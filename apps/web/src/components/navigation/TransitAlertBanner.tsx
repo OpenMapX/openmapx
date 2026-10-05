@@ -56,7 +56,7 @@ export function TransitAlertBanner({
   // Boarding platform changed for the ride you're about to catch: prominent while
   // you haven't boarded yet (it's moot once under way).
   const currentLeg = legs[currentLegIndex];
-  const departed = (transitProgress?.fractionAlongLeg ?? 0) > 0.12;
+  const departed = transitProgress?.phase === "riding";
   const wasPlatform = currentLeg ? changedFromPlatform(currentLeg.from) : undefined;
   if (currentLeg?.route && !departed && wasPlatform && currentLeg.from.platformCode) {
     cards.push({

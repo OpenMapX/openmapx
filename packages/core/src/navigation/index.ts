@@ -151,6 +151,7 @@ export {
   type TransitTickOptions,
   type TransitTickResult,
   type TransitTickState,
+  transitProgressFromTick,
 } from "./processTransitFix";
 export { computeProgress, stepStartMeters, upcomingManeuverIndex } from "./progress";
 export {
@@ -236,13 +237,25 @@ export {
   transitItineraryFingerprint,
 } from "./transitPackage";
 export {
-  computeTransitProgress,
-  detectMissedConnection,
   type PreparedTransitProgress,
   prepareTransitProgress,
   stopsUntilAlight,
   type TransitProgress,
 } from "./transitProgress";
+export {
+  convexHull,
+  DESTINATION_RADIUS_METERS,
+  defaultStopAreaShape,
+  isWithinStopArea,
+  resolveTransitLegTargets,
+  spanMeters,
+  stopAreaDistance,
+  stopAreaShapeDistance,
+  stopAreaTolerance,
+  type TransitLegTargets,
+  type TransitStopAreaIndex,
+  transitStopsNeedingAreas,
+} from "./transitStopAreas";
 export {
   type CapturableLeg,
   captureTransitLegStops,

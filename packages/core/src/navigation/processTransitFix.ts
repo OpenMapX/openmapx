@@ -5,30 +5,43 @@ import {
   type PreparedTransitProgress,
   prepareTransitProgress,
   stopsUntilAlight,
+  type TransitPhase,
+  type TransitProgress,
 } from "./transitProgress";
+import {
+  defaultStopAreaShape,
+  isWithinStopArea,
+  resolveTransitLegTargets,
+  stopAreaDistance,
+  stopAreaTolerance,
+  type TransitLegTargets,
+  type TransitStopAreaIndex,
+} from "./transitStopAreas";
 import { walkLegStepProgress } from "./transitWalk";
 import type { FixInput } from "./types";
 
 /**
- * Stateful transit navigation.
+ * Stateful transit navigation, shared by the browser and the app shell.
  *
- * The existing `computeTransitProgress` picks whichever leg is geometrically
- * closest on every fix. That is fine for drawing a banner, and wrong for
+ * Picking whichever leg is geometrically closest on every fix is wrong for
  * guidance: a bus that passes near the return leg of a loop would "advance" the
- * traveller two legs and then snap back, and the alighting cue would fire in the
- * wrong place.
+ * traveller two legs and then snap back, the alighting cue would fire in the
+ * wrong place, and a rider standing at a stop stays on the walk that led there
+ * until the ride's line happens to be nearer.
  *
  * This engine instead holds a position and defends it. It only ever considers
  * the current leg, the next one, and — inside a short recovery window — the
  * previous one. It advances at most one leg per call, and once riding progress
- * is established it never goes backwards.
+ * is established it never goes backwards. Stops are areas: a walk ends on
+ * entering the platform it leads to, a ride on halting anywhere along its
+ * arrival platform (see `transitStopAreas`).
  *
  * It is pure: one optional fix, the captured itinerary, prior state, and an
  * explicit `nowMs` in; new state and typed events out. No clock, no network, no
  * storage, no localisation.
  */
 
-export type TransitPhase = "walking" | "waiting-to-board" | "riding" | "transferring" | "arrived";
+export type { TransitPhase };
 export type TransitConfidence = "gps" | "schedule" | "stale";
 
 export interface TransitTickState {
@@ -91,6 +104,13 @@ const NEXT_LEG_DEVIATION_METERS = 120;
 const ENDPOINT_PROXIMITY_METERS = 80;
 /** Distance (m) from the board stop below which the traveller is waiting there. */
 const BOARD_STOP_PROXIMITY_METERS = 60;
+/**
+ * How far (m) beyond the boarding area a fix must be before a passed departure
+ * alone says the rider left on the vehicle — a late bus finds them nearby.
+ */
+const DEPARTED_BEYOND_BOARD_AREA_METERS = 25;
+/** Share of a leg that must lie behind before its end area can end it. */
+const END_AREA_MIN_FRACTION = 0.5;
 /** How long after entering a leg a correction back to the previous one is allowed. */
 const RECOVERY_WINDOW_MS = 90_000;
 /** Progress on the new leg beyond which recovery is refused. */
@@ -101,6 +121,8 @@ const RECOVERY_DEVIATION_MARGIN_METERS = 50;
 const APPROACHING_ALIGHT_STOPS = 1;
 
 /* --------------------------------------------------------------- helpers --- */
+
+type TransitLegTargetShapes = TransitLegTargets["end"];
 
 export function freshTransitTickState(nowMs: number): TransitTickState {
   return {
@@ -208,6 +230,8 @@ export interface TransitTickInput {
   options: TransitTickOptions;
   /** Reused across ticks; rebuilt transparently after process death. */
   prepared?: PreparedTransitProgress;
+  /** Known shapes of the trip's stops, by stop id; a stop without one is a circle. */
+  stopAreas?: TransitStopAreaIndex;
 }
 
 /**
@@ -269,14 +293,19 @@ export function processTransitFix(input: TransitTickInput): TransitTickResult {
     const coords = accepted.coords as [number, number];
     const current = matchLeg(prepared, state.currentLegIndex, coords);
     const next = matchLeg(prepared, state.currentLegIndex + 1, coords);
+    const targets = resolveTransitLegTargets(itinerary, input.stopAreas);
+    const inArea = (shapes: TransitLegTargetShapes) =>
+      shapes !== null && isWithinStopArea(shapes, coords, accepted.accuracy);
 
     // A narrowly-scoped correction: only just after entering a leg, only before
     // meaningful progress on it, and only when the previous leg fits clearly
-    // better. Beyond that the engine never goes backwards.
+    // better. Beyond that the engine never goes backwards — and never while the
+    // rider stands at the stop the current leg boards from.
     const withinRecovery =
       nowMs - state.legEnteredAtMs <= RECOVERY_WINDOW_MS &&
       (current?.fraction ?? 1) < RECOVERY_MAX_FRACTION &&
-      state.phase !== "riding";
+      state.phase !== "riding" &&
+      !inArea(targets[state.currentLegIndex]?.board ?? null);
     if (withinRecovery && state.currentLegIndex > 0) {
       const previous = matchLeg(prepared, state.currentLegIndex - 1, coords);
       if (
@@ -314,26 +343,65 @@ export function processTransitFix(input: TransitTickInput): TransitTickResult {
         match.snapped,
         prepared,
       );
+      const legTargets = targets[state.currentLegIndex];
+      // An itinerary place without a position still has one in the captured
+      // journey, which knows where the vehicle stops.
       const alightStop = captureFor(captures, state.currentLegIndex)?.stops.at(-1);
-      const atAlightStop =
-        alightStop !== undefined &&
-        metresBetween(coords, [alightStop.lng, alightStop.lat]) <= ENDPOINT_PROXIMITY_METERS;
+      const endShapes =
+        legTargets?.end ??
+        (isTransitLeg(leg) && alightStop
+          ? [
+              defaultStopAreaShape(
+                [alightStop.lng, alightStop.lat],
+                (leg as { mode?: string }).mode,
+              ),
+            ]
+          : null);
+      const inEndArea = inArea(endShapes);
+      // Being at the stop is being at the stop, however early: no time guard.
+      const reachedBoardStop =
+        !isTransitLeg(leg) &&
+        isTransitLeg(legAt(itinerary, state.currentLegIndex + 1)) &&
+        inEndArea;
+      // The vehicle is in the alight stop with at most that stop still ahead,
+      // wherever along a long platform it halted.
+      const reachedAlightStop =
+        isTransitLeg(leg) &&
+        state.phase === "riding" &&
+        inEndArea &&
+        match.fraction >= END_AREA_MIN_FRACTION &&
+        (alightProximity === null || alightProximity <= 1);
 
       const shouldAdvance =
         state.currentLegIndex < legs.length - 1 &&
         ((match.fraction >= ADVANCE_FRACTION && nextIsCloser) ||
-          (endpointDistance <= ENDPOINT_PROXIMITY_METERS && plausibleByTime) ||
-          (state.phase === "riding" && alightProximity === 0 && atAlightStop));
+          // A stop without a known position still ends near its leg's last point.
+          (endShapes === null &&
+            endpointDistance <= ENDPOINT_PROXIMITY_METERS &&
+            plausibleByTime) ||
+          reachedBoardStop ||
+          reachedAlightStop);
 
       // Phase within the leg, before any advance.
       if (isTransitLeg(leg)) {
+        const board = legTargets?.board ?? null;
+        const inBoardArea = inArea(board);
         const boardStop = captureFor(captures, state.currentLegIndex)?.stops[0];
         const nearBoardStop =
-          boardStop !== undefined &&
-          metresBetween(coords, [boardStop.lng, boardStop.lat]) <= BOARD_STOP_PROXIMITY_METERS;
+          board !== null
+            ? stopAreaDistance(board, coords) <=
+              stopAreaTolerance(accepted.accuracy) + DEPARTED_BEYOND_BOARD_AREA_METERS
+            : boardStop !== undefined &&
+              metresBetween(coords, [boardStop.lng, boardStop.lat]) <= BOARD_STOP_PROXIMITY_METERS;
         const departed = Number.isFinite(legStartMs(leg)) && nowMs >= legStartMs(leg);
 
-        if (state.phase !== "riding" && (match.fraction > 0.05 || (departed && !nearBoardStop))) {
+        // Walking the length of a long platform is still waiting; only leaving
+        // the stop, along the line or after the departure, is riding.
+        if (
+          state.phase !== "riding" &&
+          !inBoardArea &&
+          (match.fraction > 0.05 || (departed && !nearBoardStop))
+        ) {
           state.phase = "riding";
           emit({
             id: eventId(options.itineraryFingerprint, "board", state.currentLegIndex),
@@ -415,7 +483,7 @@ export function processTransitFix(input: TransitTickInput): TransitTickResult {
       if (
         !shouldAdvance &&
         state.currentLegIndex === legs.length - 1 &&
-        match.fraction >= 0.98 &&
+        (match.fraction >= 0.98 || (inEndArea && match.fraction >= END_AREA_MIN_FRACTION)) &&
         legs.length > 0
       ) {
         state.phase = "arrived";
@@ -438,18 +506,23 @@ export function processTransitFix(input: TransitTickInput): TransitTickResult {
   // ran first it would step straight past the departure that was missed and
   // the traveller would never be told.
 
-  const upcoming = legAt(itinerary, state.currentLegIndex);
+  // The ride being waited for, or — while still walking to its stop — the one
+  // that walk leads to: a departure that passed mid-walk is missed already.
+  const upcomingIndex = isTransitLeg(legAt(itinerary, state.currentLegIndex))
+    ? state.currentLegIndex
+    : state.currentLegIndex + 1;
+  const upcoming = legAt(itinerary, upcomingIndex);
   if (state.phase !== "arrived" && isTransitLeg(upcoming)) {
     const departure = legStartMs(upcoming);
     const missed =
       Number.isFinite(departure) && nowMs > departure + 120_000 && state.phase !== "riding";
-    if (missed && state.replanRequestedForLeg !== state.currentLegIndex) {
-      state.replanRequestedForLeg = state.currentLegIndex;
+    if (missed && state.replanRequestedForLeg !== upcomingIndex) {
+      state.replanRequestedForLeg = upcomingIndex;
       needsReplan = true;
       emit({
-        id: eventId(options.itineraryFingerprint, "missed-connection", state.currentLegIndex),
+        id: eventId(options.itineraryFingerprint, "missed-connection", upcomingIndex),
         type: "missed-connection",
-        legIndex: state.currentLegIndex,
+        legIndex: upcomingIndex,
       });
     }
   }
@@ -499,5 +572,26 @@ export function processTransitFix(input: TransitTickInput): TransitTickResult {
     confidence,
     needsReplan,
     ...(rejectedReason && { rejectedReason }),
+  };
+}
+
+/**
+ * What the follow-along UI shows for a tick: the engine's leg and phase, with
+ * the fix placed on that leg. Derived rather than stored, so the browser and
+ * the shell present one engine's decisions the same way.
+ */
+export function transitProgressFromTick(
+  state: TransitTickState,
+  prepared: PreparedTransitProgress,
+  coords: [number, number],
+): TransitProgress {
+  const match = matchLeg(prepared, state.currentLegIndex, coords);
+  return {
+    currentLegIndex: state.currentLegIndex,
+    snapped: match?.snapped ?? coords,
+    fractionAlongLeg: match?.fraction ?? 0,
+    deviationMeters: match?.deviationMeters ?? 0,
+    arrived: state.phase === "arrived",
+    phase: state.phase,
   };
 }

@@ -41,6 +41,7 @@ export {
   useTransitReachabilityCheck,
 } from "./useTransitReachabilityCheck";
 export { useTransitRoute } from "./useTransitRoute";
+export { useTransitStopAreas } from "./useTransitStopAreas";
 export { useTransitStops } from "./useTransitStops";
 export { useVehicleJourney } from "./useVehicleJourney";
 export { useVehiclePositions } from "./useVehiclePositions";

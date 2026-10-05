@@ -98,7 +98,7 @@ export function TransitLegBanner({
   const alightSoon = legStops.length > 0 && stopsRemaining > 0 && stopsRemaining <= 1;
   // Boarding platform is only relevant until you're on board; once under way the
   // alight platform (surfaced on the "get off" card) is what matters.
-  const departed = (transitProgress?.fractionAlongLeg ?? 0) > 0.12;
+  const departed = transitProgress?.phase === "riding";
   const boardingPlatform = leg.from.platformCode;
   const alightPlatform = leg.to.platformCode;
   // Show the vehicle's destination sign when it adds information beyond the

@@ -63,6 +63,7 @@ const progressAt = (lng: number): TransitProgress => ({
   fractionAlongLeg: lng / 0.004,
   deviationMeters: 0,
   arrived: false,
+  phase: "riding",
 });
 
 describe("TransitLegBanner leg index ownership", () => {
