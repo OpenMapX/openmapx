@@ -19,10 +19,12 @@ export {
 export { type FetchDirectionsParams, fetchDirections } from "../api/directions";
 export {
   fetchTransitPlan,
+  fetchTransitStopArea,
   fetchVehicleJourney,
   refreshTransitItinerary,
   type TransitPlanParams,
   type TransitRefreshResult,
+  type TransitStopAreaRequest,
   type VehicleJourneyParams,
 } from "../api/transit";
 // The capture builder travels with the fetches that feed it: a caller preparing

@@ -83,6 +83,28 @@ describe("prepareTransitStart", () => {
     expect(result.outcomes.map((outcome) => outcome.status)).toEqual(["captured", "captured"]);
   });
 
+  it("carries the stops' shapes, leaving out any it could not get", async () => {
+    const { client } = fakeClient(() => withStops(4));
+    const shape = { type: "point", coordinates: [8, 50], bufferMeters: 12 };
+    (client as unknown as { getOptional: unknown }).getOptional = vi.fn(async (path: unknown) => {
+      if (String(path).includes("a0")) {
+        return { data: { stopId: "a0", platform: [shape], station: [], source: "osm" } };
+      }
+      throw new Error("Overpass is busy");
+    });
+
+    const result = await prepareTransitStart({
+      ...baseInput,
+      itinerary: itineraryWith(["t1"]),
+      client,
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(Object.keys(result.startPackage.stopAreas ?? {})).toEqual(["a0"]);
+    expect(result.startPackage.stopAreas?.a0?.platform).toEqual([shape]);
+  });
+
   it("fetches a repeated trip once", async () => {
     const { client, fetched } = fakeClient(() => withStops(4));
 

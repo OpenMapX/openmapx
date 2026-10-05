@@ -326,3 +326,65 @@ describe("TransitItineraryCache", () => {
     expect(cache.preparedFor(current)).not.toBe(first);
   });
 });
+
+describe("processTransitBatch stop areas", () => {
+  /** The fixture trip on real lines: a walk east to the platform, a ride on west. */
+  function sessionWithAreas(withAreas: boolean): TransitMobileSession {
+    const base = session();
+    const startPackage = base.payload.startPackage;
+    const itinerary = structuredClone(startPackage.itinerary) as {
+      legs: Array<Record<string, unknown>>;
+    };
+    itinerary.legs[0].geometry = {
+      type: "LineString",
+      coordinates: [
+        [8.67, 50.11],
+        [8.68, 50.11],
+      ],
+    };
+    itinerary.legs[1].geometry = {
+      type: "LineString",
+      coordinates: [
+        [8.68, 50.11],
+        [8.64, 50.11],
+      ],
+    };
+    // A 400 m platform reaching back along the approach.
+    const platform = {
+      type: "polygon" as const,
+      coordinates: [
+        [8.6745, 50.10996],
+        [8.6801, 50.10996],
+        [8.6801, 50.11004],
+        [8.6745, 50.11004],
+      ] as [number, number][],
+      bufferMeters: 3,
+    };
+    return {
+      ...base,
+      payload: {
+        ...base.payload,
+        startPackage: {
+          ...startPackage,
+          itinerary,
+          ...(withAreas
+            ? {
+                stopAreas: {
+                  "stop-a": { stopId: "stop-a", platform: [platform], station: [], source: "osm" },
+                },
+              }
+            : {}),
+        },
+      },
+    } as TransitMobileSession;
+  }
+
+  it("hands the captured stop shapes to the engine", () => {
+    // 300 m short of the platform's point, but already on the platform.
+    const fix = fixAt(NOW, { coords: [8.6758, 50.11], accuracy: 5 });
+    const withAreas = run({ session: sessionWithAreas(true), fixes: [fix] });
+    const without = run({ session: sessionWithAreas(false), fixes: [fix] });
+    expect((withAreas.session as TransitMobileSession).payload.tickState.currentLegIndex).toBe(1);
+    expect((without.session as TransitMobileSession).payload.tickState.currentLegIndex).toBe(0);
+  });
+});

@@ -106,6 +106,7 @@ export function processTransitBatch(input: ProcessTransitBatchInput): TransitBat
       nowMs,
       options,
       prepared,
+      ...(startPackage.stopAreas ? { stopAreas: startPackage.stopAreas } : {}),
     });
     tickState = result.state as never;
     confidence = result.confidence;

@@ -200,11 +200,48 @@ export const transitLegCaptureSchema = z
   })
   .strict();
 
+const stopAreaBufferSchema = z.number().finite().nonnegative().max(500);
+
+const stopAreaShapeSchema = z.discriminatedUnion("type", [
+  z
+    .object({
+      type: z.literal("point"),
+      coordinates: lngLatSchema,
+      bufferMeters: stopAreaBufferSchema,
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("line"),
+      coordinates: z.array(lngLatSchema).min(2).max(2_000),
+      bufferMeters: stopAreaBufferSchema,
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("polygon"),
+      coordinates: z.array(lngLatSchema).min(3).max(2_000),
+      bufferMeters: stopAreaBufferSchema,
+    })
+    .strict(),
+]);
+
+export const transitStopAreaSchema = z
+  .object({
+    stopId: z.string().max(MAX_ID_LENGTH),
+    platform: z.array(stopAreaShapeSchema).max(64),
+    station: z.array(stopAreaShapeSchema).max(64),
+    source: z.enum(["osm", "feed"]),
+  })
+  .strict();
+
 export const transitStartPackageSchema = z
   .object({
     kind: z.literal("transit"),
     itinerary: z.record(z.string(), z.unknown()),
     captures: z.array(transitLegCaptureSchema).max(MAX_LEGS).default([]),
+    /** The shapes of the trip's stops, captured with the journeys; absent ones are circles. */
+    stopAreas: z.record(z.string().max(MAX_ID_LENGTH), transitStopAreaSchema).optional(),
     replanOptions: z.record(z.string(), z.unknown()).optional(),
     locale: localeSchema,
     units: unitsSchema,

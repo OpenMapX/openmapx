@@ -13,15 +13,18 @@
  * invent stops that would put someone off a train in the wrong place.
  */
 
+import { transitStopsNeedingAreas } from "@openmapx/core/navigation";
 import {
   type ApiClient,
   type BuildTransitPackageResult,
   buildTransitNavigationPackage,
+  fetchTransitStopArea,
   fetchVehicleJourney,
   isApiRequestAbortedError,
   type JourneyStopLike,
+  type TransitStopAreaRequest,
 } from "@openmapx/core/navigation/api";
-import type { TripItinerary } from "@openmapx/mobility-core/transit";
+import type { TransitStopArea, TripItinerary } from "@openmapx/mobility-core/transit";
 
 /** How many journeys are fetched at once. */
 export const CAPTURE_CONCURRENCY = 4;
@@ -128,6 +131,29 @@ async function fetchJourneyStops(
 }
 
 /**
+ * Fetches one stop's shape, or nothing. A stop without one is followed as a
+ * circle around its point, so a failure here only costs precision.
+ */
+async function fetchStopArea(
+  stop: TransitStopAreaRequest,
+  client: ApiClient,
+  signal: AbortSignal | undefined,
+): Promise<TransitStopArea | null> {
+  const controller = new AbortController();
+  const onAbort = () => controller.abort();
+  signal?.addEventListener("abort", onAbort);
+  const timer = setTimeout(() => controller.abort(), CAPTURE_TIMEOUT_MS);
+  try {
+    return await fetchTransitStopArea(stop, client, { signal: controller.signal });
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+    signal?.removeEventListener("abort", onAbort);
+  }
+}
+
+/**
  * Builds a startable transit package from a planned itinerary.
  *
  * The rotating refresh token stays where it already is — inside the itinerary
@@ -140,9 +166,15 @@ export async function prepareTransitStart(
 ): Promise<PrepareTransitStartResult> {
   const tripIds = riddenTripIds(input.itinerary);
 
-  const fetched = await mapWithLimit(tripIds, CAPTURE_CONCURRENCY, (tripId) =>
-    fetchJourneyStops(tripId, input.client, input.signal),
-  );
+  // The stops' shapes travel too: underground there is no fetching them later.
+  const [fetched, areas] = await Promise.all([
+    mapWithLimit(tripIds, CAPTURE_CONCURRENCY, (tripId) =>
+      fetchJourneyStops(tripId, input.client, input.signal),
+    ),
+    mapWithLimit(transitStopsNeedingAreas(input.itinerary), CAPTURE_CONCURRENCY, (stop) =>
+      fetchStopArea(stop, input.client, input.signal),
+    ),
+  ]);
   if (input.signal?.aborted || fetched.some((result) => result.aborted)) {
     return { ok: false, code: "aborted" };
   }
@@ -155,9 +187,13 @@ export async function prepareTransitStart(
     outcomes.push({ tripId, status: stops && stops.length > 0 ? "captured" : "missing" });
   }
 
+  const stopAreas: Record<string, TransitStopArea> = {};
+  for (const area of areas) if (area) stopAreas[area.stopId] = area;
+
   const built = buildTransitNavigationPackage({
     itinerary: input.itinerary,
     journeys,
+    stopAreas,
     replanOptions: input.replanOptions,
     locale: input.locale,
     units: input.units,
