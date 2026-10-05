@@ -6,6 +6,7 @@ import {
   PANEL,
   useDirectionsStore,
   useMapClickStore,
+  useNavigationStore,
   useParkingStore,
   usePlaceStore,
   useSidebarStore,
@@ -52,6 +53,8 @@ export function MapClickHandler() {
       }
       if (owner) return;
       if (useTravelTimeStore.getState().isActive) return;
+      // A dropped pin and its place panel only get in the way while navigating.
+      if (useNavigationStore.getState().status !== "idle") return;
 
       const activeLayers = [...INTERACTIVE_LAYER_IDS].filter((id) => !!map.getLayer(id));
       if (activeLayers.length > 0) {

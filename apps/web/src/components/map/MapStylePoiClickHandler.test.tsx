@@ -36,6 +36,7 @@ import {
   PANEL,
   useDirectionsStore,
   useMapClickStore,
+  useNavigationStore,
   useParkingStore,
   usePlaceStore,
   useSidebarStore,
@@ -126,6 +127,8 @@ afterEach(() => {
   useCrowdReportStore.getState().stopPicking();
   useMeasurementStore.getState().deactivate();
   useTravelTimeStore.getState().deactivate();
+  useNavigationStore.setState({ status: "idle" });
+  useMapClickStore.getState().setClickedLngLat(null);
   mapContextTest.mapRef.current = null;
   usePlaceStore.setState({ selectedPlace: null });
   useSidebarStore.setState({ activeSidebarId: null, activeDetailId: null, collapsed: false });
@@ -271,6 +274,38 @@ describe("MapStylePoiClickHandler", () => {
 
     expect(usePlaceStore.getState().selectedPlace).toBeNull();
   });
+
+  it.each(["navigating", "rerouting", "arrived"] as const)(
+    "neither selects a POI nor drops a pin while %s",
+    (status) => {
+      const fake = new FakeMap({ "poi-label": [pointFeature({ name: "Museum" }, { id: 42 })] });
+      mapContextTest.mapRef.current = fake;
+      useNavigationStore.setState({ status });
+      const view = render(
+        <>
+          <MapClickHandler />
+          <MapStylePoiClickHandler />
+        </>,
+      );
+      const poiHit: Record<string, MapGeoJSONFeature[]> = {
+        "poi-label": [pointFeature({ name: "Museum" })],
+      };
+      for (const features of [poiHit, {}]) {
+        fake.setFeatures(features);
+        act(() =>
+          fake.emit("click", {
+            point: { x: 12, y: 24 },
+            lngLat: { lng: 8, lat: 50 },
+            originalEvent: new MouseEvent("click"),
+          }),
+        );
+      }
+      expect(usePlaceStore.getState().selectedPlace).toBeNull();
+      expect(useSidebarStore.getState().activeSidebarId).toBeNull();
+      expect(useMapClickStore.getState().clickedLngLat).toBeNull();
+      view.unmount();
+    },
+  );
 
   it("sets the pointer cursor only over a named POI", () => {
     const fake = new FakeMap({ "poi-label": [pointFeature({ name: "Smithsonian" })] });

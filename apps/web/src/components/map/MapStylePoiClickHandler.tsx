@@ -7,6 +7,7 @@ import {
   PANEL,
   useDirectionsStore,
   useIsSaved,
+  useNavigationStore,
   usePlaceDetails,
   usePlaceStore,
   useSession,
@@ -168,6 +169,8 @@ export function MapStylePoiClickHandler() {
 
     const onClick = (e: MapMouseEvent) => {
       if (getMapClickOwner(e)) return;
+      // Place panels only get in the way while navigating.
+      if (useNavigationStore.getState().status !== "idle") return;
       const target = findStylePoiAtPoint(
         map,
         e.point,
