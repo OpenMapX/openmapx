@@ -6,6 +6,8 @@ import {
   processTransitFix,
   type TransitMobileSession,
   type TransitNavigationEvent,
+  type TransitTickState,
+  transitProgressFromTick,
 } from "@openmapx/core/navigation";
 import type { SessionEffect } from "../../storage/SessionRepository";
 import type { ProcessorMutation } from "../processor";
@@ -114,6 +116,12 @@ export function processTransitBatch(input: ProcessTransitBatchInput): TransitBat
     allEvents.push(...result.events);
   }
 
+  const progress = followAlongProgress(
+    tickState as TransitTickState,
+    prepared,
+    startPackage.itinerary as never,
+  );
+
   const effects: SessionEffect[] = [];
   const enqueue: Array<{ eventId: string; critical: boolean; payload: unknown }> = [];
   const eventIds: string[] = [];
@@ -149,7 +157,12 @@ export function processTransitBatch(input: ProcessTransitBatchInput): TransitBat
       events: appendBounded(session.cueLedger.events, eventIds),
     },
     ...(tickState.lastAcceptedFix ? { lastAcceptedFix: tickState.lastAcceptedFix } : {}),
-    payload: { ...session.payload, tickState, confidence },
+    payload: {
+      ...session.payload,
+      tickState,
+      confidence,
+      progress: (progress as unknown as Record<string, unknown> | null) ?? session.payload.progress,
+    },
   };
 
   // The cadence follows the phase, and a change is a profile update on the one
@@ -176,4 +189,20 @@ function appendBounded(existing: readonly string[], additions: readonly string[]
   const next = [...existing];
   for (const id of additions) if (!next.includes(id)) next.push(id);
   return next.length > 512 ? next.slice(next.length - 512) : next;
+}
+
+/**
+ * What the page shows for the engine's decision: the leg and phase, with the
+ * last accepted fix placed on that leg. A leg the schedule advanced without any
+ * fix is shown from its start, so the banner still moves on underground.
+ */
+function followAlongProgress(
+  state: TransitTickState,
+  prepared: PreparedTransitProgress,
+  itinerary: { legs?: Array<{ geometry?: { coordinates?: [number, number][] } }> },
+) {
+  const coords =
+    (state.lastAcceptedFix?.coords as [number, number] | undefined) ??
+    itinerary.legs?.[state.currentLegIndex]?.geometry?.coordinates?.[0];
+  return coords ? transitProgressFromTick(state, prepared, coords) : null;
 }

@@ -387,4 +387,14 @@ describe("processTransitBatch stop areas", () => {
     expect((withAreas.session as TransitMobileSession).payload.tickState.currentLegIndex).toBe(1);
     expect((without.session as TransitMobileSession).payload.tickState.currentLegIndex).toBe(0);
   });
+
+  it("publishes the engine's leg and phase as the page's follow-along progress", () => {
+    const fix = fixAt(NOW, { coords: [8.6758, 50.11], accuracy: 5 });
+    const outcome = run({ session: sessionWithAreas(true), fixes: [fix] });
+    expect((outcome.session as TransitMobileSession).payload.progress).toMatchObject({
+      currentLegIndex: 1,
+      phase: "waiting-to-board",
+      arrived: false,
+    });
+  });
 });
