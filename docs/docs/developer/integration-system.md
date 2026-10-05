@@ -511,6 +511,7 @@ interface IntegrationContext {
   registerGtfsCatalogProvider(p: GtfsCatalogProvider): void; // → "gtfs-catalog"
   registerRoadConditionsProvider(p: RoadConditionsProvider): void; // → "road-conditions"
   registerFuelStationProvider(p: FuelStationProvider): void; // → "fuel-stations"
+  registerParkingSiteProvider(p: ParkingSiteProvider): void; // → "parking-sites"
 
   registerPoiSources(sources: readonly PoiSource[]): void; // → data-manager ingest
   registerRoute(method, path, handler, options?): void; // options.rateLimitTier

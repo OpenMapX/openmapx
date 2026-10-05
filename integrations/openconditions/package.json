@@ -9,7 +9,8 @@
   },
   "dependencies": {
     "@openmapx/core": "workspace:^",
-    "@openmapx/integration-framework": "workspace:^"
+    "@openmapx/integration-framework": "workspace:^",
+    "@openmapx/mobility-core": "workspace:^"
   },
   "devDependencies": {
     "@types/node": "^26.6.2",

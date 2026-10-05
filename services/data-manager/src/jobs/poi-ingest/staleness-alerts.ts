@@ -1,4 +1,5 @@
 import { poiFeedState } from "@openmapx/db-schema";
+import { getAllPoiSources } from "@openmapx/poi-source-registry";
 import { db as defaultDb } from "../../db/index.js";
 import type { GithubIssueSink } from "../github-issue-sink.js";
 
@@ -73,6 +74,11 @@ export interface DetectStalePoiSourcesOptions {
   staleAfterHours?: number;
   failuresThreshold?: number;
   now?: () => Date;
+  /**
+   * Source ids that are currently registered. Defaults to the live registry.
+   * Rows for any other id are leftovers of a removed source and never alert.
+   */
+  registeredSourceIds?: ReadonlySet<string>;
 }
 
 export interface EmitPoiAlertsOptions {
@@ -116,6 +122,8 @@ export async function detectStalePoiSources(
   const staleAfterHours = opts.staleAfterHours ?? DEFAULT_STALE_AFTER_HOURS;
   const failuresThreshold = opts.failuresThreshold ?? DEFAULT_FAILURES_THRESHOLD;
   const now = opts.now ? opts.now() : new Date();
+  const registered =
+    opts.registeredSourceIds ?? new Set(getAllPoiSources().map((source) => source.id));
 
   const rows = await handle
     .select({
@@ -131,6 +139,10 @@ export async function detectStalePoiSources(
   const staleCutoffMs = now.getTime() - staleAfterHours * 3600 * 1000;
 
   for (const row of rows) {
+    // A source that is no longer registered leaves its state row behind; it
+    // can never refresh again, so it must not keep raising alerts.
+    if (!registered.has(row.sourceId)) continue;
+
     // Trigger 1: stale. A row that has never recorded an ingest yet is
     // `unknown` rather than stale — bootstrap covers the first-deploy case.
     const evidenceCheckAt = verifiedStaticCheckAt(row.refreshEvidence, now);

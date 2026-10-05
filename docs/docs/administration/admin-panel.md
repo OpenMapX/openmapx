@@ -128,7 +128,7 @@ and in-flight pipeline jobs that keep the transit engine's data fresh.
 ### POI ingest
 
 The operator surface for the points-of-interest ingest crons that feed data
-sources like EV charging and parking. It shows per-source schedule, last-run and
+sources, which today means EV charging. It shows per-source schedule, last-run and
 row counts, in-flight jobs, recent failures, and a manual **Sync** action for
 triaging a stale or broken source.
 

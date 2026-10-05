@@ -103,6 +103,16 @@ export type {
   NlpProvider,
   NlpProviderId,
   OsmIdentity,
+  ParkingArea,
+  ParkingCounts,
+  ParkingLayout,
+  ParkingRate,
+  ParkingSite,
+  ParkingSiteProvider,
+  ParkingSiteQuery,
+  ParkingSiteType,
+  ParkingStatus,
+  ParkingTrend,
   ParseContext,
   PhotoProvider,
   PhotoQuery,
@@ -285,7 +295,13 @@ export {
   ProviderTimeoutError,
   runWithProviderDeadline,
 } from "./provider-execution";
-export { QueryValidationError, type RouteQuery, scalarQueries, scalarQuery } from "./query";
+export {
+  listQuery,
+  QueryValidationError,
+  type RouteQuery,
+  scalarQueries,
+  scalarQuery,
+} from "./query";
 export { IntegrationRegistry } from "./registry";
 export {
   createStagedRuntimeContext,

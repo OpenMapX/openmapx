@@ -28,7 +28,7 @@ the volumes flagged `backup: true`. Three of them are:
 - **`postgis`** — the PostgreSQL/PostGIS database. This is the important one: user
   accounts and sessions, saved places, vehicle and parking state, share payloads,
   Timeline connection metadata, the audit log, all admin and integration
-  configuration, and ingested data-source rows (EV charging, parking, and the
+  configuration, and ingested data-source rows (EV charging and the
   rest) live here. It is captured with a streamed `pg_dump` piped through gzip
   while the database stays running.
 - **`redis`** — the Valkey (Redis-compatible) cache. Holds the transit registry

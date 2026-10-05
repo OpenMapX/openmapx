@@ -8,11 +8,7 @@
 useDefault = true
 
 [allowlist]
-description = "Known non-secrets: intentionally public open-data credentials and test fixtures"
-paths = [
-  # Test fixtures use public place IDs that trip the generic-api-key rule.
-  '''integrations/parking/providers/__tests__/parkapi-v2-equivalence\.test\.ts''',
-]
+description = "Known non-secrets: intentionally public open-data credentials"
 regexes = [
   # NRW.Mobidrom GBFS API: the Keycloak client secret is published openly on the
   # public dataset page for any API consumer (see nrw-mobidrom-client.ts header).

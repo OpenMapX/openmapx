@@ -29,6 +29,7 @@ import type { GeocodingProvider } from "../contracts/geocoding-provider.js";
 import type { GtfsCatalogProvider } from "../contracts/gtfs-catalog-provider.js";
 import type { KnowledgeProvider } from "../contracts/knowledge-provider.js";
 import type { MobilityDataSourceProvider } from "../contracts/mobility-data-source-provider.js";
+import type { ParkingSiteProvider } from "../contracts/parking-site-provider.js";
 import type { PhotoProvider } from "../contracts/photo-provider.js";
 import type { PoiSearchProvider } from "../contracts/poi-search-provider.js";
 import type { RealtimeProvider } from "../contracts/realtime-provider.js";
@@ -210,6 +211,7 @@ export interface CapturedRegistrations {
   ride: RideProvider[];
   roadConditions: RoadConditionsProvider[];
   fuelStations: FuelStationProvider[];
+  parkingSites: ParkingSiteProvider[];
   photo: PhotoProvider[];
   streetLevel: StreetLevelProvider[];
   review: ReviewProvider[];
@@ -262,6 +264,7 @@ export function createMockIntegrationContext(
     ride: [],
     roadConditions: [],
     fuelStations: [],
+    parkingSites: [],
     photo: [],
     streetLevel: [],
     review: [],
@@ -325,6 +328,9 @@ export function createMockIntegrationContext(
     },
     registerFuelStationProvider: (p) => {
       registered.fuelStations.push(p);
+    },
+    registerParkingSiteProvider: (p) => {
+      registered.parkingSites.push(p);
     },
     registerPhotoProvider: (p) => {
       registered.photo.push(p);

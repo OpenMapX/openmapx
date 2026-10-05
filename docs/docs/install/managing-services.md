@@ -321,7 +321,7 @@ fits in, see [Configuration](./configuration.md).
 :::note[Data-manager credentials are separate]
 The POI ingest pipeline runs inside the `data-manager` container, which can't
 see the integration host's config cascade. Sources that need API keys (certain
-parking and transit feeds) read them from data-manager environment variables set
+EV charging and transit feeds) read them from data-manager environment variables set
 directly in `infra/docker/.env`, not from the admin UI.
 :::
 

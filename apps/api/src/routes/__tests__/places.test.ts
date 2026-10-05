@@ -1038,6 +1038,31 @@ describe("GET /places/:id", () => {
     expect(mockLookupByCoords).not.toHaveBeenCalled();
   });
 
+  it("hands a resolver an id with a literal % exactly as the client sent it", async () => {
+    const fuelResolver = vi.fn().mockResolvedValue({
+      id: "fuel:50%off a%20b",
+      primaryScheme: "fuel",
+      ids: { fuel: "50%off a%20b" },
+      name: "Shell",
+      address: "Some Street 1, Berlin",
+      coordinates: [13.37, 52.52] as [number, number],
+    });
+    registerPlaceResolver("fuel", fuelResolver);
+    mockGetPlaceKnowledge.mockResolvedValue({ externalIds: {} });
+    mockBuildReviewLinks.mockReturnValue([]);
+
+    const res = await app.inject({
+      method: "GET",
+      url: `/places/${encodeURIComponent("fuel:50%off a%20b")}?${qs({ lat: "52.52", lng: "13.37" })}`,
+    });
+
+    expect(res.statusCode, res.body).toBe(200);
+    expect(fuelResolver).toHaveBeenCalledWith(
+      "50%off a%20b",
+      expect.objectContaining({ lat: 52.52, lng: 13.37 }),
+    );
+  });
+
   it("prefers lookupByNameAndCoords for non-scheme opaque ids", async () => {
     mockLookupByNameAndCoords.mockResolvedValue(MOCK_PLACE);
     mockGetPlaceKnowledge.mockResolvedValue({ externalIds: {} });

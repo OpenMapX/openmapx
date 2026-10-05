@@ -414,7 +414,7 @@ logic lives entirely in each orchestrator.
 
 ### The POI ingest exception
 
-A few sources — national EV-charging registries, parking catalogs — are too
+A few sources — national EV-charging registries — are too
 large to load per request. Instead of the eager `search(bbox)` shape, the
 integration declares its sources (`ctx.registerPoiSources(...)`) and an
 off-request pipeline in `data-manager` fetches, parses, validates, and writes

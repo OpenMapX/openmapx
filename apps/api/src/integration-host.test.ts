@@ -17,13 +17,6 @@ import {
   initRuntime as initEvRuntime,
   rollbackRuntimeStaging as rollbackEvRuntimeStaging,
 } from "@integrations/ev-charging/runtime.js";
-import {
-  beginRuntimeStaging as beginParkingRuntimeStaging,
-  commitRuntimeStaging as commitParkingRuntimeStaging,
-  getRuntimeContext as getParkingRuntimeContext,
-  initRuntime as initParkingRuntime,
-  rollbackRuntimeStaging as rollbackParkingRuntimeStaging,
-} from "@integrations/parking/runtime.js";
 import type { IntegrationContext } from "@openmapx/integration-framework";
 import { getPlaceResolver, registerPlaceResolver } from "@openmapx/place-ids";
 import type { FastifyInstance } from "fastify";
@@ -159,6 +152,43 @@ describe("initIntegrations — loader", () => {
       expect(
         getIntegrationProviders<{ priority: number }>("air-quality-probe", "air-quality"),
       ).toMatchObject([{ priority: 2 }]);
+    } finally {
+      rmSync(parent, { recursive: true, force: true });
+    }
+  });
+
+  it("stores parking site providers under the parking-sites key", async () => {
+    const parent = mkdtempSync(join(tmpdir(), "omx-parking-site-provider-"));
+    const directory = join(parent, "parking-site-probe");
+    mkdirSync(directory, { recursive: true });
+    writeFileSync(
+      join(directory, "manifest.json"),
+      JSON.stringify({
+        id: "parking-site-probe",
+        version: "1.0.0",
+        author: "Test",
+        license: "MIT",
+        domains: ["data-source"],
+        quality: "built-in",
+      }),
+    );
+    writeFileSync(
+      join(directory, "index.js"),
+      [
+        "export function setup(ctx) {",
+        "  ctx.registerParkingSiteProvider({",
+        "    id: 'probe', coverage: { all: true },",
+        "    searchSites: async () => ({ sites: [] }), getSite: async () => null,",
+        "  });",
+        "}",
+      ].join("\n"),
+    );
+    const app = makeApp();
+    try {
+      await initIntegrations(app, [{ directory: parent, isBuiltIn: true }]);
+      expect(
+        getIntegrationProviders<{ id: string }>("parking-site-probe", "parking-sites"),
+      ).toMatchObject([{ id: "probe" }]);
     } finally {
       rmSync(parent, { recursive: true, force: true });
     }
@@ -670,9 +700,6 @@ describe("reloadIntegrations — concurrency and mid-reload visibility", () => {
         ...ctx,
         id: `process-state-generation-${registeredGeneration}`,
       } as IntegrationContext;
-      beginParkingRuntimeStaging();
-      initParkingRuntime(generationContext);
-      ctx.onActivate(commitParkingRuntimeStaging, rollbackParkingRuntimeStaging);
       beginEvRuntimeStaging();
       initEvRuntime(generationContext);
       ctx.onActivate(commitEvRuntimeStaging, rollbackEvRuntimeStaging);
@@ -776,7 +803,7 @@ describe("reloadIntegrations — concurrency and mid-reload visibility", () => {
     }
   });
 
-  it("keeps place resolvers and parking/EV contexts on the old generation until commit", async () => {
+  it("keeps place resolvers and EV contexts on the old generation until commit", async () => {
     const parent = writeProcessStateFixture();
     const g = globalThis as Record<string, unknown>;
     const app = makeApp();
@@ -785,7 +812,6 @@ describe("reloadIntegrations — concurrency and mid-reload visibility", () => {
       await initIntegrations(app, [{ directory: parent, isBuiltIn: true }]);
       expect(currentGeneration()).toBe(1);
       expect(await resolvedProcessStateGeneration()).toBe(1);
-      expect(getParkingRuntimeContext().id).toBe("process-state-generation-1");
       expect(getEvRuntimeContext().id).toBe("process-state-generation-1");
       expect(g.__omxActiveProcessStateGeneration).toBe(1);
 
@@ -798,7 +824,6 @@ describe("reloadIntegrations — concurrency and mid-reload visibility", () => {
 
       expect(currentGeneration()).toBe(2);
       expect(await resolvedProcessStateGeneration()).toBe(1);
-      expect(getParkingRuntimeContext().id).toBe("process-state-generation-1");
       expect(getEvRuntimeContext().id).toBe("process-state-generation-1");
       expect(g.__omxActiveProcessStateGeneration).toBe(1);
 
@@ -807,7 +832,6 @@ describe("reloadIntegrations — concurrency and mid-reload visibility", () => {
       await reload;
 
       expect(await resolvedProcessStateGeneration()).toBe(2);
-      expect(getParkingRuntimeContext().id).toBe("process-state-generation-2");
       expect(getEvRuntimeContext().id).toBe("process-state-generation-2");
       expect(g.__omxActiveProcessStateGeneration).toBe(2);
     } finally {
@@ -889,7 +913,7 @@ describe("reloadIntegrations — concurrency and mid-reload visibility", () => {
     }
   });
 
-  it("rolls back staged place resolvers and parking/EV contexts after setup fails", async () => {
+  it("rolls back staged place resolvers and EV contexts after setup fails", async () => {
     const parent = writeProcessStateFixture();
     const g = globalThis as Record<string, unknown>;
     const app = makeApp();
@@ -903,7 +927,6 @@ describe("reloadIntegrations — concurrency and mid-reload visibility", () => {
 
       expect(currentGeneration()).toBe(2);
       expect(await resolvedProcessStateGeneration()).toBe(1);
-      expect(getParkingRuntimeContext().id).toBe("process-state-generation-1");
       expect(getEvRuntimeContext().id).toBe("process-state-generation-1");
       expect(g.__omxActiveProcessStateGeneration).toBe(1);
       expect(g.__omxActivationEvents).toEqual([
@@ -947,7 +970,6 @@ describe("reloadIntegrations — concurrency and mid-reload visibility", () => {
         "rollback:2:first",
       ]);
       expect(await resolvedProcessStateGeneration()).toBe(1);
-      expect(getParkingRuntimeContext().id).toBe("process-state-generation-1");
       expect(getEvRuntimeContext().id).toBe("process-state-generation-1");
       expect(g.__omxActiveProcessStateGeneration).toBe(1);
     } finally {

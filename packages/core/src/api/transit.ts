@@ -176,10 +176,9 @@ export function fetchVehicleJourney(
   options: ApiRequestOptions = {},
 ): Promise<MobilityEnvelope<VehicleJourney>> {
   const url = API_ENDPOINTS.transitVehicleJourney.replace(":id", encodeURIComponent(params.tripId));
-  // Left unencoded on purpose: the client builds the query with
-  // `URLSearchParams`, which encodes once. Pre-encoding would double it.
-  const query = params.fallbackIds?.length
-    ? { fallback_ids: params.fallbackIds.join(",") }
-    : undefined;
+  // One repeated parameter per id, left unencoded on purpose: the client builds
+  // the query with `URLSearchParams`, which encodes each once. Joining would
+  // corrupt an id that itself holds the separator.
+  const query = params.fallbackIds?.length ? { fallback_ids: params.fallbackIds } : undefined;
   return client.get<MobilityEnvelope<VehicleJourney>>(url, query, options);
 }

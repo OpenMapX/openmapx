@@ -145,7 +145,7 @@ export interface PoiSourceCommon {
   parts?: FeedIdParts;
   /** Prefix on emitted user-facing station IDs. Defaults to `${id}:`. */
   stationIdPrefix?: string;
-  /** Domain bucket: "ev-charging" | "parking" | future ones. */
+  /** Domain bucket: "ev-charging" | future ones. */
   domain: string;
   name: string;
   /** Optional perf short-circuit: skip the DB roundtrip when the request bbox is outside. */

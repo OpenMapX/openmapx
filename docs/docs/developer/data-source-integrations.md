@@ -292,8 +292,8 @@ discovery, fetching, and station-status normalization — build on those rather
 than parsing GBFS by hand.
 
 :::tip[Large datasets: ingest instead of fan-out]
-When an upstream returns a whole national registry in one request (much of
-parking, the big EV registries), prefer the **POI ingest pipeline** over an
+When an upstream returns a whole national registry in one request (the big EV
+registries), prefer the **POI ingest pipeline** over an
 eager per-request fetch: declare the feed with `ctx.registerPoiSources(...)` so
 the `data-manager` service ingests it into PostGIS on a cron, and have `search`
 read only the rows intersecting the viewport. See the

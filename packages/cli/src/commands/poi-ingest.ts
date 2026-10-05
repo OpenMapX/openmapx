@@ -89,7 +89,7 @@ function dataManagerHint(): void {
 export function registerPoiIngestCommands(program: Command): void {
   const poi = program
     .command("poi-ingest")
-    .description("Inspect and trigger POI ingest sources (EV charging, parking, ...)");
+    .description("Inspect and trigger POI ingest sources (EV charging)");
 
   poi
     .command("state")
@@ -143,7 +143,7 @@ export function registerPoiIngestCommands(program: Command): void {
   poi
     .command("list")
     .description("List all registered POI sources")
-    .option("--domain <name>", "Filter by domain (e.g. ev-charging, parking)")
+    .option("--domain <name>", "Filter by domain (e.g. ev-charging)")
     .option("--status <name>", "Filter by status (active | stale | failed | unknown)")
     .action(async (options: { domain?: string; status?: string }) => {
       const client = new DataManagerClient({ baseUrl: dataManagerUrl() });

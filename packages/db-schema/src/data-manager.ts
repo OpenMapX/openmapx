@@ -83,9 +83,9 @@ export const feedState = dataManager.table("feed_state", {
 
 export const poiFeedState = dataManager.table("poi_feed_state", {
   id: uuid("id").primaryKey().defaultRandom(),
-  /** Registry id from POI_SOURCES (e.g. "bnetza-ev", "utmc-newcastle-parking"). */
+  /** Registry id from POI_SOURCES (e.g. "bnetza-ev", "switzerland-ev"). */
   sourceId: text("source_id").notNull().unique(),
-  /** Domain bucket from PoiSource.domain — "ev-charging" | "parking" | future. */
+  /** Domain bucket from PoiSource.domain — "ev-charging" | future. */
   domain: text("domain").notNull(),
   lastStaticIngestAt: timestamp("last_static_ingest_at", { withTimezone: true }),
   lastStaticRowCount: integer("last_static_row_count"),

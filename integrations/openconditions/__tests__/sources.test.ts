@@ -211,9 +211,25 @@ describe("toDataSource", () => {
     }
   });
 
+  test("maps an OC parking feed to the parking-sites domain", () => {
+    const parking = toDataSource(
+      ocSource({
+        id: "de-bw-mobidata-parking",
+        name: "MobiData BW ParkAPI car parking sites",
+        domain: "parking",
+        product: "parking",
+        operator: "mobidata",
+        accessMode: "bulk",
+        restricted: false,
+      }),
+    )!;
+    expect(parking).toMatchObject({ sourceId: "de-bw-mobidata-parking", domain: "parking-sites" });
+    expect(validateDataSource(parking, manifest.domains).valid).toBe(true);
+  });
+
   test("skips OC domains OMX has no domain for", () => {
-    expect(toDataSource(ocSource({ domain: "parking" }))).toBeUndefined();
     expect(toDataSource(ocSource({ domain: "ev" }))).toBeUndefined();
+    expect(toDataSource(ocSource({ domain: "webcams" }))).toBeUndefined();
   });
 });
 
@@ -226,7 +242,7 @@ describe("startSourceSync", () => {
   });
 
   test("supplies the sources at activation and refreshes them on the interval", async () => {
-    let answer: unknown = listOf(NDW, ocSource({ domain: "parking", id: "de-x-parking" }));
+    let answer: unknown = listOf(NDW, ocSource({ domain: "ev", id: "de-x-ev" }));
     const http = fakeHttpClient((req) => (req.url === `${BASE_URL}/sources` ? answer : undefined));
     const client = createOpenConditionsClient(OPERATOR, http)!;
     const ctx = createMockIntegrationContext({ id: "openconditions", http });
@@ -402,11 +418,7 @@ describe("startSourceSync logging", () => {
     const broken = { ...ocSource({ id: "de-broken-fuel" }) } as Partial<OcSource>;
     delete broken.rights;
     const http = fakeHttpClient(() =>
-      listOf(
-        NDW,
-        ocSource({ id: "de-x-parking", domain: "parking", restricted: false }),
-        broken as OcSource,
-      ),
+      listOf(NDW, ocSource({ id: "de-x-ev", domain: "ev", restricted: false }), broken as OcSource),
     );
     const { lines, log } = recordingLog();
     const ctx = createMockIntegrationContext({ id: "openconditions", http, log });
@@ -420,7 +432,7 @@ describe("startSourceSync logging", () => {
     const invalid = lines.filter((l) => l.level === "warn");
     expect(invalid).toHaveLength(1);
     expect(invalid[0]!.message).toMatch(/de-broken-fuel/);
-    const unmapped = lines.filter((l) => /de-x-parking/.test(l.message));
+    const unmapped = lines.filter((l) => /de-x-ev/.test(l.message));
     expect(unmapped).toHaveLength(1);
     expect(unmapped[0]!.level).toBe("debug");
     expect(unmapped[0]!.message).toMatch(/no OpenMapX domain/);
@@ -471,12 +483,16 @@ describe("setup", () => {
     await setup(ctx, { OPENCONDITIONS_URL: BASE_URL });
     expect(ctx.registered.roadConditions).toHaveLength(1);
     expect(ctx.registered.fuelStations).toHaveLength(1);
+    expect(ctx.registered.parkingSites).toHaveLength(1);
     expect(ctx.registered.dataSourceLists).toHaveLength(0);
 
     // Without a list nothing can be gated, so nothing is served.
     const callsBefore = http.calls.length;
     const [road] = ctx.registered.roadConditions;
     const [fuel] = ctx.registered.fuelStations;
+    const [parking] = ctx.registered.parkingSites;
+    expect(await parking!.searchSites(BBOX)).toEqual({ sites: [], partial: "unavailable" });
+    expect(await parking!.getSite("oc:feature:x")).toBeNull();
     expect(await road!.getEvents(BBOX)).toEqual([]);
     await expect(road!.getRoutingEvents!(BBOX)).rejects.toThrow(/source list/);
     expect(await road!.getFlow!(BBOX)).toEqual([]);

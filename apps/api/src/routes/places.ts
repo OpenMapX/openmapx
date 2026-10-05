@@ -736,7 +736,7 @@ export const placesRoute: FastifyPluginAsync = async (fastify) => {
       },
     },
     handler: async (req, reply) => {
-      const rawId = decodeURIComponent(req.params.id);
+      const rawId = req.params.id;
       const lang = req.query.lang;
       const hasAddress = req.query.hasAddress === "1";
       const latInput = Number.parseFloat(req.query.lat ?? "");

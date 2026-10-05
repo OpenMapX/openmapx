@@ -32,8 +32,7 @@ export const PL_EIPA_OPERATOR_URL = `${BASE_URL}/operator.json`;
 export const PL_EIPA_DICTIONARY_URL = `${BASE_URL}/dictionary.json`;
 
 /**
- * Same env-var-only contract as the parking UTMC/NSW/BahnPark feeds (see
- * integrations/parking/poi-sources.ts): the data-manager POI-ingest scanner
+ * An env-var-only credential: the data-manager POI-ingest scanner
  * builds this header directly from the environment at fetch time, bypassing
  * the admin credential vault entirely (`ctx.config` isn't available inside
  * `resolveHeaders`/the parser's own secondary fetches). Returns `{}` when

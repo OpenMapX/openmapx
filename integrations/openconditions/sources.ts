@@ -37,6 +37,7 @@ export interface OcSource {
 const DOMAINS: Readonly<Record<string, string>> = {
   roads: "road-conditions",
   fuel: "fuel-stations",
+  parking: "parking-sites",
 };
 
 /** How often the list is read again. */

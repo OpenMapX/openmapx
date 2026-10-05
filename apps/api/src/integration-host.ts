@@ -627,6 +627,11 @@ function buildIntegrationContext(args: {
       existing.push(provider);
       providers.set("fuel-stations", existing);
     },
+    registerParkingSiteProvider(provider) {
+      const existing = providers.get("parking-sites") ?? [];
+      existing.push(provider);
+      providers.set("parking-sites", existing);
+    },
     registerPhotoProvider(provider) {
       const existing = providers.get("photos") ?? [];
       existing.push(provider);

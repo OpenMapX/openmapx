@@ -10,7 +10,7 @@ Beyond the base map and its [overlays](./map-layers.md), OpenMapX can plot
 real-world points of interest with live detail attached. Pick **EV charging**
 and the map fills with charging stations, each colored by whether it's available
 or in use, with connector types and power on click. Pick **Gas Stations** and
-you get live fuel prices per grade. There's also parking with live occupancy,
+you get live fuel prices per grade. There's also parking with live occupancy from OpenConditions,
 shared bikes and e-scooters and car-sharing vehicles you can actually rent right
 now, and traffic and scenic webcams.
 
@@ -91,9 +91,8 @@ server's address rather than your users'.
 ### Where the data lives
 
 Most sources are queried live from the upstream API for the bounding box you're
-looking at. A number of the larger or rate-limited feeds — much of the parking
-catalog and the bigger national EV registries — are instead **ingested on a
-schedule** by the `data-manager` service, which fetches and parses the upstream
+looking at. A number of the larger or rate-limited feeds — the bigger national
+EV registries — are instead **ingested on a schedule** by the `data-manager` service, which fetches and parses the upstream
 feed into a local PostGIS table on a cron; the app then reads only the rows that
 intersect your viewport. From the map this is invisible; the practical
 difference is operational, covered under [enabling and configuring](#enabling-and-configuring)
@@ -106,15 +105,15 @@ show; the _Origins_ column is a representative sample, not the full list — mos
 categories aggregate many regional feeds, and OpenStreetMap is the global
 fallback for the location-only sources.
 
-| Category         | What it shows                                 | Origins (representative)                                                                                                                                                                                   |
-| ---------------- | --------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **EV charging**  | Charging stations, status, connectors         | OpenChargeMap, AFDC/NREL, Bundesnetzagentur, France IRVE, NOBIL, SFOE, NDW/DOT-NL, EVRoam NZ, E-Control AT, and national feeds across Europe, Asia, and Australia; OpenStreetMap fallback                  |
-| **Fuel**         | Gas stations + per-grade prices               | Every enabled fuel-station provider: OpenConditions' national price feeds (Prix Carburants, Minetur; with the operator token also Tankerkönig/MTS-K and E-Control) and OpenStreetMap (operator token only) |
-| **Parking**      | Parking + Park & Ride, live occupancy         | ParkAPI / ParkenDD, MobiData BW, DB BahnPark, Autobahn GmbH, plus many city and regional open-data portals, OpenStreetMap                                                                                  |
-| **Bike sharing** | Docks + free-floating bikes, availability     | GBFS feeds via the MobilityData catalog, CityBikes, Nextbike, Donkey Republic, Deutsche Bahn, Entur (NO)                                                                                                   |
-| **Car sharing**  | Car-sharing stations + vehicles               | GBFS catalog, Entur, Cambio, Communauto, CoopStroom, Dégage, and German municipal portals                                                                                                                  |
-| **E-scooters**   | Free-floating scooters + operator zones       | GBFS catalog, Entur (NO), NRW.Mobidrom (Voi, Lime), Felyx                                                                                                                                                  |
-| **Webcams**      | Traffic + scenic cameras, still or live video | Windy, OpenStreetMap, Caltrans, TfL, NPS, many US 511 feeds, Finland/Sweden/Norway/Iceland/Spain, Ontario, Hong Kong, NSW, and Taiwan                                                                      |
+| Category         | What it shows                                 | Origins (representative)                                                                                                                                                                                                                                                                           |
+| ---------------- | --------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **EV charging**  | Charging stations, status, connectors         | OpenChargeMap, AFDC/NREL, Bundesnetzagentur, France IRVE, NOBIL, SFOE, NDW/DOT-NL, EVRoam NZ, E-Control AT, and national feeds across Europe, Asia, and Australia; OpenStreetMap fallback                                                                                                          |
+| **Fuel**         | Gas stations + per-grade prices               | Every enabled fuel-station provider: OpenConditions' national price feeds (Prix Carburants, Minetur; with the operator token also Tankerkönig/MTS-K and E-Control) and OpenStreetMap (operator token only)                                                                                         |
+| **Parking**      | Parking + Park & Ride, live occupancy         | Every enabled parking provider: OpenConditions' parking feeds (MobiData BW, NRW.Mobidrom, DB BahnPark, SBB, RDW and NDW truck parking (NL), HDB (SG), and many city and regional open-data portals; with the operator token also the Mobidrom Park & Ride lots, the French BNLS and OpenStreetMap) |
+| **Bike sharing** | Docks + free-floating bikes, availability     | GBFS feeds via the MobilityData catalog, CityBikes, Nextbike, Donkey Republic, Deutsche Bahn, Entur (NO)                                                                                                                                                                                           |
+| **Car sharing**  | Car-sharing stations + vehicles               | GBFS catalog, Entur, Cambio, Communauto, CoopStroom, Dégage, and German municipal portals                                                                                                                                                                                                          |
+| **E-scooters**   | Free-floating scooters + operator zones       | GBFS catalog, Entur (NO), NRW.Mobidrom (Voi, Lime), Felyx                                                                                                                                                                                                                                          |
+| **Webcams**      | Traffic + scenic cameras, still or live video | Windy, OpenStreetMap, Caltrans, TfL, NPS, many US 511 feeds, Finland/Sweden/Norway/Iceland/Spain, Ontario, Hong Kong, NSW, and Taiwan                                                                                                                                                              |
 
 A few notes on origins:
 
@@ -125,7 +124,9 @@ A few notes on origins:
   far beyond the named operators above.
 - **OpenStreetMap** (queried via the Overpass service) backs the location-only
   sources everywhere a richer feed doesn't reach — chargers, fuel stations,
-  parking, and webcams all fall back to it.
+  car parks and webcams all fall back to it. OpenStreetMap's car parks and
+  fuel stations come through OpenConditions (`osm-parking`, `osm-fuel`) and
+  only with the operator token.
 - **Licenses vary by source**, from public-domain and CC BY open data to
   bilateral commercial terms; each source declares its own license and
   attribution in its manifest, which is what feeds the per-view credits and the
@@ -153,8 +154,15 @@ require credentials, declared per integration:
   OpenStreetMap (ODbL share-alike) also need the
   [operator token](../administration/community-extensions.md#the-operator-token)
   set on both sides; without it the fuel layer shows France and Spain only.
-- **Parking** can use credentials for DB BahnPark, Transport for NSW, and the
-  Newcastle UTMC feed.
+- **Parking** comes from [OpenConditions](../administration/community-extensions.md#example-openconditions);
+  without it the parking source is not offered and has no chip. Credentials for
+  the keyed feeds (DB BahnPark, North East UTMC, Transport for NSW) are
+  OpenConditions ingest feed credentials: set them in the admin panel as service
+  credentials of `openconditions-ingest`. The Mobidrom Park & Ride lots
+  (CC BY-SA), the French BNLS (ODbL) and every facility known only from
+  OpenStreetMap are restricted sources and reach OpenMapX only with the
+  [operator token](../administration/community-extensions.md#the-operator-token)
+  set on both sides.
 - **Webcams** can use a Windy key plus per-state US DOT 511 keys.
 
 EV coverage also includes open registries for Ireland, Cyprus, Luxembourg,
@@ -167,8 +175,8 @@ Where a source has no key, it's simply skipped and the others still answer. Keys
 set on an integration follow the usual config cascade — admin panel or `.env`.
 
 :::note[Credentials for ingested sources live elsewhere]
-Sources fetched on a schedule by the `data-manager` service (much of parking and
-the large EV registries) read their credentials from data-manager environment
+Sources fetched on a schedule by the `data-manager` service (the large EV
+registries) read their credentials from data-manager environment
 variables in `infra/docker/.env`, **not** from the admin panel — the ingest
 runs in a container that can't see the per-integration config. The admin fields
 for those sources are kept for visibility, but the value the cron uses is the

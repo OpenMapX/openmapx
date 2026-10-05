@@ -385,14 +385,11 @@ describe("metered DB API Marketplace health checks", () => {
     vi.restoreAllMocks();
   });
 
-  it.each([
-    ["bike-sharing", "Deutsche Bahn GBFS"],
-    ["parking", "DB BahnPark"],
-  ])("probes %s without sending credentials", async (integrationId, checkName) => {
+  it("probes bike-sharing without sending credentials", async () => {
     const manifest = JSON.parse(
-      readFileSync(resolve(REPO_ROOT, "integrations", integrationId, "manifest.json"), "utf8"),
+      readFileSync(resolve(REPO_ROOT, "integrations", "bike-sharing", "manifest.json"), "utf8"),
     ) as { healthCheck: Array<Record<string, unknown>> };
-    const healthCheck = manifest.healthCheck.find((check) => check.name === checkName);
+    const healthCheck = manifest.healthCheck.find((check) => check.name === "Deutsche Bahn GBFS");
 
     expect(healthCheck).toBeDefined();
     expect(healthCheck?.type).toBe("ping");
@@ -403,8 +400,6 @@ describe("metered DB API Marketplace health checks", () => {
     integration.config = {
       "db-bike-client-id": "must-not-be-sent",
       "db-bike-api-key": "must-not-be-sent",
-      "de-db-bahnpark-client-id": "must-not-be-sent",
-      "de-db-bahnpark-api-key": "must-not-be-sent",
     };
 
     const results = await executeIntegrationHealthCheck(integration);

@@ -1,7 +1,7 @@
 /**
  * OpenConditions, built in: reads the OpenConditions HTTP API at
- * `OPENCONDITIONS_URL` and registers its road-conditions and fuel-stations
- * providers. The OpenConditions services themselves run beside OpenMapX; no
+ * `OPENCONDITIONS_URL` and registers its road-conditions, fuel-stations and
+ * parking-sites providers. The OpenConditions services themselves run beside OpenMapX; no
  * OpenConditions code runs here.
  *
  * The data sources are the instance's own: the integration reads its
@@ -23,6 +23,7 @@
 import type { IntegrationContext } from "@openmapx/integration-framework";
 import { createOpenConditionsClient } from "./client.js";
 import { createFuelStationProvider } from "./fuel/provider.js";
+import { createParkingSiteProvider } from "./parking/provider.js";
 import { createRoadConditionsProvider } from "./road-conditions/provider.js";
 import { createLiveSources, startSourceSync } from "./sources.js";
 
@@ -50,4 +51,5 @@ export async function setup(
 
   ctx.registerRoadConditionsProvider(createRoadConditionsProvider(client, sources));
   ctx.registerFuelStationProvider(createFuelStationProvider(client, sources));
+  ctx.registerParkingSiteProvider(createParkingSiteProvider(client, sources));
 }

@@ -130,9 +130,11 @@ describe("CoverageService", () => {
   });
 
   it("retains API evidence when data-manager is unavailable", async () => {
+    const parking = integration();
+    parking.manifest.domains = ["parking-sites"];
     const collected = await collectCoverageData({
       now: () => new Date("2026-09-10T12:00:00.000Z"),
-      integrations: [integration()],
+      integrations: [parking],
       dataManager: {
         read: async () => {
           throw new Error("secret internal address");
@@ -153,10 +155,15 @@ describe("CoverageService", () => {
     const both = integration();
     both.id = "openconditions";
     both.manifest.id = "openconditions";
-    both.manifest.domains = ["road-conditions", "fuel-stations"];
+    both.manifest.domains = ["road-conditions", "fuel-stations", "parking-sites"];
     both.manifest.dataSources = [
       { ...both.manifest.dataSources![0]!, sourceId: "nl-ndw-events", name: "NDW" },
       { ...both.manifest.dataSources![0]!, sourceId: "osm-fuel", domain: "fuel-stations" },
+      {
+        ...both.manifest.dataSources![0]!,
+        sourceId: "de-bw-mobidata-parking",
+        domain: "parking-sites",
+      },
     ];
     both.providers = new Map();
     const collected = await collectCoverageData({
@@ -172,8 +179,9 @@ describe("CoverageService", () => {
       providerHealth: null,
       integrationHealth: () => ({ updatedAt: null, results: [] }),
     });
-    // Fuel has no coverage domain; it is not traffic coverage.
+    // Fuel has no coverage domain; it is not traffic coverage. Parking sites are parking coverage.
     expect(collected.streams.map((s) => [s.sourceId, s.domain])).toEqual([
+      ["de-bw-mobidata-parking", "parking"],
       ["nl-ndw-events", "traffic"],
     ]);
   });

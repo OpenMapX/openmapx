@@ -8,29 +8,12 @@ import {
   rollbackRuntimeStaging as rollbackEvRuntimeStaging,
   stageRuntimeCommit as stageEvRuntimeCommit,
 } from "./ev-charging/runtime.js";
-import {
-  beginRuntimeStaging as beginParkingRuntimeStaging,
-  commitRuntimeStaging as commitParkingRuntimeStaging,
-  getRuntimeContext as getParkingRuntimeContext,
-  initRuntime as initParkingRuntime,
-  rollbackRuntimeStaging as rollbackParkingRuntimeStaging,
-  stageRuntimeCommit as stageParkingRuntimeCommit,
-} from "./parking/runtime.js";
 
 function context(id: string): IntegrationContext {
   return { id } as IntegrationContext;
 }
 
 const runtimes = [
-  {
-    name: "parking",
-    begin: beginParkingRuntimeStaging,
-    commit: commitParkingRuntimeStaging,
-    get: getParkingRuntimeContext,
-    init: initParkingRuntime,
-    rollback: rollbackParkingRuntimeStaging,
-    stageCommit: stageParkingRuntimeCommit,
-  },
   {
     name: "EV charging",
     begin: beginEvRuntimeStaging,

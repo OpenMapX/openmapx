@@ -59,6 +59,18 @@ export type {
   PricingPlanEntry,
 } from "./mobility-data-source-provider.js";
 export type {
+  ParkingArea,
+  ParkingCounts,
+  ParkingLayout,
+  ParkingRate,
+  ParkingSite,
+  ParkingSiteProvider,
+  ParkingSiteQuery,
+  ParkingSiteType,
+  ParkingStatus,
+  ParkingTrend,
+} from "./parking-site-provider.js";
+export type {
   PhotoProvider,
   PhotoQuery,
 } from "./photo-provider.js";

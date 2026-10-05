@@ -76,9 +76,8 @@ function uniqueReasons(reasons: readonly CoverageReasonCode[]): CoverageReasonCo
   return [...new Set(reasons)];
 }
 
-function domainForPoi(source: PoiSource): "pois" | "ev" | "parking" {
+function domainForPoi(source: PoiSource): "pois" | "ev" {
   if (source.domain === "ev-charging" || source.domain === "ev") return "ev";
-  if (source.domain === "parking") return "parking";
   return "pois";
 }
 

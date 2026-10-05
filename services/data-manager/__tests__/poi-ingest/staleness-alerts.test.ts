@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, test, vi } from "vitest";
 import type { GithubIssueSink } from "../../src/jobs/github-issue-sink.js";
 import {
   detectStalePoiSources,
@@ -62,6 +62,13 @@ function buildLogger(): PoiAlertLogger & {
 }
 
 describe("detectStalePoiSources", () => {
+  const REGISTERED = new Set([
+    "bnetza-ev",
+    "switzerland-ev",
+    "timestamp-only",
+    "utmc-newcastle",
+    "apag",
+  ]);
   const NOW = new Date("2026-05-24T12:00:00Z");
   const staticEvidence = (at: Date) => ({
     version: 1,
@@ -86,7 +93,11 @@ describe("detectStalePoiSources", () => {
         refreshEvidence: staticEvidence(fresh),
       },
     ]);
-    const alerts = await detectStalePoiSources({ db: handle, now: () => NOW });
+    const alerts = await detectStalePoiSources({
+      db: handle,
+      now: () => NOW,
+      registeredSourceIds: REGISTERED,
+    });
     expect(alerts).toEqual([]);
   });
 
@@ -101,7 +112,11 @@ describe("detectStalePoiSources", () => {
         refreshEvidence: staticEvidence(tooOld),
       },
     ]);
-    const alerts = await detectStalePoiSources({ db: handle, now: () => NOW });
+    const alerts = await detectStalePoiSources({
+      db: handle,
+      now: () => NOW,
+      registeredSourceIds: REGISTERED,
+    });
     expect(alerts).toHaveLength(1);
     const alert = alerts[0] as PoiAlert;
     expect(alert.kind).toBe("stale");
@@ -115,14 +130,18 @@ describe("detectStalePoiSources", () => {
     const { handle } = buildFakeDb([
       {
         sourceId: "timestamp-only",
-        domain: "parking",
+        domain: "ev-charging",
         lastStaticIngestAt: oldTimestamp,
         consecutiveFailures: 0,
         lastError: null,
       },
     ]);
 
-    const alerts = await detectStalePoiSources({ db: handle, now: () => NOW });
+    const alerts = await detectStalePoiSources({
+      db: handle,
+      now: () => NOW,
+      registeredSourceIds: REGISTERED,
+    });
     expect(alerts).toEqual([]);
   });
 
@@ -135,7 +154,30 @@ describe("detectStalePoiSources", () => {
         lastError: null,
       },
     ]);
-    const alerts = await detectStalePoiSources({ db: handle, now: () => NOW });
+    const alerts = await detectStalePoiSources({
+      db: handle,
+      now: () => NOW,
+      registeredSourceIds: REGISTERED,
+    });
+    expect(alerts).toEqual([]);
+  });
+
+  test("a feed-state row of a source no longer registered raises no alert", async () => {
+    const tooOld = new Date(NOW.getTime() - 100 * 3600 * 1000);
+    const { handle } = buildFakeDb([
+      {
+        sourceId: "removed-parking-source",
+        domain: "parking",
+        consecutiveFailures: 9,
+        lastError: { message: "gone" },
+        refreshEvidence: staticEvidence(tooOld),
+      },
+    ]);
+    const alerts = await detectStalePoiSources({
+      db: handle,
+      now: () => NOW,
+      registeredSourceIds: REGISTERED,
+    });
     expect(alerts).toEqual([]);
   });
 
@@ -144,13 +186,17 @@ describe("detectStalePoiSources", () => {
     const { handle } = buildFakeDb([
       {
         sourceId: "utmc-newcastle",
-        domain: "parking",
+        domain: "ev-charging",
         consecutiveFailures: 3,
         lastError: { message: "401 Unauthorized" },
         refreshEvidence: staticEvidence(fresh),
       },
     ]);
-    const alerts = await detectStalePoiSources({ db: handle, now: () => NOW });
+    const alerts = await detectStalePoiSources({
+      db: handle,
+      now: () => NOW,
+      registeredSourceIds: REGISTERED,
+    });
     expect(alerts).toHaveLength(1);
     const alert = alerts[0] as PoiAlert;
     expect(alert.kind).toBe("consecutive-failures");
@@ -163,13 +209,17 @@ describe("detectStalePoiSources", () => {
     const { handle } = buildFakeDb([
       {
         sourceId: "apag",
-        domain: "parking",
+        domain: "ev-charging",
         consecutiveFailures: 5,
         lastError: { message: "DNS lookup failed" },
         refreshEvidence: staticEvidence(tooOld),
       },
     ]);
-    const alerts = await detectStalePoiSources({ db: handle, now: () => NOW });
+    const alerts = await detectStalePoiSources({
+      db: handle,
+      now: () => NOW,
+      registeredSourceIds: REGISTERED,
+    });
     expect(alerts.map((a) => a.kind).sort()).toEqual(["consecutive-failures", "stale"]);
   });
 
@@ -187,6 +237,7 @@ describe("detectStalePoiSources", () => {
     const alerts = await detectStalePoiSources({
       db: handle,
       now: () => NOW,
+      registeredSourceIds: REGISTERED,
       staleAfterHours: 4,
       failuresThreshold: 1,
     });
@@ -273,7 +324,7 @@ describe("poiGithubIssueTitle", () => {
     expect(
       poiGithubIssueTitle({
         sourceId: "utmc-newcastle",
-        domain: "parking",
+        domain: "ev-charging",
         kind: "consecutive-failures",
         threshold: {},
         detail: {},

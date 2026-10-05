@@ -30,7 +30,7 @@ export function PoiIngestPage() {
       <Box sx={{ mb: 2 }}>
         <AdminPageHeader
           title="POI ingest"
-          subtitle="EV charging · parking · per-source PostGIS ingest"
+          subtitle="EV charging · per-source PostGIS ingest"
           actions={
             <Tooltip title="Refresh all">
               <IconButton

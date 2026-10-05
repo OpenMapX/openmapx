@@ -45,7 +45,6 @@ const INTEGRATIONS_DIR = join(REPO_ROOT, "integrations");
  */
 export const CREDENTIAL_KEYED_INTEGRATIONS = [
   "ev-charging",
-  "parking",
   "scooter-sharing",
   "bike-sharing",
   "webcam",

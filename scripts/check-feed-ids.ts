@@ -20,7 +20,7 @@
  *      entry for every ingested feed.
  *   4. `deriveFeedId(parts)` is globally unique across all poi-source
  *      integrations — they share the `poi_ingest` Postgres schema.
- *   5. For ev-charging, parking and fuel, `strings/{en,de}.json`
+ *   5. For ev-charging and fuel, `strings/{en,de}.json`
  *      `dataSources` keys and manifest `sourceId`s match in both directions
  *      (a lighter re-assertion of what `check-legal-tables` already covers,
  *      kept here so this gate is self-contained).
@@ -48,7 +48,7 @@ const INTEGRATIONS_DIR = join(REPO_ROOT, "integrations");
 const LOCALES = ["en", "de"] as const;
 
 /** Integrations whose manifest/strings alignment we re-assert here. */
-const STRINGS_ALIGNED_INTEGRATIONS = ["ev-charging", "parking", "fuel"] as const;
+const STRINGS_ALIGNED_INTEGRATIONS = ["ev-charging", "fuel"] as const;
 
 interface DiscoveredIntegration {
   id: string;

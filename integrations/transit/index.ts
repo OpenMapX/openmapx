@@ -10,6 +10,7 @@ import {
   type BoundingBoxLimits,
   clampViewportBoundingBox,
   type IntegrationContext,
+  listQuery,
   type ProviderCallContext,
   parsePositiveRadius,
   parseWgs84Point,
@@ -370,7 +371,7 @@ export function setup(ctx: IntegrationContext): void {
 
   // GET /stops/:id
   ctx.registerRoute("GET", "/stops/:id", async (req, reply) => {
-    const res = await orchestrator.getStop(decodeURIComponent(req.params.id));
+    const res = await orchestrator.getStop(req.params.id);
     if (!res.data) {
       reply.status(404).send({ error: "Stop not found" });
       return;
@@ -380,7 +381,7 @@ export function setup(ctx: IntegrationContext): void {
 
   // GET /stops/:id/transfers — accessibility-annotated transfers out of a stop.
   ctx.registerRoute("GET", "/stops/:id/transfers", async (req, reply) => {
-    const stopId = decodeURIComponent(req.params.id);
+    const stopId = req.params.id;
     const cacheKey = `stop-transfers:${stopId}`;
     let env = (await ctx.cache.get(cacheKey)) as MobilityEnvelope<unknown> | null;
     if (!env) {
@@ -394,7 +395,7 @@ export function setup(ctx: IntegrationContext): void {
 
   // GET /stops/:id/infrastructure
   ctx.registerRoute("GET", "/stops/:id/infrastructure", async (req, reply) => {
-    const stopId = decodeURIComponent(req.params.id);
+    const stopId = req.params.id;
     const cacheKey = `stop-infra:${stopId}`;
     let env: MobilityEnvelope<unknown> | null = null;
     try {
@@ -417,7 +418,7 @@ export function setup(ctx: IntegrationContext): void {
   // GET /stops/:id/platform-stops
   ctx.registerRoute("GET", "/stops/:id/platform-stops", async (req, reply) => {
     reply.header("Cache-Control", "public, max-age=3600, s-maxage=3600");
-    const result = await orchestrator.getStopPlatforms(decodeURIComponent(req.params.id));
+    const result = await orchestrator.getStopPlatforms(req.params.id);
     reply.send(toEnvelope(result));
   });
 
@@ -433,7 +434,7 @@ export function setup(ctx: IntegrationContext): void {
       "Cache-Control",
       isPast ? "public, max-age=86400, s-maxage=86400" : "public, max-age=300, s-maxage=300",
     );
-    const result = await orchestrator.getStopTimetable(decodeURIComponent(req.params.id), date);
+    const result = await orchestrator.getStopTimetable(req.params.id, date);
     reply.send(toEnvelope(result));
   });
 
@@ -445,7 +446,7 @@ export function setup(ctx: IntegrationContext): void {
       return;
     }
     reply.header("Cache-Control", "public, max-age=30, s-maxage=30");
-    const stopId = decodeURIComponent(req.params.id);
+    const stopId = req.params.id;
     const cacheKey = `transit:departures:${stopId}:${minutes}`;
     const result = await ctx.cache.withCache(cacheKey, 30, async () => {
       const res = await orchestrator.getDepartures(stopId, minutes);
@@ -462,7 +463,7 @@ export function setup(ctx: IntegrationContext): void {
       return;
     }
     reply.header("Cache-Control", "public, max-age=60, s-maxage=60");
-    const stopId = decodeURIComponent(req.params.id);
+    const stopId = req.params.id;
     const cacheKey = `transit:arrivals:${stopId}:${minutes}`;
     const result = await ctx.cache.withCache(cacheKey, 60, async () => {
       const res = await orchestrator.getArrivals(stopId, minutes);
@@ -474,7 +475,7 @@ export function setup(ctx: IntegrationContext): void {
   // GET /stops/:id/alerts
   ctx.registerRoute("GET", "/stops/:id/alerts", async (req, reply) => {
     reply.header("Cache-Control", "public, max-age=60, s-maxage=60");
-    const stopId = decodeURIComponent(req.params.id);
+    const stopId = req.params.id;
     const cacheKey = `transit:stop-alerts:${stopId}`;
     const alerts = await ctx.cache.withCache(cacheKey, 60, async () => {
       const res = await orchestrator.getStopAlerts(stopId);
@@ -485,14 +486,14 @@ export function setup(ctx: IntegrationContext): void {
 
   // GET /stops/:id/facilities
   ctx.registerRoute("GET", "/stops/:id/facilities", async (req, reply) => {
-    const result = await orchestrator.getFacilities(decodeURIComponent(req.params.id));
+    const result = await orchestrator.getFacilities(req.params.id);
     reply.send(toEnvelope(result));
   });
 
   // GET /routes
   ctx.registerRoute("GET", "/routes", async (req, reply) => {
     if (scalarQueries(req.query).stop_id) {
-      const stopId = decodeURIComponent(scalarQueries(req.query).stop_id);
+      const stopId = scalarQueries(req.query).stop_id;
       const cacheKey = `transit:routes-for-stop:${stopId}`;
       const routes = await ctx.cache.withCache(cacheKey, 300, async () => {
         const res = await orchestrator.getRoutesForStop(stopId);
@@ -539,7 +540,7 @@ export function setup(ctx: IntegrationContext): void {
 
   // GET /routes/:id
   ctx.registerRoute("GET", "/routes/:id", async (req, reply) => {
-    const routeId = decodeURIComponent(req.params.id);
+    const routeId = req.params.id;
     const cacheKey = `transit:route:${routeId}`;
     let env = (await ctx.cache.get(cacheKey)) as MobilityEnvelope<unknown> | null;
     if (!env) {
@@ -558,10 +559,8 @@ export function setup(ctx: IntegrationContext): void {
 
   // GET /routes/:id/stops
   ctx.registerRoute("GET", "/routes/:id/stops", async (req, reply) => {
-    const routeId = decodeURIComponent(req.params.id);
-    const hintStopId = scalarQueries(req.query).hint_stop_id
-      ? decodeURIComponent(scalarQueries(req.query).hint_stop_id)
-      : undefined;
+    const routeId = req.params.id;
+    const hintStopId = scalarQueries(req.query).hint_stop_id || undefined;
     const cacheKey = `transit:route-stops:${routeId}:${hintStopId ?? ""}`;
     let env = (await ctx.cache.get(cacheKey)) as MobilityEnvelope<unknown[]> | null;
     if (!env) {
@@ -577,7 +576,7 @@ export function setup(ctx: IntegrationContext): void {
   // GET /routes/:id/alerts
   ctx.registerRoute("GET", "/routes/:id/alerts", async (req, reply) => {
     reply.header("Cache-Control", "public, max-age=60, s-maxage=60");
-    const routeId = decodeURIComponent(req.params.id);
+    const routeId = req.params.id;
     const cacheKey = `transit:route-alerts:${routeId}`;
     const alerts = await ctx.cache.withCache(cacheKey, 60, async () => {
       const res = await orchestrator.getRouteAlerts(routeId);
@@ -589,7 +588,7 @@ export function setup(ctx: IntegrationContext): void {
   // GET /routes/:id/live
   ctx.registerRoute("GET", "/routes/:id/live", async (req, reply) => {
     reply.header("Cache-Control", "public, max-age=15, s-maxage=15");
-    const routeId = decodeURIComponent(req.params.id);
+    const routeId = req.params.id;
     const [vehicles, alerts] = await Promise.all([
       orchestrator.getVehiclePositions(routeId),
       orchestrator.getRouteAlerts(routeId),
@@ -1264,13 +1263,13 @@ export function setup(ctx: IntegrationContext): void {
 
   // GET /vehicles/:id
   ctx.registerRoute("GET", "/vehicles/:id", async (req, reply) => {
-    const tripId = decodeURIComponent(req.params.id);
-    const fallbackIds = scalarQueries(req.query).fallback_ids
-      ? scalarQueries(req.query)
-          .fallback_ids.split(",")
-          .map((s) => decodeURIComponent(s.trim()))
-      : undefined;
-    const cacheKey = `transit:vehicle-journey:${tripId}:${(fallbackIds ?? []).join(",")}`;
+    const tripId = req.params.id;
+    // Repeated `fallback_ids=a&fallback_ids=b`, each id verbatim: an id may
+    // itself hold a comma or edge spaces. Empty items are dropped, so a bare
+    // `fallback_ids=` reads as absent.
+    const nonEmptyFallbackIds = listQuery(req.query, "fallback_ids")?.filter((id) => id !== "");
+    const fallbackIds = nonEmptyFallbackIds?.length ? nonEmptyFallbackIds : undefined;
+    const cacheKey = `transit:vehicle-journey:${JSON.stringify([tripId, fallbackIds ?? []])}`;
     let env = (await ctx.cache.get(cacheKey)) as MobilityEnvelope<unknown> | null;
     if (!env) {
       const res = await orchestrator.getVehicleJourney(tripId, fallbackIds);

@@ -87,12 +87,12 @@ function domainForIntegration(
   source: { domain?: string } = {},
 ): CoverageCollection["streams"][number]["domain"] | null {
   if (integration.id === "ev-charging") return "ev";
-  if (integration.id === "parking") return "parking";
   const domains = source.domain !== undefined ? [source.domain] : integration.manifest.domains;
   if (domains.includes("geocoding")) return "addresses";
   if (domains.includes("poi-search")) return "pois";
   if (domains.includes("transit") || domains.includes("live-transit")) return "transit";
   if (domains.includes("road-conditions")) return "traffic";
+  if (domains.includes("parking-sites")) return "parking";
   return null;
 }
 

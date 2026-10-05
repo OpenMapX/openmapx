@@ -1,6 +1,6 @@
 {
   "name": "OpenConditions",
-  "description": "Aktuelle Straßenlage (Ereignisse, Baustellen, Sperrungen und Verkehrsfluss) und Tankstellen mit ihren Preisen aus einer OpenConditions-Instanz",
+  "description": "Aktuelle Straßenlage (Ereignisse, Baustellen, Sperrungen und Verkehrsfluss), Tankstellen mit ihren Preisen und Parkplätze mit freien Stellplätzen und Tarifen aus einer OpenConditions-Instanz",
   "dataSources": {
     "domain:road-conditions": {
       "purpose": "Verkehrsereignisse, Baustellen, Sperrungen und Verkehrsfluss, gelesen über OpenConditions",
@@ -11,6 +11,11 @@
       "purpose": "Tankstellen und ihre Kraftstoffpreise, gelesen über OpenConditions",
       "dataSent": "Nichts über die Nutzer. OpenConditions fragt manche Quellen bei Bedarf ab: Eine solche Quelle erhält die Rasterzellen oder deren Mittelpunkte, die den gesuchten Kartenausschnitt abdecken (bzw. beim Öffnen einer Tankstelle einen Ausschnitt von etwa 200 m um sie), und eine Quelle mit Schlüssel zusätzlich den API-Schlüssel des Betreibers. Quellen, die OpenConditions im Gesamtabruf liest, erhalten nichts",
       "dataReceived": "Tankstellen mit Adresse, Marke, Öffnungszeiten, den angebotenen Kraftstoffen und ihren Preisen"
+    },
+    "domain:parking-sites": {
+      "purpose": "Parkhäuser und andere Parkplätze mit ihren freien Stellplätzen und Tarifen, gelesen über OpenConditions",
+      "dataSent": "Nichts über die Nutzer. OpenConditions fragt manche Quellen bei Bedarf ab: Eine solche Quelle erhält die Rasterzellen, die den gesuchten Kartenausschnitt abdecken (bzw. beim Öffnen eines Parkplatzes einen Ausschnitt von etwa 200 m um ihn). Quellen, die OpenConditions im Gesamtabruf liest, erhalten nichts",
+      "dataReceived": "Parkplätze mit Adresse, Betreiber, Öffnungszeiten, Kapazität, freien Stellplätzen, Stellplätzen für bestimmte Fahrzeuge und Nutzergruppen sowie Tarifen"
     }
   }
 }

@@ -269,7 +269,7 @@ probe.
 
 ## `poi-ingest`
 
-Inspect and trigger the POI ingest sources (EV charging, parking, and the like)
+Inspect and trigger the POI ingest sources (EV charging)
 that the data-manager runs. These commands talk to the data-manager at
 `$DATA_MANAGER_URL`.
 

@@ -5,6 +5,7 @@ import type { GeocodingProvider } from "./contracts/geocoding-provider.js";
 import type { GtfsCatalogProvider } from "./contracts/gtfs-catalog-provider.js";
 import type { KnowledgeProvider } from "./contracts/knowledge-provider.js";
 import type { MobilityDataSourceProvider } from "./contracts/mobility-data-source-provider.js";
+import type { ParkingSiteProvider } from "./contracts/parking-site-provider.js";
 import type { PhotoProvider } from "./contracts/photo-provider.js";
 import type { PoiSearchProvider } from "./contracts/poi-search-provider.js";
 import type { RealtimeProvider } from "./contracts/realtime-provider.js";
@@ -126,6 +127,10 @@ export interface DatabaseClient {
 export type RouteHandler = (
   req: {
     query: RouteQuery;
+    /**
+     * Path params, already decoded exactly once by the host (an encoded `/`
+     * stays inside its param). Handlers must not decode them again.
+     */
     params: Record<string, string>;
     body: unknown;
     /**
@@ -524,6 +529,12 @@ export interface IntegrationContext {
    * registered providers.
    */
   registerFuelStationProvider(provider: FuelStationProvider): void;
+  /**
+   * Typed registrar for parking-site providers (sites, areas, counts, rates).
+   * Stored under the `parking-sites` key; the `parking` orchestrator merges
+   * all registered providers.
+   */
+  registerParkingSiteProvider(provider: ParkingSiteProvider): void;
   /** Typed registrar for photo providers. Stored under the `photos` key. */
   registerPhotoProvider(provider: PhotoProvider): void;
   /** Typed registrar for street-level imagery providers. Stored under the `street-level-imagery` key. */
