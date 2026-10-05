@@ -254,7 +254,7 @@ importers:
         version: 57.0.2(expo@57.0.24)(react@19.3.0)
       expo-location:
         specifier: ~57.0.19
-        version: 57.0.19(expo@57.0.24)(supports-color@8.1.1)(typescript@6.0.3)
+        version: 57.0.20(expo@57.0.24)(supports-color@8.1.1)(typescript@6.0.3)
       expo-notifications:
         specifier: ~57.0.20
         version: 57.0.21(expo@57.0.24)(react-native@0.86.3(@babel/core@7.29.7(supports-color@8.1.1))(@react-native/jest-preset@0.86.3(@babel/core@7.29.7(supports-color@8.1.1))(react@19.3.0)(supports-color@8.1.1))(@types/react@19.3.0)(react@19.3.0)(supports-color@8.1.1))(react@19.3.0)(supports-color@8.1.1)(typescript@6.0.3)
@@ -7662,8 +7662,8 @@ packages:
       react: '*'
       react-native: 0.86.3
 
-  expo-location@57.0.19:
-    resolution: {integrity: sha512-eNX8D74Aav4Go0jmNQIuIP3ioV6QLNDsKuEXE24rtqoG80UgqgD0gjnwwWqkC5fs7yGUToXcy4BLqlwCqrX5pQ==}
+  expo-location@57.0.20:
+    resolution: {integrity: sha512-E9cr7A5eQS91bm3McMx3FiWy7SCorVTPLq9gLFFW+7dfuSqQp5FLNBZQ6NFJaS8tVhCyl2WyKMFh0TAo/+7K9Q==}
     peerDependencies:
       expo: '*'
 
@@ -16256,7 +16256,7 @@ snapshots:
       - supports-color
     optional: true
 
-  expo-location@57.0.19(expo@57.0.24)(supports-color@8.1.1)(typescript@6.0.3):
+  expo-location@57.0.20(expo@57.0.24)(supports-color@8.1.1)(typescript@6.0.3):
     dependencies:
       '@expo/image-utils': 0.11.5(supports-color@8.1.1)(typescript@6.0.3)
       expo: 57.0.24(@babel/core@7.29.7(supports-color@8.1.1))(@expo/dom-webview@57.0.1)(react-dom@19.3.0(react@19.3.0))(react-native-webview@13.16.1(react-native@0.86.3(@babel/core@7.29.7(supports-color@8.1.1))(@react-native/jest-preset@0.86.3(@babel/core@7.29.7(supports-color@8.1.1))(react@19.3.0)(supports-color@8.1.1))(@types/react@19.3.0)(react@19.3.0)(supports-color@8.1.1))(react@19.3.0))(react-native@0.86.3(@babel/core@7.29.7(supports-color@8.1.1))(@react-native/jest-preset@0.86.3(@babel/core@7.29.7(supports-color@8.1.1))(react@19.3.0)(supports-color@8.1.1))(@types/react@19.3.0)(react@19.3.0)(supports-color@8.1.1))(react@19.3.0)(supports-color@8.1.1)(typescript@6.0.3)
