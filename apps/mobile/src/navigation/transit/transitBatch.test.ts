@@ -400,6 +400,14 @@ describe("processTransitBatch stop areas", () => {
       currentLegIndex: 1,
       phase: "waiting-to-board",
       arrived: false,
+      position: [8.6758, 50.11],
     });
+  });
+
+  it("does not report a position before any fix is accepted", () => {
+    const outcome = run({ session: sessionWithAreas(true), fixes: [] });
+    const progress = (outcome.session as TransitMobileSession).payload.progress;
+    expect(progress).toMatchObject({ currentLegIndex: 0 });
+    expect(progress).not.toHaveProperty("position");
   });
 });

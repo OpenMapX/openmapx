@@ -219,6 +219,7 @@ describe("processTransitFix with stop areas", () => {
       currentLegIndex: 1,
       phase: "waiting-to-board",
       arrived: false,
+      position: xy(150, 2),
     });
     expect(progress.fractionAlongLeg).toBeCloseTo(0.1, 2);
   });

@@ -201,8 +201,11 @@ function followAlongProgress(
   prepared: PreparedTransitProgress,
   itinerary: { legs?: Array<{ geometry?: { coordinates?: [number, number][] } }> },
 ) {
-  const coords =
-    (state.lastAcceptedFix?.coords as [number, number] | undefined) ??
-    itinerary.legs?.[state.currentLegIndex]?.geometry?.coordinates?.[0];
-  return coords ? transitProgressFromTick(state, prepared, coords) : null;
+  const fix = state.lastAcceptedFix?.coords as [number, number] | undefined;
+  if (fix) return transitProgressFromTick(state, prepared, fix);
+  const start = itinerary.legs?.[state.currentLegIndex]?.geometry?.coordinates?.[0];
+  if (!start) return null;
+  // The leg's start stands in for the rider's place on it, not for where they are.
+  const { position: _position, ...progress } = transitProgressFromTick(state, prepared, start);
+  return progress;
 }

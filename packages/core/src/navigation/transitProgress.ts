@@ -13,6 +13,8 @@ export type TransitPhase = "walking" | "waiting-to-board" | "riding" | "transfer
 
 export interface TransitProgress {
   currentLegIndex: number;
+  /** The fix itself, where the rider is; absent when no fix has been accepted yet. */
+  position?: LngLat;
   snapped: LngLat;
   fractionAlongLeg: number;
   deviationMeters: number;

@@ -588,6 +588,7 @@ export function transitProgressFromTick(
   const match = matchLeg(prepared, state.currentLegIndex, coords);
   return {
     currentLegIndex: state.currentLegIndex,
+    position: coords,
     snapped: match?.snapped ?? coords,
     fractionAlongLeg: match?.fraction ?? 0,
     deviationMeters: match?.deviationMeters ?? 0,
