@@ -79,16 +79,16 @@ importers:
         version: 1.7.5(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.2)(@opentelemetry/api@1.9.1)(better-call@1.4.0(zod@4.6.5))(jose@6.2.12)(kysely@0.29.6)(nanostores@1.5.3)
       '@better-auth/expo':
         specifier: 1.7.5
-        version: 1.7.5(0a59186a5cb2beed9393690efc3e8a6e)
+        version: 1.7.5(93b5b29d9914f379f22dff444b2b9eff)
       '@better-auth/i18n':
         specifier: 1.7.5
-        version: 1.7.5(@better-auth/core@1.7.5(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.2)(@opentelemetry/api@1.9.1)(better-call@1.4.0(zod@4.6.5))(jose@6.2.12)(kysely@0.29.6)(nanostores@1.5.3))(better-auth@1.7.5(@opentelemetry/api@1.9.1)(drizzle-kit@0.31.10)(drizzle-orm@0.45.2(@opentelemetry/api@1.9.1)(expo-sqlite@57.0.3(expo@57.0.24)(react-native@0.86.3(@babel/core@7.29.7(supports-color@8.1.1))(@react-native/jest-preset@0.86.3(@babel/core@7.29.7(supports-color@8.1.1))(react@19.3.0)(supports-color@8.1.1))(@types/react@19.3.0)(react@19.3.0)(supports-color@8.1.1))(react@19.3.0))(kysely@0.29.6)(postgres@3.4.9))(next@16.3.6(@babel/core@7.29.7(supports-color@8.1.1))(@opentelemetry/api@1.9.1)(@types/node@26.6.2)(babel-plugin-macros@3.1.0)(babel-plugin-react-compiler@1.0.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.1)(vue@3.5.40(typescript@6.0.3)))
+        version: 1.7.5(@better-auth/core@1.7.5(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.2)(@opentelemetry/api@1.9.1)(better-call@1.4.0(zod@4.6.5))(jose@6.2.12)(kysely@0.29.6)(nanostores@1.5.3))(better-auth@1.7.5(@opentelemetry/api@1.9.1)(drizzle-kit@0.31.10)(drizzle-orm@0.45.3(@opentelemetry/api@1.9.1)(expo-sqlite@57.0.3(expo@57.0.24)(react-native@0.86.3(@babel/core@7.29.7(supports-color@8.1.1))(@react-native/jest-preset@0.86.3(@babel/core@7.29.7(supports-color@8.1.1))(react@19.3.0)(supports-color@8.1.1))(@types/react@19.3.0)(react@19.3.0)(supports-color@8.1.1))(react@19.3.0))(kysely@0.29.6)(postgres@3.4.9))(next@16.3.6(@babel/core@7.29.7(supports-color@8.1.1))(@opentelemetry/api@1.9.1)(@types/node@26.6.2)(babel-plugin-macros@3.1.0)(babel-plugin-react-compiler@1.0.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.1)(vue@3.5.40(typescript@6.0.3)))
       '@better-auth/oauth-provider':
         specifier: 1.7.5
-        version: 1.7.5(@better-auth/core@1.7.5(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.2)(@opentelemetry/api@1.9.1)(better-call@1.4.0(zod@4.6.5))(jose@6.2.12)(kysely@0.29.6)(nanostores@1.5.3))(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.2)(better-auth@1.7.5(@opentelemetry/api@1.9.1)(drizzle-kit@0.31.10)(drizzle-orm@0.45.2(@opentelemetry/api@1.9.1)(expo-sqlite@57.0.3(expo@57.0.24)(react-native@0.86.3(@babel/core@7.29.7(supports-color@8.1.1))(@react-native/jest-preset@0.86.3(@babel/core@7.29.7(supports-color@8.1.1))(react@19.3.0)(supports-color@8.1.1))(@types/react@19.3.0)(react@19.3.0)(supports-color@8.1.1))(react@19.3.0))(kysely@0.29.6)(postgres@3.4.9))(next@16.3.6(@babel/core@7.29.7(supports-color@8.1.1))(@opentelemetry/api@1.9.1)(@types/node@26.6.2)(babel-plugin-macros@3.1.0)(babel-plugin-react-compiler@1.0.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.1)(vue@3.5.40(typescript@6.0.3)))(better-call@1.4.0(zod@4.6.5))
+        version: 1.7.5(@better-auth/core@1.7.5(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.2)(@opentelemetry/api@1.9.1)(better-call@1.4.0(zod@4.6.5))(jose@6.2.12)(kysely@0.29.6)(nanostores@1.5.3))(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.2)(better-auth@1.7.5(@opentelemetry/api@1.9.1)(drizzle-kit@0.31.10)(drizzle-orm@0.45.3(@opentelemetry/api@1.9.1)(expo-sqlite@57.0.3(expo@57.0.24)(react-native@0.86.3(@babel/core@7.29.7(supports-color@8.1.1))(@react-native/jest-preset@0.86.3(@babel/core@7.29.7(supports-color@8.1.1))(react@19.3.0)(supports-color@8.1.1))(@types/react@19.3.0)(react@19.3.0)(supports-color@8.1.1))(react@19.3.0))(kysely@0.29.6)(postgres@3.4.9))(next@16.3.6(@babel/core@7.29.7(supports-color@8.1.1))(@opentelemetry/api@1.9.1)(@types/node@26.6.2)(babel-plugin-macros@3.1.0)(babel-plugin-react-compiler@1.0.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.1)(vue@3.5.40(typescript@6.0.3)))(better-call@1.4.0(zod@4.6.5))
       '@better-auth/passkey':
         specifier: 1.7.5
-        version: 1.7.5(fe0a3de7222b10d44046c7540c796fe1)
+        version: 1.7.5(5caac6966fb149b4819fd92e505bf066)
       '@fastify/cors':
         specifier: ^11.3.0
         version: 11.3.0
@@ -145,10 +145,10 @@ importers:
         version: 2.11.0(@opentelemetry/api@1.9.1)
       better-auth:
         specifier: 1.7.5
-        version: 1.7.5(@opentelemetry/api@1.9.1)(drizzle-kit@0.31.10)(drizzle-orm@0.45.2(@opentelemetry/api@1.9.1)(expo-sqlite@57.0.3(expo@57.0.24)(react-native@0.86.3(@babel/core@7.29.7(supports-color@8.1.1))(@react-native/jest-preset@0.86.3(@babel/core@7.29.7(supports-color@8.1.1))(react@19.3.0)(supports-color@8.1.1))(@types/react@19.3.0)(react@19.3.0)(supports-color@8.1.1))(react@19.3.0))(kysely@0.29.6)(postgres@3.4.9))(next@16.3.6(@babel/core@7.29.7(supports-color@8.1.1))(@opentelemetry/api@1.9.1)(@types/node@26.6.2)(babel-plugin-macros@3.1.0)(babel-plugin-react-compiler@1.0.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.1)(vue@3.5.40(typescript@6.0.3))
+        version: 1.7.5(@opentelemetry/api@1.9.1)(drizzle-kit@0.31.10)(drizzle-orm@0.45.3(@opentelemetry/api@1.9.1)(expo-sqlite@57.0.3(expo@57.0.24)(react-native@0.86.3(@babel/core@7.29.7(supports-color@8.1.1))(@react-native/jest-preset@0.86.3(@babel/core@7.29.7(supports-color@8.1.1))(react@19.3.0)(supports-color@8.1.1))(@types/react@19.3.0)(react@19.3.0)(supports-color@8.1.1))(react@19.3.0))(kysely@0.29.6)(postgres@3.4.9))(next@16.3.6(@babel/core@7.29.7(supports-color@8.1.1))(@opentelemetry/api@1.9.1)(@types/node@26.6.2)(babel-plugin-macros@3.1.0)(babel-plugin-react-compiler@1.0.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.1)(vue@3.5.40(typescript@6.0.3))
       better-auth-harmony:
         specifier: ^1.3.2
-        version: 1.3.2(better-auth@1.7.5(@opentelemetry/api@1.9.1)(drizzle-kit@0.31.10)(drizzle-orm@0.45.2(@opentelemetry/api@1.9.1)(expo-sqlite@57.0.3(expo@57.0.24)(react-native@0.86.3(@babel/core@7.29.7(supports-color@8.1.1))(@react-native/jest-preset@0.86.3(@babel/core@7.29.7(supports-color@8.1.1))(react@19.3.0)(supports-color@8.1.1))(@types/react@19.3.0)(react@19.3.0)(supports-color@8.1.1))(react@19.3.0))(kysely@0.29.6)(postgres@3.4.9))(next@16.3.6(@babel/core@7.29.7(supports-color@8.1.1))(@opentelemetry/api@1.9.1)(@types/node@26.6.2)(babel-plugin-macros@3.1.0)(babel-plugin-react-compiler@1.0.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.1)(vue@3.5.40(typescript@6.0.3)))
+        version: 1.3.2(better-auth@1.7.5(@opentelemetry/api@1.9.1)(drizzle-kit@0.31.10)(drizzle-orm@0.45.3(@opentelemetry/api@1.9.1)(expo-sqlite@57.0.3(expo@57.0.24)(react-native@0.86.3(@babel/core@7.29.7(supports-color@8.1.1))(@react-native/jest-preset@0.86.3(@babel/core@7.29.7(supports-color@8.1.1))(react@19.3.0)(supports-color@8.1.1))(@types/react@19.3.0)(react@19.3.0)(supports-color@8.1.1))(react@19.3.0))(kysely@0.29.6)(postgres@3.4.9))(next@16.3.6(@babel/core@7.29.7(supports-color@8.1.1))(@opentelemetry/api@1.9.1)(@types/node@26.6.2)(babel-plugin-macros@3.1.0)(babel-plugin-react-compiler@1.0.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.1)(vue@3.5.40(typescript@6.0.3)))
       cached-hafas-client:
         specifier: ^5.1.9
         version: 5.1.9(hafas-client@6.3.6(supports-color@8.1.1))(prom-client@15.1.3)(supports-color@8.1.1)
@@ -157,7 +157,7 @@ importers:
         version: 6.11.3(supports-color@8.1.1)
       drizzle-orm:
         specifier: ^0.45.2
-        version: 0.45.2(@opentelemetry/api@1.9.1)(expo-sqlite@57.0.3(expo@57.0.24)(react-native@0.86.3(@babel/core@7.29.7(supports-color@8.1.1))(@react-native/jest-preset@0.86.3(@babel/core@7.29.7(supports-color@8.1.1))(react@19.3.0)(supports-color@8.1.1))(@types/react@19.3.0)(react@19.3.0)(supports-color@8.1.1))(react@19.3.0))(kysely@0.29.6)(postgres@3.4.9)
+        version: 0.45.3(@opentelemetry/api@1.9.1)(expo-sqlite@57.0.3(expo@57.0.24)(react-native@0.86.3(@babel/core@7.29.7(supports-color@8.1.1))(@react-native/jest-preset@0.86.3(@babel/core@7.29.7(supports-color@8.1.1))(react@19.3.0)(supports-color@8.1.1))(@types/react@19.3.0)(react@19.3.0)(supports-color@8.1.1))(react@19.3.0))(kysely@0.29.6)(postgres@3.4.9)
       fast-xml-parser:
         specifier: ^5.11.1
         version: 5.11.1
@@ -380,7 +380,7 @@ importers:
         version: 1.7.5(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.2)(@opentelemetry/api@1.9.1)(better-call@1.4.0(zod@4.6.5))(jose@6.2.12)(kysely@0.29.6)(nanostores@1.5.3)
       '@better-auth/passkey':
         specifier: 1.7.5
-        version: 1.7.5(fe0a3de7222b10d44046c7540c796fe1)
+        version: 1.7.5(5caac6966fb149b4819fd92e505bf066)
       '@dnd-kit/core':
         specifier: ^6.3.1
         version: 6.3.1(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
@@ -482,7 +482,7 @@ importers:
         version: 7.4.0
       better-auth:
         specifier: 1.7.5
-        version: 1.7.5(@opentelemetry/api@1.9.1)(drizzle-kit@0.31.10)(drizzle-orm@0.45.2(@opentelemetry/api@1.9.1)(expo-sqlite@57.0.3(expo@57.0.24)(react-native@0.86.3(@babel/core@7.29.7(supports-color@8.1.1))(@react-native/jest-preset@0.86.3(@babel/core@7.29.7(supports-color@8.1.1))(react@19.3.0)(supports-color@8.1.1))(@types/react@19.3.0)(react@19.3.0)(supports-color@8.1.1))(react@19.3.0))(kysely@0.29.6)(postgres@3.4.9))(next@16.3.6(@babel/core@7.29.7(supports-color@8.1.1))(@opentelemetry/api@1.9.1)(@types/node@26.6.2)(babel-plugin-macros@3.1.0)(babel-plugin-react-compiler@1.0.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.1)(vue@3.5.40(typescript@6.0.3))
+        version: 1.7.5(@opentelemetry/api@1.9.1)(drizzle-kit@0.31.10)(drizzle-orm@0.45.3(@opentelemetry/api@1.9.1)(expo-sqlite@57.0.3(expo@57.0.24)(react-native@0.86.3(@babel/core@7.29.7(supports-color@8.1.1))(@react-native/jest-preset@0.86.3(@babel/core@7.29.7(supports-color@8.1.1))(react@19.3.0)(supports-color@8.1.1))(@types/react@19.3.0)(react@19.3.0)(supports-color@8.1.1))(react@19.3.0))(kysely@0.29.6)(postgres@3.4.9))(next@16.3.6(@babel/core@7.29.7(supports-color@8.1.1))(@opentelemetry/api@1.9.1)(@types/node@26.6.2)(babel-plugin-macros@3.1.0)(babel-plugin-react-compiler@1.0.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.1)(vue@3.5.40(typescript@6.0.3))
       emoji-mart:
         specifier: ^5.6.0
         version: 5.6.0
@@ -2142,10 +2142,10 @@ importers:
         version: 1.7.5(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.2)(@opentelemetry/api@1.9.1)(better-call@1.4.0(zod@4.6.5))(jose@6.2.12)(kysely@0.29.6)(nanostores@1.5.3)
       '@better-auth/oauth-provider':
         specifier: 1.7.5
-        version: 1.7.5(@better-auth/core@1.7.5(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.2)(@opentelemetry/api@1.9.1)(better-call@1.4.0(zod@4.6.5))(jose@6.2.12)(kysely@0.29.6)(nanostores@1.5.3))(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.2)(better-auth@1.7.5(@opentelemetry/api@1.9.1)(drizzle-kit@0.31.10)(drizzle-orm@0.45.2(@opentelemetry/api@1.9.1)(expo-sqlite@57.0.3(expo@57.0.24)(react-native@0.86.3(@babel/core@7.29.7(supports-color@8.1.1))(@react-native/jest-preset@0.86.3(@babel/core@7.29.7(supports-color@8.1.1))(react@19.3.0)(supports-color@8.1.1))(@types/react@19.3.0)(react@19.3.0)(supports-color@8.1.1))(react@19.3.0))(kysely@0.29.6)(postgres@3.4.9))(next@16.3.6(@babel/core@7.29.7(supports-color@8.1.1))(@opentelemetry/api@1.9.1)(@types/node@26.6.2)(babel-plugin-macros@3.1.0)(babel-plugin-react-compiler@1.0.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.1)(vue@3.5.40(typescript@6.0.3)))(better-call@1.4.0(zod@4.6.5))
+        version: 1.7.5(@better-auth/core@1.7.5(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.2)(@opentelemetry/api@1.9.1)(better-call@1.4.0(zod@4.6.5))(jose@6.2.12)(kysely@0.29.6)(nanostores@1.5.3))(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.2)(better-auth@1.7.5(@opentelemetry/api@1.9.1)(drizzle-kit@0.31.10)(drizzle-orm@0.45.3(@opentelemetry/api@1.9.1)(expo-sqlite@57.0.3(expo@57.0.24)(react-native@0.86.3(@babel/core@7.29.7(supports-color@8.1.1))(@react-native/jest-preset@0.86.3(@babel/core@7.29.7(supports-color@8.1.1))(react@19.3.0)(supports-color@8.1.1))(@types/react@19.3.0)(react@19.3.0)(supports-color@8.1.1))(react@19.3.0))(kysely@0.29.6)(postgres@3.4.9))(next@16.3.6(@babel/core@7.29.7(supports-color@8.1.1))(@opentelemetry/api@1.9.1)(@types/node@26.6.2)(babel-plugin-macros@3.1.0)(babel-plugin-react-compiler@1.0.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.1)(vue@3.5.40(typescript@6.0.3)))(better-call@1.4.0(zod@4.6.5))
       '@better-auth/passkey':
         specifier: 1.7.5
-        version: 1.7.5(fe0a3de7222b10d44046c7540c796fe1)
+        version: 1.7.5(5caac6966fb149b4819fd92e505bf066)
       '@openmapx/air-quality':
         specifier: workspace:*
         version: link:../air-quality
@@ -2169,7 +2169,7 @@ importers:
         version: 6.1.2
       better-auth:
         specifier: 1.7.5
-        version: 1.7.5(@opentelemetry/api@1.9.1)(drizzle-kit@0.31.10)(drizzle-orm@0.45.2(@opentelemetry/api@1.9.1)(expo-sqlite@57.0.3(expo@57.0.24)(react-native@0.86.3(@babel/core@7.29.7(supports-color@8.1.1))(@react-native/jest-preset@0.86.3(@babel/core@7.29.7(supports-color@8.1.1))(react@19.3.0)(supports-color@8.1.1))(@types/react@19.3.0)(react@19.3.0)(supports-color@8.1.1))(react@19.3.0))(kysely@0.29.6)(postgres@3.4.9))(next@16.3.6(@babel/core@7.29.7(supports-color@8.1.1))(@opentelemetry/api@1.9.1)(@types/node@26.6.2)(babel-plugin-macros@3.1.0)(babel-plugin-react-compiler@1.0.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.1)(vue@3.5.40(typescript@6.0.3))
+        version: 1.7.5(@opentelemetry/api@1.9.1)(drizzle-kit@0.31.10)(drizzle-orm@0.45.3(@opentelemetry/api@1.9.1)(expo-sqlite@57.0.3(expo@57.0.24)(react-native@0.86.3(@babel/core@7.29.7(supports-color@8.1.1))(@react-native/jest-preset@0.86.3(@babel/core@7.29.7(supports-color@8.1.1))(react@19.3.0)(supports-color@8.1.1))(@types/react@19.3.0)(react@19.3.0)(supports-color@8.1.1))(react@19.3.0))(kysely@0.29.6)(postgres@3.4.9))(next@16.3.6(@babel/core@7.29.7(supports-color@8.1.1))(@opentelemetry/api@1.9.1)(@types/node@26.6.2)(babel-plugin-macros@3.1.0)(babel-plugin-react-compiler@1.0.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.1)(vue@3.5.40(typescript@6.0.3))
       js-yaml:
         specifier: ^5.2.1
         version: 5.4.2
@@ -2221,7 +2221,7 @@ importers:
     dependencies:
       drizzle-orm:
         specifier: ^0.45.2
-        version: 0.45.2(@opentelemetry/api@1.9.1)(expo-sqlite@57.0.3(expo@57.0.24)(react-native@0.86.3(@babel/core@7.29.7(supports-color@8.1.1))(@react-native/jest-preset@0.86.3(@babel/core@7.29.7(supports-color@8.1.1))(react@19.3.0)(supports-color@8.1.1))(@types/react@19.3.0)(react@19.3.0)(supports-color@8.1.1))(react@19.3.0))(kysely@0.29.6)(postgres@3.4.9)
+        version: 0.45.3(@opentelemetry/api@1.9.1)(expo-sqlite@57.0.3(expo@57.0.24)(react-native@0.86.3(@babel/core@7.29.7(supports-color@8.1.1))(@react-native/jest-preset@0.86.3(@babel/core@7.29.7(supports-color@8.1.1))(react@19.3.0)(supports-color@8.1.1))(@types/react@19.3.0)(react@19.3.0)(supports-color@8.1.1))(react@19.3.0))(kysely@0.29.6)(postgres@3.4.9)
     devDependencies:
       '@types/node':
         specifier: ^26.6.2
@@ -2641,7 +2641,7 @@ importers:
         version: 10.0.1
       drizzle-orm:
         specifier: ^0.45.2
-        version: 0.45.2(@opentelemetry/api@1.9.1)(expo-sqlite@57.0.3(expo@57.0.24)(react-native@0.86.3(@babel/core@7.29.7(supports-color@8.1.1))(@react-native/jest-preset@0.86.3(@babel/core@7.29.7(supports-color@8.1.1))(react@19.3.0)(supports-color@8.1.1))(@types/react@19.3.0)(react@19.3.0)(supports-color@8.1.1))(react@19.3.0))(kysely@0.29.6)(postgres@3.4.9)
+        version: 0.45.3(@opentelemetry/api@1.9.1)(expo-sqlite@57.0.3(expo@57.0.24)(react-native@0.86.3(@babel/core@7.29.7(supports-color@8.1.1))(@react-native/jest-preset@0.86.3(@babel/core@7.29.7(supports-color@8.1.1))(react@19.3.0)(supports-color@8.1.1))(@types/react@19.3.0)(react@19.3.0)(supports-color@8.1.1))(react@19.3.0))(kysely@0.29.6)(postgres@3.4.9)
       execa:
         specifier: ^10.0.1
         version: 10.0.1
@@ -7359,8 +7359,8 @@ packages:
   drizzle-kit@0.31.10:
     resolution: {integrity: sha512-7OZcmQUrdGI+DUNNsKBn1aW8qSoKuTH7d0mYgSP8bAzdFzKoovxEFnoGQp2dVs82EOJeYycqRtciopszwUf8bw==}
 
-  drizzle-orm@0.45.2:
-    resolution: {integrity: sha512-kY0BSaTNYWnoDMVoyY8uxmyHjpJW1geOmBMdSSicKo9CIIWkSxMIj2rkeSR51b8KAPB7m+qysjuHme5nKP+E5Q==}
+  drizzle-orm@0.45.3:
+    resolution: {integrity: sha512-CAloER21cDdcgZ1OmjrZX82EeRNsdP+y0onX/eyoYDaYzki/adrAa91lzM5jWh7zZPK4qUbw/6LGv9J+A+uizA==}
     peerDependencies:
       '@aws-sdk/client-rds-data': '>=3'
       '@cloudflare/workers-types': '>=4'
@@ -7368,6 +7368,7 @@ packages:
       '@libsql/client': '>=0.10.0'
       '@libsql/client-wasm': '>=0.10.0'
       '@neondatabase/serverless': '>=0.10.0'
+      '@netlify/db': '>=0.4.0'
       '@op-engineering/op-sqlite': '>=2'
       '@opentelemetry/api': ^1.4.1
       '@planetscale/database': '>=1.13'
@@ -7403,6 +7404,8 @@ packages:
       '@libsql/client-wasm':
         optional: true
       '@neondatabase/serverless':
+        optional: true
+      '@netlify/db':
         optional: true
       '@op-engineering/op-sqlite':
         optional: true
@@ -11688,28 +11691,28 @@ snapshots:
     optionalDependencies:
       '@opentelemetry/api': 1.9.1
 
-  '@better-auth/drizzle-adapter@1.7.5(@better-auth/core@1.7.5(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.2)(@opentelemetry/api@1.9.1)(better-call@1.4.0(zod@4.6.5))(jose@6.2.12)(kysely@0.29.6)(nanostores@1.5.3))(@better-auth/utils@0.4.2)(drizzle-orm@0.45.2(@opentelemetry/api@1.9.1)(expo-sqlite@57.0.3(expo@57.0.24)(react-native@0.86.3(@babel/core@7.29.7(supports-color@8.1.1))(@react-native/jest-preset@0.86.3(@babel/core@7.29.7(supports-color@8.1.1))(react@19.3.0)(supports-color@8.1.1))(@types/react@19.3.0)(react@19.3.0)(supports-color@8.1.1))(react@19.3.0))(kysely@0.29.6)(postgres@3.4.9))':
+  '@better-auth/drizzle-adapter@1.7.5(@better-auth/core@1.7.5(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.2)(@opentelemetry/api@1.9.1)(better-call@1.4.0(zod@4.6.5))(jose@6.2.12)(kysely@0.29.6)(nanostores@1.5.3))(@better-auth/utils@0.4.2)(drizzle-orm@0.45.3(@opentelemetry/api@1.9.1)(expo-sqlite@57.0.3(expo@57.0.24)(react-native@0.86.3(@babel/core@7.29.7(supports-color@8.1.1))(@react-native/jest-preset@0.86.3(@babel/core@7.29.7(supports-color@8.1.1))(react@19.3.0)(supports-color@8.1.1))(@types/react@19.3.0)(react@19.3.0)(supports-color@8.1.1))(react@19.3.0))(kysely@0.29.6)(postgres@3.4.9))':
     dependencies:
       '@better-auth/core': 1.7.5(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.2)(@opentelemetry/api@1.9.1)(better-call@1.4.0(zod@4.6.5))(jose@6.2.12)(kysely@0.29.6)(nanostores@1.5.3)
       '@better-auth/utils': 0.4.2
     optionalDependencies:
-      drizzle-orm: 0.45.2(@opentelemetry/api@1.9.1)(expo-sqlite@57.0.3(expo@57.0.24)(react-native@0.86.3(@babel/core@7.29.7(supports-color@8.1.1))(@react-native/jest-preset@0.86.3(@babel/core@7.29.7(supports-color@8.1.1))(react@19.3.0)(supports-color@8.1.1))(@types/react@19.3.0)(react@19.3.0)(supports-color@8.1.1))(react@19.3.0))(kysely@0.29.6)(postgres@3.4.9)
+      drizzle-orm: 0.45.3(@opentelemetry/api@1.9.1)(expo-sqlite@57.0.3(expo@57.0.24)(react-native@0.86.3(@babel/core@7.29.7(supports-color@8.1.1))(@react-native/jest-preset@0.86.3(@babel/core@7.29.7(supports-color@8.1.1))(react@19.3.0)(supports-color@8.1.1))(@types/react@19.3.0)(react@19.3.0)(supports-color@8.1.1))(react@19.3.0))(kysely@0.29.6)(postgres@3.4.9)
 
-  '@better-auth/expo@1.7.5(0a59186a5cb2beed9393690efc3e8a6e)':
+  '@better-auth/expo@1.7.5(93b5b29d9914f379f22dff444b2b9eff)':
     dependencies:
       '@better-auth/core': 1.7.5(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.2)(@opentelemetry/api@1.9.1)(better-call@1.4.0(zod@4.6.5))(jose@6.2.12)(kysely@0.29.6)(nanostores@1.5.3)
       '@better-fetch/fetch': 1.3.2
-      better-auth: 1.7.5(@opentelemetry/api@1.9.1)(drizzle-kit@0.31.10)(drizzle-orm@0.45.2(@opentelemetry/api@1.9.1)(expo-sqlite@57.0.3(expo@57.0.24)(react-native@0.86.3(@babel/core@7.29.7(supports-color@8.1.1))(@react-native/jest-preset@0.86.3(@babel/core@7.29.7(supports-color@8.1.1))(react@19.3.0)(supports-color@8.1.1))(@types/react@19.3.0)(react@19.3.0)(supports-color@8.1.1))(react@19.3.0))(kysely@0.29.6)(postgres@3.4.9))(next@16.3.6(@babel/core@7.29.7(supports-color@8.1.1))(@opentelemetry/api@1.9.1)(@types/node@26.6.2)(babel-plugin-macros@3.1.0)(babel-plugin-react-compiler@1.0.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.1)(vue@3.5.40(typescript@6.0.3))
+      better-auth: 1.7.5(@opentelemetry/api@1.9.1)(drizzle-kit@0.31.10)(drizzle-orm@0.45.3(@opentelemetry/api@1.9.1)(expo-sqlite@57.0.3(expo@57.0.24)(react-native@0.86.3(@babel/core@7.29.7(supports-color@8.1.1))(@react-native/jest-preset@0.86.3(@babel/core@7.29.7(supports-color@8.1.1))(react@19.3.0)(supports-color@8.1.1))(@types/react@19.3.0)(react@19.3.0)(supports-color@8.1.1))(react@19.3.0))(kysely@0.29.6)(postgres@3.4.9))(next@16.3.6(@babel/core@7.29.7(supports-color@8.1.1))(@opentelemetry/api@1.9.1)(@types/node@26.6.2)(babel-plugin-macros@3.1.0)(babel-plugin-react-compiler@1.0.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.1)(vue@3.5.40(typescript@6.0.3))
       better-call: 1.4.0(zod@4.6.5)
       zod: 4.6.5
     optionalDependencies:
       expo-constants: 57.0.19(expo@57.0.24)(react-native@0.86.3(@babel/core@7.29.7(supports-color@8.1.1))(@react-native/jest-preset@0.86.3(@babel/core@7.29.7(supports-color@8.1.1))(react@19.3.0)(supports-color@8.1.1))(@types/react@19.3.0)(react@19.3.0)(supports-color@8.1.1))(supports-color@8.1.1)
       expo-linking: 57.0.5(expo@57.0.24)(react-native@0.86.3(@babel/core@7.29.7(supports-color@8.1.1))(@react-native/jest-preset@0.86.3(@babel/core@7.29.7(supports-color@8.1.1))(react@19.3.0)(supports-color@8.1.1))(@types/react@19.3.0)(react@19.3.0)(supports-color@8.1.1))(react@19.3.0)(supports-color@8.1.1)
 
-  '@better-auth/i18n@1.7.5(@better-auth/core@1.7.5(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.2)(@opentelemetry/api@1.9.1)(better-call@1.4.0(zod@4.6.5))(jose@6.2.12)(kysely@0.29.6)(nanostores@1.5.3))(better-auth@1.7.5(@opentelemetry/api@1.9.1)(drizzle-kit@0.31.10)(drizzle-orm@0.45.2(@opentelemetry/api@1.9.1)(expo-sqlite@57.0.3(expo@57.0.24)(react-native@0.86.3(@babel/core@7.29.7(supports-color@8.1.1))(@react-native/jest-preset@0.86.3(@babel/core@7.29.7(supports-color@8.1.1))(react@19.3.0)(supports-color@8.1.1))(@types/react@19.3.0)(react@19.3.0)(supports-color@8.1.1))(react@19.3.0))(kysely@0.29.6)(postgres@3.4.9))(next@16.3.6(@babel/core@7.29.7(supports-color@8.1.1))(@opentelemetry/api@1.9.1)(@types/node@26.6.2)(babel-plugin-macros@3.1.0)(babel-plugin-react-compiler@1.0.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.1)(vue@3.5.40(typescript@6.0.3)))':
+  '@better-auth/i18n@1.7.5(@better-auth/core@1.7.5(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.2)(@opentelemetry/api@1.9.1)(better-call@1.4.0(zod@4.6.5))(jose@6.2.12)(kysely@0.29.6)(nanostores@1.5.3))(better-auth@1.7.5(@opentelemetry/api@1.9.1)(drizzle-kit@0.31.10)(drizzle-orm@0.45.3(@opentelemetry/api@1.9.1)(expo-sqlite@57.0.3(expo@57.0.24)(react-native@0.86.3(@babel/core@7.29.7(supports-color@8.1.1))(@react-native/jest-preset@0.86.3(@babel/core@7.29.7(supports-color@8.1.1))(react@19.3.0)(supports-color@8.1.1))(@types/react@19.3.0)(react@19.3.0)(supports-color@8.1.1))(react@19.3.0))(kysely@0.29.6)(postgres@3.4.9))(next@16.3.6(@babel/core@7.29.7(supports-color@8.1.1))(@opentelemetry/api@1.9.1)(@types/node@26.6.2)(babel-plugin-macros@3.1.0)(babel-plugin-react-compiler@1.0.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.1)(vue@3.5.40(typescript@6.0.3)))':
     dependencies:
       '@better-auth/core': 1.7.5(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.2)(@opentelemetry/api@1.9.1)(better-call@1.4.0(zod@4.6.5))(jose@6.2.12)(kysely@0.29.6)(nanostores@1.5.3)
-      better-auth: 1.7.5(@opentelemetry/api@1.9.1)(drizzle-kit@0.31.10)(drizzle-orm@0.45.2(@opentelemetry/api@1.9.1)(expo-sqlite@57.0.3(expo@57.0.24)(react-native@0.86.3(@babel/core@7.29.7(supports-color@8.1.1))(@react-native/jest-preset@0.86.3(@babel/core@7.29.7(supports-color@8.1.1))(react@19.3.0)(supports-color@8.1.1))(@types/react@19.3.0)(react@19.3.0)(supports-color@8.1.1))(react@19.3.0))(kysely@0.29.6)(postgres@3.4.9))(next@16.3.6(@babel/core@7.29.7(supports-color@8.1.1))(@opentelemetry/api@1.9.1)(@types/node@26.6.2)(babel-plugin-macros@3.1.0)(babel-plugin-react-compiler@1.0.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.1)(vue@3.5.40(typescript@6.0.3))
+      better-auth: 1.7.5(@opentelemetry/api@1.9.1)(drizzle-kit@0.31.10)(drizzle-orm@0.45.3(@opentelemetry/api@1.9.1)(expo-sqlite@57.0.3(expo@57.0.24)(react-native@0.86.3(@babel/core@7.29.7(supports-color@8.1.1))(@react-native/jest-preset@0.86.3(@babel/core@7.29.7(supports-color@8.1.1))(react@19.3.0)(supports-color@8.1.1))(@types/react@19.3.0)(react@19.3.0)(supports-color@8.1.1))(react@19.3.0))(kysely@0.29.6)(postgres@3.4.9))(next@16.3.6(@babel/core@7.29.7(supports-color@8.1.1))(@opentelemetry/api@1.9.1)(@types/node@26.6.2)(babel-plugin-macros@3.1.0)(babel-plugin-react-compiler@1.0.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.1)(vue@3.5.40(typescript@6.0.3))
 
   '@better-auth/kysely-adapter@1.7.5(@better-auth/core@1.7.5(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.2)(@opentelemetry/api@1.9.1)(better-call@1.4.0(zod@4.6.5))(jose@6.2.12)(kysely@0.29.6)(nanostores@1.5.3))(@better-auth/utils@0.4.2)(kysely@0.29.6)':
     dependencies:
@@ -11728,24 +11731,24 @@ snapshots:
       '@better-auth/core': 1.7.5(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.2)(@opentelemetry/api@1.9.1)(better-call@1.4.0(zod@4.6.5))(jose@6.2.12)(kysely@0.29.6)(nanostores@1.5.3)
       '@better-auth/utils': 0.4.2
 
-  '@better-auth/oauth-provider@1.7.5(@better-auth/core@1.7.5(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.2)(@opentelemetry/api@1.9.1)(better-call@1.4.0(zod@4.6.5))(jose@6.2.12)(kysely@0.29.6)(nanostores@1.5.3))(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.2)(better-auth@1.7.5(@opentelemetry/api@1.9.1)(drizzle-kit@0.31.10)(drizzle-orm@0.45.2(@opentelemetry/api@1.9.1)(expo-sqlite@57.0.3(expo@57.0.24)(react-native@0.86.3(@babel/core@7.29.7(supports-color@8.1.1))(@react-native/jest-preset@0.86.3(@babel/core@7.29.7(supports-color@8.1.1))(react@19.3.0)(supports-color@8.1.1))(@types/react@19.3.0)(react@19.3.0)(supports-color@8.1.1))(react@19.3.0))(kysely@0.29.6)(postgres@3.4.9))(next@16.3.6(@babel/core@7.29.7(supports-color@8.1.1))(@opentelemetry/api@1.9.1)(@types/node@26.6.2)(babel-plugin-macros@3.1.0)(babel-plugin-react-compiler@1.0.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.1)(vue@3.5.40(typescript@6.0.3)))(better-call@1.4.0(zod@4.6.5))':
+  '@better-auth/oauth-provider@1.7.5(@better-auth/core@1.7.5(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.2)(@opentelemetry/api@1.9.1)(better-call@1.4.0(zod@4.6.5))(jose@6.2.12)(kysely@0.29.6)(nanostores@1.5.3))(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.2)(better-auth@1.7.5(@opentelemetry/api@1.9.1)(drizzle-kit@0.31.10)(drizzle-orm@0.45.3(@opentelemetry/api@1.9.1)(expo-sqlite@57.0.3(expo@57.0.24)(react-native@0.86.3(@babel/core@7.29.7(supports-color@8.1.1))(@react-native/jest-preset@0.86.3(@babel/core@7.29.7(supports-color@8.1.1))(react@19.3.0)(supports-color@8.1.1))(@types/react@19.3.0)(react@19.3.0)(supports-color@8.1.1))(react@19.3.0))(kysely@0.29.6)(postgres@3.4.9))(next@16.3.6(@babel/core@7.29.7(supports-color@8.1.1))(@opentelemetry/api@1.9.1)(@types/node@26.6.2)(babel-plugin-macros@3.1.0)(babel-plugin-react-compiler@1.0.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.1)(vue@3.5.40(typescript@6.0.3)))(better-call@1.4.0(zod@4.6.5))':
     dependencies:
       '@better-auth/core': 1.7.5(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.2)(@opentelemetry/api@1.9.1)(better-call@1.4.0(zod@4.6.5))(jose@6.2.12)(kysely@0.29.6)(nanostores@1.5.3)
       '@better-auth/utils': 0.4.2
       '@better-fetch/fetch': 1.3.2
-      better-auth: 1.7.5(@opentelemetry/api@1.9.1)(drizzle-kit@0.31.10)(drizzle-orm@0.45.2(@opentelemetry/api@1.9.1)(expo-sqlite@57.0.3(expo@57.0.24)(react-native@0.86.3(@babel/core@7.29.7(supports-color@8.1.1))(@react-native/jest-preset@0.86.3(@babel/core@7.29.7(supports-color@8.1.1))(react@19.3.0)(supports-color@8.1.1))(@types/react@19.3.0)(react@19.3.0)(supports-color@8.1.1))(react@19.3.0))(kysely@0.29.6)(postgres@3.4.9))(next@16.3.6(@babel/core@7.29.7(supports-color@8.1.1))(@opentelemetry/api@1.9.1)(@types/node@26.6.2)(babel-plugin-macros@3.1.0)(babel-plugin-react-compiler@1.0.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.1)(vue@3.5.40(typescript@6.0.3))
+      better-auth: 1.7.5(@opentelemetry/api@1.9.1)(drizzle-kit@0.31.10)(drizzle-orm@0.45.3(@opentelemetry/api@1.9.1)(expo-sqlite@57.0.3(expo@57.0.24)(react-native@0.86.3(@babel/core@7.29.7(supports-color@8.1.1))(@react-native/jest-preset@0.86.3(@babel/core@7.29.7(supports-color@8.1.1))(react@19.3.0)(supports-color@8.1.1))(@types/react@19.3.0)(react@19.3.0)(supports-color@8.1.1))(react@19.3.0))(kysely@0.29.6)(postgres@3.4.9))(next@16.3.6(@babel/core@7.29.7(supports-color@8.1.1))(@opentelemetry/api@1.9.1)(@types/node@26.6.2)(babel-plugin-macros@3.1.0)(babel-plugin-react-compiler@1.0.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.1)(vue@3.5.40(typescript@6.0.3))
       better-call: 1.4.0(zod@4.6.5)
       jose: 6.2.12
       zod: 4.6.5
 
-  '@better-auth/passkey@1.7.5(fe0a3de7222b10d44046c7540c796fe1)':
+  '@better-auth/passkey@1.7.5(5caac6966fb149b4819fd92e505bf066)':
     dependencies:
       '@better-auth/core': 1.7.5(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.2)(@opentelemetry/api@1.9.1)(better-call@1.4.0(zod@4.6.5))(jose@6.2.12)(kysely@0.29.6)(nanostores@1.5.3)
       '@better-auth/utils': 0.4.2
       '@better-fetch/fetch': 1.3.2
       '@simplewebauthn/browser': 13.3.0
       '@simplewebauthn/server': 13.3.3
-      better-auth: 1.7.5(@opentelemetry/api@1.9.1)(drizzle-kit@0.31.10)(drizzle-orm@0.45.2(@opentelemetry/api@1.9.1)(expo-sqlite@57.0.3(expo@57.0.24)(react-native@0.86.3(@babel/core@7.29.7(supports-color@8.1.1))(@react-native/jest-preset@0.86.3(@babel/core@7.29.7(supports-color@8.1.1))(react@19.3.0)(supports-color@8.1.1))(@types/react@19.3.0)(react@19.3.0)(supports-color@8.1.1))(react@19.3.0))(kysely@0.29.6)(postgres@3.4.9))(next@16.3.6(@babel/core@7.29.7(supports-color@8.1.1))(@opentelemetry/api@1.9.1)(@types/node@26.6.2)(babel-plugin-macros@3.1.0)(babel-plugin-react-compiler@1.0.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.1)(vue@3.5.40(typescript@6.0.3))
+      better-auth: 1.7.5(@opentelemetry/api@1.9.1)(drizzle-kit@0.31.10)(drizzle-orm@0.45.3(@opentelemetry/api@1.9.1)(expo-sqlite@57.0.3(expo@57.0.24)(react-native@0.86.3(@babel/core@7.29.7(supports-color@8.1.1))(@react-native/jest-preset@0.86.3(@babel/core@7.29.7(supports-color@8.1.1))(react@19.3.0)(supports-color@8.1.1))(@types/react@19.3.0)(react@19.3.0)(supports-color@8.1.1))(react@19.3.0))(kysely@0.29.6)(postgres@3.4.9))(next@16.3.6(@babel/core@7.29.7(supports-color@8.1.1))(@opentelemetry/api@1.9.1)(@types/node@26.6.2)(babel-plugin-macros@3.1.0)(babel-plugin-react-compiler@1.0.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.1)(vue@3.5.40(typescript@6.0.3))
       better-call: 1.4.0(zod@4.6.5)
       nanostores: 1.5.3
       zod: 4.6.5
@@ -15404,17 +15407,17 @@ snapshots:
     dependencies:
       tweetnacl: 0.14.5
 
-  better-auth-harmony@1.3.2(better-auth@1.7.5(@opentelemetry/api@1.9.1)(drizzle-kit@0.31.10)(drizzle-orm@0.45.2(@opentelemetry/api@1.9.1)(expo-sqlite@57.0.3(expo@57.0.24)(react-native@0.86.3(@babel/core@7.29.7(supports-color@8.1.1))(@react-native/jest-preset@0.86.3(@babel/core@7.29.7(supports-color@8.1.1))(react@19.3.0)(supports-color@8.1.1))(@types/react@19.3.0)(react@19.3.0)(supports-color@8.1.1))(react@19.3.0))(kysely@0.29.6)(postgres@3.4.9))(next@16.3.6(@babel/core@7.29.7(supports-color@8.1.1))(@opentelemetry/api@1.9.1)(@types/node@26.6.2)(babel-plugin-macros@3.1.0)(babel-plugin-react-compiler@1.0.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.1)(vue@3.5.40(typescript@6.0.3))):
+  better-auth-harmony@1.3.2(better-auth@1.7.5(@opentelemetry/api@1.9.1)(drizzle-kit@0.31.10)(drizzle-orm@0.45.3(@opentelemetry/api@1.9.1)(expo-sqlite@57.0.3(expo@57.0.24)(react-native@0.86.3(@babel/core@7.29.7(supports-color@8.1.1))(@react-native/jest-preset@0.86.3(@babel/core@7.29.7(supports-color@8.1.1))(react@19.3.0)(supports-color@8.1.1))(@types/react@19.3.0)(react@19.3.0)(supports-color@8.1.1))(react@19.3.0))(kysely@0.29.6)(postgres@3.4.9))(next@16.3.6(@babel/core@7.29.7(supports-color@8.1.1))(@opentelemetry/api@1.9.1)(@types/node@26.6.2)(babel-plugin-macros@3.1.0)(babel-plugin-react-compiler@1.0.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.1)(vue@3.5.40(typescript@6.0.3))):
     dependencies:
-      better-auth: 1.7.5(@opentelemetry/api@1.9.1)(drizzle-kit@0.31.10)(drizzle-orm@0.45.2(@opentelemetry/api@1.9.1)(expo-sqlite@57.0.3(expo@57.0.24)(react-native@0.86.3(@babel/core@7.29.7(supports-color@8.1.1))(@react-native/jest-preset@0.86.3(@babel/core@7.29.7(supports-color@8.1.1))(react@19.3.0)(supports-color@8.1.1))(@types/react@19.3.0)(react@19.3.0)(supports-color@8.1.1))(react@19.3.0))(kysely@0.29.6)(postgres@3.4.9))(next@16.3.6(@babel/core@7.29.7(supports-color@8.1.1))(@opentelemetry/api@1.9.1)(@types/node@26.6.2)(babel-plugin-macros@3.1.0)(babel-plugin-react-compiler@1.0.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.1)(vue@3.5.40(typescript@6.0.3))
+      better-auth: 1.7.5(@opentelemetry/api@1.9.1)(drizzle-kit@0.31.10)(drizzle-orm@0.45.3(@opentelemetry/api@1.9.1)(expo-sqlite@57.0.3(expo@57.0.24)(react-native@0.86.3(@babel/core@7.29.7(supports-color@8.1.1))(@react-native/jest-preset@0.86.3(@babel/core@7.29.7(supports-color@8.1.1))(react@19.3.0)(supports-color@8.1.1))(@types/react@19.3.0)(react@19.3.0)(supports-color@8.1.1))(react@19.3.0))(kysely@0.29.6)(postgres@3.4.9))(next@16.3.6(@babel/core@7.29.7(supports-color@8.1.1))(@opentelemetry/api@1.9.1)(@types/node@26.6.2)(babel-plugin-macros@3.1.0)(babel-plugin-react-compiler@1.0.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.1)(vue@3.5.40(typescript@6.0.3))
       libphonenumber-js: 1.13.13
       mailchecker: 6.0.21
       validator: 13.15.35
 
-  better-auth@1.7.5(@opentelemetry/api@1.9.1)(drizzle-kit@0.31.10)(drizzle-orm@0.45.2(@opentelemetry/api@1.9.1)(expo-sqlite@57.0.3(expo@57.0.24)(react-native@0.86.3(@babel/core@7.29.7(supports-color@8.1.1))(@react-native/jest-preset@0.86.3(@babel/core@7.29.7(supports-color@8.1.1))(react@19.3.0)(supports-color@8.1.1))(@types/react@19.3.0)(react@19.3.0)(supports-color@8.1.1))(react@19.3.0))(kysely@0.29.6)(postgres@3.4.9))(next@16.3.6(@babel/core@7.29.7(supports-color@8.1.1))(@opentelemetry/api@1.9.1)(@types/node@26.6.2)(babel-plugin-macros@3.1.0)(babel-plugin-react-compiler@1.0.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.1)(vue@3.5.40(typescript@6.0.3)):
+  better-auth@1.7.5(@opentelemetry/api@1.9.1)(drizzle-kit@0.31.10)(drizzle-orm@0.45.3(@opentelemetry/api@1.9.1)(expo-sqlite@57.0.3(expo@57.0.24)(react-native@0.86.3(@babel/core@7.29.7(supports-color@8.1.1))(@react-native/jest-preset@0.86.3(@babel/core@7.29.7(supports-color@8.1.1))(react@19.3.0)(supports-color@8.1.1))(@types/react@19.3.0)(react@19.3.0)(supports-color@8.1.1))(react@19.3.0))(kysely@0.29.6)(postgres@3.4.9))(next@16.3.6(@babel/core@7.29.7(supports-color@8.1.1))(@opentelemetry/api@1.9.1)(@types/node@26.6.2)(babel-plugin-macros@3.1.0)(babel-plugin-react-compiler@1.0.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.1)(vue@3.5.40(typescript@6.0.3)):
     dependencies:
       '@better-auth/core': 1.7.5(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.2)(@opentelemetry/api@1.9.1)(better-call@1.4.0(zod@4.6.5))(jose@6.2.12)(kysely@0.29.6)(nanostores@1.5.3)
-      '@better-auth/drizzle-adapter': 1.7.5(@better-auth/core@1.7.5(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.2)(@opentelemetry/api@1.9.1)(better-call@1.4.0(zod@4.6.5))(jose@6.2.12)(kysely@0.29.6)(nanostores@1.5.3))(@better-auth/utils@0.4.2)(drizzle-orm@0.45.2(@opentelemetry/api@1.9.1)(expo-sqlite@57.0.3(expo@57.0.24)(react-native@0.86.3(@babel/core@7.29.7(supports-color@8.1.1))(@react-native/jest-preset@0.86.3(@babel/core@7.29.7(supports-color@8.1.1))(react@19.3.0)(supports-color@8.1.1))(@types/react@19.3.0)(react@19.3.0)(supports-color@8.1.1))(react@19.3.0))(kysely@0.29.6)(postgres@3.4.9))
+      '@better-auth/drizzle-adapter': 1.7.5(@better-auth/core@1.7.5(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.2)(@opentelemetry/api@1.9.1)(better-call@1.4.0(zod@4.6.5))(jose@6.2.12)(kysely@0.29.6)(nanostores@1.5.3))(@better-auth/utils@0.4.2)(drizzle-orm@0.45.3(@opentelemetry/api@1.9.1)(expo-sqlite@57.0.3(expo@57.0.24)(react-native@0.86.3(@babel/core@7.29.7(supports-color@8.1.1))(@react-native/jest-preset@0.86.3(@babel/core@7.29.7(supports-color@8.1.1))(react@19.3.0)(supports-color@8.1.1))(@types/react@19.3.0)(react@19.3.0)(supports-color@8.1.1))(react@19.3.0))(kysely@0.29.6)(postgres@3.4.9))
       '@better-auth/kysely-adapter': 1.7.5(@better-auth/core@1.7.5(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.2)(@opentelemetry/api@1.9.1)(better-call@1.4.0(zod@4.6.5))(jose@6.2.12)(kysely@0.29.6)(nanostores@1.5.3))(@better-auth/utils@0.4.2)(kysely@0.29.6)
       '@better-auth/memory-adapter': 1.7.5(@better-auth/core@1.7.5(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.2)(@opentelemetry/api@1.9.1)(better-call@1.4.0(zod@4.6.5))(jose@6.2.12)(kysely@0.29.6)(nanostores@1.5.3))(@better-auth/utils@0.4.2)
       '@better-auth/mongo-adapter': 1.7.5(@better-auth/core@1.7.5(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.2)(@opentelemetry/api@1.9.1)(better-call@1.4.0(zod@4.6.5))(jose@6.2.12)(kysely@0.29.6)(nanostores@1.5.3))(@better-auth/utils@0.4.2)
@@ -15432,7 +15435,7 @@ snapshots:
       zod: 4.6.5
     optionalDependencies:
       drizzle-kit: 0.31.10
-      drizzle-orm: 0.45.2(@opentelemetry/api@1.9.1)(expo-sqlite@57.0.3(expo@57.0.24)(react-native@0.86.3(@babel/core@7.29.7(supports-color@8.1.1))(@react-native/jest-preset@0.86.3(@babel/core@7.29.7(supports-color@8.1.1))(react@19.3.0)(supports-color@8.1.1))(@types/react@19.3.0)(react@19.3.0)(supports-color@8.1.1))(react@19.3.0))(kysely@0.29.6)(postgres@3.4.9)
+      drizzle-orm: 0.45.3(@opentelemetry/api@1.9.1)(expo-sqlite@57.0.3(expo@57.0.24)(react-native@0.86.3(@babel/core@7.29.7(supports-color@8.1.1))(@react-native/jest-preset@0.86.3(@babel/core@7.29.7(supports-color@8.1.1))(react@19.3.0)(supports-color@8.1.1))(@types/react@19.3.0)(react@19.3.0)(supports-color@8.1.1))(react@19.3.0))(kysely@0.29.6)(postgres@3.4.9)
       next: 16.3.6(@babel/core@7.29.7(supports-color@8.1.1))(@opentelemetry/api@1.9.1)(@types/node@26.6.2)(babel-plugin-macros@3.1.0)(babel-plugin-react-compiler@1.0.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
       react: 19.3.0
       react-dom: 19.3.0(react@19.3.0)
@@ -16089,7 +16092,7 @@ snapshots:
       esbuild: 0.28.2
       tsx: 4.23.15
 
-  drizzle-orm@0.45.2(@opentelemetry/api@1.9.1)(expo-sqlite@57.0.3(expo@57.0.24)(react-native@0.86.3(@babel/core@7.29.7(supports-color@8.1.1))(@react-native/jest-preset@0.86.3(@babel/core@7.29.7(supports-color@8.1.1))(react@19.3.0)(supports-color@8.1.1))(@types/react@19.3.0)(react@19.3.0)(supports-color@8.1.1))(react@19.3.0))(kysely@0.29.6)(postgres@3.4.9):
+  drizzle-orm@0.45.3(@opentelemetry/api@1.9.1)(expo-sqlite@57.0.3(expo@57.0.24)(react-native@0.86.3(@babel/core@7.29.7(supports-color@8.1.1))(@react-native/jest-preset@0.86.3(@babel/core@7.29.7(supports-color@8.1.1))(react@19.3.0)(supports-color@8.1.1))(@types/react@19.3.0)(react@19.3.0)(supports-color@8.1.1))(react@19.3.0))(kysely@0.29.6)(postgres@3.4.9):
     optionalDependencies:
       '@opentelemetry/api': 1.9.1
       expo-sqlite: 57.0.3(expo@57.0.24)(react-native@0.86.3(@babel/core@7.29.7(supports-color@8.1.1))(@react-native/jest-preset@0.86.3(@babel/core@7.29.7(supports-color@8.1.1))(react@19.3.0)(supports-color@8.1.1))(@types/react@19.3.0)(react@19.3.0)(supports-color@8.1.1))(react@19.3.0)
