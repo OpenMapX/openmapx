@@ -5680,6 +5680,33 @@
         "x-openmapx-source": "integrations/transit/index.ts"
       }
     },
+    "/api/integrations/transit/stops/{id}/area": {
+      "get": {
+        "operationId": "getApiIntegrationsTransitStopsIdArea",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /stops/:id/area (transit)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "transit",
+        "x-openmapx-source": "integrations/transit/index.ts"
+      }
+    },
     "/api/integrations/transit/stops/{id}/arrivals": {
       "get": {
         "operationId": "getApiIntegrationsTransitStopsIdArrivals",

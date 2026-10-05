@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import {
   type BBox,
   normalizeSearchTerm,
+  overpassQuery,
   type SearchSuggestionProviderResult,
   type SearchSuggestionQuery,
   TIME_AWARE_TEMPORAL_DEFAULT,
@@ -62,11 +63,15 @@ import {
   transitSurfaceCacheKey,
 } from "./reachability.js";
 import { signRefreshHandle, verifyRefreshHandle } from "./refresh-token.js";
+import { parseStopAreaQuery, resolveStopArea, stopAreaCacheKey } from "./stop-area.js";
 
 /**
  * Strip the server-only `trace` field from a MobilityResult and return the
  * `{ data, attributions, freshness }` envelope sent on the wire.
  */
+/** Stops and platforms move rarely; a week keeps Overpass out of most trips. */
+const STOP_AREA_TTL_SECONDS = 7 * 24 * 60 * 60;
+
 function toEnvelope<T>(result: MobilityResult<T>): MobilityEnvelope<T> {
   return {
     data: result.data,
@@ -413,6 +418,39 @@ export function setup(ctx: IntegrationContext): void {
     }
     reply.header("Cache-Control", "public, max-age=3600, s-maxage=86400");
     reply.send(env);
+  });
+
+  // GET /stops/:id/area — the stop's platform and stop place, for navigation
+  // to decide that a rider reached it. 204 when nothing beyond its point is known.
+  ctx.registerRoute("GET", "/stops/:id/area", async (req, reply) => {
+    const query = parseStopAreaQuery(decodeURIComponent(req.params.id), scalarQueries(req.query));
+    if (!query) {
+      reply.status(400).send({ error: "Invalid stop area query" });
+      return;
+    }
+    const resolved = await ctx.cache.withCache(
+      stopAreaCacheKey(query),
+      STOP_AREA_TTL_SECONDS,
+      () =>
+        resolveStopArea(query, {
+          overpass: overpassQuery,
+          siblings: (stopId) => orchestrator.getStopPlatforms(stopId),
+        }),
+      undefined,
+      (value) => value.complete,
+    );
+    reply.header("Cache-Control", "public, max-age=86400, s-maxage=604800");
+    if (!resolved.area) {
+      reply.status(204).send(null);
+      return;
+    }
+    reply.send(
+      envelope(resolved.area, resolved.attributions, {
+        fetchedAt: new Date().toISOString(),
+        hasRealtimeData: false,
+        isStale: false,
+      }),
+    );
   });
 
   // GET /stops/:id/platform-stops
