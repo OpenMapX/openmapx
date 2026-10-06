@@ -1,13 +1,14 @@
 name: 🐛 Bug report
 description: Report a defect in OpenMapX
-title: "[Bug]: "
+type: Bug
 labels: [bug, needs-triage]
 body:
   - type: markdown
     attributes:
       value: |
-        Thanks for taking the time to file a bug. Please fill out as much as you can —
-        incomplete reports are slower to act on and may be closed.
+        Describe what you observed and fill out what you know. If the root cause or
+        implementation details are unknown, say so; maintainers can help investigate
+        during triage. Use a descriptive title that names the observed problem.
 
         - 🔒 **Security issue?** Do **not** file it here — see [SECURITY.md](https://github.com/OpenMapX/openmapx/blob/main/SECURITY.md).
         - ❓ **Question or idea?** Please use [Discussions](https://github.com/OpenMapX/openmapx/discussions) instead.
@@ -20,7 +21,7 @@ body:
           required: true
         - label: I'm on the latest `main` or the most recent release (older versions aren't patched).
           required: true
-        - label: This is a bug in OpenMapX itself, not in an upstream service (Valhalla, Nominatim, MOTIS, …) or a third-party API.
+        - label: This report concerns behavior observed in OpenMapX. I included any evidence about upstream services or third-party APIs, if known.
           required: true
   - type: textarea
     id: what-happened
