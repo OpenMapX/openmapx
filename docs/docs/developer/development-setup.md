@@ -256,6 +256,9 @@ the first time you run `pnpm install`.
 
 ## Where to go next
 
+- **[Map comparison baseline](./map-comparison-baseline.md)** — fixed German
+  camera, search and place-sheet checks for visual and discovery changes.
+
 - **[Architecture](./architecture.md)** — how the services, integrations, and
   capability bindings fit together.
 - **[Integration system](./integration-system.md)** — the manifest schema and
