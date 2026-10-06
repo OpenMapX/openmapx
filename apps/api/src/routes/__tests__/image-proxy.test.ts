@@ -204,23 +204,30 @@ describe("image-proxy route", () => {
   });
 
   it("limits actual image bytes per client and refills the budget", async () => {
-    await rebuildApp({
-      RATE_LIMIT_IMAGE_PROXY_MAX_BYTES: "5",
-      RATE_LIMIT_IMAGE_PROXY_WINDOW_MS: "100",
-    });
-    mockFetchWithRedirects.mockImplementation(async () => imageResponse(3));
-    const request = { referer: ALLOWED_REFERER, remoteAddress: "198.51.100.20" };
+    // The token bucket refills continuously: even 20 ms between requests can
+    // replenish the missing byte. Keep its clock independent of runner load.
+    const clock = vi.spyOn(Date, "now").mockReturnValue(0);
+    try {
+      await rebuildApp({
+        RATE_LIMIT_IMAGE_PROXY_MAX_BYTES: "5",
+        RATE_LIMIT_IMAGE_PROXY_WINDOW_MS: "100",
+      });
+      mockFetchWithRedirects.mockImplementation(async () => imageResponse(3));
+      const request = { referer: ALLOWED_REFERER, remoteAddress: "198.51.100.20" };
 
-    const first = await inject(request);
-    const exhausted = await inject(request);
-    await new Promise((resolve) => setTimeout(resolve, 110));
-    const refilled = await inject(request);
+      const first = await inject(request);
+      const exhausted = await inject(request);
+      clock.mockReturnValue(110);
+      const refilled = await inject(request);
 
-    expect(first.statusCode).toBe(200);
-    expect(first.rawPayload.byteLength).toBe(3);
-    expect(exhausted.statusCode).toBe(429);
-    expect(exhausted.headers["cache-control"]).toBe("private, no-store");
-    expect(refilled.statusCode).toBe(200);
+      expect(first.statusCode).toBe(200);
+      expect(first.rawPayload.byteLength).toBe(3);
+      expect(exhausted.statusCode).toBe(429);
+      expect(exhausted.headers["cache-control"]).toBe("private, no-store");
+      expect(refilled.statusCode).toBe(200);
+    } finally {
+      clock.mockRestore();
+    }
   });
 
   it("stops a stream that exceeds both its declared length and the remaining byte budget", async () => {
