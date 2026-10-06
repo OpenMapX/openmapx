@@ -49,9 +49,17 @@ overrides:
   "@hey-api/client-fetch": "workspace:*"
   "protobufjs": ">=7.5.5"
   "uuid": ">=14.0.0"
-  # Include the libheif security fixes shipped in sharp 0.35.4.
+  # Include sharp 0.35.5's librsvg fix (GHSA-wq5f-xc86-pv6w) as well as
+  # the libheif fixes from 0.35.4.
   # The workspace requires Node >=24, which is compatible with sharp 0.35+.
-  "sharp": ">=0.35.4"
+  "sharp": ">=0.35.5"
+  # Transitive dependencies also ship in the production workspace installs.
+  # Keep consumers on their compatible major lines with the patched releases.
+  "compression@1": "^1.8.2" # CVE-2026-87776
+  "shell-quote@1": "^1.11.0" # CVE-2026-102422
+  "source-map-js@1": "^1.2.2" # CVE-2026-93749
+  # Updating vue brings its exact-version renderer/compiler dependencies along.
+  "vue@3": "^3.5.42" # GHSA-g2v6-rqmx-r4w6
   "@xmldom/xmldom@0.9": "^0.9.12"
   "esbuild": ">=0.28.1"
   "postcss": ">=8.5.10"

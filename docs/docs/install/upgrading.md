@@ -54,6 +54,15 @@ days old. Cached source rebuilds preserve that clock; failed releases leave it d
 for the next daily attempt. Existing releases without cold-refresh metadata get
 one uncached rebuild. Every selected image is scanned, including reused digests.
 
+A previously green commit can fail a later release scan when the vulnerability
+database learns about a dependency already present in its images. Passing PR
+builds and tests does not prove the main release's vulnerability gate will pass.
+For a fixed library advisory, update the dependency and any workspace security
+minimum in `pnpm-workspace.yaml`, regenerate the root lockfile, and verify the
+selected images. Updating only a direct dependency can leave an older transitive
+copy in another image. A failed scan leaves the previously published release
+selected; rerunning unchanged inputs is not a dependency remediation.
+
 For a reproducible rollback reference, use the run-qualified manifest tag
 `ghcr.io/openmapx/release-manifest:<commit>-<run-id>-<attempt>` (the identifier is
 also stored in its JSON `release` field), or a manifest digest. Bare commit-SHA
