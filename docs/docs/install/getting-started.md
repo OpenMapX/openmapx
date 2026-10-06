@@ -111,11 +111,11 @@ admin panel after the stack is up. For the full reference, see
 
 :::tip[Tile provider]
 The default `NEXT_PUBLIC_STYLE_PROVIDER=openmapx` renders the bundled OpenMapX
-house style. Without self-hosted tile URLs, vector tiles and glyphs use the
-MapTiler Cloud fallback, which requires a `MAPTILER_KEY`. You can manage that
-key from the admin UI, or enable the `tileserver` service and set
-`NEXT_PUBLIC_TILES_URL` and `NEXT_PUBLIC_MAP_STYLE_URL` for a fully self-hosted
-basemap.
+house style. Enabled `tileserver` or explicit self-hosted tile URLs always take priority.
+Otherwise, `auto` uses MapTiler when a key is configured and keyless OpenFreeMap
+when it is not. Choose the hosted provider in **Admin → Settings → Map** or via
+`BASEMAP_PROVIDER=auto|openfreemap|maptiler`; the environment overrides admin.
+Geocoding and satellite key requirements are separate.
 :::
 
 ## 3. Enable a minimal set of services

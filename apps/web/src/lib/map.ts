@@ -6,7 +6,7 @@ import { resolveOfflinePackageStyle } from "./offlineAreas/packageStyle";
 
 /**
  * Canonical base-map credits — the single source of truth for the OSM /
- * OpenMapTiles / MapTiler attribution shown across the app. `BaseAttributions`
+ * OpenMapTiles / hosted-provider attribution shown across the app. `BaseAttributions`
  * registers these in the main map's attribution registry (rendered by
  * `MapFooter`); `baseMapCreditsHtml` (below) renders the same objects as HTML
  * for the embedded maps, which render them through `<MapCredits>` instead of
@@ -31,6 +31,12 @@ export const OPENMAPTILES_ATTRIBUTION: Attribution = {
   url: "https://openmaptiles.org/",
   spdxLicense: "BSD-3-Clause",
   licenseUrl: "https://github.com/openmaptiles/openmaptiles/blob/master/LICENSE.md",
+};
+
+export const OPENFREEMAP_ATTRIBUTION: Attribution = {
+  sourceId: "openfreemap",
+  name: "OpenFreeMap",
+  url: "https://openfreemap.org/",
 };
 
 export const MAPTILER_ATTRIBUTION: Attribution = {
@@ -101,7 +107,7 @@ export async function loadMaptilerStyle(
  * `attribution`, so these strings are the single source of truth for credits on
  * those maps. Credits (see {@link baseMapVectorCredits}): OSM (data) +
  * OpenMapTiles (our OSM-Bright-derived style — CC-BY 4.0 design + the schema)
- * always, plus MapTiler when their hosted tiles are used. Rendered from the
+ * always, plus the active hosted vector provider. Rendered from the
  * shared {@link OSM_ATTRIBUTION} et al. so the metadata can't drift from the
  * main map's.
  */
@@ -115,11 +121,15 @@ export function baseMapCreditsHtml(env: ClientEnv): string[] {
  * - OpenMapTiles — our style derives from OSM Bright, whose design is CC-BY 4.0
  *   and requires a visible "© OpenMapTiles" credit; the tile schema is theirs too.
  * - MapTiler — only when the deployment renders MapTiler's hosted `v3-openmaptiles`
- *   tiles (the default); a self-hosted tileserver drops it.
+ *   tiles. OpenFreeMap is credited for its hosted vectors; local tiles omit both.
  */
 export function baseMapVectorCredits(env: ClientEnv): Attribution[] {
   const credits = [OSM_ATTRIBUTION, OPENMAPTILES_ATTRIBUTION];
-  if (!usesSelfHostedTiles(env)) credits.push(MAPTILER_ATTRIBUTION);
+  if (!usesSelfHostedTiles(env)) {
+    credits.push(
+      env.basemapProvider === "openfreemap" ? OPENFREEMAP_ATTRIBUTION : MAPTILER_ATTRIBUTION,
+    );
+  }
   return credits;
 }
 
@@ -128,9 +138,8 @@ export type MapStyleVariant = "light" | "dark";
 
 /**
  * Whether the deployment serves its own (OpenMapTiles) vector tiles rather than
- * MapTiler's. Drives the vendor attribution: self-hosted ⇒ © OpenMapTiles,
- * otherwise ⇒ © MapTiler (who hosts the `v3-openmaptiles` tiles our style uses
- * by default). OSM is credited separately in all cases.
+ * a hosted provider's. Local tiles omit hosted-vector credits; OSM and
+ * OpenMapTiles are credited separately in all cases.
  */
 export function usesSelfHostedTiles(env: ClientEnv): boolean {
   return Boolean(env.tilesUrl);
@@ -151,7 +160,11 @@ export async function loadOpenMapXStyle(
   }
   const style = await res.json();
 
-  const tilesUrl = env.tilesUrl || apiRoute(env, "/api/maptiler/tiles/v3-openmaptiles/tiles.json");
+  const tilesUrl =
+    env.tilesUrl ||
+    (env.basemapProvider === "openfreemap"
+      ? "https://tiles.openfreemap.org/planet"
+      : apiRoute(env, "/api/maptiler/tiles/v3-openmaptiles/tiles.json"));
   style.sources.openmaptiles.url = tilesUrl;
   // Attribution is contributed via `useMapAttributions` (per-Attribution
   // side-channel sources) so MapLibre's substring dedup works cleanly across
@@ -165,7 +178,9 @@ export async function loadOpenMapXStyle(
 
   const glyphBase = env.mapStyleUrl
     ? `${env.mapStyleUrl.replace(/\/$/, "")}/fonts`
-    : apiRoute(env, "/api/maptiler/fonts");
+    : env.basemapProvider === "openfreemap" || usesSelfHostedTiles(env)
+      ? "https://tiles.openfreemap.org/fonts"
+      : apiRoute(env, "/api/maptiler/fonts");
   style.glyphs = `${glyphBase}/{fontstack}/{range}.pbf`;
 
   return offlinePackages

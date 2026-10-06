@@ -72,7 +72,7 @@ transparently reaches out to a public one instead:
 | Driving routes        | `router.project-osrm.org`                       | OSRM                        |
 | Multi-modal routing   | Stadia Maps Valhalla (`api.stadiamaps.com`)     | Valhalla                    |
 | Transit               | Transitous / MOTIS cloud (`api.transitous.org`) | MOTIS                       |
-| Map tiles             | MapTiler Cloud fallback                         | TileServer GL               |
+| Map tiles             | OpenFreeMap (keyless) or MapTiler               | TileServer GL               |
 
 A common lean deployment self-hosts nothing in this table: the [search](../features/search.md),
 [directions](../features/directions.md), and [public-transit](../features/public-transit.md)
@@ -189,7 +189,7 @@ right-sized box, but never for runtime, where swapping wrecks query latency.
 Self-hosted tiles are convenient to overlook as a cost, but they aren't free:
 TileServer GL needs an ~80 GB planet MBTiles archive plus its own build, and the
 glyph download is another step in your pipeline. If you're
-running lean, keep the hosted MapTiler fallback and skip TileServer GL and
+running lean, keep the hosted OpenFreeMap or MapTiler source and skip TileServer GL and
 Martin entirely — along with the
 `openmapx data download fonts` step and the MBTiles build.
 

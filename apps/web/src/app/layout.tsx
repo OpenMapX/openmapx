@@ -17,7 +17,7 @@ import { PersistentStorageRequest } from "@/components/pwa/PersistentStorageRequ
 import { SwUpdateNotice } from "@/components/pwa/SwUpdateNotice";
 import { InstallPromptCapture } from "@/components/pwa/useInstallPrompt";
 import { EnvProvider } from "@/integration-api/runtime/EnvProvider";
-import { buildClientEnv } from "@/integration-api/runtime/env";
+import { loadClientEnv } from "@/lib/serverClientEnv";
 import { Providers } from "./providers";
 
 export const metadata: Metadata = {
@@ -56,7 +56,7 @@ export const viewport: Viewport = {
 export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   const locale = await getLocale();
   const messages = await getMessages();
-  const clientEnv = buildClientEnv();
+  const clientEnv = await loadClientEnv();
   const nonce = (await headers()).get("x-nonce") ?? undefined;
 
   return (

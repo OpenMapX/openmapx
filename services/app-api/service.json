@@ -29,6 +29,7 @@
     "expose": [3001],
     "envFile": [".env"],
     "environment": {
+      "BASEMAP_PROVIDER": "${BASEMAP_PROVIDER:-}",
       "PORT": "3001",
       "HOST": "0.0.0.0",
       "TRUST_PROXY_RANGES": "${TRUST_PROXY_RANGES:-uniquelocal}",

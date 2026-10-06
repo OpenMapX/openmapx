@@ -19,6 +19,12 @@ export {
 export { API_ENDPOINTS } from "./endpoints";
 export { fetchJunctionLookups } from "./junctions";
 export {
+  type HostedBasemapProvider,
+  hostedBasemapProviderSchema,
+  type MapConfig,
+  mapConfigSchema,
+} from "./map-config";
+export {
   connectTimeline,
   disconnectTimeline,
   getPersonalTimelineDay,

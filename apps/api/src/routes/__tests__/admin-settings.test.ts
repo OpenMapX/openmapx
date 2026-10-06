@@ -428,3 +428,20 @@ describe("GET /admin/logs", () => {
     expect(body.total).toBe(1);
   });
 });
+
+describe("hosted basemap admin selection", () => {
+  it("accepts a valid hosted preference and rejects unknown choices", async () => {
+    const valid = await app.inject({
+      method: "PATCH",
+      url: "/admin/settings",
+      payload: { hostedBasemapProvider: "openfreemap" },
+    });
+    expect(valid.statusCode).toBe(200);
+    const invalid = await app.inject({
+      method: "PATCH",
+      url: "/admin/settings",
+      payload: { hostedBasemapProvider: "unknown" },
+    });
+    expect(invalid.statusCode).toBe(400);
+  });
+});

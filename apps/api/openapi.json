@@ -51,6 +51,10 @@
       "description": "Routes under /api/legal-config."
     },
     {
+      "name": "map-config",
+      "description": "Routes under /api/map-config."
+    },
+    {
       "name": "mapterhorn",
       "description": "Routes under /api/mapterhorn."
     },
@@ -6046,6 +6050,20 @@
         },
         "tags": [
           "legal-config"
+        ],
+        "x-openmapx-auth": "public"
+      }
+    },
+    "/api/map-config": {
+      "get": {
+        "operationId": "getApiMapConfig",
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "map-config"
         ],
         "x-openmapx-auth": "public"
       }

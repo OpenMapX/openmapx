@@ -126,8 +126,10 @@ and network-backed overlays are not offline capabilities.
 Offline preparation uses only the deployment's self-hosted OpenMapX MBTiles and
 glyph inputs. It never fetches a style from a repository or packages a
 MapTiler-hosted dataset. Visible package credits are therefore OpenStreetMap and
-OpenMapTiles. The online fallback additionally shows MapTiler attribution when
-`NEXT_PUBLIC_TILES_URL` is not configured.
+OpenMapTiles. The online source additionally credits MapTiler or OpenFreeMap when that hosted
+provider is selected. Downloaded local packages keep only their own data/style
+credits. OpenFreeMap changes the online source, not the prepared regional package
+dataset or its compatibility requirements.
 
 See [Self-hosting map tiles](../guides/map-tiles.md) for the two source inputs
 and deployment variables.
