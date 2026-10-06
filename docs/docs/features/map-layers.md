@@ -38,6 +38,21 @@ source isn't configured on your deployment shows no imagery. While an offline
 package is active, Default and Terrain show the flat street map. The picker also has a
 **Globe view** toggle that switches the map from a flat projection to a 3D globe.
 
+## Places while browsing
+
+The owned street map introduces a small selection of named restaurants, cafés,
+bars, bakeries and shops at neighborhood zooms 14–15. These labels yield space
+to existing destinations, transit and road names; they do not show every business.
+The ordinary close-up POI layers take over from zoom 16. Parking and small
+street fixtures keep their later introduction.
+
+Visibility depends on the local rank and coverage of the active OpenMapTiles
+dataset, followed by label collisions. Rank is not a rating or popularity score.
+Tap a visible business symbol to open its place sheet; category search can find
+additional destinations that are not labeled on the map. See the
+[comparison baseline](../developer/map-comparison-baseline.md) for fixed German
+examples and how to assess cartography changes.
+
 ## How overlays work
 
 Every overlay is an [integration](../overview/how-it-works.md). A map-overlay

@@ -131,7 +131,7 @@ For offline search-ranking regressions, use the existing
 5. For cartography changes also repeat z14–15 in dark theme and a fixed desktop
    viewport. Assess readable business names, road-name retention, landmark and
    station prominence, overlapping symbols, clipped names, and duplicate labels.
-   Check z16–18 for unintended changes and unnamed/indoor points for leakage.
+   Check z16–18 for unintended changes and unnamed/non-ground-level points for leakage.
 
 For the early-POI experiment, success means a restrained selection of named
 businesses is discoverable at neighborhood zooms, landmarks remain prominent,
@@ -142,3 +142,60 @@ Do not infer missing places from a collision-hidden label.
 The reference is a visual/discovery baseline, not a performance benchmark,
 complete German coverage audit, or device certification. Pair performance work
 with [navigation performance measurement](./navigation-performance.md).
+
+## Neighborhood POI follow-up
+
+The first change against this baseline introduces named, ground-level food
+destinations and shops at z14–15. The maximum **local tile rank** is 8 / 24 for
+restaurant, cafe, bar, beer, bakery and ice_cream, and 4 / 12 for shop, grocery,
+clothing_store and alcohol_shop. Parking is a separate policy group with its
+original later introduction. These values do not claim popularity or fame.
+
+`poi-neighborhood-business` occupies z14 up to, but excluding, z16. It draws
+below the existing POI and road-name layers so their labels claim space first.
+The regular POI layers exclude these businesses below z16 to avoid duplicates;
+their original close-up progression resumes at z16. Unnamed, empty-name,
+non-ground-level and unranked candidates are excluded at neighborhood zooms. All symbols
+keep collision avoidance enabled.
+
+The [follow-up evidence](/img/neighborhood-pois/2026-10-06/comparison.json)
+includes 20 light maps, eight dark maps, desktop light/dark comparisons and a
+tap-to-place check. The candidate was applied **temporarily in the browser** on
+OpenMapX.com: generated POI filters and the new layer, with the application's
+existing name localization. The live instance was not deployed or changed.
+Public TileJSON still reported the same October 3 OSM snapshot/schema; the
+archive checksum and deployed application SHA remain unknown. These captures
+isolate the style change against the same live instance and source URLs.
+
+| Case     | Business POIs z14: before → after | Business POIs z15: before → after |
+| -------- | --------------------------------- | --------------------------------- |
+| Berlin   | 0 → 1                             | 0 → 7                             |
+| Aachen   | 0 → 1                             | 0 → 4                             |
+| Neuss    | 0 → 6                             | 0 → 5                             |
+| Monschau | 0 → 2                             | 0 → 1                             |
+
+Every baseline POI remained in the 20 light views, road-label counts were
+unchanged, and z16–18 POI results were unchanged. Dark views matched the light
+POI counts. The lower priority matters: an initial trial in the ordinary POI
+layers displaced three smaller Berlin cultural labels; the final layer avoids
+that in these fixtures. This is observed fixture coverage, not a guarantee for
+every provider or city. Source rank alone also cannot promise that the most
+useful restaurant or café is the one labeled in each neighborhood.
+
+| Berlin z15 before                                            | Berlin z15 after                                                       |
+| ------------------------------------------------------------ | ---------------------------------------------------------------------- |
+| ![Before](/img/map-baseline/2026-10-06/berlin-z15-light.png) | ![After](/img/neighborhood-pois/2026-10-06/berlin-z15-light-after.png) |
+
+| Dark before                                                                  | Dark after                                                                 |
+| ---------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| ![Before dark](/img/neighborhood-pois/2026-10-06/berlin-z15-dark-before.png) | ![After dark](/img/neighborhood-pois/2026-10-06/berlin-z15-dark-after.png) |
+
+Maintain the policy in `apps/web/scripts/poi-visibility-policy.mjs` and its layer
+generation in `apps/web/scripts/apply-poi-visibility.mjs`; run
+`pnpm -C apps/web style:poi` to regenerate both owned styles. Do not edit just
+one generated style. `scripts/__tests__/poi-visibility.test.ts` uses MapLibre's
+installed expression engine against both generated styles to check eligibility,
+rank boundaries, exclusions, duplicate prevention, layer priority, and validity.
+Repeat generation to check idempotence and repeat the visual matrix before
+expanding the thresholds. Hosted complete MapTiler styles are outside this
+owned-style policy.

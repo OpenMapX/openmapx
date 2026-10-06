@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { poiIconImageExpression, poiTextColourExpression } from "./poi-icon-registry.mjs";
 import {
   landmarkExpression,
+  neighborhoodBusinessExpression,
   notabilityExpression,
   poiRankLimitExpression,
   streetFixtureFilter,
@@ -83,6 +84,9 @@ for (const layer of style.layers) {
     groundLevel,
     ["!", landmarkExpression()],
     ["!", isStation],
+    // The early business layer yields label space to existing destinations.
+    // At z16 the normal rank-based layers resume without duplicates.
+    ["any", [">=", ["zoom"], 16], ["!", neighborhoodBusinessExpression()]],
   ];
   if (layer.id === "poi-level-1") {
     filter.push(["<=", rank, 14], ["has", "name"], ["!=", ["get", "class"], "park"]);
@@ -110,6 +114,27 @@ for (const layer of style.layers) {
   layer.layout["text-offset"] = [0, 1.05];
   layer.paint = { "text-color": textColour, ...halo };
 }
+
+// Neighborhood businesses use the same symbols, with a lower placement
+// priority than every existing POI and road-name layer. No extra data source.
+upsertLayer(
+  {
+    ...structuredClone(style.layers.find((layer) => layer.id === "poi-level-1")),
+    id: "poi-neighborhood-business",
+    minzoom: 14,
+    maxzoom: 16,
+    filter: [
+      "all",
+      ["==", ["geometry-type"], "Point"],
+      neighborhoodBusinessExpression(),
+      ["<=", rank, poiRankLimitExpression()],
+      ["has", "name"],
+      ["!=", ["coalesce", ["get", "name"], ""], ""],
+      groundLevel,
+    ],
+  },
+  "poi-street-fixtures",
+);
 
 // Landmarks, picked by how widely their name is translated, get a larger badge,
 // a bold name and first claim on space, from a zoom out where other POIs are hidden.
