@@ -1,0 +1,1810 @@
+{
+  "schemaVersion": 1,
+  "browser": "T3 Code collaborative preview; Chromium 152.0.7977.130, Electron 44.4.2; desktop user agent with phone-sized CSS viewport",
+  "placeCaptureState": "Initial half-height mobile sheet, no manual expansion or scrolling; text records include rendered DOM content below the screenshot fold",
+  "assetSha256": {
+    "openmapx-dark.json": "62786c49fb9fea3455410135730b42fa0c0cc4ce580864cf168a805e3d33211a",
+    "openmapx-streets.json": "d0c548b10cb19054b32324f8f225db67aaaefdc7bc7e2934d7e6e06f44ca0469",
+    "sprite.json": "16c7ade94a4d116a1156ae3aa4a759ae82376416eade74c23b5e0bcabe28e439",
+    "sprite.png": "6a1a1c103f109f8e9fb86bd0b3599fa5ce870beb6dddcbd529ff8dfea362736a"
+  },
+  "capturedAt": "2026-10-06T20:49:09.820Z",
+  "deploymentCommit": "unknown",
+  "enabledIntegrations": [
+    "air-quality",
+    "air-quality-eccc",
+    "air-quality-uk-air",
+    "data-source",
+    "bike-sharing",
+    "car-sharing",
+    "crowd-reports",
+    "ev-charging",
+    "flights",
+    "food-delivery",
+    "fuel",
+    "geocoding",
+    "geocoding-db-ris",
+    "geocoding-entur",
+    "geocoding-maptiler",
+    "geocoding-motis",
+    "geocoding-nominatim",
+    "geocoding-pelias",
+    "geocoding-photon",
+    "hotels",
+    "knowledge-marine-weather",
+    "knowledge-noaa-tides",
+    "knowledge-ourairports",
+    "knowledge-sun-time",
+    "knowledge-tides-canada",
+    "knowledge-tides-ioc",
+    "knowledge-tides-norway",
+    "knowledge-tides-pegelonline",
+    "knowledge-wikidata",
+    "knowledge-wikipedia",
+    "live-transit-db-ris",
+    "live-transit-entur",
+    "live-transit-motis",
+    "transit",
+    "transit-opentransportdata-ch",
+    "live-transit-siri-sx-ch",
+    "openconditions",
+    "overlay-3d-buildings",
+    "overlay-air-quality",
+    "overlay-cycling",
+    "overlay-earthquakes",
+    "overlay-environment",
+    "overlay-hiking",
+    "overlay-live-transit",
+    "overlay-natural-events",
+    "overlay-nautical",
+    "overlay-ourairports",
+    "overlay-satellite",
+    "overlay-schematic-transit",
+    "overlay-sun-time",
+    "overlay-tool-measurement",
+    "overlay-tool-travel-time",
+    "overlay-traffic-flow",
+    "overlay-traffic-tomtom",
+    "overlay-transit",
+    "overlay-weather",
+    "overlay-weather-alerts",
+    "overlay-wildfires",
+    "overlay-winter-sports",
+    "parking",
+    "photos",
+    "photos-flickr",
+    "photos-mapillary",
+    "photos-panoramax",
+    "photos-wikimedia",
+    "poi-search",
+    "poi-overpass",
+    "restaurants",
+    "reviews",
+    "reviews-mangrove",
+    "ride-deeplink",
+    "ride-gofs",
+    "ride-hailing",
+    "ride-partner",
+    "road-conditions",
+    "routing",
+    "routing-osrm",
+    "routing-valhalla",
+    "scooter-sharing",
+    "search-nlp",
+    "search-notable-places",
+    "search-osm-aliases",
+    "search-suggestions",
+    "street-level-imagery-panoramax",
+    "transit-db-vendo",
+    "transit-dynamic-registry",
+    "transit-entur",
+    "transit-hafas",
+    "transit-irail",
+    "transit-mbta",
+    "transit-mobility-database",
+    "transit-motis",
+    "transit-otp",
+    "transit-overpass",
+    "transit-ris-routing",
+    "transit-tfl",
+    "transit-transitland",
+    "weather",
+    "weather-bright-sky",
+    "weather-met-norway",
+    "weather-open-meteo",
+    "weather-open-meteo-air-quality",
+    "weather-openweathermap",
+    "webcam"
+  ],
+  "locale": "en",
+  "registryRevision": "577370047f7a31f265ee654d5753cd34ed2a494e05a1d3b878c2b22cda0f493f",
+  "styleMinzooms": [
+    {
+      "id": "poi-level-3",
+      "minzoom": 16
+    },
+    {
+      "id": "poi-level-2",
+      "minzoom": 15
+    },
+    {
+      "id": "poi-level-1",
+      "minzoom": 14
+    }
+  ],
+  "tilejson": {
+    "attribution": "<a href=\"https://www.openmaptiles.org/\" target=\"_blank\">&copy; OpenMapTiles</a> <a href=\"https://www.openstreetmap.org/copyright\" target=\"_blank\">&copy; OpenStreetMap contributors</a>",
+    "basename": "tiles.mbtiles",
+    "bounds": [5.86442, 47.26543, 15.05078, 55.14777],
+    "center": [10.4576, 51.2066, 5],
+    "compression": "gzip",
+    "description": "A tileset showcasing all layers in OpenMapTiles. https://openmaptiles.org",
+    "format": "pbf",
+    "id": "tiles",
+    "maxzoom": 14,
+    "minzoom": 0,
+    "name": "OpenMapTiles",
+    "planetiler:buildtime": "2026-03-28T14:40:55.764Z",
+    "planetiler:githash": "0e5588c4a6e8c29a270a33afe8df62027d889604",
+    "planetiler:osm:osmosisreplicationseq": "4927",
+    "planetiler:osm:osmosisreplicationtime": "2026-10-03T20:20:50Z",
+    "planetiler:osm:osmosisreplicationurl": "https://download.geofabrik.de/europe/germany-updates",
+    "planetiler:version": "0.10.2",
+    "tilejson": "3.0.0",
+    "tiles": ["https://openmapx.com/tiles/data/openmapx/{z}/{x}/{y}.pbf"],
+    "type": "baselayer",
+    "version": "3.16.0"
+  },
+  "url": "https://openmapx.com",
+  "viewport": {
+    "dpr": 1,
+    "height": 932,
+    "width": 430
+  },
+  "settings": {
+    "map": "Default",
+    "theme": "light",
+    "pitch": 0,
+    "bearing": 0,
+    "overlays": "none selected",
+    "apiKeys": "not inspected; registry enabled does not prove credentials or availability",
+    "vectorProvider": "self-hosted TileServer GL",
+    "glyphs": "self-hosted /tiles/fonts",
+    "terrain": "proxied Mapterhorn",
+    "searchProviderObserved": "MapTiler; aggregate chain/category results"
+  },
+  "sites": [
+    {
+      "id": "berlin",
+      "name": "Berlin Mitte",
+      "lat": 52.520407,
+      "lon": 13.404914
+    },
+    {
+      "id": "aachen",
+      "name": "Aachen old town",
+      "lat": 50.7754,
+      "lon": 6.0839
+    },
+    {
+      "id": "neuss",
+      "name": "Neuss town centre",
+      "lat": 51.1982,
+      "lon": 6.6916
+    },
+    {
+      "id": "monschau",
+      "name": "Monschau rural Eifel",
+      "lat": 50.5545,
+      "lon": 6.2407
+    }
+  ],
+  "captures": [
+    {
+      "site": "berlin",
+      "center": [13.404914, 52.520407],
+      "pois": [
+        {
+          "class": "railway",
+          "id": 39081410141,
+          "name": "Alexanderplatz",
+          "rank": 7,
+          "subclass": "station"
+        },
+        {
+          "class": "place_of_worship",
+          "id": 3136707342,
+          "name": "Berliner Dom",
+          "rank": 18,
+          "subclass": "christian"
+        },
+        {
+          "class": "theatre",
+          "id": 159768922,
+          "name": "Staatsoper Unter den Linden",
+          "rank": 15,
+          "subclass": "theatre"
+        },
+        {
+          "class": "museum",
+          "id": 3136597042,
+          "name": "Pergamonmuseum",
+          "rank": 15,
+          "subclass": "museum"
+        },
+        {
+          "class": "attraction",
+          "id": 813619422,
+          "name": "Haus Schwarzenberg",
+          "rank": 4,
+          "subclass": "attraction"
+        },
+        {
+          "class": "attraction",
+          "id": 61375293,
+          "name": "Hackescher Markt",
+          "rank": 3,
+          "subclass": "attraction"
+        },
+        {
+          "class": "railway",
+          "id": 39478361581,
+          "name": "Hausvogteiplatz",
+          "rank": 1,
+          "subclass": "subway"
+        },
+        {
+          "class": "attraction",
+          "id": 4454475212,
+          "name": "Jesenicky",
+          "rank": 1,
+          "subclass": "attraction"
+        },
+        {
+          "class": "railway",
+          "id": 49407313041,
+          "name": "Märkisches Museum",
+          "rank": 1,
+          "subclass": "subway"
+        },
+        {
+          "class": "railway",
+          "id": 39046742111,
+          "name": "Spittelmarkt",
+          "rank": 1,
+          "subclass": "subway"
+        }
+      ],
+      "ready": true,
+      "roadLabels": 12,
+      "zoom": 14,
+      "screenshot": "berlin-z14-light.png"
+    },
+    {
+      "site": "berlin",
+      "center": [13.404914, 52.520407],
+      "pois": [
+        {
+          "class": "place_of_worship",
+          "id": 3136707342,
+          "name": "Berliner Dom",
+          "rank": 18,
+          "subclass": "christian"
+        },
+        {
+          "class": "attraction",
+          "id": 5564352412,
+          "name": "Berliner Fernsehturm",
+          "rank": 14,
+          "subclass": "attraction"
+        },
+        {
+          "class": "library",
+          "id": 38833287261,
+          "name": "Zadig",
+          "rank": 6,
+          "subclass": "books"
+        },
+        {
+          "class": "attraction",
+          "id": 3372018282,
+          "name": "Hackesche Höfe",
+          "rank": 5,
+          "subclass": "attraction"
+        },
+        {
+          "class": "attraction",
+          "id": 61375293,
+          "name": "Hackescher Markt",
+          "rank": 3,
+          "subclass": "attraction"
+        },
+        {
+          "class": "town_hall",
+          "id": 42119053,
+          "name": "Rotes Rathaus",
+          "rank": 5,
+          "subclass": "townhall"
+        },
+        {
+          "class": "attraction",
+          "id": 26713114001,
+          "name": "Berlin Dungeon",
+          "rank": 14,
+          "subclass": "attraction"
+        },
+        {
+          "class": "college",
+          "id": 242472402,
+          "name": "European School of Management and Technology Berlin",
+          "rank": 2,
+          "subclass": "university"
+        },
+        {
+          "class": "museum",
+          "id": 431594442,
+          "name": "Direktorenhaus Berlin",
+          "rank": 8,
+          "subclass": "museum"
+        },
+        {
+          "class": "castle",
+          "id": 431595072,
+          "name": "Palais Schwerin",
+          "rank": 14,
+          "subclass": "castle"
+        },
+        {
+          "class": "museum",
+          "id": 263826642,
+          "name": "Knoblauchhaus",
+          "rank": 23,
+          "subclass": "museum"
+        }
+      ],
+      "ready": true,
+      "roadLabels": 19,
+      "zoom": 15,
+      "screenshot": "berlin-z15-light.png"
+    },
+    {
+      "site": "berlin",
+      "center": [13.404914, 52.520407],
+      "pois": [
+        {
+          "class": "shop",
+          "id": 11581658181,
+          "name": "dm",
+          "rank": 12,
+          "subclass": "chemist"
+        },
+        {
+          "class": "attraction",
+          "id": 26713114001,
+          "name": "Berlin Dungeon",
+          "rank": 14,
+          "subclass": "attraction"
+        },
+        {
+          "class": "attraction",
+          "id": 238132042,
+          "name": "Neptunbrunnen",
+          "rank": 13,
+          "subclass": "attraction"
+        },
+        {
+          "class": "railway",
+          "id": 16337597661,
+          "name": "S Hackescher Markt",
+          "rank": 2,
+          "subclass": "tram_stop"
+        },
+        {
+          "class": "shop",
+          "id": 49202282401,
+          "name": "Pylones",
+          "rank": 10,
+          "subclass": "toys"
+        },
+        {
+          "class": "shop",
+          "id": 113468356531,
+          "name": "My Laser Glass",
+          "rank": 11,
+          "subclass": "photo"
+        },
+        {
+          "class": "cafe",
+          "id": 14331204651,
+          "name": "Bandy Brooks",
+          "rank": 21,
+          "subclass": "cafe"
+        },
+        {
+          "class": "restaurant",
+          "id": 892750751,
+          "name": "Azem",
+          "rank": 25,
+          "subclass": "restaurant"
+        }
+      ],
+      "ready": true,
+      "roadLabels": 19,
+      "zoom": 16,
+      "screenshot": "berlin-z16-light.png"
+    },
+    {
+      "site": "berlin",
+      "center": [13.404914, 52.520407],
+      "pois": [
+        {
+          "class": "bus",
+          "id": 38679104381,
+          "name": "Spandauer Straße/Marienkirche",
+          "rank": 10,
+          "subclass": "bus_stop"
+        },
+        {
+          "class": "bus",
+          "id": 29155909251,
+          "name": "Spandauer Straße/Marienkirche",
+          "rank": 7,
+          "subclass": "bus_stop"
+        },
+        {
+          "class": "bus",
+          "id": 18279964141,
+          "name": "Spandauer Straße/Marienkirche",
+          "rank": 5,
+          "subclass": "bus_stop"
+        },
+        {
+          "class": "railway",
+          "id": 46731356471,
+          "name": "Spandauer Straße/Marienkirche",
+          "rank": 3,
+          "subclass": "tram_stop"
+        },
+        {
+          "class": "railway",
+          "id": 307314811,
+          "name": "Spandauer Straße/Marienkirche",
+          "rank": 1,
+          "subclass": "tram_stop"
+        },
+        {
+          "class": "shop",
+          "id": 18199293641,
+          "name": "Berlin",
+          "rank": 20,
+          "subclass": "gift"
+        },
+        {
+          "class": "restaurant",
+          "id": 33099519611,
+          "name": "Alto",
+          "rank": 68,
+          "subclass": "restaurant"
+        },
+        {
+          "class": "lodging",
+          "id": 8773341231,
+          "name": "Wunderflats",
+          "rank": 56,
+          "subclass": "hostel"
+        },
+        {
+          "class": "restaurant",
+          "id": 4376144481,
+          "name": "Schlögl's Altberliner Gaststätte",
+          "rank": 51,
+          "subclass": "restaurant"
+        },
+        {
+          "class": "lodging",
+          "id": 238531382,
+          "name": "Alexander Plaza",
+          "rank": 46,
+          "subclass": "hotel"
+        },
+        {
+          "class": "bar",
+          "id": 57261980871,
+          "name": "Berlin Icebar - Polar Expedition",
+          "rank": 42,
+          "subclass": "bar"
+        },
+        {
+          "class": "cafe",
+          "id": 17941313351,
+          "name": "Espresso House",
+          "rank": 60,
+          "subclass": "cafe"
+        },
+        {
+          "class": "bar",
+          "id": 4376111401,
+          "name": "Palm Beach",
+          "rank": 40,
+          "subclass": "bar"
+        },
+        {
+          "class": "fast_food",
+          "id": 36070911781,
+          "name": "dean&david",
+          "rank": 37,
+          "subclass": "fast_food"
+        },
+        {
+          "class": "fast_food",
+          "id": 30453344541,
+          "name": "Hot",
+          "rank": 36,
+          "subclass": "fast_food"
+        },
+        {
+          "class": "fast_food",
+          "id": 6678596141,
+          "name": "Subway",
+          "rank": 33,
+          "subclass": "fast_food"
+        },
+        {
+          "class": "fast_food",
+          "id": 4376113781,
+          "name": "Nordsee",
+          "rank": 32,
+          "subclass": "fast_food"
+        },
+        {
+          "class": "restaurant",
+          "id": 4376132521,
+          "name": "Kartoffelhaus",
+          "rank": 50,
+          "subclass": "restaurant"
+        }
+      ],
+      "ready": true,
+      "roadLabels": 10,
+      "zoom": 17,
+      "screenshot": "berlin-z17-light.png"
+    },
+    {
+      "site": "berlin",
+      "center": [13.404914, 52.520407],
+      "pois": [
+        {
+          "class": "bus",
+          "id": 38679104381,
+          "name": "Spandauer Straße/Marienkirche",
+          "rank": 10,
+          "subclass": "bus_stop"
+        },
+        {
+          "class": "railway",
+          "id": 46731356471,
+          "name": "Spandauer Straße/Marienkirche",
+          "rank": 3,
+          "subclass": "tram_stop"
+        },
+        {
+          "class": "cafe",
+          "id": 103094496881,
+          "name": "Happy Tea",
+          "rank": 89,
+          "subclass": "cafe"
+        },
+        {
+          "class": "bar",
+          "id": 4376111401,
+          "name": "Palm Beach",
+          "rank": 40,
+          "subclass": "bar"
+        },
+        {
+          "class": "restaurant",
+          "id": 4376127311,
+          "name": "BLOCK HOUSE",
+          "rank": 49,
+          "subclass": "restaurant"
+        },
+        {
+          "class": "fast_food",
+          "id": 36070911781,
+          "name": "dean&david",
+          "rank": 37,
+          "subclass": "fast_food"
+        },
+        {
+          "class": "fast_food",
+          "id": 4376113781,
+          "name": "Nordsee",
+          "rank": 32,
+          "subclass": "fast_food"
+        },
+        {
+          "class": "shop",
+          "id": 133324540561,
+          "name": "Sportstech",
+          "rank": 28,
+          "subclass": "sports"
+        },
+        {
+          "class": "bakery",
+          "id": 18199146881,
+          "name": "Bäcker Wiedemann",
+          "rank": 63,
+          "subclass": "bakery"
+        }
+      ],
+      "ready": true,
+      "roadLabels": 4,
+      "zoom": 18,
+      "screenshot": "berlin-z18-light.png"
+    },
+    {
+      "site": "aachen",
+      "center": [6.0839, 50.7754],
+      "pois": [
+        {
+          "class": "railway",
+          "id": 30706312111,
+          "name": "Aachen Hauptbahnhof",
+          "rank": 1,
+          "subclass": "station"
+        },
+        {
+          "class": "place_of_worship",
+          "id": 204702462,
+          "name": "Aachener Dom",
+          "rank": 105,
+          "subclass": "christian"
+        },
+        {
+          "class": "attraction",
+          "id": 623296452,
+          "name": "Lousberg-Terrasse",
+          "rank": 1,
+          "subclass": "attraction"
+        },
+        {
+          "class": "attraction",
+          "id": 13483163242,
+          "name": "Guaita’sche Gartentreppe",
+          "rank": 1,
+          "subclass": "attraction"
+        },
+        {
+          "class": "attraction",
+          "id": 18792643421,
+          "name": "Torbogen des Klosterather Hofs",
+          "rank": 7,
+          "subclass": "attraction"
+        },
+        {
+          "class": "hospital",
+          "id": 4293452972,
+          "name": "Alexianer Krankenhaus",
+          "rank": 1,
+          "subclass": "hospital"
+        },
+        {
+          "class": "hospital",
+          "id": 3943331702,
+          "name": "Ärztehaus am Luisenhospital",
+          "rank": 1,
+          "subclass": "clinic"
+        }
+      ],
+      "ready": true,
+      "roadLabels": 17,
+      "zoom": 14,
+      "screenshot": "aachen-z14-light.png"
+    },
+    {
+      "site": "aachen",
+      "center": [6.0839, 50.7754],
+      "pois": [
+        {
+          "class": "place_of_worship",
+          "id": 204702462,
+          "name": "Aachener Dom",
+          "rank": 105,
+          "subclass": "christian"
+        },
+        {
+          "class": "monument",
+          "id": 796206282,
+          "name": "Ehrenmal",
+          "rank": 4,
+          "subclass": "monument"
+        },
+        {
+          "class": "hospital",
+          "id": 4293452972,
+          "name": "Alexianer Krankenhaus",
+          "rank": 1,
+          "subclass": "hospital"
+        }
+      ],
+      "ready": true,
+      "roadLabels": 31,
+      "zoom": 15,
+      "screenshot": "aachen-z15-light.png"
+    },
+    {
+      "site": "aachen",
+      "center": [6.0839, 50.7754],
+      "pois": [
+        {
+          "class": "place_of_worship",
+          "id": 204702462,
+          "name": "Aachener Dom",
+          "rank": 105,
+          "subclass": "christian"
+        },
+        {
+          "class": "shop",
+          "id": 45062805451,
+          "name": "Laser Aachen",
+          "rank": 11,
+          "subclass": "beauty"
+        },
+        {
+          "class": "shop",
+          "id": 29800738611,
+          "name": "AG Elektronik",
+          "rank": 10,
+          "subclass": "electronics"
+        },
+        {
+          "class": "bus",
+          "id": 34159505771,
+          "name": "Minoritenstraße",
+          "rank": 3,
+          "subclass": "bus_stop"
+        },
+        {
+          "class": "attraction",
+          "id": 3260119542,
+          "name": "Grashaus",
+          "rank": 8,
+          "subclass": "attraction"
+        },
+        {
+          "class": "library",
+          "id": 118047704881,
+          "name": "Antiquariat Schmetz am Dom",
+          "rank": 17,
+          "subclass": "books"
+        },
+        {
+          "class": "library",
+          "id": 11813855981,
+          "name": "Artemis Books",
+          "rank": 16,
+          "subclass": "books"
+        }
+      ],
+      "ready": true,
+      "roadLabels": 26,
+      "zoom": 16,
+      "screenshot": "aachen-z16-light.png"
+    },
+    {
+      "site": "aachen",
+      "center": [6.0839, 50.7754],
+      "pois": [
+        {
+          "class": "place_of_worship",
+          "id": 204702462,
+          "name": "Aachener Dom",
+          "rank": 105,
+          "subclass": "christian"
+        },
+        {
+          "class": "town_hall",
+          "id": 837347442,
+          "name": "Bezirksvertretung Aachen-Mitte",
+          "rank": 10,
+          "subclass": "townhall"
+        },
+        {
+          "class": "school",
+          "id": 14183490271,
+          "name": "Domsingschule",
+          "rank": 8,
+          "subclass": "school"
+        },
+        {
+          "class": "town_hall",
+          "id": 80684342,
+          "name": "Aachener Rathaus",
+          "rank": 9,
+          "subclass": "townhall"
+        },
+        {
+          "class": "school",
+          "id": 2209909602,
+          "name": "Kindertagesstätte St. Foillan",
+          "rank": 6,
+          "subclass": "kindergarten"
+        },
+        {
+          "class": "hospital",
+          "id": 97655557741,
+          "name": "Direct Clinics Aachen",
+          "rank": 2,
+          "subclass": "clinic"
+        },
+        {
+          "class": "attraction",
+          "id": 3260119542,
+          "name": "Grashaus",
+          "rank": 8,
+          "subclass": "attraction"
+        },
+        {
+          "class": "shop",
+          "id": 2398896772,
+          "name": "Kiosk am Markt",
+          "rank": 18,
+          "subclass": "kiosk"
+        },
+        {
+          "class": "shop",
+          "id": 837347142,
+          "name": "Sport Mulack",
+          "rank": 15,
+          "subclass": "sports"
+        },
+        {
+          "class": "shop",
+          "id": 9917760331,
+          "name": "Leonidas",
+          "rank": 22,
+          "subclass": "chocolate"
+        },
+        {
+          "class": "museum",
+          "id": 4139611092,
+          "name": "Internationales Zeitungsmuseum",
+          "rank": 136,
+          "subclass": "museum"
+        },
+        {
+          "class": "bar",
+          "id": 78597510131,
+          "name": "The Gin Library",
+          "rank": 104,
+          "subclass": "bar"
+        },
+        {
+          "class": "museum",
+          "id": 2100819902,
+          "name": "Centre Charlemagne",
+          "rank": 133,
+          "subclass": "museum"
+        },
+        {
+          "class": "restaurant",
+          "id": 1255017752,
+          "name": "Macaroni",
+          "rank": 112,
+          "subclass": "restaurant"
+        },
+        {
+          "class": "cafe",
+          "id": 832662252,
+          "name": "Nobis",
+          "rank": 108,
+          "subclass": "cafe"
+        }
+      ],
+      "ready": true,
+      "roadLabels": 16,
+      "zoom": 17,
+      "screenshot": "aachen-z17-light.png"
+    },
+    {
+      "site": "aachen",
+      "center": [6.0839, 50.7754],
+      "pois": [
+        {
+          "class": "place_of_worship",
+          "id": 204702462,
+          "name": "Aachener Dom",
+          "rank": 105,
+          "subclass": "christian"
+        },
+        {
+          "class": "town_hall",
+          "id": 80684342,
+          "name": "Aachener Rathaus",
+          "rank": 9,
+          "subclass": "townhall"
+        },
+        {
+          "class": "hospital",
+          "id": 97655557731,
+          "name": "Domhof-Klinik",
+          "rank": 1,
+          "subclass": "clinic"
+        },
+        {
+          "class": "cafe",
+          "id": 29811718411,
+          "name": "Karls",
+          "rank": 154,
+          "subclass": "cafe"
+        },
+        {
+          "class": "art_gallery",
+          "id": 20706973671,
+          "name": "Kunst am Markt Retroviews",
+          "rank": 148,
+          "subclass": "gallery"
+        },
+        {
+          "class": "restaurant",
+          "id": 97162716981,
+          "name": "Ratskeller",
+          "rank": 190,
+          "subclass": "restaurant"
+        },
+        {
+          "class": "restaurant",
+          "id": 791404232,
+          "name": "Hexenhof",
+          "rank": 116,
+          "subclass": "restaurant"
+        },
+        {
+          "class": "restaurant",
+          "id": 584586952,
+          "name": "Postwagen",
+          "rank": 108,
+          "subclass": "restaurant"
+        },
+        {
+          "class": "shop",
+          "id": 60865579141,
+          "name": "Rituals",
+          "rank": 42,
+          "subclass": "cosmetics"
+        },
+        {
+          "class": "shop",
+          "id": 22072332071,
+          "name": "Pralinenliebe",
+          "rank": 29,
+          "subclass": "chocolate"
+        },
+        {
+          "class": "shop",
+          "id": 22072331941,
+          "name": "Viu",
+          "rank": 28,
+          "subclass": "optician"
+        },
+        {
+          "class": "shop",
+          "id": 72836377141,
+          "name": "Pieper",
+          "rank": 47,
+          "subclass": "perfumery"
+        }
+      ],
+      "ready": true,
+      "roadLabels": 11,
+      "zoom": 18,
+      "screenshot": "aachen-z18-light.png"
+    },
+    {
+      "site": "neuss",
+      "center": [6.6916, 51.1982],
+      "pois": [
+        {
+          "class": "railway",
+          "id": 18689652141,
+          "name": "Neuss Hbf",
+          "rank": 1,
+          "subclass": "station"
+        },
+        {
+          "class": "attraction",
+          "id": 3929900462,
+          "name": "Blutturm",
+          "rank": 7,
+          "subclass": "attraction"
+        },
+        {
+          "class": "attraction",
+          "id": 883683472,
+          "name": "Pegeluhr",
+          "rank": 6,
+          "subclass": "attraction"
+        },
+        {
+          "class": "hospital",
+          "id": 2296777372,
+          "name": "Alexius/Josef Krankenhaus",
+          "rank": 1,
+          "subclass": "hospital"
+        }
+      ],
+      "ready": true,
+      "roadLabels": 10,
+      "zoom": 14,
+      "screenshot": "neuss-z14-light.png"
+    },
+    {
+      "site": "neuss",
+      "center": [6.6916, 51.1982],
+      "pois": [
+        {
+          "class": "hospital",
+          "id": 263773992,
+          "name": "Rheintor-Klinik",
+          "rank": 1,
+          "subclass": "clinic"
+        },
+        {
+          "class": "attraction",
+          "id": 63712422611,
+          "name": "Römischer Meilenstein",
+          "rank": 7,
+          "subclass": "attraction"
+        },
+        {
+          "class": "attraction",
+          "id": 1736782062,
+          "name": "Hamtor",
+          "rank": 6,
+          "subclass": "attraction"
+        },
+        {
+          "class": "attraction",
+          "id": 3929900462,
+          "name": "Blutturm",
+          "rank": 7,
+          "subclass": "attraction"
+        },
+        {
+          "class": "art_gallery",
+          "id": 23014972261,
+          "name": "Wasserrad",
+          "rank": 6,
+          "subclass": "artwork"
+        }
+      ],
+      "ready": true,
+      "roadLabels": 31,
+      "zoom": 15,
+      "screenshot": "neuss-z15-light.png"
+    },
+    {
+      "site": "neuss",
+      "center": [6.6916, 51.1982],
+      "pois": [
+        {
+          "class": "shop",
+          "id": 2889748821,
+          "name": "Kapadokya",
+          "rank": 11,
+          "subclass": "convenience"
+        },
+        {
+          "class": "library",
+          "id": 1291062092,
+          "name": "Stadtbibliothek Neuss",
+          "rank": 8,
+          "subclass": "library"
+        },
+        {
+          "class": "shop",
+          "id": 3304439601,
+          "name": "Optik Horstkotte",
+          "rank": 9,
+          "subclass": "optician"
+        },
+        {
+          "class": "attraction",
+          "id": 63712422611,
+          "name": "Römischer Meilenstein",
+          "rank": 7,
+          "subclass": "attraction"
+        },
+        {
+          "class": "railway",
+          "id": 25788430121,
+          "name": "Glockhammer",
+          "rank": 1,
+          "subclass": "tram_stop"
+        },
+        {
+          "class": "town_hall",
+          "id": 13000263,
+          "name": "Stadtverwaltung Neuss",
+          "rank": 14,
+          "subclass": "townhall"
+        },
+        {
+          "class": "restaurant",
+          "id": 4247316132,
+          "name": "Herzog von Burgund",
+          "rank": 6,
+          "subclass": "restaurant"
+        },
+        {
+          "class": "shop",
+          "id": 21207929621,
+          "name": "Massawa",
+          "rank": 10,
+          "subclass": "kiosk"
+        },
+        {
+          "class": "place_of_worship",
+          "id": 874115602,
+          "name": "Klosterkirche Marienberg",
+          "rank": 22,
+          "subclass": "christian"
+        },
+        {
+          "class": "library",
+          "id": 3795599521,
+          "name": "Thalia",
+          "rank": 15,
+          "subclass": "books"
+        },
+        {
+          "class": "fast_food",
+          "id": 8769879471,
+          "name": "Pizza Snack",
+          "rank": 19,
+          "subclass": "fast_food"
+        }
+      ],
+      "ready": true,
+      "roadLabels": 25,
+      "zoom": 16,
+      "screenshot": "neuss-z16-light.png"
+    },
+    {
+      "site": "neuss",
+      "center": [6.6916, 51.1982],
+      "pois": [
+        {
+          "class": "town_hall",
+          "id": 13000263,
+          "name": "Stadtverwaltung Neuss",
+          "rank": 14,
+          "subclass": "townhall"
+        },
+        {
+          "class": "library",
+          "id": 3795599521,
+          "name": "Thalia",
+          "rank": 15,
+          "subclass": "books"
+        },
+        {
+          "class": "police",
+          "id": 3300174301,
+          "name": "Rathauswache",
+          "rank": 18,
+          "subclass": "police"
+        },
+        {
+          "class": "library",
+          "id": 139943522751,
+          "name": "Der Buchladen in der Neustraße",
+          "rank": 17,
+          "subclass": "books"
+        },
+        {
+          "class": "restaurant",
+          "id": 3102860401,
+          "name": "Spitzweg",
+          "rank": 105,
+          "subclass": "restaurant"
+        },
+        {
+          "class": "fast_food",
+          "id": 17043115111,
+          "name": "Cafe Hellas",
+          "rank": 42,
+          "subclass": "fast_food"
+        },
+        {
+          "class": "restaurant",
+          "id": 3139596041,
+          "name": "Weisses Haus",
+          "rank": 108,
+          "subclass": "restaurant"
+        },
+        {
+          "class": "cafe",
+          "id": 3102868011,
+          "name": "Eiscafe Roma",
+          "rank": 106,
+          "subclass": "cafe"
+        }
+      ],
+      "ready": true,
+      "roadLabels": 17,
+      "zoom": 17,
+      "screenshot": "neuss-z17-light.png"
+    },
+    {
+      "site": "neuss",
+      "center": [6.6916, 51.1982],
+      "pois": [
+        {
+          "class": "attraction",
+          "id": 12649404491,
+          "name": "Schützenglockenspiel",
+          "rank": 8,
+          "subclass": "attraction"
+        },
+        {
+          "class": "town_hall",
+          "id": 13000263,
+          "name": "Stadtverwaltung Neuss",
+          "rank": 14,
+          "subclass": "townhall"
+        },
+        {
+          "class": "police",
+          "id": 3300174301,
+          "name": "Rathauswache",
+          "rank": 18,
+          "subclass": "police"
+        },
+        {
+          "class": "cafe",
+          "id": 53663229791,
+          "name": "Koffi",
+          "rank": 152,
+          "subclass": "cafe"
+        },
+        {
+          "class": "bar",
+          "id": 4436672111,
+          "name": "The Hidden",
+          "rank": 91,
+          "subclass": "nightclub"
+        },
+        {
+          "class": "fast_food",
+          "id": 3102875861,
+          "name": "Curry am Büchel",
+          "rank": 71,
+          "subclass": "fast_food"
+        },
+        {
+          "class": "grocery",
+          "id": 55186225111,
+          "name": "Gewürzmühle Engels",
+          "rank": 65,
+          "subclass": "deli"
+        },
+        {
+          "class": "shop",
+          "id": 122594139091,
+          "name": "Rituals",
+          "rank": 56,
+          "subclass": "cosmetics"
+        },
+        {
+          "class": "shop",
+          "id": 122594139071,
+          "name": "Nanu-Nana",
+          "rank": 55,
+          "subclass": "gift"
+        },
+        {
+          "class": "shop",
+          "id": 122594139021,
+          "name": "Bijou Brigitte",
+          "rank": 54,
+          "subclass": "jewelry"
+        },
+        {
+          "class": "shop",
+          "id": 122593989001,
+          "name": "Minails",
+          "rank": 53,
+          "subclass": "beauty"
+        },
+        {
+          "class": "shop",
+          "id": 63873935531,
+          "name": "Vodafone",
+          "rank": 44,
+          "subclass": "mobile_phone"
+        },
+        {
+          "class": "shop",
+          "id": 30893986251,
+          "name": "Apollo-Optik",
+          "rank": 35,
+          "subclass": "optician"
+        },
+        {
+          "class": "cafe",
+          "id": 1606685062,
+          "name": "Jimmy's",
+          "rank": 99,
+          "subclass": "cafe"
+        },
+        {
+          "class": "shop",
+          "id": 8147871991,
+          "name": "Rauchbar",
+          "rank": 26,
+          "subclass": "tobacco"
+        },
+        {
+          "class": "shop",
+          "id": 8431022011,
+          "name": "Parfümerie Becker",
+          "rank": 27,
+          "subclass": "perfumery"
+        }
+      ],
+      "ready": true,
+      "roadLabels": 4,
+      "zoom": 18,
+      "screenshot": "neuss-z18-light.png"
+    },
+    {
+      "site": "monschau",
+      "center": [6.2407, 50.5545],
+      "pois": [
+        {
+          "class": "attraction",
+          "id": 3216924781,
+          "name": "Historische Senfmühle",
+          "rank": 5,
+          "subclass": "attraction"
+        },
+        {
+          "class": "attraction",
+          "id": 3292115751,
+          "name": "Mühlenley",
+          "rank": 2,
+          "subclass": "viewpoint"
+        },
+        {
+          "class": "attraction",
+          "id": 1238485012,
+          "name": "Haller",
+          "rank": 1,
+          "subclass": "attraction"
+        },
+        {
+          "class": "castle",
+          "id": 376989722,
+          "name": "Dreistegen",
+          "rank": 3,
+          "subclass": "ruins"
+        },
+        {
+          "class": "attraction",
+          "id": 8526704671,
+          "name": "Engelsley",
+          "rank": 1,
+          "subclass": "viewpoint"
+        }
+      ],
+      "ready": true,
+      "roadLabels": 5,
+      "zoom": 14,
+      "screenshot": "monschau-z14-light.png"
+    },
+    {
+      "site": "monschau",
+      "center": [6.2407, 50.5545],
+      "pois": [
+        {
+          "class": "attraction",
+          "id": 3292115751,
+          "name": "Mühlenley",
+          "rank": 2,
+          "subclass": "viewpoint"
+        },
+        {
+          "class": "attraction",
+          "id": 1238485012,
+          "name": "Haller",
+          "rank": 1,
+          "subclass": "attraction"
+        },
+        {
+          "class": "place_of_worship",
+          "id": 1333053932,
+          "name": "Antoniuskapelle",
+          "rank": 1,
+          "subclass": "christian"
+        },
+        {
+          "class": "castle",
+          "id": 50042886991,
+          "name": "Burg Monschau",
+          "rank": 16,
+          "subclass": "castle"
+        },
+        {
+          "class": "museum",
+          "id": 45364675281,
+          "name": "Erlebnismuseum Lernort Natur",
+          "rank": 15,
+          "subclass": "museum"
+        }
+      ],
+      "ready": true,
+      "roadLabels": 16,
+      "zoom": 15,
+      "screenshot": "monschau-z15-light.png"
+    },
+    {
+      "site": "monschau",
+      "center": [6.2407, 50.5545],
+      "pois": [
+        {
+          "class": "parking",
+          "id": 906397082,
+          "name": "Seidenfabrik",
+          "rank": 11,
+          "subclass": "parking"
+        },
+        {
+          "class": "town_hall",
+          "id": 906398382,
+          "name": "Amtsgericht Monschau",
+          "rank": 7,
+          "subclass": "courthouse"
+        },
+        {
+          "class": "beer",
+          "id": 24319392621,
+          "name": "VAT 60",
+          "rank": 7,
+          "subclass": "pub"
+        },
+        {
+          "class": "attraction",
+          "id": 13348148521,
+          "name": "Halve Mond",
+          "rank": 3,
+          "subclass": "viewpoint"
+        },
+        {
+          "class": "attraction",
+          "id": 3292115751,
+          "name": "Mühlenley",
+          "rank": 2,
+          "subclass": "viewpoint"
+        },
+        {
+          "class": "lodging",
+          "id": 910048622,
+          "name": "DJH Jugendherberge Monschau - Burg Monschau",
+          "rank": 7,
+          "subclass": "hostel"
+        },
+        {
+          "class": "bus",
+          "id": 44638736661,
+          "name": "Stadtbahn Monschau",
+          "rank": 3,
+          "subclass": "bus_stop"
+        },
+        {
+          "class": "bus",
+          "id": 29551830221,
+          "name": "Monschau, Ursulinen/Burgau",
+          "rank": 2,
+          "subclass": "bus_stop"
+        },
+        {
+          "class": "fast_food",
+          "id": 121480887851,
+          "name": "Friterie Chez Louis",
+          "rank": 13,
+          "subclass": "fast_food"
+        },
+        {
+          "class": "shop",
+          "id": 138540782571,
+          "name": "Geduldspiele",
+          "rank": 10,
+          "subclass": "toys"
+        },
+        {
+          "class": "shop",
+          "id": 2515483952,
+          "name": "Monschauer Süßwarenparadies",
+          "rank": 6,
+          "subclass": "confectionery"
+        },
+        {
+          "class": "place_of_worship",
+          "id": 1333053932,
+          "name": "Antoniuskapelle",
+          "rank": 1,
+          "subclass": "christian"
+        },
+        {
+          "class": "cafe",
+          "id": 906137352,
+          "name": "Weekend",
+          "rank": 17,
+          "subclass": "cafe"
+        }
+      ],
+      "ready": true,
+      "roadLabels": 20,
+      "zoom": 16,
+      "screenshot": "monschau-z16-light.png"
+    },
+    {
+      "site": "monschau",
+      "center": [6.2407, 50.5545],
+      "pois": [
+        {
+          "class": "fast_food",
+          "id": 20836808131,
+          "name": "Grillhaus",
+          "rank": 10,
+          "subclass": "fast_food"
+        },
+        {
+          "class": "shop",
+          "id": 83035715401,
+          "name": "Birgits Lädchen",
+          "rank": 9,
+          "subclass": "convenience"
+        },
+        {
+          "class": "attraction",
+          "id": 13348148521,
+          "name": "Halve Mond",
+          "rank": 3,
+          "subclass": "viewpoint"
+        },
+        {
+          "class": "attraction",
+          "id": 1238485012,
+          "name": "Haller",
+          "rank": 1,
+          "subclass": "attraction"
+        },
+        {
+          "class": "fast_food",
+          "id": 121480887851,
+          "name": "Friterie Chez Louis",
+          "rank": 13,
+          "subclass": "fast_food"
+        },
+        {
+          "class": "shop",
+          "id": 138540782571,
+          "name": "Geduldspiele",
+          "rank": 10,
+          "subclass": "toys"
+        },
+        {
+          "class": "shop",
+          "id": 43338186371,
+          "name": "Eifeler Schmuck Design",
+          "rank": 7,
+          "subclass": "jewelry"
+        },
+        {
+          "class": "lodging",
+          "id": 910048622,
+          "name": "DJH Jugendherberge Monschau - Burg Monschau",
+          "rank": 7,
+          "subclass": "hostel"
+        },
+        {
+          "class": "museum",
+          "id": 906396962,
+          "name": "Rotes Haus",
+          "rank": 22,
+          "subclass": "museum"
+        },
+        {
+          "class": "lodging",
+          "id": 906187902,
+          "name": "Hotel Bürgerhaus Monschau",
+          "rank": 20,
+          "subclass": "hotel"
+        },
+        {
+          "class": "cafe",
+          "id": 906137352,
+          "name": "Weekend",
+          "rank": 17,
+          "subclass": "cafe"
+        },
+        {
+          "class": "art_gallery",
+          "id": 135106106151,
+          "name": "Maaßens Päulche",
+          "rank": 55,
+          "subclass": "artwork"
+        },
+        {
+          "class": "restaurant",
+          "id": 92319390191,
+          "name": "Eifel-Stübchen",
+          "rank": 46,
+          "subclass": "restaurant"
+        },
+        {
+          "class": "restaurant",
+          "id": 51039230181,
+          "name": "Alter Markt",
+          "rank": 41,
+          "subclass": "restaurant"
+        },
+        {
+          "class": "cafe",
+          "id": 24192747981,
+          "name": "Café Herzstück",
+          "rank": 37,
+          "subclass": "cafe"
+        },
+        {
+          "class": "restaurant",
+          "id": 51039230191,
+          "name": "Alt Montjoie",
+          "rank": 42,
+          "subclass": "restaurant"
+        },
+        {
+          "class": "place_of_worship",
+          "id": 2515485292,
+          "name": "Schlosskapelle",
+          "rank": 29,
+          "subclass": "christian"
+        }
+      ],
+      "ready": true,
+      "roadLabels": 17,
+      "zoom": 17,
+      "screenshot": "monschau-z17-light.png"
+    },
+    {
+      "site": "monschau",
+      "center": [6.2407, 50.5545],
+      "pois": [
+        {
+          "class": "shop",
+          "id": 138540782571,
+          "name": "Geduldspiele",
+          "rank": 10,
+          "subclass": "toys"
+        },
+        {
+          "class": "shop",
+          "id": 127878198401,
+          "name": "Leonidas",
+          "rank": 9,
+          "subclass": "chocolate"
+        },
+        {
+          "class": "attraction",
+          "id": 906397882,
+          "name": "Haus Troistorff",
+          "rank": 2,
+          "subclass": "attraction"
+        },
+        {
+          "class": "bus",
+          "id": 13834138821,
+          "name": "Burghotel",
+          "rank": 1,
+          "subclass": "bus_stop"
+        },
+        {
+          "class": "art_gallery",
+          "id": 121580522281,
+          "name": "Mon-unique",
+          "rank": 17,
+          "subclass": "art"
+        },
+        {
+          "class": "museum",
+          "id": 906396962,
+          "name": "Rotes Haus",
+          "rank": 22,
+          "subclass": "museum"
+        },
+        {
+          "class": "restaurant",
+          "id": 92319551171,
+          "name": "Café am roten Haus",
+          "rank": 47,
+          "subclass": "restaurant"
+        },
+        {
+          "class": "restaurant",
+          "id": 92319390191,
+          "name": "Eifel-Stübchen",
+          "rank": 46,
+          "subclass": "restaurant"
+        },
+        {
+          "class": "restaurant",
+          "id": 51039230181,
+          "name": "Alter Markt",
+          "rank": 41,
+          "subclass": "restaurant"
+        },
+        {
+          "class": "lodging",
+          "id": 31336269141,
+          "name": "Hotel Royal Garni",
+          "rank": 38,
+          "subclass": "hotel"
+        }
+      ],
+      "ready": true,
+      "roadLabels": 8,
+      "zoom": 18,
+      "screenshot": "monschau-z18-light.png"
+    }
+  ],
+  "searches": [
+    {
+      "site": "berlin",
+      "q": "Hauptbahnhof Berlin",
+      "center": [13.404914, 52.520407],
+      "text": "100 m\nBerlin\n\nArea · Germany · 742 m from map center\n\nHauptbahnhof\n\nTransit stop · Europaplatz 1, 10557 Berlin, Germany · 2.5 km from map center\n\nHauptbahnhof\n\nTransit stop · An der Wuhlheide 189, 12459 Berlin, Germany · 12 km from map center\n\nBerlin Hauptbahnhof (tief)\n\nTransit stop · Washingtonplatz 1, 10557 Berlin, Germany · 2.4 km from map center\n\nGrillstand HBF\n\nPlace · 10557 Berlin, Germany · 2.5 km from map center\n\nHotel Potsdamer Hof Berlin Am Potsdamer Platz\n\nPlace · Potsdamer Straße 68, 10785 Berlin, Germany · 3.1 km from map center\n\nHaustechnik Berlin Brandenburg\n\nPlace · Berliner Straße 119, 10713 Berlin, Germany · 7.0 km from map center\n\nSearch \"Hauptbahnhof Berlin\" in this area\n\nMapTiler · Proprietary\nRestaurants\nHotels\nTransit\nActivities\nBike Sharing\nE-Scooters\nCar Sharing\nParking\nEV Charging\nGas Stations\nMuseums\nPharmacies\nATMs\nWebcams\nLegal Notice\nPrivacy\nTerms\nLicenses\n© OpenStreetMap contributors | © OpenMapTiles | © Mapterhorn",
+      "zoom": 15,
+      "screenshot": "search-berlin-1.png"
+    },
+    {
+      "site": "berlin",
+      "q": "REWE",
+      "center": [13.404914, 52.520407],
+      "text": "100 m\nREWE\n\nPlace · Aaron-Bernstein-Platz 7, 10117 Berlin, Germany · 1.2 km from map center\n\nREWE\n\nPlace · Schönhauser Allee 10-11, 10119 Berlin, Germany · 1.2 km from map center\n\nREWE\n\nChain · German supermarket chain\n\nREWE\n\nPlace · Lankwitzer Straße 19-24, 12209 Berlin, Germany · 11 km from map center\n\nREWE Getränkemarkt\n\nChain · chain of beverage stores\n\nBrewpub\ncraft brewery\n\nSearch category\n\nCraft Brewery\n\nSearch category\n\nSearch \"REWE\" in this area\n\nMapTiler · Proprietary\nRestaurants\nHotels\nTransit\nActivities\nBike Sharing\nE-Scooters\nCar Sharing\nParking\nEV Charging\nGas Stations\nMuseums\nPharmacies\nATMs\nWebcams\nLegal Notice\nPrivacy\nTerms\nLicenses\n© OpenStreetMap contributors | © OpenMapTiles | © Mapterhorn",
+      "zoom": 15,
+      "screenshot": "search-berlin-2.png"
+    },
+    {
+      "site": "aachen",
+      "q": "Aachen Dom",
+      "center": [6.0839, 50.7754],
+      "text": "100 m\nDomschatzkammer\n\nPlace · Johannes-Paul-II.-Straße 15, 52062 Aachen, Germany · 86 m from map center\n\nDomsingschule\n\nPlace · Ritter-Chorus-Straße 1-4, 52062 Aachen, Germany · 59 m from map center\n\nDomhof-Klinik\n\nPlace · Katschhof 3, 52062 Aachen, Germany · 44 m from map center\n\nDomkeller\n\nPlace · Hof 1, 52062 Aachen, Germany · 106 m from map center\n\nDomino's\n\nPlace · Templergraben 42, 52062 Aachen, Germany · 484 m from map center\n\nDomino's\n\nPlace · Vaalser Straße 119, 52074 Aachen, Germany · 1.5 km from map center\n\nSearch \"Aachen Dom\" in this area\n\nMapTiler · Proprietary\nRestaurants\nHotels\nTransit\nActivities\nBike Sharing\nE-Scooters\nCar Sharing\nParking\nEV Charging\nGas Stations\nMuseums\nPharmacies\nATMs\nWebcams\nLegal Notice\nPrivacy\nTerms\nLicenses\n© OpenStreetMap contributors | © OpenMapTiles | © Mapterhorn",
+      "zoom": 15,
+      "screenshot": "search-aachen-3.png"
+    },
+    {
+      "site": "monschau",
+      "q": "Café",
+      "center": [6.2407, 50.5545],
+      "text": "100 m\nCafe\nCafes\n\nSearch category\n\nCafeteria\n\nSearch category\n\nCafé Herzstück\n\nPlace · Markt 7, Monschau, Germany · 114 m from map center\n\nCafé Thelen\n\nPlace · Burgau 1, Monschau, Germany · 304 m from map center\n\nSchloss-Café\n\nPlace · Stadtstraße 4-6, Monschau, Germany · 69 m from map center\n\nCafe\n\nPlace · An der Streng 6-7, Simmerath, Germany · 6.6 km from map center\n\nCafe & Bar Celona\n\nChain · German catering company\n\nCafe extrablatt\n\nChain · German company\n\nCafé Henn\n\nPlace · Seeufer 1, Simmerath, Germany · 12 km from map center\n\nFazenda Cachoeira do Café Airport\n\nAirport · Formosa do Rio Preto, BR · 8503 km from map center\n\nSearch \"Café\" in this area\n\nOurAirports\nMapTiler · Proprietary\nRestaurants\nHotels\nTransit\nActivities\nBike Sharing\nE-Scooters\nCar Sharing\nParking\nEV Charging\nGas Stations\nMuseums\nPharmacies\nATMs\nWebcams\nLegal Notice\nPrivacy\nTerms\nLicenses\n© OpenStreetMap contributors | © OpenMapTiles | © Mapterhorn",
+      "zoom": 15,
+      "screenshot": "search-monschau-4.png"
+    }
+  ],
+  "places": [
+    {
+      "id": "aachen-cathedral",
+      "text": "Aachen Cathedral\n30 m\nRestaurants\nHotels\nTransit\nActivities\nBike Sharing\nE-Scooters\nCar Sharing\nParking\nEV Charging\nGas Stations\nMuseums\nPharmacies\nATMs\nWebcams\n\nView photos\n\nDraupnir3 / Wikimedia Commons / CC BY-SA 3.0\nAachen Cathedral\nPlace of Worship\nDirections\nSave\nNearby\nShare\nOverview\nReviews\nInfo\n\nDomhof 1, 52062 Aachen, Germany\n\n+49 241 477090\naachendom.de\n\nRoman-Catholic cathedral in Aachen, Germany\n\nAbout this place\nFounded\n\n801\n\nArchitect\n\nOdo of Metz\n\nMore\nWikipedia\n\nAdd label\n\nConditions\nQ3FM+WH Aachen\nImprove this place\n\nSuggest a correction to OpenStreetMap\n\nPartially wheelchair accessible\n\nChristian · Roman_catholic\n\nToilets · wheelchair accessible\n\nWorld Heritage Site\n\nWheelchair · description\n\nbarrierefreier Zugang über Krämertüre, bzw. Haupteingang mit angelegter Rampe, WC über Domhof mit angelegter Rampe erreichbar.\n\nLegal Notice\nPrivacy\nTerms\nLicenses\n© OpenStreetMap contributors | © OpenMapTiles | © Mapterhorn",
+      "url": "https://openmapx.com/?map=50.7754%2C6.0839%2C17%2C0%2C0&panel=place&place=stylePoi%3A204702462&at=50.774756%2C6.083985&name=Aachen+Cathedral&cat=christian&raw=place_of_worship%2Fchristian",
+      "screenshot": "place-aachen-cathedral.png"
+    },
+    {
+      "id": "monschau-schloss-cafe",
+      "text": "Schloss-Café\n100 m\nRestaurants\nHotels\nTransit\nActivities\nBike Sharing\nE-Scooters\nCar Sharing\nParking\nEV Charging\nGas Stations\nMuseums\nPharmacies\nATMs\nWebcams\nSchloss-Café\nCafe\nDirections\nSave\nNearby\nShare\nOverview\nReviews\nInfo\n\nStadtstraße 4-6, 52156 Monschau, Germany\n\nMenu\n\nhotelroyal.de\n\nPlace an order\n\n+49 2472 98770\nhotelroyal.de/schlosscafe\n\nOutdoor seating\n\nAdd label\n\nConditions\nH63R+HF Monschau\nImprove this place\n\nSuggest a correction to OpenStreetMap\n\nLegal Notice\nPrivacy\nTerms\nLicenses\n© OpenStreetMap contributors | © OpenMapTiles | © Mapterhorn",
+      "url": "https://openmapx.com/?map=50.553955%2C6.241154%2C15%2C0%2C0&panel=place&place=maptiler%3Apoi.14904583&at=50.553955%2C6.241154&name=Schloss-Caf%C3%A9&cat=poi&raw=cafe",
+      "screenshot": "place-monschau-cafe.png"
+    }
+  ]
+}
