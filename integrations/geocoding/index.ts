@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { type AutocompleteResult, setOverpassUrl } from "@openmapx/core";
 import { type IntegrationContext, scalarQueries } from "@openmapx/integration-framework";
 import { registerPlaceResolver } from "@openmapx/place-ids";
+import { isStationQuery, mergeForwardEvidence, rankForwardResults } from "./forward-ranking.js";
 import { MemCache } from "./mem-cache.js";
 import { getGeocodingProvider, setConfiguredProviderList } from "./orchestrator.js";
 import {
@@ -79,10 +80,17 @@ export function setup(ctx: IntegrationContext): void {
       const result = await ctx.cache.withCache(
         hashKey("cache:geocode", { q: normalizedQ, lang: effectiveLang, prox: proxKey }),
         TTL_FORWARD,
-        () =>
-          fetchWithVariants(q, (v) =>
-            getGeocodingProvider(ctx).geocode(v, effectiveLang, proximity),
-          ),
+        async () => {
+          // Equivalent station queries must fetch/deduplicate in the same order,
+          // whichever spelling first populates their shared cache slot.
+          const stationQuery = isStationQuery(q);
+          const candidates = await fetchWithVariants(
+            stationQuery ? normalizedQ : q,
+            (v) => getGeocodingProvider(ctx).geocode(v, effectiveLang, proximity),
+            stationQuery ? mergeForwardEvidence : undefined,
+          );
+          return rankForwardResults(q, candidates);
+        },
       );
       reply.header("Cache-Control", "public, max-age=86400");
       reply.send(result);

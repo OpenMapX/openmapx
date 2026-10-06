@@ -49,12 +49,13 @@ export function resolveMaptilerApiKey(
 interface MaptilerFeature {
   id: string;
   text: string;
+  matching_text?: string;
   place_name: string;
   place_type: string[];
   relevance: number;
   geometry: { coordinates: [number, number] };
   address?: string;
-  context?: Array<{ id: string; text: string }>;
+  context?: Array<{ id: string; text: string; place_designation?: string }>;
   properties?: {
     categories?: string[];
     /** Settlement rank of an area ("city", "town", "hamlet"), when MapTiler knows it. */
@@ -107,6 +108,22 @@ function rawCategoryOf(f: MaptilerFeature): string | undefined {
 
 interface MaptilerResponse {
   features: MaptilerFeature[];
+}
+
+/** MapTiler also represents independent cities as counties (e.g. Düsseldorf). */
+function localitiesOf(f: MaptilerFeature): string[] {
+  return [
+    ...new Set(
+      (f.context ?? [])
+        .filter(
+          (c) =>
+            c.id.startsWith("municipality.") ||
+            (["place", "county", "locality"].includes(c.id.split(".")[0]) &&
+              ["city", "town", "village", "hamlet"].includes(c.place_designation ?? "")),
+        )
+        .map((c) => c.text),
+    ),
+  ];
 }
 
 function mapType(placeType: string[]): SearchResult["type"] {
@@ -164,14 +181,20 @@ export const maptilerGeocodingService: GeocodingProviderImpl = {
     const params: Record<string, string> = { limit: "10", types: SEARCH_TYPES };
     if (proximity) params.proximity = `${proximity[0]},${proximity[1]}`;
     const data = await fetchMaptiler(query, params, lang);
-    return data.features.map((f) => ({
-      id: `maptiler:${f.id}`,
-      label: f.place_name,
-      coordinates: f.geometry.coordinates,
-      type: mapType(f.place_type),
-      confidence: f.relevance,
-      rawCategory: f.properties?.categories?.[0],
-    }));
+    return data.features.map((f) => {
+      const localities = localitiesOf(f);
+      return {
+        id: `maptiler:${f.id}`,
+        label: f.place_name,
+        name: f.text,
+        ...(f.matching_text ? { aliases: [f.matching_text] } : {}),
+        ...(localities.length ? { localities } : {}),
+        coordinates: f.geometry.coordinates,
+        type: mapType(f.place_type),
+        confidence: f.relevance,
+        rawCategory: f.properties?.categories?.[0],
+      };
+    });
   },
 
   async reverseGeocode(

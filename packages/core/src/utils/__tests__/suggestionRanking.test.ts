@@ -41,6 +41,61 @@ const cafes: AutocompleteResult = {
 
 describe("rankAutocompleteRows", () => {
   it.each([
+    "railway station",
+    "railway halt",
+    "railway_station",
+    "railway_halt",
+    "train station",
+    "railway/station",
+    "public_transport/station",
+    "building/train_station",
+  ])(
+    "recognizes %s so the Neuss station beats the signal box at both recorded map centers",
+    (category) => {
+      const station = place(
+        "maptiler:poi.14564580",
+        "Neuss Hbf",
+        [6.6846707090735435, 51.204437672300486],
+        { rawCategory: category },
+      );
+      const signal = place(
+        "maptiler:poi.32849890",
+        "Neuss Hbf Nf",
+        [6.685013716752906, 51.20621048226127],
+        { rawCategory: "building" },
+      );
+      for (const proximity of [
+        [6.6847, 51.2044],
+        [6.684, 51.207],
+      ] as [number, number][]) {
+        const rows = rankAutocompleteRows(
+          { places: [signal, station] },
+          { query: "Hauptbahnhof Neuss", proximity, zoom: 14 },
+        );
+        expect(rows[0].id).toBe(station.id);
+      }
+    },
+  );
+
+  it.each(["Taxi", "Parking"])(
+    "does not promote a MapTiler station over explicit %s intent",
+    (amenity) => {
+      const station = place("station", "Neuss Hbf", [6.6847, 51.2044], {
+        rawCategory: "railway station",
+      });
+      const requested = place("amenity", `${amenity} Neuss Hbf`, [6.6847, 51.2044], {
+        rawCategory: amenity.toLowerCase(),
+      });
+      expect(
+        rankAutocompleteRows(
+          { places: [requested, station] },
+          { query: `${amenity} Neuss Hbf`, proximity: [6.6847, 51.2044], zoom: 14 },
+        )[0].id,
+      ).toBe("amenity");
+    },
+  );
+
+  it.each([
     ["Kentucky Fried Chicken", 1.3, "open"],
     ["Kentucky", 0.8, "open"],
     ["Fried", 0.7, "search"],
