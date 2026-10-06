@@ -28,6 +28,45 @@ covered by our [Code of Conduct](CODE_OF_CONDUCT.md).
 - **Translations** — strings live in `packages/i18n/`. Run
   `pnpm check-translations` to verify completeness.
 
+## Issues and triage
+
+Use the [issue forms](https://github.com/OpenMapX/openmapx/issues/new/choose)
+to report a bug, request a feature or integration, or plan a task. The forms
+assign the issue type automatically: **Bug** for defects, **Feature** for
+feature and integration requests, and **Task** for maintenance, investigations,
+and technical work. Labels describe the affected area and triage state.
+
+Write a descriptive issue title that names the problem or desired outcome,
+such as "Station searches prefer unrelated POIs" or "Add support for a new
+transit provider". Conventional Commits apply to commit messages and PR
+titles; issues use their type and labels for classification.
+
+Reporters can submit observations with an incomplete investigation. Include
+what you know, supporting evidence, and open questions; you do not need to
+prove the root cause or design a fix. Maintainers verify the report against
+current code and complete the planning details during triage.
+
+### Ready for implementation
+
+Before scheduling implementation, maintainers check that an issue has:
+
+- [ ] A verified problem or desired outcome, with reproduction evidence or
+      a clear use case. Code claims reference the relevant files and revision;
+      observations, hypotheses, and upstream behavior are distinguished.
+- [ ] A bounded scope, explicit exclusions, and any unresolved decisions.
+- [ ] Testable acceptance criteria and a verification approach. For an
+      investigation, define the questions to answer and evidence to deliver.
+- [ ] An appropriate issue type and labels, plus **Priority** and **Effort**
+      values in the repository's issue fields, assigned by a maintainer.
+- [ ] Dependencies and blockers recorded as linked issues where possible,
+      or an explicit statement that none are known.
+
+An open issue can remain in the backlog while these details are incomplete.
+Keep `needs-triage` until the initial review is complete; removing it does
+not by itself mean the issue is ready for implementation. Resolve or assign
+blocking decisions before starting the work. Large efforts should be split
+into linked tasks with independently verifiable outcomes.
+
 ## Development setup
 
 Requirements:
@@ -143,7 +182,7 @@ Conventions:
 
 ### Commit messages
 
-This repo uses [Conventional Commits](https://www.conventionalcommits.org),
+Commit messages and PR titles use [Conventional Commits](https://www.conventionalcommits.org),
 enforced by commitlint via Husky and by the `pr-title` GitHub Action.
 
 Examples:

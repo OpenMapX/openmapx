@@ -1,6 +1,6 @@
 name: 🧩 New integration / provider
 description: Request (or propose to build) support for a new data provider, source, or backend service
-title: "[Integration]: "
+type: Feature
 labels: [enhancement, integration, needs-triage]
 body:
   - type: markdown

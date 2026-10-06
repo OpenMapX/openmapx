@@ -1,0 +1,50 @@
+name: 🛠️ Task
+description: Plan maintenance, an investigation, or technical work
+type: Task
+labels: [needs-triage]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this form for maintenance, investigations, and technical work. Use the bug,
+        feature, or integration form for those requests. Give the task a descriptive title.
+
+        Share what you know and identify open questions. Maintainers complete the
+        [triage checklist](https://github.com/OpenMapX/openmapx/blob/main/CONTRIBUTING.md#ready-for-implementation)
+        before scheduling implementation.
+  - type: checkboxes
+    id: preflight
+    attributes:
+      label: Before you start
+      options:
+        - label: I searched existing issues and this work isn't already tracked.
+          required: true
+  - type: textarea
+    id: objective
+    attributes:
+      label: Objective
+      description: What should this work achieve, and why is it needed? Link supporting evidence or related issues.
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope
+      description: Which areas should change? State what is out of scope and identify any open questions.
+    validations:
+      required: true
+  - type: textarea
+    id: completion-criteria
+    attributes:
+      label: Completion criteria
+      description: How will we verify this task is complete? For an investigation, name the questions to answer and the evidence to deliver.
+      placeholder: |
+        - [ ] Observable result or check
+        - [ ] Required evidence or documentation
+    validations:
+      required: true
+  - type: textarea
+    id: dependencies
+    attributes:
+      label: Dependencies
+      description: Link blocking issues, required decisions, or external dependencies. Say "None known" or "Unknown" if appropriate.
