@@ -98,7 +98,7 @@ describe("bundled basemap detail", () => {
       expect(group.limits).toHaveLength(7);
       expect(group.limits).toEqual(group.limits.toSorted((a, b) => a - b));
     }
-    expect(poiRankLimit("restaurant", 15)).toBe(0);
+    expect(poiRankLimit("restaurant", 15)).toBeGreaterThan(0);
     expect(poiRankLimit("restaurant", 17)).toBeGreaterThan(0);
   });
 

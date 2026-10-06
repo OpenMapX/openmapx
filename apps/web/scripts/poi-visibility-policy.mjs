@@ -49,7 +49,10 @@ export const poiVisibilityGroups = [
   },
   {
     classes: ["restaurant", "cafe", "bar", "beer", "bakery", "ice_cream"],
-    limits: [0, 0, 25, 115, 220, all, all],
+    neighborhoodBusiness: true,
+    // A small locally ranked selection appears before the close-up business
+    // layers. Keep z15 below rank 25, where poi-level-3 starts at z16.
+    limits: [8, 24, 25, 115, 220, all, all],
   },
   {
     classes: ["fast_food"],
@@ -60,7 +63,13 @@ export const poiVisibilityGroups = [
     limits: [0, 0, 25, 78, 180, all, all],
   },
   {
-    classes: ["shop", "grocery", "clothing_store", "alcohol_shop", "parking"],
+    classes: ["shop", "grocery", "clothing_store", "alcohol_shop"],
+    neighborhoodBusiness: true,
+    limits: [4, 12, 12, 22, 65, 140, all],
+  },
+  {
+    // Parking keeps its later introduction; it is not a shopping destination.
+    classes: ["parking"],
     limits: [0, 0, 12, 22, 65, 140, all],
   },
   {
@@ -123,6 +132,19 @@ export const poiVisibilityGroups = [
 ];
 
 const fallbackLimits = [0, 0, 0, 0, 10, 50, all];
+
+export function neighborhoodBusinessExpression() {
+  return [
+    "in",
+    ["get", "class"],
+    [
+      "literal",
+      poiVisibilityGroups
+        .filter((group) => group.neighborhoodBusiness)
+        .flatMap((group) => group.classes),
+    ],
+  ];
+}
 
 // Bus and tram stops are many small points that mostly repeat a nearby
 // station's name. They arrive as icons from z16; their names come from the
