@@ -1141,6 +1141,7 @@
     "avoidsConsumption": "Vermeidet verbrauchsintensive Streckenabschnitte"
   },
   "openingHours": {
+    "unavailable": "Öffnungszeiten nicht verfügbar",
     "source": "Quelle",
     "checkedOn": "Öffnungszeiten geprüft am {date}",
     "unconfirmed": "Öffnungszeiten unbestätigt",

@@ -107,6 +107,15 @@ hours and other place metadata, which feeds the [place panel](./places.md).
 Attribution identifies the sources that actually contributed returned records;
 if one provider fails while another succeeds, the result is marked partial.
 
+Category rows keep a fixed thumbnail column while optional photos arrive or
+fail, so the place name and facts keep their text width. A neutral photo icon
+stands in when there is no usable image; it does not represent a real photo or
+a loading promise. Missing hours are labeled **Opening hours unavailable**,
+separately from reported hours that cannot establish an open/closed state.
+Ratings appear only when supplied, with their source. Photo credits remain
+independent links below the row. Optional photo/rating enrichment stays batched
+for visible cards; choosing a place does not wait for it.
+
 For queries that read like a question rather than a place name — "quiet vegan
 cafe with wifi open now" — OpenMapX can parse the sentence into a structured
 search and run it for you. That's a feature of its own, local-first and with an

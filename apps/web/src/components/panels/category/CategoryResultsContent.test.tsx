@@ -771,6 +771,70 @@ describe("visible category card enrichment", () => {
     return { intersect, view, observed };
   }
 
+  it("keeps the row, keyboard focus and thumbnail slot through delayed and failed photos", async () => {
+    const place = {
+      id: "osm:node/stable-photo",
+      name: "Stable cafe",
+      coordinates: [6.08, 50.77],
+      category: "cafe",
+      address: "A long address that should keep its text column",
+    } as CategoryPlace;
+    let resolveBatch!: (value: unknown) => void;
+    const post = vi.spyOn(apiClient, "post").mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveBatch = resolve;
+        }) as never,
+    );
+    const { intersect } = mountVisibleCards([place]);
+    const row = screen.getByRole("button", { name: /Stable cafe/ });
+    row.focus();
+    const slot = row.querySelector('[data-testid="result-photo-slot"]');
+    expect(slot).toBeInTheDocument();
+    expect(row).toHaveFocus();
+    intersect([place.id]);
+    await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
+    await act(async () =>
+      resolveBatch({
+        results: [
+          {
+            id: place.id,
+            photo: { url: "https://upload.wikimedia.org/Stable.jpg", source: "osm" },
+            outcomes: { photo: { status: "available" }, rating: { status: "absent" } },
+          },
+        ],
+      }),
+    );
+    const image = row.querySelector<HTMLImageElement>('img[src*="image-proxy"]');
+    expect(image).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Stable cafe/ })).toBe(row);
+    expect(row.querySelector('[data-testid="result-photo-slot"]')).toBe(slot);
+    expect(row).toHaveFocus();
+    if (!image) throw new Error("Expected the enriched image");
+    fireEvent.error(image);
+    expect(row.querySelector("img")).toBeNull();
+    expect(row.querySelector('[data-testid="result-photo-slot"]')).toBe(slot);
+    expect(row).toHaveFocus();
+    expect(post).toHaveBeenCalledTimes(1);
+    expect(post.mock.calls[0][0]).toBe("/api/places/card-enrichment");
+  });
+
+  it("labels missing hours without inventing a closed state, photo or rating", () => {
+    mountVisibleCards([
+      {
+        id: "osm:node/missing-hours",
+        name: "Unreported cafe",
+        category: "cafe",
+        coordinates: [6.08, 50.77],
+      } as CategoryPlace,
+    ]);
+    const row = screen.getByRole("button", { name: /Unreported cafe/ });
+    expect(row).toHaveTextContent("openingHours.unavailable");
+    expect(row).not.toHaveTextContent("common.closed");
+    expect(row).not.toHaveTextContent("place.ratedReviews");
+    expect(row.querySelector("img")).toBeNull();
+  });
+
   async function advanceCardTimers(milliseconds: number) {
     await act(async () => vi.advanceTimersByTimeAsync(milliseconds));
   }

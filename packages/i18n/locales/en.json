@@ -1141,6 +1141,7 @@
     "avoidsConsumption": "Avoids higher-consumption segments"
   },
   "openingHours": {
+    "unavailable": "Opening hours unavailable",
     "source": "Source",
     "checkedOn": "hours checked {date}",
     "unconfirmed": "Opening hours unconfirmed",

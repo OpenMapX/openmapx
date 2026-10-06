@@ -2,6 +2,7 @@
 
 import { useTravelTimeStore } from "@integrations/overlay-tool-travel-time/store";
 import DirectionsBusIcon from "@mui/icons-material/DirectionsBus";
+import PhotoOutlinedIcon from "@mui/icons-material/PhotoOutlined";
 import TrainIcon from "@mui/icons-material/Train";
 import TramIcon from "@mui/icons-material/Tram";
 import Box from "@mui/material/Box";
@@ -153,6 +154,7 @@ function CategoryPlaceCard({
   const tcat = useTranslations("category");
   const units = useSettingsStore((s) => s.units);
   const ohText = useOpeningHoursText();
+  const th = useTranslations("openingHours");
   const distanceMetres = resultDistanceMetres(distanceReference, place.coordinates);
   const attributes = selectResultAttributes(place.osmTags);
   const tagLabel = place.category
@@ -177,161 +179,179 @@ function CategoryPlaceCard({
         }}
         selected={isHovered}
         hoverBg="rgba(0,0,0,0.06)"
-        bottomPadding={showPhoto ? 0.25 : undefined}
       >
-        {showPhoto && photoUrl && (
-          <Box
-            component="img"
-            src={proxyImageUrl(photoUrl)}
-            alt=""
-            loading="lazy"
-            onError={() => setFailedPhotoUrl(photoUrl)}
-            sx={{
-              width: 72,
-              height: 72,
-              objectFit: "cover",
-              borderRadius: 1,
-              float: "right",
-              ml: 1,
-              mb: 0.5,
-            }}
-          />
-        )}
-        {brandIdentity ? (
-          <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-            <BrandLogo
-              brand={{
-                qid: brandIdentity.qid,
-                name: place.brand?.name ?? place.name,
-                logoFile: brandLogos.get(brandIdentity.qid),
-                kind: [brandIdentity.kind],
-              }}
-              size={20}
-            />
-            {/* minWidth: 0 lets the name shrink/wrap inside the row instead of
+        <Box sx={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) 72px", gap: 1.5 }}>
+          <Box sx={{ minWidth: 0 }}>
+            {brandIdentity ? (
+              <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                <BrandLogo
+                  brand={{
+                    qid: brandIdentity.qid,
+                    name: place.brand?.name ?? place.name,
+                    logoFile: brandLogos.get(brandIdentity.qid),
+                    kind: [brandIdentity.kind],
+                  }}
+                  size={20}
+                />
+                {/* minWidth: 0 lets the name shrink/wrap inside the row instead of
               pushing the fixed-size logo out or overflowing the list item. */}
-            <Box sx={{ minWidth: 0, flex: 1 }}>
+                <Box sx={{ minWidth: 0, flex: 1 }}>
+                  <ResultItemName>{place.name}</ResultItemName>
+                </Box>
+              </Box>
+            ) : (
               <ResultItemName>{place.name}</ResultItemName>
-            </Box>
-          </Box>
-        ) : (
-          <ResultItemName>{place.name}</ResultItemName>
-        )}
-        <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5, alignItems: "center", mb: 0.25 }}>
-          {tagLabel && (
-            <Typography
-              variant="caption"
-              sx={{
-                color: "text.secondary",
-              }}
-            >
-              {tagLabel}
-            </Typography>
-          )}
-          {tagLabel && place.address && (
-            <Typography
-              variant="caption"
-              sx={{
-                color: "text.secondary",
-              }}
-            >
-              ·
-            </Typography>
-          )}
-          {place.address && (
-            <Typography
-              variant="caption"
-              sx={{
-                color: "text.secondary",
-                overflowWrap: "anywhere",
-              }}
-            >
-              {place.address}
-            </Typography>
-          )}
-        </Box>
-        {rating && (
-          <Typography
-            variant="caption"
-            sx={{ color: "text.secondary", display: "block", mb: 0.25 }}
-          >
-            ★ {new Intl.NumberFormat(locale, { maximumFractionDigits: 1 }).format(rating.stars)} ·{" "}
-            {rating.count} {tp("ratedReviews")} ·{" "}
-            {registry.findDataSource(rating.source)?.name ?? rating.source}
-          </Typography>
-        )}
-        {(distanceMetres !== null || attributes.length > 0) && (
-          <Box
-            sx={{
-              display: "flex",
-              flexWrap: "wrap",
-              gap: 0.75,
-              alignItems: "center",
-              minWidth: 0,
-              mb: 0.25,
-            }}
-          >
-            {distanceMetres !== null && (
-              <Typography variant="caption" sx={{ color: "text.secondary", fontWeight: 600 }}>
-                {formatMeasurementDistance(distanceMetres, units)}
-              </Typography>
             )}
-            {attributes.map((attribute) => (
-              <Typography
-                key={attribute.kind}
-                variant="caption"
-                sx={{ color: "text.secondary", overflowWrap: "anywhere" }}
-              >
-                {attribute.kind === "cuisine"
-                  ? `${tcat("cuisine")}: ${attribute.value}`
-                  : attribute.kind === "outdoor_seating"
-                    ? tp("outdoorSeating")
-                    : attribute.kind === "wheelchair_yes"
-                      ? tp("wheelchairYes")
-                      : attribute.kind === "wheelchair_designated"
-                        ? tp("wheelchairDesignated")
-                        : tp("wheelchairLimited")}
-              </Typography>
-            ))}
-          </Box>
-        )}
-        {(() => {
-          const hours = place.openingHoursInfo?.status ?? null;
-          if (hours) {
-            if (hours.isUnknown) {
-              return (
+            <Box
+              sx={{ display: "flex", flexWrap: "wrap", gap: 0.5, alignItems: "center", mb: 0.25 }}
+            >
+              {tagLabel && (
                 <Typography
                   variant="caption"
                   sx={{
                     color: "text.secondary",
                   }}
                 >
-                  {ohText.state(hours)}
+                  {tagLabel}
+                </Typography>
+              )}
+              {tagLabel && place.address && (
+                <Typography
+                  variant="caption"
+                  sx={{
+                    color: "text.secondary",
+                  }}
+                >
+                  ·
+                </Typography>
+              )}
+              {place.address && (
+                <Typography
+                  variant="caption"
+                  sx={{
+                    color: "text.secondary",
+                    overflowWrap: "anywhere",
+                  }}
+                >
+                  {place.address}
+                </Typography>
+              )}
+            </Box>
+            {rating && (
+              <Typography
+                variant="caption"
+                sx={{ color: "text.secondary", display: "block", mb: 0.25 }}
+              >
+                ★ {new Intl.NumberFormat(locale, { maximumFractionDigits: 1 }).format(rating.stars)}{" "}
+                · {rating.count} {tp("ratedReviews")} ·{" "}
+                {registry.findDataSource(rating.source)?.name ?? rating.source}
+              </Typography>
+            )}
+            {(distanceMetres !== null || attributes.length > 0) && (
+              <Box
+                sx={{
+                  display: "flex",
+                  flexWrap: "wrap",
+                  gap: 0.75,
+                  alignItems: "center",
+                  minWidth: 0,
+                  mb: 0.25,
+                }}
+              >
+                {distanceMetres !== null && (
+                  <Typography variant="caption" sx={{ color: "text.secondary", fontWeight: 600 }}>
+                    {formatMeasurementDistance(distanceMetres, units)}
+                  </Typography>
+                )}
+                {attributes.map((attribute) => (
+                  <Typography
+                    key={attribute.kind}
+                    variant="caption"
+                    sx={{ color: "text.secondary", overflowWrap: "anywhere" }}
+                  >
+                    {attribute.kind === "cuisine"
+                      ? `${tcat("cuisine")}: ${attribute.value}`
+                      : attribute.kind === "outdoor_seating"
+                        ? tp("outdoorSeating")
+                        : attribute.kind === "wheelchair_yes"
+                          ? tp("wheelchairYes")
+                          : attribute.kind === "wheelchair_designated"
+                            ? tp("wheelchairDesignated")
+                            : tp("wheelchairLimited")}
+                  </Typography>
+                ))}
+              </Box>
+            )}
+            {(() => {
+              const hours = place.openingHoursInfo?.status ?? null;
+              if (hours) {
+                if (hours.isUnknown) {
+                  return (
+                    <Typography
+                      variant="caption"
+                      sx={{
+                        color: "text.secondary",
+                      }}
+                    >
+                      {ohText.state(hours)}
+                    </Typography>
+                  );
+                }
+                const detail = ohText.detail(hours);
+                return (
+                  <Typography variant="body2" sx={{ color: "text.secondary" }}>
+                    <Box component="span" sx={{ color: openingHoursTone(hours), fontWeight: 700 }}>
+                      {ohText.state(hours)}
+                    </Box>
+                    {detail && <> · {detail}</>}
+                  </Typography>
+                );
+              }
+              if (place.isOpen !== undefined) {
+                return (
+                  <Typography
+                    variant="body2"
+                    sx={{ color: place.isOpen ? "success.main" : "error.main", fontWeight: 700 }}
+                  >
+                    {place.isOpen ? tc("open") : tc("closed")}
+                  </Typography>
+                );
+              }
+              return (
+                <Typography variant="caption" sx={{ color: "text.secondary" }}>
+                  {th("unavailable")}
                 </Typography>
               );
-            }
-            const detail = ohText.detail(hours);
-            return (
-              <Typography variant="body2" sx={{ color: "text.secondary" }}>
-                <Box component="span" sx={{ color: openingHoursTone(hours), fontWeight: 700 }}>
-                  {ohText.state(hours)}
-                </Box>
-                {detail && <> · {detail}</>}
-              </Typography>
-            );
-          }
-          if (place.isOpen !== undefined) {
-            return (
-              <Typography
-                variant="body2"
-                sx={{ color: place.isOpen ? "success.main" : "error.main", fontWeight: 700 }}
-              >
-                {place.isOpen ? tc("open") : tc("closed")}
-              </Typography>
-            );
-          }
-          return null;
-        })()}
+            })()}
+          </Box>
+          <Box
+            data-testid="result-photo-slot"
+            aria-hidden="true"
+            sx={{
+              width: 72,
+              height: 72,
+              borderRadius: 1,
+              overflow: "hidden",
+              bgcolor: "action.hover",
+              color: "text.disabled",
+              display: "grid",
+              placeItems: "center",
+            }}
+          >
+            {showPhoto && photoUrl ? (
+              <Box
+                component="img"
+                src={proxyImageUrl(photoUrl)}
+                alt=""
+                loading="lazy"
+                onError={() => setFailedPhotoUrl(photoUrl)}
+                sx={{ width: 72, height: 72, objectFit: "cover" }}
+              />
+            ) : (
+              <PhotoOutlinedIcon />
+            )}
+          </Box>
+        </Box>
       </ResultListItem>
       {showPhoto && photo && (
         <Box sx={{ px: 2, pb: 0.75, color: "text.secondary", fontSize: "0.65rem" }}>
