@@ -642,8 +642,16 @@ export async function adminSettingsRoute(app: FastifyInstance) {
 
     const allowedKeys = new Set(
       SETTING_DEFS.filter((d) => {
-        const envVal = d.env ? process.env[d.env] : undefined;
-        return !(envVal !== undefined && envVal !== "");
+        // Match GET's validated effective source: malformed env values do not lock the editor.
+        return (
+          resolveSettingPrecedence({
+            envValue: d.env ? process.env[d.env] : undefined,
+            databaseValue: undefined,
+            defaultValue: d.default,
+            parseEnv: (raw) => parseEnvValue(raw, d),
+            validate: (candidate): candidate is unknown => matchesDeclaredType(d, candidate),
+          }).source !== "env"
+        );
       }).map((d) => d.key),
     );
 
@@ -653,6 +661,8 @@ export async function adminSettingsRoute(app: FastifyInstance) {
     for (const [key, value] of Object.entries(updates)) {
       if (!allowedKeys.has(key)) continue;
       const def = defsByKey.get(key);
+      // A redacted secret is a preservation marker, never a replacement credential.
+      if (def?.secret && value === "***") continue;
       if (!def || !matchesDeclaredType(def, value)) {
         rejected.push(key);
         continue;

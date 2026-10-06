@@ -18,7 +18,10 @@ MapTiler when its effective server-side key is configured, otherwise OpenFreeMap
 Choose `auto`, `openfreemap`, or `maptiler` in **Admin → Settings → Map → Hosted
 Vector Basemap**, or set `BASEMAP_PROVIDER` to override the admin value. Reload
 the page after an admin change. An explicit MapTiler choice without a key reports
-missing configuration; it does not silently switch providers.
+missing configuration; it does not silently switch providers. Invalid provider
+environment values are ignored and leave the admin setting editable. Saving a
+provider preserves the existing redacted MapTiler key; replace or clear that
+field explicitly to change the credential.
 
 OpenFreeMap supplies OpenMapTiles-compatible vectors from its stable `/planet`
 TileJSON and keyless Noto glyphs. The OpenMapX light/dark styles and sprites stay
@@ -30,7 +33,10 @@ geocoding, satellite imagery or other provider-specific key requirements.
 An enabled local server is never bypassed merely because a hosted preference is
 set or a local request fails. Configure an explicit glyph base for external local
 tiles; without one, glyphs use OpenFreeMap so labels do not require a MapTiler key.
-The built-in TileServer GL supplies its own glyphs automatically. It does not
+The built-in TileServer GL supplies its own glyphs automatically. Its discovered
+`/tiles` paths use the web origin, independently of `NEXT_PUBLIC_API_URL`.
+For another tile-server origin (including direct local development on port 8080),
+set explicit tile and glyph URLs. It does not
 require a second catalog of server-side styles.
 
 Martin is separate: it generates optional overlay tiles from PostGIS and does

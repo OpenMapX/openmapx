@@ -22,6 +22,7 @@ const mockGetEntries = vi.fn().mockReturnValue({ entries: [], total: 0 });
 const mockGetSources = vi.fn().mockReturnValue([]);
 vi.mock("../../services/app-logger.js", () => ({
   appLogger: {
+    add: vi.fn(),
     getEntries: (...args: unknown[]) => mockGetEntries(...args),
     getSources: (...args: unknown[]) => mockGetSources(...args),
   },
@@ -443,5 +444,57 @@ describe("hosted basemap admin selection", () => {
       payload: { hostedBasemapProvider: "unknown" },
     });
     expect(invalid.statusCode).toBe(400);
+  });
+});
+
+describe("map settings review regressions", () => {
+  it("preserves a redacted secret when saving a hosted provider", async () => {
+    selectResolveWith = [{ key: "maptilerApiKey", value: "existing-key" }];
+    const res = await app.inject({
+      method: "PATCH",
+      url: "/admin/settings",
+      payload: { hostedBasemapProvider: "openfreemap", maptilerApiKey: "***" },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(insertChain.values).toHaveBeenCalledTimes(1);
+    expect(insertChain.values).toHaveBeenCalledWith(
+      expect.objectContaining({
+        key: "hostedBasemapProvider",
+        value: "openfreemap",
+      }),
+    );
+  });
+  it.each(["replacement-key", ""])(
+    "allows an explicit secret replacement or clearing: %s",
+    async (value) => {
+      const res = await app.inject({
+        method: "PATCH",
+        url: "/admin/settings",
+        payload: { maptilerApiKey: value },
+      });
+      expect(res.statusCode).toBe(200);
+      expect(insertChain.values).toHaveBeenCalledWith(
+        expect.objectContaining({ key: "maptilerApiKey", value }),
+      );
+    },
+  );
+  it("allows saving the provider when an invalid environment selection is ignored", async () => {
+    vi.stubEnv("BASEMAP_PROVIDER", "invalid");
+    const get = await app.inject("/admin/settings");
+    expect(get.statusCode).toBe(200);
+    const setting = get
+      .json()
+      .groups.find((g: { id: string }) => g.id === "map")
+      .settings.find((s: { key: string }) => s.key === "hostedBasemapProvider");
+    expect(setting.envOverride).toBe(false);
+    const res = await app.inject({
+      method: "PATCH",
+      url: "/admin/settings",
+      payload: { hostedBasemapProvider: "openfreemap" },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(insertChain.values).toHaveBeenCalledWith(
+      expect.objectContaining({ key: "hostedBasemapProvider", value: "openfreemap" }),
+    );
   });
 });

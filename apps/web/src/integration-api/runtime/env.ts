@@ -38,12 +38,10 @@ export interface ClientEnv {
  */
 export function buildClientEnv(mapConfig?: MapConfig): ClientEnv {
   const apiBase = (process.env.NEXT_PUBLIC_API_URL ?? "").replace(/\/$/, "");
-  const publicPath = (path: string) => (path ? `${apiBase}${path}` : "");
   const tilesUrl =
-    process.env.NEXT_PUBLIC_TILES_URL?.trim() || publicPath(mapConfig?.selfHostedTilesUrl ?? "");
+    process.env.NEXT_PUBLIC_TILES_URL?.trim() || (mapConfig?.selfHostedTilesUrl ?? "");
   const mapStyleUrl =
-    process.env.NEXT_PUBLIC_MAP_STYLE_URL?.trim() ||
-    publicPath(mapConfig?.selfHostedGlyphsUrl ?? "");
+    process.env.NEXT_PUBLIC_MAP_STYLE_URL?.trim() || (mapConfig?.selfHostedGlyphsUrl ?? "");
   const preference =
     mapConfig?.hostedBasemapProvider ??
     hostedBasemapProviderSchema.catch("auto").parse(process.env.BASEMAP_PROVIDER);

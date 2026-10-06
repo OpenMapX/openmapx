@@ -117,17 +117,17 @@ describe("vector basemap selection", () => {
     }
   });
 
-  it("uses enabled TileServer GL automatically and keeps local URLs on the public API origin", () => {
+  it("uses enabled TileServer GL automatically and keeps local URLs on the web origin with a separate API", () => {
     delete process.env.NEXT_PUBLIC_TILES_URL;
     delete process.env.NEXT_PUBLIC_MAP_STYLE_URL;
-    process.env.NEXT_PUBLIC_API_URL = "https://maps.test";
+    process.env.NEXT_PUBLIC_API_URL = "https://api.test";
     const env = buildClientEnv({
       ...hosted("maptiler", true),
       selfHostedTilesUrl: "/tiles/data/openmapx.json",
       selfHostedGlyphsUrl: "/tiles",
     });
     expect(env.basemapProvider).toBe("selfhosted");
-    expect(env.tilesUrl).toBe("https://maps.test/tiles/data/openmapx.json");
-    expect(env.mapStyleUrl).toBe("https://maps.test/tiles");
+    expect(env.tilesUrl).toBe("/tiles/data/openmapx.json");
+    expect(env.mapStyleUrl).toBe("/tiles");
   });
 });
