@@ -5,6 +5,14 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest
 import { controlledRequestLoggingOptions } from "../../server-wiring.js";
 import { createSafePinoOptions } from "../../utils/safe-log-fields.js";
 
+const databaseState = vi.hoisted(() => ({ rows: [] as { key: string; value: unknown }[] }));
+vi.mock("../../db/index.js", () => ({
+  db: { select: () => ({ from: async () => databaseState.rows }) },
+}));
+vi.mock("../../db/schema.js", () => ({ systemSettings: {} }));
+
+import { invalidateMapSettings } from "../../utils/map-settings.js";
+
 let app: FastifyInstance;
 
 beforeAll(async () => {
@@ -19,6 +27,8 @@ afterAll(async () => {
 });
 
 afterEach(() => {
+  databaseState.rows = [];
+  invalidateMapSettings();
   vi.unstubAllEnvs();
   vi.restoreAllMocks();
 });
@@ -244,5 +254,23 @@ describe("GET /maptiler/*", () => {
     expect(body.sprite).toContain("https://api.example.test/");
     expect(body.glyphs).not.toContain("attacker");
     expect(body.sprite).not.toContain("attacker");
+  });
+});
+
+describe("admin-configured MapTiler credentials", () => {
+  it("authenticates upstream requests with the effective database key without returning it", async () => {
+    vi.stubEnv("MAPTILER_KEY", "");
+    vi.stubEnv("NEXT_PUBLIC_MAPTILER_KEY", "");
+    databaseState.rows = [{ key: "maptilerApiKey", value: "admin-secret-key" }];
+    vi.stubGlobal("fetch", async (url: URL) => {
+      expect(url.searchParams.get("key")).toBe("admin-secret-key");
+      return Response.json({
+        tiles: ["https://api.maptiler.com/tiles/v3/{z}/{x}/{y}.pbf?key=admin-secret-key"],
+      });
+    });
+    const response = await app.inject("/maptiler/tiles/v3/tiles.json");
+    expect(response.statusCode).toBe(200);
+    expect(response.body).not.toContain("admin-secret-key");
+    expect(response.json().tiles[0]).toContain("/api/maptiler/tiles/v3/");
   });
 });

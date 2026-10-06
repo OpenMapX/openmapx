@@ -16,6 +16,7 @@
     "tag": "latest",
     "expose": [3000],
     "environment": {
+      "BASEMAP_PROVIDER": "${BASEMAP_PROVIDER:-}",
       "NEXT_PUBLIC_API_URL": "https://${DOMAIN:-localhost}",
       "INTERNAL_API_URL": "http://app-api:3001",
       "NEXT_PUBLIC_MAP_STYLE_URL": "${NEXT_PUBLIC_MAP_STYLE_URL:-}",

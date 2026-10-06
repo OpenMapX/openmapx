@@ -1,6 +1,7 @@
 import { USER_AGENT } from "@openmapx/core";
 import { envString } from "@openmapx/core/server-env";
 import type { FastifyPluginAsync, FastifyRequest } from "fastify";
+import { loadMapSettings } from "../utils/map-settings.js";
 import { declareRouteAuth } from "../utils/route-auth.js";
 import { safeErrorClass, summarizeExternalUrl } from "../utils/safe-log-fields.js";
 
@@ -18,7 +19,7 @@ const FONT_TEMPLATE_RE = /^fonts\/(?:\{fontstack\}|[^/]+)\/(?:\{range\}|\d+-\d+)
 type JsonRecord = Record<string, unknown>;
 
 function maptilerKey(): string {
-  return envString("MAPTILER_KEY", envString("NEXT_PUBLIC_MAPTILER_KEY", ""));
+  return envString("MAPTILER_KEY", envString("NEXT_PUBLIC_MAPTILER_KEY", "")).trim();
 }
 
 function isAllowedMaptilerPath(path: string): boolean {
@@ -157,7 +158,7 @@ export const maptilerRoute: FastifyPluginAsync = async (fastify) => {
   declareRouteAuth(fastify, "public");
 
   fastify.get("/maptiler/*", async (req, reply) => {
-    const key = maptilerKey();
+    const key = maptilerKey() || (await loadMapSettings()).maptilerApiKey;
     if (!key) {
       return reply.status(503).send({ message: "MapTiler API key is not configured" });
     }

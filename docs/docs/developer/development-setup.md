@@ -131,10 +131,11 @@ cp apps/web/.env.example apps/web/.env.local
 
 The one value that matters for local development is `NEXT_PUBLIC_API_URL`, which
 already defaults to `http://localhost:3001` — the API you just started. The
-default OpenMapX style gets vector tiles and glyphs through the API's MapTiler
-fallback, so the MapTiler key lives server-side as `MAPTILER_KEY` in
-`apps/api/.env`, not in the browser bundle. Set it there if you want hosted map
-tiles; you can also self-host tiles later.
+default OpenMapX style uses keyless OpenFreeMap when the API has no MapTiler key.
+A configured server-side `MAPTILER_KEY` in `apps/api/.env` or admin settings
+selects MapTiler in `auto` mode; the key never enters the browser bundle. Override
+the hosted choice with `BASEMAP_PROVIDER` or admin settings. Enabled TileServer GL
+or explicit self-hosted tile URLs always take priority.
 
 Start the dev server:
 

@@ -12,10 +12,32 @@ chooses where that style reads its OpenMapTiles vector data and font glyphs.
 This keeps the online map, downloaded areas, previews, and dark-mode switches on
 one visual definition.
 
-Without self-hosted URLs, the bundled style reads MapTiler-hosted vector tiles
-and glyphs through the API proxy. A self-hosted deployment can replace those two
-data endpoints with TileServer GL. It does not download or maintain a second set
-of server-side styles.
+Enabled TileServer GL is selected automatically; explicit `NEXT_PUBLIC_TILES_URL`
+also always takes priority. Without local tiles, `BASEMAP_PROVIDER=auto` uses
+MapTiler when its effective server-side key is configured, otherwise OpenFreeMap.
+Choose `auto`, `openfreemap`, or `maptiler` in **Admin → Settings → Map → Hosted
+Vector Basemap**, or set `BASEMAP_PROVIDER` to override the admin value. Reload
+the page after an admin change. An explicit MapTiler choice without a key reports
+missing configuration; it does not silently switch providers. Invalid provider
+environment values are ignored and leave the admin setting editable. Saving a
+provider preserves the existing redacted MapTiler key; replace or clear that
+field explicitly to change the credential.
+
+OpenFreeMap supplies OpenMapTiles-compatible vectors from its stable `/planet`
+TileJSON and keyless Noto glyphs. The OpenMapX light/dark styles and sprites stay
+unchanged. Its tiles/glyphs are requested directly by the browser; see the
+[provider's privacy policy](https://openfreemap.org/privacy/). MapTiler assets use
+the existing backend proxy and keep the key server-side. Neither selection changes
+geocoding, satellite imagery or other provider-specific key requirements.
+
+An enabled local server is never bypassed merely because a hosted preference is
+set or a local request fails. Configure an explicit glyph base for external local
+tiles; without one, glyphs use OpenFreeMap so labels do not require a MapTiler key.
+The built-in TileServer GL supplies its own glyphs automatically. Its discovered
+`/tiles` paths use the web origin, independently of `NEXT_PUBLIC_API_URL`.
+For another tile-server origin (including direct local development on port 8080),
+set explicit tile and glyph URLs. It does not
+require a second catalog of server-side styles.
 
 Martin is separate: it generates optional overlay tiles from PostGIS and does
 not provide the base map.
@@ -111,7 +133,9 @@ app and API normally use different origins. Restart `app-web` after changing
 these values.
 
 `NEXT_PUBLIC_STYLE_PROVIDER=maptiler` selects MapTiler's complete hosted style
-through the API and does not use the local OpenMapX offline-package pipeline.
+through the API only when MapTiler is the resolved vector provider. Self-hosted
+and OpenFreeMap vectors always use the owned styles. Complete hosted styles do
+not use the local OpenMapX offline-package pipeline.
 
 ## Relief and contours
 
@@ -222,3 +246,18 @@ self-hosted base map need TileServer GL, not Martin.
 - [Map layers & overlays](../features/map-layers.md)
 - [Configuration](../install/configuration.md)
 - [Service manifest reference](../developer/service-manifest.md)
+
+## Hosted source and attribution
+
+[OpenFreeMap](https://openfreemap.org/) uses the OpenMapTiles schema and needs no
+API key. Its public service has no SLA; operators can select another hosted
+source or their own tiles. The footer credits OpenStreetMap and OpenMapTiles,
+plus the selected hosted provider. Local/offline tiles do not display a hosted
+provider credit. OpenFreeMap and self-hosted basemaps default to proxied
+Mapterhorn terrain and generated contours, keeping Terrain keyless too.
+
+If the public configuration API is unavailable or returns invalid configuration,
+the page preserves explicit local URLs or tries the conventional `/tiles` paths.
+It does not silently switch a potentially self-hosted instance to a third party.
+A hosted deployment can consequently show an unavailable map during an API
+outage; reload after the API recovers to retry provider discovery.

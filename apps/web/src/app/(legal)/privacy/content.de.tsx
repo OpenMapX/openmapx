@@ -68,8 +68,7 @@ export default function PrivacyContentDe({
           mb: 4,
         }}
       >
-        Zuletzt aktualisiert: 5. September 2026 (Abschnitte zu Auskunft und Datenübertragbarkeit
-        überarbeitet)
+        Zuletzt aktualisiert: 6. Oktober 2026 (OpenFreeMap-Kartendienste ergänzt)
       </Typography>
       <Section title={T.controller}>
         <Typography>
@@ -734,6 +733,16 @@ export default function PrivacyContentDe({
         </Typography>
         <ServiceTable
           rows={[
+            {
+              service: "OpenFreeMap",
+              purpose:
+                "Vektorkacheln und Schrift-Glyphen bei Auswahl von OpenFreeMap; Glyphen-Fallback bei lokalen Kacheln ohne Schriftserver",
+              dataSent:
+                "Browser-IP-Adresse, Kachelkoordinaten und Glyphen-Anfragen; kann den sichtbaren Kartenausschnitt widerspiegeln",
+              endUserExposure: "Direkt (Browser)",
+              country: "Ungarn",
+              privacy: "https://openfreemap.org/privacy/",
+            },
             {
               service: "MapTiler Cloud",
               purpose:

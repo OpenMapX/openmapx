@@ -68,7 +68,7 @@ export default function PrivacyContent({
           mb: 4,
         }}
       >
-        Last updated: September 5, 2026 (subject access and portability sections revised)
+        Last updated: October 6, 2026 (OpenFreeMap map services added)
       </Typography>
       <Section title={T.controller}>
         <Typography>
@@ -671,6 +671,16 @@ export default function PrivacyContent({
         </Typography>
         <ServiceTable
           rows={[
+            {
+              service: "OpenFreeMap",
+              purpose:
+                "Vector tiles and font glyphs when OpenFreeMap is selected; glyph fallback for local tiles without a configured font server",
+              dataSent:
+                "Browser IP address, map tile coordinates and glyph requests; may reflect the visible map area",
+              endUserExposure: "Direct (browser)",
+              country: "Hungary",
+              privacy: "https://openfreemap.org/privacy/",
+            },
             {
               service: "MapTiler Cloud",
               purpose:

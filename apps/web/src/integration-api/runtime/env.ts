@@ -6,12 +6,15 @@
  * Next.js inlines NEXT_PUBLIC_* at build time and the minifier dead-code-
  * eliminates fallback branches.
  *
- * Instead, the root layout (server component) calls buildClientEnv() once per
+ * Instead, the root layout (server component) calls loadClientEnv() once per
  * request and passes the result to an EnvProvider context.  Client components
  * read from the context via the useEnv() hook.
  */
 
+import { hostedBasemapProviderSchema, type MapConfig } from "@openmapx/core/map-config";
+
 export interface ClientEnv {
+  basemapProvider?: "selfhosted" | "openfreemap" | "maptiler";
   apiUrl: string;
   mapStyleUrl: string;
   tilesUrl: string;
@@ -33,22 +36,40 @@ export interface ClientEnv {
  * Build the client environment config from process.env.
  * Must only be called from server components (where process.env is real).
  */
-export function buildClientEnv(): ClientEnv {
+export function buildClientEnv(mapConfig?: MapConfig): ClientEnv {
   const apiBase = (process.env.NEXT_PUBLIC_API_URL ?? "").replace(/\/$/, "");
+  const tilesUrl =
+    process.env.NEXT_PUBLIC_TILES_URL?.trim() || (mapConfig?.selfHostedTilesUrl ?? "");
+  const mapStyleUrl =
+    process.env.NEXT_PUBLIC_MAP_STYLE_URL?.trim() || (mapConfig?.selfHostedGlyphsUrl ?? "");
+  const preference =
+    mapConfig?.hostedBasemapProvider ??
+    hostedBasemapProviderSchema.catch("auto").parse(process.env.BASEMAP_PROVIDER);
+  const keyConfigured =
+    mapConfig?.maptilerConfigured ??
+    Boolean(process.env.MAPTILER_KEY?.trim() || process.env.NEXT_PUBLIC_MAPTILER_KEY?.trim());
+  const basemapProvider = tilesUrl
+    ? "selfhosted"
+    : preference === "auto"
+      ? keyConfigured
+        ? "maptiler"
+        : "openfreemap"
+      : preference;
   const styleProvider =
-    (process.env.NEXT_PUBLIC_STYLE_PROVIDER as "maptiler" | "openmapx") || "openmapx";
-  const selfHostedBasemap =
-    (styleProvider === "openmapx" && Boolean(process.env.NEXT_PUBLIC_TILES_URL)) ||
-    (styleProvider === "maptiler" && Boolean(process.env.NEXT_PUBLIC_MAP_STYLE_URL));
+    basemapProvider === "maptiler" && process.env.NEXT_PUBLIC_STYLE_PROVIDER === "maptiler"
+      ? "maptiler"
+      : "openmapx";
+  const keylessTerrain = basemapProvider !== "maptiler";
   const customDem = Boolean(process.env.NEXT_PUBLIC_TERRAIN_DEM_TILEJSON_URL);
-  const useMapterhorn = selfHostedBasemap && !customDem;
+  const useMapterhorn = keylessTerrain && !customDem;
   const customContour = Boolean(process.env.NEXT_PUBLIC_TERRAIN_CONTOUR_TILEJSON_URL);
   const generatedContours = (useMapterhorn || customDem) && !customContour;
 
   return {
     apiUrl: process.env.NEXT_PUBLIC_API_URL ?? "",
-    mapStyleUrl: process.env.NEXT_PUBLIC_MAP_STYLE_URL ?? "",
-    tilesUrl: process.env.NEXT_PUBLIC_TILES_URL ?? "",
+    mapStyleUrl,
+    tilesUrl,
+    basemapProvider,
     styleProvider,
     trafficTileUrlTemplate:
       process.env.NEXT_PUBLIC_TRAFFIC_TILE_URL_TEMPLATE ||

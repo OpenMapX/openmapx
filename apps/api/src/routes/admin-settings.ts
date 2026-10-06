@@ -7,6 +7,7 @@ import { appLogger } from "../services/app-logger";
 import { invalidateDataUsePolicy, refreshDataUsePolicy } from "../services/data-use-policy";
 import { writeAuditLog } from "../utils/audit-log";
 import { loadEmailConfig, sendViaEmailLabs, sendViaLettermint, sendViaSmtp } from "../utils/email";
+import { invalidateMapSettings } from "../utils/map-settings";
 import { emailTestLimit } from "../utils/rate-limit";
 import { getAdminSession, requireAdmin } from "../utils/require-admin";
 import { declareRouteAuth } from "../utils/route-auth";
@@ -254,6 +255,17 @@ export const SETTING_DEFS: SettingDef[] = [
     default: true,
   },
   // Map
+  {
+    group: "map",
+    key: "hostedBasemapProvider",
+    label: "Hosted Vector Basemap",
+    description:
+      "Used only when self-hosted tiles are not configured or enabled. Auto uses MapTiler with a configured key, otherwise OpenFreeMap. Reload the map after saving.",
+    type: "select",
+    options: ["auto", "openfreemap", "maptiler"],
+    env: "BASEMAP_PROVIDER",
+    default: "auto",
+  },
   {
     group: "map",
     key: "maptilerApiKey",
@@ -630,8 +642,16 @@ export async function adminSettingsRoute(app: FastifyInstance) {
 
     const allowedKeys = new Set(
       SETTING_DEFS.filter((d) => {
-        const envVal = d.env ? process.env[d.env] : undefined;
-        return !(envVal !== undefined && envVal !== "");
+        // Match GET's validated effective source: malformed env values do not lock the editor.
+        return (
+          resolveSettingPrecedence({
+            envValue: d.env ? process.env[d.env] : undefined,
+            databaseValue: undefined,
+            defaultValue: d.default,
+            parseEnv: (raw) => parseEnvValue(raw, d),
+            validate: (candidate): candidate is unknown => matchesDeclaredType(d, candidate),
+          }).source !== "env"
+        );
       }).map((d) => d.key),
     );
 
@@ -641,6 +661,8 @@ export async function adminSettingsRoute(app: FastifyInstance) {
     for (const [key, value] of Object.entries(updates)) {
       if (!allowedKeys.has(key)) continue;
       const def = defsByKey.get(key);
+      // A redacted secret is a preservation marker, never a replacement credential.
+      if (def?.secret && value === "***") continue;
       if (!def || !matchesDeclaredType(def, value)) {
         rejected.push(key);
         continue;
@@ -685,6 +707,7 @@ export async function adminSettingsRoute(app: FastifyInstance) {
     // getters behind the response filter keep serving the last-good sets until
     // a refresh lands, so await one here: by the time this response returns,
     // the new policy is live on every request path.
+    invalidateMapSettings();
     invalidateDataUsePolicy();
     await refreshDataUsePolicy();
 
@@ -845,6 +868,7 @@ export async function adminSettingsRoute(app: FastifyInstance) {
         request,
       });
 
+      invalidateMapSettings();
       return { ok: true, imported, skipped };
     },
   );

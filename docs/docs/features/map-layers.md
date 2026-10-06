@@ -27,9 +27,9 @@ ships four:
 | **Cycling**   | A bike-oriented base that foregrounds cycle routes and infrastructure.                                |
 
 Where the data comes from depends on how your instance is configured. The street
-map is served by your tile stack (a self-hosted tile server, or MapTiler Cloud).
+map is served by your tile stack (a self-hosted tile server, OpenFreeMap, or MapTiler Cloud).
 Default and Terrain add elevation data on top of it: Mapterhorn when you host
-your own tiles, MapTiler Terrain with a MapTiler basemap, or a DEM of your own
+your own tiles or OpenFreeMap, MapTiler Terrain with a MapTiler basemap, or a DEM of your own
 (see [Map tiles](../guides/map-tiles.md)). Default only shades mountains softly
 between zoom 6 and 14; Terrain shows the full relief at every zoom. Satellite imagery comes from MapTiler and
 needs `MAPTILER_KEY`; the cycling base uses Thunderforest when a key is set and

@@ -26,6 +26,10 @@
       "types": "./src/erasure-cleanup.ts",
       "default": "./src/erasure-cleanup.ts"
     },
+    "./map-config": {
+      "types": "./src/api/map-config.ts",
+      "default": "./src/api/map-config.ts"
+    },
     "./server-api": {
       "types": "./src/api/server.ts",
       "default": "./src/api/server.ts"

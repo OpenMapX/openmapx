@@ -79,7 +79,7 @@ itself derived from Mapbox Open Styles. OSM Bright is dual-licensed:
 OpenMapX satisfies the CC-BY design attribution through the map's attribution
 control (`BaseAttributions` / `baseMapVectorCredits` in `apps/web`), which shows
 “© OpenMapTiles” and “© OpenStreetMap contributors” on every vector base map —
-plus “© MapTiler” when MapTiler's hosted tiles are used. The full upstream
+plus “© MapTiler” or “OpenFreeMap” when that provider's hosted tiles are used. The full upstream
 notice text is reproduced on the `/licenses` page.
 
 ## Contributing and relicensing

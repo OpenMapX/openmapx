@@ -444,6 +444,8 @@ function SettingsGroupPanel({
       const body: Record<string, unknown> = {};
       for (const s of group.settings) {
         if (s.envOverride) continue;
+        // Keep configured credentials unless the operator replaces or explicitly clears them.
+        if (s.secret && localValues[s.key] === "***") continue;
         // Don't write fields hidden by their showWhen predicate — saving while
         // a field is hidden would clobber the stored value of the option that
         // isn't currently active.

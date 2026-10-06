@@ -337,3 +337,43 @@ describe("SystemSettings focused sections", () => {
     );
   });
 });
+
+describe("configured secret preservation", () => {
+  it("omits an unchanged redacted key when saving the provider", async () => {
+    mockGroup("Map", [
+      {
+        group: "map",
+        key: "maptilerApiKey",
+        label: "MapTiler API Key",
+        type: "string",
+        secret: true,
+        value: "***",
+        source: "database",
+        envOverride: false,
+      },
+      {
+        group: "map",
+        key: "hostedBasemapProvider",
+        label: "Hosted Vector Basemap",
+        type: "select",
+        options: ["auto", "openfreemap", "maptiler"],
+        secret: false,
+        value: "openfreemap",
+        source: "database",
+        envOverride: false,
+      },
+    ]);
+    render(<SystemSettings />, { wrapper: createQueryWrapper() });
+    await screen.findByLabelText("MapTiler API Key");
+    fireEvent.click(screen.getByRole("button", { name: "Save Map" }));
+    await waitFor(() => {
+      const patch = fetchMock.mock.calls.find(
+        ([, init]) => (init as RequestInit | undefined)?.method === "PATCH",
+      );
+      expect(patch).toBeDefined();
+      expect(JSON.parse(String((patch?.[1] as RequestInit).body))).toEqual({
+        hostedBasemapProvider: "openfreemap",
+      });
+    });
+  });
+});
