@@ -280,6 +280,7 @@ export { isSystemSavedList } from "./savedLists";
 export {
   compareSearchSuggestions,
   editDistance,
+  isRailwayStationCategory,
   isUppercaseAcronymIntent,
   localityScore,
   MIN_NEAR_SPELLING_LENGTH,

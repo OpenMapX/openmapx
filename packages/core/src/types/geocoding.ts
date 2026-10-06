@@ -8,6 +8,12 @@ import type { SearchSuggestionMatch } from "./searchSuggestion";
 export interface SearchResult {
   id: string;
   label: string;
+  /** Primary place name without address or administrative context, when available. */
+  name?: string;
+  /** Provider-reported matched names, distinct from the primary name. */
+  aliases?: string[];
+  /** Settlement names containing the place; excludes broad administrative regions. */
+  localities?: string[];
   coordinates: LngLat;
   type: "address" | "poi" | "street" | "region";
   confidence: number;

@@ -93,20 +93,23 @@ export function expandSearchQuery(query: string): string {
 /**
  * Fetch results for all query variants and deduplicate by id.
  * If the query has no synonym matches, makes a single fetch call.
+ * An optional merger retains evidence reported only on later duplicate IDs.
  */
 export async function fetchWithVariants<T extends { id: string }>(
   query: string,
   fetcher: (q: string) => Promise<T[]>,
+  mergeDuplicate?: (first: T, duplicate: T) => T,
 ): Promise<T[]> {
   const variants = getQueryVariants(query);
   if (variants.length === 1) {
     return fetcher(variants[0]);
   }
   const results = await Promise.all(variants.map((v) => fetcher(v)));
-  const seen = new Set<string>();
-  return results.flat().filter((item) => {
-    if (seen.has(item.id)) return false;
-    seen.add(item.id);
-    return true;
-  });
+  const seen = new Map<string, T>();
+  for (const item of results.flat()) {
+    const first = seen.get(item.id);
+    if (!first) seen.set(item.id, item);
+    else if (mergeDuplicate) seen.set(item.id, mergeDuplicate(first, item));
+  }
+  return [...seen.values()];
 }

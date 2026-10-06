@@ -172,6 +172,21 @@ shape** — a label, coordinates, a type (`address`, `poi`, `street`, `region`,
 and so on), and a confidence score. Your search code never has to care which
 engine produced a match.
 
+For station queries such as "Hauptbahnhof Neuss", forward geocoding ranks the
+combined synonym results before caching them. Complete primary-name or matched
+alias coverage, including the actual settlement when available, takes precedence
+over provider order. Matching railway stations then rank ahead of individual
+platforms and other POIs. Aliases discovered by later synonym responses are
+retained when the same result ID is deduplicated. Street names and broad administrative regions cannot
+establish a settlement match. Explicit taxi, parking, and numbered-address queries
+retain provider ordering. Provider confidence remains metadata; MapTiler's value
+is its original relevance, even when the final order changes.
+
+The dropdown has its own ranking, including distance from the map center. It
+recognizes railway station/halt categories from both MapTiler and OSM-style
+providers. Its order can still differ from `/geocode`. Neither ranker can return
+a station or square absent from the provider's candidates.
+
 Two touches improve recall along the way. Queries are **expanded for transit
 abbreviations** in several languages before they're sent on, so "Aachen Hbf"
 and "Aachen Hauptbahnhof" find the same station regardless of which form you
@@ -181,6 +196,12 @@ autocomplete prefixes plus a shared Valkey (Redis-compatible) cache — keyed on
 so common searches return without touching an upstream engine. When an upstream
 is briefly unreachable, the app serves slightly stale cached results rather than
 failing the search.
+
+Equivalent station spellings use the same canonical upstream variant order as
+well as the same cache key, so a cold cache populated with "Hbf" or
+"Hauptbahnhof" produces the same answer. Forward answers use the `cache:geocode`
+namespace with separate language and proximity slots and a 24-hour TTL.
+Autocomplete category recognition happens in the client.
 
 For the bigger picture of how integrations, services, and the API server fit
 together, see [How it works](../overview/how-it-works.md).

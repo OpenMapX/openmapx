@@ -95,9 +95,15 @@ const STATION_PROMINENCE = 0.25;
 const STATION_RAW_CATEGORIES = new Set([
   "railway/station",
   "railway/halt",
-  "public_transport/station",
-  "building/train_station",
+  "public/transport/station",
+  "building/train/station",
+  "train/station",
 ]);
+
+/** Recognize railway categories from both OSM-style and MapTiler spellings. */
+export function isRailwayStationCategory(category: string | undefined): boolean {
+  return STATION_RAW_CATEGORIES.has(category?.trim().toLowerCase().replace(/[ _]+/g, "/") ?? "");
+}
 /**
  * Weight of a provider's own order. Providers rank by fame we are not told
  * (Photon puts the Eiffel Tower in Paris before a garden and a peak of the
@@ -526,9 +532,7 @@ function rankedProminence(item: AutocompleteResult): number {
   const importance = item.importance ?? 0;
   if (item.rawCategory === AIRPORT_RAW_CATEGORY) return importance * AIRPORT_PROMINENCE_SHARE;
   const own = importance * PLACE_PROMINENCE_SHARE;
-  return STATION_RAW_CATEGORIES.has(item.rawCategory ?? "")
-    ? Math.max(own, STATION_PROMINENCE)
-    : own;
+  return isRailwayStationCategory(item.rawCategory) ? Math.max(own, STATION_PROMINENCE) : own;
 }
 
 export function isPlaceRow(item: AutocompleteResult): boolean {

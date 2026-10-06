@@ -1,0 +1,3646 @@
+{
+  "hauptbahnhof neuss": {
+    "features": [
+      {
+        "id": "poi.25722638",
+        "text": "Neusser Tor",
+        "place_name": "Neusser Tor, Am Hauptbahnhof 8, 47798 Krefeld, Germany",
+        "place_type": [
+          "poi"
+        ],
+        "relevance": 0.89,
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            6.567114517092705,
+            51.3250994384764
+          ]
+        },
+        "context": [
+          {
+            "id": "address.3971191",
+            "text": "Am Hauptbahnhof"
+          },
+          {
+            "id": "locality.61158",
+            "text": "Krefeld-Mitte"
+          },
+          {
+            "id": "municipal_district.134097",
+            "text": "Krefeld-Mitte"
+          },
+          {
+            "id": "county.2252",
+            "text": "Krefeld",
+            "place_designation": "city"
+          },
+          {
+            "id": "subregion.408",
+            "text": "Düsseldorf"
+          },
+          {
+            "id": "region.791",
+            "text": "North Rhine-Westphalia"
+          },
+          {
+            "id": "country.175",
+            "text": "Germany"
+          }
+        ],
+        "properties": {
+          "categories": [
+            "taxi"
+          ]
+        }
+      },
+      {
+        "id": "poi.27957867",
+        "text": "Neuss Hauptbahnhof",
+        "place_name": "Neuss Hauptbahnhof, 41460 Neuss, Germany",
+        "place_type": [
+          "poi"
+        ],
+        "relevance": 0.7,
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            6.685506887733936,
+            51.2039709053707
+          ]
+        },
+        "context": [
+          {
+            "id": "place.2264749",
+            "text": "Marienviertel",
+            "place_designation": "neighbourhood"
+          },
+          {
+            "id": "locality.97403",
+            "text": "Innenstadt",
+            "place_designation": "suburb"
+          },
+          {
+            "id": "municipality.51396",
+            "text": "Neuss",
+            "place_designation": "city"
+          },
+          {
+            "id": "county.1690",
+            "text": "Rhein-Kreis Neuss"
+          },
+          {
+            "id": "subregion.408",
+            "text": "Düsseldorf"
+          },
+          {
+            "id": "region.791",
+            "text": "North Rhine-Westphalia"
+          },
+          {
+            "id": "country.175",
+            "text": "Germany"
+          }
+        ],
+        "properties": {
+          "categories": [
+            "bus stop",
+            "stop"
+          ]
+        }
+      },
+      {
+        "id": "poi.27957787",
+        "text": "Neuss Hauptbahnhof",
+        "place_name": "Neuss Hauptbahnhof, Krefelder Straße 16, 41460 Neuss, Germany",
+        "place_type": [
+          "poi"
+        ],
+        "relevance": 0.7,
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            6.684281788766384,
+            51.202874341589286
+          ]
+        },
+        "context": [
+          {
+            "id": "address.364021",
+            "text": "Krefelder Straße"
+          },
+          {
+            "id": "place.2264749",
+            "text": "Marienviertel",
+            "place_designation": "neighbourhood"
+          },
+          {
+            "id": "locality.97403",
+            "text": "Innenstadt",
+            "place_designation": "suburb"
+          },
+          {
+            "id": "municipality.51396",
+            "text": "Neuss",
+            "place_designation": "city"
+          },
+          {
+            "id": "county.1690",
+            "text": "Rhein-Kreis Neuss"
+          },
+          {
+            "id": "subregion.408",
+            "text": "Düsseldorf"
+          },
+          {
+            "id": "region.791",
+            "text": "North Rhine-Westphalia"
+          },
+          {
+            "id": "country.175",
+            "text": "Germany"
+          }
+        ],
+        "properties": {
+          "categories": [
+            "bus stop",
+            "stop"
+          ]
+        }
+      },
+      {
+        "id": "poi.27957708",
+        "text": "Neuss Hauptbahnhof",
+        "place_name": "Neuss Hauptbahnhof, Krefelder Straße 13, 41460 Neuss, Germany",
+        "place_type": [
+          "poi"
+        ],
+        "relevance": 0.7,
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            6.684325374662876,
+            51.20272350950958
+          ]
+        },
+        "context": [
+          {
+            "id": "address.364021",
+            "text": "Krefelder Straße"
+          },
+          {
+            "id": "place.2264749",
+            "text": "Marienviertel",
+            "place_designation": "neighbourhood"
+          },
+          {
+            "id": "locality.97403",
+            "text": "Innenstadt",
+            "place_designation": "suburb"
+          },
+          {
+            "id": "municipality.51396",
+            "text": "Neuss",
+            "place_designation": "city"
+          },
+          {
+            "id": "county.1690",
+            "text": "Rhein-Kreis Neuss"
+          },
+          {
+            "id": "subregion.408",
+            "text": "Düsseldorf"
+          },
+          {
+            "id": "region.791",
+            "text": "North Rhine-Westphalia"
+          },
+          {
+            "id": "country.175",
+            "text": "Germany"
+          }
+        ],
+        "properties": {
+          "categories": [
+            "bus stop",
+            "stop"
+          ]
+        }
+      },
+      {
+        "id": "poi.27957621",
+        "text": "Neuss Hauptbahnhof",
+        "place_name": "Neuss Hauptbahnhof, Kapitelstraße 1a, 41460 Neuss, Germany",
+        "place_type": [
+          "poi"
+        ],
+        "relevance": 0.7,
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            6.684219092130661,
+            51.20242814609568
+          ]
+        },
+        "context": [
+          {
+            "id": "address.14647707",
+            "text": "Kapitelstraße"
+          },
+          {
+            "id": "place.2264749",
+            "text": "Marienviertel",
+            "place_designation": "neighbourhood"
+          },
+          {
+            "id": "locality.97403",
+            "text": "Innenstadt",
+            "place_designation": "suburb"
+          },
+          {
+            "id": "municipality.51396",
+            "text": "Neuss",
+            "place_designation": "city"
+          },
+          {
+            "id": "county.1690",
+            "text": "Rhein-Kreis Neuss"
+          },
+          {
+            "id": "subregion.408",
+            "text": "Düsseldorf"
+          },
+          {
+            "id": "region.791",
+            "text": "North Rhine-Westphalia"
+          },
+          {
+            "id": "country.175",
+            "text": "Germany"
+          }
+        ],
+        "properties": {
+          "categories": [
+            "bus stop",
+            "stop"
+          ]
+        }
+      },
+      {
+        "id": "poi.25862584",
+        "text": "Neuss Hauptbahnhof",
+        "place_name": "Neuss Hauptbahnhof, Salzstraße 55, 41460 Neuss, Germany",
+        "place_type": [
+          "poi"
+        ],
+        "relevance": 0.7,
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            6.6875795647501945,
+            51.20465193816395
+          ]
+        },
+        "context": [
+          {
+            "id": "address.8435066",
+            "text": "Salzstraße"
+          },
+          {
+            "id": "place.2264749",
+            "text": "Marienviertel",
+            "place_designation": "neighbourhood"
+          },
+          {
+            "id": "locality.97403",
+            "text": "Innenstadt",
+            "place_designation": "suburb"
+          },
+          {
+            "id": "municipality.51396",
+            "text": "Neuss",
+            "place_designation": "city"
+          },
+          {
+            "id": "county.1690",
+            "text": "Rhein-Kreis Neuss"
+          },
+          {
+            "id": "subregion.408",
+            "text": "Düsseldorf"
+          },
+          {
+            "id": "region.791",
+            "text": "North Rhine-Westphalia"
+          },
+          {
+            "id": "country.175",
+            "text": "Germany"
+          }
+        ],
+        "properties": {
+          "categories": [
+            "bus stop",
+            "stop"
+          ]
+        }
+      },
+      {
+        "id": "poi.33779531",
+        "text": "Hauptbahnhof",
+        "place_name": "Hauptbahnhof, Kieler Straße 17, 42697 Solingen, Germany",
+        "place_type": [
+          "poi"
+        ],
+        "relevance": 0.6,
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            7.003403651467124,
+            51.15999042549952
+          ]
+        },
+        "context": [
+          {
+            "id": "address.2041789",
+            "text": "Kieler Straße"
+          },
+          {
+            "id": "place.3385115",
+            "text": "Nassenweg",
+            "place_designation": "hamlet"
+          },
+          {
+            "id": "locality.103211",
+            "text": "Ohligs/Aufderhöhe/Merscheid"
+          },
+          {
+            "id": "county.2158",
+            "text": "Solingen",
+            "place_designation": "city"
+          },
+          {
+            "id": "subregion.408",
+            "text": "Düsseldorf"
+          },
+          {
+            "id": "region.791",
+            "text": "North Rhine-Westphalia"
+          },
+          {
+            "id": "country.175",
+            "text": "Germany"
+          }
+        ],
+        "properties": {
+          "categories": [
+            "bus station",
+            "station"
+          ]
+        }
+      },
+      {
+        "id": "poi.24889081",
+        "text": "Kranichwiese",
+        "place_name": "Kranichwiese, FG 4, 45131 Essen, Germany",
+        "place_type": [
+          "poi"
+        ],
+        "relevance": 0.6,
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            6.991694122552872,
+            51.429156685823024
+          ]
+        },
+        "matching_text": "Hauptbahnhof",
+        "context": [
+          {
+            "id": "address.15532647",
+            "text": "FG 4"
+          },
+          {
+            "id": "locality.10260",
+            "text": "Rüttenscheid",
+            "place_designation": "suburb"
+          },
+          {
+            "id": "municipal_district.64647",
+            "text": "II"
+          },
+          {
+            "id": "county.2185",
+            "text": "Essen",
+            "place_designation": "city"
+          },
+          {
+            "id": "subregion.408",
+            "text": "Düsseldorf"
+          },
+          {
+            "id": "region.791",
+            "text": "North Rhine-Westphalia"
+          },
+          {
+            "id": "country.175",
+            "text": "Germany"
+          }
+        ],
+        "properties": {
+          "categories": [
+            "tram stop",
+            "stop"
+          ]
+        }
+      },
+      {
+        "id": "poi.27708289",
+        "text": "Hauptbahnhof",
+        "place_name": "Hauptbahnhof, 45468 Mülheim an der Ruhr, Germany",
+        "place_type": [
+          "poi"
+        ],
+        "relevance": 0.6,
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            6.886844225227833,
+            51.4314763279312
+          ]
+        },
+        "context": [
+          {
+            "id": "place.1191991",
+            "text": "Innenstadt",
+            "place_designation": "neighbourhood"
+          },
+          {
+            "id": "locality.27350",
+            "text": "Altstadt II",
+            "place_designation": "suburb"
+          },
+          {
+            "id": "municipal_district.31270",
+            "text": "Rechtsruhr-Süd"
+          },
+          {
+            "id": "county.1298",
+            "text": "Mülheim an der Ruhr",
+            "place_designation": "city"
+          },
+          {
+            "id": "subregion.408",
+            "text": "Düsseldorf"
+          },
+          {
+            "id": "region.791",
+            "text": "North Rhine-Westphalia"
+          },
+          {
+            "id": "country.175",
+            "text": "Germany"
+          }
+        ],
+        "properties": {
+          "categories": [
+            "bicycle parking"
+          ]
+        }
+      }
+    ]
+  },
+  "hbf neuss": {
+    "features": [
+      {
+        "id": "poi.25722638",
+        "text": "Neusser Tor",
+        "place_name": "Neusser Tor, Am Hauptbahnhof 8, 47798 Krefeld, Germany",
+        "place_type": [
+          "poi"
+        ],
+        "relevance": 0.89,
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            6.567114517092705,
+            51.3250994384764
+          ]
+        },
+        "context": [
+          {
+            "id": "address.3971191",
+            "text": "Am Hauptbahnhof"
+          },
+          {
+            "id": "locality.61158",
+            "text": "Krefeld-Mitte"
+          },
+          {
+            "id": "municipal_district.134097",
+            "text": "Krefeld-Mitte"
+          },
+          {
+            "id": "county.2252",
+            "text": "Krefeld",
+            "place_designation": "city"
+          },
+          {
+            "id": "subregion.408",
+            "text": "Düsseldorf"
+          },
+          {
+            "id": "region.791",
+            "text": "North Rhine-Westphalia"
+          },
+          {
+            "id": "country.175",
+            "text": "Germany"
+          }
+        ],
+        "properties": {
+          "categories": [
+            "taxi"
+          ]
+        }
+      },
+      {
+        "id": "poi.33705864",
+        "text": "Hof-Café im Neusser Kinderbauernhof",
+        "place_name": "Hof-Café im Neusser Kinderbauernhof, Nixhütter Weg 141, 41466 Neuss, Germany",
+        "place_type": [
+          "poi"
+        ],
+        "relevance": 0.755556,
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            6.702843613416803,
+            51.17100524577865
+          ]
+        },
+        "context": [
+          {
+            "id": "address.14910771",
+            "text": "Nixhütter Weg"
+          },
+          {
+            "id": "locality.97400",
+            "text": "Selikum",
+            "place_designation": "village"
+          },
+          {
+            "id": "municipality.51396",
+            "text": "Neuss",
+            "place_designation": "city"
+          },
+          {
+            "id": "county.1690",
+            "text": "Rhein-Kreis Neuss"
+          },
+          {
+            "id": "subregion.408",
+            "text": "Düsseldorf"
+          },
+          {
+            "id": "region.791",
+            "text": "North Rhine-Westphalia"
+          },
+          {
+            "id": "country.175",
+            "text": "Germany"
+          }
+        ],
+        "properties": {
+          "categories": [
+            "cafe",
+            "building"
+          ]
+        }
+      },
+      {
+        "id": "poi.14564580",
+        "text": "Neuss Hbf",
+        "place_name": "Neuss Hbf, Further Straße 1, 41460 Neuss, Germany",
+        "place_type": [
+          "poi"
+        ],
+        "relevance": 0.7,
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            6.6846707090735435,
+            51.204437672300486
+          ]
+        },
+        "context": [
+          {
+            "id": "address.9007076",
+            "text": "Further Straße"
+          },
+          {
+            "id": "place.2264749",
+            "text": "Marienviertel",
+            "place_designation": "neighbourhood"
+          },
+          {
+            "id": "locality.97403",
+            "text": "Innenstadt",
+            "place_designation": "suburb"
+          },
+          {
+            "id": "municipality.51396",
+            "text": "Neuss",
+            "place_designation": "city"
+          },
+          {
+            "id": "county.1690",
+            "text": "Rhein-Kreis Neuss"
+          },
+          {
+            "id": "subregion.408",
+            "text": "Düsseldorf"
+          },
+          {
+            "id": "region.791",
+            "text": "North Rhine-Westphalia"
+          },
+          {
+            "id": "country.175",
+            "text": "Germany"
+          }
+        ],
+        "properties": {
+          "categories": [
+            "railway station",
+            "train station",
+            "station"
+          ]
+        }
+      },
+      {
+        "id": "poi.32849890",
+        "text": "Neuss Hbf Nf",
+        "place_name": "Neuss Hbf Nf, Salzstraße 6, 41462 Neuss, Germany",
+        "place_type": [
+          "poi"
+        ],
+        "relevance": 0.7,
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            6.685013716752906,
+            51.20621048226127
+          ]
+        },
+        "context": [
+          {
+            "id": "address.8435066",
+            "text": "Salzstraße"
+          },
+          {
+            "id": "place.2264749",
+            "text": "Marienviertel",
+            "place_designation": "neighbourhood"
+          },
+          {
+            "id": "locality.97402",
+            "text": "Furth-Süd",
+            "place_designation": "suburb"
+          },
+          {
+            "id": "municipality.51396",
+            "text": "Neuss",
+            "place_designation": "city"
+          },
+          {
+            "id": "county.1690",
+            "text": "Rhein-Kreis Neuss"
+          },
+          {
+            "id": "subregion.408",
+            "text": "Düsseldorf"
+          },
+          {
+            "id": "region.791",
+            "text": "North Rhine-Westphalia"
+          },
+          {
+            "id": "country.175",
+            "text": "Germany"
+          }
+        ],
+        "properties": {
+          "categories": [
+            "building"
+          ]
+        }
+      },
+      {
+        "id": "poi.28863269",
+        "text": "Neuss Hbf",
+        "place_name": "Neuss Hbf, 41460 Neuss, Germany",
+        "place_type": [
+          "poi"
+        ],
+        "relevance": 0.7,
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            6.684706918895245,
+            51.203490479203026
+          ]
+        },
+        "context": [
+          {
+            "id": "place.2264749",
+            "text": "Marienviertel",
+            "place_designation": "neighbourhood"
+          },
+          {
+            "id": "locality.97403",
+            "text": "Innenstadt",
+            "place_designation": "suburb"
+          },
+          {
+            "id": "municipality.51396",
+            "text": "Neuss",
+            "place_designation": "city"
+          },
+          {
+            "id": "county.1690",
+            "text": "Rhein-Kreis Neuss"
+          },
+          {
+            "id": "subregion.408",
+            "text": "Düsseldorf"
+          },
+          {
+            "id": "region.791",
+            "text": "North Rhine-Westphalia"
+          },
+          {
+            "id": "country.175",
+            "text": "Germany"
+          }
+        ],
+        "properties": {
+          "categories": [
+            "railway halt",
+            "train halt",
+            "halt"
+          ]
+        }
+      },
+      {
+        "id": "address.10310714",
+        "text": "Hauptbahnhof",
+        "place_name": "Hauptbahnhof, 52353 Duren, Germany",
+        "place_type": [
+          "address"
+        ],
+        "relevance": 0.6,
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            6.481197662651539,
+            50.8089104504053
+          ]
+        },
+        "context": [
+          {
+            "id": "municipality.49711",
+            "text": "Duren",
+            "place_designation": "town"
+          },
+          {
+            "id": "county.1476",
+            "text": "Düren"
+          },
+          {
+            "id": "subregion.118",
+            "text": "Cologne Government Region"
+          },
+          {
+            "id": "region.791",
+            "text": "North Rhine-Westphalia"
+          },
+          {
+            "id": "country.175",
+            "text": "Germany"
+          }
+        ],
+        "properties": {}
+      },
+      {
+        "id": "poi.15027895",
+        "text": "Neuß",
+        "place_name": "Neuß, Heidbüchel 17, Monschau, Germany",
+        "place_type": [
+          "poi"
+        ],
+        "relevance": 0.5,
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            6.266114019910447,
+            50.57243791662777
+          ]
+        },
+        "context": [
+          {
+            "id": "address.1681679",
+            "text": "Heidbüchel"
+          },
+          {
+            "id": "place.28957",
+            "text": "Imgenbroich",
+            "place_designation": "village"
+          },
+          {
+            "id": "municipality.14583",
+            "text": "Monschau",
+            "place_designation": "town"
+          },
+          {
+            "id": "county.2101",
+            "text": "Aachen (district)"
+          },
+          {
+            "id": "subregion.118",
+            "text": "Cologne Government Region"
+          },
+          {
+            "id": "region.791",
+            "text": "North Rhine-Westphalia"
+          },
+          {
+            "id": "country.175",
+            "text": "Germany"
+          }
+        ],
+        "properties": {
+          "categories": [
+            "bakery",
+            "house"
+          ]
+        }
+      },
+      {
+        "id": "poi.54357470",
+        "text": "HOUSE BUILD FUJIWARA",
+        "place_name": "HOUSE BUILD FUJIWARA, , Setouchi, Okayama Prefecture 701-4264, Japan",
+        "place_type": [
+          "poi"
+        ],
+        "relevance": 0.5,
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            134.10190790891647,
+            34.70377375569542
+          ]
+        },
+        "matching_text": "HBF",
+        "context": [
+          {
+            "id": "place.2726793",
+            "text": "Osafunecho-Haji",
+            "place_designation": "quarter"
+          },
+          {
+            "id": "municipality.112626",
+            "text": "Setouchi",
+            "place_designation": "city"
+          },
+          {
+            "id": "region.1797",
+            "text": "Okayama Prefecture"
+          },
+          {
+            "id": "country.160",
+            "text": "Japan"
+          }
+        ],
+        "properties": {
+          "categories": [
+            "carpenter"
+          ]
+        }
+      },
+      {
+        "id": "poi.29838114",
+        "text": "Hbf",
+        "place_name": "Hbf, Am Bahnhof 1, 08056 Zwickau, Germany",
+        "place_type": [
+          "poi"
+        ],
+        "relevance": 0.5,
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            12.477055974304676,
+            50.71537651090953
+          ]
+        },
+        "context": [
+          {
+            "id": "address.2930036",
+            "text": "Am Bahnhof"
+          },
+          {
+            "id": "locality.98691",
+            "text": "Mitte-West"
+          },
+          {
+            "id": "municipal_district.2348",
+            "text": "Zwickau-Mitte"
+          },
+          {
+            "id": "municipality.32766",
+            "text": "Zwickau",
+            "place_designation": "town"
+          },
+          {
+            "id": "county.2431",
+            "text": "Zwickau"
+          },
+          {
+            "id": "region.544",
+            "text": "Saxony"
+          },
+          {
+            "id": "country.175",
+            "text": "Germany"
+          }
+        ],
+        "properties": {
+          "categories": [
+            "taxi"
+          ]
+        }
+      },
+      {
+        "id": "poi.15151615",
+        "text": "Hbf",
+        "place_name": "Hbf, Willy-Brandt-Platz 2, 99084 Erfurt, Germany",
+        "place_type": [
+          "poi"
+        ],
+        "relevance": 0.5,
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            11.038131639361382,
+            50.97314399391646
+          ]
+        },
+        "context": [
+          {
+            "id": "address.14257231",
+            "text": "Willy-Brandt-Platz"
+          },
+          {
+            "id": "place.2577141",
+            "text": "Innere Krämpfervorstadt",
+            "place_designation": "quarter"
+          },
+          {
+            "id": "locality.5037",
+            "text": "Altstadt",
+            "place_designation": "suburb"
+          },
+          {
+            "id": "county.2247",
+            "text": "Erfurt",
+            "place_designation": "city"
+          },
+          {
+            "id": "region.482",
+            "text": "Thuringia"
+          },
+          {
+            "id": "country.175",
+            "text": "Germany"
+          }
+        ],
+        "properties": {
+          "categories": [
+            "taxi"
+          ]
+        }
+      }
+    ]
+  },
+  "hauptbahnhof düsseldorf": {
+    "features": [
+      {
+        "id": "poi.33779531",
+        "text": "Hauptbahnhof",
+        "place_name": "Hauptbahnhof, Kieler Straße 17, 42697 Solingen, Germany",
+        "place_type": [
+          "poi"
+        ],
+        "relevance": 1,
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            7.003403651467124,
+            51.15999042549952
+          ]
+        },
+        "context": [
+          {
+            "id": "address.2041789",
+            "text": "Kieler Straße"
+          },
+          {
+            "id": "place.3385115",
+            "text": "Nassenweg",
+            "place_designation": "hamlet"
+          },
+          {
+            "id": "locality.103211",
+            "text": "Ohligs/Aufderhöhe/Merscheid"
+          },
+          {
+            "id": "county.2158",
+            "text": "Solingen",
+            "place_designation": "city"
+          },
+          {
+            "id": "subregion.408",
+            "text": "Düsseldorf"
+          },
+          {
+            "id": "region.791",
+            "text": "North Rhine-Westphalia"
+          },
+          {
+            "id": "country.175",
+            "text": "Germany"
+          }
+        ],
+        "properties": {
+          "categories": [
+            "bus station",
+            "station"
+          ]
+        }
+      },
+      {
+        "id": "poi.14769293",
+        "text": "Hauptbahnhof",
+        "place_name": "Hauptbahnhof, Döppersberg 53, 42103 Wuppertal, Germany",
+        "place_type": [
+          "poi"
+        ],
+        "relevance": 1,
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            7.151128649711609,
+            51.25492558010614
+          ]
+        },
+        "context": [
+          {
+            "id": "address.13889576",
+            "text": "Döppersberg"
+          },
+          {
+            "id": "place.2022952",
+            "text": "Südstadt",
+            "place_designation": "suburb"
+          },
+          {
+            "id": "locality.13328",
+            "text": "Elberfeld"
+          },
+          {
+            "id": "municipal_district.134768",
+            "text": "Elberfeld"
+          },
+          {
+            "id": "county.1582",
+            "text": "Wuppertal",
+            "place_designation": "city"
+          },
+          {
+            "id": "subregion.408",
+            "text": "Düsseldorf"
+          },
+          {
+            "id": "region.791",
+            "text": "North Rhine-Westphalia"
+          },
+          {
+            "id": "country.175",
+            "text": "Germany"
+          }
+        ],
+        "properties": {
+          "categories": [
+            "bus station",
+            "station"
+          ]
+        }
+      },
+      {
+        "id": "poi.24889081",
+        "text": "Kranichwiese",
+        "place_name": "Kranichwiese, FG 4, 45131 Essen, Germany",
+        "place_type": [
+          "poi"
+        ],
+        "relevance": 1,
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            6.991694122552872,
+            51.429156685823024
+          ]
+        },
+        "matching_text": "Hauptbahnhof",
+        "context": [
+          {
+            "id": "address.15532647",
+            "text": "FG 4"
+          },
+          {
+            "id": "locality.10260",
+            "text": "Rüttenscheid",
+            "place_designation": "suburb"
+          },
+          {
+            "id": "municipal_district.64647",
+            "text": "II"
+          },
+          {
+            "id": "county.2185",
+            "text": "Essen",
+            "place_designation": "city"
+          },
+          {
+            "id": "subregion.408",
+            "text": "Düsseldorf"
+          },
+          {
+            "id": "region.791",
+            "text": "North Rhine-Westphalia"
+          },
+          {
+            "id": "country.175",
+            "text": "Germany"
+          }
+        ],
+        "properties": {
+          "categories": [
+            "tram stop",
+            "stop"
+          ]
+        }
+      },
+      {
+        "id": "poi.27708289",
+        "text": "Hauptbahnhof",
+        "place_name": "Hauptbahnhof, 45468 Mülheim an der Ruhr, Germany",
+        "place_type": [
+          "poi"
+        ],
+        "relevance": 1,
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            6.886844225227833,
+            51.4314763279312
+          ]
+        },
+        "context": [
+          {
+            "id": "place.1191991",
+            "text": "Innenstadt",
+            "place_designation": "neighbourhood"
+          },
+          {
+            "id": "locality.27350",
+            "text": "Altstadt II",
+            "place_designation": "suburb"
+          },
+          {
+            "id": "municipal_district.31270",
+            "text": "Rechtsruhr-Süd"
+          },
+          {
+            "id": "county.1298",
+            "text": "Mülheim an der Ruhr",
+            "place_designation": "city"
+          },
+          {
+            "id": "subregion.408",
+            "text": "Düsseldorf"
+          },
+          {
+            "id": "region.791",
+            "text": "North Rhine-Westphalia"
+          },
+          {
+            "id": "country.175",
+            "text": "Germany"
+          }
+        ],
+        "properties": {
+          "categories": [
+            "bicycle parking"
+          ]
+        }
+      },
+      {
+        "id": "poi.27518661",
+        "text": "Hauptbahnhof",
+        "place_name": "Hauptbahnhof, Bahnhofstunnel, 42697 Solingen, Germany",
+        "place_type": [
+          "poi"
+        ],
+        "relevance": 1,
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            7.003752328455448,
+            51.16041474378409
+          ]
+        },
+        "context": [
+          {
+            "id": "address.9912161",
+            "text": "Bahnhofstunnel"
+          },
+          {
+            "id": "place.3385115",
+            "text": "Nassenweg",
+            "place_designation": "hamlet"
+          },
+          {
+            "id": "locality.103211",
+            "text": "Ohligs/Aufderhöhe/Merscheid"
+          },
+          {
+            "id": "county.2158",
+            "text": "Solingen",
+            "place_designation": "city"
+          },
+          {
+            "id": "subregion.408",
+            "text": "Düsseldorf"
+          },
+          {
+            "id": "region.791",
+            "text": "North Rhine-Westphalia"
+          },
+          {
+            "id": "country.175",
+            "text": "Germany"
+          }
+        ],
+        "properties": {
+          "categories": [
+            "bus stop",
+            "stop"
+          ]
+        }
+      },
+      {
+        "id": "poi.27518659",
+        "text": "Hauptbahnhof",
+        "place_name": "Hauptbahnhof, Taxi Spur Solingen Hbf, 42697 Solingen, Germany",
+        "place_type": [
+          "poi"
+        ],
+        "relevance": 1,
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            7.00331948697567,
+            51.16040170730422
+          ]
+        },
+        "context": [
+          {
+            "id": "address.434160",
+            "text": "Taxi Spur Solingen Hbf"
+          },
+          {
+            "id": "place.3385115",
+            "text": "Nassenweg",
+            "place_designation": "hamlet"
+          },
+          {
+            "id": "locality.103211",
+            "text": "Ohligs/Aufderhöhe/Merscheid"
+          },
+          {
+            "id": "county.2158",
+            "text": "Solingen",
+            "place_designation": "city"
+          },
+          {
+            "id": "subregion.408",
+            "text": "Düsseldorf"
+          },
+          {
+            "id": "region.791",
+            "text": "North Rhine-Westphalia"
+          },
+          {
+            "id": "country.175",
+            "text": "Germany"
+          }
+        ],
+        "properties": {
+          "categories": [
+            "bus stop",
+            "stop"
+          ]
+        }
+      },
+      {
+        "id": "poi.27145259",
+        "text": "Hauptbahnhof",
+        "place_name": "Hauptbahnhof, Kieler Straße 15, 42697 Solingen, Germany",
+        "place_type": [
+          "poi"
+        ],
+        "relevance": 1,
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            7.003708407282829,
+            51.15997949157738
+          ]
+        },
+        "context": [
+          {
+            "id": "address.2041789",
+            "text": "Kieler Straße"
+          },
+          {
+            "id": "place.3385115",
+            "text": "Nassenweg",
+            "place_designation": "hamlet"
+          },
+          {
+            "id": "locality.103211",
+            "text": "Ohligs/Aufderhöhe/Merscheid"
+          },
+          {
+            "id": "county.2158",
+            "text": "Solingen",
+            "place_designation": "city"
+          },
+          {
+            "id": "subregion.408",
+            "text": "Düsseldorf"
+          },
+          {
+            "id": "region.791",
+            "text": "North Rhine-Westphalia"
+          },
+          {
+            "id": "country.175",
+            "text": "Germany"
+          }
+        ],
+        "properties": {
+          "categories": [
+            "bus stop",
+            "stop"
+          ]
+        }
+      }
+    ]
+  },
+  "hbf düsseldorf": {
+    "features": [
+      {
+        "id": "address.10820203",
+        "text": "Am Hauptbahnhof",
+        "place_name": "Am Hauptbahnhof, 45127 Essen, Germany",
+        "place_type": [
+          "address"
+        ],
+        "relevance": 0.9,
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            7.013180628418922,
+            51.45123397513826
+          ]
+        },
+        "context": [
+          {
+            "id": "place.1461338",
+            "text": "Sternviertel",
+            "place_designation": "neighbourhood"
+          },
+          {
+            "id": "locality.10436",
+            "text": "Stadtkern"
+          },
+          {
+            "id": "municipal_district.39693",
+            "text": "I"
+          },
+          {
+            "id": "county.2185",
+            "text": "Essen",
+            "place_designation": "city"
+          },
+          {
+            "id": "subregion.408",
+            "text": "Düsseldorf"
+          },
+          {
+            "id": "region.791",
+            "text": "North Rhine-Westphalia"
+          },
+          {
+            "id": "country.175",
+            "text": "Germany"
+          }
+        ],
+        "properties": {}
+      },
+      {
+        "id": "address.6743258",
+        "text": "Am Hauptbahnhof",
+        "place_name": "Am Hauptbahnhof, 45468 Mülheim an der Ruhr, Germany",
+        "place_type": [
+          "address"
+        ],
+        "relevance": 0.9,
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            6.8889319896698,
+            51.42995750556024
+          ]
+        },
+        "context": [
+          {
+            "id": "place.1191991",
+            "text": "Innenstadt",
+            "place_designation": "neighbourhood"
+          },
+          {
+            "id": "locality.27580",
+            "text": "Altstadt I",
+            "place_designation": "neighbourhood"
+          },
+          {
+            "id": "municipal_district.31270",
+            "text": "Rechtsruhr-Süd"
+          },
+          {
+            "id": "county.1298",
+            "text": "Mülheim an der Ruhr",
+            "place_designation": "city"
+          },
+          {
+            "id": "subregion.408",
+            "text": "Düsseldorf"
+          },
+          {
+            "id": "region.791",
+            "text": "North Rhine-Westphalia"
+          },
+          {
+            "id": "country.175",
+            "text": "Germany"
+          }
+        ],
+        "properties": {}
+      },
+      {
+        "id": "address.3971191",
+        "text": "Am Hauptbahnhof",
+        "place_name": "Am Hauptbahnhof, 47798 Krefeld, Germany",
+        "place_type": [
+          "address"
+        ],
+        "relevance": 0.9,
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            6.567442752420902,
+            51.32529093413889
+          ]
+        },
+        "context": [
+          {
+            "id": "locality.61158",
+            "text": "Krefeld-Mitte"
+          },
+          {
+            "id": "municipal_district.134097",
+            "text": "Krefeld-Mitte"
+          },
+          {
+            "id": "county.2252",
+            "text": "Krefeld",
+            "place_designation": "city"
+          },
+          {
+            "id": "subregion.408",
+            "text": "Düsseldorf"
+          },
+          {
+            "id": "region.791",
+            "text": "North Rhine-Westphalia"
+          },
+          {
+            "id": "country.175",
+            "text": "Germany"
+          }
+        ],
+        "properties": {}
+      },
+      {
+        "id": "poi.14565227",
+        "text": "Düsseldorf Central Station",
+        "place_name": "Düsseldorf Central Station, Konrad-Adenauer-Platz 65 a-d, 40210 Dusseldorf, Germany",
+        "place_type": [
+          "poi"
+        ],
+        "relevance": 0.8,
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            6.794301308691502,
+            51.21973416992536
+          ]
+        },
+        "matching_text": "Düsseldorf Hbf",
+        "context": [
+          {
+            "id": "address.4347003",
+            "text": "Weg Gleis 12"
+          },
+          {
+            "id": "locality.2685",
+            "text": "Stadtmitte",
+            "place_designation": "suburb"
+          },
+          {
+            "id": "municipal_district.3107",
+            "text": "1"
+          },
+          {
+            "id": "county.1693",
+            "text": "Dusseldorf",
+            "place_designation": "city"
+          },
+          {
+            "id": "subregion.408",
+            "text": "Düsseldorf"
+          },
+          {
+            "id": "region.791",
+            "text": "North Rhine-Westphalia"
+          },
+          {
+            "id": "country.175",
+            "text": "Germany"
+          }
+        ],
+        "properties": {
+          "categories": [
+            "railway station",
+            "train station",
+            "station"
+          ]
+        }
+      },
+      {
+        "id": "poi.26473598",
+        "text": "Essen Hauptbahnhof",
+        "place_name": "Essen Hauptbahnhof, Freiheit 4, 45127 Essen, Germany",
+        "place_type": [
+          "poi"
+        ],
+        "relevance": 0.8,
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            7.014467753469944,
+            51.451476968859815
+          ]
+        },
+        "matching_text": "Essen Hbf",
+        "context": [
+          {
+            "id": "address.10316426",
+            "text": "Freiheit"
+          },
+          {
+            "id": "place.1461338",
+            "text": "Sternviertel",
+            "place_designation": "neighbourhood"
+          },
+          {
+            "id": "locality.10436",
+            "text": "Stadtkern"
+          },
+          {
+            "id": "municipal_district.39693",
+            "text": "I"
+          },
+          {
+            "id": "county.2185",
+            "text": "Essen",
+            "place_designation": "city"
+          },
+          {
+            "id": "subregion.408",
+            "text": "Düsseldorf"
+          },
+          {
+            "id": "region.791",
+            "text": "North Rhine-Westphalia"
+          },
+          {
+            "id": "country.175",
+            "text": "Germany"
+          }
+        ],
+        "properties": {
+          "categories": [
+            "railway station",
+            "train station",
+            "station"
+          ]
+        }
+      },
+      {
+        "id": "poi.24819235",
+        "text": "Essen Hbf",
+        "place_name": "Essen Hbf, Am Hauptbahnhof 26, 45127 Essen, Germany",
+        "place_type": [
+          "poi"
+        ],
+        "relevance": 0.8,
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            7.013008296489716,
+            51.451070585683404
+          ]
+        },
+        "context": [
+          {
+            "id": "address.10820203",
+            "text": "Am Hauptbahnhof"
+          },
+          {
+            "id": "place.1461338",
+            "text": "Sternviertel",
+            "place_designation": "neighbourhood"
+          },
+          {
+            "id": "locality.10436",
+            "text": "Stadtkern"
+          },
+          {
+            "id": "municipal_district.39693",
+            "text": "I"
+          },
+          {
+            "id": "county.2185",
+            "text": "Essen",
+            "place_designation": "city"
+          },
+          {
+            "id": "subregion.408",
+            "text": "Düsseldorf"
+          },
+          {
+            "id": "region.791",
+            "text": "North Rhine-Westphalia"
+          },
+          {
+            "id": "country.175",
+            "text": "Germany"
+          }
+        ],
+        "properties": {
+          "categories": [
+            "bus station",
+            "station"
+          ]
+        }
+      },
+      {
+        "id": "poi.808458",
+        "text": "Essen Hbf",
+        "place_name": "Essen Hbf, Sternviertel, Essen, Germany",
+        "place_type": [
+          "poi"
+        ],
+        "relevance": 0.8,
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            7.012527845799923,
+            51.45086645251219
+          ]
+        },
+        "context": [
+          {
+            "id": "address.10820203",
+            "text": "Am Hauptbahnhof"
+          },
+          {
+            "id": "place.1461338",
+            "text": "Sternviertel",
+            "place_designation": "neighbourhood"
+          },
+          {
+            "id": "locality.10030",
+            "text": "Südviertel",
+            "place_designation": "quarter"
+          },
+          {
+            "id": "municipal_district.39693",
+            "text": "I"
+          },
+          {
+            "id": "county.2185",
+            "text": "Essen",
+            "place_designation": "city"
+          },
+          {
+            "id": "subregion.408",
+            "text": "Düsseldorf"
+          },
+          {
+            "id": "region.791",
+            "text": "North Rhine-Westphalia"
+          },
+          {
+            "id": "country.175",
+            "text": "Germany"
+          }
+        ],
+        "properties": {
+          "categories": [
+            "subway"
+          ]
+        }
+      }
+    ]
+  },
+  "bahnhof krefeld": {
+    "features": [
+      {
+        "id": "address.9876730",
+        "text": "Bahnhof Brefeld",
+        "place_name": "Bahnhof Brefeld, 66280 Sulzbach/Saar, Germany",
+        "place_type": [
+          "address"
+        ],
+        "relevance": 0.966667,
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            7.049982212483883,
+            49.31412453991981
+          ]
+        },
+        "context": [
+          {
+            "id": "place.2066664",
+            "text": "Brefeld",
+            "place_designation": "village"
+          },
+          {
+            "id": "municipality.25711",
+            "text": "Sulzbach/Saar",
+            "place_designation": "town"
+          },
+          {
+            "id": "county.2046",
+            "text": "Regionalverband Saarbrücken"
+          },
+          {
+            "id": "region.483",
+            "text": "Saarland"
+          },
+          {
+            "id": "country.175",
+            "text": "Germany"
+          }
+        ],
+        "properties": {}
+      },
+      {
+        "id": "poi.24797143",
+        "text": "Bahnhof",
+        "place_name": "Bahnhof, Eisenbahnstraße 5, 42781 Haan, Germany",
+        "place_type": [
+          "poi"
+        ],
+        "relevance": 0.75,
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            6.99858371168375,
+            51.18857650052128
+          ]
+        },
+        "context": [
+          {
+            "id": "address.14748655",
+            "text": "Eisenbahnstraße"
+          },
+          {
+            "id": "municipality.135688",
+            "text": "Haan",
+            "place_designation": "town"
+          },
+          {
+            "id": "county.1410",
+            "text": "Mettmann"
+          },
+          {
+            "id": "subregion.408",
+            "text": "Düsseldorf"
+          },
+          {
+            "id": "region.791",
+            "text": "North Rhine-Westphalia"
+          },
+          {
+            "id": "country.175",
+            "text": "Germany"
+          }
+        ],
+        "properties": {
+          "categories": [
+            "taxi"
+          ]
+        }
+      },
+      {
+        "id": "poi.27446506",
+        "text": "Bahnhof",
+        "place_name": "Bahnhof, Bahnhofstraße 52, 48477 Hörstel, Germany",
+        "place_type": [
+          "poi"
+        ],
+        "relevance": 0.639286,
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            7.591707296669483,
+            52.29542450237138
+          ]
+        },
+        "context": [
+          {
+            "id": "address.14759082",
+            "text": "Bahnhofstraße"
+          },
+          {
+            "id": "municipality.6448",
+            "text": "Hörstel",
+            "place_designation": "town"
+          },
+          {
+            "id": "county.1460",
+            "text": "Steinfurt"
+          },
+          {
+            "id": "subregion.453",
+            "text": "Münster"
+          },
+          {
+            "id": "region.791",
+            "text": "North Rhine-Westphalia"
+          },
+          {
+            "id": "country.175",
+            "text": "Germany"
+          }
+        ],
+        "properties": {
+          "categories": [
+            "bus stop",
+            "stop"
+          ]
+        }
+      },
+      {
+        "id": "poi.14357606",
+        "text": "Bahnhof-Apotheke",
+        "place_name": "Bahnhof-Apotheke, Ellerstraße 50, 40227 Dusseldorf, Germany",
+        "place_type": [
+          "poi"
+        ],
+        "relevance": 0.55,
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            6.793673671782017,
+            51.21688465564588
+          ]
+        },
+        "context": [
+          {
+            "id": "address.9569221",
+            "text": "Ellerstraße"
+          },
+          {
+            "id": "locality.2772",
+            "text": "Oberbilk",
+            "place_designation": "suburb"
+          },
+          {
+            "id": "municipal_district.3321",
+            "text": "3"
+          },
+          {
+            "id": "county.1693",
+            "text": "Dusseldorf",
+            "place_designation": "city"
+          },
+          {
+            "id": "subregion.408",
+            "text": "Düsseldorf"
+          },
+          {
+            "id": "region.791",
+            "text": "North Rhine-Westphalia"
+          },
+          {
+            "id": "country.175",
+            "text": "Germany"
+          }
+        ],
+        "properties": {
+          "categories": [
+            "pharmacy"
+          ]
+        }
+      },
+      {
+        "id": "poi.14740752",
+        "text": "Bahnhof-Apotheke",
+        "place_name": "Bahnhof-Apotheke, Friedrich-Wilhelm-Straße 78, 47051 Duisburg, Germany",
+        "place_type": [
+          "poi"
+        ],
+        "relevance": 0.55,
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            6.769584082067013,
+            51.43048636080789
+          ]
+        },
+        "context": [
+          {
+            "id": "address.11168233",
+            "text": "Friedrich-Wilhelm-Straße"
+          },
+          {
+            "id": "place.2202764",
+            "text": "Wabenquartier",
+            "place_designation": "neighbourhood"
+          },
+          {
+            "id": "locality.13289",
+            "text": "Dellviertel",
+            "place_designation": "suburb"
+          },
+          {
+            "id": "municipal_district.3086",
+            "text": "Duisburg-Mitte",
+            "place_designation": "borough"
+          },
+          {
+            "id": "county.1483",
+            "text": "Duisburg",
+            "place_designation": "city"
+          },
+          {
+            "id": "subregion.408",
+            "text": "Düsseldorf"
+          },
+          {
+            "id": "region.791",
+            "text": "North Rhine-Westphalia"
+          },
+          {
+            "id": "country.175",
+            "text": "Germany"
+          }
+        ],
+        "properties": {
+          "categories": [
+            "pharmacy"
+          ]
+        }
+      },
+      {
+        "id": "poi.31333664",
+        "text": "Bahnhof Apotheke",
+        "place_name": "Bahnhof Apotheke, Friedrich-Wilhelm-Straße 78, 47051 Duisburg, Germany",
+        "place_type": [
+          "poi"
+        ],
+        "relevance": 0.55,
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            6.7695932440465185,
+            51.43048897371388
+          ]
+        },
+        "context": [
+          {
+            "id": "address.11168233",
+            "text": "Friedrich-Wilhelm-Straße"
+          },
+          {
+            "id": "place.2202764",
+            "text": "Wabenquartier",
+            "place_designation": "neighbourhood"
+          },
+          {
+            "id": "locality.13289",
+            "text": "Dellviertel",
+            "place_designation": "suburb"
+          },
+          {
+            "id": "municipal_district.3086",
+            "text": "Duisburg-Mitte",
+            "place_designation": "borough"
+          },
+          {
+            "id": "county.1483",
+            "text": "Duisburg",
+            "place_designation": "city"
+          },
+          {
+            "id": "subregion.408",
+            "text": "Düsseldorf"
+          },
+          {
+            "id": "region.791",
+            "text": "North Rhine-Westphalia"
+          },
+          {
+            "id": "country.175",
+            "text": "Germany"
+          }
+        ],
+        "properties": {
+          "categories": [
+            "pharmacy",
+            "building"
+          ]
+        }
+      },
+      {
+        "id": "address.11709043",
+        "text": "Am Bahnhof",
+        "place_name": "Am Bahnhof, 40489 Dusseldorf, Germany",
+        "place_type": [
+          "address"
+        ],
+        "relevance": 0.55,
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            6.784643009305,
+            51.30617429942123
+          ]
+        },
+        "context": [
+          {
+            "id": "locality.2833",
+            "text": "Kalkum",
+            "place_designation": "suburb"
+          },
+          {
+            "id": "municipal_district.3536",
+            "text": "5"
+          },
+          {
+            "id": "county.1693",
+            "text": "Dusseldorf",
+            "place_designation": "city"
+          },
+          {
+            "id": "subregion.408",
+            "text": "Düsseldorf"
+          },
+          {
+            "id": "region.791",
+            "text": "North Rhine-Westphalia"
+          },
+          {
+            "id": "country.175",
+            "text": "Germany"
+          }
+        ],
+        "properties": {}
+      },
+      {
+        "id": "address.13719137",
+        "text": "Am Bahnhof",
+        "place_name": "Am Bahnhof, 47137 Duisburg, Germany",
+        "place_type": [
+          "address"
+        ],
+        "relevance": 0.55,
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            6.780103370547295,
+            51.46812198881468
+          ]
+        },
+        "context": [
+          {
+            "id": "place.217383",
+            "text": "Meiderich",
+            "place_designation": "suburb"
+          },
+          {
+            "id": "locality.12171",
+            "text": "Mittelmeiderich",
+            "place_designation": "suburb"
+          },
+          {
+            "id": "municipal_district.3084",
+            "text": "Meiderich/Beeck",
+            "place_designation": "borough"
+          },
+          {
+            "id": "county.1483",
+            "text": "Duisburg",
+            "place_designation": "city"
+          },
+          {
+            "id": "subregion.408",
+            "text": "Düsseldorf"
+          },
+          {
+            "id": "region.791",
+            "text": "North Rhine-Westphalia"
+          },
+          {
+            "id": "country.175",
+            "text": "Germany"
+          }
+        ],
+        "properties": {}
+      },
+      {
+        "id": "address.9445",
+        "text": "Am Bahnhof",
+        "place_name": "Am Bahnhof, 41352 Korschenbroich, Germany",
+        "place_type": [
+          "address"
+        ],
+        "relevance": 0.55,
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            6.509287096560001,
+            51.1956346850527
+          ]
+        },
+        "context": [
+          {
+            "id": "municipality.2919",
+            "text": "Korschenbroich",
+            "place_designation": "town"
+          },
+          {
+            "id": "county.1690",
+            "text": "Rhein-Kreis Neuss"
+          },
+          {
+            "id": "subregion.408",
+            "text": "Düsseldorf"
+          },
+          {
+            "id": "region.791",
+            "text": "North Rhine-Westphalia"
+          },
+          {
+            "id": "country.175",
+            "text": "Germany"
+          }
+        ],
+        "properties": {}
+      },
+      {
+        "id": "address.5436501",
+        "text": "Am Bahnhof",
+        "place_name": "Am Bahnhof, 47877 Willich, Germany",
+        "place_type": [
+          "address"
+        ],
+        "relevance": 0.55,
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            6.451936438679695,
+            51.2868123307814
+          ]
+        },
+        "context": [
+          {
+            "id": "place.543849",
+            "text": "Anrath",
+            "place_designation": "suburb"
+          },
+          {
+            "id": "municipality.33982",
+            "text": "Willich",
+            "place_designation": "town"
+          },
+          {
+            "id": "county.1614",
+            "text": "Viersen"
+          },
+          {
+            "id": "subregion.408",
+            "text": "Düsseldorf"
+          },
+          {
+            "id": "region.791",
+            "text": "North Rhine-Westphalia"
+          },
+          {
+            "id": "country.175",
+            "text": "Germany"
+          }
+        ],
+        "properties": {}
+      }
+    ]
+  },
+  "neuss marktplatz": {
+    "features": [
+      {
+        "id": "poi.32334704",
+        "text": "Marktplatz",
+        "place_name": "Marktplatz, Am Markt 13, 41363 Jüchen, Germany",
+        "place_type": [
+          "poi"
+        ],
+        "relevance": 0.74,
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            6.50717022964011,
+            51.10733755022354
+          ]
+        },
+        "context": [
+          {
+            "id": "address.1560906",
+            "text": "Am Markt"
+          },
+          {
+            "id": "place.28987",
+            "text": "Garzweiler",
+            "place_designation": "village"
+          },
+          {
+            "id": "municipality.2952",
+            "text": "Jüchen",
+            "place_designation": "town"
+          },
+          {
+            "id": "county.1690",
+            "text": "Rhein-Kreis Neuss"
+          },
+          {
+            "id": "subregion.408",
+            "text": "Düsseldorf"
+          },
+          {
+            "id": "region.791",
+            "text": "North Rhine-Westphalia"
+          },
+          {
+            "id": "country.175",
+            "text": "Germany"
+          }
+        ],
+        "properties": {
+          "categories": [
+            "parking"
+          ]
+        }
+      },
+      {
+        "id": "poi.25407430",
+        "text": "Marktplatz",
+        "place_name": "Marktplatz, Römerstraße 49, 41539 Dormagen, Germany",
+        "place_type": [
+          "poi"
+        ],
+        "relevance": 0.74,
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            6.837951242923737,
+            51.094418998660565
+          ]
+        },
+        "context": [
+          {
+            "id": "address.8081198",
+            "text": "Römerstraße"
+          },
+          {
+            "id": "place.3761962",
+            "text": "Dormagen-Mitte",
+            "place_designation": "suburb"
+          },
+          {
+            "id": "municipality.2760",
+            "text": "Dormagen",
+            "place_designation": "town"
+          },
+          {
+            "id": "county.1690",
+            "text": "Rhein-Kreis Neuss"
+          },
+          {
+            "id": "subregion.408",
+            "text": "Düsseldorf"
+          },
+          {
+            "id": "region.791",
+            "text": "North Rhine-Westphalia"
+          },
+          {
+            "id": "country.175",
+            "text": "Germany"
+          }
+        ],
+        "properties": {
+          "categories": [
+            "bus stop",
+            "stop"
+          ]
+        }
+      },
+      {
+        "id": "poi.25407427",
+        "text": "Marktplatz",
+        "place_name": "Marktplatz, Römerstraße 51, 41539 Dormagen, Germany",
+        "place_type": [
+          "poi"
+        ],
+        "relevance": 0.74,
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            6.8380990996956825,
+            51.09450806817751
+          ]
+        },
+        "context": [
+          {
+            "id": "address.8081198",
+            "text": "Römerstraße"
+          },
+          {
+            "id": "place.3761962",
+            "text": "Dormagen-Mitte",
+            "place_designation": "suburb"
+          },
+          {
+            "id": "municipality.2760",
+            "text": "Dormagen",
+            "place_designation": "town"
+          },
+          {
+            "id": "county.1690",
+            "text": "Rhein-Kreis Neuss"
+          },
+          {
+            "id": "subregion.408",
+            "text": "Düsseldorf"
+          },
+          {
+            "id": "region.791",
+            "text": "North Rhine-Westphalia"
+          },
+          {
+            "id": "country.175",
+            "text": "Germany"
+          }
+        ],
+        "properties": {
+          "categories": [
+            "bus stop",
+            "stop"
+          ]
+        }
+      },
+      {
+        "id": "poi.25061963",
+        "text": "Marktplatz",
+        "place_name": "Marktplatz, Poststraße 61, 41516 Grevenbroich, Germany",
+        "place_type": [
+          "poi"
+        ],
+        "relevance": 0.74,
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            6.622245982289314,
+            51.107445119484346
+          ]
+        },
+        "context": [
+          {
+            "id": "address.7332377",
+            "text": "Poststraße"
+          },
+          {
+            "id": "municipal_district.69402",
+            "text": "Wevelinghoven",
+            "place_designation": "suburb"
+          },
+          {
+            "id": "municipality.2988",
+            "text": "Grevenbroich",
+            "place_designation": "town"
+          },
+          {
+            "id": "county.1690",
+            "text": "Rhein-Kreis Neuss"
+          },
+          {
+            "id": "subregion.408",
+            "text": "Düsseldorf"
+          },
+          {
+            "id": "region.791",
+            "text": "North Rhine-Westphalia"
+          },
+          {
+            "id": "country.175",
+            "text": "Germany"
+          }
+        ],
+        "properties": {
+          "categories": [
+            "bus stop",
+            "stop"
+          ]
+        }
+      },
+      {
+        "id": "poi.25061856",
+        "text": "Marktplatz",
+        "place_name": "Marktplatz, Poststraße 82, 41516 Grevenbroich, Germany",
+        "place_type": [
+          "poi"
+        ],
+        "relevance": 0.74,
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            6.620998755097389,
+            51.10683359227052
+          ]
+        },
+        "context": [
+          {
+            "id": "address.7332377",
+            "text": "Poststraße"
+          },
+          {
+            "id": "municipal_district.69402",
+            "text": "Wevelinghoven",
+            "place_designation": "suburb"
+          },
+          {
+            "id": "municipality.2988",
+            "text": "Grevenbroich",
+            "place_designation": "town"
+          },
+          {
+            "id": "county.1690",
+            "text": "Rhein-Kreis Neuss"
+          },
+          {
+            "id": "subregion.408",
+            "text": "Düsseldorf"
+          },
+          {
+            "id": "region.791",
+            "text": "North Rhine-Westphalia"
+          },
+          {
+            "id": "country.175",
+            "text": "Germany"
+          }
+        ],
+        "properties": {
+          "categories": [
+            "bus stop",
+            "stop"
+          ]
+        }
+      },
+      {
+        "id": "address.15225433",
+        "text": "Marktplatz",
+        "place_name": "Marktplatz, 41516 Grevenbroich, Germany",
+        "place_type": [
+          "address"
+        ],
+        "relevance": 0.74,
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            6.62395890802145,
+            51.1073049215333
+          ]
+        },
+        "context": [
+          {
+            "id": "municipal_district.69402",
+            "text": "Wevelinghoven",
+            "place_designation": "suburb"
+          },
+          {
+            "id": "municipality.2988",
+            "text": "Grevenbroich",
+            "place_designation": "town"
+          },
+          {
+            "id": "county.1690",
+            "text": "Rhein-Kreis Neuss"
+          },
+          {
+            "id": "subregion.408",
+            "text": "Düsseldorf"
+          },
+          {
+            "id": "region.791",
+            "text": "North Rhine-Westphalia"
+          },
+          {
+            "id": "country.175",
+            "text": "Germany"
+          }
+        ],
+        "properties": {}
+      },
+      {
+        "id": "address.3156217",
+        "text": "Marktplatz",
+        "place_name": "Marktplatz, 41539 Dormagen, Germany",
+        "place_type": [
+          "address"
+        ],
+        "relevance": 0.74,
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            6.837684027850628,
+            51.094708526604734
+          ]
+        },
+        "context": [
+          {
+            "id": "place.3761962",
+            "text": "Dormagen-Mitte",
+            "place_designation": "suburb"
+          },
+          {
+            "id": "municipality.2760",
+            "text": "Dormagen",
+            "place_designation": "town"
+          },
+          {
+            "id": "county.1690",
+            "text": "Rhein-Kreis Neuss"
+          },
+          {
+            "id": "subregion.408",
+            "text": "Düsseldorf"
+          },
+          {
+            "id": "region.791",
+            "text": "North Rhine-Westphalia"
+          },
+          {
+            "id": "country.175",
+            "text": "Germany"
+          }
+        ],
+        "properties": {}
+      },
+      {
+        "id": "poi.30039746",
+        "text": "Marktplatz",
+        "place_name": "Marktplatz, Bahnhofstraße 19a, 38173 Sickte, Germany",
+        "place_type": [
+          "poi"
+        ],
+        "relevance": 0.625,
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            10.63876151339889,
+            52.215334608925744
+          ]
+        },
+        "context": [
+          {
+            "id": "address.3492970",
+            "text": "Bahnhofstraße"
+          },
+          {
+            "id": "locality.136745",
+            "text": "Obersickte",
+            "place_designation": "quarter"
+          },
+          {
+            "id": "municipality.44413",
+            "text": "Sickte",
+            "place_designation": "village"
+          },
+          {
+            "id": "county.1739",
+            "text": "Wolfenbüttel"
+          },
+          {
+            "id": "region.818",
+            "text": "Lower Saxony"
+          },
+          {
+            "id": "country.175",
+            "text": "Germany"
+          }
+        ],
+        "properties": {
+          "categories": [
+            "parking"
+          ]
+        }
+      },
+      {
+        "id": "poi.29745453",
+        "text": "Marktplatz",
+        "place_name": "Marktplatz, 26935 Stadland, Germany",
+        "place_type": [
+          "poi"
+        ],
+        "relevance": 0.625,
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            8.453710688138585,
+            53.399750615383454
+          ]
+        },
+        "context": [
+          {
+            "id": "place.32832",
+            "text": "Rodenkirchen",
+            "place_designation": "village"
+          },
+          {
+            "id": "municipality.28082",
+            "text": "Stadland"
+          },
+          {
+            "id": "county.2213",
+            "text": "Wesermarsch"
+          },
+          {
+            "id": "region.818",
+            "text": "Lower Saxony"
+          },
+          {
+            "id": "country.175",
+            "text": "Germany"
+          }
+        ],
+        "properties": {
+          "categories": [
+            "parking"
+          ]
+        }
+      },
+      {
+        "id": "poi.43006041",
+        "text": "Marktplatz",
+        "place_name": "Marktplatz, Marktplatz 6, 67583 Guntersblum, Germany",
+        "place_type": [
+          "poi"
+        ],
+        "relevance": 0.625,
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            8.34410468687554,
+            49.79747419462797
+          ]
+        },
+        "context": [
+          {
+            "id": "address.16286292",
+            "text": "Marktplatz"
+          },
+          {
+            "id": "municipality.81169",
+            "text": "Guntersblum",
+            "place_designation": "village"
+          },
+          {
+            "id": "county.1988",
+            "text": "Mainz-Bingen"
+          },
+          {
+            "id": "region.471",
+            "text": "Rhineland-Palatinate"
+          },
+          {
+            "id": "country.175",
+            "text": "Germany"
+          }
+        ],
+        "properties": {
+          "categories": [
+            "parking"
+          ]
+        }
+      }
+    ]
+  },
+  "neuss hauptbahnhof": {
+    "features": [
+      {
+        "id": "poi.27957867",
+        "text": "Neuss Hauptbahnhof",
+        "place_name": "Neuss Hauptbahnhof, 41460 Neuss, Germany",
+        "place_type": [
+          "poi"
+        ],
+        "relevance": 1,
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            6.685506887733936,
+            51.2039709053707
+          ]
+        },
+        "context": [
+          {
+            "id": "place.2264749",
+            "text": "Marienviertel",
+            "place_designation": "neighbourhood"
+          },
+          {
+            "id": "locality.97403",
+            "text": "Innenstadt",
+            "place_designation": "suburb"
+          },
+          {
+            "id": "municipality.51396",
+            "text": "Neuss",
+            "place_designation": "city"
+          },
+          {
+            "id": "county.1690",
+            "text": "Rhein-Kreis Neuss"
+          },
+          {
+            "id": "subregion.408",
+            "text": "Düsseldorf"
+          },
+          {
+            "id": "region.791",
+            "text": "North Rhine-Westphalia"
+          },
+          {
+            "id": "country.175",
+            "text": "Germany"
+          }
+        ],
+        "properties": {
+          "categories": [
+            "bus stop",
+            "stop"
+          ]
+        }
+      },
+      {
+        "id": "poi.27957787",
+        "text": "Neuss Hauptbahnhof",
+        "place_name": "Neuss Hauptbahnhof, Krefelder Straße 16, 41460 Neuss, Germany",
+        "place_type": [
+          "poi"
+        ],
+        "relevance": 1,
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            6.684281788766384,
+            51.202874341589286
+          ]
+        },
+        "context": [
+          {
+            "id": "address.364021",
+            "text": "Krefelder Straße"
+          },
+          {
+            "id": "place.2264749",
+            "text": "Marienviertel",
+            "place_designation": "neighbourhood"
+          },
+          {
+            "id": "locality.97403",
+            "text": "Innenstadt",
+            "place_designation": "suburb"
+          },
+          {
+            "id": "municipality.51396",
+            "text": "Neuss",
+            "place_designation": "city"
+          },
+          {
+            "id": "county.1690",
+            "text": "Rhein-Kreis Neuss"
+          },
+          {
+            "id": "subregion.408",
+            "text": "Düsseldorf"
+          },
+          {
+            "id": "region.791",
+            "text": "North Rhine-Westphalia"
+          },
+          {
+            "id": "country.175",
+            "text": "Germany"
+          }
+        ],
+        "properties": {
+          "categories": [
+            "bus stop",
+            "stop"
+          ]
+        }
+      },
+      {
+        "id": "poi.27957708",
+        "text": "Neuss Hauptbahnhof",
+        "place_name": "Neuss Hauptbahnhof, Krefelder Straße 13, 41460 Neuss, Germany",
+        "place_type": [
+          "poi"
+        ],
+        "relevance": 1,
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            6.684325374662876,
+            51.20272350950958
+          ]
+        },
+        "context": [
+          {
+            "id": "address.364021",
+            "text": "Krefelder Straße"
+          },
+          {
+            "id": "place.2264749",
+            "text": "Marienviertel",
+            "place_designation": "neighbourhood"
+          },
+          {
+            "id": "locality.97403",
+            "text": "Innenstadt",
+            "place_designation": "suburb"
+          },
+          {
+            "id": "municipality.51396",
+            "text": "Neuss",
+            "place_designation": "city"
+          },
+          {
+            "id": "county.1690",
+            "text": "Rhein-Kreis Neuss"
+          },
+          {
+            "id": "subregion.408",
+            "text": "Düsseldorf"
+          },
+          {
+            "id": "region.791",
+            "text": "North Rhine-Westphalia"
+          },
+          {
+            "id": "country.175",
+            "text": "Germany"
+          }
+        ],
+        "properties": {
+          "categories": [
+            "bus stop",
+            "stop"
+          ]
+        }
+      },
+      {
+        "id": "poi.27957621",
+        "text": "Neuss Hauptbahnhof",
+        "place_name": "Neuss Hauptbahnhof, Kapitelstraße 1a, 41460 Neuss, Germany",
+        "place_type": [
+          "poi"
+        ],
+        "relevance": 1,
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            6.684219092130661,
+            51.20242814609568
+          ]
+        },
+        "context": [
+          {
+            "id": "address.14647707",
+            "text": "Kapitelstraße"
+          },
+          {
+            "id": "place.2264749",
+            "text": "Marienviertel",
+            "place_designation": "neighbourhood"
+          },
+          {
+            "id": "locality.97403",
+            "text": "Innenstadt",
+            "place_designation": "suburb"
+          },
+          {
+            "id": "municipality.51396",
+            "text": "Neuss",
+            "place_designation": "city"
+          },
+          {
+            "id": "county.1690",
+            "text": "Rhein-Kreis Neuss"
+          },
+          {
+            "id": "subregion.408",
+            "text": "Düsseldorf"
+          },
+          {
+            "id": "region.791",
+            "text": "North Rhine-Westphalia"
+          },
+          {
+            "id": "country.175",
+            "text": "Germany"
+          }
+        ],
+        "properties": {
+          "categories": [
+            "bus stop",
+            "stop"
+          ]
+        }
+      },
+      {
+        "id": "poi.25862584",
+        "text": "Neuss Hauptbahnhof",
+        "place_name": "Neuss Hauptbahnhof, Salzstraße 55, 41460 Neuss, Germany",
+        "place_type": [
+          "poi"
+        ],
+        "relevance": 1,
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            6.6875795647501945,
+            51.20465193816395
+          ]
+        },
+        "context": [
+          {
+            "id": "address.8435066",
+            "text": "Salzstraße"
+          },
+          {
+            "id": "place.2264749",
+            "text": "Marienviertel",
+            "place_designation": "neighbourhood"
+          },
+          {
+            "id": "locality.97403",
+            "text": "Innenstadt",
+            "place_designation": "suburb"
+          },
+          {
+            "id": "municipality.51396",
+            "text": "Neuss",
+            "place_designation": "city"
+          },
+          {
+            "id": "county.1690",
+            "text": "Rhein-Kreis Neuss"
+          },
+          {
+            "id": "subregion.408",
+            "text": "Düsseldorf"
+          },
+          {
+            "id": "region.791",
+            "text": "North Rhine-Westphalia"
+          },
+          {
+            "id": "country.175",
+            "text": "Germany"
+          }
+        ],
+        "properties": {
+          "categories": [
+            "bus stop",
+            "stop"
+          ]
+        }
+      },
+      {
+        "id": "poi.27957531",
+        "text": "Neuss Hauptbahnhof / Nordeingang",
+        "place_name": "Neuss Hauptbahnhof / Nordeingang, 41462 Neuss, Germany",
+        "place_type": [
+          "poi"
+        ],
+        "relevance": 1,
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            6.68226208537817,
+            51.2040311946146
+          ]
+        },
+        "context": [
+          {
+            "id": "place.2264749",
+            "text": "Marienviertel",
+            "place_designation": "neighbourhood"
+          },
+          {
+            "id": "locality.97402",
+            "text": "Furth-Süd",
+            "place_designation": "suburb"
+          },
+          {
+            "id": "municipality.51396",
+            "text": "Neuss",
+            "place_designation": "city"
+          },
+          {
+            "id": "county.1690",
+            "text": "Rhein-Kreis Neuss"
+          },
+          {
+            "id": "subregion.408",
+            "text": "Düsseldorf"
+          },
+          {
+            "id": "region.791",
+            "text": "North Rhine-Westphalia"
+          },
+          {
+            "id": "country.175",
+            "text": "Germany"
+          }
+        ],
+        "properties": {
+          "categories": [
+            "bus stop",
+            "stop"
+          ]
+        }
+      }
+    ]
+  },
+  "neuss hbf": {
+    "features": [
+      {
+        "id": "poi.14564580",
+        "text": "Neuss Hbf",
+        "place_name": "Neuss Hbf, Further Straße 1, 41460 Neuss, Germany",
+        "place_type": [
+          "poi"
+        ],
+        "relevance": 1,
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            6.6846707090735435,
+            51.204437672300486
+          ]
+        },
+        "context": [
+          {
+            "id": "address.9007076",
+            "text": "Further Straße"
+          },
+          {
+            "id": "place.2264749",
+            "text": "Marienviertel",
+            "place_designation": "neighbourhood"
+          },
+          {
+            "id": "locality.97403",
+            "text": "Innenstadt",
+            "place_designation": "suburb"
+          },
+          {
+            "id": "municipality.51396",
+            "text": "Neuss",
+            "place_designation": "city"
+          },
+          {
+            "id": "county.1690",
+            "text": "Rhein-Kreis Neuss"
+          },
+          {
+            "id": "subregion.408",
+            "text": "Düsseldorf"
+          },
+          {
+            "id": "region.791",
+            "text": "North Rhine-Westphalia"
+          },
+          {
+            "id": "country.175",
+            "text": "Germany"
+          }
+        ],
+        "properties": {
+          "categories": [
+            "railway station",
+            "train station",
+            "station"
+          ]
+        }
+      },
+      {
+        "id": "poi.28863269",
+        "text": "Neuss Hbf",
+        "place_name": "Neuss Hbf, 41460 Neuss, Germany",
+        "place_type": [
+          "poi"
+        ],
+        "relevance": 1,
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            6.684706918895245,
+            51.203490479203026
+          ]
+        },
+        "context": [
+          {
+            "id": "place.2264749",
+            "text": "Marienviertel",
+            "place_designation": "neighbourhood"
+          },
+          {
+            "id": "locality.97403",
+            "text": "Innenstadt",
+            "place_designation": "suburb"
+          },
+          {
+            "id": "municipality.51396",
+            "text": "Neuss",
+            "place_designation": "city"
+          },
+          {
+            "id": "county.1690",
+            "text": "Rhein-Kreis Neuss"
+          },
+          {
+            "id": "subregion.408",
+            "text": "Düsseldorf"
+          },
+          {
+            "id": "region.791",
+            "text": "North Rhine-Westphalia"
+          },
+          {
+            "id": "country.175",
+            "text": "Germany"
+          }
+        ],
+        "properties": {
+          "categories": [
+            "railway halt",
+            "train halt",
+            "halt"
+          ]
+        }
+      },
+      {
+        "id": "poi.32849890",
+        "text": "Neuss Hbf Nf",
+        "place_name": "Neuss Hbf Nf, Salzstraße 6, 41462 Neuss, Germany",
+        "place_type": [
+          "poi"
+        ],
+        "relevance": 1,
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            6.685013716752906,
+            51.20621048226127
+          ]
+        },
+        "context": [
+          {
+            "id": "address.8435066",
+            "text": "Salzstraße"
+          },
+          {
+            "id": "place.2264749",
+            "text": "Marienviertel",
+            "place_designation": "neighbourhood"
+          },
+          {
+            "id": "locality.97402",
+            "text": "Furth-Süd",
+            "place_designation": "suburb"
+          },
+          {
+            "id": "municipality.51396",
+            "text": "Neuss",
+            "place_designation": "city"
+          },
+          {
+            "id": "county.1690",
+            "text": "Rhein-Kreis Neuss"
+          },
+          {
+            "id": "subregion.408",
+            "text": "Düsseldorf"
+          },
+          {
+            "id": "region.791",
+            "text": "North Rhine-Westphalia"
+          },
+          {
+            "id": "country.175",
+            "text": "Germany"
+          }
+        ],
+        "properties": {
+          "categories": [
+            "building"
+          ]
+        }
+      },
+      {
+        "id": "poi.32448985",
+        "text": "Neuss Gbf Ngf (Nmf)",
+        "place_name": "Neuss Gbf Ngf (Nmf), Karl-Arnold-Straße 3-5, 41460 Neuss, Germany",
+        "place_type": [
+          "poi"
+        ],
+        "relevance": 0.944444,
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            6.6864991828944085,
+            51.20757562231122
+          ]
+        },
+        "context": [
+          {
+            "id": "address.9422550",
+            "text": "Karl-Arnold-Straße"
+          },
+          {
+            "id": "locality.97401",
+            "text": "Barbaraviertel",
+            "place_designation": "suburb"
+          },
+          {
+            "id": "municipality.51396",
+            "text": "Neuss",
+            "place_designation": "city"
+          },
+          {
+            "id": "county.1690",
+            "text": "Rhein-Kreis Neuss"
+          },
+          {
+            "id": "subregion.408",
+            "text": "Düsseldorf"
+          },
+          {
+            "id": "region.791",
+            "text": "North Rhine-Westphalia"
+          },
+          {
+            "id": "country.175",
+            "text": "Germany"
+          }
+        ],
+        "properties": {
+          "categories": [
+            "building"
+          ]
+        }
+      },
+      {
+        "id": "poi.36635767",
+        "text": "Neuss Norf Bf Südost",
+        "place_name": "Neuss Norf Bf Südost, Mainstraße 21, 41469 Neuss, Germany",
+        "place_type": [
+          "poi"
+        ],
+        "relevance": 0.755556,
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            6.731782629757504,
+            51.160539536352516
+          ]
+        },
+        "context": [
+          {
+            "id": "address.207475",
+            "text": "Mainstraße"
+          },
+          {
+            "id": "place.4530099",
+            "text": "Derikum",
+            "place_designation": "village"
+          },
+          {
+            "id": "locality.97404",
+            "text": "Norf",
+            "place_designation": "village"
+          },
+          {
+            "id": "municipality.51396",
+            "text": "Neuss",
+            "place_designation": "city"
+          },
+          {
+            "id": "county.1690",
+            "text": "Rhein-Kreis Neuss"
+          },
+          {
+            "id": "subregion.408",
+            "text": "Düsseldorf"
+          },
+          {
+            "id": "region.791",
+            "text": "North Rhine-Westphalia"
+          },
+          {
+            "id": "country.175",
+            "text": "Germany"
+          }
+        ],
+        "properties": {
+          "categories": [
+            "bicycle parking"
+          ]
+        }
+      },
+      {
+        "id": "poi.36635758",
+        "text": "Neuss Norf Bf Schließfach Südwest",
+        "place_name": "Neuss Norf Bf Schließfach Südwest, Bahnstraße 28, 41469 Neuss, Germany",
+        "place_type": [
+          "poi"
+        ],
+        "relevance": 0.755556,
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            6.731354319911816,
+            51.16042998805021
+          ]
+        },
+        "context": [
+          {
+            "id": "address.15642167",
+            "text": "Bahnstraße"
+          },
+          {
+            "id": "locality.97404",
+            "text": "Norf",
+            "place_designation": "village"
+          },
+          {
+            "id": "municipality.51396",
+            "text": "Neuss",
+            "place_designation": "city"
+          },
+          {
+            "id": "county.1690",
+            "text": "Rhein-Kreis Neuss"
+          },
+          {
+            "id": "subregion.408",
+            "text": "Düsseldorf"
+          },
+          {
+            "id": "region.791",
+            "text": "North Rhine-Westphalia"
+          },
+          {
+            "id": "country.175",
+            "text": "Germany"
+          }
+        ],
+        "properties": {
+          "categories": [
+            "bicycle parking"
+          ]
+        }
+      },
+      {
+        "id": "poi.36635728",
+        "text": "Neuss Norf Bf Schließfach Nordwest",
+        "place_name": "Neuss Norf Bf Schließfach Nordwest, Bahnstraße 36, 41469 Neuss, Germany",
+        "place_type": [
+          "poi"
+        ],
+        "relevance": 0.755556,
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            6.730524580925703,
+            51.16092705349918
+          ]
+        },
+        "context": [
+          {
+            "id": "address.15642167",
+            "text": "Bahnstraße"
+          },
+          {
+            "id": "locality.97404",
+            "text": "Norf",
+            "place_designation": "village"
+          },
+          {
+            "id": "municipality.51396",
+            "text": "Neuss",
+            "place_designation": "city"
+          },
+          {
+            "id": "county.1690",
+            "text": "Rhein-Kreis Neuss"
+          },
+          {
+            "id": "subregion.408",
+            "text": "Düsseldorf"
+          },
+          {
+            "id": "region.791",
+            "text": "North Rhine-Westphalia"
+          },
+          {
+            "id": "country.175",
+            "text": "Germany"
+          }
+        ],
+        "properties": {
+          "categories": [
+            "bicycle parking"
+          ]
+        }
+      },
+      {
+        "id": "poi.36446286",
+        "text": "Neuss Norf Bf Schließfach Südwest",
+        "place_name": "Neuss Norf Bf Schließfach Südwest, Bahnstraße 21, 41469 Neuss, Germany",
+        "place_type": [
+          "poi"
+        ],
+        "relevance": 0.755556,
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            6.73149079819791,
+            51.160201008129064
+          ]
+        },
+        "context": [
+          {
+            "id": "address.15642167",
+            "text": "Bahnstraße"
+          },
+          {
+            "id": "locality.97404",
+            "text": "Norf",
+            "place_designation": "village"
+          },
+          {
+            "id": "municipality.51396",
+            "text": "Neuss",
+            "place_designation": "city"
+          },
+          {
+            "id": "county.1690",
+            "text": "Rhein-Kreis Neuss"
+          },
+          {
+            "id": "subregion.408",
+            "text": "Düsseldorf"
+          },
+          {
+            "id": "region.791",
+            "text": "North Rhine-Westphalia"
+          },
+          {
+            "id": "country.175",
+            "text": "Germany"
+          }
+        ],
+        "properties": {
+          "categories": [
+            "bicycle parking"
+          ]
+        }
+      },
+      {
+        "id": "poi.36635731",
+        "text": "Neuss Norf Bf Schließfach Nordwest",
+        "place_name": "Neuss Norf Bf Schließfach Nordwest, Bahnstraße 33, 41469 Neuss, Germany",
+        "place_type": [
+          "poi"
+        ],
+        "relevance": 0.755556,
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            6.730494573712349,
+            51.16100274827532
+          ]
+        },
+        "context": [
+          {
+            "id": "address.15642167",
+            "text": "Bahnstraße"
+          },
+          {
+            "id": "locality.97404",
+            "text": "Norf",
+            "place_designation": "village"
+          },
+          {
+            "id": "municipality.51396",
+            "text": "Neuss",
+            "place_designation": "city"
+          },
+          {
+            "id": "county.1690",
+            "text": "Rhein-Kreis Neuss"
+          },
+          {
+            "id": "subregion.408",
+            "text": "Düsseldorf"
+          },
+          {
+            "id": "region.791",
+            "text": "North Rhine-Westphalia"
+          },
+          {
+            "id": "country.175",
+            "text": "Germany"
+          }
+        ],
+        "properties": {
+          "categories": [
+            "bicycle parking"
+          ]
+        }
+      }
+    ]
+  }
+}

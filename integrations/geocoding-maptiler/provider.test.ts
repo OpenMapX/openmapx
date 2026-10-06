@@ -67,6 +67,7 @@ describe("MapTiler geocoding provider", () => {
       {
         id: "maptiler:poi.123",
         label: "Köln Hauptbahnhof, Köln, Germany",
+        name: "Köln Hauptbahnhof",
         coordinates: [6.9582814, 50.9430759],
         type: "poi",
         confidence: 1,
@@ -75,6 +76,7 @@ describe("MapTiler geocoding provider", () => {
       {
         id: "maptiler:address.456",
         label: "Bahnhofsvorplatz 1, Köln, Germany",
+        name: "Bahnhofsvorplatz 1",
         coordinates: [6.96, 50.94],
         type: "address",
         confidence: 0.9,
@@ -83,6 +85,7 @@ describe("MapTiler geocoding provider", () => {
       {
         id: "maptiler:street.789",
         label: "Domkloster, Köln, Germany",
+        name: "Domkloster",
         coordinates: [6.95, 50.94],
         type: "street",
         confidence: 0.8,
@@ -91,6 +94,7 @@ describe("MapTiler geocoding provider", () => {
       {
         id: "maptiler:place.10",
         label: "Köln, Germany",
+        name: "Köln",
         coordinates: [6.95, 50.93],
         type: "region",
         confidence: 0.7,
