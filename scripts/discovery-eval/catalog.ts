@@ -50,6 +50,12 @@ export const CATALOG: EvalCase[] = [
     note: "Partial photos/ratings, independent credits, bounded retries, stale searches and missing data; no real-provider availability or production latency claim.",
   },
   {
+    id: "place/selected-sheet-partial-states",
+    layer: "ui/contract-fixtures",
+    suite: "apps/web/src/components/panels/place/PlaceDetailContent.test.tsx",
+    note: "Absent/uncertain hours, photo detents, retained selection across enrichment and independent actions; no availability claim.",
+  },
+  {
     id: "coverage/overture-reviewed-gate-contract",
     layer: "dataset-gate/unit-fixtures",
     suite: `${overture}/eval/quality-gate.test.ts`,
@@ -86,30 +92,6 @@ export const CATALOG: EvalCase[] = [
     suite: `${navigation}/fasterRoute.test.ts`,
   },
   {
-    id: "manual/urban-rural-browsing",
-    layer: "ui/live-manual",
-    unavailable:
-      "Repeat the map comparison baseline at fixed viewport, coordinates, zoom and provider/style/source revisions; attach external capture manifest and judgments.",
-  },
-  {
-    id: "manual/closed-missing-businesses",
-    layer: "dataset/live-manual",
-    unavailable:
-      "Independently verify a stratified regional sample of missing/closed businesses against exact OSM/Overture generations; no current closure ground truth is captured here.",
-  },
-  {
-    id: "manual/mall-tenant-floor-identity",
-    layer: "dataset/live-manual",
-    unavailable:
-      "Independently judge tenants, branches, entrances and floors; synthetic conflation guards do not establish regional coverage.",
-  },
-  {
-    id: "manual/provider-performance",
-    layer: "adapted-api/live-manual",
-    unavailable:
-      "Declare request/latency budgets and repeat cold/warm captures in both query orders, with explicit region/configuration/source revisions.",
-  },
-  {
     id: "unavailable/installed-navigation",
     layer: "installed-device",
     unavailable:
@@ -136,6 +118,9 @@ export const INPUT_FILES = [
       ...(entry.suite ? [entry.suite] : []),
     ]),
     `${search}/cases.ts`,
+    "scripts/discovery-eval/reviewed.ts",
+    "scripts/discovery-eval/examples/control-before.json",
+    "scripts/discovery-eval/examples/control-after.json",
     "services/data-manager/src/jobs/overture/eval/quality-baseline.ts",
     "apps/web/public/styles/openmapx-streets.json",
     "apps/web/public/styles/openmapx-dark.json",

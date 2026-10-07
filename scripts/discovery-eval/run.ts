@@ -5,18 +5,11 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { CATALOG, INPUT_FILES } from "./catalog.js";
+import { parseOptions } from "./options.js";
 import { compareReports, createReport, type EvalReport } from "./report.js";
+import { readManifest } from "./reviewed.js";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
-function options(args: string[]) {
-  const result = { out: join(root, ".superpowers/eval-reports/latest"), baseline: "" };
-  for (let i = 0; i < args.length; i += 2) {
-    if (!["--out", "--baseline"].includes(args[i]) || !args[i + 1] || args[i + 1].startsWith("--"))
-      throw new Error("Usage: pnpm discovery-eval [--out DIRECTORY] [--baseline REPORT.json]");
-    result[args[i] === "--out" ? "out" : "baseline"] = resolve(args[i + 1]);
-  }
-  return result;
-}
 function markdown(report: EvalReport, comparison: ReturnType<typeof compareReports> | null) {
   const counts = report.cases.reduce<Record<string, number>>((all, entry) => {
     all[entry.status] = (all[entry.status] ?? 0) + 1;
@@ -29,8 +22,8 @@ function markdown(report: EvalReport, comparison: ReturnType<typeof compareRepor
     `Application: ${report.metadata.appRevision}; working tree dirty: ${report.metadata.workingTreeDirty}`,
     `Run succeeded: ${report.runSucceeded}; case counts: ${JSON.stringify(counts)}`,
     "",
-    "This is offline recorded/synthetic/contract evidence. Manual and installed-device results are unavailable. Assertion counts can overlap between cases; they are not independent observations or production performance metrics.",
-    `Search capture provenance: ${report.metadata.captureProvenance.legacyFixtures} legacy fixtures with unknown provenance; ${report.metadata.captureProvenance.adaptedApiCaptures} explicitly adapted API captures. Exact deployed source generations are unknown here.`,
+    "Automated cases are offline recorded/synthetic/contract evidence. Optional reviewed observations retain their own live/recorded/synthetic provenance; absent layers and installed-device cases are unavailable. Assertion counts can overlap between cases; they are not independent observations or production performance metrics.",
+    `Search capture provenance: ${report.metadata.captureProvenance.legacyFixtures} legacy fixtures with unknown provenance; ${report.metadata.captureProvenance.adaptedApiCaptures} explicitly adapted API captures. Legacy fixture deployment/source generations are unknown; optional operator context follows.`,
     "",
     ...(comparison
       ? [
@@ -49,10 +42,31 @@ function markdown(report: EvalReport, comparison: ReturnType<typeof compareRepor
         `| ${entry.id} | ${entry.layer} | ${entry.status} | ${entry.passed} / ${entry.failed} / ${entry.unavailable} | ${entry.reason ?? ""} |`,
     ),
     "",
+    "## Independently reviewed observations",
+    "",
+    `Definitions and frozen pilot budgets: ${report.reviewed.definitionHash}; ${report.reviewed.unavailable.length} case/layer observations unavailable.`,
+    "Raw upstream belongs to provider; adapted API/client ranking belongs to normalization; final readable UI belongs to presentation. A missing layer is not an inferred success.",
+    "",
+    `\`\`\`json\n${JSON.stringify(report.reviewed.manifest?.context ?? { unavailable: "No operator manifest supplied" }, null, 2)}\n\`\`\``,
+    "",
+    "| Case | Layer / stage | Provenance / cache | Status | Measured metrics |",
+    "| --- | --- | --- | --- | --- |",
+    ...report.reviewed.results.map(
+      (entry) =>
+        `| ${entry.caseId} | ${entry.layer} / ${entry.stage} | ${entry.kind} / ${entry.cache} | ${entry.status} | ${JSON.stringify(entry.metrics)} |`,
+    ),
+    "",
+    "Absent layers (listed individually in report.json):",
+    "",
+    ...report.reviewed.unavailable.map((entry) => `- ${entry.caseId}: ${entry.layer}`),
+    "",
   ].join("\n");
 }
 function main() {
-  const config = options(process.argv.slice(2));
+  const config = parseOptions(process.argv.slice(2), root);
+  const manifest = config.evidence
+    ? readManifest(JSON.parse(readFileSync(config.evidence, "utf8")))
+    : null;
   // Snapshot before output writes; reports cannot mark their own capture as dirty.
   const appRevision = execFileSync("git", ["rev-parse", "HEAD"], {
     cwd: root,
@@ -96,6 +110,7 @@ function main() {
       CATALOG,
       { appRevision, workingTreeDirty, inputHashes, captureProvenance },
       root,
+      manifest,
     );
     const comparison = config.baseline
       ? compareReports(JSON.parse(readFileSync(config.baseline, "utf8")), report)
@@ -111,7 +126,8 @@ function main() {
       test.status !== 0 ||
       !report.runSucceeded ||
       comparison?.regressions.length ||
-      comparison?.runRegression
+      comparison?.runRegression ||
+      comparison?.reviewed.regressions.length
     )
       process.exitCode = 1;
   } finally {

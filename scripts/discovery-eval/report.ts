@@ -1,5 +1,13 @@
 import { createHash } from "node:crypto";
 import { relative } from "node:path";
+import {
+  buildReviewedEvidence,
+  compareReviewedEvidence,
+  type Manifest,
+  type ReviewedEvidence,
+  readManifest,
+  validReviewedEvidence,
+} from "./reviewed.js";
 
 export interface EvalCase {
   id: string;
@@ -23,6 +31,7 @@ export interface EvalReport {
   catalogHash: string;
   runSucceeded: boolean;
   metadata: EvidenceMetadata;
+  reviewed: ReviewedEvidence;
   cases: Array<{
     id: string;
     layer: string;
@@ -55,7 +64,8 @@ function testEvidence(input: unknown): { success: boolean; testResults: TestFile
     if (
       !record(file) ||
       typeof file.name !== "string" ||
-      !["passed", "failed"].includes(String(file.status)) ||
+      typeof file.status !== "string" ||
+      !["passed", "failed"].includes(file.status) ||
       !Array.isArray(file.assertionResults)
     ) {
       throw new Error("Invalid test evidence");
@@ -82,6 +92,7 @@ export function createReport(
   catalog: EvalCase[],
   metadata: EvidenceMetadata,
   root: string,
+  manifest: Manifest | null = null,
 ): EvalReport {
   const evidence = testEvidence(input);
   if (new Set(catalog.map((entry) => entry.id)).size !== catalog.length) {
@@ -146,11 +157,14 @@ export function createReport(
           : {}),
     };
   });
+  const reviewed = buildReviewedEvidence(manifest ? readManifest(manifest) : null);
   return {
-    protocolVersion: 1,
+    protocolVersion: 2,
+    reviewed,
     catalogHash: createHash("sha256").update(JSON.stringify(catalog)).digest("hex"),
     runSucceeded:
       evidence.success &&
+      reviewed.results.every((entry) => entry.status !== "failed") &&
       cases.every(
         (entry, index) => !catalog[index].suite || ["passed", "known-gap"].includes(entry.status),
       ),
@@ -162,7 +176,7 @@ export function createReport(
 function validReport(value: unknown): value is EvalReport {
   if (
     !record(value) ||
-    value.protocolVersion !== 1 ||
+    value.protocolVersion !== 2 ||
     typeof value.catalogHash !== "string" ||
     typeof value.runSucceeded !== "boolean" ||
     !record(value.metadata) ||
@@ -175,6 +189,7 @@ function validReport(value: unknown): value is EvalReport {
       value.metadata.captureProvenance.legacyFixtures,
       value.metadata.captureProvenance.adaptedApiCaptures,
     ].every((n) => Number.isInteger(n) && (n as number) >= 0) ||
+    !validReviewedEvidence(value.reviewed) ||
     !Array.isArray(value.cases)
   )
     return false;
@@ -184,7 +199,8 @@ function validReport(value: unknown): value is EvalReport {
         record(entry) &&
         typeof entry.id === "string" &&
         typeof entry.layer === "string" &&
-        ["passed", "failed", "unavailable", "known-gap"].includes(String(entry.status)) &&
+        typeof entry.status === "string" &&
+        ["passed", "failed", "unavailable", "known-gap"].includes(entry.status) &&
         [entry.passed, entry.failed, entry.unavailable].every(
           (n) => Number.isInteger(n) && (n as number) >= 0,
         ) &&
@@ -235,7 +251,12 @@ export function compareReports(before: unknown, after: unknown) {
   const changedInputs = [...keys]
     .filter((key) => before.metadata.inputHashes[key] !== after.metadata.inputHashes[key])
     .sort();
+  const reviewed = compareReviewedEvidence(before.reviewed, after.reviewed);
+  const hasOperatorObservations = [before, after].some(
+    (report) => (report.reviewed.manifest?.observations.length ?? 0) > 0,
+  );
   return {
+    reviewed,
     regressions: after.cases
       .filter((entry) => previous.get(entry.id)?.status === "passed" && entry.status !== "passed")
       .map((entry) => entry.id),
@@ -245,6 +266,10 @@ export function compareReports(before: unknown, after: unknown) {
     changedInputs,
     appOnlyComparison:
       changedInputs.length === 0 &&
+      !hasOperatorObservations &&
+      !reviewed.contextChanged &&
+      !reviewed.captureConditionsChanged &&
+      !reviewed.changedProviderInputs.length &&
       !before.metadata.workingTreeDirty &&
       !after.metadata.workingTreeDirty,
     runRegression: before.runSucceeded && !after.runSucceeded,

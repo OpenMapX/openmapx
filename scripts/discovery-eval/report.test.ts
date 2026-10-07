@@ -1,5 +1,7 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { compareReports, createReport, type EvalCase, type EvidenceMetadata } from "./report.js";
+import { buildReviewedEvidence, readManifest } from "./reviewed.js";
 
 const cases: EvalCase[] = [
   { id: "station", layer: "client-ranking", suite: "search.test.ts", assertions: ["station rank"] },
@@ -128,7 +130,7 @@ describe("versioned discovery evidence reports", () => {
 
   it("rejects comparisons across protocol, catalog or budget changes", () => {
     const before = createReport(input(), cases, metadata, "/repo");
-    expect(() => compareReports(before, { ...before, protocolVersion: 2 })).toThrow("protocol");
+    expect(() => compareReports(before, { ...before, protocolVersion: 3 })).toThrow("protocol");
     const changed = createReport(
       input(),
       [{ ...cases[0], assertions: ["different budget"] }],
@@ -144,4 +146,50 @@ describe("versioned discovery evidence reports", () => {
       expect(() => createReport(evidence, cases, metadata, "/repo")).toThrow("test evidence");
     },
   );
+  it("retains layer-specific unavailable judgments in the generated report", () => {
+    const report = createReport(input(), cases, metadata, "/repo");
+    expect(report.reviewed.unavailable).toContainEqual({
+      caseId: "business/edeka-alexa",
+      layer: "provider",
+    });
+    expect(
+      report.reviewed.definitions.find((entry) => entry.id === "business/edeka-alexa")?.entities[0]
+        .label,
+    ).toBe("EDEKA");
+  });
+
+  it("rejects tampered numerical evidence in a baseline", () => {
+    const report = createReport(input(), cases, metadata, "/repo");
+    const changed = {
+      ...report,
+      reviewed: { ...buildReviewedEvidence(null), results: [{ status: "passed" }] },
+    };
+    expect(() => compareReports(changed, report)).toThrow("report");
+  });
+  it("rejects array-valued status fields in supplied test evidence and baselines", () => {
+    const evidence = input();
+    expect(() =>
+      createReport(
+        { ...evidence, testResults: [{ ...evidence.testResults[0], status: ["passed"] }] },
+        cases,
+        metadata,
+        "/repo",
+      ),
+    ).toThrow("test evidence");
+    const report = createReport(input(), cases, metadata, "/repo");
+    expect(() =>
+      compareReports(
+        { ...report, cases: [{ ...report.cases[0], status: ["passed"] }, report.cases[1]] },
+        report,
+      ),
+    ).toThrow("report");
+  });
+  it("does not infer an application-only change from external recorded observations with unknown deployment", () => {
+    const manifest = readManifest(
+      JSON.parse(readFileSync(new URL("./examples/control-before.json", import.meta.url), "utf8")),
+    );
+    for (const entry of manifest.observations) entry.kind = "recorded";
+    const report = createReport(input(), cases, metadata, "/repo", manifest);
+    expect(compareReports(report, report).appOnlyComparison).toBe(false);
+  });
 });

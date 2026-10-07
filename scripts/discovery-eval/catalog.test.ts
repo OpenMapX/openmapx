@@ -4,6 +4,14 @@ import { describe, expect, it } from "vitest";
 import { CATALOG, INPUT_FILES } from "./catalog.js";
 
 describe("discovery input inventory", () => {
+  it("runs selected-place partial states as well as list-card enrichment", () => {
+    expect(
+      CATALOG.some(
+        (entry) =>
+          entry.suite === "apps/web/src/components/panels/place/PlaceDetailContent.test.tsx",
+      ),
+    ).toBe(true);
+  });
   it("fingerprints the recorded upstream station results used by cold/warm ranking", () => {
     const entry = CATALOG.find((entry) => entry.id === "search/station-synonyms-cache-order");
     expect(entry?.fixtures).toContain(
