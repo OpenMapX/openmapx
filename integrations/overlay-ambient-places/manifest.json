@@ -42,6 +42,18 @@
   "category": "Places",
   "dataSources": [
     {
+      "sourceId": "osm-ambient-places",
+      "name": "OpenStreetMap",
+      "url": "https://www.openstreetmap.org/",
+      "license": "ODbL",
+      "licenseUrl": "https://opendatacommons.org/licenses/odbl/",
+      "commercialUse": "yes",
+      "attribution": "\u00a9 <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap contributors</a>",
+      "providerCountry": "GB",
+      "providerPrivacyUrl": "https://wiki.osmfoundation.org/wiki/Privacy_Policy",
+      "endUserExposure": "server-only"
+    },
+    {
       "sourceId": "overture",
       "name": "Overture Maps",
       "url": "https://overturemaps.org",

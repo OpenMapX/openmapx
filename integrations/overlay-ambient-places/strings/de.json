@@ -51,6 +51,11 @@
       "purpose": "Benannte Orte aus einem veröffentlichten regionalen OSM- und Overture-Datensatz",
       "dataSent": "Keine; selbst gehostete regionale Kartenkacheln",
       "dataReceived": "Namen und Koordinaten von Orten"
+    },
+    "osm-ambient-places": {
+      "purpose": "Benannte Orte aus einem veröffentlichten regionalen OSM- und Overture-Datensatz",
+      "dataSent": "Keine; selbst gehostete regionale Kartenkacheln",
+      "dataReceived": "Namen und Koordinaten von Orten"
     }
   }
 }

@@ -292,8 +292,9 @@ export function matchAmbientBasemap(
         byName.set(name, bucket);
       }
   for (const l of labels) {
-    if (l.osmId && byId.has(l.osmId)) {
-      matches.set(l.key, byId.get(l.osmId)!);
+    if (l.osmId) {
+      const exact = byId.get(l.osmId);
+      if (exact) matches.set(l.key, exact);
       continue;
     }
     const candidates = (byName.get(normalize(l.name)) ?? []).filter(

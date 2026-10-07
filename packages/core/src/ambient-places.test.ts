@@ -92,6 +92,18 @@ describe("ambient place policy", () => {
     expect(mergeAmbientPlaces([a], [b], new Map())).toHaveLength(2);
     expect(mergeAmbientPlaces([a], [], new Map([[a.id, "gers-a"]]))[0].gersId).toBe("gers-a");
   });
+  it("never replaces an explicit different basemap OSM identity through proximity", () => {
+    const a = ambientPlaceFromOsm(osm)!;
+    const label = {
+      key: "base/other",
+      name: a.name,
+      category: a.category,
+      coordinates: a.coordinates,
+      osmId: "osm:node/2",
+    };
+    expect(matchAmbientBasemap([a], [label]).size).toBe(0);
+    expect(matchAmbientBasemap([a], [{ ...label, osmId: a.id }]).get(label.key)?.id).toBe(a.id);
+  });
   it("matches unique nearby compatible basemap labels and refuses branches and tenants", () => {
     const a = ambientPlaceFromOsm(osm)!;
     const label = {

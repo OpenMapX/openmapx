@@ -122,6 +122,80 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       }
     }, 120_000);
 
+    it("applies linked OSM policy and location across the regional boundary", async () => {
+      const pg = await startPostgis();
+      try {
+        await pg.sql.unsafe(
+          buildSearchIndexSchemaDDL("osm_search") + buildSearchIndexIndexesDDL("osm_search"),
+        );
+        await pg.sql.unsafe(`INSERT INTO osm_search.index_state(singleton,region,source_path,source_fingerprint,current_fingerprint,epoch,status,started_at,published_at,updated_at) VALUES(1,'aachen','fixture','fixture','fixture','boundary','ready',now(),now(),now());
+          INSERT INTO osm_search.places(osm_type,osm_id,name,lat,lng,category,tags,importance) VALUES
+          ('node',1,'Closed clinic',50.77,5.8999,'amenity:hospital','{"disused":"yes"}',0.8),
+          ('node',2,'Private clinic',50.77,5.8999,'amenity:hospital','{"access":"private"}',0.8),
+          ('node',3,'Upper-floor clinic',50.77,5.8999,'amenity:hospital','{"level":"1"}',0.8)`);
+        await pg.sql.unsafe(buildSchemaDDL("overture_places"));
+        await pg.sql.unsafe(`INSERT INTO overture_places.conflation_state(singleton,release,region,place_count,places_published_at,status,phase) VALUES(1,'2026-10-01.0','aachen',4,now(),'completed','complete');
+          INSERT INTO overture_places.places(gers_id,name,geom,basic_category,confidence,operating_status,release) SELECT 'boundary-'||i,'Clinic '||i,ST_SetSRID(ST_MakePoint(5.9001,50.77),4326),'hospital',0.8,'open','2026-10-01.0' FROM generate_series(1,4) i;
+          INSERT INTO overture_places.poi_conflation_link(osm_type,osm_id,gers_id,source_confidence,match_confidence,distance_m,method,evidence,release) SELECT 'node',i,'boundary-'||i,0.8,1,14,'fixture','{}','2026-10-01.0' FROM generate_series(1,3) i`);
+        const a = await buildAmbientPlaces(pg.sql, region);
+        const rows = await pg.sql.unsafe<{ id: string }[]>(
+          `SELECT id FROM ambient_places.features WHERE generation=$1 ORDER BY id`,
+          [a.generation],
+        );
+        // Authoritative OSM locations are outside; closed/private counterparts
+        // cannot be resurrected and the tenant cannot become a ground-floor gap.
+        expect(rows.map((r) => r.id)).toEqual(["overture:boundary-4"]);
+        await pg.sql.unsafe(`UPDATE osm_search.places SET lng=5.9001 WHERE osm_id=3`);
+        const b = await buildAmbientPlaces(pg.sql, region);
+        const [tenant] = await pg.sql.unsafe<{ tenant: boolean; min_zoom: number; name: string }[]>(
+          `SELECT tenant,min_zoom,name FROM ambient_places.features WHERE generation=$1 AND id='osm:node/3'`,
+          [b.generation],
+        );
+        expect(tenant).toMatchObject({ tenant: true, min_zoom: 18, name: "Upper-floor clinic" });
+        expect(b.sources.osm.count).toBe(1);
+      } finally {
+        await pg.stop();
+      }
+    }, 120_000);
+
+    it("keeps recently retired old publications available through rapid builds and rollback", async () => {
+      const pg = await startPostgis();
+      try {
+        await pg.sql.unsafe(
+          buildSearchIndexSchemaDDL("osm_search") + buildSearchIndexIndexesDDL("osm_search"),
+        );
+        await pg.sql.unsafe(`INSERT INTO osm_search.index_state(singleton,region,source_path,source_fingerprint,current_fingerprint,epoch,status,started_at,published_at,updated_at) VALUES(1,'aachen','fixture','fixture','fixture','lease','ready',now(),now(),now());
+          INSERT INTO osm_search.places(osm_type,osm_id,name,lat,lng,category,tags,importance) VALUES('node',1,'Clinic',50.77,6.08,'amenity:hospital','{}',0.8)`);
+        const a = await buildAmbientPlaces(pg.sql, region);
+        const bytes = await readAmbientTile(pg.sql, a.generation, tile.z, tile.x, tile.y);
+        await pg.sql.unsafe(
+          `UPDATE ambient_places.generations SET published_at=now()-interval '8 days',cache_lease_until=now()-interval '1 day' WHERE id=$1`,
+          [a.generation],
+        );
+        await buildAmbientPlaces(pg.sql, region);
+        await buildAmbientPlaces(pg.sql, region);
+        await buildAmbientPlaces(pg.sql, region);
+        expect(await readAmbientTile(pg.sql, a.generation, tile.z, tile.x, tile.y)).toEqual(bytes);
+        const old = await buildAmbientPlaces(pg.sql, region);
+        await pg.sql.unsafe(
+          `UPDATE ambient_places.generations SET published_at=now()-interval '8 days',cache_lease_until=now()-interval '1 day' WHERE id=$1`,
+          [old.generation],
+        );
+        await buildAmbientPlaces(pg.sql, region);
+        await rollbackAmbientPlaces(pg.sql);
+        expect((await readAmbientManifest(pg.sql))?.generation).toBe(old.generation);
+        await buildAmbientPlaces(pg.sql, region);
+        await buildAmbientPlaces(pg.sql, region);
+        // The eighth slot is still leased: a ninth build must preserve every URL.
+        await expect(buildAmbientPlaces(pg.sql, region)).rejects.toThrow(/retention/i);
+        expect(await readAmbientTile(pg.sql, old.generation, tile.z, tile.x, tile.y)).toEqual(
+          bytes,
+        );
+      } finally {
+        await pg.stop();
+      }
+    }, 120_000);
+
     it("bounds dense tiles, serializes writers and protects the generation cache lease", async () => {
       const pg = await startPostgis();
       try {

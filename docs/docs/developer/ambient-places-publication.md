@@ -20,11 +20,15 @@ imports planet data, calls AllThePlaces directly, or changes geocoding.
 3. In **Admin → Services → Data workflows → Nearby places**, choose a name and
    bounding box. Bounds must fit Germany's rollout envelope
    `[5.8,47.2,15.1,55.1]`, span at most 0.5 degrees in either direction and contain
-   at most 100,000 rows from either source. The combined result also cannot exceed
+   at most 100,000 OSM rows including linked boundary counterparts, and 100,000
+   Overture rows. The combined result also cannot exceed
    100,000 places.
 4. Publish and refresh the status card. It shows active/previous generation,
    source region/epoch/release, dates, counts and errors. Build acceptance is
-   asynchronous (`202`); acceptance is not proof that publication succeeded.
+   asynchronous (`202`) after acquiring the publication writer lock; acceptance is
+   not proof that publication succeeded. Competing requests receive `409`. Status
+   writes share the writer lock and attempt identity, so a rejected request cannot
+   overwrite or abort the admitted publication.
 5. Use **Disable** for discovery fallback, **Enable** to resume, or **Roll back**
    to switch to the predecessor. Rollback can be repeated to switch back.
 
@@ -55,8 +59,11 @@ without exposing a partial generation. There is no dependency on a background
 planet import or a live source-table query at map-render time.
 
 Generation URLs never change their bytes when sources refresh. At most eight
-snapshots are retained. Unreferenced generations can be removed only after seven
-days; active and previous are preserved. If all slots still have cache leases,
+snapshots are retained. Unreferenced generations can be removed only after their
+cache lease expires. The lease renews when leaving active discovery or rolling
+back, covering seven days plus the one-minute discovery refresh interval from
+that transition, regardless of the original publication date. Active and previous
+are preserved. If all slots still have cache leases,
 publication refuses another build. Disable changes discovery within the client's
 one-minute refresh interval; it does not revoke previously downloaded tiles.
 Clients keep a fresh last-good manifest on temporary discovery failure and remove
@@ -67,12 +74,17 @@ Accepted OSM↔GERS links determine identity: `osm:<type>/<id>` remains primary 
 GERS remains an alias. Overture-only places use `overture:<GERS>`. Bigint OSM IDs
 remain strings throughout SQL, tiles, search and details. OSM field values win;
 Overture fills missing names and unmatched coverage. A known excluded OSM match
-cannot be resurrected by its Overture counterpart. Tiles carry canonical ID, GERS,
+cannot be resurrected by its Overture counterpart. Linked OSM counterparts are
+read and evaluated even across the bbox boundary, within the same OSM input cap.
+Authoritative OSM locations outside the chosen region omit the pair; they do not
+become an Overture gap with lost closure or tenant policy. Tiles carry canonical ID, GERS,
 localized names, category, rank, minimum zoom, tenant flag and source combination.
 
 The client suppresses ambient features already owned by a category/selection ID.
 An owned-basemap label can acquire the canonical identity only through an explicit
-OSM ID or a unique compatible-category/name match within eight metres. Ambiguous
+OSM ID or, only when no explicit identity is supplied, a unique compatible-category/name
+match within eight metres. An explicit different OSM identity is never replaced
+by proximity. Ambiguous
 branches and non-ground tenants are not matched by proximity. Mappings belong to
 the map instance and are cleared on style replacement and overlay teardown. The
 existing place-card conversion/resolver handles both tile and basemap clicks.

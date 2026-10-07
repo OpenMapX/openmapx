@@ -51,6 +51,11 @@
       "purpose": "Named places from a published regional OSM and Overture snapshot",
       "dataSent": "None; hosted regional tiles",
       "dataReceived": "Names and locations of places"
+    },
+    "osm-ambient-places": {
+      "purpose": "Named places from a published regional OSM and Overture snapshot",
+      "dataSent": "None; hosted regional tiles",
+      "dataReceived": "Names and locations of places"
     }
   }
 }

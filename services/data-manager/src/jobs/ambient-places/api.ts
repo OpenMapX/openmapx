@@ -1,19 +1,21 @@
+import { randomUUID } from "node:crypto";
 import { type AmbientRegion, validateAmbientRegion } from "@openmapx/core/ambient-places";
 import { readAmbientManifest } from "@openmapx/core/ambient-places-server";
 import type { FastifyInstance } from "fastify";
 import type postgres from "postgres";
 import { buildAmbientPlaces, rollbackAmbientPlaces, setAmbientEnabled } from "./build.js";
-import { AMBIENT_WRITE_LOCK, ensureAmbientSchema } from "./schema.js";
+import { AMBIENT_WRITE_LOCK, AmbientPublicationBusyError } from "./schema.js";
 
 /** Mounted inside data-manager's bearer-token protected application. */
 export function registerAmbientPlacesApi(app: FastifyInstance, sql: postgres.Sql): void {
-  let building = false;
+  let building: string | null = null;
   app.get("/ambient-places/status", async () => {
     const active = await readAmbientManifest(sql);
     const [exists] = await sql.unsafe<{ exists: boolean }[]>(
       `SELECT to_regclass('ambient_places.state') IS NOT NULL AS exists`,
     );
-    if (!exists.exists) return { active: null, previous: null, building, lastError: null };
+    if (!exists.exists)
+      return { active: null, previous: null, building: Boolean(building), lastError: null };
     const [state] = await sql.unsafe<
       {
         previous: string | null;
@@ -31,7 +33,7 @@ export function registerAmbientPlacesApi(app: FastifyInstance, sql: postgres.Sql
     return {
       active,
       previous: state.previous,
-      building: building || writer.busy,
+      building: Boolean(building) || writer.busy,
       lastError: state.last_build_error,
       startedAt: state.last_build_started_at,
       finishedAt: state.last_build_finished_at,
@@ -45,42 +47,41 @@ export function registerAmbientPlacesApi(app: FastifyInstance, sql: postgres.Sql
       return reply.code(400).send({ error: (error as Error).message });
     }
     if (building) return reply.code(409).send({ error: "An ambient build is already running" });
-    await ensureAmbientSchema(sql);
-    building = true;
+    // Claim the local slot before the first await. Cross-process admission is
+    // acknowledged only once the publisher has acquired the database lock.
+    const attempt = randomUUID();
+    building = attempt;
+    let claimed = false;
+    let accept!: () => void;
+    let reject!: (error: unknown) => void;
+    const admission = new Promise<void>((resolve, rejectPromise) => {
+      accept = resolve;
+      reject = rejectPromise;
+    });
+    void buildAmbientPlaces(sql, region, () => {
+      claimed = true;
+      accept();
+    })
+      .catch((error) => {
+        if (!claimed) {
+          if (building === attempt) building = null;
+          reject(error);
+        }
+        app.log.warn(
+          { errorClass: error instanceof Error ? error.name : "Unknown" },
+          "Ambient publication failed; active generation retained",
+        );
+      })
+      .finally(() => {
+        if (building === attempt) building = null;
+      });
     try {
-      await sql.unsafe(
-        `UPDATE ambient_places.state SET last_build_started_at=now(),last_build_finished_at=NULL,last_build_error=NULL WHERE singleton=1`,
-      );
+      await admission;
     } catch (error) {
-      building = false;
+      if (error instanceof AmbientPublicationBusyError)
+        return reply.code(409).send({ error: error.message });
       throw error;
     }
-    void buildAmbientPlaces(sql, region)
-      .then(
-        () =>
-          sql.unsafe(
-            `UPDATE ambient_places.state SET last_build_finished_at=now(),last_build_error=NULL WHERE singleton=1`,
-          ),
-        (error) => {
-          app.log.warn(
-            { errorClass: error instanceof Error ? error.name : "Unknown" },
-            "Ambient publication failed; active generation retained",
-          );
-          return sql.unsafe(
-            `UPDATE ambient_places.state SET last_build_finished_at=now(),last_build_error=$1 WHERE singleton=1`,
-            [error instanceof Error ? error.message : "Publication failed"],
-          );
-        },
-      )
-      .catch((error) =>
-        app.log.error(
-          { errorClass: error instanceof Error ? error.name : "Unknown" },
-          "Ambient job status could not be recorded",
-        ),
-      )
-      .finally(() => {
-        building = false;
-      });
     return reply.code(202).send({ accepted: true });
   });
   app.post(

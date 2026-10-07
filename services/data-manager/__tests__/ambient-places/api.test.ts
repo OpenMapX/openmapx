@@ -2,8 +2,10 @@ import Fastify from "fastify";
 import type postgres from "postgres";
 import { describe, expect, it, vi } from "vitest";
 
-vi.mock("../../src/jobs/ambient-places/build.js", () => ({
-  buildAmbientPlaces: async () => ({}),
+const mock = vi.hoisted(() => ({ build: vi.fn() }));
+vi.mock("../../src/jobs/ambient-places/build.js", async (importOriginal) => ({
+  ...(await importOriginal<object>()),
+  buildAmbientPlaces: mock.build,
   rollbackAmbientPlaces: async () => {},
   setAmbientEnabled: async () => {},
 }));
@@ -11,16 +13,16 @@ vi.mock("../../src/jobs/ambient-places/build.js", () => ({
 import { registerAmbientPlacesApi } from "../../src/jobs/ambient-places/api.js";
 
 describe("ambient publication job lifecycle", () => {
-  it("allows retry after an initial job status write fails", async () => {
-    let fail = true;
+  it("allows retry after publisher admission fails", async () => {
+    mock.build.mockRejectedValueOnce(new Error("Temporary database outage"));
+    mock.build.mockImplementationOnce(async (_sql, _region, claim: () => void) => {
+      claim();
+      return {};
+    });
     const sql = {
       begin: async (callback: (tx: { unsafe: () => Promise<unknown[]> }) => Promise<unknown>) =>
         callback({ unsafe: async () => [] }),
-      unsafe: async (query: string) => {
-        if (query.includes("last_build_started_at=now()") && fail) {
-          fail = false;
-          throw new Error("Temporary database outage");
-        }
+      unsafe: async () => {
         return [{ exists: false }];
       },
     } as unknown as postgres.Sql;
