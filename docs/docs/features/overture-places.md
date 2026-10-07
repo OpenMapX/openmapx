@@ -47,6 +47,49 @@ Candidates are selected nearest the map center, then by confidence and field
 completeness. The combined result is deterministically reranked, conservative
 same-business duplicates are removed, and the response is capped at 50 places.
 
+## Nearby places during normal browsing
+
+The built-in `overlay-ambient-places` integration can show named places without
+starting a category search. An administrator first builds the existing regional
+OSM search index; an Overture snapshot is optional, but a populated Overture
+source must have completed its link rebuild. In **Admin → Services → Data
+workflows → Nearby places**, publish one German bounding box. The initial form
+covers Aachen (`5.9,50.65,6.3,50.95`). The box may span at most 0.5 degrees in each
+direction, with at most 100,000 input rows per source and 100,000 final places.
+The initial rollout is deliberately regional; it does not import the planet.
+
+Named essential destinations start at zoom 13, everyday businesses at 15 and
+other places at 16. Non-ground OSM tenants wait until 18. Explicitly closed,
+disused, demolished or private OSM records are omitted. Overture records require
+known `open` status and confidence of at least 0.5. Missing confidence/status
+is omitted rather than guessed. Labels use a supplied German/English name and
+fall back to the source name; names are capped at 120 Unicode characters. No
+hours, ratings or popularity are inferred. Missing OSM fields may be filled by
+an accepted Overture match; unmatched Overture records fill regional gaps.
+Accepted OSM↔GERS links retain the OSM primary ID across tiles, search and place
+cards, even when the OSM record is outside the ambient candidate set.
+
+The admin card reports generation, region, counts, source epoch/release,
+publication time and build errors. A snapshot date describes the local data
+publication, not a recent verification of every business. Source/publication
+age above 90 days disables discovery. Coverage is partial: filters, missing
+source data, ranking caps and label collisions can all omit places.
+
+Publishing stages a complete immutable generation and activates it in one
+transaction. A failed or interrupted build retains the active generation.
+**Disable** removes it from discovery; **Roll back** switches to the predecessor.
+Both are available without waiting for a rebuild. Clients refresh discovery
+every minute and retain a fresh last-known generation during a temporary API
+failure. Already cached tile URLs remain valid for their seven-day cache lease;
+disable is therefore a discovery change, not immediate revocation of cached data.
+At most eight generations are retained; publication refuses to evict an
+unexpired generation just to make room.
+
+The online path uses bounded PostGIS MVT reads behind the existing API. Regional
+PMTiles remain a possible offline/export delivery option, not an offline feature
+of this overlay. [Publication and serving decisions](../developer/ambient-places-publication.md)
+explain the comparison, limits, tests and rollback model.
+
 ## Releases and regional refreshes
 
 OpenMapX discovers the current release from Overture's official STAC catalog

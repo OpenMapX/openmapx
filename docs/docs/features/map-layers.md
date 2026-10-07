@@ -53,6 +53,21 @@ additional destinations that are not labeled on the map. See the
 [comparison baseline](../developer/map-comparison-baseline.md) for fixed German
 examples and how to assess cartography changes.
 
+When an operator publishes a regional place snapshot, **Nearby places** adds
+ranked named OSM and Overture destinations during ordinary browsing, without a
+category search. Essential destinations start at zoom 13; everyday businesses
+appear later, and indoor/non-ground tenants wait until zoom 18. Label collisions
+still limit what is visible. These ranks express usefulness and source importance,
+not ratings, popularity, or a promise that a business is currently open.
+
+The overlay avoids repeating a confidently matched owned-basemap label or an
+already selected/category-result marker. Tapping a matched label opens the same
+canonical place identity as search. The legend identifies the published region,
+snapshot date and whether coverage is OSM-only or combined. Outside that region,
+or before publication, normal map browsing continues with the basemap. You can
+toggle **Nearby places** in Layers. See [Overture Places](./overture-places.md)
+for source policies and operator setup.
+
 ## How overlays work
 
 Every overlay is an [integration](../overview/how-it-works.md). A map-overlay
