@@ -148,6 +148,18 @@ export interface Route {
    */
   baselineDuration?: number;
   /**
+   * Provider evidence that fresh congestion speeds cover this exact route and
+   * were used in its duration. A comparison duration or road-closure proof is
+   * insufficient. Only complete coverage permits a green, low-delay ETA.
+   * Leases must be at most two minutes from evaluatedAt. Current providers do
+   * not yet emit this evidence; absent/partial/expired evidence means unknown.
+   */
+  trafficCoverage?: {
+    complete: boolean;
+    evaluatedAt: string;
+    validUntil: string;
+  };
+  /**
    * The route drives along a road closed to all but local access ("Anlieger
    * frei"): it starts or ends on one, or can be reached only through one.
    */

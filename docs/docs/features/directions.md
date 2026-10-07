@@ -125,17 +125,32 @@ future closures that haven't started yet or nightly closures during daytime trip
 ### Reading traffic information
 
 Driving and motorcycle cards color the travel time by the estimated traffic
-delay and show a short caption such as **+12 min traffic**. The estimate compares
+delay and show a short caption such as **+12 min**. The estimate compares
 the same route with and without current traffic speeds. It appears when the
 extra time is at least five minutes and at least 10% of the comparison duration;
 the existing severity bands distinguish light, moderate, heavy and severe
 delays. The text supplies the amount so color is not the only signal.
 
-**May not include traffic delays** is shown only when the route has no usable
-comparison duration. A comparison below the display thresholds does not produce
-an “all clear” claim. Open **About traffic** with the info button for a
-plain-language explanation of the estimate, road updates and the route provider.
-These details do not interrupt route selection or Start.
+When there is no usable delay estimate or congestion data is missing,
+incomplete or stale, the duration uses the normal text color and the card shows
+**Traffic data unavailable**. A route with fresh, complete congestion coverage
+and a comparison below the display thresholds has a **green duration** and no
+additional caption. Significant estimated delays retain their severity color
+and the short **+12 min** caption.
+
+A zero delay comparison alone cannot establish fresh congestion coverage.
+The route contract's optional `trafficCoverage` evidence must confirm that
+current congestion speeds cover the exact route and were used in its duration;
+its lease expires within two minutes of evaluation. Current routing providers
+**do not yet emit this evidence**, so low-delay comparisons currently use the
+unavailable state rather than green. Adding trustworthy engine-side congestion
+coverage remains part of the traffic follow-up; closure proofs and map-layer
+colors cannot substitute for it. Positive delay estimates remain useful even
+without complete coverage of every road.
+
+Open **About traffic** with the info button for a plain-language explanation of
+the estimate, road updates and the route provider. These details do not interrupt
+route selection or Start.
 
 Road updates are described as used only when this route has current, matching
 engine and server evidence. That explanation expires automatically; missing,

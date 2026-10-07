@@ -361,17 +361,17 @@ describe("RouteCard compact traffic explanation", () => {
     renderCard(baseRoute);
     const ids = screen.getByRole("radio").getAttribute("aria-describedby")?.split(" ") ?? [];
     expect(ids.map((id) => document.getElementById(id)?.textContent).join(" ")).toContain(
-      "May not include traffic delays",
+      "Traffic data unavailable",
     );
   });
   it("shows a compact delay and describes it to keyboard users", () => {
     renderCard({ ...baseRoute, duration: 6300, baselineDuration: 3600 });
-    expect(screen.getByTestId("traffic-delay")).toHaveTextContent("+45 min traffic");
+    expect(screen.getByTestId("traffic-delay")).toHaveTextContent(/^\+45 min$/);
     expect(screen.queryByText(/baseline/i)).toBeNull();
-    expect(screen.queryByText("May not include traffic delays")).toBeNull();
+    expect(screen.queryByText("Traffic data unavailable")).toBeNull();
     const ids = screen.getByRole("radio").getAttribute("aria-describedby")?.split(" ") ?? [];
     expect(ids.map((id) => document.getElementById(id)?.textContent).join(" ")).toContain(
-      "+45 min traffic",
+      "+45 min",
     );
   });
   it.each([
@@ -396,7 +396,10 @@ describe("RouteCard compact traffic explanation", () => {
   ])("does not advertise a significant delay for %s / %s seconds", (duration, baselineDuration) => {
     renderCard({ ...baseRoute, duration, baselineDuration });
     expect(screen.queryByTestId("traffic-delay")).toBeNull();
-    expect(screen.queryByText("May not include traffic delays")).toBeNull();
+    expect(screen.getByText("Traffic data unavailable")).toBeInTheDocument();
+    expect(getComputedStyle(screen.getByRole("heading", { level: 6 })).color).toBe(
+      "rgba(0, 0, 0, 0.87)",
+    );
     expect(screen.getByRole("button", { name: "About traffic" })).toBeInTheDocument();
   });
   it.each([undefined, 0, -1, Number.NaN, Number.POSITIVE_INFINITY])(
@@ -404,7 +407,7 @@ describe("RouteCard compact traffic explanation", () => {
     (baselineDuration) => {
       renderCard({ ...baseRoute, baselineDuration });
       expect(screen.queryByTestId("traffic-delay")).toBeNull();
-      expect(screen.getByText("May not include traffic delays")).toBeInTheDocument();
+      expect(screen.getByText("Traffic data unavailable")).toBeInTheDocument();
     },
   );
   it.each(["walking", "cycling"] as const)("does not show traffic delays for %s", (mode) => {
@@ -428,11 +431,11 @@ describe("RouteCard compact traffic explanation", () => {
     expect(getComputedStyle(screen.getByRole("heading", { level: 6 })).color).toBe(
       "var(--omx-traffic-heavy)",
     );
-    expect(screen.getByText("+45 min traffic")).toBeInTheDocument();
+    expect(screen.getByText("+45 min")).toBeInTheDocument();
   });
   it("localizes the compact delay in German", () => {
     renderCard({ ...baseRoute, duration: 6300, baselineDuration: 3600 }, "metric", "de");
-    expect(screen.getByTestId("traffic-delay")).toHaveTextContent("+45 min durch Verkehr");
+    expect(screen.getByTestId("traffic-delay")).toHaveTextContent(/^\+45 min$/);
   });
   it.each(["route", "peek"] as const)(
     "opens and closes traffic info without selecting the %s route",
@@ -994,5 +997,134 @@ describe("RouteCard impact integration", () => {
       </NextIntlClientProvider>,
     );
     expect(screen.getByText("Fastest route")).toBeDefined();
+  });
+});
+
+describe("RouteCard current congestion coverage", () => {
+  const now = Date.parse("2026-10-07T12:00:00Z");
+  const freshCoverage = {
+    complete: true,
+    evaluatedAt: "2026-10-07T11:59:59Z",
+    validUntil: "2026-10-07T12:00:30Z",
+  };
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(now);
+  });
+  afterEach(() => vi.useRealTimers());
+
+  it.each([3600, 3500, 3840, 3899])(
+    "uses green without a hint for a fresh %s-second comparison",
+    (duration) => {
+      renderCard({
+        ...baseRoute,
+        duration,
+        baselineDuration: 3600,
+        trafficCoverage: freshCoverage,
+      });
+      expect(getComputedStyle(screen.getByRole("heading", { level: 6 })).color).toBe(
+        "var(--omx-brand)",
+      );
+      expect(screen.queryByTestId("route-traffic-status")).toBeNull();
+      expect(screen.queryByTestId("traffic-delay")).toBeNull();
+      const describedBy = screen.getByRole("radio").getAttribute("aria-describedby");
+      expect(describedBy).toBeNull();
+    },
+  );
+
+  it.each([
+    undefined,
+    { ...freshCoverage, complete: false },
+    { ...freshCoverage, evaluatedAt: "2026-10-07T12:00:01Z" },
+    { ...freshCoverage, validUntil: "2026-10-07T12:00:00Z" },
+    { ...freshCoverage, validUntil: "invalid" },
+    { ...freshCoverage, evaluatedAt: "invalid" },
+    { ...freshCoverage, validUntil: "2026-10-07T12:05:00Z" },
+  ])("does not turn a zero delay green with insufficient evidence (%j)", (trafficCoverage) => {
+    renderCard({ ...baseRoute, duration: 3600, baselineDuration: 3600, trafficCoverage });
+    expect(getComputedStyle(screen.getByRole("heading", { level: 6 })).color).toBe(
+      "rgba(0, 0, 0, 0.87)",
+    );
+    expect(screen.getByText("Traffic data unavailable")).toBeInTheDocument();
+  });
+
+  it("expires green and updates both the duration and its accessible note", () => {
+    renderCard({
+      ...baseRoute,
+      duration: 3600,
+      baselineDuration: 3600,
+      trafficCoverage: freshCoverage,
+    });
+    act(() => vi.advanceTimersByTime(30000));
+    expect(getComputedStyle(screen.getByRole("heading", { level: 6 })).color).toBe(
+      "rgba(0, 0, 0, 0.87)",
+    );
+    expect(screen.getByText("Traffic data unavailable")).toBeInTheDocument();
+    const id = screen.getByRole("radio").getAttribute("aria-describedby");
+    expect(id && document.getElementById(id)).toHaveTextContent("Traffic data unavailable");
+  });
+
+  it("rearms freshness expiration when the wall clock moves backwards", () => {
+    renderCard({
+      ...baseRoute,
+      duration: 3600,
+      baselineDuration: 3600,
+      trafficCoverage: freshCoverage,
+    });
+    vi.setSystemTime(now - 10000);
+    act(() => vi.advanceTimersByTime(30000));
+    expect(screen.queryByText("Traffic data unavailable")).toBeNull();
+    act(() => vi.advanceTimersByTime(10000));
+    expect(screen.getByText("Traffic data unavailable")).toBeInTheDocument();
+  });
+
+  it("still requires a usable comparison even with complete fresh coverage", () => {
+    renderCard({ ...baseRoute, trafficCoverage: freshCoverage });
+    expect(getComputedStyle(screen.getByRole("heading", { level: 6 })).color).toBe(
+      "rgba(0, 0, 0, 0.87)",
+    );
+    expect(screen.getByText("Traffic data unavailable")).toBeInTheDocument();
+  });
+
+  it("keeps significant delays colored even with complete coverage", () => {
+    renderCard({
+      ...baseRoute,
+      duration: 6300,
+      baselineDuration: 3600,
+      trafficCoverage: freshCoverage,
+    });
+    expect(getComputedStyle(screen.getByRole("heading", { level: 6 })).color).toBe(
+      "var(--omx-traffic-heavy)",
+    );
+    expect(screen.getByTestId("traffic-delay")).toHaveTextContent(/^\+45 min$/);
+    expect(screen.queryByText("Traffic data unavailable")).toBeNull();
+  });
+});
+
+describe("RouteCard expired congestion estimates", () => {
+  const now = Date.parse("2026-10-07T12:00:00Z");
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(now);
+  });
+  afterEach(() => vi.useRealTimers());
+  it("drops the delay color and caption when supplied congestion evidence expires", () => {
+    renderCard({
+      ...baseRoute,
+      duration: 6300,
+      baselineDuration: 3600,
+      trafficCoverage: {
+        complete: true,
+        evaluatedAt: "2026-10-07T11:59:59Z",
+        validUntil: "2026-10-07T12:00:30Z",
+      },
+    });
+    expect(screen.getByTestId("traffic-delay")).toHaveTextContent(/^\+45 min$/);
+    act(() => vi.advanceTimersByTime(30000));
+    expect(screen.queryByTestId("traffic-delay")).toBeNull();
+    expect(screen.getByText("Traffic data unavailable")).toBeInTheDocument();
+    expect(getComputedStyle(screen.getByRole("heading", { level: 6 })).color).toBe(
+      "rgba(0, 0, 0, 0.87)",
+    );
   });
 });

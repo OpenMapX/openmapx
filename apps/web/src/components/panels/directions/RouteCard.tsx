@@ -40,9 +40,9 @@ import { useDateTimeFormat } from "@/integration-api/runtime/useDateTimeFormat";
 import { formatCo2Emission } from "@/lib/formatCo2";
 import { useStartNavigation } from "@/lib/mobile/useStartNavigation";
 import { primeSpeechSynthesis } from "@/lib/navigation/useNavigationVoice";
-import { routeTrafficDelay } from "@/lib/route-traffic-delay";
 import { requestHeadingPermission } from "@/lib/useHeading";
 import { useNow } from "@/lib/useNow";
+import { useRouteTrafficPresentation } from "@/lib/useRouteTrafficPresentation";
 import { RouteTrafficStatus } from "./RouteTrafficStatus";
 import { type RouteArrivalContext, resolveRouteArrival } from "./routeArrival";
 
@@ -147,11 +147,11 @@ export function RouteCard({
   const [impactDetailsOpen, setImpactDetailsOpen] = useState(false);
   const arrivalCaptionId = useId();
   const trafficCaptionId = useId();
-  const traffic = routeTrafficDelay(route);
+  const traffic = useRouteTrafficPresentation(route);
   const selectionDescription =
     [
       route.mode === "driving" && arrivalContext ? arrivalCaptionId : null,
-      (route.mode === "driving" || route.mode === "motorcycle") && (!traffic || traffic.band)
+      (route.mode === "driving" || route.mode === "motorcycle") && traffic.kind !== "clear"
         ? trafficCaptionId
         : null,
     ]
@@ -245,7 +245,16 @@ export function RouteCard({
       <Typography
         variant="h6"
         sx={{
-          color: traffic?.band ? TRAFFIC_TEXT_COLOR[traffic.band] : active ? BRAND : "text.primary",
+          color:
+            route.mode === "driving" || route.mode === "motorcycle"
+              ? traffic.kind === "delay"
+                ? TRAFFIC_TEXT_COLOR[traffic.band]
+                : traffic.kind === "clear"
+                  ? BRAND
+                  : "text.primary"
+              : active
+                ? BRAND
+                : "text.primary",
           fontWeight: 700,
           lineHeight: 1.25,
           fontVariantNumeric: "tabular-nums",

@@ -4319,9 +4319,10 @@
       "slow": "Langsam"
     },
     "about": "Verkehrsinformationen",
-    "summary": "Stau eventuell nicht berücksichtigt",
+    "summary": "Keine Verkehrsdaten verfügbar",
     "provider": "Routenanbieter: {source}",
-    "delay": "+{delay} durch Verkehr",
+    "delay": "+{delay}",
+    "coverageExplanation": "Die Fahrzeit berücksichtigt den aktuellen Verkehr.",
     "estimateExplanation": "Die zusätzliche Zeit wird geschätzt, indem diese Route mit und ohne aktuelle Verkehrsgeschwindigkeiten verglichen wird. Tatsächliche Verzögerungen können abweichen."
   }
 }

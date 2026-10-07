@@ -7,8 +7,8 @@ import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
 import { TrafficInfo } from "@/integration-api/components/TrafficInfo";
 import { TRAFFIC_TEXT_COLOR } from "@/integration-api/runtime/theme";
-import { routeTrafficDelay } from "@/lib/route-traffic-delay";
 import { routeTrafficStatus } from "@/lib/route-traffic-status";
+import { useRouteTrafficPresentation } from "@/lib/useRouteTrafficPresentation";
 
 export function RouteTrafficStatus({
   route,
@@ -38,13 +38,14 @@ export function RouteTrafficStatus({
     expire();
     return () => clearTimeout(timer);
   }, [deadline]);
+  const traffic = useRouteTrafficPresentation(route);
   if (!status) return null;
-  const traffic = routeTrafficDelay(route);
-  const caption = traffic?.band
-    ? t("delay", { delay: formatDuration(traffic.seconds) })
-    : !traffic
-      ? t("summary")
-      : null;
+  const caption =
+    traffic.kind === "delay"
+      ? t("delay", { delay: formatDuration(traffic.seconds) })
+      : traffic.kind === "unavailable"
+        ? t("summary")
+        : null;
   return (
     <Box sx={{ display: "flex", alignItems: "center", gap: 0.25, mt: 0.25 }}>
       {caption && (
@@ -52,9 +53,9 @@ export function RouteTrafficStatus({
           id={id}
           component="div"
           variant="caption"
-          data-testid={traffic?.band ? "traffic-delay" : "route-traffic-status"}
+          data-testid={traffic.kind === "delay" ? "traffic-delay" : "route-traffic-status"}
           sx={{
-            color: traffic?.band ? TRAFFIC_TEXT_COLOR[traffic.band] : "text.secondary",
+            color: traffic.kind === "delay" ? TRAFFIC_TEXT_COLOR[traffic.band] : "text.secondary",
             overflowWrap: "anywhere",
           }}
         >
@@ -63,7 +64,13 @@ export function RouteTrafficStatus({
       )}
       <TrafficInfo>
         <Typography variant="body2" sx={{ mb: 1 }}>
-          {t(traffic ? "estimateExplanation" : "congestionUnverified")}
+          {t(
+            traffic.kind === "delay"
+              ? "estimateExplanation"
+              : traffic.kind === "clear"
+                ? "coverageExplanation"
+                : "congestionUnverified",
+          )}
         </Typography>
         <Typography variant="body2" sx={{ mb: 1 }}>
           {t(`application.${status.application}`)}

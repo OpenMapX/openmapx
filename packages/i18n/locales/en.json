@@ -4319,9 +4319,10 @@
       "slow": "Slow"
     },
     "about": "About traffic",
-    "summary": "May not include traffic delays",
+    "summary": "Traffic data unavailable",
     "provider": "Route provider: {source}",
-    "delay": "+{delay} traffic",
+    "delay": "+{delay}",
+    "coverageExplanation": "Current traffic is included in this travel time.",
     "estimateExplanation": "The extra time is estimated by comparing this route with and without current traffic speeds. Actual delays can vary."
   }
 }
