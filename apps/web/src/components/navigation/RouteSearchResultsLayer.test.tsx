@@ -3,6 +3,13 @@ import type { AlongRoutePoi, CategoryPlace } from "@openmapx/core";
 import { act, render, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+vi.mock("next-intl", async () => {
+  const { createTranslator } = await vi.importActual<typeof import("next-intl")>("next-intl");
+  const { default: messages } = await import("@openmapx/i18n/locales/en.json");
+  const translate = createTranslator({ locale: "en", messages, namespace: "navigation" });
+  return { useTranslations: () => translate };
+});
+
 const fixtures = vi.hoisted(() => ({
   publish: vi.fn(),
   loadBrand: vi.fn(),
@@ -47,6 +54,34 @@ beforeEach(() => {
   fixtures.map.isStyleLoaded.mockReturnValue(true);
 });
 describe("RouteSearchResultsLayer brand pins", () => {
+  it("labels unknown and unreachable detours without short geometric minutes", () => {
+    const unknown = {
+      ...results[0],
+      detour: {
+        id: "lidl",
+        kind: "unknown",
+        access: { kind: "coordinate", coordinates: [13, 52] },
+        waypoints: [],
+      },
+    } as AlongRoutePoi<CategoryPlace>;
+    const { rerender } = render(<RouteSearchResultsLayer {...props} results={[unknown]} />);
+    const label = () =>
+      (
+        fixtures.publish.mock.calls.at(-1)?.[0] as
+          | { data: { features: { properties: { label: string } }[] } }[]
+          | undefined
+      )?.[0].data.features[0].properties.label;
+    expect(label()).toBe("Unknown detour");
+    rerender(
+      <RouteSearchResultsLayer
+        {...props}
+        results={[{ ...unknown, detour: { ...unknown.detour!, kind: "unreachable" } }]}
+      />,
+    );
+    expect(label()).toBe("Unreachable");
+    rerender(<RouteSearchResultsLayer {...props} />);
+    expect(label()).toBe("~+2 min");
+  });
   it("publishes the selected brand logo after it loads", async () => {
     fixtures.loadBrand.mockResolvedValue(true);
     render(<RouteSearchResultsLayer {...props} brandQid="Q151954" />);

@@ -2,16 +2,18 @@
 
 import type { Route } from "@integrations/routing/types";
 import {
+  type DirectionsResult,
   type OverpassFilter,
   readRouteMatcherCounters,
   resetRouteMatcherCounters,
   setRouteMatcherCounting,
   useNavigationStore,
 } from "@openmapx/core";
-import { act, renderHook } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("next-intl", () => ({ useLocale: () => "en" }));
+const directions = vi.hoisted(() => vi.fn());
 
 // POIs along the corridor, standing in for the category search response.
 const places = [
@@ -19,6 +21,7 @@ const places = [
   { id: "b", name: "B", coordinates: [0.002, -0.0003] },
   { id: "c", name: "C", coordinates: [0.003, 0.0001] },
 ];
+let categoryPlaces: ((typeof places)[number] & { routingEntrance?: [number, number] })[] = places;
 
 // A deliberately different-shaped fixture for the filter search response —
 // different ids, names, coordinates, *and* length (2 vs 3) from `places`. If
@@ -48,8 +51,9 @@ vi.mock("@openmapx/core", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@openmapx/core")>();
   return {
     ...actual,
+    fetchDirections: directions,
     useCategorySearch: () => ({
-      data: { results: places },
+      data: { results: categoryPlaces },
       isLoading: false,
       isError: false,
     }),
@@ -94,18 +98,304 @@ const publishProgress = (alongMeters: number) => {
 };
 
 describe("useRouteSearch route index ownership", () => {
+  it("uses the selected identity for co-located stops with different entrances", async () => {
+    categoryPlaces = [
+      { ...places[0], id: "a", routingEntrance: [0.0019, 0] },
+      { ...places[0], id: "b", routingEntrance: [0.0021, 0] },
+    ];
+    const { result } = renderHook(() => useRouteSearch({ category: "fuel" }));
+    await act(async () => {});
+    directions.mockResolvedValue({
+      waypoints,
+      activeRouteIndex: 0,
+      provider: "routing-fixture",
+      routes: [freshRoute()],
+    });
+    await act(async () => {
+      expect(await result.current.addStop({ id: "b", coordinates: [0.001, 0.0002] } as never)).toBe(
+        true,
+      );
+    });
+    expect(useNavigationStore.getState().destinationWaypoints[1]).toEqual([0.0021, 0]);
+  });
+  it("pins and retains the baseline-selected provider when the active route has none", async () => {
+    directions.mockResolvedValue({
+      waypoints,
+      activeRouteIndex: 0,
+      provider: "routing-a",
+      routes: [freshRoute()],
+    });
+    const { result } = renderHook(() => useRouteSearch({ category: "fuel" }));
+    await waitFor(() => expect(result.current.results[0].detour?.kind).toBe("network"));
+    directions.mockClear();
+    await act(async () => {
+      expect(await result.current.addStop([0.001, 0.0002])).toBe(true);
+    });
+    expect(directions.mock.calls[0][0]).toMatchObject({ provider: "routing-a" });
+    expect(useNavigationStore.getState().routeProvider).toBe("routing-a");
+  });
+  it("rejects an old entrance after the selected candidate target refreshes", async () => {
+    const { result, rerender } = renderHook(() => useRouteSearch({ category: "fuel" }));
+    let finish!: (value: DirectionsResult) => void;
+    let requested = false;
+    directions.mockImplementation(() => {
+      if (requested) return Promise.reject(new Error("offline"));
+      requested = true;
+      return new Promise((resolve) => {
+        finish = resolve;
+      });
+    });
+    let pending!: Promise<boolean>;
+    act(() => {
+      pending = result.current.addStop([0.001, 0.0002]);
+    });
+    const signal = (directions.mock.calls.at(-1)?.[2] as { signal: AbortSignal }).signal;
+    categoryPlaces = places.map((p) => (p.id === "a" ? { ...p, coordinates: [0.0019, 0] } : p));
+    rerender();
+    expect(signal.aborted).toBe(true);
+    await act(async () => {
+      finish({
+        waypoints,
+        activeRouteIndex: 0,
+        provider: "routing-fixture",
+        routes: [freshRoute()],
+      });
+      expect(await pending).toBe(false);
+    });
+    expect(useNavigationStore.getState().destinationWaypoints).toEqual(waypoints);
+    expect(useNavigationStore.getState().status).toBe("navigating");
+  });
   beforeEach(() => {
+    directions.mockReset().mockRejectedValue(new Error("offline"));
     useNavigationStore.getState().stopNavigation();
     useNavigationStore.getState().startGroundNavigation(freshRoute(), "driving", waypoints);
     resetRouteMatcherCounters();
     setRouteMatcherCounting(true);
   });
 
+  it("publishes network deltas and keeps provider/options on every comparison", async () => {
+    const route = freshRoute();
+    useNavigationStore
+      .getState()
+      .startGroundNavigation(route, "driving", waypoints, [], "routing-fixture", {
+        routeOptions: {
+          avoidTolls: true,
+          avoidHighways: true,
+          avoidFerries: true,
+          avoidClosures: true,
+        },
+      });
+    directions.mockImplementation(async (value: unknown) => {
+      const { waypoints: points } = value as { waypoints: [number, number][] };
+      return {
+        waypoints,
+        activeRouteIndex: 0,
+        provider: "routing-fixture",
+        routes: [
+          {
+            ...route,
+            duration: points.length === 2 ? 60 : 180,
+            distance: points.length === 2 ? 444 : 1444,
+          },
+        ],
+      };
+    });
+    const { result } = renderHook(() => useRouteSearch({ category: "fuel" }));
+    await waitFor(() => expect(result.current.results[0].detour?.kind).toBe("network"));
+    expect(result.current.results[0].detourSeconds).toBe(120);
+    expect(result.current.results[0].detourMeters).toBe(1000);
+    for (const [params, , options] of directions.mock.calls) {
+      expect(params).toMatchObject({
+        provider: "routing-fixture",
+        avoidTolls: true,
+        avoidHighways: true,
+        avoidFerries: true,
+        avoidClosures: true,
+      });
+      expect((options as { signal: AbortSignal } | undefined)?.signal).toBeInstanceOf(AbortSignal);
+    }
+    const calls = directions.mock.calls.length;
+    for (let i = 1; i <= 5; i++) act(() => publishProgress(i * 10));
+    expect(directions).toHaveBeenCalledTimes(calls);
+  });
+
+  it("invalidates a held network claim immediately after provider changes", async () => {
+    const route = freshRoute();
+    directions.mockResolvedValue({
+      waypoints,
+      activeRouteIndex: 0,
+      provider: "routing-fixture",
+      routes: [route],
+    });
+    const { result } = renderHook(() => useRouteSearch({ category: "fuel" }));
+    await waitFor(() => expect(result.current.results[0].detour?.kind).toBe("network"));
+    directions.mockReturnValue(new Promise(() => {}));
+    act(() => useNavigationStore.setState({ routeProvider: "routing-other" }));
+    expect(result.current.results[0].detour?.kind).not.toBe("network");
+  });
+
+  it("rejects a late added stop after another session starts with the same route", async () => {
+    const { result } = renderHook(() => useRouteSearch(null));
+    const original = useNavigationStore.getState().route!;
+    let finish!: (result: DirectionsResult) => void;
+    directions.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    let pending!: Promise<boolean>;
+    act(() => {
+      pending = result.current.addStop([0.002, 0.0002]);
+    });
+    act(() => {
+      useNavigationStore.getState().stopNavigation();
+      useNavigationStore.getState().startGroundNavigation(original, "driving", waypoints);
+    });
+    await act(async () => {
+      finish({
+        waypoints,
+        activeRouteIndex: 0,
+        provider: "routing-fixture",
+        routes: [freshRoute()],
+      });
+      expect(await pending).toBe(false);
+    });
+    expect(useNavigationStore.getState().destinationWaypoints).toEqual(waypoints);
+    expect(useNavigationStore.getState().route).toBe(original);
+  });
+
+  it("cancels its stop request and restores navigation without committing a late response", async () => {
+    const { result } = renderHook(() => useRouteSearch(null));
+    const original = useNavigationStore.getState().route;
+    let finish!: (value: DirectionsResult) => void;
+    directions.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    let pending!: Promise<boolean>;
+    act(() => {
+      pending = result.current.addStop([0.002, 0.0002]);
+    });
+    const signal = (directions.mock.calls[0][2] as { signal: AbortSignal } | undefined)?.signal;
+    act(() => result.current.cancelAddStop());
+    expect(signal?.aborted).toBe(true);
+    expect(useNavigationStore.getState().status).toBe("navigating");
+    await act(async () => {
+      finish({
+        waypoints,
+        activeRouteIndex: 0,
+        provider: "routing-fixture",
+        routes: [freshRoute()],
+      });
+      expect(await pending).toBe(false);
+    });
+    expect(useNavigationStore.getState().route).toBe(original);
+  });
+
+  it("lets only the latest competing stop selection commit", async () => {
+    const { result } = renderHook(() => useRouteSearch(null));
+    const finishes: ((value: DirectionsResult) => void)[] = [];
+    directions.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finishes.push(resolve);
+        }),
+    );
+    let first!: Promise<boolean>;
+    let second!: Promise<boolean>;
+    act(() => {
+      first = result.current.addStop([0.001, 0.0002]);
+    });
+    act(() => {
+      second = result.current.addStop([0.003, 0.0002]);
+    });
+    expect(directions).toHaveBeenCalledTimes(2);
+    await act(async () => {
+      finishes[1]({
+        waypoints,
+        activeRouteIndex: 0,
+        provider: "routing-fixture",
+        routes: [freshRoute()],
+      });
+      expect(await second).toBe(true);
+    });
+    await act(async () => {
+      finishes[0]({
+        waypoints,
+        activeRouteIndex: 0,
+        provider: "routing-fixture",
+        routes: [freshRoute()],
+      });
+      expect(await first).toBe(false);
+    });
+    expect(useNavigationStore.getState().destinationWaypoints).toEqual([
+      waypoints[0],
+      [0.003, 0.0002],
+      waypoints[1],
+    ]);
+  });
+
+  it("expires held estimates without polling the provider", async () => {
+    vi.useFakeTimers();
+    try {
+      directions.mockResolvedValue({
+        waypoints,
+        activeRouteIndex: 0,
+        provider: "routing-fixture",
+        routes: [freshRoute()],
+      });
+      const { result } = renderHook(() => useRouteSearch({ category: "fuel" }));
+      await act(async () => {});
+      expect(result.current.results[0].detour?.kind).toBe("network");
+      const calls = directions.mock.calls.length;
+      await act(async () => vi.advanceTimersByTimeAsync(60_001));
+      expect(result.current.results[0].detour?.kind).not.toBe("network");
+      expect(directions).toHaveBeenCalledTimes(calls);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not evaluate or add stops in a native-owned session", async () => {
+    useNavigationStore.setState({ navigationAuthority: "native" });
+    const { result } = renderHook(() => useRouteSearch({ category: "fuel" }));
+    expect(await result.current.addStop([0.002, 0.0002])).toBe(false);
+    expect(directions).not.toHaveBeenCalled();
+  });
+
+  it("aborts evaluation on unmount and never issues remaining candidate requests", async () => {
+    let finish!: (value: DirectionsResult) => void;
+    directions.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    const { unmount } = renderHook(() => useRouteSearch({ category: "fuel" }));
+    const signal = (directions.mock.calls[0]?.[2] as { signal: AbortSignal } | undefined)?.signal;
+    unmount();
+    expect(signal?.aborted).toBe(true);
+    await act(async () =>
+      finish({
+        waypoints,
+        activeRouteIndex: 0,
+        provider: "routing-fixture",
+        routes: [freshRoute()],
+      }),
+    );
+    expect(directions).toHaveBeenCalledTimes(1);
+  });
+
   afterEach(() => {
     setRouteMatcherCounting(false);
     resetRouteMatcherCounters();
+    useNavigationStore.setState({ navigationAuthority: "browser" });
     useNavigationStore.getState().stopNavigation();
     filterSearchResult = { data: undefined, isLoading: false, isError: false };
+    categoryPlaces = places;
   });
 
   it("selects the filter search over the category search when a filter is given", () => {

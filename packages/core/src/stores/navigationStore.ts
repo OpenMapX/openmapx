@@ -290,7 +290,7 @@ interface NavigationState {
    * persisting the new waypoint list so later reroutes keep the stop. Clears
    * stale progress like a reroute.
    */
-  addStop: (route: Route, waypoints: LngLat[]) => void;
+  addStop: (route: Route, waypoints: LngLat[], provider?: string) => void;
   startTransitNavigation: (itinerary: TripItinerary, replanOptions?: TransitReplanOptions) => void;
   applyTransitProgress: (p: TransitProgress) => void;
   setTransitRerouteNeeded: (v: boolean) => void;
@@ -553,7 +553,7 @@ export const useNavigationStore = create<NavigationState>((set, get) => ({
         fasterRouteSuppressed: false,
       };
     }),
-  addStop: (route, waypoints) => {
+  addStop: (route, waypoints, provider) => {
     clearRoadConditionLeaseTimer();
     set({
       status: "navigating",
@@ -561,6 +561,7 @@ export const useNavigationStore = create<NavigationState>((set, get) => ({
       routes: [route],
       activeRouteIndex: 0,
       destinationWaypoints: waypoints,
+      routeProvider: provider ?? get().routeProvider,
       ...ROUTE_IDENTITY_RESET,
       routeSelectionIntent: "userSelected",
       fasterRouteSuppressed: false,

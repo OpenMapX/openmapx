@@ -42,6 +42,7 @@ export interface ParsedDirectionsRequest {
   travelMode: TravelMode;
   avoidClosures: boolean;
   requireTimeAware: boolean;
+  provider?: string;
   routingOptions: ParsedRoutingOptions;
 }
 
@@ -109,6 +110,9 @@ export function parseDirectionsRequest(
     if (departAt && arriveBy) {
       throw new Error("departAt and arriveBy are mutually exclusive");
     }
+    if (query.provider !== undefined && !/^[a-z0-9][a-z0-9-]{0,127}$/.test(query.provider)) {
+      throw new Error("provider must be a routing integration ID");
+    }
 
     return {
       operation: policy.operation,
@@ -116,6 +120,7 @@ export function parseDirectionsRequest(
       travelMode,
       avoidClosures: query.avoidClosures === "true" || query.avoidClosures === "1",
       requireTimeAware: Boolean(departAt || arriveBy),
+      ...(query.provider && { provider: query.provider }),
       routingOptions: {
         avoidHighways: query.avoidHighways === "true",
         avoidTolls: query.avoidTolls === "true",
@@ -151,6 +156,7 @@ export function createDirectionsCacheIdentity(
     exclusionsHash,
     lang: routingOptions.lang ?? "en",
     mode: request.travelMode,
+    ...(request.provider && { provider: request.provider }),
     ...(request.operation === "optimize" ? { optimize: true } : {}),
     units: routingOptions.units,
     waypoints: roundWaypoints(request.waypoints),
