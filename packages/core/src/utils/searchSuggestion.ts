@@ -323,10 +323,22 @@ function nameWithoutItsTown(item: AutocompleteResult): string | undefined {
 /**
  * Whether the query is the row's whole name followed by words of its address:
  * "10115 berlin" for the postcode 10115 in Berlin, "paris france".
+ * Only complete address words corroborate exact location intent. Prefixes
+ * remain autocomplete evidence, scored separately below, rather than turning
+ * "Alexa" in a street called "Alexander" into an explicit remote destination.
  */
-function isNameWithItsPlace(key: string, label: string, context: string): boolean {
-  if (!key.startsWith(`${label} `)) return false;
-  return everyTokenStartsAWord(words(key.slice(label.length + 1)), words(context));
+function isNameWithItsPlace(key: string, label: string, address: string): boolean {
+  if (!label || !key.startsWith(`${label} `)) return false;
+  // Provider sublabels often repeat the primary name before the address; that
+  // repetition supplies no independent evidence of where the place is.
+  const place =
+    address === label
+      ? ""
+      : address.startsWith(`${label} `)
+        ? address.slice(label.length + 1)
+        : address;
+  const placeWords = words(place);
+  return words(key.slice(label.length + 1)).every((token) => placeWords.includes(token));
 }
 
 function exactMatchScore(kind: SearchMatchKind): number {
@@ -401,7 +413,8 @@ export function textMatchScore(item: AutocompleteResult, query: string): number 
   const key = matchKey(query);
   const label = matchKey(item.label);
   const context = matchKey(`${item.label} ${item.sublabel ?? ""}`);
-  if (label === key || isNameWithItsPlace(key, label, context)) return TEXT_SCORE.exact;
+  if (label === key || isNameWithItsPlace(key, label, matchKey(item.sublabel ?? "")))
+    return TEXT_SCORE.exact;
   // A category's name in the singular names it as fully: "museum" for Museums.
   if (item.type === "category" && label === `${key}s`) return TEXT_SCORE.exact;
   if (label.startsWith(key)) return TEXT_SCORE.prefix;
@@ -485,7 +498,7 @@ export function isSameDestination(a: AutocompleteResult, b: AutocompleteResult):
 
 /**
  * Whether the query names where the row is, beyond its name: a house number
- * or postcode that is part of its name ("hauptstraße 5", "10115"), or a word
+ * or postcode that is part of its name ("hauptstraße 5", "10115"), or complete words
  * of its address typed after the name ("10115 berlin", "paris france").
  */
 export function queryNamesLocation(item: AutocompleteResult, query: string): boolean {
@@ -493,7 +506,7 @@ export function queryNamesLocation(item: AutocompleteResult, query: string): boo
   const label = matchKey(item.label);
   const labelWords = words(label);
   if (words(key).some((token) => /\d/u.test(token) && labelWords.includes(token))) return true;
-  return isNameWithItsPlace(key, label, matchKey(`${item.label} ${item.sublabel ?? ""}`));
+  return isNameWithItsPlace(key, label, matchKey(item.sublabel ?? ""));
 }
 
 /**
