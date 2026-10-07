@@ -57,7 +57,7 @@ export async function readAmbientPlaceByGers(
     await tx.unsafe(`SET LOCAL statement_timeout='2000ms'`);
     const [row] = await tx.unsafe<(Record<string, unknown> & { lng: number; lat: number })[]>(
       `SELECT id,gers_id,name,name_de,name_en,category,rank,min_zoom,tenant,sources,
-        ST_X(ST_Transform(geom,4326)) AS lng,ST_Y(ST_Transform(geom,4326)) AS lat
+        ST_X(ST_Transform(ST_GeomFromEWKB(geom),4326)) AS lng,ST_Y(ST_Transform(ST_GeomFromEWKB(geom),4326)) AS lat
         FROM ambient_places.features WHERE generation=$1 AND gers_id=$2 ORDER BY id COLLATE "C" LIMIT 1`,
       [manifest.generation, gers],
     );
@@ -87,9 +87,9 @@ export async function readAmbientTile(
     const [result] = await tx.unsafe<{ tile: Buffer }[]>(
       `
       WITH candidates AS MATERIALIZED (
-        SELECT id,gers_id,name,name_de,name_en,category,rank,min_zoom,tenant,sources,geom
+        SELECT id,gers_id,name,name_de,name_en,category,rank,min_zoom,tenant,sources,ST_GeomFromEWKB(geom) AS geom
         FROM ambient_places.features
-        WHERE generation=$1 AND min_zoom<=$2 AND geom && ST_TileEnvelope($2,$3,$4,margin=>64.0/4096)
+        WHERE generation=$1 AND min_zoom<=$2 AND ST_GeomFromEWKB(geom) && ST_TileEnvelope($2,$3,$4,margin=>64.0/4096)
         ORDER BY rank DESC,id COLLATE "C" LIMIT ${AMBIENT_LIMITS.tileFeatures}
       ), budgeted AS (
         SELECT *, sum(octet_length(id)+coalesce(octet_length(gers_id),0)+octet_length(name)

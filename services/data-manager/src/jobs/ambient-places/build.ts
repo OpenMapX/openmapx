@@ -221,7 +221,7 @@ export async function buildAmbientPlaces(
         }));
         await tx.unsafe(
           `INSERT INTO ambient_places.features(generation,id,gers_id,name,name_de,name_en,category,rank,min_zoom,tenant,sources,geom)
-        SELECT $1::UUID,r.id,r.gers_id,r.name,r.name_de,r.name_en,r.category,r.rank,r.min_zoom,r.tenant,r.sources,ST_Transform(ST_SetSRID(ST_MakePoint(r.lng,r.lat),4326),3857)
+        SELECT $1::UUID,r.id,r.gers_id,r.name,r.name_de,r.name_en,r.category,r.rank,r.min_zoom,r.tenant,r.sources,ST_AsEWKB(ST_Transform(ST_SetSRID(ST_MakePoint(r.lng,r.lat),4326),3857))
         FROM jsonb_to_recordset($2::TEXT::JSONB) AS r(id TEXT,gers_id TEXT,name TEXT,name_de TEXT,name_en TEXT,category TEXT,rank INT,min_zoom SMALLINT,tenant BOOLEAN,sources TEXT,lng DOUBLE PRECISION,lat DOUBLE PRECISION)`,
           [manifest.generation, JSON.stringify(rows)],
         );

@@ -17,10 +17,11 @@ CREATE TABLE IF NOT EXISTS ambient_places.features (
   generation UUID NOT NULL REFERENCES ambient_places.generations(id) ON DELETE CASCADE,
   id TEXT NOT NULL, gers_id TEXT, name TEXT NOT NULL, name_de TEXT, name_en TEXT,
   category TEXT NOT NULL, rank INTEGER NOT NULL, min_zoom SMALLINT NOT NULL,
-  tenant BOOLEAN NOT NULL, sources TEXT NOT NULL, geom geometry(POINT,3857) NOT NULL,
+  tenant BOOLEAN NOT NULL, sources TEXT NOT NULL, geom BYTEA NOT NULL,
   PRIMARY KEY(generation,id)
 );
-CREATE INDEX IF NOT EXISTS ambient_features_geom ON ambient_places.features USING GIST(geom);
+-- EWKB keeps this internal store out of Martin's automatic geometry-table discovery.
+CREATE INDEX IF NOT EXISTS ambient_features_geom ON ambient_places.features USING GIST(ST_GeomFromEWKB(geom));
 CREATE INDEX IF NOT EXISTS ambient_features_gers ON ambient_places.features(generation,gers_id) WHERE gers_id IS NOT NULL;
 CREATE TABLE IF NOT EXISTS ambient_places.state (
   singleton SMALLINT PRIMARY KEY CHECK(singleton=1),

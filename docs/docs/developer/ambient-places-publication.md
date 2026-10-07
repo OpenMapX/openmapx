@@ -60,6 +60,13 @@ swap commit together. Any failure rolls them all back. Concurrent writers fail
 without exposing a partial generation. There is no dependency on a background
 planet import or a live source-table query at map-render time.
 
+Projected points are stored as EWKB bytes with a functional GiST index on
+`ST_GeomFromEWKB(geom)`. This keeps the internal generation store out of Martin's
+automatic spatial-table discovery: an unversioned table endpoint would otherwise
+bypass the API's generation and read budgets. Tile queries decode the indexed
+geometry before MVT encoding. Existing Martin sources and configuration are
+unchanged.
+
 Generation URLs never change their bytes when sources refresh. At most eight
 snapshots are retained. Unreferenced generations can be removed only after their
 cache lease expires. The lease renews when leaving active discovery or rolling
@@ -141,7 +148,8 @@ identical decoded MVT bytes. The same bounded query was served through the
 repository-pinned Martin image and an archive converted/verified with the official
 PMTiles CLI 1.31.2. The archive was 16,451 bytes; exporting its 60 source tiles took
 556 ms. For one 215-byte zoom-18 tile, first-request and 20 repeated-request
-measurements were:
+measurements were (using the prototype native-geometry storage before the final
+EWKB discovery safeguard):
 
 | Serving path   | First request | Warm median | Warm p95 |
 | -------------- | ------------: | ----------: | -------: |
@@ -149,12 +157,20 @@ measurements were:
 | Martin/PostGIS |      19.27 ms |     3.31 ms |  4.27 ms |
 | Martin/PMTiles |       5.55 ms |     1.42 ms |  2.87 ms |
 
+The final store uses the same projected points and MVT query with EWKB decoding
+and its functional spatial index; the table above does not measure that final
+storage representation. Its bounds, decoded tiles and details lookup are checked
+by the real PostGIS regression suite.
+
 These are local fixture observations under concurrent development load, not
 production capacity estimates. They do not measure a full regional archive,
 remote range requests, CDN misses, a restarted cold database, or mobile FPS. The
 20 Martin repeats benefit from its response cache. A separate 1,000-place dense
-PostGIS fixture emitted 256 features / 14,805 bytes, with p95 SQL/repository reads
-of 6.75 ms over 20 repeats. The single-place fixture published in 144 ms and
+PostGIS fixture emitted 256 features / 14,805 bytes, with prototype p95
+SQL/repository reads of 6.75 ms over 20 repeats. The same regression fixture with
+final EWKB storage on 2026-10-08 measured 3.57 ms p95 and identical feature/byte
+counts; differing local load prevents treating this as a speed comparison.
+The prototype single-place fixture published in 144 ms and
 produced a 214-byte tile. Long multilingual UTF-8 labels verified the byte budget
 by reducing the feature count below 256. Reproduce behavior with:
 

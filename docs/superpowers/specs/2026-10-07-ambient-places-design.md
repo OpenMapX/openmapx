@@ -17,6 +17,8 @@ merge or deploy. Keep screenshot files outside the repository.
 ## Storage and publication
 
 Publish an immutable generation in dedicated `ambient_places` PostGIS tables.
+Store projected points as EWKB bytes with a functional spatial index so Martin's
+automatic table discovery cannot expose an unversioned, unbounded alternate source.
 A repeatable-read transaction reads the existing OSM index, Overture records
 and accepted OSM/GERS links together. It builds a separate candidate, validates
 it, then atomically changes the singleton active pointer and previous pointer.
@@ -30,7 +32,9 @@ spatially indexed, limited to 100,001 rows each; more than 100,000 from either
 source rejects publication. Candidate output is limited to 100,000 places,
 written in batches of 500. No empty generation may replace a working layer.
 Keep at most eight committed generations. Prune only unreferenced generations
-older than seven days; if retention prevents freeing space, refuse the build.
+after their seven-day plus one-minute retirement lease expires; renew the lease
+when leaving active discovery or rolling back, independently of publication age.
+If retention prevents freeing space, refuse the build.
 Transactions have a 120-second statement timeout. Operator rebuilds run as
 one asynchronous in-process job, with database locking as the cross-process
 authority. A restart cannot leave a permanent job lock.

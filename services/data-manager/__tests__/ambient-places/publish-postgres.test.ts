@@ -48,6 +48,10 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         const start = performance.now();
         const a = await buildAmbientPlaces(pg.sql, region);
         const initialBuildMs = performance.now() - start;
+        const [discovery] = await pg.sql.unsafe<{ exposed: boolean }[]>(
+          `SELECT EXISTS(SELECT 1 FROM geometry_columns WHERE f_table_schema='ambient_places' AND f_table_name='features') AS exposed`,
+        );
+        expect(discovery.exposed).toBe(false);
         expect(a).toMatchObject({
           placeCount: 1,
           sources: { osm: { epoch: "osm-one", count: 1 }, overture: null },
