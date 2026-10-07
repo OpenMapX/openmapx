@@ -24,7 +24,14 @@ export function RouteTrafficStatus({
   const deadline = status?.deadline;
   useEffect(() => {
     if (deadline == null) return;
-    const timer = setTimeout(() => setRevision((v) => v + 1), Math.max(0, deadline - Date.now()));
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const expire = () => {
+      const remaining = deadline - Date.now();
+      // A wall-clock correction can make a monotonic timeout fire early.
+      if (remaining > 0) timer = setTimeout(expire, remaining);
+      else setRevision((v) => v + 1);
+    };
+    expire();
     return () => clearTimeout(timer);
   }, [deadline]);
   if (!status) return null;

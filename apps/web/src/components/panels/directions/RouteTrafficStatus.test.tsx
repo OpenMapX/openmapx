@@ -77,3 +77,19 @@ it("removes a prior successful claim on failed assessment", () => {
     "Road-condition check unavailable",
   );
 });
+
+it("rearms expiry when a clock correction makes the first callback early", () => {
+  render(view());
+  vi.setSystemTime(now - 1000);
+  act(() => {
+    vi.advanceTimersByTime(30000);
+  });
+  expect(screen.getByTestId("route-traffic-status")).toHaveTextContent("application verified");
+  act(() => {
+    vi.advanceTimersByTime(1000);
+  });
+  expect(screen.getByTestId("route-traffic-status")).toHaveTextContent(
+    "Road-condition evidence expired",
+  );
+  expect(screen.getByTestId("route-traffic-status")).not.toHaveTextContent("application verified");
+});
