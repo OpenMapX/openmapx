@@ -1,5 +1,23 @@
 import type postgres from "postgres";
-import { AMBIENT_LIMITS, AMBIENT_MAX_AGE_MS, type AmbientManifest } from "../ambient-places";
+import {
+  AMBIENT_LIMITS,
+  AMBIENT_MAX_AGE_MS,
+  type AmbientManifest,
+  type AmbientPlace,
+  ambientPlaceFromTile,
+} from "../ambient-places";
+
+function freshPublication(manifest: AmbientManifest): boolean {
+  const dates = [
+    manifest.publishedAt,
+    manifest.sources.osm.publishedAt,
+    ...(manifest.sources.overture ? [manifest.sources.overture.publishedAt] : []),
+  ];
+  return dates.every(
+    (date) =>
+      Number.isFinite(Date.parse(date)) && Date.now() - Date.parse(date) <= AMBIENT_MAX_AGE_MS,
+  );
+}
 
 export function validAmbientTile(generation: string, z: number, x: number, y: number): boolean {
   return (
@@ -22,16 +40,30 @@ export async function readAmbientManifest(sql: postgres.Sql): Promise<AmbientMan
     `SELECT g.manifest,s.enabled FROM ambient_places.state s JOIN ambient_places.generations g ON g.id=s.active WHERE s.singleton=1`,
   );
   if (!row) return null;
-  const dates = [
-    row.manifest.publishedAt,
-    row.manifest.sources.osm.publishedAt,
-    ...(row.manifest.sources.overture ? [row.manifest.sources.overture.publishedAt] : []),
-  ];
-  const fresh = dates.every(
-    (date) =>
-      Number.isFinite(Date.parse(date)) && Date.now() - Date.parse(date) <= AMBIENT_MAX_AGE_MS,
-  );
-  return { ...row.manifest, enabled: row.enabled && fresh };
+  return { ...row.manifest, enabled: row.enabled && freshPublication(row.manifest) };
+}
+
+/** Resolve only a published GERS alias, including an accepted canonical OSM ID.
+ * Discovery disable does not revoke already published tiles or their identities.
+ */
+export async function readAmbientPlaceByGers(
+  sql: postgres.Sql,
+  gers: string,
+): Promise<{ generation: string; place: AmbientPlace } | null> {
+  if (!gers || gers.length > 128) return null;
+  const manifest = await readAmbientManifest(sql);
+  if (!manifest || !freshPublication(manifest)) return null;
+  return sql.begin(async (tx) => {
+    await tx.unsafe(`SET LOCAL statement_timeout='2000ms'`);
+    const [row] = await tx.unsafe<(Record<string, unknown> & { lng: number; lat: number })[]>(
+      `SELECT id,gers_id,name,name_de,name_en,category,rank,min_zoom,tenant,sources,
+        ST_X(ST_Transform(geom,4326)) AS lng,ST_Y(ST_Transform(geom,4326)) AS lat
+        FROM ambient_places.features WHERE generation=$1 AND gers_id=$2 ORDER BY id COLLATE "C" LIMIT 1`,
+      [manifest.generation, gers],
+    );
+    const place = row ? ambientPlaceFromTile(row, [row.lng, row.lat]) : null;
+    return place ? { generation: manifest.generation, place } : null;
+  });
 }
 export async function readAmbientTile(
   sql: postgres.Sql,

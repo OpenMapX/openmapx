@@ -1,6 +1,10 @@
 import { VectorTile } from "@mapbox/vector-tile";
 import { AMBIENT_LIMITS } from "@openmapx/core/ambient-places";
-import { readAmbientManifest, readAmbientTile } from "@openmapx/core/ambient-places-server";
+import {
+  readAmbientManifest,
+  readAmbientPlaceByGers,
+  readAmbientTile,
+} from "@openmapx/core/ambient-places-server";
 import { PbfReader } from "pbf";
 import { describe, expect, it } from "vitest";
 import {
@@ -69,11 +73,21 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         const current = await readAmbientTile(pg.sql, b.generation, tile.z, tile.x, tile.y);
         expect(current!.toString("utf8")).toContain("gers-a");
         expect(current!.toString("utf8")).not.toContain("overture:gers-a");
+        expect(await readAmbientPlaceByGers(pg.sql, "gers-a")).toMatchObject({
+          generation: b.generation,
+          place: { id: "osm:node/9007199254740993", gersId: "gers-a", name: "Klinik" },
+        });
+        expect(await readAmbientPlaceByGers(pg.sql, "gers-b")).toMatchObject({
+          place: { id: "overture:gers-b", name: "Cafe" },
+        });
+        expect(await readAmbientPlaceByGers(pg.sql, "not-published")).toBeNull();
+
         await rollbackAmbientPlaces(pg.sql);
         expect((await readAmbientManifest(pg.sql))!.generation).toBe(a.generation);
         await rollbackAmbientPlaces(pg.sql);
         await setAmbientEnabled(pg.sql, false);
         expect((await readAmbientManifest(pg.sql))!.enabled).toBe(false);
+        expect((await readAmbientPlaceByGers(pg.sql, "gers-b"))?.place.id).toBe("overture:gers-b");
         await setAmbientEnabled(pg.sql, true);
         await pg.sql.unsafe(
           `CREATE FUNCTION ambient_places.reject_fixture() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'fixture insertion failure'; END $$; CREATE TRIGGER reject_fixture BEFORE INSERT ON ambient_places.features FOR EACH ROW EXECUTE FUNCTION ambient_places.reject_fixture()`,

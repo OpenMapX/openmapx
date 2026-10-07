@@ -21,6 +21,7 @@ CREATE TABLE IF NOT EXISTS ambient_places.features (
   PRIMARY KEY(generation,id)
 );
 CREATE INDEX IF NOT EXISTS ambient_features_geom ON ambient_places.features USING GIST(geom);
+CREATE INDEX IF NOT EXISTS ambient_features_gers ON ambient_places.features(generation,gers_id) WHERE gers_id IS NOT NULL;
 CREATE TABLE IF NOT EXISTS ambient_places.state (
   singleton SMALLINT PRIMARY KEY CHECK(singleton=1),
   active UUID REFERENCES ambient_places.generations(id), previous UUID REFERENCES ambient_places.generations(id),

@@ -28,7 +28,9 @@ imports planet data, calls AllThePlaces directly, or changes geocoding.
    asynchronous (`202`) after acquiring the publication writer lock; acceptance is
    not proof that publication succeeded. Competing requests receive `409`. Status
    writes share the writer lock and attempt identity, so a rejected request cannot
-   overwrite or abort the admitted publication.
+   overwrite or abort the admitted publication. While `building` is true,
+   external status readers can still see the prior completed attempt's dates or
+   error until the candidate transaction commits.
 5. Use **Disable** for discovery fallback, **Enable** to resume, or **Roll back**
    to switch to the predecessor. Rollback can be repeated to switch back.
 
@@ -88,6 +90,13 @@ by proximity. Ambiguous
 branches and non-ground tenants are not matched by proximity. Mappings belong to
 the map instance and are cleared on style replacement and overlay teardown. The
 existing place-card conversion/resolver handles both tile and basemap clicks.
+When the optional Overture search provider has no registered resolver, the place
+API resolves a matching GERS alias from the fresh published ambient snapshot,
+retaining canonical OSM/GERS identity and supplied names. Its existing detail
+cache key includes that generation. Discovery disable does not revoke snapshot
+identities already exposed in cached tiles. The richer live Overture metadata
+continues to use the enabled provider; unpublished disabled-provider deep links
+retain their existing coordinate fallback.
 
 ## Policy and read budgets
 
