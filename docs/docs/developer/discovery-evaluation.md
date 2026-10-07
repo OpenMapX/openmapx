@@ -10,6 +10,12 @@ connects existing semantic search fixtures, conflation guards, Overture gates,
 place-card and selected-sheet contracts and navigation replays. It does not turn synthetic tests
 into evidence of current regional coverage or installed-device readiness.
 
+For business-name/address retrieval, see the
+[Berlin EDEKA investigation](business-name-address-retrieval.md). It compares
+independent raw, adapted, combined, ranked and live UI evidence and uses stable
+source identities. The pilot's label/radius score alone cannot verify a nearby
+same-brand tenant or resolve a conflicting returned address.
+
 ## Run and compare
 
 From the repository root:

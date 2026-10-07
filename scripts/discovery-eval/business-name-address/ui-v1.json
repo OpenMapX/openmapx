@@ -1,0 +1,849 @@
+{
+  "version": 1,
+  "deployment": null,
+  "deploymentUnknownReason": "Public UI exposes no deployment SHA",
+  "cache": "uncontrolled",
+  "viewport": [1280, 800],
+  "dpr": 1,
+  "theme": "dark",
+  "center": [13.416, 52.5194],
+  "zoom": 15,
+  "pitch": 0,
+  "bearing": 0,
+  "caseResults": [
+    {
+      "capturedAt": "2026-10-07T20:41:38.831Z",
+      "caseId": "moch-name",
+      "query": "EDEKA Moch",
+      "requests": [
+        {
+          "completed": true,
+          "lat": "52.52",
+          "lng": "13.42",
+          "path": "/api/integrations/geocoding/autocomplete",
+          "q": "EDEKA Moch",
+          "status": 200,
+          "zoom": "15",
+          "ids": [
+            "maptiler:poi.30456941",
+            "maptiler:poi.27997147",
+            "maptiler:poi.32434263",
+            "maptiler:poi.31643808",
+            "maptiler:poi.14639240",
+            "maptiler:poi.14883072"
+          ],
+          "partial": null
+        },
+        {
+          "completed": true,
+          "lat": "52.52",
+          "lng": "13.42",
+          "path": "/api/integrations/search-suggestions/search",
+          "q": "EDEKA Moch",
+          "status": 200,
+          "zoom": null,
+          "ids": [],
+          "partial": true
+        }
+      ],
+      "rows": [
+        {
+          "id": "search-bar-option-0",
+          "text": "EDEKA Koch-SportparkPlace · Karl-Brandt-Weg 11, 44629 Herne, Germany · 438 km from map center"
+        },
+        {
+          "id": "search-bar-option-1",
+          "text": "Edeka MöckPlace · August-Lämmle-Straße 17, 72766 Reutlingen, Germany · 537 km from map center"
+        },
+        {
+          "id": "search-bar-option-2",
+          "text": "Edeka MöckPlace · Friedrich-Naumann-Straße 36, 72762 Reutlingen, Germany · 539 km from map center"
+        },
+        {
+          "id": "search-bar-option-3",
+          "text": "Edeka MöckPlace · 72810 Gomaringen, Germany · 545 km from map center"
+        },
+        {
+          "id": "search-bar-option-4",
+          "text": "Edeka MöckPlace · Robert-Bosch-Straße 19, 72810 Gomaringen, Germany · 546 km from map center"
+        },
+        {
+          "id": "search-bar-option-5",
+          "text": "Edeka KochPlace · Im Grund 1, 72469 Meßstetten, Germany · 577 km from map center"
+        },
+        {
+          "id": "search-bar-option-6",
+          "text": "Search \"EDEKA Moch\" in this area"
+        }
+      ],
+      "url": "https://openmapx.com/?map=52.5194%2C13.416%2C15%2C0%2C0"
+    },
+    {
+      "capturedAt": "2026-10-07T20:41:39.786Z",
+      "caseId": "moch-address",
+      "query": "EDEKA Moch Grunerstraße 20",
+      "requests": [
+        {
+          "completed": true,
+          "lat": "52.52",
+          "lng": "13.42",
+          "path": "/api/integrations/geocoding/autocomplete",
+          "q": "EDEKA Moch Grunerstraße 20",
+          "status": 200,
+          "zoom": "15",
+          "ids": [
+            "maptiler:address.12686057",
+            "maptiler:address.10027702",
+            "maptiler:address.10343043",
+            "maptiler:address.9410688",
+            "maptiler:address.5097698",
+            "maptiler:place.4929509"
+          ],
+          "partial": null
+        },
+        {
+          "completed": true,
+          "lat": "52.52",
+          "lng": "13.42",
+          "path": "/api/integrations/search-suggestions/search",
+          "q": "EDEKA Moch Grunerstraße 20",
+          "status": 200,
+          "zoom": null,
+          "ids": [],
+          "partial": true
+        }
+      ],
+      "rows": [
+        {
+          "id": "search-bar-option-0",
+          "text": "GrunerstraßeAddress · Grunerstraße 20, 10179 Berlin, Germany · 122 m from map center"
+        },
+        {
+          "id": "search-bar-option-1",
+          "text": "Colonia 20 de NoviembreArea · Huaniqueo, Mexico · 9828 km from map center"
+        },
+        {
+          "id": "search-bar-option-2",
+          "text": "GroenerstraßeAddress · Groenerstraße 20, 13585 Berlin, Germany · 15 km from map center"
+        },
+        {
+          "id": "search-bar-option-3",
+          "text": "GründerstraßeAddress · Gründerstraße 20, 12526 Berlin, Germany · 16 km from map center"
+        },
+        {
+          "id": "search-bar-option-4",
+          "text": "GrünerstraßeAddress · Grünerstraße 20, 95615 Marktredwitz, Germany · 294 km from map center"
+        },
+        {
+          "id": "search-bar-option-5",
+          "text": "GrunerstraßeAddress · Grunerstraße 20, 65510 Idstein, Germany · 440 km from map center"
+        },
+        {
+          "id": "search-bar-option-6",
+          "text": "Search \"EDEKA Moch Grunerstraße 20\" in this area"
+        }
+      ],
+      "url": "https://openmapx.com/?map=52.5194%2C13.416%2C15%2C0%2C0"
+    },
+    {
+      "capturedAt": "2026-10-07T20:41:40.797Z",
+      "caseId": "edeka-address",
+      "query": "EDEKA Grunerstraße 20 Berlin",
+      "requests": [
+        {
+          "completed": true,
+          "lat": "52.52",
+          "lng": "13.42",
+          "path": "/api/integrations/geocoding/autocomplete",
+          "q": "EDEKA Grunerstraße 20 Berlin",
+          "status": 200,
+          "zoom": "15",
+          "ids": [
+            "maptiler:poi.39267497",
+            "maptiler:poi.15407240",
+            "maptiler:poi.15448214",
+            "maptiler:poi.30149398",
+            "maptiler:address.12686057",
+            "maptiler:address.10027702"
+          ],
+          "partial": null
+        },
+        {
+          "completed": true,
+          "lat": "52.52",
+          "lng": "13.42",
+          "path": "/api/integrations/search-suggestions/search",
+          "q": "EDEKA Grunerstraße 20 Berlin",
+          "status": 200,
+          "zoom": null,
+          "ids": [],
+          "partial": true
+        }
+      ],
+      "rows": [
+        {
+          "id": "search-bar-option-0",
+          "text": "EDEKAPlace · Alexanderstraße 25, 10178 Berlin, Germany · 108 m from map center"
+        },
+        {
+          "id": "search-bar-option-1",
+          "text": "GrunerstraßeAddress · Grunerstraße 20, 10179 Berlin, Germany · 122 m from map center"
+        },
+        {
+          "id": "search-bar-option-2",
+          "text": "EDEKAPlace · Markt 11, 13597 Berlin, Germany · 14 km from map center"
+        },
+        {
+          "id": "search-bar-option-3",
+          "text": "EDEKAPlace · Buntzelstraße 14, 12526 Berlin, Germany · 16 km from map center"
+        },
+        {
+          "id": "search-bar-option-4",
+          "text": "GroenerstraßeAddress · Groenerstraße 20, 13585 Berlin, Germany · 15 km from map center"
+        },
+        {
+          "id": "search-bar-option-5",
+          "text": "EDEKAPlace · Falkenseer Chaussee 266a, 13583 Berlin, Germany · 16 km from map center"
+        },
+        {
+          "id": "search-bar-option-6",
+          "text": "Search \"EDEKA Grunerstraße 20 Berlin\" in this area"
+        }
+      ],
+      "url": "https://openmapx.com/?map=52.5194%2C13.416%2C15%2C0%2C0"
+    },
+    {
+      "capturedAt": "2026-10-07T20:41:42.335Z",
+      "caseId": "edeka-alexa",
+      "query": "EDEKA Alexa",
+      "requests": [
+        {
+          "completed": true,
+          "lat": "52.52",
+          "lng": "13.42",
+          "path": "/api/integrations/geocoding/autocomplete",
+          "q": "EDEKA Alexa",
+          "status": 200,
+          "zoom": "15",
+          "ids": [
+            "maptiler:poi.39267497",
+            "maptiler:poi.15445342",
+            "maptiler:poi.15632141",
+            "maptiler:poi.15895501",
+            "maptiler:poi.32007491",
+            "maptiler:poi.15469482"
+          ],
+          "partial": null
+        },
+        {
+          "completed": true,
+          "lat": "52.52",
+          "lng": "13.42",
+          "path": "/api/integrations/search-suggestions/search",
+          "q": "EDEKA Alexa",
+          "status": 200,
+          "zoom": null,
+          "ids": [],
+          "partial": true
+        }
+      ],
+      "rows": [
+        {
+          "id": "search-bar-option-0",
+          "text": "EDEKAPlace · Alexanderstraße 25, 10178 Berlin, Germany · 108 m from map center"
+        },
+        {
+          "id": "search-bar-option-1",
+          "text": "EDEKAPlace · Straßburger Straße 9A-C, 10405 Berlin, Germany · 1.1 km from map center"
+        },
+        {
+          "id": "search-bar-option-2",
+          "text": "EDEKAPlace · Annenstraße 4a, 10179 Berlin, Germany · 1.3 km from map center"
+        },
+        {
+          "id": "search-bar-option-3",
+          "text": "Search \"EDEKA Alexa\" in this area"
+        }
+      ],
+      "url": "https://openmapx.com/?map=52.5194%2C13.416%2C15%2C0%2C0"
+    },
+    {
+      "capturedAt": "2026-10-07T20:41:43.365Z",
+      "caseId": "edeka-gruner",
+      "query": "EDEKA Grunerstraße",
+      "requests": [
+        {
+          "completed": true,
+          "lat": "52.52",
+          "lng": "13.42",
+          "path": "/api/integrations/geocoding/autocomplete",
+          "q": "EDEKA Grunerstraße",
+          "status": 200,
+          "zoom": "15",
+          "ids": [
+            "maptiler:poi.39267497",
+            "maptiler:poi.15448214",
+            "maptiler:poi.15864452",
+            "maptiler:poi.15445342",
+            "maptiler:poi.15632141",
+            "maptiler:poi.15895501"
+          ],
+          "partial": null
+        },
+        {
+          "completed": true,
+          "lat": "52.52",
+          "lng": "13.42",
+          "path": "/api/integrations/search-suggestions/search",
+          "q": "EDEKA Grunerstraße",
+          "status": 200,
+          "zoom": null,
+          "ids": [],
+          "partial": true
+        }
+      ],
+      "rows": [
+        {
+          "id": "search-bar-option-0",
+          "text": "EDEKAPlace · Alexanderstraße 25, 10178 Berlin, Germany · 108 m from map center"
+        },
+        {
+          "id": "search-bar-option-1",
+          "text": "EDEKAPlace · Straßburger Straße 9A-C, 10405 Berlin, Germany · 1.1 km from map center"
+        },
+        {
+          "id": "search-bar-option-2",
+          "text": "EDEKAPlace · Annenstraße 4a, 10179 Berlin, Germany · 1.3 km from map center"
+        },
+        {
+          "id": "search-bar-option-3",
+          "text": "EDEKAPlace · Buntzelstraße 14, 12526 Berlin, Germany · 16 km from map center"
+        },
+        {
+          "id": "search-bar-option-4",
+          "text": "Search \"EDEKA Grunerstraße\" in this area"
+        }
+      ],
+      "url": "https://openmapx.com/?map=52.5194%2C13.416%2C15%2C0%2C0"
+    },
+    {
+      "capturedAt": "2026-10-07T20:41:44.434Z",
+      "caseId": "edeka-alexander",
+      "query": "EDEKA Alexanderstraße 25 Berlin",
+      "requests": [
+        {
+          "completed": true,
+          "lat": "52.52",
+          "lng": "13.42",
+          "path": "/api/integrations/geocoding/autocomplete",
+          "q": "EDEKA Alexanderstraße 25 Berlin",
+          "status": 200,
+          "zoom": "15",
+          "ids": [
+            "maptiler:poi.39267497",
+            "maptiler:poi.15445342",
+            "maptiler:poi.15632141",
+            "maptiler:poi.32007491",
+            "maptiler:address.6574798",
+            "maptiler:poi.15258278"
+          ],
+          "partial": null
+        },
+        {
+          "completed": true,
+          "lat": "52.52",
+          "lng": "13.42",
+          "path": "/api/integrations/search-suggestions/search",
+          "q": "EDEKA Alexanderstraße 25 Berlin",
+          "status": 200,
+          "zoom": null,
+          "ids": [],
+          "partial": true
+        }
+      ],
+      "rows": [
+        {
+          "id": "search-bar-option-0",
+          "text": "EDEKAPlace · Alexanderstraße 25, 10178 Berlin, Germany · 108 m from map center"
+        },
+        {
+          "id": "search-bar-option-1",
+          "text": "AlexanderstraßeAddress · Alexanderstraße 25, 10179 Berlin, Germany · 139 m from map center"
+        },
+        {
+          "id": "search-bar-option-2",
+          "text": "EDEKAPlace · Straßburger Straße 9A-C, 10405 Berlin, Germany · 1.1 km from map center"
+        },
+        {
+          "id": "search-bar-option-3",
+          "text": "EdekaPlace · Berliner Straße 96, 13507 Berlin, Germany · 12 km from map center"
+        },
+        {
+          "id": "search-bar-option-4",
+          "text": "Search \"EDEKA Alexanderstraße 25 Berlin\" in this area"
+        }
+      ],
+      "url": "https://openmapx.com/?map=52.5194%2C13.416%2C15%2C0%2C0"
+    },
+    {
+      "capturedAt": "2026-10-07T20:41:45.631Z",
+      "caseId": "edeka-brand",
+      "query": "EDEKA",
+      "requests": [
+        {
+          "completed": true,
+          "lat": "52.52",
+          "lng": "13.42",
+          "path": "/api/integrations/geocoding/autocomplete",
+          "q": "EDEKA",
+          "status": 200,
+          "zoom": "15",
+          "ids": [
+            "maptiler:poi.39267497",
+            "maptiler:poi.15864452",
+            "maptiler:poi.15445342",
+            "maptiler:poi.15632141",
+            "maptiler:poi.15895501",
+            "maptiler:poi.32007491"
+          ],
+          "partial": null
+        },
+        {
+          "completed": true,
+          "lat": "52.52",
+          "lng": "13.42",
+          "path": "/api/integrations/search-suggestions/search",
+          "q": "EDEKA",
+          "status": 200,
+          "zoom": null,
+          "ids": [],
+          "partial": true
+        }
+      ],
+      "rows": [
+        {
+          "id": "search-bar-option-0",
+          "text": "EDEKAPlace · Alexanderstraße 25, 10178 Berlin, Germany · 108 m from map center"
+        },
+        {
+          "id": "search-bar-option-1",
+          "text": "EDEKAPlace · Straßburger Straße 9A-C, 10405 Berlin, Germany · 1.1 km from map center"
+        },
+        {
+          "id": "search-bar-option-2",
+          "text": "EDEKAPlace · Annenstraße 4a, 10179 Berlin, Germany · 1.3 km from map center"
+        },
+        {
+          "id": "search-bar-option-3",
+          "text": "EdekaChain · German supermarket chain"
+        },
+        {
+          "id": "search-bar-option-4",
+          "text": "Nextbikeedeka nextbikeChain · German bicycle-sharing company and franchise"
+        },
+        {
+          "id": "search-bar-option-5",
+          "text": "Search \"EDEKA\" in this area"
+        }
+      ],
+      "url": "https://openmapx.com/?map=52.5194%2C13.416%2C15%2C0%2C0"
+    },
+    {
+      "capturedAt": "2026-10-07T20:41:46.609Z",
+      "caseId": "media-alexa",
+      "query": "MediaMarkt Alexa",
+      "requests": [
+        {
+          "completed": true,
+          "lat": "52.52",
+          "lng": "13.42",
+          "path": "/api/integrations/geocoding/autocomplete",
+          "q": "MediaMarkt Alexa",
+          "status": 200,
+          "zoom": "15",
+          "ids": [
+            "maptiler:poi.15539884",
+            "maptiler:poi.15422100",
+            "maptiler:poi.15388462",
+            "maptiler:poi.15513302",
+            "maptiler:poi.27301831",
+            "maptiler:poi.31290179"
+          ],
+          "partial": null
+        },
+        {
+          "completed": true,
+          "lat": "52.52",
+          "lng": "13.42",
+          "path": "/api/integrations/search-suggestions/search",
+          "q": "MediaMarkt Alexa",
+          "status": 200,
+          "zoom": null,
+          "ids": [],
+          "partial": true
+        }
+      ],
+      "rows": [
+        {
+          "id": "search-bar-option-0",
+          "text": "MediaMarktPlace · Pr Willem Alexander Prom 69-83, 2284 DJ Rijswijk, Netherlands · 621 km from map center"
+        },
+        {
+          "id": "search-bar-option-1",
+          "text": "MediaMarktPlace · Grunerstraße 20, 10179 Berlin, Germany · 97 m from map center"
+        },
+        {
+          "id": "search-bar-option-2",
+          "text": "MediaMarktPlace · Äußere Schneeberger Straße 95, 08056 Zwickau, Germany · 212 km from map center"
+        },
+        {
+          "id": "search-bar-option-3",
+          "text": "MediaMarktPlace · Waldershofer Straße 10, 95615 Marktredwitz, Germany · 295 km from map center"
+        },
+        {
+          "id": "search-bar-option-4",
+          "text": "MediaMarktPlace · Schloßplatz 8, 26122 Oldenburg, Germany · 356 km from map center"
+        },
+        {
+          "id": "search-bar-option-5",
+          "text": "MediaMarktPlace · Posthalterweg 15, 26129 Oldenburg, Germany · 359 km from map center"
+        },
+        {
+          "id": "search-bar-option-6",
+          "text": "Search \"MediaMarkt Alexa\" in this area"
+        }
+      ],
+      "url": "https://openmapx.com/?map=52.5194%2C13.416%2C15%2C0%2C0"
+    },
+    {
+      "capturedAt": "2026-10-07T20:41:47.644Z",
+      "caseId": "media-address",
+      "query": "MediaMarkt Grunerstraße 20 Berlin",
+      "requests": [
+        {
+          "completed": true,
+          "lat": "52.52",
+          "lng": "13.42",
+          "path": "/api/integrations/geocoding/autocomplete",
+          "q": "MediaMarkt Grunerstraße 20 Berlin",
+          "status": 200,
+          "zoom": "15",
+          "ids": [
+            "maptiler:poi.15422100",
+            "maptiler:address.12686057",
+            "maptiler:poi.34392614",
+            "maptiler:poi.30823762",
+            "maptiler:address.10027702",
+            "maptiler:address.10343043"
+          ],
+          "partial": null
+        },
+        {
+          "completed": true,
+          "lat": "52.52",
+          "lng": "13.42",
+          "path": "/api/integrations/search-suggestions/search",
+          "q": "MediaMarkt Grunerstraße 20 Berlin",
+          "status": 200,
+          "zoom": null,
+          "ids": [],
+          "partial": true
+        }
+      ],
+      "rows": [
+        {
+          "id": "search-bar-option-0",
+          "text": "MediaMarktPlace · Grunerstraße 20, 10179 Berlin, Germany · 97 m from map center"
+        },
+        {
+          "id": "search-bar-option-1",
+          "text": "GrunerstraßeAddress · Grunerstraße 20, 10179 Berlin, Germany · 122 m from map center"
+        },
+        {
+          "id": "search-bar-option-2",
+          "text": "GroenerstraßeAddress · Groenerstraße 20, 13585 Berlin, Germany · 15 km from map center"
+        },
+        {
+          "id": "search-bar-option-3",
+          "text": "GründerstraßeAddress · Gründerstraße 20, 12526 Berlin, Germany · 16 km from map center"
+        },
+        {
+          "id": "search-bar-option-4",
+          "text": "MediaMarktPlace · Berliner Straße 15, 89250 Senden, Germany · 523 km from map center"
+        },
+        {
+          "id": "search-bar-option-5",
+          "text": "MediaMarktPlace · Berliner Allee 34a, 22850 Norderstedt, Germany · 263 km from map center"
+        },
+        {
+          "id": "search-bar-option-6",
+          "text": "Search \"MediaMarkt Grunerstraße 20 Berlin\" in this area"
+        }
+      ],
+      "url": "https://openmapx.com/?map=52.5194%2C13.416%2C15%2C0%2C0"
+    },
+    {
+      "capturedAt": "2026-10-07T20:41:48.565Z",
+      "caseId": "rewe-address",
+      "query": "REWE Invalidenstraße 158 Berlin",
+      "requests": [
+        {
+          "completed": true,
+          "lat": "52.52",
+          "lng": "13.42",
+          "path": "/api/integrations/geocoding/autocomplete",
+          "q": "REWE Invalidenstraße 158 Berlin",
+          "status": 200,
+          "zoom": "15",
+          "ids": [
+            "maptiler:poi.15426609",
+            "maptiler:poi.15741076",
+            "maptiler:poi.34014416",
+            "maptiler:poi.15509199",
+            "maptiler:poi.36656201",
+            "maptiler:address.8692633"
+          ],
+          "partial": null
+        }
+      ],
+      "rows": [
+        {
+          "id": "search-bar-option-0",
+          "text": "REWEPlace · Invalidenstraße 158, 10115 Berlin, Germany · 1.9 km from map center"
+        },
+        {
+          "id": "search-bar-option-1",
+          "text": "InvalidenstraßeAddress · Invalidenstraße 158, 10115 Berlin, Germany · 1.9 km from map center"
+        },
+        {
+          "id": "search-bar-option-2",
+          "text": "Rewe To GoPlace · Europaplatz 2, 10557 Berlin, Germany · 3.2 km from map center"
+        },
+        {
+          "id": "search-bar-option-3",
+          "text": "REWEPlace · Heidestraße 41, 10557 Berlin, Germany · 3.7 km from map center"
+        },
+        {
+          "id": "search-bar-option-4",
+          "text": "Search \"REWE Invalidenstraße 158 Berlin\" in this area"
+        }
+      ],
+      "url": "https://openmapx.com/?map=52.5194%2C13.416%2C15%2C0%2C0"
+    },
+    {
+      "capturedAt": "2026-10-07T20:41:50.165Z",
+      "caseId": "wrong-address",
+      "query": "EDEKA Moch Grunerstraße 999 Berlin",
+      "requests": [
+        {
+          "completed": true,
+          "lat": "52.52",
+          "lng": "13.42",
+          "path": "/api/integrations/geocoding/autocomplete",
+          "q": "EDEKA Moch Grunerstraße 999 Berlin",
+          "status": 200,
+          "zoom": "15",
+          "ids": [
+            "maptiler:place.4795446",
+            "maptiler:region.505",
+            "maptiler:locality.2701",
+            "maptiler:place.4534518",
+            "maptiler:neighbourhood.20256",
+            "maptiler:place.2470107"
+          ],
+          "partial": null
+        },
+        {
+          "completed": true,
+          "lat": "52.52",
+          "lng": "13.42",
+          "path": "/api/integrations/search-suggestions/search",
+          "q": "EDEKA Moch Grunerstraße 999 Berlin",
+          "status": 200,
+          "zoom": null,
+          "ids": [],
+          "partial": true
+        }
+      ],
+      "rows": [
+        {
+          "id": "search-bar-option-0",
+          "text": "BerlinArea · Germany · 1.4 km from map center"
+        },
+        {
+          "id": "search-bar-option-1",
+          "text": "NeuköllnArea · Berlin, Germany · 4.5 km from map center"
+        },
+        {
+          "id": "search-bar-option-2",
+          "text": "Stone PiecesArea · Berlin, Germany · 24 km from map center"
+        },
+        {
+          "id": "search-bar-option-3",
+          "text": "Berlin CenterArea · Berlin Township, United States · 6862 km from map center"
+        },
+        {
+          "id": "search-bar-option-4",
+          "text": "Berliner SiedlungArea · Treuenbrietzen, Germany · 58 km from map center"
+        },
+        {
+          "id": "search-bar-option-5",
+          "text": "Berliner VorstadtStreet · Potsdam, Germany · 26 km from map center"
+        },
+        {
+          "id": "search-bar-option-6",
+          "text": "Search \"EDEKA Moch Grunerstraße 999 Berlin\" in this area"
+        }
+      ],
+      "url": "https://openmapx.com/?map=52.5194%2C13.416%2C15%2C0%2C0"
+    },
+    {
+      "capturedAt": "2026-10-07T20:41:51.194Z",
+      "caseId": "invented-name",
+      "query": "Zzqxv430 Testladen Grunerstraße 20 Berlin",
+      "requests": [
+        {
+          "completed": true,
+          "lat": "52.52",
+          "lng": "13.42",
+          "path": "/api/integrations/geocoding/autocomplete",
+          "q": "Zzqxv430 Testladen Grunerstraße 20 Berlin",
+          "status": 200,
+          "zoom": "15",
+          "ids": [
+            "maptiler:address.12686057",
+            "maptiler:address.10027702",
+            "maptiler:address.10343043",
+            "maptiler:poi.2947497",
+            "maptiler:poi.2947574",
+            "maptiler:poi.6230752"
+          ],
+          "partial": null
+        },
+        {
+          "completed": true,
+          "lat": "52.52",
+          "lng": "13.42",
+          "path": "/api/integrations/search-suggestions/search",
+          "q": "Zzqxv430 Testladen Grunerstraße 20 Berlin",
+          "status": 200,
+          "zoom": null,
+          "ids": [],
+          "partial": true
+        }
+      ],
+      "rows": [
+        {
+          "id": "search-bar-option-0",
+          "text": "GrunerstraßeAddress · Grunerstraße 20, 10179 Berlin, Germany · 122 m from map center"
+        },
+        {
+          "id": "search-bar-option-1",
+          "text": "20Place · Elisabeth-Schwarzhaupt-Platz, Berlin, Germany · 2.8 km from map center"
+        },
+        {
+          "id": "search-bar-option-2",
+          "text": "20Place · Siemenssiedlung am Hohenzollernkanal III, Berlin, Germany · 12 km from map center"
+        },
+        {
+          "id": "search-bar-option-3",
+          "text": "GroenerstraßeAddress · Groenerstraße 20, 13585 Berlin, Germany · 15 km from map center"
+        },
+        {
+          "id": "search-bar-option-4",
+          "text": "GründerstraßeAddress · Gründerstraße 20, 12526 Berlin, Germany · 16 km from map center"
+        },
+        {
+          "id": "search-bar-option-5",
+          "text": "Search \"Zzqxv430 Testladen Grunerstraße 20 Berlin\" in this area"
+        }
+      ],
+      "url": "https://openmapx.com/?map=52.5194%2C13.416%2C15%2C0%2C0"
+    },
+    {
+      "capturedAt": "2026-10-07T20:41:52.849Z",
+      "caseId": "schaaf-address",
+      "query": "EDEKA Schaaf Schillingstraße 2 Berlin",
+      "requests": [
+        {
+          "completed": true,
+          "lat": "52.52",
+          "lng": "13.42",
+          "path": "/api/integrations/geocoding/autocomplete",
+          "q": "EDEKA Schaaf Schillingstraße 2 Berlin",
+          "status": 200,
+          "zoom": "15",
+          "ids": [
+            "maptiler:poi.32879876",
+            "maptiler:address.4011014",
+            "maptiler:address.9975161",
+            "maptiler:address.18028993",
+            "maptiler:address.6705156",
+            "maptiler:region.505"
+          ],
+          "partial": null
+        },
+        {
+          "completed": true,
+          "lat": "52.52",
+          "lng": "13.42",
+          "path": "/api/integrations/search-suggestions/search",
+          "q": "EDEKA Schaaf Schillingstraße 2 Berlin",
+          "status": 200,
+          "zoom": null,
+          "ids": [],
+          "partial": true
+        }
+      ],
+      "rows": [
+        {
+          "id": "search-bar-option-0",
+          "text": "BerlinArea · Germany · 1.4 km from map center"
+        },
+        {
+          "id": "search-bar-option-1",
+          "text": "Edeka SchaafPlace · Singerstraße 121, 10179 Berlin, Germany · 382 m from map center"
+        },
+        {
+          "id": "search-bar-option-2",
+          "text": "SchillingstraßeAddress · Schillingstraße 2, 10179 Berlin, Germany · 380 m from map center"
+        },
+        {
+          "id": "search-bar-option-3",
+          "text": "SchillingstrasseAddress · 10179 Berlin, Germany · 371 m from map center"
+        },
+        {
+          "id": "search-bar-option-4",
+          "text": "SchellingstraßeAddress · 10785 Berlin, Germany · 3.3 km from map center"
+        },
+        {
+          "id": "search-bar-option-5",
+          "text": "SchillingstraßeAddress · Schillingstraße 2, 13403 Berlin, Germany · 8.3 km from map center"
+        },
+        {
+          "id": "search-bar-option-6",
+          "text": "Search \"EDEKA Schaaf Schillingstraße 2 Berlin\" in this area"
+        }
+      ],
+      "url": "https://openmapx.com/?map=52.5194%2C13.416%2C15%2C0%2C0"
+    }
+  ],
+  "selections": [
+    {
+      "query": "EDEKA Moch Grunerstraße 20",
+      "action": "Enter",
+      "observed": "area search, 0 results",
+      "capturedAt": "2026-10-07T20:42:24.163Z",
+      "panel": "category",
+      "selectedId": null
+    },
+    {
+      "query": "EDEKA Alexa",
+      "action": "Enter",
+      "observed": "opened EDEKA place sheet with Alexanderstraße address; same-tenant status unresolved",
+      "capturedAt": "2026-10-07T20:43:00.894Z",
+      "panel": "place",
+      "selectedId": "maptiler:poi.39267497"
+    }
+  ]
+}

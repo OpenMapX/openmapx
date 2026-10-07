@@ -1,0 +1,464 @@
+{
+  "version": 1,
+  "assessedAt": "2026-10-07T20:40:55.784378+00:00",
+  "osm": {
+    "access": "OSM API map bbox and direct versioned elements; no deployed extract",
+    "bbox": [13.414, 52.5185, 13.418, 52.521],
+    "mapSha256": "b0e10e00f82586f4746e2ea77101a110250e8fa34d64742fea960a0e28f21ce1",
+    "records": [
+      {
+        "id": "node/322490364",
+        "version": 24,
+        "timestamp": "2024-09-05T10:13:11Z",
+        "tags": {
+          "addr:city": "Berlin",
+          "addr:country": "DE",
+          "addr:housename": "MediaMarkt",
+          "addr:housenumber": "20",
+          "addr:postcode": "10179",
+          "addr:street": "Grunerstraße",
+          "addr:suburb": "Mitte",
+          "brand": "MediaMarkt",
+          "brand:wikidata": "Q2381223",
+          "brand:wikipedia": "en:Media Markt",
+          "contact:phone": "+49 30 2408840",
+          "internet_access": "wlan",
+          "level": "0",
+          "name": "MediaMarkt",
+          "opening_hours": "Mo-Sa 10:00-20:00",
+          "shop": "electronics",
+          "website": "https://www.mediamarkt.de/de/store/berlin-mitte-190",
+          "wheelchair": "yes"
+        }
+      },
+      {
+        "id": "way/258898047",
+        "version": 38,
+        "timestamp": "2026-09-04T20:52:25Z",
+        "tags": {
+          "addr:city": "Berlin",
+          "addr:city:fa": "برلین",
+          "addr:country": "DE",
+          "addr:housename": "Alexa",
+          "addr:housenumber": "20",
+          "addr:postcode": "10179",
+          "addr:street": "Grunerstraße",
+          "addr:suburb": "Mitte",
+          "alt_name": "Alexa Berlin",
+          "building": "retail",
+          "building:colour": "#b6434e",
+          "building:levels": "4",
+          "building:material": "concrete",
+          "contact:website": "https://www.alexacentre.com/",
+          "fixme": "Indoor mapping with rooms started but not finished.\nIndoor corridors are missing.",
+          "internet_access": "wlan",
+          "name": "Alexa",
+          "opening_hours": "Mo-Sa 10:00-21:00",
+          "phone": "+49 30 269340121",
+          "roof:colour": "gray",
+          "roof:shape": "flat",
+          "shop": "mall",
+          "start_date": "2007-9-12",
+          "toilets": "yes",
+          "toilets:wheelchair": "yes",
+          "wheelchair": "yes",
+          "wikidata": "Q322847",
+          "wikipedia": "de:Alexa (Einkaufszentrum)"
+        }
+      },
+      {
+        "id": "way/1204762785",
+        "version": 3,
+        "timestamp": "2026-01-23T16:12:26Z",
+        "tags": {
+          "addr:city": "Berlin",
+          "brand": "Edeka",
+          "brand:wikidata": "Q701755",
+          "brand:wikipedia": "de:Edeka",
+          "indoor": "room",
+          "level": "-1",
+          "name": "EDEKA",
+          "opening_hours": "Mo-Sa 08:00-21:00",
+          "payment:cash": "yes",
+          "payment:debit_cards": "yes",
+          "room": "shop",
+          "shop": "supermarket",
+          "wheelchair": "yes"
+        }
+      },
+      {
+        "id": "node/348000444",
+        "version": 29,
+        "timestamp": "2025-04-10T11:24:48Z",
+        "tags": {
+          "addr:city": "Berlin",
+          "addr:housenumber": "158",
+          "addr:postcode": "10115",
+          "addr:street": "Invalidenstraße",
+          "brand": "Rewe",
+          "brand:wikidata": "Q16968817",
+          "brand:wikipedia": "de:Rewe",
+          "check_date": "2024-06-16",
+          "check_date:opening_hours": "2022-06-10",
+          "level": "0",
+          "name": "REWE",
+          "opening_hours": "Mo-Sa 07:00-23:00",
+          "payment:cash": "yes",
+          "payment:credit_cards": "yes",
+          "payment:debit_cards": "yes",
+          "phone": "+49 30 28390336",
+          "shop": "supermarket",
+          "toilets:wheelchair": "yes",
+          "website": "https://www.rewe.de/marktseite/rewe-markt-berlin-invalidenstra%C3%9Fe-158/",
+          "wheelchair": "yes"
+        }
+      },
+      {
+        "id": "node/9154787137",
+        "version": 13,
+        "timestamp": "2026-08-18T07:17:13Z",
+        "tags": {
+          "addr:city": "Berlin",
+          "addr:country": "DE",
+          "addr:housenumber": "2",
+          "addr:postcode": "10179",
+          "addr:street": "Schillingstraße",
+          "addr:suburb": "Mitte",
+          "brand": "Edeka",
+          "brand:wikidata": "Q701755",
+          "check_date:opening_hours": "2026-08-18",
+          "contact:website": "https://www.edeka.de/eh/minden-hannover/edeka-schaaf-schillingstr.-2/index.jsp",
+          "currency:EUR": "yes",
+          "diet:halal": "no",
+          "diet:kosher": "no",
+          "level": "0",
+          "name": "Edeka Schaaf",
+          "opening_hours": "Mo-Sa 07:00-22:00",
+          "organic": "yes",
+          "second_hand": "no",
+          "shop": "supermarket",
+          "stroller": "yes",
+          "wheelchair": "yes",
+          "wikimedia_commons": "File:Schillingstraße 2.jpg"
+        }
+      }
+    ]
+  },
+  "overture": {
+    "access": "read-only DuckDB 1.5.6 S3 bbox scan; no import",
+    "release": "2026-09-23.1",
+    "url": "s3://overturemaps-us-west-2/release/2026-09-23.1/theme=places/type=place/*",
+    "bbox": [13.408, 52.513, 13.426, 52.527],
+    "unfilteredRowCount": 3255,
+    "subsetSha256": "a9ec6402ecd390d6200151ace4d5a5a7106d1ca8641652e19dd336211684ba93",
+    "records": [
+      {
+        "id": "466267a9-58bc-48bd-9457-93e7eb90e2b8",
+        "version": 10,
+        "names": {
+          "primary": "EDEKA Barnimstraße",
+          "common": null,
+          "rules": null
+        },
+        "addresses": [
+          {
+            "freeform": "Barnimstraße 18",
+            "locality": "Berlin",
+            "postcode": "10249",
+            "region": null,
+            "country": "DE"
+          }
+        ],
+        "phones": ["+493024729176"],
+        "websites": ["https://www.edeka.de/"],
+        "brand": {
+          "wikidata": null,
+          "names": {
+            "primary": "EDEKA",
+            "common": null,
+            "rules": null
+          }
+        },
+        "confidence": 0.999917788362503,
+        "operating_status": null,
+        "sources": [
+          {
+            "property": "",
+            "dataset": "meta",
+            "license": "CDLA-Permissive-2.0",
+            "record_id": "366295967427907",
+            "update_time": "2026-09-14T00:00:00.000Z",
+            "confidence": 0.9880852699279785,
+            "between": null,
+            "provider": "meta",
+            "resource": "meta",
+            "version": "2026-09-14"
+          },
+          {
+            "property": "/properties/confidence",
+            "dataset": "Overture",
+            "license": "CDLA-Permissive-2.0",
+            "record_id": null,
+            "update_time": "2026-09-17T22:52:12Z",
+            "confidence": null,
+            "between": null,
+            "provider": "overture",
+            "resource": "confidence_calculation",
+            "version": "2026-09-17"
+          }
+        ],
+        "bbox": {
+          "xmin": 13.422950744628906,
+          "xmax": 13.422952651977539,
+          "ymin": 52.52610778808594,
+          "ymax": 52.52611541748047
+        }
+      },
+      {
+        "id": "bfbe5e1d-7db5-482e-8772-f53959dde008",
+        "version": 9,
+        "names": {
+          "primary": "MediaMarkt Berlin-Mitte (im Alexa)",
+          "common": null,
+          "rules": null
+        },
+        "addresses": [
+          {
+            "freeform": "Grunerstraße 20",
+            "locality": "Berlin",
+            "postcode": "10179",
+            "region": null,
+            "country": "DE"
+          }
+        ],
+        "phones": ["+4922122243333"],
+        "websites": [
+          "https://www.mediamarkt.de/de/store/berlin-mitte-190?utm_source=places+link&utm_medium=seo-places+link&utm_term=Media+Markt+Berlin-Mitte+StoreId+190"
+        ],
+        "brand": {
+          "wikidata": null,
+          "names": {
+            "primary": "MediaMarktSaturn",
+            "common": null,
+            "rules": null
+          }
+        },
+        "confidence": 0.9999635516405105,
+        "operating_status": null,
+        "sources": [
+          {
+            "property": "",
+            "dataset": "meta",
+            "license": "CDLA-Permissive-2.0",
+            "record_id": "295733827232255",
+            "update_time": "2026-09-14T00:00:00.000Z",
+            "confidence": 0.9939252734184265,
+            "between": null,
+            "provider": "meta",
+            "resource": "meta",
+            "version": "2026-09-14"
+          },
+          {
+            "property": "/properties/confidence",
+            "dataset": "Overture",
+            "license": "CDLA-Permissive-2.0",
+            "record_id": null,
+            "update_time": "2026-09-17T22:52:12Z",
+            "confidence": null,
+            "between": null,
+            "provider": "overture",
+            "resource": "confidence_calculation",
+            "version": "2026-09-17"
+          }
+        ],
+        "bbox": {
+          "xmin": 13.414756774902344,
+          "xmax": 13.414758682250977,
+          "ymin": 52.519893646240234,
+          "ymax": 52.519901275634766
+        }
+      },
+      {
+        "id": "035b544e-40f5-4ce0-a06f-1c9032ded028",
+        "version": 13,
+        "names": {
+          "primary": "EDEKA Moch Supermarket",
+          "common": null,
+          "rules": null
+        },
+        "addresses": [
+          {
+            "freeform": "Grunerstraße 20",
+            "locality": "Berlin",
+            "postcode": "10179",
+            "region": null,
+            "country": "DE"
+          }
+        ],
+        "phones": ["+493024045625"],
+        "websites": ["http://Edeka.de/"],
+        "brand": {
+          "wikidata": null,
+          "names": {
+            "primary": "EDEKA",
+            "common": null,
+            "rules": null
+          }
+        },
+        "confidence": 0.9999057413816452,
+        "operating_status": null,
+        "sources": [
+          {
+            "property": "",
+            "dataset": "meta",
+            "license": "CDLA-Permissive-2.0",
+            "record_id": "194804870560113",
+            "update_time": "2026-08-24T00:00:00.000Z",
+            "confidence": 0.9863393306732178,
+            "between": null,
+            "provider": "meta",
+            "resource": "meta",
+            "version": "2026-08-24"
+          },
+          {
+            "property": "/properties/confidence",
+            "dataset": "Overture",
+            "license": "CDLA-Permissive-2.0",
+            "record_id": null,
+            "update_time": "2026-09-17T22:52:12Z",
+            "confidence": null,
+            "between": null,
+            "provider": "overture",
+            "resource": "confidence_calculation",
+            "version": "2026-09-17"
+          }
+        ],
+        "bbox": {
+          "xmin": 13.414728164672852,
+          "xmax": 13.414730072021484,
+          "ymin": 52.51996994018555,
+          "ymax": 52.51997756958008
+        }
+      },
+      {
+        "id": "81270f18-8f0b-48a9-ae69-31d4ef96cdd5",
+        "version": 8,
+        "names": {
+          "primary": "MediaMarkt",
+          "common": null,
+          "rules": null
+        },
+        "addresses": [
+          {
+            "freeform": "Grunerstr. 20",
+            "locality": "Berlin",
+            "postcode": "10179",
+            "region": "Berlin",
+            "country": "DE"
+          }
+        ],
+        "phones": ["030 2408840"],
+        "websites": ["https://www.mediamarkt.de/markt/berlin-mitte"],
+        "brand": null,
+        "confidence": 0.77,
+        "operating_status": null,
+        "sources": [
+          {
+            "property": "",
+            "dataset": "Foursquare",
+            "license": "Apache-2.0",
+            "record_id": "4b1530cef964a5201da923e3",
+            "update_time": "2026-04-11T00:00:00.000",
+            "confidence": 0.77,
+            "between": null,
+            "provider": "foursquare",
+            "resource": "foursquare",
+            "version": "2026-04-14"
+          },
+          {
+            "property": "/properties/confidence",
+            "dataset": "Overture",
+            "license": "CDLA-Permissive-2.0",
+            "record_id": null,
+            "update_time": "2026-09-17T22:52:12Z",
+            "confidence": null,
+            "between": null,
+            "provider": "overture",
+            "resource": "confidence_calculation",
+            "version": "2026-09-17"
+          }
+        ],
+        "bbox": {
+          "xmin": 13.414745330810547,
+          "xmax": 13.41474723815918,
+          "ymin": 52.519866943359375,
+          "ymax": 52.519874572753906
+        }
+      },
+      {
+        "id": "a56cd442-edcf-4d26-98c1-9c70de50f1d7",
+        "version": 11,
+        "names": {
+          "primary": "EDEKA Schaaf",
+          "common": null,
+          "rules": null
+        },
+        "addresses": [
+          {
+            "freeform": "Schillingstraße 2",
+            "locality": "Berlin",
+            "postcode": "10179",
+            "region": null,
+            "country": "DE"
+          }
+        ],
+        "phones": ["+493023458611"],
+        "websites": [
+          "https://www.edeka.de/eh/minden-hannover/edeka-schaaf-schillingstr.-2/index.jsp"
+        ],
+        "brand": {
+          "wikidata": null,
+          "names": {
+            "primary": "EDEKA",
+            "common": null,
+            "rules": null
+          }
+        },
+        "confidence": 0.9999163304030895,
+        "operating_status": null,
+        "sources": [
+          {
+            "property": "",
+            "dataset": "meta",
+            "license": "CDLA-Permissive-2.0",
+            "record_id": "101877065539523",
+            "update_time": "2026-09-14T00:00:00.000Z",
+            "confidence": 0.9878739714622498,
+            "between": null,
+            "provider": "meta",
+            "resource": "meta",
+            "version": "2026-09-14"
+          },
+          {
+            "property": "/properties/confidence",
+            "dataset": "Overture",
+            "license": "CDLA-Permissive-2.0",
+            "record_id": null,
+            "update_time": "2026-09-17T22:52:12Z",
+            "confidence": null,
+            "between": null,
+            "provider": "overture",
+            "resource": "confidence_calculation",
+            "version": "2026-09-17"
+          }
+        ],
+        "bbox": {
+          "xmin": 13.420568466186523,
+          "xmax": 13.420570373535156,
+          "ymin": 52.51737594604492,
+          "ymax": 52.51738357543945
+        }
+      }
+    ]
+  }
+}
