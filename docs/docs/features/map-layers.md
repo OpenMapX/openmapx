@@ -124,6 +124,24 @@ than inventing a speed.
 These overlays complement the dedicated [public transit](./public-transit.md) and
 [directions](./directions.md) features rather than replacing them.
 
+Both traffic legends explain their source: owned traffic-flow tiles or hosted
+TomTom traffic. They show **source data age unknown** and **coverage unknown for
+this view**. The owned vector tiles and TomTom raster tiles expose no usable
+upstream/publication timestamp or completeness metadata. Successful tile requests
+are not evidence of fresh measurements; typical and estimated flow values can
+also color roads. A hidden layer is explicitly labelled hidden.
+
+Traffic publication/check evidence exists in authenticated admin coverage, but
+is not exposed by these public tile contracts. The legends do not fetch admin
+diagnostics or borrow check/request times as observation age. A public, bounded
+publication metadata contract remains follow-up work.
+
+**Map colors do not verify traffic influence on a route.** The routing engine can
+differ from the displayed overlay: hosted TomTom traffic over a self-hosted
+Valhalla route is still a map visualization. Directions cards separately explain
+validated road-condition application and unverified congestion influence; see
+[Reading traffic evidence](./directions.md#reading-traffic-evidence).
+
 ### Context-aware layers
 
 Useful layers follow the task without becoming permanent preferences. Opening a

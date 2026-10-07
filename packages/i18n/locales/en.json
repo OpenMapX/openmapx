@@ -4307,6 +4307,16 @@
       "unavailable": "Road-condition check unavailable",
       "unverified": "Road-condition application not verified"
     },
-    "congestionUnverified": "Congestion effect on ETA not verified"
+    "congestionUnverified": "Congestion effect on ETA not verified",
+    "overlay": {
+      "ownedSource": "Self-hosted traffic-flow tiles",
+      "hostedSource": "TomTom hosted traffic",
+      "ageUnknown": "Source data age unknown",
+      "coverageUnknown": "Coverage unknown for this view",
+      "mapOnly": "Map colors do not verify traffic influence on a route",
+      "estimates": "Typical and estimated values may not be current measurements",
+      "hidden": "Layer hidden",
+      "toggleHosted": "Toggle TomTom traffic"
+    }
   }
 }

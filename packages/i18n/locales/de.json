@@ -4307,6 +4307,16 @@
       "unavailable": "Prüfung der Straßenbedingungen nicht verfügbar",
       "unverified": "Berücksichtigung der Straßenbedingungen nicht verifiziert"
     },
-    "congestionUnverified": "Einfluss von Staus auf die Ankunftszeit nicht verifiziert"
+    "congestionUnverified": "Einfluss von Staus auf die Ankunftszeit nicht verifiziert",
+    "overlay": {
+      "ownedSource": "Selbst gehostete Verkehrsfluss-Kacheln",
+      "hostedSource": "Gehostete Verkehrsdaten von TomTom",
+      "ageUnknown": "Alter der Quelldaten unbekannt",
+      "coverageUnknown": "Abdeckung für diesen Ausschnitt unbekannt",
+      "mapOnly": "Kartenfarben belegen keinen Verkehrseinfluss auf eine Route",
+      "estimates": "Typische und geschätzte Werte sind möglicherweise keine aktuellen Messungen",
+      "hidden": "Ebene ausgeblendet",
+      "toggleHosted": "TomTom-Verkehr umschalten"
+    }
   }
 }

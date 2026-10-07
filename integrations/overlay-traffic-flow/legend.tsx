@@ -5,6 +5,7 @@ import Typography from "@mui/material/Typography";
 import { TRAFFIC_BAND_COLORS, type TrafficBand, useOverlayVisibilitySetter } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { OverlayLegend } from "@/integration-api/overlay/OverlayLegend";
+import { TrafficOverlayContext } from "@/integration-api/overlay/TrafficOverlayContext";
 import { useTrafficFlowStore } from "./store";
 import { TRAFFIC_FLOW_CONFIDENCE_STEPS } from "./visual-style";
 
@@ -71,6 +72,7 @@ export function TrafficFlowLegend() {
           ))}
         </Box>
       </Box>
+      <TrafficOverlayContext hosted={false} visible={layerVisible} />
     </OverlayLegend>
   );
 }

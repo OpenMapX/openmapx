@@ -13,7 +13,7 @@
   "domains": ["map-overlay"],
   "frontend": {
     "mapLayer": true,
-    "legend": false,
+    "legend": true,
     "panel": false,
     "layerSelector": {
       "group": "map-details",

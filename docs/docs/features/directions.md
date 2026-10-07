@@ -122,6 +122,29 @@ selected travel time. The system evaluates these in the closure's local timezone
 fine-grained recurring schedule windows). This prevents routing detours around
 future closures that haven't started yet or nightly closures during daytime trips.
 
+### Reading traffic evidence
+
+Motorized route cards separate **road-condition application** from **congestion's
+effect on the ETA**. “Application verified” requires this response's validated
+Valhalla proof and the server's matching graph/write/engine assessment. It expires
+at the evidence lease; missing, conflicting, limited or failed evidence cannot
+produce that claim. A new route/provider replaces the status. Failed directions
+queries show recovery instead of reusing a previous successful card.
+
+This proof concerns applied road conditions such as closures and speed caps. It
+does not establish that congestion changed the selected path or added a particular
+number of minutes. Cards therefore keep congestion's ETA influence explicitly
+unverified. A significant difference from `baselineDuration` is labelled **versus
+engine baseline**, not a measured traffic delay or a normal journey time. Valhalla
+and hosted Stadia routes are identified separately where their source IDs say so;
+a provider name alone does not prove self-hosting.
+
+The proof's evaluation time is a verification time, not an upstream observation
+or publication age. Map colors and freshly downloaded tiles do not substitute for
+route evidence. The [traffic legends](./map-layers.md#transportation) explain the separate
+map-only sources and their currently unknown source age/coverage. This initial
+presentation applies to directions cards, not every navigation/EV surface.
+
 ## Stop times and dwell
 
 Any stop on a trip can carry a time of its own. The clock button on a waypoint
