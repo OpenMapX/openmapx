@@ -19,7 +19,7 @@ export function TransitDataStatus({
     parts.push(t(`dataStatus.${status.freshness}`));
     if (status.ageSeconds !== null) parts.push(t("dataStatus.age", { seconds: status.ageSeconds }));
   }
-  if (status.source !== "unknown") parts.push(t(`dataStatus.${status.source}`));
+  parts.push(t(`dataStatus.${status.source === "unknown" ? "sourceUnknown" : status.source}`));
   return (
     <Typography
       component="span"

@@ -1611,7 +1611,8 @@
       "hosted": "Gehostete Quelle",
       "refreshFailed": "Aktualisierung fehlgeschlagen. Bereits geladene Zeiten können veraltet sein.",
       "partial": "Einige Fahrplanquellen sind nicht verfügbar. Die Ergebnisse können unvollständig sein.",
-      "timingUnknown": "Echtzeitstatus unbekannt"
+      "timingUnknown": "Echtzeitstatus unbekannt",
+      "sourceUnknown": "Quelle unbekannt"
     }
   },
   "category": {

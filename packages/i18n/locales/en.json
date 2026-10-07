@@ -1611,7 +1611,8 @@
       "hosted": "Hosted source",
       "refreshFailed": "Timetable refresh failed. Previously loaded times may be out of date.",
       "partial": "Some timetable sources are unavailable. Results may be incomplete.",
-      "timingUnknown": "Realtime status unknown"
+      "timingUnknown": "Realtime status unknown",
+      "sourceUnknown": "Source unknown"
     }
   },
   "category": {

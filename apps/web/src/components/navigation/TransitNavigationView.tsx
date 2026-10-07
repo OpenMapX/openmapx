@@ -185,6 +185,7 @@ export function TransitNavigationView() {
               ) : (
                 <TransitLegBanner
                   leg={currentLeg}
+                  source={itinerary.source ?? itinerary.instance}
                   legIndex={currentLegIndex}
                   totalLegs={legs.length}
                   transitProgress={transitProgress}

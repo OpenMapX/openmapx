@@ -99,7 +99,7 @@ so, keeping the part of the schedule it did work out.
 
 ## Departures, stops, and alerts
 
-Open any stop or station and OpenMapX shows a live departure board: the next
+Open any stop or station and OpenMapX shows a departure board: the next
 departures with their lines, destinations, scheduled and real-time times, delays,
 platform or track, and cancellations. The same surfaces back stop-detail views in
 [places](./places.md) — search a station and you get its departures, the lines
@@ -111,6 +111,40 @@ the actual delay, a platform change, a cancellation — are merged in on top fro
 any real-time provider that covers the area. When the underlying provider already
 returns real-time-aware times (MOTIS does this natively from GTFS-RT), OpenMapX
 skips the redundant second lookup.
+
+### Understanding timetable status
+
+Departure rows, the journey sheet and transit navigation use the same textual
+status policy. **Scheduled time** means the service is explicitly schedule-only;
+**Realtime prediction** means the service carries realtime evidence. An enabled
+provider or a completed request does not establish realtime coverage. Legacy or
+contradictory service metadata is labelled **Realtime status unknown**.
+
+For realtime predictions, **Recent source data** requires a valid upstream
+`freshness.dataAsOf` timestamp no more than 90 seconds old and realtime envelope
+metadata. Older observations or an explicit stale flag produce **Stale source
+data**; missing, invalid or future timestamps produce **Source age unknown**.
+This trip-update window follows the
+[GTFS realtime best practices](https://gtfs.org/documentation/realtime/realtime-best-practices/).
+It does not establish that every station has realtime coverage. Local adapter
+`observedAt`, request `fetchedAt`, and itinerary `plannedAt`/`refreshedAt` are not
+upstream publication times. Current MOTIS/Transitous timetable wrappers do not
+supply upstream age, so predictions from them usually have unknown age.
+
+Self-hosted and hosted source labels describe the known provider path, alongside
+existing feed credits. Stop, route and trip identifiers remain source-aware;
+similarly named parent/sibling stations are not merged by the UI. Platform changes
+show both planned and current codes when available, plus a **changed** label.
+Cancelled services retain a clear cancellation label and struck-through times;
+a cancelled navigation leg does not issue a boarding cue.
+
+A failed refresh retains previously loaded times with a warning and retry action.
+A partially successful linked board retains successful sources with an incomplete
+results notice; it does not claim there are no departures when remaining sources
+failed. A successful empty timetable remains a valid empty result. Realtime
+source age is reevaluated every 30 seconds while these views are mounted; this
+adds no provider polling or installed-shell live-data owner. Offline/native
+navigation lifecycle validation remains separate.
 
 ## Live vehicles on the map
 
