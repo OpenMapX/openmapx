@@ -367,7 +367,8 @@ describe("RouteCard compact traffic explanation", () => {
   it("does not advertise an engine-baseline delta as traffic delay", () => {
     renderCard({ ...baseRoute, duration: 6300, baselineDuration: 3600 });
     expect(screen.queryByTestId("traffic-delay")).toBeNull();
-    expect(screen.queryByText(/^\+45 min|baseline/i)).toBeNull();
+    expect(screen.queryByText(/^\+45 min/i)).toBeNull();
+    expect(screen.queryByText(/baseline/i)).toBeNull();
   });
   it.each(["route", "peek"] as const)(
     "opens and closes traffic info without selecting the %s route",
