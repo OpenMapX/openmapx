@@ -13,8 +13,10 @@ import { useTranslations } from "next-intl";
 import { useMemo, useState } from "react";
 import { AttributionStrip } from "@/components/ui/AttributionStrip";
 import { useAttributionFromHooks } from "@/integration-api/overlay/useAttributionFromHooks";
+import { useNow } from "@/lib/useNow";
 import { AlertsBanner } from "./AlertsBanner";
 import { DepartureRow } from "./DepartureRow";
+import { TransitQueryNotice } from "./TransitDataStatus";
 
 interface StopBoardViewProps {
   stopId: string;
@@ -43,6 +45,7 @@ export function StopBoardView({
 }: StopBoardViewProps) {
   const t = useTranslations("transit");
   const tc = useTranslations("common");
+  const now = useNow(30_000);
   const [tab, setTab] = useState<"departures" | "arrivals">("departures");
   const departuresQuery = useDepartures(stopId);
   const { data: departures, isLoading: departuresLoading } = departuresQuery;
@@ -62,6 +65,8 @@ export function StopBoardView({
     [alerts],
   );
 
+  const activeQuery = tab === "departures" ? departuresQuery : arrivalsQuery;
+  const uncertain = activeQuery.isError || activeQuery.freshness?.isPartial;
   const items = tab === "departures" ? departures : arrivals;
   const isLoading = tab === "departures" ? departuresLoading : arrivalsLoading;
   const hasArrivals = Boolean(arrivals?.length);
@@ -142,7 +147,15 @@ export function StopBoardView({
             <AlertsBanner alerts={alerts} />
           </Box>
         )}
-        {isLoading ? (
+        <TransitQueryNotice
+          failed={activeQuery.isError}
+          partial={activeQuery.freshness?.isPartial}
+          onRetry={() => {
+            void activeQuery.refetch();
+          }}
+          retrying={activeQuery.isFetching}
+        />
+        {isLoading && !items ? (
           <Box>
             {[1, 2, 3, 4, 5].map((index) => (
               <Box
@@ -164,13 +177,16 @@ export function StopBoardView({
                 <DepartureRow
                   departure={departure}
                   showPlatform
+                  now={now}
+                  freshness={activeQuery.freshness}
+                  queryFailed={activeQuery.isError}
                   onClick={(item) => onDepartureClick(toMergedDeparture(item))}
                   hasAlert={alertRouteIds.has(departure.route.id)}
                 />
               </Box>
             ))}
           </Box>
-        ) : (
+        ) : !uncertain && !isLoading ? (
           <Box sx={{ px: 2, py: 3, textAlign: "center" }}>
             <Typography
               variant="body2"
@@ -181,7 +197,7 @@ export function StopBoardView({
               {t("noDeparturesGeneric", { tab: t(tab) })}
             </Typography>
           </Box>
-        )}
+        ) : null}
       </Box>
     </Box>
   );

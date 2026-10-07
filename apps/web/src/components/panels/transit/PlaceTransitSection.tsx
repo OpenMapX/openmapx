@@ -30,10 +30,12 @@ import { useMemo } from "react";
 import { AttributionStrip } from "@/components/ui/AttributionStrip";
 import { useAttributionFromHooks } from "@/integration-api/overlay/useAttributionFromHooks";
 import { BRAND } from "@/integration-api/runtime/theme";
+import { useNow } from "@/lib/useNow";
 import { AlertsBanner } from "./AlertsBanner";
 import { DepartureRow } from "./DepartureRow";
 import { FacilitiesSection } from "./FacilitiesSection";
 import { RouteBadge } from "./RouteBadge";
+import { TransitQueryNotice } from "./TransitDataStatus";
 
 const MAX_BADGES_PER_MODE = 8;
 
@@ -78,6 +80,7 @@ export function PlaceTransitSection({
 }: PlaceTransitSectionProps) {
   const t = useTranslations("transit");
   const tc = useTranslations("common");
+  const now = useNow(30_000);
   const routesQuery = useLinkedTransitRoutes(place);
   const { data: routes, isLoading } = routesQuery;
   const alertsQuery = useLinkedTransitAlerts(place);
@@ -235,6 +238,14 @@ export function PlaceTransitSection({
           {t("nextDepartures")}
         </Typography>
       </Box>
+      <TransitQueryNotice
+        failed={departuresQuery.isError}
+        partial={departuresQuery.freshness?.isPartial}
+        onRetry={() => {
+          void departuresQuery.refetch();
+        }}
+        retrying={departuresQuery.isFetching}
+      />
       {depsLoading && !departures && (
         <Box sx={{ mt: 1 }}>
           {[0, 1, 2].map((i) => (
@@ -248,6 +259,9 @@ export function PlaceTransitSection({
             <DepartureRow
               key={`${dep.tripId}-${dep.scheduledAt}-${dep.route.id}`}
               departure={dep}
+              now={now}
+              freshness={departuresQuery.freshness}
+              queryFailed={departuresQuery.isError}
               onClick={
                 onOpenTripDetail ? (dep) => onOpenTripDetail(dep as MergedDeparture) : undefined
               }
@@ -255,7 +269,10 @@ export function PlaceTransitSection({
             />
           ))}
         </Box>
-      ) : !depsLoading && departures ? (
+      ) : !depsLoading &&
+        departures &&
+        !departuresQuery.isError &&
+        !departuresQuery.freshness?.isPartial ? (
         <Typography
           variant="caption"
           sx={{

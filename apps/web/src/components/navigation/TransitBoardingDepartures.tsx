@@ -5,6 +5,8 @@ import Typography from "@mui/material/Typography";
 import { useDepartures } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { DepartureRow } from "@/components/panels/transit/DepartureRow";
+import { TransitQueryNotice } from "@/components/panels/transit/TransitDataStatus";
+import { useNow } from "@/lib/useNow";
 
 /** How many upcoming departures to list. */
 const LIMIT = 4;
@@ -27,14 +29,16 @@ export function TransitBoardingDepartures({
   targetRouteShortName?: string;
 }) {
   const t = useTranslations("navigation");
-  const { data: departures } = useDepartures(stopId, 45);
-  if (!departures || departures.length === 0) return null;
+  const now = useNow(30_000);
+  const query = useDepartures(stopId, 45);
+  const { data: departures } = query;
+  if (!departures?.length && !query.isError && !query.freshness?.isPartial) return null;
 
   // Put the service the rider is catching first, then the soonest others.
   const isTarget = (tripId: string, route: string) =>
     (targetTripId && tripId === targetTripId) ||
     (!!targetRouteShortName && route === targetRouteShortName);
-  const ordered = [...departures].sort((a, b) => {
+  const ordered = [...(departures ?? [])].sort((a, b) => {
     const at = isTarget(a.tripId, a.route.shortName) ? 0 : 1;
     const bt = isTarget(b.tripId, b.route.shortName) ? 0 : 1;
     return at - bt;
@@ -49,8 +53,23 @@ export function TransitBoardingDepartures({
       >
         {t("departuresAt", { stop: stopName })}
       </Typography>
+      <TransitQueryNotice
+        failed={query.isError}
+        partial={query.freshness?.isPartial}
+        onRetry={() => {
+          void query.refetch();
+        }}
+        retrying={query.isFetching}
+      />
       {ordered.slice(0, LIMIT).map((dep) => (
-        <DepartureRow key={`${dep.tripId}-${dep.scheduledAt}`} departure={dep} showPlatform />
+        <DepartureRow
+          key={`${dep.tripId}-${dep.scheduledAt}`}
+          departure={dep}
+          showPlatform
+          now={now}
+          freshness={query.freshness}
+          queryFailed={query.isError}
+        />
       ))}
     </Box>
   );

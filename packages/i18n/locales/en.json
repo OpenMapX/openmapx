@@ -1598,7 +1598,21 @@
     "alertInfo": "Info",
     "alertWarning": "Warning",
     "alertSevere": "Service disruption",
-    "alertCritical": "Major disruption"
+    "alertCritical": "Major disruption",
+    "platformChanged": "changed",
+    "dataStatus": {
+      "scheduled": "Scheduled time",
+      "realtime": "Realtime prediction",
+      "unknown": "Source age unknown",
+      "fresh": "Recent source data",
+      "stale": "Stale source data",
+      "age": "Source age: {seconds}s",
+      "local": "Self-hosted source",
+      "hosted": "Hosted source",
+      "refreshFailed": "Timetable refresh failed. Previously loaded times may be out of date.",
+      "partial": "Some timetable sources are unavailable. Results may be incomplete.",
+      "timingUnknown": "Realtime status unknown"
+    }
   },
   "category": {
     "openNow": "Open now",

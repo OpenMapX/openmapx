@@ -1598,7 +1598,21 @@
     "alertInfo": "Info",
     "alertWarning": "Warnung",
     "alertSevere": "Betriebsstörung",
-    "alertCritical": "Schwere Störung"
+    "alertCritical": "Schwere Störung",
+    "platformChanged": "geändert",
+    "dataStatus": {
+      "scheduled": "Planzeit",
+      "realtime": "Echtzeitprognose",
+      "unknown": "Alter der Quelldaten unbekannt",
+      "fresh": "Aktuelle Quelldaten",
+      "stale": "Veraltete Quelldaten",
+      "age": "Alter der Quelldaten: {seconds}s",
+      "local": "Selbst gehostete Quelle",
+      "hosted": "Gehostete Quelle",
+      "refreshFailed": "Aktualisierung fehlgeschlagen. Bereits geladene Zeiten können veraltet sein.",
+      "partial": "Einige Fahrplanquellen sind nicht verfügbar. Die Ergebnisse können unvollständig sein.",
+      "timingUnknown": "Echtzeitstatus unbekannt"
+    }
   },
   "category": {
     "openNow": "Jetzt geöffnet",
