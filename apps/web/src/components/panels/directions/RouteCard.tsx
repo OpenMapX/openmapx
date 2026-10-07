@@ -133,6 +133,7 @@ export function RouteCard({
   const t = useTranslations("directions");
   const tc = useTranslations("common");
   const tNav = useTranslations("navigation");
+  const tTraffic = useTranslations("trafficStatus");
   const locale = useLocale();
   const { startGround } = useStartNavigation();
   const waypoints = useDirectionsStore((s) => s.waypoints);
@@ -258,9 +259,27 @@ export function RouteCard({
           fontWeight: 700,
           lineHeight: 1.25,
           fontVariantNumeric: "tabular-nums",
+          display: "flex",
+          alignItems: "baseline",
+          flexWrap: "wrap",
+          columnGap: 0.5,
+          pr: route.mode === "driving" || route.mode === "motorcycle" ? 4 : 0,
+          py: route.mode === "driving" || route.mode === "motorcycle" ? 0.5 : 0,
         }}
       >
-        {formatDuration(route.duration)}
+        <span>{formatDuration(route.duration)}</span>
+        {traffic.kind === "delay" && (
+          <Typography
+            component="span"
+            variant="caption"
+            id={trafficCaptionId}
+            data-testid="traffic-delay"
+            sx={{ color: "inherit", fontWeight: 500, whiteSpace: "nowrap", lineHeight: 1.35 }}
+          >
+            {" "}
+            ({tTraffic("delay", { delay: formatDuration(traffic.seconds) })})
+          </Typography>
+        )}
       </Typography>
       <Box sx={{ display: "flex", alignItems: "baseline", gap: 1, mt: 0.25, minWidth: 0 }}>
         <Typography variant="body2" noWrap sx={{ color: "text.secondary", flex: 1, minWidth: 0 }}>
@@ -343,46 +362,64 @@ export function RouteCard({
         transition: "background-color 0.15s",
       }}
     >
-      <Box sx={{ flexShrink: 0, mt: 0.25 }}>{modeIcon}</Box>
+      <Box
+        sx={{
+          flexShrink: 0,
+          mt: route.mode === "driving" || route.mode === "motorcycle" ? 0.75 : 0.25,
+        }}
+      >
+        {modeIcon}
+      </Box>
       <Box sx={{ flex: 1, minWidth: 0 }}>
-        {selectionKind === "peek" ? (
-          <Box
-            component="button"
-            type="button"
-            aria-label={selectionLabel}
-            aria-describedby={selectionDescription}
-            onClick={onSelect}
-            sx={selectionSx}
-          >
-            {summaryContent}
-          </Box>
-        ) : (
-          <Box component="label" sx={{ ...selectionSx, position: "relative" }}>
+        <Box sx={{ position: "relative" }}>
+          {selectionKind === "peek" ? (
             <Box
-              component="input"
-              type="radio"
-              name="alternative-route"
+              component="button"
+              type="button"
               aria-label={selectionLabel}
               aria-describedby={selectionDescription}
-              checked={active}
-              onChange={onSelect}
-              onClick={() => {
-                if (active) onSelect();
-              }}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") onSelect();
-              }}
-              sx={{ position: "absolute", opacity: 0, width: "1px", height: "1px", m: 0 }}
-            />
-            {summaryContent}
+              onClick={onSelect}
+              sx={selectionSx}
+            >
+              {summaryContent}
+            </Box>
+          ) : (
+            <Box component="label" sx={{ ...selectionSx, position: "relative" }}>
+              <Box
+                component="input"
+                type="radio"
+                name="alternative-route"
+                aria-label={selectionLabel}
+                aria-describedby={selectionDescription}
+                checked={active}
+                onChange={onSelect}
+                onClick={() => {
+                  if (active) onSelect();
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") onSelect();
+                }}
+                sx={{ position: "absolute", opacity: 0, width: "1px", height: "1px", m: 0 }}
+              />
+              {summaryContent}
+            </Box>
+          )}
+          <Box sx={{ position: "absolute", right: "-13px", top: "-9px" }}>
+            <RouteTrafficStatus route={route} impact={roadConditionImpact} provider={provider} />
           </Box>
-        )}
-        <RouteTrafficStatus
-          id={trafficCaptionId}
-          route={route}
-          impact={roadConditionImpact}
-          provider={provider}
-        />
+        </Box>
+        {(route.mode === "driving" || route.mode === "motorcycle") &&
+          traffic.kind === "unavailable" && (
+            <Typography
+              id={trafficCaptionId}
+              component="div"
+              variant="caption"
+              data-testid="route-traffic-status"
+              sx={{ color: "text.secondary", mt: 0.25, lineHeight: 1.35, overflowWrap: "anywhere" }}
+            >
+              {tTraffic("summary")}
+            </Typography>
+          )}
         {impact ? (
           <Box
             sx={{ mt: 0.5 }}

@@ -125,7 +125,7 @@ future closures that haven't started yet or nightly closures during daytime trip
 ### Reading traffic information
 
 Driving and motorcycle cards color the travel time by the estimated traffic
-delay and show a short caption such as **+12 min**. The estimate compares
+delay and show a short caption such as **(+12 min)** directly after the duration. The estimate compares
 the same route with and without current traffic speeds. It appears when the
 extra time is at least five minutes and at least 10% of the comparison duration;
 the existing severity bands distinguish light, moderate, heavy and severe
@@ -136,7 +136,9 @@ incomplete or stale, the duration uses the normal text color and the card shows
 **Traffic data unavailable**. A route with fresh, complete congestion coverage
 and a comparison below the display thresholds has a **green duration** and no
 additional caption. Significant estimated delays retain their severity color
-and the short **+12 min** caption.
+and the inline **(+12 min)** amount. The **About traffic** button is aligned
+with the duration, above the distance, for all traffic states. The unavailable
+note sits directly below the route summary without a separate icon row.
 
 A zero delay comparison alone cannot establish fresh congestion coverage.
 The route contract's optional `trafficCoverage` evidence must confirm that

@@ -108,7 +108,6 @@ it("rearms expiry when a clock correction makes the first callback early", () =>
 
 it("keeps provider and application details out of the default summary", () => {
   render(view());
-  expect(screen.getByTestId("route-traffic-status")).toHaveTextContent("Traffic data unavailable");
   expect(screen.queryByText(/Self-hosted Valhalla/)).toBeNull();
   expect(screen.queryByText("Available road updates were used for this route.")).toBeNull();
   fireEvent.click(screen.getByRole("button", { name: "About traffic" }));
@@ -119,10 +118,9 @@ it("keeps provider and application details out of the default summary", () => {
   expect(screen.queryByRole("dialog")).toBeNull();
 });
 
-it("shows the estimate when comparison data exists and replaces it on another route", () => {
+it("updates the explanation when a new route has no estimate", () => {
   const r = { ...route, duration: 6300, baselineDuration: 3600 };
   const rendered = render(view(r));
-  expect(screen.getByTestId("traffic-delay")).toHaveTextContent("+45 min");
   fireEvent.click(screen.getByRole("button", { name: "About traffic" }));
   expect(screen.getByRole("dialog", { name: "About traffic" })).toHaveTextContent(
     "The extra time is estimated by comparing this route with and without current traffic speeds.",
@@ -131,6 +129,7 @@ it("shows the estimate when comparison data exists and replaces it on another ro
     "This travel time may not include current traffic delays.",
   );
   rendered.rerender(view(route));
-  expect(screen.queryByTestId("traffic-delay")).toBeNull();
-  expect(screen.getByTestId("route-traffic-status")).toHaveTextContent("Traffic data unavailable");
+  expect(screen.getByRole("dialog", { name: "About traffic" })).toHaveTextContent(
+    "This travel time may not include current traffic delays.",
+  );
 });

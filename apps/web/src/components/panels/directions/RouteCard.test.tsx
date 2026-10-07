@@ -366,7 +366,7 @@ describe("RouteCard compact traffic explanation", () => {
   });
   it("shows a compact delay and describes it to keyboard users", () => {
     renderCard({ ...baseRoute, duration: 6300, baselineDuration: 3600 });
-    expect(screen.getByTestId("traffic-delay")).toHaveTextContent(/^\+45 min$/);
+    expect(screen.getByTestId("traffic-delay")).toHaveTextContent(/^\(\+45 min\)$/);
     expect(screen.queryByText(/baseline/i)).toBeNull();
     expect(screen.queryByText("Traffic data unavailable")).toBeNull();
     const ids = screen.getByRole("radio").getAttribute("aria-describedby")?.split(" ") ?? [];
@@ -431,11 +431,11 @@ describe("RouteCard compact traffic explanation", () => {
     expect(getComputedStyle(screen.getByRole("heading", { level: 6 })).color).toBe(
       "var(--omx-traffic-heavy)",
     );
-    expect(screen.getByText("+45 min")).toBeInTheDocument();
+    expect(screen.getByText("(+45 min)")).toBeInTheDocument();
   });
   it("localizes the compact delay in German", () => {
     renderCard({ ...baseRoute, duration: 6300, baselineDuration: 3600 }, "metric", "de");
-    expect(screen.getByTestId("traffic-delay")).toHaveTextContent(/^\+45 min$/);
+    expect(screen.getByTestId("traffic-delay")).toHaveTextContent(/^\(\+45 min\)$/);
   });
   it.each(["route", "peek"] as const)(
     "opens and closes traffic info without selecting the %s route",
@@ -1096,7 +1096,7 @@ describe("RouteCard current congestion coverage", () => {
     expect(getComputedStyle(screen.getByRole("heading", { level: 6 })).color).toBe(
       "var(--omx-traffic-heavy)",
     );
-    expect(screen.getByTestId("traffic-delay")).toHaveTextContent(/^\+45 min$/);
+    expect(screen.getByTestId("traffic-delay")).toHaveTextContent(/^\(\+45 min\)$/);
     expect(screen.queryByText("Traffic data unavailable")).toBeNull();
   });
 });
@@ -1119,7 +1119,7 @@ describe("RouteCard expired congestion estimates", () => {
         validUntil: "2026-10-07T12:00:30Z",
       },
     });
-    expect(screen.getByTestId("traffic-delay")).toHaveTextContent(/^\+45 min$/);
+    expect(screen.getByTestId("traffic-delay")).toHaveTextContent(/^\(\+45 min\)$/);
     act(() => vi.advanceTimersByTime(30000));
     expect(screen.queryByTestId("traffic-delay")).toBeNull();
     expect(screen.getByText("Traffic data unavailable")).toBeInTheDocument();
@@ -1127,4 +1127,41 @@ describe("RouteCard expired congestion estimates", () => {
       "rgba(0, 0, 0, 0.87)",
     );
   });
+});
+
+describe("RouteCard compact traffic header", () => {
+  it("shows the parenthesized delay directly in the duration heading", () => {
+    renderCard({ ...baseRoute, duration: 6300, baselineDuration: 3600 });
+    expect(screen.getByRole("heading", { level: 6 })).toHaveTextContent("1 h 45 min (+45 min)");
+    expect(
+      screen.getByRole("heading", { level: 6 }).contains(screen.getByTestId("traffic-delay")),
+    ).toBe(true);
+    expect(screen.getAllByTestId("traffic-delay")).toHaveLength(1);
+  });
+
+  it.each(["route", "peek"] as const)(
+    "keeps the info button outside the %s selection control",
+    (selectionKind) => {
+      const onSelect = vi.fn();
+      render(
+        <NextIntlClientProvider locale="en" messages={en}>
+          <RouteCard
+            route={baseRoute}
+            index={0}
+            active
+            selectionKind={selectionKind}
+            onSelect={onSelect}
+            onDetails={() => {}}
+            units="metric"
+          />
+        </NextIntlClientProvider>,
+      );
+      const button = screen.getByRole("button", { name: "About traffic" });
+      expect(button.closest("label")).toBeNull();
+      expect(button.parentElement?.closest("button")).toBeNull();
+      fireEvent.click(button);
+      expect(screen.getByRole("dialog", { name: "About traffic" })).toBeInTheDocument();
+      expect(onSelect).not.toHaveBeenCalled();
+    },
+  );
 });
