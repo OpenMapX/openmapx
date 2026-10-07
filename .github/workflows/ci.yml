@@ -126,6 +126,9 @@ jobs:
 
       - run: pnpm check-types
 
+      - name: Type-check the regional camera audit
+        run: pnpm exec tsc -p scripts/camera-audit/tsconfig.json
+
   test-node:
     name: test (node)
     runs-on: ubuntu-latest

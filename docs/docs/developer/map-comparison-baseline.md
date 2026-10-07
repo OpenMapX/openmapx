@@ -199,3 +199,9 @@ rank boundaries, exclusions, duplicate prevention, layer priority, and validity.
 Repeat generation to check idempotence and repeat the visual matrix before
 expanding the thresholds. Hosted complete MapTiler styles are outside this
 owned-style policy.
+
+## Related regional pilots
+
+The [regional camera data audit](./regional-camera-audit.md) uses a bounded Aachen
+sample and records its own snapshot/hash and unknown physical coverage. It is an
+ALPR research result, not a new camera overlay or an extension of basemap coverage.
