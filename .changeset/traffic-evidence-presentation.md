@@ -5,4 +5,4 @@
 "@openmapx/integration-overlay-traffic-tomtom": patch
 ---
 
-Keep route traffic caveats short and offer plain-language explanations on demand. Use a Fast–Slow traffic legend, preserve request-bound road-update verification, and avoid presenting engine-baseline differences as measured traffic delays.
+Show compact estimated traffic delays and color route travel times using the existing severity bands. Offer plain-language route and map explanations on demand, retain request-bound road-update verification, and use a Fast–Slow traffic legend.

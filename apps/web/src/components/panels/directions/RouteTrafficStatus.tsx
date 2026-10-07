@@ -2,10 +2,12 @@
 
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
-import type { RoadConditionRouteImpact, Route } from "@openmapx/core";
+import { formatDuration, type RoadConditionRouteImpact, type Route } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
 import { TrafficInfo } from "@/integration-api/components/TrafficInfo";
+import { TRAFFIC_TEXT_COLOR } from "@/integration-api/runtime/theme";
+import { routeTrafficDelay } from "@/lib/route-traffic-delay";
 import { routeTrafficStatus } from "@/lib/route-traffic-status";
 
 export function RouteTrafficStatus({
@@ -37,20 +39,31 @@ export function RouteTrafficStatus({
     return () => clearTimeout(timer);
   }, [deadline]);
   if (!status) return null;
+  const traffic = routeTrafficDelay(route);
+  const caption = traffic?.band
+    ? t("delay", { delay: formatDuration(traffic.seconds) })
+    : !traffic
+      ? t("summary")
+      : null;
   return (
     <Box sx={{ display: "flex", alignItems: "center", gap: 0.25, mt: 0.25 }}>
-      <Typography
-        id={id}
-        component="div"
-        variant="caption"
-        data-testid="route-traffic-status"
-        sx={{ color: "text.secondary", overflowWrap: "anywhere" }}
-      >
-        {t("summary")}
-      </Typography>
+      {caption && (
+        <Typography
+          id={id}
+          component="div"
+          variant="caption"
+          data-testid={traffic?.band ? "traffic-delay" : "route-traffic-status"}
+          sx={{
+            color: traffic?.band ? TRAFFIC_TEXT_COLOR[traffic.band] : "text.secondary",
+            overflowWrap: "anywhere",
+          }}
+        >
+          {caption}
+        </Typography>
+      )}
       <TrafficInfo>
         <Typography variant="body2" sx={{ mb: 1 }}>
-          {t("congestionUnverified")}
+          {t(traffic ? "estimateExplanation" : "congestionUnverified")}
         </Typography>
         <Typography variant="body2" sx={{ mb: 1 }}>
           {t(`application.${status.application}`)}

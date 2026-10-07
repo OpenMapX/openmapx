@@ -4320,6 +4320,8 @@
     },
     "about": "About traffic",
     "summary": "May not include traffic delays",
-    "provider": "Route provider: {source}"
+    "provider": "Route provider: {source}",
+    "delay": "+{delay} traffic",
+    "estimateExplanation": "The extra time is estimated by comparing this route with and without current traffic speeds. Actual delays can vary."
   }
 }

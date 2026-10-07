@@ -364,11 +364,75 @@ describe("RouteCard compact traffic explanation", () => {
       "May not include traffic delays",
     );
   });
-  it("does not advertise an engine-baseline delta as traffic delay", () => {
+  it("shows a compact delay and describes it to keyboard users", () => {
     renderCard({ ...baseRoute, duration: 6300, baselineDuration: 3600 });
-    expect(screen.queryByTestId("traffic-delay")).toBeNull();
-    expect(screen.queryByText(/^\+45 min/i)).toBeNull();
+    expect(screen.getByTestId("traffic-delay")).toHaveTextContent("+45 min traffic");
     expect(screen.queryByText(/baseline/i)).toBeNull();
+    expect(screen.queryByText("May not include traffic delays")).toBeNull();
+    const ids = screen.getByRole("radio").getAttribute("aria-describedby")?.split(" ") ?? [];
+    expect(ids.map((id) => document.getElementById(id)?.textContent).join(" ")).toContain(
+      "+45 min traffic",
+    );
+  });
+  it.each([
+    [3960, "light"],
+    [4500, "moderate"],
+    [5400, "heavy"],
+    [7200, "severe"],
+  ] as const)(
+    "colors the travel time for a %s-second route using the %s delay band",
+    (duration, band) => {
+      renderCard({ ...baseRoute, duration, baselineDuration: 3600 });
+      expect(getComputedStyle(screen.getByRole("heading", { level: 6 })).color).toBe(
+        `var(--omx-traffic-${band})`,
+      );
+    },
+  );
+  it.each([
+    [2640, 2400], // Relative threshold reached, less than five minutes extra.
+    [5760, 5400], // More than five minutes extra, below ten percent.
+    [3600, 3600], // Same estimate without current traffic speeds.
+    [3500, 3600], // Current conditions can be quicker than the comparison.
+  ])("does not advertise a significant delay for %s / %s seconds", (duration, baselineDuration) => {
+    renderCard({ ...baseRoute, duration, baselineDuration });
+    expect(screen.queryByTestId("traffic-delay")).toBeNull();
+    expect(screen.queryByText("May not include traffic delays")).toBeNull();
+    expect(screen.getByRole("button", { name: "About traffic" })).toBeInTheDocument();
+  });
+  it.each([undefined, 0, -1, Number.NaN, Number.POSITIVE_INFINITY])(
+    "does not fabricate a delay without a usable comparison (%s)",
+    (baselineDuration) => {
+      renderCard({ ...baseRoute, baselineDuration });
+      expect(screen.queryByTestId("traffic-delay")).toBeNull();
+      expect(screen.getByText("May not include traffic delays")).toBeInTheDocument();
+    },
+  );
+  it.each(["walking", "cycling"] as const)("does not show traffic delays for %s", (mode) => {
+    renderCard({ ...baseRoute, mode, duration: 6300, baselineDuration: 3600 });
+    expect(screen.queryByTestId("traffic-delay")).toBeNull();
+    expect(screen.queryByRole("button", { name: "About traffic" })).toBeNull();
+  });
+  it("keeps severity coloring on an unselected motorcycle alternative", () => {
+    render(
+      <NextIntlClientProvider locale="en" messages={en}>
+        <RouteCard
+          route={{ ...baseRoute, mode: "motorcycle", duration: 6300, baselineDuration: 3600 }}
+          index={1}
+          active={false}
+          onSelect={() => {}}
+          onDetails={() => {}}
+          units="metric"
+        />
+      </NextIntlClientProvider>,
+    );
+    expect(getComputedStyle(screen.getByRole("heading", { level: 6 })).color).toBe(
+      "var(--omx-traffic-heavy)",
+    );
+    expect(screen.getByText("+45 min traffic")).toBeInTheDocument();
+  });
+  it("localizes the compact delay in German", () => {
+    renderCard({ ...baseRoute, duration: 6300, baselineDuration: 3600 }, "metric", "de");
+    expect(screen.getByTestId("traffic-delay")).toHaveTextContent("+45 min durch Verkehr");
   });
   it.each(["route", "peek"] as const)(
     "opens and closes traffic info without selecting the %s route",

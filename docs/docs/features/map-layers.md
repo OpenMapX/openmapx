@@ -142,8 +142,9 @@ publication metadata contract remains follow-up work.
 
 **Map colors do not verify traffic influence on a route.** The routing engine can
 differ from the displayed overlay: hosted TomTom traffic over a self-hosted
-Valhalla route is still a map visualization. Directions cards separately explain
-validated road-condition application and unverified congestion influence; see
+Valhalla route is still a map visualization. Directions cards show estimated
+traffic delays when comparison data is available and explain road-update
+verification separately; see
 [Reading traffic information](./directions.md#reading-traffic-information).
 
 ### Context-aware layers

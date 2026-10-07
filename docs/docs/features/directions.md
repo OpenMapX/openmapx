@@ -124,19 +124,26 @@ future closures that haven't started yet or nightly closures during daytime trip
 
 ### Reading traffic information
 
-Driving and motorcycle cards keep the travel time prominent. **May not include
-traffic delays** means we cannot confirm that current congestion is reflected
-in that estimate. Open **About traffic** using the info button for the route
-provider and road-update explanation. These details do not interrupt route
-selection or Start.
+Driving and motorcycle cards color the travel time by the estimated traffic
+delay and show a short caption such as **+12 min traffic**. The estimate compares
+the same route with and without current traffic speeds. It appears when the
+extra time is at least five minutes and at least 10% of the comparison duration;
+the existing severity bands distinguish light, moderate, heavy and severe
+delays. The text supplies the amount so color is not the only signal.
 
-Available road updates are described as used only when this route has current,
-matching engine and server evidence. That explanation expires automatically;
-missing, failed or conflicting checks never carry a previous success forward.
-Road updates concern closures and speed restrictions, not a measured number of
-minutes lost in traffic. The engine's baseline duration remains available in the
-API, but its difference is not displayed as a traffic delay or used to color a
-card's travel time.
+**May not include traffic delays** is shown only when the route has no usable
+comparison duration. A comparison below the display thresholds does not produce
+an “all clear” claim. Open **About traffic** with the info button for a
+plain-language explanation of the estimate, road updates and the route provider.
+These details do not interrupt route selection or Start.
+
+Road updates are described as used only when this route has current, matching
+engine and server evidence. That explanation expires automatically; missing,
+failed or conflicting checks never carry a previous success forward. This
+road-update verification is separate from the engine's estimated delay. The
+estimate reflects the selected path at calculation time, can include applied
+speed restrictions, and does not establish a fresh congestion measurement for
+every road or the extra time versus a different traffic-free route.
 
 Map colors are separate from travel-time estimates. The
 [traffic legends](./map-layers.md#transportation) explain their sources and
@@ -193,8 +200,8 @@ The directions panel exposes the tuning knobs that map onto the routing API:
   engine's live-traffic request when one is available. The result is graph- and
   request-dependent: the engine may return only the primary route when no
   distinct alternative satisfies its cost and safety filters. Baseline durations
-  remain available through the API for comparison; they are not displayed as
-  measured traffic delays and can legitimately be slower than the live route.
+  supply the same-path estimated traffic-delay comparison shown on route cards;
+  they can legitimately be slower than the live route.
 - **Stops and optimization** — add intermediate waypoints, and ask the engine to
   reorder them into the shortest trip while keeping the first and last fixed.
 
