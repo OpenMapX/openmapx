@@ -80,7 +80,11 @@ scans. These are research-request bounds, not a production service contract.
 | Exact query SHA-256        | `4a01887e90abb06e6bf19b52f1940cdfe34654874bf1d71079361b289a6e4272` |
 
 The exact query, response, request costs, review file and generated outputs are
-archived as an external attachment on the implementation PR linked from #407.
+archived outside Git in the [source-evidence comment](https://github.com/OpenMapX/openmapx/issues/407#issuecomment-6029136789).
+The ZIP is Base64 encoded in a collapsed section with decoding instructions and
+a verified checksum: the available CLI rejects ZIP attachments and the browser
+has no authenticated upload session. A binary archive destination can replace
+that encoding while retaining the checksum.
 The repository contains synthetic tests, not the raw snapshot or screenshot
 folders. Later source edits must produce a new archive/hash and version-matched
 review; silently replacing this snapshot invalidates the comparison.
