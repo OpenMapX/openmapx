@@ -124,6 +124,29 @@ than inventing a speed.
 These overlays complement the dedicated [public transit](./public-transit.md) and
 [directions](./directions.md) features rather than replacing them.
 
+The **Traffic flow** legend uses a compact **Fast–Slow** color scale. Open
+**About traffic** with the info button in either traffic legend for its source
+and limitations. The owned legend also explains measured, estimated and typical
+readings there, using the same opacity as the renderer. A hidden layer stays
+explicitly labelled hidden.
+
+The tile formats expose no usable upstream/publication time or completeness
+metadata, so the details say the update time is unknown and some roads may be
+missing. Downloading a tile does not establish fresh measurements. Road colors
+do not establish whether traffic delays are included in a route's travel time.
+
+Traffic publication/check evidence exists in authenticated admin coverage, but
+is not exposed by these public tile contracts. The legends do not fetch admin
+diagnostics or borrow check/request times as observation age. A public, bounded
+publication metadata contract remains follow-up work.
+
+**Map colors do not verify traffic influence on a route.** The routing engine can
+differ from the displayed overlay: hosted TomTom traffic over a self-hosted
+Valhalla route is still a map visualization. Directions cards show estimated
+traffic delays when comparison data is available and explain road-update
+verification separately; see
+[Reading traffic information](./directions.md#reading-traffic-information).
+
 ### Context-aware layers
 
 Useful layers follow the task without becoming permanent preferences. Opening a

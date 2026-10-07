@@ -122,6 +122,51 @@ selected travel time. The system evaluates these in the closure's local timezone
 fine-grained recurring schedule windows). This prevents routing detours around
 future closures that haven't started yet or nightly closures during daytime trips.
 
+### Reading traffic information
+
+Driving and motorcycle cards color the travel time by the estimated traffic
+delay and show a short caption such as **(+12 min)** directly after the duration. The estimate compares
+the same route with and without current traffic speeds. It appears when the
+extra time is at least five minutes and at least 10% of the comparison duration;
+the existing severity bands distinguish light, moderate, heavy and severe
+delays. The text supplies the amount so color is not the only signal.
+
+When there is no usable delay estimate or congestion data is missing,
+incomplete or stale, the duration uses the normal text color without an extra
+visible note. **Traffic data unavailable** remains in **About traffic** and the
+route's screen-reader description. A route with fresh, complete congestion coverage
+and a comparison below the display thresholds has a **green duration** and no
+additional caption. Significant estimated delays retain their severity color
+and the inline **(+12 min)** amount. The **About traffic** button is aligned
+with the duration, above the distance, for all traffic states.
+
+A zero delay comparison alone cannot establish fresh congestion coverage.
+The route contract's optional `trafficCoverage` evidence must confirm that
+current congestion speeds cover the exact route and were used in its duration;
+its lease expires within two minutes of evaluation. Current routing providers
+**do not yet emit this evidence**, so low-delay comparisons currently use the
+unavailable state rather than green. Adding trustworthy engine-side congestion
+coverage remains part of the traffic follow-up; closure proofs and map-layer
+colors cannot substitute for it. Positive delay estimates remain useful even
+without complete coverage of every road.
+
+Open **About traffic** with the info button for a plain-language explanation of
+the estimate, road updates and the route provider. These details do not interrupt
+route selection or Start.
+
+Road updates are described as used only when this route has current, matching
+engine and server evidence. That explanation expires automatically; missing,
+failed or conflicting checks never carry a previous success forward. This
+road-update verification is separate from the engine's estimated delay. The
+estimate reflects the selected path at calculation time, can include applied
+speed restrictions, and does not establish a fresh congestion measurement for
+every road or the extra time versus a different traffic-free route.
+
+Map colors are separate from travel-time estimates. The
+[traffic legends](./map-layers.md#transportation) explain their sources and
+limitations on demand. This presentation applies to directions cards, not every
+navigation/EV surface.
+
 ## Stop times and dwell
 
 Any stop on a trip can carry a time of its own. The clock button on a waypoint
@@ -172,8 +217,8 @@ The directions panel exposes the tuning knobs that map onto the routing API:
   engine's live-traffic request when one is available. The result is graph- and
   request-dependent: the engine may return only the primary route when no
   distinct alternative satisfies its cost and safety filters. Baseline durations
-  are shown for comparison when supplied; a baseline can legitimately be slower
-  than the live route.
+  supply the same-path estimated traffic-delay comparison shown on route cards;
+  they can legitimately be slower than the live route.
 - **Stops and optimization** — add intermediate waypoints, and ask the engine to
   reorder them into the shortest trip while keeping the first and last fixed.
 

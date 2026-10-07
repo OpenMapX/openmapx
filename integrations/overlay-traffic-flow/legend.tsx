@@ -5,6 +5,7 @@ import Typography from "@mui/material/Typography";
 import { TRAFFIC_BAND_COLORS, type TrafficBand, useOverlayVisibilitySetter } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { OverlayLegend } from "@/integration-api/overlay/OverlayLegend";
+import { TrafficOverlayContext } from "@/integration-api/overlay/TrafficOverlayContext";
 import { useTrafficFlowStore } from "./store";
 import { TRAFFIC_FLOW_CONFIDENCE_STEPS } from "./visual-style";
 
@@ -15,6 +16,7 @@ export const BANDS: { color: string; key: TrafficBand }[] = (
 
 export function TrafficFlowLegend() {
   const t = useTranslations("trafficFlow");
+  const ts = useTranslations("trafficStatus.overlay");
   const panelOpen = useTrafficFlowStore((s) => s.panelOpen);
   const layerVisible = useTrafficFlowStore((s) => s.layerVisible);
   const setLayerVisible = useOverlayVisibilitySetter("traffic-flow");
@@ -35,42 +37,42 @@ export function TrafficFlowLegend() {
             <Box key={band.key} sx={{ flex: 1, bgcolor: band.color }} />
           ))}
         </Box>
-        <Box sx={{ display: "flex", mt: 0.4 }}>
-          {BANDS.map((band) => (
-            <Typography
-              key={band.key}
-              sx={{ flex: 1, fontSize: 9.5, color: "text.secondary", textAlign: "center" }}
-            >
-              {t(`band.${band.key}`)}
-            </Typography>
-          ))}
+        <Box sx={{ display: "flex", justifyContent: "space-between", mt: 0.4 }}>
+          <Typography variant="caption" color="text.secondary">
+            {ts("fast")}
+          </Typography>
+          <Typography variant="caption" color="text.secondary">
+            {ts("slow")}
+          </Typography>
         </Box>
       </Box>
 
-      <Box sx={{ mb: 1 }}>
-        <Typography sx={{ fontSize: 10.5, color: "text.secondary", mb: 0.4 }}>
-          {t("confidence.label")}
-        </Typography>
-        <Box sx={{ display: "flex", gap: 1 }}>
-          {TRAFFIC_FLOW_CONFIDENCE_STEPS.map((step) => (
-            <Box key={step.key} sx={{ display: "flex", alignItems: "center", gap: 0.4 }}>
-              <Box
-                data-testid={`traffic-flow-confidence-${step.key}`}
-                sx={{
-                  width: 9,
-                  height: 9,
-                  borderRadius: "2px",
-                  bgcolor: TRAFFIC_BAND_COLORS.freeFlow,
-                  opacity: step.opacity,
-                }}
-              />
-              <Typography sx={{ fontSize: 10.5, color: "text.secondary" }}>
-                {t(`confidence.${step.key}`)}
-              </Typography>
-            </Box>
-          ))}
+      <TrafficOverlayContext hosted={false} visible={layerVisible}>
+        <Box sx={{ mt: 1 }}>
+          <Typography sx={{ fontSize: 10.5, color: "text.secondary", mb: 0.4 }}>
+            {t("confidence.label")}
+          </Typography>
+          <Box sx={{ display: "flex", gap: 1 }}>
+            {TRAFFIC_FLOW_CONFIDENCE_STEPS.map((step) => (
+              <Box key={step.key} sx={{ display: "flex", alignItems: "center", gap: 0.4 }}>
+                <Box
+                  data-testid={`traffic-flow-confidence-${step.key}`}
+                  sx={{
+                    width: 9,
+                    height: 9,
+                    borderRadius: "2px",
+                    bgcolor: TRAFFIC_BAND_COLORS.freeFlow,
+                    opacity: step.opacity,
+                  }}
+                />
+                <Typography sx={{ fontSize: 10.5, color: "text.secondary" }}>
+                  {t(`confidence.${step.key}`)}
+                </Typography>
+              </Box>
+            ))}
+          </Box>
         </Box>
-      </Box>
+      </TrafficOverlayContext>
     </OverlayLegend>
   );
 }

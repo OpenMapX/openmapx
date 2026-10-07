@@ -892,8 +892,6 @@
       "checkFailed": "Straßenbedingungen für diese Route konnten nicht geprüft werden"
     },
     "localAccessRoad": "Nutzt eine gesperrte Straße (Anlieger frei)",
-    "trafficDelay": "+{delay} Verkehr",
-    "trafficDelayNormally": "normalerweise {baseline}",
     "from": "von",
     "to": "nach",
     "origin": "Start",
@@ -4291,5 +4289,40 @@
     "confirmTitle": "OSM-Suchindex erstellen",
     "confirmMessage": "Den OSM-Code- und Aliasindex für „{region}“ erstellen und atomar veröffentlichen? Dies kann CPU, Datenträger und Datenbank stark beanspruchen.",
     "startBuild": "Erstellung starten"
+  },
+  "trafficStatus": {
+    "source": {
+      "localValhalla": "Selbst gehostetes Valhalla",
+      "hostedValhalla": "Gehostetes Valhalla (Stadia Maps)",
+      "valhalla": "Valhalla",
+      "osrm": "OSRM",
+      "unknown": "Routing-Quelle unbekannt"
+    },
+    "application": {
+      "verified": "Verfügbare Straßenmeldungen wurden für diese Route berücksichtigt.",
+      "expired": "Straßenmeldungen müssen erneut geprüft werden. Berechne die Route erneut.",
+      "limited": "Einige gemeldete Straßenänderungen fehlen möglicherweise.",
+      "unavailable": "Straßenmeldungen konnten nicht geprüft werden.",
+      "unverified": "Es ist unklar, welche Straßenmeldungen berücksichtigt wurden."
+    },
+    "congestionUnverified": "Die Fahrzeit berücksichtigt möglicherweise keine aktuellen Verzögerungen durch Stau.",
+    "overlay": {
+      "ownedSource": "Verkehrsinformationen von diesem Server.",
+      "hostedSource": "Verkehrsinformationen von TomTom.",
+      "ageUnknown": "Der Aktualisierungszeitpunkt ist unbekannt.",
+      "coverageUnknown": "Einige Straßen fehlen möglicherweise.",
+      "mapOnly": "Straßenfarben zeigen nicht, ob Verzögerungen in der Fahrzeit berücksichtigt sind.",
+      "estimates": "Einige Farben basieren auf üblichen oder geschätzten Geschwindigkeiten statt aktuellen Messungen.",
+      "hidden": "Ausgeblendet",
+      "toggleHosted": "TomTom-Verkehr umschalten",
+      "fast": "Schnell",
+      "slow": "Langsam"
+    },
+    "about": "Verkehrsinformationen",
+    "summary": "Keine Verkehrsdaten verfügbar",
+    "provider": "Routenanbieter: {source}",
+    "delay": "+{delay}",
+    "coverageExplanation": "Die Fahrzeit berücksichtigt den aktuellen Verkehr.",
+    "estimateExplanation": "Die zusätzliche Zeit wird geschätzt, indem diese Route mit und ohne aktuelle Verkehrsgeschwindigkeiten verglichen wird. Tatsächliche Verzögerungen können abweichen."
   }
 }

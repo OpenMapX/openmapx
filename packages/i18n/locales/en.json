@@ -892,8 +892,6 @@
       "checkFailed": "Couldn't check road conditions for this route"
     },
     "localAccessRoad": "Uses a road closed except for local access",
-    "trafficDelay": "+{delay} traffic",
-    "trafficDelayNormally": "normally {baseline}",
     "from": "from",
     "to": "to",
     "origin": "Origin",
@@ -4291,5 +4289,40 @@
     "confirmTitle": "Build OSM search index",
     "confirmMessage": "Build and atomically publish the OSM code and alias index for \"{region}\"? This can be CPU-, disk-, and database-intensive.",
     "startBuild": "Start build"
+  },
+  "trafficStatus": {
+    "source": {
+      "localValhalla": "Self-hosted Valhalla",
+      "hostedValhalla": "Hosted Valhalla (Stadia Maps)",
+      "valhalla": "Valhalla",
+      "osrm": "OSRM",
+      "unknown": "Routing source unknown"
+    },
+    "application": {
+      "verified": "Available road updates were used for this route.",
+      "expired": "Road updates need to be checked again. Refresh the route.",
+      "limited": "Some reported road changes may be missing.",
+      "unavailable": "Road updates couldn’t be checked.",
+      "unverified": "We couldn’t confirm which road updates were used."
+    },
+    "congestionUnverified": "This travel time may not include current traffic delays.",
+    "overlay": {
+      "ownedSource": "Traffic information from this server.",
+      "hostedSource": "Traffic information from TomTom.",
+      "ageUnknown": "The update time is unknown.",
+      "coverageUnknown": "Some roads may be missing.",
+      "mapOnly": "Road colors don’t tell you whether delays are included in your travel time.",
+      "estimates": "Some colors use typical or estimated speeds rather than current measurements.",
+      "hidden": "Hidden",
+      "toggleHosted": "Toggle TomTom traffic",
+      "fast": "Fast",
+      "slow": "Slow"
+    },
+    "about": "About traffic",
+    "summary": "Traffic data unavailable",
+    "provider": "Route provider: {source}",
+    "delay": "+{delay}",
+    "coverageExplanation": "Current traffic is included in this travel time.",
+    "estimateExplanation": "The extra time is estimated by comparing this route with and without current traffic speeds. Actual delays can vary."
   }
 }
