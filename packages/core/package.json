@@ -137,6 +137,10 @@
     "./coverage": {
       "types": "./src/coverage/index.ts",
       "default": "./src/coverage/index.ts"
+    },
+    "./ambient-places": {
+      "types": "./src/ambient-places.ts",
+      "default": "./src/ambient-places.ts"
     }
   },
   "scripts": {

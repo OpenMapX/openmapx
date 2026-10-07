@@ -16,6 +16,7 @@ import type {
 import { registerPlaceResolver } from "@openmapx/place-ids";
 
 interface OvertureRow {
+  canonical_id?: string | null;
   gers_id: string;
   name: string;
   longitude: number;
@@ -140,7 +141,7 @@ function overtureRowToPoiSearchResult(
     });
 
   return {
-    id: `overture:${row.gers_id}`,
+    id: row.canonical_id ?? `overture:${row.gers_id}`,
     gersId: row.gers_id,
     name: localized.name,
     coordinates: [row.longitude, row.latitude],
@@ -173,6 +174,9 @@ async function queryOverturePlaces(
   const { bbox, concepts, minConfidence } = opts;
   const sql = `
     SELECT
+      (SELECT 'osm:' || link.osm_type || '/' || link.osm_id::TEXT
+       FROM overture_places.poi_conflation_link link
+       WHERE link.gers_id = places.gers_id) AS canonical_id,
       gers_id,
       name,
       ST_X(geom) AS longitude,
