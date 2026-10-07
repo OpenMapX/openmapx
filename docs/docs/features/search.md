@@ -42,6 +42,17 @@ Paris, while a word that names a kind of place nearby ("vegan", "döner") or a
 chain's branches ("aldi") search what you can currently see on the map. When
 several equally known places far away share the name ("springfield"), the list
 stays open with the first one highlighted, and a second Enter takes it.
+
+A complete name followed by complete normalized address words (for example,
+"MediaMarkt Rijswijk") supplies explicit location evidence, even far from the
+map. A partial address word remains a weaker autocomplete match: "Alexa" in a
+street named "Alexander" does not establish exact remote business intent.
+Ordinary name prefixes, explicit aliases and official codes keep their existing
+confidence. When the returned rows do not confidently name the query, plain
+Enter follows the existing natural-language or visible-area search path; an
+explicit dropdown choice still opens that row. This can make the dropdown order
+differ from the server's candidate order without changing candidate retrieval.
+
 Coordinates and Plus Codes are detected client side and resolved without a
 round trip to a geocoder at all.
 
