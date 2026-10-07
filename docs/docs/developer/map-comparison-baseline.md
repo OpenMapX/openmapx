@@ -10,6 +10,11 @@ or place sheets. Compare the same camera, viewport, theme, locale, and dataset.
 Keep data coverage, provider behavior, cartographic eligibility, and label
 collision outcomes separate when explaining a difference.
 
+The [landmark edge placement evaluation](./landmark-edge-placement.md) records
+issue #431's frozen Berlin camera, separately centred control and bounded
+phone/desktop edge comparisons. It concludes that the tested placement changes
+do not justify shipping; a rendered feature can still have clipped text.
+
 ## Reference capture: October 6, 2026
 
 The reference is the live **OpenMapX.com** instance in a **430 × 932 CSS-pixel**
