@@ -892,8 +892,8 @@
       "checkFailed": "Couldn't check road conditions for this route"
     },
     "localAccessRoad": "Uses a road closed except for local access",
-    "trafficDelay": "+{delay} traffic",
-    "trafficDelayNormally": "normally {baseline}",
+    "trafficDelay": "+{delay} vs engine baseline",
+    "trafficDelayNormally": "baseline {baseline}",
     "from": "from",
     "to": "to",
     "origin": "Origin",
@@ -4291,5 +4291,22 @@
     "confirmTitle": "Build OSM search index",
     "confirmMessage": "Build and atomically publish the OSM code and alias index for \"{region}\"? This can be CPU-, disk-, and database-intensive.",
     "startBuild": "Start build"
+  },
+  "trafficStatus": {
+    "source": {
+      "localValhalla": "Self-hosted Valhalla",
+      "hostedValhalla": "Hosted Valhalla (Stadia Maps)",
+      "valhalla": "Valhalla",
+      "osrm": "OSRM",
+      "unknown": "Routing source unknown"
+    },
+    "application": {
+      "verified": "Road-condition application verified",
+      "expired": "Road-condition evidence expired",
+      "limited": "Road-condition evidence limited",
+      "unavailable": "Road-condition check unavailable",
+      "unverified": "Road-condition application not verified"
+    },
+    "congestionUnverified": "Congestion effect on ETA not verified"
   }
 }

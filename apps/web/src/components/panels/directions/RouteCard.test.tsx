@@ -131,7 +131,9 @@ describe("RouteCard arrival time", () => {
     renderArrival({ kind: "now", destinationTimeZone: "Europe/Berlin" });
     const arrival = screen.getByTestId("route-arrival");
     expect(arrival).toHaveTextContent(/Arrives.*1:30\s*PM/);
-    expect(screen.getByRole("radio").getAttribute("aria-describedby")).toBe(arrival.id);
+    expect(screen.getByRole("radio").getAttribute("aria-describedby")?.split(" ")).toContain(
+      arrival.id,
+    );
   });
 
   it("resolves a chosen departure in the origin zone before displaying destination time", () => {
@@ -355,6 +357,14 @@ describe("RouteCard keyboard actions", () => {
 });
 
 describe("RouteCard traffic delta", () => {
+  it("describes traffic evidence when keyboard users select a route", () => {
+    renderCard(baseRoute);
+    const ids = screen.getByRole("radio").getAttribute("aria-describedby")?.split(" ") ?? [];
+    expect(ids.map((id) => document.getElementById(id)?.textContent).join(" ")).toContain(
+      "Congestion effect on ETA not verified",
+    );
+  });
+
   it("shows nothing when there is no baseline duration", () => {
     renderCard(baseRoute);
     expect(screen.queryByTestId("traffic-delay")).toBeNull();
@@ -377,6 +387,8 @@ describe("RouteCard traffic delta", () => {
     renderCard({ ...baseRoute, duration: 5220, baselineDuration: 4500 });
     const el = screen.getByTestId("traffic-delay");
     expect(el.textContent).toContain("12 min");
+    expect(el).toHaveTextContent("vs engine baseline");
+    expect(el).not.toHaveTextContent(/traffic|normally/i);
     expect(getComputedStyle(el).color).toBe("var(--omx-traffic-light)");
   });
 

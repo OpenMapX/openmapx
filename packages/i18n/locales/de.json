@@ -892,8 +892,8 @@
       "checkFailed": "Straßenbedingungen für diese Route konnten nicht geprüft werden"
     },
     "localAccessRoad": "Nutzt eine gesperrte Straße (Anlieger frei)",
-    "trafficDelay": "+{delay} Verkehr",
-    "trafficDelayNormally": "normalerweise {baseline}",
+    "trafficDelay": "+{delay} gegenüber der Modell-Basiszeit",
+    "trafficDelayNormally": "Basiszeit {baseline}",
     "from": "von",
     "to": "nach",
     "origin": "Start",
@@ -4291,5 +4291,22 @@
     "confirmTitle": "OSM-Suchindex erstellen",
     "confirmMessage": "Den OSM-Code- und Aliasindex für „{region}“ erstellen und atomar veröffentlichen? Dies kann CPU, Datenträger und Datenbank stark beanspruchen.",
     "startBuild": "Erstellung starten"
+  },
+  "trafficStatus": {
+    "source": {
+      "localValhalla": "Selbst gehostetes Valhalla",
+      "hostedValhalla": "Gehostetes Valhalla (Stadia Maps)",
+      "valhalla": "Valhalla",
+      "osrm": "OSRM",
+      "unknown": "Routing-Quelle unbekannt"
+    },
+    "application": {
+      "verified": "Berücksichtigung der Straßenbedingungen verifiziert",
+      "expired": "Nachweis der Straßenbedingungen abgelaufen",
+      "limited": "Nachweis der Straßenbedingungen eingeschränkt",
+      "unavailable": "Prüfung der Straßenbedingungen nicht verfügbar",
+      "unverified": "Berücksichtigung der Straßenbedingungen nicht verifiziert"
+    },
+    "congestionUnverified": "Einfluss von Staus auf die Ankunftszeit nicht verifiziert"
   }
 }

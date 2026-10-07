@@ -43,6 +43,7 @@ import { useStartNavigation } from "@/lib/mobile/useStartNavigation";
 import { primeSpeechSynthesis } from "@/lib/navigation/useNavigationVoice";
 import { requestHeadingPermission } from "@/lib/useHeading";
 import { useNow } from "@/lib/useNow";
+import { RouteTrafficStatus } from "./RouteTrafficStatus";
 import { type RouteArrivalContext, resolveRouteArrival } from "./routeArrival";
 
 const GROUND_MODES = new Set<Route["mode"]>(["driving", "walking", "cycling", "motorcycle"]);
@@ -148,6 +149,14 @@ export function RouteCard({
   const [startError, setStartError] = useState<string | null>(null);
   const [impactDetailsOpen, setImpactDetailsOpen] = useState(false);
   const arrivalCaptionId = useId();
+  const trafficCaptionId = useId();
+  const selectionDescription =
+    [
+      route.mode === "driving" && arrivalContext ? arrivalCaptionId : null,
+      route.mode === "driving" || route.mode === "motorcycle" ? trafficCaptionId : null,
+    ]
+      .filter(Boolean)
+      .join(" ") || undefined;
   const roadConditionNotice = roadConditionRouteNotice(roadConditionImpact);
 
   const handleStart = async () => {
@@ -288,6 +297,12 @@ export function RouteCard({
           {t("trafficDelayNormally", { baseline: formatDuration(trafficDelay.baseline) })}
         </Typography>
       )}
+      <RouteTrafficStatus
+        id={trafficCaptionId}
+        route={route}
+        impact={roadConditionImpact}
+        provider={provider}
+      />
       {roadConditionNotice && (
         <Typography
           variant="caption"
@@ -352,9 +367,7 @@ export function RouteCard({
             component="button"
             type="button"
             aria-label={selectionLabel}
-            aria-describedby={
-              route.mode === "driving" && arrivalContext ? arrivalCaptionId : undefined
-            }
+            aria-describedby={selectionDescription}
             onClick={onSelect}
             sx={selectionSx}
           >
@@ -367,9 +380,7 @@ export function RouteCard({
               type="radio"
               name="alternative-route"
               aria-label={selectionLabel}
-              aria-describedby={
-                route.mode === "driving" && arrivalContext ? arrivalCaptionId : undefined
-              }
+              aria-describedby={selectionDescription}
               checked={active}
               onChange={onSelect}
               onClick={() => {
