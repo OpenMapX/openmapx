@@ -10,6 +10,10 @@ or place sheets. Compare the same camera, viewport, theme, locale, and dataset.
 Keep data coverage, provider behavior, cartographic eligibility, and label
 collision outcomes separate when explaining a difference.
 
+For a separately pinned Aachen ALPR sample and its unknown physical coverage, see
+the [regional camera data audit](./regional-camera-audit.md). It is research, not
+a new camera overlay or an extension of basemap coverage.
+
 ## Reference capture: October 6, 2026
 
 The reference is the live **OpenMapX.com** instance in a **430 × 932 CSS-pixel**
@@ -199,9 +203,3 @@ rank boundaries, exclusions, duplicate prevention, layer priority, and validity.
 Repeat generation to check idempotence and repeat the visual matrix before
 expanding the thresholds. Hosted complete MapTiler styles are outside this
 owned-style policy.
-
-## Related regional pilots
-
-The [regional camera data audit](./regional-camera-audit.md) uses a bounded Aachen
-sample and records its own snapshot/hash and unknown physical coverage. It is an
-ALPR research result, not a new camera overlay or an extension of basemap coverage.

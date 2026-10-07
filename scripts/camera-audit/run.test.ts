@@ -1,4 +1,4 @@
-import { spawnSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -35,7 +35,7 @@ function run(extra: string[] = []) {
       "6.04,50.75,6.13,50.80",
       ...extra,
     ],
-    { encoding: "utf8" },
+    { encoding: "utf8", timeout: 1000 },
   );
 }
 it("writes explicit no-go audit and attributed empty GeoJSON only from a valid complete snapshot", () => {
@@ -65,3 +65,15 @@ it("rejects duplicate/unknown flags and credential sources without echoing sensi
   expect(existsSync(join(dir, "out"))).toBe(false);
   expect(run(["--unknown", "x"]).status).toBe(1);
 });
+
+it.skipIf(process.platform === "win32")(
+  "rejects nonregular snapshot inputs promptly rather than hanging",
+  () => {
+    rmSync(join(dir, "input.json"));
+    execFileSync("mkfifo", [join(dir, "input.json")]);
+    const r = run();
+    expect(r.status, String(r.error)).toBe(1);
+    expect(r.error).toBeUndefined();
+    expect(existsSync(join(dir, "out"))).toBe(false);
+  },
+);

@@ -222,7 +222,17 @@ export function auditCameraSnapshot(raw: Buffer, query: Buffer, options: AuditOp
         item.lat > n
       )
         throw new Error("Invalid or outside-bbox node position");
-      const inactive = ["disused", "removed", "demolished", "abandoned"].some(
+      const inactive = [
+        "disused",
+        "removed",
+        "demolished",
+        "razed",
+        "abandoned",
+        "construction",
+        "proposed",
+        "planned",
+        "was",
+      ].some(
         (key) =>
           tags[key] === "yes" || `${key}:man_made` in tags || `${key}:surveillance:type` in tags,
       );

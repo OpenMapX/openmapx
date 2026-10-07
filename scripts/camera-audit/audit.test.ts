@@ -26,6 +26,9 @@ const conflictTags: Record<string, string>[] = [
   { "camera:type": "dome" },
   { "camera:type": "PTZ" },
   { "camera:type": "panning" },
+  { "razed:man_made": "surveillance" },
+  { "construction:man_made": "surveillance" },
+  { "proposed:man_made": "surveillance" },
 ];
 const alpr = { man_made: "surveillance", "surveillance:type": "ALPR" };
 const raw = (elements: unknown[], extra: Record<string, unknown> = {}) =>

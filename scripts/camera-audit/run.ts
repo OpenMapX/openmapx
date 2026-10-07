@@ -1,6 +1,7 @@
-import { mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { auditCameraSnapshot, type Review } from "./audit.ts";
+import { readAuditInput as read } from "./read-input.ts";
 
 try {
   const allowed = new Set([
@@ -26,10 +27,6 @@ try {
     return value;
   };
   for (const key of allowed) if (key !== "--review") required(key);
-  const read = (path: string) => {
-    if (statSync(path).size > 5 * 1024 * 1024) throw new Error("Input size exceeds 5 MiB");
-    return readFileSync(path);
-  };
   const bbox = required("--bbox").split(",").map(Number);
   if (bbox.length !== 4) throw new Error("Invalid regional bbox");
   const review = args.get("--review");

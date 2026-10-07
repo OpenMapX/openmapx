@@ -153,6 +153,7 @@ Overpass remarks, malformed positions/metadata, duplicate identities and stale
 review versions fail; they never become empty successful coverage. A failed write
 removes only the newly created output directory. Inputs and previous runs remain.
 
+Inputs must be regular files; reads and allocation are bounded even if a file grows.
 Bounds: 5 MiB per file, 10,000 objects, at most 1 degree on each bbox axis and
 1,000 eligible ALPR points. The candidate pair list is capped at 1,000 and marks
 truncation explicitly; subdivide dense regions. Input/query hashes and a normalized
