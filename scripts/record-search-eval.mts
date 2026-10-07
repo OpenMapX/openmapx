@@ -1,10 +1,11 @@
 /**
- * Records the provider responses behind each search-eval case, so the ranking
+ * Records selected adapted API responses behind each search-eval case, so the ranking
  * eval (packages/core/src/utils/__tests__/search-eval) runs offline and
  * deterministically. Needs a running API:
  *
  *   pnpm search-eval:record [--api http://localhost:3001] [case-id …]
  *
+ * These are not raw upstream payloads. Each recording includes capture provenance.
  * Re-record after changing a provider, the geocoding chain, or a case's query
  * or location; the fixtures are what the eval scores.
  */
@@ -16,6 +17,7 @@ import {
   EVAL_CASES,
   type EvalCase,
 } from "../packages/core/src/utils/__tests__/search-eval/cases.js";
+import { captureMetadata } from "./discovery-eval/capture.js";
 
 const FIXTURE_DIR = join(
   dirname(fileURLToPath(import.meta.url)),
@@ -56,7 +58,13 @@ function pick<T extends object>(item: T, fields: readonly string[]): Partial<T> 
   ) as Partial<T>;
 }
 
-async function recordCase(evalCase: EvalCase) {
+function provenance() {
+  const revision = execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim();
+  const dirty = execFileSync("git", ["status", "--porcelain"], { encoding: "utf8" }).trim() !== "";
+  return captureMetadata(api, revision, new Date(), dirty);
+}
+
+async function recordCase(evalCase: EvalCase, capture: ReturnType<typeof captureMetadata>) {
   const [lng, lat] = evalCase.center;
   const near = { lat: lat.toFixed(2), lng: lng.toFixed(2) };
   const q = evalCase.query;
@@ -88,6 +96,7 @@ async function recordCase(evalCase: EvalCase) {
     }),
   ]);
   return {
+    capture: { ...capture, recordedAt: new Date().toISOString() },
     autocomplete: autocomplete.map((item) => pick(item, PLACE_FIELDS)),
     aggregate: aggregate.suggestions.map((item) => pick(item, PLACE_FIELDS)),
     brands: brands.matches.map((item) =>
@@ -98,6 +107,7 @@ async function recordCase(evalCase: EvalCase) {
 }
 
 async function main() {
+  const capture = provenance(); // Validate and snapshot the checkout before requests or writes.
   mkdirSync(FIXTURE_DIR, { recursive: true });
   const langs = new Set(EVAL_CASES.map((evalCase) => evalCase.lang));
   const chipTranslations: Record<string, unknown> = {};
@@ -117,12 +127,12 @@ async function main() {
   });
   writeFileSync(
     join(FIXTURE_DIR, "_shared.json"),
-    `${JSON.stringify({ chipTranslations, integrationCategories }, null, 1)}\n`,
+    `${JSON.stringify({ capture, chipTranslations, integrationCategories }, null, 1)}\n`,
   );
 
   for (const evalCase of EVAL_CASES) {
     if (only.size > 0 && !only.has(evalCase.id)) continue;
-    const recorded = await recordCase(evalCase);
+    const recorded = await recordCase(evalCase, capture);
     writeFileSync(
       join(FIXTURE_DIR, `${evalCase.id}.json`),
       `${JSON.stringify(recorded, null, 1)}\n`,

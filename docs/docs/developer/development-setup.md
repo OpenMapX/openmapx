@@ -221,6 +221,8 @@ Tooling notes:
   `web` (the Next.js app and React-bound packages, in jsdom). All test commands
   run from the repo root:
   - `pnpm test` — run the whole suite once
+  - `pnpm discovery-eval --out /tmp/openmapx-eval` — run the versioned offline
+    [discovery evaluation](discovery-evaluation.md) and save a comparison report
   - `pnpm test:watch` — watch mode
   - `pnpm test:coverage` — run with a V8 coverage report (written to `coverage/`)
   - `pnpm test --project web` / `--project node` — scope to one environment
