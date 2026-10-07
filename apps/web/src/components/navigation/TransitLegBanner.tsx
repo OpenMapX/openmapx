@@ -327,7 +327,8 @@ export function TransitLegBanner({
             </Typography>
             {transfer?.nextLeg.cancelled && (
               <Typography variant="body2" sx={{ fontWeight: 700 }}>
-                {transfer.nextLeg.route?.shortName} · {tt("canceled")}
+                {tt("nextServiceCanceled")}
+                {transfer.nextLeg.route?.shortName ? ` · ${transfer.nextLeg.route.shortName}` : ""}
               </Typography>
             )}
             <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, minWidth: 0 }}>

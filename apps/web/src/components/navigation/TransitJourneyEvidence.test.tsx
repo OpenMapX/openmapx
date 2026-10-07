@@ -154,7 +154,7 @@ it("announces alighting rather than boarding a cancelled next transfer", () => {
       }}
     />,
   );
-  expect(screen.getByText(/transit.canceled/)).toBeInTheDocument();
+  expect(screen.getByText(/transit.nextServiceCanceled/)).toBeInTheDocument();
   expect(screen.queryByText("navigation.changeAt")).not.toBeInTheDocument();
   expect(state.speak).toHaveBeenCalledWith("navigation.voiceAlight");
   expect(state.speak).not.toHaveBeenCalledWith("navigation.voiceTransfer");

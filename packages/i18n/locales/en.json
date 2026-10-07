@@ -1613,7 +1613,8 @@
       "partial": "Some timetable sources are unavailable. Results may be incomplete.",
       "timingUnknown": "Realtime status unknown",
       "sourceUnknown": "Source unknown"
-    }
+    },
+    "nextServiceCanceled": "Next service canceled"
   },
   "category": {
     "openNow": "Open now",

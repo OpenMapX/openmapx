@@ -1613,7 +1613,8 @@
       "partial": "Einige Fahrplanquellen sind nicht verfügbar. Die Ergebnisse können unvollständig sein.",
       "timingUnknown": "Echtzeitstatus unbekannt",
       "sourceUnknown": "Quelle unbekannt"
-    }
+    },
+    "nextServiceCanceled": "Nächste Verbindung fällt aus"
   },
   "category": {
     "openNow": "Jetzt geöffnet",
