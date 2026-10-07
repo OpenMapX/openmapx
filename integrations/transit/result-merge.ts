@@ -48,10 +48,12 @@ export function mergeFreshness(...values: Freshness[]): Freshness {
   // Every realtime contributor must have a known age before claiming a combined one.
   const realtime = values.filter((value) => value.hasRealtimeData);
   const relevant = realtime.length ? realtime : values;
+  const now = Date.now();
   const dates = relevant
     .map((value) => value.dataAsOf)
     .filter(
-      (value): value is string => typeof value === "string" && Number.isFinite(Date.parse(value)),
+      (value): value is string =>
+        typeof value === "string" && Number.isFinite(Date.parse(value)) && Date.parse(value) <= now,
     );
   const dataAsOf =
     dates.length === relevant.length

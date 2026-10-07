@@ -92,3 +92,24 @@ describe("transit result merging", () => {
     expect(Date.parse(merged.fetchedAt)).toBeGreaterThanOrEqual(before);
   });
 });
+
+it("does not hide a future realtime contributor behind an older valid timestamp", () => {
+  const now = Date.parse("2026-10-07T08:00:00Z");
+  const clock = vi.spyOn(Date, "now").mockReturnValue(now);
+  try {
+    expect(
+      mergeFreshness(
+        freshness(new Date(now).toISOString(), {
+          hasRealtimeData: true,
+          dataAsOf: "2026-10-07T07:59:30Z",
+        }),
+        freshness(new Date(now).toISOString(), {
+          hasRealtimeData: true,
+          dataAsOf: "2026-10-07T08:10:00Z",
+        }),
+      ).dataAsOf,
+    ).toBeUndefined();
+  } finally {
+    clock.mockRestore();
+  }
+});

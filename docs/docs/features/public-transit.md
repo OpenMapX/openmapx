@@ -128,7 +128,8 @@ This trip-update window follows the
 [GTFS realtime best practices](https://gtfs.org/documentation/realtime/realtime-best-practices/).
 It does not establish that every station has realtime coverage. Local adapter
 `observedAt`, request `fetchedAt`, and itinerary `plannedAt`/`refreshedAt` are not
-upstream publication times. Current MOTIS/Transitous timetable wrappers do not
+upstream publication times. Differing predicted departure times are displayed even
+for early services or when no numeric delay is supplied. Current MOTIS/Transitous timetable wrappers do not
 supply upstream age, so predictions from them usually have unknown age.
 
 Self-hosted and hosted source labels describe the known provider path, alongside
@@ -143,7 +144,11 @@ A partially successful linked board retains successful sources with an incomplet
 results notice; it does not claim there are no departures when remaining sources
 failed. A successful empty timetable remains a valid empty result. Realtime
 source age is reevaluated every 30 seconds while these views are mounted; this
-adds no provider polling or installed-shell live-data owner. Offline/native
+adds no provider polling or installed-shell live-data owner. A failed refresh
+currently labels cached age as unknown even when cached metadata was already
+stale; the separate failure warning remains. Station discovery happens before
+these timetable queries: legacy stop-name discovery failures can still produce
+an empty linked-stop result, especially with a cold cache. Offline/native
 navigation lifecycle validation remains separate.
 
 ## Live vehicles on the map

@@ -462,12 +462,11 @@ describe("getDepartures", () => {
     );
   });
 
-  it("returns empty array on error", async () => {
+  it("keeps timetable transport failures distinct from a successful empty array", async () => {
     vi.mocked(stoptimes).mockRejectedValueOnce(new Error("fail"));
-
-    const result = await getDepartures(testInstance, "test:de:12345", 60);
-
-    expect(result).toEqual([]);
+    await expect(getDepartures(testInstance, "test:de:12345", 60)).rejects.toThrow(
+      "MOTIS timetable unavailable",
+    );
   });
 });
 

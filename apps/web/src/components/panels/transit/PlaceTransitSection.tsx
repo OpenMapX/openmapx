@@ -107,7 +107,9 @@ export function PlaceTransitSection({
   );
 
   // Show skeleton while loading only if we haven't confirmed there are no routes
-  if (isLoading && !routes) {
+  const hasDepartures = Boolean(departures?.length);
+  const uncertainDepartures = departuresQuery.isError || departuresQuery.freshness?.isPartial;
+  if (isLoading && !routes && !hasDepartures && !uncertainDepartures) {
     return (
       <Box sx={{ px: 2, py: 1 }}>
         <Divider sx={{ mb: 1.5 }} />
@@ -122,9 +124,9 @@ export function PlaceTransitSection({
   }
 
   // No transit data for this place — render nothing
-  if (!routes || routes.length === 0) return null;
+  if (!routes?.length && !hasDepartures && !uncertainDepartures) return null;
 
-  const grouped = groupByMode(routes);
+  const grouped = groupByMode(routes ?? []);
 
   return (
     <Box sx={{ px: 2, py: 1 }}>

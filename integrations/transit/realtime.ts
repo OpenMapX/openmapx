@@ -172,6 +172,7 @@ export async function enrichDeparturesWithRealtime(
       partial = true;
       continue;
     }
+    partial ||= outcome.value.freshness.isPartial === true;
     for (const id of ids) {
       const delta = outcome.value.data[id];
       if (!delta) continue;
@@ -204,6 +205,7 @@ export async function enrichDeparturesWithRealtime(
           partial = true;
           continue;
         }
+        partial ||= outcome.value.freshness.isPartial === true;
         if (!outcome.value.data) continue;
         let applied = false;
         for (const departure of byTrip.get(tripId) ?? []) {

@@ -44,6 +44,13 @@ export function DepartureRow({
   const fmt = useDateTimeFormat();
   const isDelayed = departure.delaySeconds != null && departure.delaySeconds > 60;
   const isCanceled = departure.canceled === true;
+  const scheduledTime = fmt.time(departure.scheduledAt);
+  const validExpectedAt =
+    departure.expectedAt && Number.isFinite(Date.parse(departure.expectedAt))
+      ? departure.expectedAt
+      : undefined;
+  const expectedTime = validExpectedAt ? fmt.time(validExpectedAt) : undefined;
+  const timeChanged = expectedTime !== undefined && expectedTime !== scheduledTime;
   const hasRemarks = departure.remarks && departure.remarks.length > 0;
 
   const inner = (
@@ -86,22 +93,21 @@ export function DepartureRow({
             variant="body2"
             sx={{
               fontWeight: 500,
-              textDecoration:
-                isCanceled || (isDelayed && departure.expectedAt) ? "line-through" : "none",
+              textDecoration: isCanceled || timeChanged ? "line-through" : "none",
               color: isCanceled ? "text.disabled" : "text.primary",
             }}
           >
-            {fmt.time(departure.scheduledAt)}
+            {scheduledTime}
           </Typography>
-          {isDelayed && !isCanceled && departure.expectedAt && (
+          {timeChanged && !isCanceled && (
             <Typography
               variant="body2"
               sx={{
                 fontWeight: 600,
-                color: "error.main",
+                color: isDelayed ? "error.main" : "text.primary",
               }}
             >
-              {fmt.time(departure.expectedAt)}
+              {expectedTime}
             </Typography>
           )}
           {isCanceled && (

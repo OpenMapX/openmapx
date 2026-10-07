@@ -9,6 +9,8 @@ import { PlaceTransitSection } from "./PlaceTransitSection";
 import { StopBoardView } from "./StopBoardView";
 
 const state = vi.hoisted(() => ({
+  routesAvailable: true,
+  routesLoading: false,
   query: {
     data: [] as Departure[] | undefined,
     isLoading: false,
@@ -33,8 +35,10 @@ vi.mock("@openmapx/core", () => ({
   useLinkedTransitDepartures: () => state.query,
   useLinkedTransitArrivals: () => ({ data: [], isLoading: false }),
   useLinkedTransitRoutes: () => ({
-    data: [{ id: "ms:route-a", shortName: "RE1", longName: "", mode: "rail", providers: ["ms"] }],
-    isLoading: false,
+    data: state.routesAvailable
+      ? [{ id: "ms:route-a", shortName: "RE1", longName: "", mode: "rail", providers: ["ms"] }]
+      : [],
+    isLoading: state.routesLoading,
   }),
   useLinkedTransitFacilities: () => ({ data: [] }),
   useLinkedTransitAlerts: () => ({ data: [] }),
@@ -62,6 +66,8 @@ const departure: Departure = {
   },
 };
 beforeEach(() => {
+  state.routesAvailable = true;
+  state.routesLoading = false;
   state.query = {
     data: [departure],
     isLoading: false,
@@ -183,5 +189,27 @@ it.each(["linked board", "place preview", "boarding board"])(
     );
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
     expect(screen.getByText("Sibling station")).toBeInTheDocument();
+  },
+);
+
+it.each([
+  { expectedAt: "2026-10-07T08:03:00Z", delaySeconds: -120, clock: "08:03" },
+  { expectedAt: "2026-10-07T08:06:00Z", delaySeconds: 60, clock: "08:06" },
+  { expectedAt: "2026-10-07T08:07:00Z", delaySeconds: undefined, clock: "08:07" },
+])("shows the differing expected time $clock independently of positive delay", (value) => {
+  render(<DepartureRow departure={{ ...departure, ...value }} now={Date.now()} />);
+  expect(screen.getByText(value.clock)).toBeInTheDocument();
+  expect(screen.getByText("08:05")).toBeInTheDocument();
+});
+it.each([false, true])(
+  "keeps useful departures and recovery when independent route metadata is loading=%s or absent",
+  (loading) => {
+    state.routesAvailable = false;
+    state.routesLoading = loading;
+    state.query.isError = true;
+    render(<PlaceTransitSection place={place} onOpenDepartures={() => {}} />);
+    expect(screen.getByText("Sibling station")).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("refreshFailed");
+    expect(screen.getByRole("button", { name: "common.retry" })).toBeInTheDocument();
   },
 );

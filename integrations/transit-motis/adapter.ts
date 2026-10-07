@@ -345,11 +345,7 @@ export function normalizeStoptime(
       instance: instance.provider,
       datasetEpoch: provenance?.datasetEpoch,
       realtimeCompleteness:
-        st.realTime === true
-          ? "merged"
-          : st.realTime === false || provenance?.realtimeEnabled === false
-            ? "none"
-            : "unknown",
+        st.realTime === true ? "merged" : st.realTime === false ? "none" : "unknown",
       observedAt: new Date().toISOString(),
     },
   };

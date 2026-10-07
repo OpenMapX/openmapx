@@ -1,6 +1,17 @@
 import type { TripItinerary, TripLeg } from "@openmapx/mobility-core/transit";
 import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+
+vi.mock("@/lib/navigation/useTransferInfo", () => ({
+  useTransferInfo: () => ({
+    nextHeadsign: "Next train",
+    boardPlatform: "4",
+    platformChanged: true,
+    levelChange: null,
+    walkMinutes: 2,
+  }),
+}));
+
 import { TransitJourneySheet } from "./TransitJourneySheet";
 import { TransitLegBanner } from "./TransitLegBanner";
 
@@ -121,4 +132,30 @@ describe("journey and navigation use the same transit evidence", () => {
     expect(state.journey.mock.calls.map((call) => call[0])).toEqual([null, null]);
     expect(screen.getAllByText(/dataStatus.realtime/)[0]).toHaveTextContent("dataStatus.unknown");
   });
+});
+
+it("announces alighting rather than boarding a cancelled next transfer", () => {
+  render(
+    <TransitLegBanner
+      leg={leg}
+      legIndex={0}
+      totalLegs={2}
+      source="ms"
+      transitProgress={{
+        currentLegIndex: 0,
+        snapped: [13.3798, 52.5298],
+        fractionAlongLeg: 0.98,
+        deviationMeters: 0,
+        arrived: false,
+      }}
+      transfer={{
+        nextLeg: { ...leg, tripId: "ms:cancelled-next", cancelled: true },
+        walkSeconds: 120,
+      }}
+    />,
+  );
+  expect(screen.getByText(/transit.canceled/)).toBeInTheDocument();
+  expect(screen.queryByText("navigation.changeAt")).not.toBeInTheDocument();
+  expect(state.speak).toHaveBeenCalledWith("navigation.voiceAlight");
+  expect(state.speak).not.toHaveBeenCalledWith("navigation.voiceTransfer");
 });

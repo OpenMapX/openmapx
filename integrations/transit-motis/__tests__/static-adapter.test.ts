@@ -641,3 +641,25 @@ describe("MOTIS timetable transport evidence", () => {
     await expect(getDepartures(instance, "ms:root", 60)).resolves.toEqual([]);
   });
 });
+
+it.each([false, undefined])(
+  "keeps absent per-service realtime evidence unknown with health/configuration %s",
+  (realtimeEnabled) => {
+    const normalized = normalizeStoptime(
+      instance,
+      {
+        tripId: "trip-a",
+        place: {
+          stopId: "stop-a",
+          name: "Station",
+          lat: 52.52,
+          lon: 13.37,
+          scheduledDeparture: "2026-10-07T08:05:00Z",
+        },
+      },
+      "departure",
+      { realtimeEnabled },
+    );
+    expect(normalized.provenance?.realtimeCompleteness).toBe("unknown");
+  },
+);

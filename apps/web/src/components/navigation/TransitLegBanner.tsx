@@ -146,7 +146,7 @@ export function TransitLegBanner({
       }
       if (voiceEnabled) {
         speak(
-          transfer
+          transfer && !transfer.nextLeg.cancelled
             ? t("voiceTransfer", {
                 stop: leg.to.name,
                 line: transfer.nextLeg.route?.shortName || transfer.nextLeg.route?.longName || "",
@@ -297,7 +297,7 @@ export function TransitLegBanner({
           retrying={journeyQuery.isFetching}
         />
       )}
-      {alightSoon && transfer ? (
+      {alightSoon && transfer && !transfer.nextLeg.cancelled ? (
         <TransitTransferCard
           fromLeg={leg}
           nextLeg={transfer.nextLeg}
@@ -325,6 +325,11 @@ export function TransitLegBanner({
             <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
               {t("alightSoon")}
             </Typography>
+            {transfer?.nextLeg.cancelled && (
+              <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                {transfer.nextLeg.route?.shortName} · {tt("canceled")}
+              </Typography>
+            )}
             <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, minWidth: 0 }}>
               <Typography variant="caption" noWrap>
                 {t("alightAt", { place: leg.to.name })}

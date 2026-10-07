@@ -400,3 +400,33 @@ describe("realtime internals", () => {
     expect(providerMatches(noMethod, undefined)).toBe(false);
   });
 });
+
+it.each(["batch empty", "batch no-op", "single null", "single no-op"])(
+  "preserves declared partial coverage for %s realtime responses",
+  async (mode) => {
+    const base = { data: [dep({ tripId: "ms:trip-1" })], attributions: [], freshness: fresh() };
+    const metadata = fresh({ hasRealtimeData: true, isPartial: true });
+    const provider = makeProvider(
+      mode.startsWith("batch")
+        ? {
+            getTripUpdates: async () => ({
+              data: mode === "batch empty" ? {} : { "ms:trip-1": { tripId: "ms:trip-1" } },
+              attributions: [],
+              freshness: metadata,
+            }),
+          }
+        : {
+            getTripUpdate: async () => ({
+              data: mode === "single null" ? null : { tripId: "ms:trip-1" },
+              attributions: [],
+              freshness: metadata,
+            }),
+          },
+    );
+    const out = await enrichDeparturesWithRealtime({ ctx: makeCtx([provider]), timed }, base, {
+      stopId: "ms:s",
+    });
+    expect(out.data).toEqual(base.data);
+    expect(out.freshness).toMatchObject({ isPartial: true, hasRealtimeData: false });
+  },
+);
