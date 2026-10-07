@@ -409,7 +409,8 @@
     "nautical": "Seekarten",
     "sunTime": "Tageslicht & Zeitzonen",
     "schematicTransit": "Schematischer Liniennetzplan",
-    "closeMorePanel": "Erweitertes Menü schließen"
+    "closeMorePanel": "Erweitertes Menü schließen",
+    "ambientPlaces": "Orte in der Nähe"
   },
   "schematicTransit": {
     "title": "Schematischer Liniennetzplan",
@@ -4324,5 +4325,15 @@
     "delay": "+{delay}",
     "coverageExplanation": "Die Fahrzeit berücksichtigt den aktuellen Verkehr.",
     "estimateExplanation": "Die zusätzliche Zeit wird geschätzt, indem diese Route mit und ohne aktuelle Verkehrsgeschwindigkeiten verglichen wird. Tatsächliche Verzögerungen können abweichen."
+  },
+  "ambientPlaces": {
+    "title": "Orte in der Nähe",
+    "toggle": "Orte in der Nähe anzeigen",
+    "unavailable": "Kein regionaler Datensatz verfügbar",
+    "snapshot": "Datensatz vom {date}",
+    "combined": "OSM + Overture",
+    "osmOnly": "Nur OSM",
+    "disabled": "Dieser regionale Datensatz ist deaktiviert oder veraltet",
+    "error": "Aktualisierung nicht verfügbar; letzter verfügbarer Datensatz wird verwendet"
   }
 }

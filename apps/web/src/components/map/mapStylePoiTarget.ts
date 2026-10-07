@@ -1,6 +1,8 @@
+import type { CategoryPlace } from "@openmapx/core";
 import { haversineDistance } from "@openmapx/core";
 import type * as maplibregl from "maplibre-gl";
 import type { FilterSpecification, MapGeoJSONFeature, StyleSpecification } from "maplibre-gl";
+import { getAmbientIdentity } from "./ambientPlaceIdentity";
 import { STOP_LABEL_LAYER_ID } from "./stopLabelPoints";
 
 const POI_SOURCE_LAYERS = new Set(["poi"]);
@@ -17,6 +19,7 @@ const OWN_STYLE_POI_LAYER_IDS = new Set([
 type StyleLayer = StyleSpecification["layers"][number];
 
 export interface StylePoiTarget {
+  canonicalPlace?: CategoryPlace;
   featureId: string;
   name: string;
   coordinates: [number, number];
@@ -90,7 +93,7 @@ export function findStylePoiAtPoint(
   const features = map.queryRenderedFeatures(point, { layers: livePoiLayers });
   for (const feature of features) {
     const target = targetFromFeature(feature, locale);
-    if (target) return target;
+    if (target) return { ...target, canonicalPlace: getAmbientIdentity(map, feature) };
   }
   return null;
 }

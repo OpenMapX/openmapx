@@ -1,0 +1,56 @@
+{
+  "name": "Nearby places",
+  "description": "Named places from a published regional OSM and Overture snapshot",
+  "dataSources": {
+    "overture": {
+      "purpose": "Named places from a published regional OSM and Overture snapshot",
+      "dataSent": "None; hosted regional tiles",
+      "dataReceived": "Names and locations of places"
+    },
+    "foursquare": {
+      "purpose": "Named places from a published regional OSM and Overture snapshot",
+      "dataSent": "None; hosted regional tiles",
+      "dataReceived": "Names and locations of places"
+    },
+    "meta-places": {
+      "purpose": "Named places from a published regional OSM and Overture snapshot",
+      "dataSent": "None; hosted regional tiles",
+      "dataReceived": "Names and locations of places"
+    },
+    "microsoft-places": {
+      "purpose": "Named places from a published regional OSM and Overture snapshot",
+      "dataSent": "None; hosted regional tiles",
+      "dataReceived": "Names and locations of places"
+    },
+    "pinmeto": {
+      "purpose": "Named places from a published regional OSM and Overture snapshot",
+      "dataSent": "None; hosted regional tiles",
+      "dataReceived": "Names and locations of places"
+    },
+    "krick": {
+      "purpose": "Named places from a published regional OSM and Overture snapshot",
+      "dataSent": "None; hosted regional tiles",
+      "dataReceived": "Names and locations of places"
+    },
+    "renderseo": {
+      "purpose": "Named places from a published regional OSM and Overture snapshot",
+      "dataSent": "None; hosted regional tiles",
+      "dataReceived": "Names and locations of places"
+    },
+    "dac": {
+      "purpose": "Named places from a published regional OSM and Overture snapshot",
+      "dataSent": "None; hosted regional tiles",
+      "dataReceived": "Names and locations of places"
+    },
+    "brightquery": {
+      "purpose": "Named places from a published regional OSM and Overture snapshot",
+      "dataSent": "None; hosted regional tiles",
+      "dataReceived": "Names and locations of places"
+    },
+    "alltheplaces": {
+      "purpose": "Named places from a published regional OSM and Overture snapshot",
+      "dataSent": "None; hosted regional tiles",
+      "dataReceived": "Names and locations of places"
+    }
+  }
+}

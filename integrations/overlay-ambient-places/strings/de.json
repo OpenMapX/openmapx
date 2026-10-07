@@ -1,0 +1,56 @@
+{
+  "name": "Orte in der Nähe",
+  "description": "Benannte Orte aus einem veröffentlichten regionalen OSM- und Overture-Datensatz",
+  "dataSources": {
+    "overture": {
+      "purpose": "Benannte Orte aus einem veröffentlichten regionalen OSM- und Overture-Datensatz",
+      "dataSent": "Keine; selbst gehostete regionale Kartenkacheln",
+      "dataReceived": "Namen und Koordinaten von Orten"
+    },
+    "foursquare": {
+      "purpose": "Benannte Orte aus einem veröffentlichten regionalen OSM- und Overture-Datensatz",
+      "dataSent": "Keine; selbst gehostete regionale Kartenkacheln",
+      "dataReceived": "Namen und Koordinaten von Orten"
+    },
+    "meta-places": {
+      "purpose": "Benannte Orte aus einem veröffentlichten regionalen OSM- und Overture-Datensatz",
+      "dataSent": "Keine; selbst gehostete regionale Kartenkacheln",
+      "dataReceived": "Namen und Koordinaten von Orten"
+    },
+    "microsoft-places": {
+      "purpose": "Benannte Orte aus einem veröffentlichten regionalen OSM- und Overture-Datensatz",
+      "dataSent": "Keine; selbst gehostete regionale Kartenkacheln",
+      "dataReceived": "Namen und Koordinaten von Orten"
+    },
+    "pinmeto": {
+      "purpose": "Benannte Orte aus einem veröffentlichten regionalen OSM- und Overture-Datensatz",
+      "dataSent": "Keine; selbst gehostete regionale Kartenkacheln",
+      "dataReceived": "Namen und Koordinaten von Orten"
+    },
+    "krick": {
+      "purpose": "Benannte Orte aus einem veröffentlichten regionalen OSM- und Overture-Datensatz",
+      "dataSent": "Keine; selbst gehostete regionale Kartenkacheln",
+      "dataReceived": "Namen und Koordinaten von Orten"
+    },
+    "renderseo": {
+      "purpose": "Benannte Orte aus einem veröffentlichten regionalen OSM- und Overture-Datensatz",
+      "dataSent": "Keine; selbst gehostete regionale Kartenkacheln",
+      "dataReceived": "Namen und Koordinaten von Orten"
+    },
+    "dac": {
+      "purpose": "Benannte Orte aus einem veröffentlichten regionalen OSM- und Overture-Datensatz",
+      "dataSent": "Keine; selbst gehostete regionale Kartenkacheln",
+      "dataReceived": "Namen und Koordinaten von Orten"
+    },
+    "brightquery": {
+      "purpose": "Benannte Orte aus einem veröffentlichten regionalen OSM- und Overture-Datensatz",
+      "dataSent": "Keine; selbst gehostete regionale Kartenkacheln",
+      "dataReceived": "Namen und Koordinaten von Orten"
+    },
+    "alltheplaces": {
+      "purpose": "Benannte Orte aus einem veröffentlichten regionalen OSM- und Overture-Datensatz",
+      "dataSent": "Keine; selbst gehostete regionale Kartenkacheln",
+      "dataReceived": "Namen und Koordinaten von Orten"
+    }
+  }
+}
