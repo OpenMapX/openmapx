@@ -199,3 +199,8 @@ rank boundaries, exclusions, duplicate prevention, layer priority, and validity.
 Repeat generation to check idempotence and repeat the visual matrix before
 expanding the thresholds. Hosted complete MapTiler styles are outside this
 owned-style policy.
+
+For versioned search, identity, enrichment and navigation evidence alongside these
+visual cases, follow [Discovery evaluation](discovery-evaluation.md). Store new
+capture archives externally with a manifest and checksums; attach selected review
+images directly to the PR.

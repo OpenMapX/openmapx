@@ -31,6 +31,7 @@ export interface EvalReport {
     failed: number;
     unavailable: number;
     reason?: string;
+    assertionInventory: string[];
   }>;
 }
 interface Assertion {
@@ -87,7 +88,14 @@ export function createReport(
     throw new Error("Duplicate evaluation catalog ID");
   }
   const cases = catalog.map((entry): EvalReport["cases"][number] => {
-    const base = { id: entry.id, layer: entry.layer, passed: 0, failed: 0, unavailable: 0 };
+    const base = {
+      id: entry.id,
+      layer: entry.layer,
+      passed: 0,
+      failed: 0,
+      unavailable: 0,
+      assertionInventory: [] as string[],
+    };
     if (!entry.suite)
       return {
         ...base,
@@ -122,6 +130,10 @@ export function createReport(
             : "passed";
     return {
       ...base,
+      // Names can contain test parameters; retain identity without saving their contents.
+      assertionInventory: selected
+        .map((assertion) => createHash("sha256").update(assertion.fullName).digest("hex"))
+        .sort(),
       status,
       passed,
       failed,
@@ -176,7 +188,15 @@ function validReport(value: unknown): value is EvalReport {
         [entry.passed, entry.failed, entry.unavailable].every(
           (n) => Number.isInteger(n) && (n as number) >= 0,
         ) &&
-        (entry.reason === undefined || typeof entry.reason === "string"),
+        Array.isArray(entry.assertionInventory) &&
+        entry.assertionInventory.every(
+          (id) => typeof id === "string" && /^[a-f0-9]{64}$/.test(id),
+        ) &&
+        entry.assertionInventory.length ===
+          (entry.passed as number) + (entry.failed as number) + (entry.unavailable as number) &&
+        (entry.reason === undefined || typeof entry.reason === "string") &&
+        (!["passed", "known-gap"].includes(String(entry.status)) ||
+          ((entry.passed as number) > 0 && entry.failed === 0 && entry.unavailable === 0)),
     ) && new Set(value.cases.map((entry) => entry.id)).size === value.cases.length
   );
 }
@@ -200,6 +220,14 @@ export function compareReports(before: unknown, after: unknown) {
   )
     throw new Error("Incompatible evaluation case set");
   const previous = new Map(before.cases.map((entry) => [entry.id, entry]));
+  if (
+    after.cases.some(
+      (entry) =>
+        JSON.stringify(entry.assertionInventory) !==
+        JSON.stringify(previous.get(entry.id)?.assertionInventory),
+    )
+  )
+    throw new Error("Incompatible evaluation assertion inventory; required evidence changed");
   const keys = new Set([
     ...Object.keys(before.metadata.inputHashes),
     ...Object.keys(after.metadata.inputHashes),

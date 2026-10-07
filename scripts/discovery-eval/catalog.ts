@@ -29,6 +29,7 @@ export const CATALOG: EvalCase[] = [
     id: "search/station-synonyms-cache-order",
     layer: "adapted-api/mocked-upstream",
     suite: "integrations/geocoding/__tests__/forward-ranking.test.ts",
+    fixtures: ["integrations/geocoding-maptiler/__fixtures__/station-search.json"],
     note: "Cold/warm query order, station aliases, language/proximity isolation and provider-order fallback; mocked upstream, not provider coverage.",
   },
   {

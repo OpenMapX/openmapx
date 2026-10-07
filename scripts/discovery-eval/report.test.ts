@@ -94,6 +94,29 @@ describe("versioned discovery evidence reports", () => {
     });
   });
 
+  it("rejects omitted assertions even when a shortened suite passes", () => {
+    const evidence = input();
+    evidence.testResults[0].assertionResults.push({
+      fullName: "GPS recovery",
+      status: "passed",
+      failureMessages: [],
+    });
+    const wholeSuite = [{ id: "navigation", layer: "synthetic", suite: "search.test.ts" }];
+    const before = createReport(evidence, wholeSuite, metadata, "/repo");
+    const after = createReport(input(), wholeSuite, metadata, "/repo");
+    expect(() => compareReports(before, after)).toThrow("assertion inventory");
+  });
+
+  it.each([
+    { passed: 0, failed: 7, unavailable: 0 },
+    { passed: 0, failed: 0, unavailable: 0 },
+    { passed: 1, failed: 0, unavailable: 1 },
+  ])("rejects contradictory passing counts %j", (counts) => {
+    const report = createReport(input(), cases, metadata, "/repo");
+    const broken = { ...report, cases: [{ ...report.cases[0], ...counts }, report.cases[1]] };
+    expect(() => compareReports(broken, report)).toThrow("report");
+  });
+
   it("rejects malformed baseline reports and mismatched case sets", () => {
     const report = createReport(input(), cases, metadata, "/repo");
     expect(() => compareReports({} as typeof report, report)).toThrow("report");
