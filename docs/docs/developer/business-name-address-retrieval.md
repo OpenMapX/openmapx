@@ -250,12 +250,22 @@ must remain distinguishable. A country-scale rebuild/rollout needs separate scop
 
 The focused evaluation, adapter, ranking and term-extractor suite passed **127
 tests in nine files**, including 17 new evidence tests. The evaluation TypeScript
-check, offline replay and documentation production build passed. An independent
+check, offline replay and documentation production build passed. Commit hooks
+also passed repository type checks (30 cached Turbo tasks plus a fresh evaluation
+compiler run) and policy checks; repository lint passed with existing warnings.
+An independent
 read-only review recomputed recall, row totals and timing summaries and verified
 all 39 archived query-response hashes against fixture metadata. Historical
 ranking is evidence, not an assertion that later #428/#429 fixes must preserve it.
-The complete repository test suite and production database checks were not run;
-there are no production code or schema changes in this PR.
+Full repository test-gate and remote CI results are tracked in the delivery PR.
+Production database checks were not run; there are no production code or schema
+changes in this PR.
+
+The broader dead-code scan still reports 17 existing unused files and one
+development-dependency diagnostic. The same findings reproduce with the baseline
+Knip configuration while excluding this investigation's new directory. The new
+standalone replay is explicitly declared as a Knip entry and adds no remaining
+dead-code finding. Unrelated baseline cleanup is outside this bounded report.
 
 ## Admin inspection and completion status
 
