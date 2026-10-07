@@ -2221,6 +2221,9 @@ importers:
       esbuild:
         specifier: '>=0.28.1'
         version: 0.28.2
+      postgres:
+        specifier: ^3.4.9
+        version: 3.4.9
       react-dom:
         specifier: 19.3.0
         version: 19.3.0(react@19.3.0)
@@ -2681,12 +2684,18 @@ importers:
         specifier: ^8.10.2
         version: 8.10.2
     devDependencies:
+      '@mapbox/vector-tile':
+        specifier: 3.0.0
+        version: 3.0.0
       '@testcontainers/postgresql':
         specifier: ^12.1.0
         version: 12.1.0(supports-color@8.1.1)
       '@types/node':
         specifier: ^26.6.2
         version: 26.6.3
+      pbf:
+        specifier: 5.1.2
+        version: 5.1.2
       typescript:
         specifier: ^6.0.3
         version: 6.0.3
@@ -9454,6 +9463,7 @@ packages:
 
   pbf@5.1.2:
     resolution: {integrity: sha512-mnvGdvOrIvJOBGUEdGkrVXjN8E/VkIJCkf2eS1DH2yv82ORUlLttmDt0rWY38yYZmVwciZwBUvHM20qxBZf40w==}
+    hasBin: true
 
   perfect-debounce@2.1.0:
     resolution: {integrity: sha512-LjgdTytVFXeUgtHZr9WYViYSM/g8MkcTPYDlPa3cDqMirHjKiSZPYd6DoL7pK8AJQr+uWkQvCjHNdiMqsrJs+g==}

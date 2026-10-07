@@ -176,7 +176,7 @@ async function queryOverturePlaces(
     SELECT
       (SELECT 'osm:' || link.osm_type || '/' || link.osm_id::TEXT
        FROM overture_places.poi_conflation_link link
-       WHERE link.gers_id = places.gers_id) AS canonical_id,
+       WHERE link.gers_id = places.gers_id AND link.release = places.release) AS canonical_id,
       gers_id,
       name,
       ST_X(geom) AS longitude,

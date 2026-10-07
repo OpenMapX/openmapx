@@ -107,3 +107,12 @@ describe("ambient place policy", () => {
     expect(matchAmbientBasemap([a], [{ ...label, coordinates: [6.081, 50.77] }]).size).toBe(0);
   });
 });
+
+describe("accepted-link gap-fill identity", () => {
+  it("keeps canonical identity when only GERS is in the regional view, and suppresses a known closed OSM match", () => {
+    const p = ambientPlaceFromOverture(overture)!;
+    const links = new Map([["osm:node/9007199254740993", "gers-a"]]);
+    expect(mergeAmbientPlaces([], [p], links)[0].id).toBe("osm:node/9007199254740993");
+    expect(mergeAmbientPlaces([], [p], links, new Set(["osm:node/9007199254740993"]))).toEqual([]);
+  });
+});

@@ -227,6 +227,7 @@ export function mergeAmbientPlaces(
   osm: AmbientPlace[],
   overture: AmbientPlace[],
   links: Map<string, string>,
+  excludedOsm: ReadonlySet<string> = new Set(),
 ): AmbientPlace[] {
   const byGers = new Map(overture.map((p) => [p.gersId, p]));
   const consumed = new Set<string>();
@@ -242,7 +243,13 @@ export function mergeAmbientPlaces(
       sources: o ? ("osm,overture" as const) : ("osm" as const),
     };
   });
-  for (const p of overture) if (!consumed.has(p.gersId!)) result.push(p);
+  const canonicalByGers = new Map([...links].map(([id, gers]) => [gers, id]));
+  for (const p of overture) {
+    if (!p.gersId || consumed.has(p.gersId)) continue;
+    const canonicalId = canonicalByGers.get(p.gersId);
+    if (canonicalId && excludedOsm.has(canonicalId)) continue;
+    result.push(canonicalId ? { ...p, id: canonicalId } : p);
+  }
   return result.sort((a, b) => b.rank - a.rank || a.id.localeCompare(b.id, "en"));
 }
 export function ambientPlaceToCategoryPlace(place: AmbientPlace, locale: string): CategoryPlace {
