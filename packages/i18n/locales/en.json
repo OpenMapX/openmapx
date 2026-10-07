@@ -892,8 +892,6 @@
       "checkFailed": "Couldn't check road conditions for this route"
     },
     "localAccessRoad": "Uses a road closed except for local access",
-    "trafficDelay": "+{delay} vs engine baseline",
-    "trafficDelayNormally": "baseline {baseline}",
     "from": "from",
     "to": "to",
     "origin": "Origin",
@@ -4301,22 +4299,27 @@
       "unknown": "Routing source unknown"
     },
     "application": {
-      "verified": "Road-condition application verified",
-      "expired": "Road-condition evidence expired",
-      "limited": "Road-condition evidence limited",
-      "unavailable": "Road-condition check unavailable",
-      "unverified": "Road-condition application not verified"
+      "verified": "Available road updates were used for this route.",
+      "expired": "Road updates need to be checked again. Refresh the route.",
+      "limited": "Some reported road changes may be missing.",
+      "unavailable": "Road updates couldn’t be checked.",
+      "unverified": "We couldn’t confirm which road updates were used."
     },
-    "congestionUnverified": "Congestion effect on ETA not verified",
+    "congestionUnverified": "This travel time may not include current traffic delays.",
     "overlay": {
-      "ownedSource": "Self-hosted traffic-flow tiles",
-      "hostedSource": "TomTom hosted traffic",
-      "ageUnknown": "Source data age unknown",
-      "coverageUnknown": "Coverage unknown for this view",
-      "mapOnly": "Map colors do not verify traffic influence on a route",
-      "estimates": "Typical and estimated values may not be current measurements",
-      "hidden": "Layer hidden",
-      "toggleHosted": "Toggle TomTom traffic"
-    }
+      "ownedSource": "Traffic information from this server.",
+      "hostedSource": "Traffic information from TomTom.",
+      "ageUnknown": "The update time is unknown.",
+      "coverageUnknown": "Some roads may be missing.",
+      "mapOnly": "Road colors don’t tell you whether delays are included in your travel time.",
+      "estimates": "Some colors use typical or estimated speeds rather than current measurements.",
+      "hidden": "Hidden",
+      "toggleHosted": "Toggle TomTom traffic",
+      "fast": "Fast",
+      "slow": "Slow"
+    },
+    "about": "About traffic",
+    "summary": "May not include traffic delays",
+    "provider": "Route provider: {source}"
   }
 }

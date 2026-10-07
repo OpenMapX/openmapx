@@ -356,49 +356,44 @@ describe("RouteCard keyboard actions", () => {
   });
 });
 
-describe("RouteCard traffic delta", () => {
-  it("describes traffic evidence when keyboard users select a route", () => {
+describe("RouteCard compact traffic explanation", () => {
+  it("describes the caveat when keyboard users select a route", () => {
     renderCard(baseRoute);
     const ids = screen.getByRole("radio").getAttribute("aria-describedby")?.split(" ") ?? [];
     expect(ids.map((id) => document.getElementById(id)?.textContent).join(" ")).toContain(
-      "Congestion effect on ETA not verified",
+      "May not include traffic delays",
     );
   });
-
-  it("shows nothing when there is no baseline duration", () => {
-    renderCard(baseRoute);
-    expect(screen.queryByTestId("traffic-delay")).toBeNull();
-  });
-
-  it("shows nothing when the delay is under five minutes", () => {
-    // 4 min on a 40 min baseline: over 10% but under the absolute floor.
-    renderCard({ ...baseRoute, duration: 2640, baselineDuration: 2400 });
-    expect(screen.queryByTestId("traffic-delay")).toBeNull();
-  });
-
-  it("shows nothing when the delay is under ten percent", () => {
-    // 6 min on a 90 min baseline: over the absolute floor but under the ratio.
-    renderCard({ ...baseRoute, duration: 5760, baselineDuration: 5400 });
-    expect(screen.queryByTestId("traffic-delay")).toBeNull();
-  });
-
-  it("shows the delay once both thresholds are met", () => {
-    // 12 min on a 75 min baseline = 16% -> light band.
-    renderCard({ ...baseRoute, duration: 5220, baselineDuration: 4500 });
-    const el = screen.getByTestId("traffic-delay");
-    expect(el.textContent).toContain("12 min");
-    expect(el).toHaveTextContent("vs engine baseline");
-    expect(el).not.toHaveTextContent(/traffic|normally/i);
-    expect(getComputedStyle(el).color).toBe("var(--omx-traffic-light)");
-  });
-
-  it("escalates the colour with the delay", () => {
-    // 45 min on a 60 min baseline = 75% -> heavy band.
+  it("does not advertise an engine-baseline delta as traffic delay", () => {
     renderCard({ ...baseRoute, duration: 6300, baselineDuration: 3600 });
-    expect(getComputedStyle(screen.getByTestId("traffic-delay")).color).toBe(
-      "var(--omx-traffic-heavy)",
-    );
+    expect(screen.queryByTestId("traffic-delay")).toBeNull();
+    expect(screen.queryByText(/^\+45 min|baseline/i)).toBeNull();
   });
+  it.each(["route", "peek"] as const)(
+    "opens and closes traffic info without selecting the %s route",
+    (selectionKind) => {
+      const onSelect = vi.fn();
+      const view = render(
+        <NextIntlClientProvider locale="en" messages={en}>
+          <RouteCard
+            route={baseRoute}
+            index={0}
+            active
+            selectionKind={selectionKind}
+            onSelect={onSelect}
+            onDetails={() => {}}
+            units="metric"
+          />
+        </NextIntlClientProvider>,
+      );
+      fireEvent.click(screen.getByRole("button", { name: "About traffic" }));
+      expect(screen.getByRole("dialog", { name: "About traffic" })).toBeInTheDocument();
+      expect(onSelect).not.toHaveBeenCalled();
+      fireEvent.click(screen.getByRole("button", { name: "Close" }));
+      expect(onSelect).not.toHaveBeenCalled();
+      expect(view.container.querySelector("button button, button input, label button")).toBeNull();
+    },
+  );
 });
 
 /**

@@ -892,8 +892,6 @@
       "checkFailed": "Straßenbedingungen für diese Route konnten nicht geprüft werden"
     },
     "localAccessRoad": "Nutzt eine gesperrte Straße (Anlieger frei)",
-    "trafficDelay": "+{delay} gegenüber der Modell-Basiszeit",
-    "trafficDelayNormally": "Basiszeit {baseline}",
     "from": "von",
     "to": "nach",
     "origin": "Start",
@@ -4301,22 +4299,27 @@
       "unknown": "Routing-Quelle unbekannt"
     },
     "application": {
-      "verified": "Berücksichtigung der Straßenbedingungen verifiziert",
-      "expired": "Nachweis der Straßenbedingungen abgelaufen",
-      "limited": "Nachweis der Straßenbedingungen eingeschränkt",
-      "unavailable": "Prüfung der Straßenbedingungen nicht verfügbar",
-      "unverified": "Berücksichtigung der Straßenbedingungen nicht verifiziert"
+      "verified": "Verfügbare Straßenmeldungen wurden für diese Route berücksichtigt.",
+      "expired": "Straßenmeldungen müssen erneut geprüft werden. Berechne die Route erneut.",
+      "limited": "Einige gemeldete Straßenänderungen fehlen möglicherweise.",
+      "unavailable": "Straßenmeldungen konnten nicht geprüft werden.",
+      "unverified": "Es ist unklar, welche Straßenmeldungen berücksichtigt wurden."
     },
-    "congestionUnverified": "Einfluss von Staus auf die Ankunftszeit nicht verifiziert",
+    "congestionUnverified": "Die Fahrzeit berücksichtigt möglicherweise keine aktuellen Verzögerungen durch Stau.",
     "overlay": {
-      "ownedSource": "Selbst gehostete Verkehrsfluss-Kacheln",
-      "hostedSource": "Gehostete Verkehrsdaten von TomTom",
-      "ageUnknown": "Alter der Quelldaten unbekannt",
-      "coverageUnknown": "Abdeckung für diesen Ausschnitt unbekannt",
-      "mapOnly": "Kartenfarben belegen keinen Verkehrseinfluss auf eine Route",
-      "estimates": "Typische und geschätzte Werte sind möglicherweise keine aktuellen Messungen",
-      "hidden": "Ebene ausgeblendet",
-      "toggleHosted": "TomTom-Verkehr umschalten"
-    }
+      "ownedSource": "Verkehrsinformationen von diesem Server.",
+      "hostedSource": "Verkehrsinformationen von TomTom.",
+      "ageUnknown": "Der Aktualisierungszeitpunkt ist unbekannt.",
+      "coverageUnknown": "Einige Straßen fehlen möglicherweise.",
+      "mapOnly": "Straßenfarben zeigen nicht, ob Verzögerungen in der Fahrzeit berücksichtigt sind.",
+      "estimates": "Einige Farben basieren auf üblichen oder geschätzten Geschwindigkeiten statt aktuellen Messungen.",
+      "hidden": "Ausgeblendet",
+      "toggleHosted": "TomTom-Verkehr umschalten",
+      "fast": "Schnell",
+      "slow": "Langsam"
+    },
+    "about": "Verkehrsinformationen",
+    "summary": "Stau eventuell nicht berücksichtigt",
+    "provider": "Routenanbieter: {source}"
   }
 }

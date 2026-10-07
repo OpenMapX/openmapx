@@ -17,7 +17,6 @@ import type {
   RouteImpactUnavailableReason,
 } from "@openmapx/core";
 import {
-  bandForDelayRatio,
   buildElevationProfile,
   estimateDrivingCo2Grams,
   formatDistance,
@@ -36,7 +35,7 @@ import {
   type RouteImpactAssumptions,
   RouteImpactDetailsDialog,
 } from "@/components/panels/directions/RouteImpactDetailsDialog";
-import { BRAND, TRAFFIC_TEXT_COLOR } from "@/integration-api/runtime/theme";
+import { BRAND } from "@/integration-api/runtime/theme";
 import { useDateTimeFormat } from "@/integration-api/runtime/useDateTimeFormat";
 import { formatCo2Emission } from "@/lib/formatCo2";
 import { useStartNavigation } from "@/lib/mobile/useStartNavigation";
@@ -47,9 +46,6 @@ import { RouteTrafficStatus } from "./RouteTrafficStatus";
 import { type RouteArrivalContext, resolveRouteArrival } from "./routeArrival";
 
 const GROUND_MODES = new Set<Route["mode"]>(["driving", "walking", "cycling", "motorcycle"]);
-
-/** Absolute floor for showing a traffic delay, in seconds. */
-const MIN_TRAFFIC_DELAY_SECONDS = 300;
 
 function RouteArrivalCaption({
   context,
@@ -239,19 +235,6 @@ export function RouteCard({
       <DirectionsBikeIcon sx={{ fontSize: 22, color: active ? BRAND : "text.disabled" }} />
     );
 
-  // Only worth surfacing when it clears both an absolute floor and a relative
-  // one: a 90-second delta on a two-hour drive tells the user nothing, and a
-  // large ratio on a very short hop is mostly snapping noise.
-  const trafficDelay = (() => {
-    const baseline = route.baselineDuration;
-    if (baseline === undefined || baseline <= 0) return null;
-    const delaySeconds = route.duration - baseline;
-    if (delaySeconds < MIN_TRAFFIC_DELAY_SECONDS) return null;
-    const band = bandForDelayRatio(delaySeconds / baseline);
-    if (!band) return null;
-    return { band, delaySeconds, baseline };
-  })();
-
   const selectionLabel = `${route.summary ?? t("bestRoute")}, ${formatDuration(route.duration)}, ${dist}${ascentLabel ? `, ${ascentLabel}` : ""}`;
   const summaryContent = (
     <>
@@ -286,23 +269,6 @@ export function RouteCard({
           {ascentLabel}
         </Typography>
       )}
-      {trafficDelay && (
-        <Typography
-          variant="caption"
-          data-testid="traffic-delay"
-          sx={{ color: TRAFFIC_TEXT_COLOR[trafficDelay.band], display: "block", mt: 0.25 }}
-        >
-          {t("trafficDelay", { delay: formatDuration(trafficDelay.delaySeconds) })}
-          {" · "}
-          {t("trafficDelayNormally", { baseline: formatDuration(trafficDelay.baseline) })}
-        </Typography>
-      )}
-      <RouteTrafficStatus
-        id={trafficCaptionId}
-        route={route}
-        impact={roadConditionImpact}
-        provider={provider}
-      />
       {roadConditionNotice && (
         <Typography
           variant="caption"
@@ -394,6 +360,12 @@ export function RouteCard({
             {summaryContent}
           </Box>
         )}
+        <RouteTrafficStatus
+          id={trafficCaptionId}
+          route={route}
+          impact={roadConditionImpact}
+          provider={provider}
+        />
         {impact ? (
           <Box
             sx={{ mt: 0.5 }}

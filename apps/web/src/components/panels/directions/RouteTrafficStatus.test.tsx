@@ -1,6 +1,6 @@
 import type { RoadConditionRouteImpact, Route } from "@openmapx/core";
 import { en } from "@openmapx/i18n";
-import { act, cleanup, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { RouteTrafficStatus } from "./RouteTrafficStatus";
@@ -50,46 +50,73 @@ afterEach(() => {
 });
 it("expires held verification at the lease and never claims congestion causality", () => {
   render(view());
-  expect(screen.getByTestId("route-traffic-status")).toHaveTextContent(
-    "Road-condition application verified",
+  fireEvent.click(screen.getByRole("button", { name: "About traffic" }));
+  expect(screen.getByRole("dialog", { name: "About traffic" })).toHaveTextContent(
+    "Available road updates were used for this route.",
   );
-  expect(screen.getByTestId("route-traffic-status")).toHaveTextContent(
-    "Congestion effect on ETA not verified",
+  expect(screen.getByRole("dialog", { name: "About traffic" })).toHaveTextContent(
+    "This travel time may not include current traffic delays.",
   );
   act(() => {
     vi.advanceTimersByTime(30000);
   });
-  expect(screen.getByTestId("route-traffic-status")).toHaveTextContent(
-    "Road-condition evidence expired",
+  expect(screen.getByRole("dialog", { name: "About traffic" })).toHaveTextContent(
+    "Road updates need to be checked again. Refresh the route.",
   );
-  expect(screen.getByTestId("route-traffic-status")).not.toHaveTextContent("application verified");
+  expect(screen.getByRole("dialog", { name: "About traffic" })).not.toHaveTextContent(
+    "Available road updates were used",
+  );
 });
 it("replaces old status on a new provider/route without proof", () => {
   const rendered = render(view());
+  fireEvent.click(screen.getByRole("button", { name: "About traffic" }));
   rendered.rerender(view({ ...route, trafficProof: undefined }, "routing-osrm"));
-  expect(screen.getByTestId("route-traffic-status")).toHaveTextContent("OSRM");
-  expect(screen.getByTestId("route-traffic-status")).not.toHaveTextContent("application verified");
+  expect(screen.getByRole("dialog", { name: "About traffic" })).toHaveTextContent("OSRM");
+  expect(screen.getByRole("dialog", { name: "About traffic" })).not.toHaveTextContent(
+    "Available road updates were used",
+  );
 });
 it("removes a prior successful claim on failed assessment", () => {
   const rendered = render(view());
+  fireEvent.click(screen.getByRole("button", { name: "About traffic" }));
   rendered.rerender(view(route, "routing-valhalla", { ...impact, availability: "unavailable" }));
-  expect(screen.getByTestId("route-traffic-status")).toHaveTextContent(
-    "Road-condition check unavailable",
+  expect(screen.getByRole("dialog", { name: "About traffic" })).toHaveTextContent(
+    "Road updates couldn’t be checked.",
   );
 });
 
 it("rearms expiry when a clock correction makes the first callback early", () => {
   render(view());
+  fireEvent.click(screen.getByRole("button", { name: "About traffic" }));
   vi.setSystemTime(now - 1000);
   act(() => {
     vi.advanceTimersByTime(30000);
   });
-  expect(screen.getByTestId("route-traffic-status")).toHaveTextContent("application verified");
+  expect(screen.getByRole("dialog", { name: "About traffic" })).toHaveTextContent(
+    "Available road updates were used",
+  );
   act(() => {
     vi.advanceTimersByTime(1000);
   });
-  expect(screen.getByTestId("route-traffic-status")).toHaveTextContent(
-    "Road-condition evidence expired",
+  expect(screen.getByRole("dialog", { name: "About traffic" })).toHaveTextContent(
+    "Road updates need to be checked again. Refresh the route.",
   );
-  expect(screen.getByTestId("route-traffic-status")).not.toHaveTextContent("application verified");
+  expect(screen.getByRole("dialog", { name: "About traffic" })).not.toHaveTextContent(
+    "Available road updates were used",
+  );
+});
+
+it("keeps provider and application details out of the default summary", () => {
+  render(view());
+  expect(screen.getByTestId("route-traffic-status")).toHaveTextContent(
+    "May not include traffic delays",
+  );
+  expect(screen.queryByText(/Self-hosted Valhalla/)).toBeNull();
+  expect(screen.queryByText("Available road updates were used for this route.")).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "About traffic" }));
+  expect(screen.getByRole("dialog", { name: "About traffic" })).toHaveTextContent(
+    "Available road updates were used for this route.",
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Close" }));
+  expect(screen.queryByRole("dialog")).toBeNull();
 });

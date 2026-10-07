@@ -1,9 +1,11 @@
 "use client";
 
+import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
 import type { RoadConditionRouteImpact, Route } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
+import { TrafficInfo } from "@/integration-api/components/TrafficInfo";
 import { routeTrafficStatus } from "@/lib/route-traffic-status";
 
 export function RouteTrafficStatus({
@@ -36,18 +38,27 @@ export function RouteTrafficStatus({
   }, [deadline]);
   if (!status) return null;
   return (
-    <Typography
-      id={id}
-      component="div"
-      variant="caption"
-      data-testid="route-traffic-status"
-      sx={{ color: "text.secondary", display: "block", mt: 0.5, overflowWrap: "anywhere" }}
-    >
-      {t(`source.${status.source}`)}
-      {" · "}
-      {t(`application.${status.application}`)}
-      <br />
-      {t("congestionUnverified")}
-    </Typography>
+    <Box sx={{ display: "flex", alignItems: "center", gap: 0.25, mt: 0.25 }}>
+      <Typography
+        id={id}
+        component="div"
+        variant="caption"
+        data-testid="route-traffic-status"
+        sx={{ color: "text.secondary", overflowWrap: "anywhere" }}
+      >
+        {t("summary")}
+      </Typography>
+      <TrafficInfo>
+        <Typography variant="body2" sx={{ mb: 1 }}>
+          {t("congestionUnverified")}
+        </Typography>
+        <Typography variant="body2" sx={{ mb: 1 }}>
+          {t(`application.${status.application}`)}
+        </Typography>
+        <Typography variant="caption" color="text.secondary">
+          {t("provider", { source: t(`source.${status.source}`) })}
+        </Typography>
+      </TrafficInfo>
+    </Box>
   );
 }

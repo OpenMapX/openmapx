@@ -5,4 +5,4 @@
 "@openmapx/integration-overlay-traffic-tomtom": patch
 ---
 
-Explain traffic overlay sources and unknown data age separately from request-bound road-condition verification. Label route-duration differences as engine baseline comparisons without implying congestion causality.
+Keep route traffic caveats short and offer plain-language explanations on demand. Use a Fast–Slow traffic legend, preserve request-bound road-update verification, and avoid presenting engine-baseline differences as measured traffic delays.

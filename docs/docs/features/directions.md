@@ -122,28 +122,26 @@ selected travel time. The system evaluates these in the closure's local timezone
 fine-grained recurring schedule windows). This prevents routing detours around
 future closures that haven't started yet or nightly closures during daytime trips.
 
-### Reading traffic evidence
+### Reading traffic information
 
-Motorized route cards separate **road-condition application** from **congestion's
-effect on the ETA**. “Application verified” requires this response's validated
-Valhalla proof and the server's matching graph/write/engine assessment. It expires
-at the evidence lease; missing, conflicting, limited or failed evidence cannot
-produce that claim. A new route/provider replaces the status. Failed directions
-queries show recovery instead of reusing a previous successful card.
+Driving and motorcycle cards keep the travel time prominent. **May not include
+traffic delays** means we cannot confirm that current congestion is reflected
+in that estimate. Open **About traffic** using the info button for the route
+provider and road-update explanation. These details do not interrupt route
+selection or Start.
 
-This proof concerns applied road conditions such as closures and speed caps. It
-does not establish that congestion changed the selected path or added a particular
-number of minutes. Cards therefore keep congestion's ETA influence explicitly
-unverified. A significant difference from `baselineDuration` is labelled **versus
-engine baseline**, not a measured traffic delay or a normal journey time. Valhalla
-and hosted Stadia routes are identified separately where their source IDs say so;
-a provider name alone does not prove self-hosting.
+Available road updates are described as used only when this route has current,
+matching engine and server evidence. That explanation expires automatically;
+missing, failed or conflicting checks never carry a previous success forward.
+Road updates concern closures and speed restrictions, not a measured number of
+minutes lost in traffic. The engine's baseline duration remains available in the
+API, but its difference is not displayed as a traffic delay or used to color a
+card's travel time.
 
-The proof's evaluation time is a verification time, not an upstream observation
-or publication age. Map colors and freshly downloaded tiles do not substitute for
-route evidence. The [traffic legends](./map-layers.md#transportation) explain the separate
-map-only sources and their currently unknown source age/coverage. This initial
-presentation applies to directions cards, not every navigation/EV surface.
+Map colors are separate from travel-time estimates. The
+[traffic legends](./map-layers.md#transportation) explain their sources and
+limitations on demand. This presentation applies to directions cards, not every
+navigation/EV surface.
 
 ## Stop times and dwell
 
@@ -195,8 +193,8 @@ The directions panel exposes the tuning knobs that map onto the routing API:
   engine's live-traffic request when one is available. The result is graph- and
   request-dependent: the engine may return only the primary route when no
   distinct alternative satisfies its cost and safety filters. Baseline durations
-  are shown for comparison when supplied; a baseline can legitimately be slower
-  than the live route.
+  remain available through the API for comparison; they are not displayed as
+  measured traffic delays and can legitimately be slower than the live route.
 - **Stops and optimization** — add intermediate waypoints, and ask the engine to
   reorder them into the shortest trip while keeping the first and last fixed.
 
