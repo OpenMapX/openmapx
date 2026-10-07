@@ -66,6 +66,24 @@ describe("transit result merging", () => {
     });
   });
 
+  it("does not borrow known upstream age for an unknown-age realtime source", () => {
+    const fetched = "2026-08-31T12:00:00Z";
+    expect(
+      mergeFreshness(
+        freshness(fetched, { hasRealtimeData: true, dataAsOf: "2026-08-31T11:59:30Z" }),
+        freshness(fetched, { hasRealtimeData: true }),
+      ).dataAsOf,
+    ).toBeUndefined();
+  });
+
+  it("preserves incomplete coverage separately from age", () => {
+    const partial = { ...freshness("2026-08-31T12:00:00Z"), isPartial: true };
+    expect(mergeFreshness(partial, freshness("2026-08-31T12:00:00Z"))).toMatchObject({
+      isPartial: true,
+      isStale: false,
+    });
+  });
+
   it("returns current static freshness for an empty merge", () => {
     const before = Date.now();
     const merged = mergeFreshness();

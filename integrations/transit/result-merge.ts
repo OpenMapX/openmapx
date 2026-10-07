@@ -37,12 +37,31 @@ export function mergeFreshness(...values: Freshness[]): Freshness {
   let fetchedAt = values[0].fetchedAt;
   let hasRealtimeData = false;
   let isStale = false;
-  let dataAsOf: string | undefined;
+  let isPartial = false;
   for (const value of values) {
-    if (value.fetchedAt < fetchedAt) fetchedAt = value.fetchedAt;
+    if (Date.parse(value.fetchedAt) < Date.parse(fetchedAt)) fetchedAt = value.fetchedAt;
     if (value.hasRealtimeData) hasRealtimeData = true;
     if (value.isStale) isStale = true;
-    if (value.dataAsOf && (!dataAsOf || value.dataAsOf < dataAsOf)) dataAsOf = value.dataAsOf;
+    if (value.isPartial) isPartial = true;
   }
-  return { fetchedAt, hasRealtimeData, isStale, ...(dataAsOf ? { dataAsOf } : {}) };
+  // Static stop-search metadata is not the age of realtime predictions.
+  // Every realtime contributor must have a known age before claiming a combined one.
+  const realtime = values.filter((value) => value.hasRealtimeData);
+  const relevant = realtime.length ? realtime : values;
+  const dates = relevant
+    .map((value) => value.dataAsOf)
+    .filter(
+      (value): value is string => typeof value === "string" && Number.isFinite(Date.parse(value)),
+    );
+  const dataAsOf =
+    dates.length === relevant.length
+      ? dates.reduce((oldest, value) => (Date.parse(value) < Date.parse(oldest) ? value : oldest))
+      : undefined;
+  return {
+    fetchedAt,
+    hasRealtimeData,
+    isStale,
+    ...(isPartial ? { isPartial: true } : {}),
+    ...(dataAsOf ? { dataAsOf } : {}),
+  };
 }

@@ -19,6 +19,7 @@ vi.mock("@motis-project/motis-client", async (importOriginal) => ({
 }));
 
 import {
+  getArrivals,
   getDepartures,
   getLegGeometry,
   getRoute,
@@ -29,6 +30,7 @@ import {
   getStopTimetable,
   mapMotisRoute,
   normalizeStop,
+  normalizeStoptime,
 } from "../adapter.js";
 import { decodeMotisLineReference, encodeMotisRoutePatternId } from "../route-pattern-id.js";
 
@@ -591,5 +593,51 @@ describe("MOTIS adapter regression guards", () => {
       e: "ms-unversioned",
       r: "de_feed_route",
     });
+  });
+});
+
+describe("MOTIS per-service realtime evidence", () => {
+  it.each([false, undefined])(
+    "does not infer updates from enabled realtime when realTime=%s",
+    (realTime) => {
+      const departure = normalizeStoptime(
+        instance,
+        {
+          place: { scheduledDeparture: "2026-10-07T08:00:00Z", departure: "2026-10-07T08:00:00Z" },
+          mode: "BUS",
+          realTime,
+        } as never,
+        "departure",
+        { realtimeEnabled: true },
+      );
+      expect(departure.provenance?.realtimeCompleteness).toBe(
+        realTime === false ? "none" : "unknown",
+      );
+      expect(departure.expectedAt).toBeUndefined();
+    },
+  );
+});
+
+describe("MOTIS timetable transport evidence", () => {
+  beforeEach(() => mocks.stoptimes.mockReset());
+  it.each([getDepartures, getArrivals])(
+    "does not turn an HTTP error into a valid empty timetable",
+    async (read) => {
+      mocks.stoptimes.mockResolvedValue({
+        error: { message: "private upstream details" },
+        response: { status: 503 },
+      });
+      await expect(read(instance, "ms:root", 60)).rejects.toThrow("MOTIS timetable unavailable");
+    },
+  );
+  it("does not turn an invalid response into a valid empty timetable", async () => {
+    mocks.stoptimes.mockResolvedValue({ data: {} });
+    await expect(getDepartures(instance, "ms:root", 60)).rejects.toThrow(
+      "MOTIS timetable unavailable",
+    );
+  });
+  it("accepts a successfully empty timetable", async () => {
+    mocks.stoptimes.mockResolvedValue({ data: { stopTimes: [] } });
+    await expect(getDepartures(instance, "ms:root", 60)).resolves.toEqual([]);
   });
 });
