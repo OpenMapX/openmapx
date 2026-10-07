@@ -210,7 +210,7 @@ data workflow is documented in [Preparing data](../install/preparing-data.md).
 ### OSM code and alias search index
 
 The data workflow also operates the local OSM code/alias/acronym index used by
-consumer autocomplete. It shows the source region and fingerprint, current
+consumer autocomplete. It shows the source region, current
 build stage, place and term counts, publication epoch and time, whether a newer
 PBF has made the index stale, and the last error. Building is explicit: select
 the downloaded region and confirm the operation, or run
