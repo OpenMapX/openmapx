@@ -133,3 +133,12 @@ it("updates the explanation when a new route has no estimate", () => {
     "This travel time may not include current traffic delays.",
   );
 });
+
+it("states that traffic data is unavailable inside the optional explanation", () => {
+  render(view());
+  expect(screen.queryByText("Traffic data unavailable")).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "About traffic" }));
+  expect(screen.getByRole("dialog", { name: "About traffic" })).toHaveTextContent(
+    "Traffic data unavailable",
+  );
+});

@@ -1165,3 +1165,35 @@ describe("RouteCard compact traffic header", () => {
     },
   );
 });
+
+it.each(["route", "peek"] as const)(
+  "keeps unknown traffic available to assistive technology without a visible row (%s)",
+  (selectionKind) => {
+    render(
+      <NextIntlClientProvider locale="en" messages={en}>
+        <RouteCard
+          route={baseRoute}
+          index={0}
+          active
+          selectionKind={selectionKind}
+          onSelect={() => {}}
+          onDetails={() => {}}
+          units="metric"
+        />
+      </NextIntlClientProvider>,
+    );
+    const selection =
+      selectionKind === "route"
+        ? screen.getByRole("radio")
+        : screen.getByRole("button", { name: /via A46/ });
+    const id = selection.getAttribute("aria-describedby");
+    const description = id ? document.getElementById(id) : null;
+    expect(description).toHaveTextContent("Traffic data unavailable");
+    expect(description && getComputedStyle(description).position).toBe("absolute");
+    expect(description && getComputedStyle(description).width).toBe("1px");
+    fireEvent.click(screen.getByRole("button", { name: "About traffic" }));
+    expect(screen.getByRole("dialog", { name: "About traffic" })).toHaveTextContent(
+      "Traffic data unavailable",
+    );
+  },
+);

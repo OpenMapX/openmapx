@@ -132,13 +132,13 @@ the existing severity bands distinguish light, moderate, heavy and severe
 delays. The text supplies the amount so color is not the only signal.
 
 When there is no usable delay estimate or congestion data is missing,
-incomplete or stale, the duration uses the normal text color and the card shows
-**Traffic data unavailable**. A route with fresh, complete congestion coverage
+incomplete or stale, the duration uses the normal text color without an extra
+visible note. **Traffic data unavailable** remains in **About traffic** and the
+route's screen-reader description. A route with fresh, complete congestion coverage
 and a comparison below the display thresholds has a **green duration** and no
 additional caption. Significant estimated delays retain their severity color
 and the inline **(+12 min)** amount. The **About traffic** button is aligned
-with the duration, above the distance, for all traffic states. The unavailable
-note sits directly below the route summary without a separate icon row.
+with the duration, above the distance, for all traffic states.
 
 A zero delay comparison alone cannot establish fresh congestion coverage.
 The route contract's optional `trafficCoverage` evidence must confirm that

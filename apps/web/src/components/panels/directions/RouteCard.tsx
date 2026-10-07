@@ -410,15 +410,24 @@ export function RouteCard({
         </Box>
         {(route.mode === "driving" || route.mode === "motorcycle") &&
           traffic.kind === "unavailable" && (
-            <Typography
+            <Box
               id={trafficCaptionId}
-              component="div"
-              variant="caption"
+              component="span"
               data-testid="route-traffic-status"
-              sx={{ color: "text.secondary", mt: 0.25, lineHeight: 1.35, overflowWrap: "anywhere" }}
+              sx={{
+                border: 0,
+                clip: "rect(0 0 0 0)",
+                height: "1px",
+                margin: "-1px",
+                overflow: "hidden",
+                padding: 0,
+                position: "absolute",
+                whiteSpace: "nowrap",
+                width: "1px",
+              }}
             >
               {tTraffic("summary")}
-            </Typography>
+            </Box>
           )}
         {impact ? (
           <Box

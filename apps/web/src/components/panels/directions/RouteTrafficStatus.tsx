@@ -38,6 +38,11 @@ export function RouteTrafficStatus({
   if (!status) return null;
   return (
     <TrafficInfo>
+      {traffic.kind === "unavailable" && (
+        <Typography variant="body2" sx={{ fontWeight: 600, mb: 1 }}>
+          {t("summary")}
+        </Typography>
+      )}
       <Typography variant="body2" sx={{ mb: 1 }}>
         {t(
           traffic.kind === "delay"
