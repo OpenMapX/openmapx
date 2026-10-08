@@ -6,8 +6,13 @@ import type {
   FuelStationQuery,
   IntegrationContext,
 } from "@openmapx/integration-framework";
+import { money, token } from "@openmapx/integration-framework/strings";
 import { describe, expect, test, vi } from "vitest";
 import { createFuelDataSource } from "../data-source.js";
+
+/** A euro price per litre as the detail sends it, quoted to tenths of a cent, for the client to format. */
+const perLitre = (amount: number) =>
+  token("price.per", { price: money(amount, "EUR", 3), unit: "L" });
 
 const BBOX: BoundingBox = { west: 13.3, south: 52.4, east: 13.5, north: 52.6 };
 
@@ -150,12 +155,12 @@ describe("fuel orchestrator", () => {
     expect(table?.rows).toEqual([
       [
         { $t: "fuel.e5" },
-        "1.799 EUR/L",
+        perLitre(1.799),
         { $t: "product.priceAt", values: { at: Date.parse("2026-10-01T08:00:00Z") } },
       ],
       [
         { $t: "fuel.diesel" },
-        "1.659 EUR/L",
+        perLitre(1.659),
         { $t: "product.priceAt", values: { at: Date.parse("2026-10-01T06:30:00Z") } },
       ],
       [{ $t: "fuel.lpg" }, { $t: "product.noPrice" }, ""],
@@ -307,6 +312,28 @@ describe("fuel orchestrator", () => {
       { sourceId: "src-c", name: "Source C" },
     ]);
     expect(result.data[2].sources).toEqual(["src-c"]);
+  });
+
+  test("an upstream publisher's credit under its feed reaches the search's attributions", async () => {
+    const feed = { sourceId: "src-c", name: "MobiData BW", spdxLicense: "DL-DE-BY-2.0" };
+    const upstream = {
+      sourceId: "src-c",
+      name: "MobiData BW – Stadtwerke Karlsruhe",
+      spdxLicense: "CC-BY-4.0",
+      publisher: { name: "Stadtwerke Karlsruhe" },
+    };
+    const source = createFuelDataSource(
+      ctxWith([
+        provider("c", [
+          station({ id: "c:1", sources: ["src-c"], attributions: [feed, upstream] }),
+          station({ id: "c:2", sources: ["src-c"], attributions: [feed, upstream] }),
+        ]),
+      ]),
+    );
+
+    const result = await source.search(BBOX);
+
+    expect(result.attributions).toEqual([feed, upstream]);
   });
 
   test("results and details carry their station's credits", async () => {

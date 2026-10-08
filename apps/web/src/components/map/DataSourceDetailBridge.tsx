@@ -2,6 +2,7 @@
 
 import {
   createPlace,
+  isSafeHttpUrl,
   PANEL,
   type Place,
   useDataSourceDetail,
@@ -77,7 +78,8 @@ export function DataSourceDetailBridge() {
       coordinates: detail.coordinates,
       category: sourceMeta?.placeCategory ?? name,
       rawCategory: sourceMeta?.placeCategoryRaw ?? "",
-      website: detail.operator?.url,
+      // The site's own website, else its operator's; only http(s) links.
+      website: [detail.website, detail.operator?.url].find(isSafeHttpUrl),
       openingHours: detail.openingHours,
       dataSourceDetail: detail,
     });

@@ -8,5 +8,15 @@
     "moduleResolution": "Bundler",
     "noEmit": true
   },
-  "include": ["*.ts", "road-conditions", "fuel", "__tests__"]
+  "include": [
+    "*.ts",
+    "road-conditions",
+    "fuel",
+    "parking",
+    "charging",
+    "cameras",
+    "evidence",
+    "features",
+    "__tests__"
+  ]
 }

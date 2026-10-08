@@ -50,7 +50,7 @@ Package a declarative integration into a distributable `.tar.gz` artifact:
 openmapx-ext package ./integrations/my-weather --out my-weather.tar.gz
 ```
 
-Creates a declarative `.tar.gz` artifact suitable for installation via the OpenMapX admin panel. The packager rejects backend, POI-source, and same-origin frontend JavaScript.
+Creates a declarative `.tar.gz` artifact suitable for installation via the OpenMapX admin panel. The packager rejects backend and same-origin frontend JavaScript.
 
 ### bundle
 

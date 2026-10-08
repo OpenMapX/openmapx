@@ -10,6 +10,17 @@ export function escapeHtml(str: string): string {
   return str.replace(/[&<>"']/g, (ch) => ESCAPE_MAP[ch]);
 }
 
+/** Whether `value` is an absolute http(s) URL, the only kind an upstream link may carry. */
+export function isSafeHttpUrl(value: string | null | undefined): value is string {
+  if (!value) return false;
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" || url.protocol === "http:";
+  } catch {
+    return false;
+  }
+}
+
 export function sanitizeUrl(url: string): string {
   if (/^https?:\/\//i.test(url)) return escapeHtml(url);
   return "";

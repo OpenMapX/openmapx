@@ -58,6 +58,7 @@ export const API_ENDPOINTS = {
   transitAlertsForPlace: "/api/integrations/transit/alerts/for-place",
   transitFacilitiesForPlace: "/api/integrations/transit/facilities/for-place",
   transitStopInfrastructure: "/api/integrations/transit/stops/:id/infrastructure",
+  transitStopArea: "/api/integrations/transit/stops/:id/area",
   transitStopTransfers: "/api/integrations/transit/stops/:id/transfers",
   transitStopPlatforms: "/api/integrations/transit/stops/:id/platform-stops",
   transitStopTimetable: "/api/integrations/transit/stops/:id/timetable",

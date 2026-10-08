@@ -163,7 +163,7 @@ export function AmbientPlacesLayer() {
             "text-field": ["coalesce", ["get", `name_${locale.split("-")[0]}`], ["get", "name"]],
             "text-font": ["Noto Sans Regular"],
             "text-size": 11,
-            // Only corroborated landmarks spend the eight-position placement
+            // Only corroborated landmarks spend the six-position placement
             // budget; ordinary destinations keep one restrained label position.
             "text-variable-anchor-offset": [
               "case",
@@ -183,10 +183,6 @@ export function AmbientPlacesLayer() {
                   [Math.SQRT1_2, Math.SQRT1_2],
                   "top-right",
                   [-Math.SQRT1_2, Math.SQRT1_2],
-                  "bottom-left",
-                  [Math.SQRT1_2, -Math.SQRT1_2],
-                  "bottom-right",
-                  [-Math.SQRT1_2, -Math.SQRT1_2],
                 ],
               ],
               ["literal", ["left", [0.6, 0]]],
@@ -272,8 +268,21 @@ export function AmbientPlacesLayer() {
     };
     const click = (event: MapMouseEvent) => {
       if (getMapClickOwner(event)) return;
+      const target = event.originalEvent?.target;
+      if (target instanceof Element && target.closest("[data-openmapx-pin-marker]")) return;
       const live = LAYERS.filter((id) => map.getLayer(id));
       if (!live.length) return;
+      // Basemap clicks already defer to ambient features. Keep that direction
+      // while category/data-source markers and DOM pins retain higher priority.
+      const basemapLayers = getStylePoiLayerIds(map);
+      const priorityLayers = [...INTERACTIVE_LAYER_IDS].filter(
+        (id) => !LAYERS.includes(id) && !basemapLayers.includes(id) && map.getLayer(id),
+      );
+      if (
+        priorityLayers.length &&
+        map.queryRenderedFeatures(event.point, { layers: priorityLayers }).length
+      )
+        return;
       const feature = map.queryRenderedFeatures(event.point, { layers: live })[0];
       const place = feature ? fromFeature(feature) : null;
       if (!place) return;

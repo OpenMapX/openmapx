@@ -203,6 +203,9 @@ The provider itself implements the contract. Trimmed to the load-bearing parts:
 
 ```ts
 export function createFuelDataSource(ctx: IntegrationContext): MobilityDataSourceProvider {
+  // Every registered FuelStationProvider behind one search and one read by id
+  // (`createSiteOrchestrator` from the integration framework).
+  const stations = createFuelStationOrchestrator(ctx);
   return {
     id: "fuel",
     meta: META, // minZoom, icon markerStyle, placeCategory…
@@ -217,12 +220,10 @@ export function createFuelDataSource(ctx: IntegrationContext): MobilityDataSourc
     async search(bbox, filters) {
       const pricesOnly = filters?.pricesOnly === true;
       // Every covering FuelStationProvider in parallel; failures are tolerated.
-      const { stations } = await aggregateFuelStations(
-        ctx,
-        [bbox.west, bbox.south, bbox.east, bbox.north],
-        { pricesOnly },
-      );
-      const kept = stations.filter(
+      const { sites } = await stations.search([bbox.west, bbox.south, bbox.east, bbox.north], {
+        pricesOnly,
+      });
+      const kept = sites.filter(
         (s) => !pricesOnly || s.products.some((p) => p.available !== false && p.price),
       );
       return withAttribution(
@@ -234,7 +235,7 @@ export function createFuelDataSource(ctx: IntegrationContext): MobilityDataSourc
 
     async getDetail(itemId) {
       // The provider that holds the station answers; no preceding search needed.
-      const station = await findFuelStation(ctx, itemId);
+      const station = await stations.find(itemId);
       return withAttribution(
         station ? mapFuelStationToDetail(station) : null,
         station?.attributions ?? [],
@@ -261,43 +262,37 @@ strip and the place card render (see [Attribution and freshness](#attribution-an
 ## Multi-source merging
 
 A category that aggregates many feeds does the fan-out inside `search`. The
-`ev-charging` provider is the reference: it queries every registered upstream in
-parallel with `Promise.allSettled`, flattens the results, deduplicates stations
-that several feeds publish, and maps the merged set:
+`ev-charging`, `parking`, `fuel` and `webcam` providers are orchestrators over
+typed site-provider contracts (`ChargingSiteProvider`, `ParkingSiteProvider`,
+`FuelStationProvider`, `CameraProvider`). `createSiteOrchestrator` queries every registered
+provider in parallel, tolerates failures, and merges what comes back, so the
+data source only filters and maps the merged sites:
 
 ```ts
-async search(bbox, filters): Promise<MobilityResult<DataSourceResult[]>> {
-  const settled = await Promise.allSettled(
-    EV_CHARGING_SOURCE_REGISTRY.map((s) => s.search(bbox, filters)),
-  );
-  const stations = settled.flatMap((r) => (r.status === "fulfilled" ? r.value : []));
-  const merged = deduplicateChargingStations(stations);
-  const results = merged.map(mapStationToResult);
-
-  return wrapStatic(
-    results,
-    // A merged station can carry several `sources`; credit each one.
-    attribution.forResults(results, (r) => r.sources ?? r.source),
-  );
+async search(bbox, filters) {
+  const found = await sites.search(toBBox(bbox));
+  const kept = found.sites.filter((s) => matches(s, filters));
+  const result = wrapSiteResult(kept.map(mapChargingSiteToResult), siteAttributions(kept));
+  return found.partial ? { ...result, partial: found.partial } : result;
 }
 ```
 
-`Promise.allSettled` is deliberate: one failing or rate-limited upstream is
-dropped rather than failing the whole search. Because each merged station records
-every feed it drew from in `result.sources`, the second argument to
-`forResults` returns the full list so the credit set covers all contributors. For
+A failing or rate-limited provider is dropped rather than failing the whole
+search, and the result is marked `partial` so the host does not cache it. Each
+merged site carries the credits of every feed it drew from, and
+`siteAttributions` returns the full list so the credit set covers all
+contributors. For
 sharing categories that read GBFS, the
 `@openmapx/mobility-core` GBFS client and `gbfs-provider-base` handle feed
 discovery, fetching, and station-status normalization — build on those rather
 than parsing GBFS by hand.
 
-:::tip[Large datasets: ingest instead of fan-out]
-When an upstream returns a whole national registry in one request (much of
-parking, the big EV registries), prefer the **POI ingest pipeline** over an
-eager per-request fetch: declare the feed with `ctx.registerPoiSources(...)` so
-the `data-manager` service ingests it into PostGIS on a cron, and have `search`
-read only the rows intersecting the viewport. See the
-[service manifest](./service-manifest.md) for the data-manager side.
+:::tip[Large datasets belong in OpenConditions]
+When an upstream returns a whole national registry in one request, do not fetch
+it per request. Bulk sources are catalogued as feeds in OpenConditions, which
+ingests and links them; read the result through the matching provider contract
+(for example `charging-sites`) instead.
+:::
 
 Both fixed `fetch.url` values and URLs returned by `resolveUrl` use the same
 streaming safe downloader. It permits only public HTTP(S) endpoints on default

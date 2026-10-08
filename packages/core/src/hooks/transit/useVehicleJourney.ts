@@ -8,7 +8,7 @@ export function useVehicleJourney(
   fallbackIds?: string[],
 ): MobilityEnvelopeQueryResult<VehicleJourney> {
   const query = useQuery({
-    queryKey: ["vehicle-journey", tripId],
+    queryKey: ["vehicle-journey", tripId, fallbackIds],
     queryFn: () => fetchVehicleJourney({ tripId: tripId as string, fallbackIds }),
     enabled: !!tripId,
     staleTime: 30_000,

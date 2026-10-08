@@ -727,6 +727,30 @@ export interface TransitStopInfrastructure {
   geometry?: TransitStopInfrastructureGeometry;
 }
 
+/**
+ * A geometry plus the distance around it that still counts as inside. Kept
+ * unbuffered so containment stays exact and cheap, and so a navigation engine
+ * can widen it by the current GPS accuracy. Coordinates are `[lng, lat]`; a
+ * polygon is its outer ring.
+ */
+export type TransitStopAreaShape =
+  | { type: "point"; coordinates: [number, number]; bufferMeters: number }
+  | { type: "line"; coordinates: [number, number][]; bufferMeters: number }
+  | { type: "polygon"; coordinates: [number, number][]; bufferMeters: number };
+
+/**
+ * Where a stop physically is, for deciding that a rider has reached it: the
+ * platform or quay a leg boards or alights at, and the whole stop place around
+ * it. Either list may be empty when the source knows only the other.
+ */
+export interface TransitStopArea {
+  stopId: string;
+  platform: TransitStopAreaShape[];
+  station: TransitStopAreaShape[];
+  /** `osm` when OpenStreetMap described it; `feed` when only the timetable's stop grouping did. */
+  source: "osm" | "feed";
+}
+
 /** A transit route merged across multiple providers. */
 export interface MergedRoute extends TransitRoute {
   providers: string[];

@@ -22,7 +22,11 @@ function createEvRoutingEnvironment() {
   const getMatrix = vi.fn(async (s: unknown[], t: unknown[]) =>
     s.map(() => t.map(() => ({ seconds: 120, km: 2 }))),
   );
-  const searchStations = vi.fn().mockResolvedValue([]);
+  const chargingSites = {
+    id: "openconditions",
+    searchSites: vi.fn().mockResolvedValue({ sites: [] }),
+    getSite: vi.fn().mockResolvedValue(null),
+  };
   return createRoutingHandlerEnvironment({
     routingProviders: [
       {
@@ -33,10 +37,10 @@ function createEvRoutingEnvironment() {
       },
     ],
     additionalIntegrations: {
-      "data-source": [
+      "charging-sites": [
         {
-          id: "ev-charging",
-          providers: new Map<string, unknown[]>([["data-source", [{ searchStations }]]]),
+          id: "openconditions",
+          providers: new Map<string, unknown[]>([["charging-sites", [chargingSites]]]),
         },
       ],
     },
@@ -64,6 +68,8 @@ describe("POST /directions/ev — input hardening", () => {
     ["waypoints are missing", {}],
     ["socStartPct is out of range", { ...VALID_BODY, socStartPct: 150 }],
     ["socArrivalMinPct is non-numeric", { ...VALID_BODY, socArrivalMinPct: "abc" }],
+    ["departAt is not a date", { ...VALID_BODY, departAt: "tomorrow morning" }],
+    ["departAt is not a real calendar date", { ...VALID_BODY, departAt: "2026-02-30T08:00" }],
     [
       "the inline vehicle spec is malformed",
       { ...VALID_BODY, vehicleId: undefined, vehicle: { batteryKwh: 0 } },

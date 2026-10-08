@@ -88,7 +88,7 @@ async function fetchJson(url: string, timeoutMs: number): Promise<unknown> {
     timeoutMs,
     maxBytes: MAX_GBFS_DOCUMENT_BYTES,
     allowPrivateHosts: privateFeedHostAllowlist(),
-    headers: { "User-Agent": "openmapx-gbfs-validator" },
+    headers: { "User-Agent": "Open-MapX-gbfs-validator" },
   });
 }
 
@@ -305,7 +305,9 @@ export const run: StageFn = async (ctx) => {
     // The catalog lock lives under the repository's `infra/docker/`, which only
     // the operations agent may read on this service's behalf.
     const lock = await runOpsOperation({ kind: "gbfsCatalogLock.inspect" });
-    const response = await fetch(lock.url, { headers: { "User-Agent": "openmapx-gbfs-compiler" } });
+    const response = await fetch(lock.url, {
+      headers: { "User-Agent": "Open-MapX-gbfs-compiler" },
+    });
     if (!response.ok) throw new Error(`GBFS registry download failed: HTTP ${response.status}`);
     const csv = await response.text();
     const actualHash = createHash("sha256").update(csv).digest("hex");

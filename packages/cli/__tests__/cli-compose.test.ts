@@ -220,7 +220,7 @@ describe("renderComposeForRepo", () => {
   it("bootstraps stable Redis auth files while keeping the raw password out of Compose", async () => {
     const secretDir = join(tmp, "infra", "docker", "secrets");
 
-    for (const id of ["redis", "app-api", "data-manager"]) {
+    for (const id of ["redis", "app-api"]) {
       const manifest = JSON.parse(
         readFileSync(join(REPO_ROOT, "services", id, "service.json"), "utf8"),
       ) as Record<string, unknown> & { bindMounts?: Array<{ source: string }> };
@@ -233,7 +233,7 @@ describe("renderComposeForRepo", () => {
     await renderComposeForRepo({
       rootDir: tmp,
       domain: "example.com",
-      services: ["redis,app-api,data-manager"],
+      services: ["redis,app-api"],
     });
     const composePath = join(tmp, "infra", "docker", "docker-compose.generated.yml");
     const firstYaml = readFileSync(composePath, "utf8");
@@ -253,12 +253,12 @@ describe("renderComposeForRepo", () => {
     expect(firstYaml).toContain(
       'REDISCLI_AUTH="$(cat /run/secrets/redis-password)" exec redis-cli ping',
     );
-    expect(firstYaml.match(/redis-password:\/run\/secrets\/redis-password:ro/g)).toHaveLength(3);
+    expect(firstYaml.match(/redis-password:\/run\/secrets\/redis-password:ro/g)).toHaveLength(2);
 
     await renderComposeForRepo({
       rootDir: tmp,
       domain: "example.com",
-      services: ["redis,app-api,data-manager"],
+      services: ["redis,app-api"],
     });
     expect(readFileSync(passwordPath, "utf8")).toBe(firstPassword);
     expect(readFileSync(composePath, "utf8")).not.toContain(firstPassword);

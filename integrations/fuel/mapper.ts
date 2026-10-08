@@ -6,11 +6,17 @@ import {
   type DataSourceDetailSection,
   type DataSourceResult,
   gapFillBranding,
+  isSafeHttpUrl,
   type OsmIdentity,
   validObservedAt,
 } from "@openmapx/core";
 import { parseOpeningHours } from "@openmapx/core/server";
-import { type I18nToken, type Translatable, token } from "@openmapx/integration-framework/strings";
+import {
+  type I18nToken,
+  money,
+  type Translatable,
+  token,
+} from "@openmapx/integration-framework/strings";
 import type { FuelProduct, FuelStation } from "@openmapx/mobility-core/fuel";
 import strings from "./strings/en.json" with { type: "json" };
 
@@ -124,13 +130,12 @@ function formatPriceSummary(
     .filter((p) => !p.hgv || !prices.some((o) => !o.hgv && o.grade === p.grade))
     .sort((a, b) => summaryRank(a.grade) - summaryRank(b.grade));
   if (shown.length === 0) return undefined;
-  const part = (p: SummaryPrice): I18nToken => {
-    const unit = p.per === "L" ? "" : `/${UNIT_LABEL[p.per]}`;
-    return token("summary.price", {
+  const part = (p: SummaryPrice): I18nToken =>
+    token("summary.price", {
       label: summaryLabel(p.grade),
-      amount: `${p.amount.toFixed(3)} ${currency}${unit}`,
+      // A price per litre needs no unit on the card.
+      amount: p.per === "L" ? fuelMoney(p.amount, currency) : pricePer(p.amount, currency, p.per),
     });
-  };
   const car = joinParts(shown.filter((p) => !p.hgv).map(part));
   const hgv = joinParts(shown.filter((p) => p.hgv).map(part));
   const scope = car ? (hgv ? "both" : "car") : "hgv";
@@ -174,14 +179,15 @@ function stationBranding(station: FuelStation): DataSourceBranding | undefined {
  * The station's credits as per-record attributions. The `fuel` manifest
  * declares no sources of its own — every credit comes from the providers — so
  * each result and detail carries the credits of the sources it was built from.
+ * Their links come from upstream data, so only http(s) ones are kept.
  */
 function stationCredits(station: FuelStation): DataSourceAttribution[] | undefined {
   if (station.attributions.length === 0) return undefined;
   return station.attributions.map((a) => ({
     text: a.name,
-    url: a.url ?? "",
+    url: isSafeHttpUrl(a.url) ? a.url : "",
     ...(a.spdxLicense ? { license: a.spdxLicense } : {}),
-    ...(a.licenseUrl ? { licenseUrl: a.licenseUrl } : {}),
+    ...(isSafeHttpUrl(a.licenseUrl) ? { licenseUrl: a.licenseUrl } : {}),
   }));
 }
 
@@ -225,8 +231,17 @@ export function mapFuelStationToResult(station: FuelStation): DataSourceResult {
 function priceCell(product: FuelProduct): Translatable {
   if (product.available === false) return token("product.notSold");
   if (!product.price) return token("product.noPrice");
-  const { amount, currency } = product.price;
-  return `${amount.toFixed(3)} ${currency}/${UNIT_LABEL[product.per]}`;
+  return pricePer(product.price.amount, product.price.currency, product.per);
+}
+
+/** A price with its unit ("€1.799/L"); the client formats the amount in the reader's locale. */
+function pricePer(amount: number, currency: string, per: FuelProduct["per"]): I18nToken {
+  return token("price.per", { price: fuelMoney(amount, currency), unit: UNIT_LABEL[per] });
+}
+
+/** Fuel is priced to tenths of a cent ("€1.790"), so three digits always show. */
+function fuelMoney(amount: number, currency: string): I18nToken {
+  return money(amount, currency, 3);
 }
 
 /** The caption under a product: its service level and when its price was reported. */

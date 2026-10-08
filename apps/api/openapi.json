@@ -405,6 +405,8 @@
                 "transit",
                 "ev",
                 "parking",
+                "fuel",
+                "cameras",
                 "traffic"
               ]
             },
@@ -2239,106 +2241,6 @@
     "/api/data-manager/overture/status": {
       "get": {
         "operationId": "getApiDataManagerOvertureStatus",
-        "responses": {
-          "200": {
-            "description": "Default Response"
-          }
-        },
-        "tags": [
-          "data-manager"
-        ],
-        "x-openmapx-auth": "service"
-      }
-    },
-    "/api/data-manager/poi-ingest/sources": {
-      "get": {
-        "operationId": "getApiDataManagerPoiIngestSources",
-        "responses": {
-          "200": {
-            "description": "Default Response"
-          }
-        },
-        "tags": [
-          "data-manager"
-        ],
-        "x-openmapx-auth": "service"
-      }
-    },
-    "/api/data-manager/poi-ingest/sources/{id}": {
-      "get": {
-        "operationId": "getApiDataManagerPoiIngestSourcesId",
-        "parameters": [
-          {
-            "schema": {
-              "type": "string"
-            },
-            "in": "path",
-            "name": "id",
-            "required": true
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Default Response"
-          }
-        },
-        "tags": [
-          "data-manager"
-        ],
-        "x-openmapx-auth": "service"
-      }
-    },
-    "/api/data-manager/poi-ingest/sources/{id}/sync": {
-      "post": {
-        "operationId": "postApiDataManagerPoiIngestSourcesIdSync",
-        "parameters": [
-          {
-            "schema": {
-              "type": "string"
-            },
-            "in": "path",
-            "name": "id",
-            "required": true
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Default Response"
-          }
-        },
-        "tags": [
-          "data-manager"
-        ],
-        "x-openmapx-auth": "service"
-      }
-    },
-    "/api/data-manager/poi-ingest/sources/{id}/sync-live": {
-      "post": {
-        "operationId": "postApiDataManagerPoiIngestSourcesIdSyncLive",
-        "parameters": [
-          {
-            "schema": {
-              "type": "string"
-            },
-            "in": "path",
-            "name": "id",
-            "required": true
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Default Response"
-          }
-        },
-        "tags": [
-          "data-manager"
-        ],
-        "x-openmapx-auth": "service"
-      }
-    },
-    "/api/data-manager/poi-ingest/state": {
-      "get": {
-        "operationId": "getApiDataManagerPoiIngestState",
         "responses": {
           "200": {
             "description": "Default Response"
@@ -5851,6 +5753,33 @@
         "x-openmapx-source": "integrations/transit/index.ts"
       }
     },
+    "/api/integrations/transit/stops/{id}/area": {
+      "get": {
+        "operationId": "getApiIntegrationsTransitStopsIdArea",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /stops/:id/area (transit)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "transit",
+        "x-openmapx-source": "integrations/transit/index.ts"
+      }
+    },
     "/api/integrations/transit/stops/{id}/arrivals": {
       "get": {
         "operationId": "getApiIntegrationsTransitStopsIdArrivals",
@@ -6138,20 +6067,6 @@
     "/api/internal/metrics": {
       "get": {
         "operationId": "getApiInternalMetrics",
-        "responses": {
-          "200": {
-            "description": "Default Response"
-          }
-        },
-        "tags": [
-          "internal"
-        ],
-        "x-openmapx-auth": "internal"
-      }
-    },
-    "/api/internal/poi-sources/count": {
-      "get": {
-        "operationId": "getApiInternalPoiSourcesCount",
         "responses": {
           "200": {
             "description": "Default Response"

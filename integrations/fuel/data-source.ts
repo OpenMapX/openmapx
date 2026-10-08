@@ -1,29 +1,25 @@
 import type {
-  BBox,
   BoundingBox,
   DataSourceDetail,
   DataSourceFilterDef,
   DataSourceMeta,
-  DataSourceResult,
 } from "@openmapx/core";
 import { CATEGORY_FILTERS } from "@openmapx/core";
-import type {
-  DataSourceSearchResult,
-  FuelStation,
-  FuelStationQuery,
-  IntegrationContext,
-  MobilityDataSourceProvider,
-} from "@openmapx/integration-framework";
-import type { Attribution } from "@openmapx/mobility-core/attribution";
-import { freshnessNow } from "@openmapx/mobility-core/freshness";
-import { type MobilityResult, withAttribution } from "@openmapx/mobility-core/result";
-import { mapFuelStationToDetail, mapFuelStationToResult } from "./mapper.js";
 import {
-  aggregateFuelStations,
-  collectFuelStationProviders,
-  createProviderOutages,
-  findFuelStation,
-} from "./orchestrator.js";
+  type DataSourceSearchResult,
+  type FuelStation,
+  type FuelStationQuery,
+  type IntegrationContext,
+  type MobilityDataSourceProvider,
+  selectedOptions,
+  siteAttributions,
+  toBBox,
+  withinZoom,
+  wrapSiteResult as wrap,
+} from "@openmapx/integration-framework";
+import type { MobilityResult } from "@openmapx/mobility-core/result";
+import { mapFuelStationToDetail, mapFuelStationToResult } from "./mapper.js";
+import { createFuelStationOrchestrator } from "./orchestrator.js";
 
 const META: DataSourceMeta = {
   minZoom: 8,
@@ -46,24 +42,8 @@ const SEARCH_CACHE_TTL_S = 120;
 /** Seconds a station detail is cached; it shows the same prices a search does. */
 const DETAIL_CACHE_TTL_S = 120;
 
-const wrap = <T>(data: T, attributions: Attribution[]): MobilityResult<T> =>
-  withAttribution(data, attributions, freshnessNow({ hasRealtimeData: false }));
-
-/** Every contributing source's attribution, once, in first-seen order. */
-function attributionsOf(stations: FuelStation[]): Attribution[] {
-  const bySource = new Map<string, Attribution>();
-  for (const station of stations) {
-    for (const attribution of station.attributions) {
-      if (!bySource.has(attribution.sourceId)) bySource.set(attribution.sourceId, attribution);
-    }
-  }
-  return [...bySource.values()];
-}
-
 function requestedGrades(filters: Record<string, unknown> | undefined): string[] {
-  const raw = filters?.fuelType;
-  if (raw === undefined || raw === null || raw === "") return [];
-  return (Array.isArray(raw) ? raw : [raw]).map(String).filter(Boolean);
+  return [...selectedOptions(filters, "fuelType")];
 }
 
 function sells(station: FuelStation, grades: readonly string[]): boolean {
@@ -72,27 +52,6 @@ function sells(station: FuelStation, grades: readonly string[]): boolean {
 
 function hasPrice(station: FuelStation): boolean {
   return station.products.some((p) => p.available !== false && p.price !== undefined);
-}
-
-function toBBox(bbox: BoundingBox): BBox {
-  return [bbox.west, bbox.south, bbox.east, bbox.north];
-}
-
-/** The side of a map tile, in CSS pixels (MapLibre's vector tiles). */
-const TILE_PX = 512;
-/** The widest map view a search is answered for, in CSS pixels per side. */
-const MAX_VIEW_PX = 4096;
-
-/**
- * Whether a box is no wider than a map view of up to `MAX_VIEW_PX` pixels a
- * side shows at `zoom`: a tile spans 360 / 2^zoom degrees of longitude, and
- * the degrees of latitude a pixel spans shrink with the cosine of the latitude.
- */
-function withinZoom(bbox: BoundingBox, zoom: number): boolean {
-  const lonSpan = (360 / 2 ** zoom) * (MAX_VIEW_PX / TILE_PX);
-  const midLat = (bbox.south + bbox.north) / 2;
-  const latSpan = lonSpan * Math.cos((midLat * Math.PI) / 180);
-  return bbox.east - bbox.west <= lonSpan && bbox.north - bbox.south <= latSpan;
 }
 
 /**
@@ -105,7 +64,7 @@ function withinZoom(bbox: BoundingBox, zoom: number): boolean {
  * it does.
  */
 export function createFuelDataSource(ctx: IntegrationContext): MobilityDataSourceProvider {
-  const outages = createProviderOutages(ctx.log);
+  const stations = createFuelStationOrchestrator(ctx);
   return {
     id: "fuel",
     meta: META,
@@ -114,7 +73,7 @@ export function createFuelDataSource(ctx: IntegrationContext): MobilityDataSourc
     detailCacheTtl: DETAIL_CACHE_TTL_S,
     attribution: [],
 
-    isAvailable: () => collectFuelStationProviders(ctx).length > 0,
+    isAvailable: () => stations.providers().length > 0,
 
     async getFilters(): Promise<DataSourceFilterDef[]> {
       return [
@@ -147,16 +106,16 @@ export function createFuelDataSource(ctx: IntegrationContext): MobilityDataSourc
         ...(pricesOnly ? { pricesOnly } : {}),
         ...(grades.length > 0 ? { grades } : {}),
       };
-      const { stations, partial } = await aggregateFuelStations(ctx, outages, toBBox(bbox), query);
-      const kept = stations.filter(
+      const found = await stations.search(toBBox(bbox), query);
+      const kept = found.sites.filter(
         (s) => (grades.length === 0 || sells(s, grades)) && (!pricesOnly || hasPrice(s)),
       );
-      const result = wrap(kept.map(mapFuelStationToResult), attributionsOf(kept));
-      return partial ? { ...result, partial } : result;
+      const result = wrap(kept.map(mapFuelStationToResult), siteAttributions(kept));
+      return found.partial ? { ...result, partial: found.partial } : result;
     },
 
     async getDetail(itemId: string): Promise<MobilityResult<DataSourceDetail | null>> {
-      const station = await findFuelStation(ctx, outages, itemId);
+      const station = await stations.find(itemId);
       if (!station) return wrap(null, []);
       return wrap(mapFuelStationToDetail(station), station.attributions);
     },

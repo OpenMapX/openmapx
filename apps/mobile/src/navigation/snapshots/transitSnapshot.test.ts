@@ -140,10 +140,10 @@ describe("transitProgressSnapshot", () => {
       "itineraryFingerprint",
       "liveStatus",
       "phase",
-      "progress",
       "revision",
       "sessionId",
       "status",
+      "transitProgress",
       "type",
       "version",
     ]);

@@ -8,7 +8,6 @@ import type {
 const DEFAULT_SEARCH_TTL = 21600;
 const DEFAULT_DETAIL_TTL = 21600;
 const DEFAULT_MAP_CONTEXT_TTL = 300;
-const FILTER_TTL = 172800;
 
 function hashKey(prefix: string, data: unknown): string {
   const hash = createHash("sha256").update(JSON.stringify(data)).digest("hex").slice(0, 16);
@@ -49,9 +48,9 @@ export function createDataSourceOrchestrator(ctx: IntegrationContext) {
       for (const p of domainProviders) {
         // An unavailable source would answer every search empty; no chip offers it.
         if (p.isAvailable?.() === false) continue;
-        const filters = await ctx.cache.withCache(`ds:filters:${p.id}`, FILTER_TTL, () =>
-          p.getFilters(),
-        );
+        // Read on every list, never from the shared cache: a cached set would
+        // outlive an upgrade that changed the filters.
+        const filters = await p.getFilters();
         results.push({ ...p.meta, id, name, categoryChipLabel: name, filters });
       }
     }

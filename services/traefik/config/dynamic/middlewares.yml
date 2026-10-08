@@ -53,13 +53,12 @@ http:
         customResponseHeaders:
           Cache-Control: "public, max-age=300, must-revalidate"
 
-    # Blocks the app-api routes that are documented as internal-only
-    # (/api/internal/metrics, /api/internal/poi-sources/count). Those handlers
-    # are unauthenticated by design because their only real caller is
-    # data-manager, which reaches app-api directly over the docker network and
-    # never traverses Traefik. Allowing loopback only means every request that
-    # arrives through the proxy is rejected with 403, while the in-cluster
-    # caller is unaffected.
+    # Blocks the app-api route that is documented as internal-only
+    # (/api/internal/metrics). The handler is unauthenticated by design because
+    # its callers reach app-api directly over the docker network and never
+    # traverse Traefik. Allowing loopback only means every request that
+    # arrives through the proxy is rejected with 403, while in-cluster callers
+    # are unaffected.
     internal-deny:
       ipAllowList:
         sourceRange:

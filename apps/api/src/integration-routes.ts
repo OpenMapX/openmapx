@@ -92,14 +92,11 @@ function escapeRegex(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-function decodeParam(value: string): string {
-  try {
-    return decodeURIComponent(value);
-  } catch {
-    return value;
-  }
-}
-
+/**
+ * Matches against the raw, still percent-encoded path, so an encoded `/` inside
+ * a param stays inside its segment. Captures come back encoded; the dispatcher
+ * decodes each exactly once.
+ */
 function matchRoutePath(pattern: string, path: string): Record<string, string> | null {
   const patternSegments = pattern === "/" ? [] : pattern.slice(1).split("/");
   const pathSegments = path === "/" ? [] : path.slice(1).split("/");
@@ -108,7 +105,7 @@ function matchRoutePath(pattern: string, path: string): Record<string, string> |
   for (let i = 0; i < patternSegments.length; i++) {
     const patternSegment = patternSegments[i];
     if (patternSegment === "*") {
-      params["*"] = decodeParam(pathSegments.slice(i).join("/"));
+      params["*"] = pathSegments.slice(i).join("/");
       return params;
     }
 
@@ -127,7 +124,7 @@ function matchRoutePath(pattern: string, path: string): Record<string, string> |
     if (!match) return null;
     for (let j = 0; j < names.length; j++) {
       const captured = match[j + 1];
-      if (captured !== undefined) params[names[j] as string] = decodeParam(captured);
+      if (captured !== undefined) params[names[j] as string] = captured;
     }
   }
 
@@ -149,24 +146,90 @@ function findIntegrationRoute(
   return null;
 }
 
+/**
+ * The part of the request path the integration's own routes match, taken from
+ * the raw request URL rather than Fastify's `*` param. Fastify has already
+ * decoded that param, which turns an encoded `%2F` inside an id into a real `/`
+ * and splits it across segments. Everything up to the dispatcher's `*` is one
+ * raw segment per route segment (`:id` never spans a `/`), so dropping that many
+ * raw segments leaves the integration path exactly as the client encoded it.
+ */
+function rawIntegrationPath(request: FastifyRequest): string {
+  const wildcardAt = (request.routeOptions.url ?? "").split("/").indexOf("*");
+  if (wildcardAt === -1) return "/";
+  const rawUrl = request.raw.url ?? request.url;
+  const pathEnd = rawUrl.search(/[?#]/);
+  const rawPath = pathEnd === -1 ? rawUrl : rawUrl.slice(0, pathEnd);
+  return `/${rawPath.split("/").slice(wildcardAt).join("/")}`;
+}
+
+/**
+ * Decodes every captured param once. This cannot throw: the router rejects a
+ * path holding a malformed escape with its own 400 before any handler runs,
+ * and a capture is a `/`-bounded slice of that same path, so it never splits an
+ * escape or a multi-byte sequence.
+ */
+function decodeParams(params: Record<string, string>): Record<string, string> {
+  const decoded: Record<string, string> = {};
+  for (const [name, value] of Object.entries(params)) decoded[name] = decodeURIComponent(value);
+  return decoded;
+}
+
+/**
+ * Router options that make the path the router matched differ from the raw
+ * request path. `rawIntegrationPath` relies on the two agreeing segment for
+ * segment, and no lossless way exists to rebuild one from the other: the
+ * router's only output for the remainder is the fully decoded `*` param, which
+ * has already lost the difference between `/` and `%2F`. Duplicate slashes
+ * collapsed in the prefix shift every segment, a `;` delimiter moves part of
+ * the path into the query string, and a trimmed trailing slash changes the
+ * remainder. So the dispatcher refuses to run under any of them rather than
+ * hand integrations a silently wrong path. `rewriteUrl` needs no guard: Fastify
+ * writes the rewritten URL back to the raw request before routing, so the
+ * router and `request.raw.url` see the same string. `caseSensitive: false` is
+ * not guarded: the raw path is split by segment count, so a differently cased
+ * prefix and the id's own case both pass through untouched (see the route
+ * params test).
+ */
+const PATH_NORMALISING_ROUTER_OPTIONS = [
+  "ignoreDuplicateSlashes",
+  "useSemicolonDelimiter",
+  "ignoreTrailingSlash",
+] as const;
+
+// biome-ignore lint/suspicious/noExplicitAny: accept any Fastify logger variant
+function assertRawPathMatchesRouter(fastify: FastifyInstance<any, any, any, any>): void {
+  const config = fastify.initialConfig as Record<string, unknown> & {
+    routerOptions?: Record<string, unknown>;
+  };
+  for (const option of PATH_NORMALISING_ROUTER_OPTIONS) {
+    if (config[option] === true || config.routerOptions?.[option] === true) {
+      throw new Error(
+        `The integration route dispatcher matches the raw request path, so it cannot run with the router option "${option}" enabled: the router would match a normalised path that the raw path no longer lines up with. Turn "${option}" off.`,
+      );
+    }
+  }
+}
+
 export function registerIntegrationRouteDispatcher(
   // biome-ignore lint/suspicious/noExplicitAny: accept any Fastify logger variant
   fastify: FastifyInstance<any, any, any, any>,
   integrations: ReadonlyMap<string, LoadedIntegration>,
 ): void {
   if (_routeDispatcherFastify === fastify) return;
+  assertRawPathMatchesRouter(fastify);
   _routeDispatcherFastify = fastify;
 
   const dispatch = async (request: FastifyRequest, reply: FastifyReply) => {
-    const params = request.params as { id?: string; "*"?: string };
-    const id = params.id;
+    const id = (request.params as { id?: string }).id;
     if (!id) return reply.status(404).send({ error: "Not found" });
     const integration = integrations.get(id);
     if (!integration?.enabled) return reply.status(404).send({ error: "Not found" });
 
-    const routePath = params["*"] ? `/${params["*"]}` : "/";
+    const routePath = rawIntegrationPath(request);
     const matched = findIntegrationRoute(id, request.method, routePath);
     if (!matched) return reply.status(404).send({ error: "Not found" });
+    const routeParams = decodeParams(matched.params);
 
     const rateLimitTier = matched.route.options?.rateLimitTier ?? "public";
     const limiter = routeRateLimits?.[rateLimitTier];
@@ -192,7 +255,7 @@ export function registerIntegrationRouteDispatcher(
       await matched.route.handler(
         {
           query: request.query as Record<string, string | string[] | undefined>,
-          params: matched.params,
+          params: routeParams,
           body: request.body,
           userId,
           headers: request.headers,

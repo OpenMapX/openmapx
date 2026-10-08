@@ -183,10 +183,11 @@ describe("fetchVehicleJourney", () => {
     expect(calls[0].url).toContain("/vehicles/trip%2F1");
   });
 
-  it("sends fallback ids as one comma-joined parameter", async () => {
+  it("sends each fallback id as its own repeated parameter, verbatim", async () => {
     mockFetch();
-    await fetchVehicleJourney({ tripId: "t1", fallbackIds: ["a", "b"] }, client());
-    expect(calls[0].url).toContain("fallback_ids=a%2Cb");
+    const fallbackIds = ["a", "b,c", " lead", "q?x=1&y"];
+    await fetchVehicleJourney({ tripId: "t1", fallbackIds }, client());
+    expect(new URL(calls[0].url).searchParams.getAll("fallback_ids")).toEqual(fallbackIds);
   });
 
   it("omits the parameter when there are no fallbacks", async () => {

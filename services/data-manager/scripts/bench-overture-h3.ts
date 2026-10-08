@@ -1,7 +1,7 @@
 /** Disposable synthetic benchmark; never uses DATABASE_URL or imported data. */
 import { performance } from "node:perf_hooks";
 import { latLngToCell } from "h3-js";
-import { startPostgis } from "../__tests__/poi-ingest/_testcontainer.js";
+import { startPostgis } from "../__tests__/helpers/postgis-testcontainer.js";
 import { buildSchemaDDL } from "../src/jobs/overture/schema.js";
 
 const pg = await startPostgis();

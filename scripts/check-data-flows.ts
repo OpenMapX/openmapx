@@ -129,7 +129,6 @@ const ALLOWED_DOMAINS = new Set([
   "wikimedia.org",
   "sharedmobility.ch", // Swiss shared-mobility GBFS catalog (server-side)
   // Multi-tenant open-data platforms / generic infra that merely *host* feeds.
-  "opendatasoft.com", // Opendatasoft SAS platform (disclosed via ev-charging)
   "govdata.de", // German open-data catalog (feed discovery)
   "azure.com", // generic cloud host where some open-data feeds live
 ]);

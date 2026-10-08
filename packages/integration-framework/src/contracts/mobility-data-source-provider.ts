@@ -65,6 +65,10 @@ export interface MobilityDataSourceProvider {
    */
   isAvailable?(): boolean;
 
+  /**
+   * The filters the panel offers, read on every data-source list request; a
+   * provider that fetches them caches them itself.
+   */
   getFilters(): Promise<DataSourceFilterDef[]>;
   search(bbox: BoundingBox, filters?: Record<string, unknown>): Promise<DataSourceSearchResult>;
   getDetail(itemId: string): Promise<MobilityResult<DataSourceDetail | null>>;
@@ -73,12 +77,4 @@ export interface MobilityDataSourceProvider {
     filters?: Record<string, unknown>,
     options?: DataSourceMapContextSelection,
   ): Promise<MobilityResult<DataSourceMapContext | null>>;
-  /**
-   * Optional bulk canonical query used by charge-planning: returns the
-   * integration's merged domain model for `bbox` (e.g. EvChargingStation[])
-   * before it is projected to DataSourceResult. Only providers whose model
-   * carries data the generic list projection drops (per-connector power/type)
-   * implement this. Callers duck-type it via getIntegrationsByDomain.
-   */
-  searchStations?(bbox: BoundingBox): Promise<unknown[]>;
 }

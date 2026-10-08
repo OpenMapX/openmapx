@@ -84,11 +84,13 @@ export { fetchTrafficSignals } from "./trafficSignals";
 export {
   buildTransitPlanParams,
   fetchTransitPlan,
+  fetchTransitStopArea,
   fetchVehicleJourney,
   postTransitChainPlan,
   refreshTransitItinerary,
   type TransitChainPlanRequest,
   type TransitPlanParams,
   type TransitRefreshResult,
+  type TransitStopAreaRequest,
   type VehicleJourneyParams,
 } from "./transit";

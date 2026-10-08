@@ -447,6 +447,15 @@ describe("missed connections", () => {
     expect(second.needsReplan).toBe(false);
   });
 
+  it("requests it while the rider is still walking to a departure that has passed", () => {
+    const walking = freshTransitTickState(NOW);
+    const result = tick({ state: walking, nowMs: NOW + 9 * 60_000 });
+    expect(result.needsReplan).toBe(true);
+    expect(result.events).toContainEqual(
+      expect.objectContaining({ type: "missed-connection", legIndex: 1 }),
+    );
+  });
+
   it("does not request a replan while riding", () => {
     const riding: TransitTickState = {
       ...freshTransitTickState(NOW),

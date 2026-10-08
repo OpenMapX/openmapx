@@ -22,7 +22,6 @@ export type {
   HttpClientOptions,
   HttpResponse,
   IntegrationContext,
-  LiveStoreClient,
   Logger,
   MetricsRecorder,
   ProviderCallOutcome,
@@ -50,9 +49,19 @@ export type {
   AirQualityCapability,
   AirQualityProvider,
   AutocompleteResult,
+  Camera,
+  CameraProvider,
+  CameraQuery,
+  CameraStatus,
+  CameraType,
+  CameraView,
   ChainedTripPlan,
   ChainedTripSegment,
   ChainPlanWarning,
+  ChargingConnector,
+  ChargingSite,
+  ChargingSiteProvider,
+  ChargingSiteQuery,
   CurrentWeather,
   DailyForecastPoint,
   DataSourceAttribution,
@@ -71,6 +80,10 @@ export type {
   DataSourceResult,
   DataSourceSearchResult,
   DirectionsResult,
+  EnergyTariff,
+  EnergyTariffRestrictions,
+  Evse,
+  EvseStatus,
   ForecastAirQualityQuery,
   FuelProduct,
   FuelStation,
@@ -102,7 +115,20 @@ export type {
   MobilityDataSourceProvider,
   NlpProvider,
   NlpProviderId,
+  OperationalEvidence,
+  OperationalFeedCoverage,
+  OperationalFeedEvidence,
   OsmIdentity,
+  ParkingArea,
+  ParkingCounts,
+  ParkingLayout,
+  ParkingRate,
+  ParkingSite,
+  ParkingSiteProvider,
+  ParkingSiteQuery,
+  ParkingSiteType,
+  ParkingStatus,
+  ParkingTrend,
   ParseContext,
   PhotoProvider,
   PhotoQuery,
@@ -151,7 +177,6 @@ export type {
   RoadConditionRoadRef,
   RoadConditionSchedule,
   RoadConditionSeverityLabel,
-  RoadConditionsOperationalEvidence,
   RoadConditionsProvider,
   RoadConditionsQuery,
   RoadConditionValidity,
@@ -267,16 +292,8 @@ export {
   validateDataSource,
   validateManifest,
 } from "./manifest";
+export { matchesMediaHost, parseMediaHostEntry } from "./media-hosts";
 export { PLATFORM_VERSION, satisfiesPlatformVersion } from "./platform";
-export {
-  createStaticPoiReader,
-  createTwoTierPoiReader,
-  isInColdStart,
-  isLiveTooStale,
-  type PoiReader,
-  type StaticPoiReaderOptions,
-  type TwoTierPoiReaderOptions,
-} from "./poi-source-reader";
 export {
   mapSettledWithConcurrency,
   type ProviderCallContext,
@@ -285,15 +302,26 @@ export {
   ProviderTimeoutError,
   runWithProviderDeadline,
 } from "./provider-execution";
-export { QueryValidationError, type RouteQuery, scalarQueries, scalarQuery } from "./query";
+export {
+  listQuery,
+  QueryValidationError,
+  type RouteQuery,
+  scalarQueries,
+  scalarQuery,
+} from "./query";
 export { IntegrationRegistry } from "./registry";
 export {
-  createStagedRuntimeContext,
-  createStagedRuntimeValue,
-  type StagedRuntimeContext,
-  type StagedRuntimeValue,
-  stageRuntimeGeneration,
-} from "./staged-runtime-context";
+  createProviderOutages,
+  createSiteOrchestrator,
+  type ProviderOutages,
+  type SiteOrchestrator,
+  type SiteOrchestratorOptions,
+  selectedOptions,
+  siteAttributions,
+  toBBox,
+  withinZoom,
+  wrapSiteResult,
+} from "./site-orchestrator";
 // `useIntegrationRegistry` and `IntegrationRegistryContext` live in the
 // `/react` subpath — pulling them into this barrel would force every
 // consumer (CLI, API, server-side code) to ship `react` even when they

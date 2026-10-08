@@ -1,14 +1,53 @@
 import { isGooglePhotosImageUrl, resolveGooglePhotosLink } from "@integrations/photos/orchestrator";
 import { fetchWithRedirects, USER_AGENT } from "@openmapx/core";
 import { envString } from "@openmapx/core/server-env";
+import {
+  createPinnedFetchTransport,
+  resolvePublicConnectionAddresses,
+} from "@openmapx/core/utils/safe-download";
 import type { FastifyPluginAsync, FastifyReply } from "fastify";
 import { requestNetworkKey } from "../utils/rate-limit.js";
 import { declareRouteAuth } from "../utils/route-auth.js";
 import { safeErrorClass, summarizeExternalUrl } from "../utils/safe-log-fields.js";
-import { isAllowedHost } from "./image-hosts.js";
+import { isAllowedHost, isCameraHost } from "./image-hosts.js";
 import { createImageProxyBudgetFromEnv } from "./image-proxy-budget.js";
 
-export { isAllowedHost } from "./image-hosts.js";
+/**
+ * Digitraffic asks clients to name their application in `Digitraffic-User`
+ * and raises its per-address image limit for those that do; every proxied
+ * still shares the server's one address. No other host receives the header.
+ */
+function publisherHeaders(url: URL): Record<string, string> {
+  const host = url.hostname.toLowerCase();
+  return host === "digitraffic.fi" || host.endsWith(".digitraffic.fi")
+    ? { "Digitraffic-User": USER_AGENT }
+    : {};
+}
+
+/**
+ * Wraps the per-hop fetch so each hop carries only the headers its own host
+ * asks for; a redirect to another host never inherits them.
+ */
+export function withPublisherHeaders<A>(
+  fetchImpl: (input: string | URL, addresses: A, init: RequestInit) => Promise<Response>,
+): (input: string | URL, addresses: A, init: RequestInit) => Promise<Response> {
+  return (input, addresses, init) => {
+    const extra = publisherHeaders(new URL(input));
+    if (Object.keys(extra).length === 0) return fetchImpl(input, addresses, init);
+    const headers = new Headers(init.headers);
+    for (const [name, value] of Object.entries(extra)) headers.set(name, value);
+    return fetchImpl(input, addresses, { ...init, headers });
+  };
+}
+
+/** A day for photos; camera stills change every few minutes and are never cached. */
+const PHOTO_CACHE_CONTROL = "public, max-age=86400, s-maxage=86400";
+const CAMERA_CACHE_CONTROL = "no-store";
+
+function isCameraStill(requested: string, final: string): boolean {
+  if (isCameraHost(new URL(requested))) return true;
+  return URL.canParse(final) && isCameraHost(new URL(final));
+}
 
 /** Allowed frontend origins that may use the proxy. */
 function getAllowedOrigins(): string[] {
@@ -110,7 +149,7 @@ export const imageProxyRoute: FastifyPluginAsync = async (fastify) => {
         return reply.status(400).send({ message: "Only HTTP(S) URLs allowed" });
       }
 
-      if (!isAllowedHost(parsed.hostname)) {
+      if (!isAllowedHost(parsed)) {
         return reply.status(403).send({ message: "Domain not allowed" });
       }
 
@@ -127,6 +166,10 @@ export const imageProxyRoute: FastifyPluginAsync = async (fastify) => {
       };
       req.raw.once("aborted", abortClientRequest);
       reply.raw.once("close", abortClosedResponse);
+      // Every hop's socket opens on the addresses that were checked to be
+      // public, so neither an allowlisted host nor a declared camera host can
+      // point the proxy at a private, loopback or link-local address.
+      const transport = createPinnedFetchTransport();
 
       try {
         // Google Photos share links are not direct images — resolve to actual image URL
@@ -158,8 +201,10 @@ export const imageProxyRoute: FastifyPluginAsync = async (fastify) => {
             validateRedirectUrl: (next) =>
               resolvedGooglePhotos
                 ? isGooglePhotosImageUrl(next)
-                : (next.protocol === "https:" || next.protocol === "http:") &&
-                  isAllowedHost(next.hostname),
+                : (next.protocol === "https:" || next.protocol === "http:") && isAllowedHost(next),
+            resolveConnectionAddresses: resolvePublicConnectionAddresses,
+            pinnedFetchImplementation: withPublisherHeaders(transport.fetch),
+            releaseResponse: transport.releaseResponse,
           });
 
           if (!upstream.ok) {
@@ -208,7 +253,10 @@ export const imageProxyRoute: FastifyPluginAsync = async (fastify) => {
           // and the missing Content-Type combined with X-Content-Type-Options:
           // nosniff would refuse to render the bytes as an image).
           reply.hijack();
-          reply.raw.setHeader("Cache-Control", "public, max-age=86400, s-maxage=86400");
+          reply.raw.setHeader(
+            "Cache-Control",
+            isCameraStill(imageUrl, upstream.url) ? CAMERA_CACHE_CONTROL : PHOTO_CACHE_CONTROL,
+          );
           reply.raw.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
           reply.raw.setHeader("Access-Control-Allow-Origin", refererOrigin);
           // ACAO is set per request to the matched frontend origin, so a CDN must
@@ -283,6 +331,12 @@ export const imageProxyRoute: FastifyPluginAsync = async (fastify) => {
         req.raw.removeListener("aborted", abortClientRequest);
         reply.raw.removeListener("close", abortClosedResponse);
         lease.release();
+        await transport.dispose().catch((err: unknown) => {
+          req.log.warn(
+            { errorClass: safeErrorClass(err) },
+            "Image proxy connection cleanup failed",
+          );
+        });
       }
     },
   });

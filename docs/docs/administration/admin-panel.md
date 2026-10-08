@@ -125,18 +125,11 @@ The public-transit data pipeline: the Transitous feed snapshot, audited catalog
 pin changes, per-feed import state and expiry, provider health, and the recent
 and in-flight pipeline jobs that keep the transit engine's data fresh.
 
-### POI ingest
-
-The operator surface for the points-of-interest ingest crons that feed data
-sources like EV charging and parking. It shows per-source schedule, last-run and
-row counts, in-flight jobs, recent failures, and a manual **Sync** action for
-triaging a stale or broken source.
-
 ### Coverage & freshness
 
 The evidence-backed `/admin/coverage` view answers which registered operations
-have usable data in a selected region. Its six domain columns cover Addresses,
-POIs, Transit, EV, Parking, and Traffic. It keeps publication, freshness,
+have usable data in a selected region. Its seven domain columns cover Addresses,
+POIs, Transit, EV, Parking, Fuel, and Traffic. It keeps publication, freshness,
 runtime, geographic relation, and usage-rights evidence separate; **Unknown**
 means an observation is missing or cannot be verified, not that the capability
 is absent. See [Coverage & freshness](./coverage-freshness.md) for the clocks,
@@ -202,7 +195,6 @@ and unusually destructive primitives in the CLI.
 | User roles and account administration                                           | **Users**                             |
 | Backup create/list/restore/delete                                               | **Services → Backups**                |
 | Cache inspection and safe namespace clearing                                    | **Cache**                             |
-| POI ingest state/list/detail/sync/live-only sync                                | **POI ingest**                        |
 | Transitous lock inspection and audited pin bump                                 | **Transit**                           |
 
 Integration scaffolding, validation, building, and packaging remain CLI-only

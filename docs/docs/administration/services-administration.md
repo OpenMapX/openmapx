@@ -210,12 +210,22 @@ data workflow is documented in [Preparing data](../install/preparing-data.md).
 ### OSM code and alias search index
 
 The data workflow also operates the local OSM code/alias/acronym index used by
-consumer autocomplete. It shows the source region and fingerprint, current
+consumer autocomplete. It shows the source region, current
 build stage, place and term counts, publication epoch and time, whether a newer
 PBF has made the index stale, and the last error. Building is explicit: select
 the downloaded region and confirm the operation, or run
 `openmapx data search-index build [region]`. A new PBF never triggers a
 country- or planet-scale rebuild during API boot.
+
+A ready index covers the documented aliases/codes/acronyms; it does not establish
+ordinary business-name/address coverage. For an investigation, record the
+authenticated `/api/data-manager/search-index/status` response's
+`sourceFingerprint` and `epoch` as well as the Overture status response's release
+and region. The search card's summary does not display the source fingerprint.
+Keep unavailable generations unknown and do not rebuild or flush shared caches
+to diagnose a query. See the
+[business retrieval investigation](../developer/business-name-address-retrieval.md)
+for the distinction between source presence and searchable candidates.
 
 The job requires PostGIS and Osmium Tool. It streams records in bounded batches
 into `osm_search__staging`, builds exact/prefix and geographic indexes, validates

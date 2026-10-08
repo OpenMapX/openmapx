@@ -96,8 +96,8 @@ inspect a container's lifecycle state, use the service catalog under
 ## Transit provider health
 
 The transit and mobility chain has its own health surface, because it fans out
-across many upstream providers (regional transit APIs, MOTIS, GBFS feeds, POI
-sources) and a single bad provider shouldn't drag the rest down. It lives on
+across many upstream providers (regional transit APIs, MOTIS, GBFS feeds,
+OpenConditions) and a single bad provider shouldn't drag the rest down. It lives on
 `/admin/transit` as the **Provider health** table, at the bottom of the transit
 pipeline page.
 

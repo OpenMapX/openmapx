@@ -7,7 +7,7 @@ import {
   buildSearchIndexIndexesDDL,
   buildSearchIndexSchemaDDL,
 } from "../../src/jobs/search-index/schema.js";
-import { startPostgis } from "../poi-ingest/_testcontainer.js";
+import { startPostgis } from "../helpers/postgis-testcontainer.js";
 
 const request = {
   method: "POST" as const,

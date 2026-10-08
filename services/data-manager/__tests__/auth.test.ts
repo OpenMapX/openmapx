@@ -11,7 +11,6 @@ async function buildApp(): Promise<FastifyInstance> {
   app.get("/protected", async () => ({ ok: true }));
   app.get("/live", async () => ({ ok: true }));
   app.get("/status", async () => ({ ok: true }));
-  app.get("/internal/metrics", async () => ({ ok: true }));
   app.get("/internal/transit/operator-feed/:handle", async () => ({ ok: true }));
   await app.ready();
   return app;
@@ -73,13 +72,6 @@ describe("registerAuth", () => {
   it("lets /live through without a token", async () => {
     const app = await buildApp();
     const res = await app.inject({ method: "GET", url: "/live" });
-    expect(res.statusCode).toBe(200);
-    await app.close();
-  });
-
-  it("lets /internal/metrics through without a token", async () => {
-    const app = await buildApp();
-    const res = await app.inject({ method: "GET", url: "/internal/metrics" });
     expect(res.statusCode).toBe(200);
     await app.close();
   });

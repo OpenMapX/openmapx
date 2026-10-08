@@ -10,7 +10,6 @@ import type {
   HttpClient,
   HttpClientOptions,
   HttpResponse,
-  LiveStoreClient,
   Logger,
   ResponseOptions,
 } from "@openmapx/integration-framework";
@@ -222,28 +221,6 @@ export function createCacheClient(prefix: string): CacheClient {
         },
         callerSignal,
       );
-    },
-  };
-}
-
-/**
- * Reader for the cross-process `poi:live:<sourceId>` keyspace that
- * `services/data-manager`'s `write-live` stage populates. The keys are
- * deliberately NOT integration-namespaced — data-manager has no notion of
- * integration ids, only the source ids in `@openmapx/poi-source-registry`.
- * Prefixing here would silently miss every write.
- *
- * Process-scoped (one client shared across all integrations); per-key
- * isolation already happens via `@openmapx/poi-source-registry` ensuring
- * source ids are globally unique.
- */
-export function createLiveStoreClient(): LiveStoreClient {
-  return {
-    async hmget<T>(key: string, fields: readonly string[]): Promise<(T | null)[]> {
-      if (!redis) return fields.map(() => null);
-      if (fields.length === 0) return [];
-      const values = await redis.hmget(key, ...fields);
-      return values.map((v) => (v ? (JSON.parse(v) as T) : null));
     },
   };
 }

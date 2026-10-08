@@ -1,0 +1,317 @@
+{
+  "records": [
+    {
+      "id": "oc:feature:test.local:64d8d630fd398cf61a3b3c4fb6f9bb97c50d114ad461da9b7765d3367e336c60",
+      "kind": "parking_site",
+      "name": [
+        {
+          "lang": "de",
+          "text": "Karstadt"
+        }
+      ],
+      "type": "off_street",
+      "class": "feature",
+      "domain": "parking",
+      "details": {
+        "v": 1,
+        "kind": "parking_site",
+        "layout": "multi_storey",
+        "heightLimit": {
+          "unit": "m",
+          "value": 2
+        },
+        "capacityTotal": 260
+      },
+      "location": {
+        "admin": {
+          "country": "DE"
+        },
+        "extent": "point",
+        "address": {
+          "text": "Zähringerstraße 69, 76133 Karlsruhe",
+          "country": "DE"
+        },
+        "geometry": {
+          "type": "Point",
+          "coordinates": [8.4012777, 49.0090212]
+        },
+        "fuzziness": "exact",
+        "geometryOrigin": "source"
+      },
+      "revision": 1,
+      "freshness": {
+        "fetchedAt": "2026-10-05T03:45:00Z"
+      },
+      "lifecycle": "operational",
+      "provenance": {
+        "origin": "feed",
+        "privacy": {
+          "class": "authoritative"
+        },
+        "recordId": "19776",
+        "sourceId": "de-bw-mobidata-parking",
+        "upstream": [
+          {
+            "license": "CC-BY-4.0",
+            "recordId": "66",
+            "publisher": "Stadt Karlsruhe"
+          }
+        ],
+        "accessMode": "bulk",
+        "instanceId": "test.local",
+        "attribution": {
+          "license": "DL-DE-BY-2.0",
+          "provider": "MobiData BW, Datenlizenz Deutschland – Namensnennung – Version 2.0",
+          "licenseUrl": "https://www.govdata.de/dl-de/by-2-0"
+        },
+        "sourceFormat": "parkapi-v3",
+        "mergedSources": [
+          {
+            "source": "osm-parking",
+            "recordId": "oc:feature:osm-parking:node/1725394191",
+            "attribution": {
+              "rights": {
+                "retention": "yes",
+                "reviewed_at": null,
+                "commercial_use": "yes",
+                "evidence_origin": "https://opendatacommons.org/licenses/odbl/1-0/",
+                "evidence_version": "ODbL-1.0",
+                "attribution_required": "yes",
+                "source_redistribution": "yes",
+                "derived_redistribution": "yes"
+              },
+              "license": "ODbL-1.0",
+              "provider": "© OpenStreetMap contributors",
+              "licenseUrl": "https://opendatacommons.org/licenses/odbl/1-0/"
+            },
+            "link": "same_asset"
+          }
+        ],
+        "derivedFrom": {
+          "records": [
+            {
+              "class": "feature",
+              "id": "oc:feature:de-bw-mobidata-parking:19776"
+            },
+            {
+              "class": "feature",
+              "id": "oc:feature:osm-parking:node/1725394191"
+            }
+          ],
+          "method": "canonical_view",
+          "version": "1"
+        }
+      },
+      "recordedAt": "2026-10-05T03:45:00Z",
+      "canonicalId": "2833e4939cb139c01ebd3edddaab4d4240ae091408f98696eb433773b1f8a7b3",
+      "contentHash": "9ab1404dd7fbd800150ce5484801698948d524469ba96ed48d315c8e826f0e8a",
+      "externalIds": [
+        {
+          "id": "19776",
+          "scheme": "provider",
+          "authority": "de-bw-mobidata-parking/karlsruhe"
+        }
+      ],
+      "temporality": "static",
+      "components": [
+        {
+          "key": "osm-parking/car:disabled",
+          "kind": "parking_area",
+          "details": {
+            "v": 1,
+            "kind": "parking_area",
+            "capacity": 5,
+            "userGroup": "disabled",
+            "vehicleType": "car"
+          }
+        },
+        {
+          "key": "osm-parking/car:women",
+          "kind": "parking_area",
+          "details": {
+            "v": 1,
+            "kind": "parking_area",
+            "capacity": 20,
+            "userGroup": "women",
+            "vehicleType": "car"
+          }
+        }
+      ]
+    }
+  ],
+  "latest": {
+    "oc:feature:test.local:64d8d630fd398cf61a3b3c4fb6f9bb97c50d114ad461da9b7765d3367e336c60": [
+      {
+        "property": "parking.available",
+        "result": {
+          "type": "count",
+          "value": 160
+        },
+        "phenomenonTime": {
+          "instant": "2026-10-05T03:25:00Z"
+        },
+        "validUntil": "2026-10-05T03:55:00.000Z",
+        "source": "@fused",
+        "contributors": ["de-bw-mobidata-parking"]
+      },
+      {
+        "property": "parking.status",
+        "result": {
+          "type": "category",
+          "value": "open",
+          "vocabulary": "parking_status"
+        },
+        "phenomenonTime": {
+          "instant": "2026-10-05T03:25:00Z"
+        },
+        "validUntil": "2026-10-05T03:55:00.000Z",
+        "source": "@fused",
+        "contributors": ["de-bw-mobidata-parking"]
+      }
+    ]
+  },
+  "offers": {
+    "oc:feature:test.local:64d8d630fd398cf61a3b3c4fb6f9bb97c50d114ad461da9b7765d3367e336c60": [
+      {
+        "id": "oc:offer:de-bw-mobidata-parking:19776:1",
+        "kind": "parking_rate",
+        "class": "offer",
+        "domain": "parking",
+        "subject": {
+          "id": "oc:feature:de-bw-mobidata-parking:19776",
+          "class": "feature"
+        },
+        "currency": "EUR",
+        "elements": [
+          {
+            "components": [
+              {
+                "type": "parking_time",
+                "price": {
+                  "amount": "2.00",
+                  "currency": "EUR"
+                },
+                "stepSize": 1800
+              }
+            ],
+            "restrictions": {
+              "maxDuration": {
+                "unit": "h",
+                "value": 3
+              }
+            }
+          },
+          {
+            "components": [
+              {
+                "type": "parking_time",
+                "price": {
+                  "amount": "1.50",
+                  "currency": "EUR"
+                },
+                "stepSize": 3600
+              }
+            ],
+            "restrictions": {
+              "maxDuration": {
+                "unit": "d",
+                "value": 1
+              },
+              "minDuration": {
+                "unit": "h",
+                "value": 3
+              }
+            }
+          },
+          {
+            "components": [
+              {
+                "type": "flat",
+                "price": {
+                  "amount": "15.00",
+                  "currency": "EUR"
+                }
+              }
+            ],
+            "restrictions": {
+              "maxDuration": {
+                "unit": "d",
+                "value": 1
+              }
+            }
+          },
+          {
+            "components": [
+              {
+                "type": "flat",
+                "price": {
+                  "amount": "90.00",
+                  "currency": "EUR"
+                }
+              }
+            ],
+            "restrictions": {
+              "userGroups": ["long_term"],
+              "maxDuration": {
+                "unit": "mo",
+                "value": 1
+              }
+            }
+          }
+        ],
+        "location": {
+          "extent": "point",
+          "geometry": {
+            "type": "Point",
+            "coordinates": [8.4012777, 49.0090212]
+          },
+          "fuzziness": "exact",
+          "geometryOrigin": "source"
+        },
+        "revision": 1,
+        "validity": {
+          "status": "active"
+        },
+        "freshness": {
+          "fetchedAt": "2026-10-05T03:45:00Z"
+        },
+        "provenance": {
+          "origin": "feed",
+          "privacy": {
+            "class": "authoritative"
+          },
+          "recordId": "19776",
+          "sourceId": "de-bw-mobidata-parking",
+          "accessMode": "bulk",
+          "instanceId": "test.local",
+          "attribution": {
+            "license": "DL-DE-BY-2.0",
+            "provider": "MobiData BW, Datenlizenz Deutschland – Namensnennung – Version 2.0",
+            "licenseUrl": "https://www.govdata.de/dl-de/by-2-0"
+          },
+          "sourceFormat": "parkapi-v3"
+        },
+        "recordedAt": "2026-10-05T03:45:00Z",
+        "canonicalId": "04f7773c3d5867364628a68000831b3c4e79583c3be51d28127ffa7f30d70a14",
+        "contentHash": "9052d7bb5d06c13e62308e391a355b4c71b4fef8cf2dd63199cca6b4caea0d08",
+        "displayText": [
+          {
+            "lang": "de",
+            "text": "Je angefangene halbe Stunde 1,00 €, Tageshöchstsatz 15,00 €"
+          }
+        ],
+        "temporality": "static"
+      }
+    ]
+  },
+  "next": null,
+  "coverage": {
+    "partial": false,
+    "sources": [
+      {
+        "id": "osm-parking",
+        "complete": true
+      }
+    ]
+  }
+}

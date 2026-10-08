@@ -99,6 +99,7 @@ export {
   type TransitLegCapture,
   type TransitNavigationStartPackage,
   transitStartPackageSchema,
+  transitStopAreaSchema,
   WEB_TO_NATIVE_TYPES,
   type WebToNativeMessage,
   webToNativeSchema,
@@ -151,6 +152,7 @@ export {
   type TransitTickOptions,
   type TransitTickResult,
   type TransitTickState,
+  transitProgressFromTick,
 } from "./processTransitFix";
 export { computeProgress, stepStartMeters, upcomingManeuverIndex } from "./progress";
 export {
@@ -191,6 +193,22 @@ export {
   setRouteMatcherCounting,
   snapPreparedRoute,
 } from "./routeMatcher";
+export {
+  type EvaluateRouteStopsInput,
+  evaluateRouteStopDetours,
+  insertRouteStop,
+  ROUTE_STOP_CACHE_MS,
+  ROUTE_STOP_CONCURRENCY,
+  ROUTE_STOP_LIMIT,
+  ROUTE_STOP_PROGRESS_METERS,
+  type RouteStopCandidate,
+  type RouteStopDetour,
+  type RouteStopRequest,
+  type RouteStopWaypointPosition,
+  remainingRouteStopWaypoints,
+  routeStopAccess,
+  routeStopWaypointPositions,
+} from "./routeStopDetours";
 export {
   type AlongRouteOptions,
   type AlongRoutePoi,
@@ -236,13 +254,27 @@ export {
   transitItineraryFingerprint,
 } from "./transitPackage";
 export {
-  computeTransitProgress,
-  detectMissedConnection,
   type PreparedTransitProgress,
   prepareTransitProgress,
   stopsUntilAlight,
   type TransitProgress,
 } from "./transitProgress";
+export {
+  convexHull,
+  DESTINATION_RADIUS_METERS,
+  defaultStopAreaShape,
+  isWithinStopArea,
+  resolveTransitLegTargets,
+  spanMeters,
+  stopAreaDistance,
+  stopAreaShapeDistance,
+  stopAreaTolerance,
+  type TransitLegTargets,
+  type TransitStopAreaIndex,
+  type TransitStopAreaNeed,
+  transitStopAreaKey,
+  transitStopsNeedingAreas,
+} from "./transitStopAreas";
 export {
   type CapturableLeg,
   captureTransitLegStops,

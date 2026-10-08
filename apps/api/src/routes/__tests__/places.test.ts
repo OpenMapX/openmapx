@@ -323,6 +323,36 @@ describe("POST /places/card-enrichment", () => {
     });
   });
 
+  it("never offers a camera still as a place photo while camera hosts are declared", async () => {
+    const { setCameraMediaSources } = await import("../image-hosts.js");
+    setCameraMediaSources([
+      { sourceId: "fi-digitraffic-cameras", mediaHosts: ["weathercam.digitraffic.fi"] },
+    ]);
+    try {
+      mockSearchHeroPhotos.mockResolvedValueOnce([
+        {
+          url: "https://weathercam.digitraffic.fi/C0150301.jpg",
+          source: "wikimedia",
+          author: "Fintraffic",
+          license: "CC BY 4.0",
+        },
+      ]);
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/places/card-enrichment",
+        payload: { places: [{ ...place, id: "osm:node/999902", fields: ["photo"] }] },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const [result] = response.json().results;
+      expect(result.photo).toBeUndefined();
+      expect(result.outcomes.photo).toEqual({ status: "absent" });
+    } finally {
+      setCameraMediaSources([]);
+    }
+  });
+
   it("keeps a hero photo and rating when knowledge lookup fails", async () => {
     const photo = {
       url: "https://upload.wikimedia.org/wikipedia/commons/a/ab/Dom.jpg",
@@ -1041,6 +1071,31 @@ describe("GET /places/:id", () => {
     );
     expect(mockLookupByNameAndCoords).not.toHaveBeenCalled();
     expect(mockLookupByCoords).not.toHaveBeenCalled();
+  });
+
+  it("hands a resolver an id with a literal % exactly as the client sent it", async () => {
+    const fuelResolver = vi.fn().mockResolvedValue({
+      id: "fuel:50%off a%20b",
+      primaryScheme: "fuel",
+      ids: { fuel: "50%off a%20b" },
+      name: "Shell",
+      address: "Some Street 1, Berlin",
+      coordinates: [13.37, 52.52] as [number, number],
+    });
+    registerPlaceResolver("fuel", fuelResolver);
+    mockGetPlaceKnowledge.mockResolvedValue({ externalIds: {} });
+    mockBuildReviewLinks.mockReturnValue([]);
+
+    const res = await app.inject({
+      method: "GET",
+      url: `/places/${encodeURIComponent("fuel:50%off a%20b")}?${qs({ lat: "52.52", lng: "13.37" })}`,
+    });
+
+    expect(res.statusCode, res.body).toBe(200);
+    expect(fuelResolver).toHaveBeenCalledWith(
+      "50%off a%20b",
+      expect.objectContaining({ lat: 52.52, lng: 13.37 }),
+    );
   });
 
   it("prefers lookupByNameAndCoords for non-scheme opaque ids", async () => {

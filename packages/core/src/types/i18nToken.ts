@@ -17,9 +17,18 @@ export interface I18nToken {
    * ICU MessageFormat placeholder values for the resolved template
    * (e.g. {free: 3, capacity: 10} for "{free}/{capacity} free"). A value may
    * itself be a token, resolved first, so one message can embed translated
-   * parts.
+   * parts, or an amount of money, formatted in the reader's locale.
    */
-  values?: Record<string, string | number | I18nToken>;
+  values?: Record<string, string | number | I18nToken | MoneyValue>;
+}
+
+/** An amount of money in a token placeholder; the client formats it in its locale. */
+export interface MoneyValue {
+  $money: number;
+  /** ISO 4217 code. */
+  currency: string;
+  /** The fraction digits always shown, when the price is quoted to more than the currency's own. */
+  minDigits?: number;
 }
 
 /**

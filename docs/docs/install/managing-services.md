@@ -319,10 +319,10 @@ created; after changing a variable they read, recreate them from the host with
 fits in, see [Configuration](./configuration.md).
 
 :::note[Data-manager credentials are separate]
-The POI ingest pipeline runs inside the `data-manager` container, which can't
-see the integration host's config cascade. Sources that need API keys (certain
-parking and transit feeds) read them from data-manager environment variables set
-directly in `infra/docker/.env`, not from the admin UI.
+The transit pipelines run inside the `data-manager` container, which can't
+see the integration host's config cascade. Feeds that need API keys read them
+from data-manager environment variables set directly in `infra/docker/.env`,
+not from the admin UI.
 :::
 
 ## Exposure: what's reachable from outside

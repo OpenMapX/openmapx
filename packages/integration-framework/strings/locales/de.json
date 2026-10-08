@@ -35,7 +35,8 @@
       "customers": "Kunden",
       "private": "Privat",
       "permit": "Mit Genehmigung",
-      "public": "Öffentlich"
+      "public": "Öffentlich",
+      "money": "{amount}"
     }
   }
 }

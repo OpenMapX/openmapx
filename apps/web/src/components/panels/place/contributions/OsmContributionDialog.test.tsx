@@ -400,6 +400,8 @@ describe("notes", () => {
     expect((screen.getByLabelText("osmContributions.noteLabel") as HTMLTextAreaElement).value).toBe(
       "",
     );
+    // The note form carries its own submit button, so no empty footer.
+    expect(document.querySelector(".MuiDialogActions-root")).toBeNull();
   });
 
   it("requires enough text and submits exactly once", async () => {
@@ -472,6 +474,7 @@ describe("notes-only permission", () => {
     renderDialog();
     expect(await screen.findByText("osmContributions.gateScopeAction")).not.toBeNull();
     expect(screen.queryByText("osmContributions.noteDisclosure")).toBeNull();
+    expect(document.querySelector(".MuiDialogActions-root")).toBeNull();
   });
 
   it("asks for the notes permission when direct editing is off and nothing is granted", async () => {

@@ -34,6 +34,17 @@ function makeHitMap(featuresByLayer: Record<string, MapGeoJSONFeature[]>) {
 }
 
 describe("mapStylePoiTarget", () => {
+  it("keeps underscore translations consistent between the label and clicked place", () => {
+    const map = makeHitMap({
+      "poi-label": [
+        pointFeature({ name: "Kölner Dom", name_en: "Cologne Cathedral" }, { id: 45320222 }),
+      ],
+    });
+    expect(findStylePoiAtPoint(map, point, ["poi-label"], new Set(), "en")).toMatchObject({
+      name: "Cologne Cathedral",
+      featureId: "45320222",
+    });
+  });
   it("discovers only basemap POI symbol layers", () => {
     const map = {
       getStyle: () => ({

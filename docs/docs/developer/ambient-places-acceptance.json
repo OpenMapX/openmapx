@@ -2,7 +2,7 @@
   "version": 1,
   "date": "2026-10-08",
   "scope": "One real OSM-only Rhine region in disposable PostGIS; optional Overture validated with regression fixtures",
-  "workingTreeFollowup": "Landmark-only collision-safe anchors, actual-source credits, conservative worship identity matching, and categorized destination admission; codeFiles SHA-256 identifies the tested source.",
+  "workingTreeFollowup": "Four final-review defects fixed: production translation property forms, enabled-provider canonical GERS details, source-fresh retained snapshot identity, and category/DOM click priority. Six-candidate landmark placement bounds rendering work; tested codeFiles identify exact source.",
   "sources": [
     {
       "file": "duesseldorf.osm.pbf",
@@ -26,18 +26,18 @@
   "publication": {
     "index": {
       "region": "europe/germany",
-      "epoch": "9262e2d9-8492-4d4a-b0ce-76bbeb104ef2",
+      "epoch": "817452b3-5447-43e5-aab9-30cb894455a7",
       "sourceFingerprint": "sha256:c18cc77ed3493aa186bd7659fee4a9b028fbc479c2a8a90f219a3b2d33824d75",
       "placeCount": 14232,
       "termCount": 16052
     },
-    "indexedMs": 12792.523167,
-    "publishedMs": 490.0675420000007,
+    "indexedMs": 15265.852042000002,
+    "publishedMs": 654.9927500000013,
     "manifest": {
       "version": 1,
       "policyVersion": 2,
-      "generation": "6fa7e3bb-b1b8-47a4-9b2c-2111859be634",
-      "publishedAt": "2026-10-08T20:47:15.322Z",
+      "generation": "59337707-c217-4398-966c-3c21ac8237b1",
+      "publishedAt": "2026-10-08T21:42:58.742Z",
       "region": {
         "name": "Rhine regional acceptance",
         "bounds": [6.58, 50.89, 7.07, 51.31]
@@ -47,8 +47,8 @@
       "sources": {
         "osm": {
           "region": "europe/germany",
-          "epoch": "9262e2d9-8492-4d4a-b0ce-76bbeb104ef2",
-          "publishedAt": "2026-10-08T20:47:15.067Z",
+          "epoch": "817452b3-5447-43e5-aab9-30cb894455a7",
+          "publishedAt": "2026-10-08T21:42:58.436Z",
           "count": 13454
         },
         "overture": null
@@ -57,7 +57,7 @@
     "landmarks": [
       {
         "id": "osm:way/28562993",
-        "name": "Quirinus-Münster",
+        "name": "Quirinus-M\u00fcnster",
         "category": "place_of_worship",
         "rank": 2559,
         "min_zoom": 14,
@@ -65,7 +65,7 @@
       },
       {
         "id": "osm:way/4532022",
-        "name": "Kölner Dom",
+        "name": "K\u00f6lner Dom",
         "category": "place_of_worship",
         "rank": 2559,
         "min_zoom": 14,
@@ -117,36 +117,36 @@
     }
   },
   "tileReads": {
-    "firstMs": 28.35450000000003,
+    "firstMs": 32.84899999999999,
     "warm": {
       "count": 30,
-      "p50Ms": 3.484375,
-      "p95Ms": 5.2009160000000065,
+      "p50Ms": 3.6406670000000076,
+      "p95Ms": 4.53449999999998,
       "samplesMs": [
-        4.577749999999924, 4.379583000000025, 3.8106250000000728, 3.3958330000000387,
-        3.014499999999998, 3.187750000000051, 4.374208999999951, 3.149833000000058,
-        4.644249999999943, 4.223458000000051, 3.5598340000000235, 4.83887500000003, 3.484375,
-        3.6090409999999338, 2.899583000000007, 3.2896670000000086, 2.426584000000048,
-        5.2009160000000065, 3.2372910000000275, 3.039957999999956, 3.4329999999999927,
-        3.106708000000026, 2.429834000000028, 3.2476669999999785, 3.2955830000000788,
-        3.5095839999999043, 3.495584000000008, 3.560416999999916, 5.353041999999959,
-        3.7658330000000433
+        6.084041999999954, 3.4137499999999363, 3.4806670000000395, 3.701832999999965,
+        2.9012500000000045, 3.9146670000000086, 4.269166999999925, 3.500458000000094,
+        4.052290999999968, 3.2850409999999783, 3.4926249999999754, 4.258250000000089,
+        3.904333999999949, 3.8790420000000267, 3.0233749999999873, 3.8118330000000924,
+        4.245207999999934, 3.185374999999908, 3.924041999999986, 3.867416999999932,
+        3.1982499999999163, 3.502458000000047, 3.6406670000000076, 4.330332999999996,
+        3.498207999999977, 3.133874999999989, 4.53449999999998, 3.7719170000000304,
+        3.095916000000102, 3.4141250000000127
       ]
     },
     "concurrentEight": {
       "count": 40,
-      "p95Ms": 39.34204199999999,
+      "p95Ms": 47.610041000000024,
       "samplesMs": [
-        9.160499999999956, 37.05899999999997, 37.164416000000074, 38.00887499999999,
-        39.31516599999998, 39.34204199999999, 39.628165999999965, 46.51333299999999,
-        6.298000000000002, 6.31858299999999, 6.337750000000028, 6.44825000000003, 6.43162499999994,
-        6.460290999999984, 6.873624999999947, 7.254791000000068, 10.623917000000006,
-        10.670124999999985, 10.667291999999975, 10.674167000000011, 10.692166000000043,
-        10.711457999999993, 10.729791999999975, 10.75425000000007, 6.520832999999925,
-        7.183334000000059, 7.198417000000063, 7.2147919999999885, 7.222540999999978,
-        7.268917000000101, 7.253499999999917, 7.400916999999936, 5.920417000000043,
-        5.9570830000000115, 6.150999999999954, 6.257124999999974, 6.2649169999999685,
-        6.280624999999986, 6.28937499999995, 6.347209000000021
+        4.317875000000072, 45.293499999999995, 45.302875000000085, 45.330999999999904,
+        47.263374999999996, 47.610041000000024, 48.57779100000005, 52.89637499999992,
+        8.213542000000075, 8.454499999999939, 8.267417000000023, 8.399125000000026,
+        8.892208000000096, 9.031833000000006, 9.028582999999912, 9.182707999999934,
+        7.140209000000027, 7.2488329999999905, 7.298457999999982, 7.274167000000034,
+        7.304208000000017, 8.263458000000014, 8.294834000000037, 8.331041000000027,
+        13.155124999999998, 13.334625000000074, 13.20291700000007, 13.239667000000054,
+        13.24595899999997, 13.332916999999952, 13.274250000000052, 13.410540999999967,
+        8.206583000000023, 8.21345800000006, 8.285541999999964, 9.213666999999987,
+        9.258208999999965, 9.281083999999964, 9.313208000000031, 9.313540999999987
       ]
     },
     "maxFeatures": 83,
@@ -165,7 +165,7 @@
         "z": 13,
         "x": 4248,
         "y": 2735,
-        "ms": 28.35450000000003,
+        "ms": 32.84899999999999,
         "features": 38,
         "bytes": 3120
       },
@@ -173,7 +173,7 @@
         "z": 14,
         "x": 8496,
         "y": 5470,
-        "ms": 4.870207999999934,
+        "ms": 5.416583000000003,
         "features": 29,
         "bytes": 2391
       },
@@ -181,7 +181,7 @@
         "z": 15,
         "x": 16993,
         "y": 10941,
-        "ms": 3.8333330000000387,
+        "ms": 4.048165999999981,
         "features": 11,
         "bytes": 1055
       },
@@ -189,7 +189,7 @@
         "z": 16,
         "x": 33986,
         "y": 21882,
-        "ms": 2.965958999999998,
+        "ms": 3.4017499999999927,
         "features": 27,
         "bytes": 2250
       },
@@ -197,7 +197,7 @@
         "z": 17,
         "x": 67972,
         "y": 43764,
-        "ms": 2.2329590000000508,
+        "ms": 3.380457999999976,
         "features": 5,
         "bytes": 559
       },
@@ -205,7 +205,7 @@
         "z": 18,
         "x": 135944,
         "y": 87529,
-        "ms": 2.72037499999999,
+        "ms": 3.1499579999999696,
         "features": 1,
         "bytes": 205
       },
@@ -213,7 +213,7 @@
         "z": 13,
         "x": 4254,
         "y": 2744,
-        "ms": 5.2037499999999,
+        "ms": 5.70070800000002,
         "features": 83,
         "bytes": 6881
       },
@@ -221,7 +221,7 @@
         "z": 14,
         "x": 8508,
         "y": 5489,
-        "ms": 4.8072910000000775,
+        "ms": 4.58379199999996,
         "features": 49,
         "bytes": 4233
       },
@@ -229,7 +229,7 @@
         "z": 15,
         "x": 17017,
         "y": 10978,
-        "ms": 4.393457999999896,
+        "ms": 4.433374999999955,
         "features": 32,
         "bytes": 2785
       },
@@ -237,7 +237,7 @@
         "z": 16,
         "x": 34034,
         "y": 21957,
-        "ms": 4.250415999999973,
+        "ms": 4.7673750000000155,
         "features": 38,
         "bytes": 3450
       },
@@ -245,7 +245,7 @@
         "z": 17,
         "x": 68069,
         "y": 43914,
-        "ms": 2.8047500000000127,
+        "ms": 6.498665999999957,
         "features": 8,
         "bytes": 882
       },
@@ -253,7 +253,7 @@
         "z": 18,
         "x": 136139,
         "y": 87828,
-        "ms": 2.5391670000000204,
+        "ms": 5.672874999999976,
         "features": 2,
         "bytes": 358
       },
@@ -261,7 +261,7 @@
         "z": 13,
         "x": 4250,
         "y": 2741,
-        "ms": 4.428375000000074,
+        "ms": 4.493583999999942,
         "features": 0,
         "bytes": 0
       },
@@ -269,7 +269,7 @@
         "z": 14,
         "x": 8500,
         "y": 5482,
-        "ms": 4.0877499999999145,
+        "ms": 3.6132920000000013,
         "features": 0,
         "bytes": 0
       },
@@ -277,7 +277,7 @@
         "z": 15,
         "x": 17001,
         "y": 10965,
-        "ms": 3.6895410000000766,
+        "ms": 5.11566700000003,
         "features": 0,
         "bytes": 0
       },
@@ -285,7 +285,7 @@
         "z": 16,
         "x": 34002,
         "y": 21931,
-        "ms": 3.6579999999999018,
+        "ms": 3.6046250000000555,
         "features": 0,
         "bytes": 0
       },
@@ -293,7 +293,7 @@
         "z": 17,
         "x": 68004,
         "y": 43862,
-        "ms": 3.625167000000033,
+        "ms": 3.0414160000000265,
         "features": 0,
         "bytes": 0
       },
@@ -301,7 +301,7 @@
         "z": 18,
         "x": 136009,
         "y": 87725,
-        "ms": 3.637499999999932,
+        "ms": 4.722875000000045,
         "features": 0,
         "bytes": 0
       },
@@ -309,7 +309,7 @@
         "z": 13,
         "x": 4245,
         "y": 2731,
-        "ms": 5.620750000000044,
+        "ms": 2.8757910000000493,
         "features": 10,
         "bytes": 997
       },
@@ -317,7 +317,7 @@
         "z": 14,
         "x": 8491,
         "y": 5462,
-        "ms": 3.19662500000004,
+        "ms": 3.883624999999938,
         "features": 9,
         "bytes": 879
       },
@@ -325,7 +325,7 @@
         "z": 15,
         "x": 16983,
         "y": 10925,
-        "ms": 3.4095839999999953,
+        "ms": 5.170374999999922,
         "features": 10,
         "bytes": 978
       },
@@ -333,7 +333,7 @@
         "z": 16,
         "x": 33966,
         "y": 21851,
-        "ms": 3.0982500000000073,
+        "ms": 5.000709000000029,
         "features": 12,
         "bytes": 858
       },
@@ -341,7 +341,7 @@
         "z": 17,
         "x": 67933,
         "y": 43702,
-        "ms": 3.2887499999999363,
+        "ms": 4.267665999999963,
         "features": 0,
         "bytes": 0
       },
@@ -349,7 +349,7 @@
         "z": 18,
         "x": 135867,
         "y": 87405,
-        "ms": 2.621208999999908,
+        "ms": 3.2137919999998985,
         "features": 0,
         "bytes": 0
       },
@@ -357,7 +357,7 @@
         "z": 13,
         "x": 4256,
         "y": 2746,
-        "ms": 4.387749999999983,
+        "ms": 4.040292000000022,
         "features": 7,
         "bytes": 719
       },
@@ -365,7 +365,7 @@
         "z": 14,
         "x": 8513,
         "y": 5492,
-        "ms": 3.5732080000000224,
+        "ms": 3.330833000000098,
         "features": 3,
         "bytes": 351
       },
@@ -373,7 +373,7 @@
         "z": 15,
         "x": 17027,
         "y": 10985,
-        "ms": 3.6602920000000267,
+        "ms": 5.098374999999919,
         "features": 2,
         "bytes": 311
       },
@@ -381,7 +381,7 @@
         "z": 16,
         "x": 34054,
         "y": 21970,
-        "ms": 2.8039159999999583,
+        "ms": 3.163917000000083,
         "features": 4,
         "bytes": 486
       },
@@ -389,7 +389,7 @@
         "z": 17,
         "x": 68108,
         "y": 43940,
-        "ms": 4.060207999999989,
+        "ms": 3.791541999999936,
         "features": 4,
         "bytes": 486
       },
@@ -397,143 +397,94 @@
         "z": 18,
         "x": 136216,
         "y": 87881,
-        "ms": 3.705583000000047,
+        "ms": 2.9594170000000304,
         "features": 0,
         "bytes": 0
       }
     ],
-    "generation": "6fa7e3bb-b1b8-47a4-9b2c-2111859be634"
+    "generation": "59337707-c217-4398-966c-3c21ac8237b1"
   },
   "frames": {
-    "method": "Five visible 5-second sweeps per state; MapLibre easeTo two 2.5-second legs, z15 to z15.7 and back, alternating Neuss/Cologne; nearest-rank p95 pooled by state; unchanged target 33.4ms and over50 <=5%; no simultaneous builds/tests",
+    "method": "Five foreground 5s sweeps/state, two MapLibre easeTo 2.5s legs; nearest-rank pooled p95 per state, individual sweep p95 retained.",
     "desktop1280x800": {
+      "context": "Isolated headful system Chrome, English, DPR1; T3 preview explicitly unavailable.",
       "off": {
-        "sweeps": 5,
+        "runs": 5,
         "viewport": [1280, 800],
         "devicePixelRatio": 1,
-        "allForeground": true,
-        "intervalCount": 3003,
-        "pooledP95Ms": 9,
+        "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
+        "p95Ms": 9.199999999999818,
+        "intervalCount": 3001,
         "over50Percent": 0,
-        "perSweepP95Ms": [9.099999999998545, 9, 9, 9, 8.900000000008731],
-        "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) T3Code(Nightly)/0.0.46-nightly.20261008.2833 Chrome/152.0.7977.130 Electron/44.4.2 Safari/537.36"
+        "individualP95Ms": [
+          9.199999999999818, 9.200000000000728, 9.099999999998545, 9.099999999998545,
+          9.30000000000291
+        ]
       },
       "on": {
-        "sweeps": 5,
+        "runs": 5,
         "viewport": [1280, 800],
         "devicePixelRatio": 1,
-        "allForeground": true,
-        "intervalCount": 3000,
-        "pooledP95Ms": 9,
+        "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
+        "p95Ms": 9.200000000004366,
+        "intervalCount": 2998,
         "over50Percent": 0,
-        "perSweepP95Ms": [9.099999999998545, 9, 9.10000000000582, 8.89999999999418, 9],
-        "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) T3Code(Nightly)/0.0.46-nightly.20261008.2833 Chrome/152.0.7977.130 Electron/44.4.2 Safari/537.36"
+        "individualP95Ms": [
+          9.200000000000728, 9.200000000000728, 9, 9.299999999995634, 9.299999999995634
+        ]
       }
     },
     "phoneCss430x932": {
+      "context": "Same headful Chrome, 430x932 CSS viewport, English, DPR1.",
       "off": {
-        "sweeps": 5,
+        "runs": 5,
         "viewport": [430, 932],
         "devicePixelRatio": 1,
-        "allForeground": true,
-        "intervalCount": 3004,
-        "pooledP95Ms": 9.200000000011642,
+        "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
+        "p95Ms": 9.19999999999709,
+        "intervalCount": 3005,
         "over50Percent": 0,
-        "perSweepP95Ms": [
-          9.099999999976717, 9.099999999976717, 9.299999999988358, 9.299999999988358,
-          9.299999999988358
-        ],
-        "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) T3Code(Nightly)/0.0.46-nightly.20261008.2833 Chrome/152.0.7977.130 Electron/44.4.2 Safari/537.36"
+        "individualP95Ms": [
+          9.30000000000291, 9.19999999999709, 9.10000000000582, 9.10000000000582, 9
+        ]
       },
       "on": {
-        "sweeps": 5,
+        "runs": 5,
         "viewport": [430, 932],
         "devicePixelRatio": 1,
-        "allForeground": true,
-        "intervalCount": 2998,
-        "pooledP95Ms": 9.299999999988358,
+        "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
+        "p95Ms": 9.19999999999709,
+        "intervalCount": 3003,
         "over50Percent": 0,
-        "perSweepP95Ms": [
-          9.10000000000582, 9.299999999988358, 9.299999999988358, 9.299999999988358,
-          9.199999999982538
-        ],
-        "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) T3Code(Nightly)/0.0.46-nightly.20261008.2833 Chrome/152.0.7977.130 Electron/44.4.2 Safari/537.36"
-      }
-    },
-    "iosSimulatorStreamActive": {
-      "off": {
-        "sweeps": 5,
-        "viewport": [402, 714],
-        "devicePixelRatio": 3,
-        "allForeground": true,
-        "intervalCount": 1049,
-        "pooledP95Ms": 33,
-        "over50Percent": 0.19065776930409914,
-        "perSweepP95Ms": [33, 34, 32, 34, 33],
-        "userAgent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/27.0 Mobile/15E148 Safari/604.1"
-      },
-      "on": {
-        "sweeps": 5,
-        "viewport": [402, 714],
-        "devicePixelRatio": 3,
-        "allForeground": true,
-        "intervalCount": 1027,
-        "pooledP95Ms": 34,
-        "over50Percent": 0,
-        "perSweepP95Ms": [33, 35, 33, 34, 33],
-        "userAgent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/27.0 Mobile/15E148 Safari/604.1"
-      }
-    },
-    "device": "iPhone 18 Pro simulator, iOS 27, Safari 27; host macOS arm64, no physical-device thermal/battery claim",
-    "qualification": "Final isolated simulator pooled off/on 32/33ms passes the unchanged 33.4ms target. Individual on sweeps include 34/35ms. Streamed 33/34ms and paused-but-second-QA-WebGL-present 35/36ms misses retained. No unrelated host process stopped; no physical-device certificate. Phone iteration 0 off resampled after initial resize had not settled; raw invalid 1280x800 sample retained externally. One paused-shared last sweep briefly overlapped the CSS resample; that phase is diagnostic, not final acceptance.",
-    "iosSimulatorStreamPausedSharedGraphics": {
-      "off": {
-        "sweeps": 5,
-        "viewport": [402, 714],
-        "devicePixelRatio": 3,
-        "allForeground": true,
-        "intervalCount": 1055,
-        "pooledP95Ms": 35,
-        "over50Percent": 0.3791469194312796,
-        "perSweepP95Ms": [32, 35, 32, 38, 34],
-        "userAgent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/27.0 Mobile/15E148 Safari/604.1"
-      },
-      "on": {
-        "sweeps": 5,
-        "viewport": [402, 714],
-        "devicePixelRatio": 3,
-        "allForeground": true,
-        "intervalCount": 1032,
-        "pooledP95Ms": 36,
-        "over50Percent": 0.872093023255814,
-        "perSweepP95Ms": [35, 34, 34, 38, 36],
-        "userAgent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/27.0 Mobile/15E148 Safari/604.1"
+        "individualP95Ms": [
+          9.30000000000291, 9.19999999999709, 9, 9.10000000000582, 8.89999999999418
+        ]
       }
     },
     "iosSimulatorIsolated": {
+      "context": "Native iPhone18Pro iOS27 Safari, German, DPR3; preview stream paused, other owned QA WebGL map closed, no concurrent builds/tests.",
       "off": {
-        "sweeps": 5,
+        "runs": 5,
         "viewport": [402, 714],
         "devicePixelRatio": 3,
-        "allForeground": true,
-        "intervalCount": 1128,
-        "pooledP95Ms": 32,
-        "over50Percent": 0.26595744680851063,
-        "perSweepP95Ms": [30, 34, 31, 32, 30],
-        "userAgent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/27.0 Mobile/15E148 Safari/604.1"
+        "userAgent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/27.0 Mobile/15E148 Safari/604.1",
+        "p95Ms": 33,
+        "intervalCount": 1097,
+        "over50Percent": 0.09115770282588878,
+        "individualP95Ms": [31, 34, 31, 33, 31]
       },
       "on": {
-        "sweeps": 5,
+        "runs": 5,
         "viewport": [402, 714],
         "devicePixelRatio": 3,
-        "allForeground": true,
-        "intervalCount": 1104,
-        "pooledP95Ms": 33,
-        "over50Percent": 0.18115942028985507,
-        "perSweepP95Ms": [31, 34, 32, 35, 30],
-        "userAgent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/27.0 Mobile/15E148 Safari/604.1"
+        "userAgent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/27.0 Mobile/15E148 Safari/604.1",
+        "p95Ms": 33,
+        "intervalCount": 1070,
+        "over50Percent": 0,
+        "individualP95Ms": [34, 34, 33, 34, 31]
       }
-    }
+    },
+    "qualification": "Local simulator/host result only. Individual sweep results and previous streamed/stress/load misses are retained; no physical-device thermal/battery or all-host-load guarantee."
   },
   "fixedCameraViews": [
     {
@@ -544,7 +495,7 @@
       "roadLabelsAfter": 10,
       "basemapPoisBefore": 13,
       "basemapPoisAfter": 13,
-      "sameRoadAndBasemapIdentities": true,
+      "sameRoadNamesAndBasemapIdentities": true,
       "ambientPoints": 29,
       "ambientLabels": 3,
       "duplicateAmbientLabelIds": 0
@@ -557,7 +508,7 @@
       "roadLabelsAfter": 34,
       "basemapPoisBefore": 11,
       "basemapPoisAfter": 11,
-      "sameRoadAndBasemapIdentities": true,
+      "sameRoadNamesAndBasemapIdentities": true,
       "ambientPoints": 33,
       "ambientLabels": 4,
       "duplicateAmbientLabelIds": 0
@@ -570,7 +521,7 @@
       "roadLabelsAfter": 28,
       "basemapPoisBefore": 10,
       "basemapPoisAfter": 10,
-      "sameRoadAndBasemapIdentities": true,
+      "sameRoadNamesAndBasemapIdentities": true,
       "ambientPoints": 46,
       "ambientLabels": 11,
       "duplicateAmbientLabelIds": 0
@@ -583,7 +534,7 @@
       "roadLabelsAfter": 15,
       "basemapPoisBefore": 7,
       "basemapPoisAfter": 7,
-      "sameRoadAndBasemapIdentities": true,
+      "sameRoadNamesAndBasemapIdentities": true,
       "ambientPoints": 9,
       "ambientLabels": 5,
       "duplicateAmbientLabelIds": 0
@@ -596,7 +547,7 @@
       "roadLabelsAfter": 4,
       "basemapPoisBefore": 15,
       "basemapPoisAfter": 15,
-      "sameRoadAndBasemapIdentities": true,
+      "sameRoadNamesAndBasemapIdentities": true,
       "ambientPoints": 3,
       "ambientLabels": 2,
       "duplicateAmbientLabelIds": 0
@@ -609,9 +560,9 @@
       "roadLabelsAfter": 15,
       "basemapPoisBefore": 14,
       "basemapPoisAfter": 14,
-      "sameRoadAndBasemapIdentities": true,
+      "sameRoadNamesAndBasemapIdentities": true,
       "ambientPoints": 55,
-      "ambientLabels": 16,
+      "ambientLabels": 15,
       "duplicateAmbientLabelIds": 0
     },
     {
@@ -622,9 +573,9 @@
       "roadLabelsAfter": 26,
       "basemapPoisBefore": 15,
       "basemapPoisAfter": 15,
-      "sameRoadAndBasemapIdentities": true,
+      "sameRoadNamesAndBasemapIdentities": true,
       "ambientPoints": 59,
-      "ambientLabels": 8,
+      "ambientLabels": 7,
       "duplicateAmbientLabelIds": 0
     },
     {
@@ -635,7 +586,7 @@
       "roadLabelsAfter": 26,
       "basemapPoisBefore": 5,
       "basemapPoisAfter": 5,
-      "sameRoadAndBasemapIdentities": true,
+      "sameRoadNamesAndBasemapIdentities": true,
       "ambientPoints": 52,
       "ambientLabels": 17,
       "duplicateAmbientLabelIds": 0
@@ -648,7 +599,7 @@
       "roadLabelsAfter": 10,
       "basemapPoisBefore": 13,
       "basemapPoisAfter": 13,
-      "sameRoadAndBasemapIdentities": true,
+      "sameRoadNamesAndBasemapIdentities": true,
       "ambientPoints": 13,
       "ambientLabels": 3,
       "duplicateAmbientLabelIds": 0
@@ -661,7 +612,7 @@
       "roadLabelsAfter": 6,
       "basemapPoisBefore": 6,
       "basemapPoisAfter": 6,
-      "sameRoadAndBasemapIdentities": true,
+      "sameRoadNamesAndBasemapIdentities": true,
       "ambientPoints": 1,
       "ambientLabels": 1,
       "duplicateAmbientLabelIds": 0
@@ -674,7 +625,7 @@
       "roadLabelsAfter": 0,
       "basemapPoisBefore": 9,
       "basemapPoisAfter": 9,
-      "sameRoadAndBasemapIdentities": true,
+      "sameRoadNamesAndBasemapIdentities": true,
       "ambientPoints": 3,
       "ambientLabels": 1,
       "duplicateAmbientLabelIds": 0
@@ -687,7 +638,7 @@
       "roadLabelsAfter": 15,
       "basemapPoisBefore": 7,
       "basemapPoisAfter": 7,
-      "sameRoadAndBasemapIdentities": true,
+      "sameRoadNamesAndBasemapIdentities": true,
       "ambientPoints": 11,
       "ambientLabels": 4,
       "duplicateAmbientLabelIds": 0
@@ -700,7 +651,7 @@
       "roadLabelsAfter": 12,
       "basemapPoisBefore": 11,
       "basemapPoisAfter": 11,
-      "sameRoadAndBasemapIdentities": true,
+      "sameRoadNamesAndBasemapIdentities": true,
       "ambientPoints": 9,
       "ambientLabels": 6,
       "duplicateAmbientLabelIds": 0
@@ -713,7 +664,7 @@
       "roadLabelsAfter": 8,
       "basemapPoisBefore": 14,
       "basemapPoisAfter": 14,
-      "sameRoadAndBasemapIdentities": true,
+      "sameRoadNamesAndBasemapIdentities": true,
       "ambientPoints": 3,
       "ambientLabels": 2,
       "duplicateAmbientLabelIds": 0
@@ -726,7 +677,7 @@
       "roadLabelsAfter": 3,
       "basemapPoisBefore": 4,
       "basemapPoisAfter": 4,
-      "sameRoadAndBasemapIdentities": true,
+      "sameRoadNamesAndBasemapIdentities": true,
       "ambientPoints": 1,
       "ambientLabels": 2,
       "duplicateAmbientLabelIds": 0
@@ -739,7 +690,7 @@
       "roadLabelsAfter": 2,
       "basemapPoisBefore": 1,
       "basemapPoisAfter": 1,
-      "sameRoadAndBasemapIdentities": true,
+      "sameRoadNamesAndBasemapIdentities": true,
       "ambientPoints": 0,
       "ambientLabels": 0,
       "duplicateAmbientLabelIds": 0
@@ -752,7 +703,7 @@
       "roadLabelsAfter": 1,
       "basemapPoisBefore": 0,
       "basemapPoisAfter": 0,
-      "sameRoadAndBasemapIdentities": true,
+      "sameRoadNamesAndBasemapIdentities": true,
       "ambientPoints": 0,
       "ambientLabels": 0,
       "duplicateAmbientLabelIds": 0
@@ -765,7 +716,7 @@
       "roadLabelsAfter": 1,
       "basemapPoisBefore": 1,
       "basemapPoisAfter": 1,
-      "sameRoadAndBasemapIdentities": true,
+      "sameRoadNamesAndBasemapIdentities": true,
       "ambientPoints": 0,
       "ambientLabels": 0,
       "duplicateAmbientLabelIds": 0
@@ -778,7 +729,7 @@
       "roadLabelsAfter": 0,
       "basemapPoisBefore": 0,
       "basemapPoisAfter": 0,
-      "sameRoadAndBasemapIdentities": true,
+      "sameRoadNamesAndBasemapIdentities": true,
       "ambientPoints": 0,
       "ambientLabels": 0,
       "duplicateAmbientLabelIds": 0
@@ -791,7 +742,7 @@
       "roadLabelsAfter": 0,
       "basemapPoisBefore": 0,
       "basemapPoisAfter": 0,
-      "sameRoadAndBasemapIdentities": true,
+      "sameRoadNamesAndBasemapIdentities": true,
       "ambientPoints": 0,
       "ambientLabels": 0,
       "duplicateAmbientLabelIds": 0
@@ -804,7 +755,7 @@
       "roadLabelsAfter": 11,
       "basemapPoisBefore": 22,
       "basemapPoisAfter": 22,
-      "sameRoadAndBasemapIdentities": true,
+      "sameRoadNamesAndBasemapIdentities": true,
       "ambientPoints": 0,
       "ambientLabels": 0,
       "duplicateAmbientLabelIds": 0
@@ -817,7 +768,7 @@
       "roadLabelsAfter": 15,
       "basemapPoisBefore": 18,
       "basemapPoisAfter": 18,
-      "sameRoadAndBasemapIdentities": true,
+      "sameRoadNamesAndBasemapIdentities": true,
       "ambientPoints": 0,
       "ambientLabels": 0,
       "duplicateAmbientLabelIds": 0
@@ -830,7 +781,7 @@
       "roadLabelsAfter": 17,
       "basemapPoisBefore": 9,
       "basemapPoisAfter": 9,
-      "sameRoadAndBasemapIdentities": true,
+      "sameRoadNamesAndBasemapIdentities": true,
       "ambientPoints": 0,
       "ambientLabels": 0,
       "duplicateAmbientLabelIds": 0
@@ -843,7 +794,7 @@
       "roadLabelsAfter": 7,
       "basemapPoisBefore": 18,
       "basemapPoisAfter": 18,
-      "sameRoadAndBasemapIdentities": true,
+      "sameRoadNamesAndBasemapIdentities": true,
       "ambientPoints": 0,
       "ambientLabels": 0,
       "duplicateAmbientLabelIds": 0
@@ -856,7 +807,7 @@
       "roadLabelsAfter": 5,
       "basemapPoisBefore": 8,
       "basemapPoisAfter": 8,
-      "sameRoadAndBasemapIdentities": true,
+      "sameRoadNamesAndBasemapIdentities": true,
       "ambientPoints": 0,
       "ambientLabels": 0,
       "duplicateAmbientLabelIds": 0
@@ -869,7 +820,7 @@
       "roadLabelsAfter": 18,
       "basemapPoisBefore": 12,
       "basemapPoisAfter": 12,
-      "sameRoadAndBasemapIdentities": true,
+      "sameRoadNamesAndBasemapIdentities": true,
       "ambientPoints": 0,
       "ambientLabels": 0,
       "duplicateAmbientLabelIds": 0
@@ -882,7 +833,7 @@
       "roadLabelsAfter": 30,
       "basemapPoisBefore": 10,
       "basemapPoisAfter": 10,
-      "sameRoadAndBasemapIdentities": true,
+      "sameRoadNamesAndBasemapIdentities": true,
       "ambientPoints": 0,
       "ambientLabels": 0,
       "duplicateAmbientLabelIds": 0
@@ -895,7 +846,7 @@
       "roadLabelsAfter": 28,
       "basemapPoisBefore": 11,
       "basemapPoisAfter": 11,
-      "sameRoadAndBasemapIdentities": true,
+      "sameRoadNamesAndBasemapIdentities": true,
       "ambientPoints": 0,
       "ambientLabels": 0,
       "duplicateAmbientLabelIds": 0
@@ -908,7 +859,7 @@
       "roadLabelsAfter": 17,
       "basemapPoisBefore": 12,
       "basemapPoisAfter": 12,
-      "sameRoadAndBasemapIdentities": true,
+      "sameRoadNamesAndBasemapIdentities": true,
       "ambientPoints": 0,
       "ambientLabels": 0,
       "duplicateAmbientLabelIds": 0
@@ -921,7 +872,7 @@
       "roadLabelsAfter": 9,
       "basemapPoisBefore": 13,
       "basemapPoisAfter": 13,
-      "sameRoadAndBasemapIdentities": true,
+      "sameRoadNamesAndBasemapIdentities": true,
       "ambientPoints": 0,
       "ambientLabels": 0,
       "duplicateAmbientLabelIds": 0
@@ -934,7 +885,7 @@
       "roadLabelsAfter": 5,
       "basemapPoisBefore": 10,
       "basemapPoisAfter": 10,
-      "sameRoadAndBasemapIdentities": true,
+      "sameRoadNamesAndBasemapIdentities": true,
       "ambientPoints": 0,
       "ambientLabels": 0,
       "duplicateAmbientLabelIds": 0
@@ -947,7 +898,7 @@
       "roadLabelsAfter": 16,
       "basemapPoisBefore": 8,
       "basemapPoisAfter": 8,
-      "sameRoadAndBasemapIdentities": true,
+      "sameRoadNamesAndBasemapIdentities": true,
       "ambientPoints": 0,
       "ambientLabels": 0,
       "duplicateAmbientLabelIds": 0
@@ -960,7 +911,7 @@
       "roadLabelsAfter": 19,
       "basemapPoisBefore": 12,
       "basemapPoisAfter": 12,
-      "sameRoadAndBasemapIdentities": true,
+      "sameRoadNamesAndBasemapIdentities": true,
       "ambientPoints": 0,
       "ambientLabels": 0,
       "duplicateAmbientLabelIds": 0
@@ -973,7 +924,7 @@
       "roadLabelsAfter": 14,
       "basemapPoisBefore": 15,
       "basemapPoisAfter": 15,
-      "sameRoadAndBasemapIdentities": true,
+      "sameRoadNamesAndBasemapIdentities": true,
       "ambientPoints": 0,
       "ambientLabels": 0,
       "duplicateAmbientLabelIds": 0
@@ -986,7 +937,7 @@
       "roadLabelsAfter": 9,
       "basemapPoisBefore": 11,
       "basemapPoisAfter": 11,
-      "sameRoadAndBasemapIdentities": true,
+      "sameRoadNamesAndBasemapIdentities": true,
       "ambientPoints": 0,
       "ambientLabels": 0,
       "duplicateAmbientLabelIds": 0
@@ -999,7 +950,7 @@
       "roadLabelsAfter": 10,
       "basemapPoisBefore": 13,
       "basemapPoisAfter": 13,
-      "sameRoadAndBasemapIdentities": true,
+      "sameRoadNamesAndBasemapIdentities": true,
       "ambientPoints": 29,
       "ambientLabels": 3,
       "duplicateAmbientLabelIds": 0
@@ -1012,7 +963,7 @@
       "roadLabelsAfter": 34,
       "basemapPoisBefore": 11,
       "basemapPoisAfter": 11,
-      "sameRoadAndBasemapIdentities": true,
+      "sameRoadNamesAndBasemapIdentities": true,
       "ambientPoints": 33,
       "ambientLabels": 4,
       "duplicateAmbientLabelIds": 0
@@ -1025,7 +976,7 @@
       "roadLabelsAfter": 28,
       "basemapPoisBefore": 10,
       "basemapPoisAfter": 10,
-      "sameRoadAndBasemapIdentities": true,
+      "sameRoadNamesAndBasemapIdentities": true,
       "ambientPoints": 46,
       "ambientLabels": 11,
       "duplicateAmbientLabelIds": 0
@@ -1038,7 +989,7 @@
       "roadLabelsAfter": 15,
       "basemapPoisBefore": 7,
       "basemapPoisAfter": 7,
-      "sameRoadAndBasemapIdentities": true,
+      "sameRoadNamesAndBasemapIdentities": true,
       "ambientPoints": 9,
       "ambientLabels": 5,
       "duplicateAmbientLabelIds": 0
@@ -1051,7 +1002,7 @@
       "roadLabelsAfter": 4,
       "basemapPoisBefore": 15,
       "basemapPoisAfter": 15,
-      "sameRoadAndBasemapIdentities": true,
+      "sameRoadNamesAndBasemapIdentities": true,
       "ambientPoints": 3,
       "ambientLabels": 2,
       "duplicateAmbientLabelIds": 0
@@ -1064,9 +1015,9 @@
       "roadLabelsAfter": 15,
       "basemapPoisBefore": 14,
       "basemapPoisAfter": 14,
-      "sameRoadAndBasemapIdentities": true,
+      "sameRoadNamesAndBasemapIdentities": true,
       "ambientPoints": 55,
-      "ambientLabels": 16,
+      "ambientLabels": 15,
       "duplicateAmbientLabelIds": 0
     },
     {
@@ -1077,9 +1028,9 @@
       "roadLabelsAfter": 26,
       "basemapPoisBefore": 15,
       "basemapPoisAfter": 15,
-      "sameRoadAndBasemapIdentities": true,
+      "sameRoadNamesAndBasemapIdentities": true,
       "ambientPoints": 59,
-      "ambientLabels": 8,
+      "ambientLabels": 7,
       "duplicateAmbientLabelIds": 0
     },
     {
@@ -1090,7 +1041,7 @@
       "roadLabelsAfter": 26,
       "basemapPoisBefore": 5,
       "basemapPoisAfter": 5,
-      "sameRoadAndBasemapIdentities": true,
+      "sameRoadNamesAndBasemapIdentities": true,
       "ambientPoints": 52,
       "ambientLabels": 17,
       "duplicateAmbientLabelIds": 0
@@ -1103,7 +1054,7 @@
       "roadLabelsAfter": 10,
       "basemapPoisBefore": 13,
       "basemapPoisAfter": 13,
-      "sameRoadAndBasemapIdentities": true,
+      "sameRoadNamesAndBasemapIdentities": true,
       "ambientPoints": 13,
       "ambientLabels": 3,
       "duplicateAmbientLabelIds": 0
@@ -1116,19 +1067,26 @@
       "roadLabelsAfter": 6,
       "basemapPoisBefore": 6,
       "basemapPoisAfter": 6,
-      "sameRoadAndBasemapIdentities": true,
+      "sameRoadNamesAndBasemapIdentities": true,
       "ambientPoints": 1,
       "ambientLabels": 1,
       "duplicateAmbientLabelIds": 0
     }
   ],
   "interaction": {
+    "englishSuppliedDistinctNames": [
+      {
+        "id": "osm:node/1236400589",
+        "name": "Martin-Luther Haus",
+        "name_en": "Martin Luther Haus"
+      }
+    ],
     "selected": {
       "primaryScheme": "osm",
       "ids": {
         "osm": "way/28562993"
       },
-      "name": "Quirinus-Münster",
+      "name": "Quirinus-M\u00fcnster",
       "address": "",
       "coordinates": [6.693338602781296, 51.19904687734484],
       "category": "place_of_worship",
@@ -1158,8 +1116,8 @@
         ]
       ]
     ],
-    "english": ["coalesce", ["get", "name:en"], ["get", "name"]],
-    "german": ["coalesce", ["get", "name:de"], ["get", "name"]],
+    "english": ["coalesce", ["get", "name:en"], ["get", "name_en"], ["get", "name"]],
+    "german": ["coalesce", ["get", "name:de"], ["get", "name_de"], ["get", "name"]],
     "styleReloadFilter": [
       "all",
       ["<=", ["get", "min_zoom"], 16],
@@ -1191,7 +1149,7 @@
         "ids": {
           "osm": "way/28562993"
         },
-        "name": "Quirinus-Münster",
+        "name": "Quirinus-M\u00fcnster",
         "address": "",
         "coordinates": [6.6933392733335495, 51.19904645716551],
         "category": "place_of_worship",
@@ -1204,33 +1162,33 @@
   "screenshots": [
     {
       "file": "before-desktop.png",
-      "sha256": "b1c33b00802ad497b819c3823fe8718fcbc12ce9b23a1e6b904efb4673ca22fc",
-      "bytes": 864723,
-      "generation": "6fa7e3bb-b1b8-47a4-9b2c-2111859be634"
+      "sha256": "3c383a6e80b6b1560fb1b917188b18a974fd4d368b810d47613f2b93544f468d",
+      "bytes": 864031,
+      "generation": "59337707-c217-4398-966c-3c21ac8237b1"
     },
     {
       "file": "after-desktop.png",
-      "sha256": "a6982f1de6f601ce97b0047919237e793775cd176a0399717dea96ca146eb359",
-      "bytes": 900832,
-      "generation": "6fa7e3bb-b1b8-47a4-9b2c-2111859be634"
+      "sha256": "7dbcc11511cc3358696a73b2bf4c582f4bcc4272f07b2ca9b717fb47a1568ab1",
+      "bytes": 900166,
+      "generation": "59337707-c217-4398-966c-3c21ac8237b1"
     },
     {
       "file": "ios-before.png",
-      "sha256": "7e6a815253b8f7e4cd0138689d58d10b793061b1731dc7c1ec1cd26797f912a8",
-      "bytes": 308830,
-      "generation": "b900c5b5-69bb-47c1-8526-b703bac4745a"
+      "sha256": "c0d2d9b2705ebcf8e2eb84671e4368ae06268908ceaa04e8c4fa168b5e7dd009",
+      "bytes": 307679,
+      "generation": "59337707-c217-4398-966c-3c21ac8237b1"
     },
     {
       "file": "ios-after.png",
-      "sha256": "b957e0dfb9f022e138f9a9a1b3e85c6c2e9fef8c7ff3e1a79880536ada544ea9",
-      "bytes": 322292,
-      "generation": "b900c5b5-69bb-47c1-8526-b703bac4745a"
+      "sha256": "a476206bce85771e9f2fdeae38dfced718cd4e8766ea56a7a3ae0b849aa9a2ad",
+      "bytes": 321627,
+      "generation": "59337707-c217-4398-966c-3c21ac8237b1"
     },
     {
       "file": "admin.png",
-      "sha256": "553ba11c0abc21c84a68c2104122788330dd4af44017e23d6a94fd9498bc2ae5",
-      "bytes": 80715,
-      "generation": "6fa7e3bb-b1b8-47a4-9b2c-2111859be634"
+      "sha256": "7537eeb480fd3bf75f07f4970149b0513e7f2f00764228a472713134c185a5d3",
+      "bytes": 81670,
+      "generation": "59337707-c217-4398-966c-3c21ac8237b1"
     }
   ],
   "limits": [
@@ -1261,28 +1219,44 @@
     },
     {
       "file": "integrations/overlay-ambient-places/map-layer.tsx",
-      "sha256": "942b01cc57f047ff781b25e74b0d045a033413a530aea3ead1a8877d2ece3e9b"
+      "sha256": "8be73dd916da2400cd608f88febda12d24db9ff991a6500912868ae7b9b26243"
     },
     {
       "file": "services/data-manager/src/jobs/search-index/build.ts",
       "sha256": "766b92e7e71c3ec7a0cb65c2df04368a2aa33e53dabdaf38a4dd90294435588e"
+    },
+    {
+      "file": "apps/web/src/components/map/localizeTextField.ts",
+      "sha256": "ce0cf960ad810b3b6194835e70063433de9b97cee28cdb72497c56fc036ac97a"
+    },
+    {
+      "file": "apps/web/src/components/map/mapStylePoiTarget.ts",
+      "sha256": "90b535d0399147127e0eaebb8cf76f1a5e9082b43c92c73f4e4762e4a47d7f25"
+    },
+    {
+      "file": "integrations/poi-overture/index.ts",
+      "sha256": "6b5ec71a1dce14efacdd7535da776a5431aa430305aff6c657ae3c513be0538c"
+    },
+    {
+      "file": "packages/core/src/server/ambient-places.ts",
+      "sha256": "7194127e9ca894be5497151c89283a227477dc86421a19165909dd7817977438"
     }
   ],
   "framePublication": {
     "index": {
       "region": "europe/germany",
-      "epoch": "c1f9509b-00f3-4e2c-ae82-a388f8cedc9d",
+      "epoch": "817452b3-5447-43e5-aab9-30cb894455a7",
       "sourceFingerprint": "sha256:c18cc77ed3493aa186bd7659fee4a9b028fbc479c2a8a90f219a3b2d33824d75",
       "placeCount": 14232,
       "termCount": 16052
     },
-    "indexedMs": 23462.774084,
-    "publishedMs": 717.7764159999999,
+    "indexedMs": 15265.852042000002,
+    "publishedMs": 654.9927500000013,
     "manifest": {
       "version": 1,
       "policyVersion": 2,
-      "generation": "b900c5b5-69bb-47c1-8526-b703bac4745a",
-      "publishedAt": "2026-10-08T20:29:21.592Z",
+      "generation": "59337707-c217-4398-966c-3c21ac8237b1",
+      "publishedAt": "2026-10-08T21:42:58.742Z",
       "region": {
         "name": "Rhine regional acceptance",
         "bounds": [6.58, 50.89, 7.07, 51.31]
@@ -1292,8 +1266,8 @@
       "sources": {
         "osm": {
           "region": "europe/germany",
-          "epoch": "c1f9509b-00f3-4e2c-ae82-a388f8cedc9d",
-          "publishedAt": "2026-10-08T19:38:04.972Z",
+          "epoch": "817452b3-5447-43e5-aab9-30cb894455a7",
+          "publishedAt": "2026-10-08T21:42:58.436Z",
           "count": 13454
         },
         "overture": null
@@ -1302,7 +1276,7 @@
     "landmarks": [
       {
         "id": "osm:way/28562993",
-        "name": "Quirinus-Münster",
+        "name": "Quirinus-M\u00fcnster",
         "category": "place_of_worship",
         "rank": 2559,
         "min_zoom": 14,
@@ -1310,7 +1284,7 @@
       },
       {
         "id": "osm:way/4532022",
-        "name": "Kölner Dom",
+        "name": "K\u00f6lner Dom",
         "category": "place_of_worship",
         "rank": 2559,
         "min_zoom": 14,
@@ -1318,7 +1292,7 @@
       }
     ]
   },
-  "codeBase": "769270286129de5ea229dab4d0c09b18c7e49670",
+  "codeBase": "7a0d0e0ba8849c796487d294632a16dbe851e9e8",
   "tileReadsBuildLoadDiagnostic": {
     "context": "Concurrent full repository tests, type checks and production builds; retained failed warm budget, followed by one quiet repeat on the same generation.",
     "generation": "6fa7e3bb-b1b8-47a4-9b2c-2111859be634",
@@ -1355,8 +1329,294 @@
       ]
     }
   },
-  "fixedCameraGeneration": "6fa7e3bb-b1b8-47a4-9b2c-2111859be634",
-  "frameGeneration": "b900c5b5-69bb-47c1-8526-b703bac4745a",
-  "generationQualification": "Frames and native iOS captures use b900c5b5; final static desktop matrix, admin and quiet tile reads use restored 6fa7e3bb. Both index the same checksummed source with policy 2, 13,454 places and the identical tested product files.",
-  "browserQualification": "T3 preview used for initial static and frame QA. Its preview_open later explicitly reported unavailable; final paired static matrix and desktop/admin images use isolated headless system Chrome. No headless frame measurements are claimed."
+  "fixedCameraGeneration": "59337707-c217-4398-966c-3c21ac8237b1",
+  "frameGeneration": "59337707-c217-4398-966c-3c21ac8237b1",
+  "generationQualification": "Final post-review static matrix, desktop/iOS/admin images, quiet tile reads and all three frame phases use the same generation and checksummed source. Prior samples are retained separately with their original generation and qualification.",
+  "browserQualification": "Initial QA used T3 preview. After preview_open explicitly reported unavailable, final post-review frames/static matrix/desktop images used isolated headful system Chrome; iOS images/frames used native Safari via T3 device tools. No headless frame measurements are claimed.",
+  "previousFrameEvidence": {
+    "generation": "b900c5b5-69bb-47c1-8526-b703bac4745a",
+    "codeBase": "769270286129de5ea229dab4d0c09b18c7e49670",
+    "frames": {
+      "method": "Five visible 5-second sweeps per state; MapLibre easeTo two 2.5-second legs, z15 to z15.7 and back, alternating Neuss/Cologne; nearest-rank p95 pooled by state; unchanged target 33.4ms and over50 <=5%; no simultaneous builds/tests",
+      "desktop1280x800": {
+        "off": {
+          "sweeps": 5,
+          "viewport": [1280, 800],
+          "devicePixelRatio": 1,
+          "allForeground": true,
+          "intervalCount": 3003,
+          "pooledP95Ms": 9,
+          "over50Percent": 0,
+          "perSweepP95Ms": [9.099999999998545, 9, 9, 9, 8.900000000008731],
+          "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) T3Code(Nightly)/0.0.46-nightly.20261008.2833 Chrome/152.0.7977.130 Electron/44.4.2 Safari/537.36"
+        },
+        "on": {
+          "sweeps": 5,
+          "viewport": [1280, 800],
+          "devicePixelRatio": 1,
+          "allForeground": true,
+          "intervalCount": 3000,
+          "pooledP95Ms": 9,
+          "over50Percent": 0,
+          "perSweepP95Ms": [9.099999999998545, 9, 9.10000000000582, 8.89999999999418, 9],
+          "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) T3Code(Nightly)/0.0.46-nightly.20261008.2833 Chrome/152.0.7977.130 Electron/44.4.2 Safari/537.36"
+        }
+      },
+      "phoneCss430x932": {
+        "off": {
+          "sweeps": 5,
+          "viewport": [430, 932],
+          "devicePixelRatio": 1,
+          "allForeground": true,
+          "intervalCount": 3004,
+          "pooledP95Ms": 9.200000000011642,
+          "over50Percent": 0,
+          "perSweepP95Ms": [
+            9.099999999976717, 9.099999999976717, 9.299999999988358, 9.299999999988358,
+            9.299999999988358
+          ],
+          "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) T3Code(Nightly)/0.0.46-nightly.20261008.2833 Chrome/152.0.7977.130 Electron/44.4.2 Safari/537.36"
+        },
+        "on": {
+          "sweeps": 5,
+          "viewport": [430, 932],
+          "devicePixelRatio": 1,
+          "allForeground": true,
+          "intervalCount": 2998,
+          "pooledP95Ms": 9.299999999988358,
+          "over50Percent": 0,
+          "perSweepP95Ms": [
+            9.10000000000582, 9.299999999988358, 9.299999999988358, 9.299999999988358,
+            9.199999999982538
+          ],
+          "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) T3Code(Nightly)/0.0.46-nightly.20261008.2833 Chrome/152.0.7977.130 Electron/44.4.2 Safari/537.36"
+        }
+      },
+      "iosSimulatorStreamActive": {
+        "off": {
+          "sweeps": 5,
+          "viewport": [402, 714],
+          "devicePixelRatio": 3,
+          "allForeground": true,
+          "intervalCount": 1049,
+          "pooledP95Ms": 33,
+          "over50Percent": 0.19065776930409914,
+          "perSweepP95Ms": [33, 34, 32, 34, 33],
+          "userAgent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/27.0 Mobile/15E148 Safari/604.1"
+        },
+        "on": {
+          "sweeps": 5,
+          "viewport": [402, 714],
+          "devicePixelRatio": 3,
+          "allForeground": true,
+          "intervalCount": 1027,
+          "pooledP95Ms": 34,
+          "over50Percent": 0,
+          "perSweepP95Ms": [33, 35, 33, 34, 33],
+          "userAgent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/27.0 Mobile/15E148 Safari/604.1"
+        }
+      },
+      "device": "iPhone 18 Pro simulator, iOS 27, Safari 27; host macOS arm64, no physical-device thermal/battery claim",
+      "qualification": "Final isolated simulator pooled off/on 32/33ms passes the unchanged 33.4ms target. Individual on sweeps include 34/35ms. Streamed 33/34ms and paused-but-second-QA-WebGL-present 35/36ms misses retained. No unrelated host process stopped; no physical-device certificate. Phone iteration 0 off resampled after initial resize had not settled; raw invalid 1280x800 sample retained externally. One paused-shared last sweep briefly overlapped the CSS resample; that phase is diagnostic, not final acceptance.",
+      "iosSimulatorStreamPausedSharedGraphics": {
+        "off": {
+          "sweeps": 5,
+          "viewport": [402, 714],
+          "devicePixelRatio": 3,
+          "allForeground": true,
+          "intervalCount": 1055,
+          "pooledP95Ms": 35,
+          "over50Percent": 0.3791469194312796,
+          "perSweepP95Ms": [32, 35, 32, 38, 34],
+          "userAgent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/27.0 Mobile/15E148 Safari/604.1"
+        },
+        "on": {
+          "sweeps": 5,
+          "viewport": [402, 714],
+          "devicePixelRatio": 3,
+          "allForeground": true,
+          "intervalCount": 1032,
+          "pooledP95Ms": 36,
+          "over50Percent": 0.872093023255814,
+          "perSweepP95Ms": [35, 34, 34, 38, 36],
+          "userAgent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/27.0 Mobile/15E148 Safari/604.1"
+        }
+      },
+      "iosSimulatorIsolated": {
+        "off": {
+          "sweeps": 5,
+          "viewport": [402, 714],
+          "devicePixelRatio": 3,
+          "allForeground": true,
+          "intervalCount": 1128,
+          "pooledP95Ms": 32,
+          "over50Percent": 0.26595744680851063,
+          "perSweepP95Ms": [30, 34, 31, 32, 30],
+          "userAgent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/27.0 Mobile/15E148 Safari/604.1"
+        },
+        "on": {
+          "sweeps": 5,
+          "viewport": [402, 714],
+          "devicePixelRatio": 3,
+          "allForeground": true,
+          "intervalCount": 1104,
+          "pooledP95Ms": 33,
+          "over50Percent": 0.18115942028985507,
+          "perSweepP95Ms": [31, 34, 32, 35, 30],
+          "userAgent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/27.0 Mobile/15E148 Safari/604.1"
+        }
+      }
+    }
+  },
+  "basemapIdentityFields": ["featureId", "source", "sourceLayer", "layer", "coordinates", "name"],
+  "framePlacementDiagnostic": {
+    "generation": "59337707-c217-4398-966c-3c21ac8237b1",
+    "landmarkCandidates": 8,
+    "codeFiles": [
+      {
+        "file": "packages/core/src/ambient-places.ts",
+        "sha256": "af99d4ddbbc7f700942df8c9fec437f6f0f583d17904410af42048291080e9dc"
+      },
+      {
+        "file": "integrations/overlay-ambient-places/map-layer.tsx",
+        "sha256": "dee63c71e25e1c457eca07d5d6bebc2f36d9ff9984af207adbbf7d47b6d5e964"
+      },
+      {
+        "file": "services/data-manager/src/jobs/search-index/build.ts",
+        "sha256": "766b92e7e71c3ec7a0cb65c2df04368a2aa33e53dabdaf38a4dd90294435588e"
+      },
+      {
+        "file": "apps/web/src/components/map/localizeTextField.ts",
+        "sha256": "ce0cf960ad810b3b6194835e70063433de9b97cee28cdb72497c56fc036ac97a"
+      },
+      {
+        "file": "apps/web/src/components/map/mapStylePoiTarget.ts",
+        "sha256": "90b535d0399147127e0eaebb8cf76f1a5e9082b43c92c73f4e4762e4a47d7f25"
+      },
+      {
+        "file": "integrations/poi-overture/index.ts",
+        "sha256": "6b5ec71a1dce14efacdd7535da776a5431aa430305aff6c657ae3c513be0538c"
+      },
+      {
+        "file": "packages/core/src/server/ambient-places.ts",
+        "sha256": "7194127e9ca894be5497151c89283a227477dc86421a19165909dd7817977438"
+      }
+    ],
+    "frames": {
+      "method": "Five foreground 5s sweeps/state, two MapLibre easeTo 2.5s legs; nearest-rank pooled p95 per state, individual sweep p95 retained.",
+      "desktop1280x800": {
+        "context": "Isolated headful system Chrome, English, DPR1; T3 preview explicitly unavailable.",
+        "off": {
+          "runs": 5,
+          "viewport": [1280, 800],
+          "devicePixelRatio": 1,
+          "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
+          "p95Ms": 10,
+          "intervalCount": 3000,
+          "over50Percent": 0,
+          "individualP95Ms": [
+            10.099999999999454, 9.899999999999636, 9.899999999997817, 10, 9.900000000001455
+          ]
+        },
+        "on": {
+          "runs": 5,
+          "viewport": [1280, 800],
+          "devicePixelRatio": 1,
+          "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
+          "p95Ms": 10,
+          "intervalCount": 3000,
+          "over50Percent": 0,
+          "individualP95Ms": [
+            10.100000000000364, 9.80000000000291, 9.900000000001455, 9.900000000001455, 10
+          ]
+        }
+      },
+      "phoneCss430x932": {
+        "context": "Same headful Chrome, 430x932 CSS viewport, English, DPR1.",
+        "off": {
+          "runs": 5,
+          "viewport": [430, 932],
+          "devicePixelRatio": 1,
+          "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
+          "p95Ms": 9.900000000008731,
+          "intervalCount": 3005,
+          "over50Percent": 0,
+          "individualP95Ms": [
+            9.900000000001455, 9.900000000008731, 10, 9.89999999999418, 9.89999999999418
+          ]
+        },
+        "on": {
+          "runs": 5,
+          "viewport": [430, 932],
+          "devicePixelRatio": 1,
+          "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
+          "p95Ms": 10,
+          "intervalCount": 3003,
+          "over50Percent": 0,
+          "individualP95Ms": [10, 10, 10, 10, 9.89999999999418]
+        }
+      },
+      "iosSimulatorIsolated": {
+        "context": "Native iPhone18Pro iOS27 Safari, German, DPR3; preview stream paused, other owned QA WebGL map closed, no concurrent builds/tests.",
+        "off": {
+          "runs": 5,
+          "viewport": [402, 714],
+          "devicePixelRatio": 3,
+          "userAgent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/27.0 Mobile/15E148 Safari/604.1",
+          "p95Ms": 32,
+          "intervalCount": 1099,
+          "over50Percent": 0.09099181073703366,
+          "individualP95Ms": [31, 33, 31, 35, 32]
+        },
+        "on": {
+          "runs": 5,
+          "viewport": [402, 714],
+          "devicePixelRatio": 3,
+          "userAgent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/27.0 Mobile/15E148 Safari/604.1",
+          "p95Ms": 34,
+          "intervalCount": 1075,
+          "over50Percent": 0.09302325581395349,
+          "individualP95Ms": [31, 35, 31, 35, 33]
+        }
+      },
+      "qualification": "Local simulator/host result only. Individual sweep results and previous streamed/stress/load misses are retained; no physical-device thermal/battery or all-host-load guarantee."
+    },
+    "qualification": "Post-review eight-candidate isolated iOS on p95 34 ms missed unchanged 33.4 ms target. Retained before reducing candidate placement work; dense Cologne basemap baseline is near limit."
+  },
+  "rawCaptureEvidence": [
+    {
+      "file": "matrix-final.json",
+      "bytes": 313396,
+      "sha256": "70226ea760874f3f2e7f4246e7c1ac7caffea5c18a4618b9a260e1863d75aad8",
+      "location": "External QA capture; not shipped in git"
+    },
+    {
+      "file": "identity-final.json",
+      "bytes": 2286,
+      "sha256": "05ca6cad2704e2d6cb574e2f0b11e2e9eb18ab8eff34405191294f4ba49923de",
+      "location": "External QA capture; not shipped in git"
+    },
+    {
+      "file": "frames.jsonl",
+      "bytes": 212226,
+      "sha256": "41b0f0d37dce97cc3e0554180e1e2029ed91f61f20fde36efafe615faa560971",
+      "location": "External QA capture; not shipped in git"
+    },
+    {
+      "file": "frames-post-review-eight-anchors.jsonl",
+      "bytes": 195208,
+      "sha256": "6b8a56a728a8deda4be84be0b21e2682d2b347016c4c60dacadc82707d9f54b5",
+      "location": "External QA capture; not shipped in git"
+    },
+    {
+      "file": "anchor-diagnostic.json",
+      "bytes": 3261,
+      "sha256": "f7aea17c62103b0fc6b625d01a13874144ac4eef8adf586da04ec8b3e5444694",
+      "location": "External QA capture; not shipped in git"
+    }
+  ],
+  "landmarkPlacementCandidates": 6,
+  "integrationBase": "78e099076",
+  "integrationQualification": "Final delivery integrates origin/main at 78e099076. Recorded regional rendering/tile measurements used production assets before this sync (Next 16.3.6); the measured ambient/localization/provider/store code hashes are unchanged. Final integration is checked by clean Next 16.3.8 and API/data-manager/docs builds, types, regression/database and full suites. Captures are not a deployment or all-host-load guarantee.",
+  "finalReviewCaptureDate": "2026-10-09"
 }

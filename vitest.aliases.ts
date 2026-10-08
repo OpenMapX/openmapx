@@ -12,6 +12,7 @@ const MOBILITY_CORE_TYPE_SUBPATHS = [
   "parking",
   "fuel",
   "ev-charging",
+  "camera",
   "transit",
   "transit-reachability",
   "transit-isochrone",

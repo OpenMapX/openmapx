@@ -7,7 +7,7 @@ import {
   CREDENTIAL_KEYED_INTEGRATIONS,
   collectCredentialKeyViolations,
 } from "./check-credential-keys.ts";
-import { collectFeedIdViolations, runtimeDataSourceIntegrations } from "./check-feed-ids.ts";
+import { runtimeDataSourceIntegrations } from "./check-feed-ids.ts";
 
 // Integrations whose manifests set `runtimeDataSources: true` have no static
 // sources for the manifest gates to read. Every gate must say so explicitly
@@ -60,22 +60,14 @@ describe("check-feed-ids", () => {
     writeManifest("static-probe", {});
     expect(runtimeDataSourceIntegrations(root)).toEqual(["runtime-probe"]);
   });
-
-  it("rejects a poi-sources.ts in a runtime integration", () => {
-    writeManifest("runtime-probe", { runtimeDataSources: true });
-    writeFileSync(join(root, "integrations", "runtime-probe", "poi-sources.ts"), "");
-    expect(collectFeedIdViolations(root).join("\n")).toMatch(
-      /runtime-probe: .*poi-sources\.ts.*runtimeDataSources/,
-    );
-  });
 });
 
 describe("check-credential-keys", () => {
   it("rejects a credential-keyed integration that supplies its sources at runtime", () => {
     for (const id of CREDENTIAL_KEYED_INTEGRATIONS) writeManifest(id, {});
-    writeManifest("parking", { runtimeDataSources: true });
+    writeManifest("bike-sharing", { runtimeDataSources: true });
     expect(collectCredentialKeyViolations(root)).toEqual([
-      expect.stringMatching(/^parking: .*runtimeDataSources/),
+      expect.stringMatching(/^bike-sharing: .*runtimeDataSources/),
     ]);
   });
 });

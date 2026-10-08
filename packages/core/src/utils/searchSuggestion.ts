@@ -9,10 +9,10 @@ const AIRPORT_RAW_CATEGORY = "aeroway/aerodrome";
 
 const UNKNOWN_PROXIMITY_METERS = Number.MAX_SAFE_INTEGER;
 /**
- * Two same-named suggestions closer than this are treated as one place. Wide
+ * Spatial bound for corroborated duplicates and non-business destinations. Wide
  * enough that a station record from a rail operator, the OSM station node and
  * a timetable stop (which can sit several hundred metres apart on a large
- * station) collapse; the label check keeps distinct neighbours apart.
+ * station) collapse. Ordinary POIs also need entity evidence below.
  */
 const SAME_PLACE_MAX_METERS = 1_000;
 /**
@@ -323,10 +323,22 @@ function nameWithoutItsTown(item: AutocompleteResult): string | undefined {
 /**
  * Whether the query is the row's whole name followed by words of its address:
  * "10115 berlin" for the postcode 10115 in Berlin, "paris france".
+ * Only complete address words corroborate exact location intent. Prefixes
+ * remain autocomplete evidence, scored separately below, rather than turning
+ * "Alexa" in a street called "Alexander" into an explicit remote destination.
  */
-function isNameWithItsPlace(key: string, label: string, context: string): boolean {
-  if (!key.startsWith(`${label} `)) return false;
-  return everyTokenStartsAWord(words(key.slice(label.length + 1)), words(context));
+function isNameWithItsPlace(key: string, label: string, address: string): boolean {
+  if (!label || !key.startsWith(`${label} `)) return false;
+  // Provider sublabels often repeat the primary name before the address; that
+  // repetition supplies no independent evidence of where the place is.
+  const place =
+    address === label
+      ? ""
+      : address.startsWith(`${label} `)
+        ? address.slice(label.length + 1)
+        : address;
+  const placeWords = words(place);
+  return words(key.slice(label.length + 1)).every((token) => placeWords.includes(token));
 }
 
 function exactMatchScore(kind: SearchMatchKind): number {
@@ -401,7 +413,8 @@ export function textMatchScore(item: AutocompleteResult, query: string): number 
   const key = matchKey(query);
   const label = matchKey(item.label);
   const context = matchKey(`${item.label} ${item.sublabel ?? ""}`);
-  if (label === key || isNameWithItsPlace(key, label, context)) return TEXT_SCORE.exact;
+  if (label === key || isNameWithItsPlace(key, label, matchKey(item.sublabel ?? "")))
+    return TEXT_SCORE.exact;
   // A category's name in the singular names it as fully: "museum" for Museums.
   if (item.type === "category" && label === `${key}s`) return TEXT_SCORE.exact;
   if (label.startsWith(key)) return TEXT_SCORE.prefix;
@@ -485,7 +498,7 @@ export function isSameDestination(a: AutocompleteResult, b: AutocompleteResult):
 
 /**
  * Whether the query names where the row is, beyond its name: a house number
- * or postcode that is part of its name ("hauptstraße 5", "10115"), or a word
+ * or postcode that is part of its name ("hauptstraße 5", "10115"), or complete words
  * of its address typed after the name ("10115 berlin", "paris france").
  */
 export function queryNamesLocation(item: AutocompleteResult, query: string): boolean {
@@ -493,7 +506,7 @@ export function queryNamesLocation(item: AutocompleteResult, query: string): boo
   const label = matchKey(item.label);
   const labelWords = words(label);
   if (words(key).some((token) => /\d/u.test(token) && labelWords.includes(token))) return true;
-  return isNameWithItsPlace(key, label, matchKey(`${item.label} ${item.sublabel ?? ""}`));
+  return isNameWithItsPlace(key, label, matchKey(item.sublabel ?? ""));
 }
 
 /**
@@ -630,6 +643,99 @@ function transitKind(item: AutocompleteResult): "transit" | "other" | "unknown" 
   return item.type === "poi" ? "unknown" : "other";
 }
 
+function categoryKey(item: AutocompleteResult): string {
+  return item.rawCategory?.trim().toLowerCase().replace(/ +/g, "/") ?? "";
+}
+
+/** Named geographic features and landmark catalogs retain their spatial reconciliation. */
+function isLandmarkCategory(category: string): boolean {
+  return (
+    /^(historic|natural|place|boundary)\//u.test(category) ||
+    /^(aeroway\/aerodrome|man_made\/tower|tourism\/(museum|attraction|artwork))$/u.test(category)
+  );
+}
+
+function needsEntityEvidence(a: AutocompleteResult, b: AutocompleteResult): boolean {
+  if (transitKind(a) === "transit" || transitKind(b) === "transit") return false;
+  if (a.type !== "poi" && b.type !== "poi") return false;
+  // Unknown POIs may be businesses. A known shop/hotel/etc. never inherits
+  // the catalog exemption from the other row's fame or Wikidata item.
+  const categories = [categoryKey(a), categoryKey(b)].filter(Boolean);
+  if (categories.some((category) => !isLandmarkCategory(category))) return true;
+  const catalogued = [a, b].some(
+    (item) =>
+      Boolean(item.ids?.icao || item.ids?.iata) ||
+      (Boolean(item.ids?.wikidata) && (item.fame ?? 0) > 0),
+  );
+  return categories.length === 0 && !catalogued;
+}
+
+/** ID namespaces describe source records; manifest sourceIds only describe attribution. */
+function sourceDomain(item: AutocompleteResult): string | undefined {
+  const separator = item.id.indexOf(":");
+  return separator > 0 ? item.id.slice(0, separator) : item.provider;
+}
+
+/**
+ * Conservative address agreement, without guessing international address structure.
+ * Drop a repeated business name; retain unit/floor, street, number and locality.
+ * City/postcode-only context is insufficient. Missing or differently formatted
+ * addresses need an explicit shared identity rather than a spatial guess.
+ */
+function concreteAddressKey(item: AutocompleteResult): string | undefined {
+  let address = matchKey(item.sublabel ?? "");
+  const label = matchKey(item.label);
+  if (label && address.startsWith(`${label} `)) address = address.slice(label.length + 1);
+  const tokens = words(address);
+  const parts = (item.sublabel ?? "").split(",").map(matchKey);
+  if (parts[0] === label) parts.shift();
+  let street = parts[0] ?? "";
+  if (label && street.startsWith(`${label} `)) street = street.slice(label.length + 1);
+  const streetTokens = words(street);
+  // A postcode in a later locality component is not a house number.
+  if (tokens.length < 3 || !streetTokens.some((token) => /^\d{1,4}\p{L}?$/u.test(token)))
+    return undefined;
+  // A short postcode also looks like a house number. Require a recognized
+  // street term rather than interpreting arbitrary locality text as a street.
+  // This deliberately leaves unsupported address formats to shared identity.
+  if (
+    !streetTokens.some((token) =>
+      /(?:strasse|street|road|avenue|lane|drive|boulevard|allee|platz|gasse|weg)$/u.test(token),
+    ) &&
+    !streetTokens.some((token) => /^(rue|route|via|calle)$/u.test(token))
+  )
+    return undefined;
+  return address;
+}
+
+function hasContradictoryEntityEvidence(a: AutocompleteResult, b: AutocompleteResult): boolean {
+  // Apply contradictions before landmark/catalog spatial reconciliation too.
+  // Primary Wikidata row IDs are entity identities even without an ids payload.
+  const wikidata = (item: AutocompleteResult) =>
+    item.ids?.wikidata ?? (item.id.startsWith("wikidata:") ? item.id.slice(9) : undefined);
+  const aEntity = wikidata(a);
+  const bEntity = wikidata(b);
+  if (aEntity && bEntity && aEntity !== bEntity) return true;
+  const aAddress = concreteAddressKey(a);
+  const bAddress = concreteAddressKey(b);
+  return aAddress !== undefined && bAddress !== undefined && aAddress !== bAddress;
+}
+
+function hasCorroboratedEntityLocation(a: AutocompleteResult, b: AutocompleteResult): boolean {
+  // Two records in one source can be distinct tenants at exactly the same
+  // address. Different record IDs do not prove distinct entities, but also
+  // do not independently corroborate a heuristic merge. Shared IDs win above.
+  const aSource = sourceDomain(a);
+  const bSource = sourceDomain(b);
+  if (!aSource || !bSource || aSource === bSource) return false;
+  // Different OSM nodes/ways can represent one entity, so inequality is not a veto.
+  const aCategory = categoryKey(a);
+  const bCategory = categoryKey(b);
+  if (aCategory && bCategory && aCategory !== bCategory) return false;
+  const address = concreteAddressKey(a);
+  return address !== undefined && address === concreteAddressKey(b);
+}
+
 function hasSameCanonicalLocation(a: AutocompleteResult, b: AutocompleteResult): boolean {
   if (!a.coordinates || !b.coordinates) return false;
   if (normalizeSearchTerm(a.label) !== normalizeSearchTerm(b.label)) return false;
@@ -637,6 +743,13 @@ function hasSameCanonicalLocation(a: AutocompleteResult, b: AutocompleteResult):
   // from the square; merging them hid the station for "alexanderplatz".
   const kinds = new Set([transitKind(a), transitKind(b)]);
   if (kinds.has("transit") && kinds.has("other")) return false;
+  if (
+    !kinds.has("transit") &&
+    (a.type === "poi" || b.type === "poi") &&
+    hasContradictoryEntityEvidence(a, b)
+  )
+    return false;
+  if (needsEntityEvidence(a, b) && !hasCorroboratedEntityLocation(a, b)) return false;
   const maxMeters = isCityFromTwoSources(a, b) ? SAME_CITY_MAX_METERS : SAME_PLACE_MAX_METERS;
   return haversineDistance(a.coordinates, b.coordinates) < maxMeters;
 }

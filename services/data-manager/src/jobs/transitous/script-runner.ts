@@ -13,7 +13,7 @@ import { scrubSecrets } from "../../utils/scrub-secrets.js";
  * Client for the private Transitous runner.
  *
  * Upstream Transitous is third-party Python. It used to execute inside this
- * service, which owns `/data`, the database, Redis, and the ops-agent token.
+ * service, which owns `/data`, the database, and the ops-agent token.
  * The pipeline now names a script and its validated arguments; the runner —
  * a separate container with no platform authority — decides the argv and runs
  * it. Nothing in a request can widen what executes.

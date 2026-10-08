@@ -62,14 +62,10 @@ const RAW_FETCH_ALLOWLIST: Record<string, string> = {
     "Mapillary vector tiles: forwards the binary tile body, content-type, and status verbatim",
   "integrations/transit-otp/provider.ts":
     "isOtpAvailable() reachability probe: reads only res.ok, never the body",
-  "integrations/webcam/providers/osm.ts":
-    "checkUrlReachable() HEAD probe: reads only res.ok, never the body",
-  "integrations/webcam/providers/traffic-camera.ts":
-    "Hong Kong uses UTF-16 CSV and Spain/Norway use XML, so raw response bodies are parsed with bounded requests",
 };
 
 // Matches a bare, unqualified `fetch(` call — NOT `fetchJson(`,
-// `impersonatingFetch(`, or `something.fetch(`.
+// `graphqlFetch(`, or `something.fetch(`.
 const BARE_FETCH_RE = /(?<![.\w$])fetch\s*\(/;
 
 function collectTsFiles(dir: string): string[] {

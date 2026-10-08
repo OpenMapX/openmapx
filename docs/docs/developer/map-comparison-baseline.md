@@ -207,7 +207,7 @@ images directly to the PR.
 
 ## Regional ambient-place acceptance (#399)
 
-The October 8 acceptance run repeats the four fixed cameras at zooms 14–18
+The October 8–9 acceptance run repeats the four fixed cameras at zooms 14–18
 against the same public basemap TileJSON and the same policy-2 regional publication.
 Neuss lies inside the published Rhine bbox; Berlin, Aachen and Monschau are
 outside-region controls. Cologne and a rural Rhine camera add dense/sparse
@@ -217,7 +217,8 @@ or a recall audit of all German places.
 Source eligibility and rendered labels remain separate: Quirinus-Münster has
 corroborated source-backed zoom-14 eligibility, while retained city/road labels can
 still win a particular collision. The fixed zoom-16 Neuss view gains its name with
-collision-safe landmark anchors. Ordinary labels keep one position. Known owned
+collision-safe landmark anchors. Ordinary labels keep one position. All 45 paired views compare source/source-layer/feature-ID, rendered-layer,
+coordinate/name identities as well as road-name lists. Known owned
 basemap identities and selected/category destinations suppress their ambient
 counterpart; distinct source IDs are not guessed to be the same business merely
 because their names are similar.

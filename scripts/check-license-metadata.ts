@@ -52,7 +52,6 @@ const APACHE_PACKAGES = new Set([
   "mobility-formats-tomp",
   "mobility-core",
   "place-ids",
-  "poi-source-registry",
   "motis-feed-proxy-config",
   "transitous-core",
   "hardlinks",

@@ -274,6 +274,12 @@ export function OsmContributionDialog({ open, ref_, onClose }: Props) {
     state.context.displayName
       ? t("dialogTitleNamed", { name: state.context.displayName })
       : t("dialogTitle");
+  const hasActions =
+    state.step === "edit" ||
+    state.step === "review" ||
+    state.step === "publishing" ||
+    state.step === "conflict" ||
+    state.step === "success";
 
   return (
     <Dialog
@@ -295,7 +301,7 @@ export function OsmContributionDialog({ open, ref_, onClose }: Props) {
         </IconButton>
       </DialogTitle>
 
-      <DialogContent dividers>
+      <DialogContent dividers sx={hasActions ? undefined : { borderBottom: "none" }}>
         {activeError && <ErrorNotice error={activeError} />}
 
         {state.step === "gate" && (
@@ -374,49 +380,51 @@ export function OsmContributionDialog({ open, ref_, onClose }: Props) {
         {state.step === "success" && <OsmContributionSuccess result={state.result} />}
       </DialogContent>
 
-      <DialogActions sx={{ position: "sticky", bottom: 0, bgcolor: "background.paper" }}>
-        {state.step === "edit" && (
-          <Button
-            variant="contained"
-            disabled={
-              selectedChanges(state.draft).length === 0 ||
-              Object.keys(state.draft.errors).length > 0
-            }
-            onClick={() => void runPreview()}
-            sx={{ minHeight: 44 }}
-          >
-            {t("reviewAction")}
-          </Button>
-        )}
-
-        {(state.step === "review" || state.step === "publishing") && (
-          <>
-            <Button onClick={() => dispatch({ type: "backToEdit" })} sx={{ minHeight: 44 }}>
-              {t("back")}
-            </Button>
+      {hasActions && (
+        <DialogActions sx={{ position: "sticky", bottom: 0, bgcolor: "background.paper" }}>
+          {state.step === "edit" && (
             <Button
               variant="contained"
-              disabled={state.step === "publishing" || !isDraftComplete(state.draft)}
-              onClick={() => void runPublish()}
+              disabled={
+                selectedChanges(state.draft).length === 0 ||
+                Object.keys(state.draft.errors).length > 0
+              }
+              onClick={() => void runPreview()}
               sx={{ minHeight: 44 }}
             >
-              {state.step === "publishing" ? t("publishing") : t("publish")}
+              {t("reviewAction")}
             </Button>
-          </>
-        )}
+          )}
 
-        {state.step === "conflict" && (
-          <Button variant="contained" onClick={() => void adoptLatest()} sx={{ minHeight: 44 }}>
-            {t("conflictAdopt")}
-          </Button>
-        )}
+          {(state.step === "review" || state.step === "publishing") && (
+            <>
+              <Button onClick={() => dispatch({ type: "backToEdit" })} sx={{ minHeight: 44 }}>
+                {t("back")}
+              </Button>
+              <Button
+                variant="contained"
+                disabled={state.step === "publishing" || !isDraftComplete(state.draft)}
+                onClick={() => void runPublish()}
+                sx={{ minHeight: 44 }}
+              >
+                {state.step === "publishing" ? t("publishing") : t("publish")}
+              </Button>
+            </>
+          )}
 
-        {state.step === "success" && (
-          <Button variant="contained" onClick={close} sx={{ minHeight: 44 }}>
-            {t("successDone")}
-          </Button>
-        )}
-      </DialogActions>
+          {state.step === "conflict" && (
+            <Button variant="contained" onClick={() => void adoptLatest()} sx={{ minHeight: 44 }}>
+              {t("conflictAdopt")}
+            </Button>
+          )}
+
+          {state.step === "success" && (
+            <Button variant="contained" onClick={close} sx={{ minHeight: 44 }}>
+              {t("successDone")}
+            </Button>
+          )}
+        </DialogActions>
+      )}
 
       <Dialog
         open={state.step === "edit" && state.confirmingDiscard}

@@ -10,6 +10,13 @@ export interface ApiClientConfig {
   headerInterceptor?: () => Record<string, string>;
 }
 
+/**
+ * Query parameters for a GET. A list value is sent as one repeated parameter
+ * per item (`k=a&k=b`), each encoded on its own, so items may hold any
+ * character, a comma included.
+ */
+export type ApiQueryParams = Readonly<Record<string, string | readonly string[]>>;
+
 let _config: ApiClientConfig | null = null;
 
 export function configureApiClient(config: ApiClientConfig): void {
@@ -213,10 +220,13 @@ export class ApiClient {
     return this.instanceConfig ?? getConfig();
   }
 
-  private buildUrl(path: string, params?: Record<string, string>): string {
+  private buildUrl(path: string, params?: ApiQueryParams): string {
     const url = new URL(path, this.config().baseUrl);
     if (params) {
-      for (const [key, value] of Object.entries(params)) url.searchParams.set(key, value);
+      for (const [key, value] of Object.entries(params)) {
+        if (typeof value === "string") url.searchParams.set(key, value);
+        else for (const item of value) url.searchParams.append(key, item);
+      }
     }
     return url.toString();
   }
@@ -275,11 +285,7 @@ export class ApiClient {
     }
   }
 
-  async get<T>(
-    path: string,
-    params?: Record<string, string>,
-    options: ApiRequestOptions = {},
-  ): Promise<T> {
+  async get<T>(path: string, params?: ApiQueryParams, options: ApiRequestOptions = {}): Promise<T> {
     return this.send(this.buildUrl(path, params), {}, options, async (res) => {
       await assertOk(res);
       return res.json() as Promise<T>;
@@ -294,7 +300,7 @@ export class ApiClient {
    */
   async getOptional<T>(
     path: string,
-    params?: Record<string, string>,
+    params?: ApiQueryParams,
     options: ApiRequestOptions = {},
   ): Promise<T | null> {
     return this.send(this.buildUrl(path, params), {}, options, async (res) => {

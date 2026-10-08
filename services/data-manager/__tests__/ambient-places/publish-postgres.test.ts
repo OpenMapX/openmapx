@@ -5,6 +5,7 @@ import {
   readAmbientPlaceByGers,
   readAmbientTile,
 } from "@openmapx/core/ambient-places-server";
+import { createMockIntegrationContext } from "@openmapx/integration-framework/testing";
 import { PbfReader } from "pbf";
 import { describe, expect, it } from "vitest";
 import {
@@ -17,7 +18,7 @@ import {
   buildSearchIndexIndexesDDL,
   buildSearchIndexSchemaDDL,
 } from "../../src/jobs/search-index/schema.js";
-import { startPostgis } from "../poi-ingest/_testcontainer.js";
+import { startPostgis } from "../helpers/postgis-testcontainer.js";
 
 const region = {
   name: "Aachen",
@@ -32,6 +33,69 @@ const tile = {
 describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
   "ambient PostGIS publication",
   () => {
+    it("keeps exact GERS identity from readable retained generations after replacement and rollback", async () => {
+      const pg = await startPostgis();
+      try {
+        await pg.sql.unsafe(
+          buildSearchIndexSchemaDDL("osm_search") + buildSearchIndexIndexesDDL("osm_search"),
+        );
+        await pg.sql.unsafe(buildSchemaDDL("overture_places"));
+        await pg.sql.unsafe(`INSERT INTO osm_search.index_state(singleton,region,source_path,source_fingerprint,current_fingerprint,epoch,status,started_at,published_at,updated_at) VALUES(1,'aachen','fixture','fixture','fixture','retained','ready',now(),now(),now());
+          INSERT INTO osm_search.places(osm_type,osm_id,name,lat,lng,category,tags,importance) VALUES('node',1,'Clinic',50.77,6.08,'amenity/hospital','{}',0.8);
+          INSERT INTO overture_places.places(gers_id,name,geom,basic_category,confidence,operating_status,release) VALUES('gers-retained','Retained cafe',ST_SetSRID(ST_MakePoint(6.081,50.7701),4326),'cafe',0.8,'open','2026-10-01.0');
+          INSERT INTO overture_places.conflation_state(singleton,release,region,place_count,places_published_at,status,phase) VALUES(1,'2026-10-01.0','aachen',1,now(),'completed','complete')`);
+        const a = await buildAmbientPlaces(pg.sql, region);
+        const bytes = await readAmbientTile(pg.sql, a.generation, tile.z, tile.x, tile.y);
+        await pg.sql.unsafe(
+          `UPDATE overture_places.places SET geom=ST_SetSRID(ST_MakePoint(13,52),4326)`,
+        );
+        await buildAmbientPlaces(pg.sql, region);
+        await buildAmbientPlaces(pg.sql, region);
+        // Still-stored, source-fresh tiles remain readable even after lease
+        // expiry, until a later publication actually garbage-collects them.
+        await pg.sql.unsafe(
+          `UPDATE ambient_places.generations SET cache_lease_until=now()-interval '1 day' WHERE id=$1`,
+          [a.generation],
+        );
+        await setAmbientEnabled(pg.sql, false);
+        expect(await readAmbientTile(pg.sql, a.generation, tile.z, tile.x, tile.y)).toEqual(bytes);
+        expect(await readAmbientPlaceByGers(pg.sql, "gers-retained")).toMatchObject({
+          generation: a.generation,
+          place: { id: "overture:gers-retained", name: "Retained cafe" },
+        });
+        await rollbackAmbientPlaces(pg.sql);
+        expect((await readAmbientPlaceByGers(pg.sql, "gers-retained"))?.generation).toBe(
+          a.generation,
+        );
+        // Keep A retained through the following new publication; expired,
+        // unreferenced snapshots are correctly removed by its garbage collection.
+        await pg.sql.unsafe(
+          `UPDATE ambient_places.generations SET cache_lease_until=now()+interval '7 days' WHERE id=$1`,
+          [a.generation],
+        );
+        await pg.sql.unsafe(`UPDATE overture_places.places SET geom=ST_SetSRID(ST_MakePoint(6.081,50.7701),4326);
+          INSERT INTO overture_places.poi_conflation_link(osm_type,osm_id,gers_id,source_confidence,match_confidence,distance_m,method,evidence,release) VALUES('node',1,'gers-retained',0.8,1,0,'fixture','{}','2026-10-01.0')`);
+        const current = await buildAmbientPlaces(pg.sql, region);
+        expect(await readAmbientPlaceByGers(pg.sql, "gers-retained")).toMatchObject({
+          generation: current.generation,
+          place: { id: "osm:node/1" },
+        });
+        await pg.sql.unsafe(
+          `UPDATE ambient_places.generations SET manifest=jsonb_set(manifest,'{sources,osm,publishedAt}',to_jsonb((now()-interval '91 days')::TEXT)) WHERE id=$1`,
+          [current.generation],
+        );
+        expect((await readAmbientPlaceByGers(pg.sql, "gers-retained"))?.generation).toBe(
+          a.generation,
+        );
+        await pg.sql.unsafe(
+          `UPDATE ambient_places.generations SET manifest=jsonb_set(manifest,'{sources,osm,publishedAt}',to_jsonb((now()-interval '91 days')::TEXT)) WHERE id=$1`,
+          [a.generation],
+        );
+        expect(await readAmbientPlaceByGers(pg.sql, "gers-retained")).toBeNull();
+      } finally {
+        await pg.stop();
+      }
+    }, 120_000);
     it("publishes bounded canonical tiles atomically, preserves old bytes and rolls back", async () => {
       const pg = await startPostgis();
       try {
@@ -85,6 +149,24 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           place: { id: "overture:gers-b", name: "Cafe" },
         });
         expect(await readAmbientPlaceByGers(pg.sql, "not-published")).toBeNull();
+
+        // Execute the registered enabled-provider resolver against the real
+        // accepted link, not a conversion fixture with a prefilled canonical ID.
+        const { setup } = await import("../../../../integrations/poi-overture/index.js");
+        const { getPlaceResolver } = await import("../../../../packages/place-ids/src/index.js");
+        setup(
+          createMockIntegrationContext({
+            db: {
+              execute: async <T>(query: string, params?: unknown[]) =>
+                (await pg.sql.unsafe(query, params as never[])) as unknown as T,
+            },
+          }),
+        );
+        expect(await getPlaceResolver("overture")?.("gers-a", { lang: "en" })).toMatchObject({
+          id: "osm:node/9007199254740993",
+          primaryScheme: "osm",
+          ids: { osm: "node/9007199254740993", overture: "gers-a" },
+        });
 
         await rollbackAmbientPlaces(pg.sql);
         expect((await readAmbientManifest(pg.sql))!.generation).toBe(a.generation);

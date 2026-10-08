@@ -42,8 +42,11 @@ describe("ops-agent trusted configuration schema", () => {
   });
 
   it("validates canonical hyphenated values against their shipped schemas", () => {
-    const evCharging = JSON.parse(
-      readFileSync(join(repositoryRoot, "integrations/ev-charging/manifest.json"), "utf8"),
+    const openTransportData = JSON.parse(
+      readFileSync(
+        join(repositoryRoot, "integrations/transit-opentransportdata-ch/manifest.json"),
+        "utf8",
+      ),
     ) as { configSchema: Record<string, unknown> };
     const valhalla = JSON.parse(
       readFileSync(join(repositoryRoot, "integrations/routing-valhalla/manifest.json"), "utf8"),
@@ -51,8 +54,8 @@ describe("ops-agent trusted configuration schema", () => {
 
     expect(
       validateTrustedConfigurationValues(
-        { "at-econtrol-referer-domain": "maps.example.test" },
-        evCharging.configSchema,
+        { requestorRef: "maps.example.test" },
+        openTransportData.configSchema,
       ),
     ).toBe(true);
     expect(

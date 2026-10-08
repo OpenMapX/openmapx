@@ -17,9 +17,9 @@ RUN pnpm build
 
 FROM nginx:alpine@sha256:62ff2089abf5a9ed33bd232895bef5e22f7bb4b200675cec49a5ebc48e3d4ac8
 # The current official image predates Alpine's OpenSSL fix for CVE-2026-14456
-# and later libexpat, util-linux, and PCRE2 fixes. Upgrade only the affected runtime
-# libraries.
-RUN apk upgrade --no-cache libcrypto3 libssl3 libexpat libuuid pcre2
+# and later libexpat, util-linux, PCRE2, and TIFF (CVE-2026-4775) fixes.
+# Upgrade only the affected runtime libraries.
+RUN apk upgrade --no-cache libcrypto3 libssl3 libexpat libuuid pcre2 tiff
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /app/build /usr/share/nginx/html
 EXPOSE 80

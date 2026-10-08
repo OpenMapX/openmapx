@@ -43,6 +43,26 @@ it("titles a detail its sources name nothing by its translated fallback name", (
   usePlaceStore.getState().setSelectedPlace(null);
 });
 
+it("shows a site's own website, or else its operator's, as the place's website", () => {
+  const websiteOf = (detail: Record<string, unknown>) => {
+    usePlaceStore.getState().setSelectedPlace(null);
+    useDataSourceStore.getState().selectItem("ev-charging", "C");
+    response.detail = { id: "C", name: "Ladepark", coordinates: [8, 50], sections: [], ...detail };
+    const view = render(<DataSourceDetailBridge />);
+    const website = usePlaceStore.getState().selectedPlace?.website;
+    view.unmount();
+    useDataSourceStore.getState().clearSelection();
+    usePlaceStore.getState().setSelectedPlace(null);
+    return website;
+  };
+
+  expect(websiteOf({ website: "https://ladepark.example" })).toBe("https://ladepark.example");
+  expect(websiteOf({ operator: { name: "EnBW", url: "https://enbw.com" } })).toBe(
+    "https://enbw.com",
+  );
+  expect(websiteOf({ website: "javascript:alert(1)" })).toBeUndefined();
+});
+
 it("does not reclaim a newer transit selection on a retained data-source refetch", () => {
   usePlaceStore.getState().setSelectedPlace(
     createPlace({

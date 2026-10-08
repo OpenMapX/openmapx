@@ -121,7 +121,7 @@ export function useDataSourceMatch(place: Place | null): DataSourceDetail | null
     queryKey: ["ds-match-detail", sourceId, bestMatch?.id],
     queryFn: ({ signal }) =>
       apiClient.get<MobilityEnvelope<DataSourceDetail>>(
-        `${API_ENDPOINTS.dataSourceDetail}/${sourceId}/detail/${bestMatch?.id}`,
+        `${API_ENDPOINTS.dataSourceDetail}/${sourceId}/detail/${encodeURIComponent(bestMatch?.id ?? "")}`,
         undefined,
         apiQueryRequestOptions(signal, DETAIL_QUERY_POLICY),
       ),

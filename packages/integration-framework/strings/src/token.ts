@@ -25,6 +25,20 @@ export function token(key: string, values?: I18nToken["values"]): I18nToken {
 }
 
 /**
+ * An amount of money as a token, formatted by the client in the reader's
+ * locale ("€0.39", "0,39 €"). Use it as a cell, or as a placeholder value of
+ * a token that adds the unit ("{amount}/kWh"). `minDigits` is for prices
+ * quoted to more digits than the currency's own (fuel to tenths of a cent).
+ */
+export function money(amount: number, currency: string, minDigits?: number): I18nToken {
+  const value =
+    minDigits === undefined
+      ? { $money: amount, currency }
+      : { $money: amount, currency, minDigits };
+  return { $t: "shared.value.money", values: { amount: value } };
+}
+
+/**
  * Typed accessors for the framework's shared catalog. Use these wherever an
  * integration's mapper wants to emit cross-integration vocabulary (Source,
  * Last Updated, Open, etc.). Editor autocomplete prevents typos.

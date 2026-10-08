@@ -5,6 +5,7 @@ import {
   envelopeOf,
   forgetEvents,
   type NativeReadModel,
+  projectionOf,
   rememberEvent,
   type SnapshotEnvelope,
 } from "./nativeSnapshotReducer";
@@ -226,5 +227,32 @@ describe("browserEngineAllowed", () => {
     // Two engines would produce two answers to "where am I", spoken over each
     // other.
     expect(browserEngineAllowed(authority)).toBe(false);
+  });
+});
+
+describe("projectionOf for transit", () => {
+  it("hands the shell engine's leg and phase to the page as transitProgress", () => {
+    const transitProgress = {
+      currentLegIndex: 1,
+      snapped: [8.68, 50.11],
+      fractionAlongLeg: 0,
+      deviationMeters: 3,
+      arrived: false,
+      phase: "waiting-to-board",
+    };
+    const raw = {
+      version: 1,
+      type: "full",
+      kind: "transit",
+      sessionId: "t1",
+      revision: 2,
+      itineraryFingerprint: "it-a",
+      status: "active",
+      itinerary: { legs: [] },
+      transitProgress,
+    };
+    const outcome = applyNativeSnapshot(null, envelope(raw));
+    if (!outcome.ok) throw new Error("not applied");
+    expect(projectionOf(outcome.model, "full").transitProgress).toEqual(transitProgress);
   });
 });

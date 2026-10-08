@@ -9,8 +9,6 @@
     "@openmapx/integration-data-source": "workspace:^",
     "@openmapx/integration-framework": "workspace:^",
     "@openmapx/mobility-core": "workspace:^",
-    "@openmapx/mobility-formats": "workspace:^",
-    "@openmapx/place-ids": "workspace:^",
-    "fast-xml-parser": "^5.11.1"
+    "@openmapx/place-ids": "workspace:^"
   }
 }

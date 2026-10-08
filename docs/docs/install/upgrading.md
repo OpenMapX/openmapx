@@ -88,7 +88,7 @@ Heavy region-derived index volumes (Nominatim, Pelias/Elasticsearch, Valhalla,
 MOTIS, Photon, TileServer, Overpass) are intentionally **excluded** — they rebuild
 from source data and would dominate the snapshot for no recovery benefit. What
 the backup captures is the irreplaceable state: your database (users, admin
-config, integration settings, ingested POI data).
+config, integration settings, imported place data).
 
 You may also copy your environment file aside, since it holds the secrets the
 whole stack depends on and is never part of a code pull:

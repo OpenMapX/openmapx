@@ -324,35 +324,6 @@ export function listDatexMeasurementSiteRecords(input: DatexInput): DatexElement
   );
 }
 
-export function listDatexParkingTables(input: DatexInput): DatexElement[] {
-  const publication = getDatexPayloadPublication(input);
-  const directTables = getXmlChildren(publication, "parkingTable");
-  if (directTables.length > 0) return directTables;
-
-  const genericExtension = getXmlChild(publication, "genericPublicationExtension");
-  const tablePublication =
-    getXmlChild(genericExtension, "parkingTablePublication") ??
-    getXmlChild(publication, "parkingTablePublication");
-  if (!tablePublication) return [];
-
-  return getXmlChildren(tablePublication, "parkingTable");
-}
-
-export function listDatexParkingRecords(input: DatexInput): DatexElement[] {
-  return listDatexParkingTables(input).flatMap((table) => getXmlChildren(table, "parkingRecord"));
-}
-
-export function listDatexParkingRecordStatuses(input: DatexInput): DatexElement[] {
-  const publication = getDatexPayloadPublication(input);
-  const directStatuses = getXmlChildren(publication, "parkingRecordStatus");
-  const genericExtension = getXmlChild(publication, "genericPublicationExtension");
-  const statusPublication =
-    getXmlChild(genericExtension, "parkingStatusPublication") ??
-    getXmlChild(publication, "parkingStatusPublication");
-  const nestedStatuses = getXmlChildren(statusPublication, "parkingRecordStatus");
-  return [...directStatuses, ...nestedStatuses];
-}
-
 export function listDatexMultilingualValues(node: unknown): DatexMultilingualValue[] {
   const seen = new Set<string>();
   const values: DatexMultilingualValue[] = [];
@@ -366,29 +337,6 @@ export function listDatexMultilingualValues(node: unknown): DatexMultilingualVal
   }
 
   return values;
-}
-
-export function resolveDatexMultilingualValue(
-  node: unknown,
-  preferredLanguages: string[] = [],
-): string | undefined {
-  const values = listDatexMultilingualValues(node);
-  if (values.length === 0) return undefined;
-
-  const normalizedLanguages = preferredLanguages.map((language) => language.toLowerCase());
-  for (const language of normalizedLanguages) {
-    const exactMatch = values.find((entry) => entry.language?.toLowerCase() === language);
-    if (exactMatch) return exactMatch.value;
-
-    const baseLanguage = language.split("-")[0];
-    const partialMatch = values.find((entry) => {
-      const entryLanguage = entry.language?.toLowerCase();
-      return entryLanguage === baseLanguage || entryLanguage?.startsWith(`${baseLanguage}-`);
-    });
-    if (partialMatch) return partialMatch.value;
-  }
-
-  return values[0]?.value;
 }
 
 export function indexDatexElementsById(

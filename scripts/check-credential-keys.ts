@@ -44,11 +44,8 @@ const INTEGRATIONS_DIR = join(REPO_ROOT, "integrations");
  * credential keys must disambiguate which source they belong to.
  */
 export const CREDENTIAL_KEYED_INTEGRATIONS = [
-  "ev-charging",
-  "parking",
   "scooter-sharing",
   "bike-sharing",
-  "webcam",
   "ride-gofs",
   "ride-partner",
 ] as const;
@@ -148,7 +145,7 @@ export function allConfigKeysOf(manifest: IntegrationManifest): Set<string> {
  * Config keys that some integration legitimately reads off `ctx.config` even
  * though the host injects them rather than the integration's own
  * `configSchema` declaring them (for example, a shared `redis`/`endpoint`
- * handle). None of the six
+ * handle). None of the four
  * `CREDENTIAL_KEYED_INTEGRATIONS` currently do this — this set exists so a
  * future one that legitimately needs to can be exempted here, with a comment,
  * instead of the check being weakened.

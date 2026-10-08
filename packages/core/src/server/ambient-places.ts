@@ -43,26 +43,42 @@ export async function readAmbientManifest(sql: postgres.Sql): Promise<AmbientMan
   return { ...row.manifest, enabled: row.enabled && freshPublication(row.manifest) };
 }
 
-/** Resolve only a published GERS alias, including an accepted canonical OSM ID.
+/** Resolve a source-fresh published GERS alias, preferring active then newest.
  * Discovery disable does not revoke already published tiles or their identities.
+ * Still-retained generations own their identities until removed or source-stale.
  */
 export async function readAmbientPlaceByGers(
   sql: postgres.Sql,
   gers: string,
 ): Promise<{ generation: string; place: AmbientPlace } | null> {
   if (!gers || gers.length > 128) return null;
-  const manifest = await readAmbientManifest(sql);
-  if (!manifest || !freshPublication(manifest)) return null;
-  return sql.begin(async (tx) => {
+  return sql.begin("isolation level repeatable read", async (tx) => {
     await tx.unsafe(`SET LOCAL statement_timeout='2000ms'`);
-    const [row] = await tx.unsafe<(Record<string, unknown> & { lng: number; lat: number })[]>(
-      `SELECT id,gers_id,name,name_de,name_en,category,rank,min_zoom,tenant,sources,
+    const [exists] = await tx.unsafe<{ exists: boolean }[]>(
+      `SELECT to_regclass('ambient_places.state') IS NOT NULL AS exists`,
+    );
+    if (!exists.exists) return null;
+    const candidates = await tx.unsafe<{ generation: string; manifest: AmbientManifest }[]>(
+      `SELECT g.id AS generation,g.manifest FROM ambient_places.generations g
+       CROSS JOIN ambient_places.state s WHERE s.singleton=1
+       ORDER BY (g.id=s.active) DESC,g.published_at DESC,g.id
+       LIMIT ${AMBIENT_LIMITS.generations}`,
+    );
+    const generations = candidates
+      .filter((candidate) => freshPublication(candidate.manifest))
+      .map((candidate) => candidate.generation);
+    if (!generations.length) return null;
+    const [row] = await tx.unsafe<
+      (Record<string, unknown> & { generation: string; lng: number; lat: number })[]
+    >(
+      `SELECT generation,id,gers_id,name,name_de,name_en,category,rank,min_zoom,tenant,sources,
         ST_X(ST_Transform(ST_GeomFromEWKB(geom),4326)) AS lng,ST_Y(ST_Transform(ST_GeomFromEWKB(geom),4326)) AS lat
-        FROM ambient_places.features WHERE generation=$1 AND gers_id=$2 ORDER BY id COLLATE "C" LIMIT 1`,
-      [manifest.generation, gers],
+        FROM ambient_places.features WHERE generation=ANY($1::UUID[]) AND gers_id=$2
+        ORDER BY array_position($1::UUID[],generation),id COLLATE "C" LIMIT 1`,
+      [generations, gers],
     );
     const place = row ? ambientPlaceFromTile(row, [row.lng, row.lat]) : null;
-    return place ? { generation: manifest.generation, place } : null;
+    return place ? { generation: row.generation, place } : null;
   });
 }
 export async function readAmbientTile(

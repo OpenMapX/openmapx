@@ -46,9 +46,6 @@ const INTENTIONALLY_UNDECLARED = new Set([
   // Set by services/data-manager/Dockerfile. Declaring it here would overwrite
   // it with an empty string and disable the production hard-fail in src/auth.ts.
   "NODE_ENV",
-  // Read with ??, so an empty compose default would replace the correct
-  // in-image path and break integration discovery. Dev-shell only.
-  "OPENMAPX_INTEGRATIONS_DIR",
 ]);
 
 /** Runtime knobs consumed by Node/tsx rather than by our own code. */

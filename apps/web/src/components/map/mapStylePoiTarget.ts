@@ -42,12 +42,18 @@ export function getStylePoiLayerIds(map: maplibregl.Map): string[] {
 
 /**
  * The name a basemap POI label shows: the map localises every `name` label to
- * `name:<locale>` with the plain `name` as fallback, so the selected place's
+ * supplied colon/underscore language fields with plain `name` as fallback, so the selected place's
  * pin and panel take the same name the map printed beside the icon.
  */
 function displayedName(properties: MapGeoJSONFeature["properties"], locale?: string) {
-  const localized = locale ? properties?.[`name:${locale}`] : undefined;
-  if (typeof localized === "string" && localized.length > 0) return localized;
+  if (locale) {
+    for (const language of new Set([locale, locale.split("-")[0]])) {
+      for (const key of [`name:${language}`, `name_${language}`]) {
+        const localized = properties?.[key];
+        if (typeof localized === "string" && localized.length > 0) return localized;
+      }
+    }
+  }
   const name = properties?.name;
   return typeof name === "string" && name.length > 0 ? name : null;
 }

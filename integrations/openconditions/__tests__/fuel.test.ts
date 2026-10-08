@@ -7,7 +7,8 @@ import {
 } from "@openmapx/integration-framework/testing";
 import { describe, expect, test } from "vitest";
 import { createOpenConditionsClient } from "../client.js";
-import { CROWD_CREDIT, type LatestReading, recordToFuelStation } from "../fuel/map.js";
+import { CROWD_CREDIT, type LatestReading } from "../features/record.js";
+import { recordToFuelStation } from "../fuel/map.js";
 import { createFuelStationProvider } from "../fuel/provider.js";
 import { setup } from "../index.js";
 import { createLiveSources, type LiveSources } from "../sources.js";
@@ -47,7 +48,12 @@ function providerWith(respond: Responder, sources: LiveSources = EVERY_SOURCE) {
 }
 
 /** A live list that lists every source, for the tests that are not about the list. */
-const EVERY_SOURCE: LiveSources = { ready: true, has: () => true, link: () => undefined };
+const EVERY_SOURCE: LiveSources = {
+  ready: true,
+  has: () => true,
+  link: () => undefined,
+  licenseName: () => undefined,
+};
 
 /** A live list of `ids`, as the `/sources` sync fills it. */
 function listed(...ids: string[]) {
@@ -113,7 +119,8 @@ describe("fuel-stations-openconditions", () => {
     expect(stations).toHaveLength(1);
     const station = stations[0]!;
     expect(station).toMatchObject({
-      id: STATION_ID,
+      // The survivor member's id, which stays when the cluster's membership changes.
+      id: TK_MEMBER,
       name: "TotalEnergies Berlin",
       brand: "TotalEnergies",
       country: "DE",
@@ -434,20 +441,97 @@ describe("fuel-stations-openconditions", () => {
     expect((await complete.searchStations(BBOX)).partial).toBeUndefined();
   });
 
+  test("the 2000-station cap counts stations kept, with a bound on the records read", async () => {
+    const cursorOf = (req: FakeHttpRequest) =>
+      (req.options?.params as Rec | undefined)?.["cursor"] as string | undefined;
+    // Every other record is no fuel station, so a page keeps 200 stations.
+    const page = (n: number, mappable: boolean) => ({
+      records: Array.from({ length: 400 }, (_, i) => {
+        const record = stationRecord(`p${n}-${i}`, [13.4, 52.5]);
+        if (!mappable || i % 2 === 1) record["kind"] = "parking_site";
+        return record;
+      }),
+      latest: {},
+      next: `c${n + 1}`,
+    });
+    const reading = (mappable: boolean) =>
+      providerWith((req) => {
+        const cursor = cursorOf(req);
+        return page(cursor === undefined ? 1 : Number(cursor.slice(1)), mappable);
+      });
+
+    const half = reading(true);
+    const kept = await half.provider.searchStations(BBOX);
+    expect(kept.stations).toHaveLength(2000);
+    expect(half.http.calls).toHaveLength(10);
+    expect(kept.partial).toBe("area");
+
+    // Nothing maps: the read stops at four times the cap in records.
+    const none = reading(false);
+    const empty = await none.provider.searchStations(BBOX);
+    expect(empty.stations).toEqual([]);
+    expect(none.http.calls).toHaveLength(20);
+    expect(empty.partial).toBe("area");
+  });
+
+  test("a later page that fails keeps the pages read so far as part of the area; a first one fails the search", async () => {
+    const page = (n: number) => ({
+      records: Array.from({ length: 400 }, (_, i) => stationRecord(`p${n}-${i}`, [13.4, 52.5])),
+      latest: {},
+      next: `c${n + 1}`,
+    });
+    const cursorOf = (req: FakeHttpRequest) =>
+      (req.options?.params as Rec | undefined)?.["cursor"] as string | undefined;
+    const { provider } = providerWith((req) => {
+      const cursor = cursorOf(req);
+      if (cursor === "c2") throw new Error("The operation was aborted due to timeout");
+      return page(1);
+    });
+
+    const { stations, partial } = await provider.searchStations(BBOX);
+    expect(stations).toHaveLength(400);
+    expect(partial).toBe("area");
+
+    const failing = providerWith(() => {
+      throw new Error("The operation was aborted due to timeout");
+    }).provider;
+    await expect(failing.searchStations(BBOX)).rejects.toThrow(/timeout/);
+  });
+
+  test("a searched station opens by the id the search gave it, after its cluster changed", async () => {
+    const fresh = () => clone(featuresResponse) as unknown as Rec;
+    let answer = fresh();
+    const { provider } = providerWith((req) => (req.method === "getResponse" ? NOT_FOUND : answer));
+    const [searched] = (await provider.searchStations(BBOX)).stations;
+
+    // A new member links in: the cluster, and so its canonical id, is a new one.
+    answer = fresh();
+    const record = (answer["records"] as Rec[])[0]!;
+    const canonical =
+      "oc:feature:test.local:0000000000000000000000000000000000000000000000000000000000000000";
+    record["id"] = canonical;
+    answer["latest"] = { [canonical]: readingsOf(fresh()) };
+    const provenance = record["provenance"] as { derivedFrom: { records: Rec[] } };
+    provenance.derivedFrom.records.push({ class: "feature", id: "oc:feature:osm-fuel:way/9" });
+
+    const opened = await provider.getStation(searched!.id);
+    expect(opened).toMatchObject({ id: TK_MEMBER, brand: "TotalEnergies" });
+  });
+
   test("getStation of an id no search returned reads one feature", async () => {
     const { http, provider } = providerWith((req) =>
       req.method === "getResponse" &&
-      req.url === `${BASE_URL}/features/${encodeURIComponent(STATION_ID)}`
+      req.url === `${BASE_URL}/features/${encodeURIComponent(TK_MEMBER)}`
         ? { status: 200, headers: {}, body: clone(featureResponse) }
         : undefined,
     );
 
-    const station = await provider.getStation(STATION_ID);
+    const station = await provider.getStation(TK_MEMBER);
 
     expect(http.calls).toHaveLength(1);
     expect(http.calls[0]!.options?.params).toEqual({ expand: "components,latest" });
     expect(station).toMatchObject({
-      id: STATION_ID,
+      id: TK_MEMBER,
       brand: "TotalEnergies",
       country: "DE",
       sources: ["de-tankerkoenig-fuel", "osm-fuel"],
@@ -521,9 +605,9 @@ describe("fuel-stations-openconditions", () => {
     searched = true;
     http.calls.length = 0;
 
-    const station = await provider.getStation(STATION_ID);
+    const station = await provider.getStation(TK_MEMBER);
 
-    expect(station).toMatchObject({ id: STATION_ID, brand: "TotalEnergies" });
+    expect(station).toMatchObject({ id: TK_MEMBER, brand: "TotalEnergies" });
     expect(http.calls.map((c) => c.method)).toEqual(["get", "getResponse"]);
   });
 
@@ -534,7 +618,7 @@ describe("fuel-stations-openconditions", () => {
     const listed = (await searched.searchStations(BBOX, { excludedSourceIds: ["osm-fuel"] }))
       .stations[0]!;
 
-    const opened = await searched.getStation(STATION_ID, { excludedSourceIds: ["osm-fuel"] });
+    const opened = await searched.getStation(listed.id, { excludedSourceIds: ["osm-fuel"] });
 
     expect(opened).toEqual(listed);
     expect(opened!.sources).toEqual(["de-tankerkoenig-fuel"]);

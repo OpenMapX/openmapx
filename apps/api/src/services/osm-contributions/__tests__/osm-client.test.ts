@@ -73,7 +73,7 @@ describe("request shaping", () => {
     expect(init.method ?? "GET").toBe("GET");
     expect(headerOf(init, "authorization")).toBeUndefined();
     expect(headerOf(init, "accept")).toBe("application/json");
-    expect(headerOf(init, "user-agent")).toMatch(/^OpenMapX\/1\.0 \(/);
+    expect(headerOf(init, "user-agent")).toMatch(/^Open-MapX\/1\.0 \(/);
     expect(init.redirect).toBe("error");
     expect(init.signal).toBeInstanceOf(AbortSignal);
   });

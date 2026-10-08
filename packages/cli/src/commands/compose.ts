@@ -367,17 +367,14 @@ export function registerComposeCommands(program: Command): void {
   compose
     .command("rotate-redis-password")
     .description("Atomically rotate Redis authentication files while Redis clients are stopped")
-    .option(
-      "--confirm-clients-stopped",
-      "Confirm app-api and data-manager are stopped before rotating",
-    )
+    .option("--confirm-clients-stopped", "Confirm app-api is stopped before rotating")
     .action((options: { confirmClientsStopped?: boolean }) => {
       try {
         const result = rotateRedisPasswordForRepo({
           confirmClientsStopped: options.confirmClientsStopped === true,
         });
         log.ok(`Rotated Redis authentication files → ${result.passwordPath}, ${result.aclPath}`);
-        log.dim("Recreate Redis, then restart app-api and data-manager.");
+        log.dim("Recreate Redis, then restart app-api.");
       } catch (err) {
         log.err(`Redis password rotation failed: ${(err as Error).message}`);
         process.exit(1);

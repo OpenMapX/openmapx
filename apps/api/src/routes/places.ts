@@ -44,7 +44,7 @@ import { buildReviewLinks } from "../services/review-links";
 import { hashKey, TTL, withCache } from "../utils/cache.js";
 import { createLimiter } from "../utils/concurrency.js";
 import { declareRouteAuth } from "../utils/route-auth.js";
-import { isAllowedHost } from "./image-hosts.js";
+import { isStaticImageHost } from "./image-hosts.js";
 
 // Bound concurrent place enrichments. Each enrichPlace runs a heavy fan-out
 // (knowledge sources, photo + review providers, and sometimes multi-MB OSM
@@ -213,7 +213,7 @@ function proxyablePhoto(photo: PlacePhoto): boolean {
     isDisplayablePhoto(photo) &&
     urls.every((raw) => {
       if (!validHttpUrl(raw)) return false;
-      return isAllowedHost(new URL(raw).hostname);
+      return isStaticImageHost(new URL(raw).hostname);
     })
   );
 }
@@ -739,7 +739,7 @@ export const placesRoute: FastifyPluginAsync = async (fastify) => {
       },
     },
     handler: async (req, reply) => {
-      const rawId = decodeURIComponent(req.params.id);
+      const rawId = req.params.id;
       const lang = req.query.lang;
       const hasAddress = req.query.hasAddress === "1";
       const latInput = Number.parseFloat(req.query.lat ?? "");

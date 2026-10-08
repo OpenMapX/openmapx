@@ -1,4 +1,4 @@
-import { PANEL, useSidebarStore } from "@openmapx/core";
+import { PANEL, useNavigationStore, useSidebarStore } from "@openmapx/core";
 import { act, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { getMapObstructionInsets, publishMapObstruction } from "@/lib/mapObstructions";
@@ -8,9 +8,6 @@ vi.mock("@mui/material/useMediaQuery", () => ({ default: () => isMobileRef.curre
 vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntl());
 vi.mock("@openmapx/integration-framework/react", () => ({
   useIntegrationRegistry: () => ({ getWithPanel: () => [] }),
-}));
-vi.mock("@/components/navigation/HideDuringNavigation", () => ({
-  HideDuringNavigation: ({ children }: { children: React.ReactNode }) => children,
 }));
 vi.mock("./panel-map", () => ({
   SIDEBAR_PANELS: {
@@ -28,6 +25,7 @@ vi.mock("./sheet/MobileBottomSheet", () => ({
 import { PanelHost } from "./PanelHost";
 
 afterEach(() => {
+  useNavigationStore.setState({ status: "idle" });
   useSidebarStore.setState({ activeSidebarId: null, activeDetailId: null, collapsed: false });
   publishMapObstruction("sidebar", "left", null);
   publishMapObstruction("detail", "left", null);
@@ -75,4 +73,43 @@ it("keeps the place sheet available on mobile when a desktop rail was collapsed"
 
   expect(await screen.findByText("Category results content")).toBeInTheDocument();
   expect(await screen.findByText("Floating place content")).toBeInTheDocument();
+});
+
+describe("PanelHost during navigation", () => {
+  it.each([false, true])(
+    "shows a place card opened mid-route but not the sidebar (mobile: %s)",
+    async (mobile) => {
+      isMobileRef.current = mobile;
+      useSidebarStore.getState().openSidebar(PANEL.CATEGORY);
+      useNavigationStore.setState({ status: "navigating" });
+      render(<PanelHost />);
+
+      act(() => useSidebarStore.getState().openDetail(PANEL.PLACE_CARD));
+      expect(await screen.findByText("Floating place content")).toBeInTheDocument();
+      expect(screen.queryByText("Category results content")).not.toBeInTheDocument();
+      // The guidance camera keeps its own framing.
+      expect(getMapObstructionInsets().left).toBe(0);
+    },
+  );
+
+  it("closes a card left open from planning when navigation starts", () => {
+    useSidebarStore.getState().openSidebar(PANEL.CATEGORY);
+    useSidebarStore.getState().openDetail(PANEL.PLACE_CARD);
+    render(<PanelHost />);
+
+    act(() => useNavigationStore.setState({ status: "navigating" }));
+    expect(useSidebarStore.getState().activeDetailId).toBeNull();
+    expect(screen.queryByText("Floating place content")).not.toBeInTheDocument();
+  });
+
+  it("hands a card opened mid-route back to the normal layout when guidance ends", async () => {
+    useNavigationStore.setState({ status: "navigating" });
+    render(<PanelHost />);
+    act(() => useSidebarStore.setState({ activeDetailId: PANEL.PLACE_CARD }));
+
+    act(() => useNavigationStore.setState({ status: "idle" }));
+    expect(useSidebarStore.getState().activeSidebarId).toBe(PANEL.PLACE);
+    expect(useSidebarStore.getState().activeDetailId).toBeNull();
+    expect(await screen.findByText("Docked place content")).toBeInTheDocument();
+  });
 });

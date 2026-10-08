@@ -16,8 +16,7 @@ action. A bundle may contain:
 
 - **integrations** — declarative app metadata and presentation assets.
   Distributed as prebuilt `.tar.gz` artifacts, pinned by SHA-256. Community
-  backend and POI-source JavaScript is rejected rather than run in a privileged
-  host process.
+  backend JavaScript is rejected rather than run in a privileged host process.
 - **services** — backend containers: a database, a routing engine, an alternative
   geocoder, a data processor. Distributed as Git repositories, pinned by tag or
   commit.
@@ -149,7 +148,7 @@ Integration artifacts are guarded on several fronts: only HTTPS artifact URLs ar
 accepted; a SHA-256 pin is mandatory and checked before extraction; artifacts
 are capped at 200 MB; tar extraction blocks path-escape (zip-slip), malicious
 symlinks/hardlinks, and absolute paths; and an artifact shipping a
-`node_modules/` directory is rejected. Backend, POI-source, and frontend runtime
+`node_modules/` directory is rejected. Backend and frontend runtime
 entry points are also rejected; executable behavior must move into an isolated
 service. These reduce the blast radius of a
 malformed archive — they are not a substitute for trusting the author.

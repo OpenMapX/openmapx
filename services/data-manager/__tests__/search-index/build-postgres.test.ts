@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { buildOsmSearchIndex } from "../../src/jobs/search-index/build.js";
 import { StateStore } from "../../src/state.js";
-import { startPostgis } from "../poi-ingest/_testcontainer.js";
+import { startPostgis } from "../helpers/postgis-testcontainer.js";
 
 const skipE2e = process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1";
 

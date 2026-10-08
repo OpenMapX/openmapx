@@ -18,8 +18,8 @@ const { createExpression, latest } = rendererRequire("@maplibre/maplibre-gl-styl
     value: {
       evaluate: (
         globals: { zoom: number },
-        feature: { type: string; properties: { rank: number }; geometry: never[] },
-      ) => { values: unknown[] };
+        feature: { type: string; properties: Record<string, unknown>; geometry: never[] },
+      ) => unknown;
     };
   };
 };
@@ -69,6 +69,7 @@ vi.mock("next-intl", () => ({ useLocale: () => "de" }));
 
 import type { Map as MapLibreMap } from "maplibre-gl";
 import { getAmbientIdentity } from "@/components/map/ambientPlaceIdentity";
+import { localizeTextField } from "@/components/map/localizeTextField";
 import { AmbientPlacesLayer } from "./map-layer";
 import { useAmbientPlacesStore } from "./store";
 
@@ -105,6 +106,115 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 describe("ambient generation lifecycle", () => {
+  it("keeps supplied ambient translations after production styledata localization", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({ ok: true, json: async () => ({ manifest }) })),
+    );
+    render(<AmbientPlacesLayer />);
+    await waitFor(() => expect(test.group).not.toBeNull());
+    const descriptor = test.group as {
+      layers: { type: string; layout?: Record<string, unknown> }[];
+    };
+    let textField = descriptor.layers.find((layer) => layer.type === "symbol")?.layout?.[
+      "text-field"
+    ];
+    for (const [locale, expected] of [
+      ["en", "Cologne Cathedral"],
+      ["de", "Dom zu Köln"],
+      ["en", "Cologne Cathedral"],
+    ]) {
+      textField = localizeTextField(textField, locale);
+      const expression = createExpression(
+        textField,
+        "layers.ambient-places-labels.layout.text-field",
+        latest.layout_symbol["text-field"],
+      );
+      expect(expression.result).toBe("success");
+      expect(
+        String(
+          expression.value.evaluate(
+            { zoom: 16 },
+            {
+              type: "Point",
+              properties: {
+                name: "Kölner Dom",
+                name_en: "Cologne Cathedral",
+                name_de: "Dom zu Köln",
+              },
+              geometry: [],
+            },
+          ),
+        ),
+      ).toBe(expected);
+      expect(
+        String(
+          expression.value.evaluate(
+            { zoom: 16 },
+            { type: "Point", properties: { name: "Source name" }, geometry: [] },
+          ),
+        ),
+      ).toBe("Source name");
+    }
+  });
+  it.each(["category marker", "DOM pin"])(
+    "keeps an overlapping %s selection instead of choosing a different ambient point",
+    async (owner) => {
+      const ambient = {
+        type: "Feature",
+        layer: { id: "ambient-places-points" },
+        geometry: { type: "Point", coordinates: [6.08, 50.77] },
+        properties: {
+          id: "osm:node/1",
+          name: "Ambient A",
+          category: "cafe",
+          rank: 2000,
+          min_zoom: 15,
+          tenant: false,
+          sources: "osm",
+        },
+      } as MapGeoJSONFeature;
+      const category = {
+        ...ambient,
+        layer: { id: "category-results-layer" },
+        properties: { id: "osm:node/2", name: "Category B" },
+      } as MapGeoJSONFeature;
+      test.map.querySourceFeatures.mockReturnValue([ambient]);
+      test.map.queryRenderedFeatures.mockImplementation((...args: unknown[]) => {
+        const options = args[1] as { layers?: string[] } | undefined;
+        return (owner === "category marker" ? [category, ambient] : [ambient]).filter((feature) =>
+          options?.layers?.includes(feature.layer.id),
+        );
+      });
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async () => ({ ok: true, json: async () => ({ manifest }) })),
+      );
+      render(<AmbientPlacesLayer />);
+      await waitFor(() => expect(test.group).not.toBeNull());
+      const selected = {
+        primaryScheme: "osm",
+        ids: { osm: "node/2" },
+        id: "osm:node/2",
+        name: "Category B",
+        address: "",
+        coordinates: [6.08, 50.77],
+      } as const;
+      usePlaceStore.setState({
+        selectedPlace: { ...selected, coordinates: [...selected.coordinates] },
+      });
+      const click = test.map.on.mock.calls.find(([event]) => event === "click")?.[1];
+      const pin = document.createElement("div");
+      pin.dataset.openmapxPinMarker = "true";
+      act(() =>
+        click?.({
+          point: { x: 1, y: 2 },
+          ...(owner === "DOM pin" ? { originalEvent: { target: pin } } : {}),
+        }),
+      );
+      expect(usePlaceStore.getState().selectedPlace?.id).toBe("osm:node/2");
+    },
+  );
   it("uses a bounded generation source and cleans handlers/identity on disable", async () => {
     vi.stubGlobal(
       "fetch",
@@ -127,9 +237,14 @@ describe("ambient generation lifecycle", () => {
     expect(expression.result, JSON.stringify(expression.value)).toBe("success");
     if (expression.result !== "success") throw new Error("Invalid placement policy");
     const positions = (rank: number) =>
-      expression.value.evaluate({ zoom: 16 }, { type: "Point", properties: { rank }, geometry: [] })
-        .values;
-    expect(positions(2559)).toHaveLength(16);
+      (
+        expression.value.evaluate(
+          { zoom: 16 },
+          { type: "Point", properties: { rank }, geometry: [] },
+        ) as { values: unknown[] }
+      ).values;
+    // The dense-city placement budget is six candidates for landmarks.
+    expect(positions(2559)).toHaveLength(12);
     expect(positions(2059)).toHaveLength(2);
     expect(positions(3059)).toHaveLength(2);
     expect(test.attribution).toHaveBeenLastCalledWith("overlay-ambient-places", [
@@ -210,7 +325,10 @@ describe("ambient generation lifecycle", () => {
       Object.fromEntries(
         test.map.on.mock.calls.map(([event, handler]) => [event, handler]),
       ) as Record<string, (event?: unknown) => void>;
-    test.map.queryRenderedFeatures.mockReturnValue([feature]);
+    test.map.queryRenderedFeatures.mockImplementation((...args: unknown[]) => {
+      const options = args[1] as { layers?: string[] } | undefined;
+      return options?.layers?.includes("ambient-places-points") ? [feature] : [];
+    });
     act(() => handlers().click({ point: { x: 1, y: 2 } }));
     expect(usePlaceStore.getState().selectedPlace).toMatchObject({
       id: "osm:node/9007199254740993",

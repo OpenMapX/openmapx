@@ -25,7 +25,6 @@ COPY packages/noaa-coops-data/package.json packages/noaa-coops-data/
 COPY packages/openconditions-contrib-client/package.json packages/openconditions-contrib-client/
 COPY packages/ourairports-data/package.json packages/ourairports-data/
 COPY packages/place-ids/package.json packages/place-ids/
-COPY packages/poi-source-registry/package.json packages/poi-source-registry/
 COPY packages/presets/package.json packages/presets/
 COPY packages/brands/package.json packages/brands/
 COPY packages/transitous-core/package.json packages/transitous-core/

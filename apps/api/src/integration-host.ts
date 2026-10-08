@@ -34,20 +34,9 @@ import {
   commitPlaceResolverStaging,
   rollbackPlaceResolverStaging,
 } from "@openmapx/place-ids";
-import {
-  beginPoiSourceRegistryStaging,
-  commitPoiSourceRegistryStaging,
-  registerPoiSources as registerPoiSourcesInStore,
-  rollbackPoiSourceRegistryStaging,
-} from "@openmapx/poi-source-registry";
 import type { FastifyInstance } from "fastify";
 import { sql as pgClient } from "./db";
-import {
-  createCacheClient,
-  createHttpClient,
-  createLiveStoreClient,
-  createLogger,
-} from "./integration-clients";
+import { createCacheClient, createHttpClient, createLogger } from "./integration-clients";
 import {
   type ConfigSource,
   type ConfigValueWithSource,
@@ -103,8 +92,6 @@ type NormalizedIntegrationDirectory = { directory: string; isBuiltIn: boolean };
 // biome-ignore lint/suspicious/noExplicitAny: accept any Fastify logger variant
 let _fastify: FastifyInstance<any, any, any, any> | null = null;
 let _integrationDirs: NormalizedIntegrationDirectory[] = [];
-
-const liveStore = createLiveStoreClient();
 
 function normalizeIntegrationDirs(
   dirs: IntegrationDirectoryInput[],
@@ -558,7 +545,6 @@ function buildIntegrationContext(args: {
     config,
     http,
     cache,
-    liveStore,
     db,
     log,
     secrets: { get: (key: string) => getSecret(id, key) },
@@ -627,6 +613,21 @@ function buildIntegrationContext(args: {
       existing.push(provider);
       providers.set("fuel-stations", existing);
     },
+    registerParkingSiteProvider(provider) {
+      const existing = providers.get("parking-sites") ?? [];
+      existing.push(provider);
+      providers.set("parking-sites", existing);
+    },
+    registerChargingSiteProvider(provider) {
+      const existing = providers.get("charging-sites") ?? [];
+      existing.push(provider);
+      providers.set("charging-sites", existing);
+    },
+    registerCameraProvider(provider) {
+      const existing = providers.get("cameras") ?? [];
+      existing.push(provider);
+      providers.set("cameras", existing);
+    },
     registerPhotoProvider(provider) {
       const existing = providers.get("photos") ?? [];
       existing.push(provider);
@@ -661,15 +662,6 @@ function buildIntegrationContext(args: {
       const existing = providers.get("gtfs-catalog") ?? [];
       existing.push(provider);
       providers.set("gtfs-catalog", existing);
-    },
-    registerPoiSources(sources) {
-      // Forward to the shared @openmapx/poi-source-registry store. The
-      // wrapper logger tags warnings with the integration id so cross-
-      // integration id collisions are traceable. `log` is the per-
-      // integration Logger built earlier in this ctx builder.
-      registerPoiSourcesInStore(sources, {
-        warn: (msg: string, ...rest: unknown[]) => log.warn(`[poi-sources] ${msg}`, ...rest),
-      });
     },
     registerRoute(method: string, path: string, handler: RouteHandler, options?: RouteOptions) {
       registerIntegrationRoute(id, method, path, handler, options);
@@ -1190,7 +1182,6 @@ async function doReloadIntegrations(): Promise<ReloadResult> {
 
   try {
     beginIntegrationRouteStaging();
-    beginPoiSourceRegistryStaging();
     beginPlaceResolverStaging();
 
     // Re-discover and re-setup (topological sort by dependencies, same as cold start).
@@ -1349,12 +1340,11 @@ async function doReloadIntegrations(): Promise<ReloadResult> {
     }
 
     // No awaits in this block: request handlers see the entire old graph or the
-    // entire new graph, never a mixture of registry/routes/POI/event generations.
+    // entire new graph, never a mixture of registry/routes/resolver/event generations.
     activationScope.activate();
     integrations.clear();
     for (const [id, integration] of next) integrations.set(id, integration);
     commitIntegrationRouteStaging();
-    commitPoiSourceRegistryStaging();
     commitPlaceResolverStaging();
     eventBus = stagedEventBus;
     activationScope.complete();
@@ -1363,7 +1353,6 @@ async function doReloadIntegrations(): Promise<ReloadResult> {
       _fastify.log.warn(rollbackError, "Failed to roll back staged integration activation");
     }
     rollbackIntegrationRouteStaging();
-    rollbackPoiSourceRegistryStaging();
     rollbackPlaceResolverStaging();
     stagedEventBus.removeAll();
     for (const integration of next.values()) {

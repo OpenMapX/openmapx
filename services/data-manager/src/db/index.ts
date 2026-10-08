@@ -6,7 +6,6 @@ import {
   offlinePackageArtifactReferences,
   offlinePackageJobOwners,
   offlinePackageJobs,
-  poiFeedState,
 } from "@openmapx/db-schema";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
@@ -24,7 +23,6 @@ export const db = drizzle(sql, {
     jobs,
     jobStages,
     feedState,
-    poiFeedState,
     offlinePackageJobs,
     offlinePackageJobOwners,
     offlinePackageArtifactReferences,

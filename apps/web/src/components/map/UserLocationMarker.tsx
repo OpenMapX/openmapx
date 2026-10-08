@@ -1,6 +1,6 @@
 "use client";
 
-import { useMapStore } from "@openmapx/core";
+import { useMapStore, useNavigationStore } from "@openmapx/core";
 import type * as maplibregl from "maplibre-gl";
 import { useTranslations } from "next-intl";
 import { useEffect, useRef, useState } from "react";
@@ -11,7 +11,15 @@ import { getMapClickOwner } from "@/integration-api/map/mapClickOwnership";
 export function UserLocationMarker() {
   const t = useTranslations("parking");
   const { mapReady, mapRef } = useMap();
-  const userLocation = useMapStore((s) => s.userLocation);
+  const lastKnownLocation = useMapStore((s) => s.userLocation);
+  // Transit navigation draws no puck of its own: the dot follows its fixes,
+  // which stay out of the map store so explore and search don't refetch per fix.
+  const transitPosition = useNavigationStore((s) =>
+    s.kind === "transit" && s.status !== "idle" && s.status !== "arrived"
+      ? s.transitProgress?.position
+      : undefined,
+  );
+  const userLocation = transitPosition ?? lastKnownLocation;
   const markerRef = useRef<maplibregl.Marker | null>(null);
   const [cardOpen, setCardOpen] = useState(false);
   const locationLabel = t("yourLocation");

@@ -104,10 +104,14 @@ branches and non-ground tenants are not matched by proximity. Mappings belong to
 the map instance and are cleared on style replacement and overlay teardown. The
 existing place-card conversion/resolver handles both tile and basemap clicks.
 When the optional Overture search provider has no registered resolver, the place
-API resolves a matching GERS alias from the fresh published ambient snapshot,
-retaining canonical OSM/GERS identity and supplied names. Its existing detail
-cache key includes that generation. Discovery disable does not revoke snapshot
-identities already exposed in cached tiles. The richer live Overture metadata
+API resolves a matching GERS alias from source-fresh retained ambient snapshots,
+preferring the active generation and then the newest retained match,
+retaining canonical OSM/GERS identity and supplied names. Enabled-provider GERS
+details also apply accepted same-release links and retain the OSM primary plus
+GERS alias while supplying richer Overture metadata. Its existing detail
+cache key includes that generation. Discovery disable or replacement does not revoke snapshot
+identities in still-retained, source-fresh generations already exposed in cached
+tiles. Removed or source-stale snapshots cannot resolve through this fallback. The richer live Overture metadata
 continues to use the enabled provider; unpublished disabled-provider deep links
 retain their existing coordinate fallback.
 
@@ -117,7 +121,8 @@ retain their existing coordinate fallback.
   or private-access records. Non-ground level/floor records start at zoom 18.
 - Overture: named valid points, known `open` status and finite confidence ≥0.5.
   Missing values are omitted. Unsupported contributor datasets block publication.
-- Labels: supplied German/English names, otherwise the source name; at most 120
+- Labels: supplied German/English names, otherwise the source name; the shared
+  style localization pass accepts colon and underscore language fields; at most 120
   Unicode characters. No inferred opening hours, ratings or popularity.
 - Ranking (policy 2): essential destinations at zoom 13; corroborated cathedral/
   basilica or heritage levels 1–3 destinations at 14; other registered cultural
@@ -218,7 +223,7 @@ The earlier browser evidence used clearly labeled synthetic fixtures. The region
 acceptance run below uses a real OSM extract in a disposable database; it does not
 claim production Aachen coverage.
 
-## Real regional acceptance: October 8, 2026
+## Real regional acceptance: October 8–9, 2026
 
 The follow-up uses dated, public Geofabrik Düsseldorf/Cologne October 6 PBFs,
 merged and cropped to `[6.58,50.89,7.07,51.31]`. The existing extractor/index builder
@@ -241,7 +246,7 @@ this change preserves that existing ingestion/geocoder behavior.
 Actual Quirinus-Münster (`osm:way/28562993`) and Cologne Cathedral
 (`osm:way/4532022`) publish at zoom 14 through corroborated source tags.
 Names still compete for available space: eligibility does not guarantee a label
-in every camera. Eight candidate anchors allow a corroborated landmark name to use nearby
+in every camera. Six candidate anchors allow a corroborated landmark name to use nearby
 whitespace while retaining collision avoidance and road/transit priority. Ordinary
 destinations retain one label position to bound placement work and crowding.
 The selected/category/basemap suppression filter is repaired per live layer after
@@ -259,20 +264,25 @@ The [aggregate acceptance evidence](https://github.com/OpenMapX/openmapx/blob/ma
 source hashes, runtime/settings, measured targets, fixed camera outcomes and
 external screenshot checksums. It contains no screenshot binaries or credentials.
 Selected real before/after and iOS screenshots are attached directly to PR #436.
-Frames and native iOS images use generation `b900c5b5`; the final static matrix,
-desktop/admin images and quiet tile reads use restored generation `6fa7e3bb`.
-Both contain the same 13,454 places from the identical source hash, policy and
-tested product files. Generation IDs and source epochs remain explicit in the
-evidence. T3 preview handled initial static/frame QA; after `preview_open`
-explicitly reported unavailable, isolated headless system Chrome completed the
-static matrix and desktop/admin captures. It was not used for frame timings.
+Final static views, images, tile reads and frame measurements use generation
+`59337707-c217-4398-966c-3c21ac8237b1`, containing the same 13,454 places and
+checksummed source. Earlier generations and measurements remain explicitly
+identified in the artifact. T3 preview handled initial static/frame QA; after
+`preview_open` explicitly reported unavailable, isolated foreground system Chrome
+completed desktop/phone-CSS frames, the static matrix and desktop/admin images.
+Native iOS screenshots and frames use Safari through the T3 device tools.
+No headless frame measurements are claimed.
+The final branch integrates newer main and Next 16.3.8 after these measurements.
+The measured feature files remain checksum-identical; clean final builds and
+integration/regression/full-suite checks verify that integration. The artifact
+retains the exact measured runtime rather than relabeling it as a deployment.
 
 | Regional check                           | Declared limit |   Observed |
 | ---------------------------------------- | -------------: | ---------: |
-| Publication after indexing               |           60 s |    0.490 s |
-| First repository tile read               |       1,000 ms |   28.35 ms |
-| Warm sparse/dense p95, 30 reads          |         100 ms |    5.20 ms |
-| Eight concurrent reads p95, 40 reads     |         250 ms |   39.34 ms |
+| Publication after indexing               |           60 s |    0.655 s |
+| First repository tile read               |       1,000 ms |   32.85 ms |
+| Warm sparse/dense p95, 30 reads          |         100 ms |    4.53 ms |
+| Eight concurrent reads p95, 40 reads     |         250 ms |   47.61 ms |
 | Representative tile features / bytes     |  256 / 131,072 | 83 / 6,881 |
 | Explicit IDs duplicated in decoded tiles |              0 |          0 |
 
@@ -306,11 +316,13 @@ The source PBFs omit user/UID/changeset metadata.
 The fixed-camera matrix contains 45 off/on pairs at zooms 14–18: Neuss, Cologne,
 sparse Zons, an empty rural cell, and no-region Aachen/Berlin/Monschau controls,
 plus owned-dark English Neuss and German Cologne. Each pair has identical road
-name and basemap POI identity lists; decoded tiles and visible ambient label lists
+name lists and basemap POI identities (source, source layer, feature ID, rendered
+layer, coordinates and name); decoded tiles and visible ambient label lists
 have no duplicate explicit IDs. A native pointer tap opens Quirinus-Münster with
-canonical ID `osm:way/28562993`; selected-label suppression survives both paint-only
-theme recreation and full style replacement. English/German fields conservatively
-fall back to the source name. External enrichment is disabled in the QA fixture.
+canonical ID `osm:way/28562993`; overlapping category and DOM markers retain
+click priority. Selected-label suppression survives both paint-only
+theme recreation and full style replacement. English/German labels retain supplied colon or underscore language properties
+after the real map localizer runs, then fall back conservatively to the source name. External enrichment is disabled in the QA fixture.
 The actual admin component shows the real generation, policy 2, source coverage
 and the intentionally induced failed-build notice while retaining the active map.
 Its rendering fixture bypasses outer production authentication; API authorization
@@ -324,23 +336,22 @@ recorded in the aggregate evidence. No builds/tests ran concurrently.
 
 | Production-asset viewport                | Off pooled p95 | On pooled p95 | On >50 ms |
 | ---------------------------------------- | -------------: | ------------: | --------: |
-| T3 desktop, 1280 × 800                   |         9.0 ms |        9.0 ms |        0% |
-| T3 phone CSS, 430 × 932                  |         9.2 ms |        9.3 ms |        0% |
-| iPhone 18 Pro simulator Safari, isolated |          32 ms |         33 ms |    0.181% |
-| Same simulator, live stream active       |          33 ms |         34 ms |        0% |
+| Foreground Chrome, 1280 × 800            |         9.2 ms |        9.2 ms |        0% |
+| Same Chrome, phone CSS 430 × 932         |         9.2 ms |        9.2 ms |        0% |
+| iPhone 18 Pro simulator Safari, isolated |          33 ms |         33 ms |        0% |
 
-The isolated run pauses the device preview stream and removes our second QA
-WebGL map. A paused-stream run with that second map still present reached
-35/36 ms off/on; it remains diagnostic evidence alongside the streamed results.
-No unrelated host process was stopped. The phone-CSS off iteration 0 was repeated
-after its initial viewport resize had not settled; the original sample is retained
-externally.
+The final isolated run pauses the device preview stream and removes our second
+QA WebGL map. Six collision-placement candidates retain the actual Quirinus name
+where four/five fail, while bounding work below the original eight-candidate
+policy. The preceding same-generation eight-candidate run measured 32/34 ms off/on
+and missed the on target; its samples and code hashes remain in the artifact.
+Earlier streamed 33/34 ms and shared-load 35/36 ms samples remain diagnostic
+evidence. No unrelated host process was stopped.
 
 The unchanged target is pooled p95 ≤33.4 ms and intervals >50 ms ≤5%.
-The isolated simulator run meets it; the streamed run narrowly misses the
-p95 target, and individual isolated on sweeps reach 34–35 ms. This is a
-qualified local simulator result, not a claim that every sweep or physical device
-passes. An earlier forced-`jumpTo`-every-RAF stress workload missed mobile targets
-in both states; those raw samples remain external and are not relabeled as normal
-app camera behavior. Physical-device thermal/battery behavior and deployed
-network/CDN latency remain rollout checks.
+The final six-candidate isolated simulator run meets it; individual on sweeps
+still reach 34 ms. This is a qualified local simulator result, not a claim that
+every sweep or physical device passes. An earlier forced-`jumpTo`-every-RAF stress
+workload missed mobile targets in both states; those raw samples remain external
+and are not relabeled as normal app camera behavior. Physical-device thermal/battery
+behavior and deployed network/CDN latency remain rollout checks.

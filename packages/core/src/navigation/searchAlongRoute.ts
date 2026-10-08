@@ -1,6 +1,7 @@
 import type { BoundingBox, LngLat } from "../types/geometry";
 import { cumulativeDistances, positionAt } from "./deadReckon";
 import { asRouteMatcher, type RouteMatcherInput, snapPreparedRoute } from "./routeMatcher";
+import type { RouteStopDetour } from "./routeStopDetours";
 
 /** A POI projected onto the active route, with an estimated detour. */
 export interface AlongRoutePoi<T> {
@@ -13,6 +14,10 @@ export interface AlongRoutePoi<T> {
   detourMeters: number;
   /** Estimated extra travel time for the detour, seconds. */
   detourSeconds: number;
+  /** Absent means a geometric approximation, never verified road access. */
+  detour?: RouteStopDetour;
+  /** A bounded network comparison is in flight for this candidate. */
+  detourPending?: boolean;
 }
 
 export interface AlongRouteOptions {

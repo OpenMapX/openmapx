@@ -28,6 +28,7 @@ export {
   useTransitReachability,
   useTransitReachabilityCheck,
   useTransitRoute,
+  useTransitStopAreas,
   useTransitStops,
   useVehicleJourney,
   useVehiclePositions,

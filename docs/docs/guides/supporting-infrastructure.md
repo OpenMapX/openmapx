@@ -30,8 +30,7 @@ or any source data — they boot from their image and are ready.
 The `postgis` service is PostgreSQL with the PostGIS spatial extension, and it is
 the system of record for everything an instance can't regenerate from source
 data. User accounts and sessions, admin and integration settings, the audit log,
-saved places, and the rows the data-manager's POI ingest
-pipeline writes all live here. `app-api`, `data-manager`, and `martin` (when the
+saved places, and the place data the data-manager imports all live here. `app-api`, `data-manager`, and `martin` (when the
 tile stack is enabled) all connect to it over the private Docker network.
 
 | Property         | Value                                                            |
@@ -165,8 +164,7 @@ so it expires and repopulates on its own. `app-api` caches upstream provider
 responses here — geocoding and transit results, weather and air-quality readings,
 photo lookups, per-integration namespaced entries, and integration health — and
 the dynamic transit registry it fetches from GitHub is stored under
-`transit:registry` with a 48-hour TTL. The data-manager's POI ingest pipeline
-also writes live POI state here for `app-api` to read back.
+`transit:registry` with a 48-hour TTL.
 
 512 MB is generous for this; real usage is typically well under half that, since
 entries expire rather than accumulate. The `openmapx-redisdata` volume is flagged

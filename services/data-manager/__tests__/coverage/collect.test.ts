@@ -10,7 +10,6 @@ const NOW = new Date("2026-09-10T12:00:00.000Z");
 
 function emptySql() {
   const unsafe = vi.fn(async (query: string) => {
-    if (query.includes("data_manager.poi_feed_state")) return [];
     if (query.includes("to_regclass('osm_search.index_state')")) return [{ exists: false }];
     if (query.includes("to_regclass('overture_places.conflation_state')"))
       return [{ exists: false }];
@@ -37,7 +36,6 @@ describe("data-manager coverage collection", () => {
         dataDir,
         sql: emptySql(),
         store: new StateStore(dataDir),
-        sources: [],
         now: () => NOW,
       });
       expect(result.collectionStatus).toBe("partial");
@@ -50,76 +48,6 @@ describe("data-manager coverage collection", () => {
     }
   });
 
-  it("exposes declared POI bounds as a selectable scope without claiming an unresolved cache is active", async () => {
-    const dataDir = mkdtempSync(join(tmpdir(), "openmapx-coverage-poi-"));
-    const sql = emptySql();
-    const query = sql.unsafe.bind(sql);
-    sql.unsafe = ((statement: string) =>
-      statement.includes("data_manager.poi_feed_state")
-        ? Promise.resolve([
-            {
-              source_id: "fixture",
-              refresh_evidence: {
-                version: 1,
-                live: {
-                  activeVersion: "old",
-                  lastPublishedVersion: "old",
-                  lastPublishedAt: NOW.toISOString(),
-                  lastSuccessfulCheckAt: NOW.toISOString(),
-                  lastSuccessfullyCheckedVersion: "old",
-                  activeAssociation: "unknown",
-                  pendingWriteIntentId: "pending",
-                  rowCount: 1,
-                  lastAttempt: { at: NOW.toISOString(), outcome: "failed" },
-                },
-              },
-            },
-          ])
-        : query(statement)) as typeof sql.unsafe;
-    try {
-      const result = await collectCoverageSnapshot({
-        dataDir,
-        sql,
-        store: new StateStore(dataDir),
-        now: () => NOW,
-        sources: [
-          {
-            id: "fixture",
-            ownerIntegrationId: "parking",
-            domain: "parking",
-            stationIdPrefix: "fixture:",
-            name: "Fixture scope",
-            coverage: [10, 50, 11, 51],
-            static: {
-              cron: "0 4 * * *",
-              fetch: { type: "http", url: "https://example.test" },
-              parse: () => [],
-            },
-            live: {
-              cron: "* * * * *",
-              fetch: { type: "http", url: "https://example.test" },
-              parse: () => new Map(),
-            },
-          },
-        ],
-      });
-      expect(result.regions).toContainEqual(
-        expect.objectContaining({
-          key: "regional-scope:fixture",
-          label: "Fixture scope",
-          bounds: [10, 50, 11, 51],
-        }),
-      );
-      const live = result.streams.find((stream) => stream.stream === "live");
-      expect(live).toMatchObject({
-        presence: "unknown",
-        publication: { active: null, version: "old" },
-      });
-      expect(live?.reasons).not.toContain("serving_earlier_data");
-    } finally {
-      rmSync(dataDir, { recursive: true, force: true });
-    }
-  });
   it("keeps an empty deployment distinct from missing optional publication schemas", async () => {
     const dataDir = mkdtempSync(join(tmpdir(), "openmapx-coverage-empty-"));
     try {
@@ -127,7 +55,6 @@ describe("data-manager coverage collection", () => {
         dataDir,
         sql: emptySql(),
         store: new StateStore(dataDir),
-        sources: [],
         now: () => NOW,
       });
 
@@ -157,7 +84,6 @@ describe("data-manager coverage collection", () => {
         dataDir,
         sql: emptySql(),
         store: new StateStore(dataDir),
-        sources: [],
         now: () => NOW,
       });
       expect(result.collectionStatus).toBe("partial");

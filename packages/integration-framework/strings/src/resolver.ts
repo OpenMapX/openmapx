@@ -1,4 +1,5 @@
 import { IntlMessageFormat } from "intl-messageformat";
+import { formatMoney } from "./money";
 import type { I18nToken, LocaleStrings } from "./types";
 
 export interface ResolveOptions {
@@ -47,7 +48,10 @@ export function resolveToken(token: I18nToken, opts: ResolveOptions): string {
   return key;
 }
 
-/** Token-valued placeholders are resolved first, with the same locale and catalogs. */
+/**
+ * Token-valued placeholders are resolved first, with the same locale and
+ * catalogs; money is formatted in that locale.
+ */
 function resolveValues(
   values: I18nToken["values"],
   opts: ResolveOptions,
@@ -55,7 +59,13 @@ function resolveValues(
   if (!values) return undefined;
   const out: Record<string, string | number> = {};
   for (const [name, value] of Object.entries(values)) {
-    out[name] = typeof value === "object" && value !== null ? resolveToken(value, opts) : value;
+    if (typeof value !== "object" || value === null) {
+      out[name] = value;
+    } else if ("$money" in value) {
+      out[name] = formatMoney(value.$money, value.currency, opts.locale, value.minDigits);
+    } else {
+      out[name] = resolveToken(value, opts);
+    }
   }
   return out;
 }

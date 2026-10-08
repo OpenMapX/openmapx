@@ -1,4 +1,4 @@
-import type { TripItinerary } from "@openmapx/mobility-core/transit";
+import type { TransitStopArea, TripItinerary } from "@openmapx/mobility-core/transit";
 import { type TransitNavigationStartPackage, transitStartPackageSchema } from "./mobileProtocol";
 import { captureTransitLegStops, type JourneyStopLike } from "./transitStops";
 
@@ -28,6 +28,8 @@ export interface BuildTransitPackageInput {
   itinerary: TripItinerary;
   /** Ridden stop lists by trip id, as fetched while the connection worked. */
   journeys: Readonly<Record<string, readonly JourneyStopLike[] | undefined>>;
+  /** Stop shapes by stop id, as fetched alongside the journeys; any may be missing. */
+  stopAreas?: Readonly<Record<string, TransitStopArea>>;
   replanOptions?: Record<string, unknown>;
   locale: "en" | "de";
   units: "metric" | "imperial";
@@ -95,6 +97,9 @@ export function buildTransitNavigationPackage(
     kind: "transit" as const,
     itinerary: input.itinerary as unknown as Record<string, unknown>,
     captures,
+    ...(input.stopAreas && Object.keys(input.stopAreas).length > 0
+      ? { stopAreas: input.stopAreas }
+      : {}),
     ...(input.replanOptions ? { replanOptions: input.replanOptions } : {}),
     locale: input.locale,
     units: input.units,

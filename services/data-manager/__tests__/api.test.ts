@@ -57,7 +57,7 @@ describe("data-manager API", () => {
     const app = Fastify();
     registerApi(app, {
       dataDir: "/tmp/openmapx-dm-test-starting",
-      readiness: () => ({ status: "starting", phase: "poi-source-discovery" }),
+      readiness: () => ({ status: "starting", phase: "job-reconciliation" }),
     });
 
     const res = await app.inject({ method: "GET", url: "/status" });
@@ -66,7 +66,7 @@ describe("data-manager API", () => {
     expect(res.json()).toMatchObject({
       ok: false,
       status: "starting",
-      phase: "poi-source-discovery",
+      phase: "job-reconciliation",
     });
     await app.close();
   });
@@ -75,7 +75,7 @@ describe("data-manager API", () => {
     const app = Fastify();
     registerApi(app, {
       dataDir: "/tmp/openmapx-dm-test-live",
-      readiness: () => ({ status: "failed", phase: "redis" }),
+      readiness: () => ({ status: "failed", phase: "job-reconciliation" }),
     });
 
     const res = await app.inject({ method: "GET", url: "/live" });

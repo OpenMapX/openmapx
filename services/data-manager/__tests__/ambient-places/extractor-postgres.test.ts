@@ -6,7 +6,7 @@ import { buildAmbientPlaces } from "../../src/jobs/ambient-places/build.js";
 import { buildOsmSearchIndex } from "../../src/jobs/search-index/build.js";
 import { featureToSearchPlace } from "../../src/jobs/search-index/extract.js";
 import { StateStore } from "../../src/state.js";
-import { startPostgis } from "../poi-ingest/_testcontainer.js";
+import { startPostgis } from "../helpers/postgis-testcontainer.js";
 import corpus from "./landmark-corpus.json";
 
 describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(

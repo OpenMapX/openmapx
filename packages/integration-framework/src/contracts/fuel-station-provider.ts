@@ -1,5 +1,6 @@
 import type { BBox, DataSourcePartialReason } from "@openmapx/core";
 import type { FuelStation } from "@openmapx/mobility-core/fuel";
+import type { OperationalEvidence } from "./operational-evidence.js";
 
 export type { FuelProduct, FuelStation } from "@openmapx/mobility-core/fuel";
 
@@ -44,4 +45,6 @@ export interface FuelStationProvider {
     id: string,
     q?: Pick<FuelStationQuery, "excludedSourceIds">,
   ): Promise<FuelStation | null>;
+  /** The state of the feeds behind the stations, for the coverage report. */
+  getOperationalEvidence?(): Promise<OperationalEvidence>;
 }

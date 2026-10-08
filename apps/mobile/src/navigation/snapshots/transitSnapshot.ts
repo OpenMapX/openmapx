@@ -29,7 +29,8 @@ export interface TransitFullSnapshot {
   currentWalkStepIndex: number;
   phase: string;
   confidence: TransitMobileSession["payload"]["confidence"];
-  progress: unknown;
+  /** The engine's leg, phase and position on it, as the page's `transitProgress`. */
+  transitProgress: unknown;
   settings: unknown;
   locale: "en" | "de";
   units: "metric" | "imperial";
@@ -52,7 +53,7 @@ export interface TransitProgressSnapshot {
   currentWalkStepIndex: number;
   phase: string;
   confidence: TransitMobileSession["payload"]["confidence"];
-  progress: unknown;
+  transitProgress: unknown;
   connectivity: TransitMobileSession["connectivity"];
   liveStatus: { refresh: string; replan: string; hasLiveToken: boolean };
 }
@@ -92,7 +93,7 @@ export function transitFullSnapshot(session: TransitMobileSession): TransitFullS
     currentWalkStepIndex: tickState.currentWalkStepIndex,
     phase: tickState.phase,
     confidence: session.payload.confidence,
-    progress: structuredClone(session.payload.progress),
+    transitProgress: structuredClone(session.payload.progress),
     settings: structuredClone(startPackage.settings),
     locale: session.locale,
     units: session.units,
@@ -116,7 +117,7 @@ export function transitProgressSnapshot(session: TransitMobileSession): TransitP
     currentWalkStepIndex: tickState.currentWalkStepIndex,
     phase: tickState.phase,
     confidence: session.payload.confidence,
-    progress: structuredClone(session.payload.progress),
+    transitProgress: structuredClone(session.payload.progress),
     connectivity: session.connectivity,
     liveStatus: liveStatus(session),
   };
