@@ -11,11 +11,11 @@ import {
 const REPO_ROOT = process.cwd();
 
 describe("credential-key consistency", () => {
-  it("has no credential-key violations across the six embedded-provider manifests", () => {
+  it("has no credential-key violations across the five embedded-provider manifests", () => {
     expect(collectCredentialKeyViolations(REPO_ROOT)).toEqual([]);
   });
 
-  it("every credential key of the six governed integrations is a real <sourceId>-<field> composition", () => {
+  it("every credential key of the five governed integrations is a real <sourceId>-<field> composition", () => {
     let checked = 0;
     for (const integrationId of CREDENTIAL_KEYED_INTEGRATIONS) {
       const loaded = loadManifest(integrationId);
@@ -58,17 +58,17 @@ describe("credential-key consistency", () => {
   });
 
   it("rejects a credential key with disallowed characters or casing", () => {
-    const sourceIds = new Set(["ocm"]);
-    expect(checkCredentialKey("ev-charging", "ocm_api_key", sourceIds)).toBeDefined();
-    expect(checkCredentialKey("ev-charging", "ocmApiKey", sourceIds)).toBeDefined();
+    const sourceIds = new Set(["dot-ga"]);
+    expect(checkCredentialKey("webcam", "dot_ga_api_key", sourceIds)).toBeDefined();
+    expect(checkCredentialKey("webcam", "dotGaApiKey", sourceIds)).toBeDefined();
   });
 
   it("rejects a credential key composed with a field outside the allowed set", () => {
-    const sourceIds = new Set(["ocm"]);
-    expect(checkCredentialKey("ev-charging", "ocm-secret", sourceIds)).toBeDefined();
+    const sourceIds = new Set(["dot-ga"]);
+    expect(checkCredentialKey("webcam", "dot-ga-secret", sourceIds)).toBeDefined();
   });
 
-  it("ignores exempt single-provider integrations, even though their bare keys would fail the six-integration rule", () => {
+  it("ignores exempt single-provider integrations, even though their bare keys would fail the five-integration rule", () => {
     // geocoding-maptiler is a single-provider integration and is legitimately
     // NOT in CREDENTIAL_KEYED_INTEGRATIONS, so collectCredentialKeyViolations
     // never inspects it.

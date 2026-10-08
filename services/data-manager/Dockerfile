@@ -4,10 +4,7 @@
 # outside its own directory to pick up:
 #   - pnpm-workspace.yaml + workspace package.json files (for dependency
 #     resolution of @openmapx/db-schema, @openmapx/hardlinks, and the other
-#     workspace packages the baked `integrations/` tree depends on)
-#   - integrations/ — baked into the image so POI-source discovery is
-#     self-contained (see poi-source-discovery.ts): no host bind-mount of
-#     the repo is required to see integration code, mirroring apps/api
+#     workspace packages the data-manager imports)
 #   - services/motis/tools/transitous/requirements.txt (pulled into the
 #     runtime stage for the Transitous GTFS pipeline)
 #
@@ -43,7 +40,6 @@ COPY packages/db-schema/package.json packages/db-schema/
 COPY packages/hardlinks/package.json packages/hardlinks/
 COPY packages/motis-feed-proxy-config/package.json packages/motis-feed-proxy-config/
 COPY packages/mobility-formats/package.json packages/mobility-formats/
-COPY packages/poi-source-registry/package.json packages/poi-source-registry/
 COPY packages/transitous-core/package.json packages/transitous-core/
 COPY packages/core/package.json packages/core/
 COPY packages/hey-api-client-fetch/package.json packages/hey-api-client-fetch/
@@ -51,16 +47,8 @@ COPY packages/i18n/package.json packages/i18n/
 COPY packages/cli/package.json packages/cli/
 COPY packages/air-quality/package.json packages/air-quality/
 COPY packages/integration-framework/package.json packages/integration-framework/
-COPY packages/mangrove-client/package.json packages/mangrove-client/
 COPY packages/mobility-core/package.json packages/mobility-core/
-COPY packages/ev-charge-planner/package.json packages/ev-charge-planner/
-COPY packages/noaa-coops-data/package.json packages/noaa-coops-data/
-COPY packages/openconditions-contrib-client/package.json packages/openconditions-contrib-client/
-COPY packages/ourairports-data/package.json packages/ourairports-data/
 COPY packages/place-ids/package.json packages/place-ids/
-COPY packages/presets/package.json packages/presets/
-COPY packages/brands/package.json packages/brands/
-COPY integrations/ integrations/
 
 RUN pnpm install --frozen-lockfile
 
@@ -74,7 +62,6 @@ COPY packages/db-schema/package.json packages/db-schema/
 COPY packages/hardlinks/package.json packages/hardlinks/
 COPY packages/motis-feed-proxy-config/package.json packages/motis-feed-proxy-config/
 COPY packages/mobility-formats/package.json packages/mobility-formats/
-COPY packages/poi-source-registry/package.json packages/poi-source-registry/
 COPY packages/transitous-core/package.json packages/transitous-core/
 COPY packages/core/package.json packages/core/
 COPY packages/hey-api-client-fetch/package.json packages/hey-api-client-fetch/
@@ -82,16 +69,8 @@ COPY packages/i18n/package.json packages/i18n/
 COPY packages/cli/package.json packages/cli/
 COPY packages/air-quality/package.json packages/air-quality/
 COPY packages/integration-framework/package.json packages/integration-framework/
-COPY packages/mangrove-client/package.json packages/mangrove-client/
 COPY packages/mobility-core/package.json packages/mobility-core/
-COPY packages/ev-charge-planner/package.json packages/ev-charge-planner/
-COPY packages/noaa-coops-data/package.json packages/noaa-coops-data/
-COPY packages/openconditions-contrib-client/package.json packages/openconditions-contrib-client/
-COPY packages/ourairports-data/package.json packages/ourairports-data/
 COPY packages/place-ids/package.json packages/place-ids/
-COPY packages/presets/package.json packages/presets/
-COPY packages/brands/package.json packages/brands/
-COPY integrations/ integrations/
 
 RUN pnpm install --frozen-lockfile --prod --ignore-scripts && \
     rm -rf node_modules/.pnpm/image-size@*
@@ -198,7 +177,7 @@ COPY --from=prod-deps /app/services/data-manager/node_modules ./services/data-ma
 # The shared @openmapx/db-schema, @openmapx/hardlinks, and
 # @openmapx/motis-feed-proxy-config packages ship their TypeScript source
 # directly; tsx/esm (preserved because it's a prod dep) transpiles them on
-# import. This matches how apps/api loads its dynamic integration code.
+# import.
 # db-schema needs its own node_modules so the symlinked drizzle-orm resolves
 # from its source files at runtime; the other two have no prod externals so
 # only the source is needed.
@@ -208,19 +187,14 @@ COPY packages/hardlinks/ ./packages/hardlinks/
 COPY packages/motis-feed-proxy-config/ ./packages/motis-feed-proxy-config/
 COPY packages/mobility-formats/ ./packages/mobility-formats/
 COPY --from=prod-deps /app/packages/mobility-formats/node_modules ./packages/mobility-formats/node_modules
-COPY packages/poi-source-registry/ ./packages/poi-source-registry/
-COPY --from=prod-deps /app/packages/poi-source-registry/node_modules ./packages/poi-source-registry/node_modules
 COPY packages/transitous-core/ ./packages/transitous-core/
 COPY --from=prod-deps /app/packages/transitous-core/node_modules ./packages/transitous-core/node_modules
 COPY packages/core/ ./packages/core/
 COPY --from=prod-deps /app/packages/core/node_modules ./packages/core/node_modules
 COPY packages/hey-api-client-fetch/ ./packages/hey-api-client-fetch/
 
-# The baked `integrations/` tree (below) dynamically imports these packages
-# at runtime the same way apps/api's integration loader does — they are not
-# direct dependencies of @openmapx/data-manager itself, but of the
-# integration code data-manager now ships and runs discovery against instead
-# of reading from the host bind-mount.
+# Transitive runtime dependencies of @openmapx/core and @openmapx/cli, which
+# data-manager imports.
 COPY packages/place-ids/ ./packages/place-ids/
 COPY packages/air-quality/ ./packages/air-quality/
 COPY --from=prod-deps /app/packages/air-quality/node_modules ./packages/air-quality/node_modules
@@ -228,20 +202,6 @@ COPY packages/integration-framework/ ./packages/integration-framework/
 COPY --from=prod-deps /app/packages/integration-framework/node_modules ./packages/integration-framework/node_modules
 COPY packages/mobility-core/ ./packages/mobility-core/
 COPY --from=prod-deps /app/packages/mobility-core/node_modules ./packages/mobility-core/node_modules
-COPY packages/ev-charge-planner/ ./packages/ev-charge-planner/
-COPY --from=prod-deps /app/packages/ev-charge-planner/node_modules ./packages/ev-charge-planner/node_modules
-COPY packages/mangrove-client/ ./packages/mangrove-client/
-COPY --from=prod-deps /app/packages/mangrove-client/node_modules ./packages/mangrove-client/node_modules
-COPY packages/noaa-coops-data/ ./packages/noaa-coops-data/
-COPY --from=prod-deps /app/packages/noaa-coops-data/node_modules ./packages/noaa-coops-data/node_modules
-COPY packages/openconditions-contrib-client/ ./packages/openconditions-contrib-client/
-COPY --from=prod-deps /app/packages/openconditions-contrib-client/node_modules ./packages/openconditions-contrib-client/node_modules
-COPY packages/ourairports-data/ ./packages/ourairports-data/
-COPY --from=prod-deps /app/packages/ourairports-data/node_modules ./packages/ourairports-data/node_modules
-COPY packages/presets/ ./packages/presets/
-COPY --from=prod-deps /app/packages/presets/node_modules ./packages/presets/node_modules
-COPY packages/brands/ ./packages/brands/
-COPY --from=prod-deps /app/packages/brands/node_modules ./packages/brands/node_modules
 
 # packages/cli source + node_modules — bundled for parity with apps/api's
 # runner (admin-cli.ts spawns the CLI for data jobs when no host bind-mount
@@ -249,16 +209,11 @@ COPY --from=prod-deps /app/packages/brands/node_modules ./packages/brands/node_m
 COPY packages/cli/ packages/cli/
 COPY --from=prod-deps /app/packages/cli/node_modules ./packages/cli/node_modules
 
-# Integrations with pnpm-resolved node_modules (manifests + code + deps) —
-# this is what makes data-manager self-contained: POI-source discovery no
-# longer needs the host bind-mount to see integration code.
-COPY --from=prod-deps /app/integrations ./integrations
-
 COPY --from=builder /app/services/data-manager/dist ./services/data-manager/dist
 COPY services/data-manager/package.json ./services/data-manager/
 
-# tsx resolves tsconfig paths + .js -> .ts at runtime for the dynamically
-# imported integration modules (mirrors apps/api's runner).
+# tsx resolves tsconfig paths + .js -> .ts at runtime for the workspace
+# packages that ship TypeScript source.
 ENV TSX_TSCONFIG_PATH=/app/tsconfig.base.json
 COPY tsconfig.base.json ./
 

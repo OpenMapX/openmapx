@@ -28,7 +28,7 @@ For the two data-rich domains with their own typed contracts and orchestration
 rules, follow the dedicated guides once you have the basics here:
 
 - [Data-source integrations](./data-source-integrations.md) — bike/car/scooter
-  sharing, parking, fuel, EV charging, webcams.
+  sharing, webcams, and the merged charging, parking, and fuel categories.
 - [Transit integrations](./transit-integrations.md) — stops, departures, trip
   planning, vehicle positions, and alerts.
 
@@ -336,7 +336,7 @@ context conveniences are doing the work here:
 - **`ctx.log`** is a structured logger already tagged with the integration id.
 
 `ctx` also exposes `secrets`, an optional `db` (present only when the manifest
-requires `postgis`), `liveStore` for the shared POI keyspace, and an event bus —
+requires `postgis`), and an event bus —
 the full surface is enumerated in the
 [Integration system](./integration-system.md#services-available-to-integration-code).
 
@@ -513,7 +513,8 @@ files that own a standalone map.
 ## Where to go next
 
 - **[Data-source integrations](./data-source-integrations.md)** — the typed
-  contract and orchestration for external POI sources.
+  contract and orchestration for map data sources: sharing, webcams, and the
+  merged charging, parking, and fuel categories.
 - **[Transit integrations](./transit-integrations.md)** — stops, departures,
   trip planning, and realtime overlays.
 - **[Integration system](./integration-system.md)** — the manifest schema, the

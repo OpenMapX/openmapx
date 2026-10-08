@@ -1,0 +1,104 @@
+{
+  "record": {
+    "id": "oc:feature:de-bw-mobidata-charging:KA-2",
+    "kind": "charging_site",
+    "name": [{ "lang": "de", "text": "Schnellladepunkt Durlacher Tor" }],
+    "class": "feature",
+    "domain": "charging",
+    "details": { "v": 1, "kind": "charging_site" },
+    "access": { "audience": "public" },
+    "location": {
+      "admin": { "country": "DE" },
+      "extent": "point",
+      "geometry": { "type": "Point", "coordinates": [8.4195, 49.0107] },
+      "fuzziness": "exact",
+      "geometryOrigin": "source"
+    },
+    "components": [
+      {
+        "key": "KA2-EVSE-1",
+        "kind": "evse",
+        "lifecycle": "operational",
+        "details": { "v": 1, "kind": "evse", "evseId": "DE*BWE*E2002*1", "uid": "KA2-EVSE-1" }
+      },
+      {
+        "key": "KA2-EVSE-1/1",
+        "parentKey": "KA2-EVSE-1",
+        "kind": "connector",
+        "details": {
+          "v": 1,
+          "kind": "connector",
+          "standard": "IEC_62196_T2_COMBO",
+          "format": "cable",
+          "powerType": "DC",
+          "current": "dc",
+          "maxPowerKw": 300,
+          "tariffRefs": ["oc:offer:de-bw-mobidata-charging:KA-2:T1"]
+        }
+      }
+    ],
+    "revision": 1,
+    "freshness": { "fetchedAt": "2026-10-06T03:00:00Z" },
+    "lifecycle": "operational",
+    "provenance": {
+      "origin": "feed",
+      "privacy": { "class": "authoritative" },
+      "recordId": "KA-2",
+      "sourceId": "de-bw-mobidata-charging",
+      "accessMode": "bulk",
+      "instanceId": "test.local",
+      "attribution": {
+        "license": "DL-DE-BY-2.0",
+        "provider": "MobiData BW, Datenlizenz Deutschland – Namensnennung – Version 2.0",
+        "licenseUrl": "https://www.govdata.de/dl-de/by-2-0"
+      },
+      "sourceFormat": "ocpi"
+    },
+    "recordedAt": "2026-10-06T03:00:00Z",
+    "temporality": "static"
+  },
+  "latest": [
+    {
+      "property": "charging.evse_status",
+      "componentKey": "KA2-EVSE-1",
+      "result": { "type": "category", "value": "available", "vocabulary": "evse_status" },
+      "phenomenonTime": { "instant": "2026-10-06T02:55:00Z" },
+      "validUntil": "2026-10-06T03:25:00.000Z",
+      "source": "de-bw-mobidata-charging"
+    }
+  ],
+  "offers": [
+    {
+      "id": "oc:offer:de-bw-mobidata-charging:KA-2:T1",
+      "kind": "energy_tariff",
+      "class": "offer",
+      "domain": "charging",
+      "subject": { "id": "oc:feature:de-bw-mobidata-charging:KA-2", "class": "feature" },
+      "currency": "EUR",
+      "elements": [
+        {
+          "components": [
+            { "type": "energy", "price": { "amount": "0.69", "currency": "EUR" }, "vatPct": 19 }
+          ]
+        }
+      ],
+      "validity": { "status": "active" },
+      "provenance": {
+        "origin": "feed",
+        "privacy": { "class": "authoritative" },
+        "recordId": "KA-2:T1",
+        "sourceId": "de-bw-mobidata-charging",
+        "accessMode": "bulk",
+        "instanceId": "test.local",
+        "attribution": {
+          "license": "DL-DE-BY-2.0",
+          "provider": "MobiData BW, Datenlizenz Deutschland – Namensnennung – Version 2.0"
+        },
+        "sourceFormat": "ocpi"
+      },
+      "recordedAt": "2026-10-06T03:00:00Z",
+      "temporality": "static"
+    }
+  ],
+  "canonical": true
+}

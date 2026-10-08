@@ -17,13 +17,6 @@ vi.mock("../health-history", () => ({
   recordHealthResult: vi.fn().mockResolvedValue(undefined),
 }));
 
-// Mock the browser-fingerprint client so tests never load the native `impit`
-// module or hit the network.
-vi.mock("@openmapx/integration-framework/impersonate", () => ({
-  impersonatingFetch: vi.fn().mockResolvedValue({ ok: true, status: 200 }),
-}));
-
-import { impersonatingFetch } from "@openmapx/integration-framework/impersonate";
 import {
   executeAllIntegrationHealthChecks,
   executeIntegrationHealthCheck,
@@ -318,57 +311,6 @@ describe("integration-health secret redaction", () => {
     expect(results[0]?.status).toBe("down");
     expect(results[0]?.error).not.toContain(secret);
     expect(results[0]?.error).not.toContain(exposedLeadingFragment);
-  });
-});
-
-describe("integration-health impersonation", () => {
-  let fetchSpy: ReturnType<typeof vi.spyOn>;
-
-  beforeEach(() => {
-    fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(null, { status: 200 }));
-    vi.mocked(impersonatingFetch).mockClear();
-    vi.mocked(impersonatingFetch).mockResolvedValue({ ok: true, status: 200 } as never);
-  });
-
-  afterEach(() => {
-    vi.restoreAllMocks();
-  });
-
-  it("routes an impersonate:true probe through the browser-fingerprint client, not global fetch", async () => {
-    const integration = makeIntegration({
-      type: "http",
-      url: "https://api.openchargemap.io/v3/poi/",
-      impersonate: true,
-    });
-
-    const results = await executeIntegrationHealthCheck(integration);
-
-    expect(results[0]?.status).toBe("up");
-    expect(impersonatingFetch).toHaveBeenCalledOnce();
-    expect(fetchSpy).not.toHaveBeenCalled();
-  });
-
-  it("surfaces a 403 from the impersonated probe as down", async () => {
-    vi.mocked(impersonatingFetch).mockResolvedValue({ ok: false, status: 403 } as never);
-    const integration = makeIntegration({
-      type: "http",
-      url: "https://api.openchargemap.io/v3/poi/",
-      impersonate: true,
-    });
-
-    const results = await executeIntegrationHealthCheck(integration);
-
-    expect(results[0]?.status).toBe("down");
-    expect(results[0]?.error).toBe("HTTP 403");
-  });
-
-  it("leaves a normal probe on global fetch (no impersonation)", async () => {
-    const integration = makeIntegration({ type: "http", url: "https://api.example.com/health" });
-
-    await executeIntegrationHealthCheck(integration);
-
-    expect(fetchSpy).toHaveBeenCalledOnce();
-    expect(impersonatingFetch).not.toHaveBeenCalled();
   });
 });
 

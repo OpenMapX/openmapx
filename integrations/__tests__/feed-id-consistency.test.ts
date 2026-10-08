@@ -5,7 +5,7 @@ import { collectFeedIdViolations } from "../../scripts/check-feed-ids";
 const REPO_ROOT = process.cwd();
 
 describe("feed-id consistency", () => {
-  it("has no feed-id violations across manifests and poi-sources", () => {
+  it("has no feed-id violations across manifests", () => {
     expect(collectFeedIdViolations(REPO_ROOT)).toEqual([]);
   });
 });

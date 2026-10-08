@@ -6,10 +6,12 @@ import {
   type DataSourceDetailSection,
   type DataSourceResult,
   gapFillBranding,
+  isSafeHttpUrl,
   type OsmIdentity,
 } from "@openmapx/core";
 import {
   type I18nToken,
+  money,
   sharedT,
   type Translatable,
   token,
@@ -140,14 +142,15 @@ function siteBranding(site: ParkingSite): DataSourceBranding | undefined {
  * The site's credits as per-record attributions. The `parking` manifest
  * declares no sources of its own — every credit comes from the providers — so
  * each result and detail carries the credits of the sources it was built from.
+ * Their links come from upstream data, so only http(s) ones are kept.
  */
 function siteCredits(site: ParkingSite): DataSourceAttribution[] | undefined {
   if (site.attributions.length === 0) return undefined;
   return site.attributions.map((a) => ({
     text: a.name,
-    url: a.url ?? "",
+    url: isSafeHttpUrl(a.url) ? a.url : "",
     ...(a.spdxLicense ? { license: a.spdxLicense } : {}),
-    ...(a.licenseUrl ? { licenseUrl: a.licenseUrl } : {}),
+    ...(isSafeHttpUrl(a.licenseUrl) ? { licenseUrl: a.licenseUrl } : {}),
   }));
 }
 
@@ -316,21 +319,6 @@ function durationToken(minutes: number): I18nToken {
   return token("tariff.durMinutes", { count: whole });
 }
 
-/** A price as the place panel shows it, e.g. "€2.00" or "CHF 1.50"; an unknown currency is written after the amount. */
-function formatPrice(amount: number, currency: string): string {
-  try {
-    return new Intl.NumberFormat("en", {
-      style: "currency",
-      currency,
-      minimumFractionDigits: 2,
-    })
-      .format(amount)
-      .replaceAll(" ", " ");
-  } catch {
-    return `${amount.toFixed(2)} ${currency}`;
-  }
-}
-
 /** The parts as one token, each after the last, so any count reads as a list. */
 function joinParts(parts: I18nToken[]): I18nToken | undefined {
   let joined: I18nToken | undefined;
@@ -357,7 +345,7 @@ function rateLabel(row: RateRow): I18nToken {
 }
 
 function rateValue(row: RateRow, currency: string): Translatable {
-  const price = formatPrice(row.amount, currency);
+  const price = money(row.amount, currency);
   if (row.kind === "flat") return price;
   // Billed by the hour, a price per hour needs no step.
   return row.stepMin && row.stepMin !== 60
@@ -423,7 +411,12 @@ export function mapParkingSiteToDetail(site: ParkingSite): DataSourceDetail {
     coordinates: site.coordinates,
     identity: siteIdentity(site),
     address: site.address ? { line1: site.address } : undefined,
-    operator: site.operator ? { name: site.operator, url: site.website } : undefined,
+    operator: site.operator
+      ? {
+          name: site.operator,
+          ...(isSafeHttpUrl(site.website) ? { url: site.website } : {}),
+        }
+      : undefined,
     openingHours: site.openingHours,
     sections,
     parkAndRide: site.type === "park_and_ride" ? true : undefined,

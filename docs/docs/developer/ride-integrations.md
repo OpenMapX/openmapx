@@ -164,7 +164,7 @@ normalises all of these, with the reasoning recorded in comments beside each hel
 
 Declare the credential in `configSchema` with `x-openmapx-secret: true` and an
 `x-openmapx-setup` guide, then read it back from `ctx.config["<sourceId>-<field>"]` — the
-vault hands it over decrypted, the same path `ev-charging` uses for `ocm-api-key`. Saving
+vault hands it over decrypted, the same path `webcam` uses for its per-source keys. Saving
 a credential in the admin panel reloads the integration, so a new key takes effect without
 a restart. Register nothing when the credential is absent.
 

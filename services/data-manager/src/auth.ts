@@ -5,15 +5,11 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 /**
  * Paths that bypass the bearer-token pre-handler:
  *   - `/live` and `/status` — liveness and readiness probes.
- *   - `/internal/metrics` — Prometheus scrape endpoint. The data-manager
- *     port is bound to 127.0.0.1 on the host (see service.json) so the
- *     surface is already firewalled off; matches the apps/api posture for
- *     its own `/internal/metrics` route.
  *   - one exact GET relay-capability path — the 256-bit, run-bound handle is
  *     the only authority upstream Python receives; malformed paths/methods
  *     still require the ordinary bearer token.
  */
-const HEALTH_PATHS = new Set<string>(["/live", "/status", "/internal/metrics"]);
+const HEALTH_PATHS = new Set<string>(["/live", "/status"]);
 const OPERATOR_FEED_RELAY_PATH = /^\/internal\/transit\/operator-feed\/[a-f0-9]{64}$/i;
 
 function bypassesBearerAuth(req: FastifyRequest): boolean {

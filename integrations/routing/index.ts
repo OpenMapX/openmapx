@@ -49,7 +49,7 @@ import {
 } from "./schedule-request.js";
 import { verifyRouteTraffic } from "./traffic-application.js";
 import type { DirectionsResult } from "./types.js";
-import { parseTravelMode } from "./validation.js";
+import { parseDateTime, parseTravelMode } from "./validation.js";
 
 export { evidenceBoundCacheTtlSeconds } from "./road-condition-routing.js";
 
@@ -980,7 +980,7 @@ export function setup(ctx: IntegrationContext): void {
   /**
    * POST /directions/ev — a driving route with EV charging stops inserted
    * (@openmapx/ev-charge-planner), planned against the selected routing
-   * provider, a corridor charger search (ev-charging data-source), and its
+   * provider, a corridor charger search (charging-sites providers), and its
    * optional time/distance matrix. Not cached at the HTTP layer beyond
    * `runEvPlan`'s own short-TTL cache (live availability can shift the plan).
    *
@@ -1015,7 +1015,10 @@ export function setup(ctx: IntegrationContext): void {
         socArrivalMinPct: optionalNumberInRange(body?.socArrivalMinPct, "socArrivalMinPct", 0, 100),
         socTargetPct: optionalNumberInRange(body?.socTargetPct, "socTargetPct", 0, 100),
         ambientTempC: optionalNumberInRange(body?.ambientTempC, "ambientTempC", -60, 60),
-        departAt: typeof body?.departAt === "string" ? body.departAt : undefined,
+        departAt:
+          body?.departAt === undefined
+            ? undefined
+            : parseDateTime(String(body.departAt), "departAt"),
         avoidClosures: body?.avoidClosures === true || body?.avoidClosures === "1",
         avoidTolls: !!body?.avoidTolls,
         avoidHighways: !!body?.avoidHighways,

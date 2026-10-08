@@ -1,7 +1,7 @@
 /**
  * OpenConditions, built in: reads the OpenConditions HTTP API at
- * `OPENCONDITIONS_URL` and registers its road-conditions, fuel-stations and
- * parking-sites providers. The OpenConditions services themselves run beside OpenMapX; no
+ * `OPENCONDITIONS_URL` and registers its road-conditions, fuel-stations,
+ * parking-sites and charging-sites providers. The OpenConditions services themselves run beside OpenMapX; no
  * OpenConditions code runs here.
  *
  * The data sources are the instance's own: the integration reads its
@@ -21,11 +21,13 @@
  * Without `OPENCONDITIONS_URL` the integration registers nothing.
  */
 import type { IntegrationContext } from "@openmapx/integration-framework";
+import { createChargingSiteProvider } from "./charging/provider.js";
 import { createOpenConditionsClient } from "./client.js";
+import { createSiteEvidenceReader } from "./evidence/read.js";
 import { createFuelStationProvider } from "./fuel/provider.js";
 import { createParkingSiteProvider } from "./parking/provider.js";
 import { createRoadConditionsProvider } from "./road-conditions/provider.js";
-import { createLiveSources, startSourceSync } from "./sources.js";
+import { createLiveSources, createSourceScopes, startSourceSync } from "./sources.js";
 
 /** How long setup waits for the first `/sources` list before registering the providers. */
 const FIRST_SOURCES_WAIT_MS = 3_000;
@@ -38,7 +40,11 @@ export async function setup(
   if (!client) return;
 
   const sources = createLiveSources();
-  const sync = startSourceSync(ctx, client, { onSources: (list) => sources.update(list) });
+  const scopes = createSourceScopes();
+  const sync = startSourceSync(ctx, client, {
+    onSources: (list) => sources.update(list),
+    onDescribed: (list) => scopes.update(list),
+  });
   let waited: ReturnType<typeof setTimeout> | undefined;
   await Promise.race([
     sync.first,
@@ -49,7 +55,10 @@ export async function setup(
   ]);
   clearTimeout(waited);
 
+  // The coverage report asks the three place providers together; they share one read.
+  const evidence = createSiteEvidenceReader(client, scopes);
   ctx.registerRoadConditionsProvider(createRoadConditionsProvider(client, sources));
-  ctx.registerFuelStationProvider(createFuelStationProvider(client, sources));
-  ctx.registerParkingSiteProvider(createParkingSiteProvider(client, sources));
+  ctx.registerFuelStationProvider(createFuelStationProvider(client, sources, { evidence }));
+  ctx.registerParkingSiteProvider(createParkingSiteProvider(client, sources, { evidence }));
+  ctx.registerChargingSiteProvider(createChargingSiteProvider(client, sources, { evidence }));
 }

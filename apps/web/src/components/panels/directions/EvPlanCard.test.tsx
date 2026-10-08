@@ -24,7 +24,11 @@ const baseResult: EvDirectionsResult = {
   ],
   stops: [
     {
-      station: { id: "c1", name: "Ionity Aachen", coordinates: [6, 50] },
+      station: {
+        id: "oc:feature:de-bnetza-charging:12345",
+        name: "Ionity Aachen",
+        coordinates: [6, 50],
+      },
       connector: "ccs2",
       powerKw: 150,
       operator: "Ionity",
@@ -34,7 +38,7 @@ const baseResult: EvDirectionsResult = {
       chargeSeconds: 1500,
       addedKwh: 40,
       availability: { available: 3, total: 6, updatedAt: "2026-07-21T10:00:00Z" },
-      tariffSummary: "0.55 EUR/kWh",
+      tariffPrice: { amount: 0.55, currency: "EUR", unit: "kWh" },
       estimatedCost: { amount: 12.5, currency: "EUR" },
       attributions: [{ text: "OpenChargeMap", url: "https://openchargemap.org" }],
     },
@@ -65,7 +69,7 @@ describe("EvPlanCard", () => {
     const place = usePlaceStore.getState().selectedPlace;
     // Same id space the data-source layer resolves details with, so the panel
     // fetches the real station rather than showing only the preview.
-    expect(place?.ids?.["ev-charging"]).toBe("c1");
+    expect(place?.ids?.["ev-charging"]).toBe("oc:feature:de-bnetza-charging:12345");
     expect(place?.name).toBe("Ionity Aachen");
     expect(place?.coordinates).toEqual([6, 50]);
   });
@@ -83,6 +87,99 @@ describe("EvPlanCard", () => {
     );
     screen.getByText("directions.ev.unreachable");
     expect(screen.queryByText(/Ionity Aachen/)).toBeNull();
+  });
+
+  it("shows the stop's cost beside the tariff it was costed on, and undated availability", () => {
+    const [stop] = baseResult.stops;
+    render(
+      <EvPlanCard
+        result={{
+          ...baseResult,
+          stops: [{ ...stop, availability: { available: 1, total: 4 } }],
+        }}
+      />,
+      { wrapper: createQueryWrapper() },
+    );
+    screen.getByText(/directions\.ev\.tariffPrice/);
+    screen.getByText(/12\.50/);
+    screen.getByText("directions.ev.availability");
+  });
+
+  it("says there is no charger data instead of calling the route unreachable", () => {
+    render(
+      <EvPlanCard
+        result={{
+          ...baseResult,
+          stops: [],
+          warnings: [{ kind: "no-charger-data" }, { kind: "unreachable", afterStopIndex: -1 }],
+        }}
+      />,
+      { wrapper: createQueryWrapper() },
+    );
+    screen.getByText("directions.ev.noChargers");
+    expect(screen.queryByText("directions.ev.unreachable")).toBeNull();
+  });
+
+  it("says the rest of the route has no charger data when earlier stops were planned", () => {
+    render(
+      <EvPlanCard
+        result={{
+          ...baseResult,
+          warnings: [{ kind: "no-charger-data" }, { kind: "unreachable", afterStopIndex: 0 }],
+        }}
+      />,
+      { wrapper: createQueryWrapper() },
+    );
+    screen.getByText("directions.ev.noChargersAhead");
+    expect(screen.queryByText("directions.ev.noChargers")).toBeNull();
+    screen.getByText(/Ionity Aachen/);
+  });
+
+  it("says the charger sources did not answer instead of claiming there is no charger data", () => {
+    render(
+      <EvPlanCard
+        result={{
+          ...baseResult,
+          stops: [],
+          warnings: [
+            { kind: "charger-sources-unavailable" },
+            { kind: "unreachable", afterStopIndex: -1 },
+            { kind: "partial-charger-data" },
+          ],
+        }}
+      />,
+      { wrapper: createQueryWrapper() },
+    );
+    screen.getByText("directions.ev.chargerSourcesUnavailable");
+    expect(screen.queryByText("directions.ev.noChargers")).toBeNull();
+    expect(screen.queryByText("directions.ev.unreachable")).toBeNull();
+    expect(screen.queryByText("directions.ev.partialChargers")).toBeNull();
+  });
+
+  it("says the charger sources did not answer for the rest of the route after earlier stops", () => {
+    render(
+      <EvPlanCard
+        result={{
+          ...baseResult,
+          warnings: [
+            { kind: "charger-sources-unavailable" },
+            { kind: "unreachable", afterStopIndex: 0 },
+          ],
+        }}
+      />,
+      { wrapper: createQueryWrapper() },
+    );
+    screen.getByText("directions.ev.chargerSourcesUnavailableAhead");
+    screen.getByText(/Ionity Aachen/);
+  });
+
+  it("notes when charger sources answered only in part", () => {
+    render(
+      <EvPlanCard result={{ ...baseResult, warnings: [{ kind: "partial-charger-data" }] }} />,
+      { wrapper: createQueryWrapper() },
+    );
+    screen.getByText("directions.ev.partialChargers");
+    screen.getByText(/Ionity Aachen/);
   });
 
   it("shows the no-allowed-network warning with a retry action", () => {

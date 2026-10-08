@@ -1,4 +1,5 @@
 import type { FuelStation } from "@openmapx/integration-framework";
+import { licenseUrlForSpdx } from "@openmapx/mobility-core/license";
 
 /**
  * What every OpenConditions feature domain reads the same way: a canonical
@@ -192,6 +193,37 @@ export function credit(source: RecordSource, linkOf: SourceLink): Attribution {
     ...(license ? { spdxLicense: license } : {}),
     ...(licenseUrl ? { licenseUrl } : {}),
   };
+}
+
+/**
+ * The credits of the upstream publishers the aggregators among the kept
+ * sources took the feature from: one per publisher, named "<feed provider> –
+ * <publisher>" under the feed it came through, with the licence's own text
+ * linked where the publisher states one. A publisher is owed credit whatever
+ * its licence, so one without a licence is credited by name.
+ */
+export function upstreamCredits(kept: readonly RecordSource[], linkOf: SourceLink): Attribution[] {
+  const out: Attribution[] = [];
+  for (const source of kept) {
+    const feed = credit(source, linkOf);
+    for (const u of source.upstream) {
+      const publisher = str(u["publisher"]);
+      if (!publisher) continue;
+      const license = str(u["license"]);
+      const name = `${feed.name} – ${publisher}`;
+      if (out.some((a) => a.sourceId === source.id && a.name === name)) continue;
+      const licenseUrl = license ? licenseUrlForSpdx(license) : undefined;
+      out.push({
+        sourceId: source.id,
+        name,
+        ...(feed.url ? { url: feed.url } : {}),
+        ...(license ? { spdxLicense: license } : {}),
+        ...(licenseUrl ? { licenseUrl } : {}),
+        publisher: { name: publisher },
+      });
+    }
+  }
+  return out;
 }
 
 export function addressOf(location: Rec): string | undefined {

@@ -7,26 +7,16 @@
  * build itself only runs on push to `main`. So an omission ships green and
  * breaks after merge.
  *
- * Two independent properties are asserted here, because each catches a failure
- * the other cannot:
+ * Every workspace package reachable from baked integration code must appear in
+ * each baking Dockerfile. A package missing from the deps stage fails `pnpm
+ * install --frozen-lockfile` (the lockfile's importer set cannot be satisfied);
+ * one missing from a tsx runner resolves at install but throws
+ * ERR_MODULE_NOT_FOUND at boot, taking down every integration that imports it.
+ * Adding a workspace package is a repo-level act with obligations in every
+ * baking Dockerfile, and it belongs to no single feature task.
  *
- * 1. COMPLETENESS — every workspace package reachable from baked integration
- *    code must appear in each Dockerfile. A package missing from the deps stage
- *    fails `pnpm install --frozen-lockfile` (the lockfile's importer set cannot
- *    be satisfied); one missing from a tsx runner resolves at install but throws
- *    ERR_MODULE_NOT_FOUND at boot, taking down every integration that imports
- *    it. This is the check that a new workspace package needs: adding one is a
- *    repo-level act with obligations in three Dockerfiles, and it belongs to no
- *    single feature task.
- *
- * 2. DRIFT — data-manager's runner must remain a superset of app-api's. Both
- *    dynamically import baked integration code under tsx, so a package app-api
- *    picks up must reach data-manager too or its integrations fail at boot.
- *
- * Property 2 alone is satisfied by two Dockerfiles that are consistently wrong:
- * a package omitted from both leaves the sets in sync and the gate green. That
- * is exactly how `packages/brands` shipped missing from all three Dockerfiles.
- * Property 1 is what closes it.
+ * The data-manager image does not bake `integrations/`; it is held to its own
+ * dependency closure the same way, since it runs workspace source under tsx.
  */
 import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -38,15 +28,6 @@ const ROOT = join(HERE, "..");
 const read = (rel: string): string => readFileSync(join(ROOT, rel), "utf-8");
 const readJson = (rel: string): { name?: string; dependencies?: Record<string, string> } =>
   JSON.parse(read(rel));
-
-// Packages app-api's runner bakes that data-manager legitimately does not
-// need to (e.g. an app-api-only leaf package no integration depends on).
-// Keep this empty unless a real, documented divergence exists.
-const APP_API_ONLY_ALLOWLIST = new Set<string>([
-  // API privacy archives and notifications use the shared headless translator.
-  // Data ingestion and its baked integration providers do not import i18n.
-  "i18n",
-]);
 
 /**
  * Extracts the set of `packages/<name>` source directories a Dockerfile's
@@ -102,25 +83,31 @@ function packageNameToDir(): Map<string, string> {
 }
 
 /**
- * The `packages/*` closure that baked integration code needs at runtime.
- *
- * Seeded from every integration's runtime `dependencies` — all of them are baked
+ * The runtime `dependencies` of every integration: all of them are baked
  * wholesale by `COPY integrations/ integrations/`, so any workspace package one
- * of them imports must ship too — then followed transitively through those
- * packages' own runtime deps. `devDependencies` are deliberately not followed:
- * they are absent from the production install and never resolved at runtime.
+ * of them imports must ship too.
  */
-function requiredPackages(): Set<string> {
-  const nameToDir = packageNameToDir();
-  const queue: string[] = [];
-
+function integrationDependencies(): string[] {
+  const deps: string[] = [];
   for (const dir of readdirSync(join(ROOT, "integrations"))) {
     try {
-      queue.push(...Object.keys(readJson(`integrations/${dir}/package.json`).dependencies ?? {}));
+      deps.push(...Object.keys(readJson(`integrations/${dir}/package.json`).dependencies ?? {}));
     } catch {
       // Not an integration directory (or has no manifest); nothing to bake.
     }
   }
+  return deps;
+}
+
+/**
+ * The `packages/*` closure some code needs at runtime: its runtime
+ * `dependencies`, followed transitively through those packages' own runtime
+ * deps. `devDependencies` are deliberately not followed: they are absent from
+ * the production install and never resolved at runtime.
+ */
+function requiredPackages(seeds: readonly string[]): Set<string> {
+  const nameToDir = packageNameToDir();
+  const queue = [...seeds];
 
   const required = new Set<string>();
   while (queue.length > 0) {
@@ -136,34 +123,40 @@ function requiredPackages(): Set<string> {
   return required;
 }
 
-const APP_API_DOCKERFILE = "apps/api/Dockerfile";
-const DATA_MANAGER_DOCKERFILE = "services/data-manager/Dockerfile";
-const WEB_DOCKERFILE = "apps/web/Dockerfile";
+const integrationClosure = requiredPackages(integrationDependencies());
 
 /**
- * Every image that bakes `integrations/`. `stagesSource` marks the ones whose
- * runner dynamically imports integration code under tsx and therefore needs the
- * package *source*, not just its manifest — `apps/web` does not, because Next's
- * standalone output bundles workspace packages at build time.
+ * Every image checked, with the closure it must stage: the images that bake
+ * `integrations/` need the integrations' closure, the data-manager image its
+ * own. `stagesSource` marks the ones whose runner imports workspace code under
+ * tsx and therefore needs the package *source*, not just its manifest —
+ * `apps/web` does not, because Next's standalone output bundles workspace
+ * packages at build time.
  */
-const BAKING_IMAGES: { path: string; stagesSource: boolean }[] = [
-  { path: APP_API_DOCKERFILE, stagesSource: true },
-  { path: DATA_MANAGER_DOCKERFILE, stagesSource: true },
-  { path: WEB_DOCKERFILE, stagesSource: false },
+const IMAGES: { path: string; stagesSource: boolean; required: Set<string> }[] = [
+  { path: "apps/api/Dockerfile", stagesSource: true, required: integrationClosure },
+  { path: "apps/web/Dockerfile", stagesSource: false, required: integrationClosure },
+  {
+    path: "services/data-manager/Dockerfile",
+    stagesSource: true,
+    required: requiredPackages(
+      Object.keys(readJson("services/data-manager/package.json").dependencies ?? {}),
+    ),
+  },
 ];
 
-const required = requiredPackages();
-
-if (required.size === 0) {
+const empty = IMAGES.filter((image) => image.required.size === 0);
+if (empty.length > 0) {
   console.error(
-    "✗ Computed an empty required-package set from integrations/ — the manifest walk is " +
-      "broken; fix scripts/check-dockerfile-workspace-sync.ts before trusting this gate.",
+    `✗ Computed an empty required-package set for ${empty.map((i) => i.path).join(", ")} — ` +
+      "the manifest walk is broken; fix scripts/check-dockerfile-workspace-sync.ts before " +
+      "trusting this gate.",
   );
   process.exit(1);
 }
 
 const completenessErrors: string[] = [];
-for (const { path: dockerfile, stagesSource } of BAKING_IMAGES) {
+for (const { path: dockerfile, stagesSource, required } of IMAGES) {
   const manifests = manifestPackages(dockerfile);
   const missingManifests = [...required].filter((pkg) => !manifests.has(pkg)).sort();
   if (missingManifests.length > 0) {
@@ -181,8 +174,8 @@ for (const { path: dockerfile, stagesSource } of BAKING_IMAGES) {
   if (missingSources.length > 0) {
     completenessErrors.push(
       `${dockerfile}'s runner never copies source for: ${missingSources.join(", ")}\n` +
-        "    Baked integration code imports it under tsx, so this resolves at install and then " +
-        "throws ERR_MODULE_NOT_FOUND at boot, taking down every integration that imports it. " +
+        "    The image's code imports it under tsx, so this resolves at install and then " +
+        "throws ERR_MODULE_NOT_FOUND at boot, taking down everything that imports it. " +
         "Add `COPY packages/<pkg>/ <dest>` (plus the matching `COPY --from=prod-deps " +
         ".../node_modules ...` if the package has runtime deps).",
     );
@@ -191,42 +184,14 @@ for (const { path: dockerfile, stagesSource } of BAKING_IMAGES) {
 
 if (completenessErrors.length > 0) {
   console.error(
-    `✗ Workspace packages reachable from baked integrations are missing from image builds:\n\n` +
+    `✗ Workspace packages an image's code reaches are missing from its build:\n\n` +
       `${completenessErrors.map((e) => `  • ${e}`).join("\n\n")}\n`,
   );
   process.exit(1);
 }
 
-const appApiPackages = runnerPackages(APP_API_DOCKERFILE);
-const dataManagerPackages = runnerPackages(DATA_MANAGER_DOCKERFILE);
-
-if (appApiPackages.size === 0 || dataManagerPackages.size === 0) {
-  console.error(
-    `✗ Extracted zero packages from one of the Dockerfiles (app-api: ${appApiPackages.size}, ` +
-      `data-manager: ${dataManagerPackages.size}) — the "AS runner" parsing regex likely no longer ` +
-      "matches; fix scripts/check-dockerfile-workspace-sync.ts before trusting this gate.",
-  );
-  process.exit(1);
-}
-
-const missing = [...appApiPackages]
-  .filter((pkg) => !dataManagerPackages.has(pkg) && !APP_API_ONLY_ALLOWLIST.has(pkg))
-  .sort();
-
-if (missing.length > 0) {
-  console.error(
-    `✗ ${DATA_MANAGER_DOCKERFILE}'s runner stage is missing packages baked into ` +
-      `${APP_API_DOCKERFILE}'s runner stage: ${missing.join(", ")}\n` +
-      "Add the matching `COPY packages/<pkg>/ ...` (+ `COPY --from=prod-deps .../node_modules ...` " +
-      `if the package has runtime deps) lines to ${DATA_MANAGER_DOCKERFILE}, or — if the package is ` +
-      "genuinely app-api-only — add it to APP_API_ONLY_ALLOWLIST in this script with a comment " +
-      "explaining why.",
-  );
-  process.exit(1);
-}
-
 console.log(
-  `✓ Dockerfile workspace packages complete and in sync — ${required.size} packages reachable ` +
-    `from baked integrations are staged by all ${BAKING_IMAGES.length} images; data-manager's ` +
-    `runner bakes ${dataManagerPackages.size} (app-api bakes ${appApiPackages.size}).`,
+  `✓ Dockerfile workspace packages complete — ${IMAGES.map(
+    (image) => `${image.path}: ${image.required.size}`,
+  ).join(", ")} packages staged.`,
 );

@@ -5,7 +5,11 @@ vi.hoisted(() => {
   process.env.BETTER_AUTH_SECRET ||= "coverage-service-test-secret";
 });
 
-import type { LoadedIntegration } from "@openmapx/integration-framework";
+import type {
+  LoadedIntegration,
+  OperationalEvidence,
+  OperationalFeedEvidence,
+} from "@openmapx/integration-framework";
 import { buildCoverageCatalog } from "./catalog.js";
 import type { CoverageCollection } from "./collect.js";
 import { collectCoverageData, freshenStream, runtimeForProvider } from "./collect.js";
@@ -76,7 +80,7 @@ describe("CoverageService", () => {
     id: "parking",
     manifest: {
       id: "parking",
-      domains: ["data-source"],
+      domains: ["parking-sites"],
       dataSources: [
         {
           sourceId: "test-source",
@@ -93,7 +97,9 @@ describe("CoverageService", () => {
     directory: "/fixture",
     isBuiltIn: true,
     enabled: true,
-    providers: new Map([["data-source", [{ id: "parking", search: async () => [] }]]]),
+    providers: new Map([
+      ["parking-sites", [{ id: "parking", searchSites: async () => ({ sites: [] }) }]],
+    ]),
     strings: {},
     shutdownHandlers: [],
   });
@@ -155,7 +161,7 @@ describe("CoverageService", () => {
     const both = integration();
     both.id = "openconditions";
     both.manifest.id = "openconditions";
-    both.manifest.domains = ["road-conditions", "fuel-stations", "parking-sites"];
+    both.manifest.domains = ["road-conditions", "fuel-stations", "parking-sites", "charging-sites"];
     both.manifest.dataSources = [
       { ...both.manifest.dataSources![0]!, sourceId: "nl-ndw-events", name: "NDW" },
       { ...both.manifest.dataSources![0]!, sourceId: "osm-fuel", domain: "fuel-stations" },
@@ -163,6 +169,11 @@ describe("CoverageService", () => {
         ...both.manifest.dataSources![0]!,
         sourceId: "de-bw-mobidata-parking",
         domain: "parking-sites",
+      },
+      {
+        ...both.manifest.dataSources![0]!,
+        sourceId: "de-bw-mobidata-charging",
+        domain: "charging-sites",
       },
     ];
     both.providers = new Map();
@@ -179,10 +190,12 @@ describe("CoverageService", () => {
       providerHealth: null,
       integrationHealth: () => ({ updatedAt: null, results: [] }),
     });
-    // Fuel has no coverage domain; it is not traffic coverage. Parking sites are parking coverage.
+    // A source naming no domain of its own takes the integration's: road conditions here.
     expect(collected.streams.map((s) => [s.sourceId, s.domain])).toEqual([
+      ["de-bw-mobidata-charging", "ev"],
       ["de-bw-mobidata-parking", "parking"],
       ["nl-ndw-events", "traffic"],
+      ["osm-fuel", "fuel"],
     ]);
   });
 
@@ -300,6 +313,139 @@ describe("CoverageService", () => {
     });
   });
 
+  it("reports ev from the charging-sites provider and keeps route planning reachable with a router", async () => {
+    const charging = integration();
+    charging.id = "openconditions";
+    charging.manifest.id = "openconditions";
+    charging.manifest.domains = ["charging-sites"];
+    charging.manifest.dataSources = [
+      {
+        ...charging.manifest.dataSources![0]!,
+        sourceId: "de-bw-mobidata-charging",
+        domain: "charging-sites",
+      },
+    ];
+    charging.providers = new Map([
+      [
+        "charging-sites",
+        [{ id: "charging-sites-openconditions", searchSites: async () => ({ sites: [] }) }],
+      ],
+    ]);
+    const router = integration();
+    router.id = "routing-valhalla";
+    router.manifest.id = "routing-valhalla";
+    router.manifest.domains = ["routing"];
+    router.manifest.dataSources = [];
+    router.providers = new Map([["routing", [{ id: "valhalla", supportedModes: ["driving"] }]]]);
+
+    const catalog = buildCoverageCatalog([charging, router]);
+    const chargers = catalog.providers.filter((p) => p.integrationId === "openconditions");
+    expect(chargers.map((p) => [p.providerId, p.supports])).toEqual([
+      [
+        "charging-sites-openconditions",
+        {
+          "ev.charger-discovery": true,
+          "ev.charger-availability": true,
+          "ev.route-planning": true,
+        },
+      ],
+    ]);
+
+    const stream = {
+      ...makeStream("2026-09-10T13:00:00.000Z"),
+      key: "service:openconditions:de-bw-mobidata-charging",
+      owner: { kind: "integration" as const, id: "openconditions" },
+      sourceId: "de-bw-mobidata-charging",
+      domain: "ev" as const,
+    };
+    const collection = makeCollection(stream);
+    collection.catalog = catalog;
+    collection.policy = { allowGreyArea: true, allowNonCommercial: true };
+    const service = createCoverageService({
+      now: () => new Date(collection.generatedAt),
+      collector: async () => collection,
+    });
+
+    const report = await service.report({ regionId: REGION.key });
+    const byId = (id: string) => report.capabilities.find((item) => item.operationId === id);
+    expect(byId("ev.charger-discovery")?.evidenceKeys).toEqual([stream.key]);
+    const route = byId("ev.route-planning");
+    expect(route?.status).not.toBe("unsupported");
+    expect(route?.candidates?.[0]).toMatchObject({
+      providerId: "valhalla+charging-sites-openconditions",
+      operationSupported: true,
+    });
+    expect(route?.evidenceKeys).toContain(stream.key);
+  });
+
+  it("cites only streams of the operation's own domain for an integration serving several", async () => {
+    const mixed = integration();
+    mixed.id = "openconditions";
+    mixed.manifest.id = "openconditions";
+    mixed.manifest.domains = ["charging-sites", "parking-sites", "road-conditions"];
+    const template = mixed.manifest.dataSources![0]!;
+    mixed.manifest.dataSources = [
+      { ...template, sourceId: "z-charging", domain: "charging-sites" },
+      { ...template, sourceId: "a-parking", domain: "parking-sites" },
+      { ...template, sourceId: "a-road", domain: "road-conditions" },
+    ];
+    mixed.providers = new Map([
+      [
+        "charging-sites",
+        [{ id: "charging-sites-openconditions", searchSites: async () => ({ sites: [] }) }],
+      ],
+    ]);
+    const parking = integration();
+    parking.manifest.dataSources = [
+      { ...template, sourceId: "a-parking" },
+      { ...template, sourceId: "z-parking" },
+    ];
+
+    const stream = (
+      sourceId: string,
+      domain: "ev" | "parking" | "traffic",
+      owner: string,
+      kind: "static" | "live" = "static",
+    ) => ({
+      ...makeStream("2026-09-10T13:00:00.000Z"),
+      key: `${owner}:${sourceId}:${kind}`,
+      owner: { kind: "integration" as const, id: owner },
+      sourceId,
+      stream: kind,
+      domain,
+    });
+    // The other domains' sources sort first, so a stream picked by name alone would be theirs.
+    const evStatic = stream("z-charging", "ev", "openconditions");
+    const evLive = stream("z-charging", "ev", "openconditions", "live");
+    const roadStatic = stream("a-road", "traffic", "openconditions");
+    const roadLive = stream("a-road", "traffic", "openconditions", "live");
+    const parkingStatic = stream("a-parking", "parking", "openconditions");
+    const ownParking = stream("z-parking", "parking", "parking");
+    const ownParkingEv = stream("a-parking", "ev", "parking");
+    const collection = makeCollection(evStatic);
+    collection.streams = [
+      evStatic,
+      evLive,
+      roadStatic,
+      roadLive,
+      parkingStatic,
+      ownParking,
+      ownParkingEv,
+    ];
+    collection.catalog = buildCoverageCatalog([mixed, parking]);
+    collection.policy = { allowGreyArea: true, allowNonCommercial: true };
+    const service = createCoverageService({
+      now: () => new Date(collection.generatedAt),
+      collector: async () => collection,
+    });
+
+    const report = await service.report({ regionId: REGION.key });
+    const byId = (id: string) => report.capabilities.find((item) => item.operationId === id);
+    expect(byId("ev.charger-discovery")?.evidenceKeys).toEqual([evStatic.key]);
+    expect(byId("ev.charger-availability")?.evidenceKeys).toEqual([evLive.key]);
+    expect(byId("parking.facility-discovery")?.evidenceKeys).toEqual([ownParking.key]);
+  });
+
   it("keeps globally scoped evidence in the unassigned region", async () => {
     const regional = makeStream("2026-09-10T13:00:00.000Z");
     const unassigned = {
@@ -328,5 +474,456 @@ describe("CoverageService", () => {
     const regions = await service.regions();
     expect(regions.regions.find((entry) => entry.region.key === REGION.key)?.sourceCount).toBe(1);
     expect(regions.regions.find((entry) => entry.region.key === "unassigned")?.sourceCount).toBe(1);
+  });
+});
+
+describe("coverage of the OpenConditions place domains", () => {
+  const NOW = new Date("2026-10-06T10:00:00.000Z");
+
+  type Coverage = NonNullable<OperationalFeedEvidence["coverage"]>;
+  type Entry = Coverage[number];
+  const entry = (
+    stream: Entry["stream"],
+    accessMode: Entry["accessMode"],
+    countries: string[],
+    whole: boolean,
+    basis: Entry["basis"] = "observed",
+  ): Entry => ({ stream, accessMode, countries, whole, basis });
+  /** A bulk feed with places and readings, holding `countries` whole. */
+  const bulk = (...countries: string[]): Coverage => [
+    entry("static", "bulk", countries, true),
+    entry("live", "bulk", countries, true),
+  ];
+  /** A bulk feed of one subdivision of `country`. */
+  const subdivision = (country: string): Coverage => [
+    entry("static", "bulk", [country], false),
+    entry("live", "bulk", [country], false),
+  ];
+  const onDemand = (...countries: string[]): Coverage => [
+    entry("static", "on_demand", countries, false),
+  ];
+
+  const feed = (
+    sourceId: string,
+    coverage: Coverage,
+    over: Partial<OperationalFeedEvidence> = {},
+  ): OperationalFeedEvidence => ({
+    sourceId,
+    lastAttemptAt: "2026-10-06T09:55:00.000Z",
+    lastOutcome: "changed",
+    lastSuccessfulCheckAt: "2026-10-06T09:55:00.000Z",
+    lastPublicationAt: "2026-10-06T09:55:00.000Z",
+    publicationRevision: "12",
+    upstreamAsOf: null,
+    freshUntil: "2026-10-06T10:25:00.000Z",
+    expectedIntervalSeconds: 300,
+    activeEventCount: 100,
+    changedCount: 0,
+    rejectedCount: 0,
+    consecutiveFailures: 0,
+    error: null,
+    bindingCounts: null,
+    graph: { generation: null, status: "unknown", regions: [] },
+    coverage,
+    status: "healthy",
+    action: null,
+    ...over,
+  });
+
+  const evidence = (...feeds: OperationalFeedEvidence[]): OperationalEvidence => ({
+    schemaVersion: 1,
+    instanceId: "oc-eu-1",
+    collectedAt: NOW.toISOString(),
+    feeds,
+  });
+
+  const CHARGING = evidence(
+    feed("de-bnetza-charging", [entry("static", "bulk", ["DE"], true)]),
+    feed("de-bw-mobidata-charging", subdivision("DE")),
+    feed("nl-ndw-charging", bulk("NL")),
+    feed("ocm-charging", onDemand("DE", "FR", "US")),
+    feed("us-afdc-charging", [entry("static", "bulk", ["US"], true)]),
+  );
+  const PARKING = evidence(
+    feed("de-bw-mobidata-parking", subdivision("DE")),
+    feed("nl-ndw-parking", bulk("NL")),
+  );
+  const FUEL = evidence(
+    // On demand and never asked for yet: no record, no poll, only its catalogue country.
+    feed("at-econtrol-fuel", [entry("static", "on_demand", ["AT"], false, "declared")], {
+      lastAttemptAt: null,
+      lastOutcome: null,
+      lastSuccessfulCheckAt: null,
+      lastPublicationAt: null,
+      publicationRevision: null,
+      freshUntil: null,
+      activeEventCount: null,
+      status: "unknown",
+    }),
+    feed("de-tankerkoenig-fuel", [...onDemand("DE"), entry("live", "on_demand", ["DE"], false)]),
+    feed("fr-prixcarburants-fuel", bulk("FR")),
+  );
+
+  const source = (sourceId: string, domain: string) => ({
+    sourceId,
+    domain,
+    name: sourceId,
+    url: `https://${sourceId}.example`,
+    license: "CC-BY-4.0",
+    providerCountry: "DE",
+    providerPrivacyUrl: "https://example.test/privacy",
+    commercialUse: "yes" as const,
+  });
+
+  function openconditions(
+    read: Partial<Record<"charging" | "parking" | "fuel", () => Promise<OperationalEvidence>>> = {},
+  ): LoadedIntegration {
+    return {
+      id: "openconditions",
+      manifest: {
+        id: "openconditions",
+        domains: ["charging-sites", "parking-sites", "fuel-stations"],
+        dataSources: [
+          ...CHARGING.feeds.map((f) => source(f.sourceId, "charging-sites")),
+          ...PARKING.feeds.map((f) => source(f.sourceId, "parking-sites")),
+          ...FUEL.feeds.map((f) => source(f.sourceId, "fuel-stations")),
+        ],
+      },
+      config: {},
+      directory: "/fixture",
+      isBuiltIn: true,
+      enabled: true,
+      providers: new Map<string, unknown[]>([
+        [
+          "charging-sites",
+          [
+            {
+              id: "charging-sites-openconditions",
+              searchSites: async () => ({ sites: [] }),
+              getOperationalEvidence: read.charging ?? (async () => CHARGING),
+            },
+          ],
+        ],
+        [
+          "parking-sites",
+          [
+            {
+              id: "parking-sites-openconditions",
+              searchSites: async () => ({ sites: [] }),
+              getOperationalEvidence: read.parking ?? (async () => PARKING),
+            },
+          ],
+        ],
+        [
+          "fuel-stations",
+          [
+            {
+              id: "fuel-stations-openconditions",
+              searchStations: async () => ({ stations: [] }),
+              getOperationalEvidence: read.fuel ?? (async () => FUEL),
+            },
+          ],
+        ],
+      ]),
+      strings: {},
+      shutdownHandlers: [],
+    };
+  }
+
+  const router = (): LoadedIntegration => ({
+    id: "routing-valhalla",
+    manifest: { id: "routing-valhalla", domains: ["routing"], dataSources: [] },
+    config: {},
+    directory: "/fixture",
+    isBuiltIn: true,
+    enabled: true,
+    providers: new Map([["routing", [{ id: "valhalla", supportedModes: ["driving"] }]]]),
+    strings: {},
+    shutdownHandlers: [],
+  });
+
+  const collect = (integrations: LoadedIntegration[]) =>
+    collectCoverageData({
+      now: () => NOW,
+      integrations,
+      dataManager: {
+        read: async () => {
+          throw new Error("Unavailable");
+        },
+      },
+      loadBindings: async () => new Map(),
+      loadPolicy: async () => ({ allowGreyArea: true, allowNonCommercial: true }),
+      providerHealth: null,
+      integrationHealth: () => ({
+        updatedAt: NOW.getTime(),
+        results: integrations.map((i) => ({
+          id: i.id,
+          name: i.id,
+          category: "test",
+          url: "",
+          status: "up" as const,
+        })),
+      }),
+    });
+
+  it("collects static and live streams from each place provider and names their countries", async () => {
+    const collected = await collect([openconditions()]);
+    const site = collected.streams.filter((s) => s.stream !== "catalog");
+
+    expect(site.map((s) => [s.domain, s.sourceId, s.stream, s.reasons])).toEqual([
+      ["ev", "de-bnetza-charging", "static", []],
+      ["ev", "de-bw-mobidata-charging", "live", ["source_partial"]],
+      ["ev", "de-bw-mobidata-charging", "static", ["source_partial"]],
+      ["ev", "nl-ndw-charging", "live", []],
+      ["ev", "nl-ndw-charging", "static", []],
+      ["ev", "ocm-charging", "static", ["source_partial"]],
+      ["ev", "us-afdc-charging", "static", []],
+      ["fuel", "at-econtrol-fuel", "static", ["source_partial"]],
+      ["fuel", "de-tankerkoenig-fuel", "live", ["source_partial"]],
+      ["fuel", "de-tankerkoenig-fuel", "static", ["source_partial"]],
+      ["fuel", "fr-prixcarburants-fuel", "live", []],
+      ["fuel", "fr-prixcarburants-fuel", "static", []],
+      ["parking", "de-bw-mobidata-parking", "live", ["source_partial"]],
+      ["parking", "de-bw-mobidata-parking", "static", ["source_partial"]],
+      ["parking", "nl-ndw-parking", "live", []],
+      ["parking", "nl-ndw-parking", "static", []],
+    ]);
+    expect(site.every((s) => s.owner.id === "openconditions" && s.presence === "present")).toBe(
+      true,
+    );
+    // A source with evidence is not repeated as a bare declaration.
+    expect(collected.streams.filter((s) => s.stream === "catalog")).toEqual([]);
+    expect(collected.regions.map((r) => [r.key, r.kind, r.label])).toEqual(
+      expect.arrayContaining([
+        ["country:AT", "country", "Austria"],
+        ["country:DE", "country", "Germany"],
+        ["country:FR", "country", "France"],
+        ["country:NL", "country", "Netherlands"],
+        ["country:US", "country", "United States"],
+      ]),
+    );
+  });
+
+  it("keeps road evidence when a place provider's read hangs", { timeout: 10_000 }, async () => {
+    const road: LoadedIntegration = {
+      ...router(),
+      id: "road-conditions-fixture",
+      manifest: {
+        id: "road-conditions-fixture",
+        domains: ["road-conditions"],
+        dataSources: [source("nl-ndw-events", "road-conditions")],
+      },
+      providers: new Map([
+        [
+          "road-conditions",
+          [
+            {
+              id: "road",
+              getEvents: async () => [],
+              getOperationalEvidence: async () =>
+                evidence(
+                  feed("nl-ndw-events", [], {
+                    graph: { generation: "g", status: "ready", regions: ["nl"] },
+                  }),
+                ),
+            },
+          ],
+        ],
+      ]),
+    };
+    const collected = await collect([
+      road,
+      openconditions({ charging: () => new Promise<OperationalEvidence>(() => {}) }),
+    ]);
+
+    expect(collected.warnings).toContain("collector_unavailable");
+    const live = collected.streams.filter((s) => s.stream !== "catalog");
+    expect(live.filter((s) => s.domain === "traffic").map((s) => s.sourceId)).toEqual([
+      "nl-ndw-events",
+    ]);
+    expect(live.some((s) => s.domain === "ev")).toBe(false);
+    expect(live.some((s) => s.domain === "parking")).toBe(true);
+  });
+
+  it("keeps the other domains when one provider's evidence fails", async () => {
+    const collected = await collect([
+      openconditions({
+        parking: async () => {
+          throw new Error("OpenConditions /coverage responded 503");
+        },
+      }),
+    ]);
+
+    expect(collected.collectionStatus).toBe("partial");
+    expect(collected.warnings).toContain("collector_unavailable");
+    const domains = new Set(
+      collected.streams.filter((s) => s.stream !== "catalog").map((s) => s.domain),
+    );
+    expect([...domains].sort()).toEqual(["ev", "fuel"]);
+    // The parking sources fall back to their declarations.
+    expect(collected.streams.filter((s) => s.domain === "parking").map((s) => s.stream)).toEqual([
+      "catalog",
+      "catalog",
+    ]);
+  });
+
+  async function reportFor(regionId: string) {
+    const collection = await collect([openconditions(), router()]);
+    const service = createCoverageService({ now: () => NOW, collector: async () => collection });
+    const report = await service.report({ regionId });
+    return (id: string) => report.capabilities.find((item) => item.operationId === id);
+  }
+
+  it("is operational where fresh bulk feeds hold the country whole", async () => {
+    const de = await reportFor("country:DE");
+    expect(de("ev.charger-discovery")).toMatchObject({
+      status: "operational",
+      evidenceKeys: ["ev:openconditions:oc-eu-1:de-bnetza-charging:static"],
+    });
+
+    const nl = await reportFor("country:NL");
+    expect(nl("ev.charger-availability")).toMatchObject({
+      status: "operational",
+      evidenceKeys: ["ev:openconditions:oc-eu-1:nl-ndw-charging:live"],
+    });
+    expect(nl("parking.facility-discovery")?.status).toBe("operational");
+    expect(nl("parking.occupancy")?.status).toBe("operational");
+
+    const fr = await reportFor("country:FR");
+    expect(fr("fuel.station-discovery")?.status).toBe("operational");
+    expect(fr("fuel.prices")?.status).toBe("operational");
+  });
+
+  it("prefers a bulk feed over an on-demand one in the same country", async () => {
+    // ocm-charging sorts before us-afdc-charging, so a pick by name alone would be partial.
+    const us = await reportFor("country:US");
+
+    expect(us("ev.charger-discovery")).toMatchObject({
+      status: "operational",
+      evidenceKeys: ["ev:openconditions:oc-eu-1:us-afdc-charging:static"],
+    });
+  });
+
+  it("reports a country one subdivision's bulk feed holds as partial", async () => {
+    // de-bw-mobidata-parking is the only parking feed in Germany: Baden-Württemberg is not Germany.
+    const de = await reportFor("country:DE");
+    for (const id of ["parking.facility-discovery", "parking.occupancy"]) {
+      expect(de(id)?.status).toBe("limited");
+      expect(de(id)?.reasons).toContain("source_partial");
+    }
+    expect(de("ev.charger-availability")?.status).toBe("limited");
+  });
+
+  it("reports an area only on-demand feeds reach as partial", async () => {
+    const de = await reportFor("country:DE");
+    expect(de("fuel.station-discovery")).toMatchObject({ status: "limited" });
+    expect(de("fuel.station-discovery")?.reasons).toContain("source_partial");
+    expect(de("fuel.prices")?.status).toBe("limited");
+
+    const fr = await reportFor("country:FR");
+    expect(fr("ev.charger-discovery")?.status).toBe("limited");
+    expect(fr("ev.charger-discovery")?.reasons).toContain("source_partial");
+  });
+
+  it("reports an on-demand feed's country as partial before any read fetched there", async () => {
+    const at = await reportFor("country:AT");
+    expect(at("fuel.station-discovery")).toMatchObject({
+      status: "limited",
+      evidenceKeys: ["fuel:openconditions:oc-eu-1:at-econtrol-fuel:static"],
+    });
+    expect(at("fuel.station-discovery")?.reasons).toContain("source_partial");
+  });
+
+  it("stands a global on-demand feed for the area its catalogue declares", async () => {
+    const world: [number, number, number, number] = [-180, -90, 180, 90];
+    const global = evidence(
+      ...CHARGING.feeds.filter((f) => f.sourceId !== "ocm-charging"),
+      feed("ocm-charging", [
+        {
+          stream: "static",
+          accessMode: "on_demand",
+          countries: [],
+          whole: false,
+          basis: "declared",
+          bbox: world,
+        },
+      ]),
+    );
+    const collection = await collect([openconditions({ charging: async () => global })]);
+    const ocm = collection.streams.find((s) => s.sourceId === "ocm-charging");
+
+    expect(ocm?.region).toMatchObject({ keys: [], basis: "declared", bounds: world });
+    expect(ocm?.publication.active).toBe(true);
+    const service = createCoverageService({ now: () => NOW, collector: async () => collection });
+    // Not only in the unassigned bucket: every region lists it.
+    const nl = await service.report({ regionId: "country:NL" });
+    expect(nl.sources.some((source) => source.sourceId === "ocm-charging")).toBe(true);
+    // Its box places it, so it is not also counted as naming no region.
+    expect(collection.unassignedSourceCount).toBe(0);
+    expect(collection.regions.some((r) => r.key === "unassigned")).toBe(false);
+  });
+
+  it("keeps a feed that names no place in the unassigned bucket beside a global one", async () => {
+    const world: [number, number, number, number] = [-180, -90, 180, 90];
+    const global = evidence(
+      ...CHARGING.feeds.filter((f) => f.sourceId !== "ocm-charging"),
+      feed("ocm-charging", [
+        {
+          stream: "static",
+          accessMode: "on_demand",
+          countries: [],
+          whole: false,
+          basis: "declared",
+          bbox: world,
+        },
+      ]),
+      feed("xx-nowhere-charging", []),
+    );
+    const collection = await collect([openconditions({ charging: async () => global })]);
+    const service = createCoverageService({ now: () => NOW, collector: async () => collection });
+    const unassigned = await service.report({ regionId: "unassigned" });
+
+    expect(unassigned.sources.map((source) => source.sourceId)).toEqual(["xx-nowhere-charging"]);
+    expect(collection.unassignedSourceCount).toBe(1);
+  });
+
+  it("judges EV route planning only from feeds the charging provider serves", async () => {
+    // OpenConditions reports a feed the deployment does not serve (withheld in public scope).
+    const withheld = evidence(
+      ...CHARGING.feeds,
+      feed("lu-withheld-charging", [entry("static", "bulk", ["LU"], true)]),
+    );
+    const collection = await collect([
+      openconditions({ charging: async () => withheld }),
+      router(),
+    ]);
+    const service = createCoverageService({ now: () => NOW, collector: async () => collection });
+    const report = await service.report({ regionId: "country:LU" });
+    const byId = (id: string) => report.capabilities.find((item) => item.operationId === id);
+
+    expect(byId("ev.charger-discovery")?.evidenceKeys ?? []).not.toContain(
+      "ev:openconditions:oc-eu-1:lu-withheld-charging:static",
+    );
+    expect(byId("ev.route-planning")?.evidenceKeys ?? []).not.toContain(
+      "ev:openconditions:oc-eu-1:lu-withheld-charging:static",
+    );
+  });
+
+  it("pairs the router with the charging feeds for EV route planning", async () => {
+    const de = await reportFor("country:DE");
+    const route = de("ev.route-planning");
+
+    expect(route?.candidates?.[0]).toMatchObject({
+      providerId: "valhalla+charging-sites-openconditions",
+      operationSupported: true,
+      runtime: "up",
+    });
+    expect(route?.evidenceKeys).toContain("ev:openconditions:oc-eu-1:de-bnetza-charging:static");
+    // The charging side holds nothing back. The router publishes no evidence of
+    // its base graph, so the pair stops at unknown on that alone.
+    expect({ status: route?.status, reasons: route?.reasons }).toEqual({
+      status: "unknown",
+      reasons: ["no_publication_evidence"],
+    });
   });
 });

@@ -1,0 +1,280 @@
+{
+  "records": [
+    {
+      "id": "oc:feature:test.local:5d1c2a7e9b0f4c36a81d7e52f3b9c40d6e18a7b2c5f09d34e1a6b8c7d2f05e91",
+      "kind": "charging_site",
+      "name": [{ "lang": "de", "text": "Ladepark Karlsruhe Kaiserstraße" }],
+      "class": "feature",
+      "domain": "charging",
+      "details": {
+        "v": 1,
+        "kind": "charging_site",
+        "brand": "EnBW",
+        "website": "https://www.enbw.com/elektromobilitaet",
+        "tariffText": [{ "lang": "de", "text": "Ad-hoc-Preis am Ladepunkt" }]
+      },
+      "operator": {
+        "role": "operator",
+        "name": [{ "lang": "de", "text": "EnBW mobility+" }],
+        "website": "https://www.enbw.com"
+      },
+      "access": {
+        "audience": "public",
+        "payment": ["app", "credit_card"],
+        "authentication": ["rfid", "app"]
+      },
+      "openingHours": { "osm": "24/7", "twentyFourSeven": true, "timezone": "Europe/Berlin" },
+      "location": {
+        "admin": { "country": "DE" },
+        "extent": "point",
+        "address": {
+          "street": "Kaiserstraße",
+          "houseNumber": "12",
+          "postalCode": "76133",
+          "city": "Karlsruhe",
+          "country": "DE"
+        },
+        "geometry": { "type": "Point", "coordinates": [8.4112, 49.0088] },
+        "fuzziness": "exact",
+        "geometryOrigin": "source"
+      },
+      "components": [
+        {
+          "key": "EVSE-1",
+          "kind": "evse",
+          "lifecycle": "operational",
+          "details": {
+            "v": 1,
+            "kind": "evse",
+            "evseId": "DE*BWE*E1001*1",
+            "uid": "EVSE-1",
+            "capabilities": ["RFID_READER", "REMOTE_START_STOP_CAPABLE"],
+            "parkingRestrictions": ["ev_only"]
+          }
+        },
+        {
+          "key": "EVSE-1/1",
+          "parentKey": "EVSE-1",
+          "kind": "connector",
+          "details": {
+            "v": 1,
+            "kind": "connector",
+            "standard": "IEC_62196_T2",
+            "format": "socket",
+            "powerType": "AC_3_PHASE",
+            "current": "ac",
+            "maxVoltage": 400,
+            "maxAmperage": 32,
+            "maxPowerKw": 22,
+            "tariffRefs": ["oc:offer:de-bw-mobidata-charging:KA-1:T1"]
+          }
+        },
+        {
+          "key": "EVSE-2",
+          "kind": "evse",
+          "lifecycle": "operational",
+          "details": {
+            "v": 1,
+            "kind": "evse",
+            "evseId": "DE*BWE*E1001*2",
+            "uid": "EVSE-2"
+          }
+        },
+        {
+          "key": "EVSE-2/1",
+          "parentKey": "EVSE-2",
+          "kind": "connector",
+          "details": {
+            "v": 1,
+            "kind": "connector",
+            "standard": "IEC_62196_T2_COMBO",
+            "format": "cable",
+            "powerType": "DC",
+            "current": "dc",
+            "maxVoltage": 500,
+            "maxAmperage": 300,
+            "maxPowerKw": 150,
+            "tariffRefs": ["oc:offer:de-bw-mobidata-charging:KA-1:T1"]
+          }
+        },
+        {
+          "key": "osm-charging/socket",
+          "kind": "evse",
+          "details": { "v": 1, "kind": "evse", "quantity": 4 }
+        },
+        {
+          "key": "osm-charging/socket/1",
+          "parentKey": "osm-charging/socket",
+          "kind": "connector",
+          "details": { "v": 1, "kind": "connector", "standard": "IEC_62196_T2" }
+        }
+      ],
+      "revision": 1,
+      "freshness": { "fetchedAt": "2026-10-06T03:00:00Z" },
+      "lifecycle": "operational",
+      "provenance": {
+        "origin": "feed",
+        "privacy": { "class": "authoritative" },
+        "recordId": "KA-1",
+        "sourceId": "de-bw-mobidata-charging",
+        "upstream": [{ "license": "CC-BY-4.0", "recordId": "ka-1", "publisher": "EnBW" }],
+        "accessMode": "bulk",
+        "instanceId": "test.local",
+        "attribution": {
+          "license": "DL-DE-BY-2.0",
+          "provider": "MobiData BW, Datenlizenz Deutschland – Namensnennung – Version 2.0",
+          "licenseUrl": "https://www.govdata.de/dl-de/by-2-0"
+        },
+        "sourceFormat": "ocpi",
+        "mergedSources": [
+          {
+            "source": "osm-charging",
+            "recordId": "oc:feature:osm-charging:node/4793460914",
+            "attribution": {
+              "license": "ODbL-1.0",
+              "provider": "© OpenStreetMap contributors",
+              "licenseUrl": "https://opendatacommons.org/licenses/odbl/1-0/"
+            },
+            "link": "same_asset"
+          }
+        ],
+        "derivedFrom": {
+          "records": [
+            { "class": "feature", "id": "oc:feature:de-bw-mobidata-charging:KA-1" },
+            { "class": "feature", "id": "oc:feature:osm-charging:node/4793460914" }
+          ],
+          "method": "canonical_view",
+          "version": "1"
+        }
+      },
+      "recordedAt": "2026-10-06T03:00:00Z",
+      "temporality": "static"
+    }
+  ],
+  "latest": {
+    "oc:feature:test.local:5d1c2a7e9b0f4c36a81d7e52f3b9c40d6e18a7b2c5f09d34e1a6b8c7d2f05e91": [
+      {
+        "property": "charging.evse_status",
+        "componentKey": "EVSE-1",
+        "result": { "type": "category", "value": "available", "vocabulary": "evse_status" },
+        "phenomenonTime": { "instant": "2026-10-06T02:55:00Z" },
+        "validUntil": "2026-10-06T03:25:00.000Z",
+        "source": "@fused",
+        "contributors": ["de-bw-mobidata-charging"]
+      },
+      {
+        "property": "charging.evse_status",
+        "componentKey": "EVSE-2",
+        "result": { "type": "category", "value": "occupied", "vocabulary": "evse_status" },
+        "phenomenonTime": { "instant": "2026-10-06T02:55:00Z" },
+        "validUntil": "2026-10-06T03:25:00.000Z",
+        "source": "@fused",
+        "contributors": ["de-bw-mobidata-charging"]
+      },
+      {
+        "property": "charging.connector_status",
+        "componentKey": "EVSE-2/1",
+        "result": { "type": "category", "value": "charging", "vocabulary": "evse_status" },
+        "phenomenonTime": { "instant": "2026-10-06T02:55:00Z" },
+        "validUntil": "2026-10-06T03:25:00.000Z",
+        "source": "de-bw-mobidata-charging"
+      }
+    ]
+  },
+  "offers": {
+    "oc:feature:test.local:5d1c2a7e9b0f4c36a81d7e52f3b9c40d6e18a7b2c5f09d34e1a6b8c7d2f05e91": [
+      {
+        "id": "oc:offer:de-bw-mobidata-charging:KA-1:T1",
+        "kind": "energy_tariff",
+        "class": "offer",
+        "domain": "charging",
+        "subject": { "id": "oc:feature:de-bw-mobidata-charging:KA-1", "class": "feature" },
+        "currency": "EUR",
+        "tariffType": "ad_hoc",
+        "elements": [
+          {
+            "components": [
+              { "type": "energy", "price": { "amount": "0.59", "currency": "EUR" }, "vatPct": 19 },
+              { "type": "session", "price": { "amount": "1", "currency": "EUR" } }
+            ],
+            "restrictions": { "startTime": "08:00", "endTime": "18:00" }
+          },
+          {
+            "components": [
+              { "type": "energy", "price": { "amount": "0.39", "currency": "EUR" }, "vatPct": 19 }
+            ],
+            "restrictions": {
+              "startTime": "18:00",
+              "endTime": "08:00",
+              "days": ["MO", "TU", "WE", "TH", "FR"],
+              "maxPowerKw": 50
+            }
+          },
+          {
+            "components": [
+              {
+                "type": "parking_time",
+                "price": { "amount": "0.1", "currency": "EUR" },
+                "stepSize": 60
+              }
+            ],
+            "restrictions": { "minDuration": { "unit": "s", "value": 14400 } }
+          }
+        ],
+        "minPrice": { "amount": "1.5", "currency": "EUR" },
+        "priceIncludesVat": true,
+        "validity": { "status": "active" },
+        "provenance": {
+          "origin": "feed",
+          "privacy": { "class": "authoritative" },
+          "recordId": "KA-1:T1",
+          "sourceId": "de-bw-mobidata-charging",
+          "accessMode": "bulk",
+          "instanceId": "test.local",
+          "attribution": {
+            "license": "DL-DE-BY-2.0",
+            "provider": "MobiData BW, Datenlizenz Deutschland – Namensnennung – Version 2.0",
+            "licenseUrl": "https://www.govdata.de/dl-de/by-2-0"
+          },
+          "sourceFormat": "ocpi"
+        },
+        "recordedAt": "2026-10-06T03:00:00Z",
+        "temporality": "static"
+      },
+      {
+        "id": "oc:offer:osm-charging:node/4793460914:T2",
+        "kind": "energy_tariff",
+        "class": "offer",
+        "domain": "charging",
+        "subject": { "id": "oc:feature:osm-charging:node/4793460914", "class": "feature" },
+        "currency": "EUR",
+        "elements": [
+          {
+            "components": [
+              { "type": "time", "price": { "amount": "0.05", "currency": "EUR" }, "stepSize": 60 }
+            ]
+          }
+        ],
+        "validity": { "status": "active" },
+        "provenance": {
+          "origin": "feed",
+          "privacy": { "class": "authoritative" },
+          "recordId": "node/4793460914:T2",
+          "sourceId": "osm-charging",
+          "accessMode": "on_demand",
+          "instanceId": "test.local",
+          "attribution": {
+            "license": "ODbL-1.0",
+            "provider": "© OpenStreetMap contributors",
+            "licenseUrl": "https://opendatacommons.org/licenses/odbl/1-0/"
+          },
+          "sourceFormat": "overpass"
+        },
+        "recordedAt": "2026-10-06T03:00:00Z",
+        "temporality": "static"
+      }
+    ]
+  },
+  "next": null,
+  "coverage": { "partial": false, "sources": [{ "id": "osm-charging", "complete": true }] }
+}

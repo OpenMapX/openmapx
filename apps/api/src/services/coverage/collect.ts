@@ -2,13 +2,16 @@ import {
   type AuthorityObservation,
   type CoverageReasonCode,
   evaluateFreshness,
+  isCountryRegionKey,
   type RightsEvidence,
   type RuntimeStatus,
   type StreamEvidence,
 } from "@openmapx/core/coverage";
 import { services } from "@openmapx/core/server";
 import type {
+  ChargingSiteProvider,
   LoadedIntegration,
+  OperationalEvidence,
   ProviderHealthSnapshot,
   RoadConditionsProvider,
 } from "@openmapx/integration-framework";
@@ -30,8 +33,10 @@ import {
   buildCoverageCatalog,
   type CoverageCatalog,
   type CoverageProviderDescriptor,
+  PLACE_DOMAINS,
 } from "./catalog.js";
 import { roadConditionStreams } from "./road-conditions.js";
+import { siteStreams } from "./sites.js";
 
 const RUNTIME_MAX_AGE_MS = 120_000;
 const PASSIVE_HEALTH_MAX_AGE_MS = 300_000;
@@ -86,14 +91,58 @@ function domainForIntegration(
   integration: LoadedIntegration,
   source: { domain?: string } = {},
 ): CoverageCollection["streams"][number]["domain"] | null {
-  if (integration.id === "ev-charging") return "ev";
   const domains = source.domain !== undefined ? [source.domain] : integration.manifest.domains;
   if (domains.includes("geocoding")) return "addresses";
   if (domains.includes("poi-search")) return "pois";
   if (domains.includes("transit") || domains.includes("live-transit")) return "transit";
   if (domains.includes("road-conditions")) return "traffic";
-  if (domains.includes("parking-sites")) return "parking";
-  return null;
+  return PLACE_DOMAINS.find((place) => domains.includes(place.kind))?.domain ?? null;
+}
+
+/** A provider's operational evidence and how it becomes coverage streams. */
+interface OperationalRead {
+  read(): Promise<OperationalEvidence>;
+  streams(snapshot: OperationalEvidence): StreamEvidence[];
+}
+
+/**
+ * The operational evidence the enabled providers publish: road conditions
+ * from the road-conditions providers, places from the charging, parking and
+ * fuel providers. At most 32 reads.
+ */
+function operationalReads(
+  catalog: CoverageCatalog,
+  integrations: readonly LoadedIntegration[],
+): OperationalRead[] {
+  const roads = catalog.providers
+    .filter(
+      (p) =>
+        p.kind === "road-conditions" &&
+        p.enabled &&
+        (p.provider as RoadConditionsProvider).getOperationalEvidence,
+    )
+    .map(
+      (p): OperationalRead => ({
+        read: () => (p.provider as RoadConditionsProvider).getOperationalEvidence!(),
+        streams: (snapshot) => roadConditionStreams(p.integrationId, snapshot),
+      }),
+    );
+  const places = integrations
+    .filter((integration) => integration.enabled)
+    .flatMap((integration) =>
+      PLACE_DOMAINS.flatMap(({ kind, domain }) =>
+        (integration.providers.get(kind) ?? [])
+          .map((raw) => raw as Pick<ChargingSiteProvider, "getOperationalEvidence">)
+          .filter((provider) => typeof provider.getOperationalEvidence === "function")
+          .map(
+            (provider): OperationalRead => ({
+              read: () => provider.getOperationalEvidence!(),
+              streams: (snapshot) => siteStreams(integration.id, domain, snapshot),
+            }),
+          ),
+      ),
+    );
+  return [...roads, ...places].slice(0, 32);
 }
 
 function catalogStream(
@@ -286,6 +335,26 @@ export function runtimeForProvider(
   );
 }
 
+/**
+ * Whether a stream names no place at all: no region and no area. A stream
+ * with a declared area (a global source's world box) is placed by it.
+ */
+export function isUnassigned(stream: StreamEvidence): boolean {
+  return stream.region.keys.length === 0 && stream.region.bounds === undefined;
+}
+
+const countryNames = new Intl.DisplayNames(["en"], { type: "region", fallback: "code" });
+
+/** A country region's English name, e.g. "Germany" for `country:DE`; the code when unknown. */
+function countryLabel(key: string): string {
+  const code = key.slice("country:".length).toUpperCase();
+  try {
+    return countryNames.of(code) ?? code;
+  } catch {
+    return code;
+  }
+}
+
 async function boundedRead<T>(read: () => Promise<T>, timeoutMs = 3500): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
@@ -311,34 +380,25 @@ export async function collectCoverageData(
     manifest: structuredClone(integration.manifest),
   }));
   const catalog = buildCoverageCatalog(integrations);
+  const operational = operationalReads(catalog, integrations);
   const dataManager = options.dataManager ?? createDataManagerEvidenceReader();
   // Start independent authorities together. A stuck store must neither delay
   // healthy evidence nor extend the API's five-second response budget.
-  const reads = await Promise.allSettled([
-    boundedRead(() => dataManager.read()),
-    boundedRead(options.loadBindings ?? loadAllBindingsByIntegration),
-    boundedRead(options.loadPolicy ?? getDataUsePolicy),
-    boundedRead(async () => {
-      const health =
-        options.providerHealth === undefined ? getProviderHealth() : options.providerHealth;
-      return health ? health.peekMany(safeProviderIds(catalog)) : null;
-    }),
-    boundedRead(async () => {
-      const providers = catalog.providers
-        .filter(
-          (p) =>
-            p.kind === "road-conditions" &&
-            p.enabled &&
-            (p.provider as RoadConditionsProvider).getOperationalEvidence,
-        )
-        .slice(0, 32);
-      return Promise.allSettled(
-        providers.map(async (p) => ({
-          owner: p.integrationId,
-          snapshot: await (p.provider as RoadConditionsProvider).getOperationalEvidence!(),
-        })),
-      );
-    }),
+  const [reads, operationalResults] = await Promise.all([
+    Promise.allSettled([
+      boundedRead(() => dataManager.read()),
+      boundedRead(options.loadBindings ?? loadAllBindingsByIntegration),
+      boundedRead(options.loadPolicy ?? getDataUsePolicy),
+      boundedRead(async () => {
+        const health =
+          options.providerHealth === undefined ? getProviderHealth() : options.providerHealth;
+        return health ? health.peekMany(safeProviderIds(catalog)) : null;
+      }),
+    ]),
+    // Each provider's read has its own bound: a slow one costs only its own streams.
+    Promise.allSettled(
+      operational.map(async (entry) => ({ entry, snapshot: await boundedRead(entry.read) })),
+    ),
   ]);
   let data: DataManagerEvidenceSnapshot;
   try {
@@ -445,26 +505,26 @@ export async function collectCoverageData(
     }
   }
 
-  const streams = addCatalogStreams(integrations, data.evidence, generatedAt);
-  const roadReads = reads[4];
-  if (roadReads.status === "fulfilled") {
-    for (const read of roadReads.value) {
-      try {
-        if (read.status === "rejected") throw read.reason;
-        streams.push(...roadConditionStreams(read.value.owner, read.value.snapshot));
-        if (read.value.snapshot.truncated) {
-          collectionStatus = "partial";
-          warnings.push("evidence_truncated");
-        }
-      } catch {
+  const operationalStreams: StreamEvidence[] = [];
+  for (const read of operationalResults) {
+    try {
+      if (read.status === "rejected") throw read.reason;
+      operationalStreams.push(...read.value.entry.streams(read.value.snapshot));
+      if (read.value.snapshot.truncated) {
         collectionStatus = "partial";
-        warnings.push("collector_unavailable");
+        warnings.push("evidence_truncated");
       }
+    } catch {
+      collectionStatus = "partial";
+      warnings.push("collector_unavailable");
     }
-  } else {
-    collectionStatus = "partial";
-    warnings.push("collector_unavailable");
   }
+  // A source with operational evidence is not listed again as a bare declaration.
+  const streams = addCatalogStreams(
+    integrations,
+    [...data.evidence, ...operationalStreams],
+    generatedAt,
+  );
 
   const catalogWithServiceRights: CoverageCatalog = {
     ...catalog,
@@ -492,14 +552,22 @@ export async function collectCoverageData(
       requirementStates.set(integration.id, "unknown");
     }
   }
-  const regions = [...data.regions];
-  if (
-    streams.some((stream) => stream.region.keys.length === 0) &&
-    !regions.some((region) => region.key === "unassigned")
-  ) {
+  const regions = data.regions.map((region) =>
+    region.kind === "country" ? { ...region, label: countryLabel(region.key) } : region,
+  );
+  // Operational evidence names the countries its records are in; each is a region to report on.
+  const known = new Set(regions.map((region) => region.key));
+  for (const key of new Set(streams.flatMap((stream) => stream.region.keys))) {
+    if (known.has(key) || !isCountryRegionKey(key)) continue;
+    regions.push({ key, label: countryLabel(key), kind: "country" });
+    known.add(key);
+  }
+  // The data manager lists its regions by key; the countries added here join that order.
+  regions.sort((a, b) => a.key.localeCompare(b.key));
+  if (streams.some(isUnassigned) && !regions.some((region) => region.key === "unassigned")) {
     regions.push({ key: "unassigned", label: "Region not specified", kind: "unassigned" });
   }
-  const unassignedSourceCount = streams.filter((stream) => stream.region.keys.length === 0).length;
+  const unassignedSourceCount = streams.filter(isUnassigned).length;
   if (collectionStatus === "unavailable") warnings.push("collector_unavailable");
   return {
     generatedAt,

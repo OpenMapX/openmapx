@@ -220,8 +220,8 @@ export interface FeatureReaderOptions<T> extends Omit<FeaturePageQuery, "bbox"> 
 }
 
 export interface FeatureReader<T> {
-  /** The area's features, and whether some may be missing. */
-  search(bbox: BBox, excluded: Excluded): Promise<{ items: T[]; partArea: boolean }>;
+  /** The area's features, and whether some may be missing; `max` replaces the reader's cap for this read. */
+  search(bbox: BBox, excluded: Excluded, max?: number): Promise<{ items: T[]; partArea: boolean }>;
   /** The feature with this id, or one of its members' ids; null when OpenConditions holds none. */
   open(id: string, excluded: Excluded): Promise<T | null>;
 }
@@ -240,9 +240,9 @@ export function createFeatureReader<T extends Placed>(
   options: FeatureReaderOptions<T>,
 ): FeatureReader<T> {
   const seen = new FeaturePositions(options.remembered);
-  const { kind, expand, pageSize, maxBytes, max } = options;
+  const { kind, expand, pageSize, maxBytes } = options;
 
-  async function readBbox(bbox: BBox, excluded: Excluded) {
+  async function readBbox(bbox: BBox, excluded: Excluded, max: number = options.max) {
     const found: { item: T; ids: string[] }[] = [];
     let partArea = false;
     const maxRecords = max * RECORDS_PER_ITEM;
@@ -274,8 +274,8 @@ export function createFeatureReader<T extends Placed>(
   }
 
   return {
-    async search(bbox, excluded) {
-      const { found, partArea } = await readBbox(bbox, excluded);
+    async search(bbox, excluded, max) {
+      const { found, partArea } = await readBbox(bbox, excluded, max);
       return { items: found.map((f) => f.item), partArea };
     },
     async open(id, excluded) {

@@ -13,13 +13,14 @@ currently usable data source, and which fact needs attention when it does not.
 
 ## Reading the page
 
-The region matrix always shows six domain columns:
+The region matrix always shows seven domain columns:
 
 - Addresses — forward address search and reverse geocoding.
 - POIs — POI search and the optional Overture enrichment stream.
 - Transit — stops, departures, journey planning, and realtime.
 - EV — charger discovery, charger availability, and EV route planning.
 - Parking — facility discovery and occupancy.
+- Fuel — station discovery and prices.
 - Traffic — flow, road conditions, and confirmed traffic-graph application.
 
 Select a region or a domain cell to open the selected-region view. The source
@@ -58,18 +59,15 @@ They are not interchangeable:
 | Expires / freshness deadline | The next validity boundary derived from the source policy or actual live TTL. At the boundary, `now >= deadline` is stale or expired. |
 
 Static and live streams are shown independently. For example, a successful
-static POI swap can remain current when the following live write fails. A live
-write is only published after its durable Postgres intent is resolved against a
-validated Redis multi-command result; an unresolved newer intent makes the
-association unknown rather than borrowing an older success.
+static snapshot can remain current when the following live poll fails.
 
 ## Geographic evidence
 
 The report uses matching extract/country keys first, then declared or published
 bounds. Different keys do not prove disjointness: extracts can nest or overlap.
-Named source scopes make declared POI bounds selectable; declared coverage alone
-qualifies an otherwise usable capability as limited. Relations are **exact**, **contains**, **partial overlap**,
-**outside**, or **unknown**. A provider declaration such as “worldwide” is not
+Declared coverage alone qualifies an otherwise usable capability as limited.
+Relations are **exact**, **contains**, **partial overlap**, **outside**, or
+**unknown**. A provider declaration such as “worldwide” is not
 treated as publication evidence. A bounding box that overlaps a small part of a
 region does not prove full-region or local-count coverage, and sources without a
 verified association appear in the unassigned count.
@@ -78,6 +76,12 @@ Search and Overture are singleton active regions. The collector reads stored
 publication fingerprints and timestamps; it does not hash a large PBF from a
 GET request. Overture's Places publication timestamp is independent of later
 OSM conflation. The Places publication marker is created atomically with the active schema.
+
+EV, parking, fuel, and traffic-condition evidence comes from OpenConditions:
+each of its providers reports, per feed, the last poll outcome, the last
+published snapshot, and the regions the feed covers, and the page shows those
+as the stream's attempt, publication, and region. A deployment without
+OpenConditions has no streams in those domains.
 
 Transit evidence comes from the active MOTIS slot and manifest. Historical feed
 rows do not count as active coverage, and an import timestamp is not a claim
@@ -129,7 +133,7 @@ link in the source drawer:
   and wait for a successful active publication. Timestamp/hash columns without
   the new publication marker do not establish freshness.
 - **Failed attempt with an older publication** — repair the upstream feed or
-  credentials in POI ingest, Transit, or the owning integration. The older
+  credentials in OpenConditions, Transit, or the owning integration. The older
   publication is intentionally still shown until a replacement is committed.
 - **Region unknown or partial** — check the active extract, published region,
   source declaration, or provider mapping. Do not use the count as a claim of
@@ -145,5 +149,5 @@ link in the source drawer:
   a valid empty deployment; fixing the underlying workflow lets a later read
   replace the diagnostic.
 
-The page is intentionally diagnostic and read-only. Use the linked POI ingest,
-Transit, integration, or data-workflow screens for changes.
+The page is intentionally diagnostic and read-only. Use the linked Transit,
+integration, or data-workflow screens for changes.

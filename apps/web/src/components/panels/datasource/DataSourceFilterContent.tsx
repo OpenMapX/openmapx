@@ -2,20 +2,12 @@
 
 import ArrowDownwardIcon from "@mui/icons-material/ArrowDownward";
 import ArrowUpwardIcon from "@mui/icons-material/ArrowUpward";
-import BlockIcon from "@mui/icons-material/Block";
 import CancelIcon from "@mui/icons-material/Cancel";
-import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutlined";
-import ErrorOutlineIcon from "@mui/icons-material/ErrorOutlined";
-import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
-import LockIcon from "@mui/icons-material/Lock";
-import LockOpenIcon from "@mui/icons-material/LockOpen";
-import ScheduleIcon from "@mui/icons-material/Schedule";
 import SortIcon from "@mui/icons-material/Sort";
 import Autocomplete, { type AutocompleteRenderValueGetItemProps } from "@mui/material/Autocomplete";
 import Box from "@mui/material/Box";
 import Chip from "@mui/material/Chip";
 import CircularProgress from "@mui/material/CircularProgress";
-import Collapse from "@mui/material/Collapse";
 import Divider from "@mui/material/Divider";
 import FormControlLabel from "@mui/material/FormControlLabel";
 import IconButton from "@mui/material/IconButton";
@@ -40,10 +32,6 @@ import {
 import { isI18nToken } from "@openmapx/integration-framework/strings";
 import { useTranslations } from "next-intl";
 import { useCallback, useMemo, useState } from "react";
-import {
-  type GroupedMultiSelectGroup,
-  GroupedMultiSelectSection,
-} from "@/components/panels/datasource/GroupedMultiSelectSection";
 import { useDataSourceI18nResolver } from "@/components/panels/place/useDataSourceI18nResolver";
 import { ResultItemName, ResultList, ResultListItem } from "@/components/ui/ResultListItem";
 import { useMap } from "@/integration-api/map/MapContext";
@@ -86,126 +74,6 @@ function FormattedSummary({ text }: { text: string }) {
 function shouldShowOperatorCaption(result: DataSourceResult): boolean {
   if (!result.operator) return false;
   return !result.name.toLowerCase().startsWith(result.operator.toLowerCase());
-}
-
-/**
- * Connector label substrings considered "common" -- shown by default.
- * Matched case-insensitively against each option's label.
- */
-const COMMON_CONNECTOR_PATTERNS = [
-  "type 2",
-  "ccs",
-  "chademo",
-  "nacs",
-  "tesla",
-  "type 1",
-  "j1772",
-  "schuko",
-];
-
-/** Determines if a connector option label is a "common" connector. */
-function isCommonConnector(label: string): boolean {
-  const lower = label.toLowerCase();
-  return COMMON_CONNECTOR_PATTERNS.some((p) => lower.includes(p));
-}
-
-/**
- * Status group definitions. Each group maps to a set of OCM status label
- * substrings. When a user selects a group, all matching OCM status IDs are
- * added to the filter.
- */
-interface StatusGroup {
-  labelKey: string;
-  icon: React.ReactNode;
-  patterns: string[];
-}
-
-const STATUS_GROUPS: StatusGroup[] = [
-  {
-    labelKey: "operational",
-    icon: <CheckCircleOutlineIcon fontSize="small" sx={{ color: "#4caf50" }} />,
-    patterns: ["operational"],
-  },
-  {
-    labelKey: "nonOperational",
-    icon: <ErrorOutlineIcon fontSize="small" sx={{ color: "#f44336" }} />,
-    patterns: ["not operational", "temporarily unavailable", "unavailable"],
-  },
-  {
-    labelKey: "plannedOther",
-    icon: <ScheduleIcon fontSize="small" sx={{ color: "#9e9e9e" }} />,
-    patterns: ["planned", "removed", "unknown", "decommissioned"],
-  },
-];
-
-/** Map an OCM status label to a group index. Non-operational must be checked before operational. */
-function statusGroupIndex(statusLabel: string): number {
-  const lower = statusLabel.toLowerCase();
-  // "partly operational" stays with operational -- check non-operational patterns
-  // first but exclude "partly"
-  if (!lower.includes("partly") && STATUS_GROUPS[1].patterns.some((p) => lower.includes(p)))
-    return 1;
-  // Then check operational (catches "Operational" and "Partly Operational")
-  if (STATUS_GROUPS[0].patterns.some((p) => lower.includes(p))) return 0;
-  // Everything else: Planned / Other
-  return STATUS_GROUPS.length - 1;
-}
-
-/**
- * Access type grouping -- maps option labels to an icon and group label.
- */
-interface AccessGroup {
-  labelKey: string;
-  icon: React.ReactNode;
-  patterns: string[];
-}
-
-const ACCESS_GROUPS: AccessGroup[] = [
-  {
-    labelKey: "public",
-    icon: <LockOpenIcon fontSize="small" />,
-    patterns: ["public"],
-  },
-  {
-    labelKey: "membershipRequired",
-    icon: <LockIcon fontSize="small" />,
-    patterns: ["membership"],
-  },
-  {
-    labelKey: "visitorsCustomers",
-    icon: <LockOpenIcon fontSize="small" />,
-    patterns: ["visitors", "customers"],
-  },
-  {
-    labelKey: "privateRestricted",
-    icon: <BlockIcon fontSize="small" />,
-    patterns: ["private", "restricted", "staff"],
-  },
-];
-
-function accessGroupIndex(label: string): number {
-  const lower = label.toLowerCase();
-  for (let i = 0; i < ACCESS_GROUPS.length; i++) {
-    if (ACCESS_GROUPS[i].patterns.some((p) => lower.includes(p))) return i;
-  }
-  return ACCESS_GROUPS.length - 1;
-}
-
-function buildFilterOptionGroups(
-  options: NonNullable<DataSourceFilterDef["options"]>,
-  groups: Array<{ label: string; icon: React.ReactNode }>,
-  groupIndex: (label: string) => number,
-): GroupedMultiSelectGroup[] {
-  return groups
-    .map((group, index) => {
-      const matchingOptions = options.filter((option) => groupIndex(option.label) === index);
-      return {
-        ...group,
-        optionIds: matchingOptions.map((option) => option.id),
-        optionLabels: matchingOptions.map((option) => option.label),
-      };
-    })
-    .filter((group) => group.optionIds.length > 0);
 }
 
 /** Derive unique operator names from raw (pre-client-filter) results. */
@@ -298,6 +166,12 @@ export function DataSourceFilterContent() {
     if (activeSource === "parking") {
       return [{ key: "freeSpaces", labelKey: "freeSpaces" as const }];
     }
+    if (activeSource === "ev-charging") {
+      return [
+        { key: "powerKw", labelKey: "power" as const },
+        { key: "available", labelKey: "availability" as const },
+      ];
+    }
     return [{ key: "available", labelKey: "availability" as const }];
   }, [activeSource, filters.fuelType]);
 
@@ -334,29 +208,6 @@ export function DataSourceFilterContent() {
     }
   };
 
-  /** Toggle an entire set of option IDs at once (for grouped statuses / access). */
-  const handleToggleGroup = (filterId: string, optionIds: (string | number)[]) => {
-    const current = (filters[filterId] as (string | number)[] | undefined) ?? [];
-    const allSelected = optionIds.every((id) => current.includes(id));
-    if (allSelected) {
-      // Remove all IDs in this group
-      setFilter(
-        filterId,
-        current.filter((v) => !optionIds.includes(v)),
-      );
-    } else {
-      // Add missing IDs from this group
-      const toAdd = optionIds.filter((id) => !current.includes(id));
-      setFilter(filterId, [...current, ...toAdd]);
-    }
-  };
-
-  // Build filter lookup by id
-  const filterMap = new Map<string, DataSourceFilterDef>();
-  for (const f of sourceMeta.filters) {
-    filterMap.set(f.id, f);
-  }
-
   return (
     <>
       {/* Filter sections + results */}
@@ -374,75 +225,32 @@ export function DataSourceFilterContent() {
           </Box>
         )}
 
-        {/* Connector Type -- curated common connectors + expandable "Show all" */}
-        {(() => {
-          const def = filterMap.get("connectorType");
-          return def ? (
-            <ConnectorTypeSection
-              filterDef={def}
-              currentValue={filters.connectorType}
-              onToggle={handleToggleMultiSelect}
+        {/* Toggles render as switches, the charging speed as chips with the
+            map markers' coloured dots, everything else as generic chips */}
+        {sourceMeta.filters.map((filterDef) =>
+          filterDef.type === "toggle" ? (
+            <ToggleFilterSection
+              key={filterDef.id}
+              filterDef={filterDef}
+              checked={Boolean(filters[filterDef.id])}
+              onChange={(checked) => setFilter(filterDef.id, checked)}
             />
-          ) : null;
-        })()}
-
-        {/* Charging Speed -- chips with colored dots matching map markers */}
-        {(() => {
-          const def = filterMap.get("speed");
-          return def ? (
+          ) : filterDef.id === "speed" ? (
             <SpeedFilterSection
-              filterDef={def}
+              key={filterDef.id}
+              filterDef={filterDef}
               currentValue={filters.speed}
               onToggle={handleToggleMultiSelect}
             />
-          ) : null;
-        })()}
-
-        {/* Access Type -- grouped with icons */}
-        {(() => {
-          const def = filterMap.get("usageType");
-          return def ? (
-            <AccessTypeSection
-              filterDef={def}
-              currentValue={filters.usageType}
-              onToggleGroup={handleToggleGroup}
+          ) : (
+            <ChipFilterSection
+              key={filterDef.id}
+              filterDef={filterDef}
+              currentValue={filters[filterDef.id]}
+              onToggle={handleToggleMultiSelect}
             />
-          ) : null;
-        })()}
-
-        {/* Status -- consolidated into 3 groups */}
-        {(() => {
-          const def = filterMap.get("status");
-          return def ? (
-            <StatusSection
-              filterDef={def}
-              currentValue={filters.status}
-              onToggleGroup={handleToggleGroup}
-            />
-          ) : null;
-        })()}
-
-        {/* Remaining filters not handled above -- toggles render as switches,
-            everything else falls back to generic chips */}
-        {sourceMeta.filters
-          .filter((f) => !["connectorType", "speed", "usageType", "status"].includes(f.id))
-          .map((filterDef) =>
-            filterDef.type === "toggle" ? (
-              <ToggleFilterSection
-                key={filterDef.id}
-                filterDef={filterDef}
-                checked={Boolean(filters[filterDef.id])}
-                onChange={(checked) => setFilter(filterDef.id, checked)}
-              />
-            ) : (
-              <ChipFilterSection
-                key={filterDef.id}
-                filterDef={filterDef}
-                currentValue={filters[filterDef.id]}
-                onToggle={handleToggleMultiSelect}
-              />
-            ),
-          )}
+          ),
+        )}
 
         {/* Dynamic operator filter -- Autocomplete */}
         {operatorOptions.length > 0 && (
@@ -685,8 +493,6 @@ export function DataSourceFilterContent() {
   );
 }
 
-/** Connector Type Section -- common chips + expandable "Show all" */
-
 function FilterOptionChip({
   label,
   selected,
@@ -717,105 +523,7 @@ function FilterOptionChip({
   );
 }
 
-function ConnectorTypeSection({
-  filterDef,
-  currentValue,
-  onToggle,
-}: {
-  filterDef: DataSourceFilterDef;
-  currentValue: unknown;
-  onToggle: (filterId: string, optionId: string | number) => void;
-}) {
-  const t = useTranslations("dataSources");
-  const [showAll, setShowAll] = useState(false);
-
-  if (filterDef.type !== "multi-select" || !filterDef.options) return null;
-
-  const selected = (currentValue as (string | number)[] | undefined) ?? [];
-  const commonOptions = filterDef.options.filter((opt) => isCommonConnector(opt.label));
-  const otherOptions = filterDef.options.filter((opt) => !isCommonConnector(opt.label));
-
-  // If a non-common connector is selected, auto-expand the "show all" section
-  const hasSelectedOther = otherOptions.some((opt) => selected.includes(opt.id));
-
-  return (
-    <Box sx={{ mb: 2 }}>
-      <Typography
-        variant="body2"
-        sx={{
-          fontWeight: 600,
-          mb: 1,
-        }}
-      >
-        {filterDef.label}
-      </Typography>
-      <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}>
-        {commonOptions.map((opt) => {
-          const isSelected = selected.includes(opt.id);
-          return (
-            <FilterOptionChip
-              key={String(opt.id)}
-              label={opt.label}
-              selected={isSelected}
-              onClick={() => onToggle(filterDef.id, opt.id)}
-            />
-          );
-        })}
-      </Box>
-      {otherOptions.length > 0 && (
-        <>
-          <Box
-            component="button"
-            type="button"
-            onClick={() => setShowAll((v) => !v)}
-            sx={{
-              display: "flex",
-              alignItems: "center",
-              gap: 0.5,
-              mt: 1,
-              p: 0,
-              border: "none",
-              background: "none",
-              cursor: "pointer",
-              color: BRAND,
-              fontSize: 12,
-              fontFamily: "inherit",
-            }}
-          >
-            <ExpandMoreIcon
-              sx={{
-                fontSize: 16,
-                transform: showAll || hasSelectedOther ? "rotate(180deg)" : "rotate(0deg)",
-                transition: "transform 0.2s",
-              }}
-            />
-            {showAll || hasSelectedOther
-              ? t("showFewer")
-              : t("showAllTypes", { count: filterDef.options.length })}
-          </Box>
-
-          <Collapse in={showAll || hasSelectedOther}>
-            <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5, mt: 1 }}>
-              {otherOptions.map((opt) => {
-                const isSelected = selected.includes(opt.id);
-                return (
-                  <FilterOptionChip
-                    key={String(opt.id)}
-                    label={opt.label}
-                    selected={isSelected}
-                    onClick={() => onToggle(filterDef.id, opt.id)}
-                  />
-                );
-              })}
-            </Box>
-          </Collapse>
-        </>
-      )}
-    </Box>
-  );
-}
-
-/** Generic Chip Filter Section -- used for any unknown filter */
+/** Generic Chip Filter Section -- used for every multi-select filter */
 
 const SPEED_COLORS: Record<string, string> = {
   slow: "#4CAF50",
@@ -905,6 +613,7 @@ function ToggleFilterSection({
   checked: boolean;
   onChange: (checked: boolean) => void;
 }) {
+  const t = useTranslations("dataSources");
   return (
     <Box sx={{ mb: 2 }}>
       <FormControlLabel
@@ -913,74 +622,11 @@ function ToggleFilterSection({
         }
         label={
           <Typography variant="body2" sx={{ fontWeight: 600 }}>
-            {filterDef.label}
+            {translateDataSourceLabel(filterDef.label, t)}
           </Typography>
         }
       />
     </Box>
-  );
-}
-
-/** Access Type Section -- vertical list with icons, grouped */
-
-function AccessTypeSection({
-  filterDef,
-  currentValue,
-  onToggleGroup,
-}: {
-  filterDef: DataSourceFilterDef;
-  currentValue: unknown;
-  onToggleGroup: (filterId: string, optionIds: (string | number)[]) => void;
-}) {
-  const t = useTranslations("dataSources");
-  if (filterDef.type !== "multi-select" || !filterDef.options) return null;
-
-  const selected = (currentValue as (string | number)[] | undefined) ?? [];
-  const groups = buildFilterOptionGroups(
-    filterDef.options,
-    ACCESS_GROUPS.map((group) => ({ ...group, label: t(group.labelKey) })),
-    accessGroupIndex,
-  );
-
-  return (
-    <GroupedMultiSelectSection
-      label={filterDef.label}
-      groups={groups}
-      selected={selected}
-      onToggle={(optionIds) => onToggleGroup(filterDef.id, optionIds)}
-      tintIcons
-    />
-  );
-}
-
-/** Status Section -- 3 consolidated groups with icons */
-
-function StatusSection({
-  filterDef,
-  currentValue,
-  onToggleGroup,
-}: {
-  filterDef: DataSourceFilterDef;
-  currentValue: unknown;
-  onToggleGroup: (filterId: string, optionIds: (string | number)[]) => void;
-}) {
-  const t = useTranslations("dataSources");
-  if (filterDef.type !== "multi-select" || !filterDef.options) return null;
-
-  const selected = (currentValue as (string | number)[] | undefined) ?? [];
-  const groups = buildFilterOptionGroups(
-    filterDef.options,
-    STATUS_GROUPS.map((group) => ({ ...group, label: t(group.labelKey) })),
-    statusGroupIndex,
-  );
-
-  return (
-    <GroupedMultiSelectSection
-      label={filterDef.label}
-      groups={groups}
-      selected={selected}
-      onToggle={(optionIds) => onToggleGroup(filterDef.id, optionIds)}
-    />
   );
 }
 

@@ -38,6 +38,7 @@ const DOMAINS: readonly CoverageDomain[] = [
   "transit",
   "ev",
   "parking",
+  "fuel",
   "traffic",
 ];
 const ASSESSMENTS: readonly UsageAssessment[] = [

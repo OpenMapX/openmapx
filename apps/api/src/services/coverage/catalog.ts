@@ -6,10 +6,12 @@ import {
   type RightsEvidence,
 } from "@openmapx/core/coverage";
 import type {
+  ChargingSiteProvider,
+  FuelStationProvider,
   GeocodingProvider,
   IntegrationDataSource,
   LoadedIntegration,
-  MobilityDataSourceProvider,
+  ParkingSiteProvider,
   PoiSearchProvider,
   RealtimeProvider,
   RoadConditionsProvider,
@@ -36,6 +38,29 @@ export interface CoverageProviderDescriptor {
   supports: Partial<Record<CoverageDomainOperationId, boolean>>;
 }
 
+/** The provider kinds of places, the coverage domain of each, and how a provider of it is recognised. */
+export const PLACE_DOMAINS: ReadonlyArray<{
+  kind: "charging-sites" | "parking-sites" | "fuel-stations";
+  domain: CoverageDomain;
+  serves(provider: unknown): boolean;
+}> = [
+  {
+    kind: "charging-sites",
+    domain: "ev",
+    serves: (provider) => typeof (provider as ChargingSiteProvider).searchSites === "function",
+  },
+  {
+    kind: "parking-sites",
+    domain: "parking",
+    serves: (provider) => typeof (provider as ParkingSiteProvider).searchSites === "function",
+  },
+  {
+    kind: "fuel-stations",
+    domain: "fuel",
+    serves: (provider) => typeof (provider as FuelStationProvider).searchStations === "function",
+  },
+];
+
 export interface CoverageCatalog {
   integrations: readonly LoadedIntegration[];
   providers: CoverageProviderDescriptor[];
@@ -56,6 +81,8 @@ export const COVERAGE_OPERATION_LABELS: Record<CoverageDomainOperationId, string
   "ev.route-planning": "EV route planning",
   "parking.facility-discovery": "Parking facility discovery",
   "parking.occupancy": "Live parking occupancy",
+  "fuel.station-discovery": "Fuel station discovery",
+  "fuel.prices": "Live fuel prices",
   "traffic.flow": "Traffic flow",
   "traffic.road-conditions": "Road conditions",
   "traffic.traffic-aware-routing": "Traffic-aware routing",
@@ -78,6 +105,8 @@ export const OPERATION_DEFINITIONS: ReadonlyArray<{
   { id: "ev.route-planning", domain: "ev" },
   { id: "parking.facility-discovery", domain: "parking" },
   { id: "parking.occupancy", domain: "parking" },
+  { id: "fuel.station-discovery", domain: "fuel" },
+  { id: "fuel.prices", domain: "fuel" },
   { id: "traffic.flow", domain: "traffic" },
   { id: "traffic.road-conditions", domain: "traffic" },
   { id: "traffic.traffic-aware-routing", domain: "traffic" },
@@ -272,29 +301,25 @@ function makeProviders(integration: LoadedIntegration): CoverageProviderDescript
     );
   }
 
-  for (const [index, raw] of asProviders(integration, "data-source").entries()) {
-    const provider = raw as MobilityDataSourceProvider;
-    const id = providerId(provider, integration, index);
-    const dataDomain =
-      integration.id === "ev-charging" ? "ev" : integration.id === "parking" ? "parking" : null;
-    if (!dataDomain) continue;
+  // The place domains are decided from their providers, not the orchestrators
+  // that merge them: the providers hold the sources and their evidence.
+  for (const place of PLACE_DOMAINS) {
     const ids = COVERAGE_OPERATION_IDS.filter((operationId) =>
-      dataDomain === "ev" ? operationId.startsWith("ev.") : operationId.startsWith("parking."),
+      operationId.startsWith(`${place.domain}.`),
     );
-    result.push(
-      supports(
-        integration.id,
-        id,
-        ids,
-        (operationId) =>
-          operationId.endsWith("discovery") || operationId.endsWith("facility-discovery")
-            ? typeof provider.search === "function"
-            : Boolean(provider.searchStations || provider.search),
-        provider,
-        "data-source",
-        integration,
-      ),
-    );
+    for (const [index, provider] of asProviders(integration, place.kind).entries()) {
+      result.push(
+        supports(
+          integration.id,
+          providerId(provider, integration, index),
+          ids,
+          () => place.serves(provider),
+          provider,
+          "data-source",
+          integration,
+        ),
+      );
+    }
   }
 
   const routingIds = COVERAGE_OPERATION_IDS.filter(

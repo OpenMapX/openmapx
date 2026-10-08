@@ -1,5 +1,6 @@
 import type { FuelStationProvider } from "@openmapx/integration-framework";
 import type { OpenConditionsClient } from "../client.js";
+import type { SiteEvidenceReader } from "../evidence/read.js";
 import { createFeatureReader, excludedBy } from "../features/read.js";
 import type { LiveSources } from "../sources.js";
 import { recordToFuelStation } from "./map.js";
@@ -22,6 +23,8 @@ const EXPAND = "components,latest";
 export interface FuelStationProviderOptions {
   /** How many searched stations to remember; 10,000 by default. */
   remembered?: number;
+  /** The coverage evidence reader, shared with the other place providers; without it the provider has no operational evidence. */
+  evidence?: SiteEvidenceReader;
 }
 
 /**
@@ -36,6 +39,7 @@ export interface FuelStationProviderOptions {
  * arrives it serves no station, and after it a source that is not listed is
  * taken out of every station as an excluded source is. A credit the record
  * carries without a link takes the source's homepage from the list.
+ * Its operational evidence is OpenConditions' account of the fuel feeds.
  */
 export function createFuelStationProvider(
   client: OpenConditionsClient,
@@ -43,6 +47,7 @@ export function createFuelStationProvider(
   options: FuelStationProviderOptions = {},
 ): FuelStationProvider {
   const link = (sourceId: string) => sources.link(sourceId);
+  const evidence = options.evidence;
   const reader = createFeatureReader(client, {
     kind: "fuel_station",
     expand: EXPAND,
@@ -68,5 +73,6 @@ export function createFuelStationProvider(
       if (!sources.ready) return null;
       return reader.open(id, excludedBy(sources, q?.excludedSourceIds));
     },
+    ...(evidence ? { getOperationalEvidence: () => evidence.read("fuel") } : {}),
   };
 }

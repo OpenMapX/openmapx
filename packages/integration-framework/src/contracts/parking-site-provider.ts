@@ -1,5 +1,6 @@
 import type { BBox, DataSourcePartialReason } from "@openmapx/core";
 import type { ParkingSite } from "@openmapx/mobility-core/parking";
+import type { OperationalEvidence } from "./operational-evidence.js";
 
 export type {
   ParkingArea,
@@ -46,4 +47,6 @@ export interface ParkingSiteProvider {
    * site opens with the same sources it was listed with.
    */
   getSite(id: string, q?: ParkingSiteQuery): Promise<ParkingSite | null>;
+  /** The state of the feeds behind the sites, for the coverage report. */
+  getOperationalEvidence?(): Promise<OperationalEvidence>;
 }

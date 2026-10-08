@@ -19,8 +19,10 @@ vi.mock("@/integration-api/runtime/useDateTimeFormat", () => ({
   }),
 }));
 
+const intl = vi.hoisted(() => ({ locale: "en" }));
+
 vi.mock("next-intl", () => ({
-  useLocale: () => "en",
+  useLocale: () => intl.locale,
   useTranslations: () => (key: string) =>
     (
       ({
@@ -34,6 +36,40 @@ vi.mock("next-intl", () => ({
 vi.mock("@/integration-api/runtime/theme", () => ({
   BRAND: "#008080",
 }));
+
+describe("StructuredSections pricing plans", () => {
+  const plans = (locale: string) => {
+    intl.locale = locale;
+    try {
+      return renderToStaticMarkup(
+        <StructuredSections
+          sections={[
+            {
+              title: "Pricing",
+              type: "pricing",
+              pricingPlans: [{ name: "", currency: "EUR", unlockFee: 1, perKm: 0.19, perHour: 12 }],
+            },
+          ]}
+        />,
+      );
+    } finally {
+      intl.locale = "en";
+    }
+  };
+
+  it("writes plan prices in the reader's locale", () => {
+    const en = plans("en");
+    expect(en).toContain("€1.00");
+    expect(en).toContain("€0.19/km");
+    expect(en).toContain("€12.00/h");
+
+    const de = plans("de");
+    expect(de).toContain("1,00 €");
+    expect(de).toContain("0,19 €/km");
+    expect(de).toContain("12,00 €/h");
+    expect(de).not.toContain("1.00 €");
+  });
+});
 
 describe("StructuredSections", () => {
   it("routes structured image sections through the backend image proxy", () => {
@@ -64,7 +100,7 @@ describe("StructuredSections", () => {
             caption: "2 of 4 available",
             type: "table",
             columns: ["Type", "Power", "Current", "Qty", "Status"],
-            rows: [["CCS", "50 kW", "DC", 2, "operational"]],
+            rows: [["CCS (Type 2)", "50 kW", "DC", 2, "Available", "available"]],
             sectionIcon: "bolt",
           },
         ]}
@@ -84,7 +120,7 @@ describe("StructuredSections", () => {
             captionTimestamp: "2026-07-20T10:00:00Z",
             type: "table",
             columns: ["Type", "Power", "Current", "Qty", "Status"],
-            rows: [["CCS", "50 kW", "DC", 2, "operational"]],
+            rows: [["CCS (Type 2)", "50 kW", "DC", 2, "Available", "available"]],
             sectionIcon: "bolt",
           },
         ]}
@@ -104,7 +140,7 @@ describe("StructuredSections", () => {
             caption: "2 of 4 available",
             type: "table",
             columns: ["Type", "Power", "Current", "Qty", "Status"],
-            rows: [["CCS", "50 kW", "DC", 2, "operational"]],
+            rows: [["CCS (Type 2)", "50 kW", "DC", 2, "Available", "available"]],
             sectionIcon: "bolt",
           },
         ]}
@@ -113,6 +149,34 @@ describe("StructuredSections", () => {
 
     expect(markup).toContain("2 of 4 available");
     expect(markup).not.toContain("5 minutes ago");
+  });
+
+  it("colours a connector status by its kind cell, not by the words of the status", () => {
+    const render = (status: string, kind: string) =>
+      renderToStaticMarkup(
+        <StructuredSections
+          sections={[
+            {
+              title: "Connectors",
+              type: "table",
+              rowLayout: "connector",
+              rows: [["CCS (Type 2)", "150 kW", "DC", 1, status, kind]],
+              sectionIcon: "bolt",
+            },
+          ]}
+        />,
+      );
+    // The status is the row's last caption; its generated class carries the colour.
+    const statusClass = (markup: string) =>
+      [...markup.matchAll(/<span class="([^"]+)">/g)].at(-1)?.[1];
+
+    const available = statusClass(render("Verfügbar", "available"));
+    const out = statusClass(render("Not operational", "out"));
+    const unknown = statusClass(render("", "unknown"));
+
+    expect(new Set([available, out, unknown]).size).toBe(3);
+    expect(statusClass(render("Operational, available", "unknown"))).toBe(unknown);
+    expect(statusClass(render("Not available", "out"))).toBe(out);
   });
 
   it("renders a structured pricing table with formatted prices and a direct-price caption", () => {

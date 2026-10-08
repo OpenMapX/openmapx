@@ -1,14 +1,5 @@
 import type postgres from "postgres";
 
-export interface PoiFeedStateRow {
-  source_id: string;
-  domain: string;
-  status: string;
-  consecutive_failures: number | string;
-  last_error: unknown;
-  refresh_evidence: unknown;
-}
-
 export interface SearchPublicationRow {
   region: string;
   source_fingerprint: string | null;
@@ -62,17 +53,6 @@ async function boundedQuery<T extends object[]>(sql: CoverageSql, query: string)
   } finally {
     clearTimeout(timer);
   }
-}
-
-export async function readPoiFeedStates(sql: CoverageSql): Promise<PoiFeedStateRow[]> {
-  return boundedQuery<PoiFeedStateRow[]>(
-    sql,
-    `SELECT source_id, domain, status, consecutive_failures, last_error,
-            refresh_evidence
-       FROM data_manager.poi_feed_state
-      ORDER BY source_id
-      LIMIT 10000`,
-  );
 }
 
 export async function readSearchPublication(

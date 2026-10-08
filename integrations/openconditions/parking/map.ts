@@ -8,9 +8,7 @@ import type {
   ParkingStatus,
   ParkingTrend,
 } from "@openmapx/integration-framework";
-import { licenseUrlForSpdx } from "@openmapx/mobility-core/license";
 import {
-  type Attribution,
   addressOf,
   allowedReadings,
   CROWD_CREDIT,
@@ -27,12 +25,12 @@ import {
   noLink,
   pointOf,
   type Rec,
-  type RecordSource,
   rec,
   type SourceLink,
   sourcesOf,
   splitKey,
   str,
+  upstreamCredits,
 } from "../features/record.js";
 
 const SITE_TYPES: ReadonlySet<string> = new Set<ParkingSiteType>([
@@ -199,36 +197,6 @@ function rateOf(offer: Rec): ParkingRate | undefined {
   if (rows.length === 0 || currency === undefined) return undefined;
   const text = firstText(offer["displayText"]);
   return { currency, rows, ...(text ? { text } : {}) };
-}
-
-/**
- * The credits of the upstream publishers the aggregators among the kept
- * sources took the site from: one per publisher with a licence, named
- * "<feed provider> – <publisher>" under the feed it came through, with the
- * licence's own text linked.
- */
-function upstreamCredits(kept: readonly RecordSource[], linkOf: SourceLink): Attribution[] {
-  const out: Attribution[] = [];
-  for (const source of kept) {
-    const feed = credit(source, linkOf);
-    for (const u of source.upstream) {
-      const publisher = str(u["publisher"]);
-      const license = str(u["license"]);
-      if (!publisher || !license) continue;
-      const name = `${feed.name} – ${publisher}`;
-      if (out.some((a) => a.sourceId === source.id && a.name === name)) continue;
-      const licenseUrl = licenseUrlForSpdx(license);
-      out.push({
-        sourceId: source.id,
-        name,
-        ...(feed.url ? { url: feed.url } : {}),
-        spdxLicense: license,
-        ...(licenseUrl ? { licenseUrl } : {}),
-        publisher: { name: publisher },
-      });
-    }
-  }
-  return out;
 }
 
 /** Whether an area says more than that the site has such spaces. */

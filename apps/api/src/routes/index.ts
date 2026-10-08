@@ -19,7 +19,6 @@ import { elevationRoute } from "./elevation";
 import { garageRoute } from "./garage";
 import { imageProxyRoute } from "./image-proxy";
 import { internalMetricsRoute } from "./internal-metrics";
-import { internalPoiSourcesRoute } from "./internal-poi-sources";
 import { isochroneRoute } from "./isochrone";
 import { legalConfigRoute } from "./legal-config";
 import { mapConfigRoute } from "./map-config";
@@ -98,7 +97,6 @@ export async function registerCoreRoutes(
   await server.register(isochroneRoute, { prefix: "/api" });
   await server.register(imageProxyRoute, { prefix: "/api" });
   await server.register(internalMetricsRoute, { prefix: "/api" });
-  await server.register(internalPoiSourcesRoute, { prefix: "/api" });
   await server.register(winterSportsRoute, { prefix: "/api" });
   await server.register(reviewsKeypairRoute, { prefix: "/api" });
   await server.register(savedRoute, { prefix: "/api" });

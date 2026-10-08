@@ -10,6 +10,7 @@ import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import type { EvChargeStop, EvDirectionsResult } from "@openmapx/core";
 import { formatDuration, useDataSources } from "@openmapx/core";
+import { formatMoney } from "@openmapx/integration-framework/strings";
 import { useLocale, useTranslations } from "next-intl";
 import { AttributionStrip } from "@/components/ui/AttributionStrip";
 import { BRAND } from "@/integration-api/runtime/theme";
@@ -31,9 +32,13 @@ export function EvPlanCard({
   const { data: dataSourcesData } = useDataSources();
   const evSourceMeta = dataSourcesData?.sources?.find((s) => s.id === EV_CHARGING_SOURCE_ID);
 
-  const hasUnreachable = result.warnings.some(
-    (w) => w.kind === "unreachable" || w.kind === "no-charger-data",
-  );
+  // A plan that found no charger data, or whose charger sources did not
+  // answer, is unreachable for that reason alone; say so.
+  const hasNoChargers = result.warnings.some((w) => w.kind === "no-charger-data");
+  const hasSourcesDown = result.warnings.some((w) => w.kind === "charger-sources-unavailable");
+  const hasUnreachable =
+    !hasNoChargers && !hasSourcesDown && result.warnings.some((w) => w.kind === "unreachable");
+  const hasPartialChargers = result.warnings.some((w) => w.kind === "partial-charger-data");
   const hasNoAllowedNetwork = result.warnings.some((w) => w.kind === "no-allowed-network");
   const hasTightMargin = result.warnings.some((w) => w.kind === "tight-margin");
 
@@ -107,9 +112,31 @@ export function EvPlanCard({
 
       <Divider />
 
+      {hasNoChargers && (
+        <Alert severity="warning" sx={{ mx: 2, my: 1.5 }}>
+          {t(result.stops.length > 0 ? "noChargersAhead" : "noChargers")}
+        </Alert>
+      )}
+
+      {hasSourcesDown && (
+        <Alert severity="warning" sx={{ mx: 2, my: 1.5 }}>
+          {t(
+            result.stops.length > 0
+              ? "chargerSourcesUnavailableAhead"
+              : "chargerSourcesUnavailable",
+          )}
+        </Alert>
+      )}
+
       {hasUnreachable && (
         <Alert severity="warning" sx={{ mx: 2, my: 1.5 }}>
           {t("unreachable")}
+        </Alert>
+      )}
+
+      {hasPartialChargers && !hasNoChargers && !hasSourcesDown && (
+        <Alert severity="info" sx={{ mx: 2, my: 1.5 }}>
+          {t("partialChargers")}
         </Alert>
       )}
 
@@ -129,7 +156,7 @@ export function EvPlanCard({
         </Alert>
       )}
 
-      {hasTightMargin && !hasUnreachable && !hasNoAllowedNetwork && (
+      {hasTightMargin && !hasUnreachable && !hasNoChargers && !hasNoAllowedNetwork && (
         <Alert severity="warning" sx={{ mx: 2, my: 1.5 }}>
           {t("tightMargin")}
         </Alert>
@@ -166,6 +193,13 @@ function EvPlanStopRow({
         style: "currency",
         currency: stop.estimatedCost.currency,
       }).format(stop.estimatedCost.amount)
+    : null;
+  // The tariff's own digits (0.389/kWh) are kept; the locale places symbol and separator.
+  const tariffFmt = stop.tariffPrice
+    ? t("tariffPrice", {
+        price: formatMoney(stop.tariffPrice.amount, stop.tariffPrice.currency, locale),
+        unit: stop.tariffPrice.unit,
+      })
     : null;
   const attributions = stop.attributions.map(runtimeAttributionToAttribution);
 
@@ -238,14 +272,12 @@ function EvPlanStopRow({
             </Typography>
           )}
         </Box>
-        {(costFmt || stop.tariffSummary) && (
+        {(costFmt || tariffFmt) && (
           <Typography
             variant="caption"
             sx={{ color: "text.secondary", display: "block", mt: 0.25 }}
           >
-            {costFmt}
-            {costFmt && stop.tariffSummary ? " · " : ""}
-            {stop.tariffSummary}
+            {[costFmt, tariffFmt].filter(Boolean).join(" · ")}
           </Typography>
         )}
       </ButtonBase>

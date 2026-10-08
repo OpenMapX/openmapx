@@ -48,6 +48,7 @@ export const DOMAIN_TO_SECTION_KEY: Record<string, string> = {
   "road-conditions": "roadConditions",
   "fuel-stations": "fuelStations",
   "parking-sites": "parkingSites",
+  "charging-sites": "chargingSites",
   "gtfs-catalog": "transitDataCatalogs",
   "flight-search": "flights",
   "ride-hailing": "rideHailing",

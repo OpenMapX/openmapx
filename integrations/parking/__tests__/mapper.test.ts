@@ -262,12 +262,15 @@ describe("mapParkingSiteToDetail", () => {
       ["Up to 1 day", "€12.00"],
       ["Up to 1 month (P-Card)", "€30.00"],
       ["Up to 1 year (Yearly ticket)", "€300.00"],
-      ["Up to 1 hour", "CHF 2.00 per hour (billed per 30 min)"],
-      ["From 5 hours", "CHF 1.00 per hour (billed per 6 min)"],
+      ["Up to 1 hour", "CHF 2.00 per hour (billed per 30 min)"],
+      ["From 5 hours", "CHF 1.00 per hour (billed per 6 min)"],
       // Billed by the hour: a price per hour says so already.
-      ["1 hour to 3 hours", "CHF 1.50 per hour"],
-      ["Up to 1 month (Monthly ticket, Public transport season ticket)", "CHF 100.00"],
+      ["1 hour to 3 hours", "CHF 1.50 per hour"],
+      ["Up to 1 month (Monthly ticket, Public transport season ticket)", "CHF 100.00"],
     ]);
+    // The reader's locale places the symbol and the decimal separator.
+    expect(text(pricing?.rows?.[0][1], "de")).toBe("2,00 €");
+    expect(text(pricing?.rows?.[6][1], "de")).toBe("1,50 CHF pro Stunde");
     expect(text(pricing?.rows?.[2][0], "de")).toBe("Bis 1 Monat (P-Card)");
     expect(text(pricing?.rows?.[4][1], "de")).toMatch(/pro Stunde \(abgerechnet je 30\s?Min/);
   });
@@ -315,6 +318,25 @@ describe("mapParkingSiteToDetail", () => {
     expect(detail.identity).toEqual({ operator: "APCOA" });
     expect(detail.branding?.logoUrl).toMatch(/^https:\/\/commons\.wikimedia\.org\//);
     expect(detail.parkAndRide).toBeUndefined();
+  });
+
+  it("drops upstream URLs that are not http(s)", () => {
+    const site = makeSite({
+      operator: "APCOA",
+      website: "javascript:alert(1)",
+      attributions: [
+        {
+          sourceId: "de-bw-mobidata-parking",
+          name: "MobiData BW",
+          url: "data:text/html,<script>alert(1)</script>",
+          licenseUrl: "javascript:alert(1)",
+        },
+      ],
+    });
+    const emitted = JSON.stringify([mapParkingSiteToResult(site), mapParkingSiteToDetail(site)]);
+
+    expect(emitted).not.toMatch(/javascript:|data:/);
+    expect(mapParkingSiteToDetail(site).operator).toEqual({ name: "APCOA" });
   });
 });
 

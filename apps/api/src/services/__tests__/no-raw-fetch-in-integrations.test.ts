@@ -69,7 +69,7 @@ const RAW_FETCH_ALLOWLIST: Record<string, string> = {
 };
 
 // Matches a bare, unqualified `fetch(` call — NOT `fetchJson(`,
-// `impersonatingFetch(`, or `something.fetch(`.
+// `graphqlFetch(`, or `something.fetch(`.
 const BARE_FETCH_RE = /(?<![.\w$])fetch\s*\(/;
 
 function collectTsFiles(dir: string): string[] {

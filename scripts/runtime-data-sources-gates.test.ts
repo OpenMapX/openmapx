@@ -7,7 +7,7 @@ import {
   CREDENTIAL_KEYED_INTEGRATIONS,
   collectCredentialKeyViolations,
 } from "./check-credential-keys.ts";
-import { collectFeedIdViolations, runtimeDataSourceIntegrations } from "./check-feed-ids.ts";
+import { runtimeDataSourceIntegrations } from "./check-feed-ids.ts";
 
 // Integrations whose manifests set `runtimeDataSources: true` have no static
 // sources for the manifest gates to read. Every gate must say so explicitly
@@ -59,14 +59,6 @@ describe("check-feed-ids", () => {
     writeManifest("runtime-probe", { runtimeDataSources: true });
     writeManifest("static-probe", {});
     expect(runtimeDataSourceIntegrations(root)).toEqual(["runtime-probe"]);
-  });
-
-  it("rejects a poi-sources.ts in a runtime integration", () => {
-    writeManifest("runtime-probe", { runtimeDataSources: true });
-    writeFileSync(join(root, "integrations", "runtime-probe", "poi-sources.ts"), "");
-    expect(collectFeedIdViolations(root).join("\n")).toMatch(
-      /runtime-probe: .*poi-sources\.ts.*runtimeDataSources/,
-    );
   });
 });
 

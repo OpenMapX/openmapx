@@ -11,11 +11,6 @@ import {
   regionKeyForExtract,
   type StreamEvidence,
 } from "@openmapx/core/coverage";
-import {
-  type PoiSource,
-  type RegisteredPoiSource,
-  getAllPoiSources as registrySources,
-} from "@openmapx/poi-source-registry";
 import { Cron } from "croner";
 import type postgres from "postgres";
 import {
@@ -34,9 +29,7 @@ import { scrubSecrets } from "../utils/scrub-secrets.js";
 import {
   type FeedStateRow,
   type OverturePublicationRow,
-  type PoiFeedStateRow,
   readOverturePublication,
-  readPoiFeedStates,
   readSearchPublication,
   readTransitFeedStates,
   type SearchPublicationRow,
@@ -48,7 +41,6 @@ export interface CollectCoverageOptions {
   dataDir: string;
   sql: postgres.Sql;
   store: StateStore;
-  sources?: readonly RegisteredPoiSource[];
   now?: () => Date;
 }
 
@@ -74,18 +66,6 @@ function numeric(value: unknown): number | null {
 
 function uniqueReasons(reasons: readonly CoverageReasonCode[]): CoverageReasonCode[] {
   return [...new Set(reasons)];
-}
-
-function domainForPoi(source: PoiSource): "pois" | "ev" {
-  if (source.domain === "ev-charging" || source.domain === "ev") return "ev";
-  return "pois";
-}
-
-function streamNames(source: RegisteredPoiSource): Array<"static" | "live"> {
-  const names: Array<"static" | "live"> = [];
-  if (source.static || source.bundled) names.push("static");
-  if (source.live || source.bundled) names.push("live");
-  return names;
 }
 
 function cronPolicy(
@@ -219,156 +199,6 @@ function baseStream(input: {
     freshness: freshness.freshness,
     reasons: uniqueReasons([...(input.reasons ?? []), ...freshness.reasons]),
   };
-}
-
-function declaredRegion(source: RegisteredPoiSource): StreamEvidence["region"] {
-  if (source.coverage) {
-    return {
-      keys: [`regional-scope:${source.id}`],
-      label: source.name,
-      basis: "declared",
-      relation: "unknown",
-      bounds: source.coverage,
-    };
-  }
-  return { keys: [], basis: "unknown", relation: "unknown" };
-}
-
-function readRefreshStream(
-  value: unknown,
-  stream: "static" | "live",
-): Record<string, unknown> | null {
-  if (!value || typeof value !== "object" || (value as { version?: unknown }).version !== 1)
-    return null;
-  const root = value as Record<string, unknown>;
-  const selected = root[stream];
-  return selected && typeof selected === "object" ? (selected as Record<string, unknown>) : null;
-}
-
-function textField(value: Record<string, unknown> | null, field: string): string | null {
-  const result = value?.[field];
-  return typeof result === "string" && result.length > 0 ? result.slice(0, 512) : null;
-}
-
-function dateField(value: Record<string, unknown> | null, field: string): string | null {
-  const result = textField(value, field);
-  return result && Number.isFinite(Date.parse(result)) ? result : null;
-}
-
-function attemptField(value: Record<string, unknown> | null): StreamEvidence["attempt"] {
-  const attempt = value?.lastAttempt;
-  if (!attempt || typeof attempt !== "object") return makeAttempt(null, "unknown");
-  const record = attempt as Record<string, unknown>;
-  const outcome = record.outcome;
-  const allowed = [
-    "running",
-    "succeeded",
-    "unchanged",
-    "partial",
-    "failed",
-    "skipped",
-    "unknown",
-  ] as const;
-  const normalized = allowed.includes(outcome as (typeof allowed)[number])
-    ? (outcome as (typeof allowed)[number])
-    : "unknown";
-  return makeAttempt(
-    dateField(record, "at"),
-    normalized,
-    typeof record.jobId === "string" ? record.jobId.slice(0, 256) : null,
-    typeof record.message === "string" ? record.message : null,
-  );
-}
-
-function buildPoiStreams(
-  sources: readonly RegisteredPoiSource[],
-  stateRows: readonly PoiFeedStateRow[],
-  now: Date,
-): StreamEvidence[] {
-  const byId = new Map(stateRows.map((row) => [row.source_id, row]));
-  const generatedAt = now.toISOString();
-  const result: StreamEvidence[] = [];
-  for (const source of sources) {
-    const ownerId = source.ownerIntegrationId ?? "unknown";
-    const owner = { kind: "integration" as const, id: ownerId };
-    const row = byId.get(source.id);
-    for (const stream of streamNames(source)) {
-      const evidence = readRefreshStream(row?.refresh_evidence, stream);
-      const activeVersion =
-        typeof evidence?.activeVersion === "string" ? evidence.activeVersion : null;
-      const activeAssociation = evidence?.activeAssociation;
-      const associationKnown = activeAssociation === "known";
-      const publishedAt = dateField(evidence, "lastPublishedAt");
-      const checkedAt = dateField(evidence, "lastSuccessfulCheckAt");
-      const lastAttempt = evidence ? attemptField(evidence) : makeAttempt(null, "unknown");
-      const count = numeric(evidence?.rowCount);
-      const configuredSpec =
-        stream === "static" ? (source.static ?? source.bundled) : (source.live ?? source.bundled);
-      const cron = configuredSpec?.cron;
-      const expiry = dateField(evidence, "expiresAt");
-      const policy = cronPolicy(cron, checkedAt, now, "freshness-policy-missing", expiry);
-      const hasPublication = Boolean(
-        activeVersion &&
-          publishedAt &&
-          associationKnown &&
-          !textField(evidence, "pendingWriteIntentId"),
-      );
-      const presence: StreamEvidence["presence"] = hasPublication
-        ? count === 0
-          ? "empty"
-          : "present"
-        : "unknown";
-      const reasons: CoverageReasonCode[] = [];
-      if (!row) reasons.push("no_publication_evidence");
-      if (!hasPublication) reasons.push("no_publication_evidence");
-      if (activeAssociation === "unknown" || evidence?.pendingWriteIntentId) {
-        reasons.push("publish_failed");
-      }
-      if (
-        hasPublication &&
-        (lastAttempt.outcome === "failed" || lastAttempt.outcome === "partial")
-      ) {
-        reasons.push("serving_earlier_data");
-      }
-      if (ownerId === "unknown") reasons.push("lineage_unknown");
-      if (lastAttempt.outcome === "failed" || lastAttempt.outcome === "partial") {
-        reasons.push("upstream_check_failed");
-      }
-      const lastSuccessfullyCheckedVersion = textField(evidence, "lastSuccessfullyCheckedVersion");
-      const upstreamAsOf = dateField(evidence, "upstreamAsOf");
-      const observedAt = lastAttempt.at ?? checkedAt ?? publishedAt ?? generatedAt;
-      result.push(
-        baseStream({
-          key: `poi:${ownerId}:${source.id}:${stream}`,
-          owner,
-          sourceId: source.id,
-          attributionSourceId: source.attributionSourceId,
-          stream,
-          domain: domainForPoi(source),
-          now,
-          observedAt,
-          presence,
-          region: declaredRegion(source),
-          ...(count !== null
-            ? { count: { value: count, unit: "records", scope: "registered source" } }
-            : {}),
-          publication: {
-            version: textField(evidence, "lastPublishedVersion") ?? activeVersion,
-            publishedAt,
-            active: hasPublication ? true : null,
-          },
-          attempt: lastAttempt,
-          lastSuccessfulCheckAt: checkedAt,
-          lastSuccessfullyCheckedVersion,
-          upstreamAsOf,
-          expiresAt: expiry,
-          policy,
-          reasons,
-        }),
-      );
-    }
-  }
-  return result;
 }
 
 function buildSearchStream(
@@ -894,8 +724,6 @@ export async function collectCoverageSnapshot(
   }
 
   const datasets = opts.store.getAll();
-  const sources = opts.sources ?? registrySources();
-  let poiRows: PoiFeedStateRow[] = [];
   let search: { exists: boolean; row: SearchPublicationRow | null } = { exists: false, row: null };
   let overture: {
     exists: boolean;
@@ -906,15 +734,13 @@ export async function collectCoverageSnapshot(
   };
   let transitRows: FeedStateRow[] = [];
   const reads = await Promise.allSettled([
-    readPoiFeedStates(opts.sql),
     readSearchPublication(opts.sql),
     readOverturePublication(opts.sql),
     readTransitFeedStates(opts.sql),
   ]);
-  if (reads[0].status === "fulfilled") poiRows = reads[0].value;
-  if (reads[1].status === "fulfilled") search = reads[1].value;
-  if (reads[2].status === "fulfilled") overture = reads[2].value;
-  if (reads[3].status === "fulfilled") transitRows = reads[3].value;
+  if (reads[0].status === "fulfilled") search = reads[0].value;
+  if (reads[1].status === "fulfilled") overture = reads[1].value;
+  if (reads[2].status === "fulfilled") transitRows = reads[2].value;
   const failedReads = reads.filter((result) => result.status === "rejected").length;
   if (failedReads) {
     context.partial = true;
@@ -929,7 +755,6 @@ export async function collectCoverageSnapshot(
   );
 
   const streams: StreamEvidence[] = [];
-  streams.push(...buildPoiStreams(sources, poiRows, now));
   streams.push(
     buildSearchStream(
       search.exists,

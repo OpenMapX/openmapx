@@ -17,7 +17,8 @@ import IconButton from "@mui/material/IconButton";
 import Link from "@mui/material/Link";
 import Typography from "@mui/material/Typography";
 import { type PricingPlanEntry, proxyImageUrl, safeHref } from "@openmapx/core";
-import { useTranslations } from "next-intl";
+import { formatMoney } from "@openmapx/integration-framework/strings";
+import { useLocale, useTranslations } from "next-intl";
 import { type ReactNode, useState } from "react";
 import { HlsVideo } from "@/components/ui/HlsVideo";
 import { BRAND } from "@/integration-api/runtime/theme";
@@ -91,12 +92,16 @@ function renderSectionIcon(sectionIcon?: ReactNode | string): ReactNode {
   }
 }
 
+/** The colour of a connector row's status, by the status kind its last cell names. */
+const STATUS_KIND_COLOR: Readonly<Record<string, string>> = {
+  available: "success.main",
+  busy: "warning.main",
+  out: "error.main",
+};
+
 function ConnectorRow({ row }: { row: (string | number)[] }) {
-  const [type, power, current, qty, status] = row;
+  const [type, power, current, qty, status, kind] = row;
   const statusStr = String(status ?? "");
-  const isAvailable =
-    statusStr.toLowerCase().includes("operational") ||
-    statusStr.toLowerCase().includes("available");
 
   return (
     <Box
@@ -127,7 +132,7 @@ function ConnectorRow({ row }: { row: (string | number)[] }) {
       <Typography
         variant="caption"
         sx={{
-          color: isAvailable ? "success.main" : "text.disabled",
+          color: STATUS_KIND_COLOR[String(kind ?? "")] ?? "text.disabled",
           fontWeight: 500,
           flexShrink: 0,
           ml: 1,
@@ -295,10 +300,12 @@ function PricingPlansSection({
     perHour: labels?.perHour ?? "Per hour",
     free: labels?.free ?? "Free",
   };
+  const locale = useLocale();
   return (
     <Box>
       {plans.map((plan, i) => {
-        const sym = plan.currency === "EUR" ? "€" : plan.currency;
+        // The reader's locale places the symbol and the decimal separator.
+        const price = (amount: number) => formatMoney(amount, plan.currency, locale);
         const name = plan.name || resolvedLabels.standard;
         const showName = plans.length > 1 || !!plan.name;
         const planKey = `${plan.name}-${plan.currency}-${plan.unlockFee ?? ""}-${plan.perKm ?? ""}-${plan.perHour ?? ""}`;
@@ -321,21 +328,15 @@ function PricingPlansSection({
             ) : (
               <>
                 {plan.unlockFee !== undefined && (
-                  <PricingPlanRow
-                    label={resolvedLabels.unlockFee}
-                    value={`${plan.unlockFee.toFixed(2)} ${sym}`}
-                  />
+                  <PricingPlanRow label={resolvedLabels.unlockFee} value={price(plan.unlockFee)} />
                 )}
                 {plan.perKm !== undefined && (
-                  <PricingPlanRow
-                    label={resolvedLabels.perKm}
-                    value={`${plan.perKm.toFixed(2)} ${sym}/km`}
-                  />
+                  <PricingPlanRow label={resolvedLabels.perKm} value={`${price(plan.perKm)}/km`} />
                 )}
                 {plan.perHour !== undefined && (
                   <PricingPlanRow
                     label={resolvedLabels.perHour}
-                    value={`${plan.perHour.toFixed(2)} ${sym}/h`}
+                    value={`${price(plan.perHour)}/h`}
                   />
                 )}
               </>

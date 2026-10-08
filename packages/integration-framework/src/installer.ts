@@ -928,8 +928,6 @@ function manifestDeclaresBackend(manifest: Record<string, unknown>): boolean {
 const EXECUTABLE_COMMUNITY_CODE_PATHS = [
   "index.ts",
   "index.js",
-  "poi-sources.ts",
-  "poi-sources.js",
   "dist/backend/index.mjs",
   "map-layer.tsx",
   "legend.tsx",

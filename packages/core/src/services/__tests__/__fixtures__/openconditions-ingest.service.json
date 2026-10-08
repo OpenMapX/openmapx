@@ -24,7 +24,7 @@
       "OPENCONDITIONS_ARCHIVE_DIR": "/data/archive",
       "OPENCONDITIONS_STATE_DIR": "/data"
     },
-    "memory": "${OPENCONDITIONS_INGEST_MEMORY:-4g}",
+    "memory": "${OPENCONDITIONS_INGEST_MEMORY:-6g}",
     "restart": "unless-stopped",
     "dependsOn": [
       {

@@ -17,6 +17,16 @@ export {
   assertTransitProviderContract,
 } from "./assert-contract";
 export type {
+  ChargingConnector,
+  ChargingSite,
+  ChargingSiteProvider,
+  ChargingSiteQuery,
+  EnergyTariff,
+  EnergyTariffRestrictions,
+  Evse,
+  EvseStatus,
+} from "./charging-site-provider.js";
+export type {
   FuelProduct,
   FuelStation,
   FuelStationProvider,
@@ -58,6 +68,11 @@ export type {
   OsmIdentity,
   PricingPlanEntry,
 } from "./mobility-data-source-provider.js";
+export type {
+  OperationalEvidence,
+  OperationalFeedCoverage,
+  OperationalFeedEvidence,
+} from "./operational-evidence.js";
 export type {
   ParkingArea,
   ParkingCounts,
@@ -123,7 +138,6 @@ export type {
   RoadConditionRoadRef,
   RoadConditionSchedule,
   RoadConditionSeverityLabel,
-  RoadConditionsOperationalEvidence,
   RoadConditionsProvider,
   RoadConditionsQuery,
   RoadConditionValidity,

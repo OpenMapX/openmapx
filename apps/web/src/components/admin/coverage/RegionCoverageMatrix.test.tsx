@@ -68,6 +68,16 @@ const data: CoverageRegionsResponse = {
           attention: 1,
           reasons: [],
         },
+        fuel: {
+          domain: "fuel",
+          status: "limited",
+          operational: 0,
+          limited: 1,
+          unavailable: 0,
+          unknown: 0,
+          attention: 1,
+          reasons: ["source_partial"],
+        },
         traffic: {
           domain: "traffic",
           status: "operational",

@@ -94,7 +94,6 @@ const nextConfig: NextConfig = {
     "@openmapx/noaa-coops-data",
     "@openmapx/ourairports-data",
     "@openmapx/place-ids",
-    "@openmapx/poi-source-registry",
     "@openmapx/presets",
   ],
   // esbuild is loaded lazily by @openmapx/core's integration installer (only

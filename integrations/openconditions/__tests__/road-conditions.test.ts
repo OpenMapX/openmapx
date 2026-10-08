@@ -299,6 +299,7 @@ describe("road-conditions provider", () => {
               feeds: [
                 {
                   id: "de-child",
+                  domain: "roads",
                   parentSourceId: "de-parent",
                   lastAttemptAt: "2026-09-11T09:59:00.000Z",
                   lastOutcome: "changed",
@@ -349,6 +350,28 @@ describe("road-conditions provider", () => {
       status: "healthy",
       action: null,
     });
+  });
+
+  it("reads revision 0 as no publication, and leaves out feeds of other domains and disabled ones", async () => {
+    const p = provider({
+      serve: (url) =>
+        url.endsWith("/feeds/status")
+          ? {
+              instanceId: "oc-eu-1",
+              collectedAt: "2026-09-11T10:00:00.000Z",
+              graph: { generation: "graph-1", status: "ready", regions: ["de"] },
+              feeds: [
+                { id: "de-new", domain: "roads", publicationRevision: 0, lastOutcome: "failed" },
+                { id: "de-off", domain: "roads", state: "disabled" },
+                { id: "de-bnetza-charging", domain: "charging", publicationRevision: 4 },
+              ],
+            }
+          : undefined,
+    });
+    const { feeds } = await p.getOperationalEvidence!();
+    expect(feeds.map((feed) => [feed.sourceId, feed.publicationRevision])).toEqual([
+      ["de-new", null],
+    ]);
   });
 
   it("getFlow fetches /segments.geojson at OPENCONDITIONS_URL with the bbox as a comma-joined param", async () => {

@@ -11,81 +11,60 @@ describe("initializeRequiredSubsystems", () => {
     const calls: string[] = [];
     const readiness = new DataManagerReadiness();
     const cronHandles = handles();
-    const poiHandles = handles();
 
     const result = await initializeRequiredSubsystems({
       readiness,
       initializeOfflineStorage: async () => {
         calls.push("offline");
       },
-      verifyRedis: async () => {
-        calls.push("redis");
-      },
       reconcileJobs: async () => {
         calls.push("reconcile");
         return ["orphan-1"];
-      },
-      discoverPoiSources: async () => {
-        calls.push("discover");
       },
       setupCronSchedulers: () => {
         calls.push("cron");
         return cronHandles as never;
       },
-      setupPoiScheduler: () => {
-        calls.push("poi-cron");
-        return poiHandles as never;
-      },
     });
 
-    expect(calls).toEqual(["offline", "redis", "reconcile", "discover", "cron", "poi-cron"]);
-    expect(result).toEqual({ cronHandles, poiHandles, interruptedJobIds: ["orphan-1"] });
+    expect(calls).toEqual(["offline", "reconcile", "cron"]);
+    expect(result).toEqual({ cronHandles, interruptedJobIds: ["orphan-1"] });
     expect(readiness.snapshot()).toEqual({ status: "starting", phase: "cron-schedulers" });
   });
 
   it("fails readiness at the exact mandatory phase and does not continue", async () => {
     const readiness = new DataManagerReadiness();
-    const discover = vi.fn();
     const setupCronSchedulers = vi.fn();
 
     await expect(
       initializeRequiredSubsystems({
         readiness,
         initializeOfflineStorage: async () => {},
-        verifyRedis: async () => {
-          throw new Error("redis unavailable");
+        reconcileJobs: async () => {
+          throw new Error("database unavailable");
         },
-        reconcileJobs: async () => [],
-        discoverPoiSources: discover,
         setupCronSchedulers,
-        setupPoiScheduler: () => handles() as never,
       }),
-    ).rejects.toThrow("redis unavailable");
+    ).rejects.toThrow("database unavailable");
 
-    expect(readiness.snapshot()).toEqual({ status: "failed", phase: "redis" });
-    expect(discover).not.toHaveBeenCalled();
+    expect(readiness.snapshot()).toEqual({ status: "failed", phase: "job-reconciliation" });
     expect(setupCronSchedulers).not.toHaveBeenCalled();
   });
 
-  it("stops the general cron scheduler when POI scheduler construction fails", async () => {
+  it("fails readiness when the cron scheduler cannot be constructed", async () => {
     const readiness = new DataManagerReadiness();
-    const cronHandles = handles();
 
     await expect(
       initializeRequiredSubsystems({
         readiness,
         initializeOfflineStorage: async () => {},
-        verifyRedis: async () => {},
         reconcileJobs: async () => [],
-        discoverPoiSources: async () => {},
-        setupCronSchedulers: () => cronHandles as never,
-        setupPoiScheduler: () => {
-          throw new Error("POI scheduler failed");
+        setupCronSchedulers: () => {
+          throw new Error("cron setup failed");
         },
       }),
-    ).rejects.toThrow("POI scheduler failed");
+    ).rejects.toThrow("cron setup failed");
 
-    expect(cronHandles.stop).toHaveBeenCalledOnce();
     expect(readiness.snapshot()).toEqual({ status: "failed", phase: "cron-schedulers" });
   });
 });

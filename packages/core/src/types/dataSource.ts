@@ -181,7 +181,9 @@ export interface DataSourceDetailSection {
    *
    *  - `"connector"` (default): the plug-style row — first cell as the title,
    *    the middle cells joined into a caption beneath it, the last cell as a
-   *    right-hand status. Suits `[type, power, current, qty, status]`.
+   *    right-hand status. Suits `[type, power, current, qty, status, kind]`,
+   *    where `kind` (`available`, `busy`, `out`, `planned` or `unknown`) is not
+   *    shown but picks the status colour.
    *  - `"pricing"`: `[label, price, conditions]` — label left with the
    *    conditions as a caption beneath it, price right. The conditions cell may
    *    be an empty string, and a blank label continues the row above it.
@@ -275,6 +277,8 @@ export interface DataSourceDetail {
     country?: string;
   };
   operator?: { name: string; url?: string; legalName?: string };
+  /** The place's own website (http(s) only), when it is not already the operator's link. */
+  website?: string;
   /** Per-record attribution that cannot be expressed statically in the integration manifest. */
   attributions?: DataSourceAttribution[];
   branding?: DataSourceBranding;

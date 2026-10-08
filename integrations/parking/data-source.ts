@@ -1,27 +1,24 @@
 import type {
-  BBox,
   BoundingBox,
   DataSourceDetail,
   DataSourceFilterDef,
   DataSourceMeta,
 } from "@openmapx/core";
 import { CATEGORY_FILTERS } from "@openmapx/core";
-import type {
-  DataSourceSearchResult,
-  IntegrationContext,
-  MobilityDataSourceProvider,
-  ParkingSite,
-} from "@openmapx/integration-framework";
-import type { Attribution } from "@openmapx/mobility-core/attribution";
-import { freshnessNow } from "@openmapx/mobility-core/freshness";
-import { type MobilityResult, withAttribution } from "@openmapx/mobility-core/result";
-import { mapParkingSiteToDetail, mapParkingSiteToResult } from "./mapper.js";
 import {
-  aggregateParkingSites,
-  collectParkingSiteProviders,
-  createProviderOutages,
-  findParkingSite,
-} from "./orchestrator.js";
+  type DataSourceSearchResult,
+  type IntegrationContext,
+  type MobilityDataSourceProvider,
+  type ParkingSite,
+  selectedOptions as selected,
+  siteAttributions,
+  toBBox,
+  withinZoom,
+  wrapSiteResult as wrap,
+} from "@openmapx/integration-framework";
+import type { MobilityResult } from "@openmapx/mobility-core/result";
+import { mapParkingSiteToDetail, mapParkingSiteToResult } from "./mapper.js";
+import { createParkingSiteOrchestrator } from "./orchestrator.js";
 
 const META: DataSourceMeta = {
   minZoom: 12,
@@ -93,31 +90,6 @@ const SEARCH_CACHE_TTL_S = 60;
 /** Seconds a site detail is cached; it shows the same counts a search does. */
 const DETAIL_CACHE_TTL_S = 60;
 
-const wrap = <T>(data: T, attributions: Attribution[]): MobilityResult<T> =>
-  withAttribution(data, attributions, freshnessNow({ hasRealtimeData: false }));
-
-/**
- * Every contributing credit, once, in first-seen order: keyed by source and
- * name, so an upstream publisher credited under its feed's source stays.
- */
-function attributionsOf(sites: ParkingSite[]): Attribution[] {
-  const byCredit = new Map<string, Attribution>();
-  for (const site of sites) {
-    for (const attribution of site.attributions) {
-      const key = `${attribution.sourceId}\u0000${attribution.name}`;
-      if (!byCredit.has(key)) byCredit.set(key, attribution);
-    }
-  }
-  return [...byCredit.values()];
-}
-
-/** The selected option ids of a multi-select filter; none selected keeps every site. */
-function selected(filters: Record<string, unknown> | undefined, id: string): Set<string> {
-  const raw = filters?.[id];
-  if (raw === undefined || raw === null || raw === "") return new Set();
-  return new Set((Array.isArray(raw) ? raw : [raw]).map(String).filter(Boolean));
-}
-
 const GARAGE_LAYOUTS = new Set(["multi_storey", "automated", "covered", "nested"]);
 const SURFACE_LAYOUTS = new Set(["surface", "single_level"]);
 
@@ -176,27 +148,6 @@ function matches(site: ParkingSite, filters: Record<string, unknown> | undefined
   return [...features].every((f) => hasFeature(site, f));
 }
 
-function toBBox(bbox: BoundingBox): BBox {
-  return [bbox.west, bbox.south, bbox.east, bbox.north];
-}
-
-/** The side of a map tile, in CSS pixels (MapLibre's vector tiles). */
-const TILE_PX = 512;
-/** The widest map view a search is answered for, in CSS pixels per side. */
-const MAX_VIEW_PX = 4096;
-
-/**
- * Whether a box is no wider than a map view of up to `MAX_VIEW_PX` pixels a
- * side shows at `zoom`: a tile spans 360 / 2^zoom degrees of longitude, and
- * the degrees of latitude a pixel spans shrink with the cosine of the latitude.
- */
-function withinZoom(bbox: BoundingBox, zoom: number): boolean {
-  const lonSpan = (360 / 2 ** zoom) * (MAX_VIEW_PX / TILE_PX);
-  const midLat = (bbox.south + bbox.north) / 2;
-  const latSpan = lonSpan * Math.cos((midLat * Math.PI) / 180);
-  return bbox.east - bbox.west <= lonSpan && bbox.north - bbox.south <= latSpan;
-}
-
 /**
  * The `parking` data source: every registered parking-site provider merged
  * behind one search and one detail. The filters are applied here, on the
@@ -206,7 +157,7 @@ function withinZoom(bbox: BoundingBox, zoom: number): boolean {
  * more only when it does.
  */
 export function createParkingDataSource(ctx: IntegrationContext): MobilityDataSourceProvider {
-  const outages = createProviderOutages(ctx.log);
+  const sites = createParkingSiteOrchestrator(ctx);
   return {
     id: "parking",
     meta: META,
@@ -215,7 +166,7 @@ export function createParkingDataSource(ctx: IntegrationContext): MobilityDataSo
     detailCacheTtl: DETAIL_CACHE_TTL_S,
     attribution: [],
 
-    isAvailable: () => collectParkingSiteProviders(ctx).length > 0,
+    isAvailable: () => sites.providers().length > 0,
 
     async getFilters(): Promise<DataSourceFilterDef[]> {
       return PARKING_FILTERS;
@@ -228,14 +179,14 @@ export function createParkingDataSource(ctx: IntegrationContext): MobilityDataSo
       // The map asks only from `minZoom` on; a wider box would make the
       // providers fetch a region's sites, so it is answered empty.
       if (!withinZoom(bbox, META.minZoom)) return wrap([], []);
-      const { sites, partial } = await aggregateParkingSites(ctx, outages, toBBox(bbox));
-      const kept = sites.filter((s) => matches(s, filters));
-      const result = wrap(kept.map(mapParkingSiteToResult), attributionsOf(kept));
-      return partial ? { ...result, partial } : result;
+      const found = await sites.search(toBBox(bbox));
+      const kept = found.sites.filter((s) => matches(s, filters));
+      const result = wrap(kept.map(mapParkingSiteToResult), siteAttributions(kept));
+      return found.partial ? { ...result, partial: found.partial } : result;
     },
 
     async getDetail(itemId: string): Promise<MobilityResult<DataSourceDetail | null>> {
-      const site = await findParkingSite(ctx, outages, itemId);
+      const site = await sites.find(itemId);
       if (!site) return wrap(null, []);
       return wrap(mapParkingSiteToDetail(site), site.attributions);
     },

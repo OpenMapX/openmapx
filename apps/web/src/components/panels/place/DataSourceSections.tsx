@@ -40,7 +40,6 @@ import { useDataSourceI18nResolver } from "./useDataSourceI18nResolver";
 const SOURCE_HEADERS: Record<string, { icon: ReactNode; titleKey: string }> = {
   // EV Charging
   "ev-charging": { icon: <EvStationIcon sx={{ fontSize: 20 }} />, titleKey: "evCharging" },
-  ocm: { icon: <EvStationIcon sx={{ fontSize: 20 }} />, titleKey: "evCharging" },
   // Fuel
   fuel: { icon: <LocalGasStationIcon sx={{ fontSize: 20 }} />, titleKey: "fuelPrices" },
   // Bike Sharing

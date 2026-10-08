@@ -230,14 +230,19 @@ describe("parking-sites-openconditions", () => {
     expect(without.attributions.map((a) => a.name)).toEqual(["© OpenStreetMap contributors"]);
   });
 
-  test("an upstream publisher without a licence is not credited", () => {
+  test("an upstream publisher without a licence is credited by name", () => {
     const answer = body();
     const provenance = recordOf(answer)["provenance"] as Rec;
     provenance["upstream"] = [{ publisher: "Stadt Karlsruhe", recordId: "66" }];
-    expect(mapped(answer)!.attributions.map((a) => a.name)).toEqual([
+    const { attributions } = mapped(answer)!;
+    expect(attributions.map((a) => a.name)).toEqual([
       MOBIDATA_PROVIDER,
       "© OpenStreetMap contributors",
+      `${MOBIDATA_PROVIDER} – Stadt Karlsruhe`,
     ]);
+    const credit = attributions.find((a) => a.publisher?.name === "Stadt Karlsruhe");
+    expect(credit?.spdxLicense).toBeUndefined();
+    expect(credit?.licenseUrl).toBeUndefined();
   });
 
   test("an excluded source's readings and offers are dropped", async () => {

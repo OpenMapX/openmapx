@@ -261,21 +261,42 @@ limits, taper point, and connector set. Then set starting charge, target charge
 at stops, minimum arrival reserve, preferred or excluded charging networks, and
 an optional home-energy price and currency.
 
-The planner first computes the road route, searches compatible chargers along
-its corridor, evaluates detours with a route matrix, and reroutes through the
-selected stops. It accounts for elevation and temperature, the vehicle's charge
-curve and connector limits, station power, network preferences, and live
-availability when it is useful for a near-term trip. The result separates drive
-and charge time and shows distance, estimated energy, arrival charge, and cost
-only where the source data supports a meaningful price. Warnings explain missing
-availability or tariff data, tight reserves, and cases where no compatible or
-allowed network can make the trip. Selecting a charge stop opens its charger
+The planner first computes the road route, searches charging sites along its
+corridor, evaluates detours with a route matrix, and reroutes through the
+selected stops. At each site it picks the charge point the vehicle would use: a
+connector it plugs into, on a charge point that is in service (one a live status
+reports out of order, or one still planned, is skipped), at the highest power,
+and at equal power one that is free right now. It accounts for elevation and
+temperature, the vehicle's charge curve and AC/DC limits, network preferences,
+and live availability when the stop is reached soon after you plan; a status
+past its validity never counts as free.
+
+A stop's cost comes from the tariffs that apply to the chosen connector, matched
+on the station's local clock from the time you arrive there: time-of-day and
+weekday windows (a night rate past midnight counts for the evening it began),
+validity dates and power limits all count, so a departure time moves a stop into
+or out of a night rate, and a charge that runs into one pays it from the
+window's edge on. Energy and duration limits price tiers within the
+session ("the first 20 kWh at one price, then another"), assuming the energy
+arrives evenly over the charge. Energy, charge-time and per-session prices are
+summed (VAT added where the tariff quotes prices without it) and held within
+the tariff's minimum and maximum price. Parking-time prices are not added: a
+tariff bills them for time plugged in but not charging, and a planned stop
+leaves when its charge ends. The cheapest applicable tariff is shown with its
+main price; a tariff anyone can pay ad hoc is preferred over subscription or
+profile tariffs whenever one applies. The result separates drive and charge
+time and shows distance, estimated energy, arrival charge, and cost (rounded to
+the currency's smallest unit) only where the source data supports a meaningful
+price. Warnings explain missing charger data, charger sources that did not
+answer or answered only in part, tight reserves, and cases where no compatible
+or allowed network can make the trip. Selecting a charge stop opens its charger
 place card.
 
 EV planning currently supports one origin and one destination; arbitrary user
 waypoints are not accepted because the planner owns the charging stops. It
-requires Valhalla routing plus enabled EV-charging data sources. Live occupancy
-and tariffs depend on the feeds available in the trip region.
+requires Valhalla routing plus a charging-site provider (OpenConditions);
+without one the plan says no charger data is available instead of failing. Live
+occupancy and tariffs depend on the feeds available in the trip region.
 
 ## Turn-by-turn navigation
 

@@ -9,7 +9,6 @@ export {
   offlinePackageArtifactReferences as dataManagerOfflinePackageArtifactReferences,
   offlinePackageJobOwners as dataManagerOfflinePackageJobOwners,
   offlinePackageJobs as dataManagerOfflinePackageJobs,
-  poiFeedState as dataManagerPoiFeedState,
 } from "@openmapx/db-schema";
 // Admin audit log
 export { adminAuditLog } from "./admin-audit-schema";

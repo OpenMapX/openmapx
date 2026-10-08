@@ -1,5 +1,12 @@
-/** The six operational domains shown by the coverage report. */
-export type CoverageDomain = "addresses" | "pois" | "transit" | "ev" | "parking" | "traffic";
+/** The seven operational domains shown by the coverage report. */
+export type CoverageDomain =
+  | "addresses"
+  | "pois"
+  | "transit"
+  | "ev"
+  | "parking"
+  | "fuel"
+  | "traffic";
 
 export type CoveragePermission = "yes" | "no" | "conditional" | "unknown";
 
@@ -90,6 +97,8 @@ export type CoverageDomainOperationId =
   | "ev.route-planning"
   | "parking.facility-discovery"
   | "parking.occupancy"
+  | "fuel.station-discovery"
+  | "fuel.prices"
   | "traffic.flow"
   | "traffic.road-conditions"
   | "traffic.traffic-aware-routing";
@@ -280,7 +289,7 @@ export interface RightsAssessmentSummary {
 export interface CoverageRegion {
   key: RegionKey;
   label: string;
-  kind: "extract" | "country" | "regional-scope" | "unassigned";
+  kind: "extract" | "country" | "unassigned";
   originalId?: string;
   bounds?: Wgs84Bounds;
   aliases?: string[];
@@ -409,6 +418,7 @@ export const COVERAGE_DOMAINS: readonly CoverageDomain[] = [
   "transit",
   "ev",
   "parking",
+  "fuel",
   "traffic",
 ];
 
@@ -426,6 +436,8 @@ export const COVERAGE_OPERATION_IDS: readonly CoverageDomainOperationId[] = [
   "ev.route-planning",
   "parking.facility-discovery",
   "parking.occupancy",
+  "fuel.station-discovery",
+  "fuel.prices",
   "traffic.flow",
   "traffic.road-conditions",
   "traffic.traffic-aware-routing",

@@ -1,14 +1,30 @@
 import {
   bboxAroundPoint,
+  type DataSourceAttribution,
   type DirectionsResult,
+  type EvPlanWarning,
   type EvVehicleSpec,
+  isSafeHttpUrl,
   matchesAnyOperator,
   normalizeOperator,
   type RoutingOptions,
 } from "@openmapx/core";
-import { getVehiclePreset, planCharges, routeEnergyKwh } from "@openmapx/ev-charge-planner";
-import type { IntegrationContext } from "@openmapx/integration-framework";
-import type { EvChargingStation } from "@openmapx/mobility-core/ev-charging";
+import {
+  ChargerSourcesUnavailableError,
+  getVehiclePreset,
+  planCharges,
+  routeEnergyKwh,
+} from "@openmapx/ev-charge-planner";
+import {
+  type ChargingSite,
+  type ChargingSiteProvider,
+  type ChargingSiteQuery,
+  createSiteOrchestrator,
+  type IntegrationContext,
+  type SiteOrchestrator,
+  toBBox,
+} from "@openmapx/integration-framework";
+import { availabilityOf } from "@openmapx/mobility-core/ev-charging";
 import { applyClosureExclusions, resolveTravelInstant } from "./closure-exclusions.js";
 import { roadConditionImpactForRequest } from "./road-condition-routing.js";
 import { verifyRouteTraffic } from "./traffic-application.js";
@@ -18,6 +34,9 @@ import { verifyRouteTraffic } from "./traffic-application.js";
  * as a share of the pack. Absolute on purpose — see the re-validation below.
  */
 const TIGHT_MARGIN_BAND_FRACTION = 0.05;
+
+/** Upper bound on the sites one corridor window asks a provider for. */
+const MAX_SITES_PER_WINDOW = 8000;
 
 export interface EvPlanArgs {
   waypoints: [number, number][];
@@ -32,12 +51,12 @@ export interface EvPlanArgs {
   avoidTolls?: boolean;
   avoidHighways?: boolean;
   avoidFerries?: boolean;
-  preferredNetworks?: string[]; // D9 — operator display names
+  preferredNetworks?: string[]; // operator display names
   avoidedNetworks?: string[];
-  exclusiveNetworks?: boolean; // D9 — treat preferredNetworks as a hard whitelist
-  preferCheaper?: boolean; // D10 — default true
-  homePricePerKwh?: number; // D11 — home tariff for trip-cost estimate
-  homeCurrency?: string; // D11
+  exclusiveNetworks?: boolean; // treat preferredNetworks as a hard whitelist
+  preferCheaper?: boolean; // default true
+  homePricePerKwh?: number; // home tariff for the trip-cost estimate
+  homeCurrency?: string;
   units?: "metric" | "imperial";
   lang?: string;
 }
@@ -62,20 +81,56 @@ export interface ResolvedRoutingProvider {
   provider: EvRoutingProvider;
 }
 
+type ChargingSites = SiteOrchestrator<ChargingSiteProvider, ChargingSite, ChargingSiteQuery>;
+
+const chargingSitesByContext = new WeakMap<IntegrationContext, ChargingSites>();
+
 /**
- * Find the ev-charging provider (duck-typed `searchStations`) in the
- * `data-source` domain. `LoadedIntegration` is `{ id, providers: Map<domain,
- * unknown[]> }` — the providers live in the Map, not on a `.provider` field.
+ * Every `charging-sites` provider behind one search. The operator's
+ * disallowed sources are pushed into each provider's query and filtered again
+ * on each site's sources; a failing provider makes the answer partial. One
+ * orchestrator serves every plan of an integration, so a failing provider is
+ * logged once per outage rather than once per plan.
  */
-function findStationSource(ctx: IntegrationContext) {
-  for (const loaded of ctx.getIntegrationsByDomain("data-source")) {
-    // biome-ignore lint/suspicious/noExplicitAny: LoadedIntegration.providers is Map<string, unknown[]>; narrowed below via the searchStations duck-type check.
-    const providers = ((loaded as any).providers?.get?.("data-source") ?? []) as any[];
-    for (const provider of providers) {
-      if (provider && typeof provider.searchStations === "function") return provider;
-    }
+function chargingSites(ctx: IntegrationContext): ChargingSites {
+  let sites = chargingSitesByContext.get(ctx);
+  if (!sites) {
+    sites = createSiteOrchestrator<ChargingSiteProvider, ChargingSite, ChargingSiteQuery>(ctx, {
+      domain: "charging-sites",
+      logPrefix: "ev-plan",
+      search: { name: "searchSites", run: (p, bbox, query) => p.searchSites(bbox, query) },
+      get: { name: "getSite", run: (p, id, query) => p.getSite(id, query) },
+    });
+    chargingSitesByContext.set(ctx, sites);
   }
-  return null;
+  return sites;
+}
+
+/**
+ * A stop's credits as the charger place card shows them. Their links come
+ * from upstream data, so only http(s) ones are kept.
+ */
+function stopCredits(site: ChargingSite): DataSourceAttribution[] {
+  return site.attributions.map((a) => ({
+    text: a.name,
+    url: isSafeHttpUrl(a.url) ? a.url : "",
+    ...(a.spdxLicense ? { license: a.spdxLicense } : {}),
+    ...(isSafeHttpUrl(a.licenseUrl) ? { licenseUrl: a.licenseUrl } : {}),
+  }));
+}
+
+/** An amount rounded to its currency's minor unit (cents, or none for yen). */
+function roundToMinorUnit(amount: number, currency: string): number {
+  let digits = 2;
+  try {
+    digits =
+      new Intl.NumberFormat("en", { style: "currency", currency }).resolvedOptions()
+        .maximumFractionDigits ?? 2;
+  } catch {
+    // An unknown currency code keeps two digits.
+  }
+  const scale = 10 ** digits;
+  return Math.round(amount * scale) / scale;
 }
 
 /**
@@ -116,7 +171,7 @@ export async function runEvPlan(
       { status: 503 },
     );
   }
-  // Built once and threaded into BOTH getRoute calls below by reference (D7):
+  // Built once and threaded into BOTH getRoute calls below by reference:
   // the base route and the re-route through the chosen stops must honour the
   // same avoid flags + closure exclusions, or the re-route could silently
   // detour back through a closed segment the base route avoided.
@@ -149,24 +204,23 @@ export async function runEvPlan(
       baseDirections.routes[baseDirections.activeRouteIndex] ?? baseDirections.routes[0];
     if (!baseRoute) throw Object.assign(new Error("no base route"), { status: 502 });
 
-    const disallowed = ctx.getDisallowedSourceIds
-      ? await ctx.getDisallowedSourceIds()
-      : new Set<string>();
-    const stationSource = findStationSource(ctx);
+    const sites = chargingSites(ctx);
+    let partialChargerData = false;
+    const nowMs = Date.now();
 
     const socStartKwh = (args.socStartPct / 100) * vehicle.batteryKwh;
     const socArrivalMinKwh = ((args.socArrivalMinPct ?? 10) / 100) * vehicle.batteryKwh;
     const socTargetKwh = ((args.socTargetPct ?? 80) / 100) * vehicle.batteryKwh;
 
-    // D9: normalise the user's network preferences into match keys once.
+    // Normalise the user's network preferences into match keys once.
     const preferredNetworkKeys = new Set(
       (args.preferredNetworks ?? []).map(normalizeOperator).filter(Boolean),
     );
     const avoidedNetworkKeys = new Set(
       (args.avoidedNetworks ?? []).map(normalizeOperator).filter(Boolean),
     );
-    const exclusiveNetworkKeys = args.exclusiveNetworks ? preferredNetworkKeys : undefined; // D9 hard whitelist
-    const costWeight = args.preferCheaper === false ? 0 : 1; // D10
+    const exclusiveNetworkKeys = args.exclusiveNetworks ? preferredNetworkKeys : undefined; // hard whitelist
+    const costWeight = args.preferCheaper === false ? 0 : 1;
 
     const plan = await planCharges(
       {
@@ -177,7 +231,8 @@ export async function runEvPlan(
         socTargetKwh,
         ambientTempC: args.ambientTempC ?? 20,
         hasElevation: (baseRoute.elevation?.length ?? 0) >= 2,
-        nowMs: Date.now(),
+        nowMs,
+        tripStartMs: closureAt?.getTime() ?? nowMs,
         preferredNetworkKeys,
         avoidedNetworkKeys,
         exclusiveNetworkKeys,
@@ -185,11 +240,15 @@ export async function runEvPlan(
       },
       {
         async requestCorridorChargers(centre, radiusKm) {
-          if (!stationSource) return [];
-          // bboxAroundPoint(center: LngLat, radiusMetres): BoundingBox (object, not tuple)
-          const bbox = bboxAroundPoint(centre, radiusKm * 1000);
-          const stations: EvChargingStation[] = await stationSource.searchStations(bbox);
-          return stations.filter((s) => !s.sources?.some((src) => disallowed.has(src)));
+          const bbox = toBBox(bboxAroundPoint(centre, radiusKm * 1000));
+          const answer = await sites.search(bbox, { maxSites: MAX_SITES_PER_WINDOW });
+          if (answer.partial) partialChargerData = true;
+          // An empty answer that is partial (a source failed, or answered for
+          // part of the area only) is no evidence that the window has no chargers.
+          if (answer.partial && answer.sites.length === 0) {
+            throw new ChargerSourcesUnavailableError();
+          }
+          return answer.sites;
         },
         async requestMatrix(sources, targets) {
           if (typeof routingProvider.getMatrix === "function") {
@@ -233,7 +292,7 @@ export async function runEvPlan(
     // flag it when the trip arrives within a thin band of the reserve. This is
     // whole-trip granularity — per-leg mid-trip re-validation is a future
     // refinement.
-    const revalidationWarnings: typeof plan.warnings = [];
+    const revalidationWarnings: EvPlanWarning[] = [];
     if (plan.stops.length > 0) {
       const finalEnergyKwh = routeEnergyKwh(finalRoute, vehicle, {
         ambientTempC: args.ambientTempC ?? 20,
@@ -254,7 +313,7 @@ export async function runEvPlan(
       }
     }
 
-    const tripCost = estimateTripCost(plan, args.homePricePerKwh, args.homeCurrency); // D11
+    const tripCost = estimateTripCost(plan, args.homePricePerKwh, args.homeCurrency);
 
     return {
       routes: [finalRoute],
@@ -268,22 +327,25 @@ export async function runEvPlan(
         resolved.integrationId,
       ),
       stops: plan.stops.map((s) => ({
-        station: { id: s.station.id, name: s.station.name, coordinates: s.station.coordinates },
+        station: { id: s.site.id, name: s.site.name, coordinates: s.site.coordinates },
         connector: s.connector,
         powerKw: s.powerKw,
-        operator: s.station.operator?.name,
+        operator: s.site.operator?.name,
         isPreferredNetwork: matchesAnyOperator(
-          normalizeOperator(s.station.operator?.name),
+          normalizeOperator(s.site.operator?.name),
           preferredNetworkKeys,
         ),
         arriveSocPct: Math.round((s.arriveSocKwh / vehicle.batteryKwh) * 100),
         departSocPct: Math.round((s.departSocKwh / vehicle.batteryKwh) * 100),
         chargeSeconds: Math.round(s.chargeSeconds),
         addedKwh: Math.round(s.addedKwh * 10) / 10,
-        availability: s.station.availability,
-        tariffSummary: summariseTariff(s.station),
-        estimatedCost: s.estimatedCost,
-        attributions: s.station.attributions ?? [],
+        availability: availabilityOf(s.site),
+        tariffPrice: s.estimatedCost?.price,
+        estimatedCost: s.estimatedCost && {
+          amount: roundToMinorUnit(s.estimatedCost.amount, s.estimatedCost.currency),
+          currency: s.estimatedCost.currency,
+        },
+        attributions: stopCredits(s.site),
       })),
       totals: {
         driveSeconds: Math.round(finalRoute.duration),
@@ -291,7 +353,11 @@ export async function runEvPlan(
         energyKwh: Math.round(plan.totalEnergyKwh * 10) / 10,
         ...(tripCost ? { estimatedCost: tripCost } : {}),
       },
-      warnings: [...plan.warnings, ...revalidationWarnings],
+      warnings: [
+        ...plan.warnings,
+        ...revalidationWarnings,
+        ...(partialChargerData ? [{ kind: "partial-charger-data" } as const] : []),
+      ],
     };
   };
   return ttl > 0
@@ -329,7 +395,7 @@ function evPlanCacheKey(
 }
 
 /**
- * D11 whole-trip cost: known public sessions priced by their own tariff, and all
+ * Whole-trip cost: known public sessions priced by their own tariff, and all
  * other energy (home + any unpriced public kWh) valued at the home tariff.
  * Public sessions priced in a currency other than `homeCurrency` are NOT
  * FX-converted (we have no rates) — they're reported separately in
@@ -405,9 +471,4 @@ function greatCircleMatrix(sources: [number, number][], targets: [number, number
       return { km: d, seconds: (d / KMH) * 3600 };
     }),
   );
-}
-
-function summariseTariff(station: EvChargingStation): string | undefined {
-  const energy = station.tariffs?.[0]?.elements.find((e) => e.type === "energy");
-  return energy ? `${energy.price} ${energy.currency}/kWh` : undefined;
 }

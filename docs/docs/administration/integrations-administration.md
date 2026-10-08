@@ -103,11 +103,11 @@ INTEGRATION_GEOCODING_MAPTILER_APIKEY=your-key-here
 ```
 
 Region-first hyphenated keys are normalized the same way. For example, the
-`pl-eipa-api-key` config key of the `ev-charging` integration is set by:
+`us-ga-511-api-key` config key of the `webcam` integration is set by:
 
 ```bash
-# infra/docker/.env — overrides the `pl-eipa-api-key` setting of the `ev-charging` integration
-INTEGRATION_EV_CHARGING_PL_EIPA_API_KEY=your-key-here
+# infra/docker/.env — overrides the `us-ga-511-api-key` setting of the `webcam` integration
+INTEGRATION_WEBCAM_US_GA_511_API_KEY=your-key-here
 ```
 
 For the bigger picture of where settings live — `.env`, the admin panel, and how

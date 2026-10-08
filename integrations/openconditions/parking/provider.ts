@@ -1,5 +1,6 @@
 import type { ParkingSiteProvider } from "@openmapx/integration-framework";
 import type { OpenConditionsClient } from "../client.js";
+import type { SiteEvidenceReader } from "../evidence/read.js";
 import { createFeatureReader, excludedBy } from "../features/read.js";
 import type { LiveSources } from "../sources.js";
 import { recordToParkingSite } from "./map.js";
@@ -19,6 +20,8 @@ export interface ParkingSiteProviderOptions {
   remembered?: number;
   /** The clock readings are judged stale by. */
   now?: () => Date;
+  /** The coverage evidence reader, shared with the other place providers; without it the provider has no operational evidence. */
+  evidence?: SiteEvidenceReader;
 }
 
 /**
@@ -31,6 +34,7 @@ export interface ParkingSiteProviderOptions {
  * It fails closed on the live source list (`sources`), as the fuel provider
  * does: until the first list arrives it serves no site, and after it a source
  * that is not listed is taken out of every site as an excluded source is.
+ * Its operational evidence is OpenConditions' account of the parking feeds.
  */
 export function createParkingSiteProvider(
   client: OpenConditionsClient,
@@ -38,6 +42,7 @@ export function createParkingSiteProvider(
   options: ParkingSiteProviderOptions = {},
 ): ParkingSiteProvider {
   const link = (sourceId: string) => sources.link(sourceId);
+  const evidence = options.evidence;
   const now = options.now ?? (() => new Date());
   const reader = createFeatureReader(client, {
     kind: "parking_site",
@@ -65,5 +70,6 @@ export function createParkingSiteProvider(
       if (!sources.ready) return null;
       return reader.open(id, excludedBy(sources, q?.excludedSourceIds));
     },
+    ...(evidence ? { getOperationalEvidence: () => evidence.read("parking") } : {}),
   };
 }

@@ -35,6 +35,7 @@ export {
   isDisplayablePhoto,
   parseCommonsPage,
 } from "./commons-metadata";
+export { connectorStandardOf } from "./connector-standard";
 export { haversineDistance } from "./coordinates";
 export { applyClientSideFilters, splitFilters } from "./dataSourceFilters";
 export {
@@ -84,7 +85,14 @@ export {
 } from "./fetchWithRedirects";
 export { buildFlightOpenUrl } from "./flightLink";
 export { isFoodPlace, resolveOsmMenuUrl } from "./foodPlace";
-export { escapeHtml, formatTime, relativeTime, safeHref, sanitizeUrl } from "./format";
+export {
+  escapeHtml,
+  formatTime,
+  isSafeHttpUrl,
+  relativeTime,
+  safeHref,
+  sanitizeUrl,
+} from "./format";
 export {
   formatArea,
   formatDistance,
@@ -134,7 +142,6 @@ export { bareDomain } from "./httpUrl";
 export { formatAddress, legalConfig } from "./legalConfig";
 export { isLodging } from "./lodgingPlace";
 export { type MatchRange, matchRanges } from "./matchRanges";
-export { normalizeConnector } from "./normalize-connector";
 export { matchesAnyOperator, normalizeOperator, operatorKeyMatches } from "./normalize-operator";
 export { validObservedAt } from "./observationTime";
 export {

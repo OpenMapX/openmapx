@@ -40,12 +40,7 @@ describe("policy TTL", () => {
 
 describe("policy DEDUP", () => {
   it("every distance radius is a positive number of meters", () => {
-    const radiusKeys: DedupKey[] = [
-      "STOP_RADIUS_M",
-      "STATION_RADIUS_M",
-      "PARKING_RADIUS_M",
-      "EV_RADIUS_M",
-    ];
+    const radiusKeys: DedupKey[] = ["STOP_RADIUS_M", "STATION_RADIUS_M", "PARKING_RADIUS_M"];
     for (const key of radiusKeys) {
       const v = DEDUP[key];
       expect(typeof v, `${key} must be number`).toBe("number");

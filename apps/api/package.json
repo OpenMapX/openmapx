@@ -37,7 +37,6 @@
     "@openmapx/mobility-core": "workspace:^",
     "@openmapx/mobility-formats": "workspace:^",
     "@openmapx/place-ids": "workspace:^",
-    "@openmapx/poi-source-registry": "workspace:^",
     "@openmapx/presets": "workspace:^",
     "@openmapx/transitous-core": "workspace:^",
     "@opentelemetry/api": "^1.9.1",

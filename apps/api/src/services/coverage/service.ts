@@ -4,6 +4,7 @@ import {
   type CapabilityCandidate,
   type CapabilityResult,
   type CapabilityStatus,
+  COVERAGE_DOMAINS,
   type CoverageDomain,
   type CoverageDomainOperationId,
   type CoverageReasonCode,
@@ -37,6 +38,7 @@ import {
   collectCoverageData,
   freshenStream,
   freshnessUsable,
+  isUnassigned,
   runtimeForProvider,
   streamSourceRights,
 } from "./collect.js";
@@ -169,7 +171,7 @@ function streamIncludedInRegion(region: CoverageRegion, stream: StreamEvidence):
   // A source without any declared geographic scope belongs in the explicit
   // unassigned bucket. It must not be repeated in every named region merely
   // because its relation to each one is unknown.
-  if (region.key === "unassigned") return stream.region.keys.length === 0;
+  if (region.key === "unassigned") return isUnassigned(stream);
   const hasScope = stream.region.keys.length > 0 || stream.region.bounds !== undefined;
   if (!hasScope) return false;
   return regionRelation(region, stream) !== "disjoint";
@@ -242,10 +244,14 @@ function combinedEvidence(
   reasons: CoverageReasonCode[];
 } {
   const related = streams.map((stream) => ({ stream, relation: regionRelation(region, stream) }));
+  // Of equally placed and fresh streams, one that covers its area whole (a
+  // bulk feed) is better evidence than one covering part of it (on demand).
+  const partial = (stream: StreamEvidence) => (stream.reasons.includes("source_partial") ? 1 : 0);
   const ranked = [...related].sort(
     (a, b) =>
       relationRank(b.relation) - relationRank(a.relation) ||
       freshnessRank(b.stream.freshness) - freshnessRank(a.stream.freshness) ||
+      partial(a.stream) - partial(b.stream) ||
       a.stream.key.localeCompare(b.stream.key),
   );
   // Alternatives must qualify as a whole. Never combine one stream's
@@ -277,6 +283,13 @@ function combinedEvidence(
     ]),
   };
 }
+
+/** The operations a place provider serves from live readings rather than its places. */
+const LIVE_OPERATIONS: ReadonlySet<CoverageDomainOperationId> = new Set([
+  "ev.charger-availability",
+  "parking.occupancy",
+  "fuel.prices",
+]);
 
 function evidenceForProvider(
   provider: CoverageProviderDescriptor,
@@ -315,14 +328,15 @@ function evidenceForProvider(
   if (operationId === "traffic.traffic-aware-routing") return byKey("traffic:graph");
   if (provider.kind === "data-source") {
     const wanted = new Set(provider.sourceIds);
+    // An integration serving several domains (openconditions) owns streams of all of them.
+    const domain = operationId.split(".")[0];
     const matches = streams.filter(
       (stream) =>
         stream.owner.kind === "integration" &&
         stream.owner.id === provider.integrationId &&
+        stream.domain === domain &&
         wanted.has(stream.attributionSourceId ?? stream.sourceId) &&
-        (operationId.includes("availability") || operationId.includes("occupancy")
-          ? stream.stream === "live"
-          : stream.stream === "static"),
+        stream.stream === (LIVE_OPERATIONS.has(operationId) ? "live" : "static"),
     );
     return matches.length > 0
       ? matches
@@ -330,6 +344,7 @@ function evidenceForProvider(
           (stream) =>
             stream.owner.kind === "integration" &&
             stream.owner.id === provider.integrationId &&
+            stream.domain === domain &&
             stream.stream === "catalog",
         );
   }
@@ -536,6 +551,7 @@ function combineRuntimeStatuses(left: RuntimeStatus, right: RuntimeStatus): Runt
   return "up";
 }
 
+/** The charging provider's static streams, of the sources it serves, as `evidenceForProvider` reads them. */
 function evStaticEvidence(
   provider: CoverageProviderDescriptor,
   collection: CoverageCollection,
@@ -692,9 +708,6 @@ function sourceRow(
     correctiveLinks.push({ label: "Data services", href: "/admin/services" });
   if (stream.domain === "transit") {
     correctiveLinks.push({ label: "Transit sources", href: "/admin/transit" });
-  }
-  if (stream.stream === "static" || stream.stream === "live") {
-    correctiveLinks.push({ label: "POI ingest", href: "/admin/poi-ingest" });
   }
   return {
     key: stream.key,
@@ -1042,10 +1055,7 @@ export class CoverageService {
         now,
       ).capabilities;
       const domains = Object.fromEntries(
-        ["addresses", "pois", "transit", "ev", "parking", "traffic"].map((domain) => [
-          domain,
-          domainSummary(domain as CoverageDomain, evaluated),
-        ]),
+        COVERAGE_DOMAINS.map((domain) => [domain, domainSummary(domain, evaluated)]),
       ) as CoverageRegionsResponse["regions"][number]["domains"];
       const sourceRows = sourceRowsFor(revision.collected, region, "operational", now);
       return {
@@ -1110,9 +1120,7 @@ export class CoverageService {
     const page = allSources.slice(offset, offset + limit);
     const metadata = this.baseMetadata(revision, now);
     const ageSeconds = metadata.collectionAgeSeconds;
-    const summary = ["addresses", "pois", "transit", "ev", "parking", "traffic"].map((domain) =>
-      domainSummary(domain as CoverageDomain, capabilities),
-    );
+    const summary = COVERAGE_DOMAINS.map((domain) => domainSummary(domain, capabilities));
     const policy = revision.collected.policy;
     const gatedSources = policy
       ? revision.collected.catalog.rights.filter(

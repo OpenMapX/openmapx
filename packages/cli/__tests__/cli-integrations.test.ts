@@ -319,26 +319,6 @@ describe("installIntegration (local source)", () => {
     expect(existsSync(join(tmp, "custom_integrations", "backend-demo"))).toBe(false);
   });
 
-  it("rejects executable community POI declarations", async () => {
-    const src = join(tmp, "community-poi");
-    mkdirSync(src, { recursive: true });
-    writeFileSync(
-      join(src, "manifest.json"),
-      JSON.stringify({ ...baseManifest, id: "community-poi" }),
-      "utf-8",
-    );
-    writeFileSync(
-      join(src, "poi-sources.js"),
-      "export function declarePoiSources() { return []; }",
-      "utf-8",
-    );
-
-    await expect(installIntegration({ source: src, rootDir: tmp })).rejects.toThrow(
-      /Executable community integration code cannot be installed/,
-    );
-    expect(existsSync(join(tmp, "custom_integrations", "community-poi"))).toBe(false);
-  });
-
   it("replaces an existing install", async () => {
     const src = join(tmp, "src-int");
     mkdirSync(src, { recursive: true });

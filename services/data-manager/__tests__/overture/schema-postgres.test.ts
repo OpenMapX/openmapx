@@ -2,7 +2,7 @@
 // in, missing infrastructure is fatal.
 import { describe, expect, it } from "vitest";
 import { buildSchemaDDL } from "../../src/jobs/overture/schema.js";
-import { startPostgis } from "../poi-ingest/_testcontainer.js";
+import { startPostgis } from "../helpers/postgis-testcontainer.js";
 
 const skipE2e = process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1";
 

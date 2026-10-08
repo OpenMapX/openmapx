@@ -144,7 +144,7 @@
       "us-ga-511-api-key": {
         "type": "string",
         "title": "Georgia 511 API Key",
-        "description": "Register at https://511ga.org/my511/register. Read by the data-manager POI-ingest process from the environment, NOT from this vault — set INTEGRATION_WEBCAM_US_GA_511_API_KEY instead; saving it here alone will not reach the consumer.",
+        "description": "Register at https://511ga.org/my511/register. Read by the API's webcam integration from the environment, NOT from this vault — set INTEGRATION_WEBCAM_US_GA_511_API_KEY instead; saving it here alone will not reach the consumer.",
         "x-openmapx-secret": true,
         "x-openmapx-setup": {
           "url": "https://511ga.org/developers/doc",
@@ -162,7 +162,7 @@
       "us-fl-511-api-key": {
         "type": "string",
         "title": "Florida 511 API Key",
-        "description": "Register at https://fl511.com/my511/register. Read by the data-manager POI-ingest process from the environment, NOT from this vault — set INTEGRATION_WEBCAM_US_FL_511_API_KEY instead; saving it here alone will not reach the consumer.",
+        "description": "Register at https://fl511.com/my511/register. Read by the API's webcam integration from the environment, NOT from this vault — set INTEGRATION_WEBCAM_US_FL_511_API_KEY instead; saving it here alone will not reach the consumer.",
         "x-openmapx-secret": true,
         "x-openmapx-setup": {
           "url": "https://fl511.com",
@@ -184,7 +184,7 @@
       "us-az-511-api-key": {
         "type": "string",
         "title": "Arizona 511 API Key",
-        "description": "Register at https://az511.com/my511/register. Read by the data-manager POI-ingest process from the environment, NOT from this vault — set INTEGRATION_WEBCAM_US_AZ_511_API_KEY instead; saving it here alone will not reach the consumer.",
+        "description": "Register at https://az511.com/my511/register. Read by the API's webcam integration from the environment, NOT from this vault — set INTEGRATION_WEBCAM_US_AZ_511_API_KEY instead; saving it here alone will not reach the consumer.",
         "x-openmapx-secret": true,
         "x-openmapx-setup": {
           "url": "https://az511.com/developers/doc",
@@ -202,7 +202,7 @@
       "us-id-511-api-key": {
         "type": "string",
         "title": "Idaho 511 API Key",
-        "description": "Register at https://511.idaho.gov/my511/register. Read by the data-manager POI-ingest process from the environment, NOT from this vault — set INTEGRATION_WEBCAM_US_ID_511_API_KEY instead; saving it here alone will not reach the consumer.",
+        "description": "Register at https://511.idaho.gov/my511/register. Read by the API's webcam integration from the environment, NOT from this vault — set INTEGRATION_WEBCAM_US_ID_511_API_KEY instead; saving it here alone will not reach the consumer.",
         "x-openmapx-secret": true,
         "x-openmapx-setup": {
           "url": "https://511.idaho.gov/developers/doc",
@@ -220,7 +220,7 @@
       "us-ut-511-api-key": {
         "type": "string",
         "title": "Utah 511 API Key",
-        "description": "Register at https://prod-ut.ibi511.com/my511/register. Read by the data-manager POI-ingest process from the environment, NOT from this vault — set INTEGRATION_WEBCAM_US_UT_511_API_KEY instead; saving it here alone will not reach the consumer.",
+        "description": "Register at https://prod-ut.ibi511.com/my511/register. Read by the API's webcam integration from the environment, NOT from this vault — set INTEGRATION_WEBCAM_US_UT_511_API_KEY instead; saving it here alone will not reach the consumer.",
         "x-openmapx-secret": true,
         "x-openmapx-setup": {
           "url": "https://udottraffic.utah.gov/developers/doc",
@@ -237,7 +237,7 @@
       "us-la-511-api-key": {
         "type": "string",
         "title": "Louisiana 511 API Key",
-        "description": "Register at https://511la.org/my511/register. Read by the data-manager POI-ingest process from the environment, NOT from this vault — set INTEGRATION_WEBCAM_US_LA_511_API_KEY instead; saving it here alone will not reach the consumer.",
+        "description": "Register at https://511la.org/my511/register. Read by the API's webcam integration from the environment, NOT from this vault — set INTEGRATION_WEBCAM_US_LA_511_API_KEY instead; saving it here alone will not reach the consumer.",
         "x-openmapx-secret": true,
         "x-openmapx-setup": {
           "url": "https://www.511la.org/developers/doc",
@@ -255,7 +255,7 @@
       "us-pa-511-api-key": {
         "type": "string",
         "title": "Pennsylvania 511 API Key",
-        "description": "Register at https://www.511pa.com/my511/register. Read by the data-manager POI-ingest process from the environment, NOT from this vault — set INTEGRATION_WEBCAM_US_PA_511_API_KEY instead; saving it here alone will not reach the consumer.",
+        "description": "Register at https://www.511pa.com/my511/register. Read by the API's webcam integration from the environment, NOT from this vault — set INTEGRATION_WEBCAM_US_PA_511_API_KEY instead; saving it here alone will not reach the consumer.",
         "x-openmapx-secret": true,
         "x-openmapx-setup": {
           "url": "https://www.pa.gov/agencies/penndot/programs-and-doing-business/online-services/developer-resources-documentation-api",
@@ -278,7 +278,7 @@
       "us-sc-511-api-key": {
         "type": "string",
         "title": "South Carolina 511 API Key",
-        "description": "Register at https://511sc.org/my511/register. Read by the data-manager POI-ingest process from the environment, NOT from this vault — set INTEGRATION_WEBCAM_US_SC_511_API_KEY instead; saving it here alone will not reach the consumer.",
+        "description": "Register at https://511sc.org/my511/register. Read by the API's webcam integration from the environment, NOT from this vault — set INTEGRATION_WEBCAM_US_SC_511_API_KEY instead; saving it here alone will not reach the consumer.",
         "x-openmapx-secret": true,
         "x-openmapx-setup": {
           "url": "https://511sc.org/developers/doc",
@@ -296,7 +296,7 @@
       "us-ma-511-api-key": {
         "type": "string",
         "title": "Massachusetts 511 API Key",
-        "description": "Register at https://www.mass511.com/my511/register. Read by the data-manager POI-ingest process from the environment, NOT from this vault — set INTEGRATION_WEBCAM_US_MA_511_API_KEY instead; saving it here alone will not reach the consumer.",
+        "description": "Register at https://www.mass511.com/my511/register. Read by the API's webcam integration from the environment, NOT from this vault — set INTEGRATION_WEBCAM_US_MA_511_API_KEY instead; saving it here alone will not reach the consumer.",
         "x-openmapx-secret": true,
         "x-openmapx-setup": {
           "url": "https://www.mass511.com/developers/doc",

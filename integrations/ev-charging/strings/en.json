@@ -1,9 +1,13 @@
 {
   "name": "EV Charging Stations",
-  "description": "Electric vehicle charging station locations and connector details",
+  "description": "Charging stations with their charge points, live status and tariffs, from every enabled charging provider",
+  "siteFallbackName": "Charging station",
+  "literal": "{value}",
+  "join": "{head}, {tail}",
   "section": {
     "connectors": "Connectors",
-    "usage": "Usage"
+    "usage": "Usage",
+    "openingHours": "Opening Hours"
   },
   "availability": "{available} of {total} available",
   "column": {
@@ -12,179 +16,151 @@
     "qty": "Qty"
   },
   "row": {
-    "cost": "Cost",
     "payment": "Payment",
-    "membershipRequired": "Membership required",
-    "pricingEnergy": "Energy",
-    "pricingTime": "Time",
-    "pricingFlat": "Flat fee",
-    "pricingParking": "Parking"
+    "authentication": "Authentication"
   },
-  "priceEnergy": "{amount}/kWh",
-  "priceTime": "{amount}/min",
-  "priceFlat": "{amount}/session",
-  "priceParking": "{amount}/min parking",
-  "pricingNote": "Direct payment price at this charger — your provider's roaming or subscription price may differ.",
-  "pricingNoteOperator": "Price published by the operator — your provider's roaming or subscription price may differ.",
-  "allConnectors": "All connectors",
-  "tariffDetails": "View tariff details",
+  "value": {
+    "restricted": "Restricted"
+  },
+  "current": {
+    "ac": "AC",
+    "dc": "DC"
+  },
+  "status": {
+    "available": "Available",
+    "charging": "Charging",
+    "occupied": "Occupied",
+    "reserved": "Reserved",
+    "blocked": "Blocked",
+    "out_of_order": "Out of order",
+    "inoperative": "Inoperative",
+    "planned": "Planned",
+    "removed": "Removed",
+    "unknown": "Unknown"
+  },
+  "connector": {
+    "CHADEMO": "CHAdeMO",
+    "CHAOJI": "ChaoJi",
+    "DOMESTIC_A": "Type A (NEMA 1-15)",
+    "DOMESTIC_B": "Type B (NEMA 5-15)",
+    "DOMESTIC_C": "Type C (Europlug)",
+    "DOMESTIC_D": "Type D",
+    "DOMESTIC_E": "Type E",
+    "DOMESTIC_F": "Schuko (Type F)",
+    "DOMESTIC_G": "Type G (BS 1363)",
+    "DOMESTIC_H": "Type H",
+    "DOMESTIC_I": "Type I",
+    "DOMESTIC_J": "Type J",
+    "DOMESTIC_K": "Type K",
+    "DOMESTIC_L": "Type L",
+    "DOMESTIC_M": "Type M",
+    "DOMESTIC_N": "Type N",
+    "DOMESTIC_O": "Type O",
+    "GBT_AC": "GB/T AC",
+    "GBT_DC": "GB/T DC",
+    "IEC_60309_2_single_16": "CEE 16 A single-phase",
+    "IEC_60309_2_three_16": "CEE 16 A three-phase",
+    "IEC_60309_2_three_32": "CEE 32 A three-phase",
+    "IEC_60309_2_three_64": "CEE 63 A three-phase",
+    "IEC_62196_T1": "Type 1",
+    "IEC_62196_T1_COMBO": "CCS (Type 1)",
+    "IEC_62196_T2": "Type 2",
+    "IEC_62196_T2_COMBO": "CCS (Type 2)",
+    "IEC_62196_T3A": "Type 3A",
+    "IEC_62196_T3C": "Type 3C",
+    "NEMA_5_20": "NEMA 5-20",
+    "NEMA_6_30": "NEMA 6-30",
+    "NEMA_6_50": "NEMA 6-50",
+    "NEMA_10_30": "NEMA 10-30",
+    "NEMA_10_50": "NEMA 10-50",
+    "NEMA_14_30": "NEMA 14-30",
+    "NEMA_14_50": "NEMA 14-50",
+    "PANTOGRAPH_BOTTOM_UP": "Pantograph (bottom-up)",
+    "PANTOGRAPH_TOP_DOWN": "Pantograph (top-down)",
+    "TESLA_R": "Tesla Roadster",
+    "TESLA_S": "Tesla",
+    "SAE_J3400": "NACS (SAE J3400)",
+    "MCS": "MCS",
+    "UNKNOWN": "Unknown"
+  },
+  "pricing": {
+    "energy": "Energy",
+    "time": "Charging time",
+    "flat": "Flat fee",
+    "parking_time": "Parking",
+    "session": "Session fee",
+    "idle": "Idle fee",
+    "reservation": "Reservation",
+    "distance": "Distance",
+    "plus": "{head} + {tail}",
+    "tariffN": "Tariff {n}",
+    "tariffFor": "{connectors} · {tariff}",
+    "allConnectors": "All connectors",
+    "tariffDetails": "View tariff details",
+    "note": "Direct payment price at this charger — your provider's roaming or subscription price may differ.",
+    "noteOperator": "Price published by the operator — your provider's roaming or subscription price may differ."
+  },
+  "tariffType": {
+    "ad_hoc": "Ad hoc",
+    "profile_cheap": "Cheapest",
+    "profile_fast": "Fastest",
+    "profile_green": "Green energy",
+    "regular": "Regular",
+    "member": "Member",
+    "roaming": "Roaming"
+  },
+  "price": {
+    "energy": "{amount}/kWh",
+    "time": "{amount}/h",
+    "flat": "{amount}/session",
+    "parking_time": "{amount}/h parking",
+    "session": "{amount}/session",
+    "idle": "{amount}/h idle",
+    "reservation": "{amount} reservation",
+    "distance": "{amount}/km"
+  },
+  "qualifier": {
+    "and": "{head} · {tail}",
+    "list": "{head}, {tail}",
+    "dayRange": "{from}–{to}",
+    "timeRange": "{from}–{to}",
+    "timeFrom": "from {from}",
+    "timeUntil": "until {to}",
+    "dateRange": "{from} – {to}",
+    "dateFrom": "from {from}",
+    "dateUntil": "until {to}",
+    "powerRange": "{min}–{max} kW",
+    "powerMin": "≥{min} kW",
+    "powerMax": "≤{max} kW",
+    "kwhRange": "{min}–{max} kWh",
+    "kwhMin": "≥{min} kWh",
+    "kwhMax": "≤{max} kWh",
+    "currentRange": "{min}–{max} A",
+    "currentMin": "≥{min} A",
+    "currentMax": "≤{max} A",
+    "durationRange": "{min} to {max}",
+    "durationMin": "from {min}",
+    "durationMax": "up to {max}",
+    "minutes": "{count} min",
+    "hours": "{count} h",
+    "reservation": "while reserved",
+    "reservationExpires": "after a reservation expires",
+    "exclVat": "excl. VAT"
+  },
+  "day": {
+    "MO": "Mon",
+    "TU": "Tue",
+    "WE": "Wed",
+    "TH": "Thu",
+    "FR": "Fri",
+    "SA": "Sat",
+    "SU": "Sun"
+  },
   "summary": {
     "connectorsTyped": "{count}x {types}",
     "connectorsTypedPower": "{count}x {types} · {power} kW",
     "connectorsCount": "{count, plural, =1 {1 connector} other {# connectors}}",
     "connectorsCountPower": "{count, plural, =1 {1 connector} other {# connectors}} · {power} kW",
     "powerKw": "{power} kW"
-  },
-  "dataSources": {
-    "ocm": {
-      "purpose": "Global community-maintained EV charging station locations with connector details, power levels, operator info, and per-record data-provider/license attribution",
-      "dataSent": "Bounding-box coordinates (south, west, north, east), optional filters (connector type, usage type, status), and the OpenChargeMap API key — sent server-side per map request",
-      "dataReceived": "Charging stations with connector types, power levels, operator info, pricing, availability status, and per-record data-provider/license metadata when available"
-    },
-    "us-afdc": {
-      "purpose": "Official Alternative Fuel Stations dataset (US DOE / NREL) covering public electric charging stations in the United States and Canada",
-      "dataSent": "Bounding-box centre latitude/longitude plus a derived search radius, the filters fuel_type=ELEC, country=all, status=E, access=public, and the AFDC/NREL API key (in an X-Api-Key header) — sent server-side per map request",
-      "dataReceived": "Charging station records with location, operator/network, connector types and per-level port counts, access, pricing, opening hours, and status metadata"
-    },
-    "de-bnetza": {
-      "purpose": "Official German charging station registry (Bundesnetzagentur Ladesäulenregister) covering public charging infrastructure in Germany",
-      "dataSent": "No query parameters — the full national CSV dataset is downloaded server-side on a daily schedule into the local database and then queried by bounding box locally; no user data reaches the provider per map request",
-      "dataReceived": "Charging station records with location, operator, connector types, rated power, EVSE ids, and operational status"
-    },
-    "de-ocpdb": {
-      "purpose": "Nationwide German charging data aggregated by MobiData BW (OCPDB) from the Bundesnetzagentur registry and charge point operators via Mobilithek, adding structured ad-hoc tariffs and live availability",
-      "dataSent": "No query parameters carrying user data — the full national OCPI dataset is paged server-side on a schedule into the local database and then queried by bounding box locally; no user data reaches the provider per map request",
-      "dataReceived": "Charging station records with location, operator, connector types, rated power, EVSE ids, live status and availability, and structured per-EVSE tariffs (energy/time price, currency, VAT)"
-    },
-    "fr-irve": {
-      "purpose": "French national consolidated EV charging dataset (Base nationale consolidée des IRVE) covering public charging points in France",
-      "dataSent": "Bounding-box coordinates as an in_bbox(point_geo, north, west, south, east) filter with pagination (limit/offset) — sent server-side per map request; no API key",
-      "dataReceived": "Charging point records with location, operator/owner, connector types, rated power, access conditions, payment methods, pricing, opening hours, and accessibility metadata"
-    },
-    "ie-esb": {
-      "purpose": "ESB ecars public charging network covering the Republic of Ireland and Northern Ireland",
-      "dataSent": "No query parameters — the full ESB ecars CSV dataset is downloaded server-side on a daily schedule into the local database and then queried by bounding box locally; no user data reaches the provider per map request",
-      "dataReceived": "Charging station records with location, county, connector types and per-type counts, rated power, opening hours, and free-text pricing"
-    },
-    "cy-cynap": {
-      "purpose": "CYNAP public EV charging point register for Cyprus, published by the Department of Electrical and Mechanical Services (EMS)",
-      "dataSent": "No query parameters — the full CYNAP DATEX II dataset is downloaded server-side on a daily schedule into the local database and then queried by bounding box locally; no user data reaches the provider per map request",
-      "dataReceived": "Charging point records with location, operator/owner, status, connector types and count, rated power, and opening hours"
-    },
-    "lu-chargy": {
-      "purpose": "Chargy public charging network covering Luxembourg",
-      "dataSent": "No query parameters — the full Chargy KML dataset is downloaded server-side on a daily schedule into the local database and then queried by bounding box locally; no user data reaches the provider per map request",
-      "dataReceived": "Charging station records with location, address, connector power ratings, and a station-level available/unavailable rollup status"
-    },
-    "nz-evroam": {
-      "purpose": "EVRoam public charging network for New Zealand, published by Waka Kotahi NZ Transport Agency",
-      "dataSent": "No query parameters — the full ArcGIS FeatureServer dataset is downloaded server-side on a daily schedule into the local database and then queried by bounding box locally; no user data reaches the provider per map request",
-      "dataReceived": "Charging station records with location, operator/owner, opening hours, connector types (Type 1/Type 2/CCS/CHAdeMO) with power ratings and counts, operational status, and whether charging is free or paid"
-    },
-    "es-dgt": {
-      "purpose": "Official Spanish national EV charging point registry (DGT National Access Point) covering public charging infrastructure in Spain",
-      "dataSent": "No query parameters — the full national DATEX II dataset is downloaded server-side on a daily schedule into the local database and then queried by bounding box locally; no user data reaches the provider per map request",
-      "dataReceived": "Charging site records with location, address, operator, connector types, rated power, current type, and last-updated timestamp"
-    },
-    "it-pun": {
-      "purpose": "Italian national EV charging registry (PUN — Piattaforma Unica Nazionale, GSE/MASE); license terms are unconfirmed public-sector open data, included provisionally",
-      "dataSent": "No query parameters — the full ArcGIS FeatureServer dataset is downloaded server-side on a daily schedule into the local database and then queried by bounding box locally; no user data reaches the provider per map request",
-      "dataReceived": "EVSE-level charging records (grouped into stations) with location, address, connector standards (Type 1/Type 2/CCS/CHAdeMO) with power ratings, opening hours, and operational status"
-    },
-    "au-nsw-ev": {
-      "purpose": "Official Transport for NSW register of public EV charging locations across New South Wales",
-      "dataSent": "No query parameters — the full NSW CSV dataset is downloaded server-side on a daily schedule into the local database and then queried by bounding box locally; no user data reaches the provider per map request",
-      "dataReceived": "Charging station records with location, operator, local government area, postcode, charger type (AC/DC), rated power, plug count, and operational/planned status"
-    },
-    "au-qld-ev": {
-      "purpose": "Queensland Department of Transport and Main Roads register of public EV charging sites",
-      "dataSent": "No query parameters — the full Queensland CSV dataset is downloaded server-side on a daily schedule into the local database and then queried by bounding box locally; no user data reaches the provider per map request",
-      "dataReceived": "Charging station records with location, address, and host/operator; no connector-level data"
-    },
-    "au-vic-ev": {
-      "purpose": "Victorian Government (DEECA) Destination Charger Program register of public EV charging sites",
-      "dataSent": "No query parameters — the full WFS GeoJSON dataset is downloaded server-side on a daily schedule into the local database and then queried by bounding box locally; no user data reaches the provider per map request",
-      "dataReceived": "Charging station records with location, address, region, operator/lead organisation, connector types and counts, and operational/planned status"
-    },
-    "be-flanders": {
-      "purpose": "Flemish public EV charging point register (Laadpunten) published by the Department of Mobility and Public Works",
-      "dataSent": "No query parameters carrying user data — the full WFS dataset is paged server-side on a daily schedule into the local database and then queried by bounding box locally; no user data reaches the provider per map request",
-      "dataReceived": "Charging records with location, operator, connector types, rated power, current type (AC/DC), and address; no live status or pricing"
-    },
-    "hk-epd": {
-      "purpose": "Official Hong Kong EPD dataset of public electric vehicle chargers covering car parks across Hong Kong",
-      "dataSent": "No query parameters — the full territory-wide JSON dataset is downloaded server-side on a daily schedule into the local database and then queried by bounding box locally; no user data reaches the provider per map request",
-      "dataReceived": "Charging station records with location, operator, connector types and per-type counts, opening hours, and enabled/disabled status"
-    },
-    "fi-digitraffic": {
-      "purpose": "Finnish national EV charging network dataset (Fintraffic / Digitraffic AFIR Charging Network API) covering publicly accessible charging infrastructure in Finland",
-      "dataSent": "No query parameters — the full national locations feed and its structured tariffs feed are downloaded server-side on a daily schedule into the local database and then queried by bounding box locally; no user data reaches the provider per map request",
-      "dataReceived": "Charging station records with location, operator, connector types, rated power, EVSE ids, opening hours, and structured per-connector tariffs (energy/time/parking price, currency, VAT)"
-    },
-    "lt-vialietuva": {
-      "purpose": "Lithuanian national EV charging dataset (Via Lietuva OCPI) covering publicly accessible charging infrastructure in Lithuania, including structured tariffs",
-      "dataSent": "No query parameters — the full national OCPI locations and tariffs feeds are downloaded server-side on a daily schedule into the local database and then queried by bounding box locally; no user data reaches the provider per map request",
-      "dataReceived": "Charging station records with location, operator, connector types, rated power, and structured per-connector tariffs (energy/session price, currency, VAT)"
-    },
-    "be-wallonia": {
-      "purpose": "Public EV charging register for Wallonia, published by the Service public de Wallonie (SPW)",
-      "dataSent": "No query parameters — the full regional CSV dataset is downloaded server-side on a daily schedule, reprojected from Belgian Lambert 72 to WGS84 into the local database, and then queried by bounding box locally; no user data reaches the provider per map request",
-      "dataReceived": "Charging records with location, operator, address, province, access type, power tier (inferred connector type), and last-updated date; no live status or pricing"
-    },
-    "kr-datago": {
-      "purpose": "Nationwide EV charging station standard dataset published by Korea Environment Corporation (한국환경공단) via data.go.kr",
-      "dataSent": "No query parameters beyond the fixed column list — the full dataset is downloaded server-side on a daily schedule via data.go.kr's keyless standard-data endpoint into the local database and then queried by bounding box locally; no user data reaches the provider per map request",
-      "dataReceived": "Charging station records with name, address, province, slow/fast charger counts, fast-charger connector type, opening hours, closed days, parking-fee flag, managing operator, phone number, and reference date"
-    },
-    "pl-eipa": {
-      "purpose": "Polish national alternative-fuel/EV charging register (EIPA, run by UDT) covering publicly accessible charging stations in Poland, with live per-point availability and structured PLN pricing",
-      "dataSent": "No query parameters — the full national station/point/pricing feed is downloaded server-side on a schedule (authenticated from the environment) into the local database and then queried by bounding box locally; no user data reaches the provider per map request",
-      "dataReceived": "Charging station records with location, operator, connector types/power, live per-point availability status, and structured energy (PLN/kWh) and time (PLN/min) pricing"
-    },
-    "at-econtrol": {
-      "purpose": "E-Control Austria's national Ladestellenverzeichnis — public EV charging stations across Austria with live per-connector status and structured ad-hoc pricing",
-      "dataSent": "Latitude/longitude of the searched map area's center, plus the operator's API key and registered Referer domain — sent server-side per map request; no user data reaches the provider",
-      "dataReceived": "Charging station records with location, operator, live per-connector status, connector types, rated power, opening hours, and structured energy/time/flat/blocking-fee pricing in EUR"
-    },
-    "sg-ltadatamall": {
-      "purpose": "Official Singapore EV charging station dataset (LTA DataMall), covering charging point locations, connectors, and real-time availability by postal code",
-      "dataSent": "No bounding-box or location parameters — the batch endpoint is called with only the AccountKey header, its pre-signed download link is fetched, and the full national result set is filtered by bounding box locally; a single-station lookup additionally sends the derived 6-digit postal code",
-      "dataReceived": "Charging station records with address, coordinates, per-charger operator, connector (plug) types, power rating, charging price, and live per-connector availability status"
-    },
-    "tw-tdx": {
-      "purpose": "Official Taiwanese national EV charging station dataset (TDX — Transport Data eXchange, Ministry of Transportation and Communications) covering publicly accessible charging infrastructure by city/county, with live per-connector status",
-      "dataSent": "Bounding-box coordinates matched against approximate city/county boundaries to pick which TDX city endpoints to query, plus an OAuth2 client-credentials bearer token (obtained server-side from the configured Client ID/Secret) — sent server-side per map request",
-      "dataReceived": "Charging station records with location, address, connector types and per-type counts (AC/DC), free-text charging-rate/parking-rate descriptions, opening hours, and live per-connector availability status"
-    },
-    "opendatasoft": {
-      "purpose": "Opendatasoft (Opendatasoft SAS, France) is the API platform that hosts and serves the French national IRVE charging dataset; requests for French charging points are answered by this platform",
-      "dataSent": "The map-viewport bounding box (as an in_bbox(point_geo, north, west, south, east) filter with pagination) reaches the Opendatasoft platform server-side; no user identity, account, or API key is sent",
-      "dataReceived": "Charging point records from the hosted IRVE dataset (location, operator, connector types, power, access, payment, pricing, opening hours)"
-    },
-    "ch-sfoe": {
-      "purpose": "Swiss national charging station dataset (Swiss Federal Office of Energy SFOE) covering public charging infrastructure in Switzerland",
-      "dataSent": "No query parameters — the full national OICP dataset (and a 5-minute live-status feed) is downloaded server-side on a schedule into the local database and then queried by bounding box locally; no user data reaches the provider per map request",
-      "dataReceived": "Charging station records with location, operator, connector/plug types, rated power, accessibility, authentication/payment modes, opening hours, and live availability status"
-    },
-    "nl-dotnl": {
-      "purpose": "Dutch national charging point dataset (DOT-NL / NDW National Access Point) covering publicly accessible charging infrastructure in the Netherlands",
-      "dataSent": "No query parameters — the full national OCPI locations feed (and its structured tariffs feed) is downloaded server-side on a schedule into the local database and then queried by bounding box locally; no user data reaches the provider per map request",
-      "dataReceived": "Charging station records with location, operator, connector/plug types, rated power, structured tariffs, and live per-connector availability status"
-    },
-    "no-nobil": {
-      "purpose": "Nordic EV charging station database (NOBIL) covering public charging stations in Norway and Sweden",
-      "dataSent": "Bounding box as type=rectangle with northeast=(north, east) and southwest=(south, west), plus the NOBIL API key — sent server-side per map request",
-      "dataReceived": "Charging station records with location, operator/owner, connector types, charging capacity, port counts, accessibility, opening hours, and station status"
-    },
-    "si-nap": {
-      "purpose": "Official Slovenian national EV charging registry (NAP Slovenija / Prometej IDACS National Access Point) covering public charging infrastructure in Slovenia. Requires a business-entity registration and OAuth2 token; inactive until configured",
-      "dataSent": "No query parameters from the map — the full national DATEX II dataset is downloaded server-side on a daily schedule using an OAuth2 bearer token exchanged from the configured refresh token, into the local database, then queried by bounding box locally; no user data reaches the provider per map request",
-      "dataReceived": "Charging site records with location, address, operator, connector types, rated power, and current type"
-    },
-    "osm": {
-      "purpose": "EV charging station locations from OpenStreetMap via Overpass (secondary source, global fallback)",
-      "dataSent": "An Overpass QL query for amenity=charging_station nodes within the bounding box (south, west, north, east) — sent server-side; no API key",
-      "dataReceived": "OSM charging station nodes with name, operator, socket types, capacity, and fee info"
-    }
   }
 }

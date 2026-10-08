@@ -96,7 +96,7 @@ function toEntry(system: UpstreamSystem, origin: CatalogOrigin): CatalogEntry | 
 /**
  * Read a stored credential. Secrets declared `x-openmapx-secret` in the
  * manifest are vault-backed but arrive decrypted on `ctx.config`, the same way
- * `ev-charging` reads `ocm-api-key`. Saving one in admin reloads the
+ * `webcam` reads its per-source keys. Saving one in admin reloads the
  * integration, so a new key takes effect without a restart.
  */
 function credential(ctx: IntegrationContext, key: string): string | undefined {

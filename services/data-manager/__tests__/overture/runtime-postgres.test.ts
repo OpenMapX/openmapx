@@ -6,7 +6,7 @@ import { latLngToCell } from "h3-js";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { resolveGers } from "../../../../integrations/knowledge-overture/provider.js";
 import { buildSchemaDDL } from "../../src/jobs/overture/schema.js";
-import { type PostgisFixture, startPostgis } from "../poi-ingest/_testcontainer.js";
+import { type PostgisFixture, startPostgis } from "../helpers/postgis-testcontainer.js";
 
 const skipE2e = process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1";
 
