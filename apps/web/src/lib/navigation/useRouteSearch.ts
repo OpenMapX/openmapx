@@ -367,7 +367,7 @@ export function useRouteSearch(query: RouteSearchQuery | null): UseRouteSearch {
       );
     };
     if (!selectionCurrent()) return false;
-    const target = candidate?.place.routingEntrance ?? coord;
+    const target = candidate?.place.routingEntrance ?? candidate?.place.coordinates ?? coord;
     const from = progress?.snapped ?? destinationWaypoints[0] ?? coord;
     // The store's route wins if a reroute landed since the last render, in which
     // case the memoized index no longer describes it and the geometry is used.

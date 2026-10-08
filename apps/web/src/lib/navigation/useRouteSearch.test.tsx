@@ -98,6 +98,26 @@ const publishProgress = (alongMeters: number) => {
 };
 
 describe("useRouteSearch route index ownership", () => {
+  it("uses the refreshed coordinate when selecting a place by its retained identity", async () => {
+    const previous = { ...places[0], coordinates: [0.001, 0.0002] as [number, number] };
+    const { result, rerender, unmount } = renderHook(() => useRouteSearch({ category: "fuel" }));
+    categoryPlaces = places.map((p) =>
+      p.id === previous.id ? { ...p, coordinates: [0.0019, 0] } : p,
+    );
+    rerender();
+    await act(async () => {});
+    directions.mockResolvedValue({
+      waypoints,
+      activeRouteIndex: 0,
+      provider: "routing-fixture",
+      routes: [freshRoute()],
+    });
+    await act(async () => {
+      expect(await result.current.addStop(previous)).toBe(true);
+    });
+    unmount();
+    expect(useNavigationStore.getState().destinationWaypoints[1]).toEqual([0.0019, 0]);
+  });
   it("uses the selected identity for co-located stops with different entrances", async () => {
     categoryPlaces = [
       { ...places[0], id: "a", routingEntrance: [0.0019, 0] },

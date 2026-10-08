@@ -237,8 +237,10 @@ query, reference position, remaining waypoints, and candidate coordinates/entran
 The mounted search retains at most 64 evaluations for 60 seconds, with an expiry
 invalidation timer and no routing polling timer. Requests receive AbortSignals;
 route/session replacement, search exit and unmount invalidate ownership. Adding a
-stop uses the live position and selected place ID, so co-located places retain
-their distinct entrances. A refreshed entrance cancels a pending selection.
+stop uses the live position and selected place ID, resolving its current entrance
+or coordinate from the latest results, so co-located places retain their distinct
+entrances and stale selection coordinates cannot override a refreshed target.
+A refreshed entrance cancels a pending selection.
 Only the latest browser-owned request may commit or restore navigation state.
 When the original route has no provider recorded, adding a verified stop pins
 and persists the provider selected by its baseline comparison.
