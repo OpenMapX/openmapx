@@ -9,6 +9,7 @@
   "workspaces": {
     ".": {
       "entry": [
+        "scripts/discovery-eval/business-name-address/replay.ts",
         "scripts/check-dockerfile-workspace-sync.ts",
         "scripts/check-credential-keys.ts",
         "scripts/check-feed-ids.ts",

@@ -1,0 +1,83 @@
+{
+  "version": 1,
+  "baseline": "3c80939d26a09f131b16d849895255436b5e5798",
+  "region": "Berlin ALEXA and nearby branch controls",
+  "language": "en",
+  "center": [13.416, 52.5194],
+  "upstreamProximity": [13.42, 52.52],
+  "zoom": 15,
+  "budgets": {
+    "maxRank": 3,
+    "maxWrongBranchClaims": 0,
+    "coldMs": 5000,
+    "warmMs": 2000
+  },
+  "cases": [
+    {
+      "id": "moch-name",
+      "query": "EDEKA Moch",
+      "target": "moch"
+    },
+    {
+      "id": "moch-address",
+      "query": "EDEKA Moch Grunerstraße 20",
+      "target": "moch"
+    },
+    {
+      "id": "edeka-address",
+      "query": "EDEKA Grunerstraße 20 Berlin",
+      "target": "moch"
+    },
+    {
+      "id": "edeka-alexa",
+      "query": "EDEKA Alexa",
+      "target": "moch"
+    },
+    {
+      "id": "edeka-gruner",
+      "query": "EDEKA Grunerstraße",
+      "target": "moch"
+    },
+    {
+      "id": "edeka-alexander",
+      "query": "EDEKA Alexanderstraße 25 Berlin",
+      "target": null,
+      "judgment": "Returned-address control; real-world branch identity unresolved, excluded from exact-entity denominator"
+    },
+    {
+      "id": "edeka-brand",
+      "query": "EDEKA",
+      "target": null
+    },
+    {
+      "id": "media-alexa",
+      "query": "MediaMarkt Alexa",
+      "target": "media"
+    },
+    {
+      "id": "media-address",
+      "query": "MediaMarkt Grunerstraße 20 Berlin",
+      "target": "media"
+    },
+    {
+      "id": "rewe-address",
+      "query": "REWE Invalidenstraße 158 Berlin",
+      "target": "rewe"
+    },
+    {
+      "id": "wrong-address",
+      "query": "EDEKA Moch Grunerstraße 999 Berlin",
+      "target": "negative"
+    },
+    {
+      "id": "invented-name",
+      "query": "Zzqxv430 Testladen Grunerstraße 20 Berlin",
+      "target": "negative"
+    },
+    {
+      "id": "schaaf-address",
+      "query": "EDEKA Schaaf Schillingstraße 2 Berlin",
+      "target": "schaaf"
+    }
+  ]
+}

@@ -7,5 +7,5 @@
     "noEmit": true,
     "typeRoots": ["../../packages/cli/node_modules/@types"]
   },
-  "include": ["*.ts", "../record-search-eval.mts"]
+  "include": ["*.ts", "business-name-address/*.ts", "../record-search-eval.mts"]
 }
