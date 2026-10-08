@@ -3,7 +3,7 @@ import type { Place } from "./types/place";
 import { haversineDistance } from "./utils/coordinates";
 import { overtureTaxonomyToOpenMapX } from "./utils/overtureCategoryMap";
 
-export const AMBIENT_POLICY_VERSION = 1;
+export const AMBIENT_POLICY_VERSION = 2;
 export const AMBIENT_MAX_AGE_MS = 90 * 86400_000;
 export const AMBIENT_LIMITS = {
   places: 100_000,
@@ -104,7 +104,7 @@ const aliases: Record<string, string> = {
   townhall: "townhall",
 };
 export function ambientCategory(value: string): string {
-  const raw = value.split(":").at(-1)!;
+  const raw = value.split(/[:/]/).at(-1)!;
   return aliases[raw] ?? raw;
 }
 const essential = new Set([
@@ -142,14 +142,48 @@ function point(lng: number, lat: number): boolean {
     Math.abs(lat) <= 85.051129
   );
 }
-function policy(category: string, importance: number, tenant: boolean) {
+const culturalDestinations = new Set([
+  "place_of_worship",
+  "museum",
+  "gallery",
+  "castle",
+  "monument",
+  "archaeological_site",
+  "attraction",
+]);
+function landmarkZoom(category: string, tags: Record<string, string>): 14 | 15 | null {
+  if (!culturalDestinations.has(ambientCategory(category))) return null;
+  const identified =
+    /^Q[1-9]\d*$/.test(tags.wikidata ?? "") ||
+    /^[a-z]{2,3}(?:-[a-z]+)?:\S/.test(tags.wikipedia ?? "");
+  if (!identified) return null;
+  const heritage = /^(?:[1-9]|10|yes)$/.test(tags.heritage ?? "");
+  const designated =
+    tags.building === "cathedral" ||
+    tags["church:type"] === "cathedral" ||
+    ["yes", "minor", "major"].includes(tags.basilica);
+  if (!heritage && !designated) return null;
+  return designated || /^[1-3]$/.test(tags.heritage ?? "") ? 14 : 15;
+}
+function policy(
+  category: string,
+  importance: number,
+  tenant: boolean,
+  landmark: 14 | 15 | null = null,
+) {
   const c = ambientCategory(category);
-  const tier = essential.has(c) ? 3 : everyday.has(c) || category.startsWith("shop:") ? 2 : 1;
+  const tier = essential.has(c)
+    ? 3
+    : landmark
+      ? 2.5
+      : everyday.has(c) || /^shop[:/]/.test(category)
+        ? 2
+        : 1;
   return {
     rank:
-      tier * 100 +
+      tier * 1000 +
       Math.round(Math.max(0, Math.min(1, Number.isFinite(importance) ? importance : 0)) * 99),
-    minZoom: tenant ? 18 : tier === 3 ? 13 : tier === 2 ? 15 : 16,
+    minZoom: tenant ? 18 : tier === 3 ? 13 : (landmark ?? (tier === 2 ? 15 : 16)),
   };
 }
 export function ambientPlaceFromOsm(row: AmbientOsmRow): AmbientPlace | null {
@@ -166,20 +200,31 @@ export function ambientPlaceFromOsm(row: AmbientOsmRow): AmbientPlace | null {
     )
   )
     return null;
-  const tenant = [tags.level, tags.floor].some((v) => v !== undefined && v !== "0" && v !== "0.0");
+  const category = row.category ?? "place";
+  const landmark = landmarkZoom(category, tags);
+  // An explicitly mapped whole cultural building is a destination, not an
+  // interior tenant. Its level is not a promise about ground-floor entrances.
+  const wholeBuilding =
+    landmark !== null &&
+    row.osm_type !== "node" &&
+    ["cathedral", "church", "castle", "museum"].includes(tags.building) &&
+    !tags.indoor &&
+    !tags["building:part"];
+  const tenant =
+    !wholeBuilding &&
+    [tags.level, tags.floor].some((v) => v !== undefined && v !== "0" && v !== "0.0");
   const names: Record<string, string> = {};
   for (const lang of ["de", "en"]) {
     const v = label(tags[`name:${lang}`]);
     if (v) names[lang] = v;
   }
-  const category = row.category ?? "place";
   return {
     id: `osm:${row.osm_type}/${row.osm_id}`,
     name,
     names,
     coordinates: [row.lng, row.lat],
     category: ambientCategory(category),
-    ...policy(category, row.importance, tenant),
+    ...policy(category, row.importance, tenant, landmark),
     tenant,
     sources: "osm",
   };

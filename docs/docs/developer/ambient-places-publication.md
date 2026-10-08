@@ -113,8 +113,17 @@ retain their existing coordinate fallback.
   Missing values are omitted. Unsupported contributor datasets block publication.
 - Labels: supplied German/English names, otherwise the source name; at most 120
   Unicode characters. No inferred opening hours, ratings or popularity.
-- Ranking: essential destinations at zoom 13, everyday businesses at 15, other
-  places at 16; utility tier and OSM importance, then stable ID tie-breaking.
+- Ranking (policy 2): essential destinations at zoom 13; corroborated cathedral/
+  basilica or heritage levels 1–3 destinations at 14; other registered cultural
+  landmarks and everyday businesses at 15; other places at 16. Cultural landmarks
+  require a valid Wikidata/language-prefixed Wikipedia identity plus registered
+  heritage or explicit cathedral/basilica designation. Ordinary worship buildings
+  without that evidence stay at 16. Importance orders within utility tiers;
+  exact source ID breaks ties. Both indexed `amenity/hospital` and legacy
+  `amenity:hospital` categories normalize to the same tier.
+- Tenant handling: interior/node/building-part non-ground records stay at 18.
+  A corroborated whole cultural-building footprint is a building destination;
+  its level metadata does not imply an interior tenant or an entrance claim.
 - MVT: zooms 13–18, at most 256 features, 128 KiB, indexed geometry intersection,
   a 2-second SQL timeout and eight pending tile requests per API process. A
   conservative UTF-8 budget removes the lowest-ranked tail before encoding; a

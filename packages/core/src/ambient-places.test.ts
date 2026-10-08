@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  ambientCategory,
   ambientPlaceFromOsm,
   ambientPlaceFromOverture,
   ambientPlaceToCategoryPlace,
@@ -69,6 +70,50 @@ describe("ambient place policy", () => {
       expect(ambientPlaceFromOverture({ ...overture, ...patch })).toBeNull();
     }
     expect(ambientPlaceFromOverture({ ...overture, confidence: 0.5 })).not.toBeNull();
+  });
+  it("normalizes indexed slash categories and legacy colon categories identically", () => {
+    for (const prefix of ["amenity/", "amenity:"]) {
+      expect(ambientCategory(`${prefix}hospital`)).toBe("hospital");
+      expect(ambientPlaceFromOsm({ ...osm, category: `${prefix}hospital` })!.minZoom).toBe(13);
+    }
+    expect(ambientPlaceFromOsm({ ...osm, category: "shop/bakery" })!.minZoom).toBe(15);
+    expect(ambientPlaceFromOsm({ ...osm, category: "shop/books" })!.minZoom).toBe(15);
+  });
+  it("promotes only corroborated cultural landmarks and preserves exclusion/tenant policy", () => {
+    const base = { ...osm, category: "amenity/place_of_worship" };
+    const regional = { wikidata: "Q156475", heritage: "4" };
+    const designated = { wikidata: "Q156475", basilica: "yes" };
+    expect(ambientPlaceFromOsm({ ...base, tags: regional })!.minZoom).toBe(15);
+    expect(ambientPlaceFromOsm({ ...base, tags: designated })!.minZoom).toBe(14);
+    expect(
+      ambientPlaceFromOsm({ ...base, tags: { heritage: "1", wikipedia: "de:Dom" } })!.minZoom,
+    ).toBe(14);
+    const controls: Record<string, string>[] = [
+      {},
+      { wikidata: "Q156475" },
+      { heritage: "4" },
+      { wikidata: "Q156475", heritage: "no" },
+      { wikidata: "bad", heritage: "4" },
+      { wikipedia: "no-prefix", heritage: "4" },
+      { wikidata: "Q156475", heritage: "0" },
+    ];
+    for (const tags of controls) {
+      expect(ambientPlaceFromOsm({ ...base, tags })!.minZoom).toBe(16);
+    }
+    expect(ambientPlaceFromOsm({ ...base, tags: { ...designated, level: "1" } })!.minZoom).toBe(18);
+    expect(ambientPlaceFromOsm({ ...base, tags: { ...designated, access: "private" } })).toBeNull();
+    expect(ambientPlaceFromOsm({ ...base, tags: { ...designated, disused: "yes" } })).toBeNull();
+    expect(ambientPlaceFromOsm({ ...base, category: "shop/books", tags: regional })!.minZoom).toBe(
+      15,
+    );
+    expect(
+      ambientPlaceFromOsm({ ...base, category: "amenity/bench", tags: regional })!.minZoom,
+    ).toBe(16);
+    const landmark = ambientPlaceFromOsm({ ...base, tags: designated })!;
+    expect(landmark.rank).toBeGreaterThan(
+      ambientPlaceFromOsm({ ...osm, category: "shop/bakery" })!.rank,
+    );
+    expect(landmark.rank).toBeLessThan(ambientPlaceFromOsm(osm)!.rank);
   });
   it("ranks useful categories first and defers tenants to zoom 18", () => {
     expect(ambientPlaceFromOsm(osm)!.minZoom).toBe(13);

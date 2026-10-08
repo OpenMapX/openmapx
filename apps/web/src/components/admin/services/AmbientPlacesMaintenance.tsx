@@ -88,6 +88,7 @@ export function AmbientPlacesMaintenance({ apiUrl }: { apiUrl: string }) {
             label={active?.enabled ? "Visible" : "Disabled or out of date"}
           />
           <Chip label={active?.sources.overture ? "OSM + Overture" : "OSM only"} />
+          {active && <Chip label={`Policy ${active.policyVersion}`} />}
         </Stack>
         {active && (
           <Box>

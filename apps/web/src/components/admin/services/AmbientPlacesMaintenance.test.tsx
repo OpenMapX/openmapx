@@ -33,6 +33,7 @@ describe("ambient operator workflow", () => {
           : {
               active: {
                 generation: "generation-one",
+                policyVersion: 2,
                 publishedAt: "2026-10-07T10:00:00Z",
                 placeCount: 42,
                 enabled: true,
@@ -51,6 +52,7 @@ describe("ambient operator workflow", () => {
     view();
     await screen.findByText(/osm-one/);
     expect(screen.getByText(/OSM only/)).toBeInTheDocument();
+    expect(screen.getByText("Policy 2")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Publish map snapshot" }));
     await waitFor(() =>
       expect(fetch).toHaveBeenCalledWith(
