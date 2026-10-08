@@ -12,6 +12,7 @@ const test = vi.hoisted(() => ({
     querySourceFeatures: vi.fn((): MapGeoJSONFeature[] => []),
     queryRenderedFeatures: vi.fn((): MapGeoJSONFeature[] => []),
     getStyle: () => ({ layers: [] }),
+    getFilter: vi.fn(() => undefined),
     setFilter: vi.fn(),
     on: vi.fn<(event: string, handler: (event?: unknown) => void) => void>(),
     off: vi.fn<(event: string, handler: (event?: unknown) => void) => void>(),

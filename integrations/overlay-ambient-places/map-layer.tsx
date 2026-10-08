@@ -174,10 +174,10 @@ export function AmbientPlacesLayer() {
   }, [visible, manifest, env.apiUrl, locale, dark]);
   useMapLayerGroup(group);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: dark recreates label paint through the group hook; reinstall suppression immediately after that lifecycle.
   useEffect(() => {
     const map = mapRef.current;
     if (!visible || !manifest || !map || !mapReady) return;
-    let lastFilter = "";
     const reconcile = () => {
       if (!map.getSource(AMBIENT_SOURCE)) return;
       const unique = new Map<string, AmbientPlace>();
@@ -226,9 +226,11 @@ export function AmbientPlacesLayer() {
         ["!", ["in", ["get", "id"], ["literal", [...hidden].sort()]]],
       ];
       const key = JSON.stringify(filter);
-      if (key === lastFilter) return;
-      lastFilter = key;
-      for (const id of LAYERS) if (map.getLayer(id)) map.setFilter(id, filter);
+      // Descriptor/theme reconciliation can recreate one layer without a
+      // style.load. Compare each live layer so its suppression is restored.
+      for (const id of LAYERS)
+        if (map.getLayer(id) && JSON.stringify(map.getFilter(id)) !== key)
+          map.setFilter(id, filter);
     };
     const click = (event: MapMouseEvent) => {
       if (getMapClickOwner(event)) return;
@@ -247,7 +249,6 @@ export function AmbientPlacesLayer() {
       } else sidebar.openDetail(PANEL.PLACE_CARD);
     };
     const style = () => {
-      lastFilter = "";
       clearAmbientIdentities(map);
     };
     for (const id of LAYERS) INTERACTIVE_LAYER_IDS.add(id);
@@ -264,6 +265,6 @@ export function AmbientPlacesLayer() {
       clearAmbientIdentities(map);
       for (const id of LAYERS) INTERACTIVE_LAYER_IDS.delete(id);
     };
-  }, [mapRef, mapReady, visible, manifest, locale, occupied]);
+  }, [mapRef, mapReady, visible, manifest, locale, occupied, dark]);
   return null;
 }
