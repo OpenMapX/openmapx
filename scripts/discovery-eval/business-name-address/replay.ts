@@ -15,10 +15,10 @@ interface QuerySet {
   cases: Array<{ id: string; query: string }>;
 }
 interface Responses {
+  features: Array<{ raw: { id: string }; adapted: AutocompleteResult }>;
   cases: Array<{
     caseId: string;
-    publicRows: AutocompleteResult[];
-    aggregate: { suggestions: AutocompleteResult[]; partial: boolean };
+    rawIds: string[];
   }>;
 }
 function read<T>(name: string): T {
@@ -37,13 +37,19 @@ const report = {
     const entry = queries.cases.find((query) => query.id === fixture.caseId);
     if (!entry) throw new Error("Missing business retrieval query");
     const context = { query: entry.query, proximity: queries.center, zoom: queries.zoom };
-    const combined = [...fixture.aggregate.suggestions, ...fixture.publicRows];
+    // The historical aggregate was empty/partial. Replay the captured geocoder
+    // pool; do not treat the unavailable aggregate as source absence.
+    const combined = fixture.rawIds.map((id) => {
+      const feature = responses.features.find((candidate) => candidate.raw.id === id);
+      if (!feature) throw new Error("Missing captured candidate");
+      return feature.adapted;
+    });
     const ranked = rankAutocompleteRows({ places: combined }, context);
     const action = enterAction(ranked, context);
     return {
       caseId: fixture.caseId,
       variants: getQueryVariants(entry.query),
-      partial: fixture.aggregate.partial,
+      partial: true,
       combinedIds: combined.map((row) => row.id),
       rankedIds: ranked.map((row) => row.id),
       enter: action.kind === "open" ? { kind: "open", id: action.row.id } : action,
