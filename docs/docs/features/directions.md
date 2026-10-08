@@ -359,6 +359,44 @@ navigation UI behaves the same on Valhalla and OSRM. Valhalla additionally backs
 map-matching endpoint that snaps a recorded GPS trace to the road network — used
 for features such as placing traffic-signal markers along the active route.
 
+### Search for a stop along your route
+
+Choose a category or chain from **Search along route** while navigating. Discovery
+looks up to 25 km ahead within a 1,200 m geometric corridor. That cheap discovery
+step does not prove road access: a nearby service area may be across a motorway
+or river.
+
+For a shortlist of six stops, OpenMapX compares the complete remaining itinerary
+with and without each stop. **By road** labels show the extra routing time; the
+card also shows extra distance. Both itineraries use the active mode, avoidance
+preferences and routing provider. Existing user stops keep their order, and the
+new stop is inserted before the next stop beyond its position on the route.
+
+A known routing entrance is preferred when the place source supplies one.
+Otherwise the card explicitly says it routes to place coordinates and the
+entrance is unknown. A network estimate does not verify that a coordinate is an
+entrance or that a business is open.
+
+- **Straight-line estimate / ~**: only geometric distance and speed are available.
+- **Checking**: the road comparison is pending.
+- **Unavailable / unknown**: the provider failed, returned unusable data, or could
+  not honor the pinned routing request.
+- **No route / unreachable**: the provider returned no route through that stop.
+  Adding it is disabled.
+
+Comparisons use a route position rounded down to 500 m and expire after 60 seconds.
+Position fixes within that bucket do not issue new routing requests; passing a
+user waypoint changes the remaining itinerary immediately. Route, provider,
+preference and search changes remove old estimates. Expiry restores approximate
+labels without polling the provider. The browser cache holds at most 64
+comparisons, and only two candidate requests run concurrently after one shared
+baseline. Discovery bounds move every 5 km.
+
+**Add** replans from the current position using the same insertion rules. **Cancel**
+can dismiss a pending selection; a late response cannot change a newer route or
+navigation session. This uses the existing routing configuration and adds no
+admin setting.
+
 ## Flights: a deep-link, not live data
 
 Selecting the **flying** mode does not route an air leg or fetch live flight

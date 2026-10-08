@@ -33,6 +33,7 @@ import { BrandLogo } from "@/components/search/BrandLogo";
 import { useMapOptional } from "@/integration-api/map/MapContext";
 import { BRAND } from "@/integration-api/runtime/theme";
 import { useRouteSearchStore } from "@/lib/navigation/routeSearchStore";
+import { routeStopCopy } from "@/lib/navigation/routeStopCopy";
 import { routeSearchQueryFor, useRouteSearch } from "@/lib/navigation/useRouteSearch";
 import { RouteSearchResultsLayer } from "./RouteSearchResultsLayer";
 
@@ -101,8 +102,10 @@ export function RouteSearchControl() {
   const setBrand = useRouteSearchStore((s) => s.setBrand);
   const resetStore = useRouteSearchStore((s) => s.reset);
   const setCameraMode = useNavigationStore((s) => s.setCameraMode);
-  const [selected, setSelected] = useState<AlongRoutePoi<CategoryPlace> | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
+  const [addFailed, setAddFailed] = useState(false);
+  const selectionIntent = useRef(0);
   const [brandQuery, setBrandQuery] = useState("");
   const debouncedBrandQuery = useDebounce(brandQuery, 200);
   const { data: brandSuggestData } = useBrandSuggest(debouncedBrandQuery);
@@ -119,7 +122,33 @@ export function RouteSearchControl() {
     : brand
       ? routeSearchQueryFor({ brand })
       : null;
-  const { results, isLoading, addStop } = useRouteSearch(query);
+  const { results, isLoading, addStop, cancelAddStop } = useRouteSearch(query);
+  const selected = results.find((poi) => poi.place.id === selectedId) ?? null;
+  const copy = selected ? routeStopCopy(selected) : null;
+  // A new search or route must retire any pending selection in this sheet.
+  const route = useNavigationStore((s) => s.route);
+  const session = useNavigationStore((s) => s.navigationStartedAtMs);
+  useEffect(() => {
+    void activeKey;
+    void route;
+    void session;
+    selectionIntent.current++;
+    setSelectedId(null);
+    setAdding(false);
+    setAddFailed(false);
+    cancelAddStop();
+  }, [activeKey, route, session, cancelAddStop]);
+  const selectedTarget = selected?.place.routingEntrance ?? selected?.place.coordinates;
+  const targetLng = selectedTarget?.[0];
+  const targetLat = selectedTarget?.[1];
+  useEffect(() => {
+    void targetLng;
+    void targetLat;
+    selectionIntent.current++;
+    cancelAddStop();
+    setAdding(false);
+    setAddFailed(false);
+  }, [targetLng, targetLat, cancelAddStop]);
 
   const handleSelectBrand = (b: BrandSummary) => {
     setBrand(b);
@@ -174,13 +203,21 @@ export function RouteSearchControl() {
   }, [searching, results]);
 
   const reset = () => {
+    selectionIntent.current++;
+    cancelAddStop();
     resetStore();
-    setSelected(null);
+    setSelectedId(null);
+    setAdding(false);
+    setAddFailed(false);
     setBrandQuery("");
   };
 
   const handleSelect = (poi: AlongRoutePoi<CategoryPlace>) => {
-    setSelected(poi);
+    selectionIntent.current++;
+    cancelAddStop();
+    setSelectedId(poi.place.id);
+    setAdding(false);
+    setAddFailed(false);
     mapCtx?.flyTo(poi.place.coordinates, 15);
   };
 
@@ -190,10 +227,19 @@ export function RouteSearchControl() {
 
   const handleAdd = async () => {
     if (!selected) return;
+    const intent = ++selectionIntent.current;
+    setAddFailed(false);
     setAdding(true);
-    const ok = await addStop(selected.place.coordinates);
+    const ok = await addStop(selected.place);
+    // Success means this selection committed. Its route change also retires
+    // the card's intent, so complete search before guarding stale failures.
+    if (ok) {
+      reset();
+      return;
+    }
+    if (intent !== selectionIntent.current) return;
     setAdding(false);
-    if (ok) reset();
+    setAddFailed(true);
   };
 
   return (
@@ -378,13 +424,41 @@ export function RouteSearchControl() {
               <Typography variant="subtitle1" sx={{ fontWeight: 600 }} noWrap>
                 {selected.place.name}
               </Typography>
-              <Typography variant="body2" color="text.secondary">
-                {t("rsDetour", { minutes: Math.max(1, Math.round(selected.detourSeconds / 60)) })}
+              <Typography variant="body2" color="text.secondary" aria-live="polite">
+                {copy && t(copy.key, copy.values)}
               </Typography>
+              {selected.detour?.kind === "network" && (
+                <Typography variant="body2" color="text.secondary">
+                  {t("rsDetourDistance", {
+                    kilometers: (selected.detour.meters / 1000).toFixed(1),
+                  })}
+                </Typography>
+              )}
             </Box>
           </Box>
+          <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 1.5 }}>
+            {t(
+              selected.detour?.access.kind === "entrance" || selected.place.routingEntrance
+                ? "rsDetourEntrance"
+                : "rsDetourCoordinate",
+            )}
+          </Typography>
+          {addFailed && (
+            <Typography role="alert" color="error" variant="body2" sx={{ mb: 1 }}>
+              {t("rsAddFailed")}
+            </Typography>
+          )}
           <Box sx={{ display: "flex", gap: 1, justifyContent: "flex-end" }}>
-            <Button onClick={() => setSelected(null)} color="inherit">
+            <Button
+              onClick={() => {
+                selectionIntent.current++;
+                cancelAddStop();
+                setSelectedId(null);
+                setAdding(false);
+                setAddFailed(false);
+              }}
+              color="inherit"
+            >
               {t("rsCancel")}
             </Button>
             <Button
@@ -392,7 +466,7 @@ export function RouteSearchControl() {
               startIcon={
                 adding ? <CircularProgress size={16} color="inherit" /> : <AddLocationAltIcon />
               }
-              disabled={adding}
+              disabled={adding || selected.detour?.kind === "unreachable"}
               onClick={handleAdd}
             >
               {t("rsAdd")}

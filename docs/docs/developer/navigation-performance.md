@@ -209,6 +209,47 @@ Whatever the outcome, link the residual trace and the decision from here —
 including a justified "no Worker" or "no native spike" conclusion when the
 evidence does not support one.
 
+## Route-stop comparisons
+
+`@openmapx/core/navigation` exports `routeStopWaypointPositions`,
+`remainingRouteStopWaypoints`, `insertRouteStop`, `routeStopAccess`, and
+`evaluateRouteStopDetours`. Waypoint positions are resolved in itinerary order
+on successive route suffixes, preserving later visits to a retraced road. Pass
+the reference `alongMeters` when evaluating or inserting into a remaining route.
+The evaluator accepts an injected directions request
+port: callers must close over identical mode and routing preferences for baseline
+and candidate requests. Its typed results distinguish network deltas, unknown
+responses and explicit no-route results; an absent `AlongRoutePoi.detour` is a
+geometric approximation. A source can supply `CategoryPlace.routingEntrance`;
+ordinary coordinates remain an explicit fallback. This contract can be reused by
+future richer stop discovery without changing its routing semantics.
+
+The web hook evaluates six candidates, two at a time, after one baseline. It
+pins an enabled integration using the optional directions `provider` parameter;
+normal unpinned routing retains its fallback chain, while a pin never falls back
+to another graph or bypasses capability/source-policy checks. Mode-only matrices
+are deliberately not used because they cannot carry the active avoid options.
+
+The comparison origin advances in 500 m buckets. Waypoint membership changes
+invalidate a bucket, while speed and ordinary position fixes only refilter
+retained projections. Cache identity includes route/session, provider, preferences,
+query, reference position, remaining waypoints, and candidate coordinates/entrance.
+The mounted search retains at most 64 evaluations for 60 seconds, with an expiry
+invalidation timer and no routing polling timer. Requests receive AbortSignals;
+route/session replacement, search exit and unmount invalidate ownership. Adding a
+stop uses the live position and selected place ID, resolving its current entrance
+or coordinate from the latest results, so co-located places retain their distinct
+entrances and stale selection coordinates cannot override a refreshed target.
+A refreshed entrance cancels a pending selection.
+Only the latest browser-owned request may commit or restore navigation state.
+When the original route has no provider recorded, adding a verified stop pins
+and persists the provider selected by its baseline comparison.
+
+Regression fixtures define a directed road graph independently of the geometric
+projection, including a wrong-side motorway facility, a river crossing, a
+restricted stop and an ordinary urban stop. Hook tests cover option fidelity,
+request cadence, expiry, cancellation and same-route session replacement.
+
 ## Maintenance
 
 The HUD is an instrument, not a product feature. Before adding a permanent

@@ -393,6 +393,9 @@ export function setup(ctx: IntegrationContext): void {
     // the generic exclusion contract. Falling back to an engine that ignores
     // these fields would silently return a route through the closed segment.
     let resolvedChain = getRoutingProviders(travelMode, { requireTimeAware });
+    if (request.provider) {
+      resolvedChain = resolvedChain.filter((entry) => entry.integrationId === request.provider);
+    }
     if (hasExclusions) {
       resolvedChain = resolvedChain.filter((e) => e.provider.supportsExclusions === true);
     }
@@ -532,6 +535,9 @@ export function setup(ctx: IntegrationContext): void {
     } = await planDirectionsRequest(ctx, request);
 
     let resolvedChain = getOptimizeProviders(travelMode, { requireTimeAware });
+    if (request.provider) {
+      resolvedChain = resolvedChain.filter((entry) => entry.integrationId === request.provider);
+    }
     // When exclusions are present, only use providers that explicitly honour
     // the generic exclusion contract.
     if (hasExclusions) {
