@@ -187,7 +187,22 @@ function policy(
   };
 }
 export function ambientPlaceFromOsm(row: AmbientOsmRow): AmbientPlace | null {
-  const tags = row.tags ?? {};
+  let rawTags: unknown = row.tags ?? {};
+  if (typeof rawTags === "string") {
+    try {
+      rawTags = JSON.parse(rawTags);
+    } catch {
+      return null;
+    }
+  }
+  if (
+    !rawTags ||
+    typeof rawTags !== "object" ||
+    Array.isArray(rawTags) ||
+    !Object.values(rawTags).every((value) => typeof value === "string")
+  )
+    return null;
+  const tags = rawTags as Record<string, string>;
   const name = label(row.name);
   if (
     !name ||

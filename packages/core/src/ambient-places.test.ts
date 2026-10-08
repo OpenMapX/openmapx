@@ -115,6 +115,20 @@ describe("ambient place policy", () => {
     );
     expect(landmark.rank).toBeLessThan(ambientPlaceFromOsm(osm)!.rank);
   });
+  it("reads legacy serialized tags and rejects malformed/non-object policy inputs", () => {
+    const legacy = {
+      ...osm,
+      category: "amenity/place_of_worship",
+      tags: JSON.stringify({ wikidata: "Q896410", basilica: "minor" }),
+    };
+    expect(ambientPlaceFromOsm(legacy as never)!.minZoom).toBe(14);
+    expect(
+      ambientPlaceFromOsm({ ...legacy, tags: JSON.stringify({ access: "private" }) } as never),
+    ).toBeNull();
+    for (const tags of ["not-json", "[]", "null", { access: true }]) {
+      expect(ambientPlaceFromOsm({ ...osm, tags } as never)).toBeNull();
+    }
+  });
   it("ranks useful categories first and defers tenants to zoom 18", () => {
     expect(ambientPlaceFromOsm(osm)!.minZoom).toBe(13);
     expect(ambientPlaceFromOsm({ ...osm, category: "shop:bakery" })!.minZoom).toBe(15);

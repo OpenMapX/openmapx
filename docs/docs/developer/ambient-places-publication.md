@@ -7,7 +7,10 @@ description: Bounded regional place generations, canonical identities and the MV
 
 `overlay-ambient-places` shows destinations during ordinary map browsing. It consumes
 one published German region; source ingestion remains in the existing OSM search
-index and Overture workflows. The initial operator form targets Aachen. Nothing
+index and Overture workflows. The existing OSM extractor requires an alias, code
+or generated acronym term: a source-present name-only object can therefore be
+absent from this index and layer. This coverage limit is distinct from label
+collision or ambient ranking. The initial operator form targets Aachen. Nothing
 imports planet data, calls AllThePlaces directly, or changes geocoding.
 
 ## Operator workflow and public contract
@@ -53,6 +56,9 @@ limits; the layer is not a complete business directory.
 ## Publication, retention and identity
 
 A dedicated `ambient_places` schema isolates snapshots from mutable source tables.
+The OSM index writer stores tag objects as JSONB; ambient policy also reads older
+serialized-object rows, and rejects malformed/non-object policy tags so closure
+and private-access checks cannot silently disappear.
 A repeatable-read transaction holds an advisory writer lock, reads bounded indexed
 source candidates, applies the shared policy and writes batches of 500 places.
 Generation and feature insertion, count validation and the active/previous pointer

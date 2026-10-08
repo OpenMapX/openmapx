@@ -91,8 +91,10 @@ async function insertSearchPlaces(
   await sql.unsafe(
     `INSERT INTO osm_search__staging.places
        (osm_type, osm_id, name, lat, lng, category, tags, importance)
-     SELECT * FROM UNNEST($1::TEXT[], $2::BIGINT[], $3::TEXT[], $4::DOUBLE PRECISION[],
-       $5::DOUBLE PRECISION[], $6::TEXT[], $7::JSONB[], $8::DOUBLE PRECISION[])
+     SELECT r.osm_type,r.osm_id,r.name,r.lat,r.lng,r.category,r.tags::JSONB,r.importance
+     FROM UNNEST($1::TEXT[], $2::BIGINT[], $3::TEXT[], $4::DOUBLE PRECISION[],
+       $5::DOUBLE PRECISION[], $6::TEXT[], $7::TEXT[], $8::DOUBLE PRECISION[])
+       AS r(osm_type,osm_id,name,lat,lng,category,tags,importance)
      ON CONFLICT (osm_type, osm_id) DO UPDATE SET
        name = EXCLUDED.name, lat = EXCLUDED.lat, lng = EXCLUDED.lng,
        category = EXCLUDED.category, tags = EXCLUDED.tags, importance = EXCLUDED.importance`,
