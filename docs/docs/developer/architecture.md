@@ -274,6 +274,15 @@ domain deliberately does not replace the
 geocoding fallback chain; `SearchBar` merges both responses after each has
 applied its own semantics.
 
+The client merge in `packages/core/src/utils/searchSuggestion.ts` gives exact
+result IDs and shared external identities precedence over spatial heuristics.
+Ordinary POIs require independent source-record namespaces, equivalent concrete
+address context and compatible category/entity evidence; same name and proximity
+alone must not erase separate branches or tenants. Manifest `sourceIds` are
+attribution only. City, transit and landmark reconciliation remain entity-specific.
+The [search policy](../features/search.md#keeping-distinct-places-in-the-list)
+documents the fallback's conservative address limits and source-identity rules.
+
 The OSM alias index is an ODbL-derived data product owned by `data-manager`.
 The manager streams a selected PBF through Osmium into an
 `osm_search__staging` schema, validates it, and atomically swaps it into
