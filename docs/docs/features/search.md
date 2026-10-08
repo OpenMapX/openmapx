@@ -56,6 +56,38 @@ differ from the server's candidate order without changing candidate retrieval.
 Coordinates and Plus Codes are detected client side and resolved without a
 round trip to a geocoder at all.
 
+### Keeping distinct places in the list
+
+Nearby businesses with the same name remain separate choices, with their own
+IDs, addresses and coordinates. Name and distance alone do not establish
+business identity, including for co-located tenants or POIs without a category.
+An identical result ID or a shared non-empty external identity still joins
+records for the same entity, even when providers report different addresses.
+
+Without shared identity, ordinary POIs merge only when their normalized names
+match, they are less than 1,000 metres apart, and different source-record
+namespaces corroborate the same concrete address. Address comparison removes a
+repeated business name and normalizes spelling such as `Friedrichstr.` /
+`Friedrichstraße`, while retaining unit/floor and locality context. Missing,
+city-only or postcode-only context is insufficient: the street component must
+contain a house number and a recognized street term, such as `Street`, `Road`,
+`Rue` or `-straße`. Conflicting Wikidata items
+or reported categories prevent this heuristic merge. Different provider IDs or
+OSM node/way IDs alone do not prove different real-world entities; manifest
+`sourceIds` describe attribution, not place identity.
+
+This fallback is deliberately conservative, not an international address
+parser: incomplete or differently formatted addresses and multiple records in
+one source may remain as duplicate choices until a shared identity is supplied.
+Stations and entrances retain their existing name/distance reconciliation, and
+a station stays separate from its same-named square. Geographic features,
+recognized landmarks and airport/notable-place catalogs retain spatial
+reconciliation; a city from the notable-place index can still join its geocoder
+record within 15 kilometres. A business category does not gain that exemption
+from fame or a Wikidata item alone. Contradictory concrete addresses or Wikidata
+entities also prevent landmark/catalog spatial merging; shared identity still
+takes precedence. Commercial galleries require ordinary POI evidence.
+
 ### Famous places far away
 
 A geocoder tells which of several namesakes is famous only if it has data on

@@ -108,6 +108,18 @@ const results = EVAL_CASES.map((evalCase) => {
 });
 
 describe("search ranking eval", () => {
+  it("reconciles the captured Eiffel Tower geocoder and catalog rows once", () => {
+    const evalCase = EVAL_CASES.find((item) => item.id === "berlin-eiffel-tower");
+    expect(evalCase).toBeDefined();
+    if (!evalCase) return;
+    const rows = rankCase(evalCase);
+    const parisTower = rows.filter(
+      (row) => row.id === "osm:way/5013364" || row.id === "wikidata:Q243",
+    );
+    expect(parisTower).toHaveLength(1);
+    expect(parisTower[0].ids?.wikidata).toBe("Q243");
+  });
+
   for (const { evalCase, rows, ranks, action, passed } of results) {
     const title = `${evalCase.id}: “${evalCase.query}”`;
     const report = `ranks ${JSON.stringify(ranks)}; Enter: ${describeAction(action)}; ${describeRows(rows)}`;

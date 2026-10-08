@@ -14,6 +14,168 @@ import {
 
 const BERLIN: [number, number] = [13.405, 52.52];
 
+describe("business duplicate evidence", () => {
+  const branch = (id: string, extra: Partial<AutocompleteResult> = {}): AutocompleteResult => ({
+    id,
+    label: "REWE",
+    sublabel: "REWE, Friedrichstraße 1, Berlin",
+    coordinates: BERLIN,
+    type: "poi",
+    rawCategory: "shop/supermarket",
+    ...extra,
+  });
+  const merge = (rows: AutocompleteResult[]) =>
+    mergeAutocompleteSuggestions(rows, { query: "REWE" });
+
+  it.each([
+    ["missing address", { sublabel: undefined }],
+    ["city-only context", { sublabel: "Berlin" }],
+    ["postcode-only context", { sublabel: "10115 Berlin" }],
+    ["short postcode and country", { sublabel: "1000 Brussels, Belgium" }],
+    ["locality before short postcode", { sublabel: "Brussels 1000, Belgium" }],
+    [
+      "street without house number followed by postcode",
+      { sublabel: "Street A, 1000 Brussels, Belgium" },
+    ],
+    ["missing category and address", { rawCategory: undefined, sublabel: undefined }],
+  ] satisfies Array<[string, Partial<AutocompleteResult>]>)("preserves %s", (_name, extra) => {
+    const rows = merge([branch("maptiler:a", extra), branch("osm:node/2", extra)]);
+    expect(rows.map((row) => row.id).sort()).toEqual(["maptiler:a", "osm:node/2"]);
+  });
+
+  it("preserves nearby contradictory addresses across sources", () => {
+    expect(
+      merge([
+        branch("maptiler:a"),
+        branch("osm:node/2", { coordinates: [13.4, 52.52], sublabel: "REWE, Street B 2, Berlin" }),
+      ]),
+    ).toHaveLength(2);
+  });
+
+  it("preserves co-located same-source tenants at one address", () => {
+    expect(merge([branch("maptiler:a"), branch("maptiler:b")])).toHaveLength(2);
+  });
+
+  it("preserves co-located tenants with distinct unit addresses across sources", () => {
+    const rows = merge([
+      branch("maptiler:a", { sublabel: "REWE, Friedrichstraße 1, Unit 1, Berlin" }),
+      branch("osm:node/2", { sublabel: "REWE, Friedrichstraße 1, Unit 2, Berlin" }),
+    ]);
+    expect(rows).toHaveLength(2);
+  });
+
+  it("preserves contradictory entity identities even with an equivalent address", () => {
+    const rows = merge([
+      branch("maptiler:a", { ids: { wikidata: "Q100" } }),
+      branch("osm:node/2", { ids: { wikidata: "Q200" } }),
+    ]);
+    expect(rows).toHaveLength(2);
+  });
+
+  it("preserves contradictory primary Wikidata row identities without ids payloads", () => {
+    expect(
+      merge([
+        branch("wikidata:Q100", { rawCategory: undefined, fame: 0.9, ids: { wikidata: "Q100" } }),
+        branch("wikidata:Q200", { rawCategory: undefined }),
+      ]),
+    ).toHaveLength(2);
+  });
+
+  it("preserves nearby commercial galleries without address evidence", () => {
+    expect(
+      merge([
+        branch("maptiler:a", { rawCategory: "tourism/gallery", sublabel: "Berlin" }),
+        branch("osm:node/2", { rawCategory: "tourism/gallery", sublabel: "Berlin" }),
+      ]),
+    ).toHaveLength(2);
+  });
+
+  it("preserves different business categories at the same address", () => {
+    expect(
+      merge([branch("maptiler:a"), branch("osm:node/2", { rawCategory: "amenity/cafe" })]),
+    ).toHaveLength(2);
+  });
+
+  it("merges equivalent concrete addresses across sources despite different provider IDs", () => {
+    const rows = merge([
+      branch("maptiler:a", { provider: "geocoding-maptiler", ids: { osm: "way/1" } }),
+      branch("osm:node/2", {
+        sublabel: "Friedrichstr. 1, Berlin",
+        provider: "geocoding-photon",
+        ids: { osm: "node/2" },
+        sourceIds: ["photon"],
+      }),
+    ]);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].contributingProviders).toEqual(["geocoding-maptiler", "geocoding-photon"]);
+    expect(rows[0].sourceIds).toEqual(["photon"]);
+  });
+
+  it("merges valid shared identity despite conflicting addresses and provider IDs", () => {
+    const rows = merge([
+      branch("maptiler:a", { ids: { wikidata: "Q100" }, provider: "geocoding-maptiler" }),
+      branch("maptiler:b", { ids: { wikidata: "Q100" }, sublabel: "REWE, Street B 2, Berlin" }),
+    ]);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].ids).toEqual({ wikidata: "Q100" });
+  });
+
+  it("does not let business fame override contradictory addresses", () => {
+    expect(
+      merge([
+        branch("maptiler:a", { fame: 0.9, ids: { wikidata: "Q100" } }),
+        branch("osm:node/2", { sublabel: "REWE, Friedrichstraße 2, Berlin" }),
+      ]),
+    ).toHaveLength(2);
+  });
+
+  it.each(["tourism/gallery", "tourism/museum", undefined])(
+    "does not let landmark or catalog context %s override contradictory addresses",
+    (rawCategory) => {
+      expect(
+        merge([
+          branch("maptiler:a", { rawCategory, fame: 0.9, ids: { wikidata: "Q100" } }),
+          branch("osm:node/2", { rawCategory, sublabel: "REWE, Street B 2, Berlin" }),
+        ]),
+      ).toHaveLength(2);
+    },
+  );
+
+  it.each(["tourism/gallery", "tourism/museum", undefined])(
+    "does not let landmark or catalog context %s override contradictory Wikidata identities",
+    (rawCategory) => {
+      expect(
+        merge([
+          branch("maptiler:a", { rawCategory, fame: 0.9, ids: { wikidata: "Q100" } }),
+          branch("wikidata:Q200", { rawCategory, fame: 0.8, ids: { wikidata: "Q200" } }),
+        ]),
+      ).toHaveLength(2);
+    },
+  );
+
+  it("preserves station and entrance reconciliation at the existing station radius", () => {
+    const rows = merge([
+      branch("station:a", { label: "Berlin Hbf", rawCategory: "railway/station" }),
+      branch("osm:node/2", {
+        label: "Berlin Hbf",
+        rawCategory: "railway/subway_entrance",
+        coordinates: [13.41, 52.52],
+      }),
+    ]);
+    expect(rows).toHaveLength(1);
+  });
+
+  it("does not let a corroborated duplicate bridge two distinct addresses", () => {
+    const rows = merge([
+      branch("maptiler:a"),
+      branch("osm:node/2", { sublabel: "Friedrichstr. 1, Berlin" }),
+      branch("maptiler:b", { sublabel: "REWE, Friedrichstraße 2, Berlin" }),
+    ]);
+    expect(rows.map((row) => row.id)).toEqual(["maptiler:a", "maptiler:b"]);
+    expect(rows[1].sublabel).toBe("REWE, Friedrichstraße 2, Berlin");
+  });
+});
+
 describe("search suggestion primitives", () => {
   it("counts edits, a swap of neighbours as one, up to a limit", () => {
     expect(editDistance("neuschwanstien", "neuschwanstein", 2)).toBe(1);
