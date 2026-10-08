@@ -51,6 +51,19 @@ describe("ambient place policy", () => {
     expect(ambientPlaceToCategoryPlace(place, "fr").name).toBe("Klinik");
     expect(ambientPlaceFromOsm({ ...osm, name: "a".repeat(121) })!.name).toHaveLength(120);
   });
+  it("does not turn uncategorized indexed roads or buildings into ambient destinations", () => {
+    expect(
+      ambientPlaceFromOsm({
+        ...osm,
+        category: null,
+        tags: { name: "Industriestraße", loc_name: "Hafenmole", highway: "unclassified" },
+      }),
+    ).toBeNull();
+    expect(ambientPlaceFromOsm({ ...osm, category: "", tags: { building: "yes" } })).toBeNull();
+    expect(
+      ambientPlaceFromOsm({ ...osm, category: "amenity/library", tags: { building: "yes" } }),
+    ).not.toBeNull();
+  });
   it("excludes closed/private OSM and uncertain/closed Overture", () => {
     for (const tags of [
       { disused: "yes" },
@@ -162,6 +175,26 @@ describe("ambient place policy", () => {
     };
     expect(matchAmbientBasemap([a], [label]).size).toBe(0);
     expect(matchAmbientBasemap([a], [{ ...label, osmId: a.id }]).get(label.key)?.id).toBe(a.id);
+  });
+  it("matches alternate landmark representative points within ten metres conservatively", () => {
+    const a = {
+      ...ambientPlaceFromOsm(osm)!,
+      id: "osm:way/28562993",
+      name: "Quirinus-Münster",
+      names: {},
+      category: "place_of_worship",
+      coordinates: [6.6933392733335495, 51.19904645716551] as [number, number],
+    };
+    const label = {
+      key: "base/quirinus",
+      name: a.name,
+      category: "place_of_worship",
+      coordinates: [6.693227291107178, 51.19902166658045] as [number, number],
+    };
+    expect(matchAmbientBasemap([a], [label]).get(label.key)?.id).toBe(a.id);
+    expect(matchAmbientBasemap([a, { ...a, id: "osm:way/2" }], [label]).size).toBe(0);
+    expect(matchAmbientBasemap([{ ...a, tenant: true }], [label]).size).toBe(0);
+    expect(matchAmbientBasemap([a], [{ ...label, coordinates: [6.6931, 51.199] }]).size).toBe(0);
   });
   it("matches unique nearby compatible basemap labels and refuses branches and tenants", () => {
     const a = ambientPlaceFromOsm(osm)!;

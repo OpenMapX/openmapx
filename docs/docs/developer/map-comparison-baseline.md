@@ -204,3 +204,26 @@ For versioned search, identity, enrichment and navigation evidence alongside the
 visual cases, follow [Discovery evaluation](discovery-evaluation.md). Store new
 capture archives externally with a manifest and checksums; attach selected review
 images directly to the PR.
+
+## Regional ambient-place acceptance (#399)
+
+The October 8 acceptance run repeats the four fixed cameras at zooms 14–18
+against the same public basemap TileJSON and the same policy-2 regional publication.
+Neuss lies inside the published Rhine bbox; Berlin, Aachen and Monschau are
+outside-region controls. Cologne and a rural Rhine camera add dense/sparse
+positive cases. This is a disposable real OSM extract, not a production deployment
+or a recall audit of all German places.
+
+Source eligibility and rendered labels remain separate: Quirinus-Münster has
+corroborated source-backed zoom-14 eligibility, while retained city/road labels can
+still win a particular collision. The fixed zoom-16 Neuss view gains its name with
+collision-safe landmark anchors. Ordinary labels keep one position. Known owned
+basemap identities and selected/category destinations suppress their ambient
+counterpart; distinct source IDs are not guessed to be the same business merely
+because their names are similar.
+
+See [regional publication and measured budgets](ambient-places-publication.md)
+and its aggregate JSON for source hashes, fixed settings, camera outcomes,
+read/fallback/rollback evidence and desktop/Safari simulator frame samples.
+Before/after screenshots are PR attachments outside git. Simulated Safari results
+must not be presented as physical-device battery, thermal or fleet certification.

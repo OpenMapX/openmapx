@@ -1,0 +1,1362 @@
+{
+  "version": 1,
+  "date": "2026-10-08",
+  "scope": "One real OSM-only Rhine region in disposable PostGIS; optional Overture validated with regression fixtures",
+  "workingTreeFollowup": "Landmark-only collision-safe anchors, actual-source credits, conservative worship identity matching, and categorized destination admission; codeFiles SHA-256 identifies the tested source.",
+  "sources": [
+    {
+      "file": "duesseldorf.osm.pbf",
+      "bytes": 216424732,
+      "sha256": "125de47413c02befac0ca494985502427cd411b6876d2a3685dc7570cc38fb03",
+      "url": "https://download.geofabrik.de/europe/germany/nordrhein-westfalen/duesseldorf-regbez-261006.osm.pbf"
+    },
+    {
+      "file": "koeln.osm.pbf",
+      "bytes": 224744183,
+      "sha256": "1549bed48c33cd2bb8d8c61c0c2c2a2c86f12170295e70d31d555377a33cc6b3",
+      "url": "https://download.geofabrik.de/europe/germany/nordrhein-westfalen/koeln-regbez-261006.osm.pbf"
+    },
+    {
+      "file": "rhine.osm.pbf",
+      "bytes": 93809739,
+      "sha256": "c18cc77ed3493aa186bd7659fee4a9b028fbc479c2a8a90f219a3b2d33824d75"
+    }
+  ],
+  "latestSourceObjectTimestamp": "2026-10-06T20:09:52Z",
+  "publication": {
+    "index": {
+      "region": "europe/germany",
+      "epoch": "9262e2d9-8492-4d4a-b0ce-76bbeb104ef2",
+      "sourceFingerprint": "sha256:c18cc77ed3493aa186bd7659fee4a9b028fbc479c2a8a90f219a3b2d33824d75",
+      "placeCount": 14232,
+      "termCount": 16052
+    },
+    "indexedMs": 12792.523167,
+    "publishedMs": 490.0675420000007,
+    "manifest": {
+      "version": 1,
+      "policyVersion": 2,
+      "generation": "6fa7e3bb-b1b8-47a4-9b2c-2111859be634",
+      "publishedAt": "2026-10-08T20:47:15.322Z",
+      "region": {
+        "name": "Rhine regional acceptance",
+        "bounds": [6.58, 50.89, 7.07, 51.31]
+      },
+      "placeCount": 13454,
+      "enabled": true,
+      "sources": {
+        "osm": {
+          "region": "europe/germany",
+          "epoch": "9262e2d9-8492-4d4a-b0ce-76bbeb104ef2",
+          "publishedAt": "2026-10-08T20:47:15.067Z",
+          "count": 13454
+        },
+        "overture": null
+      }
+    },
+    "landmarks": [
+      {
+        "id": "osm:way/28562993",
+        "name": "Quirinus-Münster",
+        "category": "place_of_worship",
+        "rank": 2559,
+        "min_zoom": 14,
+        "tenant": false
+      },
+      {
+        "id": "osm:way/4532022",
+        "name": "Kölner Dom",
+        "category": "place_of_worship",
+        "rank": 2559,
+        "min_zoom": 14,
+        "tenant": false
+      }
+    ]
+  },
+  "assets": {
+    "assets": {
+      "openmapx-streets.json": {
+        "sha256": "4103b56380c9f700cdc320f48fbb9fb7b716fa5006339af80818c9761971826d",
+        "bytes": 243266
+      },
+      "openmapx-dark.json": {
+        "sha256": "f24217e849e4256c7ced9749b1cdc0ed6feb0bd3d0e0a249ef43e66bff8acf22",
+        "bytes": 243351
+      },
+      "sprite.json": {
+        "sha256": "16c7ade94a4d116a1156ae3aa4a759ae82376416eade74c23b5e0bcabe28e439",
+        "bytes": 26378
+      },
+      "sprite.png": {
+        "sha256": "6a1a1c103f109f8e9fb86bd0b3599fa5ce870beb6dddcbd529ff8dfea362736a",
+        "bytes": 59510
+      }
+    },
+    "basemapMetadata": {
+      "tiles": ["https://openmapx.com/tiles/data/openmapx/{z}/{x}/{y}.pbf"],
+      "name": "OpenMapTiles",
+      "format": "pbf",
+      "basename": "tiles.mbtiles",
+      "id": "tiles",
+      "description": "A tileset showcasing all layers in OpenMapTiles. https://openmaptiles.org",
+      "attribution": "<a href=\"https://www.openmaptiles.org/\" target=\"_blank\">&copy; OpenMapTiles</a> <a href=\"https://www.openstreetmap.org/copyright\" target=\"_blank\">&copy; OpenStreetMap contributors</a>",
+      "version": "3.16.0",
+      "type": "baselayer",
+      "bounds": [5.86442, 47.26543, 15.05078, 55.14777],
+      "center": [10.4576, 51.2066, 5],
+      "minzoom": 0,
+      "maxzoom": 14,
+      "planetiler:buildtime": "2026-03-28T14:40:55.764Z",
+      "planetiler:githash": "0e5588c4a6e8c29a270a33afe8df62027d889604",
+      "planetiler:osm:osmosisreplicationseq": "4927",
+      "planetiler:osm:osmosisreplicationtime": "2026-10-03T20:20:50Z",
+      "planetiler:osm:osmosisreplicationurl": "https://download.geofabrik.de/europe/germany-updates",
+      "planetiler:version": "0.10.2",
+      "compression": "gzip",
+      "tilejson": "3.0.0"
+    }
+  },
+  "tileReads": {
+    "firstMs": 28.35450000000003,
+    "warm": {
+      "count": 30,
+      "p50Ms": 3.484375,
+      "p95Ms": 5.2009160000000065,
+      "samplesMs": [
+        4.577749999999924, 4.379583000000025, 3.8106250000000728, 3.3958330000000387,
+        3.014499999999998, 3.187750000000051, 4.374208999999951, 3.149833000000058,
+        4.644249999999943, 4.223458000000051, 3.5598340000000235, 4.83887500000003, 3.484375,
+        3.6090409999999338, 2.899583000000007, 3.2896670000000086, 2.426584000000048,
+        5.2009160000000065, 3.2372910000000275, 3.039957999999956, 3.4329999999999927,
+        3.106708000000026, 2.429834000000028, 3.2476669999999785, 3.2955830000000788,
+        3.5095839999999043, 3.495584000000008, 3.560416999999916, 5.353041999999959,
+        3.7658330000000433
+      ]
+    },
+    "concurrentEight": {
+      "count": 40,
+      "p95Ms": 39.34204199999999,
+      "samplesMs": [
+        9.160499999999956, 37.05899999999997, 37.164416000000074, 38.00887499999999,
+        39.31516599999998, 39.34204199999999, 39.628165999999965, 46.51333299999999,
+        6.298000000000002, 6.31858299999999, 6.337750000000028, 6.44825000000003, 6.43162499999994,
+        6.460290999999984, 6.873624999999947, 7.254791000000068, 10.623917000000006,
+        10.670124999999985, 10.667291999999975, 10.674167000000011, 10.692166000000043,
+        10.711457999999993, 10.729791999999975, 10.75425000000007, 6.520832999999925,
+        7.183334000000059, 7.198417000000063, 7.2147919999999885, 7.222540999999978,
+        7.268917000000101, 7.253499999999917, 7.400916999999936, 5.920417000000043,
+        5.9570830000000115, 6.150999999999954, 6.257124999999974, 6.2649169999999685,
+        6.280624999999986, 6.28937499999995, 6.347209000000021
+      ]
+    },
+    "maxFeatures": 83,
+    "maxBytes": 6881,
+    "duplicateIds": 0,
+    "immutableAndFallback": {
+      "identicalAfterPublish": true,
+      "rollbackRestored": true,
+      "disabled": true,
+      "oldAvailableDisabled": true,
+      "failedStage": true,
+      "failedKeptActive": true
+    },
+    "raw": [
+      {
+        "z": 13,
+        "x": 4248,
+        "y": 2735,
+        "ms": 28.35450000000003,
+        "features": 38,
+        "bytes": 3120
+      },
+      {
+        "z": 14,
+        "x": 8496,
+        "y": 5470,
+        "ms": 4.870207999999934,
+        "features": 29,
+        "bytes": 2391
+      },
+      {
+        "z": 15,
+        "x": 16993,
+        "y": 10941,
+        "ms": 3.8333330000000387,
+        "features": 11,
+        "bytes": 1055
+      },
+      {
+        "z": 16,
+        "x": 33986,
+        "y": 21882,
+        "ms": 2.965958999999998,
+        "features": 27,
+        "bytes": 2250
+      },
+      {
+        "z": 17,
+        "x": 67972,
+        "y": 43764,
+        "ms": 2.2329590000000508,
+        "features": 5,
+        "bytes": 559
+      },
+      {
+        "z": 18,
+        "x": 135944,
+        "y": 87529,
+        "ms": 2.72037499999999,
+        "features": 1,
+        "bytes": 205
+      },
+      {
+        "z": 13,
+        "x": 4254,
+        "y": 2744,
+        "ms": 5.2037499999999,
+        "features": 83,
+        "bytes": 6881
+      },
+      {
+        "z": 14,
+        "x": 8508,
+        "y": 5489,
+        "ms": 4.8072910000000775,
+        "features": 49,
+        "bytes": 4233
+      },
+      {
+        "z": 15,
+        "x": 17017,
+        "y": 10978,
+        "ms": 4.393457999999896,
+        "features": 32,
+        "bytes": 2785
+      },
+      {
+        "z": 16,
+        "x": 34034,
+        "y": 21957,
+        "ms": 4.250415999999973,
+        "features": 38,
+        "bytes": 3450
+      },
+      {
+        "z": 17,
+        "x": 68069,
+        "y": 43914,
+        "ms": 2.8047500000000127,
+        "features": 8,
+        "bytes": 882
+      },
+      {
+        "z": 18,
+        "x": 136139,
+        "y": 87828,
+        "ms": 2.5391670000000204,
+        "features": 2,
+        "bytes": 358
+      },
+      {
+        "z": 13,
+        "x": 4250,
+        "y": 2741,
+        "ms": 4.428375000000074,
+        "features": 0,
+        "bytes": 0
+      },
+      {
+        "z": 14,
+        "x": 8500,
+        "y": 5482,
+        "ms": 4.0877499999999145,
+        "features": 0,
+        "bytes": 0
+      },
+      {
+        "z": 15,
+        "x": 17001,
+        "y": 10965,
+        "ms": 3.6895410000000766,
+        "features": 0,
+        "bytes": 0
+      },
+      {
+        "z": 16,
+        "x": 34002,
+        "y": 21931,
+        "ms": 3.6579999999999018,
+        "features": 0,
+        "bytes": 0
+      },
+      {
+        "z": 17,
+        "x": 68004,
+        "y": 43862,
+        "ms": 3.625167000000033,
+        "features": 0,
+        "bytes": 0
+      },
+      {
+        "z": 18,
+        "x": 136009,
+        "y": 87725,
+        "ms": 3.637499999999932,
+        "features": 0,
+        "bytes": 0
+      },
+      {
+        "z": 13,
+        "x": 4245,
+        "y": 2731,
+        "ms": 5.620750000000044,
+        "features": 10,
+        "bytes": 997
+      },
+      {
+        "z": 14,
+        "x": 8491,
+        "y": 5462,
+        "ms": 3.19662500000004,
+        "features": 9,
+        "bytes": 879
+      },
+      {
+        "z": 15,
+        "x": 16983,
+        "y": 10925,
+        "ms": 3.4095839999999953,
+        "features": 10,
+        "bytes": 978
+      },
+      {
+        "z": 16,
+        "x": 33966,
+        "y": 21851,
+        "ms": 3.0982500000000073,
+        "features": 12,
+        "bytes": 858
+      },
+      {
+        "z": 17,
+        "x": 67933,
+        "y": 43702,
+        "ms": 3.2887499999999363,
+        "features": 0,
+        "bytes": 0
+      },
+      {
+        "z": 18,
+        "x": 135867,
+        "y": 87405,
+        "ms": 2.621208999999908,
+        "features": 0,
+        "bytes": 0
+      },
+      {
+        "z": 13,
+        "x": 4256,
+        "y": 2746,
+        "ms": 4.387749999999983,
+        "features": 7,
+        "bytes": 719
+      },
+      {
+        "z": 14,
+        "x": 8513,
+        "y": 5492,
+        "ms": 3.5732080000000224,
+        "features": 3,
+        "bytes": 351
+      },
+      {
+        "z": 15,
+        "x": 17027,
+        "y": 10985,
+        "ms": 3.6602920000000267,
+        "features": 2,
+        "bytes": 311
+      },
+      {
+        "z": 16,
+        "x": 34054,
+        "y": 21970,
+        "ms": 2.8039159999999583,
+        "features": 4,
+        "bytes": 486
+      },
+      {
+        "z": 17,
+        "x": 68108,
+        "y": 43940,
+        "ms": 4.060207999999989,
+        "features": 4,
+        "bytes": 486
+      },
+      {
+        "z": 18,
+        "x": 136216,
+        "y": 87881,
+        "ms": 3.705583000000047,
+        "features": 0,
+        "bytes": 0
+      }
+    ],
+    "generation": "6fa7e3bb-b1b8-47a4-9b2c-2111859be634"
+  },
+  "frames": {
+    "method": "Five visible 5-second sweeps per state; MapLibre easeTo two 2.5-second legs, z15 to z15.7 and back, alternating Neuss/Cologne; nearest-rank p95 pooled by state; unchanged target 33.4ms and over50 <=5%; no simultaneous builds/tests",
+    "desktop1280x800": {
+      "off": {
+        "sweeps": 5,
+        "viewport": [1280, 800],
+        "devicePixelRatio": 1,
+        "allForeground": true,
+        "intervalCount": 3003,
+        "pooledP95Ms": 9,
+        "over50Percent": 0,
+        "perSweepP95Ms": [9.099999999998545, 9, 9, 9, 8.900000000008731],
+        "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) T3Code(Nightly)/0.0.46-nightly.20261008.2833 Chrome/152.0.7977.130 Electron/44.4.2 Safari/537.36"
+      },
+      "on": {
+        "sweeps": 5,
+        "viewport": [1280, 800],
+        "devicePixelRatio": 1,
+        "allForeground": true,
+        "intervalCount": 3000,
+        "pooledP95Ms": 9,
+        "over50Percent": 0,
+        "perSweepP95Ms": [9.099999999998545, 9, 9.10000000000582, 8.89999999999418, 9],
+        "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) T3Code(Nightly)/0.0.46-nightly.20261008.2833 Chrome/152.0.7977.130 Electron/44.4.2 Safari/537.36"
+      }
+    },
+    "phoneCss430x932": {
+      "off": {
+        "sweeps": 5,
+        "viewport": [430, 932],
+        "devicePixelRatio": 1,
+        "allForeground": true,
+        "intervalCount": 3004,
+        "pooledP95Ms": 9.200000000011642,
+        "over50Percent": 0,
+        "perSweepP95Ms": [
+          9.099999999976717, 9.099999999976717, 9.299999999988358, 9.299999999988358,
+          9.299999999988358
+        ],
+        "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) T3Code(Nightly)/0.0.46-nightly.20261008.2833 Chrome/152.0.7977.130 Electron/44.4.2 Safari/537.36"
+      },
+      "on": {
+        "sweeps": 5,
+        "viewport": [430, 932],
+        "devicePixelRatio": 1,
+        "allForeground": true,
+        "intervalCount": 2998,
+        "pooledP95Ms": 9.299999999988358,
+        "over50Percent": 0,
+        "perSweepP95Ms": [
+          9.10000000000582, 9.299999999988358, 9.299999999988358, 9.299999999988358,
+          9.199999999982538
+        ],
+        "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) T3Code(Nightly)/0.0.46-nightly.20261008.2833 Chrome/152.0.7977.130 Electron/44.4.2 Safari/537.36"
+      }
+    },
+    "iosSimulatorStreamActive": {
+      "off": {
+        "sweeps": 5,
+        "viewport": [402, 714],
+        "devicePixelRatio": 3,
+        "allForeground": true,
+        "intervalCount": 1049,
+        "pooledP95Ms": 33,
+        "over50Percent": 0.19065776930409914,
+        "perSweepP95Ms": [33, 34, 32, 34, 33],
+        "userAgent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/27.0 Mobile/15E148 Safari/604.1"
+      },
+      "on": {
+        "sweeps": 5,
+        "viewport": [402, 714],
+        "devicePixelRatio": 3,
+        "allForeground": true,
+        "intervalCount": 1027,
+        "pooledP95Ms": 34,
+        "over50Percent": 0,
+        "perSweepP95Ms": [33, 35, 33, 34, 33],
+        "userAgent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/27.0 Mobile/15E148 Safari/604.1"
+      }
+    },
+    "device": "iPhone 18 Pro simulator, iOS 27, Safari 27; host macOS arm64, no physical-device thermal/battery claim",
+    "qualification": "Final isolated simulator pooled off/on 32/33ms passes the unchanged 33.4ms target. Individual on sweeps include 34/35ms. Streamed 33/34ms and paused-but-second-QA-WebGL-present 35/36ms misses retained. No unrelated host process stopped; no physical-device certificate. Phone iteration 0 off resampled after initial resize had not settled; raw invalid 1280x800 sample retained externally. One paused-shared last sweep briefly overlapped the CSS resample; that phase is diagnostic, not final acceptance.",
+    "iosSimulatorStreamPausedSharedGraphics": {
+      "off": {
+        "sweeps": 5,
+        "viewport": [402, 714],
+        "devicePixelRatio": 3,
+        "allForeground": true,
+        "intervalCount": 1055,
+        "pooledP95Ms": 35,
+        "over50Percent": 0.3791469194312796,
+        "perSweepP95Ms": [32, 35, 32, 38, 34],
+        "userAgent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/27.0 Mobile/15E148 Safari/604.1"
+      },
+      "on": {
+        "sweeps": 5,
+        "viewport": [402, 714],
+        "devicePixelRatio": 3,
+        "allForeground": true,
+        "intervalCount": 1032,
+        "pooledP95Ms": 36,
+        "over50Percent": 0.872093023255814,
+        "perSweepP95Ms": [35, 34, 34, 38, 36],
+        "userAgent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/27.0 Mobile/15E148 Safari/604.1"
+      }
+    },
+    "iosSimulatorIsolated": {
+      "off": {
+        "sweeps": 5,
+        "viewport": [402, 714],
+        "devicePixelRatio": 3,
+        "allForeground": true,
+        "intervalCount": 1128,
+        "pooledP95Ms": 32,
+        "over50Percent": 0.26595744680851063,
+        "perSweepP95Ms": [30, 34, 31, 32, 30],
+        "userAgent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/27.0 Mobile/15E148 Safari/604.1"
+      },
+      "on": {
+        "sweeps": 5,
+        "viewport": [402, 714],
+        "devicePixelRatio": 3,
+        "allForeground": true,
+        "intervalCount": 1104,
+        "pooledP95Ms": 33,
+        "over50Percent": 0.18115942028985507,
+        "perSweepP95Ms": [31, 34, 32, 35, 30],
+        "userAgent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/27.0 Mobile/15E148 Safari/604.1"
+      }
+    }
+  },
+  "fixedCameraViews": [
+    {
+      "scene": "Neuss",
+      "zoom": 14,
+      "viewport": [430, 932],
+      "roadLabelsBefore": 10,
+      "roadLabelsAfter": 10,
+      "basemapPoisBefore": 13,
+      "basemapPoisAfter": 13,
+      "sameRoadAndBasemapIdentities": true,
+      "ambientPoints": 29,
+      "ambientLabels": 3,
+      "duplicateAmbientLabelIds": 0
+    },
+    {
+      "scene": "Neuss",
+      "zoom": 15,
+      "viewport": [430, 932],
+      "roadLabelsBefore": 34,
+      "roadLabelsAfter": 34,
+      "basemapPoisBefore": 11,
+      "basemapPoisAfter": 11,
+      "sameRoadAndBasemapIdentities": true,
+      "ambientPoints": 33,
+      "ambientLabels": 4,
+      "duplicateAmbientLabelIds": 0
+    },
+    {
+      "scene": "Neuss",
+      "zoom": 16,
+      "viewport": [430, 932],
+      "roadLabelsBefore": 28,
+      "roadLabelsAfter": 28,
+      "basemapPoisBefore": 10,
+      "basemapPoisAfter": 10,
+      "sameRoadAndBasemapIdentities": true,
+      "ambientPoints": 46,
+      "ambientLabels": 11,
+      "duplicateAmbientLabelIds": 0
+    },
+    {
+      "scene": "Neuss",
+      "zoom": 17,
+      "viewport": [430, 932],
+      "roadLabelsBefore": 15,
+      "roadLabelsAfter": 15,
+      "basemapPoisBefore": 7,
+      "basemapPoisAfter": 7,
+      "sameRoadAndBasemapIdentities": true,
+      "ambientPoints": 9,
+      "ambientLabels": 5,
+      "duplicateAmbientLabelIds": 0
+    },
+    {
+      "scene": "Neuss",
+      "zoom": 18,
+      "viewport": [430, 932],
+      "roadLabelsBefore": 4,
+      "roadLabelsAfter": 4,
+      "basemapPoisBefore": 15,
+      "basemapPoisAfter": 15,
+      "sameRoadAndBasemapIdentities": true,
+      "ambientPoints": 3,
+      "ambientLabels": 2,
+      "duplicateAmbientLabelIds": 0
+    },
+    {
+      "scene": "Cologne",
+      "zoom": 14,
+      "viewport": [430, 932],
+      "roadLabelsBefore": 15,
+      "roadLabelsAfter": 15,
+      "basemapPoisBefore": 14,
+      "basemapPoisAfter": 14,
+      "sameRoadAndBasemapIdentities": true,
+      "ambientPoints": 55,
+      "ambientLabels": 16,
+      "duplicateAmbientLabelIds": 0
+    },
+    {
+      "scene": "Cologne",
+      "zoom": 15,
+      "viewport": [430, 932],
+      "roadLabelsBefore": 26,
+      "roadLabelsAfter": 26,
+      "basemapPoisBefore": 15,
+      "basemapPoisAfter": 15,
+      "sameRoadAndBasemapIdentities": true,
+      "ambientPoints": 59,
+      "ambientLabels": 8,
+      "duplicateAmbientLabelIds": 0
+    },
+    {
+      "scene": "Cologne",
+      "zoom": 16,
+      "viewport": [430, 932],
+      "roadLabelsBefore": 26,
+      "roadLabelsAfter": 26,
+      "basemapPoisBefore": 5,
+      "basemapPoisAfter": 5,
+      "sameRoadAndBasemapIdentities": true,
+      "ambientPoints": 52,
+      "ambientLabels": 17,
+      "duplicateAmbientLabelIds": 0
+    },
+    {
+      "scene": "Cologne",
+      "zoom": 17,
+      "viewport": [430, 932],
+      "roadLabelsBefore": 10,
+      "roadLabelsAfter": 10,
+      "basemapPoisBefore": 13,
+      "basemapPoisAfter": 13,
+      "sameRoadAndBasemapIdentities": true,
+      "ambientPoints": 13,
+      "ambientLabels": 3,
+      "duplicateAmbientLabelIds": 0
+    },
+    {
+      "scene": "Cologne",
+      "zoom": 18,
+      "viewport": [430, 932],
+      "roadLabelsBefore": 6,
+      "roadLabelsAfter": 6,
+      "basemapPoisBefore": 6,
+      "basemapPoisAfter": 6,
+      "sameRoadAndBasemapIdentities": true,
+      "ambientPoints": 1,
+      "ambientLabels": 1,
+      "duplicateAmbientLabelIds": 0
+    },
+    {
+      "scene": "Zons",
+      "zoom": 14,
+      "viewport": [430, 932],
+      "roadLabelsBefore": 0,
+      "roadLabelsAfter": 0,
+      "basemapPoisBefore": 9,
+      "basemapPoisAfter": 9,
+      "sameRoadAndBasemapIdentities": true,
+      "ambientPoints": 3,
+      "ambientLabels": 1,
+      "duplicateAmbientLabelIds": 0
+    },
+    {
+      "scene": "Zons",
+      "zoom": 15,
+      "viewport": [430, 932],
+      "roadLabelsBefore": 15,
+      "roadLabelsAfter": 15,
+      "basemapPoisBefore": 7,
+      "basemapPoisAfter": 7,
+      "sameRoadAndBasemapIdentities": true,
+      "ambientPoints": 11,
+      "ambientLabels": 4,
+      "duplicateAmbientLabelIds": 0
+    },
+    {
+      "scene": "Zons",
+      "zoom": 16,
+      "viewport": [430, 932],
+      "roadLabelsBefore": 12,
+      "roadLabelsAfter": 12,
+      "basemapPoisBefore": 11,
+      "basemapPoisAfter": 11,
+      "sameRoadAndBasemapIdentities": true,
+      "ambientPoints": 9,
+      "ambientLabels": 6,
+      "duplicateAmbientLabelIds": 0
+    },
+    {
+      "scene": "Zons",
+      "zoom": 17,
+      "viewport": [430, 932],
+      "roadLabelsBefore": 8,
+      "roadLabelsAfter": 8,
+      "basemapPoisBefore": 14,
+      "basemapPoisAfter": 14,
+      "sameRoadAndBasemapIdentities": true,
+      "ambientPoints": 3,
+      "ambientLabels": 2,
+      "duplicateAmbientLabelIds": 0
+    },
+    {
+      "scene": "Zons",
+      "zoom": 18,
+      "viewport": [430, 932],
+      "roadLabelsBefore": 3,
+      "roadLabelsAfter": 3,
+      "basemapPoisBefore": 4,
+      "basemapPoisAfter": 4,
+      "sameRoadAndBasemapIdentities": true,
+      "ambientPoints": 1,
+      "ambientLabels": 2,
+      "duplicateAmbientLabelIds": 0
+    },
+    {
+      "scene": "Rural Rhine empty",
+      "zoom": 14,
+      "viewport": [430, 932],
+      "roadLabelsBefore": 2,
+      "roadLabelsAfter": 2,
+      "basemapPoisBefore": 1,
+      "basemapPoisAfter": 1,
+      "sameRoadAndBasemapIdentities": true,
+      "ambientPoints": 0,
+      "ambientLabels": 0,
+      "duplicateAmbientLabelIds": 0
+    },
+    {
+      "scene": "Rural Rhine empty",
+      "zoom": 15,
+      "viewport": [430, 932],
+      "roadLabelsBefore": 1,
+      "roadLabelsAfter": 1,
+      "basemapPoisBefore": 0,
+      "basemapPoisAfter": 0,
+      "sameRoadAndBasemapIdentities": true,
+      "ambientPoints": 0,
+      "ambientLabels": 0,
+      "duplicateAmbientLabelIds": 0
+    },
+    {
+      "scene": "Rural Rhine empty",
+      "zoom": 16,
+      "viewport": [430, 932],
+      "roadLabelsBefore": 1,
+      "roadLabelsAfter": 1,
+      "basemapPoisBefore": 1,
+      "basemapPoisAfter": 1,
+      "sameRoadAndBasemapIdentities": true,
+      "ambientPoints": 0,
+      "ambientLabels": 0,
+      "duplicateAmbientLabelIds": 0
+    },
+    {
+      "scene": "Rural Rhine empty",
+      "zoom": 17,
+      "viewport": [430, 932],
+      "roadLabelsBefore": 0,
+      "roadLabelsAfter": 0,
+      "basemapPoisBefore": 0,
+      "basemapPoisAfter": 0,
+      "sameRoadAndBasemapIdentities": true,
+      "ambientPoints": 0,
+      "ambientLabels": 0,
+      "duplicateAmbientLabelIds": 0
+    },
+    {
+      "scene": "Rural Rhine empty",
+      "zoom": 18,
+      "viewport": [430, 932],
+      "roadLabelsBefore": 0,
+      "roadLabelsAfter": 0,
+      "basemapPoisBefore": 0,
+      "basemapPoisAfter": 0,
+      "sameRoadAndBasemapIdentities": true,
+      "ambientPoints": 0,
+      "ambientLabels": 0,
+      "duplicateAmbientLabelIds": 0
+    },
+    {
+      "scene": "Berlin",
+      "zoom": 14,
+      "viewport": [430, 932],
+      "roadLabelsBefore": 11,
+      "roadLabelsAfter": 11,
+      "basemapPoisBefore": 22,
+      "basemapPoisAfter": 22,
+      "sameRoadAndBasemapIdentities": true,
+      "ambientPoints": 0,
+      "ambientLabels": 0,
+      "duplicateAmbientLabelIds": 0
+    },
+    {
+      "scene": "Berlin",
+      "zoom": 15,
+      "viewport": [430, 932],
+      "roadLabelsBefore": 15,
+      "roadLabelsAfter": 15,
+      "basemapPoisBefore": 18,
+      "basemapPoisAfter": 18,
+      "sameRoadAndBasemapIdentities": true,
+      "ambientPoints": 0,
+      "ambientLabels": 0,
+      "duplicateAmbientLabelIds": 0
+    },
+    {
+      "scene": "Berlin",
+      "zoom": 16,
+      "viewport": [430, 932],
+      "roadLabelsBefore": 17,
+      "roadLabelsAfter": 17,
+      "basemapPoisBefore": 9,
+      "basemapPoisAfter": 9,
+      "sameRoadAndBasemapIdentities": true,
+      "ambientPoints": 0,
+      "ambientLabels": 0,
+      "duplicateAmbientLabelIds": 0
+    },
+    {
+      "scene": "Berlin",
+      "zoom": 17,
+      "viewport": [430, 932],
+      "roadLabelsBefore": 7,
+      "roadLabelsAfter": 7,
+      "basemapPoisBefore": 18,
+      "basemapPoisAfter": 18,
+      "sameRoadAndBasemapIdentities": true,
+      "ambientPoints": 0,
+      "ambientLabels": 0,
+      "duplicateAmbientLabelIds": 0
+    },
+    {
+      "scene": "Berlin",
+      "zoom": 18,
+      "viewport": [430, 932],
+      "roadLabelsBefore": 5,
+      "roadLabelsAfter": 5,
+      "basemapPoisBefore": 8,
+      "basemapPoisAfter": 8,
+      "sameRoadAndBasemapIdentities": true,
+      "ambientPoints": 0,
+      "ambientLabels": 0,
+      "duplicateAmbientLabelIds": 0
+    },
+    {
+      "scene": "Aachen",
+      "zoom": 14,
+      "viewport": [430, 932],
+      "roadLabelsBefore": 18,
+      "roadLabelsAfter": 18,
+      "basemapPoisBefore": 12,
+      "basemapPoisAfter": 12,
+      "sameRoadAndBasemapIdentities": true,
+      "ambientPoints": 0,
+      "ambientLabels": 0,
+      "duplicateAmbientLabelIds": 0
+    },
+    {
+      "scene": "Aachen",
+      "zoom": 15,
+      "viewport": [430, 932],
+      "roadLabelsBefore": 30,
+      "roadLabelsAfter": 30,
+      "basemapPoisBefore": 10,
+      "basemapPoisAfter": 10,
+      "sameRoadAndBasemapIdentities": true,
+      "ambientPoints": 0,
+      "ambientLabels": 0,
+      "duplicateAmbientLabelIds": 0
+    },
+    {
+      "scene": "Aachen",
+      "zoom": 16,
+      "viewport": [430, 932],
+      "roadLabelsBefore": 28,
+      "roadLabelsAfter": 28,
+      "basemapPoisBefore": 11,
+      "basemapPoisAfter": 11,
+      "sameRoadAndBasemapIdentities": true,
+      "ambientPoints": 0,
+      "ambientLabels": 0,
+      "duplicateAmbientLabelIds": 0
+    },
+    {
+      "scene": "Aachen",
+      "zoom": 17,
+      "viewport": [430, 932],
+      "roadLabelsBefore": 17,
+      "roadLabelsAfter": 17,
+      "basemapPoisBefore": 12,
+      "basemapPoisAfter": 12,
+      "sameRoadAndBasemapIdentities": true,
+      "ambientPoints": 0,
+      "ambientLabels": 0,
+      "duplicateAmbientLabelIds": 0
+    },
+    {
+      "scene": "Aachen",
+      "zoom": 18,
+      "viewport": [430, 932],
+      "roadLabelsBefore": 9,
+      "roadLabelsAfter": 9,
+      "basemapPoisBefore": 13,
+      "basemapPoisAfter": 13,
+      "sameRoadAndBasemapIdentities": true,
+      "ambientPoints": 0,
+      "ambientLabels": 0,
+      "duplicateAmbientLabelIds": 0
+    },
+    {
+      "scene": "Monschau",
+      "zoom": 14,
+      "viewport": [430, 932],
+      "roadLabelsBefore": 5,
+      "roadLabelsAfter": 5,
+      "basemapPoisBefore": 10,
+      "basemapPoisAfter": 10,
+      "sameRoadAndBasemapIdentities": true,
+      "ambientPoints": 0,
+      "ambientLabels": 0,
+      "duplicateAmbientLabelIds": 0
+    },
+    {
+      "scene": "Monschau",
+      "zoom": 15,
+      "viewport": [430, 932],
+      "roadLabelsBefore": 16,
+      "roadLabelsAfter": 16,
+      "basemapPoisBefore": 8,
+      "basemapPoisAfter": 8,
+      "sameRoadAndBasemapIdentities": true,
+      "ambientPoints": 0,
+      "ambientLabels": 0,
+      "duplicateAmbientLabelIds": 0
+    },
+    {
+      "scene": "Monschau",
+      "zoom": 16,
+      "viewport": [430, 932],
+      "roadLabelsBefore": 19,
+      "roadLabelsAfter": 19,
+      "basemapPoisBefore": 12,
+      "basemapPoisAfter": 12,
+      "sameRoadAndBasemapIdentities": true,
+      "ambientPoints": 0,
+      "ambientLabels": 0,
+      "duplicateAmbientLabelIds": 0
+    },
+    {
+      "scene": "Monschau",
+      "zoom": 17,
+      "viewport": [430, 932],
+      "roadLabelsBefore": 14,
+      "roadLabelsAfter": 14,
+      "basemapPoisBefore": 15,
+      "basemapPoisAfter": 15,
+      "sameRoadAndBasemapIdentities": true,
+      "ambientPoints": 0,
+      "ambientLabels": 0,
+      "duplicateAmbientLabelIds": 0
+    },
+    {
+      "scene": "Monschau",
+      "zoom": 18,
+      "viewport": [430, 932],
+      "roadLabelsBefore": 9,
+      "roadLabelsAfter": 9,
+      "basemapPoisBefore": 11,
+      "basemapPoisAfter": 11,
+      "sameRoadAndBasemapIdentities": true,
+      "ambientPoints": 0,
+      "ambientLabels": 0,
+      "duplicateAmbientLabelIds": 0
+    },
+    {
+      "scene": "Neuss dark English",
+      "zoom": 14,
+      "viewport": [430, 932],
+      "roadLabelsBefore": 10,
+      "roadLabelsAfter": 10,
+      "basemapPoisBefore": 13,
+      "basemapPoisAfter": 13,
+      "sameRoadAndBasemapIdentities": true,
+      "ambientPoints": 29,
+      "ambientLabels": 3,
+      "duplicateAmbientLabelIds": 0
+    },
+    {
+      "scene": "Neuss dark English",
+      "zoom": 15,
+      "viewport": [430, 932],
+      "roadLabelsBefore": 34,
+      "roadLabelsAfter": 34,
+      "basemapPoisBefore": 11,
+      "basemapPoisAfter": 11,
+      "sameRoadAndBasemapIdentities": true,
+      "ambientPoints": 33,
+      "ambientLabels": 4,
+      "duplicateAmbientLabelIds": 0
+    },
+    {
+      "scene": "Neuss dark English",
+      "zoom": 16,
+      "viewport": [430, 932],
+      "roadLabelsBefore": 28,
+      "roadLabelsAfter": 28,
+      "basemapPoisBefore": 10,
+      "basemapPoisAfter": 10,
+      "sameRoadAndBasemapIdentities": true,
+      "ambientPoints": 46,
+      "ambientLabels": 11,
+      "duplicateAmbientLabelIds": 0
+    },
+    {
+      "scene": "Neuss dark English",
+      "zoom": 17,
+      "viewport": [430, 932],
+      "roadLabelsBefore": 15,
+      "roadLabelsAfter": 15,
+      "basemapPoisBefore": 7,
+      "basemapPoisAfter": 7,
+      "sameRoadAndBasemapIdentities": true,
+      "ambientPoints": 9,
+      "ambientLabels": 5,
+      "duplicateAmbientLabelIds": 0
+    },
+    {
+      "scene": "Neuss dark English",
+      "zoom": 18,
+      "viewport": [430, 932],
+      "roadLabelsBefore": 4,
+      "roadLabelsAfter": 4,
+      "basemapPoisBefore": 15,
+      "basemapPoisAfter": 15,
+      "sameRoadAndBasemapIdentities": true,
+      "ambientPoints": 3,
+      "ambientLabels": 2,
+      "duplicateAmbientLabelIds": 0
+    },
+    {
+      "scene": "Cologne dark German",
+      "zoom": 14,
+      "viewport": [430, 932],
+      "roadLabelsBefore": 15,
+      "roadLabelsAfter": 15,
+      "basemapPoisBefore": 14,
+      "basemapPoisAfter": 14,
+      "sameRoadAndBasemapIdentities": true,
+      "ambientPoints": 55,
+      "ambientLabels": 16,
+      "duplicateAmbientLabelIds": 0
+    },
+    {
+      "scene": "Cologne dark German",
+      "zoom": 15,
+      "viewport": [430, 932],
+      "roadLabelsBefore": 26,
+      "roadLabelsAfter": 26,
+      "basemapPoisBefore": 15,
+      "basemapPoisAfter": 15,
+      "sameRoadAndBasemapIdentities": true,
+      "ambientPoints": 59,
+      "ambientLabels": 8,
+      "duplicateAmbientLabelIds": 0
+    },
+    {
+      "scene": "Cologne dark German",
+      "zoom": 16,
+      "viewport": [430, 932],
+      "roadLabelsBefore": 26,
+      "roadLabelsAfter": 26,
+      "basemapPoisBefore": 5,
+      "basemapPoisAfter": 5,
+      "sameRoadAndBasemapIdentities": true,
+      "ambientPoints": 52,
+      "ambientLabels": 17,
+      "duplicateAmbientLabelIds": 0
+    },
+    {
+      "scene": "Cologne dark German",
+      "zoom": 17,
+      "viewport": [430, 932],
+      "roadLabelsBefore": 10,
+      "roadLabelsAfter": 10,
+      "basemapPoisBefore": 13,
+      "basemapPoisAfter": 13,
+      "sameRoadAndBasemapIdentities": true,
+      "ambientPoints": 13,
+      "ambientLabels": 3,
+      "duplicateAmbientLabelIds": 0
+    },
+    {
+      "scene": "Cologne dark German",
+      "zoom": 18,
+      "viewport": [430, 932],
+      "roadLabelsBefore": 6,
+      "roadLabelsAfter": 6,
+      "basemapPoisBefore": 6,
+      "basemapPoisAfter": 6,
+      "sameRoadAndBasemapIdentities": true,
+      "ambientPoints": 1,
+      "ambientLabels": 1,
+      "duplicateAmbientLabelIds": 0
+    }
+  ],
+  "interaction": {
+    "selected": {
+      "primaryScheme": "osm",
+      "ids": {
+        "osm": "way/28562993"
+      },
+      "name": "Quirinus-Münster",
+      "address": "",
+      "coordinates": [6.693338602781296, 51.19904687734484],
+      "category": "place_of_worship",
+      "names": {},
+      "id": "osm:way/28562993"
+    },
+    "paintThemeFilter": [
+      "all",
+      ["<=", ["get", "min_zoom"], 16],
+      [
+        "!",
+        [
+          "in",
+          ["get", "id"],
+          [
+            "literal",
+            [
+              "osm:node/1236400589",
+              "osm:node/1538386886",
+              "osm:node/598497421",
+              "osm:way/28562993",
+              "osm:way/43629552",
+              "osm:way/87260409",
+              "osm:way/87411560"
+            ]
+          ]
+        ]
+      ]
+    ],
+    "english": ["coalesce", ["get", "name:en"], ["get", "name"]],
+    "german": ["coalesce", ["get", "name:de"], ["get", "name"]],
+    "styleReloadFilter": [
+      "all",
+      ["<=", ["get", "min_zoom"], 16],
+      [
+        "!",
+        [
+          "in",
+          ["get", "id"],
+          [
+            "literal",
+            [
+              "osm:node/1236400589",
+              "osm:node/1538386886",
+              "osm:node/598497421",
+              "osm:way/28562993",
+              "osm:way/43629552",
+              "osm:way/87260409",
+              "osm:way/87411560"
+            ]
+          ]
+        ]
+      ]
+    ],
+    "selectedLabelVisible": false,
+    "tapCardPresent": true,
+    "basemapTap": {
+      "selected": {
+        "primaryScheme": "osm",
+        "ids": {
+          "osm": "way/28562993"
+        },
+        "name": "Quirinus-Münster",
+        "address": "",
+        "coordinates": [6.6933392733335495, 51.19904645716551],
+        "category": "place_of_worship",
+        "names": {},
+        "id": "osm:way/28562993"
+      },
+      "ambientLabels": 0
+    }
+  },
+  "screenshots": [
+    {
+      "file": "before-desktop.png",
+      "sha256": "b1c33b00802ad497b819c3823fe8718fcbc12ce9b23a1e6b904efb4673ca22fc",
+      "bytes": 864723,
+      "generation": "6fa7e3bb-b1b8-47a4-9b2c-2111859be634"
+    },
+    {
+      "file": "after-desktop.png",
+      "sha256": "a6982f1de6f601ce97b0047919237e793775cd176a0399717dea96ca146eb359",
+      "bytes": 900832,
+      "generation": "6fa7e3bb-b1b8-47a4-9b2c-2111859be634"
+    },
+    {
+      "file": "ios-before.png",
+      "sha256": "7e6a815253b8f7e4cd0138689d58d10b793061b1731dc7c1ec1cd26797f912a8",
+      "bytes": 308830,
+      "generation": "b900c5b5-69bb-47c1-8526-b703bac4745a"
+    },
+    {
+      "file": "ios-after.png",
+      "sha256": "b957e0dfb9f022e138f9a9a1b3e85c6c2e9fef8c7ff3e1a79880536ada544ea9",
+      "bytes": 322292,
+      "generation": "b900c5b5-69bb-47c1-8526-b703bac4745a"
+    },
+    {
+      "file": "admin.png",
+      "sha256": "553ba11c0abc21c84a68c2104122788330dd4af44017e23d6a94fd9498bc2ae5",
+      "bytes": 80715,
+      "generation": "6fa7e3bb-b1b8-47a4-9b2c-2111859be634"
+    }
+  ],
+  "limits": [
+    "No production write, merge or deployment",
+    "Real source run OSM-only; optional Overture is regression-fixture evidence",
+    "Existing alias/code-focused index omits some named OSM features without terms",
+    "Source minZoom eligibility does not guarantee a collision-free rendered label",
+    "No cold restarted-database, remote CDN or full-region PMTiles capacity benchmark",
+    "Mobile simulator only; streamed and individual-sweep misses disclosed",
+    "Temporary QA mounts actual components; external enrichment disabled and admin rendering bypasses production outer authentication, which is covered separately by API tests",
+    "Uncategorized indexed road/building objects are excluded from ambient admission while remaining searchable"
+  ],
+  "database": [
+    {
+      "postgres": "PostgreSQL 18.6 (Debian 18.6-1.pgdg13+2) on aarch64-unknown-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit",
+      "postgis": "POSTGIS=\"3.6.4 94d984b\" [EXTENSION] PGSQL=\"180\" GEOS=\"3.14.1-CAPI-1.20.5\" (compiled against GEOS 3.13.1) PROJ=\"9.8.1 NETWORK_ENABLED=OFF URL_ENDPOINT=https://cdn.proj.org USER_WRITABLE_DIRECTORY=/var/lib/postgresql/.local/share/proj DATABASE_PATH=/usr/share/proj/proj.db\" (compiled against PROJ 9.6.0) LIBXML=\"2.9.14\" LIBJSON=\"0.18\" LIBPROTOBUF=\"1.5.1\" WAGYU=\"0.5.0 (Internal)\" TOPOLOGY"
+    }
+  ],
+  "sourceTools": {
+    "osmium": "1.15.0",
+    "libosmium": "2.19.0",
+    "crop": "complete-way bbox [6.58,50.89,7.07,51.31]"
+  },
+  "codeFiles": [
+    {
+      "file": "packages/core/src/ambient-places.ts",
+      "sha256": "af99d4ddbbc7f700942df8c9fec437f6f0f583d17904410af42048291080e9dc"
+    },
+    {
+      "file": "integrations/overlay-ambient-places/map-layer.tsx",
+      "sha256": "942b01cc57f047ff781b25e74b0d045a033413a530aea3ead1a8877d2ece3e9b"
+    },
+    {
+      "file": "services/data-manager/src/jobs/search-index/build.ts",
+      "sha256": "766b92e7e71c3ec7a0cb65c2df04368a2aa33e53dabdaf38a4dd90294435588e"
+    }
+  ],
+  "framePublication": {
+    "index": {
+      "region": "europe/germany",
+      "epoch": "c1f9509b-00f3-4e2c-ae82-a388f8cedc9d",
+      "sourceFingerprint": "sha256:c18cc77ed3493aa186bd7659fee4a9b028fbc479c2a8a90f219a3b2d33824d75",
+      "placeCount": 14232,
+      "termCount": 16052
+    },
+    "indexedMs": 23462.774084,
+    "publishedMs": 717.7764159999999,
+    "manifest": {
+      "version": 1,
+      "policyVersion": 2,
+      "generation": "b900c5b5-69bb-47c1-8526-b703bac4745a",
+      "publishedAt": "2026-10-08T20:29:21.592Z",
+      "region": {
+        "name": "Rhine regional acceptance",
+        "bounds": [6.58, 50.89, 7.07, 51.31]
+      },
+      "placeCount": 13454,
+      "enabled": true,
+      "sources": {
+        "osm": {
+          "region": "europe/germany",
+          "epoch": "c1f9509b-00f3-4e2c-ae82-a388f8cedc9d",
+          "publishedAt": "2026-10-08T19:38:04.972Z",
+          "count": 13454
+        },
+        "overture": null
+      }
+    },
+    "landmarks": [
+      {
+        "id": "osm:way/28562993",
+        "name": "Quirinus-Münster",
+        "category": "place_of_worship",
+        "rank": 2559,
+        "min_zoom": 14,
+        "tenant": false
+      },
+      {
+        "id": "osm:way/4532022",
+        "name": "Kölner Dom",
+        "category": "place_of_worship",
+        "rank": 2559,
+        "min_zoom": 14,
+        "tenant": false
+      }
+    ]
+  },
+  "codeBase": "769270286129de5ea229dab4d0c09b18c7e49670",
+  "tileReadsBuildLoadDiagnostic": {
+    "context": "Concurrent full repository tests, type checks and production builds; retained failed warm budget, followed by one quiet repeat on the same generation.",
+    "generation": "6fa7e3bb-b1b8-47a4-9b2c-2111859be634",
+    "firstMs": 377.47570800000017,
+    "warm": {
+      "count": 30,
+      "p50Ms": 9.303375000000415,
+      "p95Ms": 127.88508399999955,
+      "samplesMs": [
+        5.975625000000036, 9.303375000000415, 4.770417000000634, 3.662042000000838,
+        3.385833000000275, 4.433458999999857, 44.975374999999985, 104.38820900000064,
+        67.89133399999992, 36.53754200000003, 26.340250000000196, 73.62662500000079,
+        56.71424999999999, 8.914291000000048, 8.027584000000388, 5.420500000000175,
+        7.1799580000006245, 4.8061250000000655, 7.0509579999998095, 6.721000000000458,
+        5.0928329999997, 10.217458000000079, 4.401084000000083, 11.334458000000268,
+        18.843832999999904, 62.54816600000049, 50.784583000000566, 11.986791999999696,
+        315.44533299999966, 127.88508399999955
+      ]
+    },
+    "concurrentEight": {
+      "count": 40,
+      "p95Ms": 128.55979099999968,
+      "samplesMs": [
+        46.50658400000066, 124.08774999999969, 127.7908750000006, 127.81154199999946,
+        127.85179199999948, 128.55979099999968, 129.32937500000025, 129.62737500000003,
+        9.139207999999599, 9.205375000000458, 9.250334000000294, 9.23937500000011,
+        9.244500000000698, 9.254375000000437, 9.272041000000172, 9.341792000000169,
+        12.854166000000077, 12.964375000000473, 19.55370799999946, 19.617709000000104,
+        19.53162499999962, 19.347915999999714, 19.356917000000067, 19.39995799999997,
+        33.719459000000825, 33.748624999999265, 33.76666599999953, 34.25279099999989,
+        34.272791999999754, 34.30595900000026, 36.406707999999526, 41.0654169999998,
+        40.192667000000256, 41.55133299999943, 41.56562500000018, 41.605458, 41.828457999999955,
+        43.796041000000514, 45.07579199999964, 45.058374999999614
+      ]
+    }
+  },
+  "fixedCameraGeneration": "6fa7e3bb-b1b8-47a4-9b2c-2111859be634",
+  "frameGeneration": "b900c5b5-69bb-47c1-8526-b703bac4745a",
+  "generationQualification": "Frames and native iOS captures use b900c5b5; final static desktop matrix, admin and quiet tile reads use restored 6fa7e3bb. Both index the same checksummed source with policy 2, 13,454 places and the identical tested product files.",
+  "browserQualification": "T3 preview used for initial static and frame QA. Its preview_open later explicitly reported unavailable; final paired static matrix and desktop/admin images use isolated headless system Chrome. No headless frame measurements are claimed."
+}

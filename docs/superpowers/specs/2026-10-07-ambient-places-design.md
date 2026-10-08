@@ -115,7 +115,7 @@ short halo text and deterministic symbol-sort-key. No DOM marker per place.
 Suppress ambient features already shown by category results or selected place,
 using canonical IDs and GERS. For owned basemap labels, match explicit OSM refs
 first; otherwise allow only one unique, same-name, compatible-category point
-within 8 metres, never known non-ground tenants. Hide the ambient copy and carry
+within 10 metres (follow-up real-source representatives differ by 8.28 m), never known non-ground tenants. Hide the ambient copy and carry
 its canonical place into the basemap tap/hover path. Ambiguous names/branches
 stay separate. Scope mappings to each Map instance; remove them on teardown.
 Do not change other overlays' filters or selection behavior.

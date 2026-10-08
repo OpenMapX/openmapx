@@ -67,6 +67,6 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         await pg.stop();
         rmSync(dir, { recursive: true, force: true });
       }
-    });
+    }, 120_000);
   },
 );

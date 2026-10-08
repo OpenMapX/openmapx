@@ -98,7 +98,7 @@ localized names, category, rank, minimum zoom, tenant flag and source combinatio
 The client suppresses ambient features already owned by a category/selection ID.
 An owned-basemap label can acquire the canonical identity only through an explicit
 OSM ID or, only when no explicit identity is supplied, a unique compatible-category/name
-match within eight metres. An explicit different OSM identity is never replaced
+match within ten metres. Worship matching uses its destination class, not the religion subclass. An explicit different OSM identity is never replaced
 by proximity. Ambiguous
 branches and non-ground tenants are not matched by proximity. Mappings belong to
 the map instance and are cleared on style replacement and overlay teardown. The
@@ -214,5 +214,133 @@ Tests cover closure/confidence/tenant/label policy, accepted identities, ambiguo
 matching, actual MVT decoding, input/dense-byte bounds, failed writes, contributor
 refusal, stale/unfinished sources, concurrency, retention, immutable bytes,
 rollback, API auth/cache/budgets and client generation/tap/style/teardown behavior.
-Browser evidence uses clearly labeled disposable fixtures; it does not claim
-verified production Aachen coverage.
+The earlier browser evidence used clearly labeled synthetic fixtures. The regional
+acceptance run below uses a real OSM extract in a disposable database; it does not
+claim production Aachen coverage.
+
+## Real regional acceptance: October 8, 2026
+
+The follow-up uses dated, public Geofabrik Düsseldorf/Cologne October 6 PBFs,
+merged and cropped to `[6.58,50.89,7.07,51.31]`. The existing extractor/index builder
+produces 14,232 unique indexed places, then policy 2 publishes 13,454 places.
+Uncategorized indexed roads/buildings remain searchable but are excluded from the
+ambient destination layer; the real Industriestraße road-segment case is a regression
+control.
+The cropped source fingerprint is
+`sha256:c18cc77ed3493aa186bd7659fee4a9b028fbc479c2a8a90f219a3b2d33824d75`.
+The source snapshot's latest object timestamp is `2026-10-06T20:09:52Z`;
+the publication timestamp is a separate pipeline timestamp.
+
+This run has **OSM-only coverage**. Optional Overture/confidence/conflation and
+published-GERS detail resolution are covered by the PostGIS regression fixtures,
+not claimed as a live Overture extract. Single-name source features without aliases
+or codes can be absent from the existing alias/code-focused search index. The
+committed landmark corpus distinguishes source presence from index eligibility;
+this change preserves that existing ingestion/geocoder behavior.
+
+Actual Quirinus-Münster (`osm:way/28562993`) and Cologne Cathedral
+(`osm:way/4532022`) publish at zoom 14 through corroborated source tags.
+Names still compete for available space: eligibility does not guarantee a label
+in every camera. Eight candidate anchors allow a corroborated landmark name to use nearby
+whitespace while retaining collision avoidance and road/transit priority. Ordinary
+destinations retain one label position to bound placement work and crowding.
+The selected/category/basemap suppression filter is repaired per live layer after
+paint-only theme recreation as well as full style replacement. OSM-only publication
+credits use the actual OSM source; combined publications retain the supported
+Overture contributor notices.
+
+The actual extractor-to-index-to-publication run also caught JSONB-array tag
+serialization: serialized strings had been stored as JSON strings rather than
+objects. The index writer now casts text values once to JSONB objects, and ambient
+policy safely reads legacy serialized objects. Private/closed legacy tags therefore
+remain enforceable without a global migration.
+
+The [aggregate acceptance evidence](https://github.com/OpenMapX/openmapx/blob/main/docs/docs/developer/ambient-places-acceptance.json) records
+source hashes, runtime/settings, measured targets, fixed camera outcomes and
+external screenshot checksums. It contains no screenshot binaries or credentials.
+Selected real before/after and iOS screenshots are attached directly to PR #436.
+Frames and native iOS images use generation `b900c5b5`; the final static matrix,
+desktop/admin images and quiet tile reads use restored generation `6fa7e3bb`.
+Both contain the same 13,454 places from the identical source hash, policy and
+tested product files. Generation IDs and source epochs remain explicit in the
+evidence. T3 preview handled initial static/frame QA; after `preview_open`
+explicitly reported unavailable, isolated headless system Chrome completed the
+static matrix and desktop/admin captures. It was not used for frame timings.
+
+| Regional check                           | Declared limit |   Observed |
+| ---------------------------------------- | -------------: | ---------: |
+| Publication after indexing               |           60 s |    0.490 s |
+| First repository tile read               |       1,000 ms |   28.35 ms |
+| Warm sparse/dense p95, 30 reads          |         100 ms |    5.20 ms |
+| Eight concurrent reads p95, 40 reads     |         250 ms |   39.34 ms |
+| Representative tile features / bytes     |  256 / 131,072 | 83 / 6,881 |
+| Explicit IDs duplicated in decoded tiles |              0 |          0 |
+
+A concurrent build/test run reached warm p95 127.89 ms, exceeding the 100 ms
+budget; those samples remain in the aggregate as a diagnostic. The table is the
+subsequent quiet repeat on the same generation, without those jobs.
+
+These reads measure the final EWKB/functional-GiST store in disposable PostGIS
+18/PostGIS 3.6. They do not measure a restarted cold database, remote network/CDN,
+a full regional PMTiles archive, or deployment capacity. On the same real source,
+replacement publication preserved old bytes; forced candidate failure retained
+active discovery; rollback restored the old pointer; disable hid discovery while
+already published tile bytes remained readable.
+
+Reproduce extraction/publication with the existing commands against a disposable
+database, using the source SHA-256 and bbox above:
+
+```sh
+osmium merge duesseldorf-regbez-261006.osm.pbf koeln-regbez-261006.osm.pbf -o merged.pbf
+osmium extract -b 6.58,50.89,7.07,51.31 merged.pbf -o rhine.osm.pbf
+# Register the cropped PBF in the data-manager StateStore, then run its existing
+# buildOsmSearchIndex and buildAmbientPlaces jobs against the disposable database.
+OPENMAPX_RUN_DATABASE_TESTS=1 pnpm exec vitest run services/data-manager/__tests__/ambient-places
+```
+
+Osmium's complete-way crop can include object geometries outside the bbox;
+publication enforces the requested region bounds. The test-only corpus contains
+selected public policy/name tags with ODbL credit, not contact or contributor data.
+The source PBFs omit user/UID/changeset metadata.
+
+The fixed-camera matrix contains 45 off/on pairs at zooms 14–18: Neuss, Cologne,
+sparse Zons, an empty rural cell, and no-region Aachen/Berlin/Monschau controls,
+plus owned-dark English Neuss and German Cologne. Each pair has identical road
+name and basemap POI identity lists; decoded tiles and visible ambient label lists
+have no duplicate explicit IDs. A native pointer tap opens Quirinus-Münster with
+canonical ID `osm:way/28562993`; selected-label suppression survives both paint-only
+theme recreation and full style replacement. English/German fields conservatively
+fall back to the source name. External enrichment is disabled in the QA fixture.
+The actual admin component shows the real generation, policy 2, source coverage
+and the intentionally induced failed-build notice while retaining the active map.
+Its rendering fixture bypasses outer production authentication; API authorization
+is verified separately by regression tests.
+
+Five foreground five-second camera sweeps per state alternate Neuss/Cologne at
+zoom 15 → 15.7 → 15 using two 2.5-second `MapLibre.easeTo` legs. RAF observes frame
+intervals without forcing a camera update on each frame. Nearest-rank p95 is
+computed over the pooled intervals per state; individual sweep p95s are also
+recorded in the aggregate evidence. No builds/tests ran concurrently.
+
+| Production-asset viewport                | Off pooled p95 | On pooled p95 | On >50 ms |
+| ---------------------------------------- | -------------: | ------------: | --------: |
+| T3 desktop, 1280 × 800                   |         9.0 ms |        9.0 ms |        0% |
+| T3 phone CSS, 430 × 932                  |         9.2 ms |        9.3 ms |        0% |
+| iPhone 18 Pro simulator Safari, isolated |          32 ms |         33 ms |    0.181% |
+| Same simulator, live stream active       |          33 ms |         34 ms |        0% |
+
+The isolated run pauses the device preview stream and removes our second QA
+WebGL map. A paused-stream run with that second map still present reached
+35/36 ms off/on; it remains diagnostic evidence alongside the streamed results.
+No unrelated host process was stopped. The phone-CSS off iteration 0 was repeated
+after its initial viewport resize had not settled; the original sample is retained
+externally.
+
+The unchanged target is pooled p95 ≤33.4 ms and intervals >50 ms ≤5%.
+The isolated simulator run meets it; the streamed run narrowly misses the
+p95 target, and individual isolated on sweeps reach 34–35 ms. This is a
+qualified local simulator result, not a claim that every sweep or physical device
+passes. An earlier forced-`jumpTo`-every-RAF stress workload missed mobile targets
+in both states; those raw samples remain external and are not relabeled as normal
+app camera behavior. Physical-device thermal/battery behavior and deployed
+network/CDN latency remain rollout checks.

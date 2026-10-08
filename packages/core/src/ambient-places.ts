@@ -206,6 +206,7 @@ export function ambientPlaceFromOsm(row: AmbientOsmRow): AmbientPlace | null {
   const name = label(row.name);
   if (
     !name ||
+    !row.category?.trim() ||
     !point(row.lng, row.lat) ||
     !/^(node|way|relation)$/.test(row.osm_type) ||
     !/^\d+$/.test(row.osm_id) ||
@@ -361,7 +362,8 @@ export function matchAmbientBasemap(
       (p) =>
         l.category &&
         ambientCategory(l.category) === p.category &&
-        haversineDistance(p.coordinates, l.coordinates) <= 8,
+        // OSM outlines and vector-tile points can use slightly different representatives.
+        haversineDistance(p.coordinates, l.coordinates) <= 10,
     );
     if (candidates.length === 1) matches.set(l.key, candidates[0]);
   }

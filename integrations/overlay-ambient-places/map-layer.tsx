@@ -27,14 +27,18 @@ import { useMap } from "@/integration-api/map/MapContext";
 import { getMapClickOwner } from "@/integration-api/map/mapClickOwnership";
 import type { MapLayerGroup } from "@/integration-api/map/mapLayerGroup";
 import { useMapLayerGroup } from "@/integration-api/map/useMapLayerGroup";
-import { useIntegrationAttribution } from "@/integration-api/overlay/useIntegrationAttribution";
+import { useIntegrationSourceAttributions } from "@/integration-api/overlay/useIntegrationAttribution";
 import { useEnv } from "@/integration-api/runtime/EnvProvider";
+import integrationManifest from "./manifest.json";
 import { useAmbientPlacesStore } from "./store";
 
 export const AMBIENT_SOURCE = "ambient-places-source";
 export const AMBIENT_POINT_LAYER = "ambient-places-points";
 export const AMBIENT_LABEL_LAYER = "ambient-places-labels";
 const LAYERS = [AMBIENT_POINT_LAYER, AMBIENT_LABEL_LAYER];
+const OSM_SOURCES = ["osm-ambient-places"];
+const COMBINED_SOURCES = integrationManifest.dataSources.map((source) => source.sourceId);
+const NO_SOURCES: string[] = [];
 function fromFeature(
   feature: Pick<MapGeoJSONFeature, "geometry" | "properties">,
 ): AmbientPlace | null {
@@ -115,7 +119,10 @@ export function AmbientPlacesLayer() {
   }, [shown, env.apiUrl, publication]);
 
   const visible = shown && usable(manifest);
-  useIntegrationAttribution("overlay-ambient-places", visible);
+  useIntegrationSourceAttributions(
+    "overlay-ambient-places",
+    visible ? (manifest?.sources.overture ? COMBINED_SOURCES : OSM_SOURCES) : NO_SOURCES,
+  );
   const group = useMemo<MapLayerGroup | null>(() => {
     if (!visible || !manifest) return null;
     return {
@@ -156,8 +163,34 @@ export function AmbientPlacesLayer() {
             "text-field": ["coalesce", ["get", `name_${locale.split("-")[0]}`], ["get", "name"]],
             "text-font": ["Noto Sans Regular"],
             "text-size": 11,
-            "text-anchor": "left",
-            "text-offset": [0.6, 0],
+            // Only corroborated landmarks spend the eight-position placement
+            // budget; ordinary destinations keep one restrained label position.
+            "text-variable-anchor-offset": [
+              "case",
+              ["all", [">=", ["get", "rank"], 2500], ["<", ["get", "rank"], 2600]],
+              [
+                "literal",
+                [
+                  "left",
+                  [1, 0],
+                  "right",
+                  [-1, 0],
+                  "top",
+                  [0, 1],
+                  "bottom",
+                  [0, -1],
+                  "top-left",
+                  [Math.SQRT1_2, Math.SQRT1_2],
+                  "top-right",
+                  [-Math.SQRT1_2, Math.SQRT1_2],
+                  "bottom-left",
+                  [Math.SQRT1_2, -Math.SQRT1_2],
+                  "bottom-right",
+                  [-Math.SQRT1_2, -Math.SQRT1_2],
+                ],
+              ],
+              ["literal", ["left", [0.6, 0]]],
+            ],
             "symbol-sort-key": ["-", ["get", "rank"]],
             "text-allow-overlap": false,
             "text-ignore-placement": false,
@@ -204,7 +237,12 @@ export function AmbientPlacesLayer() {
             key: ambientBasemapKey(feature),
             name,
             coordinates: feature.geometry.coordinates as [number, number],
-            category: String(feature.properties?.subclass ?? feature.properties?.class ?? ""),
+            // Worship subclasses describe religion, not the destination category.
+            category: String(
+              feature.properties?.class === "place_of_worship"
+                ? feature.properties.class
+                : (feature.properties?.subclass ?? feature.properties?.class ?? ""),
+            ),
             osmId:
               typeof osmId === "string" && /^(node|way|relation)$/.test(osmType)
                 ? `osm:${osmType}/${osmId}`
