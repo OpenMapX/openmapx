@@ -46,7 +46,6 @@ export function createFuelStationProvider(
   sources: LiveSources,
   options: FuelStationProviderOptions = {},
 ): FuelStationProvider {
-  const link = (sourceId: string) => sources.link(sourceId);
   const evidence = options.evidence;
   const reader = createFeatureReader(client, {
     kind: "fuel_station",
@@ -55,7 +54,8 @@ export function createFuelStationProvider(
     maxBytes: PAGE_MAX_BYTES,
     max: MAX_STATIONS,
     remembered: options.remembered ?? REMEMBERED,
-    map: (record, latest, _offers, excluded) => recordToFuelStation(record, latest, excluded, link),
+    map: (record, latest, _offers, excluded) =>
+      recordToFuelStation(record, latest, excluded, sources),
   });
 
   return {

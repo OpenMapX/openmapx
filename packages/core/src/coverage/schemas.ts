@@ -41,6 +41,7 @@ export const coverageDomainSchema = z.enum([
   "ev",
   "parking",
   "fuel",
+  "cameras",
   "traffic",
 ]);
 
@@ -136,6 +137,8 @@ export const coverageOperationIdSchema = z.enum([
   "parking.occupancy",
   "fuel.station-discovery",
   "fuel.prices",
+  "cameras.discovery",
+  "cameras.images",
   "traffic.flow",
   "traffic.road-conditions",
   "traffic.traffic-aware-routing",

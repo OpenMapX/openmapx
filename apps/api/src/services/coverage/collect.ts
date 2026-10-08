@@ -107,8 +107,8 @@ interface OperationalRead {
 
 /**
  * The operational evidence the enabled providers publish: road conditions
- * from the road-conditions providers, places from the charging, parking and
- * fuel providers. At most 32 reads.
+ * from the road-conditions providers, places from the charging, parking, fuel
+ * and camera providers. At most 32 reads.
  */
 function operationalReads(
   catalog: CoverageCatalog,

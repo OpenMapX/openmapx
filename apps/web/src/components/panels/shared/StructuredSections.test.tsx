@@ -1,5 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { act, fireEvent, render, screen } from "@/test";
 import { StructuredSections } from "./StructuredSections";
 
 vi.mock("@/components/ui/HlsVideo", () => ({
@@ -364,5 +365,174 @@ describe("StructuredSections", () => {
 
     expect(markup).toContain("Load media");
     expect(markup).not.toContain("<iframe");
+  });
+});
+
+describe("StructuredSections refreshing stills", () => {
+  const STILL = "https://weathercam.digitraffic.fi/C0150201.jpg";
+  const PROXIED = `http://localhost:3001/api/image-proxy?url=${encodeURIComponent(STILL)}`;
+
+  /**
+   * Mounts one image section and hands back a switch for whether it is on
+   * screen. Only observers watching an element still in the document hear
+   * the switch, as a real observer of a removed element hears nothing.
+   */
+  function mountStill(refreshSec?: number, imageUrl = STILL) {
+    const observers = new Set<{ notify: IntersectionObserverCallback; targets: Element[] }>();
+    class Observer {
+      private readonly entry: { notify: IntersectionObserverCallback; targets: Element[] };
+      constructor(callback: IntersectionObserverCallback) {
+        this.entry = { notify: callback, targets: [] };
+        observers.add(this.entry);
+      }
+      observe(element: Element) {
+        this.entry.targets.push(element);
+      }
+      unobserve() {}
+      disconnect() {
+        observers.delete(this.entry);
+      }
+    }
+    vi.stubGlobal("IntersectionObserver", Observer);
+    const sections = (url: string) => [
+      { title: "Helsinkiin", type: "image" as const, imageUrl: url, refreshSec },
+    ];
+    const view = render(<StructuredSections sections={sections(imageUrl)} />);
+    const onScreen = (isIntersecting: boolean) =>
+      act(() => {
+        for (const { notify, targets } of observers) {
+          const live = targets.filter((target) => document.contains(target));
+          if (live.length === 0) continue;
+          notify(
+            live.map((target) => ({ target, isIntersecting })) as IntersectionObserverEntry[],
+            {} as IntersectionObserver,
+          );
+        }
+      });
+    const img = () => screen.queryByRole("img");
+    const src = () => img()?.getAttribute("src") ?? null;
+    const showUrl = (url: string) => view.rerender(<StructuredSections sections={sections(url)} />);
+    return { onScreen, src, img, showUrl };
+  }
+
+  async function advance(seconds: number) {
+    await act(async () => vi.advanceTimersByTimeAsync(seconds * 1000));
+  }
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+    Object.defineProperty(document, "visibilityState", { configurable: true, value: "visible" });
+  });
+
+  it("re-requests the still every refreshSec while the section is on screen", async () => {
+    const { onScreen, src } = mountStill(60);
+    onScreen(true);
+    expect(src()).toBe(PROXIED);
+
+    await advance(59);
+    expect(src()).toBe(PROXIED);
+    await advance(1);
+    const first = src();
+    expect(first).not.toBe(PROXIED);
+    expect(first?.startsWith(`${PROXIED}&`)).toBe(true);
+
+    await advance(60);
+    expect(src()).not.toBe(first);
+  });
+
+  it("never refreshes while the section is off screen", async () => {
+    const { onScreen, src } = mountStill(60);
+
+    await advance(180);
+    expect(src()).toBe(PROXIED);
+
+    onScreen(true);
+    await advance(60);
+    const shown = src();
+    expect(shown).not.toBe(PROXIED);
+
+    onScreen(false);
+    await advance(300);
+    expect(src()).toBe(shown);
+  });
+
+  it("never refreshes while the page is hidden", async () => {
+    const { onScreen, src } = mountStill(60);
+    onScreen(true);
+    Object.defineProperty(document, "visibilityState", { configurable: true, value: "hidden" });
+    act(() => document.dispatchEvent(new Event("visibilitychange")));
+
+    await advance(300);
+    expect(src()).toBe(PROXIED);
+
+    Object.defineProperty(document, "visibilityState", { configurable: true, value: "visible" });
+    act(() => document.dispatchEvent(new Event("visibilitychange")));
+    await advance(60);
+    expect(src()).not.toBe(PROXIED);
+  });
+
+  it("refreshes at most every 30 seconds", async () => {
+    const { onScreen, src } = mountStill(5);
+    onScreen(true);
+
+    await advance(29);
+    expect(src()).toBe(PROXIED);
+    await advance(1);
+    expect(src()).not.toBe(PROXIED);
+  });
+
+  it("leaves a still without refreshSec alone", async () => {
+    const { onScreen, src } = mountStill();
+    onScreen(true);
+
+    await advance(600);
+    expect(src()).toBe(PROXIED);
+  });
+
+  it("refreshes a still whose frame mounts after the first render", async () => {
+    const { onScreen, src, img, showUrl } = mountStill(60);
+    // The first still fails before anything loaded, so the section renders nothing.
+    fireEvent.error(img() as HTMLElement);
+    expect(img()).toBeNull();
+
+    const next = "https://weathercam.digitraffic.fi/C0150202.jpg";
+    const proxiedNext = `http://localhost:3001/api/image-proxy?url=${encodeURIComponent(next)}`;
+    showUrl(next);
+    expect(src()).toBe(proxiedNext);
+
+    onScreen(true);
+    await advance(60);
+    expect(src()).not.toBe(proxiedNext);
+    expect(src()?.startsWith(`${proxiedNext}&`)).toBe(true);
+  });
+
+  it("keeps the last loaded still when a refresh fails; only a first failure hides it", async () => {
+    const { onScreen, src, img } = mountStill(60);
+    onScreen(true);
+
+    await advance(60);
+    const loaded = src();
+    fireEvent.load(img() as HTMLElement);
+
+    await advance(60);
+    expect(src()).not.toBe(loaded);
+    fireEvent.error(img() as HTMLElement);
+    expect(src()).toBe(loaded);
+
+    await advance(60);
+    expect(src()).not.toBe(loaded);
+  });
+
+  it("hides the section when the first still fails", () => {
+    const { img } = mountStill(60);
+
+    fireEvent.error(img() as HTMLElement);
+
+    expect(img()).toBeNull();
   });
 });

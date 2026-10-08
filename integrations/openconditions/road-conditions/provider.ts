@@ -117,7 +117,7 @@ export function createRoadConditionsProvider(
    */
   function eventsOf(records: readonly Rec[]): RoadConditionEvent[] {
     return records.flatMap((record) => {
-      const event = situationToRoadConditionEvent(record, PROVIDER_ID);
+      const event = situationToRoadConditionEvent(record, PROVIDER_ID, sources);
       return event ? [{ ...event, routingEvidence: {} }] : [];
     });
   }

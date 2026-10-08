@@ -86,7 +86,6 @@ export const flickrPhotoProvider: PhotoProvider = {
 
     const data = await fetchJson<FlickrResponse>(url.toString(), {
       timeoutMs: 5000,
-      userAgent: null,
       nullOnError: true,
     });
     if (!data) return [];

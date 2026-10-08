@@ -70,35 +70,8 @@ const SOURCE_HEADERS: Record<string, { icon: ReactNode; titleKey: string }> = {
   parking: { icon: <LocalParkingIcon sx={{ fontSize: 20 }} />, titleKey: "parking" },
   // DB Station (RIS::Stations)
   "db-station": { icon: <TrainIcon sx={{ fontSize: 20 }} />, titleKey: "dbStation" },
-  // Webcam
+  // Webcam: camera details carry OpenConditions feed ids, so the header is matched by provider.
   webcam: { icon: <VideocamIcon sx={{ fontSize: 20 }} />, titleKey: "webcams" },
-  windy: { icon: <VideocamIcon sx={{ fontSize: 20 }} />, titleKey: "webcams" },
-  "us-ca-caltrans": { icon: <VideocamIcon sx={{ fontSize: 20 }} />, titleKey: "webcams" },
-  "gb-eng-tfl": { icon: <VideocamIcon sx={{ fontSize: 20 }} />, titleKey: "webcams" },
-  "us-nps": { icon: <VideocamIcon sx={{ fontSize: 20 }} />, titleKey: "webcams" },
-  "us-ny-511": { icon: <VideocamIcon sx={{ fontSize: 20 }} />, titleKey: "webcams" },
-  "us-or-tripcheck": { icon: <VideocamIcon sx={{ fontSize: 20 }} />, titleKey: "webcams" },
-  "us-ga-511": { icon: <VideocamIcon sx={{ fontSize: 20 }} />, titleKey: "webcams" },
-  "us-fl-511": { icon: <VideocamIcon sx={{ fontSize: 20 }} />, titleKey: "webcams" },
-  "us-az-511": { icon: <VideocamIcon sx={{ fontSize: 20 }} />, titleKey: "webcams" },
-  "us-id-511": { icon: <VideocamIcon sx={{ fontSize: 20 }} />, titleKey: "webcams" },
-  "us-ut-511": { icon: <VideocamIcon sx={{ fontSize: 20 }} />, titleKey: "webcams" },
-  "us-la-511": { icon: <VideocamIcon sx={{ fontSize: 20 }} />, titleKey: "webcams" },
-  "us-pa-511": { icon: <VideocamIcon sx={{ fontSize: 20 }} />, titleKey: "webcams" },
-  "us-sc-511": { icon: <VideocamIcon sx={{ fontSize: 20 }} />, titleKey: "webcams" },
-  "us-ma-511": { icon: <VideocamIcon sx={{ fontSize: 20 }} />, titleKey: "webcams" },
-  "fi-digitraffic-webcam": { icon: <VideocamIcon sx={{ fontSize: 20 }} />, titleKey: "webcams" },
-  "se-trafikverket": { icon: <VideocamIcon sx={{ fontSize: 20 }} />, titleKey: "webcams" },
-  "no-npra": { icon: <VideocamIcon sx={{ fontSize: 20 }} />, titleKey: "webcams" },
-  "is-road-administration": {
-    icon: <VideocamIcon sx={{ fontSize: 20 }} />,
-    titleKey: "webcams",
-  },
-  "es-dgt-webcam": { icon: <VideocamIcon sx={{ fontSize: 20 }} />, titleKey: "webcams" },
-  "ca-ontario": { icon: <VideocamIcon sx={{ fontSize: 20 }} />, titleKey: "webcams" },
-  "hk-transport": { icon: <VideocamIcon sx={{ fontSize: 20 }} />, titleKey: "webcams" },
-  "au-nsw-webcam": { icon: <VideocamIcon sx={{ fontSize: 20 }} />, titleKey: "webcams" },
-  "tw-tdx-webcam": { icon: <VideocamIcon sx={{ fontSize: 20 }} />, titleKey: "webcams" },
 };
 
 export function resolveSourceHeader(
@@ -186,6 +159,7 @@ function translateStructuredSection(
     imageUrl: section.imageUrl,
     imageAlt: section.imageAlt === undefined ? undefined : resolveT(section.imageAlt),
     linkUrl: section.linkUrl,
+    refreshSec: section.refreshSec,
     embedUrl: section.embedUrl,
     embedType: section.embedType,
     sectionIcon: section.sectionIcon,

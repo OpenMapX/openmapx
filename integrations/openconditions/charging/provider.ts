@@ -45,7 +45,6 @@ export function createChargingSiteProvider(
   sources: LiveSources,
   options: ChargingSiteProviderOptions = {},
 ): ChargingSiteProvider {
-  const link = (sourceId: string) => sources.link(sourceId);
   const now = options.now ?? (() => new Date());
   const evidence = options.evidence;
   const reader = createFeatureReader(client, {
@@ -56,7 +55,7 @@ export function createChargingSiteProvider(
     max: DEFAULT_MAX_SITES,
     remembered: options.remembered ?? REMEMBERED,
     map: (record, latest, offers, excluded) =>
-      recordToChargingSite(record, latest, offers, excluded, link, now()),
+      recordToChargingSite(record, latest, offers, excluded, sources, now()),
   });
   const capOf = (maxSites: number | undefined) =>
     maxSites === undefined || !Number.isFinite(maxSites) || maxSites < 1

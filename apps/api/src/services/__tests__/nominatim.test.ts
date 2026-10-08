@@ -120,7 +120,7 @@ describe("geocode", () => {
     await nominatimService.geocode("Berlin", "de");
 
     const [, options] = mockFetch.mock.calls[0];
-    expect(options.headers["User-Agent"]).toBe("OpenMapX/1.0 (https://github.com/openmapx)");
+    expect(options.headers["User-Agent"]).toBe("Open-MapX/1.0");
     expect(options.headers["Accept-Language"]).toBe("de");
   });
 

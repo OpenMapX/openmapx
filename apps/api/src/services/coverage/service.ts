@@ -289,6 +289,7 @@ const LIVE_OPERATIONS: ReadonlySet<CoverageDomainOperationId> = new Set([
   "ev.charger-availability",
   "parking.occupancy",
   "fuel.prices",
+  "cameras.images",
 ]);
 
 function evidenceForProvider(

@@ -1,4 +1,5 @@
 import type { AirQualityProvider } from "./contracts/air-quality-provider.js";
+import type { CameraProvider } from "./contracts/camera-provider.js";
 import type { ChargingSiteProvider } from "./contracts/charging-site-provider.js";
 import type { FuelStationProvider } from "./contracts/fuel-station-provider.js";
 import type { GeocodingProvider } from "./contracts/geocoding-provider.js";
@@ -513,6 +514,12 @@ export interface IntegrationContext {
    * `ev-charging` orchestrator merges all registered providers.
    */
   registerChargingSiteProvider(provider: ChargingSiteProvider): void;
+  /**
+   * Typed registrar for camera providers (cameras, views, current stills).
+   * Stored under the `cameras` key; the `webcam` orchestrator merges all
+   * registered providers.
+   */
+  registerCameraProvider(provider: CameraProvider): void;
   /** Typed registrar for photo providers. Stored under the `photos` key. */
   registerPhotoProvider(provider: PhotoProvider): void;
   /** Typed registrar for street-level imagery providers. Stored under the `street-level-imagery` key. */

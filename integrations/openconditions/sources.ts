@@ -1,5 +1,9 @@
 import { isValidWgs84Bounds } from "@openmapx/core/coverage";
-import type { IntegrationContext, IntegrationDataSource } from "@openmapx/integration-framework";
+import {
+  type IntegrationContext,
+  type IntegrationDataSource,
+  parseMediaHostEntry,
+} from "@openmapx/integration-framework";
 import type { OpenConditionsClient } from "./client.js";
 
 /** A right as OpenConditions states it: granted, denied, or not stated (null). */
@@ -18,7 +22,10 @@ export interface OcSource {
   accessMode: "bulk" | "on_demand";
   /** Its records are withheld from the public scope; the entry is metadata only. */
   restricted: boolean;
+  /** The licence id: SPDX where SPDX lists it, else `LicenseRef-<name>`, or `NOASSERTION`. */
   license: string;
+  /** The licence's readable name, which the legal pages and credits show. */
+  licenseName?: string;
   licenseUrl?: string;
   attribution: string;
   homepage: string;
@@ -26,6 +33,8 @@ export interface OcSource {
   terms?: { url?: string; reviewedAt?: string; note?: string };
   /** Where the catalogue says the source applies: ISO 3166-1 countries, or a `[west, south, east, north]` box. */
   coverage?: { countries?: string[]; bbox?: [number, number, number, number] };
+  /** The hosts a camera feed's stills come from, which a consumer may proxy. */
+  imageHosts?: string[];
   rights: {
     redistribution: Right;
     derivedRedistribution: Right;
@@ -42,7 +51,14 @@ const DOMAINS: Readonly<Record<string, string>> = {
   fuel: "fuel-stations",
   parking: "parking-sites",
   charging: "charging-sites",
+  cameras: "cameras",
 };
+
+/**
+ * The OpenMapX domains whose data also reaches the browser directly: a
+ * camera's video stream or player page loads there once the user consents.
+ */
+const MIXED_EXPOSURE: ReadonlySet<string> = new Set(["cameras"]);
 
 /** How often the list is read again. */
 export const SOURCE_SYNC_INTERVAL_MS = 300_000;
@@ -81,18 +97,32 @@ function providerCountryOf(source: OcSource): string {
 /**
  * An OpenConditions source as an OpenMapX data source, or undefined for a
  * source in a domain OpenMapX does not serve. OpenMapX reads every source
- * server-side through OpenConditions, so none reaches the browser directly.
+ * server-side through OpenConditions; only camera streams and players reach
+ * the browser directly, after consent. A camera feed's image hosts become
+ * the media hosts the image proxy may fetch its stills from.
  */
 export function toDataSource(source: OcSource): IntegrationDataSource | undefined {
   const domain = DOMAINS[source.domain];
   if (domain === undefined) return undefined;
   const usageConditions = usageConditionsOf(source);
+  // A malformed field, or an entry the image proxy would refuse, costs the
+  // source those stills, not its listing: the data-source rules refuse a
+  // source whose media hosts hold one such entry.
+  const mediaHosts = Array.isArray(source.imageHosts)
+    ? source.imageHosts.filter(
+        (host): host is string => typeof host === "string" && parseMediaHostEntry(host) !== null,
+      )
+    : [];
   return {
     sourceId: source.id,
     domain,
     name: source.name,
     url: source.homepage,
-    license: source.license,
+    // People read this field; nothing in OpenMapX decides by the licence id.
+    license:
+      typeof source.licenseName === "string" && source.licenseName.trim() !== ""
+        ? source.licenseName
+        : source.license,
     ...(source.licenseUrl ? { licenseUrl: source.licenseUrl } : {}),
     attribution: source.attribution,
     ...(source.terms?.url ? { termsUrl: source.terms.url } : {}),
@@ -105,7 +135,8 @@ export function toDataSource(source: OcSource): IntegrationDataSource | undefine
       sourceData: redistributionOf(source.rights.redistribution, source.rights.shareAlike),
       derivedData: redistributionOf(source.rights.derivedRedistribution, source.rights.shareAlike),
     },
-    endUserExposure: "server-only",
+    ...(mediaHosts.length > 0 ? { mediaHosts } : {}),
+    endUserExposure: MIXED_EXPOSURE.has(domain) ? "mixed" : "server-only",
     personalData: false,
     cookies: false,
   };
@@ -264,22 +295,51 @@ export interface LiveSources {
   has(sourceId: string): boolean;
   /** The source's credit link: its homepage. */
   link(sourceId: string): string | undefined;
+  /** The readable name a listed source gives a licence id; none before the first list. */
+  licenseName(licenseId: string): string | undefined;
 }
 
-export interface UpdatableLiveSources extends LiveSources {
-  update(list: readonly Pick<IntegrationDataSource, "sourceId" | "url">[]): void;
+/** The listed sources with the image hosts each declares, as the cameras provider checks stills. */
+export interface MediaSources extends LiveSources {
+  /** The source's media hosts; none for a source that declares none or is not listed. */
+  mediaHosts(sourceId: string): readonly string[];
+}
+
+export interface UpdatableLiveSources extends MediaSources {
+  update(list: readonly Pick<IntegrationDataSource, "sourceId" | "url" | "mediaHosts">[]): void;
+  /**
+   * Takes the licence names from the sources as OpenConditions describes
+   * them: the accepted data sources carry the readable name in place of the id.
+   */
+  updateLicenses(list: readonly Pick<OcSource, "license" | "licenseName">[]): void;
 }
 
 export function createLiveSources(): UpdatableLiveSources {
   let links: ReadonlyMap<string, string> | undefined;
+  let media: ReadonlyMap<string, readonly string[]> = new Map();
+  let licenseNames: ReadonlyMap<string, string> = new Map();
   return {
     get ready() {
       return links !== undefined;
     },
     has: (sourceId) => links?.has(sourceId) ?? false,
     link: (sourceId) => links?.get(sourceId),
+    licenseName: (licenseId) => licenseNames.get(licenseId),
+    mediaHosts: (sourceId) => media.get(sourceId) ?? [],
     update(list) {
       links = new Map(list.map((ds) => [ds.sourceId, ds.url]));
+      media = new Map(list.flatMap((ds) => (ds.mediaHosts ? [[ds.sourceId, ds.mediaHosts]] : [])));
+    },
+    updateLicenses(list) {
+      licenseNames = new Map(
+        list.flatMap(({ license, licenseName }) =>
+          typeof license === "string" &&
+          typeof licenseName === "string" &&
+          licenseName.trim() !== ""
+            ? [[license, licenseName] as const]
+            : [],
+        ),
+      );
     },
   };
 }

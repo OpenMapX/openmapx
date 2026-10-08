@@ -37,8 +37,10 @@ point with category-appropriate detail in the place panel:
   pricing where published.
 - **E-scooters** — free-floating scooters and any operator no-ride, no-parking,
   or slow zones drawn as shaded areas on the map.
-- **Webcams** — traffic and scenic cameras, with a still thumbnail and, for
-  streams that support it, live video in the panel.
+- **Webcams** — traffic and scenic cameras. A camera with several views shows
+  each view's still, refreshed while the panel is open; streams and players
+  load in the panel after you allow external media. A camera whose views are
+  all offline or no longer updated is drawn dimmed.
 
 Selecting a category queries the visible map, drops markers, and — because these
 feeds are area-based — shows a **Search this area** chip when you pan or zoom so
@@ -91,8 +93,8 @@ server's address rather than your users'.
 
 ### Where the data lives
 
-The sharing categories and webcams are queried live from the upstream API for
-the bounding box you're looking at. EV charging, parking, and fuel come from
+The sharing categories are queried live from the upstream API for the bounding
+box you're looking at. EV charging, parking, fuel, and webcams come from
 [OpenConditions](../administration/community-extensions.md#example-openconditions),
 which fetches, parses, and links the national registers on its own schedule;
 OpenMapX reads only the sites that intersect your viewport. From the map this
@@ -114,7 +116,7 @@ fallback for the location-only sources.
 | **Bike sharing** | Docks + free-floating bikes, availability     | GBFS feeds via the MobilityData catalog, CityBikes, Nextbike, Donkey Republic, Deutsche Bahn, Entur (NO)                                                                                                                                                                                                                                 |
 | **Car sharing**  | Car-sharing stations + vehicles               | GBFS catalog, Entur, Cambio, Communauto, CoopStroom, Dégage, and German municipal portals                                                                                                                                                                                                                                                |
 | **E-scooters**   | Free-floating scooters + operator zones       | GBFS catalog, Entur (NO), NRW.Mobidrom (Voi, Lime), Felyx                                                                                                                                                                                                                                                                                |
-| **Webcams**      | Traffic + scenic cameras, still or live video | Windy, OpenStreetMap, Caltrans, TfL, NPS, many US 511 feeds, Finland/Sweden/Norway/Iceland/Spain, Ontario, Hong Kong, NSW, and Taiwan                                                                                                                                                                                                    |
+| **Webcams**      | Traffic + scenic cameras, still or live video | Every enabled camera provider: OpenConditions' camera feeds (Digitraffic (FI), Trafikverket (SE), Statens vegvesen (NO), Vegagerðin (IS), DGT (ES), Ontario 511, Hong Kong TD, Transport for NSW, TDX (TW), TfL, Caltrans, NPS, Oregon TripCheck; with the operator token also Windy, OpenStreetMap and five US 511 states)              |
 
 A few notes on origins:
 
@@ -125,9 +127,9 @@ A few notes on origins:
   far beyond the named operators above.
 - **OpenStreetMap** (queried via the Overpass service) backs the location-only
   sources everywhere a richer feed doesn't reach — chargers, fuel stations,
-  car parks and webcams all fall back to it. OpenStreetMap's car parks and
-  fuel stations come through OpenConditions (`osm-parking`, `osm-fuel`) and
-  only with the operator token.
+  car parks and webcams all fall back to it. OpenStreetMap's car parks, fuel
+  stations and webcams come through OpenConditions (`osm-parking`, `osm-fuel`,
+  `osm-cameras`) and only with the operator token.
 - **Licenses vary by source**, from public-domain and CC BY open data to
   bilateral commercial terms; each source declares its own license and
   attribution in its manifest, which is what feeds the per-view credits and the
@@ -171,7 +173,17 @@ require credentials, declared per integration:
   OpenStreetMap are restricted sources and reach OpenMapX only with the
   [operator token](../administration/community-extensions.md#the-operator-token)
   set on both sides.
-- **Webcams** can use a Windy key plus per-state US DOT 511 keys.
+- **Webcams** come from [OpenConditions](../administration/community-extensions.md#example-openconditions);
+  without it the webcam source is not offered and has no chip. Credentials for
+  the keyed feeds (Trafikverket, Ontario 511, Transport for NSW, TDX, NPS,
+  Oregon TripCheck, Windy and the US 511 states) are OpenConditions ingest feed
+  credentials: set them in the admin panel as service credentials of
+  `openconditions-ingest`. Windy (redistribution not granted), OpenStreetMap
+  (ODbL share-alike) and the Georgia, Arizona, Idaho, Utah and Louisiana 511
+  systems (no data licence) are restricted sources and reach OpenMapX only with
+  the [operator token](../administration/community-extensions.md#the-operator-token)
+  set on both sides. Stills are shown only from image hosts a live camera
+  source declares.
 
 Charging coverage also includes open registries for Belgium, Cyprus, Spain,
 Luxembourg, Lithuania, Hong Kong, New Zealand, and several

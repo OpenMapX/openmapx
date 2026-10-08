@@ -41,7 +41,6 @@ export function createParkingSiteProvider(
   sources: LiveSources,
   options: ParkingSiteProviderOptions = {},
 ): ParkingSiteProvider {
-  const link = (sourceId: string) => sources.link(sourceId);
   const evidence = options.evidence;
   const now = options.now ?? (() => new Date());
   const reader = createFeatureReader(client, {
@@ -52,7 +51,7 @@ export function createParkingSiteProvider(
     max: MAX_SITES,
     remembered: options.remembered ?? REMEMBERED,
     map: (record, latest, offers, excluded) =>
-      recordToParkingSite(record, latest, offers, excluded, link, now()),
+      recordToParkingSite(record, latest, offers, excluded, sources, now()),
   });
 
   return {

@@ -372,7 +372,7 @@ async function stageArtifactSource(opts: InstallOptions): Promise<string> {
         timeoutMs: 5 * 60_000,
         allowedContentTypes: [],
         credentialPolicy: "none",
-        headers: { "User-Agent": "OpenMapX integration installer" },
+        headers: { "User-Agent": "Open-MapX-integration-installer" },
       });
       sourcePath = archivePath;
     }

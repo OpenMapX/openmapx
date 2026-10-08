@@ -1,6 +1,7 @@
 import { createInterface } from "node:readline";
 import { Readable } from "node:stream";
 import { setTimeout as sleep } from "node:timers/promises";
+import { USER_AGENT_CONTACT } from "@openmapx/core";
 
 /**
  * QLever's public Wikidata endpoint answers a query over every place with
@@ -216,7 +217,7 @@ async function postQuery(
       headers: {
         Accept: "text/tab-separated-values",
         "Content-Type": "application/x-www-form-urlencoded",
-        "User-Agent": "OpenMapX data-manager (+https://openmapx.org)",
+        "User-Agent": USER_AGENT_CONTACT,
       },
       body: new URLSearchParams({ query }).toString(),
       signal,

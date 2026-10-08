@@ -1,0 +1,190 @@
+{
+  "records": [
+    {
+      "id": "oc:feature:test.local:d4e916bf9486620900bc5336a7a9cf4421a46c4582aae57acae91e8903d3023b",
+      "kind": "camera",
+      "name": [
+        { "lang": "fi", "text": "Tie 51 Inkoo" },
+        { "lang": "sv", "text": "Väg 51 Ingå" },
+        { "lang": "en", "text": "Road 51 Inkoo" }
+      ],
+      "type": "weather",
+      "class": "feature",
+      "domain": "roads",
+      "details": {
+        "v": 1,
+        "kind": "camera",
+        "refreshSec": 600,
+        "imageRedistribution": "allowed"
+      },
+      "location": {
+        "roads": [{ "ref": "51" }],
+        "extent": "point",
+        "geometry": { "type": "Point", "coordinates": [23.99616, 60.05374] },
+        "fuzziness": "exact",
+        "geometryOrigin": "source"
+      },
+      "revision": 1,
+      "freshness": { "fetchedAt": "2026-10-08T07:20:00.000Z" },
+      "lifecycle": "operational",
+      "provenance": {
+        "origin": "feed",
+        "privacy": { "class": "authoritative" },
+        "recordId": "C01503",
+        "sourceId": "fi-digitraffic-cameras",
+        "accessMode": "bulk",
+        "instanceId": "test.local",
+        "attribution": {
+          "license": "CC-BY-4.0",
+          "provider": "Source: Fintraffic / digitraffic.fi, license CC 4.0 BY",
+          "licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+        },
+        "sourceFormat": "digitraffic",
+        "mergedSources": [
+          {
+            "source": "osm-cameras",
+            "recordId": "oc:feature:osm-cameras:node_701",
+            "attribution": {
+              "license": "ODbL-1.0",
+              "provider": "© OpenStreetMap contributors",
+              "licenseUrl": "https://opendatacommons.org/licenses/odbl/1-0/"
+            },
+            "link": "same_asset"
+          }
+        ],
+        "derivedFrom": {
+          "records": [
+            { "class": "feature", "id": "oc:feature:fi-digitraffic-cameras:C01503" },
+            { "class": "feature", "id": "oc:feature:osm-cameras:node_701" }
+          ],
+          "method": "canonical_view",
+          "version": "1"
+        }
+      },
+      "recordedAt": "2026-10-08T07:20:00.000Z",
+      "canonicalId": "84740cae943dcc48714bcc0c1b05e59f6ef8f684d54fd5f92ba335058328c0a6",
+      "contentHash": "af007c92a23d896207e816f591a7eae33343b8e8879ab45d2a59645a56f29c0c",
+      "externalIds": [
+        { "id": "C01503", "scheme": "provider", "authority": "fi-digitraffic-cameras" }
+      ],
+      "temporality": "static",
+      "components": [
+        {
+          "key": "C0150301",
+          "kind": "camera_view",
+          "name": [{ "lang": "fi", "text": "Inkooseen" }],
+          "details": {
+            "v": 1,
+            "kind": "camera_view",
+            "direction": { "basis": "road_reference", "value": "positive" },
+            "imageRedistribution": "allowed"
+          }
+        },
+        {
+          "key": "C0150302",
+          "kind": "camera_view",
+          "name": [{ "lang": "fi", "text": "Hankoon" }],
+          "details": {
+            "v": 1,
+            "kind": "camera_view",
+            "direction": { "basis": "road_reference", "value": "negative" },
+            "imageRedistribution": "allowed"
+          }
+        },
+        {
+          "key": "C0150309",
+          "kind": "camera_view",
+          "name": [{ "lang": "fi", "text": "Tienpinta" }],
+          "details": { "v": 1, "kind": "camera_view", "imageRedistribution": "allowed" }
+        },
+        {
+          "key": "osm-cameras/0",
+          "kind": "camera_view",
+          "details": { "v": 1, "kind": "camera_view", "imageRedistribution": "unknown" }
+        }
+      ]
+    }
+  ],
+  "latest": {
+    "oc:feature:test.local:d4e916bf9486620900bc5336a7a9cf4421a46c4582aae57acae91e8903d3023b": [
+      {
+        "property": "camera.image",
+        "componentKey": "osm-cameras/0",
+        "result": {
+          "v": 1,
+          "type": "structured",
+          "value": {
+            "v": 1,
+            "status": "unknown",
+            "imageUrl": "https://example.org/inkoo/live.jpg"
+          },
+          "schema": "camera_image"
+        },
+        "phenomenonTime": { "instant": "2026-10-08T07:20:00Z" },
+        "source": "@fused",
+        "contributors": ["osm-cameras"]
+      },
+      {
+        "property": "camera.image",
+        "componentKey": "C0150301",
+        "result": {
+          "v": 1,
+          "type": "structured",
+          "value": {
+            "v": 1,
+            "status": "online",
+            "imageAt": "2026-10-08T07:13:44Z",
+            "imageUrl": "https://weathercam.digitraffic.fi/C0150301.jpg",
+            "thumbnailUrl": "https://weathercam.digitraffic.fi/C0150301.jpg?thumbnail=true"
+          },
+          "schema": "camera_image"
+        },
+        "phenomenonTime": { "instant": "2026-10-08T07:13:44Z" },
+        "validUntil": "2026-10-08T07:50:00.000Z",
+        "source": "@fused",
+        "contributors": ["fi-digitraffic-cameras"]
+      },
+      {
+        "property": "camera.image",
+        "componentKey": "C0150302",
+        "result": {
+          "v": 1,
+          "type": "structured",
+          "value": {
+            "v": 1,
+            "status": "online",
+            "imageAt": "2026-10-08T07:14:11Z",
+            "imageUrl": "https://weathercam.digitraffic.fi/C0150302.jpg",
+            "thumbnailUrl": "https://weathercam.digitraffic.fi/C0150302.jpg?thumbnail=true"
+          },
+          "schema": "camera_image"
+        },
+        "phenomenonTime": { "instant": "2026-10-08T07:14:11Z" },
+        "validUntil": "2026-10-08T07:50:00.000Z",
+        "source": "@fused",
+        "contributors": ["fi-digitraffic-cameras"]
+      },
+      {
+        "property": "camera.image",
+        "componentKey": "C0150309",
+        "result": {
+          "v": 1,
+          "type": "structured",
+          "value": {
+            "v": 1,
+            "status": "online",
+            "imageAt": "2026-10-08T07:13:57Z",
+            "imageUrl": "https://weathercam.digitraffic.fi/C0150309.jpg",
+            "thumbnailUrl": "https://weathercam.digitraffic.fi/C0150309.jpg?thumbnail=true"
+          },
+          "schema": "camera_image"
+        },
+        "phenomenonTime": { "instant": "2026-10-08T07:13:57Z" },
+        "validUntil": "2026-10-08T07:50:00.000Z",
+        "source": "@fused",
+        "contributors": ["fi-digitraffic-cameras"]
+      }
+    ]
+  },
+  "next": null
+}

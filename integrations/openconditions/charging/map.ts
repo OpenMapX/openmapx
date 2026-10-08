@@ -10,6 +10,7 @@ import {
   addressOf,
   allowedReadings,
   CROWD_CREDIT,
+  type CreditSources,
   countryOf,
   credit,
   crowdReported,
@@ -19,12 +20,11 @@ import {
   keyPrefixesOf,
   type LatestReading,
   list,
+  NO_SOURCES,
   newestReading,
-  noLink,
   pointOf,
   type Rec,
   rec,
-  type SourceLink,
   sourcesOf,
   splitKey,
   str,
@@ -208,15 +208,16 @@ function statusOf(
  * instance's own and public: a reading they contributed to is kept and
  * credits them. Null when the record is not a placeable charging site, or
  * when its survivor is excluded: the name, address and operator are the
- * survivor's and cannot be told apart from it. A reading past its
- * `validUntil` at `now` is stale.
+ * survivor's and cannot be told apart from it. A credit takes its source's
+ * link and its licence name from `sources`. A reading past its `validUntil`
+ * at `now` is stale.
  */
 export function recordToChargingSite(
   record: Rec,
   latest: readonly LatestReading[],
   offers: readonly Rec[],
   excluded: (sourceId: string) => boolean = () => false,
-  linkOf: SourceLink = noLink,
+  sources: CreditSources = NO_SOURCES,
   now: Date = new Date(),
 ): ChargingSite | null {
   const id = itemIdOf(record);
@@ -352,8 +353,8 @@ export function recordToChargingSite(
     ...(notes ? { notes } : {}),
     sources: kept.map((s) => s.id),
     attributions: [
-      ...kept.map((s) => credit(s, linkOf)),
-      ...upstreamCredits(kept, linkOf),
+      ...kept.map((s) => credit(s, sources)),
+      ...upstreamCredits(kept, sources),
       ...(crowd ? [CROWD_CREDIT] : []),
     ],
   };

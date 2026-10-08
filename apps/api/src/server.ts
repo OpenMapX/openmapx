@@ -57,6 +57,11 @@ import { PrivacyRequestError, PrivacyRequestService } from "./privacy/request-se
 import { createPrivacyRequestTaskStore } from "./privacy/request-task-store.js";
 import { loadRuntimeGdprExportReadiness } from "./privacy/runtime-readiness.js";
 import { redis } from "./redis";
+import {
+  cameraMediaSourcesOf,
+  setCameraMediaSources,
+  setGatedImageSourceResolver,
+} from "./routes/image-hosts";
 import { registerCoreRoutes } from "./routes/index";
 import {
   controlledRequestLoggingOptions,
@@ -304,6 +309,10 @@ server.addHook("preSerialization", (request, _reply, payload, done) => {
 setDisallowedSourceResolver(getGatedSourceIds);
 setRoadConditionsPolicyResolver(getRoadConditionsPolicySnapshot);
 setDisallowedIntegrationResolver(getGatedIntegrationIds);
+// The image proxy refuses a camera host whose only declaring sources the
+// policy disallows. It reads the last refreshed set on every request, so a
+// policy change reaches it with the same refresh as the response filter.
+setGatedImageSourceResolver(getGatedSourceIdsSync);
 // Reloading integrations, or a runtime integration replacing its data sources,
 // changes the source set the gated sets are derived from, so drop the policy's
 // memoized gated sets and kick a refresh right away — the synchronous getters
@@ -311,6 +320,8 @@ setDisallowedIntegrationResolver(getGatedIntegrationIds);
 // them. (The admin settings route does the same, awaited, on a policy-toggle
 // change.)
 setIntegrationSourcesChangedHook(() => {
+  // The image proxy admits a camera host only while a live source declares it.
+  setCameraMediaSources(cameraMediaSourcesOf(getAllIntegrations()));
   invalidateDataUsePolicy();
   void refreshDataUsePolicy().catch((err) => {
     server.log.warn(err, "Data-use policy refresh after an integration source change failed");
@@ -653,6 +664,9 @@ await initIntegrations(server, [
   { directory: integrationsDir, isBuiltIn: true },
   { directory: customIntegrationsDir, isBuiltIn: false },
 ]);
+// Runtime integrations supplied their first sources during setup, before
+// they were live, so the sources-changed hook has not run for them yet.
+setCameraMediaSources(cameraMediaSourcesOf(getAllIntegrations()));
 
 // Prune old health history records daily
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;

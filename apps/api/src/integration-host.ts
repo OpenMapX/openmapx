@@ -623,6 +623,11 @@ function buildIntegrationContext(args: {
       existing.push(provider);
       providers.set("charging-sites", existing);
     },
+    registerCameraProvider(provider) {
+      const existing = providers.get("cameras") ?? [];
+      existing.push(provider);
+      providers.set("cameras", existing);
+    },
     registerPhotoProvider(provider) {
       const existing = providers.get("photos") ?? [];
       existing.push(provider);

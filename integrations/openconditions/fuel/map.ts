@@ -3,6 +3,7 @@ import {
   addressOf,
   allowedReadings,
   CROWD_CREDIT,
+  type CreditSources,
   countryOf,
   credit,
   crowdReported,
@@ -12,12 +13,11 @@ import {
   keyPrefixesOf,
   type LatestReading,
   list,
+  NO_SOURCES,
   newestReading,
-  noLink,
   pointOf,
   type Rec,
   rec,
-  type SourceLink,
   sourcesOf,
   splitKey,
   str,
@@ -61,13 +61,13 @@ function lorryOnly(details: Rec): "hgv" | undefined {
  * is not a placeable fuel station, or when the record's survivor is excluded:
  * the name, brand, address and opening hours are the survivor's and cannot be
  * told apart from it. A credit the record carries without a link takes its
- * source's link from `linkOf`.
+ * source's link from `sources`, and its licence name from there too.
  */
 export function recordToFuelStation(
   record: Rec,
   latest: readonly LatestReading[],
   excluded: (sourceId: string) => boolean = () => false,
-  linkOf: SourceLink = noLink,
+  sources: CreditSources = NO_SOURCES,
 ): FuelStation | null {
   const id = itemIdOf(record);
   const location = rec(record["location"]);
@@ -143,6 +143,6 @@ export function recordToFuelStation(
     products,
     productsComplete: details["productsComplete"] === true,
     sources: kept.map((s) => s.id),
-    attributions: [...kept.map((s) => credit(s, linkOf)), ...(crowd ? [CROWD_CREDIT] : [])],
+    attributions: [...kept.map((s) => credit(s, sources)), ...(crowd ? [CROWD_CREDIT] : [])],
   };
 }

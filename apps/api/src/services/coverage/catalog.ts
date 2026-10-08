@@ -6,6 +6,7 @@ import {
   type RightsEvidence,
 } from "@openmapx/core/coverage";
 import type {
+  CameraProvider,
   ChargingSiteProvider,
   FuelStationProvider,
   GeocodingProvider,
@@ -40,7 +41,7 @@ export interface CoverageProviderDescriptor {
 
 /** The provider kinds of places, the coverage domain of each, and how a provider of it is recognised. */
 export const PLACE_DOMAINS: ReadonlyArray<{
-  kind: "charging-sites" | "parking-sites" | "fuel-stations";
+  kind: "charging-sites" | "parking-sites" | "fuel-stations" | "cameras";
   domain: CoverageDomain;
   serves(provider: unknown): boolean;
 }> = [
@@ -58,6 +59,11 @@ export const PLACE_DOMAINS: ReadonlyArray<{
     kind: "fuel-stations",
     domain: "fuel",
     serves: (provider) => typeof (provider as FuelStationProvider).searchStations === "function",
+  },
+  {
+    kind: "cameras",
+    domain: "cameras",
+    serves: (provider) => typeof (provider as CameraProvider).searchCameras === "function",
   },
 ];
 
@@ -83,6 +89,8 @@ export const COVERAGE_OPERATION_LABELS: Record<CoverageDomainOperationId, string
   "parking.occupancy": "Live parking occupancy",
   "fuel.station-discovery": "Fuel station discovery",
   "fuel.prices": "Live fuel prices",
+  "cameras.discovery": "Camera discovery",
+  "cameras.images": "Live camera images",
   "traffic.flow": "Traffic flow",
   "traffic.road-conditions": "Road conditions",
   "traffic.traffic-aware-routing": "Traffic-aware routing",
@@ -107,6 +115,8 @@ export const OPERATION_DEFINITIONS: ReadonlyArray<{
   { id: "parking.occupancy", domain: "parking" },
   { id: "fuel.station-discovery", domain: "fuel" },
   { id: "fuel.prices", domain: "fuel" },
+  { id: "cameras.discovery", domain: "cameras" },
+  { id: "cameras.images", domain: "cameras" },
   { id: "traffic.flow", domain: "traffic" },
   { id: "traffic.road-conditions", domain: "traffic" },
   { id: "traffic.traffic-aware-routing", domain: "traffic" },

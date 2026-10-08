@@ -49,6 +49,12 @@ export type {
   AirQualityCapability,
   AirQualityProvider,
   AutocompleteResult,
+  Camera,
+  CameraProvider,
+  CameraQuery,
+  CameraStatus,
+  CameraType,
+  CameraView,
   ChainedTripPlan,
   ChainedTripSegment,
   ChainPlanWarning,
@@ -286,6 +292,7 @@ export {
   validateDataSource,
   validateManifest,
 } from "./manifest";
+export { matchesMediaHost, parseMediaHostEntry } from "./media-hosts";
 export { PLATFORM_VERSION, satisfiesPlatformVersion } from "./platform";
 export {
   mapSettledWithConcurrency,

@@ -357,8 +357,10 @@ instance lists at `GET /sources`. The integration reads that list during
   international feed;
 - every source is `server-only`, since OpenMapX reads it through OpenConditions.
 
-OpenConditions `roads` feeds are credited under `road-conditions`, and `fuel`
-feeds under `fuel-stations`. Feeds of other OpenConditions domains are left out.
+OpenConditions `roads` feeds are credited under `road-conditions`, `fuel` feeds
+under `fuel-stations`, `parking` feeds under `parking-sites`, `charging` feeds
+under `charging-sites`, and `cameras` feeds under `cameras`. Feeds of other
+OpenConditions domains are left out.
 OpenConditions lists restricted feeds too, since the list is metadata, not
 records. Each `/sources` answer names the `scope` it was served in, and an
 answer without one is malformed (the last good list stays). In the `public`
@@ -508,6 +510,7 @@ interface IntegrationContext {
   registerFuelStationProvider(p: FuelStationProvider): void; // → "fuel-stations"
   registerParkingSiteProvider(p: ParkingSiteProvider): void; // → "parking-sites"
   registerChargingSiteProvider(p: ChargingSiteProvider): void; // → "charging-sites"
+  registerCameraProvider(p: CameraProvider): void; // → "cameras"
 
   registerRoute(method, path, handler, options?): void; // options.rateLimitTier
   registerHealthCheck(fn: CustomHealthCheckFn): void; // overrides manifest probe
@@ -571,7 +574,7 @@ attribution and freshness flow through every call unmodified.
 | `routing`         | `RoutingProvider`            | Turn-by-turn directions, plus optional isochrones and map-matching.                                                                                  |
 | `transit`         | `TransitProvider`            | Stops, departures/arrivals, routes, trip planning, vehicle positions, alerts.                                                                        |
 | `live-transit`    | `RealtimeProvider`           | Realtime overlays: vehicle positions, service alerts, trip-update deltas.                                                                            |
-| `data-source`     | `MobilityDataSourceProvider` | Map data sources — bike/car/scooter sharing, webcams, and the user-facing merger over the charging-sites, parking-sites and fuel-stations providers. |
+| `data-source`     | `MobilityDataSourceProvider` | Map data sources — bike/car/scooter sharing, and the user-facing merger over the charging-sites, parking-sites, fuel-stations and cameras providers. |
 | `weather`         | `WeatherProvider`            | Current conditions, hourly and daily forecasts.                                                                                                      |
 | `photos`          | `PhotoProvider`              | Place imagery, including fast OSM-tag-based hero lookups.                                                                                            |
 | `reviews`         | `ReviewProvider`             | Fetch, aggregate, and submit place reviews.                                                                                                          |
@@ -582,6 +585,7 @@ attribution and freshness flow through every call unmodified.
 | `charging-sites`  | `ChargingSiteProvider`       | EV charging sites with charge-point status and tariffs, merged by the `ev-charging` data source.                                                     |
 | `parking-sites`   | `ParkingSiteProvider`        | Parking facilities with live occupancy, merged by the `parking` data source.                                                                         |
 | `fuel-stations`   | `FuelStationProvider`        | Fuel stations with per-grade prices, merged by the `fuel` data source.                                                                               |
+| `cameras`         | `CameraProvider`             | Traffic and scenic cameras with their views, current stills and streams, merged by the `webcam` data source.                                         |
 
 A few patterns recur across the contracts and are worth calling out:
 

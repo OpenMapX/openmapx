@@ -13,7 +13,7 @@ currently usable data source, and which fact needs attention when it does not.
 
 ## Reading the page
 
-The region matrix always shows seven domain columns:
+The region matrix always shows eight domain columns:
 
 - Addresses — forward address search and reverse geocoding.
 - POIs — POI search and the optional Overture enrichment stream.
@@ -21,6 +21,7 @@ The region matrix always shows seven domain columns:
 - EV — charger discovery, charger availability, and EV route planning.
 - Parking — facility discovery and occupancy.
 - Fuel — station discovery and prices.
+- Cameras — camera discovery and live camera images.
 - Traffic — flow, road conditions, and confirmed traffic-graph application.
 
 Select a region or a domain cell to open the selected-region view. The source
@@ -77,7 +78,7 @@ publication fingerprints and timestamps; it does not hash a large PBF from a
 GET request. Overture's Places publication timestamp is independent of later
 OSM conflation. The Places publication marker is created atomically with the active schema.
 
-EV, parking, fuel, and traffic-condition evidence comes from OpenConditions:
+EV, parking, fuel, camera, and traffic-condition evidence comes from OpenConditions:
 each of its providers reports, per feed, the last poll outcome, the last
 published snapshot, and the regions the feed covers, and the page shows those
 as the stream's attempt, publication, and region. A deployment without

@@ -564,6 +564,11 @@ describe("coverage of the OpenConditions place domains", () => {
     feed("fr-prixcarburants-fuel", bulk("FR")),
   );
 
+  const CAMERAS = evidence(
+    feed("fi-digitraffic-cameras", bulk("FI")),
+    feed("windy-cameras", [entry("static", "on_demand", ["DE"], false)]),
+  );
+
   const source = (sourceId: string, domain: string) => ({
     sourceId,
     domain,
@@ -576,7 +581,10 @@ describe("coverage of the OpenConditions place domains", () => {
   });
 
   function openconditions(
-    read: Partial<Record<"charging" | "parking" | "fuel", () => Promise<OperationalEvidence>>> = {},
+    read: Partial<
+      Record<"charging" | "parking" | "fuel" | "cameras", () => Promise<OperationalEvidence>>
+    > = {},
+    withCameras = false,
   ): LoadedIntegration {
     return {
       id: "openconditions",
@@ -587,6 +595,7 @@ describe("coverage of the OpenConditions place domains", () => {
           ...CHARGING.feeds.map((f) => source(f.sourceId, "charging-sites")),
           ...PARKING.feeds.map((f) => source(f.sourceId, "parking-sites")),
           ...FUEL.feeds.map((f) => source(f.sourceId, "fuel-stations")),
+          ...(withCameras ? CAMERAS.feeds.map((f) => source(f.sourceId, "cameras")) : []),
         ],
       },
       config: {},
@@ -624,6 +633,21 @@ describe("coverage of the OpenConditions place domains", () => {
             },
           ],
         ],
+        ...(withCameras
+          ? [
+              [
+                "cameras",
+                [
+                  {
+                    id: "cameras-openconditions",
+                    searchCameras: async () => ({ cameras: [] }),
+                    getCamera: async () => null,
+                    getOperationalEvidence: read.cameras ?? (async () => CAMERAS),
+                  },
+                ],
+              ] as [string, unknown[]],
+            ]
+          : []),
       ]),
       strings: {},
       shutdownHandlers: [],
@@ -823,6 +847,39 @@ describe("coverage of the OpenConditions place domains", () => {
     const fr = await reportFor("country:FR");
     expect(fr("ev.charger-discovery")?.status).toBe("limited");
     expect(fr("ev.charger-discovery")?.reasons).toContain("source_partial");
+  });
+
+  it("reports camera discovery and images from the camera provider's feeds", async () => {
+    const collection = await collect([openconditions({}, true), router()]);
+    const cameraStreams = collection.streams.filter(
+      (s) => s.domain === "cameras" && s.stream !== "catalog",
+    );
+    expect(cameraStreams.map((s) => [s.sourceId, s.stream, s.reasons])).toEqual([
+      ["fi-digitraffic-cameras", "live", []],
+      ["fi-digitraffic-cameras", "static", []],
+      ["windy-cameras", "static", ["source_partial"]],
+    ]);
+    const service = createCoverageService({ now: () => NOW, collector: async () => collection });
+    const report = async (regionId: string) => {
+      const r = await service.report({ regionId });
+      return (id: string) => r.capabilities.find((item) => item.operationId === id);
+    };
+
+    const fi = await report("country:FI");
+    expect(fi("cameras.discovery")).toMatchObject({
+      status: "operational",
+      evidenceKeys: ["cameras:openconditions:oc-eu-1:fi-digitraffic-cameras:static"],
+    });
+    expect(fi("cameras.images")).toMatchObject({
+      status: "operational",
+      evidenceKeys: ["cameras:openconditions:oc-eu-1:fi-digitraffic-cameras:live"],
+    });
+
+    // Windy and OSM answer only for the area asked, so they never hold a country whole.
+    const de = await report("country:DE");
+    expect(de("cameras.discovery")?.status).toBe("limited");
+    expect(de("cameras.discovery")?.reasons).toContain("source_partial");
+    expect(de("cameras.images")?.status).not.toBe("operational");
   });
 
   it("reports an on-demand feed's country as partial before any read fetched there", async () => {

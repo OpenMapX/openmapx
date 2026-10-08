@@ -5,6 +5,7 @@ import type {
   RoadConditionRoadRef,
   RoadConditionValidity,
 } from "@openmapx/integration-framework";
+import { type CreditSources, licenseText, NO_SOURCES } from "../features/record.js";
 
 type Rec = Record<string, unknown>;
 
@@ -66,11 +67,12 @@ function validityOf(raw: Rec): RoadConditionValidity {
 /**
  * One OpenConditions situation record as the host's `RoadConditionEvent`,
  * field for field. A record not yet placed (no geometry) cannot be shown or
- * routed: null.
+ * routed: null. Its credit takes the licence name from `sources`.
  */
 export function situationToRoadConditionEvent(
   record: Rec,
   provider = "",
+  sources: Pick<CreditSources, "licenseName"> = NO_SOURCES,
 ): RoadConditionEvent | null {
   const location = obj(record["location"]) ?? {};
   const geometry = obj(location["geometry"]);
@@ -80,6 +82,7 @@ export function situationToRoadConditionEvent(
   const freshness = obj(record["freshness"]) ?? {};
   const severity = obj(record["severity"]) ?? {};
   const evidence = obj(record["evidence"]);
+  const license = str(attribution["license"]);
   const direction = obj(location["direction"]);
   const roads = roadsOf(location);
   return {
@@ -128,7 +131,7 @@ export function situationToRoadConditionEvent(
       : {}),
     attribution: {
       provider: str(attribution["provider"]) ?? String(provenance["sourceId"]),
-      ...strField("license", attribution["license"]),
+      ...(license ? { license: licenseText(license, sources) } : {}),
       ...strField("url", str(attribution["licenseUrl"]) ?? attribution["url"]),
     },
     ...strField("updatedAt", provenance["sourceUpdatedAt"]),

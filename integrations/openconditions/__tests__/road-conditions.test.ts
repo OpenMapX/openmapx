@@ -107,7 +107,12 @@ function provider(
 }
 
 /** A live list that lists every source, for the tests that are not about the list. */
-const EVERY_SOURCE: LiveSources = { ready: true, has: () => true, link: () => undefined };
+const EVERY_SOURCE: LiveSources = {
+  ready: true,
+  has: () => true,
+  link: () => undefined,
+  licenseName: () => undefined,
+};
 
 /** A live list of `ids`, as the `/sources` sync fills it. */
 function listed(...ids: string[]) {
@@ -155,6 +160,24 @@ describe("road-conditions provider and the live source list", () => {
     const ids = ["oc:situation:nl-ndw-events:a", "oc:situation:nl-child:c", "oc:situation:crowd:r"];
     expect((await p.getEvents(BBOX)).map((e) => e.id)).toEqual(ids);
     expect((await p.getRoutingEvents!(BBOX)).events.map((e) => e.id)).toEqual(ids);
+  });
+
+  it("credits a listed feed's LicenseRef- licence by the name the list gives it", async () => {
+    const LICENSE = "LicenseRef-NDW-Terms";
+    const named = situation("n", {
+      provenance: {
+        origin: "feed",
+        sourceId: "nl-ndw-events",
+        attribution: { provider: "NDW", license: LICENSE },
+      },
+    });
+    const live = listed("nl-ndw-events");
+    live.updateLicenses([{ license: LICENSE, licenseName: "NDW terms of use" }]);
+    const p = provider({ serve: api([named]), sources: live });
+    const [event] = await p.getEvents(BBOX);
+    expect(event!.attribution).toEqual({ provider: "NDW", license: "NDW terms of use" });
+    const [routed] = (await p.getRoutingEvents!(BBOX)).events;
+    expect(routed!.attribution.license).toBe("NDW terms of use");
   });
 
   it("stops serving a source once a refresh drops it", async () => {
@@ -699,6 +722,35 @@ describe("situationToRoadConditionEvent", () => {
       origin: "crowd",
       evidence: { state: "corroborated", confidenceScore: 0.8, routingEligible: true },
     });
+  });
+
+  it("shows a LicenseRef- licence by its listed name; an SPDX id stays as it is", () => {
+    const LICENSE = "LicenseRef-TfL-Transport-Data-Service";
+    const NAME = "TfL Transport Data Service licence (OGL v2.0 with TfL amendments)";
+    const TERMS = "https://tfl.gov.uk/corporate/terms-and-conditions/transport-data-service";
+    const names: Record<string, string> = {
+      [LICENSE]: NAME,
+      "CC-BY-4.0": "Creative Commons Attribution 4.0",
+    };
+    const sources = { ...EVERY_SOURCE, licenseName: (id: string) => names[id] };
+    const tfl = record({
+      provenance: {
+        origin: "feed",
+        sourceId: "gb-tfl-events",
+        attribution: { provider: "Transport for London", license: LICENSE, licenseUrl: TERMS },
+      },
+    });
+
+    expect(situationToRoadConditionEvent(tfl, "", sources)!.attribution).toEqual({
+      provider: "Transport for London",
+      license: NAME,
+      url: TERMS,
+    });
+    expect(situationToRoadConditionEvent(record(), "", sources)!.attribution).toMatchObject({
+      license: "CC-BY-4.0",
+    });
+    // Without names (before the first list) the id stays as it is.
+    expect(situationToRoadConditionEvent(tfl)!.attribution.license).toBe(LICENSE);
   });
 
   it("cannot show a situation it has no place for", () => {

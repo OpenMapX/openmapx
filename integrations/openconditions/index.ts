@@ -1,8 +1,8 @@
 /**
  * OpenConditions, built in: reads the OpenConditions HTTP API at
  * `OPENCONDITIONS_URL` and registers its road-conditions, fuel-stations,
- * parking-sites and charging-sites providers. The OpenConditions services themselves run beside OpenMapX; no
- * OpenConditions code runs here.
+ * parking-sites, charging-sites and cameras providers. The OpenConditions
+ * services themselves run beside OpenMapX; no OpenConditions code runs here.
  *
  * The data sources are the instance's own: the integration reads its
  * `/sources` list at setup and every five minutes after, and supplies it with
@@ -21,6 +21,7 @@
  * Without `OPENCONDITIONS_URL` the integration registers nothing.
  */
 import type { IntegrationContext } from "@openmapx/integration-framework";
+import { createCameraProvider } from "./cameras/provider.js";
 import { createChargingSiteProvider } from "./charging/provider.js";
 import { createOpenConditionsClient } from "./client.js";
 import { createSiteEvidenceReader } from "./evidence/read.js";
@@ -43,7 +44,10 @@ export async function setup(
   const scopes = createSourceScopes();
   const sync = startSourceSync(ctx, client, {
     onSources: (list) => sources.update(list),
-    onDescribed: (list) => scopes.update(list),
+    onDescribed: (list) => {
+      scopes.update(list);
+      sources.updateLicenses(list);
+    },
   });
   let waited: ReturnType<typeof setTimeout> | undefined;
   await Promise.race([
@@ -55,10 +59,11 @@ export async function setup(
   ]);
   clearTimeout(waited);
 
-  // The coverage report asks the three place providers together; they share one read.
+  // The coverage report asks the place providers together; they share one read.
   const evidence = createSiteEvidenceReader(client, scopes);
   ctx.registerRoadConditionsProvider(createRoadConditionsProvider(client, sources));
   ctx.registerFuelStationProvider(createFuelStationProvider(client, sources, { evidence }));
   ctx.registerParkingSiteProvider(createParkingSiteProvider(client, sources, { evidence }));
   ctx.registerChargingSiteProvider(createChargingSiteProvider(client, sources, { evidence }));
+  ctx.registerCameraProvider(createCameraProvider(client, sources, { evidence }));
 }

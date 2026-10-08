@@ -1,11 +1,23 @@
 import { feedIdSchema } from "@openmapx/core/feed-id";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import z from "zod/v4";
+import { parseMediaHostEntry } from "./media-hosts";
 
 const governanceUrlSchema = z.url().refine((value) => {
   const protocol = new URL(value).protocol;
   return protocol === "https:" || protocol === "http:";
 }, "must be an HTTP(S) URL");
+
+const mediaHostSchema = z
+  .string()
+  .refine((entry) => {
+    const slash = entry.indexOf("/");
+    return slash < 0 || entry.endsWith("/");
+  }, "invalid mediaHosts entry: a path prefix must end in / (cdn.example.com/images/), so it never admits a sibling path like /images-other/")
+  .refine(
+    (entry) => parseMediaHostEntry(entry) !== null,
+    "invalid mediaHosts entry: use a public host (cdn.example.com), a subdomain wildcard (*.example.com) or a host with a path prefix (cdn.example.com/images/), without scheme, port, query, IP address, localhost or dot segments; no wildcard over a shared hosting domain (*.amazonaws.com) or a public suffix (*.co.uk)",
+  );
 
 export const dataSourceSchema = z.object({
   // Source matching — connects this entry to provider source values
@@ -41,6 +53,16 @@ export const dataSourceSchema = z.object({
    * Hosts (or registrable domains) only; no scheme/path.
    */
   apiHosts: z.array(z.string()).optional(),
+  /**
+   * Image hosts the image proxy may fetch for this source. Each entry is an
+   * exact host (`weathercam.digitraffic.fi`), a subdomain wildcard
+   * (`*.thb.gov.tw`), or a host with a path prefix
+   * (`s3-eu-west-1.amazonaws.com/jamcams.tfl.gov.uk/`). No scheme, port,
+   * query, bare `*`, wildcard over one label, a public suffix or a shared
+   * hosting domain, IP literal, `localhost`, path prefix without its closing
+   * `/`, or `.`/`..`/empty path segment (`parseMediaHostEntry`).
+   */
+  mediaHosts: z.array(mediaHostSchema).optional(),
 
   // License & Attribution
   license: z.string(),

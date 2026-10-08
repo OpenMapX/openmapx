@@ -17,6 +17,14 @@ export {
   assertTransitProviderContract,
 } from "./assert-contract";
 export type {
+  Camera,
+  CameraProvider,
+  CameraQuery,
+  CameraStatus,
+  CameraType,
+  CameraView,
+} from "./camera-provider.js";
+export type {
   ChargingConnector,
   ChargingSite,
   ChargingSiteProvider,

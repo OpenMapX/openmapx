@@ -48,7 +48,12 @@ function providerWith(respond: Responder, sources: LiveSources = EVERY_SOURCE) {
 }
 
 /** A live list that lists every source, for the tests that are not about the list. */
-const EVERY_SOURCE: LiveSources = { ready: true, has: () => true, link: () => undefined };
+const EVERY_SOURCE: LiveSources = {
+  ready: true,
+  has: () => true,
+  link: () => undefined,
+  licenseName: () => undefined,
+};
 
 /** A live list of `ids`, as the `/sources` sync fills it. */
 function listed(...ids: string[]) {

@@ -27,7 +27,7 @@ export async function resolveGbfsCandidate(
   now: () => Date = () => new Date(),
 ): Promise<{ lock: GbfsCatalogLock; countryCounts: Map<string, number> }> {
   const commitResponse = await fetchImpl(MOBILITYDATA_REPO_API, {
-    headers: { "User-Agent": "openmapx-transitous-bump" },
+    headers: { "User-Agent": "Open-MapX-transitous-bump" },
   });
   if (!commitResponse.ok)
     throw new Error(`MobilityData commit lookup failed: HTTP ${commitResponse.status}`);
@@ -37,7 +37,7 @@ export async function resolveGbfsCandidate(
   }
   const url = `https://raw.githubusercontent.com/MobilityData/gbfs/${commitJson.sha}/systems.csv`;
   const csvResponse = await fetchImpl(url, {
-    headers: { "User-Agent": "openmapx-transitous-bump" },
+    headers: { "User-Agent": "Open-MapX-transitous-bump" },
   });
   if (!csvResponse.ok)
     throw new Error(`MobilityData systems.csv failed: HTTP ${csvResponse.status}`);

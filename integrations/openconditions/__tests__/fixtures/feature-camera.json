@@ -1,0 +1,145 @@
+{
+  "record": {
+    "id": "oc:feature:fi-digitraffic-cameras:C01632",
+    "kind": "camera",
+    "name": [
+      { "lang": "fi", "text": "Tie 7 Loviisa Itä" },
+      { "lang": "sv", "text": "Väg 7 Lovisa öst" },
+      { "lang": "en", "text": "Road 7 Loviisa east" }
+    ],
+    "type": "traffic",
+    "class": "feature",
+    "domain": "roads",
+    "details": {
+      "v": 1,
+      "kind": "camera",
+      "refreshSec": 600,
+      "imageRedistribution": "allowed"
+    },
+    "location": {
+      "roads": [{ "ref": "7" }],
+      "extent": "point",
+      "geometry": { "type": "Point", "coordinates": [26.263, 60.47487] },
+      "fuzziness": "exact",
+      "geometryOrigin": "source"
+    },
+    "revision": 1,
+    "freshness": { "fetchedAt": "2026-10-08T07:20:00.000Z" },
+    "lifecycle": "operational",
+    "components": [
+      {
+        "key": "C0163201",
+        "kind": "camera_view",
+        "name": [{ "lang": "fi", "text": "Kotkaan" }],
+        "details": {
+          "v": 1,
+          "kind": "camera_view",
+          "direction": { "basis": "road_reference", "value": "positive" },
+          "imageRedistribution": "allowed"
+        }
+      },
+      {
+        "key": "C0163202",
+        "kind": "camera_view",
+        "name": [{ "lang": "fi", "text": "Helsinkiin" }],
+        "details": {
+          "v": 1,
+          "kind": "camera_view",
+          "direction": { "basis": "road_reference", "value": "negative" },
+          "imageRedistribution": "allowed"
+        }
+      },
+      {
+        "key": "C0163209",
+        "kind": "camera_view",
+        "name": [{ "lang": "fi", "text": "Tienpinta" }],
+        "details": { "v": 1, "kind": "camera_view", "imageRedistribution": "allowed" }
+      }
+    ],
+    "provenance": {
+      "origin": "feed",
+      "privacy": { "class": "authoritative" },
+      "recordId": "C01632",
+      "sourceId": "fi-digitraffic-cameras",
+      "accessMode": "bulk",
+      "instanceId": "test.local",
+      "attribution": {
+        "license": "CC-BY-4.0",
+        "provider": "Source: Fintraffic / digitraffic.fi, license CC 4.0 BY",
+        "licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+      },
+      "sourceFormat": "digitraffic"
+    },
+    "recordedAt": "2026-10-08T07:20:00.000Z",
+    "canonicalId": "e68c99db63c80cf815a70f782854dd2aa8c9b646e400639b7b53f85f5f10197c",
+    "contentHash": "e9382ad77e770a75ac1cbb64750267c183712707d1891d7bd3b4b44bbe3e1161",
+    "externalIds": [
+      { "id": "C01632", "scheme": "provider", "authority": "fi-digitraffic-cameras" }
+    ],
+    "temporality": "static"
+  },
+  "latest": [
+    {
+      "property": "camera.image",
+      "componentKey": "C0163201",
+      "result": {
+        "v": 1,
+        "type": "structured",
+        "value": {
+          "v": 1,
+          "status": "offline",
+          "imageAt": "2016-12-22T09:12:27Z",
+          "imageUrl": "https://weathercam.digitraffic.fi/C0163201.jpg",
+          "thumbnailUrl": "https://weathercam.digitraffic.fi/C0163201.jpg?thumbnail=true"
+        },
+        "schema": "camera_image"
+      },
+      "phenomenonTime": { "instant": "2016-12-22T09:12:27Z" },
+      "validUntil": "2026-10-08T07:50:00.000Z",
+      "source": "fi-digitraffic-cameras"
+    },
+    {
+      "property": "camera.image",
+      "componentKey": "C0163202",
+      "result": {
+        "v": 1,
+        "type": "structured",
+        "value": {
+          "v": 1,
+          "status": "online",
+          "imageAt": "2026-10-08T07:12:34Z",
+          "imageUrl": "https://weathercam.digitraffic.fi/C0163202.jpg",
+          "thumbnailUrl": "https://weathercam.digitraffic.fi/C0163202.jpg?thumbnail=true"
+        },
+        "schema": "camera_image"
+      },
+      "phenomenonTime": { "instant": "2026-10-08T07:12:34Z" },
+      "validUntil": "2026-10-08T07:50:00.000Z",
+      "source": "fi-digitraffic-cameras"
+    },
+    {
+      "property": "camera.image",
+      "componentKey": "C0163209",
+      "result": {
+        "v": 1,
+        "type": "structured",
+        "value": {
+          "v": 1,
+          "status": "offline",
+          "imageAt": "2016-12-22T09:12:15Z",
+          "imageUrl": "https://weathercam.digitraffic.fi/C0163209.jpg",
+          "thumbnailUrl": "https://weathercam.digitraffic.fi/C0163209.jpg?thumbnail=true"
+        },
+        "schema": "camera_image"
+      },
+      "phenomenonTime": { "instant": "2016-12-22T09:12:15Z" },
+      "validUntil": "2026-10-08T07:50:00.000Z",
+      "source": "fi-digitraffic-cameras"
+    }
+  ],
+  "canonical": {
+    "canonicalFeatureId": "oc:feature:test.local:51d6218ce10ef7e92e5a7518d8d16e956314758934d23e66503fda8fa10592b8",
+    "survivorId": "oc:feature:fi-digitraffic-cameras:C01632",
+    "memberIds": ["oc:feature:fi-digitraffic-cameras:C01632", "oc:feature:windy-cameras:1179853135"]
+  }
+}

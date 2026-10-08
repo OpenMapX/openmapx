@@ -9,13 +9,25 @@ import type { SourceScopes } from "../sources.js";
 const MAX_OPERATIONAL_FEEDS = 500;
 
 /** The OpenConditions domains whose feeds hold places. */
-export type SiteDomain = "charging" | "parking" | "fuel";
+export type SiteDomain = "charging" | "parking" | "fuel" | "cameras";
 
 /** The feature kind of each place domain's places. */
 const SITE_KINDS: Readonly<Record<SiteDomain, string>> = {
   charging: "charging_site",
   parking: "parking_site",
   fuel: "fuel_station",
+  cameras: "camera",
+};
+
+/**
+ * The prefix of the properties of each place domain's readings. Cameras are
+ * the `cameras` ingest domain but their readings are the model's `camera.*`.
+ */
+const PROPERTY_PREFIXES: Readonly<Record<SiteDomain, string>> = {
+  charging: "charging.",
+  parking: "parking.",
+  fuel: "fuel.",
+  cameras: "camera.",
 };
 
 type RawGraphStatus = {
@@ -214,7 +226,9 @@ function statusOf(answer: unknown): RawOperationalStatus {
 /** The stream a row counts for in `domain`: its places, the readings about them, or neither. */
 function streamOf(row: CoverageRow, domain: SiteDomain): OperationalFeedCoverage["stream"] | null {
   if (row.class === "feature" && row.kind === SITE_KINDS[domain]) return "static";
-  if (row.class === "observation" && row.property?.startsWith(`${domain}.`)) return "live";
+  if (row.class === "observation" && row.property?.startsWith(PROPERTY_PREFIXES[domain])) {
+    return "live";
+  }
   return null;
 }
 
@@ -335,7 +349,7 @@ export interface SiteEvidenceReader {
  * The answers are read in the scope the client's token gives, so the
  * operator sees the restricted sources too.
  *
- * Reads that overlap share one fetch of the two answers, so the three place
+ * Reads that overlap share one fetch of the two answers, so the place
  * providers asked together cost one of each. Either answer failing or not
  * parsing, or no source list yet, fails every read: no evidence is made up
  * from part of it.

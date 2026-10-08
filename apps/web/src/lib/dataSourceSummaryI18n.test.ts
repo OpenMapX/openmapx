@@ -51,6 +51,21 @@ describe("translateDataSourceLabel", () => {
     ]);
   });
 
+  it("translates the webcam category filter and its six camera types in en and de", () => {
+    const labels = ["Category", "Landscape", "Traffic", "City", "Weather", "Beach", "Other"];
+
+    expect(labels.map((l) => translateDataSourceLabel(l, translator(en)))).toEqual(labels);
+    expect(labels.map((l) => translateDataSourceLabel(l, translator(de)))).toEqual([
+      "Kategorie",
+      "Landschaft",
+      "Verkehr",
+      "Stadt",
+      "Wetter",
+      "Strand",
+      "Sonstige",
+    ]);
+  });
+
   it("leaves a language-neutral label as it is", () => {
     expect(translateDataSourceLabel("CCS2", translator(de))).toBe("CCS2");
   });

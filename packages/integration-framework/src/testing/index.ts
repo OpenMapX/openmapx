@@ -22,6 +22,7 @@ import type {
   SecretsClient,
 } from "../context.js";
 import type { AirQualityProvider } from "../contracts/air-quality-provider.js";
+import type { CameraProvider } from "../contracts/camera-provider.js";
 import type { ChargingSiteProvider } from "../contracts/charging-site-provider.js";
 import type { FuelStationProvider } from "../contracts/fuel-station-provider.js";
 import type { GeocodingProvider } from "../contracts/geocoding-provider.js";
@@ -212,6 +213,7 @@ export interface CapturedRegistrations {
   fuelStations: FuelStationProvider[];
   parkingSites: ParkingSiteProvider[];
   chargingSites: ChargingSiteProvider[];
+  cameras: CameraProvider[];
   photo: PhotoProvider[];
   streetLevel: StreetLevelProvider[];
   review: ReviewProvider[];
@@ -264,6 +266,7 @@ export function createMockIntegrationContext(
     fuelStations: [],
     parkingSites: [],
     chargingSites: [],
+    cameras: [],
     photo: [],
     streetLevel: [],
     review: [],
@@ -328,6 +331,9 @@ export function createMockIntegrationContext(
     },
     registerChargingSiteProvider: (p) => {
       registered.chargingSites.push(p);
+    },
+    registerCameraProvider: (p) => {
+      registered.cameras.push(p);
     },
     registerPhotoProvider: (p) => {
       registered.photo.push(p);

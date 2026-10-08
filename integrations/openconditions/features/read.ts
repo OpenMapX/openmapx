@@ -47,20 +47,27 @@ interface WirePage {
   latest?: Record<string, LatestReading[]>;
   offers?: Record<string, Rec[]>;
   next?: unknown;
-  /** What the read's on-demand sources fetched: `partial` when any source is not `complete`. */
+  /** What the read's on-demand sources fetched: `partial` when a source that could answer fell short. */
   coverage?: { partial?: unknown; sources?: unknown };
 }
 
 /**
  * Whether a page's coverage says features may be missing: a source that did
  * not answer in time, ran out of requests, or (`too_many_cells`) was asked
- * for an area wider than it fetches in one read.
+ * for an area wider than it fetches in one read. A source that cannot run
+ * for want of configuration (`missing_configuration`) is no gap: waiting or
+ * zooming in never helps it, so it is skipped here as OpenConditions skips it
+ * for `partial`. The entries are read as well as the flag so an answer that
+ * lists a shortfall without the summary flag is still partial.
  */
 function partialCoverage(coverage: WirePage["coverage"]): boolean {
   if (coverage?.partial === true) return true;
   return (
     Array.isArray(coverage?.sources) &&
-    coverage.sources.some((s) => (s as Rec | null)?.["complete"] === false)
+    coverage.sources.some((s) => {
+      const source = s as Rec | null;
+      return source?.["complete"] === false && source["reason"] !== "missing_configuration";
+    })
   );
 }
 

@@ -6,7 +6,7 @@ import {
 } from "@openmapx/integration-framework/testing";
 import { describe, expect, test } from "vitest";
 import { createOpenConditionsClient } from "../client.js";
-import { CROWD_CREDIT, type LatestReading } from "../features/record.js";
+import { CROWD_CREDIT, type LatestReading, NO_SOURCES } from "../features/record.js";
 import { setup } from "../index.js";
 import { recordToParkingSite } from "../parking/map.js";
 import { createParkingSiteProvider } from "../parking/provider.js";
@@ -55,7 +55,12 @@ const offersOf = (b: Body) => b.offers[SITE_ID]!;
 type Responder = (req: FakeHttpRequest) => unknown;
 
 /** A live list that lists every source, for the tests that are not about the list. */
-const EVERY_SOURCE: LiveSources = { ready: true, has: () => true, link: () => undefined };
+const EVERY_SOURCE: LiveSources = {
+  ready: true,
+  has: () => true,
+  link: () => undefined,
+  licenseName: () => undefined,
+};
 
 function providerWith(respond: Responder, sources: LiveSources = EVERY_SOURCE, now = FRESH) {
   const http = fakeHttpClient(respond);
@@ -71,7 +76,7 @@ const listing =
 const NOT_FOUND = { status: 404, headers: {}, body: { error: "no such feature" } };
 
 const mapped = (b: Body, excluded: (id: string) => boolean = () => false, now = FRESH) =>
-  recordToParkingSite(recordOf(b), latestOf(b), offersOf(b), excluded, () => undefined, now);
+  recordToParkingSite(recordOf(b), latestOf(b), offersOf(b), excluded, NO_SOURCES, now);
 
 describe("parking-sites-openconditions", () => {
   test("maps a canonical OC car park with areas, site counts and a rate", async () => {

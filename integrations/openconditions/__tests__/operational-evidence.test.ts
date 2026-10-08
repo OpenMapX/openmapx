@@ -4,6 +4,7 @@ import {
   fakeHttpClient,
 } from "@openmapx/integration-framework/testing";
 import { describe, expect, test } from "vitest";
+import { createCameraProvider } from "../cameras/provider.js";
 import { createChargingSiteProvider } from "../charging/provider.js";
 import { createOpenConditionsClient } from "../client.js";
 import { createSiteEvidenceReader } from "../evidence/read.js";
@@ -32,7 +33,12 @@ import statusAnswer from "./fixtures/feeds-status.json" with { type: "json" };
  */
 
 const BASE_URL = "http://openconditions.test:4100";
-const EVERY_SOURCE: LiveSources = { ready: true, has: () => true, link: () => undefined };
+const EVERY_SOURCE: LiveSources = {
+  ready: true,
+  has: () => true,
+  link: () => undefined,
+  licenseName: () => undefined,
+};
 
 const SCOPES: Record<string, SourceScope> = {
   "de-bnetza-charging": { accessMode: "bulk", country: "DE" },
@@ -350,6 +356,86 @@ describe("site coverage evidence from OpenConditions", () => {
     ]);
   });
 
+  test("counts camera features as the static stream of cameras and camera.image readings as its live one", async () => {
+    const coverage = {
+      generatedAt: "2026-10-08T07:20:00.000Z",
+      coverage: [
+        {
+          country: "FI",
+          subdivision: null,
+          class: "feature",
+          kind: "camera",
+          accessMode: "bulk",
+          records: 812,
+          sources: ["fi-digitraffic-cameras"],
+        },
+        {
+          country: "FI",
+          subdivision: null,
+          class: "observation",
+          kind: "observation",
+          property: "camera.image",
+          accessMode: "bulk",
+          records: 2104,
+          sources: ["fi-digitraffic-cameras"],
+        },
+        // Another domain's readings under a property of the same stem count for none.
+        {
+          country: "FI",
+          subdivision: null,
+          class: "observation",
+          kind: "observation",
+          property: "cameras.other",
+          accessMode: "bulk",
+          records: 1,
+          sources: ["fi-digitraffic-cameras"],
+        },
+      ],
+    };
+    const status = {
+      collectedAt: "2026-10-08T07:20:00.000Z",
+      instanceId: "oc-eu-1",
+      feeds: [
+        {
+          id: "fi-digitraffic-cameras",
+          name: "Digitraffic weather cameras",
+          domain: "cameras",
+          hasCredentials: true,
+          selectionState: "configured",
+          cadenceSec: 600,
+          lastNetworkSuccessAt: "2026-10-08T07:15:00.000Z",
+          freshnessDeadline: "2026-10-08T07:45:00.000Z",
+          lastOutcome: "changed",
+        },
+        { ...statusAnswer.feeds[0], domain: "charging" },
+      ],
+    };
+    const { reader } = readerWith(
+      answers(coverage, status),
+      { OPENCONDITIONS_URL: BASE_URL },
+      scopesOf({ "fi-digitraffic-cameras": { accessMode: "bulk", country: "FI" } }),
+    );
+
+    const { feeds } = await reader.read("cameras");
+
+    expect(feeds.map((feed) => [feed.sourceId, feed.status, feed.coverage])).toEqual([
+      [
+        "fi-digitraffic-cameras",
+        "healthy",
+        [
+          {
+            stream: "static",
+            accessMode: "bulk",
+            countries: ["FI"],
+            whole: true,
+            basis: "observed",
+          },
+          { stream: "live", accessMode: "bulk", countries: ["FI"], whole: true, basis: "observed" },
+        ],
+      ],
+    ]);
+  });
+
   test("reads both answers with the operator token, once for the three domains read together", async () => {
     const { http, reader } = readerWith(answers(), {
       OPENCONDITIONS_URL: BASE_URL,
@@ -413,6 +499,12 @@ describe("site coverage evidence from OpenConditions", () => {
     expect((await charging.getOperationalEvidence!()).feeds).toHaveLength(6);
     expect((await parking.getOperationalEvidence!()).feeds).toHaveLength(2);
     expect((await fuel.getOperationalEvidence!()).feeds).toHaveLength(3);
+    const cameras = createCameraProvider(
+      client,
+      { ...EVERY_SOURCE, mediaHosts: () => [] },
+      { evidence: reader },
+    );
+    expect((await cameras.getOperationalEvidence!()).feeds).toEqual([]);
     const roads = await road.getOperationalEvidence!();
     expect(roads.feeds.map((feed) => feed.sourceId)).toEqual(["nl-ndw-events"]);
     expect(roads.feeds[0]?.coverage).toBeUndefined();

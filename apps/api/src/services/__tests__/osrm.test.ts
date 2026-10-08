@@ -587,9 +587,7 @@ describe("osrmService", () => {
       await osrmService.getRoute(waypoints, "driving");
 
       const options = mockFetch.mock.calls[0][1] as RequestInit;
-      expect((options.headers as Record<string, string>)["User-Agent"]).toBe(
-        "OpenMapX/1.0 (https://github.com/openmapx)",
-      );
+      expect((options.headers as Record<string, string>)["User-Agent"]).toBe("Open-MapX/1.0");
     });
 
     it("does not include exclude param when no avoid options set", async () => {

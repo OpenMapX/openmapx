@@ -4,11 +4,16 @@
  * Many third-party APIs (Nominatim, OSRM, Transitous, Met.no, OSM tiles, …)
  * require a meaningful User-Agent. Keeping them in one place makes it easy to
  * bump the version or change the contact domain project-wide.
+ *
+ * The product token is hyphenated (`Open-MapX`) on purpose: WAF bad-bot rules
+ * (AWS managed `UserAgent_BadBots_HEADER`, used by Digitraffic, USGS, Flickr and
+ * others) refuse any User-Agent containing the scanner name `nmap` as a
+ * case-insensitive substring, which "OpenMapX" does. Keep `nmap` out of every
+ * fixed User-Agent, including project URLs.
  */
 
-const APP_NAME = "OpenMapX";
+const APP_NAME = "Open-MapX";
 const APP_VERSION = "1.0";
-const APP_URL = "https://github.com/openmapx";
 
 /**
  * Contact domain embedded in outbound User-Agent strings (and the API's email
@@ -29,8 +34,8 @@ export function contactDomain(): string {
 
 const CONTACT_DOMAIN = contactDomain();
 
-/** Default user-agent — suitable for most API calls. */
-export const USER_AGENT = `${APP_NAME}/${APP_VERSION} (${APP_URL})`;
+/** Default user-agent — suitable for most API calls. Carries no project URL (every one contains `nmap`). */
+export const USER_AGENT = `${APP_NAME}/${APP_VERSION}`;
 
 /**
  * User-agent with an explicit contact email — required by some transit APIs
@@ -51,11 +56,11 @@ export const USER_AGENT_CONTACT = `${APP_NAME}/${APP_VERSION} (+https://${CONTAC
 export const USER_AGENT_ADMIN = `${APP_NAME}-Admin/${APP_VERSION}`;
 
 /**
- * Build a custom user-agent that keeps the `OpenMapX/<version>` prefix. Prefer
+ * Build a custom user-agent that keeps the `Open-MapX/<version>` prefix. Prefer
  * deriving the contact from {@link contactDomain} so it tracks the deployment.
  *
- * @example userAgent(`weather@${contactDomain()}`) // "OpenMapX/1.0 (weather@<DOMAIN>)"
- * @example userAgent("admin@example.com")          // "OpenMapX/1.0 (admin@example.com)"
+ * @example userAgent(`weather@${contactDomain()}`) // "Open-MapX/1.0 (weather@<DOMAIN>)"
+ * @example userAgent("admin@example.com")          // "Open-MapX/1.0 (admin@example.com)"
  */
 export function userAgent(comment: string): string {
   return `${APP_NAME}/${APP_VERSION} (${comment})`;

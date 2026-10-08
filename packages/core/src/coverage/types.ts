@@ -1,4 +1,4 @@
-/** The seven operational domains shown by the coverage report. */
+/** The eight operational domains shown by the coverage report. */
 export type CoverageDomain =
   | "addresses"
   | "pois"
@@ -6,6 +6,7 @@ export type CoverageDomain =
   | "ev"
   | "parking"
   | "fuel"
+  | "cameras"
   | "traffic";
 
 export type CoveragePermission = "yes" | "no" | "conditional" | "unknown";
@@ -99,6 +100,8 @@ export type CoverageDomainOperationId =
   | "parking.occupancy"
   | "fuel.station-discovery"
   | "fuel.prices"
+  | "cameras.discovery"
+  | "cameras.images"
   | "traffic.flow"
   | "traffic.road-conditions"
   | "traffic.traffic-aware-routing";
@@ -419,6 +422,7 @@ export const COVERAGE_DOMAINS: readonly CoverageDomain[] = [
   "ev",
   "parking",
   "fuel",
+  "cameras",
   "traffic",
 ];
 
@@ -438,6 +442,8 @@ export const COVERAGE_OPERATION_IDS: readonly CoverageDomainOperationId[] = [
   "parking.occupancy",
   "fuel.station-discovery",
   "fuel.prices",
+  "cameras.discovery",
+  "cameras.images",
   "traffic.flow",
   "traffic.road-conditions",
   "traffic.traffic-aware-routing",

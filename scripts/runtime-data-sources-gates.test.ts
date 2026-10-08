@@ -65,9 +65,9 @@ describe("check-feed-ids", () => {
 describe("check-credential-keys", () => {
   it("rejects a credential-keyed integration that supplies its sources at runtime", () => {
     for (const id of CREDENTIAL_KEYED_INTEGRATIONS) writeManifest(id, {});
-    writeManifest("webcam", { runtimeDataSources: true });
+    writeManifest("bike-sharing", { runtimeDataSources: true });
     expect(collectCredentialKeyViolations(root)).toEqual([
-      expect.stringMatching(/^webcam: .*runtimeDataSources/),
+      expect.stringMatching(/^bike-sharing: .*runtimeDataSources/),
     ]);
   });
 });

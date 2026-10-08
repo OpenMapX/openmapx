@@ -388,9 +388,9 @@ of the typed contracts in `@openmapx/integration-framework/src/contracts/` —
 `TransitProvider` (stops, departures, planning, alerts, with a capability bitmap
 so the orchestrator dispatches by declared capability rather than reflection),
 `RealtimeProvider` (vehicle positions, trip updates, situation feeds), or
-`MobilityDataSourceProvider` (bike/scooter/car-sharing). Parking, fuel, and EV
-charging read OpenConditions through the typed `ParkingSiteProvider`,
-`FuelStationProvider`, and `ChargingSiteProvider` contracts. Each provider declares its coverage box, priority, and a static
+`MobilityDataSourceProvider` (bike/scooter/car-sharing). Parking, fuel, EV
+charging, and webcams read OpenConditions through the typed `ParkingSiteProvider`,
+`FuelStationProvider`, `ChargingSiteProvider`, and `CameraProvider` contracts. Each provider declares its coverage box, priority, and a static
 `attribution`, and returns `MobilityResult<T>`. The orchestrator dispatches on
 capability, coverage, and current health.
 
@@ -414,11 +414,12 @@ logic lives entirely in each orchestrator.
 
 ### Bulk datasets live in OpenConditions
 
-Registries too large to fetch per request (national EV-charging, parking and
-fuel registers) are not ingested by OpenMapX. OpenConditions
+Registries too large to fetch per request (national EV-charging, parking, fuel
+and traffic-camera registers) are not ingested by OpenMapX. OpenConditions
 fetches, parses and links them, and OpenMapX's orchestrators read the result
-through the `charging-sites`, `parking-sites` and `fuel-stations` providers, so
-bulk datasets present the same canonical shape as every other source.
+through the `charging-sites`, `parking-sites`, `fuel-stations` and `cameras`
+providers, so bulk datasets present the same canonical shape as every other
+source.
 
 ## Where to go next
 

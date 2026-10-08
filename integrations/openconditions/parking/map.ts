@@ -12,6 +12,7 @@ import {
   addressOf,
   allowedReadings,
   CROWD_CREDIT,
+  type CreditSources,
   countryOf,
   credit,
   crowdReported,
@@ -21,12 +22,11 @@ import {
   keyPrefixesOf,
   type LatestReading,
   list,
+  NO_SOURCES,
   newestReading,
-  noLink,
   pointOf,
   type Rec,
   rec,
-  type SourceLink,
   sourcesOf,
   splitKey,
   str,
@@ -215,15 +215,15 @@ const counted = (area: ParkingArea) =>
  * credits them. Null when the record is not a placeable parking site, or when
  * its survivor is excluded: the name, address and counts are the survivor's
  * and cannot be told apart from it. A credit the record carries without a
- * link takes its source's link from `linkOf`. A reading past its `validUntil`
- * at `now` is stale.
+ * link takes its source's link from `sources`, and its licence name from
+ * there too. A reading past its `validUntil` at `now` is stale.
  */
 export function recordToParkingSite(
   record: Rec,
   latest: readonly LatestReading[],
   offers: readonly Rec[],
   excluded: (sourceId: string) => boolean = () => false,
-  linkOf: SourceLink = noLink,
+  sources: CreditSources = NO_SOURCES,
   now: Date = new Date(),
 ): ParkingSite | null {
   const id = itemIdOf(record);
@@ -317,8 +317,8 @@ export function recordToParkingSite(
     ...(notes ? { notes } : {}),
     sources: kept.map((s) => s.id),
     attributions: [
-      ...kept.map((s) => credit(s, linkOf)),
-      ...upstreamCredits(kept, linkOf),
+      ...kept.map((s) => credit(s, sources)),
+      ...upstreamCredits(kept, sources),
       ...(crowd ? [CROWD_CREDIT] : []),
     ],
   };

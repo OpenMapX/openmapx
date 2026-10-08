@@ -17,7 +17,10 @@ const EXACT_LABEL_KEYS: Record<string, string> = {
   Access: "filterAccess",
   Availability: "sectionAvailability",
   "Available now": "filterAvailableNow",
+  Beach: "cameraBeach",
+  Category: "filterCameraCategory",
   "Charging Speed": "filterChargingSpeed",
+  City: "cameraCity",
   Connector: "filterConnector",
   "Disabled Parking": "filterDisabledParking",
   "EV Charging": "rowEvCharging",
@@ -27,7 +30,9 @@ const EXACT_LABEL_KEYS: Record<string, string> = {
   Free: "pricingFree",
   "Hide out of service": "filterHideOutOfService",
   "Include Full": "filterIncludeFull",
+  Landscape: "cameraLandscape",
   "On-Street": "onStreet",
+  Other: "cameraOther",
   "NACS / Tesla": "connectorNacs",
   Paid: "filterPaid",
   "Park & Ride": "rowParkAndRide",
@@ -37,6 +42,7 @@ const EXACT_LABEL_KEYS: Record<string, string> = {
   "Slow (≤22 kW)": "filterSpeedSlow",
   "Spaces Available": "filterSpacesAvailable",
   "Surface Lot": "surfaceLot",
+  Traffic: "cameraTraffic",
   Type: "rowType",
   "Type 1": "connectorType1",
   "Type 2": "connectorType2",
@@ -44,6 +50,7 @@ const EXACT_LABEL_KEYS: Record<string, string> = {
   "Ultra-Rapid (>100 kW)": "filterSpeedUltraRapid",
   Underground: "undergroundGarage",
   Unknown: "unknownFee",
+  Weather: "cameraWeather",
 };
 
 const FREE_CAPACITY_RE = /^(\d+)\/(\d+) free$/;

@@ -262,9 +262,9 @@ strip and the place card render (see [Attribution and freshness](#attribution-an
 ## Multi-source merging
 
 A category that aggregates many feeds does the fan-out inside `search`. The
-`ev-charging`, `parking` and `fuel` providers are orchestrators over typed
-site-provider contracts (`ChargingSiteProvider`, `ParkingSiteProvider`,
-`FuelStationProvider`). `createSiteOrchestrator` queries every registered
+`ev-charging`, `parking`, `fuel` and `webcam` providers are orchestrators over
+typed site-provider contracts (`ChargingSiteProvider`, `ParkingSiteProvider`,
+`FuelStationProvider`, `CameraProvider`). `createSiteOrchestrator` queries every registered
 provider in parallel, tolerates failures, and merges what comes back, so the
 data source only filters and maps the merged sites:
 

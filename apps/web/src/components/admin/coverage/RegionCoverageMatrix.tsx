@@ -24,6 +24,7 @@ export const COVERAGE_MATRIX_DOMAINS: readonly CoverageDomain[] = [
   "ev",
   "parking",
   "fuel",
+  "cameras",
   "traffic",
 ];
 

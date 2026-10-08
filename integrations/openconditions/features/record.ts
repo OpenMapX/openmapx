@@ -105,15 +105,25 @@ export function memberIdsOf(record: Rec): string[] {
  * (`oc:feature:<feed>:<station>`), which stays while the cluster gains or
  * loses members; a canonical id changes with them. A record that is no
  * canonical feature keeps its own id.
+ *
+ * Some feeds build the feature id from the record id with every character
+ * outside `[A-Za-z0-9._:-]` replaced by `_` (an OSM camera's `node/701` is
+ * `node_701`), others keep it as is. The survivor's id is whichever of the
+ * two forms is actually a member, the record id as is first.
  */
 export function itemIdOf(record: Rec): string | undefined {
   const provenance = rec(record["provenance"]);
   const sourceId = str(provenance["sourceId"]);
   const recordId = str(provenance["recordId"]);
-  const survivor = sourceId && recordId ? `oc:feature:${sourceId}:${recordId}` : undefined;
-  return survivor !== undefined && memberIdsOf(record).includes(survivor)
-    ? survivor
-    : str(record["id"]);
+  if (sourceId && recordId) {
+    const members = memberIdsOf(record);
+    const forms = [recordId, recordId.replace(/[^A-Za-z0-9._:-]/g, "_")];
+    const survivor = forms
+      .map((form) => `oc:feature:${sourceId}:${form}`)
+      .find((id) => members.includes(id));
+    if (survivor !== undefined) return survivor;
+  }
+  return str(record["id"]);
 }
 
 /** The sources behind a reading: its own, or every contributor of a fused one. */
@@ -175,22 +185,46 @@ export function allowedReadings(
   return latest.filter((r) => !readingFeeds(r).some(excluded));
 }
 
-/** A source's link by source id, from the live data sources. */
-export type SourceLink = (sourceId: string) => string | undefined;
+/** What a credit reads from the live data sources. */
+export interface CreditSources {
+  /** A source's link by source id. */
+  link(sourceId: string): string | undefined;
+  /** A licence's readable name by licence id, where a listed source gives one. */
+  licenseName(licenseId: string): string | undefined;
+}
 
-export const noLink: SourceLink = () => undefined;
+/** No live data sources: no links, and every licence shown by its id. */
+export const NO_SOURCES: CreditSources = {
+  link: () => undefined,
+  licenseName: () => undefined,
+};
 
-/** A source's credit; without a link of its own it takes the source's link from `linkOf`. */
-export function credit(source: RecordSource, linkOf: SourceLink): Attribution {
+/**
+ * A licence as a credit shows it. A `LicenseRef-` id is OpenConditions' own
+ * and means nothing to a reader, so it shows by the name the live list gives
+ * it, and stays as it is where no listed source names it. Any other id is
+ * SPDX's, which readers know and which fits a credit chip: it stays as it is.
+ */
+export function licenseText(
+  licenseId: string,
+  sources: Pick<CreditSources, "licenseName">,
+): string {
+  return licenseId.startsWith("LicenseRef-")
+    ? (sources.licenseName(licenseId) ?? licenseId)
+    : licenseId;
+}
+
+/** A source's credit; without a link of its own it takes the source's link from `sources`. */
+export function credit(source: RecordSource, sources: CreditSources): Attribution {
   const a = source.attribution;
-  const url = str(a["url"]) ?? linkOf(source.id);
+  const url = str(a["url"]) ?? sources.link(source.id);
   const license = str(a["license"]);
   const licenseUrl = str(a["licenseUrl"]);
   return {
     sourceId: source.id,
     name: str(a["provider"]) ?? source.id,
     ...(url ? { url } : {}),
-    ...(license ? { spdxLicense: license } : {}),
+    ...(license ? { spdxLicense: licenseText(license, sources) } : {}),
     ...(licenseUrl ? { licenseUrl } : {}),
   };
 }
@@ -202,10 +236,13 @@ export function credit(source: RecordSource, linkOf: SourceLink): Attribution {
  * linked where the publisher states one. A publisher is owed credit whatever
  * its licence, so one without a licence is credited by name.
  */
-export function upstreamCredits(kept: readonly RecordSource[], linkOf: SourceLink): Attribution[] {
+export function upstreamCredits(
+  kept: readonly RecordSource[],
+  sources: CreditSources,
+): Attribution[] {
   const out: Attribution[] = [];
   for (const source of kept) {
-    const feed = credit(source, linkOf);
+    const feed = credit(source, sources);
     for (const u of source.upstream) {
       const publisher = str(u["publisher"]);
       if (!publisher) continue;
@@ -217,7 +254,7 @@ export function upstreamCredits(kept: readonly RecordSource[], linkOf: SourceLin
         sourceId: source.id,
         name,
         ...(feed.url ? { url: feed.url } : {}),
-        ...(license ? { spdxLicense: license } : {}),
+        ...(license ? { spdxLicense: licenseText(license, sources) } : {}),
         ...(licenseUrl ? { licenseUrl } : {}),
         publisher: { name: publisher },
       });

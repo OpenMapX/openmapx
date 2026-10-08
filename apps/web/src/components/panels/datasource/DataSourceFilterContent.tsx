@@ -483,7 +483,7 @@ export function DataSourceFilterContent() {
                   color: "text.secondary",
                 }}
               >
-                {tc("stationsInView", { count: filteredResults.length })}
+                {tc("inView", { count: filteredResults.length })}
               </Typography>
             )}
           </Box>

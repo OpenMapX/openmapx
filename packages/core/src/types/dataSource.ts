@@ -206,6 +206,12 @@ export interface DataSourceDetailSection {
   imageAlt?: I18nToken;
   /** Link URL. For "image" sections, wraps the image in an anchor tag. */
   linkUrl?: string;
+  /**
+   * For "image" sections: seconds between new stills at the source. The client
+   * re-requests the image at that pace, at most every 30 seconds, and only
+   * while the section is on screen.
+   */
+  refreshSec?: number;
   /** Embed URL for type "embed". Rendered as a sandboxed iframe or video element. */
   embedUrl?: string;
   /** Embed content type. Defaults to "iframe". "video" renders a video element. */

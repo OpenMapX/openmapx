@@ -318,6 +318,36 @@ describe("POST /places/card-enrichment", () => {
     });
   });
 
+  it("never offers a camera still as a place photo while camera hosts are declared", async () => {
+    const { setCameraMediaSources } = await import("../image-hosts.js");
+    setCameraMediaSources([
+      { sourceId: "fi-digitraffic-cameras", mediaHosts: ["weathercam.digitraffic.fi"] },
+    ]);
+    try {
+      mockSearchHeroPhotos.mockResolvedValueOnce([
+        {
+          url: "https://weathercam.digitraffic.fi/C0150301.jpg",
+          source: "wikimedia",
+          author: "Fintraffic",
+          license: "CC BY 4.0",
+        },
+      ]);
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/places/card-enrichment",
+        payload: { places: [{ ...place, id: "osm:node/999902", fields: ["photo"] }] },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const [result] = response.json().results;
+      expect(result.photo).toBeUndefined();
+      expect(result.outcomes.photo).toEqual({ status: "absent" });
+    } finally {
+      setCameraMediaSources([]);
+    }
+  });
+
   it("keeps a hero photo and rating when knowledge lookup fails", async () => {
     const photo = {
       url: "https://upload.wikimedia.org/wikipedia/commons/a/ab/Dom.jpg",

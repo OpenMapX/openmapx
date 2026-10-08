@@ -13,6 +13,10 @@
       "types": "./src/cache.ts",
       "default": "./src/cache.ts"
     },
+    "./camera": {
+      "types": "./src/types/camera.ts",
+      "default": "./src/types/camera.ts"
+    },
     "./dedup": {
       "types": "./src/dedup.ts",
       "default": "./src/dedup.ts"

@@ -8,7 +8,7 @@ import { describe, expect, test } from "vitest";
 import { recordToChargingSite } from "../charging/map.js";
 import { createChargingSiteProvider } from "../charging/provider.js";
 import { createOpenConditionsClient } from "../client.js";
-import { CROWD_CREDIT, type LatestReading } from "../features/record.js";
+import { CROWD_CREDIT, type LatestReading, NO_SOURCES } from "../features/record.js";
 import { setup } from "../index.js";
 import type { LiveSources } from "../sources.js";
 import stringsDe from "../strings/de.json" with { type: "json" };
@@ -55,7 +55,12 @@ const offersOf = (b: Body) => b.offers[SITE_ID]!;
 type Responder = (req: FakeHttpRequest) => unknown;
 
 /** A live list that lists every source, for the tests that are not about the list. */
-const EVERY_SOURCE: LiveSources = { ready: true, has: () => true, link: () => undefined };
+const EVERY_SOURCE: LiveSources = {
+  ready: true,
+  has: () => true,
+  link: () => undefined,
+  licenseName: () => undefined,
+};
 
 function providerWith(respond: Responder, sources: LiveSources = EVERY_SOURCE, now = FRESH) {
   const http = fakeHttpClient(respond);
@@ -71,7 +76,7 @@ const listing =
 const NOT_FOUND = { status: 404, headers: {}, body: { error: "no such feature" } };
 
 const mapped = (b: Body, excluded: (id: string) => boolean = () => false, now = FRESH) =>
-  recordToChargingSite(recordOf(b), latestOf(b), offersOf(b), excluded, () => undefined, now);
+  recordToChargingSite(recordOf(b), latestOf(b), offersOf(b), excluded, NO_SOURCES, now);
 
 describe("charging-sites-openconditions", () => {
   test("maps a canonical OC site with two EVSEs, their connectors, statuses and a tariff", async () => {
@@ -295,6 +300,7 @@ describe("charging-sites-openconditions", () => {
       ready: false,
       has: () => false,
       link: () => undefined,
+      licenseName: () => undefined,
     });
     expect(await provider.searchSites(BBOX)).toEqual({ sites: [], partial: "unavailable" });
     expect(await provider.getSite(MOBIDATA_MEMBER)).toBeNull();
