@@ -2,10 +2,11 @@ import Fastify from "fastify";
 import type postgres from "postgres";
 import { describe, expect, it, vi } from "vitest";
 
-const mock = vi.hoisted(() => ({ build: vi.fn() }));
+const mock = vi.hoisted(() => ({ build: vi.fn(), resume: vi.fn() }));
 vi.mock("../../src/jobs/ambient-places/build.js", async (importOriginal) => ({
   ...(await importOriginal<object>()),
   buildAmbientPlaces: mock.build,
+  resumePlanetPlaces: mock.resume,
   rollbackAmbientPlaces: async () => {},
   setAmbientEnabled: async () => {},
 }));
@@ -42,6 +43,44 @@ describe("ambient publication job lifecycle", () => {
         building: true,
         progress: { phase: "osm", processed: 2000, batches: 1, placeCount: 1990 },
       });
+    } finally {
+      release();
+      await app.close();
+    }
+  });
+  it("validates resume and shares local asynchronous admission with build/discard", async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    mock.resume.mockImplementationOnce(async (_sql, _generation, claim: () => void) => {
+      claim();
+      await gate;
+    });
+    const sql = { unsafe: async () => [{ exists: false }] } as unknown as postgres.Sql;
+    const app = Fastify();
+    registerAmbientPlacesApi(app, sql);
+    const payload = { generation: "11111111-1111-4111-8111-111111111111" };
+    try {
+      expect(
+        (
+          await app.inject({
+            method: "POST",
+            url: "/ambient-places/resume",
+            payload: { generation: "bad" },
+          })
+        ).statusCode,
+      ).toBe(400);
+      expect(mock.resume).not.toHaveBeenCalled();
+      expect(
+        (await app.inject({ method: "POST", url: "/ambient-places/resume", payload })).statusCode,
+      ).toBe(202);
+      expect(
+        (await app.inject({ method: "POST", url: "/ambient-places/resume", payload })).statusCode,
+      ).toBe(409);
+      expect(
+        (await app.inject({ method: "POST", url: "/ambient-places/discard", payload })).statusCode,
+      ).toBe(409);
     } finally {
       release();
       await app.close();

@@ -7,6 +7,15 @@ import {
   ambientPlaceFromTile,
 } from "../ambient-places";
 
+async function featureStore(sql: Pick<postgres.Sql, "unsafe">) {
+  const [row] = await sql.unsafe<{ global: boolean }[]>(
+    "SELECT to_regclass('ambient_places.features_all') IS NOT NULL AS global",
+  );
+  return {
+    table: row.global ? "ambient_places.features_all" : "ambient_places.features",
+    published: row.global ? "AND g.publication_status='published'" : "",
+  };
+}
 function freshPublication(manifest: AmbientManifest): boolean {
   const dates = [
     manifest.publishedAt,
@@ -36,8 +45,9 @@ export async function readAmbientManifest(sql: postgres.Sql): Promise<AmbientMan
     `SELECT to_regclass('ambient_places.state') IS NOT NULL AS exists`,
   );
   if (!exists.exists) return null;
+  const store = await featureStore(sql);
   const [row] = await sql.unsafe<{ manifest: AmbientManifest; enabled: boolean }[]>(
-    `SELECT g.manifest,s.enabled FROM ambient_places.state s JOIN ambient_places.generations g ON g.id=s.active WHERE s.singleton=1`,
+    `SELECT g.manifest,s.enabled FROM ambient_places.state s JOIN ambient_places.generations g ON g.id=s.active WHERE s.singleton=1 ${store.published}`,
   );
   if (!row) return null;
   return { ...row.manifest, enabled: row.enabled && freshPublication(row.manifest) };
@@ -58,9 +68,10 @@ export async function readAmbientPlaceByGers(
       `SELECT to_regclass('ambient_places.state') IS NOT NULL AS exists`,
     );
     if (!exists.exists) return null;
+    const store = await featureStore(tx);
     const candidates = await tx.unsafe<{ generation: string; manifest: AmbientManifest }[]>(
       `SELECT g.id AS generation,g.manifest FROM ambient_places.generations g
-       CROSS JOIN ambient_places.state s WHERE s.singleton=1
+       CROSS JOIN ambient_places.state s WHERE s.singleton=1 ${store.published}
        ORDER BY (g.id=s.active) DESC,g.published_at DESC,g.id
        LIMIT ${AMBIENT_LIMITS.generations}`,
     );
@@ -73,7 +84,7 @@ export async function readAmbientPlaceByGers(
     >(
       `SELECT generation,id,gers_id,name,name_de,name_en,category,rank,min_zoom,tenant,sources,
         ST_X(ST_Transform(ST_GeomFromEWKB(geom),4326)) AS lng,ST_Y(ST_Transform(ST_GeomFromEWKB(geom),4326)) AS lat
-        FROM ambient_places.features WHERE generation=ANY($1::UUID[]) AND gers_id=$2
+        FROM ${store.table} WHERE generation=ANY($1::UUID[]) AND gers_id=$2
         ORDER BY array_position($1::UUID[],generation),id COLLATE "C" LIMIT 1`,
       [generations, gers],
     );
@@ -95,18 +106,26 @@ export async function readAmbientTile(
       `SELECT to_regclass('ambient_places.generations') IS NOT NULL AS exists`,
     );
     if (!exists.exists) return null;
+    const store = await featureStore(tx);
     const [known] = await tx.unsafe<{ exists: boolean }[]>(
-      `SELECT EXISTS(SELECT 1 FROM ambient_places.generations WHERE id=$1) AS exists`,
+      `SELECT EXISTS(SELECT 1 FROM ambient_places.generations g WHERE id=$1 ${store.published}) AS exists`,
       [generation],
     );
     if (!known.exists) return null;
+    const worldWidth = 40075016.68557849;
+    const shift = x === 0 ? worldWidth : x === 2 ** z - 1 ? -worldWidth : 0;
     const [result] = await tx.unsafe<{ tile: Buffer }[]>(
       `
-      WITH candidates AS MATERIALIZED (
+      WITH spatial AS (
         SELECT id,gers_id,name,name_de,name_en,category,rank,min_zoom,tenant,sources,ST_GeomFromEWKB(geom) AS geom
-        FROM ambient_places.features
+        FROM ${store.table}
         WHERE generation=$1 AND min_zoom<=$2 AND ST_GeomFromEWKB(geom) && ST_TileEnvelope($2,$3,$4,margin=>64.0/4096)
-        ORDER BY rank DESC,id COLLATE "C" LIMIT ${AMBIENT_LIMITS.tileFeatures}
+        UNION ALL
+        SELECT id,gers_id,name,name_de,name_en,category,rank,min_zoom,tenant,sources,ST_Translate(ST_GeomFromEWKB(geom),-$5::FLOAT8,0) AS geom
+        FROM ${store.table}
+        WHERE $5::FLOAT8<>0 AND generation=$1 AND min_zoom<=$2 AND ST_GeomFromEWKB(geom) && ST_Translate(ST_TileEnvelope($2,$3,$4,margin=>64.0/4096),$5::FLOAT8,0)
+      ), candidates AS MATERIALIZED (
+        SELECT * FROM spatial ORDER BY rank DESC,id COLLATE "C" LIMIT ${AMBIENT_LIMITS.tileFeatures}
       ), budgeted AS (
         SELECT *, sum(octet_length(id)+coalesce(octet_length(gers_id),0)+octet_length(name)
           +coalesce(octet_length(name_de),0)+coalesce(octet_length(name_en),0)
@@ -119,7 +138,7 @@ export async function readAmbientTile(
         FROM budgeted WHERE bytes<=${AMBIENT_LIMITS.tileBytes - 1024}
         ORDER BY rank DESC,id COLLATE "C"
       ) SELECT ST_AsMVT(bounded,'ambient_places',4096,'geom') AS tile FROM bounded`,
-      [generation, z, x, y],
+      [generation, z, x, y, shift],
     );
     if (result.tile.length > AMBIENT_LIMITS.tileBytes)
       throw new Error("Ambient tile byte budget exceeded");

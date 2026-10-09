@@ -14,8 +14,10 @@ import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import {
   AMBIENT_GERMANY_REGION,
+  AMBIENT_PLANET_REGION,
   type AmbientBuildProgress,
   type AmbientManifest,
+  type AmbientPlanetCandidate,
   validateAmbientRegion,
 } from "@openmapx/core/ambient-places";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -31,15 +33,18 @@ interface AmbientStatus {
   startedAt?: string;
   finishedAt?: string;
   progress?: AmbientBuildProgress | null;
+  candidate?: AmbientPlanetCandidate | null;
 }
 
 export function AmbientPlacesMaintenance({ apiUrl }: { apiUrl: string }) {
   const toast = useAdminToast();
   const client = useQueryClient();
-  const [confirm, setConfirm] = useState(false);
+  const [confirm, setConfirm] = useState<"rollback" | "discard" | null>(null);
   const [name, setName] = useState("Aachen");
   const [bounds, setBounds] = useState([5.9, 50.65, 6.3, 50.95]);
-  const [country, setCountry] = useState(false);
+  const [coverage, setCoverage] = useState("regional");
+  const country = coverage === "germany";
+  const planet = coverage === "planet";
   const queryKey = ["admin", "ambient-places", "status"];
   async function request(action: string, body?: unknown) {
     const response = await fetch(`${apiUrl}/api/admin/ambient-places/${action}`, {
@@ -65,8 +70,12 @@ export function AmbientPlacesMaintenance({ apiUrl }: { apiUrl: string }) {
     mutationFn: ({ action, body }: { action: string; body: unknown }) =>
       request(action, action === "build" ? validateAmbientRegion(body) : body),
     onSuccess: (_result, variables) => {
-      toast(variables.action === "build" ? "Publication queued" : "Publication updated");
-      setConfirm(false);
+      toast(
+        ["build", "resume"].includes(variables.action)
+          ? "Publication queued"
+          : "Publication updated",
+      );
+      setConfirm(null);
       void client.invalidateQueries({ queryKey });
     },
     onError: (error: Error) => toast(error.message, "error"),
@@ -80,8 +89,8 @@ export function AmbientPlacesMaintenance({ apiUrl }: { apiUrl: string }) {
         <Box>
           <Typography variant="h6">Nearby places on the map</Typography>
           <Typography variant="body2" color="text.secondary">
-            Publish Germany or a custom region from the existing OSM search index and optional
-            Overture snapshot. Failed builds keep the last good map.
+            Publish planet, Germany or a custom region from the existing OSM search index and
+            optional Overture snapshot. Failed builds keep the last good map.
           </Typography>
         </Box>
         {(query.isLoading || busy) && <LinearProgress />}
@@ -101,6 +110,14 @@ export function AmbientPlacesMaintenance({ apiUrl }: { apiUrl: string }) {
             active until publication succeeds.
           </Alert>
         )}
+        {status?.candidate && !status.building && (
+          <Alert severity="warning">
+            Interrupted planet candidate · {status.candidate.checkpoint.processed.toLocaleString()}{" "}
+            source rows processed · {status.candidate.checkpoint.placeCount.toLocaleString()} staged
+            places. Resume with the same sources and policy, or discard and rebuild. The active map
+            remains unchanged.
+          </Alert>
+        )}
         <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap" }}>
           <Chip label={active ? `${active.placeCount.toLocaleString()} places` : "Not published"} />
           <Chip
@@ -112,7 +129,11 @@ export function AmbientPlacesMaintenance({ apiUrl }: { apiUrl: string }) {
           {active && (
             <Chip
               label={
-                active.region.coverage === "germany" ? "Germany coverage" : "Regional coverage"
+                active.region.coverage === "planet"
+                  ? "Planet coverage"
+                  : active.region.coverage === "germany"
+                    ? "Germany coverage"
+                    : "Regional coverage"
               }
             />
           )}
@@ -149,8 +170,8 @@ export function AmbientPlacesMaintenance({ apiUrl }: { apiUrl: string }) {
         <RadioGroup
           row
           aria-label="Coverage"
-          value={country ? "germany" : "regional"}
-          onChange={(event) => setCountry(event.target.value === "germany")}
+          value={coverage}
+          onChange={(event) => setCoverage(event.target.value)}
         >
           <FormControlLabel
             value="regional"
@@ -159,8 +180,16 @@ export function AmbientPlacesMaintenance({ apiUrl }: { apiUrl: string }) {
             disabled={busy}
           />
           <FormControlLabel value="germany" control={<Radio />} label="Germany" disabled={busy} />
+          <FormControlLabel value="planet" control={<Radio />} label="Planet" disabled={busy} />
         </RadioGroup>
-        {country ? (
+        {planet ? (
+          <Alert severity="info">
+            Prepare the full planet OSM snapshot with source format 2 and matching planet Overture
+            conflation first. Planet publication saves bounded checkpoints and can resume after
+            interruption. Size source preparation, database disk/WAL, retained generations and
+            serving capacity for your deployment before starting. The active map stays available.
+          </Alert>
+        ) : country ? (
           <Alert severity="info">
             Prepare the complete europe/germany OSM search snapshot and, when used, the Germany
             Overture snapshot with completed conflation first. Germany publication checks disk space
@@ -193,24 +222,34 @@ export function AmbientPlacesMaintenance({ apiUrl }: { apiUrl: string }) {
           </Stack>
         )}
         <Typography variant="caption" color="text.secondary">
-          {country
-            ? "Germany preset: installed source coverage within the rollout envelope."
-            : "Custom region: maximum 0.5° × 0.5°, 100,000 places."}{" "}
+          {planet
+            ? "Planet preset: installed source coverage within Web Mercator bounds."
+            : country
+              ? "Germany preset: installed source coverage within the rollout envelope."
+              : "Custom region: maximum 0.5° × 0.5°, 100,000 places."}{" "}
           Sources must be ready and no older than 90 days; Overture requires completed conflation.
           Eight generations are retained with a seven-day tile cache lease.
         </Typography>
         <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap" }}>
           <Button
             variant="contained"
-            disabled={busy}
+            disabled={busy || Boolean(status?.candidate)}
             onClick={() =>
               operation.mutate({
                 action: "build",
-                body: country ? AMBIENT_GERMANY_REGION : { name, bounds },
+                body: planet
+                  ? AMBIENT_PLANET_REGION
+                  : country
+                    ? AMBIENT_GERMANY_REGION
+                    : { name, bounds },
               })
             }
           >
-            {country ? "Publish Germany snapshot" : "Publish map snapshot"}
+            {planet
+              ? "Publish planet snapshot"
+              : country
+                ? "Publish Germany snapshot"
+                : "Publish map snapshot"}
           </Button>
           <Button
             disabled={busy || !active}
@@ -220,22 +259,53 @@ export function AmbientPlacesMaintenance({ apiUrl }: { apiUrl: string }) {
           >
             {active?.enabled ? "Disable" : "Enable"}
           </Button>
-          <Button disabled={busy || !status?.previous} onClick={() => setConfirm(true)}>
+          <Button disabled={busy || !status?.previous} onClick={() => setConfirm("rollback")}>
             Roll back
           </Button>
+          {status?.candidate && (
+            <>
+              <Button
+                disabled={busy}
+                onClick={() =>
+                  operation.mutate({
+                    action: "resume",
+                    body: { generation: status.candidate!.generation },
+                  })
+                }
+              >
+                Resume planet build
+              </Button>
+              <Button disabled={busy} onClick={() => setConfirm("discard")}>
+                Discard candidate
+              </Button>
+            </>
+          )}
           <Button disabled={busy} onClick={() => void client.invalidateQueries({ queryKey })}>
             Refresh
           </Button>
         </Stack>
       </Stack>
       <ConfirmDialog
-        open={confirm}
-        title="Roll back nearby places?"
-        message="The map will use the previous generation. Cached tiles remain available."
-        confirmLabel="Roll back"
+        open={confirm !== null}
+        title={
+          confirm === "discard"
+            ? "Discard unpublished planet candidate?"
+            : "Roll back nearby places?"
+        }
+        message={
+          confirm === "discard"
+            ? "The saved candidate and its progress will be removed. The active map and cached tiles remain available."
+            : "The map will use the previous generation. Cached tiles remain available."
+        }
+        confirmLabel={confirm === "discard" ? "Discard" : "Roll back"}
         loading={operation.isPending}
-        onConfirm={() => operation.mutate({ action: "rollback", body: {} })}
-        onCancel={() => setConfirm(false)}
+        onConfirm={() =>
+          operation.mutate({
+            action: confirm === "discard" ? "discard" : "rollback",
+            body: confirm === "discard" ? { generation: status?.candidate?.generation } : {},
+          })
+        }
+        onCancel={() => setConfirm(null)}
       />
     </Paper>
   );

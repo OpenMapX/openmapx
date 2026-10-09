@@ -117,6 +117,60 @@ describe("ambient HTTP budgets", () => {
     expect(read).toHaveBeenCalledTimes(9);
     await app.close();
   });
+  it("accepts planet and protects validated resume/discard actions", async () => {
+    session.role = "admin";
+    const proxy = vi.fn(
+      async () => new Response(JSON.stringify({ accepted: true }), { status: 202 }),
+    );
+    vi.stubGlobal("fetch", proxy);
+    const app = Fastify();
+    await app.register(ambientPlacesRoute, {});
+    expect(
+      (
+        await app.inject({
+          method: "POST",
+          url: "/admin/ambient-places/build",
+          payload: {
+            name: "Planet",
+            coverage: "planet",
+            bounds: [-180, -85.051129, 180, 85.051129],
+          },
+        })
+      ).statusCode,
+    ).toBe(202);
+    for (const action of ["resume", "discard"]) {
+      expect(
+        (
+          await app.inject({
+            method: "POST",
+            url: `/admin/ambient-places/${action}`,
+            payload: { generation: "invalid" },
+          })
+        ).statusCode,
+      ).toBe(400);
+      expect(
+        (
+          await app.inject({
+            method: "POST",
+            url: `/admin/ambient-places/${action}`,
+            payload: { generation },
+          })
+        ).statusCode,
+      ).toBe(202);
+    }
+    expect(proxy).toHaveBeenCalledTimes(3);
+    session.role = "user";
+    expect(
+      (
+        await app.inject({
+          method: "POST",
+          url: "/admin/ambient-places/resume",
+          payload: { generation },
+        })
+      ).statusCode,
+    ).toBe(403);
+    await app.close();
+  });
   it("accepts the Germany preset and rejects country flags with custom bounds", async () => {
     session.role = "admin";
     vi.stubGlobal(

@@ -62,6 +62,17 @@ export interface AmbientBuildProgress {
   batches: number;
   placeCount: number;
 }
+/** Operator-only durable global candidate; never included in public discovery. */
+export interface AmbientPlanetCandidate {
+  generation: string;
+  status: "running" | "failed" | "completed";
+  checkpoint: AmbientBuildProgress;
+  error: string | null;
+  startedAt: string;
+  updatedAt: string;
+}
+export const AMBIENT_GENERATION_PATTERN =
+  "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$";
 export interface AmbientOsmRow {
   osm_type: string;
   osm_id: string;

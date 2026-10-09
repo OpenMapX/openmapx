@@ -24,6 +24,62 @@ function view() {
   );
 }
 describe("ambient operator workflow", () => {
+  it("publishes the fixed planet preset and can resume an interrupted candidate", async () => {
+    const generation = "11111111-1111-4111-8111-111111111111";
+    const fetch = vi.fn(async (_url: unknown, initValue?: unknown) => ({
+      ok: true,
+      json: async () =>
+        (initValue as RequestInit | undefined)?.method
+          ? { accepted: true }
+          : { active: null, previous: null, building: false, lastError: null },
+    }));
+    vi.stubGlobal("fetch", fetch);
+    view();
+    fireEvent.click(await screen.findByRole("radio", { name: "Planet" }));
+    fireEvent.click(screen.getByRole("button", { name: "Publish planet snapshot" }));
+    await waitFor(() =>
+      expect(fetch).toHaveBeenCalledWith(
+        "http://fixture/api/admin/ambient-places/build",
+        expect.objectContaining({
+          body: JSON.stringify({
+            name: "Planet",
+            bounds: [-180, -85.051129, 180, 85.051129],
+            coverage: "planet",
+          }),
+        }),
+      ),
+    );
+    cleanup();
+    fetch.mockImplementation(async (_url, initValue) => ({
+      ok: true,
+      json: async () =>
+        (initValue as RequestInit | undefined)?.method
+          ? { accepted: true }
+          : {
+              active: null,
+              previous: null,
+              building: false,
+              lastError: "Interrupted",
+              candidate: {
+                generation,
+                status: "failed",
+                checkpoint: { phase: "osm", processed: 2000, batches: 1, placeCount: 1999 },
+              },
+            },
+    }));
+    view();
+    fireEvent.click(await screen.findByRole("button", { name: "Resume planet build" }));
+    await waitFor(() =>
+      expect(fetch).toHaveBeenCalledWith(
+        "http://fixture/api/admin/ambient-places/resume",
+        expect.objectContaining({ body: JSON.stringify({ generation }) }),
+      ),
+    );
+    expect(screen.getByRole("button", { name: "Publish map snapshot" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Discard candidate" }));
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog).toHaveTextContent("Discard unpublished planet candidate?");
+  });
   it("publishes the fixed Germany preset and keeps staged progress separate from active coverage", async () => {
     const fetch = vi.fn(async (_url: unknown, initValue?: unknown) => ({
       ok: true,

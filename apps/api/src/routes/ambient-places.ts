@@ -1,5 +1,6 @@
 import { readBoundedResponseText } from "@openmapx/core";
 import {
+  AMBIENT_GENERATION_PATTERN,
   AMBIENT_LIMITS,
   type AmbientManifest,
   validateAmbientRegion,
@@ -122,7 +123,7 @@ export async function ambientPlacesRoute(
     admin.addHook("onRequest", async (request) => {
       request.adminSession = await requireAdmin(request);
     });
-    for (const action of ["status", "build", "enabled", "rollback"] as const) {
+    for (const action of ["status", "build", "enabled", "rollback", "resume", "discard"] as const) {
       admin.route({
         method: action === "status" ? "GET" : "POST",
         url: `/admin/ambient-places/${action}`,
@@ -135,22 +136,35 @@ export async function ambientPlacesRoute(
                   additionalProperties: false,
                   properties: {
                     name: { type: "string", minLength: 1, maxLength: 80 },
-                    coverage: { type: "string", enum: ["germany"] },
+                    coverage: { type: "string", enum: ["germany", "planet"] },
                     bounds: { type: "array", minItems: 4, maxItems: 4, items: { type: "number" } },
                   },
                 },
               }
-            : action === "enabled"
+            : action === "resume" || action === "discard"
               ? {
                   body: {
                     type: "object",
-                    required: ["enabled"],
+                    required: ["generation"],
                     additionalProperties: false,
-                    properties: { enabled: { type: "boolean" } },
+                    properties: {
+                      generation: { type: "string", pattern: AMBIENT_GENERATION_PATTERN },
+                    },
                   },
                 }
-              : undefined,
-        preHandler: action === "build" ? systemMaintenanceLimit.preHandler() : undefined,
+              : action === "enabled"
+                ? {
+                    body: {
+                      type: "object",
+                      required: ["enabled"],
+                      additionalProperties: false,
+                      properties: { enabled: { type: "boolean" } },
+                    },
+                  }
+                : undefined,
+        preHandler: ["build", "resume", "discard"].includes(action)
+          ? systemMaintenanceLimit.preHandler()
+          : undefined,
         handler: async (request, reply) => {
           reply.header("Cache-Control", "no-store");
           if (action === "build")
