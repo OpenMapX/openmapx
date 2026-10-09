@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { resolve } from "node:path";
 import { usePlaceStore } from "@openmapx/core";
@@ -8,7 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const webRequire = createRequire(resolve(process.cwd(), "apps/web/package.json"));
 const rendererRequire = createRequire(webRequire.resolve("maplibre-gl/package.json"));
 const { createExpression, latest } = rendererRequire("@maplibre/maplibre-gl-style-spec") as {
-  latest: { layout_symbol: Record<string, unknown> };
+  latest: { layout_symbol: Record<string, unknown>; paint_symbol: Record<string, unknown> };
   createExpression: (
     value: unknown,
     rootKey: string,
@@ -19,6 +20,9 @@ const { createExpression, latest } = rendererRequire("@maplibre/maplibre-gl-styl
       evaluate: (
         globals: { zoom: number },
         feature: { type: string; properties: Record<string, unknown>; geometry: never[] },
+        state?: unknown,
+        canonical?: unknown,
+        images?: string[],
       ) => unknown;
     };
   };
@@ -26,6 +30,7 @@ const { createExpression, latest } = rendererRequire("@maplibre/maplibre-gl-styl
 
 const test = vi.hoisted(() => ({
   group: null as unknown,
+  styleVersion: 0,
   attribution: vi.fn(),
   map: {
     getLayer: vi.fn(() => true),
@@ -47,7 +52,7 @@ const test = vi.hoisted(() => ({
 }));
 vi.mock("@/integration-api/map/MapContext", () => {
   const context = { mapRef: { current: test.map }, mapReady: true, styleVersion: 0 };
-  return { useMap: () => context };
+  return { useMap: () => ({ ...context, styleVersion: test.styleVersion }) };
 });
 vi.mock("@/integration-api/map/useMapLayerGroup", () => ({
   useMapLayerGroup: (group: unknown) => {
@@ -95,6 +100,7 @@ beforeEach(() => {
     loading: false,
   });
   test.group = null;
+  test.styleVersion = 0;
   vi.clearAllMocks();
   test.map.querySourceFeatures.mockReturnValue([]);
   test.map.queryRenderedFeatures.mockReturnValue([]);
@@ -106,6 +112,139 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 describe("ambient generation lifecycle", () => {
+  it.each(["openmapx-streets.json", "openmapx-dark.json"])(
+    "uses the active %s POI badges, typography and category colors without uncoupled dots",
+    async (file) => {
+      const style = JSON.parse(
+        readFileSync(resolve(process.cwd(), "apps/web/public/styles", file), "utf8"),
+      );
+      const images = Object.keys(
+        JSON.parse(
+          readFileSync(resolve(process.cwd(), "apps/web/public/styles/sprite.json"), "utf8"),
+        ),
+      );
+      const original = JSON.stringify(style);
+      test.map.getStyle.mockReturnValue(style);
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async () => ({ ok: true, json: async () => ({ manifest }) })),
+      );
+      render(<AmbientPlacesLayer />);
+      await waitFor(() => expect(test.group).not.toBeNull());
+      const descriptor = test.group as {
+        layers: {
+          id: string;
+          type: string;
+          layout: Record<string, unknown>;
+          paint: Record<string, unknown>;
+          filter: unknown;
+        }[];
+      };
+      expect(descriptor.layers.every((layer) => layer.type === "symbol")).toBe(true);
+      const ordinary = descriptor.layers.find((layer) => layer.id === "ambient-places-labels");
+      const landmark = descriptor.layers.find((layer) => layer.id === "ambient-places-landmarks");
+      if (!ordinary || !landmark) throw new Error("Expected both ambient symbol partitions");
+      const native = style.layers.find((layer: { id: string }) => layer.id === "poi-level-1");
+      const nativeLandmark = style.layers.find(
+        (layer: { id: string }) => layer.id === "poi-landmark",
+      );
+      for (const [layer, template] of [
+        [ordinary, native],
+        [landmark, nativeLandmark],
+      ]) {
+        expect(layer.layout["text-font"]).toEqual(template.layout["text-font"]);
+        expect(layer.layout["text-size"]).toEqual(template.layout["text-size"]);
+        expect(layer.layout["text-max-width"]).toEqual(
+          layer === landmark ? 6 : template.layout["text-max-width"],
+        );
+        expect(layer.paint["text-halo-color"]).toEqual(template.paint["text-halo-color"]);
+        expect(layer.paint["text-halo-width"]).toEqual(template.paint["text-halo-width"]);
+        expect(layer.layout["icon-allow-overlap"]).toBe(false);
+        expect(layer.layout["text-optional"]).toBe(false);
+        expect(layer.layout["icon-optional"]).toBe(layer === landmark);
+      }
+      const evaluate = (
+        value: unknown,
+        key: string,
+        properties: Record<string, unknown>,
+        paint = false,
+      ) => {
+        const expression = createExpression(
+          value,
+          key,
+          (paint ? latest.paint_symbol : latest.layout_symbol)[key],
+        );
+        expect(expression.result, JSON.stringify(expression.value)).toBe("success");
+        return expression.value.evaluate(
+          { zoom: 16 },
+          { type: "Point", properties, geometry: [] },
+          undefined,
+          undefined,
+          images,
+        );
+      };
+      for (const [category, poiClass, subclass] of [
+        ["cafe", "cafe", "cafe"],
+        ["doctor", "doctors", "doctor"],
+        ["supermarket", "grocery", "supermarket"],
+        ["townhall", "town_hall", "townhall"],
+        ["station", "railway", "station"],
+        ["gallery", "art_gallery", "gallery"],
+        ["florist", "shop", "florist"],
+        ["place_of_worship", "place_of_worship", "place_of_worship"],
+        ["unmapped", "unmapped", "unmapped"],
+      ]) {
+        expect(evaluate(ordinary.layout["icon-image"], "icon-image", { category })).toEqual(
+          evaluate(native.layout["icon-image"], "icon-image", { class: poiClass, subclass }),
+        );
+        expect(evaluate(ordinary.paint["text-color"], "text-color", { category }, true)).toEqual(
+          evaluate(native.paint["text-color"], "text-color", { class: poiClass, subclass }, true),
+        );
+      }
+      for (const rank of [2059, 2499, 2500, 2559, 2599, 2600, 3059]) {
+        for (const layer of [ordinary, landmark]) {
+          const filter = [...test.map.setFilter.mock.calls]
+            .reverse()
+            .find(([id]) => id === layer.id)?.[1];
+          const expression = createExpression(filter, `layers.${layer.id}.filter`, {
+            type: "boolean",
+          });
+          expect(expression.result).toBe("success");
+          const matches = expression.value.evaluate(
+            { zoom: 16 },
+            { type: "Point", properties: { rank, min_zoom: 16, id: "osm:node/123" }, geometry: [] },
+          );
+          expect(matches).toBe(
+            layer === landmark ? rank >= 2500 && rank < 2600 : rank < 2500 || rank >= 2600,
+          );
+        }
+      }
+      const offsets = evaluate(
+        ordinary.layout["text-variable-anchor-offset"],
+        "text-variable-anchor-offset",
+        { rank: 2059 },
+      ) as { values: unknown[] };
+      expect(offsets.values).toEqual(["top", [0, 1.05]]);
+      expect(JSON.stringify(style)).toBe(original);
+    },
+  );
+  it("refreshes cartography when the basemap style changes without a theme render", async () => {
+    const style = (file: string) =>
+      JSON.parse(readFileSync(resolve(process.cwd(), "apps/web/public/styles", file), "utf8"));
+    test.map.getStyle.mockReturnValue(style("openmapx-streets.json"));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({ ok: true, json: async () => ({ manifest }) })),
+    );
+    const view = render(<AmbientPlacesLayer />);
+    await waitFor(() => expect(test.group).not.toBeNull());
+    const light = JSON.stringify(test.group);
+    test.map.getStyle.mockReturnValue(style("openmapx-dark.json"));
+    test.styleVersion = 1;
+    view.rerender(<AmbientPlacesLayer />);
+    expect(JSON.stringify(test.group)).not.toBe(light);
+    expect(JSON.stringify(test.group)).toContain("rgba(11, 15, 20, 0.85)");
+  });
   it("keeps supplied ambient translations after production styledata localization", async () => {
     vi.stubGlobal(
       "fetch",
@@ -114,7 +253,7 @@ describe("ambient generation lifecycle", () => {
     render(<AmbientPlacesLayer />);
     await waitFor(() => expect(test.group).not.toBeNull());
     const descriptor = test.group as {
-      layers: { type: string; layout?: Record<string, unknown> }[];
+      layers: { id: string; type: string; layout?: Record<string, unknown> }[];
     };
     let textField = descriptor.layers.find((layer) => layer.type === "symbol")?.layout?.[
       "text-field"
@@ -162,7 +301,7 @@ describe("ambient generation lifecycle", () => {
     async (owner) => {
       const ambient = {
         type: "Feature",
-        layer: { id: "ambient-places-points" },
+        layer: { id: "ambient-places-labels" },
         geometry: { type: "Point", coordinates: [6.08, 50.77] },
         properties: {
           id: "osm:node/1",
@@ -225,10 +364,10 @@ describe("ambient generation lifecycle", () => {
     expect(JSON.stringify(test.group)).toContain(manifest.generation);
     expect(JSON.stringify(test.group)).toContain('"maxzoom":18');
     const descriptor = test.group as {
-      layers: { type: string; layout?: Record<string, unknown> }[];
+      layers: { id: string; type: string; layout?: Record<string, unknown> }[];
     };
     const expression = createExpression(
-      descriptor.layers.find((layer) => layer.type === "symbol")?.layout?.[
+      descriptor.layers.find((layer) => layer.id === "ambient-places-landmarks")?.layout?.[
         "text-variable-anchor-offset"
       ],
       "layers.ambient-places-labels.layout.text-variable-anchor-offset",
@@ -243,10 +382,9 @@ describe("ambient generation lifecycle", () => {
           { type: "Point", properties: { rank }, geometry: [] },
         ) as { values: unknown[] }
       ).values;
-    // The dense-city placement budget is six candidates for landmarks.
+    // Landmarks use a separate symbol partition with six candidate positions.
     expect(positions(2559)).toHaveLength(12);
-    expect(positions(2059)).toHaveLength(2);
-    expect(positions(3059)).toHaveLength(2);
+
     expect(test.attribution).toHaveBeenLastCalledWith("overlay-ambient-places", [
       "osm-ambient-places",
     ]);
@@ -327,7 +465,7 @@ describe("ambient generation lifecycle", () => {
       ) as Record<string, (event?: unknown) => void>;
     test.map.queryRenderedFeatures.mockImplementation((...args: unknown[]) => {
       const options = args[1] as { layers?: string[] } | undefined;
-      return options?.layers?.includes("ambient-places-points") ? [feature] : [];
+      return options?.layers?.includes("ambient-places-labels") ? [feature] : [];
     });
     act(() => handlers().click({ point: { x: 1, y: 2 } }));
     expect(usePlaceStore.getState().selectedPlace).toMatchObject({

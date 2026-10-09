@@ -226,5 +226,11 @@ because their names are similar.
 See [regional publication and measured budgets](ambient-places-publication.md)
 and its aggregate JSON for source hashes, fixed settings, camera outcomes,
 read/fallback/rollback evidence and desktop/Safari simulator frame samples.
+The October 9 cartographic correction borrows the active basemap's POI badges,
+category colors, typography and halos, replacing the separate teal dot/label
+renderer. Ordinary names sit below their badges; landmark names use compact
+wrapping and may remain when only the badge collides. Icons and text retain
+normal collision checks. The new matrix, runtime and screenshots are recorded
+separately under `visualCartographyFollowup` in the aggregate artifact.
 Before/after screenshots are PR attachments outside git. Simulated Safari results
 must not be presented as physical-device battery, thermal or fleet certification.

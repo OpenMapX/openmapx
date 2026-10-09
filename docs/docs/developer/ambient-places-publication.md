@@ -146,6 +146,24 @@ contributors' license/copyright notices. It does not infer a single license for
 the conflated dataset. Tiles are rendered locally; there are no request-time calls
 to Overture or its contributors.
 
+## Cartographic integration
+
+Ambient destinations borrow their category badges, label colors, fonts, sizes and
+halos from the active basemap's POI layers. The owned light/dark styles therefore
+share the same sprite assets and visual vocabulary; hosted styles keep their own
+assets. Only the rendering adapter translates publication categories (for example
+`doctor` to `doctors` or `supermarket` to `grocery`). It does not change canonical
+IDs, ranking, source coverage or the published tile schema.
+
+Ordinary destinations use one label position below the badge. Corroborated
+landmarks use the basemap's bold landmark typography, a compact six-em wrap width
+and six collision-safe candidate positions. If a landmark badge cannot fit, its
+name can still appear when text placement succeeds. An unlabelled badge is never
+shown. Neither icons nor text force overlap or ignore placement. Existing
+basemap road/transit labels retain priority, and selection/category/basemap
+identity suppression applies independently to both symbol partitions. Basemap
+style reloads refresh the borrowed cartography and suppression filters.
+
 ## Serving comparison and decision
 
 Both alternatives use the same canonical policy and MVT content:
@@ -204,7 +222,8 @@ Official references: [PostGIS MVT](https://postgis.net/docs/ST_AsMVT.html),
 [Martin configuration](https://maplibre.org/martin/config-file/), and
 [PMTiles CLI conversion/verification](https://docs.protomaps.com/pmtiles/cli).
 
-A native-browser development check at 1280 × 800 used 1,006 synthetic places
+An earlier native-browser development check of the initial dot/label renderer at
+1280 × 800 used 1,006 synthetic places
 around Aachen. At zoom 16, 908 rendered point features competed for 83 visible
 labels; MapLibre collision placement reduced the labels without reducing the
 underlying places. A short 1.8-second pan/zoom sweep with the overlay had a median
@@ -264,18 +283,17 @@ The [aggregate acceptance evidence](https://github.com/OpenMapX/openmapx/blob/ma
 source hashes, runtime/settings, measured targets, fixed camera outcomes and
 external screenshot checksums. It contains no screenshot binaries or credentials.
 Selected real before/after and iOS screenshots are attached directly to PR #436.
-Final static views, images, tile reads and frame measurements use generation
+The earlier static views, images, tile reads and frame measurements use generation
 `59337707-c217-4398-966c-3c21ac8237b1`, containing the same 13,454 places and
 checksummed source. Earlier generations and measurements remain explicitly
 identified in the artifact. T3 preview handled initial static/frame QA; after
 `preview_open` explicitly reported unavailable, isolated foreground system Chrome
 completed desktop/phone-CSS frames, the static matrix and desktop/admin images.
 Native iOS screenshots and frames use Safari through the T3 device tools.
-No headless frame measurements are claimed.
-The final branch integrates newer main and Next 16.3.8 after these measurements.
-The measured feature files remain checksum-identical; clean final builds and
-integration/regression/full-suite checks verify that integration. The artifact
-retains the exact measured runtime rather than relabeling it as a deployment.
+No headless frame measurements are claimed in that run.
+The branch then integrated newer main and Next 16.3.8. Those historical captures
+retain their exact source checksums and runtime. The cartographic follow-up below
+identifies the subsequently changed renderer separately.
 
 | Regional check                           | Declared limit |   Observed |
 | ---------------------------------------- | -------------: | ---------: |
@@ -355,3 +373,32 @@ every sweep or physical device passes. An earlier forced-`jumpTo`-every-RAF stre
 workload missed mobile targets in both states; those raw samples remain external
 and are not relabeled as normal app camera behavior. Physical-device thermal/battery
 behavior and deployed network/CDN latency remain rollout checks.
+
+## October 9 cartographic correction
+
+The separate teal dots and sideways labels did not match the owned map style.
+The correction above borrows the active style's POI badges and typography instead.
+It republishes the same cropped source into disposable generation
+`d90ce37e-f37a-49ba-8143-97a18674fbd5` (13,454 places, unchanged policy 2), and
+renders the before/after styling states against that same generation and camera.
+The captures use production Next 16.3.8 and MapLibre 6.10.0. T3's native Electron
+preview supplies desktop/light/dark verification; Safari on the iPhone 18 Pro
+simulator supplies mobile screenshots and its own frame samples.
+
+The repeated 45 camera pairs at phone CSS dimensions 430 × 932 preserve every
+basemap POI identity and road-name list, with zero duplicate ambient IDs. The
+zoom-16 Neuss camera retains Quirinus-Münster, including in the native simulator
+view. An actual pointer tap on its placed name opens `osm:way/28562993` and hides
+its ambient copy. Style replacement refreshes category colors, fonts and halos.
+Before/after captures remain PR attachments outside git; their SHA-256, exact
+code hashes and all frame samples are qualified separately in
+`visualCartographyFollowup` in the aggregate artifact. Earlier dot-renderer
+measurements above remain historical evidence.
+
+Five five-second desktop sweeps per state have pooled frame-interval p95 of
+10.1/10.1 ms off/on. The initial native simulator run measured 36/34 ms and
+missed the unchanged 33.4 ms target in both states. An isolated repeat measured
+33/33 ms, with no on-state intervals above 50 ms. Across both runs the pooled
+native p95 is 34/34 ms; individual sweeps and the initial off-state slowdown
+remain in the artifact. These measurements establish a qualified local repeat,
+not a guarantee for physical devices or competing host load.

@@ -24,7 +24,7 @@ vi.mock("next-intl", () => ({ useLocale: () => "en" }));
 
 import {
   AMBIENT_LABEL_LAYER,
-  AMBIENT_POINT_LAYER,
+  AMBIENT_LANDMARK_LAYER,
   AMBIENT_SOURCE,
   AmbientPlacesLayer,
 } from "./map-layer";
@@ -85,7 +85,7 @@ describe("ambient suppression with the real group hook", () => {
     );
     expect(fake.state.counts.addLayer.get(AMBIENT_LABEL_LAYER)).toBeGreaterThan(added);
     act(() => fake.emit("idle"));
-    for (const layer of [AMBIENT_POINT_LAYER, AMBIENT_LABEL_LAYER])
+    for (const layer of [AMBIENT_LANDMARK_LAYER, AMBIENT_LABEL_LAYER])
       expect(JSON.stringify(fake.map.getFilter(layer))).toContain(place.id);
     const writes = fake.state.counts.setFilter.get(AMBIENT_LABEL_LAYER);
     act(() => {

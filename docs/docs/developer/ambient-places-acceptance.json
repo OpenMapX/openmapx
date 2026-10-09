@@ -1618,5 +1618,306 @@
   "landmarkPlacementCandidates": 6,
   "integrationBase": "78e099076",
   "integrationQualification": "Final delivery integrates origin/main at 78e099076. Recorded regional rendering/tile measurements used production assets before this sync (Next 16.3.6); the measured ambient/localization/provider/store code hashes are unchanged. Final integration is checked by clean Next 16.3.8 and API/data-manager/docs builds, types, regression/database and full suites. Captures are not a deployment or all-host-load guarantee.",
-  "finalReviewCaptureDate": "2026-10-09"
+  "finalReviewCaptureDate": "2026-10-09",
+  "visualCartographyFollowup": {
+    "date": "2026-10-09",
+    "parentRevision": "c40fb28de99447536e28ed85da8bca7f84ef03eb",
+    "scope": "Cartographic correction; same source hash and policy, fresh disposable generation, production rendering",
+    "publication": {
+      "index": {
+        "region": "europe/germany",
+        "epoch": "91ac6693-eda0-47fa-9d2e-0dffc9438b05",
+        "sourceFingerprint": "sha256:c18cc77ed3493aa186bd7659fee4a9b028fbc479c2a8a90f219a3b2d33824d75",
+        "placeCount": 14232,
+        "termCount": 16052
+      },
+      "indexedMs": 17182.270541,
+      "publishedMs": 498.3120000000017,
+      "manifest": {
+        "version": 1,
+        "policyVersion": 2,
+        "generation": "d90ce37e-f37a-49ba-8143-97a18674fbd5",
+        "publishedAt": "2026-10-09T05:17:29.475Z",
+        "region": {
+          "name": "Rhine regional acceptance",
+          "bounds": [
+            6.58,
+            50.89,
+            7.07,
+            51.31
+          ]
+        },
+        "placeCount": 13454,
+        "enabled": true,
+        "sources": {
+          "osm": {
+            "region": "europe/germany",
+            "epoch": "91ac6693-eda0-47fa-9d2e-0dffc9438b05",
+            "publishedAt": "2026-10-09T05:17:29.232Z",
+            "count": 13454
+          },
+          "overture": null
+        }
+      },
+      "landmarks": [
+        {
+          "id": "osm:way/28562993",
+          "name": "Quirinus-Münster",
+          "category": "place_of_worship",
+          "rank": 2559,
+          "min_zoom": 14,
+          "tenant": false
+        },
+        {
+          "id": "osm:way/4532022",
+          "name": "Kölner Dom",
+          "category": "place_of_worship",
+          "rank": 2559,
+          "min_zoom": 14,
+          "tenant": false
+        }
+      ]
+    },
+    "runtime": {
+      "next": "16.3.8",
+      "maplibre": "6.10.0",
+      "desktop": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) T3Code(Nightly)/0.0.46-nightly.20261008.2833 Chrome/152.0.7977.130 Electron/44.4.2 Safari/537.36",
+      "nativeSafari": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/27.0 Mobile/15E148 Safari/604.1"
+    },
+    "codeFiles": [
+      {
+        "file": "integrations/overlay-ambient-places/map-layer.tsx",
+        "sha256": "03d719ac7d367c69a506a76246205fe2cd5a778b197357d534b2532c035d0333"
+      },
+      {
+        "file": "apps/web/src/components/map/ambientPlaceStyle.ts",
+        "sha256": "4afa6ab840351260cc7eaef23b62ae5412a28dcf6943fc4a03bbf3c94c4bcdaf"
+      },
+      {
+        "file": "apps/web/src/components/map/localizeTextField.ts",
+        "sha256": "ce0cf960ad810b3b6194835e70063433de9b97cee28cdb72497c56fc036ac97a"
+      },
+      {
+        "file": "apps/web/public/styles/openmapx-streets.json",
+        "sha256": "4103b56380c9f700cdc320f48fbb9fb7b716fa5006339af80818c9761971826d"
+      },
+      {
+        "file": "apps/web/public/styles/openmapx-dark.json",
+        "sha256": "f24217e849e4256c7ced9749b1cdc0ed6feb0bd3d0e0a249ef43e66bff8acf22"
+      }
+    ],
+    "screenshotComparison": "Ambient enabled on both sides: initial teal circles versus active-basemap POI cartography; identical publication/camera/style/locale per pair. QA controls are temporary.",
+    "screenshots": [
+      {
+        "file": "before-desktop.png",
+        "sha256": "88dff8cd86b8ec0bae946dbb6ae58a4e712c337dba2443bd66e4cf33e4c28e15"
+      },
+      {
+        "file": "after-desktop.png",
+        "sha256": "7aee74f585ed17b438962a9747c01b46dfcd81bbe22d0b8404c65364a58f0cd8"
+      },
+      {
+        "file": "before-dark.png",
+        "sha256": "e10ddb8cfcb690590587f46f9512bc0a8c2d96a3b20f13bb8edc13626fdc5260"
+      },
+      {
+        "file": "after-dark.png",
+        "sha256": "22db872a54bcce9718e5a9294b47b3f752c8afe0ee33ca10a238c0d41a6f9fd4"
+      },
+      {
+        "file": "ios-before.png",
+        "sha256": "6e9937b48a125f854aee21c6f8ab8b7eabf79674acab71a8871b437f7a033bae"
+      },
+      {
+        "file": "ios-after.png",
+        "sha256": "7842bea62800eb7ca62c236f97d1422d9cbe6aec2e995aa0e5e521cbc27d7cd5"
+      }
+    ],
+    "fixedCameraViews": {
+      "pairs": 45,
+      "viewport": [
+        430,
+        932
+      ],
+      "basemapIdentityMismatches": 0,
+      "roadListMismatches": 0,
+      "duplicateAmbientIds": 0,
+      "circleLayerPresent": false,
+      "cameras": [
+        "Aachen",
+        "Berlin",
+        "Cologne",
+        "Cologne dark German",
+        "Monschau",
+        "Neuss",
+        "Neuss dark English",
+        "Rural Rhine",
+        "Zons"
+      ]
+    },
+    "interaction": {
+      "generation": "d90ce37e-f37a-49ba-8143-97a18674fbd5",
+      "realPointerTap": "osm:way/28562993",
+      "detailsSelectedCanonicalId": "osm:way/28562993",
+      "selectedAmbientCopyVisible": false,
+      "darkStyleHalo": "rgba(11, 15, 20, 0.85)",
+      "darkStyleFont": [
+        "Noto Sans Bold"
+      ],
+      "normalClickPriorityRegressions": true,
+      "realBasemapTap": "osm:way/28562993",
+      "basemapMatchedAmbientCopyVisible": false
+    },
+    "placement": {
+      "ordinaryCandidates": 1,
+      "landmarkCandidates": 6,
+      "landmarkWrapEm": 6,
+      "ordinaryIconOptional": false,
+      "landmarkIconOptional": true,
+      "textOptional": false,
+      "forcedOverlap": false
+    },
+    "frames": {
+      "method": "Five foreground 5-second easeTo sweeps per state, alternating Neuss/Cologne. No build/test jobs during measurements. T3 device stream paused and desktop WebGL page closed for native captures.",
+      "desktop1280x800": {
+        "off": {
+          "sweeps": 5,
+          "frames": 2986,
+          "pooledP95Ms": 10.1,
+          "over50Percent": 0.0,
+          "individualP95Ms": [
+            10.3,
+            10.3,
+            10.1,
+            10,
+            9.6
+          ]
+        },
+        "on": {
+          "sweeps": 5,
+          "frames": 2975,
+          "pooledP95Ms": 10.1,
+          "over50Percent": 0.0,
+          "individualP95Ms": [
+            10.1,
+            10.3,
+            10.1,
+            10,
+            9.8
+          ]
+        }
+      },
+      "iosInitial": {
+        "off": {
+          "sweeps": 5,
+          "frames": 1046,
+          "pooledP95Ms": 36,
+          "over50Percent": 1.052,
+          "individualP95Ms": [
+            32,
+            34,
+            32,
+            54,
+            32
+          ]
+        },
+        "on": {
+          "sweeps": 5,
+          "frames": 1075,
+          "pooledP95Ms": 34,
+          "over50Percent": 0.186,
+          "individualP95Ms": [
+            32,
+            35,
+            32,
+            35,
+            32
+          ]
+        }
+      },
+      "iosRepeat": {
+        "off": {
+          "sweeps": 5,
+          "frames": 1100,
+          "pooledP95Ms": 33,
+          "over50Percent": 0.273,
+          "individualP95Ms": [
+            31,
+            35,
+            31,
+            33,
+            30
+          ]
+        },
+        "on": {
+          "sweeps": 5,
+          "frames": 1082,
+          "pooledP95Ms": 33,
+          "over50Percent": 0.0,
+          "individualP95Ms": [
+            32,
+            36,
+            32,
+            34,
+            32
+          ]
+        }
+      },
+      "iosAllSamples": {
+        "off": {
+          "sweeps": 10,
+          "frames": 2146,
+          "pooledP95Ms": 34,
+          "over50Percent": 0.652,
+          "individualP95Ms": [
+            32,
+            34,
+            32,
+            54,
+            32,
+            31,
+            35,
+            31,
+            33,
+            30
+          ]
+        },
+        "on": {
+          "sweeps": 10,
+          "frames": 2157,
+          "pooledP95Ms": 34,
+          "over50Percent": 0.093,
+          "individualP95Ms": [
+            32,
+            35,
+            32,
+            35,
+            32,
+            32,
+            36,
+            32,
+            34,
+            32
+          ]
+        }
+      },
+      "qualification": "Initial native sample missed the unchanged 33.4 ms p95 target in both states. Repeat passed at 33/33 ms, on >50ms 0%. All initial/repeat samples retained; this is local simulator evidence, not physical-device certification.",
+      "p95TargetMs": 33.4
+    },
+    "rawCaptureEvidence": [
+      {
+        "file": "frames.jsonl",
+        "sha256": "313abcbce2c61ead4e94732f613f1891717b7b5a5c78674dd266b6fbf1ce5eb1"
+      },
+      {
+        "file": "matrix-final.json",
+        "sha256": "88d5dda2ea4ad732470cffab9381f87f9fe887b13bb50f1703eeb14105c2b0fd"
+      },
+      {
+        "file": "interaction-final.json",
+        "sha256": "451c6aba0778f9bb8cb110102d14ddae67efe5250277c6abfef5110546338798"
+      }
+    ],
+    "codeQualification": "A post-capture lint rationale comment preserves the tested style-version dependency; rendering behavior is unchanged."
+  }
 }
