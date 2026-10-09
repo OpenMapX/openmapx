@@ -1,14 +1,13 @@
 import {
   type OpsOperation,
   readOpsTokenFile,
+  type TrustedConfigurationPayload,
   trustedConfigurationPayloadSchema,
 } from "@openmapx/core/ops";
-import { services as coreServices } from "@openmapx/core/server";
 import { envString } from "@openmapx/core/server-env";
 import { db } from "../db";
 import { integrationConfig } from "../db/schema";
 import { getAllIntegrations } from "../integration-host";
-import { getServiceSelectionSummary } from "./admin-cli";
 import { createApiOpsClient, executeAndWait } from "./ops-client";
 import { resolveAllServiceConfigs } from "./service-config-resolver";
 import { getServiceRegistry } from "./service-registry";
@@ -62,21 +61,15 @@ function nonSecretConfig(
   );
 }
 
-export async function applyTrustedConfiguration(
-  options: ApplyTrustedConfigurationOptions,
-): Promise<{ revisionId: string }> {
-  const registry = getServiceRegistry();
-  const selectedRoots = options.selectedRoots ?? getServiceSelectionSummary(registry).selectedRoots;
-  const expanded = coreServices.expandServiceSelection(registry.list(), selectedRoots, {
-    allowMissingSelected: false,
-  });
-  if (expanded.missingIds.length > 0) throw new Error("Trusted configuration unavailable");
-  const allServices = registry.list();
-  const enabledServices = allServices.filter((service) =>
-    expanded.enabledIds.has(service.manifest.id),
-  );
+/**
+ * Everything a render needs from the database, for every registered service:
+ * a generation keeps what was saved for services that are not enabled, so
+ * enabling one later, from here or the CLI, renders it with its settings.
+ */
+export async function buildConfigurationInput(): Promise<TrustedConfigurationPayload> {
+  const services = getServiceRegistry().list();
   const serviceConfigMap = await resolveAllServiceConfigs(
-    enabledServices.map((service) => ({
+    services.map((service) => ({
       id: service.manifest.id,
       configSchema: service.manifest.configSchema,
       containerEnv: service.manifest.container.environment,
@@ -84,7 +77,7 @@ export async function applyTrustedConfiguration(
     })),
   );
   const serviceSecrets = await Promise.all(
-    enabledServices.map(async (service) => ({
+    services.map(async (service) => ({
       serviceId: service.manifest.id,
       values: await resolveServiceVaultSecretsStrict(service.manifest.id),
     })),
@@ -94,10 +87,9 @@ export async function applyTrustedConfiguration(
   const configuredById = new Map(
     configured.map((entry) => [entry.integrationId, entry.config as Record<string, unknown>]),
   );
-  const payload = trustedConfigurationPayloadSchema.parse({
+  return trustedConfigurationPayloadSchema.parse({
     domain: envString("DOMAIN", "localhost"),
-    selectedRoots,
-    serviceConfigs: enabledServices.map((service) => {
+    serviceConfigs: services.map((service) => {
       const envKeys = serviceConfigMap.envKeys.get(service.manifest.id);
       return {
         serviceId: service.manifest.id,
@@ -113,6 +105,23 @@ export async function applyTrustedConfiguration(
       ),
     })),
     serviceSecrets,
+  });
+}
+
+/**
+ * Hand the database's configuration to the ops-agent, which renders it with
+ * the operator's selection (or `selectedRoots`, which become it) and makes it
+ * the applied generation. The registry follows what was applied.
+ */
+export async function applyTrustedConfiguration(
+  options: ApplyTrustedConfigurationOptions,
+): Promise<{ revisionId: string; enabledServiceIds: string[] }> {
+  if ((options.kind === "serviceSelection.apply") !== (options.selectedRoots !== undefined)) {
+    throw new Error("Trusted configuration unavailable");
+  }
+  const payload = trustedConfigurationPayloadSchema.parse({
+    ...(await buildConfigurationInput()),
+    ...(options.selectedRoots ? { selectedRoots: options.selectedRoots } : {}),
   });
   const directory = process.env.OPS_TRUSTED_CONFIG_DIR;
   const tokenFile = process.env.OPS_AGENT_TOKEN_FILE;
@@ -141,13 +150,24 @@ export async function applyTrustedConfiguration(
     operationForRevision,
     payload,
   });
-  const result = await consumePublishedTrustedConfiguration(sealed, () =>
+  const result = (await consumePublishedTrustedConfiguration(sealed, () =>
     executeAndWait(
       createApiOpsClient(),
       sealed.operation as Extract<OpsOperation, { revisionId: string }>,
       options.operationKey,
       { signal: options.signal },
     ),
+  )) as { revisionId: string; enabledServiceIds: string[] };
+  getServiceRegistry().applyEnabledIds(new Set(result.enabledServiceIds));
+  return result;
+}
+
+/** The config schema of every loaded integration, by id. */
+export function integrationSchemas(): Map<string, Record<string, unknown>> {
+  return new Map(
+    getAllIntegrations().map((integration) => [
+      integration.id,
+      (integration.manifest.configSchema ?? {}) as Record<string, unknown>,
+    ]),
   );
-  return result as { revisionId: string };
 }

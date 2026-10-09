@@ -139,9 +139,10 @@ regenerated from the updated manifests:
 pnpm openmapx compose render
 ```
 
-This rewrites `infra/docker/docker-compose.generated.yml` and the hardlink plan
-from your current manifests and `infra/docker/.env`. The output is deterministic,
-and re-rendering when nothing changed is harmless — so when in doubt, render. The
+This applies a new configuration generation (compose file and hardlink plan)
+from your current manifests, `infra/docker/.env` and the settings saved in the
+admin panel. The output is deterministic, and re-rendering when nothing changed
+is harmless — so when in doubt, render. The
 update command in the next step also re-renders for you, so you can skip this
 as a standalone step unless you want to inspect the diff first.
 
@@ -218,7 +219,7 @@ services:
     image: $release_transitous_runner
 EOF
 
-release_compose=(docker compose -f infra/docker/docker-compose.generated.yml -f infra/docker/docker-compose.release.yml)
+release_compose=(docker compose --env-file infra/docker/.env -f infra/docker/.trusted-config-current/docker-compose.generated.yml -f infra/docker/docker-compose.release.yml)
 "${release_compose[@]}" pull app-api app-web data-manager ops-agent transitous-runner
 "${release_compose[@]}" up -d --force-recreate app-api app-web data-manager ops-agent transitous-runner
 ```

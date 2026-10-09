@@ -108,6 +108,20 @@ describe("resolveServiceConfigFromEnv", () => {
     expect(r.camelKey).toEqual({ value: "x", source: "env" });
   });
 
+  it("treats an empty env var as unset, as a `${VAR:-}` reference resolves an unset one", () => {
+    const r = resolveServiceConfigFromEnv(
+      {
+        id: "valhalla",
+        configSchema: {
+          type: "object",
+          properties: { memory: { type: "string", default: "1g" } },
+        },
+      },
+      { SERVICE_VALHALLA_MEMORY: "" },
+    );
+    expect(r).toEqual({ memory: { value: "1g", source: "default" } });
+  });
+
   it("ignores env vars that don't match any schema key", () => {
     const r = resolveServiceConfigFromEnv(
       {

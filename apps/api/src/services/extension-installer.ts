@@ -286,17 +286,11 @@ async function integrationInstalledExists(id: string): Promise<boolean> {
   return !!row;
 }
 
-// Enable/disable services for the *running* api without an api restart. The
-// app-api container always carries a baked OPENMAPX_ENABLED_SERVICES (the
-// renderer injects it — see buildAppApiServiceEnv), which puts selection in
-// "env mode" where the file can't be edited via the normal guarded path. So we
-// (a) apply the new enabled set to the in-memory registry — that's what
-// renderAndPersistCompose reads to (re)bake the env + emit the compose this
-// instant — and (b) write the selection file too, the source of truth a later
-// host-side `compose render` consumes. Both must agree; do not re-init the
-// registry from env after this (that would re-read the stale baked list).
-
-/** Re-derive and apply an enabled set from a fresh root list, persist the file. */
+/**
+ * Make `roots` the operator's selection and apply it: the ops-agent writes
+ * `service-selection.json`, which the CLI renders too, and the registry of the
+ * running API follows the applied generation without a restart.
+ */
 async function applySelectionRoots(
   roots: string[],
   allowMissing: boolean,
@@ -317,7 +311,6 @@ async function applySelectionRoots(
     operationKey,
     signal,
   });
-  registry.applyEnabledIds(expanded.enabledIds);
 }
 
 /** Add service ids to the selection. Returns the ids newly added. */
@@ -327,7 +320,7 @@ async function enableServicesInSelection(
   signal?: AbortSignal,
 ): Promise<string[]> {
   const registry = getServiceRegistry();
-  const roots = [...getServiceSelectionSummary(registry).selectedRoots];
+  const roots = [...(await getServiceSelectionSummary(registry)).selectedRoots];
   const added = serviceIds.filter((id) => !roots.includes(id));
   if (added.length === 0) return [];
   await applySelectionRoots([...roots, ...added], false, operationKey, signal);
@@ -340,7 +333,7 @@ async function disableServicesInSelection(
   signal?: AbortSignal,
 ): Promise<void> {
   const registry = getServiceRegistry();
-  const roots = getServiceSelectionSummary(registry).selectedRoots.filter(
+  const roots = (await getServiceSelectionSummary(registry)).selectedRoots.filter(
     (r) => !serviceIds.includes(r),
   );
   await applySelectionRoots(roots, true, operationKey, signal);
@@ -418,7 +411,7 @@ export async function installExtension(
 
     if (serviceComponents.length > 0) {
       const registry = getServiceRegistry();
-      ledger.selectedRootsBefore = [...getServiceSelectionSummary(registry).selectedRoots];
+      ledger.selectedRootsBefore = [...(await getServiceSelectionSummary(registry)).selectedRoots];
       ledger.touchedServiceIds = serviceComponents.map((component) => component.service);
       ledger.previouslyEnabledServiceIds = ledger.touchedServiceIds.filter(
         (serviceId) => registry.get(serviceId)?.enabled === true,

@@ -138,7 +138,7 @@ describe("resolveAllServiceConfigs", () => {
         proxyHostConfigKey: manifest.exposure.proxy.host.configKey,
       },
     ]);
-    expect(values.get("test")).toEqual({ APPLICATION_HOSTS: "maps.example.org", workers: 4 });
+    expect(values.get("test")).toEqual({ APPLICATION_HOSTS: "maps.example.org" });
     expect(envKeys.get("test") ?? []).toEqual([]);
     expect(
       coreServices.resolveProxyHost(manifest as never, {
@@ -149,12 +149,12 @@ describe("resolveAllServiceConfigs", () => {
     ).toBe("maps.example.org");
   });
 
-  it("reports no env keys when nothing comes from the environment", async () => {
+  it("carries only saved values: the render adds the defaults of the manifest it renders", async () => {
     selectLimitMock.mockResolvedValueOnce([]);
     const { values, envKeys } = await resolveAllServiceConfigs([
       { id: "test", configSchema: schema },
     ]);
-    expect(values.get("test")).toEqual({ memory_limit: "1g", workers: 4 });
+    expect(values.get("test")).toEqual({});
     expect(envKeys.get("test") ?? []).toEqual([]);
   });
 });

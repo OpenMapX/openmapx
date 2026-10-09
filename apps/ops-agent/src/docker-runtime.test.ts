@@ -20,9 +20,12 @@ describe("fixed Docker runtime adapters", () => {
   it("maps lifecycle effects to fixed Compose argv without accepting caller argv or paths", async () => {
     const calls: Array<{ file: string; args: readonly string[] }> = [];
     const runtime = createDockerRuntime({
-      composeFile: "/trusted/docker-compose.generated.yml",
-      releaseComposeFile: "/trusted/docker-compose.release.yml",
-      releaseComposeExists: () => true,
+      stack: {
+        infraDir: "/stack",
+        composePath: "/stack/.trusted-config-current/docker-compose.generated.yml",
+        composeReleasePath: "/stack/docker-compose.release.yml",
+      },
+      fileExists: () => true,
       execFile: async (file, args) => {
         calls.push({ file, args });
         return { stdout: "ok\n", stderr: "" };
@@ -39,45 +42,30 @@ describe("fixed Docker runtime adapters", () => {
       { kind: "service.recreateIsolated", serviceId: "motis" },
       context(),
     );
+    const stack = [
+      "compose",
+      "--env-file",
+      "/stack/.env",
+      "-f",
+      "/stack/.trusted-config-current/docker-compose.generated.yml",
+      "-f",
+      "/stack/docker-compose.release.yml",
+    ];
     expect(calls).toEqual([
-      {
-        file: "docker",
-        args: [
-          "compose",
-          "-f",
-          "/trusted/docker-compose.generated.yml",
-          "-f",
-          "/trusted/docker-compose.release.yml",
-          "up",
-          "-d",
-          "--force-recreate",
-          "motis",
-        ],
-      },
-      {
-        file: "docker",
-        args: [
-          "compose",
-          "-f",
-          "/trusted/docker-compose.generated.yml",
-          "-f",
-          "/trusted/docker-compose.release.yml",
-          "up",
-          "-d",
-          "--force-recreate",
-          "--no-deps",
-          "motis",
-        ],
-      },
+      { file: "docker", args: [...stack, "up", "-d", "--force-recreate", "motis"] },
+      { file: "docker", args: [...stack, "up", "-d", "--force-recreate", "--no-deps", "motis"] },
     ]);
   });
 
   it("uses fixed container identities for MOTIS effects", async () => {
     const calls: string[][] = [];
     const runtime = createDockerRuntime({
-      composeFile: "/trusted/compose.yml",
-      releaseComposeFile: "/trusted/release.yml",
-      releaseComposeExists: () => false,
+      stack: {
+        infraDir: "/trusted",
+        composePath: "/trusted/compose.yml",
+        composeReleasePath: "/trusted/release.yml",
+      },
+      fileExists: () => false,
       execFile: async (_file, args) => {
         calls.push([...args]);
         return { stdout: "", stderr: "" };
@@ -94,9 +82,12 @@ describe("fixed Docker runtime adapters", () => {
   it("owns the container and path for data-manager capacity and feed-proxy effects", async () => {
     const calls: string[][] = [];
     const runtime = createDockerRuntime({
-      composeFile: "/trusted/compose.yml",
-      releaseComposeFile: "/trusted/release.yml",
-      releaseComposeExists: () => false,
+      stack: {
+        infraDir: "/trusted",
+        composePath: "/trusted/compose.yml",
+        composeReleasePath: "/trusted/release.yml",
+      },
+      fileExists: () => false,
       execFile: async (_file, args) => {
         calls.push([...args]);
         return {
@@ -132,9 +123,12 @@ describe("fixed Docker runtime adapters", () => {
     const CHOWN_ID = `${process.getuid?.() ?? 1000}:${process.getgid?.() ?? 1000}`;
     const runtimeWith = (execFile: (file: string, args: readonly string[]) => Promise<unknown>) =>
       createDockerRuntime({
-        composeFile: "/trusted/compose.yml",
-        releaseComposeFile: "/trusted/release.yml",
-        releaseComposeExists: () => false,
+        stack: {
+          infraDir: "/trusted",
+          composePath: "/trusted/compose.yml",
+          composeReleasePath: "/trusted/release.yml",
+        },
+        fileExists: () => false,
         execFile: execFile as never,
       });
 
@@ -144,9 +138,12 @@ describe("fixed Docker runtime adapters", () => {
       const generation = "a".repeat(64);
       try {
         const runtime = createDockerRuntime({
-          composeFile: "/trusted/compose.yml",
-          releaseComposeFile: "/trusted/release.yml",
-          releaseComposeExists: () => false,
+          stack: {
+            infraDir: "/trusted",
+            composePath: "/trusted/compose.yml",
+            composeReleasePath: "/trusted/release.yml",
+          },
+          fileExists: () => false,
           trafficDataRoot: dataRoot,
           execFile: async (_file, args) => {
             calls.push([...args]);
@@ -226,9 +223,12 @@ describe("fixed Docker runtime adapters", () => {
       const calls: string[][] = [];
       try {
         const runtime = createDockerRuntime({
-          composeFile: "/trusted/compose.yml",
-          releaseComposeFile: "/trusted/release.yml",
-          releaseComposeExists: () => false,
+          stack: {
+            infraDir: "/trusted",
+            composePath: "/trusted/compose.yml",
+            composeReleasePath: "/trusted/release.yml",
+          },
+          fileExists: () => false,
           trafficDataRoot: dataRoot,
           execFile: async (_file, args) => {
             calls.push([...args]);
@@ -272,9 +272,12 @@ describe("fixed Docker runtime adapters", () => {
       const maintenanceContainer = `openmapx-valhalla-maint-${"f".repeat(16)}`;
       try {
         const runtime = createDockerRuntime({
-          composeFile: "/trusted/compose.yml",
-          releaseComposeFile: "/trusted/release.yml",
-          releaseComposeExists: () => false,
+          stack: {
+            infraDir: "/trusted",
+            composePath: "/trusted/compose.yml",
+            composeReleasePath: "/trusted/release.yml",
+          },
+          fileExists: () => false,
           trafficDataRoot: dataRoot,
           execFile: async (_file, args) => {
             if (args[0] === "inspect" && args.includes("{{.State.Running}}")) {
@@ -349,9 +352,12 @@ describe("fixed Docker runtime adapters", () => {
       const sharedDir = join(dataRoot, "valhalla", "osm-pbf");
       mkdirSync(sharedDir, { recursive: true });
       const runtime = createDockerRuntime({
-        composeFile: "/trusted/compose.yml",
-        releaseComposeFile: "/trusted/release.yml",
-        releaseComposeExists: () => false,
+        stack: {
+          infraDir: "/trusted",
+          composePath: "/trusted/compose.yml",
+          composeReleasePath: "/trusted/release.yml",
+        },
+        fileExists: () => false,
         trafficDataRoot: dataRoot,
         execFile: async (_file, args) => ({
           stdout:
@@ -418,9 +424,12 @@ describe("fixed Docker runtime adapters", () => {
 
   it("fails closed for complex typed effects that later migration slices must wire", async () => {
     const runtime = createDockerRuntime({
-      composeFile: "/trusted/compose.yml",
-      releaseComposeFile: "/trusted/release.yml",
-      releaseComposeExists: () => false,
+      stack: {
+        infraDir: "/trusted",
+        composePath: "/trusted/compose.yml",
+        composeReleasePath: "/trusted/release.yml",
+      },
+      fileExists: () => false,
       execFile: async () => ({ stdout: "", stderr: "" }),
     });
     await expect(
@@ -439,9 +448,12 @@ describe("fixed Docker runtime adapters", () => {
   it("inspects only the fixed Dawarich services and provisioning marker", async () => {
     const calls: string[][] = [];
     const runtime = createDockerRuntime({
-      composeFile: "/trusted/compose.yml",
-      releaseComposeFile: "/trusted/release.yml",
-      releaseComposeExists: () => false,
+      stack: {
+        infraDir: "/trusted",
+        composePath: "/trusted/compose.yml",
+        composeReleasePath: "/trusted/release.yml",
+      },
+      fileExists: () => false,
       execFile: async (_file, args) => {
         calls.push([...args]);
         if (args.includes("ps")) {
@@ -522,9 +534,12 @@ describe("fixed Docker runtime adapters", () => {
       return { lines: 2, truncated: false };
     });
     const runtime = createDockerRuntime({
-      composeFile: "/trusted/compose.yml",
-      releaseComposeFile: "/trusted/release.yml",
-      releaseComposeExists: () => false,
+      stack: {
+        infraDir: "/trusted",
+        composePath: "/trusted/compose.yml",
+        composeReleasePath: "/trusted/release.yml",
+      },
+      fileExists: () => false,
       execFile: async () => ({ stdout: "", stderr: "" }),
       followLogs,
     });
@@ -552,9 +567,12 @@ describe("fixed Docker runtime adapters", () => {
 
   it("bounds snapshot log lines in UTF-8 bytes and reports truncation", async () => {
     const runtime = createDockerRuntime({
-      composeFile: "/trusted/compose.yml",
-      releaseComposeFile: "/trusted/release.yml",
-      releaseComposeExists: () => false,
+      stack: {
+        infraDir: "/trusted",
+        composePath: "/trusted/compose.yml",
+        composeReleasePath: "/trusted/release.yml",
+      },
+      fileExists: () => false,
       execFile: async () => ({ stdout: `${"😀".repeat(1_500)}\nsecond\nthird\n`, stderr: "" }),
     });
     const result = await dispatchOpsOperation(

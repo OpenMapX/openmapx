@@ -840,10 +840,16 @@ export function createDefaultReleaseEffects(
     latest: join(directory, "latest.json"),
     transaction: join(directory, "transaction.json"),
   };
-  const repositoryPaths = {
-    composeOutPath: join(rootDir, "infra", "docker", "docker-compose.generated.yml"),
-    composeReleasePath: join(rootDir, "infra", "docker", "docker-compose.release.yml"),
+  const infraDir = join(rootDir, "infra", "docker");
+  const repositoryPaths: coreServices.StackPaths = {
+    infraDir,
+    composePath: coreServices.currentConfigurationFile(
+      infraDir,
+      coreServices.GENERATED_COMPOSE_FILE,
+    ),
+    composeReleasePath: join(infraDir, "docker-compose.release.yml"),
   };
+  const stackArgs = () => coreServices.stackComposeArgs(repositoryPaths, isRegularComposeFile);
   const manifestNames = () => {
     const entries = readdirSync(directory);
     if (entries.length > MAX_RELEASE_STORE_ENTRIES + 4)
@@ -1016,20 +1022,7 @@ export function createDefaultReleaseEffects(
         context,
       );
       const containerId = (
-        await runDocker(
-          [
-            "compose",
-            "-f",
-            repositoryPaths.composeOutPath,
-            ...(isRegularComposeFile(repositoryPaths.composeReleasePath)
-              ? ["-f", repositoryPaths.composeReleasePath]
-              : []),
-            "ps",
-            "-q",
-            "ops-agent",
-          ],
-          context,
-        )
+        await runDocker([...stackArgs(), "ps", "-q", "ops-agent"], context)
       ).trim();
       if (expected && /^[a-f0-9]{12,64}$/.test(containerId)) {
         const running = await inspectImageId(
@@ -1139,14 +1132,8 @@ export function createDefaultReleaseEffects(
       serviceIds: readonly string[],
       context: FixedCliOptions,
     ) => {
-      if (!existsSync(repositoryPaths.composeOutPath)) return false;
-      const composeArgs = [
-        "compose",
-        "-f",
-        repositoryPaths.composeOutPath,
-        "-f",
-        repositoryPaths.composeReleasePath,
-      ];
+      if (!existsSync(repositoryPaths.composePath)) return false;
+      const composeArgs = stackArgs();
       const images: Record<string, string> = {
         "app-api": manifest.images.api,
         "app-web": manifest.images.web,
@@ -1347,18 +1334,11 @@ export function createDefaultReleaseEffects(
       } catch {
         dockerReachable = false;
       }
-      const composeArgs = [
-        "compose",
-        "-f",
-        repositoryPaths.composeOutPath,
-        ...(isRegularComposeFile(repositoryPaths.composeReleasePath)
-          ? ["-f", repositoryPaths.composeReleasePath]
-          : []),
-      ];
+      const composeArgs = stackArgs();
       // Path existence alone is not readiness: a directory, an unreadable file,
       // or an unparseable document would all report ready and then fail every
       // later maintenance action. Validate through the Compose boundary itself.
-      let composeReady = isRegularComposeFile(repositoryPaths.composeOutPath);
+      let composeReady = isRegularComposeFile(repositoryPaths.composePath);
       if (composeReady && dockerReachable) {
         try {
           await runDocker([...composeArgs, "config", "-q"], context);

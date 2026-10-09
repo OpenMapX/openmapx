@@ -1,5 +1,3 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
 import { services as coreServices } from "@openmapx/core/server";
 import { repoPaths } from "./paths";
 
@@ -8,13 +6,16 @@ const {
   expandServiceSelection,
   normalizeServiceIds,
   parseServiceIdList,
+  readDesiredSelection,
+  readServiceSelectionFile,
   SERVICE_SELECTION_ENV,
+  writeServiceSelectionFile,
 } = coreServices;
 
 type ServiceRegistry = InstanceType<typeof coreServices.ServiceRegistry>;
 type ExpandedServiceSelection = coreServices.ExpandedServiceSelection;
 
-export const SERVICE_SELECTION_FILE = "service-selection.json";
+export const SERVICE_SELECTION_FILE = coreServices.SERVICE_SELECTION_FILE;
 
 export interface ServiceSelectionState {
   selected: string[];
@@ -32,29 +33,16 @@ interface ApplyServiceSelectionOptions {
 }
 
 export function serviceSelectionPath(rootDir?: string): string {
-  return join(repoPaths(rootDir).infraDir, SERVICE_SELECTION_FILE);
+  return coreServices.serviceSelectionPath(repoPaths(rootDir).infraDir);
 }
 
 export function readServiceSelection(rootDir?: string): ServiceSelectionState | null {
-  const path = serviceSelectionPath(rootDir);
-  if (!existsSync(path)) return null;
-
-  const raw = JSON.parse(readFileSync(path, "utf-8")) as Partial<ServiceSelectionState>;
-  if (!Array.isArray(raw.selected)) {
-    throw new Error(`Malformed service selection file at ${path}: expected "selected" array`);
-  }
-
-  return { selected: normalizeServiceIds(raw.selected) };
+  const selected = readServiceSelectionFile(repoPaths(rootDir).infraDir);
+  return selected ? { selected } : null;
 }
 
 export function writeServiceSelection(state: ServiceSelectionState, rootDir?: string): void {
-  const path = serviceSelectionPath(rootDir);
-  mkdirSync(join(path, ".."), { recursive: true });
-  writeFileSync(
-    path,
-    JSON.stringify({ selected: normalizeServiceIds(state.selected) }, null, 2),
-    "utf-8",
-  );
+  writeServiceSelectionFile(repoPaths(rootDir).infraDir, state.selected);
 }
 
 function requestedIdsFromInputs(opts: ApplyServiceSelectionOptions): {
@@ -64,18 +52,8 @@ function requestedIdsFromInputs(opts: ApplyServiceSelectionOptions): {
   if (opts.explicitIds) {
     return { source: "explicit", ids: normalizeServiceIds(opts.explicitIds) };
   }
-
-  const fromEnv = parseServiceIdList(process.env[SERVICE_SELECTION_ENV]);
-  if (fromEnv) {
-    return { source: "env", ids: fromEnv };
-  }
-
-  const fromFile = readServiceSelection(opts.rootDir);
-  if (fromFile) {
-    return { source: "file", ids: fromFile.selected };
-  }
-
-  return { source: "default", ids: [...DEFAULT_SELECTED_SERVICE_IDS] };
+  const desired = readDesiredSelection(repoPaths(opts.rootDir).infraDir);
+  return { source: desired.source, ids: desired.roots };
 }
 
 export function applyServiceSelection(

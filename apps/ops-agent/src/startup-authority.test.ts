@@ -33,10 +33,13 @@ describe("ops-agent startup authority gate", () => {
     expect(initialize).toHaveBeenCalledWith(captured);
   });
 
-  it("authorizes exactly the dependency-expanded baked/default selection before trusted state exists", async () => {
+  it("authorizes exactly the dependency-expanded operator selection before trusted state exists", async () => {
     const rootDir = join(import.meta.dirname, "..", "..", "..");
     const releaseAuthority = await services.captureReleaseServiceAuthority(rootDir);
-    const enabled = resolveBootstrapEnabledServiceIds(releaseAuthority.services, undefined);
+    const enabled = resolveBootstrapEnabledServiceIds(releaseAuthority.services, {
+      source: "default",
+      roots: [...services.DEFAULT_SELECTED_SERVICE_IDS],
+    });
     expect(enabled.has("app-api")).toBe(true);
     expect(enabled.has("redis")).toBe(true);
     expect(enabled.has("dawarich-app")).toBe(false);
@@ -67,7 +70,7 @@ describe("ops-agent startup authority gate", () => {
     ).resolves.toBeNull();
   });
 
-  it("expands the exact baked selection roots instead of manifest enabled defaults", () => {
+  it("expands the exact selection roots instead of manifest enabled defaults", () => {
     const loaded = [
       {
         manifest: {
@@ -110,8 +113,11 @@ describe("ops-agent startup authority gate", () => {
         enabled: true,
       },
     ];
-    expect(resolveBootstrapEnabledServiceIds(loaded, "selected")).toEqual(
-      new Set(["selected", "dependency"]),
-    );
+    expect(
+      resolveBootstrapEnabledServiceIds(loaded, { source: "file", roots: ["selected"] }),
+    ).toEqual(new Set(["selected", "dependency"]));
+    expect(() =>
+      resolveBootstrapEnabledServiceIds(loaded, { source: "file", roots: ["missing"] }),
+    ).toThrow("Service selection rejected");
   });
 });

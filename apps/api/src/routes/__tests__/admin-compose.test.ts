@@ -8,18 +8,16 @@ const adminA = { user: { id: "admin-a" } };
 
 vi.mock("@openmapx/core/server", () => ({
   repoPaths: () => ({ infraDir: "/trusted/infra" }),
-  services: {
-    buildAppApiServiceEnv: vi.fn(),
-    renderCompose: vi.fn(),
-  },
+  services: { renderConfiguration: vi.fn() },
 }));
-vi.mock("@openmapx/core/server-env", () => ({ envString: vi.fn() }));
 vi.mock("../../services/admin-ops", () => ({
   applyHardlinksFromPlan: (...args: unknown[]) => applyHardlinksFromPlan(...args),
   renderAndPersistCompose: (...args: unknown[]) => renderAndPersistCompose(...args),
 }));
-vi.mock("../../services/service-config-resolver", () => ({
-  resolveAllServiceConfigs: vi.fn(),
+vi.mock("../../services/desired-selection", () => ({ readDesiredSelection: vi.fn() }));
+vi.mock("../../services/trusted-config-operations", () => ({
+  buildConfigurationInput: vi.fn(),
+  integrationSchemas: vi.fn(),
 }));
 vi.mock("../../services/service-registry", () => ({ getServiceRegistry: vi.fn() }));
 vi.mock("../../utils/docker-compose", () => ({

@@ -969,9 +969,9 @@ describe("administrative release runtime", () => {
     const rootDir = temporaryRoot();
     const releaseDirectory = join(rootDir, "infra", "docker", ".ops-agent-releases");
     mkdirSync(releaseDirectory, { mode: 0o700 });
-    mkdirSync(join(rootDir, "infra", "docker"), { recursive: true });
+    mkdirSync(join(rootDir, "infra", "docker", ".trusted-config-current"), { recursive: true });
     writeFileSync(
-      join(rootDir, "infra", "docker", "docker-compose.generated.yml"),
+      join(rootDir, "infra", "docker", ".trusted-config-current", "docker-compose.generated.yml"),
       "services:{}\n",
     );
     const releaseId = "release-123";
@@ -1003,7 +1003,7 @@ describe("administrative release runtime", () => {
         calls.push([...args]);
         const joined = args.join(" ");
         if (joined.startsWith("info ")) return "28.0.0\n";
-        if (joined.includes("config")) return "";
+        if (joined.endsWith(" config -q")) return "";
         if (joined.includes("ps -q app-api")) return "a".repeat(64);
         if (joined.includes("ps -q app-web")) return "b".repeat(64);
         if (joined.includes("ps -q data-manager")) return "";
@@ -1046,8 +1046,14 @@ describe("administrative release runtime", () => {
       const rootDir = temporaryRoot();
       const releaseDirectory = join(rootDir, "infra", "docker", ".ops-agent-releases");
       mkdirSync(releaseDirectory, { mode: 0o700 });
-      mkdirSync(join(rootDir, "infra", "docker"), { recursive: true });
-      const composePath = join(rootDir, "infra", "docker", "docker-compose.generated.yml");
+      mkdirSync(join(rootDir, "infra", "docker", ".trusted-config-current"), { recursive: true });
+      const composePath = join(
+        rootDir,
+        "infra",
+        "docker",
+        ".trusted-config-current",
+        "docker-compose.generated.yml",
+      );
       if (compose === "file") writeFileSync(composePath, "services:{}\n");
       if (compose === "directory") mkdirSync(composePath);
       const releaseId = "release-123";
@@ -1083,7 +1089,7 @@ describe("administrative release runtime", () => {
       const effects = systemFixture("file", async (args) => {
         const joined = args.join(" ");
         if (joined.startsWith("info ")) return "28.0.0\n";
-        if (joined.includes("config")) return "";
+        if (joined.endsWith(" config -q")) return "";
         if (joined.includes("ps -q app-api")) throw new Error("compose ps failed");
         if (joined.includes("ps -q")) return "";
         throw new Error("missing image");
@@ -1115,7 +1121,7 @@ describe("administrative release runtime", () => {
       const effects = systemFixture("file", async (args) => {
         const joined = args.join(" ");
         if (joined.startsWith("info ")) return "28.0.0\n";
-        if (joined.includes("config")) throw new Error("invalid compose project");
+        if (joined.endsWith(" config -q")) throw new Error("invalid compose project");
         return "";
       });
 

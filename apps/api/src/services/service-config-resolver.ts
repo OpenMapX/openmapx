@@ -132,7 +132,10 @@ export async function resolveEffectiveServiceConfig(
 
 /** What the compose render needs from the config cascade, per service id. */
 export interface ResolvedServiceConfigs {
-  /** Values from defaults and the database, written into the rendered YAML. */
+  /**
+   * Values saved in the database. The render adds the schema defaults itself,
+   * from the manifests it renders.
+   */
   values: Map<string, Record<string, unknown>>;
   /**
    * Keys whose effective value comes from the host env. Their value is never
@@ -143,12 +146,10 @@ export interface ResolvedServiceConfigs {
 }
 
 /**
- * Batch version: resolve configs for many services in parallel. Used by the
- * compose-render path where we need the full map before handing control to
- * the renderer. Values sourced from defaults or the database are carried
- * verbatim (defaults are public manifest values; secrets live in the vault,
- * not here); env-sourced keys are reported out of band in `envKeys`, except
- * the proxy host key, whose env value is carried: the rendered labels route it.
+ * Batch version: resolve configs for many services in parallel, for a render.
+ * Database values are carried verbatim (secrets live in the vault, not here);
+ * env-sourced keys are reported out of band in `envKeys`, except the proxy
+ * host key, whose env value is carried: the rendered labels route it.
  */
 export async function resolveAllServiceConfigs(
   manifests: ResolveServiceConfigInput[],
@@ -160,7 +161,7 @@ export async function resolveAllServiceConfigs(
       const fromEnv: string[] = [];
       for (const [key, entry] of Object.entries(resolved)) {
         if (entry.source === "env" && key !== m.proxyHostConfigKey) fromEnv.push(key);
-        else flat[key] = entry.value;
+        else if (entry.source !== "default") flat[key] = entry.value;
       }
       return { id: m.id, flat, fromEnv };
     }),

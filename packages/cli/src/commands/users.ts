@@ -58,9 +58,7 @@ export async function execPsql(
   const result = await execa(
     "docker",
     [
-      "compose",
-      "-f",
-      paths.composeOutPath,
+      ...coreServices.stackComposeArgs(paths),
       "exec",
       "-T",
       target.serviceId,

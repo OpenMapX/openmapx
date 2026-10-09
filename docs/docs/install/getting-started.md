@@ -13,7 +13,7 @@ the data-manager some source data, and start the app — all driven by the
 
 Everything runs as Docker containers, and there is no hand-maintained compose
 file. You enable the [services](../overview/how-it-works.md) you want, render a
-`docker-compose.generated.yml` from their manifests, and bring the stack up. The
+compose file from their manifests, and bring the stack up. The
 deeper reference pages — [Managing services](./managing-services.md) and
 [Preparing data](./preparing-data.md) — go further than this walkthrough does;
 come here first, then follow those when you need the detail.
@@ -161,11 +161,14 @@ pnpm openmapx compose render
 ```
 
 This reads `infra/docker/.env` (so it picks up `DOMAIN` automatically) and
-writes two files, both gitignored:
+writes a configuration generation, gitignored, that
+`infra/docker/.trusted-config-current` points at. It holds:
 
-- `infra/docker/docker-compose.generated.yml` — the actual compose file
-- `infra/docker/docker-compose.generated.hardlinks.json` — the plan that maps
-  downloaded source files to per-service consumer paths
+- `docker-compose.generated.yml` — the actual compose file
+- `docker-compose.generated.hardlinks.json` — the plan that maps downloaded
+  source files to per-service consumer paths
+
+The admin panel applies changes the same way, so both always run the same stack.
 
 Re-render any time `.env`, the service selection, or a manifest changes — the
 output is deterministic. Many CLI commands (`services start`, `data link`,

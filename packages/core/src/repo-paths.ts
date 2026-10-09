@@ -55,7 +55,8 @@ export interface RepoPaths {
   integrationsDir: string;
   customIntegrationsDir: string;
   infraDir: string;
-  composeOutPath: string;
+  /** The applied configuration generation's compose file. */
+  composePath: string;
   composeReleasePath: string;
 }
 
@@ -68,7 +69,13 @@ export function repoPaths(start?: string): RepoPaths {
     integrationsDir: join(root, "integrations"),
     customIntegrationsDir: join(root, "custom_integrations"),
     infraDir: join(root, "infra", "docker"),
-    composeOutPath: join(root, "infra", "docker", "docker-compose.generated.yml"),
+    composePath: join(
+      root,
+      "infra",
+      "docker",
+      ".trusted-config-current",
+      "docker-compose.generated.yml",
+    ),
     composeReleasePath: join(root, "infra", "docker", "docker-compose.release.yml"),
   };
 }

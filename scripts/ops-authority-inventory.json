@@ -69,6 +69,7 @@
       "service.update",
       "serviceConfig.apply",
       "serviceSelection.apply",
+      "serviceSelection.inspect",
       "services.buildAll",
       "stack.render",
       "stack.start",
@@ -245,6 +246,12 @@
         "integrationConfig.apply",
         "vault.apply"
       ]
+    },
+    {
+      "id": "api.service-selection-read",
+      "callSiteIds": [],
+      "semanticSources": ["apps/api/src/services/desired-selection.ts#readDesiredSelection"],
+      "typedKinds": ["serviceSelection.inspect"]
     },
     {
       "id": "data-manager.fixed-docker-effects",

@@ -1,7 +1,5 @@
-import { existsSync } from "node:fs";
 import type { ServerResponse } from "node:http";
 import type { OpsOperation, OpsResultFor } from "@openmapx/core/ops";
-import { type RepoPaths, repoPaths } from "@openmapx/core/server";
 import {
   type ApiOpsClient,
   ApiOpsError,
@@ -11,15 +9,6 @@ import {
   submitOpsOperationWithRecovery,
   waitForOpsResult,
 } from "../services/ops-client.js";
-
-export function composeFileArgs(
-  paths: Pick<RepoPaths, "composeOutPath" | "composeReleasePath"> = repoPaths(),
-  fileExists: (path: string) => boolean = existsSync,
-): string[] {
-  const args = ["-f", paths.composeOutPath];
-  if (fileExists(paths.composeReleasePath)) args.push("-f", paths.composeReleasePath);
-  return args;
-}
 
 export interface PsEntry {
   service: string;

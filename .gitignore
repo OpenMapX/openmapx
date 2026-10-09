@@ -100,19 +100,16 @@ plans/
 .worktrees/
 
 # CLI generated outputs
-infra/docker/docker-compose.generated.yml
-infra/docker/docker-compose.generated.hardlinks.json
 infra/docker/docker-compose.release.yml
 infra/docker/.release-evidence/
 infra/docker/service-selection.json
-# Decrypted per-service secret files (rendered from the vault; never commit)
-infra/docker/.generated-secrets/
 infra/docker/.maintenance/
 # Service runtime-recovery journal written by apps/api on every boot
 infra/docker/.runtime-recovery/
 # Backups and ops-agent state written on the deployment host
 infra/docker/backups/
 infra/docker/.ops-agent-releases/
+# Applied configuration generations, decrypted service secrets included (never commit)
 infra/docker/.trusted-config-generations/
 infra/docker/.trusted-config-current
 infra/docker/services/transitous/api-keys.json

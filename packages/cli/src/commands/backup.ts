@@ -381,17 +381,18 @@ export async function discoverBackupableServices(
 // ─── Docker compose helpers (parameterised by paths/file for testability) ──
 
 interface ComposeContext {
-  composeFile: string;
+  /** `docker` arguments addressing the stack, up to the subcommand. */
+  composeArgs: string[];
   cwd: string;
 }
 
 function ctxFromRepo(rootDir?: string): ComposeContext {
   const paths = repoPaths(rootDir);
-  return { composeFile: paths.composeOutPath, cwd: paths.infraDir };
+  return { composeArgs: coreServices.stackComposeArgs(paths), cwd: paths.infraDir };
 }
 
 async function dockerCompose(ctx: ComposeContext, args: string[]): Promise<string> {
-  const result = await execa("docker", ["compose", "-f", ctx.composeFile, ...args], {
+  const result = await execa("docker", [...ctx.composeArgs, ...args], {
     cwd: ctx.cwd,
     reject: false,
   });
@@ -408,8 +409,8 @@ async function dockerCompose(ctx: ComposeContext, args: string[]): Promise<strin
 /**
  * Resolve the actual on-host docker volume name for a compose-declared volume.
  * Uses `docker compose config --format json` which reports `volumes.<key>.name`
- * with the project prefix applied. Falls back to `<projectname>_<key>` derived
- * from the cwd basename.
+ * with the project prefix applied. Falls back to `<project>_<key>` for the
+ * stack's pinned project.
  */
 export async function resolveVolumeNames(
   ctx: ComposeContext,
@@ -434,12 +435,8 @@ export async function resolveVolumeNames(
       }
     }
   } catch {
-    // Fall back to docker's default project-name derivation: lowercased
-    // basename of the compose-file directory with non-alphanumerics stripped.
-    const base = ctx.cwd.split(/[\\/]/).pop() ?? "openmapx";
-    const project = base.toLowerCase().replace(/[^a-z0-9_]/g, "");
     for (const declared of declaredNames) {
-      out.set(declared, `${project}_${declared}`);
+      out.set(declared, `${coreServices.STACK_PROJECT}_${declared}`);
     }
   }
   return out;
@@ -475,9 +472,7 @@ async function waitForPostgres(
     const result = await execa(
       "docker",
       [
-        "compose",
-        "-f",
-        ctx.composeFile,
+        ...ctx.composeArgs,
         "exec",
         "-T",
         serviceId,
@@ -794,9 +789,7 @@ async function pgDumpToFile(
   const sub = execa(
     "docker",
     [
-      "compose",
-      "-f",
-      ctx.composeFile,
+      ...ctx.composeArgs,
       "exec",
       "-T",
       serviceId,
@@ -1100,9 +1093,7 @@ async function listRestoredUsers(
   const result = await execa(
     "docker",
     [
-      "compose",
-      "-f",
-      ctx.composeFile,
+      ...ctx.composeArgs,
       "exec",
       "-T",
       serviceId,
@@ -1224,9 +1215,7 @@ COMMIT;
   const result = await execa(
     "docker",
     [
-      "compose",
-      "-f",
-      ctx.composeFile,
+      ...ctx.composeArgs,
       "exec",
       "-T",
       serviceId,
@@ -1514,19 +1503,7 @@ async function pgRestoreFromFile(
   // `CREATE EXTENSION` step.
   const drop = await execa(
     "docker",
-    [
-      "compose",
-      "-f",
-      ctx.composeFile,
-      "exec",
-      "-T",
-      serviceId,
-      "dropdb",
-      "-U",
-      user,
-      "--if-exists",
-      db,
-    ],
+    [...ctx.composeArgs, "exec", "-T", serviceId, "dropdb", "-U", user, "--if-exists", db],
     { cwd: ctx.cwd, reject: false },
   );
   if (drop.exitCode !== 0) {
@@ -1535,7 +1512,7 @@ async function pgRestoreFromFile(
 
   const create = await execa(
     "docker",
-    ["compose", "-f", ctx.composeFile, "exec", "-T", serviceId, "createdb", "-U", user, db],
+    [...ctx.composeArgs, "exec", "-T", serviceId, "createdb", "-U", user, db],
     { cwd: ctx.cwd, reject: false },
   );
   if (create.exitCode !== 0) {
@@ -1550,20 +1527,7 @@ async function pgRestoreFromFile(
   });
   const psql = execa(
     "docker",
-    [
-      "compose",
-      "-f",
-      ctx.composeFile,
-      "exec",
-      "-T",
-      serviceId,
-      "psql",
-      "-U",
-      user,
-      "-v",
-      "ON_ERROR_STOP=1",
-      db,
-    ],
+    [...ctx.composeArgs, "exec", "-T", serviceId, "psql", "-U", user, "-v", "ON_ERROR_STOP=1", db],
     { cwd: ctx.cwd, reject: false, input: gunzip.stdout ?? undefined },
   );
 
