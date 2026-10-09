@@ -1,3 +1,6 @@
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { type Options as ExecaOptions, type Result as ExecaResult, execa } from "execa";
 
 /**
@@ -21,10 +24,14 @@ export function duckDbSqlLiteral(value: string): string {
  * each call site's stdio/format (e.g. `-csv`, `stdio: "pipe"` vs `"inherit"`).
  */
 export async function runDuckDb(args: string[], options?: ExecaOptions): Promise<ExecaResult> {
+  let scratch: string | undefined;
   try {
+    const root = join(process.env.DATA_DIR ?? tmpdir(), "overture", "duckdb-tmp");
+    await mkdir(root, { recursive: true });
+    scratch = await mkdtemp(join(root, "run-"));
     return (await execa(
       "duckdb",
-      ["-bail", "-cmd", duckDbResourceSql(), ...args],
+      ["-bail", "-cmd", duckDbResourceSql(process.env, scratch), ...args],
       options ?? {},
     )) as ExecaResult;
   } catch (err) {
@@ -37,6 +44,8 @@ export async function runDuckDb(args: string[], options?: ExecaOptions): Promise
       parts.push(redactConnectionString(e.stdout));
     }
     throw new Error(parts.join("\n"));
+  } finally {
+    if (scratch) await rm(scratch, { recursive: true, force: true }).catch(() => undefined);
   }
 }
 
@@ -67,12 +76,15 @@ export function duckDbScriptProcessOptions(
 }
 
 /** Bound buffer-manager and spill usage. The container still needs an RSS limit. */
-export function duckDbResourceSql(environment: NodeJS.ProcessEnv = process.env): string {
+export function duckDbResourceSql(
+  environment: NodeJS.ProcessEnv = process.env,
+  tempDirectory = join(environment.DATA_DIR ?? tmpdir(), "overture", "duckdb-tmp"),
+): string {
   const setting = (name: string, fallback: number, max: number) => {
     const value = environment[name] === undefined ? fallback : Number(environment[name]);
     if (!Number.isSafeInteger(value) || value <= 0 || value > max)
       throw new Error(`${name} must be a positive bounded integer`);
     return value;
   };
-  return `SET memory_limit='${setting("OVERTURE_DUCKDB_MEMORY_MB", 2048, 1048576)}MiB'; SET threads=${setting("OVERTURE_DUCKDB_THREADS", 4, 64)}; SET max_temp_directory_size='${setting("OVERTURE_DUCKDB_TEMP_MB", 32768, 10485760)}MiB'; SET preserve_insertion_order=false;`;
+  return `SET temp_directory=${duckDbSqlLiteral(tempDirectory)}; SET memory_limit='${setting("OVERTURE_DUCKDB_MEMORY_MB", 2048, 1048576)}MiB'; SET threads=${setting("OVERTURE_DUCKDB_THREADS", 4, 64)}; SET max_temp_directory_size='${setting("OVERTURE_DUCKDB_TEMP_MB", 32768, 10485760)}MiB'; SET preserve_insertion_order=false;`;
 }

@@ -1,17 +1,17 @@
 ---
 title: Ambient place publication
-description: Bounded Germany and regional place generations, canonical identities and the MVT/PMTiles serving decision.
+description: Bounded global, Germany and regional place generations, canonical identities and the MVT/PMTiles serving decision.
 ---
 
 # Ambient place publication
 
 `overlay-ambient-places` shows destinations during ordinary map browsing. It consumes
-one published Germany or custom regional generation; source ingestion remains in the existing OSM search
-index and Overture workflows. The existing OSM extractor requires an alias, code
-or generated acronym term: a source-present name-only object can therefore be
-absent from this index and layer. This coverage limit is distinct from label
-collision or ambient ranking. The initial operator form targets Aachen. Nothing
-imports planet data, calls AllThePlaces directly, or changes geocoding.
+one published planet, Germany or custom regional generation. Source ingestion remains
+in the existing OSM search index and Overture workflows. Newly built OSM snapshots
+retain allowlisted named POIs even when they have no alias/code/acronym, without
+inventing lexical terms. Coverage, policy and collision limits remain distinct.
+Global publication requires a complete format 2 planet snapshot; it is explicit
+operator work. No AllThePlaces ingestion or geocoder rewrite is introduced.
 
 ## Operator workflow and public contract
 
@@ -20,13 +20,12 @@ imports planet data, calls AllThePlaces directly, or changes geocoding.
 2. Optionally complete Overture Places ingestion and conflation for the installed
    release. An absent or empty, uninitialized Overture source permits OSM-only
    publication; populated, unfinished, mismatched or stale sources fail closed.
-3. In **Admin → Services → Data workflows → Nearby places**, select **Germany**
+3. In **Admin → Services → Data workflows → Nearby places**, select **Planet**, **Germany**
    or **Custom region**. Germany requires the ready OSM snapshot for
    `europe/germany` and, when Overture is initialized, the completed
    `europe/germany` Overture snapshot. A ready state for a smaller region is
    rejected. The Germany preset uses `[5.8,47.2,15.1,55.1]` and bounded source-ID
-   batches; custom bounds must fit Germany's rollout envelope
-   `[5.8,47.2,15.1,55.1]`, span at most 0.5 degrees in either direction and contain
+   batches; custom bounds may lie anywhere within Web Mercator, use ordered west/east coordinates, span at most 0.5 degrees in either direction and contain
    at most 100,000 OSM rows including linked boundary counterparts, and 100,000
    Overture rows. The combined result also cannot exceed
    100,000 places. Germany output is capped at 20,000,000 places.
@@ -45,7 +44,7 @@ imports planet data, calls AllThePlaces directly, or changes geocoding.
    to switch to the predecessor. Rollback can be repeated to switch back.
 
 The authenticated admin proxy routes are
-`/api/admin/ambient-places/{status,build,enabled,rollback}`. Their data-manager
+`/api/admin/ambient-places/{status,build,resume,discard,enabled,rollback}`. Their data-manager
 counterparts omit `/api/admin`. Mutations use the existing administrator guard,
 audit log and validated, bearer-authenticated data-manager connection. Public
 clients read `/api/ambient-places/manifest` (`no-store`), then
@@ -53,7 +52,7 @@ clients read `/api/ambient-places/manifest` (`no-store`), then
 valid tiles are immutable for seven days. Unknown generations return `404`.
 
 The public manifest contains only generation/policy version, publication time,
-region bounds/name, optional `coverage: "germany"`, counts and source release provenance. Source filesystem
+region bounds/name, optional `coverage: "germany"` or `"planet"`, counts and source release provenance. Source filesystem
 paths/fingerprints, contributor record IDs and raw ingest state are not exposed.
 Source publication time means local snapshot publication, not real-world
 verification of every business. The UI identifies OSM-only versus combined
@@ -112,17 +111,179 @@ fixtures to verify correctness; it does not measure a real national dataset.
 OPENMAPX_RUN_DATABASE_TESTS=1 pnpm exec vitest run --maxWorkers=1 services/data-manager/__tests__/ambient-places/germany-postgres.test.ts
 ```
 
+## Planet preparation, restart and deployment
+
+Planet publication is an explicit workload, not an API boot task. On the chosen
+preparation host, use the existing authenticated data-manager/CLI workflow in order:
+
+```bash
+pnpm openmapx data download osm planet
+pnpm openmapx data search-index build planet
+pnpm openmapx data search-index status
+pnpm openmapx data overture-sync planet
+pnpm openmapx data overture-status
+```
+
+Wait for each job to finish before the next command. Keep the same downloaded
+PBF in place throughout both source builds. The OSM snapshot must be `ready`,
+region `planet`, ambient source format **2**, current fingerprint equal to its
+published fingerprint, and have a recorded file identity. Overture must be
+region `planet`, on one validated Places release, with completed conflation
+against that exact OSM file identity. Table identities, epochs, release dates,
+conflation completion/attempt and row counts form the durable source signature.
+Same-release reconflation also invalidates an interrupted candidate. Older OSM
+snapshots need rebuilding; merely widening region bounds does not establish
+worldwide coverage. Absent/empty uninitialized Overture allows explicit OSM-only
+fallback. A populated invalid Overture snapshot fails closed.
+
+In **Admin → Services → Data workflows → Nearby places**, select **Planet**,
+then **Publish planet snapshot**. The authenticated build body is:
+
+```json
+{
+  "name": "Planet",
+  "bounds": [-180, -85.051129, 180, 85.051129],
+  "coverage": "planet"
+}
+```
+
+A dedicated single-connection client holds the ambient writer and shared source
+operation locks between short transactions. Its idle/max-lifetime expiration is
+disabled for this job; backend identity and lock ownership are checked before
+transactions. Each ordered page reads at most 2,000 source rows and inserts at
+most 500 features per statement. Feature insertion and checkpoint advancement
+commit together. The build does not retain a planet-long repeatable-read snapshot.
+Source replacement still waits for the shared locks; schedule the global build
+after preparation. Only one candidate may exist. Its detached table and metadata
+are invisible to public manifest, tile and GERS reads.
+
+After a process/database interruption, status exposes the durable candidate,
+phase, processed rows, staged count and last error. **Resume planet build**
+continues that generation only with unchanged source signature and policy.
+**Discard candidate** removes only unpublished storage, then permits a new build.
+These administrator actions are validated, audited and maintenance-rate-limited.
+Their proxy endpoints are `/api/admin/ambient-places/resume` and `/discard`, with
+body `{"generation":"<candidate UUID>"}`; data-manager counterparts omit
+`/api/admin`. Resume acknowledges admission with `202`; check status for success.
+Policy/source changes require discard and rebuild. A running status after process
+loss is an interrupted candidate when no writer owns the lock. Resume reacquires
+all admission locks. Discard cannot remove active or retained published data.
+While the writer is running, competing builds and pointer changes are refused.
+To interrupt a long build deliberately, stop or restart the data-manager through
+the existing service controls. Committed pages survive; connection closure
+releases its source/writer locks. Inspect status before resuming, discarding or
+changing discovery. There is no separate candidate-cancellation endpoint.
+
+Each planet generation owns an indexed PostgreSQL partition with projected EWKB,
+canonical ID and GERS indexes. Indexes are maintained during committed pages.
+Final validation checks durable source counts/signatures, then attaches the
+partition and switches discovery atomically with a one-second lock timeout.
+A contention failure leaves a resumable candidate and the last good map active.
+There is no planet-sized final count/index rebuild under the activation lock.
+Leased generations remain available; expired unreferenced planet partitions are
+dropped instead of cascading millions of row deletes. Active/previous generations
+and the seven-day-plus-one-minute tile lease retain their existing guarantees.
+A legacy regional/Germany installation is migrated additively, without rewriting
+its existing feature rows; its previous tile URLs remain readable. New readers
+also support the old feature table before migration. Dateline tiles query the
+opposite edge through its spatial index and shift buffered geometries into the
+requested world copy. Latitude outside Web Mercator is excluded conservatively.
+
+### Deployment scenarios
+
+| Scenario                                      | Supported setup                                                                                                                                                                      | Operational tradeoff                                                                                                                                                                                                                                     |
+| --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| One appropriately sized host                  | Existing data-manager, ops-agent, authoritative PostGIS and API; separate source/publication schedules                                                                               | Simplest operations. Preparation competes with origin reads for RAM, disk I/O and WAL; container defaults are not a planet capacity profile.                                                                                                             |
+| Dedicated preparation host and scaled origins | One data-manager with persistent `/data`, private access to the same authoritative PostGIS, and authenticated ops-agent access to that database host; multiple API origins and a CDN | Separates source-tool CPU/RAM from serving. Capacity inspection must report the actual database volume; a builder-local empty disk is not a substitute. Do not run competing builders. Source/feature SQL and WAL still consume database-host resources. |
+| Immutable object storage / PMTiles            | A possible later distribution path, not an implemented exporter here                                                                                                                 | Removes most origin SQL after export, but needs generation-aware conflated tile enumeration, archive verification, object lifecycle and range/cache configuration. Raw Overture tiles cannot replace the canonical OSM/Overture policy output.           |
+
+All implemented API origins must use the same authoritative generation database.
+This change does not route individual requests to replicas or synchronize separate
+publication databases. A deployment using physical database replication must
+route discovery and feature reads consistently to a fully replayed instance;
+never copy an active pointer ahead of its partition. Back up source metadata,
+generation partitions and state together. Recover an unfinished candidate through
+resume/discard; restore the last good complete database before advertising it.
+
+A CDN may cache **only successful** generation-specific MVT responses for their
+seven-day immutable lifetime. Keep discovery/status and errors uncached; existing
+`Cache-Control` headers express this. Forward every generation/XYZ path component
+in the cache key and preserve binary content type. Changing sources creates new
+URLs. Disable changes discovery within one minute; rollback restores a retained
+URL. Neither action can revoke a tile already held by a client/CDN. Preserve the
+API's per-origin eight pending reads, two-second SQL timeout, zooms 13–18,
+256-feature and 128-KiB budgets. Origin scaling increases aggregate database work,
+so size connection limits and monitor cache misses, timeout/429 rate and query
+latency instead of multiplying API processes without a database budget.
+
+### Resource sizing and configuration
+
+No full planet import or global-load benchmark was run on the development
+machine. Plan resources from source sizes and measured indexed generation bytes,
+not from the small fixture timings below. Keep separate budgets for:
+
+- Preparation volume: current/new planet PBFs, filtered/exported files, retained
+  Overture Parquet, file-backed node index and DuckDB spill. File-backed node
+  locations do not make osmium area/relation assembly memory-free.
+- Database volume: active sources plus next-source staging, candidate/component
+  graph workspaces, retained ambient generations plus one candidate, indexes,
+  peak WAL/temporary space, backups and free-space reserve. Exact label propagation
+  can require many disk/SQL rounds on long connected graphs.
+- Serving: ordinary bounded viewport reads, database buffer-cache working set,
+  unique geographic cache misses, network egress and CDN cache hit rate. Global
+  coverage expands storage/cache footprint; each request keeps the same limits.
+
+Measure `pg_total_relation_size` for a representative indexed generation. If its
+measured size is `G`, provision retained ambient storage at least `R × G + G`
+for `R` retained published generations and one candidate, plus all other database
+budgets above. At most eight generation slots exist, including a candidate;
+leases may prevent another build. A weekly publication cadence generally retains
+fewer versions than daily builds. The conservative publisher admission allowance
+is **2 KiB per remaining raw source row**, minimum 1 GiB, plus 20 GiB reserve,
+checked before staging, every committed page and before activation. For example,
+200 million raw rows require about 381.5 GiB working allowance plus 20 GiB at the
+start; this is a guard, not an estimate of final storage or peak WAL. Other writers
+can still exhaust space after admission, in which case the candidate fails safely.
+
+| Data-manager setting                 |        Default | Meaning                                                                                                                    |
+| ------------------------------------ | -------------: | -------------------------------------------------------------------------------------------------------------------------- |
+| `AMBIENT_PLANET_MAX_PLACES`          |    `250000000` | Positive output guard; increase only after sizing the target deployment.                                                   |
+| `AMBIENT_PLANET_RESERVE_BYTES`       |  `21474836480` | Positive PostgreSQL-volume safety reserve (20 GiB).                                                                        |
+| `OVERTURE_DUCKDB_MEMORY_MB`          |         `2048` | Buffer-manager limit; total RSS can exceed it.                                                                             |
+| `OVERTURE_DUCKDB_THREADS`            |            `4` | Preparation parallelism, validated 1–64.                                                                                   |
+| `OVERTURE_DUCKDB_TEMP_MB`            |        `32768` | Maximum per-process spill (32 GiB); allocated in a unique directory under `/data/overture/duckdb-tmp`, removed after exit. |
+| `OSMIUM_PLANET_INDEX_ESTIMATE_BYTES` | `137438953472` | File-backed node-index admission allowance (128 GiB), plus 5 GiB free on the source volume; adjust for the selected PBF.   |
+
+These settings are forwarded by the data-manager service manifest and can be set
+through its existing deployment configuration. Increase the service's memory/CPU
+resource limits separately for full source preparation; its 8-GiB default is not a
+planet preparation promise. Overture pull admission additionally uses 512 bytes per
+selected STAC row as a working allowance; ingest/conflation apply their existing
+database guards. Exact assignment admits at most 512 nodes per side and 50,000 edges
+per component; dense neighborhoods are bounded too. Oversized source clusters
+fail closed and require investigation, rather than silently dropping matches.
+
+The approach follows [OSM planet distribution](https://planet.openstreetmap.org/),
+[Overture cloud sources](https://docs.overturemaps.org/getting-data/cloud-sources/),
+[osmium index types](https://docs.osmcode.org/osmium/latest/osmium-index-types.html),
+[DuckDB resource settings](https://duckdb.org/docs/current/configuration/overview),
+[PostgreSQL locking](https://www.postgresql.org/docs/current/explicit-locking.html)
+and [partitioning](https://www.postgresql.org/docs/17/ddl-partitioning.html).
+The object-storage alternative follows the
+[PMTiles deployment model](https://docs.protomaps.com/deploy/); it remains a separate
+export/distribution decision.
+
 ## Publication, retention and identity
 
 A dedicated `ambient_places` schema isolates snapshots from mutable source tables.
 The OSM index writer stores tag objects as JSONB; ambient policy also reads older
 serialized-object rows, and rejects malformed/non-object policy tags so closure
 and private-access checks cannot silently disappear.
-A repeatable-read transaction holds an advisory writer lock, reads bounded indexed
+For regional/Germany publication, a repeatable-read transaction holds an advisory writer lock, reads bounded indexed
 source candidates, applies the shared policy and writes insert batches of 500 places.
 Generation and feature insertion, count validation and the active/previous pointer
-swap commit together. Any failure rolls them all back. Concurrent writers fail
-without exposing a partial generation. There is no dependency on a background
+swap commit together. Any regional/Germany failure rolls them all back. Planet publication uses the durable batches and detached partitions described above. Concurrent writers fail
+without exposing a partial generation. There is no automatic background
 planet import or a live source-table query at map-render time.
 
 Projected points are stored as EWKB bytes with a functional GiST index on
@@ -246,7 +407,7 @@ Both alternatives use the same canonical policy and MVT content:
 | Existing Martin + PostGIS MVT | Publish immutable rows and serve a generation-specific SQL function                   | Martin cache in front of indexed PostGIS         | Existing service; direct auto-published tables/functions need explicit generation routing and budgets   |
 | Implemented API + PostGIS MVT | Same immutable PostGIS representation with validated generation/XYZ and bounded reads | Existing API cache headers and PostGIS functions | Adds SQL work for uncached reads; keeps failure/concurrency/size guards in the established API boundary |
 
-For this first online region, the API/PostGIS path avoids adding a second storage
+For the regional and global implementation, the API/PostGIS path avoids adding a second storage
 publication pipeline while preserving the same MVT representation Martin can
 serve. Directly exposing the mutable source tables would not provide immutable
 generation URLs or these limits. PMTiles is a good candidate for a later regional
@@ -546,3 +707,26 @@ accept connections, a temporary trusted QA-route helper starts the same sweeps
 after verifying the exact combined generation and current sprite; simulator URL
 opening brings Safari to the foreground. Product security policy is unchanged.
 Both the unsuccessful run and the passing qualified repeat remain in the artifact.
+
+## Global fixture acceptance: October 10, 2026
+
+The separate [global fixture artifact](./ambient-places-global-acceptance.json)
+records a synthetic 10,001-row source distributed across Tokyo, New York, Cape
+Town, Sydney and São Paulo. On local PostgreSQL 18/PostGIS 3.6, publication took
+0.508 s and one indexed generation used 2,850,816 bytes. With two retained
+generations, `EXPLAIN` prunes the other planet partition and selects an index
+for generation/spatial reads. A dense Tokyo tile contains 256 features/19,926
+bytes; twenty warm reads have p95 about 9.7 ms (individual samples in the artifact).
+These are fixture observations, not planet capacity or global latency claims.
+
+Separate real-database regressions cover committed checkpoints/resume, backend
+termination, writer/source contention, same-release source changes, count/policy/
+disk/output failures, hidden staging tile/GERS reads, leased partition retirement,
+rollback, native Japanese/bigint identities, polar exclusion and both dateline
+buffers. Component propagation crosses a 10,000-update page boundary, and dense
+assignment/neighborhood guards fail closed. A tiny actual pinned DuckDB 1.3.1/
+osmium probe verifies resource settings and file-backed Japanese-label extraction.
+Full planet preparation, peak source-tool memory/WAL, realistic cold/concurrent
+traffic and production CDN/backup recovery still require deployment acceptance.
+Earlier Neuss and Germany evidence in this page remains explicitly historical
+and regional; it does not prove global source completeness or throughput.

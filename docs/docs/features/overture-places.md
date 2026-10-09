@@ -53,20 +53,28 @@ The built-in `overlay-ambient-places` integration can show named places without
 starting a category search. An administrator first builds the existing
 OSM search index; an Overture snapshot is optional, but a populated Overture
 source must have completed its link rebuild. In **Admin → Services → Data
-workflows → Nearby places**, choose **Germany** or **Custom region**. Germany
+workflows → Nearby places**, choose **Planet**, **Germany** or **Custom region**. Germany
 requires prepared `europe/germany` OSM and optional Overture snapshots; regional
 sources are rejected for a country publication. The national publisher processes
 2,000 source rows per keyset batch, checks PostGIS disk headroom and activates one
 validated country generation. The active map remains available during the build.
-The custom form
-covers Aachen (`5.9,50.65,6.3,50.95`). The box may span at most 0.5 degrees in each
+Planet requires prepared `planet` sources and the complete OSM ambient source
+format (version 2). It commits bounded pages into an indexed, unpublished
+generation and records durable checkpoints. An interrupted build can be resumed
+with the same sources and policy, or discarded without changing the active map.
+Selecting the preset does not download or prepare sources; follow the
+[global deployment runbook](../developer/ambient-places-publication.md#planet-preparation-restart-and-deployment).
+
+The custom form defaults to Aachen (`5.9,50.65,6.3,50.95`) and accepts small boxes
+anywhere within Web Mercator coverage. The box may span at most 0.5 degrees in each
 direction, with at most 100,000 input rows per source and 100,000 final places.
 Linked OSM counterparts across the boundary count toward the OSM input cap and
 retain their closure/tenant policy and authoritative location. A pair whose OSM
 location is outside the box is omitted. Coverage follows the installed snapshot
-inside Germany's rollout envelope, with no political-border clipping or planet
-import. The OSM search index's existing alias/code/acronym selection still limits
-which named OSM objects are available to this layer.
+without political-border clipping. Format 2 retains all named objects in the
+existing OSM POI category allowlist, including those without aliases, codes or
+acronyms. It does not add lexical search terms for those objects. Rebuild an older
+OSM index to obtain that coverage; older regional generations remain readable.
 
 Named essential destinations start at zoom 13, everyday businesses at 15 and
 other places at 16. Non-ground OSM tenants wait until 18. Explicitly closed,
@@ -80,8 +88,8 @@ Accepted OSM↔GERS links retain the OSM primary ID across tiles, search and pla
 cards, even when the OSM record is outside the ambient candidate set.
 
 The admin card reports generation, region, counts, source epoch/release,
-publication time and build errors. Country progress distinguishes processed
-source rows and staged places from the activated snapshot. Country builds hold
+publication time and build errors. Country/global progress distinguishes processed
+source rows and staged places from the activated snapshot. These builds hold
 source-operation locks until publication finishes, so schedule them after source
 preparation and budget retained versions, temporary writes and transaction logs.
 A snapshot date describes the local data
@@ -165,6 +173,9 @@ OSM-authoritative plus Overture-augmenting response is checked again before
 publication. The corpus covers cafés, restaurants, supermarkets, pharmacies,
 hotels, and fuel across urban, rural, German, and cross-border locations,
 including known upstream category mistakes and duplicates.
+Planet imports run every existing labeled regional case. Those cases do not
+establish matching quality in unrepresented parts of the world; operators must
+review representative local samples before a global rollout.
 
 After a complete ingest, fused quality check, and link publication, OpenMapX
 retains the active local release snapshot and one predecessor by default. Older
@@ -218,8 +229,10 @@ sent to Overture or its contributors at request time.
 
 `planet` is supported alongside Geofabrik extract paths. Overture selects every Places asset from one verified STAC release, with at most eight concurrent catalog requests; it does not fetch a Geofabrik polygon for the world. OSM uses the existing planet PBF download. Prepare matching `planet` OSM and Overture snapshots before publishing global ambient places.
 
-DuckDB defaults to 2 GiB buffer-manager memory, four threads and 32 GiB spill allowance. Set `OVERTURE_DUCKDB_MEMORY_MB`, `OVERTURE_DUCKDB_THREADS` and `OVERTURE_DUCKDB_TEMP_MB` to positive integer limits for the preparation host. Memory outside DuckDB's buffer manager still counts toward container RSS; reserve RAM and scratch storage accordingly. First planet pull admission uses selected STAC row counts at 512 bytes per row as a working allowance, not a measured final dataset size.
+DuckDB defaults to 2 GiB buffer-manager memory, four threads and 32 GiB spill allowance. Set `OVERTURE_DUCKDB_MEMORY_MB`, `OVERTURE_DUCKDB_THREADS` and `OVERTURE_DUCKDB_TEMP_MB` to positive integer limits for the preparation host. Memory outside DuckDB's buffer manager still counts toward container RSS; reserve RAM and scratch storage accordingly. Each DuckDB process spills in an isolated directory under the persistent data volume and removes it after exit. First planet pull admission uses selected STAC row counts at 512 bytes per row as a working allowance, not a measured final dataset size.
 
 Planet osmium exports use `dense_file_array` for node locations. `OSMIUM_PLANET_INDEX_ESTIMATE_BYTES` defaults to 128 GiB and admission requires that allowance plus 5 GiB free on the extraction volume. The index is removed after completion/failure. Area assembly still needs substantial RAM, and filtered PBFs need additional disk; use a properly sized preparation host.
 
 Global conflation keeps connected-component labels and propagation proposals in PostgreSQL rather than a planet-wide Node map. Candidate pages and component reads are capped at 50,000 edges, and the exact assignment solver admits at most 512 nodes per side of a component. Oversized neighborhoods or components fail with an operator-visible error while preserving published links; they are never truncated or independently matched in overlapping shards. Investigate source anomalies before retrying.
+
+Planet ambient publication uses the same validated source release and accepted links, with durable bounded checkpoints and generation-partitioned storage. See the [global deployment runbook](../developer/ambient-places-publication.md#planet-preparation-restart-and-deployment) for preparation order, exact source identity requirements, capacity and recovery.

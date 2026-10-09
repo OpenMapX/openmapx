@@ -236,6 +236,20 @@ transaction. Extraction, validation, or publication failure keeps the prior
 snapshot live. During a rebuild the existing snapshot remains searchable;
 after a new PBF the stale snapshot also remains available until replaced.
 
+### Nearby places publication
+
+The **Nearby places on the map** card publishes existing OSM/Overture sources
+for a custom region, Germany or the planet. It displays the active generation,
+source coverage/releases and eligible counts separately from staged progress.
+Global builds require a ready format 2 OSM snapshot for `planet` and, when
+Overture is initialized, a matching completed Overture snapshot; selecting a
+preset does not ingest them. Interrupted global
+candidates persist across restarts and offer **Resume planet build** or
+**Discard candidate**. Resume requires unchanged sources and policy. Disable and
+rollback preserve retained immutable tiles. See the
+[publication runbook](../developer/ambient-places-publication.md) for preparation,
+capacity, deployment scenarios and recovery.
+
 ### Notable places index
 
 The **Notable places** card shows the Wikidata index that tells search which

@@ -35,7 +35,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         [count],
       );
     }
-    it("preserves exact transitive groups across component update pages and disconnected branches", async () => {
+    it("preserves exact transitive groups across source ID order and disconnected branches", async () => {
       await edges("overture_global", 10001, true);
       await pg.sql.unsafe(`INSERT INTO overture_global.poi_conflation_candidate(osm_type,osm_id,gers_id,match_confidence,distance_m,method,evidence,release)
    VALUES('node',10001,'g10000',0.8,1,'fixture','{}','fixture'),('node',10000,'g1',0.8,1,'fixture','{}','fixture')`);
@@ -54,6 +54,17 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         `SELECT count(*)::INT AS n,count(DISTINCT gers_id)::INT AS g,count(DISTINCT osm_id)::INT AS o FROM overture_global.poi_conflation_link_next`,
       );
       expect(unique).toEqual({ n: 10001, g: 10001, o: 10001 });
+    }, 120000);
+    it("updates more than 10000 component proposals without skipping a page", async () => {
+      await edges("overture_pages", 20002, true);
+      await pg.sql.unsafe(`INSERT INTO overture_pages.poi_conflation_candidate(osm_type,osm_id,gers_id,match_confidence,distance_m,method,evidence,release)
+        SELECT 'node',i+10001,'g'||i,0.8,1,'fixture','{}','fixture' FROM generate_series(1,10001) i`);
+      const count = await module.buildConflationComponents("overture_pages");
+      expect(count).toBe(10001);
+      const [roots] = await pg.sql.unsafe(
+        `SELECT count(*)::INT AS n FROM overture_pages.poi_conflation_component a JOIN overture_pages.poi_conflation_component b ON b.osm_id=a.osm_id+10001 AND b.osm_type=a.osm_type WHERE a.osm_id<=10001 AND a.component_id=b.component_id`,
+      );
+      expect(roots.n).toBe(10001);
     }, 120000);
     it("refuses oversized connected graphs without publishing arbitrary truncated assignments", async () => {
       await edges("overture_dense", 513, false);

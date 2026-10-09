@@ -1,3 +1,4 @@
+import { writeFile } from "node:fs/promises";
 import { VectorTile } from "@mapbox/vector-tile";
 import { AMBIENT_PLANET_REGION } from "@openmapx/core/ambient-places";
 import { readAmbientPlaceByGers, readAmbientTile } from "@openmapx/core/ambient-places-server";
@@ -47,6 +48,11 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")("global ambient
       registerAmbientPlacesApi(restarted, pg.sql);
       try {
         const response = await restarted.inject("/ambient-places/status");
+        if (process.env.OPENMAPX_GLOBAL_SCREENSHOT_STATUS_PATH)
+          await writeFile(
+            process.env.OPENMAPX_GLOBAL_SCREENSHOT_STATUS_PATH,
+            JSON.stringify(response.json(), null, 2),
+          );
         expect(response.json()).toMatchObject({
           active: null,
           building: false,
@@ -81,6 +87,78 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")("global ambient
         for (const f of features) expect(f.loadGeometry()[0][0].x).toBeGreaterThanOrEqual(-64);
         expect(bytes!.length).toBeLessThanOrEqual(128 * 1024);
       }
+    } finally {
+      await pg.stop();
+    }
+  }, 120000);
+  it("prunes retained generations and bounds dense worldwide fixture tiles", async () => {
+    const pg = await startPostgis();
+    const availableBytes = async () => 1024 ** 4;
+    try {
+      await pg.sql.unsafe(
+        buildSearchIndexSchemaDDL("osm_search") + buildSearchIndexIndexesDDL("osm_search"),
+      );
+      await pg.sql.unsafe(`INSERT INTO osm_search.index_state(region,source_path,source_fingerprint,current_fingerprint,source_file_identity,epoch,status,place_count,started_at,published_at,updated_at)
+        VALUES('planet','fixture','fixture','fixture','fixture-file','world-dense','ready',10001,now(),now(),now());
+        INSERT INTO osm_search.places(osm_type,osm_id,name,lat,lng,category,tags,importance)
+        SELECT 'node',i,'世界 Fixture Hospital '||i,
+          CASE i%5 WHEN 0 THEN 35.7 WHEN 1 THEN 40.71 WHEN 2 THEN -33.92 WHEN 3 THEN -33.86 ELSE -23.55 END,
+          CASE i%5 WHEN 0 THEN 139.7 WHEN 1 THEN -74 WHEN 2 THEN 18.42 WHEN 3 THEN 151.2 ELSE -46.63 END,
+          'amenity/hospital','{}',0.8 FROM generate_series(1,10001) i`);
+      const started = performance.now();
+      const first = await buildAmbientPlaces(pg.sql, AMBIENT_PLANET_REGION, undefined, {
+        availableBytes,
+      });
+      const publicationMs = performance.now() - started;
+      const second = await buildAmbientPlaces(pg.sql, AMBIENT_PLANET_REGION, undefined, {
+        availableBytes,
+      });
+      const z = 16,
+        x = Math.floor(((139.7 + 180) / 360) * 2 ** z),
+        y = Math.floor(((1 - Math.asinh(Math.tan((35.7 * Math.PI) / 180)) / Math.PI) / 2) * 2 ** z);
+      const times: number[] = [];
+      let bytes: Buffer | null = null;
+      for (let i = 0; i < 20; i++) {
+        const t = performance.now();
+        bytes = await readAmbientTile(pg.sql, first.generation, z, x, y);
+        times.push(performance.now() - t);
+      }
+      const layer = new VectorTile(new PbfReader(bytes!)).layers.ambient_places;
+      expect(layer.length).toBe(256);
+      expect(bytes!.length).toBeLessThanOrEqual(128 * 1024);
+      const plan = await pg.sql.unsafe(
+        `EXPLAIN (FORMAT JSON) SELECT id FROM ambient_places.features_all WHERE generation=$1 AND ST_GeomFromEWKB(geom) && ST_TileEnvelope($2,$3,$4,margin=>64.0/4096)`,
+        [first.generation, z, x, y],
+      );
+      const planText = JSON.stringify(plan);
+      expect(planText).toContain(first.generation.replaceAll("-", ""));
+      expect(planText).not.toContain(second.generation.replaceAll("-", ""));
+      expect(planText).toContain("Index");
+      const [size] = await pg.sql.unsafe("SELECT pg_total_relation_size($1)::TEXT AS bytes", [
+        `ambient_places.planet_${first.generation.replaceAll("-", "")}`,
+      ]);
+      const report = {
+        fixtureOnly: true,
+        sourceRows: 10001,
+        continentLocations: ["Tokyo", "New York", "Cape Town", "Sydney", "São Paulo"],
+        publishedPlaces: first.placeCount,
+        retainedGenerations: 2,
+        publicationMs,
+        indexedGenerationBytes: Number(size.bytes),
+        denseTileFeatures: layer.length,
+        denseTileBytes: bytes!.length,
+        warmTileMs: times,
+        warmP95Ms: [...times].sort((a, b) => a - b)[18],
+        plan: plan[0]["QUERY PLAN"],
+      };
+      if (process.env.OPENMAPX_GLOBAL_ACCEPTANCE_PATH)
+        await writeFile(
+          process.env.OPENMAPX_GLOBAL_ACCEPTANCE_PATH,
+          JSON.stringify(report, null, 2),
+        );
+      console.log(
+        JSON.stringify({ globalFixture: { ...report, plan: undefined, warmTileMs: undefined } }),
+      );
     } finally {
       await pg.stop();
     }

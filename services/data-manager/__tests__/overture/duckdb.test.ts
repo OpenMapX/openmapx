@@ -76,3 +76,9 @@ it("bounds DuckDB resources and rejects untrusted resource expressions", () => {
     expect(() => duck.duckDbResourceSql({ OVERTURE_DUCKDB_THREADS: value })).toThrow();
   }
 });
+
+it("spills DuckDB on the persistent data volume and quotes arbitrary directory names", () => {
+  expect(duck.duckDbResourceSql({ DATA_DIR: "/scratch/it's data" })).toContain(
+    "temp_directory='/scratch/it''s data/overture/duckdb-tmp'",
+  );
+});

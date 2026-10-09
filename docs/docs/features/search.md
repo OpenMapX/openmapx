@@ -123,6 +123,8 @@ high-signal institutions and facilities; lowercase matches must also be nearby
 or highly important. The first release does not include UN/LOCODE, fuzzy
 acronym matching, or a global codes registry.
 
+The OSM search snapshot also retains allowlisted named POIs without aliases for ambient map publication. It does not invent lexical alias terms for them; existing exact/prefix alias retrieval is unchanged. Newly prepared snapshots record ambient source format 2. Rebuild older snapshots before a planet ambient build, which requires that format to avoid silently omitting ordinary named businesses.
+
 ### Voice search
 
 On browsers that expose the Web Speech API, a microphone button lets you speak
@@ -287,5 +289,3 @@ suggestions until a provider is enabled.
   plan a route.
 - **[Public transit](./public-transit.md)** — transit-specialist geocoders and
   stop search feed journey planning.
-
-The OSM search snapshot also retains allowlisted named POIs without aliases for ambient map publication. It does not invent lexical alias terms for them; existing exact/prefix alias retrieval is unchanged. Newly prepared snapshots record ambient source format 2. Rebuild older snapshots before a planet ambient build, which requires that format to avoid silently omitting ordinary named businesses.

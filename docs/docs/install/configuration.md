@@ -309,6 +309,13 @@ command line overrides the env value for that invocation.
 | `INTEGRATION_GEOCODING_PROVIDER` | Comma-separated geocoding fallback chain, tried left to right. Valid names: `maptiler`, `photon`, `nominatim`, `pelias`, `motis`, `transitous`, `entur`, `db-ris`.                                                                                       | Optional. Default `maptiler`         |
 | `PHOTON_REGION`                  | Runtime download region for the self-hosted Photon index.                                                                                                                                                                                                | Default `planet`                     |
 
+Global ambient preparation/publication also forwards `AMBIENT_PLANET_MAX_PLACES`,
+`AMBIENT_PLANET_RESERVE_BYTES`, `OVERTURE_DUCKDB_MEMORY_MB`,
+`OVERTURE_DUCKDB_THREADS`, `OVERTURE_DUCKDB_TEMP_MB` and
+`OSMIUM_PLANET_INDEX_ESTIMATE_BYTES` into data-manager. Their defaults, validation
+and separate container/disk sizing requirements are documented in the
+[global publication resource table](../developer/ambient-places-publication.md#resource-sizing-and-configuration).
+
 ## Service tuning
 
 Knobs forwarded into the backend containers. Defaults are sensible for most
