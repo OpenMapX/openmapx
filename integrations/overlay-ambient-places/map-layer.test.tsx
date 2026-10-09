@@ -161,7 +161,7 @@ describe("ambient generation lifecycle", () => {
         expect(layer.paint["text-halo-width"]).toEqual(template.paint["text-halo-width"]);
         expect(layer.layout["icon-allow-overlap"]).toBe(false);
         expect(layer.layout["text-optional"]).toBe(false);
-        expect(layer.layout["icon-optional"]).toBe(layer === landmark);
+        expect(layer.layout["icon-optional"]).toBe(false);
       }
       const evaluate = (
         value: unknown,
@@ -192,7 +192,7 @@ describe("ambient generation lifecycle", () => {
         ["gallery", "art_gallery", "gallery"],
         ["florist", "shop", "florist"],
         ["place_of_worship", "place_of_worship", "place_of_worship"],
-        ["unmapped", "unmapped", "unmapped"],
+        ["unmapped", "multi", "unmapped"],
       ]) {
         expect(evaluate(ordinary.layout["icon-image"], "icon-image", { category })).toEqual(
           evaluate(native.layout["icon-image"], "icon-image", { class: poiClass, subclass }),

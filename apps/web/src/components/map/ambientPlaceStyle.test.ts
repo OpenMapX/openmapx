@@ -1,10 +1,58 @@
 import { createRequire } from "node:module";
 import type { SymbolLayerSpecification } from "maplibre-gl";
 import { describe, expect, it } from "vitest";
+import dark from "../../../public/styles/openmapx-dark.json";
+import streets from "../../../public/styles/openmapx-streets.json";
+import sprites from "../../../public/styles/sprite.json";
 import { ambientPlaceStyle } from "./ambientPlaceStyle";
 
 const require = createRequire(import.meta.resolve("maplibre-gl/package.json"));
-const { createExpression } = require("@maplibre/maplibre-gl-style-spec");
+const { createExpression, latest } = require("@maplibre/maplibre-gl-style-spec");
+
+describe.each([streets, dark])("ambient native POI badges in $name", (style) => {
+  it.each([
+    ["association", "poi-office"],
+    ["company", "poi-office-company"],
+    ["government", "poi-office-government"],
+    ["hairdressers", "poi-hairdresser"],
+    ["bars", "poi-bar"],
+    ["dental_clinic", "poi-dentist"],
+    ["fashion_and_apparel_store", "poi-clothing_store"],
+    ["attorney_or_law_firm", "poi-office"],
+    ["financial_service", "poi-office"],
+    ["diagnostics_imaging_or_lab_service", "poi-doctors"],
+    ["private_lodging", "poi-lodging"],
+    ["unmapped_destination", "poi-multi"],
+  ])("renders %s with the active style's POI badge", (category, expected) => {
+    const result = ambientPlaceStyle(style.layers as SymbolLayerSpecification[], false, false);
+    const expression = createExpression(
+      result.layout?.["icon-image"],
+      "icon-image",
+      latest.layout_symbol["icon-image"],
+    );
+    expect(expression.result).toBe("success");
+    expect(
+      expression.value.evaluate(
+        { zoom: 16 },
+        { type: "Point", properties: { category } },
+        undefined,
+        undefined,
+        Object.keys(sprites),
+      ).name,
+    ).toBe(expected);
+  });
+
+  it("uses standard native badge sizing and requires the landmark badge and label together", () => {
+    const layers = style.layers as SymbolLayerSpecification[];
+    const ordinary = ambientPlaceStyle(layers, false, false);
+    const landmark = ambientPlaceStyle(layers, true, false);
+    expect(landmark.layout?.["icon-size"]).toEqual(ordinary.layout?.["icon-size"]);
+    expect(landmark.layout?.["icon-optional"]).toBe(false);
+    expect(landmark.layout?.["text-optional"]).toBe(false);
+    expect(landmark.layout?.["icon-allow-overlap"]).toBe(false);
+    expect(landmark.layout?.["text-allow-overlap"]).toBe(false);
+  });
+});
 
 describe("ambient cartography with a hosted style", () => {
   it("adapts legacy sprite tokens to publication categories while keeping the provider's assets", () => {

@@ -7,6 +7,46 @@ import type {
 // Publication categories use OSM/Overture names. Rendering alone adapts these
 // to OpenMapTiles classes; canonical identities and published data stay intact.
 const classAliases: Record<string, string> = {
+  association: "office",
+  company: "office",
+  government: "office",
+  educational_institution: "office",
+  lawyer: "office",
+  accountant: "office",
+  insurance: "office",
+  estate_agent: "office",
+  architect: "office",
+  ngo: "office",
+  diplomatic: "office",
+  employment_agency: "office",
+  newspaper: "office",
+  notary: "office",
+  tax_advisor: "office",
+  attorney_or_law_firm: "office",
+  legal_service: "office",
+  financial_service: "office",
+  real_estate_service: "office",
+  corporate_or_business_office: "office",
+  professional_service: "office",
+  fashion_and_apparel_store: "clothing_store",
+  dental_clinic: "dentist",
+  diagnostics_imaging_or_lab_service: "doctors",
+  behavioral_or_mental_health_clinic: "doctors",
+  physical_medicine_and_rehabilitation: "doctors",
+  outpatient_care_facility: "doctors",
+  private_lodging: "lodging",
+  bars: "bar",
+  hairdressers: "hairdresser",
+  dentists: "dentist",
+  veterinarians: "veterinary",
+  cinemas: "cinema",
+  gyms: "sports_centre",
+  laundromats: "laundry",
+  bookstores: "library",
+  shopping_malls: "shop",
+  markets: "grocery",
+  nightlife: "bar",
+  opticians: "shop",
   doctor: "doctors",
   supermarket: "grocery",
   department_store: "grocery",
@@ -95,6 +135,24 @@ function adapt(value: unknown): unknown {
     if (value[1] === "class") return categoryClass;
     if (value[1] === "subclass") return ["get", "category"];
   }
+  if (
+    value[0] === "match" &&
+    Array.isArray(value[1]) &&
+    value[1][0] === "get" &&
+    value[1][1] === "class"
+  ) {
+    // Unknown destinations still use a native POI badge when the style has
+    // a generic class. Borrow that branch; never assume a sprite exists.
+    const adapted = value.map(adapt);
+    for (let index = 2; index < value.length - 1; index += 2) {
+      const labels = Array.isArray(value[index]) ? value[index] : [value[index]];
+      if (labels.includes("multi")) {
+        adapted[adapted.length - 1] = adapt(value[index + 1]);
+        break;
+      }
+    }
+    return adapted;
+  }
   return value.map(adapt);
 }
 
@@ -138,9 +196,11 @@ export function ambientPlaceStyle(
         : adapt(layout["icon-image"])) as NonNullable<
         SymbolLayerSpecification["layout"]
       >["icon-image"],
-      "icon-size": adapt(layout["icon-size"] ?? 1) as NonNullable<
-        SymbolLayerSpecification["layout"]
-      >["icon-size"],
+      // A larger landmark badge can collide where a normal native POI fits.
+      // Keep the stronger landmark label with the ordinary native badge size.
+      "icon-size": adapt(
+        ordinary?.type === "symbol" ? (ordinary.layout?.["icon-size"] ?? 1) : 1,
+      ) as NonNullable<SymbolLayerSpecification["layout"]>["icon-size"],
       "icon-padding": layout["icon-padding"] ?? 2,
       "text-font": layout["text-font"] ?? ["Noto Sans Regular"],
       "text-size": layout["text-size"] ?? 12,
@@ -170,9 +230,8 @@ export function ambientPlaceStyle(
       "icon-ignore-placement": false,
       "text-allow-overlap": false,
       "text-ignore-placement": false,
-      // Never show an unlabelled badge. A landmark name can still fit when
-      // its larger badge collides; the name must pass normal text placement.
-      "icon-optional": landmark,
+      // Keep the badge and label together, as one native POI.
+      "icon-optional": false,
       "text-optional": false,
     },
     paint: {
