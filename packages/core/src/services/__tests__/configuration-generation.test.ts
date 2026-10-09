@@ -179,6 +179,17 @@ describe("desired selection", () => {
     });
   });
 
+  it("treats an override that names no service as unset, as `${VAR:-}` passes an unset one", () => {
+    const { infraDir } = checkout();
+    writeServiceSelectionFile(infraDir, ["valhalla"]);
+    for (const value of ["", " ", ","]) {
+      expect(readDesiredSelection(infraDir, { OPENMAPX_ENABLED_SERVICES: value })).toEqual({
+        source: "file",
+        roots: ["valhalla"],
+      });
+    }
+  });
+
   it("rejects a malformed selection file", () => {
     const { infraDir } = checkout();
     writeFileSync(join(infraDir, "service-selection.json"), '{"selected":"valhalla"}');
