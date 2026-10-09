@@ -70,6 +70,8 @@ const EVERY_SOURCE: MediaSources = {
   has: () => true,
   link: () => undefined,
   licenseName: () => undefined,
+  noticeOf: () => undefined,
+  firmsSources: () => [],
   mediaHosts: (id) => HOSTS[id] ?? [],
 };
 
@@ -430,6 +432,8 @@ describe("cameras-openconditions", () => {
       has: () => false,
       link: () => undefined,
       licenseName: () => undefined,
+      noticeOf: () => undefined,
+      firmsSources: () => [],
       mediaHosts: () => [],
     });
     expect(await provider.searchCameras(BBOX)).toEqual({ cameras: [], partial: "unavailable" });

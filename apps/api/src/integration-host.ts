@@ -628,6 +628,11 @@ function buildIntegrationContext(args: {
       existing.push(provider);
       providers.set("cameras", existing);
     },
+    registerHazardsProvider(provider) {
+      const existing = providers.get("hazards") ?? [];
+      existing.push(provider);
+      providers.set("hazards", existing);
+    },
     registerPhotoProvider(provider) {
       const existing = providers.get("photos") ?? [];
       existing.push(provider);

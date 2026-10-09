@@ -9,7 +9,11 @@ export interface WildfireSourceStatus {
   truncated: boolean;
   error: "unavailable" | null;
   featureCount: number | null;
+  /** The ids of the sources behind the layer's last response, for the credits and the legend. */
+  sources: readonly string[];
 }
+
+const NO_SOURCES: readonly string[] = [];
 
 function idleSourceStatus(): WildfireSourceStatus {
   return {
@@ -19,6 +23,7 @@ function idleSourceStatus(): WildfireSourceStatus {
     truncated: false,
     error: null,
     featureCount: null,
+    sources: NO_SOURCES,
   };
 }
 
@@ -34,27 +39,23 @@ function initialStatuses(): Record<WildfireSourceId, WildfireSourceStatus> {
 export const useWildfireStore = createOverlayStore({
   overlayId: "wildfires",
   extra: {
-    loading: false,
     dayRange: 1 as 1 | 2 | 3,
-    source: "VIIRS_SNPP_NRT" as "VIIRS_SNPP_NRT" | "MODIS_NRT",
+    source: "viirs" as "viirs" | "modis",
     showHotspots: true,
     showNifcPerimeters: true,
     showEffisBurnedAreas: true,
     showNoaaSmoke: false,
     showHeatmap: false,
-    lastUpdated: null as number | null,
     statuses: initialStatuses(),
   },
   actions: (set) => ({
-    setLoading: (loading: boolean) => set({ loading }),
     setDayRange: (dayRange: 1 | 2 | 3) => set({ dayRange }),
-    setSource: (source: "VIIRS_SNPP_NRT" | "MODIS_NRT") => set({ source }),
+    setSource: (source: "viirs" | "modis") => set({ source }),
     setShowHotspots: (showHotspots: boolean) => set({ showHotspots }),
     setShowNifcPerimeters: (showNifcPerimeters: boolean) => set({ showNifcPerimeters }),
     setShowEffisBurnedAreas: (showEffisBurnedAreas: boolean) => set({ showEffisBurnedAreas }),
     setShowNoaaSmoke: (showNoaaSmoke: boolean) => set({ showNoaaSmoke }),
     setShowHeatmap: (showHeatmap: boolean) => set({ showHeatmap }),
-    setLastUpdated: (lastUpdated: number) => set({ lastUpdated }),
     setSourceStatus: (id: WildfireSourceId, patch: Partial<WildfireSourceStatus>) =>
       set((state) => ({
         statuses: {

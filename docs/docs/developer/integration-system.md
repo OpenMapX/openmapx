@@ -359,8 +359,8 @@ instance lists at `GET /sources`. The integration reads that list during
 
 OpenConditions `roads` feeds are credited under `road-conditions`, `fuel` feeds
 under `fuel-stations`, `parking` feeds under `parking-sites`, `charging` feeds
-under `charging-sites`, and `cameras` feeds under `cameras`. Feeds of other
-OpenConditions domains are left out.
+under `charging-sites`, `cameras` feeds under `cameras`, and `hazards` feeds
+under `hazards`. Feeds of other OpenConditions domains are left out.
 OpenConditions lists restricted feeds too, since the list is metadata, not
 records. Each `/sources` answer names the `scope` it was served in, and an
 answer without one is malformed (the last good list stays). In the `public`
@@ -511,6 +511,7 @@ interface IntegrationContext {
   registerParkingSiteProvider(p: ParkingSiteProvider): void; // → "parking-sites"
   registerChargingSiteProvider(p: ChargingSiteProvider): void; // → "charging-sites"
   registerCameraProvider(p: CameraProvider): void; // → "cameras"
+  registerHazardsProvider(p: HazardsProvider): void; // → "hazards"
 
   registerRoute(method, path, handler, options?): void; // options.rateLimitTier
   registerHealthCheck(fn: CustomHealthCheckFn): void; // overrides manifest probe
@@ -586,6 +587,7 @@ attribution and freshness flow through every call unmodified.
 | `parking-sites`   | `ParkingSiteProvider`        | Parking facilities with live occupancy, merged by the `parking` data source.                                                                         |
 | `fuel-stations`   | `FuelStationProvider`        | Fuel stations with per-grade prices, merged by the `fuel` data source.                                                                               |
 | `cameras`         | `CameraProvider`             | Traffic and scenic cameras with their views, current stills and streams, merged by the `webcam` data source.                                         |
+| `hazards`         | `HazardsProvider`            | Weather alerts, natural hazards, fire detections and their density grid, read by the four hazard overlays through `createHazardsOrchestrator`.       |
 
 A few patterns recur across the contracts and are worth calling out:
 

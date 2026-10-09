@@ -19,6 +19,7 @@ export function WeatherAlertLegend() {
   const toggleSeverity = useWeatherAlertStore((s) => s.toggleSeverity);
   const alertCount = useWeatherAlertStore((s) => s.alertCount);
   const lastUpdated = useWeatherAlertStore((s) => s.lastUpdated);
+  const unavailable = useWeatherAlertStore((s) => s.unavailable);
 
   return (
     <OverlayLegend
@@ -81,12 +82,20 @@ export function WeatherAlertLegend() {
       </Box>
 
       {/* Alert count + last updated */}
-      <Typography sx={{ fontSize: 11, color: "text.secondary" }}>
+      {/* No answer from a hazards source is not "no alerts". */}
+      <Typography
+        sx={{
+          fontSize: 11,
+          color: unavailable && alertCount === 0 && !loading ? "error.main" : "text.secondary",
+        }}
+      >
         {alertCount > 0
           ? t("alertsShowing", { count: alertCount })
           : loading
             ? t("loading")
-            : t("noAlerts")}
+            : unavailable
+              ? t("unavailable")
+              : t("noAlerts")}
       </Typography>
 
       {lastUpdated && (

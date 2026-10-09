@@ -37,6 +37,7 @@ export function NaturalEventLegend() {
   const toggleCategory = useNaturalEventStore((s) => s.toggleCategory);
   const eventCount = useNaturalEventStore((s) => s.eventCount);
   const lastUpdated = useNaturalEventStore((s) => s.lastUpdated);
+  const unavailable = useNaturalEventStore((s) => s.unavailable);
 
   return (
     <OverlayLegend
@@ -125,12 +126,20 @@ export function NaturalEventLegend() {
         </Box>
       </Box>
       {/* Event count + last updated */}
-      <Typography sx={{ fontSize: 11, color: "text.secondary" }}>
+      {/* No answer from a hazards source is not "no events". */}
+      <Typography
+        sx={{
+          fontSize: 11,
+          color: unavailable && eventCount === 0 && !loading ? "error.main" : "text.secondary",
+        }}
+      >
         {eventCount > 0
           ? t("eventsShowing", { count: eventCount })
           : loading
             ? t("loading")
-            : t("noEvents")}
+            : unavailable
+              ? t("unavailable")
+              : t("noEvents")}
       </Typography>
       {lastUpdated && (
         <Typography sx={{ fontSize: 10.5, color: "text.secondary", mt: 0.25 }}>

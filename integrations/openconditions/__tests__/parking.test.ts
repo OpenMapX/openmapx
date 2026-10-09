@@ -60,6 +60,8 @@ const EVERY_SOURCE: LiveSources = {
   has: () => true,
   link: () => undefined,
   licenseName: () => undefined,
+  noticeOf: () => undefined,
+  firmsSources: () => [],
 };
 
 function providerWith(respond: Responder, sources: LiveSources = EVERY_SOURCE, now = FRESH) {

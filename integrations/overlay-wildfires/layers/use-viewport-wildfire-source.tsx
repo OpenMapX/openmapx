@@ -3,23 +3,61 @@
 import type { Map as MaplibreMap } from "maplibre-gl";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useMap } from "@/integration-api/map/MapContext";
-import { useWildfireStore } from "../store";
+import { useWildfireStore, type WildfireSourceId } from "../store";
 import type { WildfireFeatureCollection } from "../types";
-import {
-  isViewportWildfireFeatureCollection,
-  type ViewportWildfireSourceId,
-} from "./viewport-wildfire-validation";
+import { isViewportWildfireFeatureCollection } from "./viewport-wildfire-validation";
 
 const VIEWPORT_DEBOUNCE_MS = 200;
 
-export interface ViewportWildfireSourceOptions {
+/** A validated response and the status it reports. */
+export interface ViewportReading<T> {
+  data: T;
+  fetchedAt: number;
+  stale: boolean;
+  truncated: boolean;
+  featureCount: number;
+  sources: readonly string[];
+}
+
+export interface ViewportResponse {
+  body: unknown;
+  headers: Pick<Headers, "get"> | undefined;
+  /** The whole zoom level the request was made at. */
+  zoom: number;
+  receivedAt: number;
+}
+
+export interface ViewportWildfireSourceOptions<T = WildfireFeatureCollection> {
   active: boolean;
-  sourceId: ViewportWildfireSourceId;
-  endpoint: string;
+  sourceId: WildfireSourceId;
+  /** The endpoint, or the endpoint for the whole zoom level of the view. */
+  endpoint: string | ((zoom: number) => string);
   minZoom: number;
   refreshMs: number;
-  publish(data: WildfireFeatureCollection): void;
+  /**
+   * Validates a response; null when it is malformed. Defaults to the
+   * perimeter envelope of `sourceId`.
+   */
+  read?(response: ViewportResponse): ViewportReading<T> | null;
+  publish(data: T): void;
   clear(): void;
+}
+
+/** Reads the envelope the perimeter and burned-area routes answer with. */
+function readEnvelope(
+  sourceId: WildfireSourceId,
+  { body }: ViewportResponse,
+): ViewportReading<WildfireFeatureCollection> | null {
+  if (sourceId !== "nifc" && sourceId !== "effis") return null;
+  if (!isViewportWildfireFeatureCollection(body, sourceId)) return null;
+  return {
+    data: body,
+    fetchedAt: Date.parse(body.fetchedAt),
+    stale: body.stale,
+    truncated: body.truncated,
+    featureCount: body.features.length,
+    sources: body.sources,
+  };
 }
 
 function normalizeLongitude(longitude: number): number {
@@ -38,7 +76,10 @@ function normalizeLongitudeInterval(west: number, east: number): { west: number;
   return { west: normalizedWest, east: normalizedEast };
 }
 
-function viewportUrl(endpoint: string, map: MaplibreMap): string | null {
+function viewportUrl(
+  endpointFor: string | ((zoom: number) => string),
+  map: MaplibreMap,
+): { url: string; zoom: number } | null {
   const zoom = Math.floor(map.getZoom());
   const bounds = map.getBounds();
   const rawValues = {
@@ -61,22 +102,32 @@ function viewportUrl(endpoint: string, map: MaplibreMap): string | null {
 
   const query = new URLSearchParams();
   for (const [key, value] of Object.entries(values)) query.set(key, String(value));
-  return `${endpoint}${endpoint.includes("?") ? "&" : "?"}${query.toString()}`;
+  const endpoint = typeof endpointFor === "string" ? endpointFor : endpointFor(zoom);
+  return { url: `${endpoint}${endpoint.includes("?") ? "&" : "?"}${query.toString()}`, zoom };
 }
 
-/** Source-local viewport fetching with zoom gating, latest-wins requests, and status updates. */
-export function useViewportWildfireSource({
+/**
+ * Source-local viewport fetching with zoom gating, latest-wins requests, and
+ * status updates. A changed endpoint refetches the view without clearing what
+ * is drawn.
+ */
+export function useViewportWildfireSource<T = WildfireFeatureCollection>({
   active,
   sourceId,
   endpoint,
   minZoom,
   refreshMs,
+  read,
   publish,
   clear,
-}: ViewportWildfireSourceOptions): boolean {
+}: ViewportWildfireSourceOptions<T>): boolean {
   const { mapRef, mapReady } = useMap();
   const setSourceStatus = useWildfireStore((state) => state.setSourceStatus);
   const resetSourceStatus = useWildfireStore((state) => state.resetSourceStatus);
+  const endpointRef = useRef(endpoint);
+  endpointRef.current = endpoint;
+  const readRef = useRef(read);
+  readRef.current = read;
   const controllerRef = useRef<AbortController | null>(null);
   const generationRef = useRef(0);
   const lastRequestedUrlRef = useRef<string | null>(null);
@@ -112,13 +163,14 @@ export function useViewportWildfireSource({
         return;
       }
 
-      const url = viewportUrl(endpoint, map);
-      if (!url) {
+      const request = viewportUrl(endpointRef.current, map);
+      if (!request) {
         abortRequest();
         lastRequestedUrlRef.current = null;
         setSourceStatus(sourceId, { loading: false, error: "unavailable" });
         return;
       }
+      const { url, zoom } = request;
       if (!force && lastRequestedUrlRef.current === url) return;
       lastRequestedUrlRef.current = url;
 
@@ -132,21 +184,24 @@ export function useViewportWildfireSource({
         const result = await fetch(url, { signal: controller.signal });
         if (controller.signal.aborted || generationRef.current !== generation) return;
         if (!result.ok) throw new Error(`Wildfire source returned ${result.status}`);
-        const data: unknown = await result.json();
+        const body: unknown = await result.json();
         if (controller.signal.aborted || generationRef.current !== generation) return;
-        if (!isViewportWildfireFeatureCollection(data, sourceId)) {
-          throw new Error("Invalid wildfire FeatureCollection");
-        }
+        const response = { body, headers: result.headers, zoom, receivedAt: Date.now() };
+        const reading = readRef.current
+          ? readRef.current(response)
+          : (readEnvelope(sourceId, response) as ViewportReading<T> | null);
+        if (!reading) throw new Error("Invalid wildfire FeatureCollection");
 
-        publish(data);
+        publish(reading.data);
         clearedRef.current = false;
         setSourceStatus(sourceId, {
           loading: false,
-          fetchedAt: Date.parse(data.fetchedAt),
-          stale: data.stale,
-          truncated: data.truncated,
+          fetchedAt: reading.fetchedAt,
+          stale: reading.stale,
+          truncated: reading.truncated,
           error: null,
-          featureCount: data.features.length,
+          featureCount: reading.featureCount,
+          sources: reading.sources,
         });
       } catch {
         if (controller.signal.aborted || generationRef.current !== generation) return;
@@ -155,18 +210,18 @@ export function useViewportWildfireSource({
         if (generationRef.current === generation) controllerRef.current = null;
       }
     },
-    [
-      abortRequest,
-      active,
-      endpoint,
-      gateSource,
-      mapRef,
-      minZoom,
-      publish,
-      setSourceStatus,
-      sourceId,
-    ],
+    [abortRequest, active, gateSource, mapRef, minZoom, publish, setSourceStatus, sourceId],
   );
+
+  // A changed query is a new URL for the same view: the dedupe lets it through, and the newest
+  // response replaces what is drawn.
+  useEffect(() => {
+    void endpoint;
+    if (!active || !mapReady) return;
+    const map = mapRef.current;
+    if (!map || map.getZoom() < minZoom) return;
+    void fetchViewport();
+  }, [active, endpoint, fetchViewport, mapReady, mapRef, minZoom]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -197,13 +252,14 @@ export function useViewportWildfireSource({
     if (canFetch) void fetchViewport();
     else gateSource();
     map.on("moveend", onMoveEnd);
-    const refreshTimer = setInterval(() => void fetchViewport(true), refreshMs);
 
     return () => {
       if (moveTimer) clearTimeout(moveTimer);
-      clearInterval(refreshTimer);
       map.off("moveend", onMoveEnd);
       abortRequest();
+      // The aborted request was never answered: the next run must ask for the view again
+      // instead of taking it for the one already in flight.
+      lastRequestedUrlRef.current = null;
       clearRenderedData();
       resetSourceStatus(sourceId);
     };
@@ -216,10 +272,16 @@ export function useViewportWildfireSource({
     mapReady,
     mapRef,
     minZoom,
-    refreshMs,
     resetSourceStatus,
     sourceId,
   ]);
+
+  // Its own effect: a new refresh interval must not clear what is drawn.
+  useEffect(() => {
+    if (!active || !mapReady || !mapRef.current) return;
+    const refreshTimer = setInterval(() => void fetchViewport(true), refreshMs);
+    return () => clearInterval(refreshTimer);
+  }, [active, fetchViewport, mapReady, mapRef, refreshMs]);
 
   return active && aboveMinZoom;
 }

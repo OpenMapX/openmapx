@@ -1123,6 +1123,16 @@ importers:
       '@openmapx/integration-framework':
         specifier: workspace:^
         version: link:../../packages/integration-framework
+      '@openmapx/mobility-core':
+        specifier: workspace:^
+        version: link:../../packages/mobility-core
+    devDependencies:
+      '@types/react':
+        specifier: ^19.3.0
+        version: 19.3.0
+      react:
+        specifier: 19.3.0
+        version: 19.3.0
 
   integrations/overlay-environment:
     dependencies:
@@ -1166,6 +1176,9 @@ importers:
       '@openmapx/integration-framework':
         specifier: workspace:^
         version: link:../../packages/integration-framework
+      '@openmapx/mobility-core':
+        specifier: workspace:^
+        version: link:../../packages/mobility-core
 
   integrations/overlay-nautical:
     dependencies:
@@ -1341,12 +1354,16 @@ importers:
       '@openmapx/integration-framework':
         specifier: workspace:^
         version: link:../../packages/integration-framework
-      '@openmapx/mobility-formats':
+      '@openmapx/mobility-core':
         specifier: workspace:^
-        version: link:../../packages/mobility-formats
-      fast-xml-parser:
-        specifier: ^5.11.1
-        version: 5.11.1
+        version: link:../../packages/mobility-core
+    devDependencies:
+      '@types/react':
+        specifier: ^19.3.0
+        version: 19.3.0
+      react:
+        specifier: 19.3.0
+        version: 19.3.0
 
   integrations/overlay-wildfires:
     dependencies:
@@ -1356,6 +1373,9 @@ importers:
       '@openmapx/integration-framework':
         specifier: workspace:^
         version: link:../../packages/integration-framework
+      '@openmapx/mobility-core':
+        specifier: workspace:^
+        version: link:../../packages/mobility-core
     devDependencies:
       '@types/react':
         specifier: ^19.3.0

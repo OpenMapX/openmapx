@@ -68,7 +68,7 @@ export default function PrivacyContent({
           mb: 4,
         }}
       >
-        Last updated: October 6, 2026 (OpenFreeMap map services added)
+        Last updated: October 9, 2026 (hazard data now read through OpenConditions)
       </Typography>
       <Section title={T.controller}>
         <Typography>
@@ -850,10 +850,12 @@ export default function PrivacyContent({
           </li>
           <li>
             <Typography>
-              <strong>No personal data transferred:</strong> Several US-based services (NASA FIRMS,
-              USGS, GitHub API) receive no user-related data at all. Our server fetches public data
-              feeds or repository files without transmitting any coordinates, search queries, or
-              user identifiers. No transfer of personal data occurs in these cases.
+              <strong>No personal data transferred:</strong> Some US-based services (GitHub API)
+              receive no user-related data at all. Our server fetches repository files without
+              transmitting any coordinates, search queries, or user identifiers. No transfer of
+              personal data occurs in these cases. Our server no longer contacts NASA FIRMS or USGS:
+              hazard data from them reaches OpenMapX through the OpenConditions instance, which
+              fetches their public feeds without any user data.
             </Typography>
           </li>
         </ul>

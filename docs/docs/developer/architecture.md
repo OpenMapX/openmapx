@@ -424,11 +424,12 @@ logic lives entirely in each orchestrator.
 ### Bulk datasets live in OpenConditions
 
 Registries too large to fetch per request (national EV-charging, parking, fuel
-and traffic-camera registers) are not ingested by OpenMapX. OpenConditions
-fetches, parses and links them, and OpenMapX's orchestrators read the result
-through the `charging-sites`, `parking-sites`, `fuel-stations` and `cameras`
-providers, so bulk datasets present the same canonical shape as every other
-source.
+and traffic-camera registers) and the hazard feeds (weather alerts, fire
+detections, earthquakes, natural events) are not ingested by OpenMapX.
+OpenConditions fetches, parses and links them, and OpenMapX's orchestrators read
+the result through the `charging-sites`, `parking-sites`, `fuel-stations`,
+`cameras` and `hazards` providers, so bulk datasets present the same canonical
+shape as every other source.
 
 ## Where to go next
 

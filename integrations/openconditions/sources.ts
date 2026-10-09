@@ -15,6 +15,10 @@ export interface OcSource {
   name: string;
   domain: string;
   product: string;
+  /** The source format its parser reads, such as `cap` or `firms`. */
+  format: string;
+  /** What sets the feed apart from the publisher's other feeds of the same product, such as `firms-viirs`. */
+  qualifier?: string;
   operator: string;
   region: string;
   country?: string;
@@ -31,6 +35,8 @@ export interface OcSource {
   homepage: string;
   privacyUrl: string;
   terms?: { url?: string; reviewedAt?: string; note?: string };
+  /** A notice the publisher requires to accompany any display of its data, verbatim. */
+  notice?: string;
   /** Where the catalogue says the source applies: ISO 3166-1 countries, or a `[west, south, east, north]` box. */
   coverage?: { countries?: string[]; bbox?: [number, number, number, number] };
   /** The hosts a camera feed's stills come from, which a consumer may proxy. */
@@ -52,6 +58,7 @@ const DOMAINS: Readonly<Record<string, string>> = {
   parking: "parking-sites",
   charging: "charging-sites",
   cameras: "cameras",
+  hazards: "hazards",
 };
 
 /**
@@ -297,6 +304,13 @@ export interface LiveSources {
   link(sourceId: string): string | undefined;
   /** The readable name a listed source gives a licence id; none before the first list. */
   licenseName(licenseId: string): string | undefined;
+  /** The notice the source's publisher requires to accompany any display of its data. */
+  noticeOf(sourceId: string): string | undefined;
+  /**
+   * The listed FIRMS feeds of one instrument: the sources whose format is
+   * `firms` and whose qualifier is `firms-viirs` or `firms-modis`.
+   */
+  firmsSources(instrument: "viirs" | "modis"): string[];
 }
 
 /** The listed sources with the image hosts each declares, as the cameras provider checks stills. */
@@ -312,12 +326,18 @@ export interface UpdatableLiveSources extends MediaSources {
    * them: the accepted data sources carry the readable name in place of the id.
    */
   updateLicenses(list: readonly Pick<OcSource, "license" | "licenseName">[]): void;
+  /** Takes the formats, qualifiers and notices from the sources as OpenConditions describes them. */
+  updateDescribed(list: readonly Pick<OcSource, "id" | "format" | "qualifier" | "notice">[]): void;
 }
+
+const FIRMS_QUALIFIERS = { viirs: "firms-viirs", modis: "firms-modis" } as const;
 
 export function createLiveSources(): UpdatableLiveSources {
   let links: ReadonlyMap<string, string> | undefined;
   let media: ReadonlyMap<string, readonly string[]> = new Map();
   let licenseNames: ReadonlyMap<string, string> = new Map();
+  let notices: ReadonlyMap<string, string> = new Map();
+  let firms: ReadonlyMap<"viirs" | "modis", readonly string[]> = new Map();
   return {
     get ready() {
       return links !== undefined;
@@ -326,9 +346,33 @@ export function createLiveSources(): UpdatableLiveSources {
     link: (sourceId) => links?.get(sourceId),
     licenseName: (licenseId) => licenseNames.get(licenseId),
     mediaHosts: (sourceId) => media.get(sourceId) ?? [],
+    noticeOf: (sourceId) => (links?.has(sourceId) ? notices.get(sourceId) : undefined),
+    // Only feeds the host accepted count, so a dropped feed's pixels are never read.
+    firmsSources: (instrument) =>
+      (firms.get(instrument) ?? []).filter((sourceId) => links?.has(sourceId) ?? false),
     update(list) {
       links = new Map(list.map((ds) => [ds.sourceId, ds.url]));
       media = new Map(list.flatMap((ds) => (ds.mediaHosts ? [[ds.sourceId, ds.mediaHosts]] : [])));
+    },
+    updateDescribed(list) {
+      notices = new Map(
+        list.flatMap(({ id, notice }) =>
+          typeof notice === "string" && notice.trim() !== "" ? [[id, notice] as const] : [],
+        ),
+      );
+      firms = new Map(
+        (Object.keys(FIRMS_QUALIFIERS) as Array<keyof typeof FIRMS_QUALIFIERS>).map(
+          (instrument) => [
+            instrument,
+            list
+              .filter(
+                (source) =>
+                  source.format === "firms" && source.qualifier === FIRMS_QUALIFIERS[instrument],
+              )
+              .map((source) => source.id),
+          ],
+        ),
+      );
     },
     updateLicenses(list) {
       licenseNames = new Map(

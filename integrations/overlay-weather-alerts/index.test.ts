@@ -1,214 +1,193 @@
-import { createNoopLogger } from "@openmapx/integration-framework/testing";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { fetchDWD, fetchECCC, fetchNOAA, isExpired, normalizeSeverity } from "./index.js";
+import type { HazardAlert, HazardsProvider } from "@openmapx/integration-framework";
+import { createMockIntegrationContext } from "@openmapx/integration-framework/testing";
+import { describe, expect, it, vi } from "vitest";
+import { type alertsToFeatureCollection, alertToFeature, setup } from "./index.js";
 
-const log = createNoopLogger();
+const NOTICE = "Warnings are provided as issued by the national meteorological services.";
 
-function mockOk(data: unknown) {
-  return Response.json(data);
+function alert(over: Partial<HazardAlert> = {}): HazardAlert {
+  return {
+    id: "oc:situation:eu-meteoalarm-alerts:2.49.0.0.250.0.ES.1",
+    type: "wind",
+    geometry: {
+      type: "Polygon",
+      coordinates: [
+        [
+          [-4, 40],
+          [-3, 40],
+          [-3, 41],
+          [-4, 40],
+        ],
+      ],
+    },
+    event: "Wind",
+    headline: "Yellow wind warning",
+    description: "Gusts up to 80 km/h.",
+    instruction: "Secure loose objects.",
+    areaDescription: "Madrid",
+    severity: "Moderate",
+    urgency: "Expected",
+    certainty: "Likely",
+    sent: "2026-10-09T06:00:00Z",
+    effective: "2026-10-09T07:00:00Z",
+    expires: "2026-10-09T18:00:00Z",
+    senderName: "AEMET",
+    // MeteoAlarm's CAP `web` is the national service's page.
+    web: "https://www.aemet.es/en/eltiempo/prediccion/avisos",
+    sources: ["eu-meteoalarm-alerts"],
+    attributions: [],
+    notices: [NOTICE],
+    ...over,
+  };
 }
 
-let mockFetch: ReturnType<typeof vi.fn>;
+interface Sent {
+  status: number;
+  headers: Record<string, string>;
+  body: unknown;
+}
 
-beforeEach(() => {
-  mockFetch = vi.fn();
-  vi.stubGlobal("fetch", mockFetch);
-});
+async function callEvents(providers: HazardsProvider[], query: Record<string, string> = {}) {
+  const base = createMockIntegrationContext();
+  const ctx = {
+    ...base,
+    getIntegrationsByDomain: (domain: string) =>
+      domain === "hazards"
+        ? providers.map((p) => ({ id: p.id, providers: new Map([["hazards", [p]]]) }))
+        : [],
+  } as unknown as Parameters<typeof setup>[0];
+  setup(ctx);
+  const route = base.registered.routes.find((r) => r.method === "GET" && r.path === "/events");
+  if (!route) throw new Error("no /events route");
 
-afterEach(() => {
-  vi.restoreAllMocks();
-  vi.unstubAllGlobals();
-});
+  const sent: Sent = { status: 200, headers: {}, body: undefined };
+  const reply = {
+    status(code: number) {
+      sent.status = code;
+      return reply;
+    },
+    header(name: string, value: string) {
+      sent.headers[name] = value;
+      return reply;
+    },
+    send(body: unknown) {
+      sent.body = body;
+      return reply;
+    },
+  };
+  await route.handler({ query, params: {}, headers: {} } as never, reply as never);
+  return sent;
+}
 
-describe("normalizeSeverity", () => {
-  it.each([
-    ["Extreme", "Extreme"],
-    ["severe", "Severe"],
-    ["MODERATE", "Moderate"],
-    ["minor", "Minor"],
-    ["unknown", "Unknown"],
-  ])("title-cases known CAP severity %s -> %s", (raw, expected) => {
-    expect(normalizeSeverity(raw)).toBe(expected);
+function provider(over: Partial<HazardsProvider> = {}): HazardsProvider {
+  return {
+    id: "hazards-test",
+    coverage: { all: true },
+    getAlerts: async () => ({ alerts: [] }),
+    getNaturalHazards: async () => ({ hazards: [] }),
+    getFirePixels: async () => ({ pixels: [] }),
+    getFireDensity: async () => ({ cells: [], sources: [] }),
+    ...over,
+  };
+}
+
+describe("alertToFeature", () => {
+  it("carries the notice, the issuer and the issue time", () => {
+    const { properties } = alertToFeature(alert());
+    expect(properties).toMatchObject({
+      title: "Yellow wind warning",
+      severity: "Moderate",
+      areaDesc: "Madrid",
+      source: "eu-meteoalarm-alerts",
+      sourceUrl: "https://www.aemet.es/en/eltiempo/prediccion/avisos",
+      geometryType: "polygon",
+      sent: "2026-10-09T06:00:00Z",
+      senderName: "AEMET",
+      notices: [NOTICE],
+      sources: ["eu-meteoalarm-alerts"],
+    });
   });
 
-  it("maps unknown / empty / nullish values to Unknown", () => {
-    expect(normalizeSeverity("catastrophic")).toBe("Unknown");
-    expect(normalizeSeverity("")).toBe("Unknown");
-    expect(normalizeSeverity(null)).toBe("Unknown");
-    expect(normalizeSeverity(undefined)).toBe("Unknown");
-  });
-});
-
-describe("isExpired", () => {
-  it("treats missing or unparseable timestamps as not expired", () => {
-    expect(isExpired(null)).toBe(false);
-    expect(isExpired(undefined)).toBe(false);
-    expect(isExpired("not-a-date")).toBe(false);
-  });
-
-  it("flags past timestamps as expired and future ones as not expired", () => {
-    expect(isExpired(new Date(Date.now() - 60_000).toISOString())).toBe(true);
-    expect(isExpired(new Date(Date.now() + 60_000).toISOString())).toBe(false);
-  });
-});
-
-describe("fetchNOAA", () => {
-  it("normalizes geometry-bearing alerts and drops zone-only / expired ones", async () => {
-    mockFetch.mockResolvedValueOnce(
-      mockOk({
-        features: [
-          {
-            geometry: {
-              type: "Polygon",
-              coordinates: [
-                [
-                  [-90, 30],
-                  [-89, 30],
-                  [-89, 31],
-                  [-90, 30],
-                ],
-              ],
-            },
-            properties: {
-              id: "urn:oid:1",
-              headline: "Tornado Warning issued",
-              event: "Tornado Warning",
-              severity: "extreme",
-              urgency: "Immediate",
-              certainty: "Observed",
-              description: "Take cover",
-              instruction: "Move to a basement",
-              effective: "2026-03-10T09:00:00Z",
-              expires: new Date(Date.now() + 3_600_000).toISOString(),
-              areaDesc: "Some County",
-              web: "https://example.gov/alert",
-            },
-          },
-          {
-            // No geometry — zone-based, should be dropped.
-            geometry: null,
-            properties: { id: "urn:oid:2", event: "Flood Watch", severity: "moderate" },
-          },
-          {
-            geometry: { type: "Polygon", coordinates: [] },
-            properties: {
-              id: "urn:oid:3",
-              event: "Old Warning",
-              severity: "severe",
-              expires: new Date(Date.now() - 3_600_000).toISOString(),
-            },
-          },
-        ],
-      }),
+  it("takes the onset, else the effective time, else the issue time", () => {
+    expect(alertToFeature(alert({ onset: "2026-10-09T08:00:00Z" })).properties.onset).toBe(
+      "2026-10-09T08:00:00Z",
     );
+    expect(alertToFeature(alert()).properties.onset).toBe("2026-10-09T07:00:00Z");
+    expect(alertToFeature(alert({ effective: undefined })).properties.onset).toBe(
+      "2026-10-09T06:00:00Z",
+    );
+  });
 
-    const features = await fetchNOAA(log);
+  it("draws a point alert as a point and falls back to the event for the title", () => {
+    const { properties } = alertToFeature(
+      alert({ geometry: { type: "Point", coordinates: [1, 2] }, headline: undefined }),
+    );
+    expect(properties.geometryType).toBe("point");
+    expect(properties.title).toBe("Wind");
+  });
+});
 
-    expect(features).toHaveLength(1);
-    expect(features[0]).toMatchObject({
-      type: "Feature",
-      properties: {
-        id: "noaa-urn:oid:1",
-        title: "Tornado Warning issued",
-        severity: "Extreme",
-        event: "Tornado Warning",
-        onset: "2026-03-10T09:00:00Z",
-        source: "noaa",
-        sourceUrl: "https://example.gov/alert",
-        geometryType: "polygon",
+describe("GET /events", () => {
+  it("serves the alerts of the provider and names the feed ids it served", async () => {
+    const getAlerts = vi.fn<HazardsProvider["getAlerts"]>(async () => ({
+      alerts: [alert(), alert({ id: "b", sources: ["de-dwd-alerts"], notices: [] })],
+    }));
+
+    const sent = await callEvents([provider({ getAlerts })], { lang: "de" });
+
+    expect(getAlerts).toHaveBeenCalledWith([-180, -90, 180, 90], {
+      simplifyDeg: 0.01,
+      lang: "de",
+    });
+    expect(sent.status).toBe(200);
+    // The route caches 60 s; the browser must not reuse an answer on top (MeteoAlarm's ten minutes).
+    expect(sent.headers["Cache-Control"]).toBe("no-cache");
+    const body = sent.body as ReturnType<typeof alertsToFeatureCollection>;
+    expect(body.sources).toEqual(["de-dwd-alerts", "eu-meteoalarm-alerts"]);
+    expect(body.features[0].properties.notices).toEqual([NOTICE]);
+    expect(body.features[0].properties.senderName).toBe("AEMET");
+  });
+
+  it("reads any language other than German as English", async () => {
+    const getAlerts = vi.fn<HazardsProvider["getAlerts"]>(async () => ({ alerts: [] }));
+    await callEvents([provider({ getAlerts })], { lang: "../etc" });
+    await callEvents([provider({ getAlerts })], { lang: "fr" });
+    await callEvents([provider({ getAlerts })]);
+    await callEvents([provider({ getAlerts })], { lang: "de-AT" });
+    expect(getAlerts.mock.calls.map((call) => call[1]?.lang)).toEqual(["en", "en", "en", "de"]);
+  });
+
+  it("serves an empty collection when no alert is in effect", async () => {
+    const sent = await callEvents([provider()]);
+    expect(sent.status).toBe(200);
+    expect(sent.body).toEqual({ type: "FeatureCollection", features: [], sources: [] });
+  });
+
+  it("answers 503 when every provider failed", async () => {
+    const getAlerts = async () => {
+      throw new Error("upstream down");
+    };
+    const sent = await callEvents([provider({ getAlerts })]);
+    expect(sent.status).toBe(503);
+    expect(sent.headers["Cache-Control"]).toBe("no-store");
+  });
+
+  it("answers 503 when no hazards provider is configured: no source is not no alerts", async () => {
+    const sent = await callEvents([]);
+    expect(sent.status).toBe(503);
+    expect(sent.headers["Cache-Control"]).toBe("no-store");
+  });
+
+  it("serves what the others returned when one provider failed", async () => {
+    const failing = provider({
+      id: "failing",
+      getAlerts: async () => {
+        throw new Error("upstream down");
       },
     });
-    expect(features[0].geometry.type).toBe("Polygon");
-  });
-
-  it("returns an empty list when NOAA responds non-OK", async () => {
-    mockFetch.mockResolvedValueOnce({ ok: false, status: 503 } as Response);
-    expect(await fetchNOAA(log)).toEqual([]);
-  });
-});
-
-describe("fetchECCC", () => {
-  it("maps Canadian alert types to CAP severities", async () => {
-    mockFetch.mockResolvedValueOnce(
-      mockOk({
-        features: [
-          {
-            id: "w1",
-            geometry: { type: "Polygon", coordinates: [[[0, 0]]] },
-            properties: { alert_type: "warning", alert_name_en: "Snow Squall Warning" },
-          },
-          {
-            id: "w2",
-            geometry: { type: "Polygon", coordinates: [[[0, 0]]] },
-            properties: { alert_type: "watch", alert_name_en: "Severe Thunderstorm Watch" },
-          },
-          {
-            id: "w3",
-            geometry: { type: "Polygon", coordinates: [[[0, 0]]] },
-            properties: { alert_type: "advisory", alert_name_en: "Fog Advisory" },
-          },
-          {
-            id: "w4",
-            geometry: { type: "Polygon", coordinates: [[[0, 0]]] },
-            properties: { alert_type: "special weather statement", alert_name_en: "Statement" },
-          },
-          {
-            id: "w5",
-            geometry: { type: "Polygon", coordinates: [[[0, 0]]] },
-            properties: { alert_type: "ended", alert_name_en: "Ended" },
-          },
-        ],
-      }),
-    );
-
-    const features = await fetchECCC(log);
-
-    expect(features.map((f) => f.properties.severity)).toEqual([
-      "Severe",
-      "Moderate",
-      "Minor",
-      "Minor",
-      "Unknown",
-    ]);
-    expect(features[0].properties.id).toBe("eccc-w1");
-    expect(features[0].properties.source).toBe("eccc");
-  });
-});
-
-describe("fetchDWD", () => {
-  it("normalizes German uppercase property keys and builds a stable id", async () => {
-    mockFetch.mockResolvedValueOnce(
-      mockOk({
-        features: [
-          {
-            geometry: { type: "Polygon", coordinates: [[[10, 50]]] },
-            properties: {
-              IDENTIFIER: "DWD-123",
-              HEADLINE: "Amtliche Warnung vor Sturm",
-              EVENT: "WIND",
-              SEVERITY: "severe",
-              URGENCY: "Immediate",
-              CERTAINTY: "Likely",
-              DESCRIPTION: "Sturmböen",
-              EXPIRES: new Date(Date.now() + 3_600_000).toISOString(),
-              NAME: "Berlin",
-            },
-          },
-        ],
-      }),
-    );
-
-    const features = await fetchDWD(log);
-
-    expect(features).toHaveLength(1);
-    expect(features[0].properties).toMatchObject({
-      id: "dwd-DWD-123",
-      title: "Amtliche Warnung vor Sturm",
-      severity: "Severe",
-      event: "WIND",
-      areaDesc: "Berlin",
-      source: "dwd",
-      geometryType: "polygon",
-    });
+    const working = provider({ id: "working", getAlerts: async () => ({ alerts: [alert()] }) });
+    const sent = await callEvents([failing, working]);
+    expect(sent.status).toBe(200);
+    expect((sent.body as { features: unknown[] }).features).toHaveLength(1);
   });
 });

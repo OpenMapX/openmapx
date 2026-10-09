@@ -1,14 +1,18 @@
-import { fetchJson } from "@openmapx/core";
-import { type IntegrationContext, scalarQueries } from "@openmapx/integration-framework";
+import type { BBox } from "@openmapx/core";
+import {
+  createHazardsOrchestrator,
+  type IntegrationContext,
+  scalarQueries,
+} from "@openmapx/integration-framework";
+import type { NaturalHazard } from "@openmapx/mobility-core/hazards";
 
-const USGS_FEED_BASE = "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary";
-const FETCH_TIMEOUT_MS = 15_000;
+const WORLD: BBox = [-180, -90, 180, 90];
 
-const _REFRESH_INTERVAL: Record<string, number> = {
-  hour: 60_000,
-  day: 120_000,
-  week: 300_000,
-  month: 600_000,
+const RANGE_MS: Record<string, number> = {
+  hour: 3_600_000,
+  day: 86_400_000,
+  week: 604_800_000,
+  month: 30 * 86_400_000,
 };
 
 const CACHE_TTL: Record<string, number> = {
@@ -18,49 +22,34 @@ const CACHE_TTL: Record<string, number> = {
   month: 600,
 };
 
-interface USGSFeature {
+interface EarthquakeFeature {
   type: "Feature";
+  id: string;
   geometry: {
     type: "Point";
-    coordinates: [number, number, number];
+    /** `[lon, lat, depth in km]`; the depth is absent when the publisher gave none. */
+    coordinates: [number, number, number?];
   };
   properties: {
     mag: number | null;
     place: string | null;
+    /** Epoch milliseconds. */
     time: number;
-    updated: number;
-    url: string;
-    detail: string;
+    url: string | null;
     felt: number | null;
-    cdi: number | null;
     mmi: number | null;
     alert: string | null;
-    status: string;
+    /** 1 for a large event in an oceanic region (not a warning), else 0. */
     tsunami: number;
-    sig: number;
-    net: string;
-    code: string;
-    magType: string;
-    type: string;
-    title: string;
+    sources: string[];
   };
 }
 
-interface USGSFeatureCollection {
+interface EarthquakeFeatureCollection {
   type: "FeatureCollection";
-  metadata: { generated: number; url: string; title: string; count: number };
-  features: USGSFeature[];
-}
-
-export function magnitudeToThreshold(minMagnitude: number): string {
-  if (minMagnitude >= 4.5) return "4.5";
-  if (minMagnitude >= 2.5) return "2.5";
-  if (minMagnitude >= 1.0) return "1.0";
-  return "all";
-}
-
-export function buildFeedUrl(timeRange: string, threshold: string): string {
-  return `${USGS_FEED_BASE}/${threshold}_${timeRange}.geojson`;
+  features: EarthquakeFeature[];
+  /** The feed ids behind the features, for the map credits. */
+  sources: string[];
 }
 
 export function depthCategory(depth: number): string {
@@ -86,12 +75,12 @@ export function ageCategory(ageMs: number): string {
   return "older";
 }
 
-export function enrichFeatures(fc: USGSFeatureCollection): USGSFeatureCollection {
+export function enrichFeatures(fc: EarthquakeFeatureCollection): EarthquakeFeatureCollection {
   const now = Date.now();
   return {
     ...fc,
     features: fc.features.map((f) => {
-      const depth = Math.max(0, f.geometry.coordinates[2] ?? 0);
+      const depth = f.geometry.coordinates[2] ?? 0;
       const mag = f.properties.mag ?? 0;
       const age = now - f.properties.time;
       return {
@@ -110,58 +99,106 @@ export function enrichFeatures(fc: USGSFeatureCollection): USGSFeatureCollection
   };
 }
 
+/** The earthquake as one map feature, or null when it carries no usable time. */
+export function hazardToFeature(hazard: NaturalHazard): EarthquakeFeature | null {
+  const time = Date.parse(hazard.start ?? hazard.updatedAt ?? "");
+  if (Number.isNaN(time)) return null;
+  const [lon, lat] = hazard.point;
+  return {
+    type: "Feature",
+    id: hazard.id,
+    geometry: {
+      type: "Point",
+      coordinates: hazard.depthM === undefined ? [lon, lat] : [lon, lat, hazard.depthM / 1000],
+    },
+    properties: {
+      mag: hazard.magnitude?.value ?? null,
+      place: hazard.name ?? null,
+      time,
+      url: hazard.detailUrl ?? null,
+      felt: hazard.feltReports ?? null,
+      mmi: hazard.mmi ?? null,
+      alert: hazard.severity?.declared ?? null,
+      tsunami: hazard.tsunamiFlag ? 1 : 0,
+      sources: hazard.sources,
+    },
+  };
+}
+
+/**
+ * The earthquakes of at least `minMagnitude`. A quake without a magnitude is
+ * kept only when no minimum is asked for.
+ */
+export function hazardsToFeatureCollection(
+  hazards: readonly NaturalHazard[],
+  minMagnitude: number,
+): EarthquakeFeatureCollection {
+  const features: EarthquakeFeature[] = [];
+  for (const hazard of hazards) {
+    const feature = hazardToFeature(hazard);
+    if (feature) features.push(feature);
+  }
+  return filterByMagnitude({ type: "FeatureCollection", features, sources: [] }, minMagnitude);
+}
+
+/** Keeps the features of at least `minMagnitude`; the sources are those of the kept features. */
+function filterByMagnitude(
+  fc: EarthquakeFeatureCollection,
+  minMagnitude: number,
+): EarthquakeFeatureCollection {
+  const features = fc.features.filter(({ properties: { mag } }) =>
+    mag === null ? minMagnitude <= 0 : mag >= minMagnitude,
+  );
+  const sources = new Set(features.flatMap((f) => f.properties.sources));
+  return { type: "FeatureCollection", features, sources: [...sources].sort() };
+}
+
+/** The language a text is asked for: one of the app's locales, English otherwise. */
+function parseLang(raw: string | undefined): "en" | "de" {
+  return raw?.toLowerCase().split("-")[0] === "de" ? "de" : "en";
+}
+
 export function setup(ctx: IntegrationContext): void {
+  const hazards = createHazardsOrchestrator(ctx);
+
   ctx.registerRoute("GET", "/earthquakes", async (req, reply) => {
-    const timeRange = scalarQueries(req.query).timeRange ?? "week";
-    const minMagnitude = Number.parseFloat(scalarQueries(req.query).minMagnitude ?? "2.5");
+    const query = scalarQueries(req.query);
+    const timeRange = query.timeRange ?? "week";
+    const minMagnitude = Number.parseFloat(query.minMagnitude ?? "2.5");
+    const lang = parseLang(query.lang);
 
-    if (!["hour", "day", "week", "month"].includes(timeRange)) {
-      reply.status(400).send({ message: "Invalid timeRange" });
-      return;
+    if (!Object.hasOwn(RANGE_MS, timeRange)) {
+      return reply.status(400).send({ message: "Invalid timeRange" });
     }
-    if (Number.isNaN(minMagnitude)) {
-      reply.status(400).send({ message: "Invalid minMagnitude" });
-      return;
+    if (!Number.isFinite(minMagnitude) || minMagnitude < 0 || minMagnitude > 10) {
+      return reply.status(400).send({ message: "Invalid minMagnitude" });
     }
 
-    const threshold = magnitudeToThreshold(minMagnitude);
-    const cacheKey = `eq:${timeRange}:${threshold}`;
     const ttl = CACHE_TTL[timeRange] ?? 300;
+    // The world's earthquakes of the range are cached once, unfiltered, so the magnitude
+    // cannot multiply cache entries. Namespaced by the response shape: an entry cached in an
+    // older shape must not be served against the new one.
+    const key = `eq:v3:${timeRange}:${lang}`;
 
     try {
-      // Check cache first
-      const cached = await ctx.cache.get<USGSFeatureCollection>(cacheKey);
-      if (cached) {
-        reply.send(enrichFeatures(cached));
-        return;
-      }
-
-      // Fetch from USGS
-      const raw = await fetchJson<USGSFeatureCollection>(buildFeedUrl(timeRange, threshold), {
-        timeoutMs: FETCH_TIMEOUT_MS,
-        nullOnError: true,
+      const fc = await ctx.cache.withCache(key, ttl, async () => {
+        const { hazards: found, partial } = await hazards.naturalHazards(WORLD, {
+          types: ["earthquake"],
+          since: new Date(Date.now() - RANGE_MS[timeRange]).toISOString(),
+          lang,
+        });
+        // Nothing back from a failed read is not "no earthquakes": caching it would hide them.
+        if (partial === "unavailable" && found.length === 0) {
+          throw new Error("every hazards provider failed");
+        }
+        return hazardsToFeatureCollection(found, 0);
       });
-
-      if (!raw) {
-        ctx.log.warn("USGS feed request failed");
-        reply.status(503).send({ message: "Earthquake data temporarily unavailable" });
-        return;
-      }
-
-      await ctx.cache.set(cacheKey, raw, ttl);
-
-      reply.send(enrichFeatures(raw));
+      reply.header("Cache-Control", `public, max-age=${ttl}`);
+      return reply.send(enrichFeatures(filterByMagnitude(fc, minMagnitude)));
     } catch (err) {
-      ctx.log.error("Failed to fetch USGS feed", err);
-
-      // Try stale cache as fallback
-      const stale = await ctx.cache.get<USGSFeatureCollection>(cacheKey);
-      if (stale) {
-        reply.send(enrichFeatures(stale));
-        return;
-      }
-
-      reply.status(503).send({ message: "Earthquake data temporarily unavailable" });
+      ctx.log.error("Failed to read earthquakes", err);
+      reply.header("Cache-Control", "no-store");
+      return reply.status(503).send({ message: "Earthquake data temporarily unavailable" });
     }
   });
 }

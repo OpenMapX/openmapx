@@ -121,6 +121,8 @@ describe("corsOptions", () => {
     expect(res.headers["access-control-expose-headers"]).toContain("Content-Range");
     expect(res.headers["access-control-expose-headers"]).toContain("X-OpenMapX-Fetched-At");
     expect(res.headers["access-control-expose-headers"]).toContain("X-OpenMapX-Stale");
+    expect(res.headers["access-control-expose-headers"]).toContain("X-OpenMapX-Truncated");
+    expect(res.headers["access-control-expose-headers"]).toContain("X-OpenMapX-Sources");
     expect(res.headers.vary).toMatch(/(?:^|,\s*)Origin(?:,|$)/i);
     await app.close();
   });

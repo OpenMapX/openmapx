@@ -196,6 +196,8 @@ export function corsOptions(trustedWebOrigins: readonly string[] = configuredTru
       "ETag",
       "X-OpenMapX-Fetched-At",
       "X-OpenMapX-Stale",
+      "X-OpenMapX-Truncated",
+      "X-OpenMapX-Sources",
     ],
   };
 }

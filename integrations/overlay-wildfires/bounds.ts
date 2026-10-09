@@ -90,39 +90,24 @@ export function normalizeViewport(query: ViewportQuery): NormalizedViewport {
   };
 }
 
-export function splitAntimeridian(bounds: NormalizedViewport): NormalizedViewport[] {
-  if (bounds.west <= bounds.east) return [bounds];
+/** The zoom from which hotspots load as individual detections; below it, as density cells. */
+export const HOTSPOT_POINTS_MIN_ZOOM = 7;
 
-  return [
-    { ...bounds, east: MAX_LON },
-    { ...bounds, west: MIN_LON, east: bounds.east },
-  ];
+/**
+ * The density cell size in degrees for a (whole) zoom level, coarse enough
+ * that a full screen holds a few thousand cells at most.
+ */
+export function densityCellDeg(zoom: number): number {
+  if (zoom <= 3) return 2;
+  if (zoom <= 4) return 1;
+  if (zoom <= 5) return 0.5;
+  return 0.25;
 }
 
-export function nifcOffsetForZoom(zoom: number): number {
+/** The tolerance in degrees perimeters are simplified to for a zoom level. */
+export function perimeterSimplifyDeg(zoom: number): number {
   if (zoom <= 4) return 0.02;
   if (zoom <= 6) return 0.01;
   if (zoom <= 8) return 0.005;
   return 0.001;
-}
-
-export function dedupeByFeatureId(
-  collections: GeoJSON.FeatureCollection[],
-): GeoJSON.FeatureCollection {
-  const seen = new Set<string | number>();
-  const features: GeoJSON.Feature[] = [];
-
-  for (const collection of collections) {
-    for (const feature of collection.features) {
-      if (feature.id === undefined || feature.id === null) {
-        features.push(feature);
-        continue;
-      }
-      if (seen.has(feature.id)) continue;
-      seen.add(feature.id);
-      features.push(feature);
-    }
-  }
-
-  return { type: "FeatureCollection", features };
 }

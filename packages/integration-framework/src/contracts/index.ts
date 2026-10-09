@@ -52,6 +52,17 @@ export type {
   GtfsCatalogProvider,
 } from "./gtfs-catalog-provider.js";
 export type {
+  CapSeverity,
+  FireDensityCell,
+  FireInstrument,
+  FirePixel,
+  HazardAlert,
+  HazardsProvider,
+  HazardsQuery,
+  NaturalHazard,
+  NaturalHazardType,
+} from "./hazards-provider.js";
+export type {
   KnowledgeContext,
   KnowledgeProvider,
   KnowledgeResult,

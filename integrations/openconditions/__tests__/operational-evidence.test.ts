@@ -38,6 +38,8 @@ const EVERY_SOURCE: LiveSources = {
   has: () => true,
   link: () => undefined,
   licenseName: () => undefined,
+  noticeOf: () => undefined,
+  firmsSources: () => [],
 };
 
 const SCOPES: Record<string, SourceScope> = {

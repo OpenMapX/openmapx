@@ -51,6 +51,7 @@ export function EarthquakeLegend() {
   const colorMode = useEarthquakeStore((s) => s.colorMode);
   const showHeatmap = useEarthquakeStore((s) => s.showHeatmap);
   const lastUpdated = useEarthquakeStore((s) => s.lastUpdated);
+  const unavailable = useEarthquakeStore((s) => s.unavailable);
   const setLayerVisible = useOverlayVisibilitySetter("earthquakes");
   const setTimeRange = useEarthquakeStore((s) => s.setTimeRange);
   const setMinMagnitude = useEarthquakeStore((s) => s.setMinMagnitude);
@@ -241,6 +242,12 @@ export function EarthquakeLegend() {
           </Box>
         </Box>
       </Box>
+      {/* No answer from a hazards source is not "no earthquakes". */}
+      {unavailable && !loading && (
+        <Typography sx={{ fontSize: 11, color: "error.main", mt: 0.75 }}>
+          {t("unavailable")}
+        </Typography>
+      )}
       <Typography sx={{ fontSize: 10.5, color: "text.secondary", mt: 0.75 }}>
         {lastUpdated &&
           t("lastUpdated", {

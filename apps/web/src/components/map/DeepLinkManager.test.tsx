@@ -1,6 +1,11 @@
 // @vitest-environment jsdom
 
 import {
+  ALL_CATEGORIES as NATURAL_EVENT_CATEGORIES,
+  useNaturalEventStore,
+} from "@integrations/overlay-natural-events/store";
+import { useWildfireStore } from "@integrations/overlay-wildfires/store";
+import {
   createOverlayStore,
   getRegisteredOverlayStore,
   isOverlayActive,
@@ -129,6 +134,32 @@ describe("DeepLinkManager overlay application", () => {
     expect(isOverlayActive("weather")).toBe(false);
     expect(window.location.search).toContain("ov=air-quality");
     expect(window.location.search).not.toContain("overlay-air-quality");
+  });
+
+  it("keeps only the natural-event categories the layer shows", () => {
+    useNaturalEventStore.setState({ activeCategories: new Set(NATURAL_EVENT_CATEGORIES) });
+
+    window.history.replaceState(null, "", "/?neCat=snow");
+    render(<DeepLinkManager />);
+    expect([...useNaturalEventStore.getState().activeCategories]).toEqual([
+      ...NATURAL_EVENT_CATEGORIES,
+    ]);
+
+    window.history.replaceState(null, "", "/?neCat=snow,floods");
+    render(<DeepLinkManager />);
+    expect([...useNaturalEventStore.getState().activeCategories]).toEqual(["floods"]);
+  });
+
+  it("reads the hotspot sensor of a wildfire link as an instrument family", () => {
+    useWildfireStore.setState({ source: "viirs" });
+
+    window.history.replaceState(null, "", "/?fire=2,modis,0");
+    render(<DeepLinkManager />);
+    expect(useWildfireStore.getState()).toMatchObject({ dayRange: 2, source: "modis" });
+
+    window.history.replaceState(null, "", "/?fire=1,VIIRS_SNPP_NRT,0");
+    render(<DeepLinkManager />);
+    expect(useWildfireStore.getState()).toMatchObject({ dayRange: 1, source: "modis" });
   });
 
   it("leaves an automation-opened overlay alone when the link does not name it", () => {

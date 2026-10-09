@@ -4,6 +4,7 @@ import type { ChargingSiteProvider } from "./contracts/charging-site-provider.js
 import type { FuelStationProvider } from "./contracts/fuel-station-provider.js";
 import type { GeocodingProvider } from "./contracts/geocoding-provider.js";
 import type { GtfsCatalogProvider } from "./contracts/gtfs-catalog-provider.js";
+import type { HazardsProvider } from "./contracts/hazards-provider.js";
 import type { KnowledgeProvider } from "./contracts/knowledge-provider.js";
 import type { MobilityDataSourceProvider } from "./contracts/mobility-data-source-provider.js";
 import type { ParkingSiteProvider } from "./contracts/parking-site-provider.js";
@@ -520,6 +521,12 @@ export interface IntegrationContext {
    * registered providers.
    */
   registerCameraProvider(provider: CameraProvider): void;
+  /**
+   * Typed registrar for hazards providers (alerts, natural hazards, fire
+   * detections). Stored under the `hazards` key; the hazards orchestrator
+   * merges all registered providers.
+   */
+  registerHazardsProvider(provider: HazardsProvider): void;
   /** Typed registrar for photo providers. Stored under the `photos` key. */
   registerPhotoProvider(provider: PhotoProvider): void;
   /** Typed registrar for street-level imagery providers. Stored under the `street-level-imagery` key. */

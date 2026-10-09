@@ -18,6 +18,7 @@ import {
   NOAA_SMOKE_STYLE,
   type WildfirePopupTranslate,
 } from "../presentation";
+import { isSourceId } from "../source-id";
 import { useWildfireStore } from "../store";
 import type { NoaaSmokeProperties, WildfireFeatureCollection } from "../types";
 
@@ -95,7 +96,7 @@ function isNoaaSmokeProperties(value: unknown): value is NoaaSmokeProperties {
     value.id.startsWith("noaa-hms:") &&
     value.id.length > "noaa-hms:".length &&
     value.kind === "observed-smoke" &&
-    value.provider === "noaa-hms" &&
+    isSourceId(value.provider) &&
     (value.density === "light" || value.density === "medium" || value.density === "heavy") &&
     (value.satellite === undefined || typeof value.satellite === "string") &&
     isOptionalTimestamp(value.startedAt) &&
@@ -119,6 +120,8 @@ export function isNoaaSmokeFeatureCollection(value: unknown): value is WildfireF
     isCanonicalTimestamp(value.fetchedAt) &&
     typeof value.stale === "boolean" &&
     typeof value.truncated === "boolean" &&
+    Array.isArray(value.sources) &&
+    value.sources.every(isSourceId) &&
     Array.isArray(value.features) &&
     value.features.every(isNoaaSmokeFeature)
   );
@@ -191,6 +194,7 @@ export function NoaaSmokeLayer({ active, popupController }: NoaaSmokeLayerProps)
         truncated: data.truncated,
         error: null,
         featureCount: data.features.length,
+        sources: data.sources,
       });
     } catch {
       if (!request.isCurrent()) return;

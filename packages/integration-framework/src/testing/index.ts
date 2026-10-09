@@ -27,6 +27,7 @@ import type { ChargingSiteProvider } from "../contracts/charging-site-provider.j
 import type { FuelStationProvider } from "../contracts/fuel-station-provider.js";
 import type { GeocodingProvider } from "../contracts/geocoding-provider.js";
 import type { GtfsCatalogProvider } from "../contracts/gtfs-catalog-provider.js";
+import type { HazardsProvider } from "../contracts/hazards-provider.js";
 import type { KnowledgeProvider } from "../contracts/knowledge-provider.js";
 import type { MobilityDataSourceProvider } from "../contracts/mobility-data-source-provider.js";
 import type { ParkingSiteProvider } from "../contracts/parking-site-provider.js";
@@ -214,6 +215,7 @@ export interface CapturedRegistrations {
   parkingSites: ParkingSiteProvider[];
   chargingSites: ChargingSiteProvider[];
   cameras: CameraProvider[];
+  hazards: HazardsProvider[];
   photo: PhotoProvider[];
   streetLevel: StreetLevelProvider[];
   review: ReviewProvider[];
@@ -267,6 +269,7 @@ export function createMockIntegrationContext(
     parkingSites: [],
     chargingSites: [],
     cameras: [],
+    hazards: [],
     photo: [],
     streetLevel: [],
     review: [],
@@ -334,6 +337,9 @@ export function createMockIntegrationContext(
     },
     registerCameraProvider: (p) => {
       registered.cameras.push(p);
+    },
+    registerHazardsProvider: (p) => {
+      registered.hazards.push(p);
     },
     registerPhotoProvider: (p) => {
       registered.photo.push(p);

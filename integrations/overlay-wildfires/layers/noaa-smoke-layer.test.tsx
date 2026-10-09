@@ -83,6 +83,7 @@ function smokeCollection(overrides: Record<string, unknown> = {}) {
     fetchedAt: "2026-08-12T12:00:00.000Z",
     stale: false,
     truncated: false,
+    sources: ["us-noaa-hms-smoke"],
     features: [
       {
         type: "Feature" as const,
@@ -90,7 +91,7 @@ function smokeCollection(overrides: Record<string, unknown> = {}) {
         properties: {
           id: "noaa-hms:7",
           kind: "observed-smoke" as const,
-          provider: "noaa-hms" as const,
+          provider: "us-noaa-hms-smoke",
           density: "heavy" as const,
           satellite: '<GOES & "West">',
           startedAt: "2026-08-12T10:00:00.000Z",
@@ -151,13 +152,14 @@ describe("NOAA smoke response validation", () => {
     ["non-canonical fetchedAt", { fetchedAt: "2026-08-12T12:00:00Z" }],
     ["missing stale", { stale: undefined }],
     ["missing truncated", { truncated: undefined }],
+    ["missing sources", { sources: undefined }],
   ])("rejects an envelope with %s", (_label, overrides) => {
     expect(isNoaaSmokeFeatureCollection(smokeCollection(overrides))).toBe(false);
   });
 
   it.each([
     ["mismatched stable ID", { id: "noaa-hms:8" }],
-    ["wrong provider", { provider: "nifc" }],
+    ["no source id as provider", { provider: "" }],
     ["wrong kind", { kind: "forecast-smoke" }],
     ["unknown density", { density: "extreme" }],
     ["invalid optional satellite", { satellite: 42 }],

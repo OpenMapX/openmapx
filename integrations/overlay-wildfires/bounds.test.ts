@@ -1,10 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  dedupeByFeatureId,
-  nifcOffsetForZoom,
-  normalizeViewport,
-  splitAntimeridian,
-} from "./bounds.js";
+import { densityCellDeg, normalizeViewport } from "./bounds.js";
 
 describe("normalizeViewport", () => {
   it("expands and quantizes a normal viewport", () => {
@@ -52,33 +47,12 @@ describe("normalizeViewport", () => {
   );
 });
 
-it("splits an antimeridian viewport", () => {
-  expect(splitAntimeridian({ west: 170, south: -10, east: -170, north: 10, zoom: 5 })).toEqual([
-    { west: 170, south: -10, east: 180, north: 10, zoom: 5 },
-    { west: -180, south: -10, east: -170, north: 10, zoom: 5 },
-  ]);
-});
-
 it.each([
-  [3, 0.02],
-  [5, 0.01],
-  [7, 0.005],
-  [9, 0.001],
-])("uses the NIFC simplification offset for zoom %i", (zoom, expected) =>
-  expect(nifcOffsetForZoom(zoom)).toBe(expected),
+  [0, 2],
+  [3, 2],
+  [4, 1],
+  [5, 0.5],
+  [6, 0.25],
+])("uses density cells for zoom %i of %f degrees", (zoom, expected) =>
+  expect(densityCellDeg(zoom)).toBe(expected),
 );
-
-it("deduplicates split-query features by provider id", () => {
-  expect(
-    dedupeByFeatureId([
-      {
-        type: "FeatureCollection",
-        features: [{ type: "Feature", id: "nifc:1", properties: {}, geometry: null }],
-      },
-      {
-        type: "FeatureCollection",
-        features: [{ type: "Feature", id: "nifc:1", properties: {}, geometry: null }],
-      },
-    ]).features,
-  ).toHaveLength(1);
-});
