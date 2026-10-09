@@ -135,24 +135,6 @@ function adapt(value: unknown): unknown {
     if (value[1] === "class") return categoryClass;
     if (value[1] === "subclass") return ["get", "category"];
   }
-  if (
-    value[0] === "match" &&
-    Array.isArray(value[1]) &&
-    value[1][0] === "get" &&
-    value[1][1] === "class"
-  ) {
-    // Unknown destinations still use a native POI badge when the style has
-    // a generic class. Borrow that branch; never assume a sprite exists.
-    const adapted = value.map(adapt);
-    for (let index = 2; index < value.length - 1; index += 2) {
-      const labels = Array.isArray(value[index]) ? value[index] : [value[index]];
-      if (labels.includes("multi")) {
-        adapted[adapted.length - 1] = adapt(value[index + 1]);
-        break;
-      }
-    }
-    return adapted;
-  }
   return value.map(adapt);
 }
 

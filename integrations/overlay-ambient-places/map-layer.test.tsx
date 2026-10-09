@@ -192,7 +192,7 @@ describe("ambient generation lifecycle", () => {
         ["gallery", "art_gallery", "gallery"],
         ["florist", "shop", "florist"],
         ["place_of_worship", "place_of_worship", "place_of_worship"],
-        ["unmapped", "multi", "unmapped"],
+        ["unmapped", "unmapped", "unmapped"],
       ]) {
         expect(evaluate(ordinary.layout["icon-image"], "icon-image", { category })).toEqual(
           evaluate(native.layout["icon-image"], "icon-image", { class: poiClass, subclass }),

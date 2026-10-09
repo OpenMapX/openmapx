@@ -152,14 +152,20 @@ Ambient destinations borrow their category badges, label colors, fonts, sizes an
 halos from the active basemap's POI layers. The owned light/dark styles therefore
 share the same sprite assets and visual vocabulary; hosted styles keep their own
 assets. Only the rendering adapter translates publication categories (for example
-`doctor` to `doctors` or `supermarket` to `grocery`). It does not change canonical
+`doctor` to `doctors`, `office/association` to `office`, or a supplied Overture
+`dental_clinic` to `dentist`). It does not change canonical
 IDs, ranking, source coverage or the published tile schema.
 
 Ordinary destinations use one label position below the badge. Corroborated
 landmarks use the basemap's bold landmark typography, a compact six-em wrap width
-and six collision-safe candidate positions. If a landmark badge cannot fit, its
-name can still appear when text placement succeeds. An unlabelled badge is never
-shown. Neither icons nor text force overlap or ignore placement. Existing
+and six collision-safe candidate positions. All destinations use the ordinary
+native badge size; an enlarged landmark badge can otherwise collide while the
+normal POI badge fits. Icon and label must fit together. Unknown destination
+categories use the owned basemap's neutral marker badge from the shared POI
+registry; `multi` still means a sports pitch. Hosted styles retain their own
+fallback. Category mappings
+are visual only and do not change published categories or ranking. Neither icons
+nor text force overlap or ignore placement. Existing
 basemap road/transit labels retain priority, and selection/category/basemap
 identity suppression applies independently to both symbol partitions. Basemap
 style reloads refresh the borrowed cartography and suppression filters.
@@ -255,7 +261,8 @@ The cropped source fingerprint is
 The source snapshot's latest object timestamp is `2026-10-06T20:09:52Z`;
 the publication timestamp is a separate pipeline timestamp.
 
-This run has **OSM-only coverage**. Optional Overture/confidence/conflation and
+The original Rhine run has **OSM-only coverage**; the subsequent combined Neuss
+run below verifies actual Overture coverage. For the original run, optional Overture/confidence/conflation and
 published-GERS detail resolution are covered by the PostGIS regression fixtures,
 not claimed as a live Overture extract. Single-name source features without aliases
 or codes can be absent from the existing alias/code-focused search index. The
@@ -402,3 +409,73 @@ missed the unchanged 33.4 ms target in both states. An isolated repeat measured
 native p95 is 34/34 ms; individual sweeps and the initial off-state slowdown
 remain in the artifact. These measurements establish a qualified local repeat,
 not a guarantee for physical devices or competing host load.
+
+## Real combined-source acceptance: October 9, 2026
+
+The latest follow-up uses the existing Overture importer and conflation job,
+alongside the real OSM extract above, in a disposable database. It publishes a
+bounded Neuss subset `[6.64,51.14,6.75,51.25]` of the Düsseldorf source region;
+this does not claim coverage of the entire region. The installed Overture Places
+release is `2026-09-23.1`, verified through its STAC catalog. Its two overlapping
+source assets produce a bounded Parquet containing 15,232 rows / 2,112,192 bytes,
+with SHA-256 `708a6e41ac21dbfb8a99923f18d94af5e9af4fb4dd506c0f99ab0d7852ce5eef`.
+Contributor names and source asset URLs are recorded in
+`combinedSourceCartographyFollowup` in the aggregate evidence.
+
+The existing structured matcher, without embeddings, completes conflation before
+publication. It accepts 921 source links across the indexed extract. Within the
+publication bounds and policy filters, generation
+`1f2bfe9c-c389-465d-8d38-7db8e17f5ba7` contains **10,138 places: 1,412 OSM-only,
+8,690 Overture-only and 36 merged OSM/Overture**. No records or links are inserted
+as synthetic acceptance witnesses. The regional labeled quality corpus has no
+applicable cases inside this subset; its successful gate therefore does not
+establish local match precision.
+
+Actual tile reads and both the snapshot fallback and enabled Overture detail
+resolver retain Quirinus-Münster's primary `osm:way/28562993` plus GERS alias
+`afb26729-88d4-43a4-81e8-1c3cf5492082`. The Overture-only Cafe Bar Kleeberg retains
+`overture:6ffbe79a-b1ce-4900-93f6-b64b67d67ed5` through its tile, cafe category
+search and details. Pointer taps on both placed badges select those identities;
+the selected ambient copy disappears. External enrichment is disabled in this QA
+fixture. The real admin component displays the combined generation, release and
+eligible source counts.
+
+| Combined Neuss check                       | Declared limit |     Observed |
+| ------------------------------------------ | -------------: | -----------: |
+| Publication after indexing/conflation      |           60 s |      0.660 s |
+| First dense repository tile read           |       1,000 ms |     31.82 ms |
+| Warm dense p95, 30 reads                   |         100 ms |     10.58 ms |
+| Eight concurrent dense reads p95, 40 reads |         250 ms |     67.57 ms |
+| Dense tile features / bytes                |  256 / 131,072 | 256 / 38,529 |
+| Explicit IDs duplicated in decoded tiles   |              0 |            0 |
+
+The new light/dark desktop and native iOS screenshots use this combined
+publication. Genuine before captures use pre-PR revision
+`78e0990764247359d724a58b6aa3884eb2150291`, rather than an intermediate PR state.
+Quirinus-Münster now requires its normal native POI badge and label to fit
+together. ADAC Center Neuss uses the native office badge in its controlled zoom-18
+comparison; at the original zoom-16 camera it can still lose collision placement.
+Eligibility is not a promise of visibility at every camera.
+
+Frame evidence and any unsuccessful diagnostic attempts are recorded separately
+from the historical OSM-only runs above. The same pooled p95 ≤33.4 ms and
+intervals >50 ms ≤5% targets remain binding. These local measurements do not
+establish physical-device or deployed network/CDN performance.
+
+After freshly invoking T3's native Electron preview and verifying the current
+sprite assets, five sweeps per state measure desktop pooled p95 9.8/9.9 ms off/on,
+with no intervals over 50 ms. Earlier preview-connection samples missed the
+budget in both states; the artifact retains them as unsuccessful diagnostics.
+An earlier Electron repeat loaded stale assets from the local QA-origin cache
+and is not used as final acceptance. Release asset cache invalidation already
+uses the committed build revision; the dirty QA rebuild reused that revision.
+
+The first combined-source native iOS run, with device streaming active, measures
+38/35 ms off/on and misses the p95 target. Pausing that stream and removing the
+second QA map produces an isolated five-sweep-per-state repeat of 29/30 ms,
+with 0.076%/0.394% of intervals over 50 ms. No builds/tests run concurrently and
+no unrelated host process is stopped. Because the native touch runner fails to
+accept connections, a temporary trusted QA-route helper starts the same sweeps
+after verifying the exact combined generation and current sprite; simulator URL
+opening brings Safari to the foreground. Product security policy is unchanged.
+Both the unsuccessful run and the passing qualified repeat remain in the artifact.

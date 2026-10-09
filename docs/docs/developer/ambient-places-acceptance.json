@@ -1919,5 +1919,1383 @@
       }
     ],
     "codeQualification": "A post-capture lint rationale comment preserves the tested style-version dependency; rendering behavior is unchanged."
+  },
+  "combinedSourceCartographyFollowup": {
+    "date": "2026-10-09",
+    "scope": "Real bounded Neuss OSM + Overture publication in task-owned PostGIS; production cartography with supplied source categories and coupled native badges/labels",
+    "beforeRevision": "78e0990764247359d724a58b6aa3884eb2150291",
+    "captureParentRevision": "02da301013dce52c8808236c2599900a01f49aae",
+    "codeFiles": {
+      "apps/web/src/components/map/ambientPlaceStyle.ts": "c2ca7fc00d7b06b0bce4f2424b09aab1baaeefeb2a530a4b3a236353366a0424",
+      "apps/web/scripts/poi-icon-registry.mjs": "f4477338aaf6826add76057488755966b32b5acad2c69f1e515c7dec263882c5",
+      "apps/web/public/styles/openmapx-streets.json": "16efe3afa8f3fc7a87bc8212365be8739e25cb25872b2afccc4366d62e8421bb",
+      "apps/web/public/styles/openmapx-dark.json": "06ed94825e13937aafe81e1bdd1de23b63d4eb352c80c1fc58e2e9ab50cc7aef",
+      "apps/web/public/styles/sprite.json": "aaaefe410ae9bdf0822e0bff251ac3cb485fc4719e02e015ab19881e9a720216",
+      "apps/web/public/styles/sprite@2x.json": "00918020a8d66c96b9231728a3248592aaddaaf22aa3c7e9d92a5c76353465fe",
+      "apps/web/public/styles/sprite.png": "ae5e3ab539b9fb3f38220ba7b861b899dbae31bf43016a1882a5c4b2e51cace5",
+      "apps/web/public/styles/sprite@2x.png": "01410076e83ec4a7901b531930f1a6028e3e27cf21d24cb2897e2cd652003e69"
+    },
+    "publication": {
+      "version": 1,
+      "policyVersion": 2,
+      "generation": "1f2bfe9c-c389-465d-8d38-7db8e17f5ba7",
+      "publishedAt": "2026-10-09T18:19:42.399Z",
+      "region": {
+        "name": "Neuss combined-source acceptance",
+        "bounds": [
+          6.64,
+          51.14,
+          6.75,
+          51.25
+        ]
+      },
+      "placeCount": 10138,
+      "enabled": true,
+      "sources": {
+        "osm": {
+          "region": "europe/germany/nordrhein-westfalen/duesseldorf-regbez",
+          "epoch": "35bd76dd-d9de-4025-98ef-f11720c2ff17",
+          "publishedAt": "2026-10-09T18:19:04.160Z",
+          "count": 1448
+        },
+        "overture": {
+          "region": "europe/germany/nordrhein-westfalen/duesseldorf-regbez",
+          "release": "2026-09-23.1",
+          "publishedAt": "2026-10-09T18:19:09.785Z",
+          "count": 8727
+        }
+      }
+    },
+    "publishedMs": 660.3756250000006,
+    "sourceCounts": [
+      {
+        "sources": "osm",
+        "count": 1412
+      },
+      {
+        "sources": "osm,overture",
+        "count": 36
+      },
+      {
+        "sources": "overture",
+        "count": 8690
+      }
+    ],
+    "overture": {
+      "release": "2026-09-23.1",
+      "boundedSnapshotRows": 15232,
+      "bbox": {
+        "west": 6.64,
+        "south": 51.14,
+        "east": 6.75,
+        "north": 51.25
+      },
+      "parquetBytes": 2112192,
+      "parquetSha256": "708a6e41ac21dbfb8a99923f18d94af5e9af4fb4dd506c0f99ab0d7852ce5eef",
+      "contributors": [
+        "AllThePlaces",
+        "BrightQuery",
+        "DAC",
+        "Foursquare",
+        "Microsoft",
+        "Overture",
+        "PinMeTo",
+        "meta"
+      ],
+      "assets": [
+        {
+          "itemId": "00010",
+          "bbox": [
+            6.285987854003906,
+            47.3820686340332,
+            42.14201736450195,
+            51.22665023803711
+          ],
+          "numRows": 5075322,
+          "href": "https://overturemaps-us-west-2.s3.us-west-2.amazonaws.com/release/2026-09-23.1/theme=places/type=place/part-00010-1c7c0e0e-408b-5c7c-8dc8-a1687f22ef6e-c000.zstd.parquet"
+        },
+        {
+          "itemId": "00011",
+          "bbox": [
+            6.285979270935059,
+            51.226646423339844,
+            42.142005920410156,
+            80.50548553466797
+          ],
+          "numRows": 5088275,
+          "href": "https://overturemaps-us-west-2.s3.us-west-2.amazonaws.com/release/2026-09-23.1/theme=places/type=place/part-00011-9aa07e3a-309b-5031-8820-4ec743a80d43-c000.zstd.parquet"
+        }
+      ],
+      "sourceCatalog": "https://stac.overturemaps.org/catalog.json"
+    },
+    "conflation": {
+      "status": "completed",
+      "linked": 921,
+      "emitted": 42474,
+      "extracted": 34570,
+      "candidates": 1142,
+      "components": 901,
+      "phaseDurationsMs": {
+        "score": 2075,
+        "assign": 128,
+        "extract": 29976,
+        "publish": 21
+      }
+    },
+    "tileReads": [
+      {
+        "name": "centre",
+        "xyz": [
+          16,
+          33986,
+          21882
+        ],
+        "firstMs": 31.823582999999985,
+        "warmP95Ms": 10.584374999999909,
+        "concurrentP95Ms": 67.57266699999991,
+        "bytes": 38529,
+        "features": 256,
+        "explicitDuplicates": 0,
+        "durations": [
+          6.13454200000001,
+          4.267082999999957,
+          4.367375000000038,
+          5.1391250000000355,
+          4.229082999999946,
+          4.857584000000088,
+          7.632292000000007,
+          5.024042000000009,
+          3.8124159999999847,
+          8.856082999999899,
+          3.686417000000006,
+          3.585207999999966,
+          4.635416999999961,
+          4.845959000000107,
+          4.379249999999956,
+          4.45575000000008,
+          46.05487500000004,
+          7.024541999999883,
+          10.584374999999909,
+          3.8940410000000156,
+          3.4873340000001463,
+          3.3858329999998205,
+          3.358249999999998,
+          3.207540999999992,
+          3.5398750000001655,
+          4.716083000000026,
+          5.1820829999999205,
+          4.908333000000084,
+          3.6262500000000273,
+          3.784915999999839
+        ],
+        "concurrent": [
+          4.788917000000083,
+          66.30324999999993,
+          66.4124159999999,
+          66.87195800000018,
+          67.05312500000014,
+          67.57266699999991,
+          73.56937500000004,
+          74.56054199999994,
+          7.477832999999919,
+          7.808166000000028,
+          8.057833000000073,
+          8.266375000000153,
+          8.48395800000003,
+          8.592124999999896,
+          8.765250000000151,
+          8.927500000000009,
+          8.756624999999985,
+          8.776875000000018,
+          8.782207999999855,
+          9.387834000000112,
+          9.783874999999853,
+          9.821958000000222,
+          10.00545800000009,
+          10.163292000000183,
+          7.999958000000106,
+          8.023374999999987,
+          8.358707999999979,
+          8.4028330000001,
+          8.385333000000173,
+          8.410167000000001,
+          8.427500000000009,
+          8.71354099999985,
+          6.161207999999988,
+          6.177625000000035,
+          6.40424999999982,
+          6.670374999999922,
+          6.676875000000109,
+          6.979624999999942,
+          7.020667000000003,
+          7.224582999999939
+        ]
+      },
+      {
+        "name": "sparse",
+        "xyz": [
+          16,
+          33977,
+          21898
+        ],
+        "firstMs": 3.0148329999999532,
+        "warmP95Ms": 3.2005420000000413,
+        "concurrentP95Ms": 5.003582999999935,
+        "bytes": 0,
+        "features": 0,
+        "explicitDuplicates": 0,
+        "durations": [
+          3.8957920000000286,
+          2.7625829999999496,
+          2.142041000000063,
+          2.3553750000000946,
+          2.2161670000000413,
+          2.402249999999867,
+          2.287667000000056,
+          2.4512500000000728,
+          2.3421670000000177,
+          2.2447089999998298,
+          3.0800000000001546,
+          2.541541999999936,
+          2.6132500000001073,
+          2.3816249999999854,
+          2.1641250000000127,
+          2.6864160000000084,
+          2.3003329999999096,
+          3.2005420000000413,
+          2.366416999999956,
+          2.2330420000000686,
+          1.9996660000001611,
+          2.0250409999998737,
+          2.2698749999999563,
+          2.2604999999998654,
+          2.3687499999998636,
+          2.2768330000001242,
+          2.292750000000069,
+          2.300457999999935,
+          2.217250000000149,
+          1.916834000000108
+        ],
+        "concurrent": [
+          4.038499999999885,
+          4.20637499999998,
+          4.2127499999999145,
+          4.268792000000076,
+          4.373832999999877,
+          4.38474999999994,
+          4.569375000000036,
+          4.8362909999998465,
+          4.180708999999979,
+          4.434958999999935,
+          4.769958999999972,
+          4.918084000000135,
+          4.948540999999977,
+          4.9806670000000395,
+          4.97766700000011,
+          5.190207999999984,
+          3.344959000000017,
+          3.4224999999999,
+          3.8652079999999387,
+          3.9571249999999054,
+          3.9665419999998903,
+          4.056916000000001,
+          4.084916999999905,
+          4.830000000000155,
+          3.7978330000000824,
+          4.228334000000132,
+          4.510999999999967,
+          4.570457999999917,
+          4.643917000000101,
+          4.774249999999938,
+          4.800083000000086,
+          5.080083000000059,
+          3.80012499999998,
+          3.808332999999948,
+          4.036290999999892,
+          4.1832090000000335,
+          4.1929589999999735,
+          4.2309999999999945,
+          4.341000000000122,
+          5.003582999999935
+        ]
+      }
+    ],
+    "identity": [
+      {
+        "name": "Quirinus-Münster",
+        "id": "osm:way/28562993",
+        "gersId": "afb26729-88d4-43a4-81e8-1c3cf5492082",
+        "sources": "osm,overture",
+        "publishedId": "osm:way/28562993",
+        "detailId": "osm:way/28562993",
+        "searchId": null,
+        "tile": [
+          18,
+          135945,
+          87529
+        ]
+      },
+      {
+        "name": "Cafe Bar Kleeberg",
+        "id": "overture:6ffbe79a-b1ce-4900-93f6-b64b67d67ed5",
+        "gersId": "6ffbe79a-b1ce-4900-93f6-b64b67d67ed5",
+        "sources": "overture",
+        "publishedId": "overture:6ffbe79a-b1ce-4900-93f6-b64b67d67ed5",
+        "detailId": "overture:6ffbe79a-b1ce-4900-93f6-b64b67d67ed5",
+        "searchId": "overture:6ffbe79a-b1ce-4900-93f6-b64b67d67ed5",
+        "tile": [
+          18,
+          135945,
+          87530
+        ]
+      }
+    ],
+    "interaction": {
+      "cafeTap": {
+        "selected": {
+          "id": "overture:6ffbe79a-b1ce-4900-93f6-b64b67d67ed5",
+          "name": "Cafe Bar Kleeberg",
+          "ids": {
+            "overture": "6ffbe79a-b1ce-4900-93f6-b64b67d67ed5",
+            "gers": "6ffbe79a-b1ce-4900-93f6-b64b67d67ed5"
+          },
+          "coordinates": [
+            6.693071722984314,
+            51.19823004156132
+          ]
+        },
+        "ambientStillVisible": false,
+        "filterHasSelected": true
+      },
+      "quirinusTap": {
+        "selected": {
+          "id": "osm:way/28562993",
+          "name": "Quirinus-Münster",
+          "ids": {
+            "osm": "way/28562993",
+            "overture": "afb26729-88d4-43a4-81e8-1c3cf5492082",
+            "gers": "afb26729-88d4-43a4-81e8-1c3cf5492082"
+          }
+        }
+      }
+    },
+    "screenshots": {
+      "after-desktop.png": {
+        "sha256": "82aa5a243292b56f594cd127f4c35245b6fc6ab922e697ca5125536a85feffdf"
+      },
+      "after-dark.png": {
+        "sha256": "31cc030d7bce137a7f87e82bd5b49f5e5832684d74cc7f820809ca884ab8399e"
+      },
+      "ios-after.png": {
+        "sha256": "5f35d5cfb47b91db65efccbd0e9c1736d1aa0b5f9455806c9cd088a177532045",
+        "exportDimensions": [
+          1206,
+          2622
+        ],
+        "qualification": "Verified native capture from current combined generation at original zoom-16 camera; raw @3x PNG. Genuine native before is exported @1x, same CSS camera."
+      },
+      "before-adac.png": {
+        "sha256": "8b8a43b778d20bac0f7c9ec6d9792fddb27c6d77426443d737df036f5dc0c289"
+      },
+      "after-adac.png": {
+        "sha256": "5315a0f6669ed90b522b163d98a5afa71e0e6efed115618753ab9a39bd12e110"
+      },
+      "admin-after.png": {
+        "sha256": "fb1914b867dd1dba637ac7d74c07582639d79621fa7a7454897394645941b529"
+      }
+    },
+    "frameDiagnostics": {
+      "rawSha256": "430f776576283ef6b66865953e9f048a732717cde83626003c0635fdc5a69276",
+      "samples": [
+        {
+          "method": "MapLibre easeTo two 2.5-second legs",
+          "enabled": false,
+          "iteration": 0,
+          "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
+          "viewport": [
+            1280,
+            800
+          ],
+          "devicePixelRatio": 2,
+          "visibility": "visible",
+          "medianMs": 483.3000000000029,
+          "p95Ms": 1049.9000000000087,
+          "over50": 8,
+          "over50Percent": 100
+        },
+        {
+          "method": "MapLibre easeTo two 2.5-second legs",
+          "enabled": true,
+          "iteration": 0,
+          "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
+          "viewport": [
+            1280,
+            800
+          ],
+          "devicePixelRatio": 2,
+          "visibility": "visible",
+          "medianMs": 383.3000000000029,
+          "p95Ms": 733.2999999999884,
+          "over50": 10,
+          "over50Percent": 100
+        },
+        {
+          "method": "MapLibre easeTo two 2.5-second legs",
+          "enabled": false,
+          "iteration": 1,
+          "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
+          "viewport": [
+            1280,
+            800
+          ],
+          "devicePixelRatio": 2,
+          "visibility": "visible",
+          "medianMs": 516.6999999999971,
+          "p95Ms": 766.6000000000058,
+          "over50": 9,
+          "over50Percent": 90
+        },
+        {
+          "method": "MapLibre easeTo two 2.5-second legs",
+          "enabled": true,
+          "iteration": 1,
+          "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
+          "viewport": [
+            1280,
+            800
+          ],
+          "devicePixelRatio": 2,
+          "visibility": "visible",
+          "medianMs": 316.6999999999971,
+          "p95Ms": 566.6000000000058,
+          "over50": 12,
+          "over50Percent": 92.3076923076923
+        },
+        {
+          "method": "MapLibre easeTo two 2.5-second legs",
+          "enabled": false,
+          "iteration": 2,
+          "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
+          "viewport": [
+            1280,
+            800
+          ],
+          "devicePixelRatio": 2,
+          "visibility": "visible",
+          "medianMs": 366.59999999999127,
+          "p95Ms": 649.8999999999942,
+          "over50": 12,
+          "over50Percent": 92.3076923076923
+        },
+        {
+          "method": "MapLibre easeTo two 2.5-second legs",
+          "enabled": true,
+          "iteration": 2,
+          "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
+          "viewport": [
+            1280,
+            800
+          ],
+          "devicePixelRatio": 2,
+          "visibility": "visible",
+          "medianMs": 333.3000000000029,
+          "p95Ms": 900.1000000000058,
+          "over50": 10,
+          "over50Percent": 100
+        },
+        {
+          "method": "MapLibre easeTo two 2.5-second legs",
+          "enabled": false,
+          "iteration": 3,
+          "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
+          "viewport": [
+            1280,
+            800
+          ],
+          "devicePixelRatio": 2,
+          "visibility": "visible",
+          "medianMs": 333.3000000000029,
+          "p95Ms": 633.3000000000029,
+          "over50": 13,
+          "over50Percent": 92.85714285714286
+        },
+        {
+          "method": "MapLibre easeTo two 2.5-second legs",
+          "enabled": true,
+          "iteration": 3,
+          "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
+          "viewport": [
+            1280,
+            800
+          ],
+          "devicePixelRatio": 2,
+          "visibility": "visible",
+          "medianMs": 266.6000000000058,
+          "p95Ms": 450,
+          "over50": 16,
+          "over50Percent": 94.11764705882354
+        },
+        {
+          "method": "MapLibre easeTo two 2.5-second legs",
+          "enabled": false,
+          "iteration": 4,
+          "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
+          "viewport": [
+            1280,
+            800
+          ],
+          "devicePixelRatio": 2,
+          "visibility": "visible",
+          "medianMs": 416.6000000000058,
+          "p95Ms": 783.4000000000233,
+          "over50": 10,
+          "over50Percent": 90.9090909090909
+        },
+        {
+          "method": "MapLibre easeTo two 2.5-second legs",
+          "enabled": true,
+          "iteration": 4,
+          "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
+          "viewport": [
+            1280,
+            800
+          ],
+          "devicePixelRatio": 2,
+          "visibility": "visible",
+          "medianMs": 749.8999999999942,
+          "p95Ms": 1141.9000000119267,
+          "over50": 6,
+          "over50Percent": 100
+        },
+        {
+          "method": "MapLibre easeTo two 2.5-second legs",
+          "enabled": true,
+          "iteration": 0,
+          "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
+          "viewport": [
+            1280,
+            800
+          ],
+          "devicePixelRatio": 2,
+          "visibility": "visible",
+          "medianMs": 416.6000000000058,
+          "p95Ms": 933.2000000000116,
+          "over50": 9,
+          "over50Percent": 90
+        },
+        {
+          "method": "MapLibre easeTo two 2.5-second legs",
+          "enabled": false,
+          "iteration": 0,
+          "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
+          "viewport": [
+            1280,
+            800
+          ],
+          "devicePixelRatio": 2,
+          "visibility": "visible",
+          "medianMs": 183.30000000004657,
+          "p95Ms": 233.40000000002328,
+          "over50": 24,
+          "over50Percent": 100
+        }
+      ],
+      "qualification": "Earlier preview-connection samples failed in both states. An earlier Electron repeat had stale QA cached assets; native preflight attempts encountered missing local QA-origin CORS. Only verified current sprite/generation repeats in frameResults establish acceptance. Native touch runner failed to accept connections; trusted local QA chunk autorun triggered identical foreground sweeps via simulator URL opening, without changing product CSP.",
+      "unverifiedNativeSamples": [
+        {
+          "method": "MapLibre easeTo two 2.5-second legs",
+          "enabled": false,
+          "iteration": 0,
+          "userAgent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/27.0 Mobile/15E148 Safari/604.1",
+          "viewport": [
+            402,
+            714
+          ],
+          "devicePixelRatio": 3,
+          "visibility": "visible",
+          "medianMs": 22,
+          "p95Ms": 40,
+          "over50": 4,
+          "over50Percent": 2.0408163265306123,
+          "frames": 196
+        },
+        {
+          "method": "MapLibre easeTo two 2.5-second legs",
+          "enabled": false,
+          "iteration": 0,
+          "userAgent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/27.0 Mobile/15E148 Safari/604.1",
+          "viewport": [
+            402,
+            714
+          ],
+          "devicePixelRatio": 3,
+          "visibility": "visible",
+          "medianMs": 21,
+          "p95Ms": 40,
+          "over50": 5,
+          "over50Percent": 2.4630541871921183,
+          "frames": 203
+        },
+        {
+          "method": "MapLibre easeTo two 2.5-second legs",
+          "enabled": true,
+          "iteration": 0,
+          "userAgent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/27.0 Mobile/15E148 Safari/604.1",
+          "viewport": [
+            402,
+            714
+          ],
+          "devicePixelRatio": 3,
+          "visibility": "visible",
+          "medianMs": 19,
+          "p95Ms": 31,
+          "over50": 3,
+          "over50Percent": 1.293103448275862,
+          "frames": 232
+        },
+        {
+          "method": "MapLibre easeTo two 2.5-second legs",
+          "enabled": false,
+          "iteration": 1,
+          "userAgent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/27.0 Mobile/15E148 Safari/604.1",
+          "viewport": [
+            402,
+            714
+          ],
+          "devicePixelRatio": 3,
+          "visibility": "visible",
+          "medianMs": 17,
+          "p95Ms": 31,
+          "over50": 5,
+          "over50Percent": 1.968503937007874,
+          "frames": 254
+        },
+        {
+          "method": "MapLibre easeTo two 2.5-second legs",
+          "enabled": true,
+          "iteration": 1,
+          "userAgent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/27.0 Mobile/15E148 Safari/604.1",
+          "viewport": [
+            402,
+            714
+          ],
+          "devicePixelRatio": 3,
+          "visibility": "visible",
+          "medianMs": 17,
+          "p95Ms": 24,
+          "over50": 2,
+          "over50Percent": 0.7246376811594203,
+          "frames": 276
+        },
+        {
+          "method": "MapLibre easeTo two 2.5-second legs",
+          "enabled": false,
+          "iteration": 2,
+          "userAgent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/27.0 Mobile/15E148 Safari/604.1",
+          "viewport": [
+            402,
+            714
+          ],
+          "devicePixelRatio": 3,
+          "visibility": "visible",
+          "medianMs": 18,
+          "p95Ms": 31,
+          "over50": 3,
+          "over50Percent": 1.2658227848101267,
+          "frames": 237
+        },
+        {
+          "method": "MapLibre easeTo two 2.5-second legs",
+          "enabled": true,
+          "iteration": 2,
+          "userAgent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/27.0 Mobile/15E148 Safari/604.1",
+          "viewport": [
+            402,
+            714
+          ],
+          "devicePixelRatio": 3,
+          "visibility": "visible",
+          "medianMs": 21,
+          "p95Ms": 36,
+          "over50": 3,
+          "over50Percent": 1.3824884792626728,
+          "frames": 217
+        }
+      ]
+    },
+    "limitations": [
+      "This is a bounded subset of Düsseldorf region, not full regional/country coverage.",
+      "Imported-region labeled quality cases elsewhere do not apply to this bounded QA region; local real witnesses verified separately.",
+      "Conflation ran the default non-embedding structured matcher; no fabricated links.",
+      "Source presence, index coverage, publication eligibility and visible collision placement remain distinct.",
+      "External enrichment unavailable in QA; actual tile API, shared published alias lookup, enabled Overture resolver and category search verified against real source tables.",
+      "No deployment or production-capacity claim."
+    ],
+    "runtime": {
+      "database": "Disposable PostGIS 18 / PostGIS 3.6 pinned testcontainer",
+      "duckdb": "Official macOS universal DuckDB 1.3.1 matching data-manager pin",
+      "duckdbZipSha256": "75305d5b818811f40bb9016f423f9dab74928996a63bf88d6341cd7adf43c7c9",
+      "capacity": 878147444736,
+      "nativeAutorunHelperSha256": "21847d56a6e9f8b026fa2a5a2d0cc6df60f5a32ff9c7f44f1a478495fbf72106"
+    },
+    "frameResults": {
+      "method": "Five five-second sweeps per state; MapLibre easeTo two 2.5-second legs; final current sprite verified with hasImage(poi-place) after clearing own QA-origin caches",
+      "desktop": {
+        "started": "2026-10-09T19:02:39.989Z",
+        "off": {
+          "intervals": 2988,
+          "p95Ms": 9.80000000000291,
+          "over50Percent": 0.0
+        },
+        "on": {
+          "intervals": 2980,
+          "p95Ms": 9.89999999999418,
+          "over50Percent": 0.0
+        },
+        "samples": [
+          {
+            "method": "MapLibre easeTo two 2.5-second legs",
+            "enabled": false,
+            "iteration": 0,
+            "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) T3CodeNightly/0.0.46-nightly.20261009.2873 Chrome/152.0.7977.130 Electron/44.4.5 Safari/537.36",
+            "viewport": [
+              1280,
+              800
+            ],
+            "devicePixelRatio": 2,
+            "visibility": "visible",
+            "medianMs": 8.30000000000291,
+            "p95Ms": 9.299999999995634,
+            "over50": 0,
+            "over50Percent": 0,
+            "frames": 591
+          },
+          {
+            "method": "MapLibre easeTo two 2.5-second legs",
+            "enabled": true,
+            "iteration": 0,
+            "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) T3CodeNightly/0.0.46-nightly.20261009.2873 Chrome/152.0.7977.130 Electron/44.4.5 Safari/537.36",
+            "viewport": [
+              1280,
+              800
+            ],
+            "devicePixelRatio": 2,
+            "visibility": "visible",
+            "medianMs": 8.30000000000291,
+            "p95Ms": 9.299999999995634,
+            "over50": 0,
+            "over50Percent": 0,
+            "frames": 596
+          },
+          {
+            "method": "MapLibre easeTo two 2.5-second legs",
+            "enabled": false,
+            "iteration": 1,
+            "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) T3CodeNightly/0.0.46-nightly.20261009.2873 Chrome/152.0.7977.130 Electron/44.4.5 Safari/537.36",
+            "viewport": [
+              1280,
+              800
+            ],
+            "devicePixelRatio": 2,
+            "visibility": "visible",
+            "medianMs": 8.30000000000291,
+            "p95Ms": 9.200000000011642,
+            "over50": 0,
+            "over50Percent": 0,
+            "frames": 600
+          },
+          {
+            "method": "MapLibre easeTo two 2.5-second legs",
+            "enabled": true,
+            "iteration": 1,
+            "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) T3CodeNightly/0.0.46-nightly.20261009.2873 Chrome/152.0.7977.130 Electron/44.4.5 Safari/537.36",
+            "viewport": [
+              1280,
+              800
+            ],
+            "devicePixelRatio": 2,
+            "visibility": "visible",
+            "medianMs": 8.30000000000291,
+            "p95Ms": 9.299999999988358,
+            "over50": 0,
+            "over50Percent": 0,
+            "frames": 601
+          },
+          {
+            "method": "MapLibre easeTo two 2.5-second legs",
+            "enabled": false,
+            "iteration": 2,
+            "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) T3CodeNightly/0.0.46-nightly.20261009.2873 Chrome/152.0.7977.130 Electron/44.4.5 Safari/537.36",
+            "viewport": [
+              1280,
+              800
+            ],
+            "devicePixelRatio": 2,
+            "visibility": "visible",
+            "medianMs": 8.30000000000291,
+            "p95Ms": 9.299999999988358,
+            "over50": 0,
+            "over50Percent": 0,
+            "frames": 596
+          },
+          {
+            "method": "MapLibre easeTo two 2.5-second legs",
+            "enabled": true,
+            "iteration": 2,
+            "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) T3CodeNightly/0.0.46-nightly.20261009.2873 Chrome/152.0.7977.130 Electron/44.4.5 Safari/537.36",
+            "viewport": [
+              1280,
+              800
+            ],
+            "devicePixelRatio": 2,
+            "visibility": "visible",
+            "medianMs": 8.30000000000291,
+            "p95Ms": 10,
+            "over50": 0,
+            "over50Percent": 0,
+            "frames": 591
+          },
+          {
+            "method": "MapLibre easeTo two 2.5-second legs",
+            "enabled": false,
+            "iteration": 3,
+            "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) T3CodeNightly/0.0.46-nightly.20261009.2873 Chrome/152.0.7977.130 Electron/44.4.5 Safari/537.36",
+            "viewport": [
+              1280,
+              800
+            ],
+            "devicePixelRatio": 2,
+            "visibility": "visible",
+            "medianMs": 8.30000000000291,
+            "p95Ms": 10.19999999999709,
+            "over50": 0,
+            "over50Percent": 0,
+            "frames": 601
+          },
+          {
+            "method": "MapLibre easeTo two 2.5-second legs",
+            "enabled": true,
+            "iteration": 3,
+            "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) T3CodeNightly/0.0.46-nightly.20261009.2873 Chrome/152.0.7977.130 Electron/44.4.5 Safari/537.36",
+            "viewport": [
+              1280,
+              800
+            ],
+            "devicePixelRatio": 2,
+            "visibility": "visible",
+            "medianMs": 8.30000000000291,
+            "p95Ms": 10.099999999991269,
+            "over50": 0,
+            "over50Percent": 0,
+            "frames": 601
+          },
+          {
+            "method": "MapLibre easeTo two 2.5-second legs",
+            "enabled": false,
+            "iteration": 4,
+            "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) T3CodeNightly/0.0.46-nightly.20261009.2873 Chrome/152.0.7977.130 Electron/44.4.5 Safari/537.36",
+            "viewport": [
+              1280,
+              800
+            ],
+            "devicePixelRatio": 2,
+            "visibility": "visible",
+            "medianMs": 8.30000000000291,
+            "p95Ms": 10.099999999991269,
+            "over50": 0,
+            "over50Percent": 0,
+            "frames": 600
+          },
+          {
+            "method": "MapLibre easeTo two 2.5-second legs",
+            "enabled": true,
+            "iteration": 4,
+            "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) T3CodeNightly/0.0.46-nightly.20261009.2873 Chrome/152.0.7977.130 Electron/44.4.5 Safari/537.36",
+            "viewport": [
+              1280,
+              800
+            ],
+            "devicePixelRatio": 2,
+            "visibility": "visible",
+            "medianMs": 8.30000000000291,
+            "p95Ms": 10.10000000000582,
+            "over50": 0,
+            "over50Percent": 0,
+            "frames": 591
+          }
+        ]
+      },
+      "native": {
+        "initialStreamed": {
+          "samples": [
+            {
+              "method": "MapLibre easeTo two 2.5-second legs",
+              "enabled": false,
+              "iteration": 0,
+              "userAgent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/27.0 Mobile/15E148 Safari/604.1",
+              "viewport": [
+                402,
+                714
+              ],
+              "devicePixelRatio": 3,
+              "visibility": "visible",
+              "medianMs": 19,
+              "p95Ms": 41,
+              "over50": 7,
+              "over50Percent": 4.516129032258065,
+              "generation": "1f2bfe9c-c389-465d-8d38-7db8e17f5ba7",
+              "neutral": true,
+              "harness": "native trusted QA chunk autorun",
+              "frames": 155
+            },
+            {
+              "method": "MapLibre easeTo two 2.5-second legs",
+              "enabled": true,
+              "iteration": 0,
+              "userAgent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/27.0 Mobile/15E148 Safari/604.1",
+              "viewport": [
+                402,
+                714
+              ],
+              "devicePixelRatio": 3,
+              "visibility": "visible",
+              "medianMs": 18,
+              "p95Ms": 34,
+              "over50": 2,
+              "over50Percent": 0.970873786407767,
+              "generation": "1f2bfe9c-c389-465d-8d38-7db8e17f5ba7",
+              "neutral": true,
+              "harness": "native trusted QA chunk autorun",
+              "frames": 206
+            },
+            {
+              "method": "MapLibre easeTo two 2.5-second legs",
+              "enabled": false,
+              "iteration": 1,
+              "userAgent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/27.0 Mobile/15E148 Safari/604.1",
+              "viewport": [
+                402,
+                714
+              ],
+              "devicePixelRatio": 3,
+              "visibility": "visible",
+              "medianMs": 21,
+              "p95Ms": 38,
+              "over50": 6,
+              "over50Percent": 2.857142857142857,
+              "generation": "1f2bfe9c-c389-465d-8d38-7db8e17f5ba7",
+              "neutral": true,
+              "harness": "native trusted QA chunk autorun",
+              "frames": 210
+            },
+            {
+              "method": "MapLibre easeTo two 2.5-second legs",
+              "enabled": true,
+              "iteration": 1,
+              "userAgent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/27.0 Mobile/15E148 Safari/604.1",
+              "viewport": [
+                402,
+                714
+              ],
+              "devicePixelRatio": 3,
+              "visibility": "visible",
+              "medianMs": 19,
+              "p95Ms": 31,
+              "over50": 1,
+              "over50Percent": 0.4166666666666667,
+              "generation": "1f2bfe9c-c389-465d-8d38-7db8e17f5ba7",
+              "neutral": true,
+              "harness": "native trusted QA chunk autorun",
+              "frames": 240
+            },
+            {
+              "method": "MapLibre easeTo two 2.5-second legs",
+              "enabled": false,
+              "iteration": 2,
+              "userAgent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/27.0 Mobile/15E148 Safari/604.1",
+              "viewport": [
+                402,
+                714
+              ],
+              "devicePixelRatio": 3,
+              "visibility": "visible",
+              "medianMs": 25,
+              "p95Ms": 45,
+              "over50": 0,
+              "over50Percent": 0,
+              "generation": "1f2bfe9c-c389-465d-8d38-7db8e17f5ba7",
+              "neutral": true,
+              "harness": "native trusted QA chunk autorun",
+              "frames": 178
+            },
+            {
+              "method": "MapLibre easeTo two 2.5-second legs",
+              "enabled": true,
+              "iteration": 2,
+              "userAgent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/27.0 Mobile/15E148 Safari/604.1",
+              "viewport": [
+                402,
+                714
+              ],
+              "devicePixelRatio": 3,
+              "visibility": "visible",
+              "medianMs": 21,
+              "p95Ms": 39,
+              "over50": 1,
+              "over50Percent": 0.49019607843137253,
+              "generation": "1f2bfe9c-c389-465d-8d38-7db8e17f5ba7",
+              "neutral": true,
+              "harness": "native trusted QA chunk autorun",
+              "frames": 204
+            },
+            {
+              "method": "MapLibre easeTo two 2.5-second legs",
+              "enabled": false,
+              "iteration": 3,
+              "userAgent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/27.0 Mobile/15E148 Safari/604.1",
+              "viewport": [
+                402,
+                714
+              ],
+              "devicePixelRatio": 3,
+              "visibility": "visible",
+              "medianMs": 18,
+              "p95Ms": 26,
+              "over50": 0,
+              "over50Percent": 0,
+              "generation": "1f2bfe9c-c389-465d-8d38-7db8e17f5ba7",
+              "neutral": true,
+              "harness": "native trusted QA chunk autorun",
+              "frames": 260
+            },
+            {
+              "method": "MapLibre easeTo two 2.5-second legs",
+              "enabled": true,
+              "iteration": 3,
+              "userAgent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/27.0 Mobile/15E148 Safari/604.1",
+              "viewport": [
+                402,
+                714
+              ],
+              "devicePixelRatio": 3,
+              "visibility": "visible",
+              "medianMs": 23,
+              "p95Ms": 26,
+              "over50": 1,
+              "over50Percent": 0.9433962264150944,
+              "generation": "1f2bfe9c-c389-465d-8d38-7db8e17f5ba7",
+              "neutral": true,
+              "harness": "native trusted QA chunk autorun",
+              "frames": 106
+            },
+            {
+              "method": "MapLibre easeTo two 2.5-second legs",
+              "enabled": false,
+              "iteration": 4,
+              "userAgent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/27.0 Mobile/15E148 Safari/604.1",
+              "viewport": [
+                402,
+                714
+              ],
+              "devicePixelRatio": 3,
+              "visibility": "visible",
+              "medianMs": 19,
+              "p95Ms": 35,
+              "over50": 0,
+              "over50Percent": 0,
+              "generation": "1f2bfe9c-c389-465d-8d38-7db8e17f5ba7",
+              "neutral": true,
+              "harness": "native trusted QA chunk autorun",
+              "frames": 224
+            },
+            {
+              "method": "MapLibre easeTo two 2.5-second legs",
+              "enabled": true,
+              "iteration": 4,
+              "userAgent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/27.0 Mobile/15E148 Safari/604.1",
+              "viewport": [
+                402,
+                714
+              ],
+              "devicePixelRatio": 3,
+              "visibility": "visible",
+              "medianMs": 19,
+              "p95Ms": 35,
+              "over50": 2,
+              "over50Percent": 0.8658008658008658,
+              "generation": "1f2bfe9c-c389-465d-8d38-7db8e17f5ba7",
+              "neutral": true,
+              "harness": "native trusted QA chunk autorun",
+              "frames": 231
+            }
+          ],
+          "off": {
+            "p95Ms": 38,
+            "over50Percent": 1.2658227848101267,
+            "intervals": 1027
+          },
+          "on": {
+            "p95Ms": 35,
+            "over50Percent": 0.7092198581560284,
+            "intervals": 987
+          }
+        },
+        "qualification": "Isolated repeat passes unchanged pooled p95 <=33.4 ms and over50 <=5% targets. Streamed first run fails p95 in both states and remains recorded. This is local simulator evidence, not a physical-device or deployed capacity claim.",
+        "isolatedRepeat": {
+          "method": "Same QA route, trusted local autorun helper waits for exact combined generation and poi-place sprite; device preview stream paused; second WebGL map removed; no builds/tests concurrently",
+          "off": {
+            "intervals": 1316,
+            "p95Ms": 29,
+            "over50Percent": 0.07598784194528875
+          },
+          "on": {
+            "intervals": 1270,
+            "p95Ms": 30,
+            "over50Percent": 0.3937007874015748
+          },
+          "samples": [
+            {
+              "method": "MapLibre easeTo two 2.5-second legs",
+              "enabled": false,
+              "iteration": 0,
+              "userAgent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/27.0 Mobile/15E148 Safari/604.1",
+              "viewport": [
+                402,
+                714
+              ],
+              "devicePixelRatio": 3,
+              "visibility": "visible",
+              "medianMs": 18,
+              "p95Ms": 31,
+              "over50": 0,
+              "over50Percent": 0,
+              "generation": "1f2bfe9c-c389-465d-8d38-7db8e17f5ba7",
+              "neutral": true,
+              "harness": "native trusted QA chunk autorun",
+              "frames": 251
+            },
+            {
+              "method": "MapLibre easeTo two 2.5-second legs",
+              "enabled": true,
+              "iteration": 0,
+              "userAgent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/27.0 Mobile/15E148 Safari/604.1",
+              "viewport": [
+                402,
+                714
+              ],
+              "devicePixelRatio": 3,
+              "visibility": "visible",
+              "medianMs": 19,
+              "p95Ms": 30,
+              "over50": 0,
+              "over50Percent": 0,
+              "generation": "1f2bfe9c-c389-465d-8d38-7db8e17f5ba7",
+              "neutral": true,
+              "harness": "native trusted QA chunk autorun",
+              "frames": 244
+            },
+            {
+              "method": "MapLibre easeTo two 2.5-second legs",
+              "enabled": false,
+              "iteration": 1,
+              "userAgent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/27.0 Mobile/15E148 Safari/604.1",
+              "viewport": [
+                402,
+                714
+              ],
+              "devicePixelRatio": 3,
+              "visibility": "visible",
+              "medianMs": 17,
+              "p95Ms": 22,
+              "over50": 0,
+              "over50Percent": 0,
+              "generation": "1f2bfe9c-c389-465d-8d38-7db8e17f5ba7",
+              "neutral": true,
+              "harness": "native trusted QA chunk autorun",
+              "frames": 280
+            },
+            {
+              "method": "MapLibre easeTo two 2.5-second legs",
+              "enabled": true,
+              "iteration": 1,
+              "userAgent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/27.0 Mobile/15E148 Safari/604.1",
+              "viewport": [
+                402,
+                714
+              ],
+              "devicePixelRatio": 3,
+              "visibility": "visible",
+              "medianMs": 18,
+              "p95Ms": 30,
+              "over50": 1,
+              "over50Percent": 0.39215686274509803,
+              "generation": "1f2bfe9c-c389-465d-8d38-7db8e17f5ba7",
+              "neutral": true,
+              "harness": "native trusted QA chunk autorun",
+              "frames": 255
+            },
+            {
+              "method": "MapLibre easeTo two 2.5-second legs",
+              "enabled": false,
+              "iteration": 2,
+              "userAgent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/27.0 Mobile/15E148 Safari/604.1",
+              "viewport": [
+                402,
+                714
+              ],
+              "devicePixelRatio": 3,
+              "visibility": "visible",
+              "medianMs": 18,
+              "p95Ms": 31,
+              "over50": 1,
+              "over50Percent": 0.40160642570281124,
+              "generation": "1f2bfe9c-c389-465d-8d38-7db8e17f5ba7",
+              "neutral": true,
+              "harness": "native trusted QA chunk autorun",
+              "frames": 249
+            },
+            {
+              "method": "MapLibre easeTo two 2.5-second legs",
+              "enabled": true,
+              "iteration": 2,
+              "userAgent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/27.0 Mobile/15E148 Safari/604.1",
+              "viewport": [
+                402,
+                714
+              ],
+              "devicePixelRatio": 3,
+              "visibility": "visible",
+              "medianMs": 19,
+              "p95Ms": 32,
+              "over50": 2,
+              "over50Percent": 0.8333333333333334,
+              "generation": "1f2bfe9c-c389-465d-8d38-7db8e17f5ba7",
+              "neutral": true,
+              "harness": "native trusted QA chunk autorun",
+              "frames": 240
+            },
+            {
+              "method": "MapLibre easeTo two 2.5-second legs",
+              "enabled": false,
+              "iteration": 3,
+              "userAgent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/27.0 Mobile/15E148 Safari/604.1",
+              "viewport": [
+                402,
+                714
+              ],
+              "devicePixelRatio": 3,
+              "visibility": "visible",
+              "medianMs": 17,
+              "p95Ms": 22,
+              "over50": 0,
+              "over50Percent": 0,
+              "generation": "1f2bfe9c-c389-465d-8d38-7db8e17f5ba7",
+              "neutral": true,
+              "harness": "native trusted QA chunk autorun",
+              "frames": 278
+            },
+            {
+              "method": "MapLibre easeTo two 2.5-second legs",
+              "enabled": true,
+              "iteration": 3,
+              "userAgent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/27.0 Mobile/15E148 Safari/604.1",
+              "viewport": [
+                402,
+                714
+              ],
+              "devicePixelRatio": 3,
+              "visibility": "visible",
+              "medianMs": 17,
+              "p95Ms": 23,
+              "over50": 1,
+              "over50Percent": 0.36363636363636365,
+              "generation": "1f2bfe9c-c389-465d-8d38-7db8e17f5ba7",
+              "neutral": true,
+              "harness": "native trusted QA chunk autorun",
+              "frames": 275
+            },
+            {
+              "method": "MapLibre easeTo two 2.5-second legs",
+              "enabled": false,
+              "iteration": 4,
+              "userAgent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/27.0 Mobile/15E148 Safari/604.1",
+              "viewport": [
+                402,
+                714
+              ],
+              "devicePixelRatio": 3,
+              "visibility": "visible",
+              "medianMs": 17,
+              "p95Ms": 32,
+              "over50": 0,
+              "over50Percent": 0,
+              "generation": "1f2bfe9c-c389-465d-8d38-7db8e17f5ba7",
+              "neutral": true,
+              "harness": "native trusted QA chunk autorun",
+              "frames": 258
+            },
+            {
+              "method": "MapLibre easeTo two 2.5-second legs",
+              "enabled": true,
+              "iteration": 4,
+              "userAgent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/27.0 Mobile/15E148 Safari/604.1",
+              "viewport": [
+                402,
+                714
+              ],
+              "devicePixelRatio": 3,
+              "visibility": "visible",
+              "medianMs": 18,
+              "p95Ms": 31,
+              "over50": 1,
+              "over50Percent": 0.390625,
+              "generation": "1f2bfe9c-c389-465d-8d38-7db8e17f5ba7",
+              "neutral": true,
+              "harness": "native trusted QA chunk autorun",
+              "frames": 256
+            }
+          ]
+        }
+      }
+    },
+    "validation": {
+      "fullSuite": {
+        "command": "pnpm exec vitest run --maxWorkers=4",
+        "exitCode": 0,
+        "passedTests": 17556,
+        "passedFiles": 1544,
+        "skippedTests": 142,
+        "skippedFiles": 31,
+        "durationSeconds": 292.26
+      },
+      "focusedPostgis": {
+        "command": "OPENMAPX_RUN_DATABASE_TESTS=1 pnpm exec vitest run --maxWorkers=1 apps/web/src/components/map/ambientPlaceStyle.test.ts apps/web/src/components/map/ambientPlaceIdentity.test.ts apps/web/src/components/map/stylePoiHoverPlacement.test.ts integrations/overlay-ambient-places integrations/poi-overture/__tests__/resolver.test.ts services/data-manager/__tests__/ambient-places packages/core/src/ambient-places.test.ts",
+        "exitCode": 0,
+        "passedTests": 82,
+        "passedFiles": 13
+      },
+      "spriteRegression": {
+        "command": "pnpm exec vitest run apps/web/src/lib/bundledBasemapSprites.test.ts apps/web/src/components/map/ambientPlaceStyle.test.ts integrations/overlay-ambient-places/map-layer.test.tsx",
+        "exitCode": 0,
+        "passedTests": 47,
+        "passedFiles": 3,
+        "baselineSpriteTestSha256": "daf7fc2f8b059ab6767126de18deec04e9221b67ba56bca9463a8d6aa00a2461"
+      },
+      "checks": {
+        "workspaceTypes": 0,
+        "lint": 0,
+        "policy": 0,
+        "openapi": 0,
+        "openapiOperations": 385
+      },
+      "builds": {
+        "cleanWeb": 0,
+        "api": 0,
+        "dataManager": 0,
+        "docs": 0
+      },
+      "qaRouteAndHelperAbsentFromProductionBuild": true,
+      "qualification": "Initial full suite had two obsolete marker_11 fallback assertions; updated to the intentional shared neutral badge contract, then all tests pass in the fresh complete rerun. Database suites are explicitly enabled in focusedPostgis; fullSuite intentionally skips optional database cases."
+    }
   }
 }

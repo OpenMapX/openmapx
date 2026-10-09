@@ -22,7 +22,8 @@ describe.each([streets, dark])("ambient native POI badges in $name", (style) => 
     ["financial_service", "poi-office"],
     ["diagnostics_imaging_or_lab_service", "poi-doctors"],
     ["private_lodging", "poi-lodging"],
-    ["unmapped_destination", "poi-multi"],
+    ["unmapped_destination", "poi-place"],
+    ["multi", "poi-multi"],
   ])("renders %s with the active style's POI badge", (category, expected) => {
     const result = ambientPlaceStyle(style.layers as SymbolLayerSpecification[], false, false);
     const expression = createExpression(
