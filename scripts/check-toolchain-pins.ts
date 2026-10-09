@@ -98,7 +98,7 @@ for (const rel of [
 }
 
 const dataManagerDockerfile = read("services/data-manager/Dockerfile");
-for (const artifact of ["DOCKER_CLI", "DOCKER_COMPOSE", "DUCKDB"] as const) {
+for (const artifact of ["DUCKDB"] as const) {
   for (const arch of ["AMD64", "ARM64"] as const) {
     const value = dataManagerDockerfile.match(
       new RegExp(`ARG ${artifact}_SHA256_${arch}=([a-f0-9]{64})`),
@@ -108,7 +108,7 @@ for (const artifact of ["DOCKER_CLI", "DOCKER_COMPOSE", "DUCKDB"] as const) {
     }
   }
 }
-if ((dataManagerDockerfile.match(/sha256sum -c -/g) ?? []).length < 3) {
+if ((dataManagerDockerfile.match(/sha256sum -c -/g) ?? []).length < 1) {
   errors.push("services/data-manager/Dockerfile: every downloaded executable must be checksummed");
 }
 

@@ -139,7 +139,9 @@ describe("production supply-chain policy", () => {
     const transitousRunnerDockerfile = read("apps/transitous-runner/Dockerfile");
     const requirements = read("services/motis/tools/transitous/requirements.txt");
 
-    expect(dataManagerDockerfile.match(/sha256sum -c -/g)).toHaveLength(3);
+    // DuckDB is the image's one downloaded executable.
+    expect(dataManagerDockerfile.match(/sha256sum -c -/g)).toHaveLength(1);
+    expect(dataManagerDockerfile).not.toMatch(/download\.docker\.com|docker\/compose\/releases/);
     expect(dataManagerDockerfile).toMatch(/pip3 install[^\n]*--require-hashes/);
     expect(transitousDockerfile).not.toContain('MOTIS_SHA256_AMD64=""');
     expect(transitousDockerfile).not.toContain('MOTIS_SHA256_ARM64=""');
