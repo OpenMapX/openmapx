@@ -83,7 +83,7 @@ export async function activateAmbientGeneration(
   ]);
   // Cover clients that discovered the outgoing generation just before this swap.
   await tx.unsafe(
-    `UPDATE ambient_places.generations SET cache_lease_until=greatest(cache_lease_until,now()+interval '7 days 1 minute') WHERE id=(SELECT active FROM ambient_places.state WHERE singleton=1)`,
+    `UPDATE ambient_places.generations SET cache_lease_until=greatest(cache_lease_until,clock_timestamp()+interval '7 days 1 minute') WHERE id=(SELECT active FROM ambient_places.state WHERE singleton=1)`,
   );
   await tx.unsafe(
     `UPDATE ambient_places.state SET previous=active,active=$1,last_build_finished_at=clock_timestamp() WHERE singleton=1`,

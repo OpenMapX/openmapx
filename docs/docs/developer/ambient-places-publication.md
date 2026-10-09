@@ -142,7 +142,9 @@ snapshots are retained. Unreferenced generations can be removed only after their
 cache lease expires. The lease renews when leaving active discovery or rolling
 back, covering seven days plus the one-minute discovery refresh interval from
 that transition, regardless of the original publication date. Active and previous
-are preserved. If all slots still have cache leases,
+are preserved. Publication renews the outgoing lease from the current database
+clock at activation, so a long country build does not shorten its protection.
+If all slots still have cache leases,
 publication refuses another build. Disable changes discovery within the client's
 one-minute refresh interval; it does not revoke previously downloaded tiles.
 Clients keep a fresh last-good manifest on temporary discovery failure and remove

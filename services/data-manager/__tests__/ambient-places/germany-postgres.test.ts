@@ -1,5 +1,5 @@
 import { VectorTile } from "@mapbox/vector-tile";
-import { AMBIENT_GERMANY_REGION } from "@openmapx/core/ambient-places";
+import { AMBIENT_GERMANY_REGION, AMBIENT_LIMITS } from "@openmapx/core/ambient-places";
 import {
   readAmbientManifest,
   readAmbientPlaceByGers,
@@ -172,7 +172,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       }
     }, 120_000);
 
-    it("rolls back staged output on disk admission or checkpoint failure", async () => {
+    it("rolls back staged output when disk runs out at a periodic checkpoint before completion", async () => {
       const pg = await startPostgis();
       try {
         await seed(pg);
@@ -183,12 +183,23 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             availableBytes: async () => 0,
           }),
         ).rejects.toThrow(/disk/i);
+        await pg.sql.unsafe(`INSERT INTO osm_search.places(osm_type,osm_id,name,lat,lng,category,tags,importance)
+          SELECT 'node',id,'Clinic '||id,52.52,13.405,'amenity/hospital','{}',0.8 FROM generate_series(2,50001) AS id;
+          UPDATE osm_search.index_state SET place_count=50001`);
         let checks = 0;
+        let processed = 0;
         await expect(
           buildAmbientPlaces(pg.sql, AMBIENT_GERMANY_REGION, undefined, {
             availableBytes: async () => (++checks === 1 ? ampleSpace() : 0),
+            onProgress: (p) => {
+              processed = p.processed;
+            },
           }),
         ).rejects.toThrow(/disk/i);
+        // The 25th batch fails its reserve check before reporting progress,
+        // leaving the final source row unread and never reaching validation.
+        expect(checks).toBe(2);
+        expect(processed).toBe(48000);
         expect((await readAmbientManifest(pg.sql))?.generation).toBe(before.generation);
         expect((await tile(pg, before.generation, 6.08, 50.77)).bytes).toEqual(bytes);
         const [count] = await pg.sql.unsafe(
@@ -200,10 +211,13 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       }
     }, 120_000);
 
-    it("reads one source snapshot even if metadata and rows are refreshed during a batch", async () => {
+    it("keeps unread later-batch rows in the original source snapshot during refresh", async () => {
       const pg = await startPostgis();
       try {
         await seed(pg);
+        await pg.sql.unsafe(`INSERT INTO osm_search.places(osm_type,osm_id,name,lat,lng,category,tags,importance)
+          SELECT 'node',id,'Original clinic '||id,52.52,13.405,'amenity/hospital','{}',0.8 FROM generate_series(2,2001) AS id;
+          UPDATE osm_search.index_state SET place_count=2001`);
         let changed = false;
         const country = await buildAmbientPlaces(pg.sql, AMBIENT_GERMANY_REGION, undefined, {
           availableBytes: ampleSpace,
@@ -216,9 +230,47 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           },
         });
         expect(country.sources.osm.epoch).toBe("country-one");
-        expect(
-          (await tile(pg, country.generation, 6.08, 50.77)).layer?.feature(0).properties.name,
-        ).toBe("Aachen clinic");
+        const [later] = await pg.sql.unsafe<{ name: string }[]>(
+          `SELECT name FROM ambient_places.features WHERE generation=$1 AND id='osm:node/2001'`,
+          [country.generation],
+        );
+        expect(later.name).toBe("Original clinic 2001");
+      } finally {
+        await pg.stop();
+      }
+    }, 120_000);
+    it("renews retiring tile leases from country activation rather than transaction start", async () => {
+      const pg = await startPostgis();
+      try {
+        await seed(pg);
+        const before = await buildAmbientPlaces(pg.sql, regional);
+        const bytes = (await tile(pg, before.generation, 6.08, 50.77)).bytes;
+        await pg.sql.unsafe(
+          `UPDATE ambient_places.generations SET cache_lease_until=now()-interval '1 day' WHERE id=$1`,
+          [before.generation],
+        );
+        let activationBoundary = NaN;
+        const country = await buildAmbientPlaces(pg.sql, AMBIENT_GERMANY_REGION, undefined, {
+          availableBytes: ampleSpace,
+          onProgress: async (p) => {
+            if (p.phase !== "validate") return;
+            await pg.sql.unsafe(`SELECT pg_sleep(0.2)`);
+            const [clock] = await pg.sql.unsafe<{ at: Date }[]>(`SELECT clock_timestamp() AS at`);
+            activationBoundary = clock.at.getTime();
+          },
+        });
+        expect(Number.isFinite(activationBoundary)).toBe(true);
+        const [retiring] = await pg.sql.unsafe<{ until: Date }[]>(
+          `SELECT cache_lease_until AS until FROM ambient_places.generations WHERE id=$1`,
+          [before.generation],
+        );
+        expect(retiring.until.getTime()).toBeGreaterThanOrEqual(
+          activationBoundary + (AMBIENT_LIMITS.cacheSeconds + 60) * 1000,
+        );
+        expect((await readAmbientManifest(pg.sql))?.generation).toBe(country.generation);
+        expect((await tile(pg, before.generation, 6.08, 50.77)).bytes).toEqual(bytes);
+        await rollbackAmbientPlaces(pg.sql);
+        expect((await readAmbientManifest(pg.sql))?.generation).toBe(before.generation);
       } finally {
         await pg.stop();
       }
