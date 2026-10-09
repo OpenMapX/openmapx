@@ -31,6 +31,14 @@ const overture = {
 };
 
 describe("ambient place policy", () => {
+  it("accepts explicit Germany coverage without relaxing custom regional bounds", () => {
+    const germany = { name: "Germany", bounds: [5.8, 47.2, 15.1, 55.1], coverage: "germany" };
+    expect(validateAmbientRegion(germany)).toEqual(germany);
+    expect(() => validateAmbientRegion({ ...germany, coverage: undefined })).toThrow();
+    expect(() => validateAmbientRegion({ ...germany, coverage: "global" })).toThrow();
+    expect(() => validateAmbientRegion({ ...germany, bounds: [5.9, 47.2, 15.1, 55.1] })).toThrow();
+    expect(() => validateAmbientRegion({ ...germany, bounds: [-180, -85, 180, 85] })).toThrow();
+  });
   it("accepts a bounded Aachen region and rejects arbitrary/planet inputs", () => {
     expect(validateAmbientRegion({ name: "Aachen", bounds: [5.9, 50.65, 6.3, 50.95] }).name).toBe(
       "Aachen",

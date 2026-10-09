@@ -7,6 +7,8 @@ export const AMBIENT_POLICY_VERSION = 2;
 export const AMBIENT_MAX_AGE_MS = 90 * 86400_000;
 export const AMBIENT_LIMITS = {
   places: 100_000,
+  countryPlaces: 20_000_000,
+  countryBatch: 2_000,
   generations: 8,
   tileFeatures: 256,
   tileBytes: 128 * 1024,
@@ -17,7 +19,13 @@ export const AMBIENT_LIMITS = {
 export interface AmbientRegion {
   name: string;
   bounds: [number, number, number, number];
+  coverage?: "germany";
 }
+export const AMBIENT_GERMANY_REGION: AmbientRegion = {
+  name: "Germany",
+  bounds: [5.8, 47.2, 15.1, 55.1],
+  coverage: "germany",
+};
 export interface AmbientPlace {
   id: string;
   gersId?: string;
@@ -69,6 +77,7 @@ export interface AmbientOvertureRow {
 export function validateAmbientRegion(value: unknown): AmbientRegion {
   const region = value as AmbientRegion;
   const b = region?.bounds;
+  const country = region?.coverage === "germany";
   if (
     typeof region?.name !== "string" ||
     !region.name.trim() ||
@@ -82,11 +91,19 @@ export function validateAmbientRegion(value: unknown): AmbientRegion {
     b[3] > 55.1 ||
     b[2] <= b[0] ||
     b[3] <= b[1] ||
-    b[2] - b[0] > 0.5 ||
-    b[3] - b[1] > 0.5
+    (region.coverage !== undefined && !country) ||
+    (country
+      ? !b.every((v, i) => v === AMBIENT_GERMANY_REGION.bounds[i])
+      : b[2] - b[0] > 0.5 || b[3] - b[1] > 0.5)
   )
-    throw new Error("Choose an ordered German region no wider or higher than 0.5 degrees");
-  return { name: region.name.trim(), bounds: [...b] };
+    throw new Error(
+      "Choose Germany coverage or an ordered German region no wider or higher than 0.5 degrees",
+    );
+  return {
+    name: region.name.trim(),
+    bounds: [...b],
+    ...(country ? { coverage: "germany" as const } : {}),
+  };
 }
 const aliases: Record<string, string> = {
   hospitals: "hospital",
