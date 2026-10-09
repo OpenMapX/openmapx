@@ -681,7 +681,7 @@
       }
     },
     {
-      "expectedMinZoom": null,
+      "expectedMinZoom": 16,
       "feature": {
         "type": "Feature",
         "id": "a175116286",
@@ -749,7 +749,7 @@
       }
     },
     {
-      "expectedMinZoom": null,
+      "expectedMinZoom": 16,
       "feature": {
         "type": "Feature",
         "id": "a181721794",

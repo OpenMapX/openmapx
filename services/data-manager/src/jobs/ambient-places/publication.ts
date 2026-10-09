@@ -6,6 +6,7 @@ import {
   type AmbientPlace,
 } from "@openmapx/core/ambient-places";
 import type postgres from "postgres";
+import { retireAmbientGenerations } from "./planet-storage.js";
 
 export function fresh(value: Date | string | null): string {
   const date = value === null ? NaN : new Date(value).getTime();
@@ -25,9 +26,7 @@ export async function tableExists(tx: postgres.TransactionSql, name: string): Pr
   return row.exists;
 }
 export async function prepareAmbientGeneration(tx: postgres.TransactionSql): Promise<string> {
-  await tx.unsafe(
-    `DELETE FROM ambient_places.generations g WHERE g.cache_lease_until<now() AND NOT EXISTS(SELECT 1 FROM ambient_places.state s WHERE g.id=s.active OR g.id=s.previous)`,
-  );
+  await retireAmbientGenerations(tx);
   const [capacity] = await tx.unsafe<{ count: number }[]>(
     `SELECT count(*)::INT AS count FROM ambient_places.generations`,
   );
@@ -41,7 +40,10 @@ export async function insertAmbientFeatures(
   tx: postgres.TransactionSql,
   generation: string,
   places: AmbientPlace[],
+  target = "ambient_places.features",
 ): Promise<void> {
+  if (target !== "ambient_places.features" && !/^ambient_places\.planet_[0-9a-f]{32}$/.test(target))
+    throw new Error("Invalid ambient feature store");
   for (let offset = 0; offset < places.length; offset += 500) {
     const rows = places.slice(offset, offset + 500).map((p) => ({
       id: p.id,
@@ -57,12 +59,14 @@ export async function insertAmbientFeatures(
       lng: p.coordinates[0],
       lat: p.coordinates[1],
     }));
-    await tx.unsafe(
-      `INSERT INTO ambient_places.features(generation,id,gers_id,name,name_de,name_en,category,rank,min_zoom,tenant,sources,geom)
+    const result = await tx.unsafe(
+      `INSERT INTO ${target}(generation,id,gers_id,name,name_de,name_en,category,rank,min_zoom,tenant,sources,geom)
       SELECT $1::UUID,r.id,r.gers_id,r.name,r.name_de,r.name_en,r.category,r.rank,r.min_zoom,r.tenant,r.sources,ST_AsEWKB(ST_Transform(ST_SetSRID(ST_MakePoint(r.lng,r.lat),4326),3857))
       FROM jsonb_to_recordset($2::TEXT::JSONB) AS r(id TEXT,gers_id TEXT,name TEXT,name_de TEXT,name_en TEXT,category TEXT,rank INT,min_zoom SMALLINT,tenant BOOLEAN,sources TEXT,lng DOUBLE PRECISION,lat DOUBLE PRECISION)`,
       [generation, JSON.stringify(rows)],
     );
+    if (result.count !== rows.length)
+      throw new Error("Candidate feature insert count validation failed");
   }
 }
 export async function activateAmbientGeneration(

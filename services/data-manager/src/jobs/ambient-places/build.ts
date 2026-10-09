@@ -1,3 +1,5 @@
+export { discardPlanetPlaces, resumePlanetPlaces } from "./planet-build.js";
+
 import { randomUUID } from "node:crypto";
 import { assertSupportedOvertureContributors, type OvertureSourceItem } from "@openmapx/core";
 import {
@@ -14,6 +16,7 @@ import {
 } from "@openmapx/core/ambient-places";
 import type postgres from "postgres";
 import { type AmbientBuildOptions, buildGermanyPlaces } from "./germany.js";
+import { buildPlanetPlaces } from "./planet-build.js";
 import {
   activateAmbientGeneration,
   fresh,
@@ -37,6 +40,7 @@ export async function buildAmbientPlaces(
   options: AmbientBuildOptions = {},
 ): Promise<AmbientManifest> {
   const region = validateAmbientRegion(input);
+  if (region.coverage === "planet") return buildPlanetPlaces(sql, onClaim, { ...options, region });
   await ensureAmbientSchema(sql);
   const attempt = randomUUID();
   let startedAt: string | null = null;

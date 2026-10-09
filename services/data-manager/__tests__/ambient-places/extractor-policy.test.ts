@@ -24,12 +24,6 @@ describe("real OSM extractor to ambient policy contract", () => {
   it.each(corpus.cases)(
     "keeps source-backed $feature.id at its intended zoom",
     ({ feature, expectedMinZoom }) => {
-      if (expectedMinZoom === null) {
-        // This existing index is alias/code-focused; source presence alone is
-        // not publication coverage. Keep excluded name-only controls explicit.
-        expect(featureToSearchPlace(feature)).toBeNull();
-        return;
-      }
       const place = evaluate(feature);
       expect(place.id).toBe(`osm:${feature.properties["@type"]}/${feature.properties["@id"]}`);
       expect(place.minZoom).toBe(expectedMinZoom);

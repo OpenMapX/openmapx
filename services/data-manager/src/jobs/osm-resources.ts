@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { rmSync, statfsSync } from "node:fs";
+import { rmSync, statfsSync, statSync } from "node:fs";
 import { join } from "node:path";
 
 /** Planet exports must not keep every node location in the Node/container heap.
@@ -24,4 +24,10 @@ export async function withOsmiumLocationIndex<T>(
   } finally {
     rmSync(path, { force: true });
   }
+}
+
+/** Compatible with the Overture extraction fingerprint: detects atomic PBF replacement. */
+export function osmFileIdentity(path: string): string {
+  const stat = statSync(path);
+  return `${stat.dev}:${stat.ino}:${stat.size}:${Math.trunc(stat.mtimeMs)}`;
 }
