@@ -40,7 +40,7 @@ interface SearchIndexCounts {
 
 export function validateSearchIndexCounts(counts: SearchIndexCounts): void {
   if (counts.places <= 0) throw new Error("search index contains no places");
-  if (counts.terms <= 0) throw new Error("search index contains no terms");
+  if (counts.terms < 0) throw new Error("search index has an invalid term count");
   if (counts.orphans > 0) throw new Error(`search index contains ${counts.orphans} orphan terms`);
   if (counts.invalid > 0) throw new Error(`search index contains ${counts.invalid} invalid rows`);
 }

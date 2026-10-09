@@ -92,6 +92,7 @@ export function computeBboxFromPoly(polyText: string): RegionBbox {
  */
 export async function fetchRegionBbox(region: string): Promise<RegionBbox> {
   assertValidRegion(region);
+  if (region === "planet") return { west: -180, south: -90, east: 180, north: 90 };
   // Defense-in-depth: the region is already constrained to lowercase path
   // segments by assertValidRegion, but pin the fetched host to Geofabrik so a
   // region value can only ever select a path under the fixed boundary host
@@ -141,7 +142,10 @@ export async function pullOverture(opts: PullOvertureOptions): Promise<string> {
   mkdirSync(outDir, { recursive: true });
   assertOvertureDiskCapacity({
     stage: "regional snapshot pull",
-    workingBytes: estimateOverturePullBytes(opts.dataDir, slug),
+    workingBytes: Math.max(
+      estimateOverturePullBytes(opts.dataDir, slug),
+      opts.region === "planet" ? stac.selectedAssetRows * 512 : 0,
+    ),
     freeBytes: freeBytesAt(opts.dataDir),
   });
   const outPath = join(outDir, `${slug}.parquet`);

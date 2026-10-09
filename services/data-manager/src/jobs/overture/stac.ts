@@ -319,15 +319,20 @@ export async function resolveOvertureStacContract(
     throw new Error("Overture Places collection contains duplicate item links");
   }
 
-  const parsedItems = await Promise.all(
-    itemUrls.map(async (url) => {
-      const expectedId = new URL(url).pathname
-        .split("/")
-        .at(-1)
-        ?.replace(/\.json$/, "");
-      if (!expectedId) throw new Error(`Could not derive the Overture STAC item ID from ${url}`);
-      const item = await fetchStacDocument(url, fetchImpl, `Overture STAC item ${expectedId}`);
-      return parseStacItem(item, release, expectedId);
+  const parsedItems: Array<OvertureStacAsset & { stacVersion: string }> = [];
+  let itemCursor = 0;
+  await Promise.all(
+    Array.from({ length: Math.min(8, itemUrls.length) }, async () => {
+      while (itemCursor < itemUrls.length) {
+        const url = itemUrls[itemCursor++];
+        const expectedId = new URL(url).pathname
+          .split("/")
+          .at(-1)
+          ?.replace(/\.json$/, "");
+        if (!expectedId) throw new Error(`Could not derive the Overture STAC item ID from ${url}`);
+        const item = await fetchStacDocument(url, fetchImpl, `Overture STAC item ${expectedId}`);
+        parsedItems.push(parseStacItem(item, release, expectedId));
+      }
     }),
   );
   const versions = new Set(parsedItems.map((item) => item.stacVersion));

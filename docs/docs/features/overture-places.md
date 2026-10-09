@@ -213,3 +213,11 @@ for the authoritative current list.
 
 Searches run against local PostGIS. User viewports and place details are not
 sent to Overture or its contributors at request time.
+
+## Global source preparation
+
+`planet` is supported alongside Geofabrik extract paths. Overture selects every Places asset from one verified STAC release, with at most eight concurrent catalog requests; it does not fetch a Geofabrik polygon for the world. OSM uses the existing planet PBF download. Prepare matching `planet` OSM and Overture snapshots before publishing global ambient places.
+
+DuckDB defaults to 2 GiB buffer-manager memory, four threads and 32 GiB spill allowance. Set `OVERTURE_DUCKDB_MEMORY_MB`, `OVERTURE_DUCKDB_THREADS` and `OVERTURE_DUCKDB_TEMP_MB` to positive integer limits for the preparation host. Memory outside DuckDB's buffer manager still counts toward container RSS; reserve RAM and scratch storage accordingly. First planet pull admission uses selected STAC row counts at 512 bytes per row as a working allowance, not a measured final dataset size.
+
+Planet osmium exports use `dense_file_array` for node locations. `OSMIUM_PLANET_INDEX_ESTIMATE_BYTES` defaults to 128 GiB and admission requires that allowance plus 5 GiB free on the extraction volume. The index is removed after completion/failure. Area assembly still needs substantial RAM, and filtered PBFs need additional disk; use a properly sized preparation host.

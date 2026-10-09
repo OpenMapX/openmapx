@@ -36,3 +36,14 @@ describe("featureToSearchPlace", () => {
     ).toBeNull();
   });
 });
+
+it("retains named cafes without inventing alias terms", () => {
+  expect(
+    featureToSearchPlace({
+      type: "Feature",
+      id: "n999",
+      geometry: { type: "Point", coordinates: [139.7, 35.7] },
+      properties: { name: "喫茶店", amenity: "cafe" },
+    }),
+  ).toMatchObject({ osmId: "999", name: "喫茶店", terms: [] });
+});

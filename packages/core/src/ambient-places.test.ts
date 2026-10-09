@@ -228,3 +228,28 @@ describe("accepted-link gap-fill identity", () => {
     expect(mergeAmbientPlaces([], [p], links, new Set(["osm:node/9007199254740993"]))).toEqual([]);
   });
 });
+
+describe("global ambient coverage", () => {
+  it("accepts native worldwide regions and the exact Mercator planet preset", () => {
+    expect(validateAmbientRegion({ name: "東京", bounds: [139.6, 35.5, 139.9, 35.8] })).toEqual({
+      name: "東京",
+      bounds: [139.6, 35.5, 139.9, 35.8],
+    });
+    expect(
+      validateAmbientRegion({
+        name: "Planet",
+        coverage: "planet",
+        bounds: [-180, -85.051129, 180, 85.051129],
+      }).coverage,
+    ).toBe("planet");
+    for (const bounds of [
+      [-180, -90, 180, 90],
+      [-179, -85.051129, 180, 85.051129],
+    ]) {
+      expect(() => validateAmbientRegion({ name: "Planet", coverage: "planet", bounds })).toThrow();
+    }
+    expect(() =>
+      validateAmbientRegion({ name: "Too wide", bounds: [-74, 40, -73, 40.3] }),
+    ).toThrow();
+  });
+});

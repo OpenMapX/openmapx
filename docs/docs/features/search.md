@@ -287,3 +287,5 @@ suggestions until a provider is enabled.
   plan a route.
 - **[Public transit](./public-transit.md)** — transit-specialist geocoders and
   stop search feed journey planning.
+
+The OSM search snapshot also retains allowlisted named POIs without aliases for ambient map publication. It does not invent lexical alias terms for them; existing exact/prefix alias retrieval is unchanged. Newly prepared snapshots record ambient source format 2. Rebuild older snapshots before a planet ambient build, which requires that format to avoid silently omitting ordinary named businesses.

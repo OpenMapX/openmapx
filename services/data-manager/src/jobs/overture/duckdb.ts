@@ -22,7 +22,11 @@ export function duckDbSqlLiteral(value: string): string {
  */
 export async function runDuckDb(args: string[], options?: ExecaOptions): Promise<ExecaResult> {
   try {
-    return (await execa("duckdb", args, options ?? {})) as ExecaResult;
+    return (await execa(
+      "duckdb",
+      ["-bail", "-cmd", duckDbResourceSql(), ...args],
+      options ?? {},
+    )) as ExecaResult;
   } catch (err) {
     const e = err as { message?: string; stderr?: unknown; stdout?: unknown; exitCode?: number };
     const parts = [redactConnectionString(e.message ?? "duckdb command failed")];
@@ -60,4 +64,15 @@ export function duckDbScriptProcessOptions(
     env: childEnv,
     extendEnv: false,
   };
+}
+
+/** Bound buffer-manager and spill usage. The container still needs an RSS limit. */
+export function duckDbResourceSql(environment: NodeJS.ProcessEnv = process.env): string {
+  const setting = (name: string, fallback: number, max: number) => {
+    const value = environment[name] === undefined ? fallback : Number(environment[name]);
+    if (!Number.isSafeInteger(value) || value <= 0 || value > max)
+      throw new Error(`${name} must be a positive bounded integer`);
+    return value;
+  };
+  return `SET memory_limit='${setting("OVERTURE_DUCKDB_MEMORY_MB", 2048, 1048576)}MiB'; SET threads=${setting("OVERTURE_DUCKDB_THREADS", 4, 64)}; SET max_temp_directory_size='${setting("OVERTURE_DUCKDB_TEMP_MB", 32768, 10485760)}MiB'; SET preserve_insertion_order=false;`;
 }
