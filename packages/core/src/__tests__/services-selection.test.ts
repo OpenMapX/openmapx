@@ -51,7 +51,8 @@ describe("service selection helpers", () => {
     ]);
   });
 
-  it("builds app-api env with selection + integration/service env passthrough", () => {
+  // biome-ignore-start lint/suspicious/noTemplateCurlyInString: Docker Compose substitution syntax in literal strings
+  it("builds app-api env from the applied set and env references, never from env values", () => {
     const env = buildAppApiServiceEnv(
       [
         svc("app-api", {
@@ -63,36 +64,21 @@ describe("service selection helpers", () => {
         svc("valhalla", {
           container: { image: "t/valhalla", tag: "latest", expose: [8002] },
         }),
-        svc("overpass", {
-          container: { image: "t/overpass", tag: "latest", expose: [80] },
-        }),
       ],
       { EXISTING: "1" },
-      {
-        OSRM_URL: "https://router.example",
-        INTEGRATION_PHOTOS_FLICKR_APIKEY: "flickr-key",
-        SERVICE_VALHALLA_BUILD_ELEVATION: "false",
-      },
+      ["INTEGRATION_PHOTOS_FLICKR_APIKEY", "SERVICE_VALHALLA_BUILD_ELEVATION", "UNRELATED"],
     );
 
     expect(env).toEqual({
       EXISTING: "1",
-      OPENMAPX_ENABLED_SERVICES: "app-api,osrm,valhalla,overpass",
-      // overpass is enabled and no host OVERPASS_URL set → internal URL injected
-      OVERPASS_URL: "http://overpass:80",
-      // INTEGRATION_*/SERVICE_* values are emitted as Docker Compose
-      // substitution placeholders so the actual secret/config value is
-      // resolved from infra/docker/.env at compose-up time and never
-      // baked into the rendered YAML.
-      // biome-ignore-start lint/suspicious/noTemplateCurlyInString: Docker Compose substitution syntax in literal strings
+      OPENMAPX_APPLIED_SERVICES: "app-api,osrm,valhalla",
+      // Compose resolves these from infra/docker/.env when the stack starts.
       INTEGRATION_PHOTOS_FLICKR_APIKEY: "${INTEGRATION_PHOTOS_FLICKR_APIKEY:-}",
       SERVICE_VALHALLA_BUILD_ELEVATION: "${SERVICE_VALHALLA_BUILD_ELEVATION:-}",
-      // biome-ignore-end lint/suspicious/noTemplateCurlyInString: Docker Compose substitution syntax in literal strings
     });
   });
 
-  it("injects internal Docker-network URLs for env-var-driven backends when co-deployed", () => {
-    // Both overpass and nominatim enabled, no host overrides
+  it("points env-addressed backends at co-deployed services unless the host env names one", () => {
     const env = buildAppApiServiceEnv(
       [
         svc("app-api"),
@@ -102,36 +88,13 @@ describe("service selection helpers", () => {
         }),
       ],
       {},
-      {},
     );
 
-    expect(env.OVERPASS_URL).toBe("http://overpass:80");
-    expect(env.NOMINATIM_URL).toBe("http://nominatim:8080");
+    expect(env.OVERPASS_URL).toBe("${OVERPASS_URL:-http://overpass:80}");
+    expect(env.NOMINATIM_URL).toBe("${NOMINATIM_URL:-http://nominatim:8080}");
+    expect(env.MOTIS_URL).toBeUndefined();
   });
-
-  it("host-env OVERPASS_URL and NOMINATIM_URL override the injected internal URLs", () => {
-    const env = buildAppApiServiceEnv(
-      [
-        svc("app-api"),
-        svc("overpass", { container: { image: "t/overpass", tag: "latest", expose: [80] } }),
-        svc("nominatim", {
-          container: { image: "t/nominatim", tag: "latest", expose: [8080] },
-        }),
-      ],
-      {},
-      {
-        OVERPASS_URL: "https://my-overpass.example.com",
-        NOMINATIM_URL: "https://my-nominatim.example.com",
-      },
-    );
-
-    // Explicit host overrides must win over the injected internal addresses
-    expect(env.OVERPASS_URL).toBeUndefined(); // not injected because hostEnv has it
-    expect(env.NOMINATIM_URL).toBeUndefined(); // not injected because hostEnv has it
-    // The host env values themselves are NOT forwarded unless they match the
-    // passthrough prefix pattern (INTEGRATION_* / SERVICE_*), so they must be
-    // set in the compose file's existing env or the manifest's ${VAR:-default}.
-  });
+  // biome-ignore-end lint/suspicious/noTemplateCurlyInString: Docker Compose substitution syntax in literal strings
 });
 
 describe("expandServiceSelection", () => {

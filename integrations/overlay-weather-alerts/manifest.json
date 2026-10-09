@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "author": "OpenMapX",
   "license": "MIT",
-  "documentation": "https://www.weather.gov/documentation/services-web-api, https://maps.dwd.de/geoserver/web/, https://www.meteoalarm.org/",
+  "documentation": "https://docs.openmapx.org/",
   "subjectData": {
     "storesPersonalData": false,
     "strategy": "not_personal",
@@ -38,87 +38,6 @@
       }
     }
   },
-  "healthCheck": [
-    {
-      "name": "NOAA",
-      "type": "http",
-      "url": "https://api.weather.gov/alerts/active/count"
-    },
-    {
-      "name": "ECCC",
-      "type": "http",
-      "url": "https://api.weather.gc.ca/collections/weather-alerts/items?f=json&limit=1"
-    },
-    {
-      "name": "DWD",
-      "type": "http",
-      "url": "https://maps.dwd.de/geoserver/dwd/ows?service=WFS&version=2.0.0&request=GetFeature&typeName=dwd:Warnungen_Gemeinden_vereinigt&outputFormat=application/json&count=1"
-    },
-    {
-      "name": "MeteoAlarm",
-      "type": "ping",
-      "url": "https://feeds.meteoalarm.org/feeds/meteoalarm-legacy-atom-de"
-    }
-  ],
   "quality": "built-in",
-  "category": "Data Overlays",
-  "dataSources": [
-    {
-      "sourceId": "noaa",
-      "name": "NOAA Weather Service",
-      "url": "https://api.weather.gov/",
-      "license": "U.S. Public Domain",
-      "licenseUrl": "https://www.weather.gov/disclaimer",
-      "commercialUse": "yes",
-      "providerCountry": "US",
-      "providerPrivacyUrl": "https://www.weather.gov/privacy",
-      "endUserExposure": "server-only",
-      "personalData": false,
-      "cookies": false,
-      "dpaAvailable": false
-    },
-    {
-      "sourceId": "eccc",
-      "name": "ECCC (Environment Canada)",
-      "url": "https://api.weather.gc.ca/",
-      "license": "ECCC End-use Licence v2.1",
-      "licenseUrl": "https://eccc-msc.github.io/open-data/licence/readme_en/",
-      "commercialUse": "yes",
-      "providerCountry": "CA",
-      "providerPrivacyUrl": "https://www.canada.ca/en/transparency/privacy.html",
-      "endUserExposure": "server-only",
-      "personalData": false,
-      "cookies": false,
-      "dpaAvailable": false
-    },
-    {
-      "sourceId": "dwd",
-      "name": "DWD (Deutscher Wetterdienst)",
-      "url": "https://www.dwd.de/",
-      "license": "CC BY 4.0",
-      "licenseUrl": "https://www.dwd.de/DE/leistungen/opendata/faqs_opendata.html",
-      "commercialUse": "yes",
-      "providerCountry": "DE",
-      "providerPrivacyUrl": "https://www.dwd.de/EN/service/dataprotection/dataprotection_node.html",
-      "endUserExposure": "server-only",
-      "personalData": false,
-      "cookies": false,
-      "dpaAvailable": true,
-      "dpaUrl": "https://www.dwd.de/DE/derdwd/_functions/Boxen/vereinbarung_auftragsverarbeitung.html"
-    },
-    {
-      "sourceId": "meteoalarm",
-      "name": "MeteoAlarm (EUMETNET)",
-      "url": "https://feeds.meteoalarm.org/",
-      "license": "CC BY 4.0",
-      "licenseUrl": "https://feeds.meteoalarm.org/",
-      "commercialUse": "yes",
-      "providerCountry": "BE",
-      "providerPrivacyUrl": "https://www.eumetnet.eu/legal-information/",
-      "endUserExposure": "server-only",
-      "personalData": false,
-      "cookies": false,
-      "dpaAvailable": false
-    }
-  ]
+  "category": "Data Overlays"
 }

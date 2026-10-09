@@ -1,26 +1,17 @@
 import { repoPaths, services } from "@openmapx/core/server";
-import { envString } from "@openmapx/core/server-env";
 import type { FastifyInstance } from "fastify";
 import { applyHardlinksFromPlan, renderAndPersistCompose } from "../services/admin-ops";
+import { readDesiredSelection } from "../services/desired-selection";
 import {
   createDirectAdminOpsKey,
   DIRECT_OPS_IDEMPOTENCY_HEADER,
   parseDirectOpsIdempotency,
 } from "../services/direct-ops-idempotency";
-import { resolveAllServiceConfigs } from "../services/service-config-resolver";
 import { getServiceRegistry } from "../services/service-registry";
+import { buildConfigurationInput, integrationSchemas } from "../services/trusted-config-operations";
 import { dockerComposeAction, STACK_STOP_GUIDANCE } from "../utils/docker-compose";
 import { requireAdmin } from "../utils/require-admin";
 import { declareRouteAuth } from "../utils/route-auth";
-
-const { buildAppApiServiceEnv, renderCompose } = services;
-
-// `composeOutDir` makes the renderer emit bind-mount sources as paths relative
-// to the (eventual) compose file location, matching what `pnpm openmapx compose
-// render` writes to disk. The file isn't actually written here; this only keeps
-// the previewed YAML byte-identical to what an operator would see after running
-// the CLI render.
-const COMPOSE_OUT_DIR = repoPaths().infraDir;
 
 export async function registerAdminComposeRoutes(
   // biome-ignore lint/suspicious/noExplicitAny: accept any Fastify logger variant
@@ -38,34 +29,16 @@ export async function registerAdminComposeRoutes(
       reply.status(503);
       return { error: "Service registry not available" };
     }
-    const domain = envString("DOMAIN", "localhost");
-    const enabled = registry.enabled();
-    // Resolve the full config cascade (defaults + DB + env) for every enabled
-    // service before rendering, so `SERVICE_<ID>_<KEY>=...` on the host and
-    // admin-panel-saved values both land in the generated compose env.
-    const { values: resolvedServiceConfigs, envKeys } = await resolveAllServiceConfigs(
-      enabled.map((s) => ({
-        id: s.manifest.id,
-        configSchema: s.manifest.configSchema,
-        containerEnv: s.manifest.container.environment,
-        proxyHostConfigKey: s.manifest.exposure?.proxy?.host?.configKey,
-      })),
-    );
-    if (enabled.some((s) => s.manifest.id === "app-api")) {
-      resolvedServiceConfigs.set(
-        "app-api",
-        buildAppApiServiceEnv(enabled, resolvedServiceConfigs.get("app-api") ?? {}, process.env),
-      );
-    }
-    const result = renderCompose(enabled, {
-      domain,
-      composeOutDir: COMPOSE_OUT_DIR,
-      allServices: registry.list(),
-      resolvedServiceConfigs,
-      serviceConfigEnvKeys: envKeys,
+    const desired = await readDesiredSelection();
+    const { rendered } = services.renderConfiguration({
+      infraDir: repoPaths().infraDir,
+      services: registry.list(),
+      integrationSchemas: integrationSchemas(),
+      input: { ...(await buildConfigurationInput()), selectedRoots: desired.roots },
+      allowMissingSelected: desired.source === "default",
     });
     reply.header("Content-Type", "text/yaml; charset=utf-8");
-    return result.composeYaml;
+    return rendered.composeYaml;
   });
 
   // POST /api/admin/compose/up — bring the whole stack up

@@ -14,7 +14,7 @@ vi.mock("@/integration-api/runtime/EnvProvider", () => ({
   useEnv: () => ({ apiUrl: "http://fixture" }),
 }));
 vi.mock("@/integration-api/overlay/useIntegrationAttribution", () => ({
-  useIntegrationSourceAttributions: vi.fn(),
+  useSourceAttributions: vi.fn(),
 }));
 vi.mock("@/lib/useExploreReachResults", () => {
   const result = { filtered: [] };

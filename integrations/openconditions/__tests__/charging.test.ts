@@ -60,6 +60,8 @@ const EVERY_SOURCE: LiveSources = {
   has: () => true,
   link: () => undefined,
   licenseName: () => undefined,
+  noticeOf: () => undefined,
+  firmsSources: () => [],
 };
 
 function providerWith(respond: Responder, sources: LiveSources = EVERY_SOURCE, now = FRESH) {
@@ -301,6 +303,8 @@ describe("charging-sites-openconditions", () => {
       has: () => false,
       link: () => undefined,
       licenseName: () => undefined,
+      noticeOf: () => undefined,
+      firmsSources: () => [],
     });
     expect(await provider.searchSites(BBOX)).toEqual({ sites: [], partial: "unavailable" });
     expect(await provider.getSite(MOBIDATA_MEMBER)).toBeNull();

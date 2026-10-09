@@ -70,7 +70,9 @@ export interface ApplyGeneratedHardlinkResult extends ApplyHardlinkResult {
   via: "data-manager" | "local" | "none";
 }
 
-const HARDLINK_PLAN_FILENAME = "docker-compose.generated.hardlinks.json";
+function hardlinkPlanPath(infraDir: string): string {
+  return coreServices.currentConfigurationFile(infraDir, coreServices.GENERATED_HARDLINK_PLAN_FILE);
+}
 
 export function readGeneratedHardlinkPlan(rootDir?: string): {
   plan: HardlinkEntry[];
@@ -78,7 +80,7 @@ export function readGeneratedHardlinkPlan(rootDir?: string): {
   dataRoot: string;
 } {
   const paths = repoPaths(rootDir);
-  const planPath = join(paths.infraDir, HARDLINK_PLAN_FILENAME);
+  const planPath = hardlinkPlanPath(paths.infraDir);
   const parsed = JSON.parse(readFileSync(planPath, "utf-8")) as unknown;
   if (!Array.isArray(parsed)) {
     throw new Error(`Hardlink plan at ${planPath} is not an array`);
@@ -116,7 +118,7 @@ export async function applyGeneratedHardlinks(
   opts: ApplyGeneratedHardlinkOptions = {},
 ): Promise<ApplyGeneratedHardlinkResult> {
   const paths = repoPaths(opts.rootDir);
-  const planPath = join(paths.infraDir, HARDLINK_PLAN_FILENAME);
+  const planPath = hardlinkPlanPath(paths.infraDir);
   if (!existsSync(planPath)) {
     if (opts.requirePlan) {
       throw new Error(`Hardlink plan not found at ${planPath}`);

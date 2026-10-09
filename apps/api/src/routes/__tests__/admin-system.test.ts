@@ -30,7 +30,9 @@ const executeAndWait = vi.fn(
 const opsClient = {};
 
 vi.mock("@openmapx/core/server", () => ({
-  repoPaths: () => ({ composeOutPath: "/repo/docker-compose.generated.yml" }),
+  repoPaths: () => ({
+    composePath: "/repo/.trusted-config-current/docker-compose.generated.yml",
+  }),
 }));
 
 vi.mock("../../utils/require-admin", () => ({

@@ -120,7 +120,9 @@ function uniqueBy<T>(values: readonly T[], identity: (value: T) => string): bool
 export const trustedConfigurationPayloadSchema = z
   .strictObject({
     domain,
-    selectedRoots: z.array(serviceId).max(256),
+    // A new selection, carried by `serviceSelection.apply` only; every other
+    // apply renders the operator's selection as it stands.
+    selectedRoots: z.array(serviceId).max(256).optional(),
     serviceConfigs: z
       .array(
         z.strictObject({
@@ -140,7 +142,11 @@ export const trustedConfigurationPayloadSchema = z
       .max(256),
     serviceSecrets: z.array(z.strictObject({ serviceId, values: secretValues })).max(256),
   })
-  .refine((value) => new Set(value.selectedRoots).size === value.selectedRoots.length)
+  .refine(
+    (value) =>
+      value.selectedRoots === undefined ||
+      new Set(value.selectedRoots).size === value.selectedRoots.length,
+  )
   .refine((value) => uniqueBy(value.serviceConfigs, (entry) => entry.serviceId))
   .refine((value) => uniqueBy(value.integrationConfigs, (entry) => entry.integrationId))
   .refine((value) => uniqueBy(value.serviceSecrets, (entry) => entry.serviceId));

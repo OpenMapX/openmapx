@@ -548,20 +548,19 @@ describe("installExtension", () => {
     expect(removeRepoMock).not.toHaveBeenCalled();
   });
 
-  it("applies the selection-consistency invariant (memory + file), init once", async () => {
+  it("makes the new service part of the operator's selection through one apply, init once", async () => {
     dbMock.queueSelect([]);
     dbMock.queueSelect([]);
 
     await installExtension(makeCtx(), { manifest: MANIFEST, sourceTrust: "community" });
 
+    // The apply writes the selection file and moves the registry to what it applied.
     expect(writeSelectionMock).toHaveBeenCalledWith(
       expect.objectContaining({
         kind: "serviceSelection.apply",
         selectedRoots: ["svc-one"],
       }),
     );
-    expect(applyEnabledIds).toHaveBeenCalled();
-    // Registry inited exactly once — never re-inited from the stale baked env.
     expect(initRegistryMock).toHaveBeenCalledTimes(1);
   });
 

@@ -462,15 +462,9 @@ export function registerServicesCommands(program: Command): void {
         process.exit(1);
       }
       try {
-        // Render compose with the *currently-enabled* selection (read from
-        // env / service-selection.json) — NOT scoped to allIds. Passing
-        // `services: allIds` here would narrow the persisted compose YAML
-        // to just the update target list, dropping every other enabled
-        // service. The api container would then read the resulting
-        // OPENMAPX_ENABLED_SERVICES on next start, narrow its registry to
-        // the same subset, and bake the narrow set back into the next
-        // render — a self-reinforcing fault that needs a manual
-        // `compose render` to recover.
+        // Render the operator's selection (env / service-selection.json), NOT
+        // one scoped to allIds: that would apply a generation holding only
+        // the update targets and drop every other enabled service.
         const rendered = await renderComposeForRepo({
           domain: process.env.DOMAIN ?? "localhost",
         });

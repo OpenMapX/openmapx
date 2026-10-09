@@ -9,9 +9,12 @@ export const useEarthquakeStore = createOverlayStore({
     colorMode: "depth" as "depth" | "recency",
     showHeatmap: false,
     lastUpdated: null as number | null,
+    /** The last refresh failed: no hazards source answered, which is not "no earthquakes". */
+    unavailable: false,
   },
   actions: (set) => ({
     setLoading: (loading: boolean) => set({ loading }),
+    setUnavailable: (unavailable: boolean) => set({ unavailable }),
     setTimeRange: (timeRange: "hour" | "day" | "week" | "month") => set({ timeRange }),
     setMinMagnitude: (minMagnitude: number) => set({ minMagnitude }),
     setColorMode: (colorMode: "depth" | "recency") => set({ colorMode }),

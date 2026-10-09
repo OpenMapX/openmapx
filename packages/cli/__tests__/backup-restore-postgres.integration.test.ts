@@ -97,7 +97,8 @@ while :; do sleep 3600; done
   );
   writeFileSync(join(root, "pnpm-workspace.yaml"), "packages: []\n");
   mkdirSync(join(root, "services"));
-  const composeFile = join(infra, "docker-compose.generated.yml");
+  mkdirSync(join(infra, ".trusted-config-current"));
+  const composeFile = join(infra, ".trusted-config-current", "docker-compose.generated.yml");
   writeFileSync(
     composeFile,
     `name: ${project}

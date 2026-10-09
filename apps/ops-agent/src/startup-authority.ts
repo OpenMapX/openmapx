@@ -1,18 +1,18 @@
 import { services } from "@openmapx/core/server";
 
+/**
+ * The services the operator's selection enables, for the time before the
+ * first configuration generation is applied.
+ */
 export function resolveBootstrapEnabledServiceIds(
   loadedServices: readonly services.LoadedService[],
-  bakedSelection: string | undefined,
+  desired: services.DesiredSelection,
 ): ReadonlySet<string> {
-  const selected = services.parseServiceIdList(bakedSelection);
-  const usesDefault = selected === null;
-  const expanded = services.expandServiceSelection(
-    [...loadedServices],
-    selected ?? services.DEFAULT_SELECTED_SERVICE_IDS,
-    { allowMissingSelected: usesDefault },
-  );
+  const expanded = services.expandServiceSelection([...loadedServices], desired.roots, {
+    allowMissingSelected: desired.source === "default",
+  });
   if (expanded.missingIds.length > 0) {
-    throw new Error("Baked service selection rejected");
+    throw new Error("Service selection rejected");
   }
   return new Set(expanded.enabledIds);
 }

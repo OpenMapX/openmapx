@@ -64,9 +64,7 @@ export function EffisBurnedAreaLayer({ active, popupController }: EffisBurnedAre
   }, [bridge.reset]);
   const popupHtml = useCallback(
     (properties: Record<string, unknown>) => {
-      if (properties.kind !== "satellite-burned-area" || properties.provider !== "effis") {
-        return null;
-      }
+      if (properties.kind !== "satellite-burned-area") return null;
       return renderWildfirePopupModel(
         buildEffisPopupModel(properties as unknown as EffisProperties, locale),
         translate,

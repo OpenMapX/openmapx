@@ -49,8 +49,7 @@ describe("wildfire presentation", () => {
         {
           id: "nifc:1",
           kind: "reported-perimeter",
-          provider: "nifc",
-          coverage: "United States",
+          provider: "us-nifc-fires",
           name: '<img src=x onerror="alert(1)"> Pine Fire',
           areaAcres: 100,
           containmentPercent: 25,
@@ -90,8 +89,7 @@ describe("wildfire presentation", () => {
       {
         id: "nifc:2",
         kind: "reported-perimeter",
-        provider: "nifc",
-        coverage: "United States",
+        provider: "us-nifc-fires",
         name: "Unnamed",
         areaAcres: Number.NaN,
         containmentPercent: Number.POSITIVE_INFINITY,
@@ -169,8 +167,7 @@ describe("wildfire presentation", () => {
       {
         id: "nifc:ja",
         kind: "reported-perimeter",
-        provider: "nifc",
-        coverage: "United States",
+        provider: "us-nifc-fires",
         name: "Pine Fire",
         areaAcres: 100,
       },

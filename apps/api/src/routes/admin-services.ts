@@ -1,5 +1,4 @@
 import { existsSync } from "node:fs";
-import { join } from "node:path";
 import type { OpsResultFor } from "@openmapx/core/ops";
 import { services as coreServices } from "@openmapx/core/server";
 import { isValidSecretKey } from "@openmapx/core/services/secret-key";
@@ -236,7 +235,7 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
       reply.status(503);
       return { error: "Service registry not available" };
     }
-    return getServiceSelectionSummary(registry);
+    return await getServiceSelectionSummary(registry);
   });
 
   // PUT /admin/services/selection — persist selected root services
@@ -252,11 +251,9 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
       }
 
       const selectedRoots = toIdList(req.body?.selectedRoots);
-      let validated: ReturnType<typeof validateServiceSelectionForWrite>;
+      let validated: Awaited<ReturnType<typeof validateServiceSelectionForWrite>>;
       try {
-        validated = validateServiceSelectionForWrite(registry, selectedRoots, {
-          allowBakedEnvironment: true,
-        });
+        validated = await validateServiceSelectionForWrite(registry, selectedRoots);
       } catch (err) {
         reply.status(400);
         return { error: (err as Error).message };
@@ -271,11 +268,7 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
         selectedRoots: validated.normalized,
         operationKey,
       });
-      const expanded = coreServices.expandServiceSelection(registry.list(), validated.normalized, {
-        allowMissingSelected: false,
-      });
-      registry.applyEnabledIds(expanded.enabledIds);
-      const summary = getServiceSelectionSummary(registry, undefined, validated.normalized);
+      const summary = await getServiceSelectionSummary(registry, validated.normalized);
       const adminSession = getAdminSession(req);
       await writeAuditLog({
         actorId: adminSession.user.id,
@@ -645,7 +638,6 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
   app.get("/admin/deployment", async () => {
     const { INFRA_DIR, isDockerAvailable } = await import("../services/admin-ops");
     const dockerAvailable = await isDockerAvailable();
-    const composePath = join(INFRA_DIR, "docker-compose.generated.yml");
     // When the API runs inside app-api, docker-compose actions need the
     // generated compose file's bind paths to resolve to real host paths.
     // That only works when the operator sets OPENMAPX_HOST_DIR to the
@@ -659,8 +651,13 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
       dockerAvailable,
       hostControlConfigured,
       hostDir: hostDir ?? null,
-      // True once the operator has run `pnpm openmapx compose render`.
-      composeRendered: existsSync(composePath),
+      // True once a configuration generation is applied: its render bakes the
+      // applied services into app-api; a host-run API sees the generation.
+      composeRendered:
+        coreServices.parseServiceIdList(process.env[coreServices.APPLIED_SERVICES_ENV]) !== null ||
+        existsSync(
+          coreServices.currentConfigurationFile(INFRA_DIR, coreServices.GENERATED_COMPOSE_FILE),
+        ),
       infraDir: INFRA_DIR,
     };
   });

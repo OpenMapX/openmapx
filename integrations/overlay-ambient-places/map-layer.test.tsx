@@ -60,8 +60,7 @@ vi.mock("@/integration-api/map/useMapLayerGroup", () => ({
   },
 }));
 vi.mock("@/integration-api/overlay/useIntegrationAttribution", () => ({
-  useIntegrationAttribution: test.attribution,
-  useIntegrationSourceAttributions: test.attribution,
+  useSourceAttributions: test.attribution,
 }));
 vi.mock("@/integration-api/runtime/EnvProvider", () => ({
   useEnv: () => ({ apiUrl: "http://fixture" }),

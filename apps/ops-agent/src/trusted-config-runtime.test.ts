@@ -67,7 +67,6 @@ function payload(
 ): TrustedConfigurationPayload {
   return {
     domain: "maps.example.test",
-    selectedRoots: ["alpha"],
     serviceConfigs: [{ serviceId: "alpha", values: { PUBLIC_SETTING: "enabled" } }],
     integrationConfigs: [{ integrationId: "routing", values: { enabled: true } }],
     serviceSecrets: [],
@@ -89,11 +88,17 @@ function claim(
   };
 }
 
+/** The operator's selection, as `services enable` or the admin panel leaves it. */
+function select(infraDir: string, roots: string[]): void {
+  writeFileSync(join(infraDir, "service-selection.json"), JSON.stringify({ selected: roots }));
+}
+
 function fixture() {
   const root = mkdtempSync(join(tmpdir(), "openmapx-trusted-runtime-"));
   roots.push(root);
   const infraDir = join(root, "infra", "docker");
   mkdirSync(infraDir, { recursive: true });
+  select(infraDir, ["alpha"]);
   const current = join(infraDir, ".trusted-config-current");
   return {
     root,
@@ -133,9 +138,11 @@ describe("ops-agent trusted configuration runtime", () => {
     const revisionId = "cfg1_0123456789abcdef0123456789abcdef0123456789a";
     const secretValue = Buffer.from([9, 8, 7, 6]).toString("base64url");
     const operation = { kind: "serviceSelection.apply" as const, revisionId };
+    select(paths.infraDir, ["beta"]);
     const trusted = claim(
       operation,
       payload({
+        selectedRoots: ["alpha"],
         serviceSecrets: [{ serviceId: "alpha", values: { PRIVATE_SETTING: secretValue } }],
       }),
     );
@@ -144,8 +151,12 @@ describe("ops-agent trusted configuration runtime", () => {
       emitLog: vi.fn(),
       claim: trusted,
     });
-    expect(result).toEqual({ revisionId });
+    expect(result).toEqual({ revisionId, enabledServiceIds: ["alpha"] });
     expect(JSON.parse(readFileSync(paths.selection, "utf8"))).toEqual({ selected: ["alpha"] });
+    // The new selection is the operator's from now on, for the CLI too.
+    expect(
+      JSON.parse(readFileSync(join(paths.infraDir, "service-selection.json"), "utf8")),
+    ).toEqual({ selected: ["alpha"] });
     expect(readFileSync(paths.compose, "utf8")).toContain("alpha:");
     expect(readFileSync(paths.compose, "utf8")).not.toContain(secretValue);
     expect(JSON.parse(readFileSync(paths.hardlinks, "utf8"))).toEqual([]);
@@ -224,11 +235,12 @@ describe("ops-agent trusted configuration runtime", () => {
       payload({ serviceSecrets: [{ serviceId: "alpha", values: { UNKNOWN_SECRET: "blocked" } }] }),
     ],
     [
-      "disabled service secret",
+      "unknown service secret",
       payload({
-        serviceSecrets: [{ serviceId: "beta", values: { PRIVATE_SETTING: "blocked" } }],
+        serviceSecrets: [{ serviceId: "missing", values: { PRIVATE_SETTING: "blocked" } }],
       }),
     ],
+    ["selection outside a selection apply", payload({ selectedRoots: ["beta"] })],
     [
       "mismatched integration",
       payload({ integrationConfigs: [{ integrationId: "missing", values: {} }] }),
@@ -269,6 +281,7 @@ describe("ops-agent trusted configuration runtime", () => {
     });
     const revisionId = "cfg1_0123456789abcdef0123456789abcdef0123456789a";
     const operation = { kind: "stack.render" as const, revisionId };
+    select(paths.infraDir, ["app-api"]);
     await expect(
       dispatchOpsOperation(runtime, operation, {
         signal: new AbortController().signal,
@@ -276,7 +289,6 @@ describe("ops-agent trusted configuration runtime", () => {
         claim: claim(
           operation,
           payload({
-            selectedRoots: ["app-api"],
             serviceConfigs: [
               { serviceId: "app-api", values: { DOCKER_CONFIG: "/attacker/control" } },
             ],
@@ -300,20 +312,20 @@ describe("ops-agent trusted configuration runtime", () => {
     });
     const revisionId = "cfg1_0123456789abcdef0123456789abcdef0123456789a";
     const operation = { kind: "stack.render" as const, revisionId };
+    select(paths.infraDir, ["app-api", "alpha"]);
     await dispatchOpsOperation(runtime, operation, {
       signal: new AbortController().signal,
       emitLog: vi.fn(),
       claim: claim(
         operation,
         payload({
-          selectedRoots: ["app-api", "alpha"],
           serviceConfigs: [{ serviceId: "alpha", values: {} }],
           integrationConfigs: [{ integrationId: "routing-demo", values: {} }],
         }),
       ),
     });
     const compose = readFileSync(paths.compose, "utf8");
-    expect(compose).toContain("OPENMAPX_ENABLED_SERVICES: app-api,alpha");
+    expect(compose).toContain("OPENMAPX_APPLIED_SERVICES: app-api,alpha");
     expect(compose).toContain(`SERVICE_ALPHA_PUBLIC_SETTING: \${SERVICE_ALPHA_PUBLIC_SETTING:-}`);
     expect(compose).toContain(
       `INTEGRATION_ROUTING_DEMO_REGION: \${INTEGRATION_ROUTING_DEMO_REGION:-}`,
@@ -411,6 +423,7 @@ describe("ops-agent trusted configuration runtime", () => {
       serviceId: "dawarich-app",
       revisionId,
     };
+    select(paths.infraDir, ["dawarich-app"]);
     await expect(
       dispatchOpsOperation(runtime, operation, {
         signal: new AbortController().signal,
@@ -418,7 +431,6 @@ describe("ops-agent trusted configuration runtime", () => {
         claim: claim(
           operation,
           payload({
-            selectedRoots: ["dawarich-app"],
             serviceConfigs: [
               {
                 serviceId: "dawarich-app",
@@ -507,7 +519,7 @@ describe("ops-agent trusted configuration runtime", () => {
           { authorityRevision: authority.revisionId },
         ),
       }),
-    ).resolves.toEqual({ revisionId: selectionRevision });
+    ).resolves.toEqual({ revisionId: selectionRevision, enabledServiceIds: ["community-live"] });
     expect(readFileSync(paths.compose, "utf8")).toContain("community-live:");
 
     authority = {
@@ -530,7 +542,6 @@ describe("ops-agent trusted configuration runtime", () => {
         claim: claim(
           config,
           payload({
-            selectedRoots: ["community-live"],
             serviceConfigs: [{ serviceId: "community-live", values: {} }],
             integrationConfigs: [{ integrationId: "integration-live", values: { region: "eu" } }],
           }),
@@ -658,7 +669,7 @@ describe("ops-agent trusted configuration runtime", () => {
         emitLog: vi.fn(),
         claim: claim(operation, payload({ integrationConfigs: [] })),
       }),
-    ).resolves.toEqual({ revisionId });
+    ).resolves.toEqual({ revisionId, enabledServiceIds: ["alpha"] });
     expect(readFileSync(paths.compose, "utf8")).toContain("alpha:");
   });
 
@@ -702,7 +713,7 @@ describe("ops-agent trusted configuration runtime", () => {
         emitLog: vi.fn(),
         claim: claim(operation, payload({ integrationConfigs: [] })),
       }),
-    ).resolves.toEqual({ revisionId });
+    ).resolves.toEqual({ revisionId, enabledServiceIds: ["alpha"] });
     expect(readFileSync(paths.compose, "utf8")).toContain("alpha:");
   });
 
@@ -738,7 +749,7 @@ describe("ops-agent trusted configuration runtime", () => {
         emitLog: vi.fn(),
         claim: claim(operation, payload({ integrationConfigs: [] })),
       }),
-    ).resolves.toEqual({ revisionId });
+    ).resolves.toEqual({ revisionId, enabledServiceIds: ["alpha"] });
   });
 
   it("applies an explicit empty vault entry and removes the prior generated secret", async () => {
@@ -795,5 +806,76 @@ describe("ops-agent trusted configuration runtime", () => {
     }
     await initializeTrustedConfigurationRuntime(paths.infraDir);
     expect(readdirSync(generations)).toHaveLength(15);
+  });
+
+  it("renders the operator's selection for every apply that does not change it", async () => {
+    const paths = fixture();
+    select(paths.infraDir, ["beta"]);
+    const runtime = createUnavailableRuntime();
+    installTrustedConfigurationRuntime(runtime, {
+      services: [service("alpha"), service("beta")],
+      integrationSchemas: new Map(),
+      infraDir: paths.infraDir,
+      env: {},
+    });
+    const operation = {
+      kind: "serviceConfig.apply" as const,
+      serviceId: "alpha",
+      revisionId: `cfg1_${"c".repeat(43)}`,
+    };
+    await expect(
+      dispatchOpsOperation(runtime, operation, {
+        signal: new AbortController().signal,
+        emitLog: vi.fn(),
+        claim: claim(operation, payload({ integrationConfigs: [] })),
+      }),
+    ).resolves.toEqual({ revisionId: operation.revisionId, enabledServiceIds: ["beta"] });
+    const compose = readFileSync(paths.compose, "utf8");
+    expect(compose).toContain("beta:");
+    expect(compose).not.toContain("alpha:");
+    // What was saved for alpha travels with the generation for when it is enabled.
+    expect(readFileSync(join(paths.current, "resolved-config.generated.json"), "utf8")).toContain(
+      '"serviceId":"alpha"',
+    );
+  });
+
+  it("leaves the selection to the operator's override while it is set", async () => {
+    const paths = fixture();
+    const runtime = createUnavailableRuntime();
+    installTrustedConfigurationRuntime(runtime, {
+      services: [service("alpha"), service("beta")],
+      integrationSchemas: new Map(),
+      infraDir: paths.infraDir,
+      env: { OPENMAPX_ENABLED_SERVICES: "alpha" },
+    });
+    const operation = {
+      kind: "serviceSelection.apply" as const,
+      revisionId: `cfg1_${"e".repeat(43)}`,
+    };
+    await expect(
+      dispatchOpsOperation(runtime, operation, {
+        signal: new AbortController().signal,
+        emitLog: vi.fn(),
+        claim: claim(operation, payload({ selectedRoots: ["beta"], integrationConfigs: [] })),
+      }),
+    ).rejects.toThrow("Trusted configuration apply failed");
+    expect(readFileSync(join(paths.infraDir, "service-selection.json"), "utf8")).toContain("alpha");
+    expect(existsSync(paths.current)).toBe(false);
+    await expect(
+      dispatchOpsOperation(
+        runtime,
+        { kind: "serviceSelection.inspect" },
+        {
+          signal: new AbortController().signal,
+          emitLog: vi.fn(),
+          claim: {
+            fingerprint: "f".repeat(64),
+            operation: { kind: "serviceSelection.inspect" },
+            source: "registry",
+            capability: { revisionId: "registry-v1", values: {} },
+          },
+        },
+      ),
+    ).resolves.toEqual({ source: "env", roots: ["alpha"] });
   });
 });

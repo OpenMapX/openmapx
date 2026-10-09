@@ -262,7 +262,9 @@ export function renderReleaseCompose(manifest: ReleaseManifest): string {
     `    image: ${manifest.images["transitous-runner"]}`,
     "configs:",
     "  privacy-release-validation:",
-    `    file: ./${PRIVACY_RELEASE_EVIDENCE_DIRECTORY}/${validationEvidenceFile}`,
+    // Compose resolves this overlay's paths against the first compose file's
+    // directory, the configuration generation; the evidence sits beside the overlay.
+    `    file: ../${PRIVACY_RELEASE_EVIDENCE_DIRECTORY}/${validationEvidenceFile}`,
     "",
   ].join("\n");
 }

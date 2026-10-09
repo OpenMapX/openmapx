@@ -4351,6 +4351,23 @@
         "x-openmapx-source": "integrations/overlay-wildfires/index.ts"
       }
     },
+    "/api/integrations/overlay-wildfires/wildfires/density": {
+      "get": {
+        "operationId": "getApiIntegrationsOverlayWildfiresWildfiresDensity",
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /wildfires/density (overlay-wildfires)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "overlay-wildfires",
+        "x-openmapx-source": "integrations/overlay-wildfires/index.ts"
+      }
+    },
     "/api/integrations/overlay-winter-sports/tiles/{z}/{x}/{y}.png": {
       "get": {
         "operationId": "getApiIntegrationsOverlayWinterSportsTilesZXYPng",

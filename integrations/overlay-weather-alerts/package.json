@@ -7,7 +7,13 @@
   "dependencies": {
     "@openmapx/core": "workspace:^",
     "@openmapx/integration-framework": "workspace:^",
-    "@openmapx/mobility-formats": "workspace:^",
-    "fast-xml-parser": "^5.11.1"
+    "@openmapx/mobility-core": "workspace:^"
+  },
+  "peerDependencies": {
+    "react": ">=19"
+  },
+  "devDependencies": {
+    "@types/react": "^19.3.0",
+    "react": "19.3.0"
   }
 }

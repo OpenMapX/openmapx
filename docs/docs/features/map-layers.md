@@ -176,7 +176,7 @@ and layers enabled only by the context switch back off when it ends.
 | Overlay            | Shows                                                                                   | Data                                                                |
 | ------------------ | --------------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
 | **Weather**        | Precipitation radar animation, plus temperature/precipitation/cloud/wind/pressure tiles | RainViewer, OpenWeather, Open-Meteo                                 |
-| **Weather alerts** | Active severe-weather warnings                                                          | NOAA, Environment Canada, DWD, MeteoAlarm                           |
+| **Weather alerts** | Active severe-weather warnings                                                          | NWS, Environment Canada, DWD, MeteoAlarm, through OpenConditions    |
 | **Air quality**    | Raw pollutant concentrations from monitoring stations                                   | Canonical provider orchestration (including OpenAQ when configured) |
 | **Environment**    | Readings from community environmental sensors                                           | openSenseMap, Sensor.Community                                      |
 
@@ -211,14 +211,25 @@ with `pnpm --filter @openmapx/integration-overlay-sun-time refresh-timezones`.
 
 ### Hazards & natural events
 
-| Overlay            | Shows                                               | Data              |
-| ------------------ | --------------------------------------------------- | ----------------- |
-| **Earthquakes**    | Recent earthquakes, sized by magnitude              | USGS              |
-| **Wildfires**      | Active fire hotspots                                | NASA FIRMS        |
-| **Natural events** | Storms, volcanoes, floods, and other ongoing events | NASA EONET, GDACS |
+| Overlay            | Shows                                                                   | Data                              |
+| ------------------ | ----------------------------------------------------------------------- | --------------------------------- |
+| **Earthquakes**    | Recent earthquakes, sized by magnitude                                  | USGS                              |
+| **Wildfires**      | Fire hotspots, active fire perimeters, burnt areas and smoke            | NASA FIRMS, NIFC, EFFIS, NOAA HMS |
+| **Natural events** | Tropical cyclones, volcanoes, floods, droughts and other ongoing events | NASA EONET, GDACS                 |
 
-These pull from public hazard feeds and are useful for situational awareness at
-a glance.
+All four hazard overlays, weather alerts included, read their data through
+[OpenConditions](../developer/building-an-external-extension.md): it fetches the
+public hazard feeds, and OpenMapX reads the result from the instance at
+`OPENCONDITIONS_URL`. Without it the overlays stay in the layer list and their
+legends say the data is unavailable. The weather alert layer, which loads the
+whole world at once, credits every feed it loaded; the other layers credit the
+feeds of what they drew. Weather alerts are cleared from the map four minutes
+after the last successful refresh, so a failed refresh never leaves old
+warnings on screen.
+Fire hotspots load for the visible area: below zoom 7 they are drawn as a
+density grid, from zoom 7 as individual detections. MeteoAlarm's European
+warnings are drawn with the area shapes MeteoAlarm publishes for redistributors,
+and their popup shows the publisher's notice, the issue time and the issuer.
 
 ### Recreation & specialty
 

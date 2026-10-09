@@ -79,6 +79,7 @@ const NIFC_COLLECTION = {
   fetchedAt: "2026-08-12T12:00:00.000Z",
   stale: false,
   truncated: false,
+  sources: ["us-nifc-fires"],
   features: [
     {
       type: "Feature" as const,
@@ -86,8 +87,7 @@ const NIFC_COLLECTION = {
       properties: {
         id: "nifc:1",
         kind: "reported-perimeter" as const,
-        provider: "nifc" as const,
-        coverage: "United States" as const,
+        provider: "us-nifc-fires",
         name: '<Pine & "Ridge">',
         areaAcres: 100,
         containmentPercent: 25,
@@ -114,6 +114,7 @@ const EFFIS_COLLECTION = {
   fetchedAt: "2026-08-12T11:30:00.000Z",
   stale: false,
   truncated: false,
+  sources: ["eu-effis-fires"],
   features: [
     {
       type: "Feature" as const,
@@ -121,7 +122,7 @@ const EFFIS_COLLECTION = {
       properties: {
         id: "effis:1",
         kind: "satellite-burned-area" as const,
-        provider: "effis" as const,
+        provider: "eu-effis-fires",
         areaHectares: 250,
         locality: "Vila <Nova>",
       },

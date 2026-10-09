@@ -344,7 +344,8 @@ destinations retain one label position to bound placement work and crowding.
 The selected/category/basemap suppression filter is repaired per live layer after
 paint-only theme recreation as well as full style replacement. OSM-only publication
 credits use the actual OSM source; combined publications retain the supported
-Overture contributor notices.
+Overture contributor notices. The overlay registers these source IDs through
+the shared `useSourceAttributions` API and clears its credits when hidden.
 
 The actual extractor-to-index-to-publication run also caught JSONB-array tag
 serialization: serialized strings had been stored as JSON strings rather than

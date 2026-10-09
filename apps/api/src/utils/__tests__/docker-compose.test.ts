@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { ApiOpsClient } from "../../services/ops-client.js";
 import {
-  composeFileArgs,
   dockerComposeAction,
   dockerComposeLogSnapshot,
   dockerComposeLogs,
@@ -19,37 +18,6 @@ function clientWithExecute(execute: ApiOpsClient["execute"]): ApiOpsClient {
     lookup: vi.fn(),
   };
 }
-
-describe("composeFileArgs", () => {
-  it("keeps the selected release overlay in every Compose operation", () => {
-    expect(
-      composeFileArgs(
-        {
-          composeOutPath: "/repo/infra/docker/docker-compose.generated.yml",
-          composeReleasePath: "/repo/infra/docker/docker-compose.release.yml",
-        },
-        (path) => path.endsWith("docker-compose.release.yml"),
-      ),
-    ).toEqual([
-      "-f",
-      "/repo/infra/docker/docker-compose.generated.yml",
-      "-f",
-      "/repo/infra/docker/docker-compose.release.yml",
-    ]);
-  });
-
-  it("uses only the generated Compose file before a release is selected", () => {
-    expect(
-      composeFileArgs(
-        {
-          composeOutPath: "/repo/infra/docker/docker-compose.generated.yml",
-          composeReleasePath: "/repo/infra/docker/docker-compose.release.yml",
-        },
-        () => false,
-      ),
-    ).toEqual(["-f", "/repo/infra/docker/docker-compose.generated.yml"]);
-  });
-});
 
 describe("inspectDawarichProvisioning", () => {
   it("returns the strict provisioning inspection result", async () => {

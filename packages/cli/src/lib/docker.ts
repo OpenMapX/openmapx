@@ -1,4 +1,4 @@
-import { existsSync } from "node:fs";
+import { services as coreServices } from "@openmapx/core/server";
 import { execa } from "execa";
 import { repoPaths } from "./paths";
 
@@ -6,10 +6,7 @@ export async function dockerCompose(
   args: string[],
 ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
   const paths = repoPaths();
-  const composeFile = paths.composeOutPath;
-  const composeFiles = ["-f", composeFile];
-  if (existsSync(paths.composeReleasePath)) composeFiles.push("-f", paths.composeReleasePath);
-  const result = await execa("docker", ["compose", ...composeFiles, ...args], {
+  const result = await execa("docker", [...coreServices.stackComposeArgs(paths), ...args], {
     cwd: paths.infraDir,
     reject: false,
   });
@@ -39,10 +36,7 @@ export async function dockerRun(
 
 export async function dockerComposeStream(args: string[]): Promise<number> {
   const paths = repoPaths();
-  const composeFile = paths.composeOutPath;
-  const composeFiles = ["-f", composeFile];
-  if (existsSync(paths.composeReleasePath)) composeFiles.push("-f", paths.composeReleasePath);
-  const sub = execa("docker", ["compose", ...composeFiles, ...args], {
+  const sub = execa("docker", [...coreServices.stackComposeArgs(paths), ...args], {
     cwd: paths.infraDir,
     stdio: "inherit",
     reject: false,

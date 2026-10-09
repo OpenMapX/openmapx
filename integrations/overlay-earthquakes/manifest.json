@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "author": "OpenMapX",
   "license": "MIT",
-  "documentation": "https://earthquake.usgs.gov/fdsnws/event/1/",
+  "documentation": "https://docs.openmapx.org/",
   "subjectData": {
     "storesPersonalData": false,
     "strategy": "not_personal",
@@ -38,26 +38,6 @@
       }
     }
   },
-  "healthCheck": {
-    "type": "http",
-    "url": "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/2.5_day.geojson"
-  },
   "quality": "built-in",
-  "category": "Data Overlays",
-  "dataSources": [
-    {
-      "sourceId": "usgs",
-      "name": "USGS Earthquake Hazards",
-      "url": "https://earthquake.usgs.gov/",
-      "license": "U.S. Public Domain",
-      "licenseUrl": "https://www.usgs.gov/information-policies-and-instructions/copyrights-and-credits",
-      "commercialUse": "yes",
-      "providerCountry": "US",
-      "providerPrivacyUrl": "https://www.doi.gov/privacy",
-      "endUserExposure": "server-only",
-      "personalData": false,
-      "cookies": false,
-      "dpaAvailable": false
-    }
-  ]
+  "category": "Data Overlays"
 }

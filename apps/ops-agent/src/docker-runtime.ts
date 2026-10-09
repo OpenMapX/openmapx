@@ -8,7 +8,11 @@ import {
   OPS_MAX_FOLLOW_LOG_EVENTS,
   type OpsResultFor,
 } from "@openmapx/core/ops";
-import { assertPosixProcessGroupsSupported, monitorPosixProcessGroup } from "@openmapx/core/server";
+import {
+  assertPosixProcessGroupsSupported,
+  monitorPosixProcessGroup,
+  services,
+} from "@openmapx/core/server";
 import { createUnavailableRuntime, type OpsRuntime } from "./runtime";
 
 const DEFAULT_TIMEOUT_MS = 120_000;
@@ -48,9 +52,8 @@ type FollowLogs = (
 ) => Promise<OpsResultFor<"service.logs.follow">>;
 
 export interface DockerRuntimeOptions {
-  composeFile: string;
-  releaseComposeFile: string;
-  releaseComposeExists: (path: string) => boolean;
+  stack: services.StackPaths;
+  fileExists: (path: string) => boolean;
   execFile?: ExecFile;
   followLogs?: FollowLogs;
   /**
@@ -81,7 +84,7 @@ const FEED_PROXY_CONTAINER = "motis-feed-proxy";
 // Valhalla's fixed identities. `/custom_files` is the shared OSM producer mount,
 // so the artifacts these commands write are readable by data-manager directly —
 // it never needs to stream a file back out through Docker.
-const VALHALLA_CONTAINER = "docker-valhalla-1";
+const VALHALLA_CONTAINER = `${services.STACK_PROJECT}-valhalla-1`;
 const VALHALLA_CONFIG_PATH = "/custom_files/valhalla.json";
 const VALHALLA_TRAFFIC_TAR = "/custom_files/traffic.tar";
 const VALHALLA_TILE_DIR = "/custom_files/valhalla_tiles";
@@ -317,14 +320,8 @@ export function createDockerRuntime(options: DockerRuntimeOptions): OpsRuntime {
     options.execFile ??
     ((file, args, execOptions) =>
       runContainedProcess(file, args, { ...execOptions, killGraceMs: KILL_GRACE_MS }));
-  const composePrefix = (): string[] => [
-    "compose",
-    "-f",
-    options.composeFile,
-    ...(options.releaseComposeExists(options.releaseComposeFile)
-      ? ["-f", options.releaseComposeFile]
-      : []),
-  ];
+  const composePrefix = (): string[] =>
+    services.stackComposeArgs(options.stack, options.fileExists);
   const run = (args: readonly string[], signal: AbortSignal, timeout = DEFAULT_TIMEOUT_MS) =>
     execFile("docker", args, { signal, timeout, maxBuffer: MAX_OUTPUT_BYTES });
   const changed = async (args: readonly string[], signal: AbortSignal, timeout?: number) => {

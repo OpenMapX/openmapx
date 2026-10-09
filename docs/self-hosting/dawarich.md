@@ -106,13 +106,15 @@ resource requirements, then use **Save & Apply** for both the timeline app and
 Sidekiq worker. The admin render is required after provisioning because it reads
 the service-config database and credential vault. Do not run a fresh CLI render
 between provisioning and this first admin apply: the CLI intentionally has no
-database/vault access. A CLI-only selection/render sequence before provisioning
-is:
+database/vault access, and renders what the last admin apply saved. After that
+apply, CLI renders keep the provisioned settings. A CLI-only selection/render
+sequence before provisioning is:
 
 ```bash
 pnpm openmapx services enable dawarich-app
 pnpm openmapx compose render --domain example.org
-docker compose -f infra/docker/docker-compose.generated.yml config --quiet
+docker compose --env-file infra/docker/.env \
+  -f infra/docker/.trusted-config-current/docker-compose.generated.yml config --quiet
 pnpm openmapx compose up --domain example.org
 ```
 

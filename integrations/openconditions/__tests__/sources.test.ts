@@ -37,6 +37,7 @@ function ocSource(overrides: Partial<OcSource> = {}): OcSource {
     name: "Tankerkönig (MTS-K)",
     domain: "fuel",
     product: "fuel",
+    format: "tankerkoenig",
     operator: "tankerkoenig",
     region: "de",
     country: "de",
@@ -242,6 +243,25 @@ describe("toDataSource", () => {
     expect(validateDataSource(parking, manifest.domains).valid).toBe(true);
   });
 
+  test("maps an OC hazards feed to the hazards domain", () => {
+    const hazards = toDataSource(
+      ocSource({
+        id: "usgs-quakes",
+        name: "USGS earthquakes",
+        domain: "hazards",
+        product: "quakes",
+        format: "usgs",
+        operator: "usgs",
+        region: "global",
+        country: undefined,
+        accessMode: "bulk",
+        restricted: false,
+      }),
+    )!;
+    expect(hazards).toMatchObject({ sourceId: "usgs-quakes", domain: "hazards" });
+    expect(validateDataSource(hazards, manifest.domains).valid).toBe(true);
+  });
+
   test("maps an OC camera feed to the cameras domain with its image hosts as media hosts", () => {
     const cameras = toDataSource(
       ocSource({
@@ -320,7 +340,7 @@ describe("toDataSource", () => {
 
   test("skips OC domains OMX has no domain for", () => {
     expect(toDataSource(ocSource({ domain: "ev" }))).toBeUndefined();
-    expect(toDataSource(ocSource({ domain: "hazards" }))).toBeUndefined();
+    expect(toDataSource(ocSource({ domain: "maritime" }))).toBeUndefined();
   });
 });
 

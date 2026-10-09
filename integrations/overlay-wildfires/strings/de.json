@@ -1,26 +1,4 @@
 {
-  "name": "NASA-FIRMS-Waldbrände",
-  "description": "Aktive Waldbrand-/Hotspot-Erkennungen von NASA FIRMS",
-  "dataSources": {
-    "firms": {
-      "purpose": "Aktive Waldbrand-/Feuererkennungen weltweit, nach Feuerstrahlungsleistung skaliert und nach Aktualität eingefärbt",
-      "dataSent": "Nur Satellitenquelle (VIIRS oder MODIS) und Zeitraum in Tagen (1-3) werden serverseitig übermittelt; OpenMapX leitet keine Browser-IP, Identität oder exakten Gerätestandortdaten weiter",
-      "dataReceived": "CSV mit Breitengrad, Längengrad, Datum/Uhrzeit, Konfidenz, Satellit, Feuerstrahlungsleistung (MW), Temperatur (K)"
-    },
-    "nifc-wfigs": {
-      "purpose": "Bestverfügbare aktuelle Perimeter von US-Waldbränden aus WFIGS. Dynamische Daten sind keine Rechtsdokumente; NIFC übernimmt keine Gewähr für Genauigkeit, Zuverlässigkeit oder Vollständigkeit.",
-      "dataSent": "Generalisierte Begrenzungsrahmen-Koordinaten (West, Süd, Ost, Nord) und ein zoomabhängiger Vereinfachungsversatz werden serverseitig übermittelt; keine Browser-IP, Identität oder exakte Gerätestandortdaten werden weitergegeben.",
-      "dataReceived": "GeoJSON mit aktuellen Waldbrand-Perimeterpolygonen, Einsatzname, gemeldeter Fläche, Eindämmung, Entdeckungs-/Aktualisierungszeit, Bundesstaat und Ursache"
-    },
-    "effis": {
-      "purpose": "Satellitenabgeleitete wöchentliche MODIS-Flächen verbrannter Gebiete für Europa, den Nahen Osten und Nordafrika; kein autoritativer Brandperimeter.",
-      "dataSent": "Generalisierte Begrenzungsrahmen-Koordinaten (West, Süd, Ost, Nord) werden serverseitig übermittelt; keine Browser-IP, Identität oder exakte Gerätestandortdaten werden weitergegeben.",
-      "dataReceived": "GeoJSON mit satellitenabgeleiteter Polygon-/MultiPolygon-Geometrie verbrannter Flächen, Hektarfläche, Daten, Land/Region/Ort und Quellenklasse; kein autoritativer Brandperimeter"
-    },
-    "noaa-hms": {
-      "purpose": "Beobachtete Rauchfahnenpolygone aus dem NOAA Hazard Mapping System (HMS), aus Satellitenbildern abgeleitet; die Dichte ist qualitativ und keine gemessene Rauchkonzentration.",
-      "dataSent": "Nur Quellen- und Zeitauswahl wird serverseitig übermittelt; keine Browser-IP, Identität oder exakte Gerätestandortdaten werden weitergegeben.",
-      "dataReceived": "GeoJSON mit beobachteter Rauchfahnen-Polygon-/MultiPolygon-Geometrie sowie FID-, Satelliten-, Start-/Endzeit- und qualitativen Dichteattributen"
-    }
-  }
+  "name": "Waldbrände",
+  "description": "Satellitengestützte Brandherde, gemeldete Brandperimeter, aus Satellitendaten abgeleitete Brandflächen und beobachteter Rauch"
 }

@@ -1,5 +1,6 @@
 import { existsSync, readFileSync, rmSync, statSync } from "node:fs";
 import { join } from "node:path";
+import { services } from "@openmapx/core/server";
 import { applyHardlinkPlan, type HardlinkEntry } from "@openmapx/hardlinks";
 import {
   type FeedProxyVars,
@@ -85,7 +86,10 @@ const FEED_PROXY_DATA_TYPE = "motis-feed-proxy-config";
  */
 function relinkFeedProxyConfig(ctx: JobContext): void {
   if (!ctx.repoRoot) return;
-  const planPath = join(ctx.repoRoot, "infra", "docker", "docker-compose.generated.hardlinks.json");
+  const planPath = services.currentConfigurationFile(
+    join(ctx.repoRoot, "infra", "docker"),
+    services.GENERATED_HARDLINK_PLAN_FILE,
+  );
   if (!existsSync(planPath)) return;
   let plan: HardlinkEntry[];
   try {

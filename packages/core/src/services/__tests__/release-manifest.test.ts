@@ -162,7 +162,9 @@ describe("shared release manifest", () => {
       },
     ]);
     expect(overlay.configs["privacy-release-validation"]).toEqual({
-      file: "./.release-evidence/privacy-release-validation-59ce9957109148ecc7d47d1179863822a181e27293e188aa365b7fa787010cb2.json",
+      // Compose resolves an overlay's paths against the first file's directory,
+      // the configuration generation; the evidence sits beside the overlay.
+      file: "../.release-evidence/privacy-release-validation-59ce9957109148ecc7d47d1179863822a181e27293e188aa365b7fa787010cb2.json",
     });
   });
 
@@ -225,7 +227,11 @@ describe("shared release manifest", () => {
         const nextCompose = load(renderReleaseCompose(next)) as {
           configs: { "privacy-release-validation": { file: string } };
         };
-        const nextEvidencePath = join(root, nextCompose.configs["privacy-release-validation"].file);
+        const nextEvidencePath = join(
+          root,
+          ".trusted-config-current",
+          nextCompose.configs["privacy-release-validation"].file,
+        );
         if (kind === "corrupt") {
           writeFileSync(nextEvidencePath, "{}\n", { mode: 0o444 });
           chmodSync(nextEvidencePath, 0o444);
@@ -270,7 +276,11 @@ describe("shared release manifest", () => {
       const oldCompose = load(firstOverlay) as {
         configs: { "privacy-release-validation": { file: string } };
       };
-      const oldEvidencePath = join(root, oldCompose.configs["privacy-release-validation"].file);
+      const oldEvidencePath = join(
+        root,
+        ".trusted-config-current",
+        oldCompose.configs["privacy-release-validation"].file,
+      );
       expect(oldEvidencePath).toBe(first.evidencePath);
       expect(JSON.parse(readFileSync(oldEvidencePath, "utf8"))).toEqual(
         manifest.privacyReleaseValidation,

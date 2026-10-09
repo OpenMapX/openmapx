@@ -1,55 +1,43 @@
-import { existsSync, lstatSync, readFileSync, readlinkSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { join } from "node:path";
 import { findRepoRoot, services } from "@openmapx/core/server";
 
 const {
-  DEFAULT_SELECTED_SERVICE_IDS,
+  APPLIED_SERVICES_ENV,
   expandServiceSelection,
-  normalizeServiceIds,
   parseServiceIdList,
+  readAppliedServiceIds,
+  readDesiredSelection,
   resolveRequirement,
-  SERVICE_SELECTION_ENV,
   ServiceRegistry,
 } = services;
 type IntegrationManifestRequires = NonNullable<services.IntegrationRequirement[] | undefined>;
 
 let registry: InstanceType<typeof ServiceRegistry> | null = null;
 const warnings: string[] = [];
-const SERVICE_SELECTION_FILE = "service-selection.json";
 
-function readSelectionFile(rootDir: string, trusted: boolean): string[] | null {
-  const infra = join(rootDir, "infra", "docker");
-  const current = join(infra, ".trusted-config-current", SERVICE_SELECTION_FILE);
-  const filePath = trusted ? current : join(infra, SERVICE_SELECTION_FILE);
-  if (!existsSync(filePath)) {
-    if (trusted) throw new Error("Malformed trusted service selection");
-    return null;
+/**
+ * The services the applied generation enabled. Its render bakes them into
+ * app-api; an API running on the host (development) reads the deployment
+ * itself, and before any render, the operator's selection.
+ */
+function appliedServiceIds(
+  rootDir: string,
+  loaded: readonly services.LoadedService[],
+): ReadonlySet<string> {
+  const baked = parseServiceIdList(process.env[APPLIED_SERVICES_ENV]);
+  if (baked) return new Set(baked);
+  const infraDir = join(rootDir, "infra", "docker");
+  const applied = readAppliedServiceIds(infraDir, loaded);
+  if (applied) return applied;
+  const desired = readDesiredSelection(infraDir);
+  const selection = expandServiceSelection([...loaded], desired.roots, {
+    allowMissingSelected: desired.source === "default",
+  });
+  if (selection.missingIds.length > 0) {
+    warnings.push(`Selected service(s) are not installed: ${selection.missingIds.join(", ")}`);
   }
-
-  const raw = JSON.parse(readFileSync(filePath, "utf-8")) as { selected?: unknown };
-  if (!Array.isArray(raw.selected)) {
-    throw new Error(`Malformed service selection file at ${filePath}: expected "selected" array`);
-  }
-
-  return normalizeServiceIds(raw.selected);
-}
-
-function hasTrustedSelection(rootDir: string): boolean {
-  const infra = join(rootDir, "infra", "docker");
-  const current = join(infra, ".trusted-config-current");
-  try {
-    const stats = lstatSync(current);
-    if (!stats.isSymbolicLink()) throw new Error("Malformed trusted service selection pointer");
-    const target = readlinkSync(current);
-    if (!/^\.trusted-config-generations\/cfg1_[A-Za-z0-9_-]{43}$/.test(target)) throw new Error();
-    const absolute = resolve(infra, target);
-    if (!absolute.startsWith(`${resolve(infra, ".trusted-config-generations")}/`))
-      throw new Error();
-    return true;
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return false;
-    throw new Error("Malformed trusted service selection pointer");
-  }
+  warnings.push(...selection.warnings);
+  return selection.enabledIds;
 }
 
 export async function initServiceRegistry(): Promise<void> {
@@ -58,33 +46,7 @@ export async function initServiceRegistry(): Promise<void> {
   const rootDir = findRepoRoot();
   registry = new ServiceRegistry({ rootDir, warnings });
   await registry.load();
-  const envSelection = parseServiceIdList(process.env[SERVICE_SELECTION_ENV]);
-  let fileSelection: string[] | null = null;
-  const trustedSelection = hasTrustedSelection(rootDir);
-  if (trustedSelection || envSelection === null) {
-    try {
-      fileSelection = readSelectionFile(rootDir, trustedSelection);
-    } catch (error) {
-      if (trustedSelection) throw error;
-      warnings.push((error as Error).message);
-    }
-  }
-  if (trustedSelection && fileSelection === null) {
-    throw new Error("Malformed trusted service selection");
-  }
-  const selection = expandServiceSelection(
-    registry.list(),
-    (trustedSelection ? fileSelection : (envSelection ?? fileSelection)) ??
-      DEFAULT_SELECTED_SERVICE_IDS,
-    {
-      allowMissingSelected: !trustedSelection && envSelection === null && fileSelection === null,
-    },
-  );
-  if (selection.missingIds.length > 0) {
-    warnings.push(`Selected service(s) are not installed: ${selection.missingIds.join(", ")}`);
-  }
-  warnings.push(...selection.warnings);
-  registry.applyEnabledIds(selection.enabledIds);
+  registry.applyEnabledIds(new Set(appliedServiceIds(rootDir, registry.list())));
 }
 
 export function getServiceRegistry(): InstanceType<typeof ServiceRegistry> {

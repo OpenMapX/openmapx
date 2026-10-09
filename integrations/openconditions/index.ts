@@ -1,7 +1,7 @@
 /**
  * OpenConditions, built in: reads the OpenConditions HTTP API at
  * `OPENCONDITIONS_URL` and registers its road-conditions, fuel-stations,
- * parking-sites, charging-sites and cameras providers. The OpenConditions
+ * parking-sites, charging-sites, cameras and hazards providers. The OpenConditions
  * services themselves run beside OpenMapX; no OpenConditions code runs here.
  *
  * The data sources are the instance's own: the integration reads its
@@ -26,6 +26,7 @@ import { createChargingSiteProvider } from "./charging/provider.js";
 import { createOpenConditionsClient } from "./client.js";
 import { createSiteEvidenceReader } from "./evidence/read.js";
 import { createFuelStationProvider } from "./fuel/provider.js";
+import { createHazardsProvider } from "./hazards/provider.js";
 import { createParkingSiteProvider } from "./parking/provider.js";
 import { createRoadConditionsProvider } from "./road-conditions/provider.js";
 import { createLiveSources, createSourceScopes, startSourceSync } from "./sources.js";
@@ -47,6 +48,7 @@ export async function setup(
     onDescribed: (list) => {
       scopes.update(list);
       sources.updateLicenses(list);
+      sources.updateDescribed(list);
     },
   });
   let waited: ReturnType<typeof setTimeout> | undefined;
@@ -66,4 +68,5 @@ export async function setup(
   ctx.registerParkingSiteProvider(createParkingSiteProvider(client, sources, { evidence }));
   ctx.registerChargingSiteProvider(createChargingSiteProvider(client, sources, { evidence }));
   ctx.registerCameraProvider(createCameraProvider(client, sources, { evidence }));
+  ctx.registerHazardsProvider(createHazardsProvider(client, sources));
 }

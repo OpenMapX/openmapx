@@ -33,7 +33,7 @@ import { useMap } from "@/integration-api/map/MapContext";
 import { getMapClickOwner } from "@/integration-api/map/mapClickOwnership";
 import type { MapLayerGroup, SlottedLayer } from "@/integration-api/map/mapLayerGroup";
 import { useMapLayerGroup } from "@/integration-api/map/useMapLayerGroup";
-import { useIntegrationSourceAttributions } from "@/integration-api/overlay/useIntegrationAttribution";
+import { useSourceAttributions } from "@/integration-api/overlay/useIntegrationAttribution";
 import { useEnv } from "@/integration-api/runtime/EnvProvider";
 import integrationManifest from "./manifest.json";
 import { useAmbientPlacesStore } from "./store";
@@ -130,7 +130,7 @@ export function AmbientPlacesLayer() {
   }, [shown, env.apiUrl, publication]);
 
   const visible = shown && usable(manifest);
-  useIntegrationSourceAttributions(
+  useSourceAttributions(
     "overlay-ambient-places",
     visible ? (manifest?.sources.overture ? COMBINED_SOURCES : OSM_SOURCES) : NO_SOURCES,
   );

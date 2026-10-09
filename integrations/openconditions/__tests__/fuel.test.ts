@@ -53,6 +53,8 @@ const EVERY_SOURCE: LiveSources = {
   has: () => true,
   link: () => undefined,
   licenseName: () => undefined,
+  noticeOf: () => undefined,
+  firmsSources: () => [],
 };
 
 /** A live list of `ids`, as the `/sources` sync fills it. */

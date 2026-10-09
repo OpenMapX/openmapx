@@ -4,9 +4,9 @@ import { describe, expect, it } from "vitest";
 import {
   assertTrustedConfigurationSchema,
   validateTrustedConfigurationValues,
-} from "./trusted-config-schema";
+} from "../configuration-schema";
 
-const repositoryRoot = join(import.meta.dirname, "..", "..", "..");
+const repositoryRoot = join(import.meta.dirname, "..", "..", "..", "..", "..");
 
 function manifests(
   base: "integrations" | "services",

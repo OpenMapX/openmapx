@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "author": "OpenMapX",
   "license": "MIT",
-  "documentation": "https://firms.modaps.eosdis.nasa.gov/, https://www.arcgis.com/home/item.html?id=d1c32af3212341869b3c810f1a215824, https://forest-fire.emergency.copernicus.eu/applications/data-and-services, https://www.ospo.noaa.gov/products/land/hms.html",
+  "documentation": "https://docs.openmapx.org/",
   "subjectData": {
     "storesPersonalData": false,
     "strategy": "not_personal",
@@ -35,96 +35,9 @@
       "enabled": {
         "type": "boolean",
         "default": true
-      },
-      "firmsApiKey": {
-        "type": "string",
-        "title": "NASA FIRMS Map Key",
-        "description": "NASA FIRMS map key.",
-        "x-openmapx-secret": true,
-        "x-openmapx-setup": {
-          "url": "https://firms.modaps.eosdis.nasa.gov/api/map_key/",
-          "urlLabel": "Request a FIRMS MAP_KEY",
-          "steps": [
-            "Open firms.modaps.eosdis.nasa.gov/api/map_key/.",
-            "Enter your email address in the MAP_KEY request form and submit.",
-            "Check your inbox — FIRMS emails the MAP_KEY to that address.",
-            "Paste the MAP_KEY here."
-          ],
-          "cost": "Free.",
-          "notes": "Rate limit is 5000 transactions per 10-minute interval. Return to the same page later to resend, modify, or delete the key."
-        }
       }
     }
   },
-  "healthCheck": {
-    "type": "http",
-    "urlTemplate": "https://firms.modaps.eosdis.nasa.gov/api/area/csv/${firmsApiKey}/VIIRS_SNPP_NRT/0,0,1,1/1",
-    "requiredConfigKeys": ["firmsApiKey"]
-  },
   "quality": "built-in",
-  "category": "Data Overlays",
-  "dataSources": [
-    {
-      "sourceId": "firms",
-      "name": "NASA FIRMS",
-      "url": "https://firms.modaps.eosdis.nasa.gov/",
-      "license": "U.S. Public Domain",
-      "licenseUrl": "https://www.earthdata.nasa.gov/engage/open-data-services-software-policies/data-use-guidance",
-      "commercialUse": "yes",
-      "providerCountry": "US",
-      "providerPrivacyUrl": "https://www.nasa.gov/privacy/",
-      "endUserExposure": "server-only",
-      "personalData": false,
-      "cookies": false,
-      "dpaAvailable": false
-    },
-    {
-      "sourceId": "nifc-wfigs",
-      "name": "NIFC WFIGS Current Interagency Fire Perimeters",
-      "url": "https://www.arcgis.com/home/item.html?id=d1c32af3212341869b3c810f1a215824",
-      "apiHosts": ["services3.arcgis.com"],
-      "license": "U.S. Government data — NIFC disclaimer",
-      "licenseUrl": "https://www.arcgis.com/home/item.html?id=d1c32af3212341869b3c810f1a215824",
-      "attribution": "National Interagency Fire Center (NIFC) / WFIGS and contributing agencies — dynamic data, not legal documents. NIFC gives no warranty, expressed or implied, as to accuracy, reliability, or completeness.",
-      "commercialUse": "conditional",
-      "providerCountry": "US",
-      "providerPrivacyUrl": "https://www.doi.gov/privacy",
-      "endUserExposure": "server-only",
-      "personalData": false,
-      "cookies": false,
-      "dpaAvailable": false
-    },
-    {
-      "sourceId": "effis",
-      "name": "EFFIS / Copernicus Emergency Management Service",
-      "url": "https://forest-fire.emergency.copernicus.eu/applications/data-and-services",
-      "apiHosts": ["maps.effis.emergency.copernicus.eu"],
-      "license": "CC-BY-4.0",
-      "licenseUrl": "https://forest-fire.emergency.copernicus.eu/about-effis/data-license",
-      "attribution": "EFFIS / Copernicus Emergency Management Service, © European Union, modified by OpenMapX.",
-      "commercialUse": "yes",
-      "providerCountry": "BE",
-      "providerPrivacyUrl": "https://commission.europa.eu/privacy-policy-websites-managed-european-commission_en",
-      "endUserExposure": "server-only",
-      "personalData": false,
-      "cookies": false,
-      "dpaAvailable": false
-    },
-    {
-      "sourceId": "noaa-hms",
-      "name": "NOAA Hazard Mapping System (HMS) Smoke Detection",
-      "url": "https://www.ospo.noaa.gov/products/land/hms.html",
-      "apiHosts": ["services2.arcgis.com"],
-      "license": "U.S. Public Domain",
-      "licenseUrl": "https://www.ospo.noaa.gov/Organization/About/linking.html",
-      "attribution": "NOAA / NESDIS Office of Satellite and Product Operations (OSPO), Hazard Mapping System (HMS) Smoke Detection. Public-domain U.S. Government information; attribution does not imply NOAA endorsement.",
-      "commercialUse": "yes",
-      "providerCountry": "US",
-      "providerPrivacyUrl": "https://www.noaa.gov/sites/default/files/legacy/document/2021/Mar/NOAAPrivacyPolicy_Final_May2017.pdf",
-      "endUserExposure": "server-only",
-      "personalData": false,
-      "cookies": false,
-      "dpaAvailable": false
-    }
-  ]
+  "category": "Data Overlays"
 }

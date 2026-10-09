@@ -88,10 +88,10 @@ describe("feed proxy transaction", () => {
     if (!tmp) throw new Error("fixture not initialized");
     // A hardlink plan like the compose renderer emits: producer `conf/` →
     // consumer `motis-feed-proxy-config/` (the dir the container mounts).
-    const infra = join(tmp, "repo", "infra", "docker");
-    mkdirSync(infra, { recursive: true });
+    const generation = join(tmp, "repo", "infra", "docker", ".trusted-config-current");
+    mkdirSync(generation, { recursive: true });
     writeFileSync(
-      join(infra, "docker-compose.generated.hardlinks.json"),
+      join(generation, "docker-compose.generated.hardlinks.json"),
       JSON.stringify([
         {
           source: "data/motis-feed-proxy/conf",

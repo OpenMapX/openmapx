@@ -53,7 +53,9 @@ The catalog also surfaces the **selection** — the set of root services that
 participate in your deployment. The selection panel shows the requested roots,
 the effective count after the renderer expands dependencies, and where the
 selection is coming from. You can edit the comma-separated list of root ids and
-**Save Selection** to persist it.
+**Save Selection** to persist it. It is the CLI's selection too: saving writes
+`infra/docker/service-selection.json`, the file `pnpm openmapx services enable`
+edits, and the panel shows what `pnpm openmapx services selected` shows.
 
 When the selection is being driven by the `OPENMAPX_ENABLED_SERVICES` environment
 variable, the panel says so and disables editing — the environment variable wins,

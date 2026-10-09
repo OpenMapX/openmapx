@@ -4,6 +4,15 @@ export {
   type IntegrationActivation,
   runImmediateActivation,
 } from "./activation-transaction";
+export {
+  type CollectionOrchestrator,
+  type CollectionOrchestratorOptions,
+  type CollectionProvider,
+  type CollectionQuery,
+  createCollectionOrchestrator,
+  createProviderOutages,
+  type ProviderOutages,
+} from "./collection-orchestrator";
 export type {
   AirQualityMetrics,
   AirQualityProviderCallMetrics,
@@ -55,6 +64,7 @@ export type {
   CameraStatus,
   CameraType,
   CameraView,
+  CapSeverity,
   ChainedTripPlan,
   ChainedTripSegment,
   ChainPlanWarning,
@@ -84,6 +94,9 @@ export type {
   EnergyTariffRestrictions,
   Evse,
   EvseStatus,
+  FireDensityCell,
+  FireInstrument,
+  FirePixel,
   ForecastAirQualityQuery,
   FuelProduct,
   FuelStation,
@@ -93,6 +106,9 @@ export type {
   GeocodingProvider,
   GtfsCatalogFeed,
   GtfsCatalogProvider,
+  HazardAlert,
+  HazardsProvider,
+  HazardsQuery,
   HourlyForecastPoint,
   IsochroneContour,
   IsochroneGeometry,
@@ -113,6 +129,8 @@ export type {
   MatchShapeMatch,
   MatchTracePoint,
   MobilityDataSourceProvider,
+  NaturalHazard,
+  NaturalHazardType,
   NlpProvider,
   NlpProviderId,
   OperationalEvidence,
@@ -254,6 +272,7 @@ export {
   type Wgs84BoundingBox,
   type Wgs84Point,
 } from "./geospatial";
+export { createHazardsOrchestrator, type HazardsOrchestrator } from "./hazards-orchestrator";
 export { httpError } from "./http-error";
 // Installer exports (`installIntegration` / `listIntegrations` /
 // `removeIntegration` / `validateIntegrationDirectory` and their option/result
@@ -311,9 +330,7 @@ export {
 } from "./query";
 export { IntegrationRegistry } from "./registry";
 export {
-  createProviderOutages,
   createSiteOrchestrator,
-  type ProviderOutages,
   type SiteOrchestrator,
   type SiteOrchestratorOptions,
   selectedOptions,

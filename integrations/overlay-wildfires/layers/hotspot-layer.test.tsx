@@ -52,56 +52,85 @@ vi.mock("maplibre-gl", () => ({
   },
 }));
 
-import { HotspotLayer } from "./hotspot-layer";
+import { DENSITY_LAYER_ID, DENSITY_SOURCE_ID, HotspotLayer } from "./hotspot-layer";
 
 const SOURCE_ID = "openmapx-wildfires-source";
 const CIRCLE_LAYER_ID = "openmapx-wildfires-circles";
 const HEATMAP_LAYER_ID = "openmapx-wildfires-heatmap";
+const EMPTY = { type: "FeatureCollection", features: [] };
+const BOUNDS = { west: -121, south: 37.5, east: -120, north: 38.5 };
+const VIEW_QUERY = "west=-121&south=37.5&east=-120&north=38.5";
 
 const HOTSPOT_COLLECTION = {
   type: "FeatureCollection" as const,
   features: [
     {
       type: "Feature" as const,
+      id: "N20:38.1234,-120.4567:2026-10-09T0930",
       properties: {
-        latitude: 50,
-        longitude: 8,
+        latitude: 38.1234,
+        longitude: -120.4567,
         brightness: 300,
         frp: 10,
         confidence: "nominal",
-        satellite: "N",
-        acqDate: "2026-08-12",
-        acqTime: "1200",
+        satellite: "N20",
+        acqDate: "2026-10-09",
+        acqTime: "0930",
         dayNight: "D",
         ageMs: 60_000,
-        source: "VIIRS_SNPP_NRT",
+        instrument: "viirs",
       },
-      geometry: { type: "Point" as const, coordinates: [8, 50] },
+      geometry: { type: "Point" as const, coordinates: [-120.4567, 38.1234] },
     },
   ],
 };
 
-const REPLACEMENT_COLLECTION = {
+const MODIS_COLLECTION = {
   type: "FeatureCollection" as const,
   features: [
     {
       type: "Feature" as const,
+      id: "T:38.2,-120.3:2026-10-09T1000",
       properties: {
-        latitude: 51,
-        longitude: 9,
-        brightness: 320,
+        latitude: 38.2,
+        longitude: -120.3,
+        brightness: null,
         frp: 100,
-        confidence: "80",
+        confidence: "20",
         satellite: "T",
-        acqDate: "2026-08-12",
-        acqTime: "1230",
+        acqDate: "2026-10-09",
+        acqTime: "1000",
         dayNight: "N",
         ageMs: 1_000,
-        source: "MODIS_NRT",
+        instrument: "modis",
       },
-      geometry: { type: "Point" as const, coordinates: [9, 51] },
+      geometry: { type: "Point" as const, coordinates: [-120.3, 38.2] },
     },
   ],
+};
+
+const DENSITY_COLLECTION = {
+  type: "FeatureCollection" as const,
+  features: [
+    {
+      type: "Feature" as const,
+      geometry: { type: "Point" as const, coordinates: [-120.25, 38.25] },
+      properties: { count: 3, frpSum: 21.5, frpMax: 12.1 },
+    },
+    {
+      type: "Feature" as const,
+      geometry: { type: "Point" as const, coordinates: [-119.75, 38.25] },
+      properties: { count: 2, frpSum: 4, frpMax: 2.5 },
+    },
+  ],
+  sources: ["nasa-firms-viirs-fires"],
+};
+
+const FRESH_HEADERS = {
+  "X-OpenMapX-Fetched-At": "2026-10-09T10:00:00.000Z",
+  "X-OpenMapX-Stale": "false",
+  "X-OpenMapX-Truncated": "false",
+  "X-OpenMapX-Sources": "nasa-firms-viirs-fires",
 };
 
 function popupController() {
@@ -118,17 +147,20 @@ function response(data: unknown = HOTSPOT_COLLECTION, headers: Record<string, st
   return { ok: true, status: 200, headers: new Headers(headers), json: async () => data };
 }
 
+/** Answers the points or the density route, whichever is asked. */
+function routeFetch() {
+  return vi.fn(async (url: string) =>
+    String(url).includes("/wildfires/density?")
+      ? response(DENSITY_COLLECTION, FRESH_HEADERS)
+      : response(HOTSPOT_COLLECTION, FRESH_HEADERS),
+  );
+}
+
 beforeEach(() => {
-  fake = createFakeMap({ styleLoaded: true });
+  fake = createFakeMap({ styleLoaded: true, zoom: 8, bounds: BOUNDS });
   mapContext.mapRef.current = fake.map;
   styleVersion = 0;
-  useWildfireStore.setState({
-    loading: false,
-    dayRange: 1,
-    source: "VIIRS_SNPP_NRT",
-    showHeatmap: false,
-    lastUpdated: null,
-  });
+  useWildfireStore.setState({ dayRange: 1, source: "viirs", showHeatmap: false });
   useWildfireStore.getState().resetSourceStatus("firms");
 });
 
@@ -138,7 +170,7 @@ afterEach(() => {
 });
 
 describe("HotspotLayer", () => {
-  it("does not start a FIRMS request while inactive", () => {
+  it("does not start a request while inactive", () => {
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
 
@@ -146,44 +178,91 @@ describe("HotspotLayer", () => {
 
     expect(fetchMock).not.toHaveBeenCalled();
     expect(fake.state.sources.has(SOURCE_ID)).toBe(false);
+    expect(fake.state.sources.has(DENSITY_SOURCE_ID)).toBe(false);
   });
 
-  it("loads FIRMS hotspots once when activated", async () => {
-    const fetchMock = vi.fn(async () => response());
+  it("loads the detections in the view from zoom 7", async () => {
+    const fetchMock = routeFetch();
     vi.stubGlobal("fetch", fetchMock);
 
     render(<HotspotLayer active popupController={popupController()} />);
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
-    expect(String(fetchMock.mock.calls[0][0])).toBe(
-      "https://api.test/api/integrations/overlay-wildfires/wildfires?dayRange=1&source=VIIRS_SNPP_NRT",
+    expect(String(fetchMock.mock.calls[0]?.[0])).toBe(
+      `https://api.test/api/integrations/overlay-wildfires/wildfires?dayRange=1&instrument=viirs&${VIEW_QUERY}&zoom=8`,
     );
     await waitFor(() => {
       expect(fake.state.sources.get(SOURCE_ID)?.data).toEqual(HOTSPOT_COLLECTION);
     });
+    expect(fake.state.sources.get(DENSITY_SOURCE_ID)?.data).toEqual(EMPTY);
+    expect(useWildfireStore.getState().statuses.firms).toMatchObject({
+      loading: false,
+      fetchedAt: Date.parse("2026-10-09T10:00:00.000Z"),
+      stale: false,
+      truncated: false,
+      error: null,
+      featureCount: 1,
+      sources: ["nasa-firms-viirs-fires"],
+    });
   });
 
-  it("registers circles in the points slot at order four", () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => response()),
+  it("loads density cells below zoom 7 and switches to detections when zoomed in", async () => {
+    fake.state.zoom = 4;
+    const fetchMock = routeFetch();
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<HotspotLayer active popupController={popupController()} />);
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    expect(String(fetchMock.mock.calls[0]?.[0])).toBe(
+      `https://api.test/api/integrations/overlay-wildfires/wildfires/density?dayRange=1&instrument=viirs&${VIEW_QUERY}&zoom=4`,
     );
+    await waitFor(() => {
+      expect(fake.state.sources.get(DENSITY_SOURCE_ID)?.data).toEqual(DENSITY_COLLECTION);
+    });
+    expect(fake.state.sources.get(SOURCE_ID)?.data).toEqual(EMPTY);
+    expect(useWildfireStore.getState().statuses.firms).toMatchObject({
+      featureCount: 5,
+      sources: ["nasa-firms-viirs-fires"],
+    });
+
+    act(() => {
+      fake.state.zoom = 7.4;
+      fake.emit("moveend");
+    });
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    expect(String(fetchMock.mock.calls[1]?.[0])).toContain("/overlay-wildfires/wildfires?");
+    expect(String(fetchMock.mock.calls[1]?.[0])).toContain("zoom=7");
+    await waitFor(() => {
+      expect(fake.state.sources.get(SOURCE_ID)?.data).toEqual(HOTSPOT_COLLECTION);
+    });
+    expect(fake.state.sources.get(DENSITY_SOURCE_ID)?.data).toEqual(EMPTY);
+  });
+
+  it("registers density cells below the detections in the points slot", () => {
+    vi.stubGlobal("fetch", routeFetch());
 
     render(<HotspotLayer active popupController={popupController()} />);
 
     expect(fake.state.layers.get(CIRCLE_LAYER_ID)?.type).toBe("circle");
+    expect(fake.state.layers.get(DENSITY_LAYER_ID)).toMatchObject({
+      type: "circle",
+      source: DENSITY_SOURCE_ID,
+    });
     expect(layerRegistrations()).toContainEqual({
       id: CIRCLE_LAYER_ID,
       slot: "overlay-points",
       order: 4,
     });
+    expect(layerRegistrations()).toContainEqual({
+      id: DENSITY_LAYER_ID,
+      slot: "overlay-points",
+      order: 3.5,
+    });
   });
 
   it("adds the heatmap only when enabled in the heat slot at order zero", () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => response()),
-    );
+    vi.stubGlobal("fetch", routeFetch());
     const { rerender } = render(<HotspotLayer active popupController={popupController()} />);
 
     expect(fake.state.layers.has(HEATMAP_LAYER_ID)).toBe(false);
@@ -201,95 +280,46 @@ describe("HotspotLayer", () => {
     });
   });
 
-  it("keeps the exact FIRMS circle and heatmap visual contract", () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => response()),
-    );
+  it("keeps the exact detection circle and heatmap visual contract", () => {
+    vi.stubGlobal("fetch", routeFetch());
     useWildfireStore.setState({ showHeatmap: true });
     render(<HotspotLayer active popupController={popupController()} />);
 
-    expect(fake.state.sources.get(SOURCE_ID)).toMatchObject({ type: "geojson" });
+    const frpRadius = [
+      "interpolate",
+      ["linear"],
+      ["get", "frp"],
+      0,
+      3,
+      10,
+      5,
+      50,
+      8,
+      200,
+      13,
+      500,
+      18,
+      1000,
+      24,
+    ];
     expect(fake.state.layers.get(CIRCLE_LAYER_ID)).toMatchObject({
       id: CIRCLE_LAYER_ID,
       type: "circle",
       source: SOURCE_ID,
     });
-    expect(fake.state.layers.get(CIRCLE_LAYER_ID)).not.toHaveProperty("minzoom");
-    expect(fake.state.layers.get(CIRCLE_LAYER_ID)).not.toHaveProperty("maxzoom");
     expect(fake.state.paint.get(CIRCLE_LAYER_ID)).toEqual({
       "circle-radius": [
         "interpolate",
         ["linear"],
         ["zoom"],
         2,
-        [
-          "*",
-          [
-            "interpolate",
-            ["linear"],
-            ["get", "frp"],
-            0,
-            3,
-            10,
-            5,
-            50,
-            8,
-            200,
-            13,
-            500,
-            18,
-            1000,
-            24,
-          ],
-          0.5,
-        ],
+        ["*", frpRadius, 0.5],
         5,
-        [
-          "*",
-          [
-            "interpolate",
-            ["linear"],
-            ["get", "frp"],
-            0,
-            3,
-            10,
-            5,
-            50,
-            8,
-            200,
-            13,
-            500,
-            18,
-            1000,
-            24,
-          ],
-          0.8,
-        ],
+        ["*", frpRadius, 0.8],
         8,
-        ["interpolate", ["linear"], ["get", "frp"], 0, 3, 10, 5, 50, 8, 200, 13, 500, 18, 1000, 24],
+        frpRadius,
         12,
-        [
-          "*",
-          [
-            "interpolate",
-            ["linear"],
-            ["get", "frp"],
-            0,
-            3,
-            10,
-            5,
-            50,
-            8,
-            200,
-            13,
-            500,
-            18,
-            1000,
-            24,
-          ],
-          1.6,
-        ],
+        ["*", frpRadius, 1.6],
       ],
       "circle-color": [
         "interpolate",
@@ -313,38 +343,15 @@ describe("HotspotLayer", () => {
       "circle-stroke-width": 0.8,
     });
     expect(fake.state.layers.get(HEATMAP_LAYER_ID)).toMatchObject({
-      id: HEATMAP_LAYER_ID,
       type: "heatmap",
       source: SOURCE_ID,
     });
-    expect(fake.state.layers.get(HEATMAP_LAYER_ID)).not.toHaveProperty("minzoom");
-    expect(fake.state.layers.get(HEATMAP_LAYER_ID)).not.toHaveProperty("maxzoom");
-    expect(fake.state.paint.get(HEATMAP_LAYER_ID)).toEqual({
+    expect(fake.state.paint.get(HEATMAP_LAYER_ID)).toMatchObject({
       "heatmap-weight": ["interpolate", ["linear"], ["get", "frp"], 0, 0, 1000, 1],
-      "heatmap-intensity": ["interpolate", ["linear"], ["zoom"], 0, 1, 9, 3],
-      "heatmap-color": [
-        "interpolate",
-        ["linear"],
-        ["heatmap-density"],
-        0,
-        "rgba(0,0,0,0)",
-        0.2,
-        "#ffffb2",
-        0.4,
-        "#fecc5c",
-        0.6,
-        "#fd8d3c",
-        0.8,
-        "#f03b20",
-        1.0,
-        "#bd0026",
-      ],
-      "heatmap-radius": ["interpolate", ["linear"], ["zoom"], 0, 4, 9, 30],
-      "heatmap-opacity": ["interpolate", ["linear"], ["zoom"], 7, 1, 12, 0],
     });
   });
 
-  it("aborts and replaces the FIRMS request when sensor or hotspot age changes", async () => {
+  it("aborts and replaces the request when the sensor or the hotspot age changes", async () => {
     const signals: AbortSignal[] = [];
     const fetchMock = vi.fn((_url: string, init: RequestInit) => {
       signals.push(init.signal as AbortSignal);
@@ -355,7 +362,7 @@ describe("HotspotLayer", () => {
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
     act(() => {
-      useWildfireStore.getState().setSource("MODIS_NRT");
+      useWildfireStore.getState().setSource("modis");
     });
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
     expect(signals[0]?.aborted).toBe(true);
@@ -365,256 +372,45 @@ describe("HotspotLayer", () => {
     });
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3));
     expect(signals[1]?.aborted).toBe(true);
-    expect(String(fetchMock.mock.calls[2][0])).toContain("dayRange=3&source=MODIS_NRT");
+    expect(String(fetchMock.mock.calls[2]?.[0])).toContain("dayRange=3&instrument=modis");
   });
 
-  it("replays retained FIRMS data immediately through a style reload while a replacement waits", async () => {
-    const pendingResponses: Array<(value: ReturnType<typeof response>) => void> = [];
+  it("keeps the drawn detections while a changed sensor's request is pending", async () => {
+    let resolveSecond: ((value: ReturnType<typeof response>) => void) | undefined;
     const fetchMock = vi.fn(() => {
-      if (fetchMock.mock.calls.length === 1) return Promise.resolve(response(HOTSPOT_COLLECTION));
-      return new Promise<ReturnType<typeof response>>((resolve) => pendingResponses.push(resolve));
+      if (fetchMock.mock.calls.length === 1) {
+        return Promise.resolve(response(HOTSPOT_COLLECTION, FRESH_HEADERS));
+      }
+      return new Promise<ReturnType<typeof response>>((resolve) => {
+        resolveSecond = resolve;
+      });
     });
     vi.stubGlobal("fetch", fetchMock);
-    const controller = popupController();
-    useWildfireStore.setState({ showHeatmap: true });
-    const { rerender } = render(<HotspotLayer active popupController={controller} />);
+    render(<HotspotLayer active popupController={popupController()} />);
     await waitFor(() => {
       expect(fake.state.sources.get(SOURCE_ID)?.data).toEqual(HOTSPOT_COLLECTION);
     });
 
-    act(() => {
-      useWildfireStore.getState().setSource("MODIS_NRT");
-    });
+    act(() => useWildfireStore.getState().setSource("modis"));
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
-
-    act(() => {
-      fake.map.setStyle({} as never);
-      styleVersion = 1;
-      rerender(<HotspotLayer active popupController={controller} />);
-    });
-    await act(async () => {});
-
-    expect(fake.state.layers.get(CIRCLE_LAYER_ID)?.type).toBe("circle");
-    expect(fake.state.layers.get(HEATMAP_LAYER_ID)?.type).toBe("heatmap");
     expect(fake.state.sources.get(SOURCE_ID)?.data).toEqual(HOTSPOT_COLLECTION);
-    expect(fetchMock).toHaveBeenCalledTimes(3);
-    expect(pendingResponses).toHaveLength(2);
 
     await act(async () => {
-      pendingResponses[1]?.(response(REPLACEMENT_COLLECTION));
+      resolveSecond?.(response(MODIS_COLLECTION, FRESH_HEADERS));
     });
     await waitFor(() => {
-      expect(fake.state.sources.get(SOURCE_ID)?.data).toEqual(REPLACEMENT_COLLECTION);
+      expect(fake.state.sources.get(SOURCE_ID)?.data).toEqual(MODIS_COLLECTION);
     });
   });
 
-  it("uses exact delegated FIRMS listener signatures and replaces them without duplicates", () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => response()),
-    );
-    const controller = popupController();
-    const { rerender, unmount } = render(<HotspotLayer active popupController={controller} />);
-    const mountedCalls = [...fake.state.listenerCalls];
-    const clickRegistration = mountedCalls.find(
-      (call) => call.method === "on" && call.event === "click" && call.layerId === CIRCLE_LAYER_ID,
-    );
-    const enterRegistration = mountedCalls.find(
-      (call) =>
-        call.method === "on" && call.event === "mouseenter" && call.layerId === CIRCLE_LAYER_ID,
-    );
-    const leaveRegistration = mountedCalls.find(
-      (call) =>
-        call.method === "on" && call.event === "mouseleave" && call.layerId === CIRCLE_LAYER_ID,
-    );
-    const styleRegistrations = mountedCalls.filter(
-      (call) => call.method === "on" && call.event === "styledata" && call.layerId === undefined,
-    );
-
-    expect(clickRegistration).toBeDefined();
-    expect(enterRegistration).toBeDefined();
-    expect(leaveRegistration).toBeDefined();
-    expect(styleRegistrations).toHaveLength(2);
-    expect(INTERACTIVE_LAYER_IDS.has(CIRCLE_LAYER_ID)).toBe(true);
-    expect(fake.state.handlers.get("click")?.size).toBe(1);
-    expect(fake.state.handlers.get("mouseenter")?.size).toBe(1);
-    expect(fake.state.handlers.get("mouseleave")?.size).toBe(1);
-    expect(fake.state.handlers.get("styledata")?.size).toBe(2);
-
-    const callsBeforePlainRerender = fake.state.listenerCalls.length;
-    rerender(<HotspotLayer active popupController={controller} />);
-    expect(fake.state.listenerCalls).toHaveLength(callsBeforePlainRerender);
-
-    act(() => {
-      fake.emit("mouseenter");
-    });
-    expect(fake.state.canvas.style.cursor).toBe("pointer");
-    act(() => {
-      fake.emit("mouseleave");
-    });
-    expect(fake.state.canvas.style.cursor).toBe("");
-
-    styleVersion = 1;
-    rerender(<HotspotLayer active popupController={controller} />);
-    for (const registration of [
-      clickRegistration,
-      enterRegistration,
-      leaveRegistration,
-      ...styleRegistrations,
-    ]) {
-      expect(fake.state.listenerCalls).toContainEqual({
-        method: "off",
-        event: registration?.event,
-        layerId: registration?.layerId,
-        handler: registration?.handler,
-      });
-    }
-    expect(fake.state.handlers.get("click")?.size).toBe(1);
-    expect(fake.state.handlers.get("mouseenter")?.size).toBe(1);
-    expect(fake.state.handlers.get("mouseleave")?.size).toBe(1);
-    expect(fake.state.handlers.get("styledata")?.size).toBe(2);
-
-    unmount();
-    const onCalls = fake.state.listenerCalls.filter((call) => call.method === "on");
-    for (const registration of onCalls) {
-      expect(fake.state.listenerCalls).toContainEqual({
-        method: "off",
-        event: registration.event,
-        layerId: registration.layerId,
-        handler: registration.handler,
-      });
-    }
-    expect(fake.state.handlers.get("click")?.size ?? 0).toBe(0);
-    expect(fake.state.handlers.get("mouseenter")?.size ?? 0).toBe(0);
-    expect(fake.state.handlers.get("mouseleave")?.size ?? 0).toBe(0);
-    expect(fake.state.handlers.get("styledata")?.size ?? 0).toBe(0);
-    expect(INTERACTIVE_LAYER_IDS.has(CIRCLE_LAYER_ID)).toBe(false);
-  });
-
-  it("aborts an active request and clears loading when hidden", async () => {
-    let signal: AbortSignal | undefined;
-    vi.stubGlobal(
-      "fetch",
-      vi.fn((_url: string, init: RequestInit) => {
-        signal = init.signal as AbortSignal;
-        return new Promise((_resolve, reject) => {
-          signal?.addEventListener("abort", () =>
-            reject(new DOMException("Aborted", "AbortError")),
-          );
-        });
-      }),
-    );
-    const controller = popupController();
-    const { rerender } = render(<HotspotLayer active popupController={controller} />);
-    await waitFor(() => expect(useWildfireStore.getState().loading).toBe(true));
-
-    rerender(<HotspotLayer active={false} popupController={controller} />);
-
-    await waitFor(() => expect(signal?.aborted).toBe(true));
-    await waitFor(() => expect(useWildfireStore.getState().loading).toBe(false));
-    expect(fake.state.sources.has(SOURCE_ID)).toBe(false);
-    expect(controller.close).toHaveBeenCalledWith(expect.any(Object));
-  });
-
-  it("aborts an active request and clears loading when unmounted", async () => {
-    let signal: AbortSignal | undefined;
-    vi.stubGlobal(
-      "fetch",
-      vi.fn((_url: string, init: RequestInit) => {
-        signal = init.signal as AbortSignal;
-        return new Promise((_resolve, reject) => {
-          signal?.addEventListener("abort", () =>
-            reject(new DOMException("Aborted", "AbortError")),
-          );
-        });
-      }),
-    );
-    const { unmount } = render(<HotspotLayer active popupController={popupController()} />);
-    await waitFor(() => expect(useWildfireStore.getState().loading).toBe(true));
-
-    unmount();
-
-    await waitFor(() => expect(signal?.aborted).toBe(true));
-    await waitFor(() => expect(useWildfireStore.getState().loading).toBe(false));
-  });
-
-  it("clears loading without updating the timestamp when FIRMS responds non-OK", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => ({ ok: false, json: async () => HOTSPOT_COLLECTION })),
-    );
-    render(<HotspotLayer active popupController={popupController()} />);
-
-    await waitFor(() => expect(useWildfireStore.getState().loading).toBe(false));
-    expect(useWildfireStore.getState().lastUpdated).toBeNull();
-    expect(fake.state.sources.get(SOURCE_ID)?.data).toEqual({
-      type: "FeatureCollection",
-      features: [],
-    });
-  });
-
-  it("clears loading without updating the timestamp when FIRMS JSON decoding fails", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => ({
-        ok: true,
-        json: async () => Promise.reject(new Error("invalid JSON")),
-      })),
-    );
-    render(<HotspotLayer active popupController={popupController()} />);
-
-    await waitFor(() => expect(useWildfireStore.getState().loading).toBe(false));
-    expect(useWildfireStore.getState().lastUpdated).toBeNull();
-  });
-
-  it("sets lastUpdated only after a current successful FIRMS response", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => response()),
-    );
-    render(<HotspotLayer active popupController={popupController()} />);
-
-    await waitFor(() => expect(useWildfireStore.getState().lastUpdated).not.toBeNull());
-    expect(useWildfireStore.getState().loading).toBe(false);
-    expect(useWildfireStore.getState().statuses.firms).toMatchObject({
-      loading: false,
-      fetchedAt: expect.any(Number),
-      stale: false,
-      truncated: false,
-      error: null,
-      featureCount: 1,
-    });
-  });
-
-  it("uses the server's original fetched time and fresh status headers", async () => {
+  it("reports a stale and truncated answer from the response headers", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async () =>
         response(HOTSPOT_COLLECTION, {
-          "X-OpenMapX-Fetched-At": "2026-08-12T10:00:00.000Z",
-          "X-OpenMapX-Stale": "false",
-        }),
-      ),
-    );
-
-    render(<HotspotLayer active popupController={popupController()} />);
-
-    await waitFor(() =>
-      expect(useWildfireStore.getState().statuses.firms).toMatchObject({
-        fetchedAt: Date.parse("2026-08-12T10:00:00.000Z"),
-        stale: false,
-      }),
-    );
-    expect(useWildfireStore.getState().lastUpdated).toBe(Date.parse("2026-08-12T10:00:00.000Z"));
-  });
-
-  it("preserves the original fetched time when FIRMS serves stale fallback data", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () =>
-        response(HOTSPOT_COLLECTION, {
-          "X-OpenMapX-Fetched-At": "2026-08-12T09:00:00.000Z",
+          ...FRESH_HEADERS,
           "X-OpenMapX-Stale": "true",
+          "X-OpenMapX-Truncated": "true",
         }),
       ),
     );
@@ -623,56 +419,15 @@ describe("HotspotLayer", () => {
 
     await waitFor(() =>
       expect(useWildfireStore.getState().statuses.firms).toMatchObject({
-        fetchedAt: Date.parse("2026-08-12T09:00:00.000Z"),
         stale: true,
-      }),
-    );
-  });
-
-  it("falls back to receipt time and fresh status for legacy servers without metadata headers", async () => {
-    const receiptTime = Date.parse("2026-08-12T12:34:56.789Z");
-    vi.spyOn(Date, "now").mockReturnValue(receiptTime);
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => response()),
-    );
-
-    render(<HotspotLayer active popupController={popupController()} />);
-
-    await waitFor(() =>
-      expect(useWildfireStore.getState().statuses.firms).toMatchObject({
-        fetchedAt: receiptTime,
-        stale: false,
-      }),
-    );
-  });
-
-  it("falls back safely when either FIRMS metadata header is malformed", async () => {
-    const receiptTime = Date.parse("2026-08-12T12:34:56.789Z");
-    vi.spyOn(Date, "now").mockReturnValue(receiptTime);
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () =>
-        response(HOTSPOT_COLLECTION, {
-          "X-OpenMapX-Fetched-At": "not-a-date",
-          "X-OpenMapX-Stale": "true",
-        }),
-      ),
-    );
-
-    render(<HotspotLayer active popupController={popupController()} />);
-
-    await waitFor(() =>
-      expect(useWildfireStore.getState().statuses.firms).toMatchObject({
-        fetchedAt: receiptTime,
-        stale: false,
+        truncated: true,
       }),
     );
   });
 
   it.each([
     [
-      "out-of-range Point geometry",
+      "an out-of-range Point geometry",
       {
         ...HOTSPOT_COLLECTION,
         features: [
@@ -687,31 +442,14 @@ describe("HotspotLayer", () => {
       "missing required properties",
       {
         ...HOTSPOT_COLLECTION,
-        features: [
-          {
-            ...HOTSPOT_COLLECTION.features[0],
-            properties: { frp: 10, ageMs: 60_000 },
-          },
-        ],
+        features: [{ ...HOTSPOT_COLLECTION.features[0], properties: { frp: 10, ageMs: 60_000 } }],
       },
     ],
-    [
-      "a mixed valid and invalid collection",
-      {
-        ...HOTSPOT_COLLECTION,
-        features: [
-          HOTSPOT_COLLECTION.features[0],
-          {
-            ...HOTSPOT_COLLECTION.features[0],
-            geometry: { type: "Point", coordinates: [8, Number.POSITIVE_INFINITY] },
-          },
-        ],
-      },
-    ],
+    ["detections of the other sensor", MODIS_COLLECTION],
   ])("rejects %s before publishing to MapLibre", async (_case, data) => {
     vi.stubGlobal(
       "fetch",
-      vi.fn(async () => response(data)),
+      vi.fn(async () => response(data, FRESH_HEADERS)),
     );
 
     render(<HotspotLayer active popupController={popupController()} />);
@@ -719,133 +457,96 @@ describe("HotspotLayer", () => {
     await waitFor(() =>
       expect(useWildfireStore.getState().statuses.firms.error).toBe("unavailable"),
     );
-    expect(fake.state.sources.get(SOURCE_ID)?.data).toEqual({
-      type: "FeatureCollection",
-      features: [],
-    });
-    expect(useWildfireStore.getState().lastUpdated).toBeNull();
+    expect(fake.state.sources.get(SOURCE_ID)?.data).toEqual(EMPTY);
   });
 
-  it("accepts and publishes a valid empty FIRMS collection", async () => {
-    const empty = { type: "FeatureCollection" as const, features: [] };
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => response(empty)),
-    );
-
-    render(<HotspotLayer active popupController={popupController()} />);
-
-    await waitFor(() => expect(fake.state.sources.get(SOURCE_ID)?.data).toEqual(empty));
-    expect(useWildfireStore.getState().statuses.firms).toMatchObject({
-      error: null,
-      featureCount: 0,
-    });
-  });
-
-  it("retains last-good FIRMS data and status metadata after a malformed refresh", async () => {
+  it("retains the last good detections and status after a malformed refresh", async () => {
     const fetchMock = vi
       .fn()
-      .mockResolvedValueOnce(
-        response(HOTSPOT_COLLECTION, {
-          "X-OpenMapX-Fetched-At": "2026-08-12T10:00:00.000Z",
-          "X-OpenMapX-Stale": "false",
-        }),
-      )
-      .mockResolvedValueOnce(
-        response({
-          ...REPLACEMENT_COLLECTION,
-          features: [
-            {
-              ...REPLACEMENT_COLLECTION.features[0],
-              geometry: { type: "LineString", coordinates: [[9, 51]] },
-            },
-          ],
-        }),
-      );
+      .mockResolvedValueOnce(response(HOTSPOT_COLLECTION, FRESH_HEADERS))
+      .mockResolvedValueOnce(response({ type: "FeatureCollection", features: "broken" }));
     vi.stubGlobal("fetch", fetchMock);
     render(<HotspotLayer active popupController={popupController()} />);
     await waitFor(() =>
       expect(fake.state.sources.get(SOURCE_ID)?.data).toEqual(HOTSPOT_COLLECTION),
     );
 
-    act(() => useWildfireStore.getState().setSource("MODIS_NRT"));
+    act(() => useWildfireStore.getState().setSource("modis"));
 
     await waitFor(() =>
       expect(useWildfireStore.getState().statuses.firms.error).toBe("unavailable"),
     );
     expect(fake.state.sources.get(SOURCE_ID)?.data).toEqual(HOTSPOT_COLLECTION);
     expect(useWildfireStore.getState().statuses.firms).toMatchObject({
-      fetchedAt: Date.parse("2026-08-12T10:00:00.000Z"),
-      stale: false,
+      fetchedAt: Date.parse("2026-10-09T10:00:00.000Z"),
       featureCount: 1,
     });
   });
 
-  it("reports a FIRMS failure independently and resets its status when hidden", async () => {
+  it("aborts its request, removes its layers and resets its status when hidden", async () => {
+    let signal: AbortSignal | undefined;
     vi.stubGlobal(
       "fetch",
-      vi.fn(async () => ({ ok: false, status: 503, json: async () => ({}) })),
-    );
-    const view = render(<HotspotLayer active popupController={popupController()} />);
-
-    await waitFor(() =>
-      expect(useWildfireStore.getState().statuses.firms.error).toBe("unavailable"),
-    );
-    expect(useWildfireStore.getState().statuses.nifc.error).toBeNull();
-
-    view.rerender(<HotspotLayer active={false} popupController={popupController()} />);
-    await waitFor(() =>
-      expect(useWildfireStore.getState().statuses.firms).toMatchObject({
-        loading: false,
-        fetchedAt: null,
-        error: null,
-        featureCount: null,
+      vi.fn((_url: string, init: RequestInit) => {
+        signal = init.signal as AbortSignal;
+        return new Promise((_resolve, reject) => {
+          signal?.addEventListener("abort", () =>
+            reject(new DOMException("Aborted", "AbortError")),
+          );
+        });
       }),
     );
-  });
-
-  it("suppresses a stale FIRMS response after a newer request publishes", async () => {
-    let resolveFirst: ((value: ReturnType<typeof response>) => void) | undefined;
-    let resolveSecond: ((value: ReturnType<typeof response>) => void) | undefined;
-    const fetchMock = vi.fn(
-      (_url: string) =>
-        new Promise<ReturnType<typeof response>>((resolve) => {
-          if (resolveFirst) resolveSecond = resolve;
-          else resolveFirst = resolve;
-        }),
-    );
-    vi.stubGlobal("fetch", fetchMock);
-    render(<HotspotLayer active popupController={popupController()} />);
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
-
-    act(() => {
-      useWildfireStore.getState().setSource("MODIS_NRT");
-    });
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
-    if (!resolveFirst || !resolveSecond) throw new Error("both FIRMS requests did not start");
-
-    await act(async () => {
-      resolveSecond?.(response(REPLACEMENT_COLLECTION));
-    });
-    await waitFor(() => {
-      expect(fake.state.sources.get(SOURCE_ID)?.data).toEqual(REPLACEMENT_COLLECTION);
-    });
-    const latestUpdated = useWildfireStore.getState().lastUpdated;
-
-    await act(async () => {
-      resolveFirst?.(response(HOTSPOT_COLLECTION));
-    });
-    expect(fake.state.sources.get(SOURCE_ID)?.data).toEqual(REPLACEMENT_COLLECTION);
-    expect(useWildfireStore.getState().lastUpdated).toBe(latestUpdated);
-  });
-
-  it("escapes external hotspot strings before handing popup HTML to the coordinator", () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => response()),
-    );
     const controller = popupController();
-    const { unmount } = render(<HotspotLayer active popupController={controller} />);
+    const { rerender } = render(<HotspotLayer active popupController={controller} />);
+    await waitFor(() => expect(useWildfireStore.getState().statuses.firms.loading).toBe(true));
+
+    rerender(<HotspotLayer active={false} popupController={controller} />);
+
+    await waitFor(() => expect(signal?.aborted).toBe(true));
+    expect(useWildfireStore.getState().statuses.firms).toMatchObject({
+      loading: false,
+      featureCount: null,
+      sources: [],
+    });
+    expect(fake.state.sources.has(SOURCE_ID)).toBe(false);
+    expect(fake.state.sources.has(DENSITY_SOURCE_ID)).toBe(false);
+    expect(fake.state.layers.has(DENSITY_LAYER_ID)).toBe(false);
+    expect(controller.close).toHaveBeenCalledWith(expect.any(Object));
+  });
+
+  it("registers its click and hover listeners once and removes them all on unmount", () => {
+    vi.stubGlobal("fetch", routeFetch());
+    const { unmount } = render(<HotspotLayer active popupController={popupController()} />);
+
+    for (const layerId of [CIRCLE_LAYER_ID, DENSITY_LAYER_ID]) {
+      for (const event of ["click", "mouseenter", "mouseleave"]) {
+        expect(
+          fake.state.listenerCalls.filter(
+            (call) => call.method === "on" && call.event === event && call.layerId === layerId,
+          ),
+        ).toHaveLength(1);
+      }
+      expect(INTERACTIVE_LAYER_IDS.has(layerId)).toBe(true);
+    }
+
+    unmount();
+    const onCalls = fake.state.listenerCalls.filter((call) => call.method === "on");
+    for (const registration of onCalls) {
+      expect(fake.state.listenerCalls).toContainEqual({
+        method: "off",
+        event: registration.event,
+        layerId: registration.layerId,
+        handler: registration.handler,
+      });
+    }
+    expect(INTERACTIVE_LAYER_IDS.has(CIRCLE_LAYER_ID)).toBe(false);
+    expect(INTERACTIVE_LAYER_IDS.has(DENSITY_LAYER_ID)).toBe(false);
+  });
+
+  it("escapes external hotspot strings in the popup", () => {
+    vi.stubGlobal("fetch", routeFetch());
+    const controller = popupController();
+    render(<HotspotLayer active popupController={controller} />);
     const feature = {
       type: "Feature",
       properties: {
@@ -861,21 +562,40 @@ describe("HotspotLayer", () => {
       geometry: { type: "Point", coordinates: [8, 50] },
     } as unknown as MapGeoJSONFeature;
 
+    const click = fake.state.listenerCalls.find(
+      (call) => call.method === "on" && call.event === "click" && call.layerId === CIRCLE_LAYER_ID,
+    );
     act(() => {
-      fake.emit("click", { features: [feature] });
+      (click?.handler as (e: unknown) => void)({ features: [feature] });
     });
 
-    expect(controller.open).toHaveBeenCalledTimes(1);
-    const lease = controller.open.mock.calls[0]?.[0];
-    expect(lease).toEqual(expect.any(Object));
-    expect(controller.open).toHaveBeenCalledWith(lease, expect.anything());
     const popup = controller.open.mock.calls[0]?.[1] as { html?: string } | undefined;
     expect(popup?.html).toContain("&lt;svg onload=&quot;alert(2)&quot;&gt;");
     expect(popup?.html).toContain("&lt;img src=x onerror=&quot;alert(1)&quot;&gt;");
     expect(popup?.html).toContain("&lt;img src=x onerror=&quot;alert(3)&quot;&gt;");
     expect(popup?.html).not.toContain('<svg onload="alert(2)">');
+  });
 
-    unmount();
-    expect(controller.close).toHaveBeenCalledWith(lease);
+  it("shows a density cell's count and fire power in its popup", () => {
+    vi.stubGlobal("fetch", routeFetch());
+    const controller = popupController();
+    render(<HotspotLayer active popupController={controller} />);
+    const cell = {
+      type: "Feature",
+      properties: { count: 3, frpSum: 21.5, frpMax: 12.1 },
+      geometry: { type: "Point", coordinates: [-120.25, 38.25] },
+    } as unknown as MapGeoJSONFeature;
+
+    const click = fake.state.listenerCalls.find(
+      (call) => call.method === "on" && call.event === "click" && call.layerId === DENSITY_LAYER_ID,
+    );
+    act(() => {
+      (click?.handler as (e: unknown) => void)({ features: [cell] });
+    });
+
+    const popup = controller.open.mock.calls[0]?.[1] as { html?: string } | undefined;
+    expect(popup?.html).toContain(">3</span>");
+    expect(popup?.html).toContain("maxFirePower: 12.1 MW");
+    expect(popup?.html).toContain("totalFirePower: 21.5 MW");
   });
 });

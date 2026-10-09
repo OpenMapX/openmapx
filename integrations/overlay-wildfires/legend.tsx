@@ -8,9 +8,11 @@ import ToggleButton from "@mui/material/ToggleButton";
 import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
 import Typography from "@mui/material/Typography";
 import { useMapStore, useOverlayVisibilitySetter } from "@openmapx/core";
+import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import { useLocale, useTranslations } from "next-intl";
 import type { ReactNode } from "react";
 import { OverlayLegend } from "@/integration-api/overlay/OverlayLegend";
+import { HOTSPOT_POINTS_MIN_ZOOM } from "./bounds";
 import {
   EFFIS_BURNED_AREA_STYLE,
   NIFC_PERIMETER_STYLE,
@@ -227,6 +229,12 @@ function Caveat({ children }: { children: ReactNode }) {
 
 export function WildfireLegend() {
   const t = useTranslations("wildfires");
+  const registry = useIntegrationRegistry();
+  /** The region a layer covers, then the names of the sources behind what it last drew. */
+  const coverage = (regionKey: string, status: WildfireSourceStatus) =>
+    [t(regionKey), ...status.sources.map((id) => registry.findDataSource(id)?.name ?? id)].join(
+      " · ",
+    );
   const zoom = useMapStore((state) => state.zoom);
   const panelOpen = useWildfireStore((state) => state.panelOpen);
   const layerVisible = useWildfireStore((state) => state.layerVisible);
@@ -267,13 +275,16 @@ export function WildfireLegend() {
       <SourceRow
         id="firms"
         title={t("hotspotDetections")}
-        coverage={t("coverageGlobal")}
+        coverage={coverage("coverageGlobal", statuses.firms)}
         switchLabel={t("showHotspots")}
         checked={showHotspots}
         onChange={setShowHotspots}
         status={statuses.firms}
       >
         <Caveat>{t("firmsHotspotCaveat")}</Caveat>
+        {showHotspots && zoom < HOTSPOT_POINTS_MIN_ZOOM ? (
+          <Caveat>{t("densityView")}</Caveat>
+        ) : null}
         {showHotspots ? (
           <Box sx={{ mt: 0.65 }}>
             <Box sx={{ display: "flex", gap: 1.25, alignItems: "flex-end", flexWrap: "wrap" }}>
@@ -314,13 +325,13 @@ export function WildfireLegend() {
                   sx={{ height: 26 }}
                 >
                   <ToggleButton
-                    value="VIIRS_SNPP_NRT"
+                    value="viirs"
                     sx={{ fontSize: 10, px: 0.9, py: 0, textTransform: "none", minWidth: 0 }}
                   >
                     {t("viirs375m")}
                   </ToggleButton>
                   <ToggleButton
-                    value="MODIS_NRT"
+                    value="modis"
                     sx={{ fontSize: 10, px: 0.9, py: 0, textTransform: "none", minWidth: 0 }}
                   >
                     {t("modis1km")}
@@ -418,7 +429,7 @@ export function WildfireLegend() {
       <SourceRow
         id="nifc"
         title={t("nifcPerimeters")}
-        coverage={t("coverageUnitedStates")}
+        coverage={coverage("coverageUnitedStates", statuses.nifc)}
         switchLabel={t("showReportedPerimeters")}
         checked={showNifcPerimeters}
         onChange={setShowNifcPerimeters}
@@ -439,7 +450,7 @@ export function WildfireLegend() {
       <SourceRow
         id="effis"
         title={t("effisBurnedAreas")}
-        coverage={t("coverageEffisRegion")}
+        coverage={coverage("coverageEffisRegion", statuses.effis)}
         switchLabel={t("showSatelliteBurnedAreas")}
         checked={showEffisBurnedAreas}
         onChange={setShowEffisBurnedAreas}
@@ -461,7 +472,7 @@ export function WildfireLegend() {
       <SourceRow
         id="noaa-hms"
         title={t("observedSmoke")}
-        coverage={t("coverageNorthAmerica")}
+        coverage={coverage("coverageNorthAmerica", statuses["noaa-hms"])}
         switchLabel={t("showObservedSmoke")}
         checked={showNoaaSmoke}
         onChange={setShowNoaaSmoke}

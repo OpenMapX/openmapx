@@ -26,8 +26,7 @@ vi.mock("@/integration-api/runtime/EnvProvider", () => ({
 }));
 
 vi.mock("@/integration-api/overlay/useIntegrationAttribution", () => ({
-  useIntegrationAttribution: vi.fn(),
-  useIntegrationSourceAttributions: attributionState.filtered,
+  useSourceAttributions: attributionState.filtered,
 }));
 
 vi.mock("next-intl", () => ({
@@ -78,6 +77,11 @@ const POLYGON_GEOMETRY = {
   ],
 };
 
+const FEED: Record<"nifc" | "effis", string> = {
+  nifc: "us-nifc-fires",
+  effis: "eu-effis-fires",
+};
+
 function providerFeature(source: "nifc" | "effis") {
   const id = `${source}:1`;
   return {
@@ -88,18 +92,26 @@ function providerFeature(source: "nifc" | "effis") {
         ? {
             id,
             kind: "reported-perimeter",
-            provider: source,
-            coverage: "United States",
+            provider: FEED.nifc,
             name: "Pine Fire",
           }
         : {
             id,
             kind: "satellite-burned-area",
-            provider: source,
+            provider: FEED.effis,
             areaHectares: 42,
           },
     geometry: POLYGON_GEOMETRY,
   };
+}
+
+/** Fires the click handler the layer registered, as MapLibre does for a click on it. */
+function clickLayer(layerId: string, feature: MapGeoJSONFeature) {
+  const handlers = fake.state.listenerCalls.filter(
+    (call) => call.method === "on" && call.event === "click" && call.layerId === layerId,
+  );
+  const handler = handlers.at(-1)?.handler as ((e: unknown) => void) | undefined;
+  handler?.({ features: [feature] });
 }
 
 const HOTSPOT_FEATURE = {
@@ -115,7 +127,7 @@ const HOTSPOT_FEATURE = {
     dayNight: "D",
     acqDate: "2026-08-12",
     acqTime: "1234",
-    source: "VIIRS_SNPP_NRT",
+    instrument: "viirs",
   },
   geometry: { type: "Point", coordinates: [8, 50] },
 } as unknown as MapGeoJSONFeature;
@@ -131,10 +143,8 @@ beforeEach(() => {
     showEffisBurnedAreas: false,
     showNoaaSmoke: false,
     showHeatmap: false,
-    loading: false,
-    lastUpdated: null,
     dayRange: 1,
-    source: "VIIRS_SNPP_NRT",
+    source: "viirs",
   });
   attributionState.filtered.mockClear();
 });
@@ -144,7 +154,7 @@ afterEach(() => {
 });
 
 describe("WildfireLayer hotspot composition", () => {
-  it("composes both polygon sources and credits only the enabled wildfire providers", async () => {
+  it("composes both polygon sources and credits exactly the sources they drew", async () => {
     useWildfireStore.setState({ showNifcPerimeters: true, showEffisBurnedAreas: true });
     vi.stubGlobal(
       "fetch",
@@ -160,6 +170,7 @@ describe("WildfireLayer hotspot composition", () => {
             fetchedAt: "2026-08-12T12:00:00.000Z",
             stale: false,
             truncated: false,
+            sources: [FEED[source]],
           };
         },
       })),
@@ -174,16 +185,11 @@ describe("WildfireLayer hotspot composition", () => {
       expect(fake.state.sources.has("openmapx-wildfires-effis-source")).toBe(true),
     );
     await waitFor(() => {
-      expect(attributionState.filtered).toHaveBeenLastCalledWith("overlay-wildfires", [
-        "nifc-wfigs",
-        "effis",
+      expect(attributionState.filtered).toHaveBeenLastCalledWith("wildfires", [
+        "eu-effis-fires",
+        "us-nifc-fires",
       ]);
     });
-    expect(
-      attributionState.filtered.mock.calls.some(([, sourceIds]) =>
-        (sourceIds as string[]).includes("noaa-hms"),
-      ),
-    ).toBe(false);
   });
 
   it("keeps FIRMS inactive until showHotspots turns on, then removes it when turned off", async () => {
@@ -223,8 +229,8 @@ describe("WildfireLayer hotspot composition", () => {
     await waitFor(() => expect(fake.state.layers.has(CIRCLE_LAYER_ID)).toBe(true));
 
     act(() => {
-      fake.emit("click", { features: [HOTSPOT_FEATURE] });
-      fake.emit("click", { features: [HOTSPOT_FEATURE] });
+      clickLayer(CIRCLE_LAYER_ID, HOTSPOT_FEATURE);
+      clickLayer(CIRCLE_LAYER_ID, HOTSPOT_FEATURE);
     });
     expect(popupState.instances).toHaveLength(2);
     expect(popupState.instances[0]?.removeCalls).toBe(1);
@@ -240,7 +246,7 @@ describe("WildfireLayer hotspot composition", () => {
     });
     await waitFor(() => expect(fake.state.layers.has(CIRCLE_LAYER_ID)).toBe(true));
     act(() => {
-      fake.emit("click", { features: [HOTSPOT_FEATURE] });
+      clickLayer(CIRCLE_LAYER_ID, HOTSPOT_FEATURE);
     });
 
     expect(popupState.instances).toHaveLength(3);
@@ -260,7 +266,7 @@ describe("WildfireLayer hotspot composition", () => {
     const { unmount } = render(<WildfireLayer />);
     await waitFor(() => expect(fake.state.layers.has(CIRCLE_LAYER_ID)).toBe(true));
 
-    act(() => fake.emit("click", { features: [HOTSPOT_FEATURE] }));
+    act(() => clickLayer(CIRCLE_LAYER_ID, HOTSPOT_FEATURE));
     expect(popupState.instances).toHaveLength(1);
 
     unmount();

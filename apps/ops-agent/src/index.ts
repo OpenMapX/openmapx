@@ -2,7 +2,7 @@ import { constants, existsSync } from "node:fs";
 import { open } from "node:fs/promises";
 import { join } from "node:path";
 import { readOpsTokenFile } from "@openmapx/core/ops";
-import { repoPaths } from "@openmapx/core/server";
+import { repoPaths, services } from "@openmapx/core/server";
 import {
   createAdministrativeRuntime,
   createDefaultFixedCli,
@@ -96,15 +96,15 @@ async function main(): Promise<void> {
       }
     }
     const builtInServices = releaseAuthority.services.map((service) => structuredClone(service));
+    const paths = repoPaths(config.rootDir);
     const bootstrapEnabledServiceIds = resolveBootstrapEnabledServiceIds(
       builtInServices,
-      process.env.OPENMAPX_ENABLED_SERVICES,
+      services.readDesiredSelection(paths.infraDir),
     );
     for (const service of builtInServices) {
       service.enabled = bootstrapEnabledServiceIds.has(service.manifest.id);
     }
     const journal = await openOpsJobJournal(config.journalFile);
-    const paths = repoPaths(config.rootDir);
     const uid = process.geteuid?.() ?? 0;
     const gid = process.getegid?.() ?? 0;
     await initializeTrustedSnapshotDirectory(config.trustedConfigDirectory, {
@@ -121,9 +121,8 @@ async function main(): Promise<void> {
     });
     const initialAuthority = await authorityLoader();
     const runtime = createDockerRuntime({
-      composeFile: join(paths.infraDir, ".trusted-config-current", "docker-compose.generated.yml"),
-      releaseComposeFile: paths.composeReleasePath,
-      releaseComposeExists: existsSync,
+      stack: paths,
+      fileExists: existsSync,
       trafficDataRoot: join(paths.infraDir, "data"),
     });
     installTrustedConfigurationRuntime(runtime, {

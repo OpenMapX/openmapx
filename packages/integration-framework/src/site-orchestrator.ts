@@ -7,43 +7,16 @@ import {
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import { freshnessNow } from "@openmapx/mobility-core/freshness";
 import { type MobilityResult, withAttribution } from "@openmapx/mobility-core/result";
-import type { IntegrationContext, Logger } from "./context";
+import {
+  allowedSources,
+  type CollectionProvider,
+  type CollectionQuery,
+  createCollectionOrchestrator,
+  createProviderOutages,
+} from "./collection-orchestrator";
+import type { IntegrationContext } from "./context";
 
-/** Records each provider's failures, so an outage is logged when it starts and when it ends. */
-export interface ProviderOutages {
-  failed(providerId: string, operation: string, err: unknown): void;
-  succeeded(providerId: string): void;
-}
-
-/**
- * Logs a provider's failures once per outage: a warning when it starts
- * failing or fails for a new reason, a debug line while it keeps failing for
- * the same one, and one line when it answers again. A wrong token or an
- * outage would otherwise warn at every search.
- */
-export function createProviderOutages(log: Logger, logPrefix: string): ProviderOutages {
-  const failing = new Map<string, string>();
-  return {
-    failed(providerId, operation, err) {
-      const reason = err instanceof Error ? err.message : String(err);
-      if (failing.get(providerId) === reason) {
-        log.debug(`[${logPrefix}] provider ${providerId} failed ${operation} again: ${reason}`);
-        return;
-      }
-      failing.set(providerId, reason);
-      log.warn(`[${logPrefix}] provider ${providerId} failed ${operation}: ${reason}`);
-    },
-    succeeded(providerId) {
-      if (failing.delete(providerId)) log.info(`[${logPrefix}] provider ${providerId} recovered`);
-    },
-  };
-}
-
-/** What every site provider has: an id and, optionally, the area it covers. */
-interface SiteProvider {
-  readonly id: string;
-  readonly coverage?: { bbox: BBox } | { all: true };
-}
+type SiteProvider = CollectionProvider;
 
 /** What every site has: an id and the sources it was built from. */
 interface Site {
@@ -51,9 +24,7 @@ interface Site {
   sources: readonly string[];
 }
 
-interface SiteQuery {
-  excludedSourceIds?: readonly string[];
-}
+type SiteQuery = CollectionQuery;
 
 export interface SiteOrchestratorOptions<TProvider, TSite, TQuery> {
   /** Domain and provider-map key the providers register under. */
@@ -108,18 +79,6 @@ export interface SiteOrchestrator<TProvider, TSite, TQuery> {
   find(id: string): Promise<TSite | null>;
 }
 
-function coversBbox(coverage: SiteProvider["coverage"], bbox: BBox): boolean {
-  if (!coverage || "all" in coverage) return true;
-  const [w, s, e, n] = bbox;
-  const [cw, cs, ce, cn] = coverage.bbox;
-  return !(e < cw || w > ce || n < cs || s > cn);
-}
-
-/** A site built from several records lists every member's source, so one disallowed member drops it. */
-function allowed(site: Site, disallowed: ReadonlySet<string>): boolean {
-  return disallowed.size === 0 || !site.sources.some((id) => disallowed.has(id));
-}
-
 /**
  * Merges every provider of one site domain behind one search and one read by
  * id. Provider failures are logged once per outage.
@@ -133,56 +92,32 @@ export function createSiteOrchestrator<
   options: SiteOrchestratorOptions<TProvider, TSite, TQuery>,
 ): SiteOrchestrator<TProvider, TSite, TQuery> {
   const outages = createProviderOutages(ctx.log, options.logPrefix);
-  const providers = (): TProvider[] =>
-    ctx
-      .getIntegrationsByDomain(options.domain)
-      .flatMap((i) => (i.providers.get(options.domain) ?? []) as TProvider[]);
-  const disallowedSources = async (): Promise<Set<string>> =>
-    (await ctx.getDisallowedSourceIds?.()) ?? new Set<string>();
+  const collection = createCollectionOrchestrator<TProvider, TSite, TQuery>(ctx, {
+    domain: options.domain,
+    logPrefix: options.logPrefix,
+    name: options.search.name,
+    outages,
+    run: async (provider, bbox, query) => {
+      const { sites, partial } = await options.search.run(provider, bbox, query);
+      return partial ? { items: sites, partial } : { items: sites };
+    },
+    sourcesOf: (site) => site.sources,
+  });
+  const providers = collection.providers;
 
   return {
     providers,
 
     async search(bbox, query) {
-      const covering = providers().filter((p) => coversBbox(p.coverage, bbox));
-      if (covering.length === 0) return { sites: [] };
-
-      const disallowed = await disallowedSources();
-      const excluded = new Set([...(query?.excludedSourceIds ?? []), ...disallowed]);
-      const providerQuery: TQuery | SiteQuery =
-        excluded.size > 0 ? { ...query, excludedSourceIds: [...excluded] } : (query ?? {});
-
-      const settled = await Promise.allSettled(
-        covering.map((p) => options.search.run(p, bbox, providerQuery)),
-      );
-
-      const sites: TSite[] = [];
-      const reasons = new Set<DataSourcePartialReason>();
-      settled.forEach((res, i) => {
-        if (res.status === "fulfilled") {
-          outages.succeeded(covering[i].id);
-          sites.push(...res.value.sites);
-          if (res.value.partial) reasons.add(res.value.partial);
-        } else {
-          reasons.add("unavailable");
-          outages.failed(covering[i].id, options.search.name, res.reason);
-        }
-      });
-
-      const kept = sites.filter((s) => allowed(s, excluded));
-      const partial = reasons.has("area")
-        ? "area"
-        : reasons.has("unavailable")
-          ? "unavailable"
-          : null;
-      return partial ? { sites: kept, partial } : { sites: kept };
+      const { items, partial } = await collection.read(bbox, query);
+      return partial ? { sites: items, partial } : { sites: items };
     },
 
     async find(id) {
       const all = providers();
       if (all.length === 0) return null;
 
-      const disallowed = await disallowedSources();
+      const disallowed = (await ctx.getDisallowedSourceIds?.()) ?? new Set<string>();
       const query: SiteQuery = { excludedSourceIds: [...disallowed] };
       const settled = await Promise.allSettled(all.map((p) => options.get.run(p, id, query)));
       let site: TSite | null = null;
@@ -195,7 +130,7 @@ export function createSiteOrchestrator<
         if (!site && res.value?.id === id) site = res.value;
       }
       if (!site) return null;
-      return allowed(site, disallowed) ? site : null;
+      return allowedSources(site.sources, disallowed) ? site : null;
     },
   };
 }

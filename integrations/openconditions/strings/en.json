@@ -1,6 +1,6 @@
 {
   "name": "OpenConditions",
-  "description": "Live road conditions (incidents, roadworks, closures and traffic flow), fuel stations with their prices, parking sites with their free spaces and tariffs, EV charging sites with their charge points, status and tariffs, and traffic and weather cameras with their current images from an OpenConditions instance",
+  "description": "Live road conditions (incidents, roadworks, closures and traffic flow), fuel stations with their prices, parking sites with their free spaces and tariffs, EV charging sites with their charge points, status and tariffs, traffic and weather cameras with their current images, and weather alerts, earthquakes, natural events and fire detections from an OpenConditions instance",
   "dataSources": {
     "domain:road-conditions": {
       "purpose": "Road incidents, roadworks, closures and traffic flow, read through OpenConditions",
@@ -26,6 +26,11 @@
       "purpose": "Traffic, weather and scenic cameras with their views and current images, read through OpenConditions",
       "dataSent": "Nothing about the user through OpenConditions: a source it fetches on demand receives the grid cells covering the searched map area (or a box of about 200 m around a camera when one is opened), and a keyed source also receives the operator's API key; sources it polls in bulk receive nothing. Camera stills are fetched by the OpenMapX server and shown through its image proxy. Video streams and third-party players load in the browser directly, only after the user clicks \"Load media\", so their provider receives the user's IP address and browser details",
       "dataReceived": "Cameras with location, type, operator, their views with direction, status and refresh interval, the current image or stream of each view, and a link to the publisher's page"
+    },
+    "domain:hazards": {
+      "purpose": "Weather and civil-protection alerts, earthquakes, natural events and satellite fire detections, read through OpenConditions",
+      "dataSent": "Nothing about the user: OpenMapX sends the OpenConditions server only map and route areas (bounding boxes) and time windows, and OpenConditions reads hazard data from its own store, filled by polling its sources on its own schedule",
+      "dataReceived": "Alerts with area, severity, validity and the publisher's text, earthquakes and other natural events with place and time, and satellite fire detections with place, time and radiative power"
     }
   }
 }

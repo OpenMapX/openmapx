@@ -26,9 +26,12 @@ function composeDefault(name: string, fallback: string): string {
   return `${name}: \${${name}:-${fallback}}`;
 }
 
-const { readServiceSecretKeysFromCompose } = coreServices;
-
 let tmp: string;
+
+/** The applied generation's compose file. */
+function generatedCompose(): string {
+  return join(tmp, "infra", "docker", ".trusted-config-current", "docker-compose.generated.yml");
+}
 let originalPostgresPassword: string | undefined;
 let originalBetterAuthSecret: string | undefined;
 let originalDataManagerAuthToken: string | undefined;
@@ -77,7 +80,7 @@ describe("renderComposeForRepo", () => {
     await expect(
       renderComposeForRepo({ rootDir: tmp, domain: "example.com", services: ["alpha"] }),
     ).rejects.toThrow(/known-placeholder/);
-    expect(existsSync(join(tmp, "infra", "docker", "docker-compose.generated.yml"))).toBe(false);
+    expect(existsSync(generatedCompose())).toBe(false);
     expect(existsSync(join(tmp, "infra", "docker", "secrets"))).toBe(false);
   });
 
@@ -90,7 +93,7 @@ describe("renderComposeForRepo", () => {
       await expect(
         renderComposeForRepo({ rootDir: tmp, domain: "example.com", services: ["alpha"] }),
       ).rejects.toThrow(new RegExp(`${name}.*too-short`));
-      expect(existsSync(join(tmp, "infra", "docker", "docker-compose.generated.yml"))).toBe(false);
+      expect(existsSync(generatedCompose())).toBe(false);
       expect(existsSync(join(tmp, "infra", "docker", "secrets"))).toBe(false);
     },
   );
@@ -107,7 +110,7 @@ describe("renderComposeForRepo", () => {
     expect(result.servicesRendered).toBe(2);
     expect(result.enabledServiceIds).toEqual(["alpha", "beta"]);
 
-    const composePath = join(tmp, "infra", "docker", "docker-compose.generated.yml");
+    const composePath = generatedCompose();
     const yaml = readFileSync(composePath, "utf-8");
     expect(yaml).toContain("services:");
     expect(yaml).toContain("alpha:");
@@ -154,16 +157,13 @@ describe("renderComposeForRepo", () => {
     const result = await renderComposeForRepo({ rootDir: tmp, domain: "example.com" });
 
     expect(result.enabledServiceIds).toEqual(["app-api", "postgis", "redis", "traefik"]);
-    const yaml = readFileSync(
-      join(tmp, "infra", "docker", "docker-compose.generated.yml"),
-      "utf-8",
-    );
+    const yaml = readFileSync(generatedCompose(), "utf-8");
     expect(yaml).toContain("app-api:");
     expect(yaml).toContain("postgis:");
     expect(yaml).toContain("redis:");
     expect(yaml).toContain("traefik:");
     expect(yaml).not.toContain("valhalla:");
-    expect(yaml).toContain("OPENMAPX_ENABLED_SERVICES: app-api,postgis,redis,traefik");
+    expect(yaml).toContain("OPENMAPX_APPLIED_SERVICES: app-api,postgis,redis,traefik");
   });
 
   it("renders the real app-api OSM contribution controls with both flags off", async () => {
@@ -175,10 +175,7 @@ describe("renderComposeForRepo", () => {
     writeManifest("app-api", manifest as unknown as Record<string, unknown>);
 
     await renderComposeForRepo({ rootDir: tmp, domain: "example.com", services: ["app-api"] });
-    const yaml = readFileSync(
-      join(tmp, "infra", "docker", "docker-compose.generated.yml"),
-      "utf-8",
-    );
+    const yaml = readFileSync(generatedCompose(), "utf-8");
 
     expect(yaml).toContain(composeDefault("OSM_CONTRIBUTIONS_ENABLED", "false"));
     expect(yaml).toContain(composeDefault("OSM_DIRECT_EDITING_ENABLED", "false"));
@@ -205,7 +202,13 @@ describe("renderComposeForRepo", () => {
     });
 
     await renderComposeForRepo({ rootDir: tmp, domain: "example.com", services: ["valhalla"] });
-    const planPath = join(tmp, "infra", "docker", "docker-compose.generated.hardlinks.json");
+    const planPath = join(
+      tmp,
+      "infra",
+      "docker",
+      ".trusted-config-current",
+      "docker-compose.generated.hardlinks.json",
+    );
     const plan = JSON.parse(readFileSync(planPath, "utf-8"));
     expect(plan).toEqual([
       {
@@ -235,7 +238,7 @@ describe("renderComposeForRepo", () => {
       domain: "example.com",
       services: ["redis,app-api"],
     });
-    const composePath = join(tmp, "infra", "docker", "docker-compose.generated.yml");
+    const composePath = generatedCompose();
     const firstYaml = readFileSync(composePath, "utf8");
     const passwordPath = join(secretDir, "redis-password");
     const firstPassword = readFileSync(passwordPath, "utf8");
@@ -278,7 +281,7 @@ describe("renderComposeForRepo", () => {
       services: ["app-api,data-manager,ops-agent"],
     });
     const secretDir = join(tmp, "infra", "docker", "secrets");
-    const composePath = join(tmp, "infra", "docker", "docker-compose.generated.yml");
+    const composePath = generatedCompose();
     const apiToken = readFileSync(join(secretDir, "ops-agent-api-token"), "utf8");
     const dataManagerToken = readFileSync(join(secretDir, "ops-agent-data-manager-token"), "utf8");
     const firstYaml = readFileSync(composePath, "utf8");
@@ -323,7 +326,7 @@ describe("renderComposeForRepo", () => {
     });
     const secretPath = join(tmp, "infra", "docker", "secrets", "offline-package-principal-key");
     const key = readFileSync(secretPath, "utf8");
-    const yaml = readFileSync(join(tmp, "infra", "docker", "docker-compose.generated.yml"), "utf8");
+    const yaml = readFileSync(generatedCompose(), "utf8");
 
     expect(key).toMatch(/^[A-Za-z0-9_-]{43}$/);
     expect(yaml).not.toContain(key);
@@ -602,90 +605,76 @@ describe("rotateRedisPasswordForRepo", () => {
   });
 });
 
-describe("renderComposeForRepo vault-secret preservation", () => {
-  const composePathIn = () => join(tmp, "infra", "docker", "docker-compose.generated.yml");
-  const secretsDirIn = () => join(tmp, "infra", "docker", ".generated-secrets");
+describe("renderComposeForRepo and what the admin panel applied", () => {
+  const ingest = {
+    ...baseManifest,
+    id: "ingest",
+    configSchema: {
+      type: "object",
+      properties: {
+        MODE: { type: "string", default: "standard" },
+        NH_API_KEY: { type: "string", "x-openmapx-secret": true },
+      },
+    },
+  };
 
-  function writePriorComposeWithIngestSecret() {
-    // Shape the app-api (vault-backed) render produces for a credentialed
-    // extension service: top-level file secret + per-service mount + _FILE env.
-    writeFileSync(
-      composePathIn(),
-      [
-        "services:",
-        "  ingest:",
-        "    image: t/x:latest",
-        "    environment:",
-        "      NH_API_KEY_FILE: /run/secrets/NH_API_KEY",
-        "    secrets:",
-        "      - source: ingest__NH_API_KEY",
-        "        target: NH_API_KEY",
-        "secrets:",
-        "  ingest__NH_API_KEY:",
-        "    file: ./.generated-secrets/ingest/NH_API_KEY",
-        "",
-      ].join("\n"),
-    );
+  /** An admin apply that saved config and a vault secret for ingest without enabling it. */
+  async function adminApply() {
+    writeManifest("alpha", { ...baseManifest, id: "alpha" });
+    writeManifest("ingest", ingest);
+    const registry = new coreServices.ServiceRegistry({ rootDir: tmp });
+    await registry.load();
+    await coreServices.commitConfigurationGeneration({
+      infraDir: join(tmp, "infra", "docker"),
+      services: registry.list(),
+      input: {
+        domain: "example.com",
+        selectedRoots: ["alpha"],
+        serviceConfigs: [{ serviceId: "ingest", values: { MODE: "saved" } }],
+        integrationConfigs: [],
+        serviceSecrets: [{ serviceId: "ingest", values: { NH_API_KEY: "secret-value" } }],
+      },
+    });
   }
 
-  it("a narrowed render keeps the excluded service's secret record; the next full render re-attaches it", async () => {
-    writeManifest("alpha", { ...baseManifest, id: "alpha" });
-    writeManifest("ingest", { ...baseManifest, id: "ingest" });
-    writePriorComposeWithIngestSecret();
+  afterEach(() => {
+    delete process.env.SERVICE_INGEST_MODE;
+  });
 
-    // Narrowed render (`--services alpha`): ingest is not part of this pass.
-    await renderComposeForRepo({ rootDir: tmp, domain: "example.com", services: ["alpha"] });
-    const afterNarrowed = readServiceSecretKeysFromCompose(composePathIn());
-    expect(afterNarrowed.get("ingest")).toEqual(["NH_API_KEY"]);
+  it("keeps saved config and vault secrets, also for a service it enables later", async () => {
+    await adminApply();
 
-    // Full render: the preserved record re-attaches the mounts to the service.
     await renderComposeForRepo({
       rootDir: tmp,
       domain: "example.com",
       services: ["alpha,ingest"],
     });
-    const yaml = readFileSync(composePathIn(), "utf-8");
+    const yaml = readFileSync(generatedCompose(), "utf-8");
+    expect(yaml).toContain("MODE: saved");
     expect(yaml).toContain("NH_API_KEY_FILE: /run/secrets/NH_API_KEY");
-    expect(yaml).toContain("source: ingest__NH_API_KEY");
-    expect(yaml).toContain("./.generated-secrets/ingest/NH_API_KEY");
+    expect(
+      readFileSync(
+        join(
+          tmp,
+          "infra",
+          "docker",
+          ".trusted-config-current",
+          ".generated-secrets",
+          "ingest",
+          "NH_API_KEY",
+        ),
+        "utf-8",
+      ),
+    ).toBe("secret-value");
   });
 
-  it("recovers key names from a readable .generated-secrets dir when the compose is missing", async () => {
-    writeManifest("ingest", { ...baseManifest, id: "ingest" });
-    mkdirSync(join(secretsDirIn(), "ingest"), { recursive: true });
-    writeFileSync(join(secretsDirIn(), "ingest", "NH_API_KEY"), "secret-value");
+  it("replaces a saved value with a reference when the host env sets it", async () => {
+    await adminApply();
+    process.env.SERVICE_INGEST_MODE = "from-env";
 
     await renderComposeForRepo({ rootDir: tmp, domain: "example.com", services: ["ingest"] });
-    const yaml = readFileSync(composePathIn(), "utf-8");
-    expect(yaml).toContain("NH_API_KEY_FILE: /run/secrets/NH_API_KEY");
-    expect(yaml).toContain("./.generated-secrets/ingest/NH_API_KEY");
-  });
-
-  it("refuses to render when .generated-secrets exists but no secret keys are recoverable", async () => {
-    writeManifest("alpha", { ...baseManifest, id: "alpha" });
-    // Vault dir present (as far as a non-root CLI can tell) but empty-looking:
-    // compose absent + nothing listable → rendering would strip the mounts.
-    mkdirSync(secretsDirIn(), { recursive: true });
-
-    await expect(
-      renderComposeForRepo({ rootDir: tmp, domain: "example.com", services: ["alpha"] }),
-    ).rejects.toThrow(/un-credential/);
-    // The guard must refuse BEFORE overwriting the compose.
-    expect(() => readFileSync(composePathIn(), "utf-8")).toThrow();
-  });
-
-  it("--drop-secrets explicitly renders without the vault mounts", async () => {
-    writeManifest("alpha", { ...baseManifest, id: "alpha" });
-    mkdirSync(secretsDirIn(), { recursive: true });
-
-    const result = await renderComposeForRepo({
-      rootDir: tmp,
-      domain: "example.com",
-      services: ["alpha"],
-      dropSecrets: true,
-    });
-    expect(result.servicesRendered).toBe(1);
-    const yaml = readFileSync(composePathIn(), "utf-8");
-    expect(yaml).not.toContain("secrets:");
+    const yaml = readFileSync(generatedCompose(), "utf-8");
+    expect(yaml).toContain(`MODE: \${SERVICE_INGEST_MODE:-}`);
+    expect(yaml).not.toContain("from-env");
   });
 });

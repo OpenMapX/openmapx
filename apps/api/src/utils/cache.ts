@@ -168,17 +168,6 @@ export const TTL = {
     station: 3600,
     location: 3600,
   },
-  earthquakes: {
-    hour: 60,
-    day: 120,
-    week: 300,
-    month: 600,
-  },
-  wildfires: {
-    1: 300,
-    2: 600,
-    3: 900,
-  },
   winterSports: TTL_POLICY.REFERENCE_DATA,
   elevation: 86400,
   hiking: {

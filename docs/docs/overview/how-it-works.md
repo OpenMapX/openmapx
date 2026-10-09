@@ -21,9 +21,10 @@ described by a `service.json` manifest under `services/<slug>/` that declares:
 - the data it **consumes** (OSM extracts, GTFS feeds, prepared tiles);
 - how, if at all, it is exposed outside the host.
 
-You enable the services you want and run `openmapx compose render`; the renderer
-reads the enabled manifests and writes `docker-compose.generated.yml`. There is
-no hand-maintained compose file.
+You enable the services you want and run `openmapx compose render` (or apply
+changes in the admin panel); the renderer reads the enabled manifests and writes
+the compose file as a new configuration generation. There is no hand-maintained
+compose file.
 
 ## Integrations: the feature layer
 

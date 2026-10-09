@@ -261,6 +261,46 @@ describe("initIntegrations — loader", () => {
     }
   });
 
+  it("stores hazards providers under the hazards key", async () => {
+    const parent = mkdtempSync(join(tmpdir(), "omx-hazards-provider-"));
+    const directory = join(parent, "hazards-probe");
+    mkdirSync(directory, { recursive: true });
+    writeFileSync(
+      join(directory, "manifest.json"),
+      JSON.stringify({
+        id: "hazards-probe",
+        version: "1.0.0",
+        author: "Test",
+        license: "MIT",
+        domains: ["data-source"],
+        quality: "built-in",
+      }),
+    );
+    writeFileSync(
+      join(directory, "index.js"),
+      [
+        "export function setup(ctx) {",
+        "  ctx.registerHazardsProvider({",
+        "    id: 'probe', coverage: { all: true },",
+        "    getAlerts: async () => ({ alerts: [] }),",
+        "    getNaturalHazards: async () => ({ hazards: [] }),",
+        "    getFirePixels: async () => ({ pixels: [] }),",
+        "    getFireDensity: async () => ({ cells: [], sources: [] }),",
+        "  });",
+        "}",
+      ].join("\n"),
+    );
+    const app = makeApp();
+    try {
+      await initIntegrations(app, [{ directory: parent, isBuiltIn: true }]);
+      expect(getIntegrationProviders<{ id: string }>("hazards-probe", "hazards")).toMatchObject([
+        { id: "probe" },
+      ]);
+    } finally {
+      rmSync(parent, { recursive: true, force: true });
+    }
+  });
+
   it("never imports a community backend bundle into the privileged API process", async () => {
     const parent = mkdtempSync(join(tmpdir(), "omx-untrusted-backend-"));
     const integrationDir = join(parent, "untrusted-backend");

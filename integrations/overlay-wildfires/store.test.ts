@@ -8,6 +8,7 @@ const IDLE_STATUS: WildfireSourceStatus = {
   truncated: false,
   error: null,
   featureCount: null,
+  sources: [],
 };
 
 const MODULE_DEFAULTS = useWildfireStore.getState();
