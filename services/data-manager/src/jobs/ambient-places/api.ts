@@ -1,5 +1,9 @@
 import { randomUUID } from "node:crypto";
-import { type AmbientRegion, validateAmbientRegion } from "@openmapx/core/ambient-places";
+import {
+  type AmbientBuildProgress,
+  type AmbientRegion,
+  validateAmbientRegion,
+} from "@openmapx/core/ambient-places";
 import { readAmbientManifest } from "@openmapx/core/ambient-places-server";
 import type { FastifyInstance } from "fastify";
 import type postgres from "postgres";
@@ -9,13 +13,20 @@ import { AMBIENT_WRITE_LOCK, AmbientPublicationBusyError } from "./schema.js";
 /** Mounted inside data-manager's bearer-token protected application. */
 export function registerAmbientPlacesApi(app: FastifyInstance, sql: postgres.Sql): void {
   let building: string | null = null;
+  let progress: AmbientBuildProgress | null = null;
   app.get("/ambient-places/status", async () => {
     const active = await readAmbientManifest(sql);
     const [exists] = await sql.unsafe<{ exists: boolean }[]>(
       `SELECT to_regclass('ambient_places.state') IS NOT NULL AS exists`,
     );
     if (!exists.exists)
-      return { active: null, previous: null, building: Boolean(building), lastError: null };
+      return {
+        active: null,
+        previous: null,
+        building: Boolean(building),
+        lastError: null,
+        progress,
+      };
     const [state] = await sql.unsafe<
       {
         previous: string | null;
@@ -37,6 +48,7 @@ export function registerAmbientPlacesApi(app: FastifyInstance, sql: postgres.Sql
       lastError: state.last_build_error,
       startedAt: state.last_build_started_at,
       finishedAt: state.last_build_finished_at,
+      progress,
     };
   });
   app.post("/ambient-places/build", async (request, reply) => {
@@ -51,6 +63,7 @@ export function registerAmbientPlacesApi(app: FastifyInstance, sql: postgres.Sql
     // acknowledged only once the publisher has acquired the database lock.
     const attempt = randomUUID();
     building = attempt;
+    progress = null;
     let claimed = false;
     let accept!: () => void;
     let reject!: (error: unknown) => void;
@@ -58,10 +71,19 @@ export function registerAmbientPlacesApi(app: FastifyInstance, sql: postgres.Sql
       accept = resolve;
       reject = rejectPromise;
     });
-    void buildAmbientPlaces(sql, region, () => {
-      claimed = true;
-      accept();
-    })
+    void buildAmbientPlaces(
+      sql,
+      region,
+      () => {
+        claimed = true;
+        accept();
+      },
+      {
+        onProgress: (value) => {
+          if (building === attempt) progress = value;
+        },
+      },
+    )
       .catch((error) => {
         if (!claimed) {
           if (building === attempt) building = null;
@@ -73,7 +95,10 @@ export function registerAmbientPlacesApi(app: FastifyInstance, sql: postgres.Sql
         );
       })
       .finally(() => {
-        if (building === attempt) building = null;
+        if (building === attempt) {
+          building = null;
+          progress = null;
+        }
       });
     try {
       await admission;

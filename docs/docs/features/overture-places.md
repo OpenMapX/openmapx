@@ -50,16 +50,23 @@ same-business duplicates are removed, and the response is capped at 50 places.
 ## Nearby places during normal browsing
 
 The built-in `overlay-ambient-places` integration can show named places without
-starting a category search. An administrator first builds the existing regional
+starting a category search. An administrator first builds the existing
 OSM search index; an Overture snapshot is optional, but a populated Overture
 source must have completed its link rebuild. In **Admin → Services → Data
-workflows → Nearby places**, publish one German bounding box. The initial form
+workflows → Nearby places**, choose **Germany** or **Custom region**. Germany
+requires prepared `europe/germany` OSM and optional Overture snapshots; regional
+sources are rejected for a country publication. The national publisher processes
+2,000 source rows per keyset batch, checks PostGIS disk headroom and activates one
+validated country generation. The active map remains available during the build.
+The custom form
 covers Aachen (`5.9,50.65,6.3,50.95`). The box may span at most 0.5 degrees in each
 direction, with at most 100,000 input rows per source and 100,000 final places.
 Linked OSM counterparts across the boundary count toward the OSM input cap and
 retain their closure/tenant policy and authoritative location. A pair whose OSM
-location is outside the box is omitted. The initial rollout is deliberately
-regional; it does not import the planet.
+location is outside the box is omitted. Coverage follows the installed snapshot
+inside Germany's rollout envelope, with no political-border clipping or planet
+import. The OSM search index's existing alias/code/acronym selection still limits
+which named OSM objects are available to this layer.
 
 Named essential destinations start at zoom 13, everyday businesses at 15 and
 other places at 16. Non-ground OSM tenants wait until 18. Explicitly closed,
@@ -68,12 +75,16 @@ known `open` status and confidence of at least 0.5. Missing confidence/status
 is omitted rather than guessed. Labels use a supplied German/English name and
 fall back to the source name; names are capped at 120 Unicode characters. No
 hours, ratings or popularity are inferred. Missing OSM fields may be filled by
-an accepted Overture match; unmatched Overture records fill regional gaps.
+an accepted Overture match; unmatched Overture records fill coverage gaps.
 Accepted OSM↔GERS links retain the OSM primary ID across tiles, search and place
 cards, even when the OSM record is outside the ambient candidate set.
 
 The admin card reports generation, region, counts, source epoch/release,
-publication time and build errors. A snapshot date describes the local data
+publication time and build errors. Country progress distinguishes processed
+source rows and staged places from the activated snapshot. Country builds hold
+source-operation locks until publication finishes, so schedule them after source
+preparation and budget retained versions, temporary writes and transaction logs.
+A snapshot date describes the local data
 publication, not a recent verification of every business. Source/publication
 age above 90 days disables discovery. Coverage is partial: filters, missing
 source data, ranking caps and label collisions can all omit places.

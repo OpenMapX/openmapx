@@ -135,6 +135,7 @@ export async function ambientPlacesRoute(
                   additionalProperties: false,
                   properties: {
                     name: { type: "string", minLength: 1, maxLength: 80 },
+                    coverage: { type: "string", enum: ["germany"] },
                     bounds: { type: "array", minItems: 4, maxItems: 4, items: { type: "number" } },
                   },
                 },

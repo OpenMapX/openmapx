@@ -1,12 +1,12 @@
 ---
 title: Ambient place publication
-description: Bounded regional place generations, canonical identities and the MVT/PMTiles serving decision.
+description: Bounded Germany and regional place generations, canonical identities and the MVT/PMTiles serving decision.
 ---
 
 # Ambient place publication
 
 `overlay-ambient-places` shows destinations during ordinary map browsing. It consumes
-one published German region; source ingestion remains in the existing OSM search
+one published Germany or custom regional generation; source ingestion remains in the existing OSM search
 index and Overture workflows. The existing OSM extractor requires an alias, code
 or generated acronym term: a source-present name-only object can therefore be
 absent from this index and layer. This coverage limit is distinct from label
@@ -15,25 +15,32 @@ imports planet data, calls AllThePlaces directly, or changes geocoding.
 
 ## Operator workflow and public contract
 
-1. Build the regional OSM search index using the existing data workflow. Its state
+1. Build the OSM search index for the target region using the existing data workflow. Its state
    must be `ready`, with a publication timestamp no older than 90 days.
 2. Optionally complete Overture Places ingestion and conflation for the installed
    release. An absent or empty, uninitialized Overture source permits OSM-only
    publication; populated, unfinished, mismatched or stale sources fail closed.
-3. In **Admin → Services → Data workflows → Nearby places**, choose a name and
-   bounding box. Bounds must fit Germany's rollout envelope
+3. In **Admin → Services → Data workflows → Nearby places**, select **Germany**
+   or **Custom region**. Germany requires the ready OSM snapshot for
+   `europe/germany` and, when Overture is initialized, the completed
+   `europe/germany` Overture snapshot. A ready state for a smaller region is
+   rejected. The Germany preset uses `[5.8,47.2,15.1,55.1]` and bounded source-ID
+   batches; custom bounds must fit Germany's rollout envelope
    `[5.8,47.2,15.1,55.1]`, span at most 0.5 degrees in either direction and contain
    at most 100,000 OSM rows including linked boundary counterparts, and 100,000
    Overture rows. The combined result also cannot exceed
-   100,000 places.
+   100,000 places. Germany output is capped at 20,000,000 places.
 4. Publish and refresh the status card. It shows active/previous generation,
    source region/epoch/release, dates, counts and errors. Build acceptance is
    asynchronous (`202`) after acquiring the publication writer lock; acceptance is
-   not proof that publication succeeded. Competing requests receive `409`. Status
+   not proof that publication succeeded. Germany admission also acquires shared
+   OSM/Overture operation locks; busy source preparation receives `409`. Status
    writes share the writer lock and attempt identity, so a rejected request cannot
    overwrite or abort the admitted publication. While `building` is true,
    external status readers can still see the prior completed attempt's dates or
-   error until the candidate transaction commits.
+   error until the candidate transaction commits. The admitting process reports
+   live country phase, processed rows, batch count and staged places separately
+   from the active publication; other processes still report the writer lock.
 5. Use **Disable** for discovery fallback, **Enable** to resume, or **Roll back**
    to switch to the predecessor. Rollback can be repeated to switch back.
 
@@ -46,12 +53,64 @@ clients read `/api/ambient-places/manifest` (`no-store`), then
 valid tiles are immutable for seven days. Unknown generations return `404`.
 
 The public manifest contains only generation/policy version, publication time,
-region bounds/name, counts and source release provenance. Source filesystem
+region bounds/name, optional `coverage: "germany"`, counts and source release provenance. Source filesystem
 paths/fingerprints, contributor record IDs and raw ingest state are not exposed.
 Source publication time means local snapshot publication, not real-world
 verification of every business. The UI identifies OSM-only versus combined
 coverage. Filters, missing source coverage, ranking and collisions remain visible
 limits; the layer is not a complete business directory.
+
+The Germany build body is:
+
+```json
+{ "name": "Germany", "bounds": [5.8, 47.2, 15.1, 55.1], "coverage": "germany" }
+```
+
+Country bounds cannot be customized with this flag. Geography is the installed
+snapshot inside the rollout envelope, not political-border clipping: a
+rectangular Overture extract can include neighbouring-country places. The
+snapshot's region label and ingest validation provide source provenance; a
+publication does not independently prove that every place in Germany is present.
+
+## Germany preparation and resource limits
+
+Prepare the existing OSM download/search-index and optional Overture
+pull/ingest/conflation workflows for `europe/germany` before publication. No new
+ingestion workflow is introduced. Sources must remain fresh and their installed
+release must be consistent. OSM-only publication is supported and identified in
+the admin card when no initialized Overture source exists.
+
+The publisher reads at most 2,000 source records at once. Its first ordered pass
+publishes eligible OSM places with accepted Overture counterparts; its second
+publishes eligible Overture gaps. Linked OSM policy and position remain
+authoritative even across envelope boundaries. Source-ID keysets preserve bigint
+identity without country-sized arrays or geographic seam deduplication.
+
+The operations agent inspects free space on the actual PostGIS volume before a
+country build. Admission requires a minimum 1 GiB working allowance, or 2 KiB per
+input source record if larger, plus a 5 GiB reserve. The reserve is checked every
+25 batches and again before activation. These are conservative admission guards,
+not measured Germany sizing or a guarantee against competing disk usage. Budget
+the existing source tables, candidate/index writes, transaction logs, retained
+country versions and backups separately; disk and I/O can dominate memory.
+
+Country publication is one potentially long repeatable-read transaction. Shared
+locks use the existing OSM and Overture operation keys and prevent source-schema
+replacement between batches. Schedule publication after source preparation;
+source update jobs can wait until it finishes. Application memory stays bounded,
+but the transaction can retain old row versions and accumulate substantial WAL.
+Failure or process interruption rolls back the candidate. The prior map remains
+available throughout, and rollback does not require another country build.
+
+The repository's container defaults are not national capacity guarantees. A full
+Germany import, cold-cache tile tests and representative concurrent traffic on
+the deployment host remain operational acceptance work. The local regression
+uses 100,001 synthetic OSM places, distant city tiles and multi-batch Overture
+fixtures to verify correctness; it does not measure a real national dataset.
+
+```bash
+OPENMAPX_RUN_DATABASE_TESTS=1 pnpm exec vitest run --maxWorkers=1 services/data-manager/__tests__/ambient-places/germany-postgres.test.ts
+```
 
 ## Publication, retention and identity
 
@@ -60,14 +119,19 @@ The OSM index writer stores tag objects as JSONB; ambient policy also reads olde
 serialized-object rows, and rejects malformed/non-object policy tags so closure
 and private-access checks cannot silently disappear.
 A repeatable-read transaction holds an advisory writer lock, reads bounded indexed
-source candidates, applies the shared policy and writes batches of 500 places.
+source candidates, applies the shared policy and writes insert batches of 500 places.
 Generation and feature insertion, count validation and the active/previous pointer
 swap commit together. Any failure rolls them all back. Concurrent writers fail
 without exposing a partial generation. There is no dependency on a background
 planet import or a live source-table query at map-render time.
 
 Projected points are stored as EWKB bytes with a functional GiST index on
-`ST_GeomFromEWKB(geom)`. This keeps the internal generation store out of Martin's
+`(generation, ST_GeomFromEWKB(geom))`. The standard PostgreSQL `btree_gist`
+extension supplies UUID indexing and is installed by schema initialization;
+the data-manager database role must be allowed to install it. The index qualifies
+both generation and geometry, including when multiple country versions are
+retained. Existing single-geometry indexing is replaced on initialization.
+EWKB keeps the internal generation store out of Martin's
 automatic spatial-table discovery: an unversioned table endpoint would otherwise
 bypass the API's generation and read budgets. Tile queries decode the indexed
 geometry before MVT encoding. Existing Martin sources and configuration are

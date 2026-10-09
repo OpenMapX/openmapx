@@ -51,6 +51,12 @@ export interface AmbientManifest {
     overture: { region: string; release: string; publishedAt: string; count: number } | null;
   };
 }
+export interface AmbientBuildProgress {
+  phase: "osm" | "overture" | "validate";
+  processed: number;
+  batches: number;
+  placeCount: number;
+}
 export interface AmbientOsmRow {
   osm_type: string;
   osm_id: string;

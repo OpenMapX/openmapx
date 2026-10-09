@@ -2,6 +2,7 @@ import { assertSupportedOvertureContributors, type OvertureSourceItem } from "@o
 import {
   AMBIENT_LIMITS,
   AMBIENT_POLICY_VERSION,
+  type AmbientBuildProgress,
   type AmbientManifest,
   type AmbientOsmRow,
   type AmbientOvertureRow,
@@ -22,12 +23,6 @@ import {
   tableExists,
 } from "./publication.js";
 
-export interface AmbientBuildProgress {
-  phase: "osm" | "overture" | "validate";
-  processed: number;
-  batches: number;
-  placeCount: number;
-}
 export interface AmbientBuildOptions {
   availableBytes?: () => Promise<number>;
   onProgress?: (progress: AmbientBuildProgress) => void | Promise<void>;

@@ -117,4 +117,37 @@ describe("ambient HTTP budgets", () => {
     expect(read).toHaveBeenCalledTimes(9);
     await app.close();
   });
+  it("accepts the Germany preset and rejects country flags with custom bounds", async () => {
+    session.role = "admin";
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(JSON.stringify({ accepted: true }), { status: 202 })),
+    );
+    const app = Fastify();
+    await app.register(ambientPlacesRoute, {});
+    const payload = { name: "Germany", bounds: [5.8, 47.2, 15.1, 55.1], coverage: "germany" };
+    expect(
+      (await app.inject({ method: "POST", url: "/admin/ambient-places/build", payload }))
+        .statusCode,
+    ).toBe(202);
+    expect(
+      (
+        await app.inject({
+          method: "POST",
+          url: "/admin/ambient-places/build",
+          payload: { ...payload, bounds: [5.9, 50.65, 6.3, 50.95] },
+        })
+      ).statusCode,
+    ).toBe(400);
+    expect(
+      (
+        await app.inject({
+          method: "POST",
+          url: "/admin/ambient-places/build",
+          payload: { ...payload, coverage: "global" },
+        })
+      ).statusCode,
+    ).toBe(400);
+    await app.close();
+  });
 });

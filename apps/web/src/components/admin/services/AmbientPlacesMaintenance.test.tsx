@@ -24,6 +24,51 @@ function view() {
   );
 }
 describe("ambient operator workflow", () => {
+  it("publishes the fixed Germany preset and keeps staged progress separate from active coverage", async () => {
+    const fetch = vi.fn(async (_url: unknown, initValue?: unknown) => ({
+      ok: true,
+      json: async () =>
+        (initValue as RequestInit | undefined)?.method
+          ? { accepted: true }
+          : { active: null, previous: null, building: false, lastError: null },
+    }));
+    vi.stubGlobal("fetch", fetch);
+    view();
+    fireEvent.click(await screen.findByRole("radio", { name: "Germany" }));
+    expect(screen.queryByRole("textbox", { name: "Region name" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Publish Germany snapshot" }));
+    await waitFor(() =>
+      expect(fetch).toHaveBeenCalledWith(
+        "http://fixture/api/admin/ambient-places/build",
+        expect.objectContaining({
+          body: JSON.stringify({
+            name: "Germany",
+            bounds: [5.8, 47.2, 15.1, 55.1],
+            coverage: "germany",
+          }),
+        }),
+      ),
+    );
+  });
+  it("shows pending country rows without advertising a published country snapshot", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({
+          active: null,
+          previous: null,
+          building: true,
+          lastError: null,
+          progress: { phase: "overture", processed: 6000, batches: 3, placeCount: 5200 },
+        }),
+      })),
+    );
+    view();
+    expect(await screen.findByText(/5,200 staged places/)).toBeInTheDocument();
+    expect(screen.getByText("Not published")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Publish map snapshot" })).toBeDisabled();
+  });
   it("shows source versions and publishes the bounded Aachen preset", async () => {
     const fetch = vi.fn(async (_url: unknown, initValue?: unknown) => ({
       ok: true,
