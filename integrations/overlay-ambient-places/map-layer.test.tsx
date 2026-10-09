@@ -484,6 +484,72 @@ describe("ambient generation lifecycle", () => {
     });
     expect(test.map.setFilter.mock.calls.length).toBeGreaterThan(prior);
   });
+  it.each([-180.00001072883606, 180.00001072883606])(
+    "reconciles and selects a buffered dateline copy at longitude %s",
+    async (longitude) => {
+      const feature = {
+        type: "Feature",
+        geometry: { type: "Point", coordinates: [longitude, 0] },
+        properties: {
+          id: "osm:node/9007199254740993",
+          gers_id: "gers-seam",
+          name: "病院",
+          category: "hospital",
+          rank: 3000,
+          min_zoom: 13,
+          sources: "osm,overture",
+        },
+      } as MapGeoJSONFeature;
+      test.map.querySourceFeatures.mockReturnValue([feature]);
+      const basemap = {
+        type: "Feature",
+        source: "basemap",
+        sourceLayer: "poi",
+        id: 77,
+        layer: { id: "poi-level-1" },
+        geometry: {
+          type: "Point",
+          coordinates: [longitude < 0 ? 179.99998927116394 : -179.99998927116394, 0],
+        },
+        properties: {
+          name: "病院",
+          class: "hospital",
+          osm_type: "node",
+          osm_id: "9007199254740993",
+        },
+      } as MapGeoJSONFeature;
+      test.map.getStyle.mockReturnValue({
+        layers: [{ id: "poi-level-1", type: "symbol", source: "basemap", "source-layer": "poi" }],
+      });
+      test.map.queryRenderedFeatures.mockImplementation((...args: unknown[]) => {
+        const layers = (args[1] as { layers?: string[] })?.layers;
+        return layers?.includes("poi-level-1")
+          ? [basemap]
+          : layers?.includes("ambient-places-labels")
+            ? [feature]
+            : [];
+      });
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async () => ({ ok: true, json: async () => ({ manifest }) })),
+      );
+      render(<AmbientPlacesLayer />);
+      await waitFor(() => expect(test.group).not.toBeNull());
+      expect(getAmbientIdentity(test.map as unknown as MapLibreMap, basemap)).toMatchObject({
+        id: "osm:node/9007199254740993",
+        gersId: "gers-seam",
+      });
+      const click = test.map.on.mock.calls.find(([event]) => event === "click")?.[1];
+      act(() => click?.({ point: { x: 1, y: 2 } }));
+      const selected = usePlaceStore.getState().selectedPlace;
+      expect(selected).toMatchObject({
+        id: "osm:node/9007199254740993",
+        ids: { gers: "gers-seam" },
+      });
+      expect(selected?.coordinates[0]).toBeGreaterThanOrEqual(-180);
+      expect(selected?.coordinates[0]).toBeLessThanOrEqual(180);
+    },
+  );
   it("shares a real worship identity with a religion-subclass basemap tap and hides its ambient copy", async () => {
     const place = {
       type: "Feature",

@@ -3,6 +3,7 @@ import {
   ambientCategory,
   ambientPlaceFromOsm,
   ambientPlaceFromOverture,
+  ambientPlaceFromTile,
   ambientPlaceToCategoryPlace,
   matchAmbientBasemap,
   mergeAmbientPlaces,
@@ -31,6 +32,23 @@ const overture = {
 };
 
 describe("ambient place policy", () => {
+  it("keeps strict source bounds and rejects non-finite/polar tile geometry", () => {
+    for (const [lng, lat] of [
+      [181, 0],
+      [-181, 0],
+      [NaN, 0],
+      [0, 86],
+    ]) {
+      expect(ambientPlaceFromOsm({ ...osm, lng, lat })).toBeNull();
+      expect(ambientPlaceFromOverture({ ...overture, longitude: lng, latitude: lat })).toBeNull();
+    }
+    for (const coordinates of [
+      [NaN, 0],
+      [Infinity, 0],
+      [0, 86],
+    ])
+      expect(ambientPlaceFromTile({ id: "osm:node/1", name: "Clinic" }, coordinates)).toBeNull();
+  });
   it("accepts explicit Germany coverage without relaxing custom regional bounds", () => {
     const germany = { name: "Germany", bounds: [5.8, 47.2, 15.1, 55.1], coverage: "germany" };
     expect(validateAmbientRegion(germany)).toEqual(germany);

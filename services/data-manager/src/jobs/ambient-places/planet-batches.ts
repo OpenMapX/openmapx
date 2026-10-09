@@ -52,9 +52,10 @@ export async function planetOsmBatch(
       [JSON.stringify(rows.map((r) => ({ osm_type: r.osm_type, osm_id: r.osm_id }))), release],
     );
     overture = linked.flatMap((r) => {
+      // Accepted identity survives even when Overture display fields are excluded.
+      links.set(`osm:${r.osm_type}/${r.osm_id}`, r.gers_id);
       const p = eligible(r, release);
       if (!p) return [];
-      links.set(`osm:${r.osm_type}/${r.osm_id}`, r.gers_id);
       return [p];
     });
   }

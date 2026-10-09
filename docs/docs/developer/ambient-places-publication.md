@@ -188,6 +188,8 @@ its existing feature rows; its previous tile URLs remain readable. New readers
 also support the old feature table before migration. Dateline tiles query the
 opposite edge through its spatial index and shift buffered geometries into the
 requested world copy. Latitude outside Web Mercator is excluded conservatively.
+Client decoding normalizes buffered world-copy longitudes before identity
+reconciliation and selection; this does not relax source coordinate validation.
 
 ### Deployment scenarios
 
@@ -313,14 +315,21 @@ an explicitly disabled or over-age publication. No published region means ordina
 basemap browsing.
 
 Accepted OSM↔GERS links determine identity: `osm:<type>/<id>` remains primary and
-GERS remains an alias. Overture-only places use `overture:<GERS>`. Bigint OSM IDs
-remain strings throughout SQL, tiles, search and details. OSM field values win;
+GERS remains an alias, including when Overture display fields are excluded and
+the valid OSM place remains. Overture-only places use `overture:<GERS>`. Published
+ambient bigint IDs remain strings in generation SQL, tiles, search aliases and
+details. OSM field values win;
 Overture fills missing names and unmatched coverage. A known excluded OSM match
 cannot be resurrected by its Overture counterpart. Linked OSM counterparts are
 read and evaluated even across the bbox boundary, within the same OSM input cap.
 Authoritative OSM locations outside the chosen region omit the pair; they do not
 become an Overture gap with lost closure or tenant policy. Tiles carry canonical ID, GERS,
 localized names, category, rank, minimum zoom, tenant flag and source combination.
+For supported older alias-focused regional/Germany indexes, an available linked
+row in the Overture OSM snapshot supplies authoritative policy and location when
+the search-index row is absent. Private/disused records remain excluded and
+upper-floor tenants retain zoom-18 deferral. Rebuild the index for complete
+format 2 named-POI coverage.
 
 The client suppresses ambient features already owned by a category/selection ID.
 An owned-basemap label can acquire the canonical identity only through an explicit

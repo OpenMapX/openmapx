@@ -43,6 +43,46 @@ async function tile(pg: PostgisFixture, generation: string, lng: number, lat: nu
 describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
   "Germany ambient publication",
   () => {
+    it.each([regional, AMBIENT_GERMANY_REGION])(
+      "respects available legacy raw OSM policy and location for $name",
+      async (region) => {
+        const pg = await startPostgis();
+        try {
+          await seed(pg);
+          await pg.sql.unsafe(buildSchemaDDL("overture_places"));
+          await pg.sql.unsafe(`UPDATE osm_search.index_state SET ambient_source_version=1;
+          INSERT INTO overture_places.places(gers_id,name,basic_category,geom,confidence,operating_status,release)
+          SELECT 'g-legacy-'||i,'Overture copy '||i,'hospital',ST_SetSRID(ST_MakePoint(6.08+i/1000.0,50.77),4326),0.9,'open','2026-09-23.1' FROM generate_series(200,203) i;
+          UPDATE overture_places.places SET geom=ST_SetSRID(ST_MakePoint(6.08,50.77),4326);
+          INSERT INTO overture_places.conflation_state(release,region,place_count,places_published_at,status,phase)
+          VALUES('2026-09-23.1','europe/germany',4,now(),'completed','complete');
+          INSERT INTO overture_places.poi_conflation_link(osm_type,osm_id,gers_id,match_confidence,distance_m,method,evidence,release)
+          SELECT 'way',i,'g-legacy-'||i,1,0,'fixture','{}','2026-09-23.1' FROM generate_series(200,203) i;
+          INSERT INTO overture_places.osm_pois(osm_type,osm_id,name,lat,lng,h3_r8,category,tags) VALUES
+          ('way',200,'Private authoritative',50.77,6.08,'fixture','amenity/hospital','{"access":"private"}'),
+          ('way',201,'Disused authoritative',50.77,6.08,'fixture','amenity/hospital','{"disused":"yes"}'),
+          ('way',202,'Tenant authoritative',50.771,6.085,'fixture','amenity/hospital','{"level":"1"}'),
+          ('way',203,'Outside authoritative',50.77,5.7,'fixture','amenity/hospital','{}')`);
+          const result = await buildAmbientPlaces(pg.sql, region, undefined, {
+            availableBytes: ampleSpace,
+          });
+          const rows = await pg.sql.unsafe(
+            `SELECT id,name,min_zoom,tenant FROM ambient_places.features_all WHERE generation=$1 ORDER BY id`,
+            [result.generation],
+          );
+          expect(rows).toEqual([
+            { id: "osm:node/1", name: "Aachen clinic", min_zoom: 13, tenant: false },
+            { id: "osm:way/202", name: "Tenant authoritative", min_zoom: 18, tenant: true },
+          ]);
+          const tenant = await readAmbientPlaceByGers(pg.sql, "g-legacy-202");
+          expect(tenant?.place.coordinates[0]).toBeCloseTo(6.085, 7);
+          expect(tenant?.place.coordinates[1]).toBeCloseTo(50.771, 7);
+        } finally {
+          await pg.stop();
+        }
+      },
+      120000,
+    );
     it("streams more than 100000 places once, serves distant tiles and keeps old regional bytes", async () => {
       const pg = await startPostgis();
       try {

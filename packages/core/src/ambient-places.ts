@@ -417,11 +417,16 @@ export function ambientPlaceFromTile(
   properties: Record<string, unknown>,
   coordinates: number[],
 ): AmbientPlace | null {
+  // MapLibre projects buffered seam features into the neighbouring world copy.
+  // Normalize at this decoding boundary; source ingestion keeps strict bounds.
+  let longitude = coordinates[0];
+  if (Number.isFinite(longitude) && (longitude < -180 || longitude > 180))
+    longitude = ((((longitude + 180) % 360) + 360) % 360) - 180;
   if (
     typeof properties.id !== "string" ||
     !/^(osm:(node|way|relation)\/\d+|overture:.+)$/.test(properties.id) ||
     typeof properties.name !== "string" ||
-    !point(coordinates[0], coordinates[1])
+    !point(longitude, coordinates[1])
   )
     return null;
   return {
@@ -433,7 +438,7 @@ export function ambientPlaceFromTile(
       ...(properties.name_de ? { de: String(properties.name_de) } : {}),
       ...(properties.name_en ? { en: String(properties.name_en) } : {}),
     },
-    coordinates: [coordinates[0], coordinates[1]],
+    coordinates: [longitude, coordinates[1]],
     category: String(properties.category ?? "place"),
     rank: Number(properties.rank),
     minZoom: Number(properties.min_zoom),

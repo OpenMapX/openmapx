@@ -190,12 +190,15 @@ export async function buildGermanyPlaces(
           osm_type: string | null;
           osm_id: string | null;
           indexed_osm_id: string | null;
+          linked_osm: AmbientOsmRow | null;
         })[]
       >(
-        `SELECT ${OVERTURE_COLUMNS},l.osm_type,l.osm_id::TEXT,p.osm_id::TEXT AS indexed_osm_id
+        `SELECT ${OVERTURE_COLUMNS},l.osm_type,l.osm_id::TEXT,p.osm_id::TEXT AS indexed_osm_id,
+        CASE WHEN raw.osm_id IS NULL THEN NULL ELSE jsonb_build_object('osm_type',raw.osm_type,'osm_id',raw.osm_id::TEXT,'name',raw.name,'lng',raw.lng,'lat',raw.lat,'category',raw.category,'tags',coalesce(raw.tags,'{}'::JSONB),'importance',0.5) END AS linked_osm
         FROM (SELECT * FROM overture_places.places WHERE gers_id>$1 ORDER BY gers_id LIMIT ${AMBIENT_LIMITS.countryBatch}) o
         LEFT JOIN overture_places.poi_conflation_link l ON l.gers_id=o.gers_id AND l.release=$2
-        LEFT JOIN osm_search.places p ON p.osm_type=l.osm_type AND p.osm_id=l.osm_id ORDER BY o.gers_id`,
+        LEFT JOIN osm_search.places p ON p.osm_type=l.osm_type AND p.osm_id=l.osm_id
+        LEFT JOIN overture_places.osm_pois raw ON raw.osm_type=l.osm_type AND raw.osm_id=l.osm_id ORDER BY o.gers_id`,
         [cursor, manifest.sources.overture.release],
       );
       if (!rows.length) break;
@@ -206,6 +209,15 @@ export async function buildGermanyPlaces(
         manifest.sources.overture!.count++;
         // Existing OSM rows own policy and position, even if excluded/outside.
         if (row.indexed_osm_id !== null) return [];
+        if (row.linked_osm) {
+          const authoritative = ambientPlaceFromOsm({
+            ...row.linked_osm,
+            name: row.linked_osm.name || row.name,
+          });
+          return authoritative && inside(authoritative)
+            ? mergeAmbientPlaces([authoritative], [p], new Map([[authoritative.id, row.gers_id]]))
+            : [];
+        }
         return [
           { ...p, ...(row.osm_id !== null ? { id: `osm:${row.osm_type}/${row.osm_id}` } : {}) },
         ];

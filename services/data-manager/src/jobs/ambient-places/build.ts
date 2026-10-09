@@ -139,7 +139,15 @@ export async function buildAmbientPlaces(
           // A linked OSM point can straddle the bbox boundary. Its policy and
           // authoritative fields must still win over the regional Overture point.
           const counterparts = await tx.unsafe<AmbientOsmRow[]>(
-            `SELECT p.osm_type,p.osm_id::TEXT,p.name,p.lng,p.lat,p.category,p.tags,p.importance FROM osm_search.places p JOIN overture_places.poi_conflation_link l USING(osm_type,osm_id) JOIN overture_places.places o USING(gers_id) WHERE o.geom && ST_MakeEnvelope($1,$2,$3,$4,4326) AND l.release=$5 ORDER BY p.osm_type,p.osm_id LIMIT ${AMBIENT_LIMITS.places + 1}`,
+            `SELECT l.osm_type,l.osm_id::TEXT,
+            CASE WHEN p.osm_id IS NOT NULL THEN p.name ELSE coalesce(nullif(raw.name,''),o.name) END AS name,
+            coalesce(p.lng,raw.lng) AS lng,coalesce(p.lat,raw.lat) AS lat,
+            coalesce(p.category,raw.category) AS category,coalesce(p.tags,raw.tags,'{}'::JSONB) AS tags,coalesce(p.importance,0.5) AS importance
+            FROM overture_places.places o JOIN overture_places.poi_conflation_link l USING(gers_id)
+            LEFT JOIN osm_search.places p ON p.osm_type=l.osm_type AND p.osm_id=l.osm_id
+            LEFT JOIN overture_places.osm_pois raw ON raw.osm_type=l.osm_type AND raw.osm_id=l.osm_id
+            WHERE o.geom && ST_MakeEnvelope($1,$2,$3,$4,4326) AND l.release=$5 AND (p.osm_id IS NOT NULL OR raw.osm_id IS NOT NULL)
+            ORDER BY l.osm_type,l.osm_id LIMIT ${AMBIENT_LIMITS.places + 1}`,
             [...params, state.release],
           );
           const allOsm = new Map(osmRows.map((row) => [`${row.osm_type}/${row.osm_id}`, row]));

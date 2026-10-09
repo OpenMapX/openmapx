@@ -1,5 +1,5 @@
 import { AMBIENT_PLANET_REGION } from "@openmapx/core/ambient-places";
-import { readAmbientManifest } from "@openmapx/core/ambient-places-server";
+import { readAmbientManifest, readAmbientPlaceByGers } from "@openmapx/core/ambient-places-server";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import * as publisher from "../../src/jobs/ambient-places/build.js";
 import { buildSchemaDDL } from "../../src/jobs/overture/schema.js";
@@ -79,6 +79,40 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       );
       expect(storage.partitions).toBe(1);
     }, 60000);
+    it.each([
+      { status: "temporarily_closed", confidence: 0.9 },
+      { status: "open", confidence: null },
+    ])(
+      "retains accepted GERS aliases without excluded Overture fields: %j",
+      async ({ status, confidence }) => {
+        await seed();
+        await pg.sql.unsafe(buildSchemaDDL("overture_places"));
+        await pg.sql.unsafe(
+          `INSERT INTO overture_places.places(gers_id,name,names,basic_category,geom,confidence,operating_status,release)
+        VALUES('g-excluded','Excluded partner','{"common":{"en":"Do not import"}}','hospital',ST_SetSRID(ST_MakePoint(139.7,35.7),4326),$1,$2,'2026-09-23.1')`,
+          [confidence, status],
+        );
+        await pg.sql.unsafe(`INSERT INTO overture_places.conflation_state(release,region,place_count,places_published_at,status,phase,source_fingerprint,completed_at)
+        VALUES('2026-09-23.1','planet',1,now(),'completed','complete','fixture-file',now());
+        INSERT INTO overture_places.poi_conflation_link(osm_type,osm_id,gers_id,match_confidence,distance_m,method,evidence,release)
+        VALUES('node',1,'g-excluded',1,0,'fixture','{}','2026-09-23.1')`);
+        const result = await publisher.buildAmbientPlaces(
+          pg.sql,
+          AMBIENT_PLANET_REGION,
+          undefined,
+          { availableBytes: ample },
+        );
+        expect(result.placeCount).toBe(4);
+        expect(await readAmbientPlaceByGers(pg.sql, "g-excluded")).toMatchObject({
+          generation: result.generation,
+          place: { id: "osm:node/1", gersId: "g-excluded", name: "世界 Clinic 1", sources: "osm" },
+        });
+        expect(
+          (await readAmbientPlaceByGers(pg.sql, "g-excluded"))?.place.names.en,
+        ).toBeUndefined();
+      },
+      60000,
+    );
     it("commits bounded checkpoints before progress and resumes without duplicate rows", async () => {
       await seed(2001);
       await expect(
