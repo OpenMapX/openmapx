@@ -2,7 +2,6 @@ import { randomUUID } from "node:crypto";
 import { assertSupportedOvertureContributors, type OvertureSourceItem } from "@openmapx/core";
 import {
   AMBIENT_LIMITS,
-  AMBIENT_MAX_AGE_MS,
   AMBIENT_POLICY_VERSION,
   type AmbientManifest,
   type AmbientOsmRow,
@@ -14,7 +13,16 @@ import {
   validateAmbientRegion,
 } from "@openmapx/core/ambient-places";
 import type postgres from "postgres";
+import { type AmbientBuildOptions, buildGermanyPlaces } from "./germany.js";
+import {
+  activateAmbientGeneration,
+  fresh,
+  insertAmbientFeatures,
+  prepareAmbientGeneration,
+  tableExists,
+} from "./publication.js";
 import { AMBIENT_WRITE_LOCK, AmbientPublicationBusyError, ensureAmbientSchema } from "./schema.js";
+import { lockAmbientCountrySources } from "./source-locks.js";
 
 async function lock(tx: postgres.TransactionSql) {
   const [row] = await tx.unsafe<{ locked: boolean }[]>(
@@ -22,27 +30,11 @@ async function lock(tx: postgres.TransactionSql) {
   );
   if (!row.locked) throw new AmbientPublicationBusyError();
 }
-function fresh(value: Date | string | null): string {
-  const date = value === null ? NaN : new Date(value).getTime();
-  if (
-    !Number.isFinite(date) ||
-    Date.now() - date > AMBIENT_MAX_AGE_MS ||
-    date > Date.now() + 60_000
-  )
-    throw new Error("Source publication is missing or too old (maximum 90 days)");
-  return new Date(date).toISOString();
-}
-async function tableExists(tx: postgres.TransactionSql, name: string): Promise<boolean> {
-  const [row] = await tx.unsafe<{ exists: boolean }[]>(
-    `SELECT to_regclass($1) IS NOT NULL AS exists`,
-    [name],
-  );
-  return row.exists;
-}
 export async function buildAmbientPlaces(
   sql: postgres.Sql,
   input: AmbientRegion,
   onClaim?: () => void | Promise<void>,
+  options: AmbientBuildOptions = {},
 ): Promise<AmbientManifest> {
   const region = validateAmbientRegion(input);
   await ensureAmbientSchema(sql);
@@ -51,6 +43,7 @@ export async function buildAmbientPlaces(
   try {
     return await sql.begin("isolation level repeatable read", async (tx) => {
       await lock(tx);
+      if (region.coverage === "germany") await lockAmbientCountrySources(tx);
       await tx.unsafe(`SET LOCAL statement_timeout='120000ms'`);
       const [clock] = await tx.unsafe<{ started_at: string }[]>(
         `SELECT clock_timestamp()::TEXT AS started_at`,
@@ -66,11 +59,20 @@ export async function buildAmbientPlaces(
       if (!(await tableExists(tx, "osm_search.index_state")))
         throw new Error("Build the regional OSM search index first");
       const [osmState] = await tx.unsafe<
-        { region: string; epoch: string; status: string; published_at: Date | null }[]
-      >(`SELECT region,epoch,status,published_at FROM osm_search.index_state WHERE singleton=1`);
+        {
+          region: string;
+          epoch: string;
+          status: string;
+          published_at: Date | null;
+          place_count: string;
+        }[]
+      >(
+        `SELECT region,epoch,status,published_at,place_count::TEXT FROM osm_search.index_state WHERE singleton=1`,
+      );
       if (!osmState || osmState.status !== "ready")
         throw new Error("OSM search index must be ready");
       const osmPublished = fresh(osmState.published_at);
+      if (region.coverage === "germany") return buildGermanyPlaces(tx, region, osmState, options);
       const params = region.bounds;
       let osmRows: AmbientOsmRow[] = await tx.unsafe<AmbientOsmRow[]>(
         `SELECT osm_type,osm_id::TEXT,name,lng,lat,category,tags,importance FROM osm_search.places WHERE geom && ST_MakeEnvelope($1,$2,$3,$4,4326)::geography ORDER BY osm_type,osm_id LIMIT ${AMBIENT_LIMITS.places + 1}`,
@@ -172,20 +174,11 @@ export async function buildAmbientPlaces(
       if (places.length === 0) throw new Error("Refusing to publish an empty ambient generation");
       if (places.length > AMBIENT_LIMITS.places)
         throw new Error("Combined regional output exceeds 100000 places");
-      await tx.unsafe(
-        `DELETE FROM ambient_places.generations g WHERE g.cache_lease_until<now() AND NOT EXISTS(SELECT 1 FROM ambient_places.state s WHERE g.id=s.active OR g.id=s.previous)`,
-      );
-      const [capacity] = await tx.unsafe<{ count: number }[]>(
-        `SELECT count(*)::INT AS count FROM ambient_places.generations`,
-      );
-      if (capacity.count >= AMBIENT_LIMITS.generations)
-        throw new Error(
-          "Generation retention limit reached; preserve seven-day tile cache leases before rebuilding",
-        );
+      const generation = await prepareAmbientGeneration(tx);
       const manifest: AmbientManifest = {
         version: 1,
         policyVersion: AMBIENT_POLICY_VERSION,
-        generation: randomUUID(),
+        generation,
         publishedAt: new Date().toISOString(),
         region,
         placeCount: places.length,
@@ -204,43 +197,8 @@ export async function buildAmbientPlaces(
         `INSERT INTO ambient_places.generations(id,manifest) VALUES($1,$2::TEXT::JSONB)`,
         [manifest.generation, JSON.stringify(manifest)],
       );
-      for (let offset = 0; offset < places.length; offset += 500) {
-        const rows = places.slice(offset, offset + 500).map((p) => ({
-          id: p.id,
-          gers_id: p.gersId ?? null,
-          name: p.name,
-          name_de: p.names.de ?? null,
-          name_en: p.names.en ?? null,
-          category: p.category,
-          rank: p.rank,
-          min_zoom: p.minZoom,
-          tenant: p.tenant,
-          sources: p.sources,
-          lng: p.coordinates[0],
-          lat: p.coordinates[1],
-        }));
-        await tx.unsafe(
-          `INSERT INTO ambient_places.features(generation,id,gers_id,name,name_de,name_en,category,rank,min_zoom,tenant,sources,geom)
-        SELECT $1::UUID,r.id,r.gers_id,r.name,r.name_de,r.name_en,r.category,r.rank,r.min_zoom,r.tenant,r.sources,ST_AsEWKB(ST_Transform(ST_SetSRID(ST_MakePoint(r.lng,r.lat),4326),3857))
-        FROM jsonb_to_recordset($2::TEXT::JSONB) AS r(id TEXT,gers_id TEXT,name TEXT,name_de TEXT,name_en TEXT,category TEXT,rank INT,min_zoom SMALLINT,tenant BOOLEAN,sources TEXT,lng DOUBLE PRECISION,lat DOUBLE PRECISION)`,
-          [manifest.generation, JSON.stringify(rows)],
-        );
-      }
-      const [count] = await tx.unsafe<{ count: number }[]>(
-        `SELECT count(*)::INT AS count FROM ambient_places.features WHERE generation=$1`,
-        [manifest.generation],
-      );
-      if (count.count !== manifest.placeCount)
-        throw new Error("Candidate feature count validation failed");
-      // A client may have discovered the outgoing generation moments ago,
-      // regardless of its original publication date. Include the refresh interval.
-      await tx.unsafe(
-        `UPDATE ambient_places.generations SET cache_lease_until=greatest(cache_lease_until,now()+interval '7 days 1 minute') WHERE id=(SELECT active FROM ambient_places.state WHERE singleton=1)`,
-      );
-      await tx.unsafe(
-        `UPDATE ambient_places.state SET previous=active,active=$1,last_build_finished_at=clock_timestamp() WHERE singleton=1`,
-        [manifest.generation],
-      );
+      await insertAmbientFeatures(tx, manifest.generation, places);
+      await activateAmbientGeneration(tx, manifest);
       return manifest;
     });
   } catch (error) {

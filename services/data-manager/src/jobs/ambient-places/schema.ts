@@ -2,11 +2,12 @@ import type postgres from "postgres";
 
 export const AMBIENT_WRITE_LOCK = 139399;
 export class AmbientPublicationBusyError extends Error {
-  constructor() {
-    super("Another ambient publication or pointer change is running");
+  constructor(message = "Another ambient publication or pointer change is running") {
+    super(message);
   }
 }
 export const ambientSchemaDDL = `
+CREATE EXTENSION IF NOT EXISTS btree_gist;
 CREATE SCHEMA IF NOT EXISTS ambient_places;
 CREATE TABLE IF NOT EXISTS ambient_places.generations (
   id UUID PRIMARY KEY, manifest JSONB NOT NULL, published_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -21,7 +22,8 @@ CREATE TABLE IF NOT EXISTS ambient_places.features (
   PRIMARY KEY(generation,id)
 );
 -- EWKB keeps this internal store out of Martin's automatic geometry-table discovery.
-CREATE INDEX IF NOT EXISTS ambient_features_geom ON ambient_places.features USING GIST(ST_GeomFromEWKB(geom));
+CREATE INDEX IF NOT EXISTS ambient_features_generation_geom ON ambient_places.features USING GIST(generation,ST_GeomFromEWKB(geom));
+DROP INDEX IF EXISTS ambient_places.ambient_features_geom;
 CREATE INDEX IF NOT EXISTS ambient_features_gers ON ambient_places.features(generation,gers_id) WHERE gers_id IS NOT NULL;
 CREATE TABLE IF NOT EXISTS ambient_places.state (
   singleton SMALLINT PRIMARY KEY CHECK(singleton=1),

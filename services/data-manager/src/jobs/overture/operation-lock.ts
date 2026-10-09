@@ -2,8 +2,8 @@ import { sql } from "../../db/index.js";
 
 // Stable, application-owned two-key advisory lock. Every operation that can
 // replace the Overture schema or its OSM snapshot uses the same lock.
-const OVERTURE_LOCK_NAMESPACE = 1_330_466_120;
-const OVERTURE_LOCK_KEY = 1;
+export const OVERTURE_LOCK_NAMESPACE = 1_330_466_120;
+export const OVERTURE_LOCK_KEY = 1;
 
 /** Serializes Overture schema/extract/conflation mutations across processes. */
 export async function withOvertureOperationLock<T>(operation: () => Promise<T>): Promise<T> {

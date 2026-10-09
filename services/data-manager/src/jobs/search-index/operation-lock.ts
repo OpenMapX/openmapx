@@ -1,7 +1,7 @@
 import type postgres from "postgres";
 
-const SEARCH_INDEX_LOCK_NAMESPACE = 1_330_466_120;
-const SEARCH_INDEX_LOCK_KEY = 2;
+export const SEARCH_INDEX_LOCK_NAMESPACE = 1_330_466_120;
+export const SEARCH_INDEX_LOCK_KEY = 2;
 const NOTABLE_PLACES_LOCK_KEY = 3;
 
 export interface SearchIndexOperationLock {
