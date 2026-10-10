@@ -20,6 +20,13 @@ describe("visibleSheetHeight", () => {
     expect(visibleSheetHeight(geo(624))).toBe(624);
   });
 
+  it("excludes snap-marker overflow from the visible sheet height", () => {
+    // Navigation: two 1px snap markers precede the full-height sheet.
+    expect(visibleSheetHeight({ scrollTop: 49, scrollHeight: 722, clientHeight: 360 })).toBe(47);
+    // Browsing: the extra mid detent adds a third marker.
+    expect(visibleSheetHeight({ scrollTop: 151, scrollHeight: 1443, clientHeight: 720 })).toBe(148);
+  });
+
   it("clamps rubber-band overscroll on both ends", () => {
     expect(visibleSheetHeight(geo(-40))).toBe(0);
     expect(visibleSheetHeight(geo(900))).toBe(800);
@@ -27,6 +34,7 @@ describe("visibleSheetHeight", () => {
 
   it("is zero rather than negative for a degenerate unlaid-out host", () => {
     expect(visibleSheetHeight({ scrollTop: 0, scrollHeight: 0, clientHeight: 0 })).toBe(0);
+    expect(visibleSheetHeight({ scrollTop: 0, scrollHeight: 360, clientHeight: 360 })).toBe(0);
   });
 
   // Real readings from a Pixel 6 Pro and from iOS Safari, both at full

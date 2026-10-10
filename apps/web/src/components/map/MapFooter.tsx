@@ -10,11 +10,8 @@ import { useMapAttributionHtml } from "@/integration-api/overlay/mapAttributionS
 import { isPanelShiftActive, PANEL_WIDTH } from "@/lib/layout";
 import { coversFooterCenter, publishMapFooterCenterCovered } from "@/lib/mapFooterCenter";
 import { useMeasuredMapObstruction } from "@/lib/mapObstructions";
+import { useMobilePanelClearance, useWindowHeight } from "@/lib/mobilePanelHeight";
 import { CREDITS_SEPARATOR, CREDITS_SX } from "./MapCredits";
-
-// Pixels to lift the footer while navigating, so it clears the navigation
-// bottom sheet instead of hiding behind it.
-const NAV_FOOTER_LIFT = 96;
 
 // Below this much free space between the two groups they stop reading as two
 // separate bars, so they're painted as one instead.
@@ -41,6 +38,7 @@ export function MapFooter() {
   const collapsed = useSidebarStore((s) => s.collapsed);
   const navigating = useNavigationStore((s) => s.status !== "idle");
   const shifted = isPanelShiftActive({ sidebarOpen, sidebarCollapsed: collapsed, navigating });
+  const followHeight = useMobilePanelClearance(useWindowHeight());
   const credits = useMapAttributionHtml();
   const creditsHtml = credits.join(CREDITS_SEPARATOR);
 
@@ -104,7 +102,10 @@ export function MapFooter() {
       sx={{
         bgcolor: merged ? background : "transparent",
         position: "absolute",
-        bottom: `calc(var(--omx-safe-bottom) + ${navigating ? NAV_FOOTER_LIFT : 0}px)`,
+        bottom: {
+          xs: followHeight > 0 ? `${followHeight}px` : "var(--omx-safe-bottom)",
+          sm: "var(--omx-safe-bottom)",
+        },
         left: {
           xs: "var(--omx-safe-left)",
           sm: shifted ? `calc(${PANEL_WIDTH}px + var(--omx-safe-left))` : "var(--omx-safe-left)",
