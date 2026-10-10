@@ -143,8 +143,9 @@ cancelled navigation leg does not issue a boarding or get-off cue. The get-off
 alarm is also suppressed until the rider has boarded.
 
 A failed refresh retains previously loaded times with one concise warning and
-retry action, rather than repeating a failure label on every row. A partially
-successful linked board retains successful sources and warns that some
+retry action aligned to the right of the warning, rather than repeating a
+failure label on every row. A partially successful linked board retains
+successful sources and warns that some
 departures may be missing; it does not claim there are no departures when
 remaining sources failed. A successful empty timetable remains a valid empty
 result. Source age is reevaluated every 30 seconds while these views are

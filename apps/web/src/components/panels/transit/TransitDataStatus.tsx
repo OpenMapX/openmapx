@@ -57,6 +57,9 @@ export function TransitQueryNotice({
     <Box
       role="status"
       sx={{
+        display: "flex",
+        alignItems: "center",
+        gap: 1,
         px: 1.5,
         py: 1,
         ...(onMap
@@ -70,13 +73,13 @@ export function TransitQueryNotice({
           : {}),
       }}
     >
-      <Typography variant="body2">
+      <Typography variant="body2" sx={{ flex: 1, minWidth: 0, overflowWrap: "anywhere" }}>
         {[failed && t("dataStatus.refreshFailed"), partial && t("dataStatus.partial")]
           .filter(Boolean)
           .join(" ")}
       </Typography>
       {onRetry && (
-        <Button size="small" onClick={onRetry} disabled={retrying}>
+        <Button size="small" onClick={onRetry} disabled={retrying} sx={{ flexShrink: 0 }}>
           {tc("retry")}
         </Button>
       )}
