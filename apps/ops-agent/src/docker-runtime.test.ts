@@ -121,7 +121,13 @@ describe("fixed Docker runtime adapters", () => {
 
   describe("Valhalla traffic effects", () => {
     const CHOWN_ID = `${process.getuid?.() ?? 1000}:${process.getgid?.() ?? 1000}`;
-    const runtimeWith = (execFile: (file: string, args: readonly string[]) => Promise<unknown>) =>
+    const runtimeWith = (
+      execFile: (
+        file: string,
+        args: readonly string[],
+        options: { timeout: number },
+      ) => Promise<unknown>,
+    ) =>
       createDockerRuntime({
         stack: {
           infraDir: "/trusted",
@@ -394,8 +400,10 @@ describe("fixed Docker runtime adapters", () => {
 
     it("produces way_edges.txt on the shared mount and hands it to the data owner", async () => {
       const calls: string[][] = [];
-      const runtime = runtimeWith(async (_file, args) => {
+      const timeouts: number[] = [];
+      const runtime = runtimeWith(async (_file, args, options) => {
         calls.push([...args]);
+        timeouts.push(options.timeout);
         return { stdout: "", stderr: "" };
       });
 
@@ -403,6 +411,8 @@ describe("fixed Docker runtime adapters", () => {
         dispatchOpsOperation(runtime, { kind: "valhalla.traffic.refreshWaysToEdges" }, context()),
       ).resolves.toEqual({ changed: true });
 
+      // A whole-country graph already takes minutes; the operation's own bound applies.
+      expect(timeouts[0]).toBe(30 * 60_000);
       expect(calls).toEqual([
         [
           "exec",
