@@ -107,9 +107,11 @@ export function normalizeServiceIds(ids: Iterable<string>): string[] {
   return out;
 }
 
+/** The ids a list names, or null when it names none: `${VAR:-}` passes an unset list as "". */
 export function parseServiceIdList(raw: string | null | undefined): string[] | null {
   if (raw === null || raw === undefined) return null;
-  return normalizeServiceIds([raw]);
+  const ids = normalizeServiceIds([raw]);
+  return ids.length > 0 ? ids : null;
 }
 
 export function formatServiceIdList(ids: Iterable<string>): string {

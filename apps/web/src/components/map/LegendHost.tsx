@@ -116,8 +116,8 @@ export function LegendHost() {
   // (long or wrapped overlay credits) does the stack stand on the footer instead.
   const footerClearance = footerCoversCenter && bottomInset > 0 ? `${bottomInset}px` : FLUSH_BOTTOM;
   const bottom = {
-    // The sheet already clears footer credits.
-    xs: followHeight > 0 ? `calc(${followHeight}px + var(--omx-safe-bottom))` : footerClearance,
+    // The visible sheet height already includes its safe-area padding.
+    xs: followHeight > 0 ? `${followHeight}px` : footerClearance,
     sm: footerClearance,
   };
 

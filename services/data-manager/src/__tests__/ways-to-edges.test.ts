@@ -61,10 +61,10 @@ describe("refreshWaysToEdges / loadWaysToEdges", () => {
     const sampleLines = ["123,1,73160266,0,110268746", "999,1,555"];
 
     const result = await refreshWaysToEdges(new Set([123]), {
-      wayEdgesPath: "/data/osm/valhalla_tiles/way_edges.txt",
+      wayEdgesPath: "/data/valhalla/osm-pbf/valhalla_tiles/way_edges.txt",
       readWayEdgesLines: async function* (path) {
         // Read from the shared mount, not out of the container.
-        expect(path).toBe("/data/osm/valhalla_tiles/way_edges.txt");
+        expect(path).toBe("/data/valhalla/osm-pbf/valhalla_tiles/way_edges.txt");
         yield* linesOf(sampleLines);
       },
       outputPath,
@@ -97,6 +97,29 @@ describe("refreshWaysToEdges / loadWaysToEdges", () => {
     ]);
     expect(loaded).toEqual(expected);
     expect(loaded.has(999)).toBe(false);
+  });
+
+  it("reads way_edges.txt from Valhalla's tile directory beside traffic.tar", async () => {
+    const read = async (): Promise<string> => {
+      let seen = "";
+      await refreshWaysToEdges(new Set(), {
+        readWayEdgesLines: (path) => {
+          seen = path;
+          return linesOf([]);
+        },
+        outputPath,
+      });
+      return seen;
+    };
+    vi.stubEnv("DATA_DIR", "/data");
+    vi.stubEnv("TRAFFIC_TAR_PATH", "");
+    try {
+      expect(await read()).toBe("/data/valhalla/osm-pbf/valhalla_tiles/way_edges.txt");
+      vi.stubEnv("TRAFFIC_TAR_PATH", "/srv/valhalla/traffic.tar");
+      expect(await read()).toBe("/srv/valhalla/valhalla_tiles/way_edges.txt");
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 
   it("propagates a failed agent operation instead of writing a map", async () => {

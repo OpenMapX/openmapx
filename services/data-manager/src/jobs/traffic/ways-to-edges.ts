@@ -1,6 +1,6 @@
 import { createReadStream } from "node:fs";
 import { readFile } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { createInterface } from "node:readline";
 import { runOpsOperation } from "../../ops-client.js";
 import { atomicWriteFile } from "../../utils/atomic-write.js";
@@ -51,12 +51,16 @@ export interface RefreshWaysToEdgesResult {
 
 /**
  * `valhalla_ways_to_edges` writes `<tile_dir>/way_edges.txt` inside the Valhalla
- * container, but that tile directory is the shared OSM producer mount, so the
- * file is readable here directly. Streaming it line-by-line matters: on a planet
- * graph it covers every routable way and is far too large to hold as a string.
+ * container. That tile directory sits beside `traffic.tar` in Valhalla's
+ * `osm-pbf` directory, which data-manager sees under `/data`, so the file is
+ * readable here directly. Streaming it line-by-line matters: on a planet graph
+ * it covers every routable way and is far too large to hold as a string.
  */
 export function defaultWayEdgesPath(): string {
-  return join(process.env.DATA_DIR ?? "/data", "osm", "valhalla_tiles", WAY_EDGES_FILENAME);
+  const tarPath =
+    process.env.TRAFFIC_TAR_PATH?.trim() ||
+    join(process.env.DATA_DIR ?? "/data", "valhalla", "osm-pbf", "traffic.tar");
+  return join(dirname(tarPath), "valhalla_tiles", WAY_EDGES_FILENAME);
 }
 
 async function* defaultReadWayEdgesLines(path: string): AsyncGenerator<string> {

@@ -211,7 +211,9 @@ class TrafficWatchdogTest(unittest.TestCase):
             value["validUntil"] = 3000
             value["uncertain"] = True
             path.write_text(json.dumps(value))
-            self.assertFalse(watchdog.lease_allows_serving(path, 1000))
+            # The writer is clearing what it cannot account for, within its lease.
+            self.assertTrue(watchdog.lease_allows_serving(path, 1000))
+            self.assertFalse(watchdog.lease_allows_serving(path, 3000))
             value["phase"] = "committed"
             path.write_text(json.dumps(value))
             self.assertFalse(watchdog.lease_allows_serving(path, 1000))

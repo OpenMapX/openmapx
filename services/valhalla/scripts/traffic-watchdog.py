@@ -149,10 +149,14 @@ def lease_allows_serving(path, now_ms=None):
             return False
         if not (0 <= deadline <= now_ms + 120_000):
             return False
+        if phase == "pending":
+            # An uncertain pending journal is the writer clearing every record
+            # it cannot account for, after each engine start or graph change.
+            # Its deadline bounds that write like any other; only an abandoned
+            # one fences serving.
+            return deadline > now_ms
         if uncertain:
             return False
-        if phase == "pending":
-            return deadline > now_ms
         return not identities or deadline > now_ms
     except (OSError, ValueError, TypeError, KeyError):
         return False

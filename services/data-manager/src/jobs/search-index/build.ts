@@ -144,7 +144,9 @@ export async function buildOsmSearchIndex(
   const dataset = resolveOsmDataset(opts.store, opts.region);
   const lock = opts.operationLock ?? createSearchIndexOperationLock(opts.sql);
   return lock.run(async () => {
-    const startedAt = new Date();
+    // Bound as text: the client is shared with drizzle, which replaces its
+    // date serializers.
+    const startedAt = new Date().toISOString();
     let stage: SearchIndexBuildStage = "resolve";
     let placeCount = 0;
     let termCount = 0;

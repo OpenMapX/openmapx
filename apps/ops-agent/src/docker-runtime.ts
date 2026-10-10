@@ -695,9 +695,11 @@ export function createDockerRuntime(options: DockerRuntimeOptions): OpsRuntime {
   runtime["valhalla.traffic.refreshWaysToEdges"] = async (_operation, context) => {
     // Writes `<tile_dir>/way_edges.txt`, a hard-coded name with no output flag.
     // data-manager reads and filters it from the shared mount afterwards.
+    // A whole-country graph takes minutes, far past the default command bound.
     const build = await valhallaExec(
       ["valhalla_ways_to_edges", "-c", VALHALLA_CONFIG_PATH],
       context.signal,
+      30 * 60_000,
     );
     if (build.exitCode !== 0) throw new Error("valhalla_ways_to_edges failed");
     const owner = options.dataMountOwner ?? defaultDataMountOwner;

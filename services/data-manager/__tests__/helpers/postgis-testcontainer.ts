@@ -1,4 +1,5 @@
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from "@testcontainers/postgresql";
+import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 
 export interface PostgisFixture {
@@ -23,6 +24,9 @@ export async function startPostgis(): Promise<PostgisFixture> {
     .start();
   const connectionString = container.getConnectionUri();
   const sql = postgres(connectionString, { max: 2 });
+  // Production shares its client with drizzle, which replaces the client's
+  // date and JSON serializers and its date parsers.
+  drizzle(sql);
   await sql.unsafe(`CREATE EXTENSION IF NOT EXISTS postgis`);
   return {
     container,
