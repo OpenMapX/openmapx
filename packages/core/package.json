@@ -137,6 +137,10 @@
     "./coverage": {
       "types": "./src/coverage/index.ts",
       "default": "./src/coverage/index.ts"
+    },
+    "./navigation/photo": {
+      "types": "./src/navigation/photo.ts",
+      "default": "./src/navigation/photo.ts"
     }
   },
   "scripts": {

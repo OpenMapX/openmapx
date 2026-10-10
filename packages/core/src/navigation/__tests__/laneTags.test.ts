@@ -131,6 +131,7 @@ describe("parseLaneTags on fixture way 314653469", () => {
     const model = parseLaneTags({ lanes: 5, destinationRefLanes: "A 57|A 57|A 57|A 46|A 46" }, 5)!;
     const merged = mergeExitPanel(model, { ...a57Point, laneCount: undefined, activeLanes: [] });
     expect(merged.activeLanes).toEqual([4]);
+    expect(merged.laneSelectionReliable).toBe(false);
   });
 
   it("appends the exit panel from the ramp tags and moves the active lanes", () => {
@@ -223,10 +224,89 @@ describe("parseLaneTags edge cases", () => {
     expect(parseLaneTags({ destinationRefLanes: "A 57|A 57|A 46|A 46" }, 5)).toBeNull();
   });
 
-  it("returns null with only turn:lanes and no destination tags", () => {
-    expect(
-      parseLaneTags({ lanes: 5, turnLanes: "none|none|none|none|slight_right" }, 5),
-    ).toBeNull();
+  it("retains a turn-only approach for matching the exit lanes", () => {
+    const model = parseLaneTags({ lanes: 5, turnLanes: "none|none|none|none|slight_right" }, 5);
+    expect(model?.laneCount).toBe(5);
+    expect(model?.panels).toEqual([]);
+    expect(model?.laneTurns).toEqual(["none", "none", "none", "none", "slight_right"]);
+  });
+
+  it("keeps both left lanes toward A46 Neuss when the other two turn right", () => {
+    const model = parseLaneTags({ lanes: 4, turnLanes: "none|none|slight_right|slight_right" });
+    expect(model).not.toBeNull();
+    const merged = mergeExitPanel(
+      model!,
+      {
+        ...a57Point,
+        side: "left",
+        laneCount: undefined,
+        activeLanes: [],
+        sign: { exitBranches: ["A 46"], exitToward: ["Düsseldorf", "Neuss"] },
+      },
+      { lanes: 2, destination: "Düsseldorf;Neuss", destinationRef: "A 46" },
+    );
+    expect(merged.laneCount).toBe(4);
+    expect(merged.activeLanes).toEqual([0, 1]);
+    expect(merged.panels.find((panel) => panel.isExit)?.lanes).toEqual([0, 1]);
+  });
+
+  it("uses both lanes whose destination board names the selected A44 branch", () => {
+    const model = parseLaneTags({
+      lanes: 4,
+      destinationRefLanes: "A 4|A 4|A 44|A 44",
+      destinationLanes: "Köln|Köln|Düsseldorf;Liège|Düsseldorf;Liège",
+    })!;
+    const merged = mergeExitPanel(
+      model,
+      {
+        ...a57Point,
+        side: "right",
+        laneCount: undefined,
+        activeLanes: [],
+        sign: { exitBranches: ["A 44"], exitToward: ["Düsseldorf", "Liège"] },
+      },
+      { lanes: 2, destination: "Düsseldorf;Liège", destinationRef: "A44" },
+    );
+    expect(merged.activeLanes).toEqual([2, 3]);
+  });
+
+  it("disambiguates branches with the same motorway number by destination and turns", () => {
+    const model = parseLaneTags({
+      lanes: 4,
+      destinationRefLanes: "A46|A46|A46|A46",
+      destinationLanes: "Neuss|Neuss|Düsseldorf|Düsseldorf",
+      turnLanes: "slight_left|slight_left|slight_right|slight_right",
+    })!;
+    const merged = mergeExitPanel(
+      model,
+      {
+        ...a57Point,
+        side: "left",
+        laneCount: undefined,
+        activeLanes: [],
+        sign: { exitBranches: ["A46"], exitToward: ["Neuss"] },
+      },
+      { lanes: 2, destinationRef: "A46", destination: "Neuss" },
+    );
+    expect(merged.activeLanes).toEqual([0, 1]);
+  });
+
+  it("does not treat a shared motorway reference as evidence for every lane of a smaller branch", () => {
+    const model = parseLaneTags({ lanes: 4, destinationRefLanes: "A46|A46|A46|A46" });
+    if (!model) throw new Error("Missing lane model");
+    const merged = mergeExitPanel(
+      model,
+      {
+        ...a57Point,
+        side: "left",
+        laneCount: undefined,
+        activeLanes: [],
+        sign: { exitBranches: ["A46"], exitToward: ["Neuss"] },
+      },
+      { lanes: 2, destinationRef: "A46", destination: "Neuss" },
+    );
+    expect(merged.laneSelectionReliable).toBe(false);
+    expect(merged.activeLanes).toEqual([0]);
   });
 
   it("attaches destination:symbol:lanes to its lane", () => {

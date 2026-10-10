@@ -114,6 +114,8 @@ export interface GantryModel {
   laneCount: number;
   panels: GantryPanel[];
   activeLanes: number[];
+  /** False when the highlighted outer lane is only a schematic fallback. */
+  laneSelectionReliable?: boolean;
   /** Raw OSM `turn:lanes` token per lane, left to right, when the way carries them. */
   laneTurns?: string[];
   /** "osm" when built from way tags; "engine" when only the engine sign was available. */

@@ -9,13 +9,10 @@ import type {
   PhotoRoutePath,
   StreetLevelImage,
 } from "@openmapx/core";
-import { projectRoutePath } from "@openmapx/core";
 import { useLocale, useTranslations } from "next-intl";
-import { useMemo, useState } from "react";
+import { usePhotoAlignment } from "./usePhotoAlignment";
 
 const PHOTO_HEIGHT = 180;
-/** Frame shape used until the photo reports or reveals its own. */
-const DEFAULT_ASPECT_RATIO = 4 / 3;
 /** Equirectangular frames cover the whole sphere, always 2:1. */
 const PANO_VIEWBOX = { width: 360, height: 180 };
 /** Only one junction photo is on screen at a time, so a fixed id is safe. */
@@ -39,36 +36,18 @@ export function JunctionPhoto({
   point: JunctionDecisionPoint;
   /** The active route, for projecting the path ahead onto the photo. */
   geometry: LngLat[];
-  /** The gantry's lane layout, so the path can move into the exit lane. */
+  /** Permitted lanes with explicit routing or OSM evidence. */
   exitLanes?: { laneCount: number; activeLanes: number[] };
 }) {
   const t = useTranslations("navigation");
   const locale = useLocale();
-  // The frame's shape sets the vertical scale of the projection. The provider's
-  // sensor dimensions are the first guess; the loaded image is the truth, and
-  // is all a provider that reports no sensor gives us.
-  const [measuredAspect, setMeasuredAspect] = useState<number | null>(null);
-  const aspectRatio = measuredAspect ?? image.aspectRatio ?? DEFAULT_ASPECT_RATIO;
-  // The panel re-renders on every fix; the projection depends only on the
-  // route, the decision point, the photo and the lane layout, so it is computed
-  // once per photo. The layout arrives as a fresh object each render, so it is
-  // keyed by value.
-  const laneCount = exitLanes?.laneCount;
-  const activeLanesKey = exitLanes?.activeLanes.join(",");
-  const path = useMemo(
-    () =>
-      projectRoutePath(geometry, point, image, {
-        aspectRatio,
-        ...(laneCount !== undefined && activeLanesKey !== undefined
-          ? {
-              exitLanes: {
-                laneCount,
-                activeLanes: activeLanesKey ? activeLanesKey.split(",").map(Number) : [],
-              },
-            }
-          : {}),
-      }),
-    [geometry, point, image, aspectRatio, laneCount, activeLanesKey],
+  const { path, aspectRatio, onLoad, imageRef } = usePhotoAlignment(
+    geometry,
+    point,
+    image,
+    objectUrl,
+    exitLanes?.laneCount,
+    exitLanes?.activeLanes.join(","),
   );
   const capturedAt = image.capturedAt ? new Date(image.capturedAt) : null;
   const date =
@@ -79,7 +58,13 @@ export function JunctionPhoto({
   return (
     <Box sx={{ display: "flex", flexDirection: "column", gap: 0.5 }} data-testid="junction-photo">
       {image.isPano && path.crop ? (
-        <PanoramaWindow image={image} objectUrl={objectUrl} path={path} />
+        <PanoramaWindow
+          image={image}
+          objectUrl={objectUrl}
+          path={path}
+          onLoad={onLoad}
+          imageRef={imageRef}
+        />
       ) : (
         <Box sx={{ height: PHOTO_HEIGHT, position: "relative", overflow: "hidden" }}>
           <Box
@@ -87,12 +72,8 @@ export function JunctionPhoto({
             aria-hidden
             alt=""
             src={objectUrl}
-            onLoad={(event: React.SyntheticEvent<HTMLImageElement>) => {
-              const { naturalWidth, naturalHeight } = event.currentTarget;
-              if (naturalWidth > 0 && naturalHeight > 0) {
-                setMeasuredAspect(naturalWidth / naturalHeight);
-              }
-            }}
+            onLoad={onLoad}
+            ref={imageRef}
             sx={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
           />
           {path.visible && (
@@ -127,13 +108,17 @@ function PanoramaWindow({
   image,
   objectUrl,
   path,
+  onLoad,
+  imageRef,
 }: {
   image: StreetLevelImage;
   objectUrl: string;
   path: PhotoRoutePath;
+  onLoad: (event: React.SyntheticEvent<HTMLImageElement>) => void;
+  imageRef: (element: HTMLImageElement | null) => void;
 }) {
   const crop = path.crop ?? { startDeg: 0, spanDeg: 90 };
-  const leftEdgeDeg = (image.heading ?? 0) - 180;
+  const leftEdgeDeg = (path.imageHeadingDeg ?? image.heading ?? 0) - 180;
   const offsetDeg = (((crop.startDeg - leftEdgeDeg) % 360) + 360) % 360;
   const windowsPerTurn = 360 / crop.spanDeg;
   const leftPercent = -(offsetDeg / crop.spanDeg) * 100;
@@ -159,6 +144,8 @@ function PanoramaWindow({
         alt=""
         src={objectUrl}
         data-left-percent={leftPercent}
+        onLoad={onLoad}
+        ref={imageRef}
         sx={{ ...slice, left: `${leftPercent}%` }}
       />
       {wraps && (
@@ -183,13 +170,9 @@ function PanoramaWindow({
 }
 
 /**
- * The route ahead, drawn as a ribbon on the road: it narrows with distance,
- * bends where the route leaves the carriageway, and fades out toward the
- * horizon, where the projection is least certain and the road is a few pixels
- * wide. Coordinates are percentages of the source image, so the overlay is
- * laid out over the same box as the photo and cropped the same way (`slice`
- * mirrors `object-fit: cover`) — the path stays on the road when the frame is
- * cropped.
+ * One fixed ribbon per permitted lane, over the road stretch verified against
+ * the photo. Source-image coordinates and crop are shared with the image;
+ * separately projected edges preserve the width under camera skew.
  */
 function RoutePathOverlay({
   path,
@@ -204,11 +187,23 @@ function RoutePathOverlay({
     (xPercent / 100) * viewBox.width,
     (yPercent / 100) * viewBox.height,
   ];
-  const left = path.points.map((p) => toViewBox(p.xPercent - p.widthPercent / 2, p.yPercent));
-  const right = path.points.map((p) => toViewBox(p.xPercent + p.widthPercent / 2, p.yPercent));
-  const ribbon = [...left, ...right.reverse()]
-    .map(([x, y]) => `${x.toFixed(2)},${y.toFixed(2)}`)
-    .join(" ");
+  const ribbons = (path.ribbons ?? [path.points]).map((points) => {
+    const left = points.map((p) =>
+      toViewBox(
+        p.left?.xPercent ?? p.xPercent - p.widthPercent / 2,
+        p.left?.yPercent ?? p.yPercent,
+      ),
+    );
+    const right = points.map((p) =>
+      toViewBox(
+        p.right?.xPercent ?? p.xPercent + p.widthPercent / 2,
+        p.right?.yPercent ?? p.yPercent,
+      ),
+    );
+    return [...left, ...right.reverse()]
+      .map(([x, y]) => `${x.toFixed(2)},${y.toFixed(2)}`)
+      .join(" ");
+  });
   const centre = path.points
     .map((p) => `${p.xPercent.toFixed(2)},${p.yPercent.toFixed(2)}`)
     .join(" ");
@@ -229,13 +224,16 @@ function RoutePathOverlay({
           <stop offset="1" stopColor="rgba(26, 115, 232, 0.08)" />
         </linearGradient>
       </defs>
-      <polygon
-        points={ribbon}
-        fill={`url(#${FADE_GRADIENT_ID})`}
-        stroke="rgba(255, 255, 255, 0.45)"
-        strokeWidth={(0.0015 * viewBox.width).toFixed(3)}
-        strokeLinejoin="round"
-      />
+      {ribbons.map((ribbon) => (
+        <polygon
+          key={ribbon}
+          points={ribbon}
+          fill={`url(#${FADE_GRADIENT_ID})`}
+          stroke="rgba(255, 255, 255, 0.45)"
+          strokeWidth={(0.0015 * viewBox.width).toFixed(3)}
+          strokeLinejoin="round"
+        />
+      ))}
     </Box>
   );
 }

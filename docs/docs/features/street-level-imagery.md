@@ -119,15 +119,19 @@ contract and exposing the same routes under
 While driving, the [junction view](./directions.md#turn-by-turn-navigation) can
 show a recent street-level image of an exit's approach, taken 30–200 m upstream
 and facing along the road — preferably where OpenStreetMap says the exit lanes
-already exist, so every lane to choose from is in the picture. It is prefetched when the route starts (never per GPS
-fix), the road ahead is projected onto it as a ribbon that narrows with distance
-and bends into the ramp — moving over from the lane the picture was taken in to
-the exit lane the overhead gantry names, and scaled to the frame's own shape,
-taken from the picture's sensor dimensions and the loaded image. The lens's
-field of view comes from Panoramax, else from the photo's focal length, else is
-assumed to be a phone's; for a dashcam or action camera with no lens data the
-road is not drawn at all, since a wide lens would put it off the road. For a regular photo
-the provider's thumbnail is used rather than the full frame, to keep mobile data low; a
+already exist, so every lane to choose from is in the picture. It is prefetched when the route starts (never per GPS fix).
+
+When routing or OpenStreetMap identifies the permitted lanes, the web app matches
+visible road markings against that lane layout in a background worker. Each
+permitted lane gets a separate ribbon inside its own corridor. These show where
+you may stay; the photo's GPS position is not used to suggest a lane change.
+The camera heading, height and tilt are fitted to the image, and the ribbons end
+on the observed approach rather than guessing a path beyond the split. Photos
+with weak markings, an ambiguous lane count, or insufficient lane evidence stay
+visible without ribbons. A regular photo also needs a known lens field of view.
+Matching runs locally on the loaded image and makes no additional provider requests.
+
+For a regular photo, the provider's thumbnail is used rather than the full frame, to keep mobile data low; a
 360° photo loads its reduced full frame, since its thumbnail is only a crop from the
 middle. It shows a 90° window facing along the route's approach. Switching junction
 photos off hides them at once, including ones already loaded. A caption below the

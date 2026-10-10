@@ -100,7 +100,11 @@ export function JunctionViewPanel({ point, gantry, photo, geometry }: Props) {
           objectUrl={photo.objectUrl}
           point={point}
           geometry={geometry}
-          exitLanes={{ laneCount: model.laneCount, activeLanes: model.activeLanes }}
+          exitLanes={
+            model.laneSelectionReliable === false
+              ? undefined
+              : { laneCount: model.laneCount, activeLanes: model.activeLanes }
+          }
         />
       ) : (
         <SchematicBody model={model} point={point} />
