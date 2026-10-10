@@ -81,6 +81,11 @@ vi.mock("../../utils/cache.js", () => ({
   TTL: { places: { detail: 86400 }, photos: 3600 },
 }));
 
+const mockAmbientPlace = vi.fn().mockResolvedValue(null);
+vi.mock("@openmapx/core/ambient-places-server", () => ({
+  readAmbientPlaceByGers: (...args: unknown[]) => mockAmbientPlace(...args),
+}));
+
 // App setup
 
 let app: FastifyInstance;
@@ -1502,5 +1507,55 @@ describe("pickMoreSpecificWebsite", () => {
     expect(
       pickMoreSpecificWebsite("https://restaurant-mueller.de/", "https://www.lieferando.de/x/y/z"),
     ).toBe("https://restaurant-mueller.de/");
+  });
+});
+
+describe("published ambient GERS details without the search provider", () => {
+  it("resolves the published canonical identity without nearest-place fallback", async () => {
+    mockAmbientPlace.mockResolvedValueOnce({
+      generation: "published-generation",
+      place: {
+        id: "osm:node/9007199254740993",
+        gersId: "gers-a",
+        name: "Klinik",
+        names: { en: "Clinic" },
+        coordinates: [6.08, 50.77],
+        category: "hospital",
+        rank: 380,
+        minZoom: 13,
+        tenant: false,
+        sources: "osm,overture",
+      },
+    });
+    const response = await app.inject({
+      method: "GET",
+      url: "/places/overture:gers-a?lat=50.77&lng=6.08&name=Clinic&lang=en",
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      id: "osm:node/9007199254740993",
+      name: "Clinic",
+      ids: { osm: "node/9007199254740993", overture: "gers-a" },
+    });
+    expect(mockLookupByNameAndCoords).not.toHaveBeenCalled();
+    expect(mockLookupByCoords).not.toHaveBeenCalled();
+    expect(mockHashKey).toHaveBeenCalledWith(
+      "cache:place",
+      expect.objectContaining({ ambientGeneration: "published-generation" }),
+    );
+  });
+  it("preserves existing fallback for an unpublished disabled-provider deep link", async () => {
+    mockAmbientPlace.mockResolvedValueOnce(null);
+    mockIsEnabledIntegrationScheme.mockReturnValue(false);
+    mockLookupByNameAndCoords.mockResolvedValueOnce(MOCK_PLACE);
+    mockGetPlaceKnowledge.mockResolvedValue({ externalIds: {} });
+    mockBuildReviewLinks.mockReturnValue([]);
+    const response = await app.inject({
+      method: "GET",
+      url: "/places/overture:not-published?lat=50.77&lng=6.08&name=Clinic",
+    });
+    expect(response.statusCode).toBe(200);
+    expect(mockAmbientPlace).toHaveBeenCalled();
+    expect(mockLookupByNameAndCoords).toHaveBeenCalled();
   });
 });

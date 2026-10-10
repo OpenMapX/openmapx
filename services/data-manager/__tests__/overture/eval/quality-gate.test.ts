@@ -15,6 +15,12 @@ import {
   validateOvertureQuality,
 } from "../../../src/jobs/overture/eval/quality-gate.js";
 
+it("includes all labeled regional cases in a planet import gate", () => {
+  for (const region of [...OVERTURE_QUALITY_BASELINE.map((c) => c.region), "asia/japan"]) {
+    expect(appliesToImportedRegion("planet", region)).toBe(true);
+  }
+});
+
 describe("Overture permanent quality baseline", () => {
   beforeEach(() => {
     mocks.unsafe.mockReset();

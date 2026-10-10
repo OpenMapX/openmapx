@@ -228,3 +228,18 @@ describe("poi-overture health check", () => {
     expect(status.status).toBe("down");
   });
 });
+
+describe("canonical accepted-link identity", () => {
+  it("uses the accepted OSM id even when only the Overture search row is returned", async () => {
+    const db = makeFakeDb([{ ...FIXTURE_ROWS[0], canonical_id: "osm:node/9007199254740993" }]);
+    const ctx = createMockIntegrationContext({ db });
+    const { setup } = await import("../index.js");
+    setup(ctx);
+    const provider = ctx.registered.poiSearch[0];
+    const result = await toOutcome(provider.search("cafes", BBOX));
+    expect(result.results[0]).toMatchObject({
+      id: "osm:node/9007199254740993",
+      gersId: "gers-abc-001",
+    });
+  });
+});

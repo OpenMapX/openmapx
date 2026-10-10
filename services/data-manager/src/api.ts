@@ -12,6 +12,7 @@ import type postgres from "postgres";
 import { type CoverageApiOptions, registerCoverageEvidenceRoute } from "./coverage/api.js";
 import type { CoverageSnapshotStore } from "./coverage/snapshot-store.js";
 import { db, sql } from "./db/index.js";
+import { registerAmbientPlacesApi } from "./jobs/ambient-places/api.js";
 import { convertPbfToBz2, convertPbfToBz2ForRegion } from "./jobs/convert-overpass.js";
 import { downloadFonts } from "./jobs/download-fonts.js";
 import { downloadOsm } from "./jobs/download-osm.js";
@@ -491,6 +492,7 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
   const singleFlight = opts.singleFlight ?? getSingleFlightController();
   const store = new StateStore(dataDir);
   const searchIndexSql = opts.searchIndexSql ?? sql;
+  registerAmbientPlacesApi(app, searchIndexSql);
   const searchIndexRuntimeState = createSearchIndexRuntimeState();
   const searchIndexOperationLock = createSearchIndexOperationLock(searchIndexSql);
   const notablePlaces = opts.notablePlaces ?? {

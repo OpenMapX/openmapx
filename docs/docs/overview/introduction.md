@@ -28,7 +28,7 @@ which optional engines and data sources to run.
 - **A pluggable backend** — each daemon (the routing engine, the geocoder, the
   transit engine, the tile server, …) is described by a manifest and runs as a
   container.
-- **A pluggable feature set** — 105 built-in _integrations_ span search,
+- **A pluggable feature set** — 106 built-in _integrations_ span search,
   routing, transit, live mobility, places, overlays, weather, and more.
   Community extensions — integrations, services, or bundles of both —
   install from one unified **Extensions** store.

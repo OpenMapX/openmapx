@@ -3,6 +3,7 @@
 import useMediaQuery from "@mui/material/useMediaQuery";
 import type { Place } from "@openmapx/core";
 import {
+  categoryPlaceToPlace,
   createPlace,
   PANEL,
   useDirectionsStore,
@@ -47,6 +48,7 @@ const HIDE_GRACE_MS = 150;
  * open exactly this place, so they share one place lookup.
  */
 export function stylePoiPlace(target: StylePoiTarget): Place {
+  if (target.canonicalPlace) return categoryPlaceToPlace(target.canonicalPlace);
   return createPlace({
     primaryScheme: "stylePoi",
     ids: { stylePoi: target.featureId },

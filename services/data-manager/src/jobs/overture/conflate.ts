@@ -1,3 +1,5 @@
+export { buildConflationComponents } from "./components.js";
+
 import {
   haversineMeters,
   nameSimilarity,
@@ -18,6 +20,7 @@ import {
 } from "@openmapx/core/utils/poiConflation";
 import { gridDisk, latLngToCell } from "h3-js";
 import { sql } from "../../db/index.js";
+import { buildConflationComponents } from "./components.js";
 import { cosineSimilarity, DEFAULT_MODEL, embed, ensureEmbeddingModel } from "./embeddings.js";
 import { assertValidRegion, resolveOvertureRelease } from "./pull.js";
 import { assertValidOvertureSchema } from "./schema.js";
@@ -148,6 +151,8 @@ export async function scoreLinkCandidates(
         const distanceM = haversineMeters(osm.lat, osm.lng, place.lat, place.lng);
         if (distanceM > thresholds.softWindowM) continue;
         candidates.set(`${osm.id}\u0000${place.id}`, { osm, place, distanceM });
+        if (candidates.size > 50_000)
+          throw new Error("Candidate page exceeds 50000 edges; investigate dense source data");
       }
     }
   }
@@ -268,7 +273,6 @@ export function assignLinkRecords(edges: LinkRecord[]): LinkRecord[] {
 }
 
 const OSM_PAGE_SIZE = 2_000;
-const ENDPOINT_PAGE_SIZE = 25_000;
 const COMPONENT_BATCH_SIZE = 2_000;
 const LINK_COLUMN_COUNT = 9;
 const LINK_ROWS_PER_BATCH = Math.floor(65_500 / LINK_COLUMN_COUNT);
@@ -477,9 +481,11 @@ export async function scoreOvertureCandidates(opts: {
        FROM "${schema}".places
        WHERE h3_r8 = ANY($1::TEXT[])
          AND (operating_status IS NULL OR operating_status <> 'permanently_closed')
-         AND (confidence IS NULL OR confidence >= ${MIN_CONFLATE_CONFIDENCE})`,
+         AND (confidence IS NULL OR confidence >= ${MIN_CONFLATE_CONFIDENCE}) LIMIT 50001`,
       [cells],
     );
+    if (placeRows.length > 50_000)
+      throw new Error("Candidate neighborhood exceeds 50000 places; investigate dense source data");
     const candidates = await scoreLinkCandidates(placeRows.map(placeRowToPoint), osmPois, {
       thresholds: DEFAULT_CONFLATION_THRESHOLDS,
       embedFn,
@@ -516,146 +522,6 @@ export async function scoreOvertureCandidates(opts: {
     processed,
     cursor: { h3: cursorCell, osmType: cursorType, osmId: cursorId },
   };
-}
-
-class DisjointSet {
-  private readonly index = new Map<string, number>();
-  private readonly keys: string[] = [];
-  private readonly parent: number[] = [];
-  private readonly rank: number[] = [];
-
-  private add(key: string): number {
-    const existing = this.index.get(key);
-    if (existing !== undefined) return existing;
-    const next = this.parent.length;
-    this.index.set(key, next);
-    this.keys.push(key);
-    this.parent.push(next);
-    this.rank.push(0);
-    return next;
-  }
-
-  private findIndex(index: number): number {
-    let root = index;
-    while (this.parent[root] !== root) root = this.parent[root];
-    let cursor = index;
-    while (this.parent[cursor] !== cursor) {
-      const next = this.parent[cursor];
-      this.parent[cursor] = root;
-      cursor = next;
-    }
-    return root;
-  }
-
-  union(left: string, right: string): void {
-    let a = this.findIndex(this.add(left));
-    let b = this.findIndex(this.add(right));
-    if (a === b) return;
-    if (this.rank[a] < this.rank[b]) [a, b] = [b, a];
-    this.parent[b] = a;
-    if (this.rank[a] === this.rank[b]) this.rank[a] += 1;
-  }
-
-  rootOf(key: string): number {
-    const index = this.index.get(key);
-    if (index === undefined) throw new Error(`Unknown conflation endpoint ${key}`);
-    return this.findIndex(index);
-  }
-
-  osmKeys(): string[] {
-    return this.keys.filter((key) => key.startsWith("o:"));
-  }
-}
-
-interface EndpointRow {
-  osm_type: string;
-  osm_id: string;
-  gers_id: string;
-}
-
-async function insertComponentRows(
-  schema: string,
-  rows: Array<{ osmType: string; osmId: string; componentId: number }>,
-): Promise<void> {
-  const batchSize = 10_000;
-  for (let offset = 0; offset < rows.length; offset += batchSize) {
-    const batch = rows.slice(offset, offset + batchSize);
-    await sql.unsafe(
-      `INSERT INTO "${schema}".poi_conflation_component
-         (osm_type, osm_id, component_id)
-       SELECT UNNEST($1::TEXT[]), UNNEST($2::BIGINT[]), UNNEST($3::BIGINT[])`,
-      [
-        batch.map((row) => row.osmType),
-        batch.map((row) => row.osmId),
-        batch.map((row) => row.componentId),
-      ],
-    );
-  }
-}
-
-/**
- * Builds exact connected-component labels from the persisted bipartite graph.
- * Only endpoint identifiers are held during this pass; the much wider scored
- * rows remain in Postgres and are read later one bounded group of components at
- * a time.
- */
-export async function buildConflationComponents(
-  schema: string,
-  onProgress?: (msg: string) => void,
-): Promise<number> {
-  assertValidOvertureSchema(schema);
-  await sql.unsafe(
-    `TRUNCATE TABLE "${schema}".poi_conflation_component,
-                    "${schema}".poi_conflation_link_next`,
-  );
-
-  const sets = new DisjointSet();
-  let cursorType = "";
-  let cursorId = "0";
-  let cursorGers = "";
-  let edges = 0;
-  while (true) {
-    const rows = await sql.unsafe<EndpointRow[]>(
-      `SELECT osm_type, osm_id::TEXT, gers_id
-       FROM "${schema}".poi_conflation_candidate
-       WHERE osm_type > $1
-          OR (osm_type = $1 AND osm_id > $2::BIGINT)
-          OR (osm_type = $1 AND osm_id = $2::BIGINT AND gers_id > $3)
-       ORDER BY osm_type, osm_id, gers_id
-       LIMIT $4`,
-      [cursorType, cursorId, cursorGers, ENDPOINT_PAGE_SIZE],
-    );
-    if (rows.length === 0) break;
-    for (const row of rows) {
-      sets.union(`o:${row.osm_type}:${row.osm_id}`, `g:${row.gers_id}`);
-    }
-    edges += rows.length;
-    const last = rows[rows.length - 1];
-    if (!last) break;
-    cursorType = last.osm_type;
-    cursorId = last.osm_id;
-    cursorGers = last.gers_id;
-    onProgress?.(`Indexed ${edges} candidate edges into exact connected components...`);
-  }
-
-  const osmKeys = sets.osmKeys().sort();
-  const componentByRoot = new Map<number, number>();
-  const rows: Array<{ osmType: string; osmId: string; componentId: number }> = [];
-  for (const key of osmKeys) {
-    const root = sets.rootOf(key);
-    let componentId = componentByRoot.get(root);
-    if (componentId === undefined) {
-      componentId = componentByRoot.size + 1;
-      componentByRoot.set(root, componentId);
-    }
-    const [, osmType, osmId] = key.split(":");
-    if (!osmType || !osmId) throw new Error(`Invalid OSM component endpoint ${key}`);
-    rows.push({ osmType, osmId, componentId });
-  }
-  await insertComponentRows(schema, rows);
-  await sql.unsafe(`ANALYZE "${schema}".poi_conflation_component`);
-  onProgress?.(`Materialized ${componentByRoot.size} disconnected components from ${edges} edges.`);
-  return componentByRoot.size;
 }
 
 interface ComponentLinkRow extends LinkRecord {
@@ -696,8 +562,9 @@ export async function assignOvertureCandidates(opts: {
   }
 
   while (true) {
-    const rows = await sql.unsafe<ComponentLinkRow[]>(
-      `WITH next_components AS MATERIALIZED (
+    const readPage = (size: number) =>
+      sql.unsafe<ComponentLinkRow[]>(
+        `WITH next_components AS MATERIALIZED (
          SELECT DISTINCT component_id
          FROM "${schema}".poi_conflation_component
          WHERE component_id > $1
@@ -713,9 +580,13 @@ export async function assignOvertureCandidates(opts: {
        JOIN "${schema}".poi_conflation_candidate AS candidate
          USING (osm_type, osm_id)
        ORDER BY component.component_id, candidate.osm_type,
-                candidate.osm_id, candidate.gers_id`,
-      [assignmentCursor, COMPONENT_BATCH_SIZE],
-    );
+                candidate.osm_id, candidate.gers_id LIMIT 50001`,
+        [assignmentCursor, size],
+      );
+    let rows = await readPage(COMPONENT_BATCH_SIZE);
+    if (rows.length > 50_000) rows = await readPage(1);
+    if (rows.length > 50_000)
+      throw new Error("Conflation component exceeds 50000 edges; investigate dense source data");
     if (rows.length === 0) break;
 
     const byComponent = new Map<number, LinkRecord[]>();
@@ -734,6 +605,15 @@ export async function assignOvertureCandidates(opts: {
         release: row.release,
       });
       byComponent.set(componentId, links);
+    }
+    for (const links of byComponent.values()) {
+      if (
+        new Set(links.map((l) => `${l.osm_type}:${l.osm_id}`)).size > 512 ||
+        new Set(links.map((l) => l.gers_id)).size > 512
+      )
+        throw new Error(
+          "Conflation component exceeds 512 nodes per side; investigate dense source data",
+        );
     }
     const selected = [...byComponent.values()].flatMap(assignLinkRecords);
     await insertLinkRows(schema, "poi_conflation_link_next", selected, (query, parameters) =>

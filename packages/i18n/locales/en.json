@@ -423,7 +423,8 @@
     "nautical": "Nautical",
     "sunTime": "Daylight & time zones",
     "schematicTransit": "Schematic transit map",
-    "closeMorePanel": "Close more panel placeholder"
+    "closeMorePanel": "Close more panel placeholder",
+    "ambientPlaces": "Nearby places"
   },
   "schematicTransit": {
     "title": "Schematic transit map",
@@ -4378,5 +4379,15 @@
     "delay": "+{delay}",
     "coverageExplanation": "Current traffic is included in this travel time.",
     "estimateExplanation": "The extra time is estimated by comparing this route with and without current traffic speeds. Actual delays can vary."
+  },
+  "ambientPlaces": {
+    "title": "Nearby places",
+    "toggle": "Show nearby places",
+    "unavailable": "No regional snapshot is available",
+    "snapshot": "Snapshot {date}",
+    "combined": "OSM + Overture",
+    "osmOnly": "OSM only",
+    "disabled": "This regional snapshot is disabled or out of date",
+    "error": "Refresh unavailable; using the last available snapshot"
   }
 }

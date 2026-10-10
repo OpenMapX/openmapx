@@ -342,5 +342,6 @@
   "poi-bollard": { "x": 144, "y": 942, "width": 46, "height": 46, "pixelRatio": 2 },
   "poi-cycle_barrier": { "x": 192, "y": 942, "width": 46, "height": 46, "pixelRatio": 2 },
   "poi-sally_port": { "x": 624, "y": 894, "width": 46, "height": 46, "pixelRatio": 2 },
-  "poi-stile": { "x": 624, "y": 894, "width": 46, "height": 46, "pixelRatio": 2 }
+  "poi-stile": { "x": 624, "y": 894, "width": 46, "height": 46, "pixelRatio": 2 },
+  "poi-place": { "x": 240, "y": 942, "width": 46, "height": 46, "pixelRatio": 2 }
 }

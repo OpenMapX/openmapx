@@ -57,7 +57,7 @@ wildcard routes, so Fastify's own introspection sees `/api/integrations/:id` and
 nothing else.
 
 They are therefore read **statically**, by parsing the `registerRoute` call
-sites with the TypeScript compiler API across the 105 built-in integrations.
+sites with the TypeScript compiler API across the 106 built-in integrations.
 Running every integration's `setup()` against a stub context executes arbitrary
 integration code — including registry loads — inside a commit gate, so the
 static scan was preferred. Both approaches independently verify the declared

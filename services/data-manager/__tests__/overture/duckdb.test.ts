@@ -60,3 +60,36 @@ describe("DuckDB secret transport", () => {
     expect(options.env).toEqual({ PATH: "/bin" });
   });
 });
+
+import * as duck from "../../src/jobs/overture/duckdb.js";
+
+it("bounds DuckDB resources and rejects untrusted resource expressions", () => {
+  const sql = duck.duckDbResourceSql({
+    OVERTURE_DUCKDB_MEMORY_MB: "1024",
+    OVERTURE_DUCKDB_THREADS: "2",
+    OVERTURE_DUCKDB_TEMP_MB: "8192",
+  });
+  expect(sql).toContain("memory_limit='1024MiB'");
+  expect(sql).toContain("threads=2");
+  expect(sql).toContain("max_temp_directory_size='8192MiB'");
+  for (const value of ["0", "1; SELECT secret", "NaN", "-5"]) {
+    expect(() => duck.duckDbResourceSql({ OVERTURE_DUCKDB_THREADS: value })).toThrow();
+  }
+});
+
+it.each(["", " \t "])("uses bounded DuckDB defaults for blank optional settings %j", (value) => {
+  const sql = duck.duckDbResourceSql({
+    OVERTURE_DUCKDB_MEMORY_MB: value,
+    OVERTURE_DUCKDB_THREADS: value,
+    OVERTURE_DUCKDB_TEMP_MB: value,
+  });
+  expect(sql).toContain("memory_limit='2048MiB'");
+  expect(sql).toContain("threads=4");
+  expect(sql).toContain("max_temp_directory_size='32768MiB'");
+});
+
+it("spills DuckDB on the persistent data volume and quotes arbitrary directory names", () => {
+  expect(duck.duckDbResourceSql({ DATA_DIR: "/scratch/it's data" })).toContain(
+    "temp_directory='/scratch/it''s data/overture/duckdb-tmp'",
+  );
+});

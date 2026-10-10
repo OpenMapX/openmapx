@@ -30,8 +30,11 @@
     "undici": "^8.10.2"
   },
   "devDependencies": {
+    "@mapbox/vector-tile": "3.0.0",
+    "@openmapx/integration-framework": "workspace:^",
     "@testcontainers/postgresql": "^12.1.0",
     "@types/node": "^26.6.2",
+    "pbf": "5.1.2",
     "typescript": "^6.0.3",
     "vitest": "^5.0.1"
   }

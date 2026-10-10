@@ -11,6 +11,10 @@
       "description": "Operator-facing administration of integrations, services, settings and jobs."
     },
     {
+      "name": "ambient-places",
+      "description": "Routes under /api/ambient-places."
+    },
+    {
       "name": "attribution",
       "description": "Routes under /api/attribution."
     },
@@ -144,6 +148,186 @@
     }
   ],
   "paths": {
+    "/api/admin/ambient-places/build": {
+      "post": {
+        "operationId": "postApiAdminAmbientPlacesBuild",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "name",
+                  "bounds"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 80
+                  },
+                  "coverage": {
+                    "type": "string",
+                    "enum": [
+                      "germany",
+                      "planet"
+                    ]
+                  },
+                  "bounds": {
+                    "type": "array",
+                    "minItems": 4,
+                    "maxItems": 4,
+                    "items": {
+                      "type": "number"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "x-openmapx-auth": "admin"
+      }
+    },
+    "/api/admin/ambient-places/discard": {
+      "post": {
+        "operationId": "postApiAdminAmbientPlacesDiscard",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "generation"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "generation": {
+                    "type": "string",
+                    "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "x-openmapx-auth": "admin"
+      }
+    },
+    "/api/admin/ambient-places/enabled": {
+      "post": {
+        "operationId": "postApiAdminAmbientPlacesEnabled",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "enabled"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "enabled": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "x-openmapx-auth": "admin"
+      }
+    },
+    "/api/admin/ambient-places/resume": {
+      "post": {
+        "operationId": "postApiAdminAmbientPlacesResume",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "generation"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "generation": {
+                    "type": "string",
+                    "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "x-openmapx-auth": "admin"
+      }
+    },
+    "/api/admin/ambient-places/rollback": {
+      "post": {
+        "operationId": "postApiAdminAmbientPlacesRollback",
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "x-openmapx-auth": "admin"
+      }
+    },
+    "/api/admin/ambient-places/status": {
+      "get": {
+        "operationId": "getApiAdminAmbientPlacesStatus",
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "x-openmapx-auth": "admin"
+      }
+    },
     "/api/admin/audit": {
       "get": {
         "operationId": "getApiAdminAudit",
@@ -1915,6 +2099,68 @@
           "admin"
         ],
         "x-openmapx-auth": "admin"
+      }
+    },
+    "/api/ambient-places/manifest": {
+      "get": {
+        "operationId": "getApiAmbientPlacesManifest",
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "ambient-places"
+        ],
+        "x-openmapx-auth": "public"
+      }
+    },
+    "/api/ambient-places/tiles/{generation}/{z}/{x}/{y}.mvt": {
+      "get": {
+        "operationId": "getApiAmbientPlacesTilesGenerationZXYMvt",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "generation",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "z",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "x",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "y",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "ambient-places"
+        ],
+        "x-openmapx-auth": "public"
       }
     },
     "/api/attribution": {
