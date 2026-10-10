@@ -33,6 +33,27 @@ export function JunctionSchematicView({ schematic }: { schematic: JunctionSchema
         />
       ))}
       {schematic.rampPath && <path data-ramp d={schematic.rampPath} fill="#9fd0ff" />}
+      {schematic.branches?.map((branch) => (
+        <g key={branch.wayId} data-branch-road data-selected={String(branch.selected)}>
+          <path
+            d={branch.path}
+            fill="none"
+            stroke="#3a3d42"
+            strokeWidth={branch.lanePaths.length > 0 ? branch.lanePaths.length * 8 + 3 : 12}
+          />
+          {branch.lanePaths.map((path, index) => (
+            <path
+              // biome-ignore lint/suspicious/noArrayIndexKey: branch lane bands have no stable id
+              key={index}
+              data-branch-lane
+              d={path}
+              fill="none"
+              stroke={branch.selected ? "#9fd0ff" : "#565b63"}
+              strokeWidth={6}
+            />
+          ))}
+        </g>
+      ))}
     </Box>
   );
 }

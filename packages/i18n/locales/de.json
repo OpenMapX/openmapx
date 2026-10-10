@@ -236,7 +236,8 @@
     "junctionViewLabel": "Kreuzungsansicht",
     "junctionLaneSummary": "Spur {lane} von {total} nutzen",
     "junctionLanesSummary": "Spuren {lanes} von {total} nutzen",
-    "junctionLaneCount": "{total} Spuren",
+    "junctionLaneCount": "{total, plural, one {# Spur} other {# Spuren}}",
+    "junctionBranchesSummary": "Abzweige: {branches}",
     "junctionPhotoCaption": "© {author} · {license} · {date}"
   },
   "common": {

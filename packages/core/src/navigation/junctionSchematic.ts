@@ -88,6 +88,20 @@ export function buildJunctionSchematic(
       ].join(" ")
     : "";
 
+  const branches = model.branches?.map((branch, index, all) => {
+    const x = 70 + (180 * index) / Math.max(1, all.length - 1);
+    const path = `M 160 ${top} Q ${x} ${top - 10} ${x} 8`;
+    const count = branch.laneCount;
+    const lanePaths =
+      count === undefined
+        ? []
+        : Array.from({ length: count }, (_, lane) => {
+            const end = x + (lane - (count - 1) / 2) * 8;
+            return `M 160 ${top} Q ${end} ${top - 10} ${end} 8`;
+          });
+    return { wayId: branch.wayId, selected: branch.selected, path, lanePaths };
+  });
+
   const panelAnchors = model.panels.map((panel) => {
     const first = panel.lanes[0] ?? 0;
     const last = panel.lanes.at(-1) ?? first;
@@ -107,8 +121,9 @@ export function buildJunctionSchematic(
     side: point.side,
     divergenceDeg: point.divergenceDeg,
     throughPath,
-    rampPath,
+    rampPath: branches ? "" : rampPath,
     lanePolygons,
     panelAnchors,
+    ...(branches ? { branches } : {}),
   };
 }

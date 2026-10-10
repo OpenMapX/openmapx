@@ -323,8 +323,10 @@ approach is never interrupted.
 
 For motorway and expressway exits, forks, and splits while driving, a **junction view** card
 appears under the banner. Its schematic shows the lane layout at the upcoming
-split, highlighting the recommended lanes and drawing multi-lane branches when
-their lane assignment is known. OpenStreetMap's approach lane count and turn
+split, highlighting the recommended lanes when their assignment is known.
+Connected outgoing roads are also shown with their own destination boards and
+known lane counts, including the continuing motorway at a fork. These symbolic
+roads share a junction point without assigning incoming lanes to either branch. OpenStreetMap's approach lane count and turn
 arrows remain useful even without per-lane destination names. With network
 access, the card also shows the real per-lane destinations where OpenStreetMap
 carries them (`destination:*:lanes`, fetched once per route through Overpass —
@@ -335,7 +337,10 @@ Lane recommendations come from the routing engine when its lane count matches
 the displayed layout; otherwise OpenStreetMap's per-lane turn arrows
 (`turn:lanes`) must agree with the maneuver's exit side. If the lane assignment
 is missing or conflicting, the known lane bands stay unhighlighted and the
-schematic omits the branch. If the lane count is unknown, only the sign is shown.
+schematic only draws branches confirmed by shared OpenStreetMap nodes. The
+routed branch is highlighted only when its destination or reference distinguishes
+it; missing tags preserve the engine sign. If the approach lane count is unknown,
+only the sign is shown.
 About half a minute
 before the exit, a photo preview shows a recent **street-level image** of the
 approach — with its author, licence, and capture date — when coverage from

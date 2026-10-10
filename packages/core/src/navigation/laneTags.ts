@@ -172,6 +172,96 @@ export function mergeExitPanel(
   model: GantryModel,
   point: JunctionDecisionPoint,
   rampTags?: OsmLaneTags,
+  outgoing?: { ways: JunctionWay[] },
+): GantryModel {
+  if (!outgoing || outgoing.ways.length < 2) return mergePrimaryExitPanel(model, point, rampTags);
+  const routeWay = selectOutgoingBySign(outgoing.ways, point);
+  // A nearest link candidate is not route identity at a shared-node fork.
+  // Fall back to the engine sign when no outgoing destination distinguishes it.
+  const merged = mergePrimaryExitPanel(model, point, routeWay?.tags);
+  const primary = merged.panels.find((panel) => panel.isExit);
+  const offset = (bearing: number) => ((bearing - point.approachBearing + 540) % 360) - 180;
+  const ways = [...outgoing.ways].sort(
+    (a, b) => offset(a.bearing) - offset(b.bearing) || a.wayId - b.wayId,
+  );
+  const panels: GantryPanel[] = ways.flatMap((way) => {
+    const labels = branchLabels(way);
+    const selected = way.wayId === routeWay?.wayId;
+    const destinations =
+      labels.destinations.length > 0
+        ? labels.destinations
+        : selected
+          ? (primary?.destinations ?? [])
+          : [];
+    const refs = labels.refs.length > 0 ? labels.refs : selected ? (primary?.refs ?? []) : [];
+    if (destinations.length === 0 && refs.length === 0 && !(selected && primary?.exitNumber))
+      return [];
+    return [
+      {
+        branchWayId: way.wayId,
+        lanes: [],
+        destinations,
+        refs,
+        symbols: splitParts(way.tags.destinationSymbol ?? ""),
+        isExit: selected,
+        ...(selected && primary?.exitNumber ? { exitNumber: primary.exitNumber } : {}),
+      },
+    ];
+  });
+  const branches = ways.map((way) => {
+    const panel = panels.find((entry) => entry.branchWayId === way.wayId);
+    const count = way.tags.lanes;
+    return {
+      wayId: way.wayId,
+      bearing: way.bearing,
+      ...(count !== undefined && Number.isInteger(count) && count > 0 ? { laneCount: count } : {}),
+      selected: way.wayId === routeWay?.wayId,
+      refs: panel?.refs ?? [],
+      destinations: panel?.destinations ?? [],
+    };
+  });
+  // Actual per-lane boards retain their layout; outgoing labels also travel
+  // with the branch model for accessibility without implying lane assignments.
+  if (model.panels.length > 0) return { ...merged, branches };
+  if (!routeWay && primary) panels.push(primary);
+  return { ...merged, branches, panels: panels.length > 0 ? panels : merged.panels };
+}
+
+function branchLabels(way: JunctionWay): { refs: string[]; destinations: string[] } {
+  const refs = splitRefParts(splitParts(way.tags.destinationRef ?? ""));
+  return {
+    refs: refs.refs,
+    destinations: union(splitParts(way.tags.destination ?? ""), refs.places),
+  };
+}
+
+/** Destination text can distinguish branches sharing the same road ref. */
+function selectOutgoingBySign(
+  ways: JunctionWay[],
+  point: JunctionDecisionPoint,
+): JunctionWay | undefined {
+  const normalize = (value: string) => value.toLocaleLowerCase().replace(/\s+/g, "");
+  const toward = (point.sign?.exitToward ?? []).map(normalize);
+  const refs = (point.sign?.exitBranches ?? []).map(normalize);
+  const labeled = ways.map((way) => ({ way, ...branchLabels(way) }));
+  const destinations = labeled.filter((entry) =>
+    entry.destinations.some((place) => toward.includes(normalize(place))),
+  );
+  if (destinations.length > 0) return destinations.length === 1 ? destinations[0].way : undefined;
+  // A reference alone may identify a destination-less road, but cannot override
+  // an explicit, different destination or resolve two same-ref roads.
+  const references = labeled.filter(
+    (entry) =>
+      (toward.length === 0 || entry.destinations.length === 0) &&
+      entry.refs.some((ref) => refs.includes(normalize(ref))),
+  );
+  return references.length === 1 ? references[0].way : undefined;
+}
+
+function mergePrimaryExitPanel(
+  model: GantryModel,
+  point: JunctionDecisionPoint,
+  rampTags?: OsmLaneTags,
 ): GantryModel {
   const exitNumber = point.sign?.exitNumbers?.[0] ?? rampTags?.junctionRef;
   const rampRefs = rampTags?.destinationRef

@@ -80,7 +80,24 @@ export function JunctionViewPanel({ point, gantry, photo, geometry }: Props) {
         : model.laneCount > 0
           ? t("junctionLaneCount", { total: model.laneCount })
           : t("junctionViewLabel");
-  const label = [laneSummary, toward.length > 0 ? t("toward", { places: toward.join(", ") }) : null]
+  const branchSummary = model.branches
+    ?.flatMap((branch) => {
+      const panel = model.panels.find((entry) => entry.branchWayId === branch.wayId);
+      const places = [
+        ...(branch.refs ?? panel?.refs ?? []),
+        ...(branch.destinations ?? panel?.destinations ?? []),
+      ].join(", ");
+      const count =
+        branch.laneCount !== undefined ? t("junctionLaneCount", { total: branch.laneCount }) : "";
+      const summary = [places, count].filter(Boolean).join(", ");
+      return summary ? [summary] : [];
+    })
+    .join("; ");
+  const label = [
+    laneSummary,
+    toward.length > 0 ? t("toward", { places: toward.join(", ") }) : null,
+    branchSummary ? t("junctionBranchesSummary", { branches: branchSummary }) : null,
+  ]
     .filter(Boolean)
     .join(", ");
   return (

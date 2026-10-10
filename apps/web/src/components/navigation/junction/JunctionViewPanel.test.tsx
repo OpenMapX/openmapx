@@ -9,6 +9,7 @@ vi.mock("next-intl", () => ({
       return `Use lanes ${String(values?.lanes)} of ${String(values?.total)}`;
     if (key === "junctionLaneCount") return `${String(values?.total)} lanes`;
     if (key === "junctionViewLabel") return "Junction view";
+    if (key === "junctionBranchesSummary") return `Branches: ${String(values?.branches)}`;
     if (key === "toward") return `toward ${String(values?.places)}`;
     if (key === "junctionPhotoCaption")
       return `© ${String(values?.author)} · ${String(values?.license)} · ${String(values?.date)}`;
@@ -201,4 +202,36 @@ describe("JunctionViewPanel photo integration", () => {
     );
     expect(html).not.toContain("<a ");
   });
+});
+
+it("shows both connected Kreuz Holz boards and branch roads while withholding incoming guidance", () => {
+  const point = findJunctionCandidates(holz.route as unknown as Route)[0];
+  const parsed = parseLaneTags(holz.lookup.approach[0].tags)!;
+  const model = mergeExitPanel(parsed, point, holz.lookup.ramps[0].tags, {
+    ways: holz.lookup.outgoing,
+  });
+  const host = document.createElement("div");
+  host.innerHTML = renderToStaticMarkup(<JunctionViewPanel point={point} gantry={model} />);
+  expect(host.querySelectorAll("[data-panel]")).toHaveLength(2);
+  expect(host.textContent).toContain("Heinsberg");
+  expect(host.textContent).toContain("Venlo");
+  expect(host.textContent).toContain("Mönchengladbach");
+  expect(host.querySelectorAll("[data-branch-road]")).toHaveLength(2);
+  expect(host.querySelectorAll("[data-branch-lane]")).toHaveLength(4);
+  expect(host.querySelectorAll('[data-lane][data-active="true"]')).toHaveLength(0);
+  expect(host.querySelector('[role="img"]')?.getAttribute("aria-label")).toContain("Heinsberg");
+  expect(host.innerHTML).not.toContain("Use lane");
+});
+
+it("announces outgoing destinations when per-lane boards remain in use", () => {
+  const point = findJunctionCandidates(holz.route as unknown as Route)[0];
+  const model = mergeExitPanel(
+    parseLaneTags({ lanes: 4, destinationLanes: "X|X|Y|Y" })!,
+    point,
+    undefined,
+    { ways: holz.lookup.outgoing },
+  );
+  const html = renderToStaticMarkup(<JunctionViewPanel point={point} gantry={model} />);
+  expect(html.match(/aria-label="([^"]+)"/)?.[1]).toContain("Heinsberg");
+  expect(html.match(/aria-label="([^"]+)"/)?.[1]).toContain("2 lanes");
 });

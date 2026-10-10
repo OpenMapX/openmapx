@@ -143,3 +143,39 @@ describe("buildJunctionSchematic", () => {
     expect(schematic.rampPath).toBe("");
   });
 });
+
+describe("connected outgoing branch roads", () => {
+  it("draws two two-lane roads from a common split without lighting incoming lanes", () => {
+    const schematic = buildJunctionSchematic(
+      {
+        ...engineGantry,
+        laneCount: 4,
+        activeLanes: [],
+        branches: [
+          { wayId: 1, bearing: 352, laneCount: 2, selected: true },
+          { wayId: 2, bearing: 357, laneCount: 2, selected: false },
+        ],
+      },
+      a57Point,
+    );
+    expect(schematic.lanePolygons).toHaveLength(4);
+    expect(schematic.activeLanes).toEqual([]);
+    expect(schematic.rampPath).toBe("");
+    expect(schematic.branches?.map((branch) => branch.lanePaths.length)).toEqual([2, 2]);
+    expect(schematic.branches?.map((branch) => branch.selected)).toEqual([true, false]);
+    expect(schematic.branches?.every((branch) => branch.path.startsWith("M 160 58.8"))).toBe(true);
+  });
+  it("keeps an unknown branch count unknown", () => {
+    const schematic = buildJunctionSchematic(
+      {
+        ...engineGantry,
+        branches: [
+          { wayId: 1, bearing: 352, selected: true },
+          { wayId: 2, bearing: 357, laneCount: 2, selected: false },
+        ],
+      },
+      a57Point,
+    );
+    expect(schematic.branches?.[0].lanePaths).toEqual([]);
+  });
+});

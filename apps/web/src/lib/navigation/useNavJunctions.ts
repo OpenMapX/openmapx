@@ -444,10 +444,15 @@ function buildGantry(
   result: JunctionLookupResult,
   point: JunctionDecisionPoint,
 ): GantryModel | null {
-  const approach = selectApproachWay(result.approach, point);
+  const approach =
+    result.outgoingApproachWayId !== undefined
+      ? result.approach.find((way) => way.wayId === result.outgoingApproachWayId)
+      : selectApproachWay(result.approach, point);
   if (!approach) return null;
   const model = parseLaneTags(approach.tags, point.laneCount);
   if (!model) return null;
   const rampWay = selectRampWay(result.ramps, point)[0];
-  return mergeExitPanel(model, point, rampWay?.tags);
+  return mergeExitPanel(model, point, rampWay?.tags, {
+    ways: result.outgoing ?? [],
+  });
 }

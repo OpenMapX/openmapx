@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { GantryModel, JunctionWay } from "../../types/junction";
 import type { Route } from "../../types/routing";
+import holz from "../__fixtures__/junction/a44-kreuz-holz-a46.json";
 import fixture from "../__fixtures__/junction/a57-neuss-exit20.json";
-import { findJunctionDecisionPoints } from "../junctionDetect";
+import { findJunctionCandidates, findJunctionDecisionPoints } from "../junctionDetect";
 import { mergeExitPanel, parseLaneTags, selectApproachWay, selectRampWay } from "../laneTags";
 
 const a57Point = findJunctionDecisionPoints(fixture.route as unknown as Route)[0];
@@ -319,5 +320,131 @@ describe("way selection", () => {
       way({ wayId: 8, highway: "motorway_link", bearing: 305, startDistanceMeters: 3 }),
     ];
     expect(selectRampWay(ramps, a57Point).map((r) => r.wayId)).toEqual([8, 7]);
+  });
+});
+
+describe("outgoing branch destination boards", () => {
+  it("retains both Kreuz Holz destinations without assigning incoming lanes", () => {
+    const point = findJunctionCandidates(holz.route as unknown as Route)[0];
+    const model = parseLaneTags(holz.lookup.approach[0].tags)!;
+    const gantry = mergeExitPanel(model, point, holz.lookup.ramps[0].tags, {
+      ways: holz.lookup.outgoing,
+    });
+    expect(gantry.panels.map((panel) => panel.destinations)).toEqual([
+      ["Düsseldorf", "Neuss"],
+      ["Heinsberg", "Venlo", "Mönchengladbach"],
+    ]);
+    expect(gantry.branches?.map((branch) => branch.laneCount)).toEqual([2, 2]);
+    expect(gantry.activeLanes).toEqual([]);
+    expect(gantry.panels.every((panel) => panel.lanes.length === 0)).toBe(true);
+  });
+});
+
+describe("connected branch route evidence", () => {
+  const point = findJunctionCandidates(holz.route as unknown as Route)[0];
+  const model = parseLaneTags(holz.lookup.approach[0].tags)!;
+  const roads: JunctionWay[] = holz.lookup.outgoing;
+
+  it("selects the routed branch independent of response order", () => {
+    for (const ways of [roads, [...roads].reverse()]) {
+      const result = mergeExitPanel(model, point, undefined, { ways });
+      expect(
+        result.branches?.filter((branch) => branch.selected).map((branch) => branch.wayId),
+      ).toEqual([168452743]);
+    }
+  });
+
+  it("can select the non-link motorway continuation by its destination", () => {
+    const result = mergeExitPanel(
+      model,
+      {
+        ...point,
+        sign: {
+          exitBranches: ["A 46", "A 61"],
+          exitToward: ["Heinsberg", "Venlo"],
+        },
+      },
+      undefined,
+      { ways: roads },
+    );
+    expect(
+      result.branches?.filter((branch) => branch.selected).map((branch) => branch.wayId),
+    ).toEqual([971245022]);
+  });
+
+  it("withholds branch selection when shared refs do not distinguish directions", () => {
+    const result = mergeExitPanel(
+      model,
+      { ...point, sign: { exitBranches: ["A 46"] } },
+      undefined,
+      { ways: roads },
+    );
+    expect(result.branches?.some((branch) => branch.selected)).toBe(false);
+    expect(result.panels.some((panel) => panel.isExit && panel.branchWayId === undefined)).toBe(
+      true,
+    );
+  });
+
+  it("preserves the engine board when the routed branch lacks OSM destinations", () => {
+    const ways = roads.map((road) =>
+      road.wayId === 168452743 ? { ...road, tags: { lanes: 2 } } : road,
+    );
+    const result = mergeExitPanel(
+      model,
+      { ...point, sign: { ...point.sign, exitNumbers: ["16"] } },
+      undefined,
+      { ways },
+    );
+    expect(
+      result.panels.some(
+        (panel) => panel.destinations.includes("Neuss") && panel.exitNumber === "16",
+      ),
+    ).toBe(true);
+    expect(result.panels.some((panel) => panel.destinations.includes("Heinsberg"))).toBe(true);
+    expect(result.branches?.some((branch) => branch.selected)).toBe(false);
+  });
+
+  it("copies the engine exit number onto the selected branch board", () => {
+    const result = mergeExitPanel(
+      model,
+      { ...point, sign: { ...point.sign, exitNumbers: ["16"] } },
+      undefined,
+      { ways: roads },
+    );
+    expect(result.panels.find((panel) => panel.branchWayId === 168452743)?.exitNumber).toBe("16");
+  });
+
+  it("uses engine destinations on a branch identified by its unique ref", () => {
+    const ways = roads.map((road) =>
+      road.wayId === 168452743
+        ? { ...road, tags: { lanes: 2, destinationRef: "A 46" } }
+        : { ...road, tags: { ...road.tags, destinationRef: "A 61" } },
+    );
+    const result = mergeExitPanel(model, point, undefined, { ways });
+    expect(result.panels.find((panel) => panel.branchWayId === 168452743)?.destinations).toEqual([
+      "Düsseldorf",
+      "Neuss",
+    ]);
+  });
+
+  it.each([0, -1, 1.5, Number.NaN])(
+    "does not fabricate branch geometry for unusable lane count %s",
+    (lanes) => {
+      const ways = roads.map((road) => ({ ...road, tags: { ...road.tags, lanes } }));
+      expect(
+        mergeExitPanel(model, point, undefined, { ways }).branches?.every(
+          (branch) => branch.laneCount === undefined,
+        ),
+      ).toBe(true);
+    },
+  );
+
+  it("retains per-lane boards and separate outgoing labels", () => {
+    const laneModel = parseLaneTags({ lanes: 4, destinationLanes: "X|X|Y|Y" })!;
+    const result = mergeExitPanel(laneModel, point, undefined, { ways: roads });
+    expect(result.panels.some((panel) => panel.destinations.includes("X"))).toBe(true);
+    expect(result.branches?.find((branch) => branch.wayId === 971245022)).toMatchObject({
+      destinations: ["Heinsberg", "Venlo", "Mönchengladbach"],
+    });
   });
 });

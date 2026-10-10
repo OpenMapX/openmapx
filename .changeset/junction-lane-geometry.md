@@ -6,4 +6,5 @@
 ---
 
 Preserve junction lane geometry without per-lane destination tags, withhold unknown
-or conflicting lane recommendations, and draw confirmed multi-lane branches.
+or conflicting lane recommendations, and show connected outgoing roads with
+separate destination boards and known lane counts, including motorway continuations.
