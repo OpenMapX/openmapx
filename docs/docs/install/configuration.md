@@ -115,12 +115,12 @@ required pieces of this group are listed under [Core / required](#core--required
 Optional social-login providers. Each requires an OAuth app registered with the
 provider.
 
-| Variable                  | Description                                                                                                                                                             | Required / Default  |
-| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------- |
-| `OSM_CLIENT_ID`           | OpenStreetMap OAuth client id. Register at the [OSM OAuth applications page](https://www.openstreetmap.org/oauth2/applications).                                        | Optional. Commented |
-| `OSM_CLIENT_SECRET`       | OpenStreetMap OAuth client secret.                                                                                                                                      | Optional. Commented |
-| `MAPILLARY_CLIENT_ID`     | Mapillary OAuth client id (re-uses the same app as `MAPILLARY_TOKEN`). Register at the [Mapillary developer dashboard](https://www.mapillary.com/dashboard/developers). | Optional. Commented |
-| `MAPILLARY_CLIENT_SECRET` | Mapillary OAuth client secret.                                                                                                                                          | Optional. Commented |
+| Variable                  | Description                                                                                                                                                                                           | Required / Default  |
+| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------- |
+| `OSM_CLIENT_ID`           | OpenStreetMap OAuth client id. Register at the [OSM OAuth applications page](https://www.openstreetmap.org/oauth2/applications).                                                                      | Optional. Commented |
+| `OSM_CLIENT_SECRET`       | OpenStreetMap OAuth client secret.                                                                                                                                                                    | Optional. Commented |
+| `MAPILLARY_CLIENT_ID`     | Mapillary OAuth client id. The same app can issue client access tokens for the imagery integrations. Register at the [Mapillary developer dashboard](https://www.mapillary.com/dashboard/developers). | Optional. Commented |
+| `MAPILLARY_CLIENT_SECRET` | Mapillary OAuth client secret.                                                                                                                                                                        | Optional. Commented |
 
 ### Redirect URLs
 
@@ -266,9 +266,18 @@ is configurable in Admin Settings → Map; `BASEMAP_PROVIDER` overrides admin. S
 Mapillary uses a server-side access token. Coverage, metadata, and panorama
 assets are proxied, so the token is never shipped in the browser bundle.
 
-| Variable          | Description                                                                                                                                                                                                                                              | Required / Default      |
-| ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------- |
-| `MAPILLARY_TOKEN` | Server-side Mapillary token used by the `/api/mapillary/*` vector-tile proxy and integrations that fetch Mapillary on the user's behalf. Stays server-side — street-level imagery is proxied through the API, so no Mapillary token reaches the browser. | Optional. Default unset |
+| Variable                                                 | Description                                                                                                                                                  | Required / Default                              |
+| -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------- |
+| `INTEGRATION_STREET_LEVEL_IMAGERY_MAPILLARY_ENABLED`     | Enable the Mapillary coverage overlay and imagery viewer. Review its Terms before opting in.                                                                 | Optional. Default `false`                       |
+| `INTEGRATION_STREET_LEVEL_IMAGERY_MAPILLARY_ACCESSTOKEN` | Server-side Mapillary client access token for the coverage overlay and imagery viewer.                                                                       | Optional. Default unset                         |
+| `INTEGRATION_PHOTOS_MAPILLARY_ACCESSTOKEN`               | Server-side Mapillary client access token for photos on place panels.                                                                                        | Optional. Default unset                         |
+| `INTEGRATION_STREET_LEVEL_IMAGERY_PROVIDER`              | Optional comma-separated provider ids that pin the active set and its priority order, such as `panoramax,mapillary`. Only enabled providers can participate. | Optional. Default unset (all enabled providers) |
+
+The same access token can be configured for both Mapillary integrations. Set it
+on each integration's **Credentials** tab in the admin panel, or supply both
+environment variables above. Imagery and coverage are proxied through the API;
+the tokens stay server-side. See [Street-level imagery](../features/street-level-imagery.md)
+for the opt-in and provider configuration details.
 
 ## Backend endpoint overrides
 
