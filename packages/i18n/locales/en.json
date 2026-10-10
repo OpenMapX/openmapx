@@ -235,6 +235,8 @@
     "toward": "toward {places}",
     "junctionViewLabel": "Junction view",
     "junctionLaneSummary": "Use lane {lane} of {total}",
+    "junctionLanesSummary": "Use lanes {lanes} of {total}",
+    "junctionLaneCount": "{total} lanes",
     "junctionPhotoCaption": "© {author} · {license} · {date}"
   },
   "common": {

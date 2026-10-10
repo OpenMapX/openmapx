@@ -235,6 +235,8 @@
     "toward": "Richtung {places}",
     "junctionViewLabel": "Kreuzungsansicht",
     "junctionLaneSummary": "Spur {lane} von {total} nutzen",
+    "junctionLanesSummary": "Spuren {lanes} von {total} nutzen",
+    "junctionLaneCount": "{total} Spuren",
     "junctionPhotoCaption": "© {author} · {license} · {date}"
   },
   "common": {

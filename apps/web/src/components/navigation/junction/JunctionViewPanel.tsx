@@ -41,9 +41,7 @@ function engineModel(point: JunctionDecisionPoint): GantryModel | null {
     headline.length || exitNumber
       ? [
           {
-            lanes: point.activeLanes.length
-              ? point.activeLanes
-              : [point.side === "left" ? 0 : Math.max(laneCount, 1) - 1],
+            lanes: point.activeLanes,
             destinations: headline,
             refs: visibleToward(point.sign?.exitBranches ?? []),
             symbols: [],
@@ -53,7 +51,7 @@ function engineModel(point: JunctionDecisionPoint): GantryModel | null {
         ]
       : [];
   return {
-    laneCount: Math.max(laneCount, 1),
+    laneCount,
     panels,
     activeLanes: point.activeLanes,
     source: "engine",
@@ -70,12 +68,19 @@ export function JunctionViewPanel({ point, gantry, photo, geometry }: Props) {
   const t = useTranslations("navigation");
   const model = gantry ?? engineModel(point);
   if (!model) return null;
-  const lane = (model.activeLanes[0] ?? model.laneCount - 1) + 1;
   const toward = visibleToward(signHeadline(point.sign));
-  const label = [
-    t("junctionLaneSummary", { lane, total: model.laneCount }),
-    toward.length > 0 ? t("toward", { places: toward.join(", ") }) : null,
-  ]
+  const laneSummary =
+    model.activeLanes.length === 1
+      ? t("junctionLaneSummary", { lane: model.activeLanes[0] + 1, total: model.laneCount })
+      : model.activeLanes.length > 1
+        ? t("junctionLanesSummary", {
+            lanes: model.activeLanes.map((lane) => lane + 1).join(", "),
+            total: model.laneCount,
+          })
+        : model.laneCount > 0
+          ? t("junctionLaneCount", { total: model.laneCount })
+          : t("junctionViewLabel");
+  const label = [laneSummary, toward.length > 0 ? t("toward", { places: toward.join(", ") }) : null]
     .filter(Boolean)
     .join(", ");
   return (
@@ -102,9 +107,9 @@ export function JunctionViewPanel({ point, gantry, photo, geometry }: Props) {
           geometry={geometry}
           exitLanes={{ laneCount: model.laneCount, activeLanes: model.activeLanes }}
         />
-      ) : (
+      ) : model.laneCount > 0 ? (
         <SchematicBody model={model} point={point} />
-      )}
+      ) : null}
     </Box>
   );
 }

@@ -32,7 +32,7 @@ export function JunctionSchematicView({ schematic }: { schematic: JunctionSchema
           strokeWidth={schematic.activeLanes.includes(i) ? 1.5 : 1}
         />
       ))}
-      <path data-ramp d={schematic.rampPath} fill="#9fd0ff" />
+      {schematic.rampPath && <path data-ramp d={schematic.rampPath} fill="#9fd0ff" />}
     </Box>
   );
 }

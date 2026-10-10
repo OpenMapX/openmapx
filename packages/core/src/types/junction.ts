@@ -72,7 +72,7 @@ export interface JunctionLookupPoint {
 
 export interface JunctionLookupResult {
   index: number;
-  /** Tagged approach ways that can be drawn as a gantry. */
+  /** Approach ways carrying lane geometry or destination/turn tags. */
   approach: JunctionWay[];
   /** Tagged ramps leaving the split. */
   ramps: JunctionWay[];
@@ -110,6 +110,7 @@ export interface GantryPanel {
 }
 
 export interface GantryModel {
+  /** Lane count at the split; 0 for an engine sign with no known lane geometry. */
   laneCount: number;
   panels: GantryPanel[];
   activeLanes: number[];
@@ -126,7 +127,7 @@ export interface JunctionSchematic {
   activeLanes: number[];
   side: "left" | "right";
   divergenceDeg: number;
-  /** SVG path data for the through carriageway and the ramp, in a 320×140 viewBox. */
+  /** SVG path data in a 320×140 viewBox; rampPath is empty without confirmed edge lanes. */
   throughPath: string;
   rampPath: string;
   /** One polygon per lane (trapezoids under perspective), left to right. */

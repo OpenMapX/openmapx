@@ -63,7 +63,7 @@ describe("buildJunctionSchematic", () => {
 
   it("mirrors the ramp to the left for a left-side exit", () => {
     const mirrored: JunctionDecisionPoint = { ...a57Point, side: "left" };
-    const schematic = buildJunctionSchematic(engineGantry, mirrored);
+    const schematic = buildJunctionSchematic({ ...engineGantry, activeLanes: [0] }, mirrored);
     const right = buildJunctionSchematic(engineGantry, a57Point);
     // Mirroring flips the ramp to the other half of the carriageway.
     expect(schematic.rampPath).not.toBe(right.rampPath);
@@ -89,6 +89,35 @@ describe("buildJunctionSchematic", () => {
     );
   });
 
+  it("draws the full width of a confirmed two-lane branch above the lane bands", () => {
+    const schematic = buildJunctionSchematic(
+      { ...engineGantry, laneCount: 4, activeLanes: [2, 3] },
+      a57Point,
+    );
+    // The top of four bands spans x=100..220; lanes 2 and 3 occupy x=160..220.
+    expect(schematic.rampPath).toMatch(/^M 160\.0 58\.8 L 220\.0 58\.8 /);
+  });
+
+  it("mirrors a two-lane branch on the left", () => {
+    const schematic = buildJunctionSchematic(
+      { ...engineGantry, laneCount: 4, activeLanes: [0, 1] },
+      { ...a57Point, side: "left" },
+    );
+    expect(schematic.rampPath).toMatch(/^M 100\.0 58\.8 L 160\.0 58\.8 /);
+  });
+
+  it.each([[], [0, 3], [1, 2]].map((activeLanes) => ({ activeLanes })))(
+    "withholds branch geometry for unconfirmed or disjoint exit lanes $activeLanes",
+    ({ activeLanes }) => {
+      const schematic = buildJunctionSchematic(
+        { ...engineGantry, laneCount: 4, activeLanes },
+        a57Point,
+      );
+      expect(schematic.lanePolygons).toHaveLength(4);
+      expect(schematic.rampPath).toBe("");
+    },
+  );
+
   it("still produces valid paths for a one-lane model", () => {
     const oneLane: GantryModel = {
       laneCount: 1,
@@ -101,5 +130,16 @@ describe("buildJunctionSchematic", () => {
     const schematic = buildJunctionSchematic(oneLane, a57Point);
     expect(schematic.lanePolygons).toHaveLength(1);
     expect(schematic.rampPath.length).toBeGreaterThan(0);
+  });
+
+  it("does not invent carriageway geometry for a sign-only model", () => {
+    const schematic = buildJunctionSchematic(
+      { ...engineGantry, laneCount: 0, activeLanes: [] },
+      a57Point,
+    );
+    expect(schematic.laneCount).toBe(0);
+    expect(schematic.lanePolygons).toEqual([]);
+    expect(schematic.throughPath).toBe("");
+    expect(schematic.rampPath).toBe("");
   });
 });

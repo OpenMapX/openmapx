@@ -127,10 +127,11 @@ describe("parseLaneTags on fixture way 314653469", () => {
     expect(merged.activeLanes).toEqual([4]);
   });
 
-  it("falls back to the outermost lane when neither the engine nor OSM says", () => {
+  it("withholds the lane recommendation when neither the engine nor OSM says", () => {
     const model = parseLaneTags({ lanes: 5, destinationRefLanes: "A 57|A 57|A 57|A 46|A 46" }, 5)!;
     const merged = mergeExitPanel(model, { ...a57Point, laneCount: undefined, activeLanes: [] });
-    expect(merged.activeLanes).toEqual([4]);
+    expect(merged.activeLanes).toEqual([]);
+    expect(merged.panels.at(-1)!.lanes).toEqual([]);
   });
 
   it("appends the exit panel from the ramp tags and moves the active lanes", () => {
@@ -186,21 +187,21 @@ describe("parseLaneTags lane-count mismatches", () => {
     source: "osm",
   };
 
-  it("maps the exit panel to the outermost right lane when the model is narrower", () => {
+  it("withholds engine lane indices when the model is narrower", () => {
     const merged = mergeExitPanel(fourLaneModel, { ...a57Point, activeLanes: [4] }, undefined);
     const exitPanel = merged.panels.at(-1)!;
-    expect(exitPanel.lanes).toEqual([3]);
-    expect(merged.activeLanes).toEqual([3]);
+    expect(exitPanel.lanes).toEqual([]);
+    expect(merged.activeLanes).toEqual([]);
   });
 
-  it("maps the exit panel to lane 0 on the left side", () => {
+  it("does not guess a left lane when the engine counted a different carriageway", () => {
     const merged = mergeExitPanel(fourLaneModel, {
       ...a57Point,
       activeLanes: [0],
       side: "left",
     });
-    expect(merged.panels.at(-1)!.lanes).toEqual([0]);
-    expect(merged.activeLanes).toEqual([0]);
+    expect(merged.panels.at(-1)!.lanes).toEqual([]);
+    expect(merged.activeLanes).toEqual([]);
   });
 });
 
@@ -211,22 +212,71 @@ describe("parseLaneTags edge cases", () => {
     expect(model.panels[0].refs).toEqual(["A 57"]);
   });
 
-  it("returns null when the lanes tag disagrees", () => {
-    expect(
-      parseLaneTags({ lanes: 4, destinationRefLanes: "A 57|A 57|A 46|A 46|A 46" }, 5),
-    ).toBeNull();
+  it("retains lane geometry when a destination list disagrees with it", () => {
+    const model = parseLaneTags({ lanes: 4, destinationRefLanes: "A 57|A 57|A 46|A 46|A 46" }, 5);
+    expect(model?.laneCount).toBe(4);
+    expect(model?.panels).toEqual([]);
   });
 
   it("does not invent destinations for lanes the tag leaves out", () => {
-    expect(parseLaneTags({ lanes: 5, destinationRefLanes: "A 57|A 57|A 46|A 46" }, 5)).toBeNull();
-    // The same short list is rejected when only the engine knows the lane count.
-    expect(parseLaneTags({ destinationRefLanes: "A 57|A 57|A 46|A 46" }, 5)).toBeNull();
+    expect(
+      parseLaneTags({ lanes: 5, destinationRefLanes: "A 57|A 57|A 46|A 46" }, 5)?.panels,
+    ).toEqual([]);
+    expect(parseLaneTags({ destinationRefLanes: "A 57|A 57|A 46|A 46" }, 5)?.panels).toEqual([]);
   });
 
-  it("returns null with only turn:lanes and no destination tags", () => {
-    expect(
-      parseLaneTags({ lanes: 5, turnLanes: "none|none|none|none|slight_right" }, 5),
-    ).toBeNull();
+  it("keeps the lane count and arrows without inventing destination panels", () => {
+    const model = parseLaneTags({ lanes: 4, turnLanes: "none|none|slight_right|slight_right" });
+    expect(model).toMatchObject({
+      laneCount: 4,
+      panels: [],
+      laneTurns: ["none", "none", "slight_right", "slight_right"],
+    });
+  });
+
+  it("retains a lane count even without destination or turn tags", () => {
+    expect(parseLaneTags({ lanes: 3 })).toMatchObject({
+      laneCount: 3,
+      panels: [],
+      activeLanes: [],
+    });
+  });
+
+  it.each([0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY])(
+    "rejects unusable lane count %s",
+    (lanes) => {
+      expect(parseLaneTags({ lanes })).toBeNull();
+    },
+  );
+
+  it("does not choose the opposite side when OSM and the maneuver disagree", () => {
+    const model: GantryModel = {
+      laneCount: 4,
+      panels: [],
+      activeLanes: [],
+      laneTurns: ["none", "none", "slight_right", "slight_right"],
+      source: "osm",
+    };
+    const merged = mergeExitPanel(
+      model,
+      { ...a57Point, side: "left", laneCount: undefined, activeLanes: [] },
+      { lanes: 2, destination: "Düsseldorf;Neuss", destinationRef: "A 46" },
+    );
+    expect(merged.activeLanes).toEqual([]);
+    expect(merged.panels[0].lanes).toEqual([]);
+    expect(merged.panels[0].destinations).toEqual(["Düsseldorf", "Neuss"]);
+  });
+
+  it("reads composite OSM turn arrows when the exit direction agrees", () => {
+    const model: GantryModel = {
+      laneCount: 4,
+      panels: [],
+      activeLanes: [],
+      laneTurns: ["none", "none", "through;slight_right", "slight_right"],
+      source: "osm",
+    };
+    const merged = mergeExitPanel(model, { ...a57Point, laneCount: undefined, activeLanes: [] });
+    expect(merged.activeLanes).toEqual([2, 3]);
   });
 
   it("attaches destination:symbol:lanes to its lane", () => {

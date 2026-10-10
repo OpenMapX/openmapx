@@ -103,22 +103,21 @@ function joinKeys(values: string[]): string {
 }
 
 /**
- * Build a gantry model from one way's OSM tags. `null` when the tags carry no
- * per-lane destinations at all, or when a `:lanes` value disagrees with the
- * lane count and the fallback — a half-parsed gantry would lie about where
- * the lanes point.
+ * Lane geometry does not require destination panels. Malformed destination
+ * lists are withheld while a known lane count and valid turn arrows survive.
+ * `null` means neither OSM nor the engine supplied a usable lane count.
  */
 export function parseLaneTags(tags: OsmLaneTags, fallbackLaneCount?: number): GantryModel | null {
   const laneCount = tags.lanes ?? fallbackLaneCount;
-  if (!laneCount || laneCount < 1) return null;
-  const destinationLanes = laneValues(splitLaneValues(tags.destinationLanes), laneCount);
-  const destinationRefLanes = laneValues(splitLaneValues(tags.destinationRefLanes), laneCount);
-  if (destinationLanes === undefined && destinationRefLanes === undefined) return null;
-  if (
+  if (laneCount === undefined || !Number.isInteger(laneCount) || laneCount < 1) return null;
+  let destinationLanes = laneValues(splitLaneValues(tags.destinationLanes), laneCount);
+  let destinationRefLanes = laneValues(splitLaneValues(tags.destinationRefLanes), laneCount);
+  const malformedDestinations =
     (tags.destinationLanes !== undefined && destinationLanes === undefined) ||
-    (tags.destinationRefLanes !== undefined && destinationRefLanes === undefined)
-  ) {
-    return null;
+    (tags.destinationRefLanes !== undefined && destinationRefLanes === undefined);
+  if (malformedDestinations) {
+    destinationLanes = undefined;
+    destinationRefLanes = undefined;
   }
   const turnLanes = laneValues(splitLaneValues(tags.turnLanes), laneCount);
   const symbolLanes = laneValues(splitLaneValues(tags.destinationSymbolLanes), laneCount);
@@ -153,7 +152,6 @@ export function parseLaneTags(tags: OsmLaneTags, fallbackLaneCount?: number): Ga
       isExit: false,
     });
   }
-  if (panels.length === 0) return null;
   return {
     laneCount,
     panels,
@@ -166,11 +164,9 @@ export function parseLaneTags(tags: OsmLaneTags, fallbackLaneCount?: number): Ga
 /**
  * Append (or mark) the exit panel: destination text from the ramp's
  * `destination`/`destination:ref`, else the engine sign; exit number from the
- * engine sign, else the ramp's `junction:ref`. When the gantry way's lane
- * count disagrees with the decision point's (a lane gain before or after the
- * way was tagged), the exit panel spans the single outermost lane on the
- * point's side, so the highlight never lands on a lane the drawn gantry
- * does not have.
+ * engine sign, else the ramp's `junction:ref`. Lane assignments require engine
+ * lanes for this lane count, or OSM arrows agreeing with the maneuver side.
+ * Unknown assignments retain the sign without lighting an inferred lane.
  */
 export function mergeExitPanel(
   model: GantryModel,
@@ -186,17 +182,16 @@ export function mergeExitPanel(
     rampRefs?.places ?? [],
   );
   const refs = rampRefs ? rampRefs.refs : (point.sign?.exitBranches ?? []);
-  // The engine's own lanes win whenever it sent them for this gantry. Without
-  // them (a routing backend that omits `turn_lanes`), OSM's per-lane turn
-  // arrows name the exit lanes; only if neither speaks does the outermost lane
-  // on the exit's side stand in.
+  // A different lane count is a different layout: the engine's indices cannot
+  // be shifted onto it. Opposite-side OSM arrows cannot resolve that mismatch.
   const engineLanes =
     model.laneCount === point.laneCount && point.activeLanes.length > 0 ? point.activeLanes : null;
   const taggedLanes = lanesTurningToward(model.laneTurns, point.side);
-  const panelLanes =
-    engineLanes ??
-    (taggedLanes.length > 0 ? taggedLanes : [point.side === "left" ? 0 : model.laneCount - 1]);
+  const panelLanes = engineLanes ?? taggedLanes;
   const carried = model.panels.filter((panel) => !panel.isExit);
+  if (destinations.length === 0 && refs.length === 0 && !exitNumber) {
+    return { ...model, panels: carried, activeLanes: [...panelLanes] };
+  }
   // A gantry often already boards the exit lane on its own ("A 46 /
   // Neuss-Zentrum"). Marking that board as the exit keeps one board lit per
   // decision instead of two over the same lane.
@@ -244,7 +239,9 @@ function lanesTurningToward(laneTurns: string[] | undefined, side: "left" | "rig
     side === "left"
       ? ["left", "slight_left", "sharp_left"]
       : ["right", "slight_right", "sharp_right"];
-  return laneTurns.flatMap((token, lane) => (leaving.includes(token.trim()) ? [lane] : []));
+  return laneTurns.flatMap((token, lane) =>
+    splitParts(token).some((part) => leaving.includes(part)) ? [lane] : [],
+  );
 }
 
 /** Keep approach ways heading the same way as the route, upstream of the point. */

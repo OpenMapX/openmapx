@@ -322,16 +322,21 @@ Both revert automatically after the maneuver, and a pinch or drag during the
 approach is never interrupted.
 
 For motorway and expressway exits, forks, and splits while driving, a **junction view** card
-appears under the banner. It shows the lanes of the overhead gantry with the
-correct one highlighted and the ramp peeling off at the split angle. The schematic
-is drawn on the client from open data: with network access it shows the real
-per-lane destinations OpenStreetMap carries on the approach segment
-(`destination:*:lanes`, fetched once per route through Overpass — set
-`OVERPASS_URL` to a self-hosted instance for multi-user deployments), and offline
-it falls back to the engine's exit sign. The lane to take comes from the routing
-engine when it reports lanes (a self-hosted Valhalla does); otherwise it is read
-from OpenStreetMap's per-lane turn arrows (`turn:lanes`), and only when neither
-says does the outermost lane on the exit's side stand in. About half a minute
+appears under the banner. Its schematic shows the lane layout at the upcoming
+split, highlighting the recommended lanes and drawing multi-lane branches when
+their lane assignment is known. OpenStreetMap's approach lane count and turn
+arrows remain useful even without per-lane destination names. With network
+access, the card also shows the real per-lane destinations where OpenStreetMap
+carries them (`destination:*:lanes`, fetched once per route through Overpass —
+set `OVERPASS_URL` to a self-hosted instance for multi-user deployments).
+Offline it falls back to the engine's exit sign and any lane data it supplies.
+
+Lane recommendations come from the routing engine when its lane count matches
+the displayed layout; otherwise OpenStreetMap's per-lane turn arrows
+(`turn:lanes`) must agree with the maneuver's exit side. If the lane assignment
+is missing or conflicting, the known lane bands stay unhighlighted and the
+schematic omits the branch. If the lane count is unknown, only the sign is shown.
+About half a minute
 before the exit, a photo preview shows a recent **street-level image** of the
 approach — with its author, licence, and capture date — when coverage from
 [Panoramax](./street-level-imagery.md) exists (Mapillary is never used here: its terms rule out use during navigation). Both the junction view and its photo preview are on by default and can be

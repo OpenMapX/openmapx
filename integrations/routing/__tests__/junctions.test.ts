@@ -211,6 +211,35 @@ describe("mapJunctionWays", () => {
     expect(result.approach).toEqual([]);
   });
 
+  it("returns approach lane counts even without destination or turn tags", () => {
+    const result = mapJunctionWays(
+      [{ ...APPROACH_WAY, tags: { highway: "motorway", oneway: "yes", lanes: "4" } }],
+      mapped(),
+    );
+    expect(result.approach[0]?.tags).toEqual({ lanes: 4 });
+    expect(result.onMotorway).toBe(true);
+  });
+
+  it.each(["4.5", "0", "-2", "unknown"])(
+    "does not admit lane-only geometry for invalid count %s",
+    (lanes) => {
+      const result = mapJunctionWays(
+        [{ ...APPROACH_WAY, tags: { highway: "motorway", oneway: "yes", lanes } }],
+        mapped(),
+      );
+      expect(result.approach).toEqual([]);
+    },
+  );
+
+  it("does not use both directions' lane total on a two-way trunk approach", () => {
+    const result = mapJunctionWays(
+      [{ ...APPROACH_WAY, tags: { highway: "trunk", lanes: "4" } }],
+      mapped(),
+    );
+    expect(result.approach).toEqual([]);
+    expect(result.onMotorway).toBe(true);
+  });
+
   it("does not put an on-ramp's surface street on the motorway", () => {
     // Only the link leaving the split: the road the route arrives on is not
     // a motorway or trunk, so nothing in the result runs through the point.

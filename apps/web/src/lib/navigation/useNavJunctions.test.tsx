@@ -33,6 +33,9 @@ const fixture = await import(
 );
 
 const a57Route = fixture.route as unknown as Route;
+const holz = await import(
+  "../../../../../packages/core/src/navigation/__fixtures__/junction/a44-kreuz-holz-a46.json"
+);
 
 const fixtureResponse = [
   {
@@ -144,6 +147,19 @@ describe("useNavJunctions gantry fetch", () => {
   afterEach(() => {
     useNavigationStore.getState().stopNavigation();
     useNavJunctionStore.getState().reset();
+  });
+
+  it("stores lane geometry from the turn-only Kreuz Holz approach", async () => {
+    fetchJunctionLookups.mockResolvedValue([holz.lookup]);
+    start();
+    useNavigationStore.setState({ route: holz.route as unknown as Route });
+    renderHook(() => useNavJunctions());
+    await waitFor(() =>
+      expect(useNavJunctionStore.getState().gantryByStep.get(1)?.laneCount).toBe(4),
+    );
+    const model = useNavJunctionStore.getState().gantryByStep.get(1)!;
+    expect(model.activeLanes).toEqual([]);
+    expect(model.panels[0].destinations).toEqual(["Düsseldorf", "Neuss"]);
   });
 
   it("promotes a candidate exit once OpenStreetMap puts the route on the motorway there", async () => {

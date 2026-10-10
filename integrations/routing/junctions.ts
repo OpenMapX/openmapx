@@ -85,7 +85,7 @@ export function parseJunctionPoints(body: unknown): JunctionLookupPoint[] | null
 
 /** The per-point cache key: position to ~10 m, bearing to 10°. */
 export function junctionCacheKey(point: JunctionLookupPoint): string {
-  return hashKey("cache:nav:junction-ways", [
+  return hashKey("cache:nav:junction-ways:v2", [
     round(point.lng, 4),
     round(point.lat, 4),
     round(point.bearing / 10, 0) * 10,
@@ -120,8 +120,13 @@ export interface OverpassWayElement {
 /** Tags the route reads off an approach or ramp way. */
 function laneTags(tags: Record<string, string>): OsmLaneTags {
   const lanes = Number(tags.lanes);
+  // On two-way trunk roads `lanes` counts both directions. A travel-direction
+  // count needs separate tags, which this lookup does not currently resolve.
+  const oneWay =
+    ["yes", "1", "true", "-1"].includes(tags.oneway ?? "") ||
+    (tags.oneway === undefined && ["motorway", "motorway_link"].includes(tags.highway ?? ""));
   return {
-    ...(Number.isFinite(lanes) && lanes > 0 ? { lanes: Math.round(lanes) } : {}),
+    ...(oneWay && Number.isInteger(lanes) && lanes > 0 ? { lanes } : {}),
     ...(tags["turn:lanes"] ? { turnLanes: tags["turn:lanes"] } : {}),
     ...(tags["destination:lanes"] ? { destinationLanes: tags["destination:lanes"] } : {}),
     ...(tags["destination:ref:lanes"]
@@ -237,7 +242,12 @@ export function mapJunctionWays(
   );
   const onMotorway = carriageways.length > 0;
   const fullLanesFromMeters = fullLanesFrom(matched, carriageways, point);
-  const drawable = matched.filter((entry) => entry.tagged).map((entry) => entry.way);
+  const drawable = matched
+    .filter(
+      ({ way, tagged }) =>
+        tagged || (!way.highway.includes("_link") && way.tags.lanes !== undefined),
+    )
+    .map((entry) => entry.way);
   const approach = drawable.filter(
     (way) =>
       !way.highway.includes("_link") &&

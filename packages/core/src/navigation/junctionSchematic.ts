@@ -21,13 +21,28 @@ function rampAngle(divergenceDeg: number): number {
 
 /**
  * Build the schematic for one decision point. The lanes run left to right in
- * driving direction; the ramp leaves from the outermost lane on `point.side`.
+ * driving direction. A ramp is drawn only for a contiguous group of known
+ * exit lanes reaching the edge on `point.side`.
  */
 export function buildJunctionSchematic(
   model: GantryModel,
   point: JunctionDecisionPoint,
 ): JunctionSchematic {
-  const laneCount = Math.max(1, model.laneCount);
+  const laneCount = model.laneCount;
+  if (laneCount < 1) {
+    return {
+      width: WIDTH,
+      height: HEIGHT,
+      laneCount: 0,
+      activeLanes: [],
+      side: point.side,
+      divergenceDeg: point.divergenceDeg,
+      throughPath: "",
+      rampPath: "",
+      lanePolygons: [],
+      panelAnchors: [],
+    };
+  }
   const left = (WIDTH - BOTTOM_WIDTH) / 2;
   const right = left + BOTTOM_WIDTH;
   const topInset = (BOTTOM_WIDTH - TOP_WIDTH) / 2;
@@ -46,23 +61,32 @@ export function buildJunctionSchematic(
     );
   }
 
-  // The ramp is the outermost lane on the exit side continuing past the top
-  // edge of the carriageway and bending away by the divergence angle, so the
-  // highlighted lane and the ramp read as one band leaving the road.
+  // Start above the bands: painting the ramp over them erases the seams of a
+  // multi-lane exit. Do not bridge unconfirmed lanes to the carriageway edge.
   const mirror = point.side === "left" ? -1 : 1;
-  const exitLane = point.side === "left" ? 0 : laneCount - 1;
-  const laneBottom = (i: number) => left + (BOTTOM_WIDTH / laneCount) * i;
+  const exitLanes = [...model.activeLanes].sort((a, b) => a - b);
+  const first = exitLanes[0];
+  const last = exitLanes.at(-1);
+  const contiguous =
+    first !== undefined &&
+    last !== undefined &&
+    exitLanes.every((lane, index) => lane === first + index) &&
+    first >= 0 &&
+    last < laneCount &&
+    (point.side === "left" ? first === 0 : last === laneCount - 1);
   const laneTop = (i: number) => left + topInset + (TOP_WIDTH / laneCount) * i;
   const angle = (rampAngle(point.divergenceDeg) * Math.PI) / 180;
   const peelX = mirror * Math.sin(angle) * RAMP_LEN;
   const peelY = Math.cos(angle) * RAMP_LEN * 0.6;
-  const rampPath = [
-    `M ${laneBottom(exitLane).toFixed(1)} ${HEIGHT}`,
-    `L ${laneBottom(exitLane + 1).toFixed(1)} ${HEIGHT}`,
-    `L ${(laneTop(exitLane + 1) + peelX).toFixed(1)} ${(top - peelY).toFixed(1)}`,
-    `L ${(laneTop(exitLane) + peelX).toFixed(1)} ${(top - peelY).toFixed(1)}`,
-    "Z",
-  ].join(" ");
+  const rampPath = contiguous
+    ? [
+        `M ${laneTop(first).toFixed(1)} ${top}`,
+        `L ${laneTop(last + 1).toFixed(1)} ${top}`,
+        `L ${(laneTop(last + 1) + peelX).toFixed(1)} ${(top - peelY).toFixed(1)}`,
+        `L ${(laneTop(first) + peelX).toFixed(1)} ${(top - peelY).toFixed(1)}`,
+        "Z",
+      ].join(" ")
+    : "";
 
   const panelAnchors = model.panels.map((panel) => {
     const first = panel.lanes[0] ?? 0;

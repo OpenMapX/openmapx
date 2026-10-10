@@ -5,6 +5,9 @@ vi.mock("next-intl", () => ({
   useTranslations: () => (key: string, values?: Record<string, unknown>) => {
     if (key === "junctionLaneSummary")
       return `Use lane ${String(values?.lane)} of ${String(values?.total)}`;
+    if (key === "junctionLanesSummary")
+      return `Use lanes ${String(values?.lanes)} of ${String(values?.total)}`;
+    if (key === "junctionLaneCount") return `${String(values?.total)} lanes`;
     if (key === "junctionViewLabel") return "Junction view";
     if (key === "toward") return `toward ${String(values?.places)}`;
     if (key === "junctionPhotoCaption")
@@ -14,8 +17,16 @@ vi.mock("next-intl", () => ({
   useLocale: () => "en",
 }));
 
-import type { GantryModel, Route } from "@openmapx/core";
-import { buildJunctionSchematic, findJunctionDecisionPoints } from "@openmapx/core";
+import type { GantryModel, JunctionLookupResult, Route } from "@openmapx/core";
+import {
+  buildJunctionSchematic,
+  findJunctionCandidates,
+  findJunctionDecisionPoints,
+  mergeExitPanel,
+  parseLaneTags,
+  selectApproachWay,
+} from "@openmapx/core";
+import holz from "../../../../../../packages/core/src/navigation/__fixtures__/junction/a44-kreuz-holz-a46.json";
 import fixture from "../../../../../../packages/core/src/navigation/__fixtures__/junction/a57-neuss-exit20.json";
 import { GantryStrip } from "./GantryStrip";
 import { JunctionSchematicView } from "./JunctionSchematic";
@@ -100,6 +111,47 @@ describe("JunctionViewPanel", () => {
     const html = renderToStaticMarkup(<JunctionViewPanel point={a57Point} />);
     expect(html).toContain("Neuss-Zentrum");
     expect(html).toContain("20");
+  });
+
+  it("keeps the exit sign without a fabricated schematic when the lane count is unknown", () => {
+    const point = findJunctionCandidates(holz.route as unknown as Route)[0];
+    const html = renderToStaticMarkup(<JunctionViewPanel point={point} />);
+    expect(html).toContain("Düsseldorf");
+    expect(html).toContain("Neuss");
+    expect(html).not.toContain('data-testid="junction-schematic"');
+    expect(html).not.toContain("Use lane");
+  });
+
+  it("draws Kreuz Holz's four lanes without highlighting an unresolved exit side", () => {
+    const point = findJunctionCandidates(holz.route as unknown as Route)[0];
+    const result = holz.lookup as JunctionLookupResult;
+    const approach = selectApproachWay(result.approach, point)!;
+    const parsed = parseLaneTags(approach.tags, point.laneCount);
+    expect(parsed).not.toBeNull();
+    const model = mergeExitPanel(parsed!, point, result.ramps[0].tags);
+    const html = renderToStaticMarkup(<JunctionViewPanel point={point} gantry={model} />);
+    expect(html.match(/data-lane/g)).toHaveLength(4);
+    expect(html).toContain("Düsseldorf");
+    expect(html).not.toContain('data-active="true"');
+    expect(html).not.toContain("data-ramp");
+    expect(html).not.toContain("Use lane");
+    expect(html).toContain('aria-label="4 lanes, toward Düsseldorf, Neuss"');
+  });
+
+  it("announces all confirmed lanes of a multi-lane exit", () => {
+    const html = renderToStaticMarkup(
+      <JunctionViewPanel point={a57Point} gantry={{ ...threePanels, activeLanes: [3, 4] }} />,
+    );
+    expect(html).toContain('aria-label="Use lanes 4, 5 of 5, toward Neuss-Zentrum"');
+  });
+
+  it("does not claim a lane recommendation just because the count is known", () => {
+    const html = renderToStaticMarkup(
+      <JunctionViewPanel point={{ ...a57Point, activeLanes: [] }} />,
+    );
+    expect(html.match(/data-lane/g)).toHaveLength(5);
+    expect(html).not.toContain("Use lane");
+    expect(html).not.toContain("data-ramp");
   });
 
   it("renders nothing when the point has no sign and no engine lanes", () => {
