@@ -142,6 +142,7 @@ function PanoramaWindow({
     position: "absolute" as const,
     top: 0,
     width: `${windowsPerTurn * 100}%`,
+    maxWidth: "none",
     height: "100%",
     objectFit: "cover" as const,
   };

@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { fireEvent, render } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
@@ -13,6 +14,8 @@ vi.mock("next-intl", () => ({
 
 import type { JunctionDecisionPoint, LngLat, StreetLevelImage } from "@openmapx/core";
 import { JunctionPhoto } from "./JunctionPhoto";
+
+const resetCss = readFileSync("apps/web/src/app/reset.css", "utf8");
 
 /** A straight road running due east, ~314 m long, at the fixture's latitude. */
 const geometry: LngLat[] = [
@@ -177,6 +180,34 @@ describe("JunctionPhoto", () => {
     expect(offsets[0]).toBeCloseTo(-(285 / 90) * 100, 1);
     expect(offsets[1]).toBeCloseTo(-(285 / 90) * 100 + 400, 1);
   });
+
+  it.each([90, 300])(
+    "keeps the panorama strip unconstrained by the image reset at heading %s",
+    (heading) => {
+      const reset = document.createElement("style");
+      // jsdom does not apply cascade layers, so apply the reset's rules without its wrapper.
+      reset.textContent = resetCss.replace(/@layer base\s*\{/, "").replace(/\}\s*$/, "");
+      document.head.append(reset);
+      try {
+        const { container } = render(
+          <JunctionPhoto
+            image={{ ...flatImage, isPano: true, fovDeg: 360, heading }}
+            objectUrl="blob:pano-1"
+            point={point}
+            geometry={geometry}
+          />,
+        );
+        const images = container.querySelectorAll("[data-pano] img");
+        expect(images).toHaveLength(heading === 300 ? 2 : 1);
+        for (const image of images) {
+          expect(getComputedStyle(image).maxWidth).toBe("none");
+          expect(getComputedStyle(image).width).toBe("400%");
+        }
+      } finally {
+        reset.remove();
+      }
+    },
+  );
 
   it("credits the provider when the image carries no author", () => {
     const html = renderToStaticMarkup(

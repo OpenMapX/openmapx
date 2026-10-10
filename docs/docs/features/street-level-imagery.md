@@ -129,8 +129,8 @@ assumed to be a phone's; for a dashcam or action camera with no lens data the
 road is not drawn at all, since a wide lens would put it off the road. For a regular photo
 the provider's thumbnail is used rather than the full frame, to keep mobile data low; a
 360° photo loads its reduced full frame, since its thumbnail is only a crop from the
-middle. Switching junction photos off hides them at once, including ones already
-loaded. A caption below the
+middle. It shows a 90° window facing along the route's approach. Switching junction
+photos off hides them at once, including ones already loaded. A caption below the
 image names the author, the licence, and the capture month — no links, so nothing
 pulls attention off the road while the trip is live. Only providers whose terms allow
 use during navigation are searched, which today means Panoramax. With no

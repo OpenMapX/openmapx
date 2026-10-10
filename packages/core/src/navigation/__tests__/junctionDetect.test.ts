@@ -2,13 +2,395 @@ import { describe, expect, it } from "vitest";
 import type { LngLat } from "../../types/geometry";
 import type { Route, RouteStep } from "../../types/routing";
 import fixture from "../__fixtures__/junction/a57-neuss-exit20.json";
+import { cumulativeDistances } from "../deadReckon";
 import {
   findJunctionCandidates,
   findJunctionDecisionPoints,
   sameJunction,
 } from "../junctionDetect";
+import { junctionLookupPoints } from "../junctionLookup";
 
 const a57Route = fixture.route as unknown as Route;
+
+const driftRoute: Route = {
+  mode: "driving",
+  distance: 1920,
+  duration: 120,
+  legs: [],
+  geometry: [
+    [0, 0],
+    [0.01, 0],
+    [0.01, 0.002],
+    [0.012, 0.002],
+  ],
+  steps: [
+    {
+      instruction: "Drive east",
+      distance: 1400,
+      duration: 80,
+      coordinates: [
+        [0, 0],
+        [0.01, 0],
+      ],
+    },
+    {
+      instruction: "Drive north",
+      distance: 300,
+      duration: 20,
+      coordinates: [
+        [0.01, 0],
+        [0.01, 0.002],
+      ],
+    },
+    {
+      instruction: "Exit right",
+      distance: 220,
+      duration: 20,
+      coordinates: [
+        [0.01, 0.002],
+        [0.012, 0.002],
+      ],
+      maneuver: { type: "fork", modifier: "right" },
+    },
+  ],
+};
+
+describe("junction geometry positions", () => {
+  it.each([true, false])(
+    "anchors junctions to the maneuver despite distance drift (motorway flag %s)",
+    (motorway) => {
+      const route = {
+        ...driftRoute,
+        steps: driftRoute.steps.map((step) => ({ ...step, motorway })),
+      };
+      const points = motorway ? findJunctionDecisionPoints(route) : findJunctionCandidates(route);
+      expect(points).toHaveLength(1);
+      expect(points[0].point).toEqual([0.01, 0.002]);
+      expect(points[0].alongMeters).toBeCloseTo(1334.339, 2);
+      expect(points[0].approachBearing).toBeCloseTo(0, 4);
+      expect(points[0].divergenceDeg).toBeCloseTo(90, 2);
+      const lookup = junctionLookupPoints(route, points)[0].lookup;
+      expect([lookup.lng, lookup.lat]).toEqual([0.01, 0.002]);
+      expect(lookup.trace[4]).toEqual([0.01, 0.002]);
+      expect(lookup.trace[3][0]).toBeCloseTo(0.01, 6);
+      expect(lookup.trace[3][1]).toBeLessThan(0.002);
+    },
+  );
+
+  it("uses the later occurrence when a step returns to an earlier coordinate", () => {
+    const route: Route = {
+      ...driftRoute,
+      geometry: [
+        [0, 0],
+        [0.01, 0],
+        [0.01, 0.01],
+        [0, 0.01],
+        [0, 0],
+        [0.002, 0],
+      ],
+      steps: [
+        {
+          instruction: "Drive around the block",
+          distance: 4000,
+          duration: 100,
+          coordinates: [
+            [0, 0],
+            [0.01, 0],
+            [0.01, 0.01],
+            [0, 0.01],
+            [0, 0],
+          ],
+          motorway: true,
+        },
+        {
+          instruction: "Exit right",
+          distance: 220,
+          duration: 20,
+          coordinates: [
+            [0, 0],
+            [0.002, 0],
+          ],
+          maneuver: { type: "fork", modifier: "right" },
+        },
+      ],
+    };
+    const point = findJunctionDecisionPoints(route)[0];
+    expect(point.point).toEqual([0, 0]);
+    expect(point.alongMeters).toBeCloseTo(4447.797, 2);
+    expect(point.approachBearing).toBeCloseTo(180, 4);
+  });
+
+  it("retains the distance fallback when a maneuver has no coordinates", () => {
+    const route = {
+      ...driftRoute,
+      steps: driftRoute.steps.map((step) => ({ ...step, coordinates: [], motorway: true })),
+    };
+    const point = findJunctionDecisionPoints(route)[0];
+    expect(point.alongMeters).toBe(1700);
+    expect(point.point).toEqual([0.012, 0.002]);
+  });
+
+  it("projects a maneuver omitted from the route's geometry vertices", () => {
+    const route: Route = {
+      ...driftRoute,
+      steps: [
+        { ...driftRoute.steps[0], motorway: true },
+        {
+          ...driftRoute.steps[2],
+          coordinates: [
+            [0.01, 0.001],
+            [0.01, 0.002],
+          ],
+        },
+      ],
+    };
+    const point = findJunctionDecisionPoints(route)[0];
+    expect(point.point[0]).toBeCloseTo(0.01, 6);
+    expect(point.point[1]).toBeCloseTo(0.001, 6);
+    expect(point.alongMeters).toBeCloseTo(1223.144, 2);
+    expect(point.approachBearing).toBeCloseTo(0, 4);
+  });
+
+  it.each([0, 0.00002])(
+    "keeps an omitted first visit before the same coordinate's later vertex (deviation %s)",
+    (deviation) => {
+      const route: Route = {
+        ...driftRoute,
+        geometry: [
+          [0, 0],
+          [0.01, 0],
+          [0.01, 0.01],
+          [0.005, 0.01],
+          [0.005, deviation],
+          [0.006, -0.001],
+        ],
+        steps: [
+          {
+            instruction: "Drive east",
+            distance: 600,
+            duration: 20,
+            motorway: true,
+            coordinates: [
+              [0, 0],
+              [0.005, deviation],
+            ],
+          },
+          {
+            instruction: "Fork around the block",
+            distance: 3400,
+            duration: 100,
+            motorway: true,
+            coordinates: [
+              [0.005, deviation],
+              [0.01, 0],
+              [0.01, 0.01],
+              [0.005, 0.01],
+              [0.005, deviation],
+            ],
+            maneuver: { type: "fork", modifier: "right" },
+          },
+          {
+            instruction: "Exit right",
+            distance: 150,
+            duration: 20,
+            coordinates: [
+              [0.005, deviation],
+              [0.006, -0.001],
+            ],
+            maneuver: { type: "fork", modifier: "right" },
+          },
+        ],
+      };
+      const points = findJunctionDecisionPoints(route);
+      expect(points).toHaveLength(2);
+      expect(points[0].point).toEqual([0.005, deviation]);
+      expect(points[1].point).toEqual([0.005, deviation]);
+      expect(points[0].alongMeters).toBeCloseTo(555.975, 2);
+      expect(points[0].approachBearing).toBeCloseTo(90, 4);
+      expect(points[1].alongMeters).toBeCloseTo(cumulativeDistances(route.geometry)[4], 2);
+      expect(points[1].approachBearing).toBeCloseTo(180, 4);
+    },
+  );
+
+  it("skips lookahead vertices whose remaining visit is omitted from the geometry", () => {
+    const t: LngLat = [0.005, -0.01];
+    const b: LngLat = [0.005, 0];
+    const start: LngLat = [0, 0];
+    const a: LngLat = [0.0025, 0];
+    const c: LngLat = [0.01, 0];
+    const d: LngLat = [0.01, 0.01];
+    const e: LngLat = [0.0025, 0.01];
+    const end: LngLat = [0.003, -0.001];
+    const route: Route = {
+      ...driftRoute,
+      geometry: [t, b, start, c, d, e, a, end],
+      steps: [
+        { ...driftRoute.steps[0], motorway: true, coordinates: [t, b, start, a] },
+        { ...driftRoute.steps[2], motorway: true, coordinates: [a, b, c, d, e, a] },
+        { ...driftRoute.steps[2], coordinates: [a, end] },
+      ],
+    };
+    const points = findJunctionDecisionPoints(route);
+    expect(points).toHaveLength(2);
+    expect(points[0].alongMeters).toBeCloseTo(1945.911, 2);
+    expect(points[0].approachBearing).toBeCloseTo(90, 4);
+    expect(points[1].alongMeters).toBeCloseTo(cumulativeDistances(route.geometry)[6], 2);
+    expect(points[1].approachBearing).toBeCloseTo(180, 4);
+  });
+
+  it("anchors a fork on the return along a retraced segment", () => {
+    const a: LngLat = [0, 0];
+    const middle: LngLat = [0.001, 0];
+    const b: LngLat = [0.002, 0];
+    const c: LngLat = [0.003, 0];
+    const route: Route = {
+      ...driftRoute,
+      geometry: [a, b, c, a],
+      steps: [
+        { ...driftRoute.steps[0], motorway: true, coordinates: [a, middle, b, c] },
+        { ...driftRoute.steps[1], motorway: true, coordinates: [c, b], maneuver: { type: "turn" } },
+        { ...driftRoute.steps[2], coordinates: [b, middle, a] },
+      ],
+    };
+    const point = findJunctionDecisionPoints(route)[0];
+    expect(point.point).toEqual(b);
+    expect(point.alongMeters).toBeCloseTo(444.78, 2);
+    expect(point.approachBearing).toBeCloseTo(270, 4);
+  });
+
+  it.each(Array.from({ length: 64 }, (_, mask) => mask))(
+    "retains travel order through simplified retraced geometry (mask %s)",
+    (mask) => {
+      const raw: LngLat[] = [0, 1, 2, 3, 2, 1, 0, 1, 2, 3].map((x) => [x * 0.001, 0]);
+      const optional = [1, 2, 4, 5, 7, 8];
+      const retained = new Set([0, 3, 6, 9, ...optional.filter((_, bit) => mask & (1 << bit))]);
+      const route: Route = {
+        ...driftRoute,
+        geometry: raw.filter((_, index) => retained.has(index)),
+        steps: raw.slice(0, -1).map((coordinate, index) => ({
+          ...driftRoute.steps[0],
+          motorway: true,
+          coordinates: [coordinate, raw[index + 1]],
+          maneuver: { type: index === 0 ? "depart" : index === 3 || index === 6 ? "turn" : "fork" },
+        })),
+      };
+      const points = findJunctionDecisionPoints(route);
+      expect(points.map((point) => point.stepIndex)).toEqual([1, 2, 4, 5, 7, 8]);
+      for (const point of points) {
+        expect(point.point).toEqual(raw[point.stepIndex]);
+        expect(point.alongMeters).toBeCloseTo(111.19492664455875 * point.stepIndex, 4);
+      }
+    },
+  );
+
+  it("reprojects anchors consumed by an earlier loop when its step shape is missing", () => {
+    const a: LngLat = [0, 0];
+    const b: LngLat = [0.01, 0];
+    const c: LngLat = [0.01, 0.01];
+    const d: LngLat = [0, 0.01];
+    const end: LngLat = [0.012, 0];
+    const route: Route = {
+      ...driftRoute,
+      geometry: [a, b, c, d, a, b, end],
+      steps: [
+        { ...driftRoute.steps[0], distance: 4447.797048846394, coordinates: [], motorway: true },
+        { ...driftRoute.steps[1], coordinates: [a, b], motorway: true },
+        { ...driftRoute.steps[2], coordinates: [b, end] },
+      ],
+    };
+    const point = findJunctionDecisionPoints(route)[0];
+    expect(point.point).toEqual(b);
+    expect(point.alongMeters).toBeCloseTo(cumulativeDistances(route.geometry)[5], 4);
+    expect(point.approachBearing).toBeCloseTo(90, 4);
+  });
+
+  it.each([5000, 6000])(
+    "recovers a maneuver after missing-shape distance drift (%s m)",
+    (distance) => {
+      const a: LngLat = [0, 0];
+      const b: LngLat = [0.01, 0];
+      const c: LngLat = [0.01, 0.01];
+      const d: LngLat = [0, 0.01];
+      const route: Route = {
+        ...driftRoute,
+        geometry: [a, b, c, d, a, b, a],
+        steps: [
+          { ...driftRoute.steps[0], distance, coordinates: [], motorway: true },
+          { ...driftRoute.steps[2], coordinates: [b, a] },
+        ],
+      };
+      const point = findJunctionDecisionPoints(route)[0];
+      expect(point.point).toEqual(b);
+      expect(point.alongMeters).toBeCloseTo(cumulativeDistances(route.geometry)[5], 4);
+      expect(point.divergenceDeg).toBeCloseTo(180, 4);
+    },
+  );
+
+  it.each([
+    { distance: 5000, earlierVertex: false },
+    { distance: 6000, earlierVertex: false },
+    { distance: 5000, earlierVertex: true },
+    { distance: 6000, earlierVertex: true },
+  ])(
+    "recovers an omitted maneuver after a missing shape ($distance m, earlier vertex $earlierVertex)",
+    ({ distance, earlierVertex }) => {
+      const a: LngLat = [0, 0];
+      const middle: LngLat = [0.005, 0];
+      const b: LngLat = [0.01, 0];
+      const c: LngLat = [0.01, 0.01];
+      const d: LngLat = [0, 0.01];
+      const end: LngLat = [0.012, 0];
+      const route: Route = {
+        ...driftRoute,
+        geometry: earlierVertex ? [a, middle, b, c, d, a, b, end] : [a, b, c, d, a, b, end],
+        steps: [
+          { ...driftRoute.steps[0], distance, coordinates: [], motorway: true },
+          { ...driftRoute.steps[2], coordinates: [middle, b, end] },
+        ],
+      };
+      const point = findJunctionDecisionPoints(route)[0];
+      expect(point.point).toEqual(middle);
+      expect(point.alongMeters).toBeCloseTo(5003.77168196654, 4);
+      expect(junctionLookupPoints(route, [point])[0].lookup.trace[3][0]).toBeLessThan(0.005);
+    },
+  );
+
+  it.each([1, 8])("uses distance evidence to pass a loop with %s missing step shapes", (count) => {
+    const route: Route = {
+      ...driftRoute,
+      geometry: [
+        [0, 0],
+        [0.01, 0],
+        [0.01, 0.01],
+        [0, 0.01],
+        [0, 0],
+        [0.002, 0],
+      ],
+      steps: [
+        ...Array.from({ length: count }, () => ({
+          instruction: "Drive around the block",
+          distance: 4447.797048846394 / count,
+          duration: 100 / count,
+          coordinates: [],
+          motorway: true,
+        })),
+        {
+          instruction: "Exit right",
+          distance: 220,
+          duration: 20,
+          coordinates: [
+            [0, 0],
+            [0.002, 0],
+          ],
+          maneuver: { type: "fork", modifier: "right" },
+        },
+      ],
+    };
+    const point = findJunctionDecisionPoints(route)[0];
+    expect(point.alongMeters).toBeCloseTo(4447.797, 2);
+    expect(point.approachBearing).toBeCloseTo(180, 4);
+  });
+});
 
 const METERS_PER_DEG_LAT = 111320;
 

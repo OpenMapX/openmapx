@@ -10,6 +10,7 @@ export interface JunctionDecisionPoint {
   kind: JunctionKind;
   side: "left" | "right";
   point: LngLat;
+  /** Arc-length on route geometry in metres; engine-distance fallback when step coordinates are missing. */
   alongMeters: number;
   /** Route bearing ~100 m before the point, from geometry (not from the engine). */
   approachBearing: number;
