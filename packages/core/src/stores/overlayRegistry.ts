@@ -63,7 +63,7 @@ export function registerOverlayEntry(entry: OverlayEntry): void {
  * that have been dynamically registered via createOverlayStore({ overlayId }).
  */
 export function initOverlayRegistry(integrations: LoadedIntegrationMeta[]): void {
-  const frontendOwners = new Map<string, string>();
+  const frontendOwners = new Map<string, LoadedIntegrationMeta>();
   for (const integration of integrations) {
     const frontend = integration.frontend;
     if (
@@ -75,21 +75,28 @@ export function initOverlayRegistry(integrations: LoadedIntegrationMeta[]): void
     const overlayId = integrationIdToOverlayId(integration.id);
     const existing = frontendOwners.get(overlayId);
     if (existing) {
+      // Sibling providers can intentionally mount one shared layer and legend.
+      if (frontend.sharedMapLayer && frontend.sharedMapLayer === existing.frontend?.sharedMapLayer)
+        continue;
       throw new Error(
-        `Multiple enabled frontend owners resolve to overlay "${overlayId}": ${existing}, ${integration.id}`,
+        `Multiple enabled frontend owners resolve to overlay "${overlayId}": ${existing.id}, ${integration.id}`,
       );
     }
-    frontendOwners.set(overlayId, integration.id);
+    frontendOwners.set(overlayId, integration);
   }
 
   // Clear any existing entries to avoid duplicates on re-init
   overlayEntries.length = 0;
+  const registeredOverlayIds = new Set<string>();
 
   for (const integration of integrations) {
     if (!integration.enabled) continue;
     if (!integration.frontend?.overlay) continue;
 
     const overlayId = integrationIdToOverlayId(integration.id);
+    // Keep the first enabled overlay's metadata, as the rendering hosts do.
+    if (registeredOverlayIds.has(overlayId)) continue;
+    registeredOverlayIds.add(overlayId);
     let storeHook = getRegisteredOverlayStore(overlayId) as StoreHook | undefined;
 
     // Stand in for integrations whose store hasn't been registered yet: simple
