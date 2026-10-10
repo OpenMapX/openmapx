@@ -17,6 +17,7 @@ import { createPinnedFetchTransport } from "./pinned-fetch";
 import { assertHttpProtocol, validatePublicUrl } from "./validate-url";
 
 export { hostMatchesAllowlist } from "./fetchWithRedirects";
+export { createPinnedFetchTransport } from "./pinned-fetch";
 
 export interface SafeDownloadOptions {
   url: URL;
@@ -191,6 +192,19 @@ async function resolvePublicAddresses(hostname: string): Promise<FetchConnection
 
 export async function assertResolvesToPublicIp(hostname: string): Promise<void> {
   await resolvePublicAddresses(hostname);
+}
+
+/**
+ * The checked addresses for one hop of a request that streams its body itself
+ * (pass as `resolveConnectionAddresses` with a pinned transport's `fetch`):
+ * HTTP(S) only, no private literal, and every resolved address public, so the
+ * socket opens on exactly what was checked.
+ */
+export async function resolvePublicConnectionAddresses(
+  url: URL,
+): Promise<FetchConnectionAddress[]> {
+  validatePublicUrl(url.toString());
+  return resolvePublicHostOrThrow(url.hostname);
 }
 
 const SAFE_DOWNLOAD_MAX_REDIRECTS = 5;

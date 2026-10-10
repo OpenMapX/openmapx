@@ -11,6 +11,7 @@ import { adminOperationsRoute } from "./admin-operations";
 import { adminServicesRoute } from "./admin-services";
 import { adminSettingsRoute } from "./admin-settings";
 import { adminSystemRoute } from "./admin-system";
+import { ambientPlacesRoute } from "./ambient-places";
 import { attributionRoute } from "./attribution";
 import { authRoute } from "./auth";
 import { capabilitiesRoute } from "./capabilities";
@@ -19,7 +20,6 @@ import { elevationRoute } from "./elevation";
 import { garageRoute } from "./garage";
 import { imageProxyRoute } from "./image-proxy";
 import { internalMetricsRoute } from "./internal-metrics";
-import { internalPoiSourcesRoute } from "./internal-poi-sources";
 import { isochroneRoute } from "./isochrone";
 import { legalConfigRoute } from "./legal-config";
 import { mapConfigRoute } from "./map-config";
@@ -85,6 +85,7 @@ export async function registerCoreRoutes(
   await server.register(mobileAuthRoute, { prefix: "/api" });
 
   await server.register(placesRoute, { prefix: "/api" });
+  await server.register(ambientPlacesRoute, { prefix: "/api" });
   await server.register(neighborhoodsRoute, { prefix: "/api" });
   await server.register(offlinePackagesRoute, { prefix: "/api" });
 
@@ -98,7 +99,6 @@ export async function registerCoreRoutes(
   await server.register(isochroneRoute, { prefix: "/api" });
   await server.register(imageProxyRoute, { prefix: "/api" });
   await server.register(internalMetricsRoute, { prefix: "/api" });
-  await server.register(internalPoiSourcesRoute, { prefix: "/api" });
   await server.register(winterSportsRoute, { prefix: "/api" });
   await server.register(reviewsKeypairRoute, { prefix: "/api" });
   await server.register(savedRoute, { prefix: "/api" });

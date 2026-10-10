@@ -126,6 +126,7 @@ described in [Capability requirement resolution](#capability-requirement-resolut
 {
   frontend?: {
     mapLayer?: boolean;      // ships a code map-layer component
+    sharedMapLayer?: string; // sibling providers mount one common layer/legend
     legend?: boolean;        // ships a code legend component
     panel?: boolean;         // ships a code side-panel component
     searchCategory?: { id: string; label?: string; showInChipBar?: boolean; iconPath?: string };
@@ -164,6 +165,17 @@ optional **declarative legend** the host draws from the manifest, which an
 overlay can use instead of shipping a `legend.tsx`. `backend.routes` signals that
 the integration registers HTTP routes; `backend.cron` declares a recurring task.
 How an overlay renders is detailed in [Map overlays](#map-overlays).
+
+Several enabled providers can intentionally share one overlay, as Mapillary and
+Panoramax do for `street-level-imagery`. Every participant must declare the same
+nonempty `frontend.sharedMapLayer` key. The rendering hosts mount the shared
+layer and legend once, the layer selector exposes one toggle, and the overlay
+registry creates one entry using the first enabled participant's overlay
+metadata in registry order. Participants should declare the same overlay rules
+and selector metadata and render all contributing providers through the common
+component. Provider metadata stays available for domain attribution; sharing a
+frontend does not remove a provider's credits. Two frontend owners resolving to
+the same overlay without a matching shared-layer declaration remain an error.
 
 When `layerSelector.preview` is set, it names an SVG file relative to the
 integration root, such as `preview.svg` or `assets/layer-preview.svg`. The host
@@ -357,8 +369,10 @@ instance lists at `GET /sources`. The integration reads that list during
   international feed;
 - every source is `server-only`, since OpenMapX reads it through OpenConditions.
 
-OpenConditions `roads` feeds are credited under `road-conditions`, and `fuel`
-feeds under `fuel-stations`. Feeds of other OpenConditions domains are left out.
+OpenConditions `roads` feeds are credited under `road-conditions`, `fuel` feeds
+under `fuel-stations`, `parking` feeds under `parking-sites`, `charging` feeds
+under `charging-sites`, `cameras` feeds under `cameras`, and `hazards` feeds
+under `hazards`. Feeds of other OpenConditions domains are left out.
 OpenConditions lists restricted feeds too, since the list is metadata, not
 records. Each `/sources` answer names the `scope` it was served in, and an
 answer without one is malformed (the last good list stays). In the `public`
@@ -428,7 +442,6 @@ where they came from.
 interface IntegrationContext {
   readonly http: HttpClient; // fetch wrapper with optional Redis caching
   readonly cache: CacheClient; // namespaced KV (int:<id>:<key>) with withCache()
-  readonly liveStore: LiveStoreClient; // shared, non-namespaced data-manager keyspace
   readonly db?: DatabaseClient; // only when the manifest requires postgis
   readonly log: Logger; // tagged structured logger
   readonly secrets: SecretsClient; // decrypted vault access
@@ -441,10 +454,6 @@ interface IntegrationContext {
 - **`cache`** is a key-value store namespaced per integration (`int:<id>:<key>`),
   with a `withCache(key, ttl, fn)` read-through helper. Namespacing means one
   integration cannot collide with another's keys.
-- **`liveStore`** is a deliberately _un-namespaced_ reader for the shared
-  `poi:live:<sourceId>` keyspace written by the data-manager's ingest pipeline.
-  It is separate from `cache` precisely because the data-manager knows nothing
-  about integration ids — prefixing here would miss every write.
 - **`db`** is present only when the manifest requires the `postgis` service;
   otherwise it is `undefined`.
 - **`log`** is a structured logger tagged with the integration id.
@@ -511,8 +520,11 @@ interface IntegrationContext {
   registerGtfsCatalogProvider(p: GtfsCatalogProvider): void; // → "gtfs-catalog"
   registerRoadConditionsProvider(p: RoadConditionsProvider): void; // → "road-conditions"
   registerFuelStationProvider(p: FuelStationProvider): void; // → "fuel-stations"
+  registerParkingSiteProvider(p: ParkingSiteProvider): void; // → "parking-sites"
+  registerChargingSiteProvider(p: ChargingSiteProvider): void; // → "charging-sites"
+  registerCameraProvider(p: CameraProvider): void; // → "cameras"
+  registerHazardsProvider(p: HazardsProvider): void; // → "hazards"
 
-  registerPoiSources(sources: readonly PoiSource[]): void; // → data-manager ingest
   registerRoute(method, path, handler, options?): void; // options.rateLimitTier
   registerHealthCheck(fn: CustomHealthCheckFn): void; // overrides manifest probe
   registerDisclosure(d: Disclosure): void; // surfaces a capability note
@@ -522,10 +534,7 @@ interface IntegrationContext {
 
 The typed registrars enforce the contract shape at compile time, so the
 orchestrator can dispatch on a declared capability rather than reflecting over
-the object. `registerPoiSources` is different in kind: it forwards entries to the
-shared POI-source registry that the data-manager ingest pipeline also reads, so
-large bbox-queryable datasets are ingested once rather than fetched eagerly per
-request. `registerRoute` mounts a route under the integration's prefix; passing
+the object. `registerRoute` mounts a route under the integration's prefix; passing
 `{ requireAuth: true }` makes the host reject unauthenticated callers with 401
 before the handler runs. Every route consumes exactly one host limiter bucket:
 `rateLimitTier` defaults to `public`, upstream-heavy point/list routes use
@@ -572,20 +581,25 @@ interface; the domain orchestrator consumes the typed shape. The contracts in
 the mobility domains return their data wrapped in a `MobilityResult<T>`, so
 attribution and freshness flow through every call unmodified.
 
-| Domain            | Contract                     | What providers in it do                                                                           |
-| ----------------- | ---------------------------- | ------------------------------------------------------------------------------------------------- |
-| `geocoding`       | `GeocodingProvider`          | Forward geocode, autocomplete, reverse geocode.                                                   |
-| `routing`         | `RoutingProvider`            | Turn-by-turn directions, plus optional isochrones and map-matching.                               |
-| `transit`         | `TransitProvider`            | Stops, departures/arrivals, routes, trip planning, vehicle positions, alerts.                     |
-| `live-transit`    | `RealtimeProvider`           | Realtime overlays: vehicle positions, service alerts, trip-update deltas.                         |
-| `data-source`     | `MobilityDataSourceProvider` | External POI sources — bike/car/scooter sharing, parking, fuel, EV charging, webcams.             |
-| `weather`         | `WeatherProvider`            | Current conditions, hourly and daily forecasts.                                                   |
-| `photos`          | `PhotoProvider`              | Place imagery, including fast OSM-tag-based hero lookups.                                         |
-| `reviews`         | `ReviewProvider`             | Fetch, aggregate, and submit place reviews.                                                       |
-| `poi-search`      | `PoiSearchProvider`          | Category and free-text POI search within a bounding box.                                          |
-| `knowledge`       | `KnowledgeProvider`          | Place enrichment from reference sources.                                                          |
-| `gtfs-catalog`    | `GtfsCatalogProvider`        | List GTFS feeds for the schedule-feed importer to ingest.                                         |
-| `road-conditions` | `RoadConditionsProvider`     | Live road/traffic conditions — incidents, roadworks, closures, and per-segment congestion speeds. |
+| Domain            | Contract                     | What providers in it do                                                                                                                              |
+| ----------------- | ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `geocoding`       | `GeocodingProvider`          | Forward geocode, autocomplete, reverse geocode.                                                                                                      |
+| `routing`         | `RoutingProvider`            | Turn-by-turn directions, plus optional isochrones and map-matching.                                                                                  |
+| `transit`         | `TransitProvider`            | Stops, departures/arrivals, routes, trip planning, vehicle positions, alerts.                                                                        |
+| `live-transit`    | `RealtimeProvider`           | Realtime overlays: vehicle positions, service alerts, trip-update deltas.                                                                            |
+| `data-source`     | `MobilityDataSourceProvider` | Map data sources — bike/car/scooter sharing, and the user-facing merger over the charging-sites, parking-sites, fuel-stations and cameras providers. |
+| `weather`         | `WeatherProvider`            | Current conditions, hourly and daily forecasts.                                                                                                      |
+| `photos`          | `PhotoProvider`              | Place imagery, including fast OSM-tag-based hero lookups.                                                                                            |
+| `reviews`         | `ReviewProvider`             | Fetch, aggregate, and submit place reviews.                                                                                                          |
+| `poi-search`      | `PoiSearchProvider`          | Category and free-text POI search within a bounding box.                                                                                             |
+| `knowledge`       | `KnowledgeProvider`          | Place enrichment from reference sources.                                                                                                             |
+| `gtfs-catalog`    | `GtfsCatalogProvider`        | List GTFS feeds for the schedule-feed importer to ingest.                                                                                            |
+| `road-conditions` | `RoadConditionsProvider`     | Live road/traffic conditions — incidents, roadworks, closures, and per-segment congestion speeds.                                                    |
+| `charging-sites`  | `ChargingSiteProvider`       | EV charging sites with charge-point status and tariffs, merged by the `ev-charging` data source.                                                     |
+| `parking-sites`   | `ParkingSiteProvider`        | Parking facilities with live occupancy, merged by the `parking` data source.                                                                         |
+| `fuel-stations`   | `FuelStationProvider`        | Fuel stations with per-grade prices, merged by the `fuel` data source.                                                                               |
+| `cameras`         | `CameraProvider`             | Traffic and scenic cameras with their views, current stills and streams, merged by the `webcam` data source.                                         |
+| `hazards`         | `HazardsProvider`            | Weather alerts, natural hazards, fire detections and their density grid, read by the four hazard overlays through `createHazardsOrchestrator`.       |
 
 A few patterns recur across the contracts and are worth calling out:
 
@@ -795,8 +809,8 @@ The host treats the two install locations differently, and the
   run directly from workspace TypeScript source — the host imports their
   `index.ts` — and need no build step. They carry `quality: "built-in"`.
 - **Community integrations** are installed under `custom_integrations/`. Their
-  manifests and safe static assets are discovered, but backend, `poi-sources`, and frontend
-  JavaScript is never imported by app-api or data-manager: those processes hold
+  manifests and safe static assets are discovered, but backend and frontend
+  JavaScript is never imported by app-api: that process holds
   database credentials, application secrets, a writable checkout, and Docker
   authority and are not sandboxes. The installer rejects such entry points.
   Backend behavior belongs in a separately containerized service component;

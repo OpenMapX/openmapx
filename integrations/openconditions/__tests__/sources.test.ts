@@ -27,6 +27,9 @@ const OPERATOR = { OPENCONDITIONS_URL: BASE_URL, OPENCONDITIONS_OPERATOR_TOKEN: 
 const SHARE_ALIKE =
   "Share-alike: a database derived from this data must be published under the same licence.";
 const BBOX: BBox = [13.438, 52.528, 13.443, 52.533];
+/** A licence OpenConditions' registry knows by a `LicenseRef-` id, and the name it gives it. */
+const TFL_LICENSE = "LicenseRef-TfL-Transport-Data-Service";
+const TFL_LICENSE_NAME = "TfL Transport Data Service licence (OGL v2.0 with TfL amendments)";
 
 function ocSource(overrides: Partial<OcSource> = {}): OcSource {
   return {
@@ -34,6 +37,7 @@ function ocSource(overrides: Partial<OcSource> = {}): OcSource {
     name: "Tankerkönig (MTS-K)",
     domain: "fuel",
     product: "fuel",
+    format: "tankerkoenig",
     operator: "tankerkoenig",
     region: "de",
     country: "de",
@@ -147,6 +151,18 @@ describe("toDataSource", () => {
     expect(toDataSource(eu)!.providerCountry).toBe("EU");
   });
 
+  test("shows the licence's readable name where OpenConditions gives one, else its id", () => {
+    const tfl = toDataSource(
+      ocSource({
+        license: "LicenseRef-TfL-Transport-Data-Service",
+        licenseName: "TfL Transport Data Service licence (OGL v2.0 with TfL amendments)",
+      }),
+    )!;
+    expect(tfl.license).toBe("TfL Transport Data Service licence (OGL v2.0 with TfL amendments)");
+    expect(validateDataSource(tfl, manifest.domains).valid).toBe(true);
+    expect(toDataSource(ocSource())!.license).toBe("CC-BY-4.0");
+  });
+
   test("share-alike makes a granted redistribution conditional; a terms note is a usage condition", () => {
     const osm = toDataSource(
       ocSource({
@@ -211,9 +227,120 @@ describe("toDataSource", () => {
     }
   });
 
+  test("maps an OC parking feed to the parking-sites domain", () => {
+    const parking = toDataSource(
+      ocSource({
+        id: "de-bw-mobidata-parking",
+        name: "MobiData BW ParkAPI car parking sites",
+        domain: "parking",
+        product: "parking",
+        operator: "mobidata",
+        accessMode: "bulk",
+        restricted: false,
+      }),
+    )!;
+    expect(parking).toMatchObject({ sourceId: "de-bw-mobidata-parking", domain: "parking-sites" });
+    expect(validateDataSource(parking, manifest.domains).valid).toBe(true);
+  });
+
+  test("maps an OC hazards feed to the hazards domain", () => {
+    const hazards = toDataSource(
+      ocSource({
+        id: "usgs-quakes",
+        name: "USGS earthquakes",
+        domain: "hazards",
+        product: "quakes",
+        format: "usgs",
+        operator: "usgs",
+        region: "global",
+        country: undefined,
+        accessMode: "bulk",
+        restricted: false,
+      }),
+    )!;
+    expect(hazards).toMatchObject({ sourceId: "usgs-quakes", domain: "hazards" });
+    expect(validateDataSource(hazards, manifest.domains).valid).toBe(true);
+  });
+
+  test("maps an OC camera feed to the cameras domain with its image hosts as media hosts", () => {
+    const cameras = toDataSource(
+      ocSource({
+        id: "gb-eng-tfl-cameras",
+        name: "TfL JamCams",
+        domain: "cameras",
+        product: "cameras",
+        operator: "tfl",
+        accessMode: "bulk",
+        restricted: false,
+        imageHosts: ["s3-eu-west-1.amazonaws.com/jamcams.tfl.gov.uk/"],
+      }),
+    )!;
+    expect(cameras).toMatchObject({
+      sourceId: "gb-eng-tfl-cameras",
+      domain: "cameras",
+      mediaHosts: ["s3-eu-west-1.amazonaws.com/jamcams.tfl.gov.uk/"],
+      // Streams and players load in the browser after the user's consent.
+      endUserExposure: "mixed",
+    });
+    expect(validateDataSource(cameras, manifest.domains).valid).toBe(true);
+
+    // A camera feed without image hosts has none to admit; another domain never has any.
+    const osm = toDataSource(ocSource({ id: "osm-cameras", domain: "cameras" }))!;
+    expect(osm).not.toHaveProperty("mediaHosts");
+    expect(osm.endUserExposure).toBe("mixed");
+    expect(toDataSource(ocSource())).toMatchObject({ endUserExposure: "server-only" });
+  });
+
+  test("a malformed imageHosts field costs the source its media hosts, not its listing", () => {
+    const camera = (imageHosts: unknown) =>
+      toDataSource(
+        ocSource({ id: "gb-eng-tfl-cameras", domain: "cameras", imageHosts } as Partial<OcSource>),
+      );
+    expect(camera("tfl.gov.uk")).toMatchObject({ sourceId: "gb-eng-tfl-cameras" });
+    expect(camera("tfl.gov.uk")).not.toHaveProperty("mediaHosts");
+    expect(camera({ host: "tfl.gov.uk" })).not.toHaveProperty("mediaHosts");
+    expect(camera([42, null, "tfl.gov.uk"])!.mediaHosts).toEqual(["tfl.gov.uk"]);
+    expect(camera([42])).not.toHaveProperty("mediaHosts");
+  });
+
+  test("an image host the proxy would refuse costs its stills, never the source", () => {
+    const camera = (imageHosts: string[]) =>
+      toDataSource(ocSource({ id: "gb-eng-tfl-cameras", domain: "cameras", imageHosts }))!;
+    const listed = camera([
+      "*.co.uk",
+      "s3-eu-west-1.amazonaws.com/jamcams.tfl.gov.uk/",
+      "s3-eu-west-1.amazonaws.com",
+      "tfl.gov.uk",
+    ]);
+    expect(listed.mediaHosts).toEqual([
+      "s3-eu-west-1.amazonaws.com/jamcams.tfl.gov.uk/",
+      "tfl.gov.uk",
+    ]);
+    expect(validateDataSource(listed, manifest.domains).valid).toBe(true);
+
+    const none = camera(["*.co.uk", "127.0.0.1"]);
+    expect(none).not.toHaveProperty("mediaHosts");
+    expect(validateDataSource(none, manifest.domains).valid).toBe(true);
+  });
+
+  test("the live sources hand out each source's media hosts", () => {
+    const live = createLiveSources();
+    live.update([
+      {
+        sourceId: "fi-digitraffic-cameras",
+        url: "https://www.digitraffic.fi",
+        mediaHosts: ["weathercam.digitraffic.fi"],
+      },
+      { sourceId: "osm-cameras", url: "https://www.openstreetmap.org/copyright" },
+    ]);
+    expect(live.mediaHosts("fi-digitraffic-cameras")).toEqual(["weathercam.digitraffic.fi"]);
+    expect(live.mediaHosts("osm-cameras")).toEqual([]);
+    expect(live.mediaHosts("unknown")).toEqual([]);
+  });
+
   test("skips OC domains OMX has no domain for", () => {
-    expect(toDataSource(ocSource({ domain: "parking" }))).toBeUndefined();
     expect(toDataSource(ocSource({ domain: "ev" }))).toBeUndefined();
+    expect(toDataSource(ocSource({ domain: "maritime" }))).toBeUndefined();
   });
 });
 
@@ -226,7 +353,7 @@ describe("startSourceSync", () => {
   });
 
   test("supplies the sources at activation and refreshes them on the interval", async () => {
-    let answer: unknown = listOf(NDW, ocSource({ domain: "parking", id: "de-x-parking" }));
+    let answer: unknown = listOf(NDW, ocSource({ domain: "ev", id: "de-x-ev" }));
     const http = fakeHttpClient((req) => (req.url === `${BASE_URL}/sources` ? answer : undefined));
     const client = createOpenConditionsClient(OPERATOR, http)!;
     const ctx = createMockIntegrationContext({ id: "openconditions", http });
@@ -402,11 +529,7 @@ describe("startSourceSync logging", () => {
     const broken = { ...ocSource({ id: "de-broken-fuel" }) } as Partial<OcSource>;
     delete broken.rights;
     const http = fakeHttpClient(() =>
-      listOf(
-        NDW,
-        ocSource({ id: "de-x-parking", domain: "parking", restricted: false }),
-        broken as OcSource,
-      ),
+      listOf(NDW, ocSource({ id: "de-x-ev", domain: "ev", restricted: false }), broken as OcSource),
     );
     const { lines, log } = recordingLog();
     const ctx = createMockIntegrationContext({ id: "openconditions", http, log });
@@ -420,7 +543,7 @@ describe("startSourceSync logging", () => {
     const invalid = lines.filter((l) => l.level === "warn");
     expect(invalid).toHaveLength(1);
     expect(invalid[0]!.message).toMatch(/de-broken-fuel/);
-    const unmapped = lines.filter((l) => /de-x-parking/.test(l.message));
+    const unmapped = lines.filter((l) => /de-x-ev/.test(l.message));
     expect(unmapped).toHaveLength(1);
     expect(unmapped[0]!.level).toBe("debug");
     expect(unmapped[0]!.message).toMatch(/no OpenMapX domain/);
@@ -460,6 +583,25 @@ describe("createLiveSources", () => {
     expect(live.has("de-tankerkoenig-fuel")).toBe(false);
     expect(live.link("de-tankerkoenig-fuel")).toBeUndefined();
   });
+
+  test("names a licence by the id a listed source carries; none before the first list", () => {
+    const live = createLiveSources();
+    expect(live.licenseName(TFL_LICENSE)).toBeUndefined();
+
+    live.updateLicenses([
+      ocSource({ id: "gb-tfl-cameras", license: TFL_LICENSE, licenseName: TFL_LICENSE_NAME }),
+      ocSource({ licenseName: " " }),
+      NDW,
+    ]);
+    expect(live.licenseName(TFL_LICENSE)).toBe(TFL_LICENSE_NAME);
+    // A source without a readable name gives its id none.
+    expect(live.licenseName("CC-BY-4.0")).toBeUndefined();
+    expect(live.licenseName("CC0-1.0")).toBeUndefined();
+
+    // Each list replaces the last.
+    live.updateLicenses([NDW]);
+    expect(live.licenseName(TFL_LICENSE)).toBeUndefined();
+  });
 });
 
 describe("setup", () => {
@@ -471,12 +613,16 @@ describe("setup", () => {
     await setup(ctx, { OPENCONDITIONS_URL: BASE_URL });
     expect(ctx.registered.roadConditions).toHaveLength(1);
     expect(ctx.registered.fuelStations).toHaveLength(1);
+    expect(ctx.registered.parkingSites).toHaveLength(1);
     expect(ctx.registered.dataSourceLists).toHaveLength(0);
 
     // Without a list nothing can be gated, so nothing is served.
     const callsBefore = http.calls.length;
     const [road] = ctx.registered.roadConditions;
     const [fuel] = ctx.registered.fuelStations;
+    const [parking] = ctx.registered.parkingSites;
+    expect(await parking!.searchSites(BBOX)).toEqual({ sites: [], partial: "unavailable" });
+    expect(await parking!.getSite("oc:feature:x")).toBeNull();
     expect(await road!.getEvents(BBOX)).toEqual([]);
     await expect(road!.getRoutingEvents!(BBOX)).rejects.toThrow(/source list/);
     expect(await road!.getFlow!(BBOX)).toEqual([]);
@@ -568,6 +714,44 @@ describe("setup", () => {
     });
     expect(station!.attributions.find((a) => a.sourceId === "de-tankerkoenig-fuel")!.url).toBe(
       "https://creativecommons.tankerkoenig.de",
+    );
+  });
+
+  test("a record credit shows a LicenseRef- licence by the name the live list gives it", async () => {
+    const LICENSE = "LicenseRef-Tankerkoenig-Terms";
+    const NAME = "Tankerkönig terms of use";
+    const answer = structuredClone(featuresResponse) as unknown as {
+      records: { provenance: { attribution: Record<string, unknown> } }[];
+    };
+    const attribution = answer.records[0]!.provenance.attribution;
+    attribution["license"] = LICENSE;
+    const http = fakeHttpClient((req) => {
+      if (req.url === `${BASE_URL}/sources`) {
+        return listOf(NDW, ocSource({ license: LICENSE, licenseName: NAME }), {
+          ...OSM,
+          licenseName: "Open Data Commons Open Database License v1.0",
+        });
+      }
+      if (req.url === `${BASE_URL}/features`) return answer;
+      return undefined;
+    });
+    const ctx = createMockIntegrationContext({
+      id: "openconditions",
+      http,
+      manifest: manifest as unknown as IntegrationManifest,
+    });
+    await setup(ctx, OPERATOR);
+    const [provider] = ctx.registered.fuelStations;
+
+    const [station] = (await provider!.searchStations(BBOX)).stations;
+
+    expect(station!.attributions.find((a) => a.sourceId === "de-tankerkoenig-fuel")).toMatchObject({
+      spdxLicense: NAME,
+      licenseUrl: attribution["licenseUrl"],
+    });
+    // An SPDX id stays as it is, whatever name the list gives it.
+    expect(station!.attributions.find((a) => a.sourceId === "osm-fuel")!.spdxLicense).toBe(
+      "ODbL-1.0",
     );
   });
 });

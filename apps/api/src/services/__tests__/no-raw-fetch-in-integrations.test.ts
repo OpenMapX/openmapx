@@ -40,16 +40,8 @@ const RAW_FETCH_ALLOWLIST: Record<string, string> = {
     "GetCapabilities XML + binary legend/tile proxies — none are JSON",
   "integrations/overlay-schematic-transit/index.ts":
     "tile proxy: streams the binary MVT tile body through createBoundedBinaryProxyStream",
-  "integrations/overlay-weather-alerts/index.ts": "MeteoAlarm Atom+CAP feeds are XML, not JSON",
   "integrations/overlay-weather/index.ts":
     "RainViewer + OWM tile proxies: forward binary PNG tiles verbatim",
-  "integrations/overlay-wildfires/effis.ts":
-    "EFFIS may return XML exception bodies for its GeoJSON endpoint, so the adapter inspects content type and raw text",
-  "integrations/overlay-wildfires/firms.ts": "FIRMS wildfire feed is CSV, not JSON",
-  "integrations/overlay-wildfires/nifc.ts":
-    "adapter maps timeout, network, HTTP status, and malformed ArcGIS JSON to provider-specific source errors",
-  "integrations/overlay-wildfires/noaa-smoke.ts":
-    "adapter maps timeout, network, HTTP status, malformed JSON, and ArcGIS error envelopes to provider-specific source errors",
   "integrations/overlay-winter-sports/index.ts":
     "tile proxy: forwards the binary PNG tile body and status verbatim",
   "integrations/restaurants/menu.ts":
@@ -62,14 +54,10 @@ const RAW_FETCH_ALLOWLIST: Record<string, string> = {
     "Mapillary vector tiles: forwards the binary tile body, content-type, and status verbatim",
   "integrations/transit-otp/provider.ts":
     "isOtpAvailable() reachability probe: reads only res.ok, never the body",
-  "integrations/webcam/providers/osm.ts":
-    "checkUrlReachable() HEAD probe: reads only res.ok, never the body",
-  "integrations/webcam/providers/traffic-camera.ts":
-    "Hong Kong uses UTF-16 CSV and Spain/Norway use XML, so raw response bodies are parsed with bounded requests",
 };
 
 // Matches a bare, unqualified `fetch(` call — NOT `fetchJson(`,
-// `impersonatingFetch(`, or `something.fetch(`.
+// `graphqlFetch(`, or `something.fetch(`.
 const BARE_FETCH_RE = /(?<![.\w$])fetch\s*\(/;
 
 function collectTsFiles(dir: string): string[] {

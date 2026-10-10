@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "author": "OpenMapX",
   "license": "MIT",
-  "documentation": "https://eonet.gsfc.nasa.gov/docs/v3, https://www.gdacs.org/gdacsapi/",
+  "documentation": "https://docs.openmapx.org/",
   "subjectData": {
     "storesPersonalData": false,
     "strategy": "not_personal",
@@ -38,48 +38,6 @@
       }
     }
   },
-  "healthCheck": [
-    {
-      "name": "NASA EONET",
-      "type": "http",
-      "url": "https://eonet.gsfc.nasa.gov/api/v3/categories"
-    },
-    {
-      "name": "GDACS",
-      "type": "http",
-      "url": "https://www.gdacs.org/gdacsapi/api/events/geteventlist/SEARCH?eventlist=TC&fromDate=2020-01-01&toDate=2020-01-02&alertlevel=Green"
-    }
-  ],
   "quality": "built-in",
-  "category": "Data Overlays",
-  "dataSources": [
-    {
-      "sourceId": "eonet",
-      "name": "NASA EONET",
-      "url": "https://eonet.gsfc.nasa.gov/",
-      "license": "U.S. Public Domain",
-      "licenseUrl": "https://www.earthdata.nasa.gov/engage/open-data-services-software-policies/data-use-guidance",
-      "commercialUse": "yes",
-      "providerCountry": "US",
-      "providerPrivacyUrl": "https://www.nasa.gov/privacy/",
-      "endUserExposure": "server-only",
-      "personalData": false,
-      "cookies": false,
-      "dpaAvailable": false
-    },
-    {
-      "sourceId": "gdacs",
-      "name": "GDACS",
-      "url": "https://www.gdacs.org/",
-      "license": "Proprietary (disclaimer-based)",
-      "licenseUrl": "https://www.gdacs.org/About/termofuse.aspx",
-      "commercialUse": "no",
-      "providerCountry": "BE",
-      "providerPrivacyUrl": "https://commission.europa.eu/privacy-policy-websites-managed-european-commission_en",
-      "endUserExposure": "server-only",
-      "personalData": false,
-      "cookies": false,
-      "dpaAvailable": false
-    }
-  ]
+  "category": "Data Overlays"
 }

@@ -6,12 +6,35 @@ import { TransitDataStatus, TransitQueryNotice } from "./TransitDataStatus";
 vi.mock("next-intl", () => mockNextIntl());
 const now = Date.parse("2026-10-07T08:00:00Z");
 describe("readable transit evidence", () => {
-  it("exposes scheduled-only and local source without claiming live coverage", () => {
+  it("shows only the traveler-facing scheduled-time hint", () => {
     render(<TransitDataStatus now={now} realtime={false} source="ms" />);
-    expect(screen.getByText(/dataStatus.scheduled/)).toHaveTextContent("dataStatus.local");
-    expect(screen.queryByText(/dataStatus.fresh/)).not.toBeInTheDocument();
+    expect(screen.getByText("transit.dataStatus.scheduled")).toBeInTheDocument();
+    expect(screen.queryByText(/dataStatus.local|dataStatus.sourceUnknown/)).not.toBeInTheDocument();
   });
-  it("labels stale predictions and age in text", () => {
+  it.each([undefined, new Date(now - 30_000).toISOString()])(
+    "adds no diagnostic row for a prediction with upstream timestamp %s",
+    (dataAsOf) => {
+      const { container } = render(
+        <TransitDataStatus
+          now={now}
+          realtime
+          source="mo"
+          freshness={{
+            fetchedAt: new Date(now).toISOString(),
+            dataAsOf,
+            hasRealtimeData: true,
+            isStale: false,
+          }}
+        />,
+      );
+      expect(container.childElementCount).toBe(0);
+    },
+  );
+  it("does not invent a live or scheduled label when service evidence is absent", () => {
+    const { container } = render(<TransitDataStatus now={now} source="ms" />);
+    expect(container.childElementCount).toBe(0);
+  });
+  it("warns about outdated predictions without raw source details", () => {
     render(
       <TransitDataStatus
         now={now}
@@ -25,8 +48,14 @@ describe("readable transit evidence", () => {
         source="mo"
       />,
     );
-    expect(screen.getByText(/dataStatus.realtime/)).toHaveTextContent("dataStatus.stale");
-    expect(screen.getByText(/dataStatus.realtime/)).toHaveTextContent("dataStatus.age");
+    expect(screen.getByText("transit.dataStatus.stale")).toBeInTheDocument();
+    expect(
+      screen.queryByText(/dataStatus.age|dataStatus.hosted|dataStatus.realtime/),
+    ).not.toBeInTheDocument();
+  });
+  it("leaves refresh failure explanations to the board-level notice", () => {
+    const { container } = render(<TransitDataStatus now={now} realtime queryFailed source="ms" />);
+    expect(container.childElementCount).toBe(0);
   });
   it("exposes a failed refresh with keyboard-accessible retry separately from rows", () => {
     const retry = vi.fn();

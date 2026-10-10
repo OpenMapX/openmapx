@@ -1,0 +1,18 @@
+[
+  {
+    "id": "maptiler:branch-a",
+    "label": "REWE",
+    "sublabel": "REWE, Street A 1, Berlin",
+    "coordinates": [13.4, 52.52],
+    "type": "poi",
+    "rawCategory": "shop/supermarket"
+  },
+  {
+    "id": "maptiler:branch-b",
+    "label": "REWE",
+    "sublabel": "REWE, Street B 2, Berlin",
+    "coordinates": [13.405, 52.52],
+    "type": "poi",
+    "rawCategory": "shop/supermarket"
+  }
+]

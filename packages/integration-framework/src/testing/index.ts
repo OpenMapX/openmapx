@@ -4,7 +4,6 @@ import type {
   MobilityHttpRequestOptions,
   MobilityHttpTransport,
 } from "@openmapx/mobility-core/json-transport";
-import type { PoiSource } from "@openmapx/poi-source-registry";
 import { runImmediateActivation } from "../activation-transaction";
 import type {
   BinaryHttpResponse,
@@ -16,7 +15,6 @@ import type {
   HttpClientOptions,
   HttpResponse,
   IntegrationContext,
-  LiveStoreClient,
   Logger,
   ResponseOptions,
   RouteHandler,
@@ -24,11 +22,15 @@ import type {
   SecretsClient,
 } from "../context.js";
 import type { AirQualityProvider } from "../contracts/air-quality-provider.js";
+import type { CameraProvider } from "../contracts/camera-provider.js";
+import type { ChargingSiteProvider } from "../contracts/charging-site-provider.js";
 import type { FuelStationProvider } from "../contracts/fuel-station-provider.js";
 import type { GeocodingProvider } from "../contracts/geocoding-provider.js";
 import type { GtfsCatalogProvider } from "../contracts/gtfs-catalog-provider.js";
+import type { HazardsProvider } from "../contracts/hazards-provider.js";
 import type { KnowledgeProvider } from "../contracts/knowledge-provider.js";
 import type { MobilityDataSourceProvider } from "../contracts/mobility-data-source-provider.js";
+import type { ParkingSiteProvider } from "../contracts/parking-site-provider.js";
 import type { PhotoProvider } from "../contracts/photo-provider.js";
 import type { PoiSearchProvider } from "../contracts/poi-search-provider.js";
 import type { RealtimeProvider } from "../contracts/realtime-provider.js";
@@ -87,8 +89,8 @@ export function fakeMobilityHttpTransport(
  * runtime loader without pulling a dev dependency. Spies/assertions are the
  * caller's concern — pass your own `vi.fn()` as an override when you need one.
  *
- * Promotes the per-file fakes that integration tests used to re-invent (see the
- * inline `makeCtx`/`makeCache`/`makeLogger` in `__tests__/poi-source-reader.test.ts`).
+ * Promotes the per-file fakes (`makeCtx`/`makeCache`/`makeLogger`) that
+ * integration tests used to re-invent.
  */
 
 export interface FakeHttpRequest {
@@ -210,6 +212,10 @@ export interface CapturedRegistrations {
   ride: RideProvider[];
   roadConditions: RoadConditionsProvider[];
   fuelStations: FuelStationProvider[];
+  parkingSites: ParkingSiteProvider[];
+  chargingSites: ChargingSiteProvider[];
+  cameras: CameraProvider[];
+  hazards: HazardsProvider[];
   photo: PhotoProvider[];
   streetLevel: StreetLevelProvider[];
   review: ReviewProvider[];
@@ -217,7 +223,6 @@ export interface CapturedRegistrations {
   searchSuggestions: SearchSuggestionProvider[];
   knowledge: KnowledgeProvider[];
   gtfsCatalog: GtfsCatalogProvider[];
-  poiSources: PoiSource[];
   routes: { method: string; path: string; handler: RouteHandler; options?: RouteOptions }[];
   healthChecks: CustomHealthCheckFn[];
   disclosures: Disclosure[];
@@ -230,7 +235,6 @@ export interface MockContextOverrides {
   config?: Record<string, unknown>;
   http?: HttpClient;
   cache?: CacheClient;
-  liveStore?: LiveStoreClient;
   secrets?: SecretsClient;
   db?: DatabaseClient;
   log?: Logger;
@@ -262,6 +266,10 @@ export function createMockIntegrationContext(
     ride: [],
     roadConditions: [],
     fuelStations: [],
+    parkingSites: [],
+    chargingSites: [],
+    cameras: [],
+    hazards: [],
     photo: [],
     streetLevel: [],
     review: [],
@@ -269,16 +277,12 @@ export function createMockIntegrationContext(
     searchSuggestions: [],
     knowledge: [],
     gtfsCatalog: [],
-    poiSources: [],
     routes: [],
     healthChecks: [],
     disclosures: [],
     dataSourceLists: [],
   };
   const noop = () => undefined;
-  const liveStore: LiveStoreClient = overrides.liveStore ?? {
-    hmget: async <T>(_key: string, fields: readonly string[]) => fields.map(() => null as T | null),
-  };
   const ctx: MockIntegrationContext = {
     id: overrides.id ?? "test-integration",
     manifest: overrides.manifest ?? ({} as IntegrationContext["manifest"]),
@@ -291,7 +295,6 @@ export function createMockIntegrationContext(
         );
       }),
     cache: overrides.cache ?? createPassthroughCache(),
-    liveStore,
     db: overrides.db,
     log: overrides.log ?? createNoopLogger(),
     secrets: overrides.secrets ?? { get: async () => null },
@@ -326,6 +329,18 @@ export function createMockIntegrationContext(
     registerFuelStationProvider: (p) => {
       registered.fuelStations.push(p);
     },
+    registerParkingSiteProvider: (p) => {
+      registered.parkingSites.push(p);
+    },
+    registerChargingSiteProvider: (p) => {
+      registered.chargingSites.push(p);
+    },
+    registerCameraProvider: (p) => {
+      registered.cameras.push(p);
+    },
+    registerHazardsProvider: (p) => {
+      registered.hazards.push(p);
+    },
     registerPhotoProvider: (p) => {
       registered.photo.push(p);
     },
@@ -346,9 +361,6 @@ export function createMockIntegrationContext(
     },
     registerGtfsCatalogProvider: (p) => {
       registered.gtfsCatalog.push(p);
-    },
-    registerPoiSources: (sources) => {
-      registered.poiSources.push(...sources);
     },
     registerRoute: (method, path, handler, options) => {
       registered.routes.push({ method, path, handler, options });

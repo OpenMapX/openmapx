@@ -100,6 +100,7 @@ const samples: Record<(typeof OPS_OPERATION_KINDS)[number], OpsOperation> = {
     kind: "serviceSelection.apply",
     revisionId: "selection_20260823",
   },
+  "serviceSelection.inspect": { kind: "serviceSelection.inspect" },
   "serviceConfig.apply": {
     kind: "serviceConfig.apply",
     serviceId: "motis",

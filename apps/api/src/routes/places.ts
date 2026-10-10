@@ -22,6 +22,8 @@ import {
   parseId,
   type ReviewProvider,
 } from "@openmapx/core";
+import { ambientPlaceToCategoryPlace } from "@openmapx/core/ambient-places";
+import { readAmbientPlaceByGers } from "@openmapx/core/ambient-places-server";
 import { currentOpeningHoursInfo } from "@openmapx/core/server";
 import {
   buildFacebookUrl,
@@ -34,6 +36,7 @@ import {
   type PlaceResolverContext,
 } from "@openmapx/place-ids";
 import type { FastifyPluginAsync } from "fastify";
+import { sql } from "../db/index.js";
 import { getAllIntegrations, isEnabledIntegrationScheme } from "../integration-host.js";
 import { getPlaceKnowledge } from "../services/knowledge/index";
 import { recordCardEnrichment } from "../services/metrics/index";
@@ -41,7 +44,7 @@ import { buildReviewLinks } from "../services/review-links";
 import { hashKey, TTL, withCache } from "../utils/cache.js";
 import { createLimiter } from "../utils/concurrency.js";
 import { declareRouteAuth } from "../utils/route-auth.js";
-import { isAllowedHost } from "./image-hosts.js";
+import { isStaticImageHost } from "./image-hosts.js";
 
 // Bound concurrent place enrichments. Each enrichPlace runs a heavy fan-out
 // (knowledge sources, photo + review providers, and sometimes multi-MB OSM
@@ -210,7 +213,7 @@ function proxyablePhoto(photo: PlacePhoto): boolean {
     isDisplayablePhoto(photo) &&
     urls.every((raw) => {
       if (!validHttpUrl(raw)) return false;
-      return isAllowedHost(new URL(raw).hostname);
+      return isStaticImageHost(new URL(raw).hostname);
     })
   );
 }
@@ -736,7 +739,7 @@ export const placesRoute: FastifyPluginAsync = async (fastify) => {
       },
     },
     handler: async (req, reply) => {
-      const rawId = decodeURIComponent(req.params.id);
+      const rawId = req.params.id;
       const lang = req.query.lang;
       const hasAddress = req.query.hasAddress === "1";
       const latInput = Number.parseFloat(req.query.lat ?? "");
@@ -752,9 +755,18 @@ export const placesRoute: FastifyPluginAsync = async (fastify) => {
       // The shared canonical identity contains every normalized input that can
       // affect resolution or enrichment. Hash the structured value so
       // unconstrained string fields cannot create separator collisions.
-      const cacheKey = hashKey("cache:place", placeRequest.identity);
-
       try {
+        const parsed = parseId(rawId);
+        const published =
+          parsed?.scheme === "overture" && !getPlaceResolver("overture")
+            ? await readAmbientPlaceByGers(sql, parsed.value)
+            : null;
+        const cacheKey = hashKey(
+          "cache:place",
+          published
+            ? { ...placeRequest.identity, ambientGeneration: published.generation }
+            : placeRequest.identity,
+        );
         const result = await withCache(cacheKey, TTL.places.detail, async () => {
           const parsedId = parseId(rawId);
           const latQ = placeRequest.identity.lat ?? Number.NaN;
@@ -783,6 +795,22 @@ export const placesRoute: FastifyPluginAsync = async (fastify) => {
               }
               return enrichLimit(() =>
                 enrichPlace(resolved, placeRequest.identity.lang ?? undefined),
+              );
+            }
+            // The optional search provider may be disabled. An ambient
+            // publication still owns its GERS identity; never snap that record
+            // to a neighboring OSM object through coordinate fallback.
+            if (published) {
+              return enrichLimit(() =>
+                enrichPlace(
+                  categoryPlaceToPlace(
+                    ambientPlaceToCategoryPlace(
+                      published.place,
+                      placeRequest.identity.lang ?? "en",
+                    ),
+                  ),
+                  placeRequest.identity.lang ?? undefined,
+                ),
               );
             }
             // No resolver registered for this scheme. The coord-fallback

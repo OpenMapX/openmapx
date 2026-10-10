@@ -7,7 +7,7 @@ dist/
 pnpm-lock.yaml
 infra/docker/data/
 # Rendered by `pnpm openmapx compose render` from services/*/service.json
-infra/docker/docker-compose.generated.yml
+infra/docker/.trusted-config-generations/
 # Generated migrations and their snapshots (never hand-edited)
 **/db/migrations/
 # Frozen fixtures are compared as captured

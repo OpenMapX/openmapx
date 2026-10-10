@@ -105,7 +105,9 @@ describe("journey and navigation use the same transit evidence", () => {
     for (const platform of screen.getAllByText(/3 → 4/))
       expect(platform).toHaveTextContent("platformChanged");
     expect(screen.getByText("transit.canceled")).toBeInTheDocument();
-    expect(screen.getAllByText(/dataStatus.realtime/)[0]).toHaveTextContent("dataStatus.unknown");
+    expect(
+      screen.queryByText(/dataStatus.realtime|dataStatus.unknown|dataStatus.local/),
+    ).not.toBeInTheDocument();
     expect(screen.queryByText(/dataStatus.fresh/)).not.toBeInTheDocument();
   });
   it("does not announce boarding a cancelled leg and makes cancellation prominent", () => {
@@ -130,7 +132,9 @@ describe("journey and navigation use the same transit evidence", () => {
       </>,
     );
     expect(state.journey.mock.calls.map((call) => call[0])).toEqual([null, null]);
-    expect(screen.getAllByText(/dataStatus.realtime/)[0]).toHaveTextContent("dataStatus.unknown");
+    expect(
+      screen.queryByText(/dataStatus.realtime|dataStatus.unknown|dataStatus.local/),
+    ).not.toBeInTheDocument();
   });
 });
 
@@ -145,6 +149,7 @@ it("announces alighting rather than boarding a cancelled next transfer", () => {
         currentLegIndex: 0,
         snapped: [13.3798, 52.5298],
         fractionAlongLeg: 0.98,
+        phase: "riding",
         deviationMeters: 0,
         arrived: false,
       }}
@@ -158,4 +163,18 @@ it("announces alighting rather than boarding a cancelled next transfer", () => {
   expect(screen.queryByText("navigation.changeAt")).not.toBeInTheDocument();
   expect(state.speak).toHaveBeenCalledWith("navigation.voiceAlight");
   expect(state.speak).not.toHaveBeenCalledWith("navigation.voiceTransfer");
+});
+
+it("does not duplicate the navigation banner's refresh warning in the journey sheet", () => {
+  state.journey.mockReturnValue({ data: { stops: [] }, isError: true });
+  render(
+    <TransitJourneySheet
+      itinerary={itinerary}
+      currentLegIndex={0}
+      transitProgress={null}
+      showQueryNotice={false}
+    />,
+  );
+  expect(screen.queryByText(/dataStatus.refreshFailed/)).not.toBeInTheDocument();
+  expect(screen.getByText("transit.canceled")).toBeInTheDocument();
 });

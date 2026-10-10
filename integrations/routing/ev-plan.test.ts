@@ -1,7 +1,75 @@
-import type { IntegrationContext } from "@openmapx/integration-framework";
+import {
+  type ChargingSiteProvider,
+  type ChargingSiteQuery,
+  createSiteOrchestrator,
+  type IntegrationContext,
+} from "@openmapx/integration-framework";
+import type { ChargingSite, EnergyTariff } from "@openmapx/mobility-core/ev-charging";
 import { describe, expect, it, vi } from "vitest";
 import { roadConditionEvent } from "./__tests__/support/road-condition.js";
 import { type ResolvedRoutingProvider, runEvPlan } from "./ev-plan.js";
+
+const SITE_ID = "oc:feature:nl-ndw-charging:NL-ABC-1";
+
+/** One CCS site mid-route, with one fresh free charge point. */
+function chargingSite(over: Partial<ChargingSite> = {}): ChargingSite {
+  return {
+    id: SITE_ID,
+    name: "c1",
+    coordinates: [1.35, 50],
+    payment: [],
+    authentication: [],
+    closed: false,
+    planned: false,
+    evses: [
+      {
+        key: "e1",
+        quantity: 1,
+        status: "available",
+        statusAt: "2026-10-05T08:00:00Z",
+        stale: false,
+        capabilities: [],
+        parkingRestrictions: [],
+        connectors: [
+          {
+            key: "e1/1",
+            standard: "IEC_62196_T2_COMBO",
+            current: "dc",
+            maxPowerKw: 150,
+            tariffIds: [],
+            stale: false,
+          },
+        ],
+      },
+    ],
+    tariffs: [],
+    sources: ["ocm-charging"],
+    attributions: [{ sourceId: "ocm-charging", name: "Open Charge Map" }],
+    ...over,
+  };
+}
+
+const energyTariff = (id: string, price: number, currency = "EUR"): EnergyTariff => ({
+  id,
+  currency,
+  elements: [{ components: [{ type: "energy", price }] }],
+  priceIncludesVat: true,
+  sourceId: "nl-ndw-charging",
+});
+
+/** A `charging-sites` provider answering every window with these sites. */
+function sitesProvider(sites: ChargingSite[] = [chargingSite()], partial?: "area" | "unavailable") {
+  return {
+    id: "openconditions",
+    searchSites: vi.fn().mockResolvedValue(partial ? { sites, partial } : { sites }),
+    getSite: vi.fn().mockResolvedValue(null),
+  };
+}
+
+const chargingDomain = (provider: ReturnType<typeof sitesProvider>) => (d: string) =>
+  d === "charging-sites"
+    ? [{ id: "openconditions", providers: new Map([["charging-sites", [provider]]]) }]
+    : [];
 
 function fakeCtx(overrides: Record<string, unknown> = {}) {
   const cache = { withCache: vi.fn((_k: string, _t: number, fn: () => unknown) => fn()) };
@@ -27,26 +95,12 @@ function fakeCtx(overrides: Record<string, unknown> = {}) {
         s.map(() => t.map(() => ({ seconds: 120, km: 2 }))),
       ),
   };
-  const evProvider = {
-    searchStations: vi.fn().mockResolvedValue([
-      {
-        id: "c1",
-        name: "c1",
-        coordinates: [1.35, 50],
-        sources: ["ocm"],
-        connectors: [{ type: "CCS", powerKw: 150, currentType: "dc" }],
-        attributions: [{ sourceId: "ocm", name: "OpenChargeMap" }],
-      },
-    ]),
-  };
+  const evProvider = sitesProvider();
   return {
-    log: { warn: vi.fn(), error: vi.fn() },
+    log: { warn: vi.fn(), error: vi.fn(), info: vi.fn(), debug: vi.fn() },
     cache,
     // LoadedIntegration shape: { id, providers: Map<domain, unknown[]> }
-    getIntegrationsByDomain: (d: string) =>
-      d === "data-source"
-        ? [{ id: "ev-charging", providers: new Map([["data-source", [evProvider]]]) }]
-        : [],
+    getIntegrationsByDomain: chargingDomain(evProvider),
     getDisallowedSourceIds: async () => new Set<string>(),
     ...overrides,
     _valhalla: valhalla,
@@ -99,12 +153,18 @@ describe("runEvPlan", () => {
       avoidClosures: false,
     });
     expect(result.stops.length).toBeGreaterThanOrEqual(1);
-    expect(result.stops[0].attributions[0].sourceId).toBe("ocm");
+    expect(result.stops[0].station.id).toBe(SITE_ID);
+    expect(result.stops[0].attributions).toEqual([{ text: "Open Charge Map", url: "" }]);
+    expect(result.stops[0].availability).toEqual({
+      available: 1,
+      total: 1,
+      updatedAt: "2026-10-05T08:00:00Z",
+    });
     // getRoute called twice: base + re-route with inserted waypoint
     expect(ctx._valhalla.getRoute).toHaveBeenCalledTimes(2);
     const rerouteWps = ctx._valhalla.getRoute.mock.calls[1][0];
     expect(rerouteWps.length).toBe(3); // origin + charger + dest
-    // both routing calls receive IDENTICAL routing options (D7: avoid flags +
+    // both routing calls receive IDENTICAL routing options (avoid flags +
     // closure exclusions threaded the same way into base route and re-route).
     expect(ctx._valhalla.getRoute.mock.calls[1][2]).toEqual(
       ctx._valhalla.getRoute.mock.calls[0][2],
@@ -128,14 +188,7 @@ describe("runEvPlan", () => {
 
     const ctx = fakeCtx({
       getIntegrationsByDomain: (d: string) => {
-        if (d === "data-source") {
-          return [
-            {
-              id: "ev-charging",
-              providers: new Map([["data-source", [ctxEvProvider()]]]),
-            },
-          ];
-        }
+        if (d === "charging-sites") return chargingDomain(sitesProvider())(d);
         if (d === "road-conditions") {
           return [
             {
@@ -180,7 +233,7 @@ describe("runEvPlan", () => {
     const rerouteOpts = ctx._valhalla.getRoute.mock.calls[1][2];
     expect(baseOpts.excludeLocations).toEqual([closurePoint]);
     expect(baseOpts.excludeLocations.length).toBeGreaterThan(0);
-    // Same exclusions threaded into BOTH the base route and the re-route (D7).
+    // Same exclusions threaded into BOTH the base route and the re-route.
     expect(rerouteOpts).toEqual(baseOpts);
   });
 
@@ -234,43 +287,11 @@ describe("runEvPlan", () => {
     expect(result.totals.energyKwh).toBeGreaterThan(0); // energy is still reported
   });
 
-  it("reports a whole-trip cost estimate when every stop is priced (D11)", async () => {
+  it("reports a whole-trip cost estimate when every stop is priced", async () => {
     const ctx = fakeCtx({
-      getIntegrationsByDomain: (d: string) =>
-        d === "data-source"
-          ? [
-              {
-                id: "ev-charging",
-                providers: new Map([
-                  [
-                    "data-source",
-                    [
-                      {
-                        searchStations: vi.fn().mockResolvedValue([
-                          {
-                            id: "c1",
-                            name: "c1",
-                            coordinates: [1.35, 50],
-                            sources: ["ocm"],
-                            connectors: [{ type: "CCS", powerKw: 150, currentType: "dc" }],
-                            attributions: [{ sourceId: "ocm", name: "OpenChargeMap" }],
-                            tariffs: [
-                              {
-                                scope: "cpo",
-                                elements: [{ type: "energy", price: 0.55, currency: "EUR" }],
-                                source: "test",
-                                updatedAt: new Date().toISOString(),
-                              },
-                            ],
-                          },
-                        ]),
-                      },
-                    ],
-                  ],
-                ]),
-              },
-            ]
-          : [],
+      getIntegrationsByDomain: chargingDomain(
+        sitesProvider([chargingSite({ tariffs: [energyTariff("t", 0.55)] })]),
+      ),
     });
     const getProviders = (): ResolvedRoutingProvider[] => [
       { integrationId: "valhalla", provider: ctx._valhalla },
@@ -317,41 +338,9 @@ describe("runEvPlan", () => {
 
   it("reports a per-currency breakdown when a public stop is priced in a foreign currency", async () => {
     const ctx = fakeCtx({
-      getIntegrationsByDomain: (d: string) =>
-        d === "data-source"
-          ? [
-              {
-                id: "ev-charging",
-                providers: new Map([
-                  [
-                    "data-source",
-                    [
-                      {
-                        searchStations: vi.fn().mockResolvedValue([
-                          {
-                            id: "c1",
-                            name: "c1",
-                            coordinates: [1.35, 50],
-                            sources: ["ocm"],
-                            connectors: [{ type: "CCS", powerKw: 150, currentType: "dc" }],
-                            attributions: [{ sourceId: "ocm", name: "OpenChargeMap" }],
-                            tariffs: [
-                              {
-                                scope: "cpo",
-                                elements: [{ type: "energy", price: 0.55, currency: "CHF" }],
-                                source: "test",
-                                updatedAt: new Date().toISOString(),
-                              },
-                            ],
-                          },
-                        ]),
-                      },
-                    ],
-                  ],
-                ]),
-              },
-            ]
-          : [],
+      getIntegrationsByDomain: chargingDomain(
+        sitesProvider([chargingSite({ tariffs: [energyTariff("t", 0.55, "CHF")] })]),
+      ),
     });
     const getProviders = (): ResolvedRoutingProvider[] => [
       { integrationId: "valhalla", provider: ctx._valhalla },
@@ -461,8 +450,14 @@ describe("runEvPlan", () => {
     expect(tight(cautious)).toBe(tight(relaxed));
   });
 
-  it("skips disallowed charger sources", async () => {
-    const ctx = fakeCtx({ getDisallowedSourceIds: async () => new Set(["ocm"]) });
+  it("the planner reads charging-sites providers and passes disallowed sources down", async () => {
+    // The provider ignores the hint and still returns the disallowed site: the
+    // planner must not plan through it.
+    const provider = sitesProvider();
+    const ctx = fakeCtx({
+      getIntegrationsByDomain: chargingDomain(provider),
+      getDisallowedSourceIds: async () => new Set(["ocm-charging"]),
+    });
     const getProviders = (): ResolvedRoutingProvider[] => [
       { integrationId: "valhalla", provider: ctx._valhalla },
     ];
@@ -473,29 +468,257 @@ describe("runEvPlan", () => {
       ],
       vehicleId: "tesla:model_3:2024:model_3_long_range",
       socStartPct: 40,
-      socArrivalMinPct: 10,
-      socTargetPct: 80,
-      ambientTempC: 20,
       avoidClosures: false,
     });
-    expect(
-      result.warnings.some((w) => w.kind === "no-charger-data" || w.kind === "unreachable"),
-    ).toBe(true);
+    expect(provider.searchSites).toHaveBeenCalled();
+    const [bbox, query] = provider.searchSites.mock.calls[0];
+    expect(bbox).toHaveLength(4);
+    expect(query).toEqual({ excludedSourceIds: ["ocm-charging"], maxSites: 8000 });
+    expect(result.stops).toHaveLength(0);
+    expect(result.warnings.some((w) => w.kind === "no-charger-data")).toBe(true);
+  });
+
+  it("without a charging provider the plan warns and has no stops", async () => {
+    const ctx = fakeCtx({ getIntegrationsByDomain: () => [] });
+    const getProviders = (): ResolvedRoutingProvider[] => [
+      { integrationId: "valhalla", provider: ctx._valhalla },
+    ];
+    const result = await runEvPlan(ctx as unknown as IntegrationContext, getProviders, {
+      waypoints: [
+        [0, 50],
+        [2.7, 50],
+      ],
+      vehicleId: "tesla:model_3:2024:model_3_long_range",
+      socStartPct: 40,
+      avoidClosures: false,
+    });
+    expect(result.stops).toHaveLength(0);
+    expect(result.warnings.some((w) => w.kind === "no-charger-data")).toBe(true);
+    // Only the base route was requested: there is nothing to re-route through.
+    expect(ctx._valhalla.getRoute).toHaveBeenCalledTimes(1);
+  });
+
+  it("a window no charger source answered is not reported as having no chargers", async () => {
+    const provider = sitesProvider([]);
+    provider.searchSites.mockRejectedValue(new Error("The operation was aborted due to timeout"));
+    const ctx = fakeCtx({ getIntegrationsByDomain: chargingDomain(provider) });
+    const getProviders = (): ResolvedRoutingProvider[] => [
+      { integrationId: "valhalla", provider: ctx._valhalla },
+    ];
+    const result = await runEvPlan(ctx as unknown as IntegrationContext, getProviders, {
+      waypoints: [
+        [0, 50],
+        [2.7, 50],
+      ],
+      vehicleId: "tesla:model_3:2024:model_3_long_range",
+      socStartPct: 40,
+      avoidClosures: false,
+    });
+    expect(result.stops).toHaveLength(0);
+    expect(result.warnings.map((w) => w.kind)).toEqual([
+      "charger-sources-unavailable",
+      "unreachable",
+      "partial-charger-data",
+    ]);
+  });
+
+  it("an empty area answer beside a failed source is not reported as having no chargers", async () => {
+    const wide = { ...sitesProvider([], "area"), id: "wide" };
+    const down = { ...sitesProvider([]), id: "down" };
+    down.searchSites.mockRejectedValue(new Error("down"));
+    const ctx = fakeCtx({
+      getIntegrationsByDomain: (d: string) =>
+        d === "charging-sites"
+          ? [{ id: "openconditions", providers: new Map([["charging-sites", [wide, down]]]) }]
+          : [],
+    });
+    // The merged answer reads `area`, not `unavailable`: the failure is not visible in it.
+    const merged = await createSiteOrchestrator<
+      ChargingSiteProvider,
+      ChargingSite,
+      ChargingSiteQuery
+    >(ctx as unknown as IntegrationContext, {
+      domain: "charging-sites",
+      logPrefix: "test",
+      search: { name: "searchSites", run: (p, bbox, query) => p.searchSites(bbox, query) },
+      get: { name: "getSite", run: (p, id, query) => p.getSite(id, query) },
+    }).search([0, 49.9, 0.1, 50.1]);
+    expect(merged).toEqual({ sites: [], partial: "area" });
+
+    const getProviders = (): ResolvedRoutingProvider[] => [
+      { integrationId: "valhalla", provider: ctx._valhalla },
+    ];
+    const result = await runEvPlan(ctx as unknown as IntegrationContext, getProviders, {
+      waypoints: [
+        [0, 50],
+        [2.7, 50],
+      ],
+      vehicleId: "tesla:model_3:2024:model_3_long_range",
+      socStartPct: 40,
+      avoidClosures: false,
+    });
+    expect(result.warnings.map((w) => w.kind)).toEqual([
+      "charger-sources-unavailable",
+      "unreachable",
+      "partial-charger-data",
+    ]);
+  });
+
+  it("a stop credits its sources as the place card does, with only http(s) links", async () => {
+    const site = chargingSite({
+      attributions: [
+        {
+          sourceId: "nl-ndw-charging",
+          name: "NDW",
+          url: "javascript:alert(1)",
+          spdxLicense: "CC0-1.0",
+          licenseUrl: "https://creativecommons.org/publicdomain/zero/1.0/",
+        },
+      ],
+    });
+    const ctx = fakeCtx({ getIntegrationsByDomain: chargingDomain(sitesProvider([site])) });
+    const getProviders = (): ResolvedRoutingProvider[] => [
+      { integrationId: "valhalla", provider: ctx._valhalla },
+    ];
+    const result = await runEvPlan(ctx as unknown as IntegrationContext, getProviders, {
+      waypoints: [
+        [0, 50],
+        [2.7, 50],
+      ],
+      vehicleId: "tesla:model_3:2024:model_3_long_range",
+      socStartPct: 40,
+      avoidClosures: false,
+    });
+    expect(result.stops[0]?.attributions).toEqual([
+      {
+        text: "NDW",
+        url: "",
+        license: "CC0-1.0",
+        licenseUrl: "https://creativecommons.org/publicdomain/zero/1.0/",
+      },
+    ]);
+  });
+
+  it("a stop's estimated cost is rounded to cents", async () => {
+    const site = chargingSite({ tariffs: [energyTariff("odd", 0.3917)] });
+    const ctx = fakeCtx({ getIntegrationsByDomain: chargingDomain(sitesProvider([site])) });
+    const getProviders = (): ResolvedRoutingProvider[] => [
+      { integrationId: "valhalla", provider: ctx._valhalla },
+    ];
+    const result = await runEvPlan(ctx as unknown as IntegrationContext, getProviders, {
+      waypoints: [
+        [0, 50],
+        [2.7, 50],
+      ],
+      vehicleId: "tesla:model_3:2024:model_3_long_range",
+      socStartPct: 40,
+      avoidClosures: false,
+    });
+    const amounts = result.stops.map((s) => s.estimatedCost?.amount ?? Number.NaN);
+    expect(amounts.length).toBeGreaterThan(0);
+    for (const amount of amounts) expect(amount).toBe(Math.round(amount * 100) / 100);
+  });
+
+  it("logs a failing charger provider once across plans, not once per plan", async () => {
+    const provider = sitesProvider([]);
+    provider.searchSites.mockRejectedValue(new Error("down"));
+    const ctx = fakeCtx({ getIntegrationsByDomain: chargingDomain(provider) });
+    const getProviders = (): ResolvedRoutingProvider[] => [
+      { integrationId: "valhalla", provider: ctx._valhalla },
+    ];
+    const args = {
+      waypoints: [
+        [0, 50],
+        [2.7, 50],
+      ] as [number, number][],
+      vehicleId: "tesla:model_3:2024:model_3_long_range",
+      socStartPct: 40,
+      avoidClosures: false,
+    };
+    await runEvPlan(ctx as unknown as IntegrationContext, getProviders, args);
+    await runEvPlan(ctx as unknown as IntegrationContext, getProviders, args);
+    expect(ctx.log.warn).toHaveBeenCalledTimes(1);
+  });
+
+  it("plans on a partial answer and says so", async () => {
+    const ctx = fakeCtx({
+      getIntegrationsByDomain: chargingDomain(sitesProvider([chargingSite()], "unavailable")),
+    });
+    const getProviders = (): ResolvedRoutingProvider[] => [
+      { integrationId: "valhalla", provider: ctx._valhalla },
+    ];
+    const result = await runEvPlan(ctx as unknown as IntegrationContext, getProviders, {
+      waypoints: [
+        [0, 50],
+        [2.7, 50],
+      ],
+      vehicleId: "tesla:model_3:2024:model_3_long_range",
+      socStartPct: 40,
+      avoidClosures: false,
+    });
+    expect(result.stops.length).toBeGreaterThanOrEqual(1);
+    expect(result.warnings.filter((w) => w.kind === "partial-charger-data")).toHaveLength(1);
+  });
+
+  it("the card's tariff summary is the costed tariff, not the first", async () => {
+    const site = chargingSite({
+      tariffs: [energyTariff("dear", 0.79), energyTariff("cheap", 0.39)],
+    });
+    const ctx = fakeCtx({ getIntegrationsByDomain: chargingDomain(sitesProvider([site])) });
+    const getProviders = (): ResolvedRoutingProvider[] => [
+      { integrationId: "valhalla", provider: ctx._valhalla },
+    ];
+    const result = await runEvPlan(ctx as unknown as IntegrationContext, getProviders, {
+      waypoints: [
+        [0, 50],
+        [2.7, 50],
+      ],
+      vehicleId: "tesla:model_3:2024:model_3_long_range",
+      socStartPct: 40,
+      avoidClosures: false,
+    });
+    expect(result.stops[0].tariffPrice).toEqual({ amount: 0.39, currency: "EUR", unit: "kWh" });
+    expect(result.stops[0].estimatedCost).toEqual({
+      amount: expect.any(Number),
+      currency: "EUR",
+    });
+  });
+
+  it("departAt sets the arrival time the tariffs are matched at", async () => {
+    const night: EnergyTariff = {
+      id: "t",
+      currency: "EUR",
+      elements: [
+        {
+          components: [{ type: "energy", price: 0.29 }],
+          restrictions: { startTime: "18:00", endTime: "06:00" },
+        },
+        { components: [{ type: "energy", price: 0.59 }] },
+      ],
+      priceIncludesVat: true,
+      sourceId: "nl-ndw-charging",
+    };
+    const plan = async (departAt: string) => {
+      const ctx = fakeCtx({
+        getIntegrationsByDomain: chargingDomain(
+          sitesProvider([chargingSite({ tariffs: [night] })]),
+        ),
+      });
+      const getProviders = (): ResolvedRoutingProvider[] => [
+        { integrationId: "valhalla", provider: ctx._valhalla },
+      ];
+      return runEvPlan(ctx as unknown as IntegrationContext, getProviders, {
+        waypoints: [
+          [0, 50],
+          [2.7, 50],
+        ],
+        vehicleId: "tesla:model_3:2024:model_3_long_range",
+        socStartPct: 40,
+        departAt,
+        avoidClosures: false,
+      });
+    };
+    expect((await plan("2026-10-05T20:00")).stops[0].tariffPrice?.amount).toBe(0.29);
+    expect((await plan("2026-10-05T08:00")).stops[0].tariffPrice?.amount).toBe(0.59);
   });
 });
-
-/** Fresh ev-charging data-source stub, shared shape with `fakeCtx`'s default. */
-function ctxEvProvider() {
-  return {
-    searchStations: vi.fn().mockResolvedValue([
-      {
-        id: "c1",
-        name: "c1",
-        coordinates: [1.35, 50],
-        sources: ["ocm"],
-        connectors: [{ type: "CCS", powerKw: 150, currentType: "dc" }],
-        attributions: [{ sourceId: "ocm", name: "OpenChargeMap" }],
-      },
-    ]),
-  };
-}

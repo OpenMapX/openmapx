@@ -7,6 +7,17 @@ import { useWildfireStore } from "../store";
 
 vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntl());
 
+const SOURCE_NAMES: Record<string, string> = {
+  "us-nifc-fires": "NIFC WFIGS Interagency Fire Perimeters",
+  "nasa-firms-viirs-fires": "NASA FIRMS VIIRS",
+};
+
+vi.mock("@openmapx/integration-framework/react", () => ({
+  useIntegrationRegistry: () => ({
+    findDataSource: (id: string) => (SOURCE_NAMES[id] ? { name: SOURCE_NAMES[id] } : undefined),
+  }),
+}));
+
 import { WildfireLegend } from "../legend";
 
 const SOURCE_IDS = ["firms", "nifc", "effis", "noaa-hms"] as const;
@@ -17,7 +28,7 @@ beforeEach(() => {
     panelOpen: true,
     layerVisible: true,
     dayRange: 1,
-    source: "VIIRS_SNPP_NRT",
+    source: "viirs",
     showHotspots: true,
     showNifcPerimeters: true,
     showEffisBurnedAreas: true,
@@ -322,6 +333,49 @@ describe("WildfireLegend source semantics and status", () => {
     }
   });
 
+  it("names each layer's region, then the sources behind what it drew", () => {
+    useWildfireStore.getState().setSourceStatus("nifc", {
+      featureCount: 1,
+      sources: ["us-nifc-fires"],
+    });
+    useWildfireStore.getState().setSourceStatus("firms", {
+      featureCount: 3,
+      sources: ["nasa-firms-viirs-fires", "unnamed-feed"],
+    });
+    render(<WildfireLegend />);
+
+    expect(
+      within(screen.getByTestId("wildfire-source-nifc")).getByText(
+        "wildfires.coverageUnitedStates · NIFC WFIGS Interagency Fire Perimeters",
+      ),
+    ).toBeTruthy();
+    expect(
+      within(screen.getByTestId("wildfire-source-firms")).getByText(
+        "wildfires.coverageGlobal · NASA FIRMS VIIRS · unnamed-feed",
+      ),
+    ).toBeTruthy();
+    expect(
+      within(screen.getByTestId("wildfire-source-effis")).getByText(
+        "wildfires.coverageEffisRegion",
+      ),
+    ).toBeTruthy();
+  });
+
+  it("explains the density view below the zoom where single detections load", () => {
+    useMapStore.setState({ zoom: 6 });
+    const view = render(<WildfireLegend />);
+    expect(
+      within(screen.getByTestId("wildfire-source-firms")).getByText("wildfires.densityView"),
+    ).toBeTruthy();
+
+    view.unmount();
+    useMapStore.setState({ zoom: 7 });
+    render(<WildfireLegend />);
+    expect(
+      within(screen.getByTestId("wildfire-source-firms")).queryByText("wildfires.densityView"),
+    ).toBeNull();
+  });
+
   it("ships domain-accurate English and German source copy", () => {
     expect(en.wildfires).toMatchObject({
       hotspotAge: "Hotspot age",
@@ -329,10 +383,10 @@ describe("WildfireLegend source semantics and status", () => {
       effisBurnedAreas: "Satellite-derived burned areas",
       effisSevenDayProduct: "Seven-day satellite-derived burned areas",
       observedSmoke: "Observed smoke",
-      coverageGlobal: "Global · NASA FIRMS",
-      coverageUnitedStates: "United States · NIFC WFIGS",
-      coverageEffisRegion: "Europe and wider EFFIS region · Copernicus EFFIS",
-      coverageNorthAmerica: "North America · NOAA HMS",
+      coverageGlobal: "Global",
+      coverageUnitedStates: "United States",
+      coverageEffisRegion: "Europe, the Middle East and North Africa",
+      coverageNorthAmerica: "North America",
       zoomInToLoadPolygons: "Zoom in to load polygons",
       qualitativeDensity: "Qualitative density",
     });
@@ -340,10 +394,10 @@ describe("WildfireLegend source semantics and status", () => {
       nifcPerimeters: "Gemeldete Brandflächen",
       effisBurnedAreas: "Satellitengestützte Brandflächen",
       observedSmoke: "Beobachteter Rauch",
-      coverageGlobal: "Global · NASA FIRMS",
-      coverageUnitedStates: "Vereinigte Staaten · NIFC WFIGS",
-      coverageEffisRegion: "Europa und weitere EFFIS-Regionen · Copernicus EFFIS",
-      coverageNorthAmerica: "Nordamerika · NOAA HMS",
+      coverageGlobal: "Global",
+      coverageUnitedStates: "Vereinigte Staaten",
+      coverageEffisRegion: "Europa, Naher Osten und Nordafrika",
+      coverageNorthAmerica: "Nordamerika",
       qualitativeDensity: "Qualitative Dichte",
     });
     expect(en.wildfires.effisBurnedAreaCaveat).toMatch(/not an authoritative wildfire perimeter/i);

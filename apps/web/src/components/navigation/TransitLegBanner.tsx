@@ -105,11 +105,13 @@ export function TransitLegBanner({
       ? stopsUntilAlight(legMatcher, legStops, transitProgress.snapped)
       : { nextStopName: null as string | null, stopsRemaining: 0 };
 
-  const alightSoon =
-    !leg.cancelled && legStops.length > 0 && stopsRemaining > 0 && stopsRemaining <= 1;
   // Boarding platform is only relevant until you're on board; once under way the
   // alight platform (surfaced on the "get off" card) is what matters.
-  const departed = (transitProgress?.fractionAlongLeg ?? 0) > 0.12;
+  const departed = transitProgress?.phase === "riding";
+  // Only aboard can the next stop be the one to get off at; waiting at the
+  // boarding stop, a fix just past its pole must not sound the get-off alarm.
+  const alightSoon =
+    departed && !leg.cancelled && legStops.length > 0 && stopsRemaining > 0 && stopsRemaining <= 1;
   const boardingPlatform = leg.from.platformCode;
   const alightPlatform = leg.to.platformCode;
   // Show the vehicle's destination sign when it adds information beyond the
@@ -197,11 +199,14 @@ export function TransitLegBanner({
   const secondary =
     isTransitLeg && !leg.cancelled && !alightSoon ? (
       <Typography variant="body2" sx={{ opacity: 0.9 }} noWrap>
-        {nextStopName
+        {departed && nextStopName
           ? t("nextStop", { stop: nextStopName })
-          : stopsRemaining > 0
-            ? t("alightAtCount", { place: leg.to.name, count: stopsRemaining })
-            : t("alightAt", { place: leg.to.name })}
+          : !departed && legStops.length > 1
+            ? // Still at the boarding stop: the whole ride lies ahead.
+              t("alightAtCount", { place: leg.to.name, count: legStops.length - 1 })
+            : stopsRemaining > 0
+              ? t("alightAtCount", { place: leg.to.name, count: stopsRemaining })
+              : t("alightAt", { place: leg.to.name })}
       </Typography>
     ) : undefined;
 
@@ -285,6 +290,7 @@ export function TransitLegBanner({
       </NavBannerShell>
       {isTransitLeg && (
         <TransitQueryNotice
+          onMap
           failed={journeyQuery.isError}
           partial={journeyQuery.freshness?.isPartial}
           onRetry={

@@ -3,10 +3,12 @@
 import useMediaQuery from "@mui/material/useMediaQuery";
 import type { Place } from "@openmapx/core";
 import {
+  categoryPlaceToPlace,
   createPlace,
   PANEL,
   useDirectionsStore,
   useIsSaved,
+  useNavigationStore,
   usePlaceDetails,
   usePlaceStore,
   useSession,
@@ -46,6 +48,7 @@ const HIDE_GRACE_MS = 150;
  * open exactly this place, so they share one place lookup.
  */
 export function stylePoiPlace(target: StylePoiTarget): Place {
+  if (target.canonicalPlace) return categoryPlaceToPlace(target.canonicalPlace);
   return createPlace({
     primaryScheme: "stylePoi",
     ids: { stylePoi: target.featureId },
@@ -59,6 +62,12 @@ export function stylePoiPlace(target: StylePoiTarget): Place {
 
 function openPlace(place: Place, setSelectedPlace: (place: Place) => void) {
   setSelectedPlace(place);
+  // Navigation hides every sidebar and shows only the floating place card, so
+  // bypass openDetail, which would route a rail-less card to the hidden sidebar.
+  if (useNavigationStore.getState().status !== "idle") {
+    useSidebarStore.setState({ activeDetailId: PANEL.PLACE_CARD });
+    return;
+  }
   const sidebarId = useSidebarStore.getState().activeSidebarId;
   if (!sidebarId || sidebarId === PANEL.PLACE) {
     // Sidebar is empty or already showing a place — take it over and close any

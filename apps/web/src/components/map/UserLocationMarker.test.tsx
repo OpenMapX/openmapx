@@ -22,6 +22,8 @@ vi.mock("@/integration-api/map/MapContext", () => {
   };
 });
 
+const { setLngLat } = vi.hoisted(() => ({ setLngLat: vi.fn() }));
+
 vi.mock("maplibre-gl", () => {
   class FakeMarker {
     constructor(private readonly options: { element: HTMLElement }) {}
@@ -33,14 +35,15 @@ vi.mock("maplibre-gl", () => {
 
     remove = vi.fn();
 
-    setLngLat() {
+    setLngLat(lngLat: [number, number]) {
+      setLngLat(lngLat);
       return this;
     }
   }
   return { Marker: FakeMarker };
 });
 
-import { useMapStore, useParkingStore } from "@openmapx/core";
+import { useMapStore, useNavigationStore, useParkingStore } from "@openmapx/core";
 import * as mapContext from "@/integration-api/map/MapContext";
 import { UserLocationMarker } from "./UserLocationMarker";
 
@@ -58,6 +61,7 @@ afterEach(() => {
   cleanup();
   vi.clearAllMocks();
   useMapStore.setState({ userLocation: null });
+  useNavigationStore.setState({ status: "idle", kind: "ground", transitProgress: null });
   mapContextTest.mapReady = false;
   mapContextTest.mapRef.current = null;
 });
@@ -112,5 +116,33 @@ describe("UserLocationMarker", () => {
       screen.getByText("my-location-card").click();
     });
     expect(screen.queryByText("my-location-card")).toBeNull();
+  });
+
+  it("follows transit navigation's fixes without moving the stored location", async () => {
+    const mapContainer = document.createElement("div");
+    mapContextTest.mapRef.current = { container: mapContainer };
+    mapContextTest.mapReady = true;
+    useMapStore.setState({ userLocation: [13.4, 52.5] });
+    useNavigationStore.setState({
+      status: "navigating",
+      kind: "transit",
+      transitProgress: {
+        currentLegIndex: 1,
+        position: [6.1, 50.78],
+        snapped: [6.1001, 50.7801],
+        fractionAlongLeg: 0,
+        deviationMeters: 10,
+        arrived: false,
+        phase: "waiting-to-board",
+      },
+    });
+
+    render(<UserLocationMarker />);
+    await waitFor(() => expect(mapContainer.children).toHaveLength(1));
+    expect(setLngLat).toHaveBeenLastCalledWith([6.1, 50.78]);
+    expect(useMapStore.getState().userLocation).toEqual([13.4, 52.5]);
+
+    act(() => useNavigationStore.setState({ status: "idle", transitProgress: null }));
+    await waitFor(() => expect(setLngLat).toHaveBeenLastCalledWith([13.4, 52.5]));
   });
 });

@@ -1,0 +1,1445 @@
+{
+  "version": 1,
+  "provenance": "Selected raw MapTiler features and public adapted rows captured 2026-10-07; fixed historical inputs, not current production results",
+  "archive": "https://gist.github.com/Medformatik/c36d8b8f44c88971277659512a533a51/8b33cd9238ba743f54f3235f2831470cf3bb5972",
+  "queriesSha256": "bdc16e4a468dcda386be3f5cca86398b1e204056399b4fd1a4559d03eec27572",
+  "features": [
+    {
+      "raw": {
+        "id": "poi.30456941",
+        "text": "EDEKA Koch-Sportpark",
+        "place_name": "EDEKA Koch-Sportpark, Karl-Brandt-Weg 11, 44629 Herne, Germany",
+        "place_type": ["poi"],
+        "geometry": { "type": "Point", "coordinates": [7.208717748485128, 51.55210278682949] },
+        "properties": { "ref": "osm:w25670529", "categories": ["stadium"], "wikidata": "Q1671027" }
+      },
+      "adapted": {
+        "id": "maptiler:poi.30456941",
+        "ids": { "wikidata": "Q1671027" },
+        "label": "EDEKA Koch-Sportpark",
+        "sublabel": "EDEKA Koch-Sportpark, Karl-Brandt-Weg 11, 44629 Herne, Germany",
+        "coordinates": [7.208717748485128, 51.55210278682949],
+        "type": "poi",
+        "rawCategory": "stadium",
+        "provider": "geocoding-maptiler"
+      }
+    },
+    {
+      "raw": {
+        "id": "poi.27997147",
+        "text": "Edeka Möck",
+        "place_name": "Edeka Möck, August-Lämmle-Straße 17, 72766 Reutlingen, Germany",
+        "place_type": ["poi"],
+        "geometry": { "type": "Point", "coordinates": [9.22899305820465, 48.48657027701767] },
+        "properties": {
+          "ref": "osm:n3593639849",
+          "categories": ["supermarket"],
+          "feature_tags": {
+            "shop": "supermarket",
+            "addr:postcode": "72766",
+            "addr:city": "Reutlingen",
+            "addr:housenumber": "17",
+            "addr:street": "August-Lämmle-Straße"
+          }
+        }
+      },
+      "adapted": {
+        "id": "maptiler:poi.27997147",
+        "label": "Edeka Möck",
+        "sublabel": "Edeka Möck, August-Lämmle-Straße 17, 72766 Reutlingen, Germany",
+        "coordinates": [9.22899305820465, 48.48657027701767],
+        "type": "poi",
+        "rawCategory": "supermarket",
+        "provider": "geocoding-maptiler"
+      }
+    },
+    {
+      "raw": {
+        "id": "poi.32434263",
+        "text": "Edeka Möck",
+        "place_name": "Edeka Möck, Friedrich-Naumann-Straße 36, 72762 Reutlingen, Germany",
+        "place_type": ["poi"],
+        "geometry": { "type": "Point", "coordinates": [9.191001408020384, 48.48736248347219] },
+        "properties": {
+          "ref": "osm:w62488816",
+          "categories": ["supermarket", "retail building"],
+          "feature_tags": {
+            "shop": "supermarket",
+            "addr:postcode": "72762",
+            "addr:city": "Reutlingen",
+            "addr:housenumber": "36",
+            "addr:street": "Friedrich-Naumann-Straße"
+          }
+        }
+      },
+      "adapted": {
+        "id": "maptiler:poi.32434263",
+        "label": "Edeka Möck",
+        "sublabel": "Edeka Möck, Friedrich-Naumann-Straße 36, 72762 Reutlingen, Germany",
+        "coordinates": [9.191001408020384, 48.48736248347219],
+        "type": "poi",
+        "rawCategory": "supermarket",
+        "provider": "geocoding-maptiler"
+      }
+    },
+    {
+      "raw": {
+        "id": "poi.31643808",
+        "text": "Edeka Möck",
+        "place_name": "Edeka Möck, 72810 Gomaringen, Germany",
+        "place_type": ["poi"],
+        "geometry": { "type": "Point", "coordinates": [9.102380722761154, 48.459401998661164] },
+        "properties": {
+          "ref": "osm:n13314629571",
+          "categories": ["supermarket"],
+          "feature_tags": {
+            "shop": "supermarket",
+            "addr:postcode": "72810",
+            "addr:city": "Gomaringen",
+            "addr:housenumber": "15",
+            "addr:street": "Ohmenhäuser Straße"
+          }
+        }
+      },
+      "adapted": {
+        "id": "maptiler:poi.31643808",
+        "label": "Edeka Möck",
+        "sublabel": "Edeka Möck, 72810 Gomaringen, Germany",
+        "coordinates": [9.102380722761154, 48.459401998661164],
+        "type": "poi",
+        "rawCategory": "supermarket",
+        "provider": "geocoding-maptiler"
+      }
+    },
+    {
+      "raw": {
+        "id": "poi.14639240",
+        "text": "Edeka Möck",
+        "place_name": "Edeka Möck, Robert-Bosch-Straße 19, 72810 Gomaringen, Germany",
+        "place_type": ["poi"],
+        "geometry": { "type": "Point", "coordinates": [9.080636147370342, 48.455747733004614] },
+        "properties": {
+          "ref": "osm:w27644197",
+          "categories": ["supermarket"],
+          "feature_tags": {
+            "shop": "supermarket",
+            "addr:postcode": "72810",
+            "addr:city": "Gomaringen",
+            "addr:housenumber": "19",
+            "addr:street": "Robert-Bosch-Straße"
+          }
+        }
+      },
+      "adapted": {
+        "id": "maptiler:poi.14639240",
+        "label": "Edeka Möck",
+        "sublabel": "Edeka Möck, Robert-Bosch-Straße 19, 72810 Gomaringen, Germany",
+        "coordinates": [9.080636147370342, 48.455747733004614],
+        "type": "poi",
+        "rawCategory": "supermarket",
+        "provider": "geocoding-maptiler"
+      }
+    },
+    {
+      "raw": {
+        "id": "poi.14883072",
+        "text": "Edeka Koch",
+        "place_name": "Edeka Koch, Im Grund 1, 72469 Meßstetten, Germany",
+        "place_type": ["poi"],
+        "geometry": { "type": "Point", "coordinates": [8.954309790404409, 48.1768506016719] },
+        "properties": {
+          "ref": "osm:w922994590",
+          "categories": ["supermarket", "building"],
+          "feature_tags": {
+            "addr:housenumber": "1",
+            "shop": "supermarket",
+            "addr:street": "Im Grund",
+            "addr:postcode": "72469",
+            "addr:city": "Meßstetten"
+          }
+        }
+      },
+      "adapted": {
+        "id": "maptiler:poi.14883072",
+        "label": "Edeka Koch",
+        "sublabel": "Edeka Koch, Im Grund 1, 72469 Meßstetten, Germany",
+        "coordinates": [8.954309790404409, 48.1768506016719],
+        "type": "poi",
+        "rawCategory": "supermarket",
+        "provider": "geocoding-maptiler"
+      }
+    },
+    {
+      "raw": {
+        "id": "address.12686057",
+        "text": "Grunerstraße",
+        "place_name": "Grunerstraße 20, 10179 Berlin, Germany",
+        "place_type": ["address"],
+        "geometry": { "type": "Point", "coordinates": [13.41582100000005, 52.518307] },
+        "properties": { "ref": "osm:w1025851956", "wikidata": "Q1550809" }
+      },
+      "adapted": {
+        "id": "maptiler:address.12686057",
+        "ids": { "wikidata": "Q1550809" },
+        "label": "Grunerstraße",
+        "sublabel": "Grunerstraße 20, 10179 Berlin, Germany",
+        "coordinates": [13.41582100000005, 52.518307],
+        "type": "address",
+        "provider": "geocoding-maptiler"
+      }
+    },
+    {
+      "raw": {
+        "id": "address.10027702",
+        "text": "Groenerstraße",
+        "place_name": "Groenerstraße 20, 13585 Berlin, Germany",
+        "place_type": ["address"],
+        "geometry": { "type": "Point", "coordinates": [13.20358299999998, 52.543163] },
+        "properties": { "ref": "osm:w1306242932" }
+      },
+      "adapted": {
+        "id": "maptiler:address.10027702",
+        "label": "Groenerstraße",
+        "sublabel": "Groenerstraße 20, 13585 Berlin, Germany",
+        "coordinates": [13.20358299999998, 52.543163],
+        "type": "address",
+        "provider": "geocoding-maptiler"
+      }
+    },
+    {
+      "raw": {
+        "id": "address.10343043",
+        "text": "Gründerstraße",
+        "place_name": "Gründerstraße 20, 12526 Berlin, Germany",
+        "place_type": ["address"],
+        "geometry": { "type": "Point", "coordinates": [13.574141999999938, 52.409928] },
+        "properties": { "ref": "osm:w130868556" }
+      },
+      "adapted": {
+        "id": "maptiler:address.10343043",
+        "label": "Gründerstraße",
+        "sublabel": "Gründerstraße 20, 12526 Berlin, Germany",
+        "coordinates": [13.574141999999938, 52.409928],
+        "type": "address",
+        "provider": "geocoding-maptiler"
+      }
+    },
+    {
+      "raw": {
+        "id": "address.9410688",
+        "text": "Grünerstraße",
+        "place_name": "Grünerstraße 20, 95615 Marktredwitz, Germany",
+        "place_type": ["address"],
+        "geometry": { "type": "Point", "coordinates": [12.09223099999997, 50.005279] },
+        "properties": { "ref": "osm:w147440163" }
+      },
+      "adapted": {
+        "id": "maptiler:address.9410688",
+        "label": "Grünerstraße",
+        "sublabel": "Grünerstraße 20, 95615 Marktredwitz, Germany",
+        "coordinates": [12.09223099999997, 50.005279],
+        "type": "address",
+        "provider": "geocoding-maptiler"
+      }
+    },
+    {
+      "raw": {
+        "id": "address.5097698",
+        "text": "Grunerstraße",
+        "place_name": "Grunerstraße 20, 65510 Idstein, Germany",
+        "place_type": ["address"],
+        "geometry": { "type": "Point", "coordinates": [8.267456000000038, 50.216309] },
+        "properties": { "ref": "osm:w11487422" }
+      },
+      "adapted": {
+        "id": "maptiler:address.5097698",
+        "label": "Grunerstraße",
+        "sublabel": "Grunerstraße 20, 65510 Idstein, Germany",
+        "coordinates": [8.267456000000038, 50.216309],
+        "type": "address",
+        "provider": "geocoding-maptiler"
+      }
+    },
+    {
+      "raw": {
+        "id": "place.4929509",
+        "text": "Colonia 20 de Noviembre",
+        "place_name": "Colonia 20 de Noviembre, Huaniqueo, Mexico",
+        "place_type": ["place"],
+        "geometry": { "type": "Point", "coordinates": [-101.58130947500467, 19.893160393441814] },
+        "properties": { "ref": "osm:n4554041879", "place_designation": "hamlet" }
+      },
+      "adapted": {
+        "id": "maptiler:place.4929509",
+        "label": "Colonia 20 de Noviembre",
+        "sublabel": "Colonia 20 de Noviembre, Huaniqueo, Mexico",
+        "coordinates": [-101.58130947500467, 19.893160393441814],
+        "type": "region",
+        "rawCategory": "place/hamlet",
+        "provider": "geocoding-maptiler"
+      }
+    },
+    {
+      "raw": {
+        "id": "poi.39267497",
+        "text": "EDEKA",
+        "place_name": "EDEKA, Alexanderstraße 25, 10178 Berlin, Germany",
+        "place_type": ["poi"],
+        "geometry": { "type": "Point", "coordinates": [13.416776409228078, 52.51855355456135] },
+        "properties": {
+          "ref": "osm:w1204762785",
+          "categories": ["supermarket"],
+          "feature_tags": { "shop": "supermarket", "level": "-1", "addr:city": "Berlin" }
+        }
+      },
+      "adapted": {
+        "id": "maptiler:poi.39267497",
+        "label": "EDEKA",
+        "sublabel": "EDEKA, Alexanderstraße 25, 10178 Berlin, Germany",
+        "coordinates": [13.416776409228078, 52.51855355456135],
+        "type": "poi",
+        "rawCategory": "supermarket",
+        "provider": "geocoding-maptiler"
+      }
+    },
+    {
+      "raw": {
+        "id": "poi.15407240",
+        "text": "EDEKA",
+        "place_name": "EDEKA, Markt 11, 13597 Berlin, Germany",
+        "place_type": ["poi"],
+        "geometry": { "type": "Point", "coordinates": [13.204706087708473, 52.53740364108829] },
+        "properties": {
+          "ref": "osm:n271738194",
+          "categories": ["supermarket"],
+          "feature_tags": {
+            "shop": "supermarket",
+            "addr:postcode": "13597",
+            "addr:city": "Berlin",
+            "addr:housenumber": "11",
+            "addr:street": "Markt"
+          }
+        }
+      },
+      "adapted": {
+        "id": "maptiler:poi.15407240",
+        "label": "EDEKA",
+        "sublabel": "EDEKA, Markt 11, 13597 Berlin, Germany",
+        "coordinates": [13.204706087708473, 52.53740364108829],
+        "type": "poi",
+        "rawCategory": "supermarket",
+        "provider": "geocoding-maptiler"
+      }
+    },
+    {
+      "raw": {
+        "id": "poi.15448214",
+        "text": "EDEKA",
+        "place_name": "EDEKA, Buntzelstraße 14, 12526 Berlin, Germany",
+        "place_type": ["poi"],
+        "geometry": { "type": "Point", "coordinates": [13.57199840247631, 52.408887070774476] },
+        "properties": {
+          "ref": "osm:n471301175",
+          "categories": ["supermarket"],
+          "feature_tags": {
+            "shop": "supermarket",
+            "addr:postcode": "12526",
+            "addr:city": "Berlin",
+            "addr:housenumber": "14",
+            "addr:street": "Buntzelstraße"
+          }
+        }
+      },
+      "adapted": {
+        "id": "maptiler:poi.15448214",
+        "label": "EDEKA",
+        "sublabel": "EDEKA, Buntzelstraße 14, 12526 Berlin, Germany",
+        "coordinates": [13.57199840247631, 52.408887070774476],
+        "type": "poi",
+        "rawCategory": "supermarket",
+        "provider": "geocoding-maptiler"
+      }
+    },
+    {
+      "raw": {
+        "id": "poi.30149398",
+        "text": "EDEKA",
+        "place_name": "EDEKA, Falkenseer Chaussee 266a, 13583 Berlin, Germany",
+        "place_type": ["poi"],
+        "geometry": { "type": "Point", "coordinates": [13.186250478029251, 52.54698238754912] },
+        "properties": {
+          "ref": "osm:n1008550282",
+          "categories": ["supermarket"],
+          "feature_tags": { "shop": "supermarket" }
+        }
+      },
+      "adapted": {
+        "id": "maptiler:poi.30149398",
+        "label": "EDEKA",
+        "sublabel": "EDEKA, Falkenseer Chaussee 266a, 13583 Berlin, Germany",
+        "coordinates": [13.186250478029251, 52.54698238754912],
+        "type": "poi",
+        "rawCategory": "supermarket",
+        "provider": "geocoding-maptiler"
+      }
+    },
+    {
+      "raw": {
+        "id": "poi.15445342",
+        "text": "EDEKA",
+        "place_name": "EDEKA, Barnimstraße 18, 10249 Berlin, Germany",
+        "place_type": ["poi"],
+        "geometry": { "type": "Point", "coordinates": [13.42295877635479, 52.52607532450191] },
+        "properties": {
+          "ref": "osm:n448814806",
+          "categories": ["supermarket"],
+          "feature_tags": {
+            "shop": "supermarket",
+            "addr:postcode": "10249",
+            "addr:city": "Berlin",
+            "addr:housenumber": "18",
+            "addr:street": "Barnimstraße"
+          }
+        }
+      },
+      "adapted": {
+        "id": "maptiler:poi.15445342",
+        "label": "EDEKA",
+        "sublabel": "EDEKA, Barnimstraße 18, 10249 Berlin, Germany",
+        "coordinates": [13.42295877635479, 52.52607532450191],
+        "type": "poi",
+        "rawCategory": "supermarket",
+        "provider": "geocoding-maptiler"
+      }
+    },
+    {
+      "raw": {
+        "id": "poi.15632141",
+        "text": "EDEKA",
+        "place_name": "EDEKA, Straßburger Straße 9A-C, 10405 Berlin, Germany",
+        "place_type": ["poi"],
+        "geometry": { "type": "Point", "coordinates": [13.41357808560133, 52.52919226436692] },
+        "properties": {
+          "ref": "osm:n3889187276",
+          "categories": ["supermarket"],
+          "feature_tags": {
+            "shop": "supermarket",
+            "addr:postcode": "10405",
+            "addr:city": "Berlin",
+            "addr:housenumber": "9A-C",
+            "addr:street": "Straßburger Straße"
+          }
+        }
+      },
+      "adapted": {
+        "id": "maptiler:poi.15632141",
+        "label": "EDEKA",
+        "sublabel": "EDEKA, Straßburger Straße 9A-C, 10405 Berlin, Germany",
+        "coordinates": [13.41357808560133, 52.52919226436692],
+        "type": "poi",
+        "rawCategory": "supermarket",
+        "provider": "geocoding-maptiler"
+      }
+    },
+    {
+      "raw": {
+        "id": "poi.15895501",
+        "text": "EDEKA",
+        "place_name": "EDEKA, Annenstraße 4a, 10179 Berlin, Germany",
+        "place_type": ["poi"],
+        "geometry": { "type": "Point", "coordinates": [13.415483734242002, 52.50777084974184] },
+        "properties": {
+          "ref": "osm:w52092588",
+          "categories": ["supermarket", "commercial building"],
+          "feature_tags": {
+            "shop": "supermarket",
+            "addr:postcode": "10179",
+            "addr:city": "Berlin",
+            "addr:housenumber": "4a",
+            "addr:street": "Annenstraße"
+          }
+        }
+      },
+      "adapted": {
+        "id": "maptiler:poi.15895501",
+        "label": "EDEKA",
+        "sublabel": "EDEKA, Annenstraße 4a, 10179 Berlin, Germany",
+        "coordinates": [13.415483734242002, 52.50777084974184],
+        "type": "poi",
+        "rawCategory": "supermarket",
+        "provider": "geocoding-maptiler"
+      }
+    },
+    {
+      "raw": {
+        "id": "poi.32007491",
+        "text": "EDEKA",
+        "place_name": "EDEKA, Templiner Straße 13a, 10119 Berlin, Germany",
+        "place_type": ["poi"],
+        "geometry": { "type": "Point", "coordinates": [13.40784888714552, 52.53201304601752] },
+        "properties": {
+          "ref": "osm:n6595730361",
+          "categories": ["supermarket"],
+          "feature_tags": {
+            "shop": "supermarket",
+            "level": "0",
+            "addr:postcode": "10119",
+            "addr:city": "Berlin",
+            "addr:housenumber": "12",
+            "addr:street": "Templiner Straße"
+          }
+        }
+      },
+      "adapted": {
+        "id": "maptiler:poi.32007491",
+        "label": "EDEKA",
+        "sublabel": "EDEKA, Templiner Straße 13a, 10119 Berlin, Germany",
+        "coordinates": [13.40784888714552, 52.53201304601752],
+        "type": "poi",
+        "rawCategory": "supermarket",
+        "provider": "geocoding-maptiler"
+      }
+    },
+    {
+      "raw": {
+        "id": "poi.15469482",
+        "text": "EDEKA",
+        "place_name": "EDEKA, Ritterstraße 38-40, 10969 Berlin, Germany",
+        "place_type": ["poi"],
+        "geometry": { "type": "Point", "coordinates": [13.403648883104324, 52.5035654379113] },
+        "properties": {
+          "ref": "osm:n652570198",
+          "categories": ["supermarket"],
+          "feature_tags": {
+            "shop": "supermarket",
+            "addr:postcode": "10969",
+            "addr:city": "Berlin",
+            "addr:housenumber": "38-40",
+            "addr:street": "Ritterstraße"
+          }
+        }
+      },
+      "adapted": {
+        "id": "maptiler:poi.15469482",
+        "label": "EDEKA",
+        "sublabel": "EDEKA, Ritterstraße 38-40, 10969 Berlin, Germany",
+        "coordinates": [13.403648883104324, 52.5035654379113],
+        "type": "poi",
+        "rawCategory": "supermarket",
+        "provider": "geocoding-maptiler"
+      }
+    },
+    {
+      "raw": {
+        "id": "poi.15864452",
+        "text": "EDEKA",
+        "place_name": "EDEKA, Platz der Vereinten Nationen 14, 10249 Berlin, Germany",
+        "place_type": ["poi"],
+        "geometry": { "type": "Point", "coordinates": [13.428411649527902, 52.52262534175838] },
+        "properties": {
+          "ref": "osm:w24035130",
+          "categories": ["supermarket", "retail building"],
+          "feature_tags": {
+            "shop": "supermarket",
+            "addr:postcode": "10249",
+            "addr:city": "Berlin",
+            "addr:housenumber": "14",
+            "addr:street": "Platz der Vereinten Nationen"
+          }
+        }
+      },
+      "adapted": {
+        "id": "maptiler:poi.15864452",
+        "label": "EDEKA",
+        "sublabel": "EDEKA, Platz der Vereinten Nationen 14, 10249 Berlin, Germany",
+        "coordinates": [13.428411649527902, 52.52262534175838],
+        "type": "poi",
+        "rawCategory": "supermarket",
+        "provider": "geocoding-maptiler"
+      }
+    },
+    {
+      "raw": {
+        "id": "address.6574798",
+        "text": "Alexanderstraße",
+        "place_name": "Alexanderstraße 25, 10179 Berlin, Germany",
+        "place_type": ["address"],
+        "geometry": { "type": "Point", "coordinates": [13.41794200000004, 52.519004] },
+        "properties": { "ref": "osm:w100405009", "wikidata": "Q17486182" }
+      },
+      "adapted": {
+        "id": "maptiler:address.6574798",
+        "ids": { "wikidata": "Q17486182" },
+        "label": "Alexanderstraße",
+        "sublabel": "Alexanderstraße 25, 10179 Berlin, Germany",
+        "coordinates": [13.41794200000004, 52.519004],
+        "type": "address",
+        "provider": "geocoding-maptiler"
+      }
+    },
+    {
+      "raw": {
+        "id": "poi.15258278",
+        "text": "Edeka",
+        "place_name": "Edeka, Berliner Straße 96, 13507 Berlin, Germany",
+        "place_type": ["poi"],
+        "geometry": { "type": "Point", "coordinates": [13.284847810864449, 52.589088279152] },
+        "properties": {
+          "ref": "osm:n316772479",
+          "categories": ["supermarket"],
+          "feature_tags": {
+            "shop": "supermarket",
+            "addr:postcode": "13507",
+            "addr:city": "Berlin",
+            "addr:housenumber": "96",
+            "addr:street": "Berliner Straße"
+          }
+        }
+      },
+      "adapted": {
+        "id": "maptiler:poi.15258278",
+        "label": "Edeka",
+        "sublabel": "Edeka, Berliner Straße 96, 13507 Berlin, Germany",
+        "coordinates": [13.284847810864449, 52.589088279152],
+        "type": "poi",
+        "rawCategory": "supermarket",
+        "provider": "geocoding-maptiler"
+      }
+    },
+    {
+      "raw": {
+        "id": "poi.15539884",
+        "text": "MediaMarkt",
+        "place_name": "MediaMarkt, Pr Willem Alexander Prom 69-83, 2284 DJ Rijswijk, Netherlands",
+        "place_type": ["poi"],
+        "geometry": { "type": "Point", "coordinates": [4.316869229078293, 52.03636822992996] },
+        "properties": {
+          "ref": "osm:n1845949909",
+          "categories": ["electronics"],
+          "feature_tags": {
+            "shop": "electronics",
+            "level": "1",
+            "addr:postcode": "2284DJ",
+            "addr:city": "Rijswijk",
+            "addr:housenumber": "69-83",
+            "addr:street": "Pr Willem Alexander Prom"
+          }
+        }
+      },
+      "adapted": {
+        "id": "maptiler:poi.15539884",
+        "label": "MediaMarkt",
+        "sublabel": "MediaMarkt, Pr Willem Alexander Prom 69-83, 2284 DJ Rijswijk, Netherlands",
+        "coordinates": [4.316869229078293, 52.03636822992996],
+        "type": "poi",
+        "rawCategory": "electronics",
+        "provider": "geocoding-maptiler"
+      }
+    },
+    {
+      "raw": {
+        "id": "poi.15422100",
+        "text": "MediaMarkt",
+        "place_name": "MediaMarkt, Grunerstraße 20, 10179 Berlin, Germany",
+        "place_type": ["poi"],
+        "geometry": { "type": "Point", "coordinates": [13.414790779352188, 52.51986159027454] },
+        "properties": {
+          "ref": "osm:n322490364",
+          "categories": ["electronics"],
+          "feature_tags": {
+            "shop": "electronics",
+            "level": "0",
+            "addr:postcode": "10179",
+            "addr:city": "Berlin",
+            "addr:housenumber": "20",
+            "addr:street": "Grunerstraße"
+          }
+        }
+      },
+      "adapted": {
+        "id": "maptiler:poi.15422100",
+        "label": "MediaMarkt",
+        "sublabel": "MediaMarkt, Grunerstraße 20, 10179 Berlin, Germany",
+        "coordinates": [13.414790779352188, 52.51986159027454],
+        "type": "poi",
+        "rawCategory": "electronics",
+        "provider": "geocoding-maptiler"
+      }
+    },
+    {
+      "raw": {
+        "id": "poi.15388462",
+        "text": "MediaMarkt",
+        "place_name": "MediaMarkt, Äußere Schneeberger Straße 95, 08056 Zwickau, Germany",
+        "place_type": ["poi"],
+        "geometry": { "type": "Point", "coordinates": [12.499412186443806, 50.70416170071806] },
+        "properties": {
+          "ref": "osm:n267485594",
+          "categories": ["electronics"],
+          "feature_tags": {
+            "shop": "electronics",
+            "addr:postcode": "08056",
+            "addr:city": "Zwickau",
+            "addr:housenumber": "95",
+            "addr:street": "Äußere Schneeberger Straße"
+          }
+        }
+      },
+      "adapted": {
+        "id": "maptiler:poi.15388462",
+        "label": "MediaMarkt",
+        "sublabel": "MediaMarkt, Äußere Schneeberger Straße 95, 08056 Zwickau, Germany",
+        "coordinates": [12.499412186443806, 50.70416170071806],
+        "type": "poi",
+        "rawCategory": "electronics",
+        "provider": "geocoding-maptiler"
+      }
+    },
+    {
+      "raw": {
+        "id": "poi.15513302",
+        "text": "MediaMarkt",
+        "place_name": "MediaMarkt, Waldershofer Straße 10, 95615 Marktredwitz, Germany",
+        "place_type": ["poi"],
+        "geometry": { "type": "Point", "coordinates": [12.077845813448675, 49.99956173454102] },
+        "properties": {
+          "ref": "osm:w145348876",
+          "categories": ["electronics", "building"],
+          "feature_tags": {
+            "addr:housenumber": "10",
+            "shop": "electronics",
+            "addr:street": "Waldershofer Straße",
+            "addr:postcode": "95615",
+            "addr:city": "Marktredwitz"
+          }
+        }
+      },
+      "adapted": {
+        "id": "maptiler:poi.15513302",
+        "label": "MediaMarkt",
+        "sublabel": "MediaMarkt, Waldershofer Straße 10, 95615 Marktredwitz, Germany",
+        "coordinates": [12.077845813448675, 49.99956173454102],
+        "type": "poi",
+        "rawCategory": "electronics",
+        "provider": "geocoding-maptiler"
+      }
+    },
+    {
+      "raw": {
+        "id": "poi.27301831",
+        "text": "MediaMarkt",
+        "place_name": "MediaMarkt, Schloßplatz 8, 26122 Oldenburg, Germany",
+        "place_type": ["poi"],
+        "geometry": { "type": "Point", "coordinates": [8.216576837003231, 53.13856416583732] },
+        "properties": {
+          "ref": "osm:n3555055573",
+          "categories": ["electronics"],
+          "feature_tags": {
+            "shop": "electronics",
+            "level": "-1",
+            "addr:postcode": "26122",
+            "addr:city": "Oldenburg",
+            "addr:housenumber": "3",
+            "addr:street": "Schloßplatz"
+          }
+        }
+      },
+      "adapted": {
+        "id": "maptiler:poi.27301831",
+        "label": "MediaMarkt",
+        "sublabel": "MediaMarkt, Schloßplatz 8, 26122 Oldenburg, Germany",
+        "coordinates": [8.216576837003231, 53.13856416583732],
+        "type": "poi",
+        "rawCategory": "electronics",
+        "provider": "geocoding-maptiler"
+      }
+    },
+    {
+      "raw": {
+        "id": "poi.31290179",
+        "text": "MediaMarkt",
+        "place_name": "MediaMarkt, Posthalterweg 15, 26129 Oldenburg, Germany",
+        "place_type": ["poi"],
+        "geometry": { "type": "Point", "coordinates": [8.172727230560895, 53.16099834226386] },
+        "properties": {
+          "ref": "osm:w1134980105",
+          "categories": ["electronics", "retail building"],
+          "feature_tags": {
+            "shop": "electronics",
+            "addr:postcode": "26129",
+            "addr:city": "Oldenburg",
+            "addr:housenumber": "15",
+            "addr:street": "Posthalterweg"
+          }
+        }
+      },
+      "adapted": {
+        "id": "maptiler:poi.31290179",
+        "label": "MediaMarkt",
+        "sublabel": "MediaMarkt, Posthalterweg 15, 26129 Oldenburg, Germany",
+        "coordinates": [8.172727230560895, 53.16099834226386],
+        "type": "poi",
+        "rawCategory": "electronics",
+        "provider": "geocoding-maptiler"
+      }
+    },
+    {
+      "raw": {
+        "id": "poi.34392614",
+        "text": "MediaMarkt",
+        "place_name": "MediaMarkt, Berliner Straße 15, 89250 Senden, Germany",
+        "place_type": ["poi"],
+        "geometry": { "type": "Point", "coordinates": [10.039082317799625, 48.33283310114879] },
+        "properties": {
+          "ref": "osm:w100513761",
+          "categories": ["electronics", "retail building"],
+          "wikidata": "Q659320",
+          "feature_tags": {
+            "shop": "electronics",
+            "addr:postcode": "89250",
+            "addr:city": "Senden",
+            "addr:housenumber": "13",
+            "addr:street": "Berliner Straße"
+          }
+        }
+      },
+      "adapted": {
+        "id": "maptiler:poi.34392614",
+        "ids": { "wikidata": "Q659320" },
+        "label": "MediaMarkt",
+        "sublabel": "MediaMarkt, Berliner Straße 15, 89250 Senden, Germany",
+        "coordinates": [10.039082317799625, 48.33283310114879],
+        "type": "poi",
+        "rawCategory": "electronics",
+        "provider": "geocoding-maptiler"
+      }
+    },
+    {
+      "raw": {
+        "id": "poi.30823762",
+        "text": "MediaMarkt",
+        "place_name": "MediaMarkt, Berliner Allee 34a, 22850 Norderstedt, Germany",
+        "place_type": ["poi"],
+        "geometry": { "type": "Point", "coordinates": [9.985382588983953, 53.6835389749034] },
+        "properties": {
+          "ref": "osm:w907293928",
+          "categories": ["electronics"],
+          "feature_tags": {
+            "shop": "electronics",
+            "level": "1",
+            "addr:postcode": "22850",
+            "addr:city": "Norderstedt",
+            "addr:housenumber": "8",
+            "addr:street": "De-Gasperi-Passage"
+          }
+        }
+      },
+      "adapted": {
+        "id": "maptiler:poi.30823762",
+        "label": "MediaMarkt",
+        "sublabel": "MediaMarkt, Berliner Allee 34a, 22850 Norderstedt, Germany",
+        "coordinates": [9.985382588983953, 53.6835389749034],
+        "type": "poi",
+        "rawCategory": "electronics",
+        "provider": "geocoding-maptiler"
+      }
+    },
+    {
+      "raw": {
+        "id": "poi.15426609",
+        "text": "REWE",
+        "place_name": "REWE, Invalidenstraße 158, 10115 Berlin, Germany",
+        "place_type": ["poi"],
+        "geometry": { "type": "Point", "coordinates": [13.397083505988121, 52.531980821191] },
+        "properties": {
+          "ref": "osm:n348000444",
+          "categories": ["supermarket"],
+          "feature_tags": {
+            "shop": "supermarket",
+            "level": "0",
+            "addr:postcode": "10115",
+            "addr:city": "Berlin",
+            "addr:housenumber": "158",
+            "addr:street": "Invalidenstraße"
+          }
+        }
+      },
+      "adapted": {
+        "id": "maptiler:poi.15426609",
+        "label": "REWE",
+        "sublabel": "REWE, Invalidenstraße 158, 10115 Berlin, Germany",
+        "coordinates": [13.397083505988121, 52.531980821191],
+        "type": "poi",
+        "rawCategory": "supermarket",
+        "provider": "geocoding-maptiler"
+      }
+    },
+    {
+      "raw": {
+        "id": "poi.15741076",
+        "text": "REWE",
+        "place_name": "REWE, Heidestraße 41, 10557 Berlin, Germany",
+        "place_type": ["poi"],
+        "geometry": { "type": "Point", "coordinates": [13.3660389482975, 52.53228104144362] },
+        "properties": {
+          "ref": "osm:n8367158861",
+          "categories": ["supermarket"],
+          "feature_tags": {
+            "shop": "supermarket",
+            "addr:postcode": "10557",
+            "level": "0",
+            "addr:city": "Berlin",
+            "addr:housenumber": "41",
+            "addr:street": "Heidestraße"
+          }
+        }
+      },
+      "adapted": {
+        "id": "maptiler:poi.15741076",
+        "label": "REWE",
+        "sublabel": "REWE, Heidestraße 41, 10557 Berlin, Germany",
+        "coordinates": [13.3660389482975, 52.53228104144362],
+        "type": "poi",
+        "rawCategory": "supermarket",
+        "provider": "geocoding-maptiler"
+      }
+    },
+    {
+      "raw": {
+        "id": "poi.34014416",
+        "text": "REWE",
+        "place_name": "REWE, Aaron-Bernstein-Platz 7, 10117 Berlin, Germany",
+        "place_type": ["poi"],
+        "geometry": { "type": "Point", "coordinates": [13.389315493404865, 52.52533119149872] },
+        "properties": {
+          "ref": "osm:n11027556740",
+          "categories": ["supermarket"],
+          "feature_tags": {
+            "shop": "supermarket",
+            "level": "-1",
+            "addr:postcode": "10117",
+            "addr:city": "Berlin",
+            "addr:housenumber": "111",
+            "addr:street": "Friedrichstraße"
+          }
+        }
+      },
+      "adapted": {
+        "id": "maptiler:poi.34014416",
+        "label": "REWE",
+        "sublabel": "REWE, Aaron-Bernstein-Platz 7, 10117 Berlin, Germany",
+        "coordinates": [13.389315493404865, 52.52533119149872],
+        "type": "poi",
+        "rawCategory": "supermarket",
+        "provider": "geocoding-maptiler"
+      }
+    },
+    {
+      "raw": {
+        "id": "poi.15509199",
+        "text": "REWE",
+        "place_name": "REWE, Chausseestraße 118-120, 10115 Berlin, Germany",
+        "place_type": ["poi"],
+        "geometry": { "type": "Point", "coordinates": [13.383975215256214, 52.529563891805815] },
+        "properties": {
+          "ref": "osm:n1110843201",
+          "categories": ["supermarket"],
+          "feature_tags": {
+            "shop": "supermarket",
+            "addr:postcode": "10115",
+            "level": "0",
+            "addr:city": "Berlin",
+            "addr:housenumber": "118-120",
+            "addr:street": "Chausseestraße"
+          }
+        }
+      },
+      "adapted": {
+        "id": "maptiler:poi.15509199",
+        "label": "REWE",
+        "sublabel": "REWE, Chausseestraße 118-120, 10115 Berlin, Germany",
+        "coordinates": [13.383975215256214, 52.529563891805815],
+        "type": "poi",
+        "rawCategory": "supermarket",
+        "provider": "geocoding-maptiler"
+      }
+    },
+    {
+      "raw": {
+        "id": "poi.36656201",
+        "text": "Rewe To Go",
+        "place_name": "Rewe To Go, Europaplatz 2, 10557 Berlin, Germany",
+        "place_type": ["poi"],
+        "geometry": { "type": "Point", "coordinates": [13.369845424343566, 52.52523409426698] },
+        "properties": {
+          "ref": "osm:w407684446",
+          "categories": ["supermarket"],
+          "feature_tags": { "shop": "supermarket", "level": "-1" }
+        }
+      },
+      "adapted": {
+        "id": "maptiler:poi.36656201",
+        "label": "Rewe To Go",
+        "sublabel": "Rewe To Go, Europaplatz 2, 10557 Berlin, Germany",
+        "coordinates": [13.369845424343566, 52.52523409426698],
+        "type": "poi",
+        "rawCategory": "supermarket",
+        "provider": "geocoding-maptiler"
+      }
+    },
+    {
+      "raw": {
+        "id": "address.8692633",
+        "text": "Invalidenstraße",
+        "place_name": "Invalidenstraße 158, 10115 Berlin, Germany",
+        "place_type": ["address"],
+        "geometry": { "type": "Point", "coordinates": [13.39708399999995, 52.531981] },
+        "properties": { "ref": "osm:w1021196045", "wikidata": "Q463414" }
+      },
+      "adapted": {
+        "id": "maptiler:address.8692633",
+        "ids": { "wikidata": "Q463414" },
+        "label": "Invalidenstraße",
+        "sublabel": "Invalidenstraße 158, 10115 Berlin, Germany",
+        "coordinates": [13.39708399999995, 52.531981],
+        "type": "address",
+        "provider": "geocoding-maptiler"
+      }
+    },
+    {
+      "raw": {
+        "id": "place.4795446",
+        "text": "Berlin Center",
+        "place_name": "Berlin Center, Berlin Township, United States",
+        "place_type": ["place"],
+        "geometry": { "type": "Point", "coordinates": [-85.13417344540358, 42.90058887898288] },
+        "properties": { "ref": "osm:n153413103", "place_designation": "hamlet" }
+      },
+      "adapted": {
+        "id": "maptiler:place.4795446",
+        "label": "Berlin Center",
+        "sublabel": "Berlin Center, Berlin Township, United States",
+        "coordinates": [-85.13417344540358, 42.90058887898288],
+        "type": "region",
+        "rawCategory": "place/hamlet",
+        "provider": "geocoding-maptiler"
+      }
+    },
+    {
+      "raw": {
+        "id": "region.505",
+        "text": "Berlin",
+        "place_name": "Berlin, Germany",
+        "place_type": ["region"],
+        "geometry": { "type": "Point", "coordinates": [13.39513085782528, 52.51738870388956] },
+        "properties": { "ref": "osm:r62422", "wikidata": "Q64", "place_designation": "city" }
+      },
+      "adapted": {
+        "id": "maptiler:region.505",
+        "ids": { "wikidata": "Q64" },
+        "label": "Berlin",
+        "sublabel": "Berlin, Germany",
+        "coordinates": [13.39513085782528, 52.51738870388956],
+        "type": "region",
+        "rawCategory": "place/city",
+        "provider": "geocoding-maptiler"
+      }
+    },
+    {
+      "raw": {
+        "id": "locality.2701",
+        "text": "Neukölln",
+        "place_name": "Neukölln, Berlin, Germany",
+        "place_type": ["locality"],
+        "geometry": { "type": "Point", "coordinates": [13.43534991145134, 52.48114978975832] },
+        "properties": { "ref": "osm:r409213", "wikidata": "Q169492", "place_designation": "suburb" }
+      },
+      "adapted": {
+        "id": "maptiler:locality.2701",
+        "ids": { "wikidata": "Q169492" },
+        "label": "Neukölln",
+        "sublabel": "Neukölln, Berlin, Germany",
+        "coordinates": [13.43534991145134, 52.48114978975832],
+        "type": "region",
+        "rawCategory": "place/suburb",
+        "provider": "geocoding-maptiler"
+      }
+    },
+    {
+      "raw": {
+        "id": "place.4534518",
+        "text": "Stone Pieces",
+        "place_name": "Stone Pieces, Berlin, Germany",
+        "place_type": ["place"],
+        "geometry": { "type": "Point", "coordinates": [13.129702471196651, 52.38950275667193] },
+        "properties": {
+          "ref": "osm:r14687142",
+          "wikidata": "Q515015",
+          "place_designation": "neighbourhood"
+        }
+      },
+      "adapted": {
+        "id": "maptiler:place.4534518",
+        "ids": { "wikidata": "Q515015" },
+        "label": "Stone Pieces",
+        "sublabel": "Stone Pieces, Berlin, Germany",
+        "coordinates": [13.129702471196651, 52.38950275667193],
+        "type": "region",
+        "rawCategory": "place/neighbourhood",
+        "provider": "geocoding-maptiler"
+      }
+    },
+    {
+      "raw": {
+        "id": "neighbourhood.20256",
+        "text": "Berliner Vorstadt",
+        "place_name": "Berliner Vorstadt, Potsdam, Germany",
+        "place_type": ["neighbourhood"],
+        "geometry": { "type": "Point", "coordinates": [13.079091534018517, 52.412128278186444] },
+        "properties": {
+          "ref": "osm:r6577655",
+          "wikidata": "Q48173386",
+          "place_designation": "suburb"
+        }
+      },
+      "adapted": {
+        "id": "maptiler:neighbourhood.20256",
+        "ids": { "wikidata": "Q48173386" },
+        "label": "Berliner Vorstadt",
+        "sublabel": "Berliner Vorstadt, Potsdam, Germany",
+        "coordinates": [13.079091534018517, 52.412128278186444],
+        "type": "street",
+        "rawCategory": "place/suburb",
+        "provider": "geocoding-maptiler"
+      }
+    },
+    {
+      "raw": {
+        "id": "place.2470107",
+        "text": "Berliner Siedlung",
+        "place_name": "Berliner Siedlung, Treuenbrietzen, Germany",
+        "place_type": ["place"],
+        "geometry": { "type": "Point", "coordinates": [12.889782898128033, 52.10644753168435] },
+        "properties": {
+          "ref": "osm:n7678030785",
+          "wikidata": "Q113687898",
+          "place_designation": "neighbourhood"
+        }
+      },
+      "adapted": {
+        "id": "maptiler:place.2470107",
+        "ids": { "wikidata": "Q113687898" },
+        "label": "Berliner Siedlung",
+        "sublabel": "Berliner Siedlung, Treuenbrietzen, Germany",
+        "coordinates": [12.889782898128033, 52.10644753168435],
+        "type": "region",
+        "rawCategory": "place/neighbourhood",
+        "provider": "geocoding-maptiler"
+      }
+    },
+    {
+      "raw": {
+        "id": "poi.2947497",
+        "text": "20",
+        "place_name": "20, Siemenssiedlung am Hohenzollernkanal III, Berlin, Germany",
+        "place_type": ["poi"],
+        "geometry": { "type": "Point", "coordinates": [13.251579366624355, 52.55727716817165] },
+        "properties": { "ref": "osm:n11165225437", "categories": ["water well"] }
+      },
+      "adapted": {
+        "id": "maptiler:poi.2947497",
+        "label": "20",
+        "sublabel": "20, Siemenssiedlung am Hohenzollernkanal III, Berlin, Germany",
+        "coordinates": [13.251579366624355, 52.55727716817165],
+        "type": "poi",
+        "rawCategory": "water well",
+        "provider": "geocoding-maptiler"
+      }
+    },
+    {
+      "raw": {
+        "id": "poi.2947574",
+        "text": "20",
+        "place_name": "20, Saatwinkel, Berlin, Germany",
+        "place_type": ["poi"],
+        "geometry": { "type": "Point", "coordinates": [13.242084681987762, 52.55983688062971] },
+        "properties": { "ref": "osm:n11165225465", "categories": ["water well"] }
+      },
+      "adapted": {
+        "id": "maptiler:poi.2947574",
+        "label": "20",
+        "sublabel": "20, Saatwinkel, Berlin, Germany",
+        "coordinates": [13.242084681987762, 52.55983688062971],
+        "type": "poi",
+        "rawCategory": "water well",
+        "provider": "geocoding-maptiler"
+      }
+    },
+    {
+      "raw": {
+        "id": "poi.6230752",
+        "text": "20",
+        "place_name": "20, Elisabeth-Schwarzhaupt-Platz, Berlin, Germany",
+        "place_type": ["poi"],
+        "geometry": { "type": "Point", "coordinates": [13.383162542017772, 52.53501260472217] },
+        "properties": { "ref": "osm:w372459506", "categories": ["pitch", "beachvolleyball"] }
+      },
+      "adapted": {
+        "id": "maptiler:poi.6230752",
+        "label": "20",
+        "sublabel": "20, Elisabeth-Schwarzhaupt-Platz, Berlin, Germany",
+        "coordinates": [13.383162542017772, 52.53501260472217],
+        "type": "poi",
+        "rawCategory": "pitch",
+        "provider": "geocoding-maptiler"
+      }
+    },
+    {
+      "raw": {
+        "id": "poi.32879876",
+        "text": "Edeka Schaaf",
+        "place_name": "Edeka Schaaf, Singerstraße 121, 10179 Berlin, Germany",
+        "place_type": ["poi"],
+        "geometry": { "type": "Point", "coordinates": [13.420668505132198, 52.51747194496568] },
+        "properties": {
+          "ref": "osm:n9154787137",
+          "categories": ["supermarket"],
+          "feature_tags": {
+            "shop": "supermarket",
+            "level": "0",
+            "addr:postcode": "10179",
+            "addr:city": "Berlin",
+            "addr:housenumber": "2",
+            "addr:street": "Schillingstraße"
+          }
+        }
+      },
+      "adapted": {
+        "id": "maptiler:poi.32879876",
+        "label": "Edeka Schaaf",
+        "sublabel": "Edeka Schaaf, Singerstraße 121, 10179 Berlin, Germany",
+        "coordinates": [13.420668505132198, 52.51747194496568],
+        "type": "poi",
+        "rawCategory": "supermarket",
+        "provider": "geocoding-maptiler"
+      }
+    },
+    {
+      "raw": {
+        "id": "address.4011014",
+        "text": "Schillingstraße",
+        "place_name": "Schillingstraße 2, 10179 Berlin, Germany",
+        "place_type": ["address"],
+        "geometry": { "type": "Point", "coordinates": [13.42051600000002, 52.517376] },
+        "properties": { "ref": "osm:w1076055688" }
+      },
+      "adapted": {
+        "id": "maptiler:address.4011014",
+        "label": "Schillingstraße",
+        "sublabel": "Schillingstraße 2, 10179 Berlin, Germany",
+        "coordinates": [13.42051600000002, 52.517376],
+        "type": "address",
+        "provider": "geocoding-maptiler"
+      }
+    },
+    {
+      "raw": {
+        "id": "address.9975161",
+        "text": "Schillingstraße",
+        "place_name": "Schillingstraße 2, 13403 Berlin, Germany",
+        "place_type": ["address"],
+        "geometry": { "type": "Point", "coordinates": [13.320637000000033, 52.566285] },
+        "properties": { "ref": "osm:w1156572743" }
+      },
+      "adapted": {
+        "id": "maptiler:address.9975161",
+        "label": "Schillingstraße",
+        "sublabel": "Schillingstraße 2, 13403 Berlin, Germany",
+        "coordinates": [13.320637000000033, 52.566285],
+        "type": "address",
+        "provider": "geocoding-maptiler"
+      }
+    },
+    {
+      "raw": {
+        "id": "address.18028993",
+        "text": "Schillingstrasse",
+        "place_name": "Schillingstrasse, 10179 Berlin, Germany",
+        "place_type": ["address"],
+        "geometry": { "type": "Point", "coordinates": [13.420090489089489, 52.51717590797079] },
+        "properties": { "ref": "osm:n10188970798" }
+      },
+      "adapted": {
+        "id": "maptiler:address.18028993",
+        "label": "Schillingstrasse",
+        "sublabel": "Schillingstrasse, 10179 Berlin, Germany",
+        "coordinates": [13.420090489089489, 52.51717590797079],
+        "type": "address",
+        "provider": "geocoding-maptiler"
+      }
+    },
+    {
+      "raw": {
+        "id": "address.6705156",
+        "text": "Schellingstraße",
+        "place_name": "Schellingstraße, 10785 Berlin, Germany",
+        "place_type": ["address"],
+        "geometry": { "type": "Point", "coordinates": [13.37306197732687, 52.505255650814135] },
+        "properties": { "ref": "osm:w1472672676" }
+      },
+      "adapted": {
+        "id": "maptiler:address.6705156",
+        "label": "Schellingstraße",
+        "sublabel": "Schellingstraße, 10785 Berlin, Germany",
+        "coordinates": [13.37306197732687, 52.505255650814135],
+        "type": "address",
+        "provider": "geocoding-maptiler"
+      }
+    }
+  ],
+  "cases": [
+    {
+      "caseId": "moch-name",
+      "rawIds": [
+        "poi.30456941",
+        "poi.27997147",
+        "poi.32434263",
+        "poi.31643808",
+        "poi.14639240",
+        "poi.14883072"
+      ]
+    },
+    {
+      "caseId": "moch-address",
+      "rawIds": [
+        "address.12686057",
+        "address.10027702",
+        "address.10343043",
+        "address.9410688",
+        "address.5097698",
+        "place.4929509"
+      ]
+    },
+    {
+      "caseId": "edeka-address",
+      "rawIds": [
+        "poi.39267497",
+        "poi.15407240",
+        "poi.15448214",
+        "poi.30149398",
+        "address.12686057",
+        "address.10027702"
+      ]
+    },
+    {
+      "caseId": "edeka-alexa",
+      "rawIds": [
+        "poi.39267497",
+        "poi.15445342",
+        "poi.15632141",
+        "poi.15895501",
+        "poi.32007491",
+        "poi.15469482"
+      ]
+    },
+    {
+      "caseId": "edeka-gruner",
+      "rawIds": [
+        "poi.39267497",
+        "poi.15448214",
+        "poi.15864452",
+        "poi.15445342",
+        "poi.15632141",
+        "poi.15895501"
+      ]
+    },
+    {
+      "caseId": "edeka-alexander",
+      "rawIds": [
+        "poi.39267497",
+        "poi.15445342",
+        "poi.15632141",
+        "poi.32007491",
+        "address.6574798",
+        "poi.15258278"
+      ]
+    },
+    {
+      "caseId": "edeka-brand",
+      "rawIds": [
+        "poi.39267497",
+        "poi.15864452",
+        "poi.15445342",
+        "poi.15632141",
+        "poi.15895501",
+        "poi.32007491"
+      ]
+    },
+    {
+      "caseId": "media-alexa",
+      "rawIds": [
+        "poi.15539884",
+        "poi.15422100",
+        "poi.15388462",
+        "poi.15513302",
+        "poi.27301831",
+        "poi.31290179"
+      ]
+    },
+    {
+      "caseId": "media-address",
+      "rawIds": [
+        "poi.15422100",
+        "address.12686057",
+        "poi.34392614",
+        "poi.30823762",
+        "address.10027702",
+        "address.10343043"
+      ]
+    },
+    {
+      "caseId": "rewe-address",
+      "rawIds": [
+        "poi.15426609",
+        "poi.15741076",
+        "poi.34014416",
+        "poi.15509199",
+        "poi.36656201",
+        "address.8692633"
+      ]
+    },
+    {
+      "caseId": "wrong-address",
+      "rawIds": [
+        "place.4795446",
+        "region.505",
+        "locality.2701",
+        "place.4534518",
+        "neighbourhood.20256",
+        "place.2470107"
+      ]
+    },
+    {
+      "caseId": "invented-name",
+      "rawIds": [
+        "address.12686057",
+        "address.10027702",
+        "address.10343043",
+        "poi.2947497",
+        "poi.2947574",
+        "poi.6230752"
+      ]
+    },
+    {
+      "caseId": "schaaf-address",
+      "rawIds": [
+        "poi.32879876",
+        "address.4011014",
+        "address.9975161",
+        "address.18028993",
+        "address.6705156",
+        "region.505"
+      ]
+    }
+  ]
+}

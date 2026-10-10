@@ -148,6 +148,18 @@ export interface Route {
    */
   baselineDuration?: number;
   /**
+   * Provider evidence that fresh congestion speeds cover this exact route and
+   * were used in its duration. A comparison duration or road-closure proof is
+   * insufficient. Only complete coverage permits a green, low-delay ETA.
+   * Leases must be at most two minutes from evaluatedAt. Current providers do
+   * not yet emit this evidence; absent/partial/expired evidence means unknown.
+   */
+  trafficCoverage?: {
+    complete: boolean;
+    evaluatedAt: string;
+    validUntil: string;
+  };
+  /**
    * The route drives along a road closed to all but local access ("Anlieger
    * frei"): it starts or ends on one, or can be reached only through one.
    */
@@ -418,6 +430,14 @@ export interface EvDirectionsRequest {
 }
 
 /** A charging stop inserted into an EV route plan. */
+/** A tariff's main price: an amount per unit, e.g. 0.39 EUR per kWh. */
+export interface TariffPrice {
+  amount: number;
+  /** ISO 4217 code. */
+  currency: string;
+  unit: "kWh" | "h" | "session";
+}
+
 export interface EvChargeStop {
   /** Subset of the charging station identity/location needed to render the stop — not the full provider record. */
   station: { id: string; name: string; coordinates: LngLat };
@@ -432,12 +452,14 @@ export interface EvChargeStop {
   chargeSeconds: number;
   addedKwh: number;
   /**
-   * Live availability at plan time, when the source reports it. Structural
-   * shape matching mobility-core's `EvseAvailability` field-for-field — kept
-   * inline here so `@openmapx/core` never imports `@openmapx/mobility-core`.
+   * Free charge points at plan time, counted over those with a fresh live
+   * status; absent when none has one. The shape of mobility-core's
+   * `availabilityOf`, kept inline so `@openmapx/core` never imports
+   * `@openmapx/mobility-core`. `updatedAt` is the newest status time.
    */
-  availability?: { available: number; total: number; updatedAt: string };
-  tariffSummary?: string;
+  availability?: { available: number; total: number; updatedAt?: string };
+  /** The main price of the tariff the session was costed on; the client formats it in its locale. */
+  tariffPrice?: TariffPrice;
   /** Modelled cost of this charging session. */
   estimatedCost?: { amount: number; currency: string };
   attributions: DataSourceAttribution[];
@@ -446,12 +468,18 @@ export interface EvChargeStop {
 /**
  * Why a plan fell short of a complete route. `tight-margin` is emitted by the
  * post-reroute whole-trip re-validation pass, when the final route arrives
- * within a thin band of the reserve.
+ * within a thin band of the reserve. `no-charger-data` means a stop was needed
+ * and no charging site was found (or none is configured);
+ * `charger-sources-unavailable` that a stop was needed and no charger source
+ * answered for it; `partial-charger-data` that a charger source did not answer
+ * in full, so a better stop may exist.
  */
 export type EvPlanWarning =
   | { kind: "unreachable"; afterStopIndex: number }
   | { kind: "tight-margin"; legIndex: number }
   | { kind: "no-charger-data" }
+  | { kind: "charger-sources-unavailable" }
+  | { kind: "partial-charger-data" }
   | { kind: "no-allowed-network"; afterStopIndex: number };
 
 /**

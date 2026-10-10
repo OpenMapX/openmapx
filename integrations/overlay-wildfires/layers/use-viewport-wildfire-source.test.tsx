@@ -19,6 +19,7 @@ const EMPTY_COLLECTION: WildfireFeatureCollection = {
   fetchedAt: "2026-08-12T12:00:00.000Z",
   stale: false,
   truncated: false,
+  sources: [],
 };
 
 const NIFC_FEATURE: GeoJSON.Feature = {
@@ -27,8 +28,7 @@ const NIFC_FEATURE: GeoJSON.Feature = {
   properties: {
     id: "nifc:1",
     kind: "reported-perimeter",
-    provider: "nifc",
-    coverage: "United States",
+    provider: "us-nifc-fires",
     name: "Pine Fire",
     areaAcres: 100,
   },
@@ -51,7 +51,7 @@ const EFFIS_FEATURE: GeoJSON.Feature = {
   properties: {
     id: "effis:1",
     kind: "satellite-burned-area",
-    provider: "effis",
+    provider: "eu-effis-fires",
     areaHectares: 42,
   },
   geometry: {
@@ -119,42 +119,9 @@ let fake: FakeMap;
 beforeEach(() => {
   fake = createFakeMap({ zoom: 3 });
   mapContext.mapRef.current = fake.map;
-  useWildfireStore.setState({
-    statuses: {
-      firms: {
-        loading: false,
-        fetchedAt: null,
-        stale: false,
-        truncated: false,
-        error: null,
-        featureCount: null,
-      },
-      nifc: {
-        loading: false,
-        fetchedAt: null,
-        stale: false,
-        truncated: false,
-        error: null,
-        featureCount: null,
-      },
-      effis: {
-        loading: false,
-        fetchedAt: null,
-        stale: false,
-        truncated: false,
-        error: null,
-        featureCount: null,
-      },
-      "noaa-hms": {
-        loading: false,
-        fetchedAt: null,
-        stale: false,
-        truncated: false,
-        error: null,
-        featureCount: null,
-      },
-    },
-  });
+  for (const id of ["firms", "nifc", "effis", "noaa-hms"] as const) {
+    useWildfireStore.getState().resetSourceStatus(id);
+  }
 });
 
 afterEach(() => {
@@ -391,12 +358,42 @@ describe("useViewportWildfireSource", () => {
     },
   );
 
-  it("publishes valid empty data and propagates cache metadata to source status", async () => {
+  it("asks again for a view whose request a re-run of its effects aborted", async () => {
+    const data = { ...EMPTY_COLLECTION, features: [NIFC_FEATURE] };
+    const fetchMock = vi.fn(async () => response(data));
+    vi.stubGlobal("fetch", fetchMock);
+    const publish = vi.fn<(data: WildfireFeatureCollection) => void>();
+
+    // Strict mode runs every effect, its cleanup and the effect again on mount, as a
+    // remount or a changed dependency would.
+    renderHook(
+      () =>
+        useViewportWildfireSource({
+          active: true,
+          sourceId: "nifc",
+          endpoint: "https://api.test/api/integrations/overlay-wildfires/perimeters/nifc",
+          minZoom: 3,
+          refreshMs: 300_000,
+          publish,
+          clear: () => {},
+        }),
+      { reactStrictMode: true },
+    );
+
+    await waitFor(() => expect(publish).toHaveBeenCalledWith(data));
+    const signals = fetchMock.mock.calls.map(
+      (call) => (call as unknown as [string, RequestInit])[1].signal,
+    );
+    expect(signals.some((signal) => signal && !signal.aborted)).toBe(true);
+  });
+
+  it("publishes valid empty data and propagates cache metadata and sources to source status", async () => {
     const data = {
       ...EMPTY_COLLECTION,
       fetchedAt: "2026-08-12T11:30:00.000Z",
       stale: true,
       truncated: true,
+      sources: ["us-nifc-fires"],
     };
     vi.stubGlobal(
       "fetch",
@@ -412,6 +409,7 @@ describe("useViewportWildfireSource", () => {
       truncated: true,
       error: null,
       featureCount: 0,
+      sources: ["us-nifc-fires"],
     });
   });
 

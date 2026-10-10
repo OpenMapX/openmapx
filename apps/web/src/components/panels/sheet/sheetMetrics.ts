@@ -11,8 +11,9 @@ export interface ScrollGeometry {
  *
  * The sheet host is a fixed-height scroll container: its height never changes,
  * only its scroll offset does, so the rendered sheet height has to be derived
- * rather than measured. The scrollable overflow equals the sheet's own height,
- * so visible height is simply how far the host has been scrolled.
+ * rather than measured. The sheet ends at the end of the scroll track, which
+ * also contains the snap markers. Subtract the remaining scroll distance from
+ * the host height so those markers do not count as visible sheet pixels.
  */
 export function visibleSheetHeight({
   scrollTop,
@@ -20,7 +21,8 @@ export function visibleSheetHeight({
   clientHeight,
 }: ScrollGeometry): number {
   const maxScroll = Math.max(0, scrollHeight - clientHeight);
-  const visible = Math.min(scrollTop, maxScroll);
+  if (maxScroll === 0) return 0;
+  const visible = clientHeight - (maxScroll - Math.min(scrollTop, maxScroll));
   return Math.max(0, Math.min(visible, clientHeight));
 }
 

@@ -10,6 +10,7 @@ import {
   presetSuggestionRows,
   rankAutocompleteRows,
 } from "../suggestionRanking";
+import distinctBusinesses from "./fixtures/distinct-businesses.json";
 
 const BERLIN: [number, number] = [13.405, 52.52];
 
@@ -276,6 +277,21 @@ describe("rankAutocompleteRows", () => {
       { query: "alexanderplatz", proximity: BERLIN },
     );
     expect(rows).toHaveLength(1);
+  });
+
+  it("preserves both controlled nearby branches with their original identity and address", () => {
+    const rows = rankAutocompleteRows(
+      { places: distinctBusinesses as AutocompleteResult[] },
+      { query: "REWE", proximity: [13.4, 52.52], zoom: 15 },
+    );
+    expect(rows).toMatchObject([
+      { id: "maptiler:branch-a", sublabel: "REWE, Street A 1, Berlin", coordinates: [13.4, 52.52] },
+      {
+        id: "maptiler:branch-b",
+        sublabel: "REWE, Street B 2, Berlin",
+        coordinates: [13.405, 52.52],
+      },
+    ]);
   });
 });
 

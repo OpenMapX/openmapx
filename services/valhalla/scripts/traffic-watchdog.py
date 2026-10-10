@@ -26,6 +26,10 @@ MAX_JOURNAL_BYTES = 64 * 1024 * 1024
 MAX_EVIDENCE_BYTES = 64 * 1024
 MAX_REQUEST_BYTES = 4 * 1024 * 1024
 MAX_RESPONSE_BYTES = 32 * 1024 * 1024
+# The data-manager writer's TRAFFIC_LEASE_MAX_MS: a lease must outlast its
+# two-minute write cadence, and none may claim more.
+MAX_LEASE_MS = 300_000
+MAX_PROOF_MS = 120_000
 DEFAULT_BACKEND_TIMEOUT = 45
 DEFAULT_CLIENT_TIMEOUT = 10
 DEFAULT_MAX_CONCURRENCY = 32
@@ -147,12 +151,16 @@ def lease_allows_serving(path, now_ms=None):
             or not isinstance(uncertain, bool)
         ):
             return False
-        if not (0 <= deadline <= now_ms + 120_000):
-            return False
-        if uncertain:
+        if not (0 <= deadline <= now_ms + MAX_LEASE_MS):
             return False
         if phase == "pending":
+            # An uncertain pending journal is the writer clearing every record
+            # it cannot account for, after each engine start or graph change.
+            # Its deadline bounds that write like any other; only an abandoned
+            # one fences serving.
             return deadline > now_ms
+        if uncertain:
+            return False
         return not identities or deadline > now_ms
     except (OSError, ValueError, TypeError, KeyError):
         return False
@@ -258,7 +266,7 @@ def proof_journal(path, now_ms):
             or SHA256_PATTERN.fullmatch(value["routingGraphGeneration"]) is None
             or not isinstance(deadline, (int, float))
             or isinstance(deadline, bool)
-            or not now_ms < deadline <= now_ms + 120_000
+            or not now_ms < deadline <= now_ms + MAX_LEASE_MS
         ):
             return None
         return value
@@ -344,8 +352,11 @@ def proof_for_request(
     if graph_after["engineBootId"] != after["engineBootId"]:
         return None
     deadline = min(before["validUntil"], after["validUntil"])
-    if not now_ms < deadline <= now_ms + 120_000:
+    if not now_ms < deadline <= now_ms + MAX_LEASE_MS:
         return None
+    # The engine serves a write until its lease ends; one route answer claims
+    # at most two minutes of it.
+    deadline = min(deadline, now_ms + MAX_PROOF_MS)
     return {
         "schemaVersion": 1,
         "requestId": eligibility["requestId"],

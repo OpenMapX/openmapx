@@ -32,7 +32,7 @@ FROM base AS runner
 WORKDIR /app
 # The pinned base predates Alpine's OpenSSL fix for CVE-2026-14456.
 RUN apk upgrade --no-cache libcrypto3 libssl3 && \
-    apk add --no-cache ca-certificates curl docker-cli docker-cli-compose && \
+    apk add --no-cache ca-certificates curl docker-cli docker-cli-compose tini && \
     rm -rf /usr/local/lib/node_modules/npm && \
     rm -f /usr/local/bin/npm /usr/local/bin/npx
 
@@ -55,4 +55,8 @@ USER node:node
 WORKDIR /app/apps/ops-agent
 EXPOSE 4300
 HEALTHCHECK --interval=15s --timeout=3s --retries=5 CMD ["curl", "-fsS", "http://127.0.0.1:4300/health"]
+# A command's helper that outlives it is reparented to PID 1. tini reaps it:
+# Node would leave it a zombie in the command's process group, and the
+# contained-process runner waits for that group to empty.
+ENTRYPOINT ["/sbin/tini", "--"]
 CMD ["node", "--import", "tsx/esm", "dist/index.js"]

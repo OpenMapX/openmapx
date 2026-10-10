@@ -1,6 +1,6 @@
 {
   "name": "OpenConditions",
-  "description": "Aktuelle Straßenlage (Ereignisse, Baustellen, Sperrungen und Verkehrsfluss) und Tankstellen mit ihren Preisen aus einer OpenConditions-Instanz",
+  "description": "Aktuelle Straßenlage (Ereignisse, Baustellen, Sperrungen und Verkehrsfluss), Tankstellen mit ihren Preisen, Parkplätze mit freien Stellplätzen und Tarifen, Ladestationen mit Ladepunkten, Status und Tarifen, Verkehrs- und Wetterkameras mit ihren aktuellen Bildern sowie Wetterwarnungen, Erdbeben, Naturereignisse und Brandmeldungen aus einer OpenConditions-Instanz",
   "dataSources": {
     "domain:road-conditions": {
       "purpose": "Verkehrsereignisse, Baustellen, Sperrungen und Verkehrsfluss, gelesen über OpenConditions",
@@ -11,6 +11,26 @@
       "purpose": "Tankstellen und ihre Kraftstoffpreise, gelesen über OpenConditions",
       "dataSent": "Nichts über die Nutzer. OpenConditions fragt manche Quellen bei Bedarf ab: Eine solche Quelle erhält die Rasterzellen oder deren Mittelpunkte, die den gesuchten Kartenausschnitt abdecken (bzw. beim Öffnen einer Tankstelle einen Ausschnitt von etwa 200 m um sie), und eine Quelle mit Schlüssel zusätzlich den API-Schlüssel des Betreibers. Quellen, die OpenConditions im Gesamtabruf liest, erhalten nichts",
       "dataReceived": "Tankstellen mit Adresse, Marke, Öffnungszeiten, den angebotenen Kraftstoffen und ihren Preisen"
+    },
+    "domain:parking-sites": {
+      "purpose": "Parkhäuser und andere Parkplätze mit ihren freien Stellplätzen und Tarifen, gelesen über OpenConditions",
+      "dataSent": "Nichts über die Nutzer. OpenConditions fragt manche Quellen bei Bedarf ab: Eine solche Quelle erhält die Rasterzellen, die den gesuchten Kartenausschnitt abdecken (bzw. beim Öffnen eines Parkplatzes einen Ausschnitt von etwa 200 m um ihn). Quellen, die OpenConditions im Gesamtabruf liest, erhalten nichts",
+      "dataReceived": "Parkplätze mit Adresse, Betreiber, Öffnungszeiten, Kapazität, freien Stellplätzen, Stellplätzen für bestimmte Fahrzeuge und Nutzergruppen sowie Tarifen"
+    },
+    "domain:charging-sites": {
+      "purpose": "Ladestationen mit ihren Ladepunkten, Steckern, aktuellem Status und Tarifen, gelesen über OpenConditions",
+      "dataSent": "Nichts über die Nutzer. OpenConditions fragt manche Quellen bei Bedarf ab: Eine solche Quelle erhält die Rasterzellen, die den gesuchten Kartenausschnitt abdecken (bzw. beim Öffnen einer Ladestation einen Ausschnitt von etwa 200 m um sie), und eine Quelle mit Schlüssel zusätzlich den API-Schlüssel des Betreibers. Quellen, die OpenConditions im Gesamtabruf liest, erhalten nichts",
+      "dataReceived": "Ladestationen mit Adresse, Betreiber, Öffnungszeiten, Ladepunkten, Steckertypen und Ladeleistung, aktuellem Status der Ladepunkte sowie Tarifen"
+    },
+    "domain:cameras": {
+      "purpose": "Verkehrs-, Wetter- und Panoramakameras mit ihren Ansichten und aktuellen Bildern, gelesen über OpenConditions",
+      "dataSent": "Über OpenConditions nichts über die Nutzer: Eine Quelle, die es bei Bedarf abfragt, erhält die Rasterzellen, die den gesuchten Kartenausschnitt abdecken (bzw. beim Öffnen einer Kamera einen Ausschnitt von etwa 200 m um sie), und eine Quelle mit Schlüssel zusätzlich den API-Schlüssel des Betreibers; Quellen, die es im Gesamtabruf liest, erhalten nichts. Kamerabilder ruft der OpenMapX-Server ab und zeigt sie über seinen Bild-Proxy. Videostreams und Player von Drittanbietern lädt der Browser direkt, und erst nachdem die Nutzer \"Medien laden\" anklicken; deren Anbieter erhält dabei die IP-Adresse und Browserangaben der Nutzer",
+      "dataReceived": "Kameras mit Standort, Art, Betreiber, ihren Ansichten mit Blickrichtung, Status und Aktualisierungsintervall, dem aktuellen Bild oder Stream jeder Ansicht sowie einem Link zur Seite des Anbieters"
+    },
+    "domain:hazards": {
+      "purpose": "Wetter- und Katastrophenwarnungen, Erdbeben, Naturereignisse und Satelliten-Brandmeldungen, gelesen über OpenConditions",
+      "dataSent": "Nichts über die Nutzer: OpenMapX übermittelt dem OpenConditions-Server nur Karten- und Routenausschnitte (Begrenzungsrahmen) sowie Zeitfenster, und OpenConditions liest die Gefahrendaten aus seinem eigenen Bestand, den es durch Abruf seiner Quellen nach eigenem Zeitplan füllt",
+      "dataReceived": "Warnungen mit Gebiet, Schwere, Gültigkeit und Text des Herausgebers, Erdbeben und andere Naturereignisse mit Ort und Zeit sowie Brandmeldungen von Satelliten mit Ort, Zeitpunkt und Strahlungsleistung"
     }
   }
 }

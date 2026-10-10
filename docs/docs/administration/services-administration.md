@@ -53,7 +53,9 @@ The catalog also surfaces the **selection** — the set of root services that
 participate in your deployment. The selection panel shows the requested roots,
 the effective count after the renderer expands dependencies, and where the
 selection is coming from. You can edit the comma-separated list of root ids and
-**Save Selection** to persist it.
+**Save Selection** to persist it. It is the CLI's selection too: saving writes
+`infra/docker/service-selection.json`, the file `pnpm openmapx services enable`
+edits, and the panel shows what `pnpm openmapx services selected` shows.
 
 When the selection is being driven by the `OPENMAPX_ENABLED_SERVICES` environment
 variable, the panel says so and disables editing — the environment variable wins,
@@ -210,12 +212,22 @@ data workflow is documented in [Preparing data](../install/preparing-data.md).
 ### OSM code and alias search index
 
 The data workflow also operates the local OSM code/alias/acronym index used by
-consumer autocomplete. It shows the source region and fingerprint, current
+consumer autocomplete. It shows the source region, current
 build stage, place and term counts, publication epoch and time, whether a newer
 PBF has made the index stale, and the last error. Building is explicit: select
 the downloaded region and confirm the operation, or run
 `openmapx data search-index build [region]`. A new PBF never triggers a
 country- or planet-scale rebuild during API boot.
+
+A ready index covers the documented aliases/codes/acronyms; it does not establish
+ordinary business-name/address coverage. For an investigation, record the
+authenticated `/api/data-manager/search-index/status` response's
+`sourceFingerprint` and `epoch` as well as the Overture status response's release
+and region. The search card's summary does not display the source fingerprint.
+Keep unavailable generations unknown and do not rebuild or flush shared caches
+to diagnose a query. See the
+[business retrieval investigation](../developer/business-name-address-retrieval.md)
+for the distinction between source presence and searchable candidates.
 
 The job requires PostGIS and Osmium Tool. It streams records in bounded batches
 into `osm_search__staging`, builds exact/prefix and geographic indexes, validates
@@ -223,6 +235,20 @@ counts and referential integrity, then swaps schemas in one database
 transaction. Extraction, validation, or publication failure keeps the prior
 snapshot live. During a rebuild the existing snapshot remains searchable;
 after a new PBF the stale snapshot also remains available until replaced.
+
+### Nearby places publication
+
+The **Nearby places on the map** card publishes existing OSM/Overture sources
+for a custom region, Germany or the planet. It displays the active generation,
+source coverage/releases and eligible counts separately from staged progress.
+Global builds require a ready format 2 OSM snapshot for `planet` and, when
+Overture is initialized, a matching completed Overture snapshot; selecting a
+preset does not ingest them. Interrupted global
+candidates persist across restarts and offer **Resume planet build** or
+**Discard candidate**. Resume requires unchanged sources and policy. Disable and
+rollback preserve retained immutable tiles. See the
+[publication runbook](../developer/ambient-places-publication.md) for preparation,
+capacity, deployment scenarios and recovery.
 
 ### Notable places index
 

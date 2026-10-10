@@ -1,4 +1,9 @@
-import type { IntegrationContext, IntegrationDataSource } from "@openmapx/integration-framework";
+import { isValidWgs84Bounds } from "@openmapx/core/coverage";
+import {
+  type IntegrationContext,
+  type IntegrationDataSource,
+  parseMediaHostEntry,
+} from "@openmapx/integration-framework";
 import type { OpenConditionsClient } from "./client.js";
 
 /** A right as OpenConditions states it: granted, denied, or not stated (null). */
@@ -10,6 +15,10 @@ export interface OcSource {
   name: string;
   domain: string;
   product: string;
+  /** The source format its parser reads, such as `cap` or `firms`. */
+  format: string;
+  /** What sets the feed apart from the publisher's other feeds of the same product, such as `firms-viirs`. */
+  qualifier?: string;
   operator: string;
   region: string;
   country?: string;
@@ -17,12 +26,21 @@ export interface OcSource {
   accessMode: "bulk" | "on_demand";
   /** Its records are withheld from the public scope; the entry is metadata only. */
   restricted: boolean;
+  /** The licence id: SPDX where SPDX lists it, else `LicenseRef-<name>`, or `NOASSERTION`. */
   license: string;
+  /** The licence's readable name, which the legal pages and credits show. */
+  licenseName?: string;
   licenseUrl?: string;
   attribution: string;
   homepage: string;
   privacyUrl: string;
   terms?: { url?: string; reviewedAt?: string; note?: string };
+  /** A notice the publisher requires to accompany any display of its data, verbatim. */
+  notice?: string;
+  /** Where the catalogue says the source applies: ISO 3166-1 countries, or a `[west, south, east, north]` box. */
+  coverage?: { countries?: string[]; bbox?: [number, number, number, number] };
+  /** The hosts a camera feed's stills come from, which a consumer may proxy. */
+  imageHosts?: string[];
   rights: {
     redistribution: Right;
     derivedRedistribution: Right;
@@ -37,7 +55,17 @@ export interface OcSource {
 const DOMAINS: Readonly<Record<string, string>> = {
   roads: "road-conditions",
   fuel: "fuel-stations",
+  parking: "parking-sites",
+  charging: "charging-sites",
+  cameras: "cameras",
+  hazards: "hazards",
 };
+
+/**
+ * The OpenMapX domains whose data also reaches the browser directly: a
+ * camera's video stream or player page loads there once the user consents.
+ */
+const MIXED_EXPOSURE: ReadonlySet<string> = new Set(["cameras"]);
 
 /** How often the list is read again. */
 export const SOURCE_SYNC_INTERVAL_MS = 300_000;
@@ -76,18 +104,32 @@ function providerCountryOf(source: OcSource): string {
 /**
  * An OpenConditions source as an OpenMapX data source, or undefined for a
  * source in a domain OpenMapX does not serve. OpenMapX reads every source
- * server-side through OpenConditions, so none reaches the browser directly.
+ * server-side through OpenConditions; only camera streams and players reach
+ * the browser directly, after consent. A camera feed's image hosts become
+ * the media hosts the image proxy may fetch its stills from.
  */
 export function toDataSource(source: OcSource): IntegrationDataSource | undefined {
   const domain = DOMAINS[source.domain];
   if (domain === undefined) return undefined;
   const usageConditions = usageConditionsOf(source);
+  // A malformed field, or an entry the image proxy would refuse, costs the
+  // source those stills, not its listing: the data-source rules refuse a
+  // source whose media hosts hold one such entry.
+  const mediaHosts = Array.isArray(source.imageHosts)
+    ? source.imageHosts.filter(
+        (host): host is string => typeof host === "string" && parseMediaHostEntry(host) !== null,
+      )
+    : [];
   return {
     sourceId: source.id,
     domain,
     name: source.name,
     url: source.homepage,
-    license: source.license,
+    // People read this field; nothing in OpenMapX decides by the licence id.
+    license:
+      typeof source.licenseName === "string" && source.licenseName.trim() !== ""
+        ? source.licenseName
+        : source.license,
     ...(source.licenseUrl ? { licenseUrl: source.licenseUrl } : {}),
     attribution: source.attribution,
     ...(source.terms?.url ? { termsUrl: source.terms.url } : {}),
@@ -100,7 +142,8 @@ export function toDataSource(source: OcSource): IntegrationDataSource | undefine
       sourceData: redistributionOf(source.rights.redistribution, source.rights.shareAlike),
       derivedData: redistributionOf(source.rights.derivedRedistribution, source.rights.shareAlike),
     },
-    endUserExposure: "server-only",
+    ...(mediaHosts.length > 0 ? { mediaHosts } : {}),
+    endUserExposure: MIXED_EXPOSURE.has(domain) ? "mixed" : "server-only",
     personalData: false,
     cookies: false,
   };
@@ -117,6 +160,8 @@ interface ReadList {
   unmapped: string[];
   /** Ids of the restricted sources left out in the public scope. */
   withheld: string[];
+  /** The sources listed, as OpenConditions describes them. */
+  described: OcSource[];
 }
 
 /** The scope OpenConditions served a read in; the operator scope includes restricted sources. */
@@ -144,7 +189,7 @@ function dataSourcesOf(answer: unknown): ReadList {
     throw new Error("Malformed /sources answer");
   }
   const operator = scope === "operator";
-  const out: ReadList = { list: [], invalid: [], unmapped: [], withheld: [] };
+  const out: ReadList = { list: [], invalid: [], unmapped: [], withheld: [], described: [] };
   for (const source of sources) {
     const id = isRecord(source) && typeof source["id"] === "string" ? source["id"] : "(no id)";
     if (
@@ -161,10 +206,89 @@ function dataSourcesOf(answer: unknown): ReadList {
       continue;
     }
     const ds = toDataSource(source as unknown as OcSource);
-    if (ds) out.list.push(ds);
-    else out.unmapped.push(id);
+    if (ds) {
+      out.list.push(ds);
+      out.described.push(source as unknown as OcSource);
+    } else out.unmapped.push(id);
   }
   return out;
+}
+
+/** How a listed source is fetched and where it applies, as `/sources` describes it. */
+export interface SourceScope {
+  accessMode: "bulk" | "on_demand";
+  /** ISO 3166-1 alpha-2, upper case; absent for a source not bound to one country. */
+  country?: string;
+  /** Set when the source covers one subdivision of `country` only. */
+  subdivision?: string;
+  /** The countries the catalogue says the source covers (ISO 3166-1 alpha-2, upper case). */
+  countries?: string[];
+  /** The area the catalogue says the source covers, `[west, south, east, north]`. */
+  bbox?: [number, number, number, number];
+}
+
+/**
+ * The ISO 3166-1 alpha-2 countries of a catalogue coverage, upper case; a
+ * subdivision code (ISO 3166-2, `DE-BW`) stands for its country. Undefined
+ * when none is valid.
+ */
+function countriesOf(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const codes = value
+    .filter(
+      (code): code is string =>
+        typeof code === "string" && /^[A-Za-z]{2}(-[A-Za-z0-9]{1,3})?$/.test(code),
+    )
+    .map((code) => code.slice(0, 2).toUpperCase());
+  return codes.length > 0 ? [...new Set(codes)].sort() : undefined;
+}
+
+/** A catalogue coverage box, when it is a valid WGS84 one. */
+function bboxOf(value: unknown): [number, number, number, number] | undefined {
+  return Array.isArray(value) &&
+    value.every((n) => typeof n === "number") &&
+    isValidWgs84Bounds(value)
+    ? [value[0], value[1], value[2], value[3]]
+    : undefined;
+}
+
+/** The scope of each listed source; none is known until the first list arrives. */
+export interface SourceScopes {
+  /** False until the first list arrives. */
+  readonly ready: boolean;
+  get(sourceId: string): SourceScope | undefined;
+}
+
+export interface UpdatableSourceScopes extends SourceScopes {
+  update(list: readonly OcSource[]): void;
+}
+
+export function createSourceScopes(): UpdatableSourceScopes {
+  let scopes: ReadonlyMap<string, SourceScope> | undefined;
+  return {
+    get ready() {
+      return scopes !== undefined;
+    },
+    get: (sourceId) => scopes?.get(sourceId),
+    update(list) {
+      scopes = new Map(
+        list.map((source) => {
+          const countries = countriesOf(source.coverage?.countries);
+          const bbox = bboxOf(source.coverage?.bbox);
+          return [
+            source.id,
+            {
+              accessMode: source.accessMode === "on_demand" ? "on_demand" : "bulk",
+              ...(source.country ? { country: source.country.toUpperCase() } : {}),
+              ...(source.subdivision ? { subdivision: source.subdivision } : {}),
+              ...(countries ? { countries } : {}),
+              ...(bbox ? { bbox } : {}),
+            },
+          ];
+        }),
+      );
+    },
+  };
 }
 
 /**
@@ -178,22 +302,88 @@ export interface LiveSources {
   has(sourceId: string): boolean;
   /** The source's credit link: its homepage. */
   link(sourceId: string): string | undefined;
+  /** The readable name a listed source gives a licence id; none before the first list. */
+  licenseName(licenseId: string): string | undefined;
+  /** The notice the source's publisher requires to accompany any display of its data. */
+  noticeOf(sourceId: string): string | undefined;
+  /**
+   * The listed FIRMS feeds of one instrument: the sources whose format is
+   * `firms` and whose qualifier is `firms-viirs` or `firms-modis`.
+   */
+  firmsSources(instrument: "viirs" | "modis"): string[];
 }
 
-export interface UpdatableLiveSources extends LiveSources {
-  update(list: readonly Pick<IntegrationDataSource, "sourceId" | "url">[]): void;
+/** The listed sources with the image hosts each declares, as the cameras provider checks stills. */
+export interface MediaSources extends LiveSources {
+  /** The source's media hosts; none for a source that declares none or is not listed. */
+  mediaHosts(sourceId: string): readonly string[];
 }
+
+export interface UpdatableLiveSources extends MediaSources {
+  update(list: readonly Pick<IntegrationDataSource, "sourceId" | "url" | "mediaHosts">[]): void;
+  /**
+   * Takes the licence names from the sources as OpenConditions describes
+   * them: the accepted data sources carry the readable name in place of the id.
+   */
+  updateLicenses(list: readonly Pick<OcSource, "license" | "licenseName">[]): void;
+  /** Takes the formats, qualifiers and notices from the sources as OpenConditions describes them. */
+  updateDescribed(list: readonly Pick<OcSource, "id" | "format" | "qualifier" | "notice">[]): void;
+}
+
+const FIRMS_QUALIFIERS = { viirs: "firms-viirs", modis: "firms-modis" } as const;
 
 export function createLiveSources(): UpdatableLiveSources {
   let links: ReadonlyMap<string, string> | undefined;
+  let media: ReadonlyMap<string, readonly string[]> = new Map();
+  let licenseNames: ReadonlyMap<string, string> = new Map();
+  let notices: ReadonlyMap<string, string> = new Map();
+  let firms: ReadonlyMap<"viirs" | "modis", readonly string[]> = new Map();
   return {
     get ready() {
       return links !== undefined;
     },
     has: (sourceId) => links?.has(sourceId) ?? false,
     link: (sourceId) => links?.get(sourceId),
+    licenseName: (licenseId) => licenseNames.get(licenseId),
+    mediaHosts: (sourceId) => media.get(sourceId) ?? [],
+    noticeOf: (sourceId) => (links?.has(sourceId) ? notices.get(sourceId) : undefined),
+    // Only feeds the host accepted count, so a dropped feed's pixels are never read.
+    firmsSources: (instrument) =>
+      (firms.get(instrument) ?? []).filter((sourceId) => links?.has(sourceId) ?? false),
     update(list) {
       links = new Map(list.map((ds) => [ds.sourceId, ds.url]));
+      media = new Map(list.flatMap((ds) => (ds.mediaHosts ? [[ds.sourceId, ds.mediaHosts]] : [])));
+    },
+    updateDescribed(list) {
+      notices = new Map(
+        list.flatMap(({ id, notice }) =>
+          typeof notice === "string" && notice.trim() !== "" ? [[id, notice] as const] : [],
+        ),
+      );
+      firms = new Map(
+        (Object.keys(FIRMS_QUALIFIERS) as Array<keyof typeof FIRMS_QUALIFIERS>).map(
+          (instrument) => [
+            instrument,
+            list
+              .filter(
+                (source) =>
+                  source.format === "firms" && source.qualifier === FIRMS_QUALIFIERS[instrument],
+              )
+              .map((source) => source.id),
+          ],
+        ),
+      );
+    },
+    updateLicenses(list) {
+      licenseNames = new Map(
+        list.flatMap(({ license, licenseName }) =>
+          typeof license === "string" &&
+          typeof licenseName === "string" &&
+          licenseName.trim() !== ""
+            ? [[license, licenseName] as const]
+            : [],
+        ),
+      );
     },
   };
 }
@@ -205,6 +395,8 @@ export interface SourceSyncOptions {
   retryMs?: number;
   /** Called with the sources the host accepted from each list. */
   onSources?: (list: readonly IntegrationDataSource[]) => void;
+  /** Called with each list's sources in a domain OpenMapX serves, as OpenConditions describes them. */
+  onDescribed?: (list: readonly OcSource[]) => void;
 }
 
 export interface SourceSync {
@@ -238,7 +430,7 @@ export function startSourceSync(
         timeoutMs: SOURCE_READ_TIMEOUT_MS,
       });
       if (stopped) return true;
-      const { list, invalid, unmapped, withheld } = dataSourcesOf(answer);
+      const { list, invalid, unmapped, withheld, described } = dataSourcesOf(answer);
       if (invalid.length > 0) {
         ctx.log.warn(`OpenConditions /sources: skipped malformed entries ${invalid.join(", ")}`);
       }
@@ -257,6 +449,7 @@ export function startSourceSync(
       // gated, so the providers serve only what it accepted.
       const accepted = ctx.setDataSources(list);
       opts.onSources?.(accepted);
+      opts.onDescribed?.(described);
       if (failing) {
         failing = false;
         ctx.log.info(`OpenConditions /sources recovered: ${accepted.length} sources`);

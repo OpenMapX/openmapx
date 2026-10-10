@@ -11,10 +11,7 @@ export {
 export {
   type ComposeServiceSnippet,
   GENERATED_SECRETS_DIRNAME,
-  mergeServiceSecretKeys,
   type RenderContext,
-  readServiceSecretKeysFromCompose,
-  readServiceSecretKeysFromDisk,
   renderCompose,
   renderServiceSnippet,
   resolveProxyHost,
@@ -28,6 +25,22 @@ export {
   serviceConfigEnvPrefix,
 } from "./config-resolver";
 export {
+  type CommitConfigurationOptions,
+  type CommittedConfiguration,
+  type ConfigurationInput,
+  commitConfigurationGeneration,
+  currentConfigurationGeneration,
+  initializeConfigurationGenerations,
+  type RenderConfigurationOptions,
+  readAppliedConfiguration,
+  readAppliedServiceIds,
+  renderConfiguration,
+} from "./configuration-generation";
+export {
+  assertTrustedConfigurationSchema,
+  validateTrustedConfigurationValues,
+} from "./configuration-schema";
+export {
   DATA_MANAGER_PLAINTEXT_HOSTS_ENV,
   DataManagerClient,
   type DataManagerClientOptions,
@@ -39,6 +52,24 @@ export {
   type SearchIndexStatus,
   validateDataManagerBaseUrl,
 } from "./data-manager-client";
+export {
+  CONFIGURATION_GENERATIONS,
+  CURRENT_CONFIGURATION,
+  currentConfigurationFile,
+  type DesiredSelection,
+  type DesiredSelectionSource,
+  GENERATED_COMPOSE_FILE,
+  GENERATED_HARDLINK_PLAN_FILE,
+  loadIntegrationSchemas,
+  readDesiredSelection,
+  readServiceSelectionFile,
+  SERVICE_SELECTION_FILE,
+  STACK_PROJECT,
+  type StackPaths,
+  serviceSelectionPath,
+  stackComposeArgs,
+  writeServiceSelectionFile,
+} from "./deployment";
 export {
   type ExtensionComponentRef,
   type ExtensionIntegrationComponent,
@@ -113,6 +144,7 @@ export {
 export { assertValidSecretKey, isValidSecretKey, SECRET_KEY_RE } from "./secret-key";
 export { computeServiceSecurityRating, type ServiceSecurityRating } from "./security-rating";
 export {
+  APPLIED_SERVICES_ENV,
   buildAppApiServiceEnv,
   DEFAULT_SELECTED_SERVICE_IDS,
   type ExpandedServiceSelection,

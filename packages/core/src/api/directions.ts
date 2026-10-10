@@ -12,6 +12,8 @@ import { API_ENDPOINTS } from "./endpoints";
 
 export interface FetchDirectionsParams {
   waypoints: LngLat[];
+  /** Pin an enabled routing integration; failure must not change graphs. */
+  provider?: string;
   mode?: TravelMode;
   avoidHighways?: boolean;
   avoidTolls?: boolean;
@@ -35,6 +37,7 @@ export interface FetchDirectionsParams {
 export function fetchDirections(
   {
     waypoints,
+    provider,
     mode = "driving",
     avoidHighways = false,
     avoidTolls = false,
@@ -53,6 +56,7 @@ export function fetchDirections(
     API_ENDPOINTS.directions,
     {
       waypoints: waypointsStr,
+      ...(provider && { provider }),
       mode,
       avoidHighways: String(avoidHighways),
       avoidTolls: String(avoidTolls),

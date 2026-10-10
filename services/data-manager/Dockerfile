@@ -4,10 +4,7 @@
 # outside its own directory to pick up:
 #   - pnpm-workspace.yaml + workspace package.json files (for dependency
 #     resolution of @openmapx/db-schema, @openmapx/hardlinks, and the other
-#     workspace packages the baked `integrations/` tree depends on)
-#   - integrations/ — baked into the image so POI-source discovery is
-#     self-contained (see poi-source-discovery.ts): no host bind-mount of
-#     the repo is required to see integration code, mirroring apps/api
+#     workspace packages the data-manager imports)
 #   - services/motis/tools/transitous/requirements.txt (pulled into the
 #     runtime stage for the Transitous GTFS pipeline)
 #
@@ -17,7 +14,7 @@
 # The GitHub Actions workflow at .github/workflows/docker.yml builds this
 # image with `context: .` for the same reason.
 
-FROM docker.io/golang:1.27@sha256:3680233e3204827fbdc66088528ae6d4b3d034f51d03a99d454f6de034888244 AS build-gtfsclean
+FROM docker.io/golang:1.27.2@sha256:5bc7f572bbaa98885a3a1fd9c0aa76b59e3e14e8628bfc316bbfd0c701e4818c AS build-gtfsclean
 # Pin gtfsclean to a commit (the project only publishes rolling snapshot-N tags)
 # instead of @latest so the build is reproducible and can't silently pull new code.
 WORKDIR /tmp/gtfsclean-build
@@ -43,7 +40,6 @@ COPY packages/db-schema/package.json packages/db-schema/
 COPY packages/hardlinks/package.json packages/hardlinks/
 COPY packages/motis-feed-proxy-config/package.json packages/motis-feed-proxy-config/
 COPY packages/mobility-formats/package.json packages/mobility-formats/
-COPY packages/poi-source-registry/package.json packages/poi-source-registry/
 COPY packages/transitous-core/package.json packages/transitous-core/
 COPY packages/core/package.json packages/core/
 COPY packages/hey-api-client-fetch/package.json packages/hey-api-client-fetch/
@@ -51,16 +47,8 @@ COPY packages/i18n/package.json packages/i18n/
 COPY packages/cli/package.json packages/cli/
 COPY packages/air-quality/package.json packages/air-quality/
 COPY packages/integration-framework/package.json packages/integration-framework/
-COPY packages/mangrove-client/package.json packages/mangrove-client/
 COPY packages/mobility-core/package.json packages/mobility-core/
-COPY packages/ev-charge-planner/package.json packages/ev-charge-planner/
-COPY packages/noaa-coops-data/package.json packages/noaa-coops-data/
-COPY packages/openconditions-contrib-client/package.json packages/openconditions-contrib-client/
-COPY packages/ourairports-data/package.json packages/ourairports-data/
 COPY packages/place-ids/package.json packages/place-ids/
-COPY packages/presets/package.json packages/presets/
-COPY packages/brands/package.json packages/brands/
-COPY integrations/ integrations/
 
 RUN pnpm install --frozen-lockfile
 
@@ -74,7 +62,6 @@ COPY packages/db-schema/package.json packages/db-schema/
 COPY packages/hardlinks/package.json packages/hardlinks/
 COPY packages/motis-feed-proxy-config/package.json packages/motis-feed-proxy-config/
 COPY packages/mobility-formats/package.json packages/mobility-formats/
-COPY packages/poi-source-registry/package.json packages/poi-source-registry/
 COPY packages/transitous-core/package.json packages/transitous-core/
 COPY packages/core/package.json packages/core/
 COPY packages/hey-api-client-fetch/package.json packages/hey-api-client-fetch/
@@ -82,16 +69,8 @@ COPY packages/i18n/package.json packages/i18n/
 COPY packages/cli/package.json packages/cli/
 COPY packages/air-quality/package.json packages/air-quality/
 COPY packages/integration-framework/package.json packages/integration-framework/
-COPY packages/mangrove-client/package.json packages/mangrove-client/
 COPY packages/mobility-core/package.json packages/mobility-core/
-COPY packages/ev-charge-planner/package.json packages/ev-charge-planner/
-COPY packages/noaa-coops-data/package.json packages/noaa-coops-data/
-COPY packages/openconditions-contrib-client/package.json packages/openconditions-contrib-client/
-COPY packages/ourairports-data/package.json packages/ourairports-data/
 COPY packages/place-ids/package.json packages/place-ids/
-COPY packages/presets/package.json packages/presets/
-COPY packages/brands/package.json packages/brands/
-COPY integrations/ integrations/
 
 RUN pnpm install --frozen-lockfile --prod --ignore-scripts && \
     rm -rf node_modules/.pnpm/image-size@*
@@ -124,50 +103,6 @@ RUN apt-get update \
       libexpat1=2.5.0-1+deb12u4 libpcre2-8-0 \
     && rm -rf /var/lib/apt/lists/*
 
-# Static Docker CLI so the data-manager can invoke `docker exec` (feed-proxy
-# nginx reload, motis-staging import) and `docker restart` (atomic-swap promote)
-# against the host daemon via the bind-mounted socket. We pull the static
-# binary tarball instead of `docker.io`/`docker-ce-cli` to avoid dragging in
-# the daemon, systemd units, or third-party apt repos. Pin to a recent stable
-# release; the CLI is forward/backward-compatible with daemons within a few
-# minor versions.
-ARG DOCKER_CLI_VERSION=29.8.1
-ARG DOCKER_CLI_SHA256_AMD64=d8db66739d2e28d4933786d73e918d9be643a67fbd835db1bf740d650a259e70
-ARG DOCKER_CLI_SHA256_ARM64=667395fbffab52901b80181dfbb39ea76da2fbd7642c4fbddd24e42146b07b48
-RUN set -eux; \
-    arch="$(uname -m)"; \
-    case "$arch" in \
-      x86_64) docker_arch=x86_64; expected_sha="$DOCKER_CLI_SHA256_AMD64" ;; \
-      aarch64|arm64) docker_arch=aarch64; expected_sha="$DOCKER_CLI_SHA256_ARM64" ;; \
-      *) echo "Unsupported arch $arch for Docker CLI install" >&2; exit 1 ;; \
-    esac; \
-    curl -fsSL "https://download.docker.com/linux/static/stable/${docker_arch}/docker-${DOCKER_CLI_VERSION}.tgz" -o /tmp/docker.tgz; \
-    echo "${expected_sha}  /tmp/docker.tgz" | sha256sum -c -; \
-    tar -xzf /tmp/docker.tgz -C /tmp; \
-    mv /tmp/docker/docker /usr/local/bin/docker; \
-    chmod +x /usr/local/bin/docker; \
-    rm -rf /tmp/docker /tmp/docker.tgz; \
-    docker --version
-# Compose v2 CLI plugin. The atomic-swap promote recreates the MOTIS container
-# with `docker compose up -d --force-recreate` (a plain `docker restart` keeps
-# the pre-swap bind-mount target), so the plugin — not just the base CLI — must
-# be present, else promote fails with "unknown shorthand flag: 'f'".
-ARG DOCKER_COMPOSE_VERSION=5.5.1
-ARG DOCKER_COMPOSE_SHA256_AMD64=db1889184726840f75c4f9c001048430d4f25b3be3cb084d3ddd762bc0aed576
-ARG DOCKER_COMPOSE_SHA256_ARM64=732e3a84c1a0f67256ce80bc2598a24546b10ca05f9faa97efceb1171ece2ef7
-RUN set -eux; \
-    arch="$(uname -m)"; \
-    case "$arch" in \
-      x86_64) compose_arch=x86_64; expected_sha="$DOCKER_COMPOSE_SHA256_AMD64" ;; \
-      aarch64|arm64) compose_arch=aarch64; expected_sha="$DOCKER_COMPOSE_SHA256_ARM64" ;; \
-      *) echo "Unsupported arch $arch for Docker Compose install" >&2; exit 1 ;; \
-    esac; \
-    mkdir -p /usr/local/lib/docker/cli-plugins; \
-    curl -fsSL "https://github.com/docker/compose/releases/download/v${DOCKER_COMPOSE_VERSION}/docker-compose-linux-${compose_arch}" \
-      -o /usr/local/lib/docker/cli-plugins/docker-compose; \
-    echo "${expected_sha}  /usr/local/lib/docker/cli-plugins/docker-compose" | sha256sum -c -; \
-    chmod +x /usr/local/lib/docker/cli-plugins/docker-compose; \
-    docker compose version
 ARG DUCKDB_VERSION=1.3.1
 ARG DUCKDB_SHA256_AMD64=a43e0156c9799496089dd265605113471df5a30a7db26e1c662484eb1d31fc08
 ARG DUCKDB_SHA256_ARM64=93ddf7bc61d148273b821abbca911053dec3ba5e004d5fa981b4732b7e608905
@@ -198,7 +133,7 @@ COPY --from=prod-deps /app/services/data-manager/node_modules ./services/data-ma
 # The shared @openmapx/db-schema, @openmapx/hardlinks, and
 # @openmapx/motis-feed-proxy-config packages ship their TypeScript source
 # directly; tsx/esm (preserved because it's a prod dep) transpiles them on
-# import. This matches how apps/api loads its dynamic integration code.
+# import.
 # db-schema needs its own node_modules so the symlinked drizzle-orm resolves
 # from its source files at runtime; the other two have no prod externals so
 # only the source is needed.
@@ -208,19 +143,14 @@ COPY packages/hardlinks/ ./packages/hardlinks/
 COPY packages/motis-feed-proxy-config/ ./packages/motis-feed-proxy-config/
 COPY packages/mobility-formats/ ./packages/mobility-formats/
 COPY --from=prod-deps /app/packages/mobility-formats/node_modules ./packages/mobility-formats/node_modules
-COPY packages/poi-source-registry/ ./packages/poi-source-registry/
-COPY --from=prod-deps /app/packages/poi-source-registry/node_modules ./packages/poi-source-registry/node_modules
 COPY packages/transitous-core/ ./packages/transitous-core/
 COPY --from=prod-deps /app/packages/transitous-core/node_modules ./packages/transitous-core/node_modules
 COPY packages/core/ ./packages/core/
 COPY --from=prod-deps /app/packages/core/node_modules ./packages/core/node_modules
 COPY packages/hey-api-client-fetch/ ./packages/hey-api-client-fetch/
 
-# The baked `integrations/` tree (below) dynamically imports these packages
-# at runtime the same way apps/api's integration loader does — they are not
-# direct dependencies of @openmapx/data-manager itself, but of the
-# integration code data-manager now ships and runs discovery against instead
-# of reading from the host bind-mount.
+# Transitive runtime dependencies of @openmapx/core and @openmapx/cli, which
+# data-manager imports.
 COPY packages/place-ids/ ./packages/place-ids/
 COPY packages/air-quality/ ./packages/air-quality/
 COPY --from=prod-deps /app/packages/air-quality/node_modules ./packages/air-quality/node_modules
@@ -228,20 +158,6 @@ COPY packages/integration-framework/ ./packages/integration-framework/
 COPY --from=prod-deps /app/packages/integration-framework/node_modules ./packages/integration-framework/node_modules
 COPY packages/mobility-core/ ./packages/mobility-core/
 COPY --from=prod-deps /app/packages/mobility-core/node_modules ./packages/mobility-core/node_modules
-COPY packages/ev-charge-planner/ ./packages/ev-charge-planner/
-COPY --from=prod-deps /app/packages/ev-charge-planner/node_modules ./packages/ev-charge-planner/node_modules
-COPY packages/mangrove-client/ ./packages/mangrove-client/
-COPY --from=prod-deps /app/packages/mangrove-client/node_modules ./packages/mangrove-client/node_modules
-COPY packages/noaa-coops-data/ ./packages/noaa-coops-data/
-COPY --from=prod-deps /app/packages/noaa-coops-data/node_modules ./packages/noaa-coops-data/node_modules
-COPY packages/openconditions-contrib-client/ ./packages/openconditions-contrib-client/
-COPY --from=prod-deps /app/packages/openconditions-contrib-client/node_modules ./packages/openconditions-contrib-client/node_modules
-COPY packages/ourairports-data/ ./packages/ourairports-data/
-COPY --from=prod-deps /app/packages/ourairports-data/node_modules ./packages/ourairports-data/node_modules
-COPY packages/presets/ ./packages/presets/
-COPY --from=prod-deps /app/packages/presets/node_modules ./packages/presets/node_modules
-COPY packages/brands/ ./packages/brands/
-COPY --from=prod-deps /app/packages/brands/node_modules ./packages/brands/node_modules
 
 # packages/cli source + node_modules — bundled for parity with apps/api's
 # runner (admin-cli.ts spawns the CLI for data jobs when no host bind-mount
@@ -249,16 +165,11 @@ COPY --from=prod-deps /app/packages/brands/node_modules ./packages/brands/node_m
 COPY packages/cli/ packages/cli/
 COPY --from=prod-deps /app/packages/cli/node_modules ./packages/cli/node_modules
 
-# Integrations with pnpm-resolved node_modules (manifests + code + deps) —
-# this is what makes data-manager self-contained: POI-source discovery no
-# longer needs the host bind-mount to see integration code.
-COPY --from=prod-deps /app/integrations ./integrations
-
 COPY --from=builder /app/services/data-manager/dist ./services/data-manager/dist
 COPY services/data-manager/package.json ./services/data-manager/
 
-# tsx resolves tsconfig paths + .js -> .ts at runtime for the dynamically
-# imported integration modules (mirrors apps/api's runner).
+# tsx resolves tsconfig paths + .js -> .ts at runtime for the workspace
+# packages that ship TypeScript source.
 ENV TSX_TSCONFIG_PATH=/app/tsconfig.base.json
 COPY tsconfig.base.json ./
 

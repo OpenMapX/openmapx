@@ -4,6 +4,7 @@ import {
   assertValidRegion,
   computeBboxFromPoly,
   discoverLatestOvertureRelease,
+  fetchRegionBbox,
   latestReleaseFromCatalog,
   regionSlug,
 } from "../../src/jobs/overture/pull.js";
@@ -102,5 +103,14 @@ describe("computeBboxFromPoly", () => {
 
   it("throws when the .poly has no coordinate lines", () => {
     expect(() => computeBboxFromPoly("none\nEND\n")).toThrow(/no coordinates/);
+  });
+});
+
+it("resolves the planet without a nonexistent Geofabrik boundary", async () => {
+  await expect(fetchRegionBbox("planet")).resolves.toEqual({
+    west: -180,
+    south: -90,
+    east: 180,
+    north: 90,
   });
 });

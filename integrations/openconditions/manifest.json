@@ -9,7 +9,14 @@
     "registrationIds": [],
     "operatorInstructions": null
   },
-  "domains": ["road-conditions", "fuel-stations"],
+  "domains": [
+    "road-conditions",
+    "fuel-stations",
+    "parking-sites",
+    "charging-sites",
+    "cameras",
+    "hazards"
+  ],
   "requires": [{ "service": "openconditions-ingest", "optional": true }],
   "backend": {
     "routes": false

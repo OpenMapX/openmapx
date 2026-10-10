@@ -42,8 +42,51 @@ Paris, while a word that names a kind of place nearby ("vegan", "döner") or a
 chain's branches ("aldi") search what you can currently see on the map. When
 several equally known places far away share the name ("springfield"), the list
 stays open with the first one highlighted, and a second Enter takes it.
+
+A complete name followed by complete normalized address words (for example,
+"MediaMarkt Rijswijk") supplies explicit location evidence, even far from the
+map. A partial address word remains a weaker autocomplete match: "Alexa" in a
+street named "Alexander" does not establish exact remote business intent.
+Ordinary name prefixes, explicit aliases and official codes keep their existing
+confidence. When the returned rows do not confidently name the query, plain
+Enter follows the existing natural-language or visible-area search path; an
+explicit dropdown choice still opens that row. This can make the dropdown order
+differ from the server's candidate order without changing candidate retrieval.
+
 Coordinates and Plus Codes are detected client side and resolved without a
 round trip to a geocoder at all.
+
+### Keeping distinct places in the list
+
+Nearby businesses with the same name remain separate choices, with their own
+IDs, addresses and coordinates. Name and distance alone do not establish
+business identity, including for co-located tenants or POIs without a category.
+An identical result ID or a shared non-empty external identity still joins
+records for the same entity, even when providers report different addresses.
+
+Without shared identity, ordinary POIs merge only when their normalized names
+match, they are less than 1,000 metres apart, and different source-record
+namespaces corroborate the same concrete address. Address comparison removes a
+repeated business name and normalizes spelling such as `Friedrichstr.` /
+`Friedrichstraße`, while retaining unit/floor and locality context. Missing,
+city-only or postcode-only context is insufficient: the street component must
+contain a house number and a recognized street term, such as `Street`, `Road`,
+`Rue` or `-straße`. Conflicting Wikidata items
+or reported categories prevent this heuristic merge. Different provider IDs or
+OSM node/way IDs alone do not prove different real-world entities; manifest
+`sourceIds` describe attribution, not place identity.
+
+This fallback is deliberately conservative, not an international address
+parser: incomplete or differently formatted addresses and multiple records in
+one source may remain as duplicate choices until a shared identity is supplied.
+Stations and entrances retain their existing name/distance reconciliation, and
+a station stays separate from its same-named square. Geographic features,
+recognized landmarks and airport/notable-place catalogs retain spatial
+reconciliation; a city from the notable-place index can still join its geocoder
+record within 15 kilometres. A business category does not gain that exemption
+from fame or a Wikidata item alone. Contradictory concrete addresses or Wikidata
+entities also prevent landmark/catalog spatial merging; shared identity still
+takes precedence. Commercial galleries require ordinary POI evidence.
 
 ### Famous places far away
 
@@ -79,6 +122,8 @@ search index. Generated acronyms require an exact match and are limited to
 high-signal institutions and facilities; lowercase matches must also be nearby
 or highly important. The first release does not include UN/LOCODE, fuzzy
 acronym matching, or a global codes registry.
+
+The OSM search snapshot also retains allowlisted named POIs without aliases for ambient map publication. It does not invent lexical alias terms for them; existing exact/prefix alias retrieval is unchanged. Newly prepared snapshots record ambient source format 2. Rebuild older snapshots before a planet ambient build, which requires that format to avoid silently omitting ordinary named businesses.
 
 ### Voice search
 

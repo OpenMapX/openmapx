@@ -225,7 +225,7 @@ export function NifcPerimeterLayer({ active, popupController }: NifcPerimeterLay
   }, [bridge.reset]);
   const popupHtml = useCallback(
     (properties: Record<string, unknown>) => {
-      if (properties.kind !== "reported-perimeter" || properties.provider !== "nifc") return null;
+      if (properties.kind !== "reported-perimeter") return null;
       return buildPopupCard(
         buildNifcPopupModel(properties as unknown as NifcProperties, locale),
         translate,

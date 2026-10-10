@@ -1,5 +1,10 @@
 import type { MobilityEnvelope } from "@openmapx/mobility-core/result";
-import type { TripItinerary, TripPlan, VehicleJourney } from "@openmapx/mobility-core/transit";
+import type {
+  TransitStopArea,
+  TripItinerary,
+  TripPlan,
+  VehicleJourney,
+} from "@openmapx/mobility-core/transit";
 import type { LngLat } from "../types/geometry";
 import type { WaypointSchedule } from "../types/routing";
 import type { ChainedTripPlan } from "../types/transitChain";
@@ -176,10 +181,45 @@ export function fetchVehicleJourney(
   options: ApiRequestOptions = {},
 ): Promise<MobilityEnvelope<VehicleJourney>> {
   const url = API_ENDPOINTS.transitVehicleJourney.replace(":id", encodeURIComponent(params.tripId));
-  // Left unencoded on purpose: the client builds the query with
-  // `URLSearchParams`, which encodes once. Pre-encoding would double it.
-  const query = params.fallbackIds?.length
-    ? { fallback_ids: params.fallbackIds.join(",") }
-    : undefined;
+  // One repeated parameter per id, left unencoded on purpose: the client builds
+  // the query with `URLSearchParams`, which encodes each once. Joining would
+  // corrupt an id that itself holds the separator.
+  const query = params.fallbackIds?.length ? { fallback_ids: params.fallbackIds } : undefined;
   return client.get<MobilityEnvelope<VehicleJourney>>(url, query, options);
+}
+
+/** One stop a trip boards or alights at, as the area lookup needs it. */
+export interface TransitStopAreaRequest {
+  stopId: string;
+  lat: number;
+  lng: number;
+  name: string;
+  platform?: string;
+  mode: string;
+}
+
+/**
+ * Fetches the physical shape of a stop — its platform and stop place — or null
+ * when nothing better than a circle around its point is known. The position,
+ * name, platform and mode travel along because they are what a stop is matched
+ * by when its id says nothing about the map.
+ */
+export async function fetchTransitStopArea(
+  stop: TransitStopAreaRequest,
+  client: ApiClient = apiClient,
+  options: ApiRequestOptions = {},
+): Promise<TransitStopArea | null> {
+  const url = API_ENDPOINTS.transitStopArea.replace(":id", encodeURIComponent(stop.stopId));
+  const envelope = await client.getOptional<MobilityEnvelope<TransitStopArea>>(
+    url,
+    {
+      lat: String(stop.lat),
+      lng: String(stop.lng),
+      name: stop.name,
+      mode: stop.mode,
+      ...(stop.platform ? { platform: stop.platform } : {}),
+    },
+    options,
+  );
+  return envelope?.data ?? null;
 }

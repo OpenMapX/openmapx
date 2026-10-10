@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import type postgres from "postgres";
 import type { StateStore } from "../../state.js";
 import { scrubSecrets } from "../../utils/scrub-secrets.js";
+import { osmFileIdentity } from "../osm-resources.js";
 import { extractSearchPlaces, type SearchPlaceRecord } from "./extract.js";
 import { createSearchIndexOperationLock, type SearchIndexOperationLock } from "./operation-lock.js";
 import { buildSearchIndexIndexesDDL, buildSearchIndexSchemaDDL } from "./schema.js";
@@ -40,7 +41,7 @@ interface SearchIndexCounts {
 
 export function validateSearchIndexCounts(counts: SearchIndexCounts): void {
   if (counts.places <= 0) throw new Error("search index contains no places");
-  if (counts.terms <= 0) throw new Error("search index contains no terms");
+  if (counts.terms < 0) throw new Error("search index has an invalid term count");
   if (counts.orphans > 0) throw new Error(`search index contains ${counts.orphans} orphan terms`);
   if (counts.invalid > 0) throw new Error(`search index contains ${counts.invalid} invalid rows`);
 }
@@ -91,8 +92,10 @@ async function insertSearchPlaces(
   await sql.unsafe(
     `INSERT INTO osm_search__staging.places
        (osm_type, osm_id, name, lat, lng, category, tags, importance)
-     SELECT * FROM UNNEST($1::TEXT[], $2::BIGINT[], $3::TEXT[], $4::DOUBLE PRECISION[],
-       $5::DOUBLE PRECISION[], $6::TEXT[], $7::JSONB[], $8::DOUBLE PRECISION[])
+     SELECT r.osm_type,r.osm_id,r.name,r.lat,r.lng,r.category,r.tags::JSONB,r.importance
+     FROM UNNEST($1::TEXT[], $2::BIGINT[], $3::TEXT[], $4::DOUBLE PRECISION[],
+       $5::DOUBLE PRECISION[], $6::TEXT[], $7::TEXT[], $8::DOUBLE PRECISION[])
+       AS r(osm_type,osm_id,name,lat,lng,category,tags,importance)
      ON CONFLICT (osm_type, osm_id) DO UPDATE SET
        name = EXCLUDED.name, lat = EXCLUDED.lat, lng = EXCLUDED.lng,
        category = EXCLUDED.category, tags = EXCLUDED.tags, importance = EXCLUDED.importance`,
@@ -141,7 +144,9 @@ export async function buildOsmSearchIndex(
   const dataset = resolveOsmDataset(opts.store, opts.region);
   const lock = opts.operationLock ?? createSearchIndexOperationLock(opts.sql);
   return lock.run(async () => {
-    const startedAt = new Date();
+    // Bound as text: the client is shared with drizzle, which replaces its
+    // date serializers.
+    const startedAt = new Date().toISOString();
     let stage: SearchIndexBuildStage = "resolve";
     let placeCount = 0;
     let termCount = 0;
@@ -153,15 +158,16 @@ export async function buildOsmSearchIndex(
     };
     try {
       progress("resolve", `Resolving OSM snapshot for ${opts.region}`);
+      const fileIdentity = osmFileIdentity(dataset.path);
       const sourceFingerprint = await fingerprintDataset(dataset);
       await opts.sql.unsafe(buildSearchIndexSchemaDDL("osm_search__staging"));
       const epoch = randomUUID();
       await opts.sql.unsafe(
         `INSERT INTO osm_search__staging.index_state
-          (region, source_path, source_fingerprint, current_fingerprint, epoch, status,
+          (region, source_path, source_fingerprint, current_fingerprint, epoch, source_file_identity, status,
            place_count, term_count, started_at, updated_at)
-         VALUES ($1,$2,$3,$3,$4,'building',0,0,$5,$5)`,
-        [opts.region, dataset.path, sourceFingerprint, epoch, startedAt],
+         VALUES ($1,$2,$3,$3,$4,$6,'building',0,0,$5,$5)`,
+        [opts.region, dataset.path, sourceFingerprint, epoch, startedAt, fileIdentity],
       );
       progress("extract", "Streaming named OSM features");
       const extract = opts.dependencies?.extract ?? extractSearchPlaces;
@@ -177,6 +183,8 @@ export async function buildOsmSearchIndex(
           await opts.onCheckpoint?.(placeCount);
         },
       });
+      if (osmFileIdentity(dataset.path) !== fileIdentity)
+        throw new Error("OSM source changed during extraction; rebuild from the new PBF");
       progress("index", "Building exact, prefix, and proximity indexes");
       await opts.sql.unsafe(buildSearchIndexIndexesDDL("osm_search__staging"));
       progress("validate", "Validating staged search snapshot");
@@ -207,6 +215,8 @@ export async function buildOsmSearchIndex(
         invalid: Number(rows[0]?.invalid ?? 0),
       };
       validateSearchIndexCounts(counts);
+      if (termCount > 0 && counts.terms === 0)
+        throw new Error("Staged snapshot lost expected alias terms");
       placeCount = counts.places;
       termCount = counts.terms;
       progress("publish", "Publishing the validated search snapshot");

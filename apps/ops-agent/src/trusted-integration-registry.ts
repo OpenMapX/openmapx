@@ -1,10 +1,11 @@
 import { join } from "node:path";
+import { services } from "@openmapx/core/server";
 import {
   TrustedAuthorityFilesystem,
   type TrustedAuthorityReadHooks,
 } from "./trusted-authority-filesystem";
-import { assertTrustedConfigurationSchema } from "./trusted-config-schema";
 
+const { assertTrustedConfigurationSchema } = services;
 const FAILED = "Trusted integration registry rejected";
 const MAX_MANIFESTS = 256;
 const MAX_MANIFEST_BYTES = 128 * 1024;

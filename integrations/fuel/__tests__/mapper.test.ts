@@ -1,4 +1,4 @@
-import { isI18nToken, resolveToken } from "@openmapx/integration-framework/strings";
+import { isI18nToken, resolveToken, sharedStrings } from "@openmapx/integration-framework/strings";
 import type { FuelProduct, FuelStation } from "@openmapx/mobility-core/fuel";
 import { describe, expect, it } from "vitest";
 import { mapFuelStationToDetail, mapFuelStationToResult } from "../mapper.js";
@@ -40,10 +40,13 @@ function text(token: unknown, locale = "en"): string {
   return resolveToken(token as Parameters<typeof resolveToken>[0], {
     locale,
     fallbackLocale: "en",
-    shared: {},
+    shared: sharedStrings,
     integration: { en, de },
   });
 }
+
+/** The no-break space ICU puts between a German amount and its symbol. */
+const NB = " ";
 
 const AT = "2026-10-01T08:00:00Z";
 
@@ -94,7 +97,8 @@ describe("mapFuelStationToResult", () => {
   it("summarises the six summary grades as a token", () => {
     const result = mapFuelStationToResult(makeStation());
     expect(isI18nToken(result.summary)).toBe(true);
-    expect(text(result.summary)).toBe("D 1.559 EUR · E5 1.699 EUR · E10 1.639 EUR");
+    expect(text(result.summary)).toBe("D €1.559 · E5 €1.699 · E10 €1.639");
+    expect(text(result.summary, "de")).toBe(`D 1,559${NB}€ · E5 1,699${NB}€ · E10 1,639${NB}€`);
   });
 
   it("summarises served and per-kg prices too, with their unit, but sorts by neither", () => {
@@ -104,7 +108,7 @@ describe("mapFuelStationToResult", () => {
       }),
     );
     expect(served.sortValues).toBeUndefined();
-    expect(text(served.summary)).toBe("E5 1.899 EUR");
+    expect(text(served.summary)).toBe("E5 €1.899");
 
     const gas = mapFuelStationToResult(
       makeStation({
@@ -115,7 +119,7 @@ describe("mapFuelStationToResult", () => {
       }),
     );
     expect(gas.sortValues).toBeUndefined();
-    expect(text(gas.summary)).toBe("CNG 1.299 EUR/kg · LNG 1.459 EUR/kg");
+    expect(text(gas.summary)).toBe("CNG €1.299/kg · LNG €1.459/kg");
 
     // A self-service price is the grade's summary; the served one only stands in.
     const both = mapFuelStationToResult(
@@ -128,7 +132,7 @@ describe("mapFuelStationToResult", () => {
       }),
     );
     expect(both.sortValues).toEqual({ diesel: 1.599 });
-    expect(text(both.summary)).toBe("D 1.599 EUR · CNG 1.299 EUR/kg");
+    expect(text(both.summary)).toBe("D €1.599 · CNG €1.299/kg");
   });
 
   it("gives every station pricesOnly keeps a price summary", () => {
@@ -148,13 +152,13 @@ describe("mapFuelStationToResult", () => {
     const lorry = (grade: string, per: FuelProduct["per"] = "L") =>
       product({ grade, vehicleScope: "hgv", per, price: eur(1.489) });
     const mixed = station(lorry("diesel"), product({ grade: "e5", price: eur(1.699) })).summary;
-    expect(text(mixed, "en")).toBe("E5 1.699 EUR · D 1.489 EUR (HGV)");
-    expect(text(mixed, "de")).toBe("E5 1.699 EUR · D 1.489 EUR (Lkw)");
+    expect(text(mixed, "en")).toBe("E5 €1.699 · D €1.489 (HGV)");
+    expect(text(mixed, "de")).toBe(`E5 1,699${NB}€ · D 1,489${NB}€ (Lkw)`);
     const only = station(lorry("diesel")).summary;
-    expect(text(only, "en")).toBe("D 1.489 EUR (HGV)");
-    expect(text(only, "de")).toBe("D 1.489 EUR (Lkw)");
+    expect(text(only, "en")).toBe("D €1.489 (HGV)");
+    expect(text(only, "de")).toBe(`D 1,489${NB}€ (Lkw)`);
     const lng = station(lorry("lng", "kg")).summary;
-    expect(text(lng, "de")).toBe("LNG 1.489 EUR/kg (Lkw)");
+    expect(text(lng, "de")).toBe(`LNG 1,489${NB}€/kg (Lkw)`);
     expect(text(lng, "de")).not.toContain("summary.");
   });
 
@@ -169,18 +173,20 @@ describe("mapFuelStationToResult", () => {
           grade as keyof typeof en.summary.grade
         ];
         expect(label, `${grade} ${locale}`).toBeTruthy();
-        expect(shown, `${grade} ${locale}`).toBe(`${label} 1.500 EUR`);
+        expect(shown, `${grade} ${locale}`).toBe(
+          locale === "en" ? `${label} €1.500` : `${label} 1,500${NB}€`,
+        );
       }
     }
     const kerosene = mapFuelStationToResult(
       makeStation({ products: [product({ grade: "kerosene", price: eur(2.1) })] }),
     ).summary;
-    expect(text(kerosene, "de")).toBe("Kerosin 2.100 EUR");
-    expect(text(kerosene, "en")).toBe("Kerosene 2.100 EUR");
+    expect(text(kerosene, "de")).toBe(`Kerosin 2,100${NB}€`);
+    expect(text(kerosene, "en")).toBe("Kerosene €2.100");
     const unknown = mapFuelStationToResult(
       makeStation({ products: [product({ grade: "new_fuel", price: eur(2.1) })] }),
     ).summary;
-    expect(text(unknown)).toBe("NEW FUEL 2.100 EUR");
+    expect(text(unknown)).toBe("NEW FUEL €2.100");
   });
 
   it("has no sort values, summary or time without a priced product", () => {
@@ -211,6 +217,25 @@ describe("mapFuelStationToResult", () => {
   it("leaves branding unset for a brand the catalog does not hold", () => {
     expect(mapFuelStationToResult(makeStation({ brand: "Zzyzx Fuel" })).branding).toBeUndefined();
   });
+
+  it("drops credit links that are not http(s)", () => {
+    const station = makeStation({
+      attributions: [
+        {
+          sourceId: "de-tankerkoenig-fuel",
+          name: "Tankerkönig",
+          url: "javascript:alert(1)",
+          licenseUrl: "data:text/html,x",
+        },
+      ],
+    });
+    const emitted = JSON.stringify([
+      mapFuelStationToResult(station),
+      mapFuelStationToDetail(station),
+    ]);
+
+    expect(emitted).not.toMatch(/javascript:|data:/);
+  });
 });
 
 describe("mapFuelStationToDetail", () => {
@@ -239,20 +264,37 @@ describe("mapFuelStationToDetail", () => {
         ],
       }),
     );
-    expect(detail.sections[0].rows).toEqual([
+    const rows = detail.sections[0].rows ?? [];
+    expect(rows.map((row) => [row[0], row[2]])).toEqual([
       [
         { $t: "fuel.diesel" },
-        "1.799 EUR/L",
         { $t: "product.servicePriceAt", values: { service: "served", at: Date.parse(AT) } },
       ],
-      [
-        { $t: "fuel.diesel" },
-        { $t: "product.noPrice" },
-        { $t: "product.service", values: { service: "self" } },
-      ],
-      [{ $t: "fuel.cng" }, "1.199 EUR/kg", ""],
-      [{ $t: "fuel.lng" }, "2.500 EUR/m³", ""],
+      [{ $t: "fuel.diesel" }, { $t: "product.service", values: { service: "self" } }],
+      [{ $t: "fuel.cng" }, ""],
+      [{ $t: "fuel.lng" }, ""],
     ]);
+    expect(rows.map((row) => text(row[1]))).toEqual([
+      "€1.799/L",
+      "No price reported",
+      "€1.199/kg",
+      "€2.500/m³",
+    ]);
+    expect(text(rows[0]?.[1], "de")).toBe(`1,799${NB}€/L`);
+  });
+
+  it("quotes a fuel price to tenths of a cent in every locale", () => {
+    const cell = (amount: number, locale: string) =>
+      text(
+        mapFuelStationToDetail(
+          makeStation({ products: [product({ grade: "e5", price: eur(amount) })] }),
+        ).sections[0]?.rows?.[0]?.[1],
+        locale,
+      );
+    expect(cell(1.79, "en")).toBe("€1.790/L");
+    expect(cell(1.79, "de")).toBe(`1,790${NB}€/L`);
+    expect(cell(1.799, "en")).toBe("€1.799/L");
+    expect(cell(1.799, "de")).toBe(`1,799${NB}€/L`);
   });
 
   it("labels lorry diesel apart and keeps it out of the price sort", () => {

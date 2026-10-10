@@ -90,7 +90,9 @@ describe("departure uncertainty and identity", () => {
     expect(screen.getByText("08:05")).toBeInTheDocument();
     expect(screen.getByText("08:08")).toBeInTheDocument();
     expect(screen.getByText(/3 → 4/)).toHaveTextContent("transit.platformChanged");
-    expect(screen.getByText(/dataStatus.realtime/)).toHaveTextContent("dataStatus.unknown");
+    expect(
+      screen.queryByText(/dataStatus.realtime|dataStatus.unknown|dataStatus.local/),
+    ).not.toBeInTheDocument();
     rerender(<DepartureRow departure={{ ...departure, canceled: true }} now={Date.now()} />);
     expect(screen.getByText("transit.canceled")).toBeInTheDocument();
     expect(screen.queryByText("08:08")).not.toBeInTheDocument();
@@ -115,7 +117,7 @@ describe("departure uncertainty and identity", () => {
     );
     expect(screen.getAllByText("Sibling station")).toHaveLength(2);
     expect(screen.getByRole("status")).toHaveTextContent("dataStatus.refreshFailed");
-    fireEvent.click(screen.getByRole("button", { name: /dataStatus.hosted/ }));
+    fireEvent.click(screen.getAllByRole("button", { name: /Sibling station/ })[1]);
     expect(select).toHaveBeenCalledWith(
       expect.objectContaining({
         tripId: "mo:trip-b",

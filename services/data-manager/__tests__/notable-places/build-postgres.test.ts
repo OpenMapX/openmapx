@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { buildNotablePlaces } from "../../src/jobs/notable-places/build.js";
 import { createNotablePlacesRuntimeState } from "../../src/jobs/notable-places/state.js";
-import { startPostgis } from "../poi-ingest/_testcontainer.js";
+import { startPostgis } from "../helpers/postgis-testcontainer.js";
 
 const skipE2e = process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1";
 

@@ -68,7 +68,7 @@ export default function PrivacyContentDe({
           mb: 4,
         }}
       >
-        Zuletzt aktualisiert: 6. Oktober 2026 (OpenFreeMap-Kartendienste ergänzt)
+        Zuletzt aktualisiert: 9. Oktober 2026 (Gefahrendaten jetzt über OpenConditions)
       </Typography>
       <Section title={T.controller}>
         <Typography>
@@ -922,11 +922,13 @@ export default function PrivacyContentDe({
           </li>
           <li>
             <Typography>
-              <strong>Keine &Uuml;bermittlung personenbezogener Daten:</strong> Mehrere US-basierte
-              Dienste (NASA FIRMS, USGS, GitHub API) erhalten keinerlei nutzerbezogene Daten. Unser
-              Server ruft &ouml;ffentliche Daten-Feeds oder Repository-Dateien ab, ohne Koordinaten,
-              Suchanfragen oder Nutzerkennungen zu &uuml;bermitteln. In diesen F&auml;llen findet
-              keine &Uuml;bermittlung personenbezogener Daten statt.
+              <strong>Keine &Uuml;bermittlung personenbezogener Daten:</strong> Einige US-basierte
+              Dienste (GitHub API) erhalten keinerlei nutzerbezogene Daten. Unser Server ruft
+              Repository-Dateien ab, ohne Koordinaten, Suchanfragen oder Nutzerkennungen zu
+              &uuml;bermitteln. In diesen F&auml;llen findet keine &Uuml;bermittlung
+              personenbezogener Daten statt. NASA FIRMS und USGS kontaktiert unser Server nicht
+              mehr: Gefahrendaten von ihnen erreichen OpenMapX &uuml;ber die OpenConditions-Instanz,
+              die deren &ouml;ffentliche Feeds ohne Nutzerdaten abruft.
             </Typography>
           </li>
         </ul>

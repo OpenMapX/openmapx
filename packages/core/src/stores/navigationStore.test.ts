@@ -244,6 +244,7 @@ describe("navigationStore", () => {
       fractionAlongLeg: 0.5,
       deviationMeters: 12,
       arrived: false,
+      phase: "riding",
     };
     store.applyTransitProgress(tp);
     expect(useNavigationStore.getState().transitProgress).toBe(tp);
@@ -258,6 +259,7 @@ describe("navigationStore", () => {
       fractionAlongLeg: 0,
       deviationMeters: 0,
       arrived: false,
+      phase: "walking",
     });
     store.stopNavigation();
     const s = useNavigationStore.getState();
@@ -276,6 +278,7 @@ describe("navigationStore", () => {
       fractionAlongLeg: 0.4,
       deviationMeters: 0,
       arrived: false,
+      phase: "riding",
     };
     store.applyTransitProgress(tp);
     const refreshed = { ...itinerary, refreshToken: "next-token" };

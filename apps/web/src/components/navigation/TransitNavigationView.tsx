@@ -222,6 +222,7 @@ export function TransitNavigationView() {
                   itinerary={itinerary}
                   currentLegIndex={currentLegIndex}
                   transitProgress={transitProgress}
+                  showQueryNotice={false}
                 />
                 {menu}
               </NavSwipeSheet>
@@ -262,6 +263,7 @@ export function TransitNavigationView() {
                       currentLegIndex={currentLegIndex}
                       transitProgress={transitProgress}
                       scroll={false}
+                      showQueryNotice={false}
                     />
                     {menu}
                   </Collapse>

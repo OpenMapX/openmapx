@@ -1,0 +1,124 @@
+{
+  "version": 1,
+  "assessedAt": "2026-10-07",
+  "assessor": "Synthetic control; primary-source case judgments are in reviewed.ts",
+  "context": {
+    "region": "Germany: Berlin pilot",
+    "extractDate": {
+      "value": null,
+      "reason": "Synthetic records, no extract used"
+    },
+    "style": {
+      "value": null,
+      "reason": "Synthetic display judgment, no rendered style used"
+    },
+    "deployment": {
+      "value": null,
+      "reason": "No deployment used in this synthetic example"
+    },
+    "sources": {
+      "osm": {
+        "value": null,
+        "reason": "Coordinates from reviewed case, no imported OSM generation"
+      },
+      "overture": {
+        "value": null,
+        "reason": "Not used"
+      }
+    },
+    "provider": {
+      "id": "synthetic-control",
+      "capabilities": ["projected search rows"]
+    },
+    "configuration": {
+      "language": "en",
+      "theme": "dark",
+      "viewport": [430, 932],
+      "dpr": 1
+    },
+    "queryOrder": ["business/rewe-invalidenstrasse"],
+    "cacheIsolation": "isolated"
+  },
+  "observations": [
+    {
+      "caseId": "business/rewe-invalidenstrasse",
+      "layer": "data",
+      "kind": "synthetic",
+      "cache": "cold",
+      "results": [
+        {
+          "label": "REWE",
+          "coordinates": [13.3970838, 52.5319807],
+          "closed": false
+        }
+      ],
+      "measurements": {
+        "requests": 1,
+        "latencyMs": 10,
+        "usefulLabels": null,
+        "overlaps": null
+      },
+      "stage": "source"
+    },
+    {
+      "caseId": "business/rewe-invalidenstrasse",
+      "layer": "provider",
+      "kind": "synthetic",
+      "cache": "cold",
+      "results": [
+        {
+          "label": "REWE",
+          "coordinates": [13.3970838, 52.5319807],
+          "closed": false
+        }
+      ],
+      "measurements": {
+        "requests": 1,
+        "latencyMs": 10,
+        "usefulLabels": null,
+        "overlaps": null
+      },
+      "stage": "raw-upstream"
+    },
+    {
+      "caseId": "business/rewe-invalidenstrasse",
+      "layer": "normalization",
+      "kind": "synthetic",
+      "cache": "cold",
+      "results": [
+        {
+          "label": "REWE",
+          "coordinates": [13.3970838, 52.5319807],
+          "closed": false
+        }
+      ],
+      "measurements": {
+        "requests": 1,
+        "latencyMs": 10,
+        "usefulLabels": null,
+        "overlaps": null
+      },
+      "stage": "adapted-api"
+    },
+    {
+      "caseId": "browsing/berlin-z15",
+      "layer": "presentation",
+      "kind": "synthetic",
+      "cache": "uncontrolled",
+      "results": [
+        {
+          "label": "Berlin Cathedral",
+          "coordinates": [13.401094, 52.519084],
+          "closed": false
+        }
+      ],
+      "measurements": {
+        "requests": null,
+        "latencyMs": null,
+        "usefulLabels": 6,
+        "overlaps": 0
+      },
+      "stage": "final-ui"
+    }
+  ]
+}

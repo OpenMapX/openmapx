@@ -38,8 +38,6 @@ import {
   listDatexMeasuredValues,
   listDatexMeasurementSiteRecords,
   listDatexMultilingualValues,
-  listDatexParkingRecordStatuses,
-  listDatexParkingRecords,
   listDatexSiteMeasurements,
   listDatexSituationRecords,
   listDatexSituations,
@@ -60,7 +58,6 @@ import {
   parseNetexDocument,
   parseSiriDocument,
   parseXmlDocument,
-  resolveDatexMultilingualValue,
   resolveDatexRef,
   resolveGbfsFeedUrl,
   resolveGbfsVehicleStatusFeedUrl,
@@ -613,7 +610,10 @@ describe("DATEX II helpers", () => {
     const measurementSiteIndex = indexDatexElementsById(v2MeasurementSiteTableDocument, [
       "measurementSiteRecord",
     ]);
-    const parkingRecord = listDatexParkingRecords(v3ParkingDocument)[0] as Record<string, unknown>;
+    const parkingRecord = listDatexElementsByName(v3ParkingDocument, "parkingRecord")[0] as Record<
+      string,
+      unknown
+    >;
 
     expect(
       isDatexPublicationType(v2MeasuredDataDocument, DATEX_PUBLICATION_TYPES.measuredData),
@@ -633,32 +633,21 @@ describe("DATEX II helpers", () => {
     expect(
       isDatexPublicationType(v2GenericParkingTableDocument, DATEX_PUBLICATION_TYPES.generic),
     ).toBe(true);
-    expect(listDatexParkingRecords(v2GenericParkingTableDocument)).toHaveLength(1);
     expect(isDatexPublicationType(v3ParkingDocument, DATEX_PUBLICATION_TYPES.parkingTable)).toBe(
       true,
     );
-    expect(listDatexParkingRecords(v3ParkingDocument)).toHaveLength(1);
     expect(listDatexMultilingualValues(parkingRecord.parkingName)).toEqual([
       { language: "en", value: "Central Garage" },
       { language: "de", value: "Zentrum Parkhaus" },
     ]);
-    expect(resolveDatexMultilingualValue(parkingRecord.parkingName, ["de-DE"])).toBe(
-      "Zentrum Parkhaus",
-    );
   });
 
-  it("parses parking record statuses from message-container payloads", () => {
-    const status = listDatexParkingRecordStatuses(
-      v3ParkingStatusMessageContainerDocument,
-    )[0] as Record<string, unknown>;
-
-    expect(listDatexParkingRecordStatuses(v3ParkingStatusMessageContainerDocument)).toHaveLength(1);
+  it("reads a message-container payload's publication type and time", () => {
     expect(getDatexPayloadPublicationType(v3ParkingStatusMessageContainerDocument)).toBe(
       DATEX_PUBLICATION_TYPES.generic,
     );
     expect(getDatexPublicationTime(v3ParkingStatusMessageContainerDocument)).toBe(
       "2026-04-21T10:30:00Z",
     );
-    expect((status.parkingRecordReference as Record<string, unknown>)?.["@_id"]).toBe("PR:1");
   });
 });

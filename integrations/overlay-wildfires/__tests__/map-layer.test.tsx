@@ -18,7 +18,7 @@ vi.mock("@/integration-api/runtime/EnvProvider", () => ({
 }));
 
 vi.mock("@/integration-api/overlay/useIntegrationAttribution", () => ({
-  useIntegrationSourceAttributions: attributionState.filtered,
+  useSourceAttributions: attributionState.filtered,
 }));
 
 vi.mock("next-intl", () => ({
@@ -67,6 +67,13 @@ const POLYGON = {
   ],
 };
 
+const FEED = {
+  nifc: "us-nifc-fires",
+  effis: "eu-effis-fires",
+  "noaa-hms": "us-noaa-hms-smoke",
+} as const;
+const VIIRS = "nasa-firms-viirs-fires";
+
 function providerCollection(source: "nifc" | "effis" | "noaa-hms") {
   const id = `${source}:1`;
   return {
@@ -75,6 +82,7 @@ function providerCollection(source: "nifc" | "effis" | "noaa-hms") {
     fetchedAt: "2026-08-12T12:00:00.000Z",
     stale: false,
     truncated: false,
+    sources: [FEED[source]],
     features: [
       {
         type: "Feature" as const,
@@ -84,21 +92,20 @@ function providerCollection(source: "nifc" | "effis" | "noaa-hms") {
             ? {
                 id,
                 kind: "reported-perimeter" as const,
-                provider: "nifc" as const,
-                coverage: "United States" as const,
+                provider: FEED.nifc,
                 name: "Pine Fire",
               }
             : source === "effis"
               ? {
                   id,
                   kind: "satellite-burned-area" as const,
-                  provider: "effis" as const,
+                  provider: FEED.effis,
                   areaHectares: 42,
                 }
               : {
                   id,
                   kind: "observed-smoke" as const,
-                  provider: "noaa-hms" as const,
+                  provider: FEED["noaa-hms"],
                   density: "medium" as const,
                 },
         geometry: POLYGON,
@@ -106,6 +113,19 @@ function providerCollection(source: "nifc" | "effis" | "noaa-hms") {
     ],
   };
 }
+
+/** At the test's zoom 4 hotspots load as density cells. */
+const DENSITY_COLLECTION = {
+  type: "FeatureCollection" as const,
+  features: [
+    {
+      type: "Feature" as const,
+      geometry: { type: "Point" as const, coordinates: [8.25, 50.25] },
+      properties: { count: 2, frpSum: 20, frpMax: 12 },
+    },
+  ],
+  sources: [VIIRS],
+};
 
 const HOTSPOT_FEATURE = {
   type: "Feature",
@@ -120,7 +140,7 @@ const HOTSPOT_FEATURE = {
     dayNight: "D",
     acqDate: "2026-08-12",
     acqTime: "1234",
-    source: "VIIRS_SNPP_NRT",
+    instrument: "viirs",
   },
   geometry: { type: "Point", coordinates: [8, 50] },
 } as unknown as MapGeoJSONFeature;
@@ -132,7 +152,7 @@ function successfulResponse(url: string): Response {
       ? providerCollection("effis")
       : url.includes("smoke/noaa")
         ? providerCollection("noaa-hms")
-        : { type: "FeatureCollection", features: [HOTSPOT_FEATURE] };
+        : DENSITY_COLLECTION;
   return { ok: true, status: 200, json: async () => data } as Response;
 }
 
@@ -158,10 +178,8 @@ beforeEach(() => {
     showEffisBurnedAreas: true,
     showNoaaSmoke: false,
     showHeatmap: false,
-    loading: false,
-    lastUpdated: null,
     dayRange: 1,
-    source: "VIIRS_SNPP_NRT",
+    source: "viirs",
   });
   for (const sourceId of ["firms", "nifc", "effis", "noaa-hms"] as const) {
     useWildfireStore.getState().resetSourceStatus(sourceId);
@@ -173,7 +191,7 @@ afterEach(() => {
 });
 
 describe("WildfireLayer source orchestration", () => {
-  it("fetches FIRMS and both default polygon sources but leaves NOAA smoke off", async () => {
+  it("fetches hotspots and both default polygon sources but leaves NOAA smoke off", async () => {
     const fetchMock = vi.fn(async (url: string) => successfulResponse(url));
     vi.stubGlobal("fetch", fetchMock);
 
@@ -181,7 +199,7 @@ describe("WildfireLayer source orchestration", () => {
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
     const urls = fetchMock.mock.calls.map(([url]) => String(url));
-    expect(urls.some((url) => url.includes("/wildfires?"))).toBe(true);
+    expect(urls.some((url) => url.includes("/wildfires/density?"))).toBe(true);
     expect(urls.some((url) => url.includes("/perimeters/nifc?"))).toBe(true);
     expect(urls.some((url) => url.includes("/burned-areas/effis?"))).toBe(true);
     expect(urls.some((url) => url.includes("/smoke/noaa"))).toBe(false);
@@ -196,7 +214,7 @@ describe("WildfireLayer source orchestration", () => {
     useWildfireStore.setState({ showNoaaSmoke: true });
     render(<WildfireLayer />);
 
-    await waitFor(() => expect(fake.state.sources.size).toBe(4));
+    await waitFor(() => expect(fake.state.sources.size).toBe(5));
     const layerIds = [...fake.state.layers.keys()];
     expect(layerIds.indexOf("openmapx-wildfires-noaa-smoke-fill")).toBeLessThan(
       layerIds.indexOf("openmapx-wildfires-effis-fill"),
@@ -246,7 +264,7 @@ describe("WildfireLayer source orchestration", () => {
     expect(fake.state.layers.has("openmapx-wildfires-nifc-fill")).toBe(true);
   });
 
-  it("keeps the hotspot age range scoped to FIRMS without refreshing NOAA smoke", async () => {
+  it("keeps the hotspot age range scoped to hotspots without refreshing NOAA smoke", async () => {
     const fetchMock = vi.fn(async (url: string) => successfulResponse(url));
     vi.stubGlobal("fetch", fetchMock);
     useWildfireStore.setState({
@@ -265,7 +283,7 @@ describe("WildfireLayer source orchestration", () => {
     await waitFor(() =>
       expect(
         fetchMock.mock.calls.some(([url]) =>
-          String(url).includes("/wildfires?dayRange=3&source=VIIRS_SNPP_NRT"),
+          String(url).includes("/wildfires/density?dayRange=3&instrument=viirs"),
         ),
       ).toBe(true),
     );
@@ -274,7 +292,7 @@ describe("WildfireLayer source orchestration", () => {
     ).toHaveLength(1);
   });
 
-  it("credits exactly the enabled source components that are loading or rendered", async () => {
+  it("credits exactly the sources the enabled layers drew", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async (url: string) => successfulResponse(url)),
@@ -283,18 +301,20 @@ describe("WildfireLayer source orchestration", () => {
     render(<WildfireLayer />);
 
     await waitFor(() =>
-      expect(attributionState.filtered).toHaveBeenLastCalledWith("overlay-wildfires", [
-        "firms",
-        "nifc-wfigs",
-        "noaa-hms",
+      expect(attributionState.filtered).toHaveBeenLastCalledWith("wildfires", [
+        VIIRS,
+        FEED.nifc,
+        FEED["noaa-hms"],
       ]),
     );
     expect(
-      attributionState.filtered.mock.calls.some(([, ids]) => (ids as string[]).includes("effis")),
+      attributionState.filtered.mock.calls.some(([, ids]) =>
+        (ids as string[]).includes(FEED.effis),
+      ),
     ).toBe(false);
   });
 
-  it("credits FIRMS only while it is loading or has rendered data", async () => {
+  it("credits hotspot sources once drawn and drops them when hotspots are hidden", async () => {
     let resolveRequest!: (value: Response) => void;
     vi.stubGlobal(
       "fetch",
@@ -313,21 +333,26 @@ describe("WildfireLayer source orchestration", () => {
     render(<WildfireLayer />);
 
     await waitFor(() =>
-      expect(attributionState.filtered).toHaveBeenLastCalledWith("overlay-wildfires", ["firms"]),
+      expect(attributionState.filtered).toHaveBeenLastCalledWith("wildfires", []),
     );
 
     await act(async () => {
-      resolveRequest({ ok: false, status: 503, json: async () => ({}) } as Response);
+      resolveRequest(successfulResponse("https://api.test/wildfires/density?dayRange=1"));
     });
     await waitFor(() =>
-      expect(attributionState.filtered).toHaveBeenLastCalledWith("overlay-wildfires", []),
+      expect(attributionState.filtered).toHaveBeenLastCalledWith("wildfires", [VIIRS]),
+    );
+
+    act(() => useWildfireStore.getState().setShowHotspots(false));
+    await waitFor(() =>
+      expect(attributionState.filtered).toHaveBeenLastCalledWith("wildfires", []),
     );
   });
 
-  it("keeps FIRMS attribution after a failed refresh retains last-good data", async () => {
+  it("keeps hotspot attribution after a failed refresh retains last-good data", async () => {
     const fetchMock = vi
       .fn()
-      .mockResolvedValueOnce(successfulResponse("https://api.test/wildfires?dayRange=1"))
+      .mockResolvedValueOnce(successfulResponse("https://api.test/wildfires/density?dayRange=1"))
       .mockResolvedValueOnce({ ok: false, status: 503, json: async () => ({}) } as Response);
     vi.stubGlobal("fetch", fetchMock);
     useWildfireStore.setState({
@@ -337,13 +362,13 @@ describe("WildfireLayer source orchestration", () => {
     });
     render(<WildfireLayer />);
 
-    await waitFor(() => expect(useWildfireStore.getState().statuses.firms.featureCount).toBe(1));
+    await waitFor(() => expect(useWildfireStore.getState().statuses.firms.featureCount).toBe(2));
     act(() => useWildfireStore.getState().setDayRange(2));
     await waitFor(() =>
       expect(useWildfireStore.getState().statuses.firms.error).toBe("unavailable"),
     );
 
-    expect(attributionState.filtered).toHaveBeenLastCalledWith("overlay-wildfires", ["firms"]);
+    expect(attributionState.filtered).toHaveBeenLastCalledWith("wildfires", [VIIRS]);
   });
 
   it("removes the first popup when a different source opens the next one", async () => {

@@ -1,7 +1,8 @@
-import { existsSync, readdirSync, readFileSync } from "node:fs";
-import { isAbsolute, join, relative, resolve } from "node:path";
-import { dump as yamlDump, load as yamlLoad } from "js-yaml";
+import { existsSync } from "node:fs";
+import { isAbsolute, relative, resolve } from "node:path";
+import { dump as yamlDump } from "js-yaml";
 import { configSchemaKeys, serviceConfigEnvPrefix } from "./config-resolver";
+import { STACK_PROJECT } from "./deployment";
 import {
   EXTERNAL_PROXY_NETWORK_KEY,
   PROXY_CERT_RESOLVER_LABEL_VALUE,
@@ -211,13 +212,10 @@ export interface RenderContext {
    * `<serviceId>__<KEY>` → target `<KEY>`, mounted at `/run/secrets/<KEY>`) and
    * sets `<KEY>_FILE=/run/secrets/<KEY>` in the environment — the *path*, never
    * the value. The secret values themselves are written to
-   * `<composeOutDir>/.generated-secrets/<serviceId>/<KEY>` by the caller
-   * (app-api's render step), which holds the decryption key. The renderer stays
-   * pure: it only needs the key names. The DB-free CLI reconstructs this map
-   * from the previously generated compose (and, when readable, the
-   * `.generated-secrets/` dir) so its renders preserve the vault mounts. May
-   * contain services outside the rendered subset — their top-level `secrets:`
-   * entries are carried forward so a narrowed render never erases the record.
+   * `<composeOutDir>/.generated-secrets/<serviceId>/<KEY>` by the generation
+   * writer. The renderer stays pure: it only needs the key names. May contain
+   * services outside the rendered subset — their top-level `secrets:` entries
+   * are kept too.
    */
   serviceSecretKeys?: Map<string, string[]>;
   /**
@@ -483,104 +481,10 @@ export function serviceSecretFilePath(serviceId: string, key: string): string {
 }
 
 /**
- * Directory (under the compose-file directory) where the app-api render step
- * materialises the decrypted per-service secret files.
+ * Directory of a configuration generation that holds the per-service secret
+ * files.
  */
 export const GENERATED_SECRETS_DIRNAME = ".generated-secrets";
-
-/**
- * Reconstruct the per-service vault secret KEY names from an EXISTING generated
- * compose file's top-level `secrets:` block (each entry named
- * `<serviceId>__<KEY>` per {@link serviceSecretName}). The app-api render step
- * derives these from the DB (which holds the values + decryption key); the
- * DB-free CLI reads them back from the compose it last wrote, so a CLI re-render
- * preserves the same `secrets:` block + `<KEY>_FILE` env the admin render
- * produced instead of silently dropping it — both management surfaces converge
- * on an identical, applyable compose.
- *
- * Deliberately reads the compose (world-readable) rather than scanning
- * `.generated-secrets/`, which is created 0700 (root-only) as the real
- * host-side secret boundary and is unreadable by a non-root CLI. Only key names
- * are recovered — never values. Tolerant of a missing / secrets-less /
- * unparseable compose (returns an empty map), so it never crashes a render.
- */
-export function readServiceSecretKeysFromCompose(composePath: string): Map<string, string[]> {
-  const byService = new Map<string, string[]>();
-  if (!existsSync(composePath)) return byService;
-  let doc: { secrets?: Record<string, unknown> } | null;
-  try {
-    doc = yamlLoad(readFileSync(composePath, "utf8")) as {
-      secrets?: Record<string, unknown>;
-    } | null;
-  } catch {
-    return byService;
-  }
-  const secrets = doc?.secrets;
-  if (!secrets || typeof secrets !== "object") return byService;
-  for (const name of Object.keys(secrets)) {
-    const sep = name.indexOf("__");
-    if (sep <= 0) continue;
-    const serviceId = name.slice(0, sep);
-    const key = name.slice(sep + 2);
-    const list = byService.get(serviceId) ?? [];
-    list.push(key);
-    byService.set(serviceId, list);
-  }
-  for (const [id, keys] of byService) byService.set(id, keys.sort());
-  return byService;
-}
-
-/**
- * Best-effort reconstruction of per-service vault secret KEY names from the
- * materialised `.generated-secrets/<serviceId>/<KEY>` files themselves. This is
- * the same on-disk layout the app-api render step writes, so when the CLI runs
- * with enough privilege to list the (0700, root-owned) directory it recovers
- * the keys even when the previous compose is missing or was written without a
- * `secrets:` block. A non-root CLI gets EACCES on the readdir — swallowed, the
- * compose-derived keys remain the only source then. Only key names are read,
- * never file contents.
- */
-export function readServiceSecretKeysFromDisk(composeOutDir: string): Map<string, string[]> {
-  const byService = new Map<string, string[]>();
-  const root = join(composeOutDir, GENERATED_SECRETS_DIRNAME);
-  let serviceIds: string[];
-  try {
-    serviceIds = readdirSync(root);
-  } catch {
-    // Missing dir, or unreadable (0700 root-owned, non-root CLI) — both fine.
-    return byService;
-  }
-  for (const serviceId of serviceIds) {
-    let keys: string[];
-    try {
-      keys = readdirSync(join(root, serviceId));
-    } catch {
-      // Stray file or unreadable per-service dir — skip, never crash a render.
-      continue;
-    }
-    if (keys.length > 0) byService.set(serviceId, [...keys].sort());
-  }
-  return byService;
-}
-
-/**
- * Union of per-service secret-key maps (deduplicated, sorted per service).
- * Used by the CLI to combine the compose-derived and disk-derived key sets so
- * a render never drops a key that either source still knows about.
- */
-export function mergeServiceSecretKeys(
-  ...sources: Array<Map<string, string[]>>
-): Map<string, string[]> {
-  const merged = new Map<string, Set<string>>();
-  for (const source of sources) {
-    for (const [serviceId, keys] of source) {
-      const set = merged.get(serviceId) ?? new Set<string>();
-      for (const key of keys) set.add(key);
-      merged.set(serviceId, set);
-    }
-  }
-  return new Map([...merged].map(([serviceId, set]) => [serviceId, [...set].sort()]));
-}
 
 export function renderServiceSnippet(
   service: LoadedService,
@@ -618,7 +522,14 @@ export function renderServiceSnippet(
 
   if (c.command !== undefined) snippet.command = c.command;
   if (c.entrypoint !== undefined) snippet.entrypoint = c.entrypoint;
-  if (c.envFile?.length) snippet.env_file = [...c.envFile];
+  // Env files are deployment files under the infra root (built-in services
+  // only), so a generation directory resolves them back to it.
+  if (c.envFile?.length) {
+    const envRoot = ctx.infraDir ?? ctx.composeOutDir;
+    snippet.env_file = envRoot
+      ? c.envFile.map((file) => toComposePath(resolve(envRoot, file), ctx.composeOutDir))
+      : [...c.envFile];
+  }
   if (c.environment) snippet.environment = { ...c.environment };
   // Overlay operator-resolved config onto the manifest's baseline environment.
   // Resolved values win over manifest defaults (that's the whole point of
@@ -1109,6 +1020,9 @@ export function renderCompose(services: LoadedService[], ctx: RenderContext): Re
       ? { [EXTERNAL_PROXY_NETWORK_KEY]: { name: proxyNetwork, external: true } }
       : {};
   const composeDoc = {
+    // The file names its project: it lives in a generation directory, which
+    // Compose would otherwise name the project after.
+    name: STACK_PROJECT,
     services: composeServices,
     networks: {
       openmapx: {

@@ -14,11 +14,23 @@ import { applyGeneratedHardlinks, applyHardlinkPlan } from "../src/lib/hardlinks
 
 let tmp: string;
 
+/** The applied generation's hardlink plan. */
+function planPath(): string {
+  return join(
+    tmp,
+    "infra",
+    "docker",
+    ".trusted-config-current",
+    "docker-compose.generated.hardlinks.json",
+  );
+}
+
 beforeEach(() => {
   tmp = mkdtempSync(join(tmpdir(), "openmapx-cli-hardlinks-"));
   writeFileSync(join(tmp, "pnpm-workspace.yaml"), "packages: []\n");
   mkdirSync(join(tmp, "services"), { recursive: true });
   mkdirSync(join(tmp, "infra", "docker", "data"), { recursive: true });
+  mkdirSync(join(tmp, "infra", "docker", ".trusted-config-current"), { recursive: true });
 });
 
 afterEach(() => {
@@ -112,13 +124,13 @@ describe("cli hardlink helpers", () => {
     expect(result.via).toBe("none");
   });
 
-  it("applyGeneratedHardlinks reads generated plan from infra/docker", async () => {
+  it("applyGeneratedHardlinks reads the applied generation's plan", async () => {
     const dataRoot = join(tmp, "infra", "docker", "data");
     mkdirSync(join(dataRoot, "osm"), { recursive: true });
     writeFileSync(join(dataRoot, "osm", "planet.osm.pbf"), "PBF");
     mkdirSync(join(tmp, "infra", "docker"), { recursive: true });
     writeFileSync(
-      join(tmp, "infra", "docker", "docker-compose.generated.hardlinks.json"),
+      planPath(),
       JSON.stringify([
         {
           source: "data/osm",
@@ -150,7 +162,7 @@ describe("cli hardlink helpers", () => {
   it("applyGeneratedHardlinks creates data root even with an empty plan", async () => {
     const dataRoot = join(tmp, "infra", "docker", "data");
     rmSync(dataRoot, { recursive: true, force: true });
-    writeFileSync(join(tmp, "infra", "docker", "docker-compose.generated.hardlinks.json"), "[]");
+    writeFileSync(planPath(), "[]");
 
     const result = await applyGeneratedHardlinks({
       rootDir: tmp,
@@ -173,7 +185,7 @@ describe("cli hardlink helpers", () => {
     writeFileSync(join(dataRoot, "osm", "planet.osm.pbf"), "PBF");
     mkdirSync(join(tmp, "infra", "docker"), { recursive: true });
     writeFileSync(
-      join(tmp, "infra", "docker", "docker-compose.generated.hardlinks.json"),
+      planPath(),
       JSON.stringify([
         {
           source: "data/osm",
@@ -206,7 +218,7 @@ describe("cli hardlink helpers", () => {
     writeFileSync(join(dataRoot, "osm", "planet.osm.pbf"), "PBF");
     mkdirSync(join(tmp, "infra", "docker"), { recursive: true });
     writeFileSync(
-      join(tmp, "infra", "docker", "docker-compose.generated.hardlinks.json"),
+      planPath(),
       JSON.stringify([
         {
           source: "data/osm",

@@ -11,7 +11,7 @@ geocoding indexes, and rendered tiles are all derived from the OSM extracts and
 GTFS feeds the data-manager already tracks, so losing them costs build time, not
 information. What you cannot regenerate is the _state_ that accumulated while the
 instance ran: the user accounts, admin settings, integration configuration, and
-ingested POI data in the database, plus the TLS certificates and secrets that
+conflated place data in the database, plus the TLS certificates and secrets that
 keep the front door open.
 
 OpenMapX backs up exactly that irreplaceable state — and deliberately skips the
@@ -28,8 +28,7 @@ the volumes flagged `backup: true`. Three of them are:
 - **`postgis`** — the PostgreSQL/PostGIS database. This is the important one: user
   accounts and sessions, saved places, vehicle and parking state, share payloads,
   Timeline connection metadata, the audit log, all admin and integration
-  configuration, and ingested data-source rows (EV charging, parking, and the
-  rest) live here. It is captured with a streamed `pg_dump` piped through gzip
+  configuration, and imported place data live here. It is captured with a streamed `pg_dump` piped through gzip
   while the database stays running.
 - **`redis`** — the Valkey (Redis-compatible) cache. Holds the transit registry
   snapshot and assorted app caches. Captured as a gzipped `tar` of the volume.

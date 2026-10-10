@@ -1,4 +1,10 @@
-import { type BBox, mapProducts, normalizeFptfDeparture, productToMode } from "@openmapx/core";
+import {
+  type BBox,
+  mapProducts,
+  normalizeFptfDeparture,
+  productToMode,
+  USER_AGENT,
+} from "@openmapx/core";
 import type {
   Departure,
   GeoJSONLineString,
@@ -134,7 +140,7 @@ function getClient(entry: RegistryEntry): any {
   let client = clientCache.get(entry.id);
   if (!client) {
     const profile = buildProfile(entry);
-    const rawClient = createClient(profile, "OpenMapX (github.com/openmapx)");
+    const rawClient = createClient(profile, USER_AGENT);
     client = _redisStore ? createCachedHafasClient(rawClient, _redisStore) : rawClient;
     clientCache.set(entry.id, client);
   }

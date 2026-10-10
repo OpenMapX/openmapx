@@ -1,0 +1,1124 @@
+{
+  "records": [
+    {
+      "id": "oc:situation:usgs-quakes:aka2026typggm",
+      "temporality": "live",
+      "externalIds": [
+        {
+          "scheme": "usgs:event",
+          "id": "us6000u10t"
+        },
+        {
+          "scheme": "usgs:event",
+          "id": "aka2026typggm"
+        }
+      ],
+      "location": {
+        "geometry": {
+          "type": "Point",
+          "coordinates": [-151.635, 59.688]
+        },
+        "extent": "point",
+        "geometryOrigin": "source",
+        "fuzziness": "exact"
+      },
+      "provenance": {
+        "origin": "feed",
+        "sourceId": "usgs-quakes",
+        "sourceFormat": "usgs",
+        "accessMode": "bulk",
+        "recordId": "aka2026typggm",
+        "sourceUpdatedAt": "2026-10-08T20:17:49.040Z",
+        "attribution": {
+          "provider": "U.S. Geological Survey",
+          "license": "LicenseRef-US-Gov-Public-Domain",
+          "licenseUrl": "https://www.usgs.gov/information-policies-and-instructions/copyrights-and-credits"
+        },
+        "privacy": {
+          "class": "authoritative"
+        },
+        "instanceId": "hazards.example"
+      },
+      "freshness": {
+        "fetchedAt": "2026-10-09T01:15:00Z"
+      },
+      "class": "situation",
+      "kind": "natural_hazard",
+      "type": "earthquake",
+      "planned": false,
+      "certainty": "observed",
+      "severity": {
+        "label": "unknown"
+      },
+      "headline": [
+        {
+          "lang": "en",
+          "text": "M 2.4 - 4 km WNW of Diamond Ridge, Alaska"
+        }
+      ],
+      "validity": {
+        "status": "ended",
+        "start": "2026-10-08T18:33:14.142Z",
+        "end": "2026-10-08T18:33:14.142Z"
+      },
+      "effects": [],
+      "details": {
+        "kind": "natural_hazard",
+        "v": 1,
+        "name": [
+          {
+            "lang": "en",
+            "text": "4 km WNW of Diamond Ridge, Alaska"
+          }
+        ],
+        "detailUrl": "https://earthquake.usgs.gov/earthquakes/eventpage/aka2026typggm",
+        "magnitude": {
+          "value": 2.4,
+          "scale": "ml"
+        },
+        "depth": {
+          "value": 55600,
+          "unit": "m"
+        },
+        "tsunamiFlag": false,
+        "reviewed": false
+      },
+      "canonicalId": "c933b091f197a5c84806910af90954438f99569f2a8e2b2b2fd449a5f19da3cb",
+      "domain": "hazards",
+      "revision": 1,
+      "recordedAt": "2026-10-09T01:15:00Z",
+      "contentHash": "0b614e6966d9f23b4a4fd2c4ea5501797b2addbb3401036e23dd2eef946e3dd9"
+    },
+    {
+      "id": "oc:situation:usgs-quakes:us6000u0xi",
+      "temporality": "live",
+      "externalIds": [
+        {
+          "scheme": "usgs:event",
+          "id": "pt26281001"
+        },
+        {
+          "scheme": "usgs:event",
+          "id": "us6000u0xi"
+        }
+      ],
+      "location": {
+        "geometry": {
+          "type": "Point",
+          "coordinates": [168.1889, -15.5411]
+        },
+        "extent": "point",
+        "geometryOrigin": "source",
+        "fuzziness": "exact"
+      },
+      "provenance": {
+        "origin": "feed",
+        "sourceId": "usgs-quakes",
+        "sourceFormat": "usgs",
+        "accessMode": "bulk",
+        "recordId": "us6000u0xi",
+        "sourceUpdatedAt": "2026-10-09T01:11:10.737Z",
+        "attribution": {
+          "provider": "U.S. Geological Survey",
+          "license": "LicenseRef-US-Gov-Public-Domain",
+          "licenseUrl": "https://www.usgs.gov/information-policies-and-instructions/copyrights-and-credits"
+        },
+        "privacy": {
+          "class": "authoritative"
+        },
+        "instanceId": "hazards.example"
+      },
+      "freshness": {
+        "fetchedAt": "2026-10-09T01:15:00Z"
+      },
+      "class": "situation",
+      "kind": "natural_hazard",
+      "type": "earthquake",
+      "planned": false,
+      "certainty": "observed",
+      "severity": {
+        "label": "minor",
+        "source": "declared",
+        "declaredRaw": "green"
+      },
+      "headline": [
+        {
+          "lang": "en",
+          "text": "M 6.3 - 102 km NE of Norsup, Vanuatu"
+        }
+      ],
+      "validity": {
+        "status": "ended",
+        "start": "2026-10-08T09:00:07.768Z",
+        "end": "2026-10-08T09:00:07.768Z"
+      },
+      "effects": [],
+      "details": {
+        "kind": "natural_hazard",
+        "v": 1,
+        "name": [
+          {
+            "lang": "en",
+            "text": "102 km NE of Norsup, Vanuatu"
+          }
+        ],
+        "detailUrl": "https://earthquake.usgs.gov/earthquakes/eventpage/us6000u0xi",
+        "magnitude": {
+          "value": 6.3,
+          "scale": "mww"
+        },
+        "depth": {
+          "value": 10000,
+          "unit": "m"
+        },
+        "tsunamiFlag": false,
+        "feltReports": 5,
+        "mmi": 7.654,
+        "reviewed": true
+      },
+      "canonicalId": "ff4070551ed984b043948d25d99020c8a7147144460c2b7d520199d14a4e3b20",
+      "domain": "hazards",
+      "revision": 1,
+      "recordedAt": "2026-10-09T01:15:00Z",
+      "contentHash": "74645c2f79da1b9948b6d437fba1641dafa83dc5053ae07aa3b77a76c09d12a6"
+    },
+    {
+      "id": "oc:situation:usgs-quakes:uu80158811",
+      "temporality": "live",
+      "externalIds": [
+        {
+          "scheme": "usgs:event",
+          "id": "uu80158811"
+        }
+      ],
+      "location": {
+        "geometry": {
+          "type": "Point",
+          "coordinates": [-111.416333333333, 38.9881666666667]
+        },
+        "extent": "point",
+        "geometryOrigin": "source",
+        "fuzziness": "exact"
+      },
+      "provenance": {
+        "origin": "feed",
+        "sourceId": "usgs-quakes",
+        "sourceFormat": "usgs",
+        "accessMode": "bulk",
+        "recordId": "uu80158811",
+        "sourceUpdatedAt": "2026-10-08T15:07:32.380Z",
+        "attribution": {
+          "provider": "U.S. Geological Survey",
+          "license": "LicenseRef-US-Gov-Public-Domain",
+          "licenseUrl": "https://www.usgs.gov/information-policies-and-instructions/copyrights-and-credits"
+        },
+        "privacy": {
+          "class": "authoritative"
+        },
+        "instanceId": "hazards.example"
+      },
+      "freshness": {
+        "fetchedAt": "2026-10-09T01:15:00Z"
+      },
+      "class": "situation",
+      "kind": "natural_hazard",
+      "type": "earthquake",
+      "planned": false,
+      "certainty": "observed",
+      "severity": {
+        "label": "unknown"
+      },
+      "headline": [
+        {
+          "lang": "en",
+          "text": "M 1.3 - 16 km WNW of Emery, Utah"
+        }
+      ],
+      "validity": {
+        "status": "ended",
+        "start": "2026-10-08T15:00:22.300Z",
+        "end": "2026-10-08T15:00:22.300Z"
+      },
+      "effects": [],
+      "details": {
+        "kind": "natural_hazard",
+        "v": 1,
+        "name": [
+          {
+            "lang": "en",
+            "text": "16 km WNW of Emery, Utah"
+          }
+        ],
+        "detailUrl": "https://earthquake.usgs.gov/earthquakes/eventpage/uu80158811",
+        "magnitude": {
+          "value": 1.34,
+          "scale": "md"
+        },
+        "depth": {
+          "value": -3370,
+          "unit": "m"
+        },
+        "tsunamiFlag": false,
+        "reviewed": true
+      },
+      "canonicalId": "78ce575081460c874f12af9d404921e21a30cdf1b7a0fab8ecd651bb4a161754",
+      "domain": "hazards",
+      "revision": 1,
+      "recordedAt": "2026-10-09T01:15:00Z",
+      "contentHash": "e8ac1e730c3985054f11e18163e275b9742a7b321d460b30d68bdff1200cd935"
+    },
+    {
+      "id": "oc:situation:usgs-quakes:us6000u0x4",
+      "temporality": "live",
+      "externalIds": [
+        {
+          "scheme": "usgs:event",
+          "id": "us6000u0x4"
+        }
+      ],
+      "location": {
+        "geometry": {
+          "type": "Point",
+          "coordinates": [125.1521, 5.6006]
+        },
+        "extent": "point",
+        "geometryOrigin": "source",
+        "fuzziness": "exact"
+      },
+      "provenance": {
+        "origin": "feed",
+        "sourceId": "usgs-quakes",
+        "sourceFormat": "usgs",
+        "accessMode": "bulk",
+        "recordId": "us6000u0x4",
+        "sourceUpdatedAt": "2026-10-08T23:18:00.061Z",
+        "attribution": {
+          "provider": "U.S. Geological Survey",
+          "license": "LicenseRef-US-Gov-Public-Domain",
+          "licenseUrl": "https://www.usgs.gov/information-policies-and-instructions/copyrights-and-credits"
+        },
+        "privacy": {
+          "class": "authoritative"
+        },
+        "instanceId": "hazards.example"
+      },
+      "freshness": {
+        "fetchedAt": "2026-10-09T01:15:00Z"
+      },
+      "class": "situation",
+      "kind": "natural_hazard",
+      "type": "earthquake",
+      "planned": false,
+      "certainty": "observed",
+      "severity": {
+        "label": "minor",
+        "source": "declared",
+        "declaredRaw": "green"
+      },
+      "headline": [
+        {
+          "lang": "en",
+          "text": "M 5.5 - 17 km SW of Burias, Philippines"
+        }
+      ],
+      "validity": {
+        "status": "ended",
+        "start": "2026-10-08T08:07:59.114Z",
+        "end": "2026-10-08T08:07:59.114Z"
+      },
+      "effects": [],
+      "details": {
+        "kind": "natural_hazard",
+        "v": 1,
+        "name": [
+          {
+            "lang": "en",
+            "text": "17 km SW of Burias, Philippines"
+          }
+        ],
+        "detailUrl": "https://earthquake.usgs.gov/earthquakes/eventpage/us6000u0x4",
+        "magnitude": {
+          "value": 5.5,
+          "scale": "mww"
+        },
+        "depth": {
+          "value": 52054,
+          "unit": "m"
+        },
+        "tsunamiFlag": false,
+        "feltReports": 11,
+        "mmi": 4.563,
+        "reviewed": true
+      },
+      "canonicalId": "5a56517d1f350050fe1df88ed8dd7537091c8cb3e0dfa25d9adc17a0c1261099",
+      "domain": "hazards",
+      "revision": 1,
+      "recordedAt": "2026-10-09T01:15:00Z",
+      "contentHash": "ac1e6c8dd5084e5bff6895c90af44b5eac6be85c257ccb4ebf3d7b89bc2c2c27"
+    },
+    {
+      "id": "oc:situation:usgs-quakes:us6000ty43",
+      "temporality": "live",
+      "externalIds": [
+        {
+          "scheme": "usgs:event",
+          "id": "attm2hmu"
+        },
+        {
+          "scheme": "usgs:event",
+          "id": "us6000ty43"
+        }
+      ],
+      "location": {
+        "geometry": {
+          "type": "Point",
+          "coordinates": [-129.6785, 50.171]
+        },
+        "extent": "point",
+        "geometryOrigin": "source",
+        "fuzziness": "exact"
+      },
+      "provenance": {
+        "origin": "feed",
+        "sourceId": "usgs-quakes",
+        "sourceFormat": "usgs",
+        "accessMode": "bulk",
+        "recordId": "us6000ty43",
+        "sourceUpdatedAt": "2026-09-28T09:30:37.040Z",
+        "attribution": {
+          "provider": "U.S. Geological Survey",
+          "license": "LicenseRef-US-Gov-Public-Domain",
+          "licenseUrl": "https://www.usgs.gov/information-policies-and-instructions/copyrights-and-credits"
+        },
+        "privacy": {
+          "class": "authoritative"
+        },
+        "instanceId": "hazards.example"
+      },
+      "freshness": {
+        "fetchedAt": "2026-10-09T01:15:00Z"
+      },
+      "class": "situation",
+      "kind": "natural_hazard",
+      "type": "earthquake",
+      "planned": false,
+      "certainty": "observed",
+      "severity": {
+        "label": "unknown"
+      },
+      "headline": [
+        {
+          "lang": "en",
+          "text": "M 5.2 - 190 km WSW of Port McNeill, Canada"
+        }
+      ],
+      "validity": {
+        "status": "ended",
+        "start": "2026-09-28T09:13:39.402Z",
+        "end": "2026-09-28T09:13:39.402Z"
+      },
+      "effects": [],
+      "details": {
+        "kind": "natural_hazard",
+        "v": 1,
+        "name": [
+          {
+            "lang": "en",
+            "text": "190 km WSW of Port McNeill, Canada"
+          }
+        ],
+        "detailUrl": "https://earthquake.usgs.gov/earthquakes/eventpage/us6000ty43",
+        "magnitude": {
+          "value": 5.2,
+          "scale": "mww"
+        },
+        "depth": {
+          "value": 10000,
+          "unit": "m"
+        },
+        "tsunamiFlag": true,
+        "reviewed": true
+      },
+      "canonicalId": "7d10aba34b35b55cd96e7a872113e37a4f98e10c8c1efe645941e02b3e6d9703",
+      "domain": "hazards",
+      "revision": 1,
+      "recordedAt": "2026-10-09T01:15:00Z",
+      "contentHash": "5298a859d8b3809807fb62e20a17f20977e1d6f86d82c41b1be6fc3767278e70"
+    },
+    {
+      "id": "oc:situation:us-nifc-fires:DB5448A6-FCAC-4041-A817-6F8198161DBA",
+      "temporality": "live",
+      "externalIds": [
+        {
+          "scheme": "irwin",
+          "id": "DB5448A6-FCAC-4041-A817-6F8198161DBA"
+        }
+      ],
+      "location": {
+        "geometry": {
+          "type": "MultiPolygon",
+          "coordinates": [
+            [
+              [
+                [-117.05595, 44.60571],
+                [-117.05131, 44.60165],
+                [-117.04818, 44.60131],
+                [-117.04946, 44.59886],
+                [-117.04773, 44.59861],
+                [-117.04774, 44.5972],
+                [-117.03848, 44.5965],
+                [-117.03674, 44.59146],
+                [-117.04327, 44.59376],
+                [-117.05483, 44.59228],
+                [-117.04786, 44.5895],
+                [-117.04604, 44.587],
+                [-117.04807, 44.58634],
+                [-117.04321, 44.5851],
+                [-117.04622, 44.58968],
+                [-117.04002, 44.58927],
+                [-117.03963, 44.58698],
+                [-117.03578, 44.58458],
+                [-117.03378, 44.58603],
+                [-117.02694, 44.58238],
+                [-117.02391, 44.58329],
+                [-117.02146, 44.58212],
+                [-117.01937, 44.57998],
+                [-117.0208, 44.57746],
+                [-117.01393, 44.57389],
+                [-117.00238, 44.57418],
+                [-117.00146, 44.57597],
+                [-116.99777, 44.57649],
+                [-116.99736, 44.57511],
+                [-116.99691, 44.57661],
+                [-116.99339, 44.57682],
+                [-116.98837, 44.57243],
+                [-116.98951, 44.57094],
+                [-116.99402, 44.57213],
+                [-116.99589, 44.56826],
+                [-116.99803, 44.56835],
+                [-116.99716, 44.56669],
+                [-116.99953, 44.56636],
+                [-117.00106, 44.56404],
+                [-117.01123, 44.5626],
+                [-117.00966, 44.56168],
+                [-117.01019, 44.55661],
+                [-117.01303, 44.55651],
+                [-117.01391, 44.55442],
+                [-117.01731, 44.5532],
+                [-117.02282, 44.55324],
+                [-117.02644, 44.55127],
+                [-117.0258, 44.54772],
+                [-117.02791, 44.54858],
+                [-117.02844, 44.54666],
+                [-117.03019, 44.54696],
+                [-117.03064, 44.54345],
+                [-117.03408, 44.54309],
+                [-117.03683, 44.54029],
+                [-117.03943, 44.5407],
+                [-117.03863, 44.53581],
+                [-117.02793, 44.53143],
+                [-117.01207, 44.52773],
+                [-116.98765, 44.51268],
+                [-116.97953, 44.50235],
+                [-116.97528, 44.50101],
+                [-116.97167, 44.49735],
+                [-116.94666, 44.49057],
+                [-116.94586, 44.48915],
+                [-116.94455, 44.49054],
+                [-116.93788, 44.48502],
+                [-116.93521, 44.48481],
+                [-116.93353, 44.48128],
+                [-116.92944, 44.4791],
+                [-116.92856, 44.47536],
+                [-116.92375, 44.47327],
+                [-116.92589, 44.46756],
+                [-116.92083, 44.46074],
+                [-116.92084, 44.45765],
+                [-116.91794, 44.4529],
+                [-116.91808, 44.44751],
+                [-116.91572, 44.44311],
+                [-116.91788, 44.43553],
+                [-116.91668, 44.43229],
+                [-116.91007, 44.42592],
+                [-116.90777, 44.41907],
+                [-116.91323, 44.41648],
+                [-116.91105, 44.41211],
+                [-116.92357, 44.41204],
+                [-116.92267, 44.40906],
+                [-116.92774, 44.40798],
+                [-116.92646, 44.40651],
+                [-116.92238, 44.40745],
+                [-116.92062, 44.40551],
+                [-116.91913, 44.39882],
+                [-116.92024, 44.39559],
+                [-116.91679, 44.39558],
+                [-116.91267, 44.39858],
+                [-116.90914, 44.39742],
+                [-116.90721, 44.38963],
+                [-116.91308, 44.38748],
+                [-116.9174, 44.38778],
+                [-116.91861, 44.37554],
+                [-116.91594, 44.37195],
+                [-116.92091, 44.36742],
+                [-116.91685, 44.36515],
+                [-116.91698, 44.3621],
+                [-116.91899, 44.36189],
+                [-116.91905, 44.36339],
+                [-116.92277, 44.36471],
+                [-116.92228, 44.36065],
+                [-116.92468, 44.3606],
+                [-116.9245, 44.36254],
+                [-116.92616, 44.36342],
+                [-116.92877, 44.35848],
+                [-116.92383, 44.33962],
+                [-116.9252, 44.33456],
+                [-116.93056, 44.33087],
+                [-116.94034, 44.33301],
+                [-116.94291, 44.33607],
+                [-116.94527, 44.33645],
+                [-116.94681, 44.33575],
+                [-116.94666, 44.3337],
+                [-116.94925, 44.33259],
+                [-116.94584, 44.3317],
+                [-116.94506, 44.32768],
+                [-116.94618, 44.32558],
+                [-116.94069, 44.32551],
+                [-116.93885, 44.32693],
+                [-116.93562, 44.32208],
+                [-116.93294, 44.32099],
+                [-116.93263, 44.31457],
+                [-116.93548, 44.3104],
+                [-116.94378, 44.30709],
+                [-116.93933, 44.29623],
+                [-116.93963, 44.29403],
+                [-116.94307, 44.29376],
+                [-116.94307, 44.29229],
+                [-116.93751, 44.29108],
+                [-116.93953, 44.28656],
+                [-116.93731, 44.28729],
+                [-116.93387, 44.28551],
+                [-116.93692, 44.28217],
+                [-116.93732, 44.28052],
+                [-116.93619, 44.28057],
+                [-116.93788, 44.27834],
+                [-116.94509, 44.27114],
+                [-116.94866, 44.26804],
+                [-116.95583, 44.26616],
+                [-116.95905, 44.2612],
+                [-116.96135, 44.26073],
+                [-116.96548, 44.26384],
+                [-116.96586, 44.27032],
+                [-116.97257, 44.27203],
+                [-116.97535, 44.27799],
+                [-116.98, 44.27988],
+                [-116.98106, 44.28321],
+                [-116.98814, 44.28582],
+                [-116.98506, 44.29524],
+                [-116.99239, 44.29679],
+                [-116.99392, 44.29313],
+                [-116.99895, 44.29172],
+                [-117.00572, 44.29355],
+                [-117.01201, 44.29304],
+                [-117.01302, 44.29585],
+                [-117.01696, 44.29623],
+                [-117.01686, 44.29962],
+                [-117.01975, 44.30138],
+                [-117.02411, 44.30077],
+                [-117.02561, 44.29803],
+                [-117.02623, 44.29984],
+                [-117.03551, 44.29861],
+                [-117.03846, 44.3009],
+                [-117.03869, 44.30588],
+                [-117.04396, 44.30588],
+                [-117.04702, 44.30837],
+                [-117.05244, 44.31964],
+                [-117.05764, 44.31815],
+                [-117.06925, 44.31837],
+                [-117.06465, 44.31324],
+                [-117.06025, 44.31273],
+                [-117.06193, 44.31066],
+                [-117.0713, 44.3128],
+                [-117.06905, 44.3089],
+                [-117.05712, 44.30114],
+                [-117.05448, 44.30086],
+                [-117.05551, 44.29963],
+                [-117.05399, 44.2985],
+                [-117.05611, 44.29822],
+                [-117.08621, 44.31865],
+                [-117.0881, 44.31756],
+                [-117.08399, 44.31278],
+                [-117.08186, 44.29614],
+                [-117.08324, 44.29108],
+                [-117.08483, 44.29235],
+                [-117.08942, 44.28596],
+                [-117.12082, 44.28049],
+                [-117.13399, 44.26866],
+                [-117.13576, 44.26452],
+                [-117.14294, 44.26144],
+                [-117.14565, 44.26441],
+                [-117.14947, 44.26214],
+                [-117.14896, 44.26008],
+                [-117.15197, 44.25985],
+                [-117.1705, 44.26402],
+                [-117.16928, 44.26642],
+                [-117.17247, 44.27327],
+                [-117.17317, 44.28005],
+                [-117.17674, 44.28332],
+                [-117.17471, 44.28799],
+                [-117.17813, 44.29223],
+                [-117.18063, 44.29321],
+                [-117.19575, 44.29089],
+                [-117.19912, 44.29186],
+                [-117.19885, 44.29433],
+                [-117.20057, 44.29248],
+                [-117.2076, 44.29089],
+                [-117.20847, 44.29297],
+                [-117.20754, 44.2962],
+                [-117.20312, 44.29503],
+                [-117.20939, 44.29957],
+                [-117.20909, 44.30249],
+                [-117.20477, 44.30876],
+                [-117.20086, 44.31115],
+                [-117.19492, 44.32338],
+                [-117.18927, 44.32872],
+                [-117.18698, 44.33704],
+                [-117.18856, 44.34144],
+                [-117.19242, 44.34734],
+                [-117.19779, 44.35103],
+                [-117.19662, 44.3539],
+                [-117.20154, 44.3544],
+                [-117.22811, 44.37154],
+                [-117.23547, 44.38216],
+                [-117.24067, 44.3938],
+                [-117.24095, 44.39536],
+                [-117.22492, 44.40362],
+                [-117.2215, 44.40944],
+                [-117.22231, 44.41207],
+                [-117.21344, 44.42084],
+                [-117.21269, 44.42898],
+                [-117.21423, 44.43303],
+                [-117.21192, 44.43796],
+                [-117.21321, 44.44169],
+                [-117.21199, 44.45476],
+                [-117.21513, 44.45806],
+                [-117.21466, 44.46195],
+                [-117.21615, 44.46261],
+                [-117.21446, 44.46496],
+                [-117.20357, 44.46623],
+                [-117.21601, 44.46523],
+                [-117.2214, 44.47585],
+                [-117.22124, 44.4793],
+                [-117.2143, 44.47925],
+                [-117.20572, 44.48213],
+                [-117.20174, 44.48086],
+                [-117.19517, 44.48353],
+                [-117.18602, 44.47872],
+                [-117.18412, 44.47579],
+                [-117.17963, 44.47818],
+                [-117.17305, 44.47395],
+                [-117.16668, 44.47459],
+                [-117.16508, 44.47284],
+                [-117.16567, 44.47011],
+                [-117.15825, 44.46662],
+                [-117.15698, 44.46352],
+                [-117.15211, 44.46503],
+                [-117.15171, 44.46933],
+                [-117.15997, 44.47598],
+                [-117.15958, 44.48549],
+                [-117.15776, 44.49119],
+                [-117.15308, 44.49807],
+                [-117.14462, 44.49916],
+                [-117.14916, 44.50461],
+                [-117.15438, 44.50702],
+                [-117.16525, 44.507],
+                [-117.16885, 44.50911],
+                [-117.17082, 44.51305],
+                [-117.1747, 44.51451],
+                [-117.17554, 44.51963],
+                [-117.17853, 44.5203],
+                [-117.17253, 44.52144],
+                [-117.1713, 44.51813],
+                [-117.16533, 44.51732],
+                [-117.16898, 44.5202],
+                [-117.16879, 44.52253],
+                [-117.16183, 44.52342],
+                [-117.14887, 44.52908],
+                [-117.14822, 44.53337],
+                [-117.14323, 44.53732],
+                [-117.13825, 44.54692],
+                [-117.1359, 44.55604],
+                [-117.1392, 44.56144],
+                [-117.1353, 44.5638],
+                [-117.13257, 44.56302],
+                [-117.1368, 44.56474],
+                [-117.14131, 44.56439],
+                [-117.14174, 44.56588],
+                [-117.13473, 44.56676],
+                [-117.12484, 44.57297],
+                [-117.11978, 44.57787],
+                [-117.12131, 44.57841],
+                [-117.11934, 44.58204],
+                [-117.11972, 44.58454],
+                [-117.09441, 44.59511],
+                [-117.09021, 44.60087],
+                [-117.07486, 44.60414],
+                [-117.06291, 44.60353],
+                [-117.05595, 44.60571]
+              ]
+            ],
+            [
+              [
+                [-116.94402, 44.26823],
+                [-116.9473, 44.26752],
+                [-116.94535, 44.26901],
+                [-116.94402, 44.26823]
+              ]
+            ],
+            [
+              [
+                [-116.91041, 44.42698],
+                [-116.91057, 44.427],
+                [-116.91049, 44.42705],
+                [-116.91041, 44.42698]
+              ]
+            ],
+            [
+              [
+                [-116.91764, 44.44756],
+                [-116.91771, 44.44756],
+                [-116.91767, 44.4476],
+                [-116.91764, 44.44756]
+              ]
+            ],
+            [
+              [
+                [-116.92561, 44.46747],
+                [-116.92571, 44.46727],
+                [-116.92581, 44.46747],
+                [-116.92561, 44.46747]
+              ]
+            ],
+            [
+              [
+                [-116.92558, 44.46774],
+                [-116.92564, 44.46772],
+                [-116.92565, 44.46779],
+                [-116.92558, 44.46774]
+              ]
+            ],
+            [
+              [
+                [-117.00764, 44.57433],
+                [-117.00778, 44.57433],
+                [-117.00768, 44.57439],
+                [-117.00764, 44.57433]
+              ]
+            ],
+            [
+              [
+                [-116.98476, 44.58072],
+                [-116.98824, 44.58018],
+                [-116.98682, 44.58124],
+                [-116.98476, 44.58072]
+              ]
+            ],
+            [
+              [
+                [-116.99196, 44.58322],
+                [-116.99301, 44.58294],
+                [-116.99166, 44.58428],
+                [-116.99196, 44.58322]
+              ]
+            ],
+            [
+              [
+                [-116.9887, 44.58309],
+                [-116.98975, 44.58406],
+                [-116.98839, 44.58497],
+                [-116.9887, 44.58309]
+              ]
+            ]
+          ]
+        },
+        "extent": "area",
+        "geometryOrigin": "source",
+        "fuzziness": "exact",
+        "admin": {
+          "country": "US",
+          "subdivision": "US-ID"
+        }
+      },
+      "provenance": {
+        "origin": "feed",
+        "sourceId": "us-nifc-fires",
+        "sourceFormat": "wfigs",
+        "accessMode": "bulk",
+        "recordId": "DB5448A6-FCAC-4041-A817-6F8198161DBA",
+        "sourceUpdatedAt": "2026-08-11T21:48:02Z",
+        "attribution": {
+          "provider": "National Interagency Fire Center (NIFC) / WFIGS and contributing agencies, dynamic data, not legal documents.",
+          "license": "LicenseRef-US-Gov-Public-Domain",
+          "licenseUrl": "https://www.arcgis.com/home/item.html?id=d1c32af3212341869b3c810f1a215824"
+        },
+        "privacy": {
+          "class": "authoritative"
+        },
+        "instanceId": "hazards.example"
+      },
+      "freshness": {
+        "fetchedAt": "2026-10-08T21:10:00Z"
+      },
+      "class": "situation",
+      "kind": "natural_hazard",
+      "type": "wildfire",
+      "subtype": "wildfire_perimeter",
+      "planned": false,
+      "certainty": "observed",
+      "severity": {
+        "label": "unknown"
+      },
+      "validity": {
+        "status": "active",
+        "start": "2026-07-24T16:00:00Z"
+      },
+      "effects": [],
+      "details": {
+        "kind": "natural_hazard",
+        "v": 1,
+        "name": [
+          {
+            "lang": "en",
+            "text": "Tartar"
+          }
+        ],
+        "areaHa": 63951.39,
+        "containmentPct": 100,
+        "discoveredAt": "2026-07-24T16:00:00Z",
+        "ignitionCause": "natural"
+      },
+      "canonicalId": "9e0a61141bd949e19c571c1203e7b5c688e761dc317671a065ceb85d2dfe0b1f",
+      "domain": "hazards",
+      "revision": 1,
+      "recordedAt": "2026-10-08T21:10:00Z",
+      "contentHash": "af9c8c3476883ad494f4ef3bbddd498ec38fc3588bbb8357b3b30ea44a8d753f"
+    },
+    {
+      "id": "oc:situation:us-noaa-hms-smoke:2026273-2",
+      "temporality": "live",
+      "location": {
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            [
+              [-83.6162, 30.7452],
+              [-83.6237, 30.7452],
+              [-83.6297, 30.7452],
+              [-83.6372, 30.7512],
+              [-83.6372, 30.7587],
+              [-83.6372, 30.7722],
+              [-83.6372, 30.7842],
+              [-83.6327, 30.7917],
+              [-83.6267, 30.7917],
+              [-83.6117, 30.7917],
+              [-83.5982, 30.7872],
+              [-83.5967, 30.7692],
+              [-83.6087, 30.7497],
+              [-83.6162, 30.7452]
+            ]
+          ]
+        },
+        "extent": "area",
+        "geometryOrigin": "source",
+        "fuzziness": "exact"
+      },
+      "provenance": {
+        "origin": "feed",
+        "sourceId": "us-noaa-hms-smoke",
+        "sourceFormat": "hms",
+        "accessMode": "bulk",
+        "recordId": "2026273-2",
+        "attribution": {
+          "provider": "NOAA/NESDIS Hazard Mapping System (HMS)",
+          "license": "CC0-1.0",
+          "licenseUrl": "https://www.arcgis.com/home/item.html?id=ab7a5fbd76e3499296350eabf599fc63"
+        },
+        "privacy": {
+          "class": "authoritative"
+        },
+        "instanceId": "hazards.example"
+      },
+      "freshness": {
+        "fetchedAt": "2026-10-08T21:10:00Z"
+      },
+      "class": "situation",
+      "kind": "natural_hazard",
+      "type": "smoke",
+      "planned": false,
+      "certainty": "observed",
+      "severity": {
+        "label": "unknown"
+      },
+      "validity": {
+        "status": "active",
+        "start": "2026-09-30T12:00:00Z"
+      },
+      "effects": [],
+      "details": {
+        "kind": "natural_hazard",
+        "v": 1,
+        "density": "light",
+        "detection": {
+          "satellite": "GOES-WEST",
+          "start": "2026-09-30T12:00:00Z",
+          "end": "2026-09-30T15:00:00Z"
+        }
+      },
+      "canonicalId": "e923816819c2f366be1e566e46bc249b3ead159267269b2956285be6a868b781",
+      "domain": "hazards",
+      "revision": 1,
+      "recordedAt": "2026-10-08T21:10:00Z",
+      "contentHash": "2c72b808b5d7386913e6c8ec51241949a368398c3466dd8d85a0915690b7572f"
+    },
+    {
+      "id": "oc:situation:nasa-eonet-events:EONET_20710",
+      "temporality": "live",
+      "location": {
+        "geometry": {
+          "type": "Point",
+          "coordinates": [-71.378, -36.868]
+        },
+        "extent": "point",
+        "geometryOrigin": "source",
+        "fuzziness": "exact"
+      },
+      "provenance": {
+        "origin": "feed",
+        "sourceId": "nasa-eonet-events",
+        "sourceFormat": "eonet",
+        "accessMode": "bulk",
+        "recordId": "EONET_20710",
+        "sourceUpdatedAt": "2026-06-15T00:00:00Z",
+        "attribution": {
+          "provider": "NASA Earth Observatory Natural Event Tracker (EONET)",
+          "license": "CC0-1.0",
+          "licenseUrl": "https://www.earthdata.nasa.gov/engage/open-data-services-software-policies/data-use-guidance"
+        },
+        "privacy": {
+          "class": "authoritative"
+        },
+        "instanceId": "hazards.example"
+      },
+      "freshness": {
+        "fetchedAt": "2026-10-09T01:15:00Z"
+      },
+      "class": "situation",
+      "kind": "natural_hazard",
+      "type": "volcano",
+      "planned": false,
+      "certainty": "observed",
+      "severity": {
+        "label": "unknown"
+      },
+      "headline": [
+        {
+          "lang": "en",
+          "text": "Nevados del Chillan Volcano, Chile"
+        }
+      ],
+      "validity": {
+        "status": "ended",
+        "start": "2026-06-15T00:00:00Z",
+        "end": "2026-09-13T00:00:00Z"
+      },
+      "effects": [],
+      "details": {
+        "kind": "natural_hazard",
+        "v": 1,
+        "name": [
+          {
+            "lang": "en",
+            "text": "Nevados del Chillan Volcano, Chile"
+          }
+        ],
+        "detailUrl": "https://volcano.si.edu/volcano.cfm?vn=357070"
+      },
+      "canonicalId": "4ec0e74ae6dfd7ef0a6b48de19f42fefcb5407b8d5cffd9b437bd19c505393cd",
+      "domain": "hazards",
+      "revision": 1,
+      "recordedAt": "2026-10-09T01:15:00Z",
+      "contentHash": "34f4448e2bd0c5791453500228e2f97d57edb774c7e285d8a1364741a2e6eefb"
+    },
+    {
+      "id": "oc:situation:nasa-eonet-events:EONET_20822",
+      "temporality": "live",
+      "location": {
+        "geometry": {
+          "type": "Point",
+          "coordinates": [-55.47, -63.78]
+        },
+        "extent": "point",
+        "geometryOrigin": "source",
+        "fuzziness": "exact"
+      },
+      "provenance": {
+        "origin": "feed",
+        "sourceId": "nasa-eonet-events",
+        "sourceFormat": "eonet",
+        "accessMode": "bulk",
+        "recordId": "EONET_20822",
+        "sourceUpdatedAt": "2026-07-23T00:00:00Z",
+        "attribution": {
+          "provider": "NASA Earth Observatory Natural Event Tracker (EONET)",
+          "license": "CC0-1.0",
+          "licenseUrl": "https://www.earthdata.nasa.gov/engage/open-data-services-software-policies/data-use-guidance"
+        },
+        "privacy": {
+          "class": "authoritative"
+        },
+        "instanceId": "hazards.example"
+      },
+      "freshness": {
+        "fetchedAt": "2026-10-09T01:15:00Z"
+      },
+      "class": "situation",
+      "kind": "natural_hazard",
+      "type": "sea_ice",
+      "subtype": "iceberg",
+      "planned": false,
+      "certainty": "observed",
+      "severity": {
+        "label": "unknown"
+      },
+      "headline": [
+        {
+          "lang": "en",
+          "text": "Iceberg D33D"
+        }
+      ],
+      "validity": {
+        "status": "ended",
+        "start": "2026-06-25T00:00:00Z",
+        "end": "2026-08-22T00:00:00Z"
+      },
+      "effects": [],
+      "details": {
+        "kind": "natural_hazard",
+        "v": 1,
+        "name": [
+          {
+            "lang": "en",
+            "text": "Iceberg D33D"
+          }
+        ],
+        "detailUrl": "https://usicecenter.gov/pub/Iceberg_Tabular.csv",
+        "areaHa": 30869.1
+      },
+      "canonicalId": "c293bb39ac7df6b34c0d6cc757c8e7aacb4f2ad092ff51a4dbb92ad5d67dc487",
+      "domain": "hazards",
+      "revision": 1,
+      "recordedAt": "2026-10-09T01:15:00Z",
+      "contentHash": "518cf4bb8ba3f5508c3ca62257743dafd031ca962def218fc4bf1d603fe63e59"
+    }
+  ],
+  "next": null
+}

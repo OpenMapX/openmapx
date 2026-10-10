@@ -4,7 +4,7 @@
  * A service manifest's `configSchema` may declare fields flagged
  * `x-openmapx-secret: true`. Those key names are not merely labels — the
  * render step turns each one into
- *   - a FILENAME under `infra/docker/.generated-secrets/<serviceId>/<key>`,
+ *   - a FILENAME under `<generation>/.generated-secrets/<serviceId>/<key>`,
  *   - a Docker secret target mounted at `/run/secrets/<key>`, and
  *   - an environment variable name `<key>_FILE`.
  *

@@ -5,13 +5,9 @@ const ALL_CATEGORIES = [
   "severeStorms",
   "floods",
   "landslides",
-  "snow",
-  "tempExtremes",
-  "dustHaze",
   "seaLakeIce",
-  "waterColor",
   "drought",
-  "manmade",
+  "dustHaze",
 ] as const;
 
 export type NaturalEventCategory = (typeof ALL_CATEGORIES)[number];
@@ -25,9 +21,12 @@ export const useNaturalEventStore = createOverlayStore({
     activeCategories: new Set<string>(ALL_CATEGORIES) as Set<string>,
     eventCount: 0,
     lastUpdated: null as number | null,
+    /** The last refresh failed: no hazards source answered, which is not "no events". */
+    unavailable: false,
   },
   actions: (set) => ({
     setLoading: (loading: boolean) => set({ loading }),
+    setUnavailable: (unavailable: boolean) => set({ unavailable }),
     setDays: (days: number | null) => set({ days }),
     toggleCategory: (id: string) =>
       set((state) => {
@@ -42,5 +41,5 @@ export const useNaturalEventStore = createOverlayStore({
     setEventCount: (eventCount: number) => set({ eventCount }),
     setLastUpdated: (lastUpdated: number) => set({ lastUpdated }),
   }),
-  onClose: () => ({ eventCount: 0 }),
+  onClose: () => ({ eventCount: 0, unavailable: false }),
 });

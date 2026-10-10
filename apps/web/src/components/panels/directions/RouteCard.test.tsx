@@ -131,7 +131,9 @@ describe("RouteCard arrival time", () => {
     renderArrival({ kind: "now", destinationTimeZone: "Europe/Berlin" });
     const arrival = screen.getByTestId("route-arrival");
     expect(arrival).toHaveTextContent(/Arrives.*1:30\s*PM/);
-    expect(screen.getByRole("radio").getAttribute("aria-describedby")).toBe(arrival.id);
+    expect(screen.getByRole("radio").getAttribute("aria-describedby")?.split(" ")).toContain(
+      arrival.id,
+    );
   });
 
   it("resolves a chosen departure in the origin zone before displaying destination time", () => {
@@ -354,39 +356,112 @@ describe("RouteCard keyboard actions", () => {
   });
 });
 
-describe("RouteCard traffic delta", () => {
-  it("shows nothing when there is no baseline duration", () => {
+describe("RouteCard compact traffic explanation", () => {
+  it("describes the caveat when keyboard users select a route", () => {
     renderCard(baseRoute);
-    expect(screen.queryByTestId("traffic-delay")).toBeNull();
-  });
-
-  it("shows nothing when the delay is under five minutes", () => {
-    // 4 min on a 40 min baseline: over 10% but under the absolute floor.
-    renderCard({ ...baseRoute, duration: 2640, baselineDuration: 2400 });
-    expect(screen.queryByTestId("traffic-delay")).toBeNull();
-  });
-
-  it("shows nothing when the delay is under ten percent", () => {
-    // 6 min on a 90 min baseline: over the absolute floor but under the ratio.
-    renderCard({ ...baseRoute, duration: 5760, baselineDuration: 5400 });
-    expect(screen.queryByTestId("traffic-delay")).toBeNull();
-  });
-
-  it("shows the delay once both thresholds are met", () => {
-    // 12 min on a 75 min baseline = 16% -> light band.
-    renderCard({ ...baseRoute, duration: 5220, baselineDuration: 4500 });
-    const el = screen.getByTestId("traffic-delay");
-    expect(el.textContent).toContain("12 min");
-    expect(getComputedStyle(el).color).toBe("var(--omx-traffic-light)");
-  });
-
-  it("escalates the colour with the delay", () => {
-    // 45 min on a 60 min baseline = 75% -> heavy band.
-    renderCard({ ...baseRoute, duration: 6300, baselineDuration: 3600 });
-    expect(getComputedStyle(screen.getByTestId("traffic-delay")).color).toBe(
-      "var(--omx-traffic-heavy)",
+    const ids = screen.getByRole("radio").getAttribute("aria-describedby")?.split(" ") ?? [];
+    expect(ids.map((id) => document.getElementById(id)?.textContent).join(" ")).toContain(
+      "Traffic data unavailable",
     );
   });
+  it("shows a compact delay and describes it to keyboard users", () => {
+    renderCard({ ...baseRoute, duration: 6300, baselineDuration: 3600 });
+    expect(screen.getByTestId("traffic-delay")).toHaveTextContent(/^\(\+45 min\)$/);
+    expect(screen.queryByText(/baseline/i)).toBeNull();
+    expect(screen.queryByText("Traffic data unavailable")).toBeNull();
+    const ids = screen.getByRole("radio").getAttribute("aria-describedby")?.split(" ") ?? [];
+    expect(ids.map((id) => document.getElementById(id)?.textContent).join(" ")).toContain(
+      "+45 min",
+    );
+  });
+  it.each([
+    [3960, "light"],
+    [4500, "moderate"],
+    [5400, "heavy"],
+    [7200, "severe"],
+  ] as const)(
+    "colors the travel time for a %s-second route using the %s delay band",
+    (duration, band) => {
+      renderCard({ ...baseRoute, duration, baselineDuration: 3600 });
+      expect(getComputedStyle(screen.getByRole("heading", { level: 6 })).color).toBe(
+        `var(--omx-traffic-${band})`,
+      );
+    },
+  );
+  it.each([
+    [2640, 2400], // Relative threshold reached, less than five minutes extra.
+    [5760, 5400], // More than five minutes extra, below ten percent.
+    [3600, 3600], // Same estimate without current traffic speeds.
+    [3500, 3600], // Current conditions can be quicker than the comparison.
+  ])("does not advertise a significant delay for %s / %s seconds", (duration, baselineDuration) => {
+    renderCard({ ...baseRoute, duration, baselineDuration });
+    expect(screen.queryByTestId("traffic-delay")).toBeNull();
+    expect(screen.getByText("Traffic data unavailable")).toBeInTheDocument();
+    expect(getComputedStyle(screen.getByRole("heading", { level: 6 })).color).toBe(
+      "rgba(0, 0, 0, 0.87)",
+    );
+    expect(screen.getByRole("button", { name: "About traffic" })).toBeInTheDocument();
+  });
+  it.each([undefined, 0, -1, Number.NaN, Number.POSITIVE_INFINITY])(
+    "does not fabricate a delay without a usable comparison (%s)",
+    (baselineDuration) => {
+      renderCard({ ...baseRoute, baselineDuration });
+      expect(screen.queryByTestId("traffic-delay")).toBeNull();
+      expect(screen.getByText("Traffic data unavailable")).toBeInTheDocument();
+    },
+  );
+  it.each(["walking", "cycling"] as const)("does not show traffic delays for %s", (mode) => {
+    renderCard({ ...baseRoute, mode, duration: 6300, baselineDuration: 3600 });
+    expect(screen.queryByTestId("traffic-delay")).toBeNull();
+    expect(screen.queryByRole("button", { name: "About traffic" })).toBeNull();
+  });
+  it("keeps severity coloring on an unselected motorcycle alternative", () => {
+    render(
+      <NextIntlClientProvider locale="en" messages={en}>
+        <RouteCard
+          route={{ ...baseRoute, mode: "motorcycle", duration: 6300, baselineDuration: 3600 }}
+          index={1}
+          active={false}
+          onSelect={() => {}}
+          onDetails={() => {}}
+          units="metric"
+        />
+      </NextIntlClientProvider>,
+    );
+    expect(getComputedStyle(screen.getByRole("heading", { level: 6 })).color).toBe(
+      "var(--omx-traffic-heavy)",
+    );
+    expect(screen.getByText("(+45 min)")).toBeInTheDocument();
+  });
+  it("localizes the compact delay in German", () => {
+    renderCard({ ...baseRoute, duration: 6300, baselineDuration: 3600 }, "metric", "de");
+    expect(screen.getByTestId("traffic-delay")).toHaveTextContent(/^\(\+45 min\)$/);
+  });
+  it.each(["route", "peek"] as const)(
+    "opens and closes traffic info without selecting the %s route",
+    (selectionKind) => {
+      const onSelect = vi.fn();
+      const view = render(
+        <NextIntlClientProvider locale="en" messages={en}>
+          <RouteCard
+            route={baseRoute}
+            index={0}
+            active
+            selectionKind={selectionKind}
+            onSelect={onSelect}
+            onDetails={() => {}}
+            units="metric"
+          />
+        </NextIntlClientProvider>,
+      );
+      fireEvent.click(screen.getByRole("button", { name: "About traffic" }));
+      expect(screen.getByRole("dialog", { name: "About traffic" })).toBeInTheDocument();
+      expect(onSelect).not.toHaveBeenCalled();
+      fireEvent.click(screen.getByRole("button", { name: "Close" }));
+      expect(onSelect).not.toHaveBeenCalled();
+      expect(view.container.querySelector("button button, button input, label button")).toBeNull();
+    },
+  );
 });
 
 /**
@@ -924,3 +999,201 @@ describe("RouteCard impact integration", () => {
     expect(screen.getByText("Fastest route")).toBeDefined();
   });
 });
+
+describe("RouteCard current congestion coverage", () => {
+  const now = Date.parse("2026-10-07T12:00:00Z");
+  const freshCoverage = {
+    complete: true,
+    evaluatedAt: "2026-10-07T11:59:59Z",
+    validUntil: "2026-10-07T12:00:30Z",
+  };
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(now);
+  });
+  afterEach(() => vi.useRealTimers());
+
+  it.each([3600, 3500, 3840, 3899])(
+    "uses green without a hint for a fresh %s-second comparison",
+    (duration) => {
+      renderCard({
+        ...baseRoute,
+        duration,
+        baselineDuration: 3600,
+        trafficCoverage: freshCoverage,
+      });
+      expect(getComputedStyle(screen.getByRole("heading", { level: 6 })).color).toBe(
+        "var(--omx-brand)",
+      );
+      expect(screen.queryByTestId("route-traffic-status")).toBeNull();
+      expect(screen.queryByTestId("traffic-delay")).toBeNull();
+      const describedBy = screen.getByRole("radio").getAttribute("aria-describedby");
+      expect(describedBy).toBeNull();
+    },
+  );
+
+  it.each([
+    undefined,
+    { ...freshCoverage, complete: false },
+    { ...freshCoverage, evaluatedAt: "2026-10-07T12:00:01Z" },
+    { ...freshCoverage, validUntil: "2026-10-07T12:00:00Z" },
+    { ...freshCoverage, validUntil: "invalid" },
+    { ...freshCoverage, evaluatedAt: "invalid" },
+    { ...freshCoverage, validUntil: "2026-10-07T12:05:00Z" },
+  ])("does not turn a zero delay green with insufficient evidence (%j)", (trafficCoverage) => {
+    renderCard({ ...baseRoute, duration: 3600, baselineDuration: 3600, trafficCoverage });
+    expect(getComputedStyle(screen.getByRole("heading", { level: 6 })).color).toBe(
+      "rgba(0, 0, 0, 0.87)",
+    );
+    expect(screen.getByText("Traffic data unavailable")).toBeInTheDocument();
+  });
+
+  it("expires green and updates both the duration and its accessible note", () => {
+    renderCard({
+      ...baseRoute,
+      duration: 3600,
+      baselineDuration: 3600,
+      trafficCoverage: freshCoverage,
+    });
+    act(() => vi.advanceTimersByTime(30000));
+    expect(getComputedStyle(screen.getByRole("heading", { level: 6 })).color).toBe(
+      "rgba(0, 0, 0, 0.87)",
+    );
+    expect(screen.getByText("Traffic data unavailable")).toBeInTheDocument();
+    const id = screen.getByRole("radio").getAttribute("aria-describedby");
+    expect(id && document.getElementById(id)).toHaveTextContent("Traffic data unavailable");
+  });
+
+  it("rearms freshness expiration when the wall clock moves backwards", () => {
+    renderCard({
+      ...baseRoute,
+      duration: 3600,
+      baselineDuration: 3600,
+      trafficCoverage: freshCoverage,
+    });
+    vi.setSystemTime(now - 10000);
+    act(() => vi.advanceTimersByTime(30000));
+    expect(screen.queryByText("Traffic data unavailable")).toBeNull();
+    act(() => vi.advanceTimersByTime(10000));
+    expect(screen.getByText("Traffic data unavailable")).toBeInTheDocument();
+  });
+
+  it("still requires a usable comparison even with complete fresh coverage", () => {
+    renderCard({ ...baseRoute, trafficCoverage: freshCoverage });
+    expect(getComputedStyle(screen.getByRole("heading", { level: 6 })).color).toBe(
+      "rgba(0, 0, 0, 0.87)",
+    );
+    expect(screen.getByText("Traffic data unavailable")).toBeInTheDocument();
+  });
+
+  it("keeps significant delays colored even with complete coverage", () => {
+    renderCard({
+      ...baseRoute,
+      duration: 6300,
+      baselineDuration: 3600,
+      trafficCoverage: freshCoverage,
+    });
+    expect(getComputedStyle(screen.getByRole("heading", { level: 6 })).color).toBe(
+      "var(--omx-traffic-heavy)",
+    );
+    expect(screen.getByTestId("traffic-delay")).toHaveTextContent(/^\(\+45 min\)$/);
+    expect(screen.queryByText("Traffic data unavailable")).toBeNull();
+  });
+});
+
+describe("RouteCard expired congestion estimates", () => {
+  const now = Date.parse("2026-10-07T12:00:00Z");
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(now);
+  });
+  afterEach(() => vi.useRealTimers());
+  it("drops the delay color and caption when supplied congestion evidence expires", () => {
+    renderCard({
+      ...baseRoute,
+      duration: 6300,
+      baselineDuration: 3600,
+      trafficCoverage: {
+        complete: true,
+        evaluatedAt: "2026-10-07T11:59:59Z",
+        validUntil: "2026-10-07T12:00:30Z",
+      },
+    });
+    expect(screen.getByTestId("traffic-delay")).toHaveTextContent(/^\(\+45 min\)$/);
+    act(() => vi.advanceTimersByTime(30000));
+    expect(screen.queryByTestId("traffic-delay")).toBeNull();
+    expect(screen.getByText("Traffic data unavailable")).toBeInTheDocument();
+    expect(getComputedStyle(screen.getByRole("heading", { level: 6 })).color).toBe(
+      "rgba(0, 0, 0, 0.87)",
+    );
+  });
+});
+
+describe("RouteCard compact traffic header", () => {
+  it("shows the parenthesized delay directly in the duration heading", () => {
+    renderCard({ ...baseRoute, duration: 6300, baselineDuration: 3600 });
+    expect(screen.getByRole("heading", { level: 6 })).toHaveTextContent("1 h 45 min (+45 min)");
+    expect(
+      screen.getByRole("heading", { level: 6 }).contains(screen.getByTestId("traffic-delay")),
+    ).toBe(true);
+    expect(screen.getAllByTestId("traffic-delay")).toHaveLength(1);
+  });
+
+  it.each(["route", "peek"] as const)(
+    "keeps the info button outside the %s selection control",
+    (selectionKind) => {
+      const onSelect = vi.fn();
+      render(
+        <NextIntlClientProvider locale="en" messages={en}>
+          <RouteCard
+            route={baseRoute}
+            index={0}
+            active
+            selectionKind={selectionKind}
+            onSelect={onSelect}
+            onDetails={() => {}}
+            units="metric"
+          />
+        </NextIntlClientProvider>,
+      );
+      const button = screen.getByRole("button", { name: "About traffic" });
+      expect(button.closest("label")).toBeNull();
+      expect(button.parentElement?.closest("button")).toBeNull();
+      fireEvent.click(button);
+      expect(screen.getByRole("dialog", { name: "About traffic" })).toBeInTheDocument();
+      expect(onSelect).not.toHaveBeenCalled();
+    },
+  );
+});
+
+it.each(["route", "peek"] as const)(
+  "keeps unknown traffic available to assistive technology without a visible row (%s)",
+  (selectionKind) => {
+    render(
+      <NextIntlClientProvider locale="en" messages={en}>
+        <RouteCard
+          route={baseRoute}
+          index={0}
+          active
+          selectionKind={selectionKind}
+          onSelect={() => {}}
+          onDetails={() => {}}
+          units="metric"
+        />
+      </NextIntlClientProvider>,
+    );
+    const selection =
+      selectionKind === "route"
+        ? screen.getByRole("radio")
+        : screen.getByRole("button", { name: /via A46/ });
+    const id = selection.getAttribute("aria-describedby");
+    const description = id ? document.getElementById(id) : null;
+    expect(description).toHaveTextContent("Traffic data unavailable");
+    expect(description && getComputedStyle(description).position).toBe("absolute");
+    expect(description && getComputedStyle(description).width).toBe("1px");
+    fireEvent.click(screen.getByRole("button", { name: "About traffic" }));
+    expect(screen.getByRole("dialog", { name: "About traffic" })).toHaveTextContent(
+      "Traffic data unavailable",
+    );
+  },
+);

@@ -107,9 +107,11 @@ export function normalizeServiceIds(ids: Iterable<string>): string[] {
   return out;
 }
 
+/** The ids a list names, or null when it names none: `${VAR:-}` passes an unset list as "". */
 export function parseServiceIdList(raw: string | null | undefined): string[] | null {
   if (raw === null || raw === undefined) return null;
-  return normalizeServiceIds([raw]);
+  const ids = normalizeServiceIds([raw]);
+  return ids.length > 0 ? ids : null;
 }
 
 export function formatServiceIdList(ids: Iterable<string>): string {
@@ -136,9 +138,8 @@ export function formatServiceIdList(ids: Iterable<string>): string {
  * are enabled. `transitous` is a public API only — there is no in-cluster
  * service to point at — so its URL stays as the manifest default.
  *
- * When a service is co-deployed we override its manifest default (public API)
- * with the Docker-internal address. The operator's explicit host-env value
- * always wins because it is applied last by the renderer's env-merge logic.
+ * When a service is co-deployed its Docker-internal address replaces the
+ * manifest default (public API), unless the operator's env names one.
  */
 const SERVICE_ENV_URL_MAP: Array<{ serviceId: string; envVar: string; internalPort: number }> = [
   { serviceId: "overpass", envVar: "OVERPASS_URL", internalPort: 80 },
@@ -147,52 +148,42 @@ const SERVICE_ENV_URL_MAP: Array<{ serviceId: string; envVar: string; internalPo
 ];
 
 /**
- * Compose-time app-api env synthesis shared by the CLI renderer and the admin
- * compose preview so both surfaces emit identical service-selection + env
- * passthrough values.
+ * The services a generation enabled, baked into app-api: the API has no view
+ * of the deployment files, and `OPENMAPX_ENABLED_SERVICES` stays the
+ * operator's override.
+ */
+export const APPLIED_SERVICES_ENV = "OPENMAPX_APPLIED_SERVICES";
+
+/**
+ * app-api's generated environment. It never holds a host env value: env
+ * settings are Compose references, resolved from `infra/docker/.env` when the
+ * stack starts, so the same render serves the CLI and the ops-agent.
  */
 export function buildAppApiServiceEnv(
   enabledServices: LoadedService[],
   existingEnv: Record<string, unknown> = {},
-  hostEnv: Record<string, string | undefined> = process.env,
-  trustedPassthroughKeys: Iterable<string> = [],
+  passthroughKeys: Iterable<string> = [],
 ): Record<string, unknown> {
   const next: Record<string, unknown> = {
     ...existingEnv,
-    [SERVICE_SELECTION_ENV]: formatServiceIdList(
+    [APPLIED_SERVICES_ENV]: formatServiceIdList(
       enabledServices.map((service) => service.manifest.id),
     ),
   };
 
   // For services that the API reaches via process.env rather than the live
-  // service registry, inject the Docker-internal URL when the service is
-  // co-deployed. This ensures self-hosted instances are used instead of the
-  // public-API fallback baked into the manifest defaults.
+  // service registry, default to the Docker-internal URL when the service is
+  // co-deployed, so self-hosted instances are used instead of the public API.
   const enabledIds = new Set(enabledServices.map((s) => s.manifest.id));
   for (const { serviceId, envVar, internalPort } of SERVICE_ENV_URL_MAP) {
-    if (enabledIds.has(serviceId) && !hostEnv[envVar]) {
-      next[envVar] = `http://${serviceId}:${internalPort}`;
+    if (enabledIds.has(serviceId)) {
+      next[envVar] = `\${${envVar}:-http://${serviceId}:${internalPort}}`;
     }
   }
 
-  // Forward dynamic operator override families into the API container so
-  // env-based integration/service config still works without an `env_file`
-  // blanket pass-through in compose. Emit a Docker Compose substitution
-  // placeholder rather than the actual value so secrets stay in the
-  // operator's `infra/docker/.env` instead of being baked into the
-  // committable `docker-compose.generated.yml` (anything in the rendered
-  // YAML can leak via backups / debug logs / accidental commits).
-  for (const key of Object.keys(hostEnv)) {
-    if (hostEnv[key] === undefined) continue;
-    if (APP_API_ENV_PASSTHROUGH_PREFIXES.some((prefix) => key.startsWith(prefix))) {
-      next[key] = `\${${key}:-}`;
-    }
-  }
-  // An ops-agent does not inherit the host's Compose `.env`, but it can derive
-  // the exact schema-backed variable names from its trusted registry. Emit
-  // placeholders for only those names; Compose resolves their values at stack
-  // application time without the snapshot carrying an environment map.
-  for (const key of trustedPassthroughKeys) {
+  // The schema-backed integration and service settings, as references: the
+  // values stay in the operator's `.env` and never reach the rendered YAML.
+  for (const key of passthroughKeys) {
     if (!APP_API_ENV_PASSTHROUGH_PREFIXES.some((prefix) => key.startsWith(prefix))) continue;
     next[key] = `\${${key}:-}`;
   }

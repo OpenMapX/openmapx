@@ -6,6 +6,7 @@ import type {
   RoadFlowQuery,
   RoadFlowSegment,
 } from "@openmapx/core";
+import type { OperationalEvidence } from "./operational-evidence.js";
 
 export type {
   LocalizedText,
@@ -38,7 +39,7 @@ export interface RoadConditionsProvider {
   readonly attribution?: RoadConditionAttribution[];
   /** When set, the orchestrator skips this provider for non-overlapping bboxes. */
   readonly coverage?: { bbox: BBox } | { all: true };
-  getOperationalEvidence?(): Promise<RoadConditionsOperationalEvidence>;
+  getOperationalEvidence?(): Promise<OperationalEvidence>;
   getEvents(bbox: BBox, opts?: RoadConditionsQuery): Promise<RoadConditionEvent[]>;
   /** Every situation in the box with each effect's routing evidence; reject anything
    * incomplete. Display-only lists cannot establish routing coverage. */
@@ -46,37 +47,4 @@ export interface RoadConditionsProvider {
 
   /** Optional live speed/congestion segments for the traffic-flow overlay. */
   getFlow?(bbox: BBox, opts?: RoadFlowQuery): Promise<RoadFlowSegment[]>;
-}
-
-/** Read-only OC operational snapshot; fetching this must never poll original feeds. */
-export interface RoadConditionsOperationalEvidence {
-  schemaVersion: 1;
-  collectedAt: string;
-  instanceId: string;
-  truncated?: boolean;
-  feeds: Array<{
-    sourceId: string;
-    parentSourceId?: string;
-    lastAttemptAt: string | null;
-    lastOutcome: string | null;
-    lastSuccessfulCheckAt: string | null;
-    lastPublicationAt: string | null;
-    publicationRevision: string | null;
-    upstreamAsOf: string | null;
-    freshUntil: string | null;
-    expectedIntervalSeconds: number | null;
-    activeEventCount: number | null;
-    changedCount: number | null;
-    rejectedCount: number | null;
-    consecutiveFailures: number | null;
-    error: string | null;
-    bindingCounts: Record<string, number> | null;
-    graph: {
-      generation: string | null;
-      status: "ready" | "partial" | "missing" | "unknown";
-      regions: string[];
-    };
-    status: string;
-    action: string | null;
-  }>;
 }

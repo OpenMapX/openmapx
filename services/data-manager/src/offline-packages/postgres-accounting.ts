@@ -24,6 +24,10 @@ function envPositiveInt(name: string, fallback: number): number {
   return Number.isFinite(value) && value > 0 ? Math.floor(value) : fallback;
 }
 
+// The data-manager's client is shared with drizzle, which replaces the
+// client's date parsers and its date and JSON serializers. Timestamps
+// therefore arrive as Postgres text and are bound as ISO strings, and JSON is
+// bound as text.
 interface JobRow {
   id: string;
   request_key: string;
@@ -33,16 +37,16 @@ interface JobRow {
   manifest: OfflineMapPackageManifest | null;
   error_code: OfflinePackageJobRecord["errorCode"] | null;
   error_message: string | null;
-  created_at: Date;
-  updated_at: Date;
+  created_at: string;
+  updated_at: string;
   lease_owner: string | null;
-  lease_expires_at: Date | null;
+  lease_expires_at: string | null;
 }
 
 interface ReferenceRow {
   package_id: string;
   byte_length: string | number;
-  retained_at: Date;
+  retained_at: string;
   protected: boolean;
 }
 
@@ -65,8 +69,8 @@ function recordFromRow(row: JobRow): OfflinePackageJobRecord {
     ...(row.manifest ? { manifest: row.manifest } : {}),
     ...(row.error_code ? { errorCode: row.error_code } : {}),
     ...(row.error_message ? { errorMessage: row.error_message } : {}),
-    createdAtMs: row.created_at.getTime(),
-    updatedAtMs: row.updated_at.getTime(),
+    createdAtMs: Date.parse(row.created_at),
+    updatedAtMs: Date.parse(row.updated_at),
   };
 }
 
@@ -294,9 +298,9 @@ export class PostgresOfflinePackageAccountingStore implements OfflinePackageAcco
             error_message, created_at, updated_at
           ) VALUES (
             ${candidate.jobId}, ${candidate.request.requestKey}, ${packageId ?? `invalid-${candidate.jobId}`},
-            ${tx.json(candidate.request as never)}, ${status}, ${manifest ? tx.json(manifest as never) : null},
+            ${JSON.stringify(candidate.request)}, ${status}, ${manifest ? JSON.stringify(manifest) : null},
             ${candidate.errorCode ?? null}, ${candidate.errorMessage ?? null},
-            ${new Date(candidate.createdAtMs)}, ${new Date(candidate.updatedAtMs)}
+            ${new Date(candidate.createdAtMs).toISOString()}, ${new Date(candidate.updatedAtMs).toISOString()}
           )
         `;
         [shared] = await tx<
@@ -310,7 +314,7 @@ export class PostgresOfflinePackageAccountingStore implements OfflinePackageAcco
             principal,
             manifest.packageId,
             manifest.archive.byteLength,
-            new Date(candidate.createdAtMs),
+            new Date(candidate.createdAtMs).toISOString(),
           )
         : [];
       // Ownership may outlive a quota-evicted artifact reference. Always retain
@@ -321,7 +325,7 @@ export class PostgresOfflinePackageAccountingStore implements OfflinePackageAcco
           VALUES (${shared.id}, ${principal}, clock_timestamp())`;
       }
       if (manifest) {
-        await tx`UPDATE data_manager.offline_package_jobs SET manifest = ${tx.json(manifest as never)} WHERE id = ${shared.id}`;
+        await tx`UPDATE data_manager.offline_package_jobs SET manifest = ${JSON.stringify(manifest)} WHERE id = ${shared.id}`;
         shared.manifest = manifest;
       }
       return {
@@ -351,7 +355,7 @@ export class PostgresOfflinePackageAccountingStore implements OfflinePackageAcco
     principal: string,
     packageId: string,
     byteLength: number,
-    retainedAt: Date,
+    retainedAt: string,
   ): Promise<string[]> {
     if (!Number.isSafeInteger(byteLength) || byteLength < 0 || byteLength > this.maxLogicalBytes) {
       throw new OfflinePackagePrincipalQuotaError(
@@ -540,7 +544,7 @@ export class PostgresOfflinePackageAccountingStore implements OfflinePackageAcco
       }
       await tx`
         UPDATE data_manager.offline_package_jobs
-        SET status = 'ready-to-download', manifest = ${tx.json(manifest as never)},
+        SET status = 'ready-to-download', manifest = ${JSON.stringify(manifest)},
             package_id = ${manifest.packageId}, updated_at = clock_timestamp(),
             lease_owner = NULL, lease_expires_at = NULL
         WHERE id = ${jobId} AND lease_owner = ${workerId}
@@ -560,14 +564,14 @@ export class PostgresOfflinePackageAccountingStore implements OfflinePackageAcco
       await this.sql`
         UPDATE data_manager.offline_package_jobs
         SET status = 'failed', error_code = ${errorCode ?? null}, error_message = ${errorMessage},
-            updated_at = ${new Date(updatedAtMs)}, lease_owner = NULL, lease_expires_at = NULL
+            updated_at = ${new Date(updatedAtMs).toISOString()}, lease_owner = NULL, lease_expires_at = NULL
         WHERE id = ${jobId} AND status = 'preparing' AND lease_owner = ${workerId}
       `;
     } else {
       await this.sql`
         UPDATE data_manager.offline_package_jobs
         SET status = 'failed', error_code = ${errorCode ?? null}, error_message = ${errorMessage},
-            updated_at = ${new Date(updatedAtMs)}, lease_owner = NULL, lease_expires_at = NULL
+            updated_at = ${new Date(updatedAtMs).toISOString()}, lease_owner = NULL, lease_expires_at = NULL
         WHERE id = ${jobId} AND status = 'preparing'
       `;
     }
@@ -578,7 +582,7 @@ export class PostgresOfflinePackageAccountingStore implements OfflinePackageAcco
       UPDATE data_manager.offline_package_jobs
       SET status = 'expired', error_code = 'expired',
           error_message = 'offline package preparation expired',
-          updated_at = ${new Date(updatedAtMs)}, lease_owner = NULL, lease_expires_at = NULL
+          updated_at = ${new Date(updatedAtMs).toISOString()}, lease_owner = NULL, lease_expires_at = NULL
       WHERE id = ${jobId} AND status = 'preparing'
     `;
   }

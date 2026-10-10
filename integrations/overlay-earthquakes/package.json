@@ -6,6 +6,14 @@
   "type": "module",
   "dependencies": {
     "@openmapx/core": "workspace:^",
-    "@openmapx/integration-framework": "workspace:^"
+    "@openmapx/integration-framework": "workspace:^",
+    "@openmapx/mobility-core": "workspace:^"
+  },
+  "peerDependencies": {
+    "react": ">=19"
+  },
+  "devDependencies": {
+    "@types/react": "^19.3.0",
+    "react": "19.3.0"
   }
 }

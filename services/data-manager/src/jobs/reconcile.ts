@@ -41,8 +41,8 @@ export interface ReconcileOrphanedJobsOptions {
  * job indefinitely and `lastSyncStatus` reads null.
  *
  * MUST run only at startup, before any new job is created. At that point nothing
- * is genuinely running, so a blanket sweep across every job kind
- * (`transitous-sync` and `poi-ingest:*`, which share the table) is safe.
+ * is genuinely running, so a blanket sweep across every job kind sharing the
+ * table is safe.
  */
 export async function reconcileOrphanedJobs(
   opts: ReconcileOrphanedJobsOptions = {},

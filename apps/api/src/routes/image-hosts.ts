@@ -1,6 +1,9 @@
+import { matchesMediaHost } from "@openmapx/integration-framework";
+
 /**
- * Allowed upstream hostname patterns for the image proxy.
- * Prevents abuse by only allowing known photo-source domains.
+ * Static upstream hostname patterns for the image proxy and place photos.
+ * Prevents abuse by only allowing known photo-source domains. Camera stills
+ * are admitted separately, through the hosts their live sources declare.
  */
 const ALLOWED_HOSTS = [
   // Wikimedia Commons
@@ -42,42 +45,16 @@ const ALLOWED_HOSTS = [
   // Mangrove review photos. Passive thumbnail loads should not expose the
   // viewer's IP address to Mangrove's file host.
   "files.mangrove.reviews",
-  // Windy webcams — `images-webcams.windy.com` etc. serve still-image
-  // previews for the Windy webcam integration.
-  "windy.com",
-  // Webcam-integration provider stills (`integrations/webcam/providers/*`).
-  // Each entry covers the operator domain + any subdomains via the existing
-  // endsWith('.<host>') match. AWS S3 buckets (e.g. TfL JamCam) are
-  // intentionally excluded — opening *.amazonaws.com is too permissive.
-  "nps.gov", // NPS — `www.nps.gov/...`
-  "dot.ca.gov", // Caltrans — `cwwp2.dot.ca.gov`
-  "tripcheck.com", // Oregon DOT — `tripcheck.com/RoadCams/...`
-  "511ny.org", // New York 511
-  "511ga.org", // Georgia 511
-  "fl511.com", // Florida 511
-  "az511.com", // Arizona 511
-  "511.idaho.gov", // Idaho 511 (exact host)
-  "ibi511.com", // shared ibi511 host (Utah uses prod-ut.ibi511.com)
-  "511la.org", // Louisiana 511
-  "511pa.com", // Pennsylvania 511 (covers www.511pa.com)
-  "weathercam.digitraffic.fi", // Finland Digitraffic weather cameras
-  "api.trafikinfo.trafikverket.se", // Sweden Trafikverket camera stills
-  "kamera.atlas.vegvesen.no", // Norway NPRA camera stills
-  "vegagerdin.is", // Iceland Road Administration camera stills
-  "etraffic.dgt.es", // Spain DGT camera stills
-  "511on.ca", // Ontario 511 camera stills
-  "tdcctv.data.one.gov.hk", // Hong Kong Transport Department camera stills
-  "webcams.transport.nsw.gov.au", // Live Traffic NSW camera stills
-  "freeway.gov.tw", // Taiwan freeway camera stills
 ];
 
 /**
- * True only when `hostname` exactly matches an allowlisted host or is a
+ * True only when `hostname` exactly matches a static allowlisted host or is a
  * subdomain of one (the leading `.` in `endsWith` enforces the label boundary,
  * so `upload.wikimedia.org.attacker.com` and `xupload.wikimedia.org` are
- * rejected). Exported for direct SSRF-allowlist testing.
+ * rejected). Place photos use this list alone: a camera operator's host is
+ * no source of place photos.
  */
-export function isAllowedHost(hostname: string): boolean {
+export function isStaticImageHost(hostname: string): boolean {
   // Commons image thumbnails use this one host. Do not admit its subdomains.
   if (hostname === "thumb.wikimedia.org") return true;
   // OpenStreetMap serves uploaded user avatars from a dedicated S3 bucket. The
@@ -93,4 +70,80 @@ export function isAllowedHost(hostname: string): boolean {
   )
     return true;
   return ALLOWED_HOSTS.some((h) => hostname === h || hostname.endsWith(`.${h}`));
+}
+
+export interface CameraMediaSource {
+  sourceId: string;
+  mediaHosts: readonly string[];
+}
+
+/**
+ * The live data sources that declare camera image hosts. Nothing else ever
+ * enters the camera allowlist: server.ts replaces this from the integration
+ * registry whenever the source set changes, and until then it is empty.
+ */
+let cameraMediaSources: readonly CameraMediaSource[] = [];
+
+const NO_GATED_SOURCES: ReadonlySet<string> = new Set();
+
+/**
+ * Source ids the operator's data-use policy disallows. Read on every check,
+ * so a policy change takes effect with the policy's own refresh. Injected by
+ * server.ts to keep this module free of the policy service and its database.
+ */
+let gatedSourceIds: () => ReadonlySet<string> = () => NO_GATED_SOURCES;
+
+export function setCameraMediaSources(sources: readonly CameraMediaSource[]): void {
+  cameraMediaSources = sources.map((s) => ({
+    sourceId: s.sourceId,
+    mediaHosts: [...s.mediaHosts],
+  }));
+}
+
+export function setGatedImageSourceResolver(resolve: () => ReadonlySet<string>): void {
+  gatedSourceIds = resolve;
+}
+
+interface MediaHostDeclarer {
+  enabled: boolean;
+  manifest: {
+    dataSources?: ReadonlyArray<{ sourceId: string; mediaHosts?: readonly string[] }>;
+  };
+}
+
+/** Every enabled integration's live data sources that declare media hosts. */
+export function cameraMediaSourcesOf(
+  integrations: Iterable<MediaHostDeclarer>,
+): CameraMediaSource[] {
+  const sources: CameraMediaSource[] = [];
+  for (const integration of integrations) {
+    if (!integration.enabled) continue;
+    for (const { sourceId, mediaHosts } of integration.manifest.dataSources ?? []) {
+      if (mediaHosts && mediaHosts.length > 0) sources.push({ sourceId, mediaHosts });
+    }
+  }
+  return sources;
+}
+
+function matchesAdmittedCameraSource(url: URL): boolean {
+  const gated = gatedSourceIds();
+  return cameraMediaSources.some(
+    (source) => !gated.has(source.sourceId) && matchesMediaHost(url, source.mediaHosts),
+  );
+}
+
+/**
+ * True when `url` is admitted only through a camera source's declared media
+ * hosts. Such a still changes every few minutes, so it is sent uncached.
+ */
+export function isCameraHost(url: URL): boolean {
+  return !isStaticImageHost(url.hostname) && matchesAdmittedCameraSource(url);
+}
+
+/**
+ * The image proxy's allowlist: the static hosts and the hosts declared by
+ * camera sources the data-use policy allows.
+ */
+export function isAllowedHost(url: URL): boolean {
+  return isStaticImageHost(url.hostname) || matchesAdmittedCameraSource(url);
 }

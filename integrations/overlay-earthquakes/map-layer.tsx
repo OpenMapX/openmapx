@@ -3,15 +3,15 @@
 import { escapeHtml, relativeTime, sanitizeUrl, useOverlayExclusion } from "@openmapx/core";
 import type { MapLayerMouseEvent } from "maplibre-gl";
 import * as maplibregl from "maplibre-gl";
-import { useTranslations } from "next-intl";
-import { useCallback, useEffect, useRef } from "react";
+import { useLocale, useTranslations } from "next-intl";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { syncHeatmapLayer } from "@/integration-api/map/heatmapLayer";
 import { INTERACTIVE_LAYER_IDS } from "@/integration-api/map/interactiveLayers";
 import { addLayerInSlot, unregisterLayerSlot } from "@/integration-api/map/layerStack";
 import { useMap } from "@/integration-api/map/MapContext";
 import { getMapClickOwner } from "@/integration-api/map/mapClickOwnership";
 import { useGeoJsonSourceDataBridge } from "@/integration-api/map/useGeoJsonSourceDataBridge";
-import { useIntegrationAttribution } from "@/integration-api/overlay/useIntegrationAttribution";
+import { useSourceAttributions } from "@/integration-api/overlay/useIntegrationAttribution";
 import { useEnv } from "@/integration-api/runtime/EnvProvider";
 import { useEarthquakeStore } from "./store";
 
@@ -135,17 +135,111 @@ function depthLabel(depth: number): string {
   return "Deep";
 }
 
+export function buildEarthquakePopupHtml(
+  p: Record<string, string | number>,
+  t: (key: string) => string,
+): string {
+  const mag = Number(p.mag ?? 0);
+  const depth = Number(p.depth ?? 0);
+  const severity = magSeverityLabel(mag);
+  const color = magColor(mag);
+  const age = Number(p.ageMs ?? 0);
+  const time = Number(p.time ?? 0);
+  const place = escapeHtml(String(p.place || t("unknownLocation")));
+  const felt = p.felt ? escapeHtml(String(p.felt)) : null;
+  const alert = p.alert && p.alert !== "null" ? escapeHtml(String(p.alert)) : null;
+  const tsunami = Number(p.tsunami ?? 0);
+  const url = sanitizeUrl(String(p.url || ""));
+  const dateStr = time
+    ? new Date(time).toLocaleString(undefined, {
+        month: "short",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+        timeZoneName: "short",
+      })
+    : "";
+
+  const alertBadge = alert
+    ? `<span style="display:inline-block;background:${alert === "red" ? "#dc2626" : alert === "orange" ? "#f97316" : alert === "yellow" ? "#eab308" : "#22c55e"};color:${alert === "yellow" || alert === "green" ? "#000" : "#fff"};font-size:11px;padding:1px 6px;border-radius:3px;font-weight:600;text-transform:capitalize">${alert}</span>`
+    : "";
+
+  const details = [
+    `<div style="font-size:12px;color:#666">${t("depth")}: ${depth.toFixed(1)} km (${depthLabel(depth)})</div>`,
+    `<div style="font-size:12px;color:#666">${t("time")}: ${relativeTime(age)} (${dateStr})</div>`,
+    felt
+      ? `<div style="font-size:12px;color:#666">${t("felt")}: ${felt} ${t("reports")}</div>`
+      : "",
+    alertBadge
+      ? `<div style="font-size:12px;color:#666;margin-top:2px">${t("alert")}: ${alertBadge}</div>`
+      : "",
+    tsunami
+      ? `<div style="font-size:12px;color:#b91c1c;font-weight:600">${t("tsunamiFlag")}</div>`
+      : "",
+  ]
+    .filter(Boolean)
+    .join("");
+
+  return `<div style="font-family:'Plus Jakarta Sans',Arial,sans-serif;min-width:220px;padding-right:18px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+          <span style="display:inline-flex;align-items:center;justify-content:center;background:${color};color:#fff;font-weight:700;font-size:18px;border-radius:6px;min-width:48px;height:36px;padding:0 8px">M ${mag.toFixed(1)}</span>
+          <div>
+            <div style="font-size:12px;color:#666">${severity}</div>
+          </div>
+        </div>
+        <div style="font-size:13px;font-weight:600;margin-bottom:6px">${place}</div>
+        ${details}
+        ${url ? `<div style="margin-top:6px;font-size:12px"><a href="${url}" target="_blank" rel="noreferrer" style="color:#1a73e8;text-decoration:none">${t("viewEventPage")} →</a></div>` : ""}
+      </div>`;
+}
+
+const NO_SOURCES: readonly string[] = [];
+
+function startPulseAnimation(map: maplibregl.Map, pulseAnimRef: { current: number | null }) {
+  if (pulseAnimRef.current !== null) {
+    cancelAnimationFrame(pulseAnimRef.current);
+    pulseAnimRef.current = null;
+  }
+  const duration = 2000;
+  const start = performance.now();
+
+  function frame(now: number) {
+    if (!map.getLayer(PULSE_LAYER_ID)) return;
+    const elapsed = ((now - start) % duration) / duration;
+    const scale = 1 + elapsed * 0.8;
+    const opacity = 0.6 * (1 - elapsed);
+
+    try {
+      map.setPaintProperty(PULSE_LAYER_ID, "circle-radius", [
+        "*",
+        MAG_RADIUS_EXPR,
+        scale,
+      ] as maplibregl.ExpressionSpecification);
+      map.setPaintProperty(PULSE_LAYER_ID, "circle-stroke-opacity", opacity);
+    } catch {
+      return;
+    }
+
+    pulseAnimRef.current = requestAnimationFrame(frame);
+  }
+
+  pulseAnimRef.current = requestAnimationFrame(frame);
+}
+
 export function EarthquakeLayer() {
   const { mapRef, mapReady, styleVersion } = useMap();
   const env = useEnv();
+  const locale = useLocale();
   const layerVisible = useEarthquakeStore((s) => s.layerVisible);
-  useIntegrationAttribution("overlay-earthquakes", layerVisible);
+  const [sourceIds, setSourceIds] = useState<readonly string[]>(NO_SOURCES);
+  useSourceAttributions("earthquakes", layerVisible ? sourceIds : NO_SOURCES);
   const timeRange = useEarthquakeStore((s) => s.timeRange);
   const minMagnitude = useEarthquakeStore((s) => s.minMagnitude);
   const colorMode = useEarthquakeStore((s) => s.colorMode);
   const showHeatmap = useEarthquakeStore((s) => s.showHeatmap);
   const setLoading = useEarthquakeStore((s) => s.setLoading);
   const setLastUpdated = useEarthquakeStore((s) => s.setLastUpdated);
+  const setUnavailable = useEarthquakeStore((s) => s.setUnavailable);
   useOverlayExclusion("earthquakes", layerVisible);
   const t = useTranslations("earthquakes");
   const fetchedRef = useRef(false);
@@ -163,32 +257,44 @@ export function EarthquakeLayer() {
     if (!map) return;
 
     const { apiUrl } = env;
-    const url = `${apiUrl}/api/integrations/overlay-earthquakes/earthquakes?timeRange=${timeRange}&minMagnitude=${minMagnitude}`;
+    const url = `${apiUrl}/api/integrations/overlay-earthquakes/earthquakes?timeRange=${timeRange}&minMagnitude=${minMagnitude}&lang=${encodeURIComponent(locale)}`;
 
     const request = beginRequest();
     setLoading(true);
     try {
       const res = await fetch(url, { signal: request.signal });
-      if (!request.isCurrent() || !res.ok) return;
+      if (!request.isCurrent()) return;
+      if (!res.ok) {
+        setUnavailable(true);
+        return;
+      }
       const data = await res.json();
       if (!request.isCurrent()) return;
 
       publishGeoJson([{ sourceId: SOURCE_ID, data }]);
+      const ids: string[] = Array.isArray(data.sources) ? data.sources : [];
+      setSourceIds((prev) =>
+        prev.length === ids.length && prev.every((id, i) => id === ids[i]) ? prev : ids,
+      );
+      setUnavailable(false);
       setLastUpdated(Date.now());
     } catch {
-      // Silent fetch failure
+      // A network failure leaves the layer as it was; an aborted request says nothing.
+      if (request.isCurrent()) setUnavailable(true);
     } finally {
       if (request.isLatest()) setLoading(false);
     }
   }, [
     beginRequest,
     env,
+    locale,
     mapRef,
     timeRange,
     minMagnitude,
     publishGeoJson,
     setLoading,
     setLastUpdated,
+    setUnavailable,
   ]);
 
   // Layer management
@@ -269,12 +375,13 @@ export function EarthquakeLayer() {
             "overlay-points",
             3,
           );
-          startPulseAnimation(map);
+          startPulseAnimation(map, pulseAnimRef);
         }
 
         if (!fetchedRef.current) {
           fetchedRef.current = true;
-          fetchEarthquakes();
+          // The fetch handles its own failures and loading state.
+          void fetchEarthquakes();
         }
       } catch {
         // Style not ready — styledata fires during loading but doesn't
@@ -310,37 +417,6 @@ export function EarthquakeLayer() {
     }
   }, [mapRef, mapReady, styleVersion, layerVisible, colorMode]);
 
-  function startPulseAnimation(map: maplibregl.Map) {
-    if (pulseAnimRef.current !== null) {
-      cancelAnimationFrame(pulseAnimRef.current);
-      pulseAnimRef.current = null;
-    }
-    const duration = 2000;
-    const start = performance.now();
-
-    function frame(now: number) {
-      if (!map.getLayer(PULSE_LAYER_ID)) return;
-      const elapsed = ((now - start) % duration) / duration;
-      const scale = 1 + elapsed * 0.8;
-      const opacity = 0.6 * (1 - elapsed);
-
-      try {
-        map.setPaintProperty(PULSE_LAYER_ID, "circle-radius", [
-          "*",
-          MAG_RADIUS_EXPR,
-          scale,
-        ] as maplibregl.ExpressionSpecification);
-        map.setPaintProperty(PULSE_LAYER_ID, "circle-stroke-opacity", opacity);
-      } catch {
-        return;
-      }
-
-      pulseAnimRef.current = requestAnimationFrame(frame);
-    }
-
-    pulseAnimRef.current = requestAnimationFrame(frame);
-  }
-
   // Heatmap toggle
   useEffect(() => {
     void styleVersion;
@@ -369,7 +445,7 @@ export function EarthquakeLayer() {
     };
 
     const interval = setInterval(() => {
-      fetchEarthquakes();
+      void fetchEarthquakes();
     }, intervals[timeRange] ?? 300_000);
 
     return () => clearInterval(interval);
@@ -387,58 +463,7 @@ export function EarthquakeLayer() {
       if (!f) return;
       const p = f.properties as Record<string, string | number>;
       const coords = (f.geometry as { coordinates: number[] }).coordinates as [number, number];
-      const mag = Number(p.mag ?? 0);
-      const depth = Number(p.depth ?? 0);
-      const severity = magSeverityLabel(mag);
-      const color = magColor(mag);
-      const age = Number(p.ageMs ?? 0);
-      const time = Number(p.time ?? 0);
-      const place = escapeHtml(String(p.place || t("unknownLocation")));
-      const felt = p.felt ? escapeHtml(String(p.felt)) : null;
-      const alert = p.alert && p.alert !== "null" ? String(p.alert) : null;
-      const tsunami = Number(p.tsunami ?? 0);
-      const url = sanitizeUrl(String(p.url || ""));
-      const dateStr = time
-        ? new Date(time).toLocaleString(undefined, {
-            month: "short",
-            day: "numeric",
-            hour: "2-digit",
-            minute: "2-digit",
-            timeZoneName: "short",
-          })
-        : "";
-
-      const alertBadge = alert
-        ? `<span style="display:inline-block;background:${alert === "red" ? "#dc2626" : alert === "orange" ? "#f97316" : alert === "yellow" ? "#eab308" : "#22c55e"};color:${alert === "yellow" || alert === "green" ? "#000" : "#fff"};font-size:11px;padding:1px 6px;border-radius:3px;font-weight:600;text-transform:capitalize">${alert}</span>`
-        : "";
-
-      const details = [
-        `<div style="font-size:12px;color:#666">${t("depth")}: ${depth.toFixed(1)} km (${depthLabel(depth)})</div>`,
-        `<div style="font-size:12px;color:#666">${t("time")}: ${relativeTime(age)} (${dateStr})</div>`,
-        felt
-          ? `<div style="font-size:12px;color:#666">${t("felt")}: ${felt} ${t("reports")}</div>`
-          : "",
-        alertBadge
-          ? `<div style="font-size:12px;color:#666;margin-top:2px">${t("alert")}: ${alertBadge}</div>`
-          : "",
-        tsunami
-          ? `<div style="font-size:12px;color:#b91c1c;font-weight:600">${t("tsunamiWarning")}</div>`
-          : "",
-      ]
-        .filter(Boolean)
-        .join("");
-
-      const html = `<div style="font-family:'Plus Jakarta Sans',Arial,sans-serif;min-width:220px;padding-right:18px">
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
-          <span style="display:inline-flex;align-items:center;justify-content:center;background:${color};color:#fff;font-weight:700;font-size:18px;border-radius:6px;min-width:48px;height:36px;padding:0 8px">M ${mag.toFixed(1)}</span>
-          <div>
-            <div style="font-size:12px;color:#666">${severity}</div>
-          </div>
-        </div>
-        <div style="font-size:13px;font-weight:600;margin-bottom:6px">${place}</div>
-        ${details}
-        ${url ? `<div style="margin-top:6px;font-size:12px"><a href="${url}" target="_blank" rel="noreferrer" style="color:#1a73e8;text-decoration:none">${t("viewOnUSGS")} →</a></div>` : ""}
-      </div>`;
+      const html = buildEarthquakePopupHtml(p, t);
 
       popupRef.current?.remove();
       popupRef.current = new maplibregl.Popup({

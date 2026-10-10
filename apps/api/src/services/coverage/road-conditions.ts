@@ -1,7 +1,12 @@
-import { type StreamEvidence, streamEvidenceSchema } from "@openmapx/core/coverage";
-import type { RoadConditionsOperationalEvidence } from "@openmapx/integration-framework";
+import {
+  type AttemptOutcome,
+  type StreamEvidence,
+  streamEvidenceSchema,
+} from "@openmapx/core/coverage";
+import type { OperationalEvidence } from "@openmapx/integration-framework";
 
-const safeText = (value: string | null): string | null =>
+/** An upstream error message without its endpoint or credentials. */
+export const safeText = (value: string | null): string | null =>
   value === null
     ? null
     : value
@@ -9,25 +14,30 @@ const safeText = (value: string | null): string | null =>
         .replace(/(?:token|key|secret|password|authorization)\s*[=:]\s*\S+/gi, "[redacted]")
         .slice(0, 512);
 
+/** The coverage outcome of an OpenConditions poll outcome. */
+export function attemptOutcomeOf(lastOutcome: string | null): AttemptOutcome {
+  const last = lastOutcome ?? "unknown";
+  return last.includes("skip")
+    ? "skipped"
+    : last.includes("partial")
+      ? "partial"
+      : last.includes("fail")
+        ? "failed"
+        : last.includes("unchanged")
+          ? "unchanged"
+          : ["changed", "empty", "succeeded", "success", "complete_empty"].includes(last)
+            ? "succeeded"
+            : "unknown";
+}
+
 export function roadConditionStreams(
   owner: string,
-  snapshot: RoadConditionsOperationalEvidence,
+  snapshot: OperationalEvidence,
 ): StreamEvidence[] {
   if (snapshot.schemaVersion !== 1 || snapshot.feeds.length > 500)
     throw new Error("Invalid road-condition operational snapshot");
   return snapshot.feeds.map((feed) => {
-    const last = feed.lastOutcome ?? "unknown";
-    const outcome = last.includes("skip")
-      ? "skipped"
-      : last.includes("partial")
-        ? "partial"
-        : last.includes("fail")
-          ? "failed"
-          : last.includes("unchanged")
-            ? "unchanged"
-            : ["changed", "empty", "succeeded", "success", "complete_empty"].includes(last)
-              ? "succeeded"
-              : "unknown";
+    const outcome = attemptOutcomeOf(feed.lastOutcome);
     return streamEvidenceSchema.parse({
       key: `road-conditions:${owner}:${snapshot.instanceId}:${feed.sourceId}`,
       owner: { kind: "integration", id: owner },

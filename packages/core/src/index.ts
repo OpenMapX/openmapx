@@ -67,14 +67,12 @@ export {
   type CoastResult,
   coastState,
   computeProgress,
-  computeTransitProgress,
   countryAtMeters,
   createNavigationSessionSnapshot,
   cumulativeDistances,
   DEFAULT_CORRIDOR_PAD_METERS,
   type DeadReckonOptions,
   type DeadReckonTarget,
-  detectMissedConnection,
   eta,
   evaluateFasterRoute,
   extractTimeline,
@@ -183,6 +181,22 @@ export {
   visibleToward,
   windowGeometry,
 } from "./navigation";
+export {
+  type EvaluateRouteStopsInput,
+  evaluateRouteStopDetours,
+  insertRouteStop,
+  ROUTE_STOP_CACHE_MS,
+  ROUTE_STOP_CONCURRENCY,
+  ROUTE_STOP_LIMIT,
+  ROUTE_STOP_PROGRESS_METERS,
+  type RouteStopCandidate,
+  type RouteStopDetour,
+  type RouteStopRequest,
+  type RouteStopWaypointPosition,
+  remainingRouteStopWaypoints,
+  routeStopAccess,
+  routeStopWaypointPositions,
+} from "./navigation/routeStopDetours";
 export type { TransitProgress } from "./navigation/transitProgress";
 export type {
   CameraMode,

@@ -583,6 +583,79 @@ describe("fusePoiResults", () => {
 });
 
 describe("fusePoiResults — link-first pass", () => {
+  it("keeps canonical gaps separate while residual matching fuses unlinked pairs", () => {
+    const neighboring = makePoi("osm:node/2", "Cafe", 52.52, 13.4, { category: "cafes" });
+    const residual = makePoi("osm:node/3", "Other cafe", 52.6, 13.5, { category: "cafes" });
+    const canonical = makePoi("osm:node/1", "Cafe", 52.52, 13.4, {
+      category: "cafes",
+      gersId: "gers-canonical",
+    });
+    const unlinked = makePoi("overture:gers-unlinked", "Other cafe", 52.6, 13.5, {
+      category: "cafes",
+      gersId: "gers-unlinked",
+    });
+    const result = fusePoiResults(
+      [neighboring, residual],
+      [canonical, unlinked],
+      DEFAULT_CONFLATION_THRESHOLDS,
+    );
+    expect(result).toHaveLength(3);
+    expect(result.find((r) => r.id === canonical.id)).toStrictEqual(canonical);
+    expect(result.find((r) => r.id === neighboring.id)).toStrictEqual(neighboring);
+    expect(result.find((r) => r.id === residual.id)?.gersId).toBe(unlinked.gersId);
+  });
+
+  it.each([undefined, new Map<string, string>(), new Map([["node/2", "gers-canonical"]])])(
+    "preserves distinct accepted OSM identities even when nearby attributes or a stale link agree (%s)",
+    (link) => {
+      const osm = makePoi("osm:node/2", "Cafe", 52.52, 13.4, { category: "cafes" });
+      const canonical = makePoi("osm:node/1", "Cafe", 52.52, 13.4, {
+        category: "cafes",
+        gersId: "gers-canonical",
+        website: "https://canonical.example",
+      });
+      const result = fusePoiResults([osm], [canonical], DEFAULT_CONFLATION_THRESHOLDS, link);
+      expect(result).toHaveLength(2);
+      expect(result.find((r) => r.id === osm.id)).toStrictEqual(osm);
+      expect(result.find((r) => r.id === canonical.id)).toStrictEqual(canonical);
+    },
+  );
+
+  it.each([undefined, new Map<string, string>(), new Map([["node/2", "gers-canonical"]])])(
+    "fuses equal accepted canonical identities before link and spatial matching (%s)",
+    (link) => {
+      const osm = makePoi("osm:node/1", "Original local name", 52.52, 13.4, {
+        category: "cafes",
+        provenance: [{ sourceId: "overpass", dataset: "OpenStreetMap" }],
+      });
+      const neighboring = makePoi("osm:node/2", "Translated name", 52.6, 13.5, {
+        category: "cafes",
+      });
+      const canonical = makePoi(osm.id, "Translated name", 52.6, 13.5, {
+        category: "cafes",
+        gersId: "gers-canonical",
+        website: "https://canonical.example",
+        provenance: [{ sourceId: "overture", dataset: "Overture Maps" }],
+      });
+      const result = fusePoiResults(
+        [osm, neighboring],
+        [canonical],
+        DEFAULT_CONFLATION_THRESHOLDS,
+        link,
+      );
+      expect(result).toHaveLength(2);
+      expect(result.find((r) => r.id === neighboring.id)).toStrictEqual(neighboring);
+      expect(result.find((r) => r.id === osm.id)).toMatchObject({
+        id: osm.id,
+        name: osm.name,
+        coordinates: osm.coordinates,
+        gersId: canonical.gersId,
+        website: canonical.website,
+        provenance: [...(osm.provenance ?? []), ...(canonical.provenance ?? [])],
+      });
+    },
+  );
+
   it("fuses via link even when names are too dissimilar for the scored matcher", () => {
     // OSM: "HARMANS KFC #189" — Overture: "KFC" — Dice similarity << 0.8, far enough apart
     // that the scored matcher would NOT match, but the link table says they are the same entity.

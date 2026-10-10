@@ -1,25 +1,22 @@
 import type { BBox, RoadConditionRoutingEvidence } from "@openmapx/core";
 import type {
   RoadConditionEvent,
-  RoadConditionsOperationalEvidence,
   RoadConditionsProvider,
   RoadConditionsQuery,
 } from "@openmapx/integration-framework";
 import type { OpenConditionsClient } from "../client.js";
+import { operationalEvidenceOf, type RawOperationalStatus } from "../evidence/read.js";
 import type { LiveSources } from "../sources.js";
 import { featureCollectionToRoadFlowSegments } from "./flow.js";
 import { situationToRoadConditionEvent } from "./situation.js";
 
 const PROVIDER_ID = "road-conditions-openconditions";
-const MAX_OPERATIONAL_FEEDS = 500;
 /** A display read stops after this many situations; a routing read reads them all. */
 const DISPLAY_MAX = 2000;
 const DISPLAY_PAGE = 1000;
 const ROUTING_PAGE = 5000;
 
 type Rec = Record<string, unknown>;
-
-type OperationalFeedEvidence = RoadConditionsOperationalEvidence["feeds"][number];
 
 type SituationPage = { records?: unknown; next?: unknown };
 
@@ -28,79 +25,6 @@ type SegmentConditionEvidenceResponse = {
   complete?: unknown;
   conditions?: Array<{ routing_evidence?: RoadConditionRoutingEvidence }>;
 };
-
-type RawGraphStatus = {
-  generation?: unknown;
-  status?: unknown;
-  regions?: unknown;
-};
-
-type RawFeedStatus = Record<string, unknown> & { id?: unknown; parentSourceId?: unknown };
-
-type RawOperationalStatus = {
-  collectedAt?: unknown;
-  instanceId?: unknown;
-  graph?: RawGraphStatus;
-  feeds?: RawFeedStatus[];
-};
-
-function stringOrNull(value: unknown): string | null {
-  return typeof value === "string" && value.length > 0 ? value : null;
-}
-
-function numberOrNull(value: unknown): number | null {
-  return typeof value === "number" && Number.isFinite(value) ? value : null;
-}
-
-function graphOf(raw: RawGraphStatus | undefined): OperationalFeedEvidence["graph"] {
-  const status = raw?.status;
-  return {
-    generation: stringOrNull(raw?.generation),
-    status:
-      status === "ready" || status === "partial" || status === "missing" || status === "unknown"
-        ? status
-        : "unknown",
-    regions: Array.isArray(raw?.regions)
-      ? raw.regions.filter((region): region is string => typeof region === "string")
-      : [],
-  };
-}
-
-function operationalState(
-  feed: RawFeedStatus,
-  graph: OperationalFeedEvidence["graph"],
-  collectedAt: string,
-): Pick<OperationalFeedEvidence, "status" | "action"> {
-  if (feed.selectionState === "discovered")
-    return { status: "discovered", action: "approve_source" };
-  if (feed.hasCredentials === false)
-    return { status: "missing_configuration", action: "configure_credentials" };
-  if (graph.status !== "ready") return { status: `graph_${graph.status}`, action: "import_graph" };
-  if (feed.lastOutcome === "failed" || (numberOrNull(feed.consecutiveFailures) ?? 0) > 0) {
-    return { status: "failed", action: "investigate_poll_failures" };
-  }
-  const freshUntil = stringOrNull(feed.freshnessDeadline);
-  if (freshUntil && Date.parse(freshUntil) <= Date.parse(collectedAt)) {
-    return { status: "stale", action: "refresh_source" };
-  }
-  if (stringOrNull(feed.lastNetworkSuccessAt)) return { status: "healthy", action: null };
-  return { status: "unknown", action: null };
-}
-
-function bindingCounts(value: unknown): Record<string, number> | null {
-  if (!value || typeof value !== "object") return null;
-  const entries = Object.entries(value).filter(
-    (entry): entry is [string, number] => typeof entry[1] === "number" && Number.isFinite(entry[1]),
-  );
-  return entries.length > 0 ? Object.fromEntries(entries) : null;
-}
-
-function changedCount(feed: RawFeedStatus): number | null {
-  const values = [feed.lastInserted, feed.lastUpdated, feed.lastDeleted].map(numberOrNull);
-  return values.every((value) => value == null)
-    ? null
-    : values.reduce<number>((sum, value) => sum + (value ?? 0), 0);
-}
 
 /** Whether a record comes from a source, or a catalogue child of a source, the deployment excluded. */
 function excluded(record: Rec, sources: ReadonlySet<string>): boolean {
@@ -166,6 +90,7 @@ export function createRoadConditionsProvider(
           bbox: bbox.join(","),
           limit: routing ? ROUTING_PAGE : DISPLAY_PAGE,
           ...(opts?.kinds?.length ? { kind: opts.kinds.join(",") } : {}),
+          ...(opts?.excludeKinds?.length ? { excludeKind: opts.excludeKinds.join(",") } : {}),
           ...(opts?.types?.length ? { type: opts.types.join(",") } : {}),
           ...(opts?.minSeverity ? { minSeverity: opts.minSeverity } : {}),
           // Only narrow when the caller asked: routing reads unfiltered so it
@@ -193,7 +118,7 @@ export function createRoadConditionsProvider(
    */
   function eventsOf(records: readonly Rec[]): RoadConditionEvent[] {
     return records.flatMap((record) => {
-      const event = situationToRoadConditionEvent(record, PROVIDER_ID);
+      const event = situationToRoadConditionEvent(record, PROVIDER_ID, sources);
       return event ? [{ ...event, routingEvidence: {} }] : [];
     });
   }
@@ -278,49 +203,10 @@ export function createRoadConditionsProvider(
       const body = await client.get<unknown>("/segments.geojson", { bbox: bbox.join(",") });
       return featureCollectionToRoadFlowSegments(body, PROVIDER_ID);
     },
+    /** The road feeds' polls and publications, judged with the segment graph they bind to. */
     async getOperationalEvidence() {
       const raw = await client.get<RawOperationalStatus>("/feeds/status");
-      const collectedAt = stringOrNull(raw.collectedAt) ?? new Date().toISOString();
-      const graph = graphOf(raw.graph);
-      const allFeeds = Array.isArray(raw.feeds) ? raw.feeds : [];
-      const feeds = allFeeds.slice(0, MAX_OPERATIONAL_FEEDS).flatMap((feed) => {
-        const sourceId = stringOrNull(feed.id);
-        if (!sourceId) return [];
-        const parentSourceId = stringOrNull(feed.parentSourceId);
-        return [
-          {
-            sourceId,
-            ...(parentSourceId ? { parentSourceId } : {}),
-            lastAttemptAt: stringOrNull(feed.lastAttemptAt),
-            lastOutcome: stringOrNull(feed.lastOutcome),
-            lastSuccessfulCheckAt: stringOrNull(feed.lastNetworkSuccessAt),
-            lastPublicationAt: stringOrNull(feed.lastPublicationAt),
-            publicationRevision:
-              typeof feed.publicationRevision === "number" ||
-              typeof feed.publicationRevision === "string"
-                ? String(feed.publicationRevision)
-                : null,
-            upstreamAsOf: stringOrNull(feed.upstreamAsOf),
-            freshUntil: stringOrNull(feed.freshnessDeadline),
-            expectedIntervalSeconds: numberOrNull(feed.cadenceSec),
-            activeEventCount: numberOrNull(feed.activeEvents),
-            changedCount: changedCount(feed),
-            rejectedCount: numberOrNull(feed.lastRejected),
-            consecutiveFailures: numberOrNull(feed.consecutiveFailures),
-            error: stringOrNull(feed.lastError),
-            bindingCounts: bindingCounts(feed.binding),
-            graph,
-            ...operationalState(feed, graph, collectedAt),
-          } satisfies OperationalFeedEvidence,
-        ];
-      });
-      return {
-        schemaVersion: 1,
-        collectedAt,
-        instanceId: stringOrNull(raw.instanceId) ?? "openconditions",
-        truncated: allFeeds.length > MAX_OPERATIONAL_FEEDS,
-        feeds,
-      };
+      return operationalEvidenceOf(raw, "roads", { graphBound: true });
     },
   };
 }

@@ -1,9 +1,9 @@
 "use client";
 
-import { useSidebarStore } from "@openmapx/core";
+import { PANEL, useNavigationStore, useSidebarStore } from "@openmapx/core";
 import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import type { ComponentType } from "react";
-import { lazy, Suspense, useMemo } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef } from "react";
 import { HideDuringNavigation } from "@/components/navigation/HideDuringNavigation";
 import { DetailShell } from "./DetailShell";
 import { DETAIL_PANELS, SIDEBAR_PANELS } from "./panel-map";
@@ -46,14 +46,28 @@ export function PanelHost() {
     .getWithPanel()
     .filter((integration) => integration.isBuiltIn !== false);
 
+  const navigating = useNavigationStore((s) => s.status !== "idle");
+  // A card left open while planning must not pop up over the guidance. One
+  // opened mid-route is re-opened through openDetail once guidance ends, so it
+  // lands in whichever panel the restored layout gives it.
+  const wasNavigating = useRef(navigating);
+  useEffect(() => {
+    if (wasNavigating.current === navigating) return;
+    wasNavigating.current = navigating;
+    const sidebar = useSidebarStore.getState();
+    const placeCardOpen = sidebar.activeDetailId === PANEL.PLACE_CARD;
+    sidebar.closeDetail();
+    if (!navigating && placeCardOpen) sidebar.openDetail(PANEL.PLACE_CARD);
+  }, [navigating]);
+
   const sidebarEntry = activeSidebarId ? SIDEBAR_PANELS[activeSidebarId] : null;
   const DetailContent = activeDetailId ? DETAIL_PANELS[activeDetailId] : null;
 
   return (
     <>
-      {/* The route-planning sidebar / place detail are hidden during turn-by-turn
-          navigation (both the desktop rail and the mobile bottom sheet), so the
-          nav overlay owns the screen. They restore when navigation ends. */}
+      {/* The route-planning sidebar is hidden during turn-by-turn navigation
+          (both the desktop rail and the mobile bottom sheet), so the nav overlay
+          owns the screen. It restores when navigation ends. */}
       <HideDuringNavigation>
         {sidebarEntry && (
           // Both panels sit side by side on desktop, but stack as bottom sheets
@@ -69,14 +83,15 @@ export function PanelHost() {
             </Suspense>
           </SidebarShell>
         )}
-        {DetailContent && (
-          <DetailShell>
-            <Suspense fallback={null}>
-              <DetailContent />
-            </Suspense>
-          </DetailShell>
-        )}
       </HideDuringNavigation>
+      {/* A place tapped mid-route still opens its card over the nav overlay. */}
+      {DetailContent && (
+        <DetailShell>
+          <Suspense fallback={null}>
+            <DetailContent />
+          </Suspense>
+        </DetailShell>
+      )}
       {withPanel.map((integration) => (
         <BuiltInPanel key={integration.id} id={integration.id} />
       ))}

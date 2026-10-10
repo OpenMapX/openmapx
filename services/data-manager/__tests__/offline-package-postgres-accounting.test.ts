@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { CanonicalOfflinePackageRequest, OfflineMapPackageManifest } from "@openmapx/core";
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from "@testcontainers/postgresql";
+import { drizzle } from "drizzle-orm/postgres-js";
 import postgres, { type Sql } from "postgres";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { OfflinePackageGenerator } from "../src/offline-packages/generator.js";
@@ -113,6 +114,9 @@ integration("PostgreSQL offline-package accounting", () => {
   beforeAll(async () => {
     container = await new PostgreSqlContainer("postgres:18-alpine").start();
     sql = postgres(container.getConnectionUri(), { max: 12 });
+    // Production shares its client with drizzle, which replaces the client's
+    // date and JSON serializers and its date parsers.
+    drizzle(sql);
     await sql`CREATE SCHEMA data_manager`;
     const migration = readFileSync(
       join(
@@ -209,6 +213,11 @@ integration("PostgreSQL offline-package accounting", () => {
         expect((await generator.getJob(principal, first.jobId))?.status).toBe("ready-to-download");
       }
       expect(extract).toHaveBeenCalledTimes(3);
+      // Bound as text, the request and manifest still land as JSON objects.
+      const shapes = await sql<{ request: string; manifest: string }[]>`
+        SELECT DISTINCT jsonb_typeof(request) AS request, jsonb_typeof(manifest) AS manifest
+          FROM data_manager.offline_package_jobs WHERE status = 'ready-to-download'`;
+      expect(shapes).toEqual([{ request: "object", manifest: "object" }]);
     } finally {
       release();
       await vi.waitFor(() => expect(generator.pendingCount()).toBe(0));

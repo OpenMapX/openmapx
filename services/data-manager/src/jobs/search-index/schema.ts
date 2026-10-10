@@ -49,6 +49,8 @@ CREATE TABLE "${schema}".index_state (
   status TEXT NOT NULL CHECK (status IN ('building','ready','failed')),
   place_count BIGINT NOT NULL DEFAULT 0,
   term_count BIGINT NOT NULL DEFAULT 0,
+  ambient_source_version INTEGER NOT NULL DEFAULT 2,
+  source_file_identity TEXT,
   started_at TIMESTAMPTZ NOT NULL,
   published_at TIMESTAMPTZ,
   updated_at TIMESTAMPTZ NOT NULL,

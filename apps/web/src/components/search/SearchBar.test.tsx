@@ -4,6 +4,8 @@ import { Profiler } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getMapObstructionInsets, publishMapObstruction } from "@/lib/mapObstructions";
 import { act, createFakeMap, createQueryWrapper, fireEvent, render, screen, waitFor } from "@/test";
+import businessLocationFixture from "../../../../../packages/core/src/utils/__tests__/fixtures/business-location-intent.json";
+import distinctBusinesses from "../../../../../packages/core/src/utils/__tests__/fixtures/distinct-businesses.json";
 
 vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntl());
 
@@ -136,11 +138,13 @@ beforeEach(() => {
   useMediaQueryMock.mockReset().mockReturnValue(false);
   flyToMock.mockReset();
   fakeMap.state.center = { lng: 0, lat: 0 };
+  fakeMap.state.zoom = 10;
   launchExploreFromPlace.mockReset();
   launchExploreTextSearch.mockReset();
   launchTextSearch.mockReset();
   useSearchStore.getState().reset();
   useDirectionsStore.getState().close(); // SearchBar returns null while directions open
+  useCategorySearchStore.getState().clearCategory();
   useCategorySearchStore.setState({ anchor: null, exploreBoxOpen: false, activeCategory: null });
   usePlaceStore.setState({ selectedPlace: null });
   useMapStore.setState({ userLocation: null });
@@ -464,6 +468,121 @@ describe("SearchBar", () => {
     expect(useSearchStore.getState().query).toBe("Berlin Hbf");
     expect(useSearchStore.getState().isFocused).toBe(false);
     expect(useRecentSearchStore.getState().entries).toEqual(["Berlin Hbf"]);
+  });
+
+  it.each([
+    ["click", "branch-a", "Street A 1", [13.4, 52.52]],
+    ["click", "branch-b", "Street B 2", [13.405, 52.52]],
+    ["keyboard", "branch-a", "Street A 1", [13.4, 52.52]],
+    ["keyboard", "branch-b", "Street B 2", [13.405, 52.52]],
+  ] satisfies Array<[string, string, string, [number, number]]>)(
+    "selects distinct %s business %s from the real list",
+    async (method, id, address, coordinates) => {
+      fakeMap.state.center = { lng: 13.4, lat: 52.52 };
+      fakeMap.state.zoom = 15;
+      useAutocompleteMock.mockReturnValue({ data: distinctBusinesses, isFetching: false });
+      useSearchStore.setState({ query: "REWE", isFocused: true });
+      renderBar();
+      const input = screen.getByLabelText("search.ariaLabel");
+      const a = await screen.findByRole("option", { name: /Street A 1/ });
+      const b = await screen.findByRole("option", { name: /Street B 2/ });
+      expect(screen.getAllByRole("option").slice(0, 2)).toEqual([a, b]);
+      if (method === "click") fireEvent.click(id === "branch-a" ? a : b);
+      else {
+        fireEvent.keyDown(input, { key: "ArrowDown" });
+        if (id === "branch-b") fireEvent.keyDown(input, { key: "ArrowDown" });
+        fireEvent.keyDown(input, { key: "Enter" });
+      }
+      expect(usePlaceStore.getState().selectedPlace).toMatchObject({
+        ids: { maptiler: id },
+        address: expect.stringContaining(address),
+        coordinates,
+      });
+      expect(flyToMock).toHaveBeenCalledWith(coordinates, 15);
+      expect(useSidebarStore.getState().activeSidebarId).toBe(PANEL.PLACE);
+    },
+  );
+
+  it("merges a corroborated cross-source branch duplicate while retaining the other branch", async () => {
+    fakeMap.state.center = { lng: 13.4, lat: 52.52 };
+    fakeMap.state.zoom = 15;
+    useAutocompleteMock.mockReturnValue({ data: distinctBusinesses, isFetching: false });
+    useSearchSuggestionsMock.mockReturnValue({
+      data: aggregateResponse([
+        aggregateSuggestion({
+          ...distinctBusinesses[0],
+          id: "osm:node/1",
+          coordinates: [13.4, 52.52],
+        } as Partial<SearchSuggestion>),
+      ]),
+      isFetching: false,
+    });
+    useSearchStore.setState({ query: "REWE", isFocused: true });
+    renderBar();
+    await screen.findByRole("option", { name: /Street B 2/ });
+    expect(screen.getAllByRole("option", { name: /Street A 1/ })).toHaveLength(1);
+    expect(screen.getAllByRole("option", { name: /Street B 2/ })).toHaveLength(1);
+  });
+
+  it("shows Berlin first for weak remote address-prefix evidence and plain Enter searches the area", async () => {
+    fakeMap.state.center = { lng: 13.416, lat: 52.5194 };
+    fakeMap.state.zoom = 15;
+    const places = businessLocationFixture as AutocompleteResult[];
+    useAutocompleteMock.mockReturnValue({ data: places, isFetching: false });
+    // Forward retrieval is independently remote-first; it must not rescue a weak POI match.
+    useGeocodingMock.mockReturnValue({
+      data: places.map((p) => ({ ...p, label: p.sublabel, confidence: 0.78 })),
+    });
+    useSettingsStore.setState({ aiSearchEnabled: false });
+    useSearchStore.setState({ query: "MediaMarkt Alexa", isFocused: true });
+    renderBar();
+    const input = screen.getByLabelText("search.ariaLabel");
+    await screen.findByRole("option", { name: /Grunerstraße 20/ });
+    const options = screen.getAllByRole("option");
+    expect(options[0]).toHaveTextContent("Grunerstraße 20");
+    expect(options[1]).toHaveTextContent("Pr Willem Alexander Prom");
+    fireEvent.submit(input.closest("form") as HTMLFormElement);
+    expect(usePlaceStore.getState().selectedPlace).toBeNull();
+    expect(flyToMock).not.toHaveBeenCalled();
+    expect(launchTextSearch).toHaveBeenCalledWith(fakeMap.map, "MediaMarkt Alexa");
+  });
+
+  it.each([
+    ["MediaMarkt Alexa", "maptiler:poi.15422100", "Grunerstraße 20"],
+    ["MediaMarkt Rijswijk", "maptiler:poi.15539884", "Pr Willem Alexander Prom"],
+  ])(
+    "selects the displayed first row for %s with ArrowDown + Enter",
+    async (query, id, address) => {
+      fakeMap.state.center = { lng: 13.416, lat: 52.5194 };
+      fakeMap.state.zoom = 15;
+      useAutocompleteMock.mockReturnValue({ data: businessLocationFixture, isFetching: false });
+      renderBar();
+      const input = screen.getByLabelText("search.ariaLabel");
+      fireEvent.focus(input);
+      fireEvent.change(input, { target: { value: query } });
+      await screen.findByRole("option", { name: /Grunerstraße 20/ });
+      expect(screen.getAllByRole("option")[0]).toHaveTextContent(address);
+      fireEvent.keyDown(input, { key: "ArrowDown" });
+      fireEvent.keyDown(input, { key: "Enter" });
+      expect(usePlaceStore.getState().selectedPlace?.address).toContain(address);
+      expect(usePlaceStore.getState().selectedPlace?.ids.maptiler).toBe(
+        id.replace("maptiler:", ""),
+      );
+    },
+  );
+
+  it("plain Enter still opens the explicitly named remote business city", async () => {
+    fakeMap.state.center = { lng: 13.416, lat: 52.5194 };
+    fakeMap.state.zoom = 15;
+    useAutocompleteMock.mockReturnValue({ data: businessLocationFixture, isFetching: false });
+    useSearchStore.setState({ query: "MediaMarkt Rijswijk", isFocused: true });
+    renderBar();
+    const input = screen.getByLabelText("search.ariaLabel");
+    await screen.findByRole("option", { name: /Pr Willem Alexander Prom/ });
+    fireEvent.submit(input.closest("form") as HTMLFormElement);
+    await waitFor(() =>
+      expect(usePlaceStore.getState().selectedPlace?.address).toContain("Rijswijk"),
+    );
   });
 
   it("records an explicitly submitted query without storing every keystroke", async () => {

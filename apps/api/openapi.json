@@ -11,6 +11,10 @@
       "description": "Operator-facing administration of integrations, services, settings and jobs."
     },
     {
+      "name": "ambient-places",
+      "description": "Routes under /api/ambient-places."
+    },
+    {
       "name": "attribution",
       "description": "Routes under /api/attribution."
     },
@@ -144,6 +148,186 @@
     }
   ],
   "paths": {
+    "/api/admin/ambient-places/build": {
+      "post": {
+        "operationId": "postApiAdminAmbientPlacesBuild",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "name",
+                  "bounds"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 80
+                  },
+                  "coverage": {
+                    "type": "string",
+                    "enum": [
+                      "germany",
+                      "planet"
+                    ]
+                  },
+                  "bounds": {
+                    "type": "array",
+                    "minItems": 4,
+                    "maxItems": 4,
+                    "items": {
+                      "type": "number"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "x-openmapx-auth": "admin"
+      }
+    },
+    "/api/admin/ambient-places/discard": {
+      "post": {
+        "operationId": "postApiAdminAmbientPlacesDiscard",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "generation"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "generation": {
+                    "type": "string",
+                    "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "x-openmapx-auth": "admin"
+      }
+    },
+    "/api/admin/ambient-places/enabled": {
+      "post": {
+        "operationId": "postApiAdminAmbientPlacesEnabled",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "enabled"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "enabled": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "x-openmapx-auth": "admin"
+      }
+    },
+    "/api/admin/ambient-places/resume": {
+      "post": {
+        "operationId": "postApiAdminAmbientPlacesResume",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "generation"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "generation": {
+                    "type": "string",
+                    "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "x-openmapx-auth": "admin"
+      }
+    },
+    "/api/admin/ambient-places/rollback": {
+      "post": {
+        "operationId": "postApiAdminAmbientPlacesRollback",
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "x-openmapx-auth": "admin"
+      }
+    },
+    "/api/admin/ambient-places/status": {
+      "get": {
+        "operationId": "getApiAdminAmbientPlacesStatus",
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "x-openmapx-auth": "admin"
+      }
+    },
     "/api/admin/audit": {
       "get": {
         "operationId": "getApiAdminAudit",
@@ -296,6 +480,8 @@
                 "transit",
                 "ev",
                 "parking",
+                "fuel",
+                "cameras",
                 "traffic"
               ]
             },
@@ -1915,6 +2101,68 @@
         "x-openmapx-auth": "admin"
       }
     },
+    "/api/ambient-places/manifest": {
+      "get": {
+        "operationId": "getApiAmbientPlacesManifest",
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "ambient-places"
+        ],
+        "x-openmapx-auth": "public"
+      }
+    },
+    "/api/ambient-places/tiles/{generation}/{z}/{x}/{y}.mvt": {
+      "get": {
+        "operationId": "getApiAmbientPlacesTilesGenerationZXYMvt",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "generation",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "z",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "x",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "y",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "ambient-places"
+        ],
+        "x-openmapx-auth": "public"
+      }
+    },
     "/api/attribution": {
       "get": {
         "operationId": "getApiAttribution",
@@ -2068,106 +2316,6 @@
     "/api/data-manager/overture/status": {
       "get": {
         "operationId": "getApiDataManagerOvertureStatus",
-        "responses": {
-          "200": {
-            "description": "Default Response"
-          }
-        },
-        "tags": [
-          "data-manager"
-        ],
-        "x-openmapx-auth": "service"
-      }
-    },
-    "/api/data-manager/poi-ingest/sources": {
-      "get": {
-        "operationId": "getApiDataManagerPoiIngestSources",
-        "responses": {
-          "200": {
-            "description": "Default Response"
-          }
-        },
-        "tags": [
-          "data-manager"
-        ],
-        "x-openmapx-auth": "service"
-      }
-    },
-    "/api/data-manager/poi-ingest/sources/{id}": {
-      "get": {
-        "operationId": "getApiDataManagerPoiIngestSourcesId",
-        "parameters": [
-          {
-            "schema": {
-              "type": "string"
-            },
-            "in": "path",
-            "name": "id",
-            "required": true
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Default Response"
-          }
-        },
-        "tags": [
-          "data-manager"
-        ],
-        "x-openmapx-auth": "service"
-      }
-    },
-    "/api/data-manager/poi-ingest/sources/{id}/sync": {
-      "post": {
-        "operationId": "postApiDataManagerPoiIngestSourcesIdSync",
-        "parameters": [
-          {
-            "schema": {
-              "type": "string"
-            },
-            "in": "path",
-            "name": "id",
-            "required": true
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Default Response"
-          }
-        },
-        "tags": [
-          "data-manager"
-        ],
-        "x-openmapx-auth": "service"
-      }
-    },
-    "/api/data-manager/poi-ingest/sources/{id}/sync-live": {
-      "post": {
-        "operationId": "postApiDataManagerPoiIngestSourcesIdSyncLive",
-        "parameters": [
-          {
-            "schema": {
-              "type": "string"
-            },
-            "in": "path",
-            "name": "id",
-            "required": true
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Default Response"
-          }
-        },
-        "tags": [
-          "data-manager"
-        ],
-        "x-openmapx-auth": "service"
-      }
-    },
-    "/api/data-manager/poi-ingest/state": {
-      "get": {
-        "operationId": "getApiDataManagerPoiIngestState",
         "responses": {
           "200": {
             "description": "Default Response"
@@ -4272,6 +4420,23 @@
         "x-openmapx-source": "integrations/overlay-wildfires/index.ts"
       }
     },
+    "/api/integrations/overlay-wildfires/wildfires/density": {
+      "get": {
+        "operationId": "getApiIntegrationsOverlayWildfiresWildfiresDensity",
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /wildfires/density (overlay-wildfires)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "overlay-wildfires",
+        "x-openmapx-source": "integrations/overlay-wildfires/index.ts"
+      }
+    },
     "/api/integrations/overlay-winter-sports/tiles/{z}/{x}/{y}.png": {
       "get": {
         "operationId": "getApiIntegrationsOverlayWinterSportsTilesZXYPng",
@@ -5680,6 +5845,33 @@
         "x-openmapx-source": "integrations/transit/index.ts"
       }
     },
+    "/api/integrations/transit/stops/{id}/area": {
+      "get": {
+        "operationId": "getApiIntegrationsTransitStopsIdArea",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /stops/:id/area (transit)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "transit",
+        "x-openmapx-source": "integrations/transit/index.ts"
+      }
+    },
     "/api/integrations/transit/stops/{id}/arrivals": {
       "get": {
         "operationId": "getApiIntegrationsTransitStopsIdArrivals",
@@ -5967,20 +6159,6 @@
     "/api/internal/metrics": {
       "get": {
         "operationId": "getApiInternalMetrics",
-        "responses": {
-          "200": {
-            "description": "Default Response"
-          }
-        },
-        "tags": [
-          "internal"
-        ],
-        "x-openmapx-auth": "internal"
-      }
-    },
-    "/api/internal/poi-sources/count": {
-      "get": {
-        "operationId": "getApiInternalPoiSourcesCount",
         "responses": {
           "200": {
             "description": "Default Response"

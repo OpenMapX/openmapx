@@ -202,7 +202,9 @@ export async function buildNotablePlaces(
   const lock = opts.operationLock ?? createNotablePlacesOperationLock(opts.sql);
   const fetchOptions = { endpoint, signal: opts.signal, fetchImpl: opts.fetchImpl };
   return lock.run(async () => {
-    const startedAt = new Date();
+    // Bound as text: the client is shared with drizzle, which replaces its
+    // date serializers.
+    const startedAt = new Date().toISOString();
     let stage: NotablePlacesBuildStage = "places";
     let placeCount = 0;
     let nameCount = 0;

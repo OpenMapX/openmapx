@@ -2,7 +2,7 @@
 
 import { useOverlayExclusion } from "@openmapx/core";
 import { useEffect, useMemo } from "react";
-import { useIntegrationSourceAttributions } from "@/integration-api/overlay/useIntegrationAttribution";
+import { useSourceAttributions } from "@/integration-api/overlay/useIntegrationAttribution";
 import { EffisBurnedAreaLayer } from "./layers/effis-burned-area-layer";
 import { HotspotLayer } from "./layers/hotspot-layer";
 import { NifcPerimeterLayer } from "./layers/nifc-perimeter-layer";
@@ -10,48 +10,32 @@ import { NoaaSmokeLayer } from "./layers/noaa-smoke-layer";
 import { createWildfirePopupController } from "./popup-controller";
 import { useWildfireStore } from "./store";
 
+const NO_SOURCES: readonly string[] = [];
+
 export function WildfireLayer() {
   const layerVisible = useWildfireStore((s) => s.layerVisible);
   const showHotspots = useWildfireStore((s) => s.showHotspots);
   const showNifcPerimeters = useWildfireStore((s) => s.showNifcPerimeters);
   const showEffisBurnedAreas = useWildfireStore((s) => s.showEffisBurnedAreas);
   const showNoaaSmoke = useWildfireStore((s) => s.showNoaaSmoke);
-  const firmsStatus = useWildfireStore((s) => s.statuses.firms);
-  const nifcStatus = useWildfireStore((s) => s.statuses.nifc);
-  const effisStatus = useWildfireStore((s) => s.statuses.effis);
-  const noaaStatus = useWildfireStore((s) => s.statuses["noaa-hms"]);
-  const attributionSourceIds = useMemo(() => {
-    if (!layerVisible) return [];
-    const sourceIds: string[] = [];
-    if (showHotspots && (firmsStatus.loading || firmsStatus.featureCount !== null)) {
-      sourceIds.push("firms");
+  // The credits name exactly the sources behind what the shown layers last drew. Joined into a
+  // string so that a status change that keeps the same sources does not re-register them.
+  const sourceKey = useWildfireStore((s) => {
+    if (!s.layerVisible) return "";
+    const ids = new Set<string>();
+    const shown = [
+      [s.showHotspots, s.statuses.firms],
+      [s.showNifcPerimeters, s.statuses.nifc],
+      [s.showEffisBurnedAreas, s.statuses.effis],
+      [s.showNoaaSmoke, s.statuses["noaa-hms"]],
+    ] as const;
+    for (const [visible, status] of shown) {
+      if (visible) for (const id of status.sources) ids.add(id);
     }
-    if (showNifcPerimeters && (nifcStatus.loading || nifcStatus.featureCount !== null)) {
-      sourceIds.push("nifc-wfigs");
-    }
-    if (showEffisBurnedAreas && (effisStatus.loading || effisStatus.featureCount !== null)) {
-      sourceIds.push("effis");
-    }
-    if (showNoaaSmoke && (noaaStatus.loading || noaaStatus.featureCount !== null)) {
-      sourceIds.push("noaa-hms");
-    }
-    return sourceIds;
-  }, [
-    effisStatus.featureCount,
-    effisStatus.loading,
-    firmsStatus.featureCount,
-    firmsStatus.loading,
-    layerVisible,
-    nifcStatus.featureCount,
-    nifcStatus.loading,
-    noaaStatus.featureCount,
-    noaaStatus.loading,
-    showEffisBurnedAreas,
-    showHotspots,
-    showNifcPerimeters,
-    showNoaaSmoke,
-  ]);
-  useIntegrationSourceAttributions("overlay-wildfires", attributionSourceIds);
+    return [...ids].sort().join(",");
+  });
+  const sourceIds = useMemo(() => (sourceKey ? sourceKey.split(",") : NO_SOURCES), [sourceKey]);
+  useSourceAttributions("wildfires", sourceIds);
   useOverlayExclusion("wildfires", layerVisible);
   const popupController = useMemo(createWildfirePopupController, []);
   useEffect(() => () => popupController.closeAll(), [popupController]);

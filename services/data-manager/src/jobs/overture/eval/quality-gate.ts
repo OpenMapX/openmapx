@@ -33,11 +33,15 @@ export interface OvertureQualityGateResult {
  */
 const QUALITY_GATE_RESULT_WINDOW = 50;
 
-/** True when the imported Geofabrik region contains the labeled case. */
+/** A planet import contains every labeled region; extracts contain descendants. */
 export function appliesToImportedRegion(importedRegion: string, caseRegion: string): boolean {
   assertValidRegion(importedRegion);
   assertValidRegion(caseRegion);
-  return caseRegion === importedRegion || caseRegion.startsWith(`${importedRegion}/`);
+  return (
+    importedRegion === "planet" ||
+    caseRegion === importedRegion ||
+    caseRegion.startsWith(`${importedRegion}/`)
+  );
 }
 
 export function evaluateOvertureQualityCase(

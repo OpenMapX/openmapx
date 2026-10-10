@@ -17,6 +17,24 @@ export {
   assertTransitProviderContract,
 } from "./assert-contract";
 export type {
+  Camera,
+  CameraProvider,
+  CameraQuery,
+  CameraStatus,
+  CameraType,
+  CameraView,
+} from "./camera-provider.js";
+export type {
+  ChargingConnector,
+  ChargingSite,
+  ChargingSiteProvider,
+  ChargingSiteQuery,
+  EnergyTariff,
+  EnergyTariffRestrictions,
+  Evse,
+  EvseStatus,
+} from "./charging-site-provider.js";
+export type {
   FuelProduct,
   FuelStation,
   FuelStationProvider,
@@ -33,6 +51,17 @@ export type {
   GtfsCatalogFeed,
   GtfsCatalogProvider,
 } from "./gtfs-catalog-provider.js";
+export type {
+  CapSeverity,
+  FireDensityCell,
+  FireInstrument,
+  FirePixel,
+  HazardAlert,
+  HazardsProvider,
+  HazardsQuery,
+  NaturalHazard,
+  NaturalHazardType,
+} from "./hazards-provider.js";
 export type {
   KnowledgeContext,
   KnowledgeProvider,
@@ -58,6 +87,23 @@ export type {
   OsmIdentity,
   PricingPlanEntry,
 } from "./mobility-data-source-provider.js";
+export type {
+  OperationalEvidence,
+  OperationalFeedCoverage,
+  OperationalFeedEvidence,
+} from "./operational-evidence.js";
+export type {
+  ParkingArea,
+  ParkingCounts,
+  ParkingLayout,
+  ParkingRate,
+  ParkingSite,
+  ParkingSiteProvider,
+  ParkingSiteQuery,
+  ParkingSiteType,
+  ParkingStatus,
+  ParkingTrend,
+} from "./parking-site-provider.js";
 export type {
   PhotoProvider,
   PhotoQuery,
@@ -111,7 +157,6 @@ export type {
   RoadConditionRoadRef,
   RoadConditionSchedule,
   RoadConditionSeverityLabel,
-  RoadConditionsOperationalEvidence,
   RoadConditionsProvider,
   RoadConditionsQuery,
   RoadConditionValidity,

@@ -8,6 +8,9 @@
     "fuelType": "Kraftstoffart",
     "price": "Preis"
   },
+  "price": {
+    "per": "{price}/{unit}"
+  },
   "product": {
     "notSold": "Nicht erhältlich",
     "noPrice": "Kein Preis gemeldet",

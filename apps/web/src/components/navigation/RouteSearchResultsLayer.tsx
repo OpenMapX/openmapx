@@ -2,6 +2,7 @@
 
 import type { AlongRoutePoi, CategoryPlace } from "@openmapx/core";
 import type * as maplibregl from "maplibre-gl";
+import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
 import { brandImageId, loadBrandMarkerImage } from "@/components/map/CategoryResultMarkers";
 import { addLayerInSlot } from "@/integration-api/map/layerStack";
@@ -10,6 +11,7 @@ import { getMapClickOwner } from "@/integration-api/map/mapClickOwnership";
 import { useGeoJsonSourceDataBridge } from "@/integration-api/map/useGeoJsonSourceDataBridge";
 import { BRAND_HEX } from "@/integration-api/runtime/theme";
 import { createMarkerSvg } from "@/lib/markerSvg";
+import { routeStopCopy } from "@/lib/navigation/routeStopCopy";
 
 const SOURCE = "route-search-source";
 const LAYER = "route-search-layer";
@@ -49,6 +51,7 @@ export function RouteSearchResultsLayer({
   onSelect: (poi: AlongRoutePoi<CategoryPlace>) => void;
 }) {
   const { mapRef, mapReady, styleVersion } = useMap();
+  const t = useTranslations("navigation");
   const fallbackImageId = `route-search-pin-${categoryKey}`;
   const [loadedBrand, setLoadedBrand] = useState<{ qid: string; styleVersion: number } | null>(
     null,
@@ -123,19 +126,22 @@ export function RouteSearchResultsLayer({
         sourceId: SOURCE,
         data: {
           type: "FeatureCollection",
-          features: results.map((poi) => ({
-            type: "Feature" as const,
-            properties: {
-              id: poi.place.id,
-              imageId,
-              label: `+${Math.max(1, Math.round(poi.detourSeconds / 60))} min`,
-            },
-            geometry: { type: "Point" as const, coordinates: poi.place.coordinates },
-          })),
+          features: results.map((poi) => {
+            const copy = routeStopCopy(poi, true);
+            return {
+              type: "Feature" as const,
+              properties: {
+                id: poi.place.id,
+                imageId,
+                label: t(copy.key, copy.values),
+              },
+              geometry: { type: "Point" as const, coordinates: poi.place.coordinates },
+            };
+          }),
         },
       },
     ]);
-  }, [imageId, publishGeoJson, results, styleVersion]);
+  }, [imageId, publishGeoJson, results, styleVersion, t]);
 
   useEffect(() => {
     const map = mapRef.current;

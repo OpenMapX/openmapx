@@ -651,6 +651,21 @@ describe("renderServiceSnippet", () => {
     expect(snippet.volumes).toEqual(["../data/osm:/data/osm"]);
   });
 
+  it("reads env files from the infra root, wherever the compose file lives", () => {
+    const service = svc("app-api", {
+      container: { image: "t/app-api", tag: "latest", expose: [80], envFile: [".env"] },
+    });
+    expect(
+      renderServiceSnippet(service, {
+        composeOutDir: "/repo/infra/docker/.trusted-config-current",
+        infraDir: "/repo/infra/docker",
+      }).env_file,
+    ).toEqual(["../.env"]);
+    expect(renderServiceSnippet(service, { composeOutDir: "/repo/infra/docker" }).env_file).toEqual(
+      [".env"],
+    );
+  });
+
   describe("optional bindMounts", () => {
     it("emits an optional bindMount when its host source exists", () => {
       const warnings: string[] = [];

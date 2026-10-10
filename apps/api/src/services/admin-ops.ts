@@ -91,10 +91,9 @@ export function resetDockerCache(): void {
 }
 
 /**
- * Render docker-compose.generated.yml + hardlink plan from the current service
- * registry and operator config layers (defaults + DB + env). Called before
- * `service.start` so "save config + apply" can take effect without requiring
- * a separate manual CLI render.
+ * Apply the operator's selection with the current config layers (defaults +
+ * DB + env) as a new configuration generation. Called before `service.start`
+ * so "save config + apply" takes effect without a separate CLI render.
  */
 export async function renderAndPersistCompose(options: {
   operationKey: string;

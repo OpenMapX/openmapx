@@ -81,6 +81,11 @@ vi.mock("../../utils/cache.js", () => ({
   TTL: { places: { detail: 86400 }, photos: 3600 },
 }));
 
+const mockAmbientPlace = vi.fn().mockResolvedValue(null);
+vi.mock("@openmapx/core/ambient-places-server", () => ({
+  readAmbientPlaceByGers: (...args: unknown[]) => mockAmbientPlace(...args),
+}));
+
 // App setup
 
 let app: FastifyInstance;
@@ -316,6 +321,36 @@ describe("POST /places/card-enrichment", () => {
         },
       ],
     });
+  });
+
+  it("never offers a camera still as a place photo while camera hosts are declared", async () => {
+    const { setCameraMediaSources } = await import("../image-hosts.js");
+    setCameraMediaSources([
+      { sourceId: "fi-digitraffic-cameras", mediaHosts: ["weathercam.digitraffic.fi"] },
+    ]);
+    try {
+      mockSearchHeroPhotos.mockResolvedValueOnce([
+        {
+          url: "https://weathercam.digitraffic.fi/C0150301.jpg",
+          source: "wikimedia",
+          author: "Fintraffic",
+          license: "CC BY 4.0",
+        },
+      ]);
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/places/card-enrichment",
+        payload: { places: [{ ...place, id: "osm:node/999902", fields: ["photo"] }] },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const [result] = response.json().results;
+      expect(result.photo).toBeUndefined();
+      expect(result.outcomes.photo).toEqual({ status: "absent" });
+    } finally {
+      setCameraMediaSources([]);
+    }
   });
 
   it("keeps a hero photo and rating when knowledge lookup fails", async () => {
@@ -1038,6 +1073,31 @@ describe("GET /places/:id", () => {
     expect(mockLookupByCoords).not.toHaveBeenCalled();
   });
 
+  it("hands a resolver an id with a literal % exactly as the client sent it", async () => {
+    const fuelResolver = vi.fn().mockResolvedValue({
+      id: "fuel:50%off a%20b",
+      primaryScheme: "fuel",
+      ids: { fuel: "50%off a%20b" },
+      name: "Shell",
+      address: "Some Street 1, Berlin",
+      coordinates: [13.37, 52.52] as [number, number],
+    });
+    registerPlaceResolver("fuel", fuelResolver);
+    mockGetPlaceKnowledge.mockResolvedValue({ externalIds: {} });
+    mockBuildReviewLinks.mockReturnValue([]);
+
+    const res = await app.inject({
+      method: "GET",
+      url: `/places/${encodeURIComponent("fuel:50%off a%20b")}?${qs({ lat: "52.52", lng: "13.37" })}`,
+    });
+
+    expect(res.statusCode, res.body).toBe(200);
+    expect(fuelResolver).toHaveBeenCalledWith(
+      "50%off a%20b",
+      expect.objectContaining({ lat: 52.52, lng: 13.37 }),
+    );
+  });
+
   it("prefers lookupByNameAndCoords for non-scheme opaque ids", async () => {
     mockLookupByNameAndCoords.mockResolvedValue(MOCK_PLACE);
     mockGetPlaceKnowledge.mockResolvedValue({ externalIds: {} });
@@ -1447,5 +1507,55 @@ describe("pickMoreSpecificWebsite", () => {
     expect(
       pickMoreSpecificWebsite("https://restaurant-mueller.de/", "https://www.lieferando.de/x/y/z"),
     ).toBe("https://restaurant-mueller.de/");
+  });
+});
+
+describe("published ambient GERS details without the search provider", () => {
+  it("resolves the published canonical identity without nearest-place fallback", async () => {
+    mockAmbientPlace.mockResolvedValueOnce({
+      generation: "published-generation",
+      place: {
+        id: "osm:node/9007199254740993",
+        gersId: "gers-a",
+        name: "Klinik",
+        names: { en: "Clinic" },
+        coordinates: [6.08, 50.77],
+        category: "hospital",
+        rank: 380,
+        minZoom: 13,
+        tenant: false,
+        sources: "osm,overture",
+      },
+    });
+    const response = await app.inject({
+      method: "GET",
+      url: "/places/overture:gers-a?lat=50.77&lng=6.08&name=Clinic&lang=en",
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      id: "osm:node/9007199254740993",
+      name: "Clinic",
+      ids: { osm: "node/9007199254740993", overture: "gers-a" },
+    });
+    expect(mockLookupByNameAndCoords).not.toHaveBeenCalled();
+    expect(mockLookupByCoords).not.toHaveBeenCalled();
+    expect(mockHashKey).toHaveBeenCalledWith(
+      "cache:place",
+      expect.objectContaining({ ambientGeneration: "published-generation" }),
+    );
+  });
+  it("preserves existing fallback for an unpublished disabled-provider deep link", async () => {
+    mockAmbientPlace.mockResolvedValueOnce(null);
+    mockIsEnabledIntegrationScheme.mockReturnValue(false);
+    mockLookupByNameAndCoords.mockResolvedValueOnce(MOCK_PLACE);
+    mockGetPlaceKnowledge.mockResolvedValue({ externalIds: {} });
+    mockBuildReviewLinks.mockReturnValue([]);
+    const response = await app.inject({
+      method: "GET",
+      url: "/places/overture:not-published?lat=50.77&lng=6.08&name=Clinic",
+    });
+    expect(response.statusCode).toBe(200);
+    expect(mockAmbientPlace).toHaveBeenCalled();
+    expect(mockLookupByNameAndCoords).toHaveBeenCalled();
   });
 });

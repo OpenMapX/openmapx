@@ -17,9 +17,8 @@ export const BRAND_HEX = "#207E23";
 /**
  * Traffic-delay text colours, keyed by the shared `TrafficBand` names. CSS
  * variables rather than hexes so light/dark switching stays in CSS, matching
- * BRAND above. `freeFlow` is absent by design: a delay below the display
- * threshold is not shown at all, and a green ETA would imply we had verified
- * the route is clear.
+ * BRAND above. Green ETAs use BRAND separately and require complete, fresh
+ * congestion coverage; a small recosting difference alone is insufficient.
  */
 export const TRAFFIC_TEXT_COLOR: Record<DelayBand, string> = {
   light: "var(--omx-traffic-light)",

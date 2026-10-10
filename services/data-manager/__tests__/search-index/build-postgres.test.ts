@@ -1,10 +1,10 @@
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { buildOsmSearchIndex } from "../../src/jobs/search-index/build.js";
 import { StateStore } from "../../src/state.js";
-import { startPostgis } from "../poi-ingest/_testcontainer.js";
+import { startPostgis } from "../helpers/postgis-testcontainer.js";
 
 const skipE2e = process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1";
 
@@ -149,3 +149,75 @@ describe.skipIf(skipE2e)("atomic search-index publication", () => {
     }
   }, 120_000);
 });
+
+it.skipIf(skipE2e)(
+  "keeps zero-term native POIs and refuses a changed PBF before publication",
+  async () => {
+    const pg = await startPostgis();
+    const dir = mkdtempSync(join(tmpdir(), "global-source-"));
+    try {
+      const path = join(dir, "planet.osm.pbf");
+      writeFileSync(path, "original");
+      const store = new StateStore(dir);
+      store.upsert({
+        type: "osm-pbf",
+        id: "planet",
+        region: "planet",
+        path,
+        sizeBytes: 8,
+        downloadedAt: new Date().toISOString(),
+      });
+      const runtimeState = { building: false, failure: null };
+      const opts = { region: "planet", dataDir: dir, store, sql: pg.sql, runtimeState };
+      const emit = async (
+        onBatch: (
+          records: import("../../src/jobs/search-index/extract.js").SearchPlaceRecord[],
+        ) => Promise<void>,
+      ) => {
+        await onBatch([
+          {
+            osmType: "node",
+            osmId: "1",
+            name: "喫茶店",
+            lat: 35.7,
+            lng: 139.7,
+            category: "amenity/cafe",
+            tags: { name: "喫茶店", amenity: "cafe" },
+            importance: 0.5,
+            terms: [],
+          },
+        ]);
+        return { emitted: 1, extracted: 1 };
+      };
+      const first = await buildOsmSearchIndex({
+        ...opts,
+        dependencies: { extract: async ({ onBatch }) => emit(onBatch) },
+      });
+      expect(first).toMatchObject({ placeCount: 1, termCount: 0 });
+      const [row] = await pg.sql.unsafe(
+        `SELECT to_jsonb(s) AS state FROM osm_search.index_state s`,
+      );
+      expect(row.state.source_file_identity).toEqual(expect.any(String));
+      await expect(
+        buildOsmSearchIndex({
+          ...opts,
+          dependencies: {
+            extract: async ({ onBatch }) => {
+              const result = await emit(onBatch);
+              const replacement = join(dir, "replacement.pbf");
+              writeFileSync(replacement, "replaced");
+              renameSync(replacement, path);
+              return result;
+            },
+          },
+        }),
+      ).rejects.toThrow(/source.*changed/i);
+      const [retained] = await pg.sql.unsafe(`SELECT epoch FROM osm_search.index_state`);
+      expect(retained.epoch).toBe(first.epoch);
+    } finally {
+      await pg.stop();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  },
+  60000,
+);

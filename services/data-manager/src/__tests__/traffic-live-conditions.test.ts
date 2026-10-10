@@ -11,7 +11,7 @@ vi.mock("../ops-client.js", () => ({
   runOpsOperation: vi.fn(async () => ({ changed: true })),
 }));
 
-import { type CronSetupOptions, setupCron } from "../cron.js";
+import { type CronSetupOptions, setupCron, TRAFFIC_LEASE_RENEWAL_MS } from "../cron.js";
 import type { WayEdge } from "../jobs/traffic/ways-to-edges.js";
 import type { WriteLiveTrafficDeps, WriteLiveTrafficResult } from "../jobs/traffic/write-live.js";
 import { conditionRow, conditionsBody } from "./fixtures/road-condition.js";
@@ -99,6 +99,7 @@ function writeResult(deps: WriteLiveTrafficDeps): WriteLiveTrafficResult {
 }
 
 interface Seams {
+  trafficLiveCronExpression?: string;
   readTrafficGraphState?: CronSetupOptions["readTrafficGraphState"];
   roadConditionsMode?: "shadow" | "active";
   fetchLiveTrafficCsv?: () => Promise<string>;
@@ -129,7 +130,7 @@ function setupCronWithSeams(seams: Seams) {
     feedProxyReloadCronExpression: "disabled",
     stalenessCheckCronExpression: "disabled",
     trafficExtractCronExpression: "disabled",
-    trafficLiveCronExpression: "disabled",
+    trafficLiveCronExpression: seams.trafficLiveCronExpression ?? "disabled",
     trafficPredictedCronExpression: "disabled",
     openConditionsUrl: OPEN_CONDITIONS_URL,
     roadConditionsMode: seams.roadConditionsMode ?? "active",
@@ -248,7 +249,7 @@ describe("traffic-live conditions merge", () => {
     handles.stop();
   });
 
-  it("keeps the last good conditions for up to TRAFFIC_CONDITIONS_STALE_MS, then drops them", async () => {
+  it("keeps the last good conditions until a renewal before TRAFFIC_CONDITIONS_STALE_MS, then drops them", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-09-06T00:00:00.000Z"));
 
@@ -269,23 +270,82 @@ describe("traffic-live conditions merge", () => {
     await handles.runTrafficLiveNow();
     expect(writeLive.mock.calls[0]?.[0].overrides?.size).toBe(1);
 
-    // Second cycle fails while the last good set is still inside the window.
+    // Second cycle fails while a renewal could still replace the last good set.
     failing = true;
-    vi.advanceTimersByTime(staleMs - 1);
+    vi.advanceTimersByTime(staleMs - TRAFFIC_LEASE_RENEWAL_MS - 1);
     await handles.runTrafficLiveNow();
     expect(writeLive.mock.calls[1]?.[0].overrides?.get("0:1:2")).toMatchObject({ closed: true });
     expect(handles.getTrafficConditionsApplied().observationIds).toEqual([A1]);
     expect(writeLive.mock.calls[1]?.[0].validUntil).toBe("2026-09-06T00:10:00.000Z");
     expect(handles.getTrafficConditionsApplied().validUntil).toBe("2026-09-06T00:10:00.000Z");
 
-    // Past the window the closures are dropped rather than held open forever.
+    // Past it the closures are dropped rather than held open forever.
     vi.advanceTimersByTime(2);
     await handles.runTrafficLiveNow();
     expect(writeLive.mock.calls[2]?.[0].overrides?.size).toBe(0);
-    const applied = handles.getTrafficConditionsApplied();
-    expect(applied.observationIds).toEqual([]);
-    expect(applied.resolverVersion).toBeNull();
+    expect(handles.getTrafficConditionsApplied().observationIds).toEqual([]);
 
+    // Past the window the set itself is gone.
+    vi.advanceTimersByTime(TRAFFIC_LEASE_RENEWAL_MS);
+    await handles.runTrafficLiveNow();
+    expect(handles.getTrafficConditionsApplied().resolverVersion).toBeNull();
+
+    handles.stop();
+  });
+
+  it("leases live speeds alone for the full term, whatever the policy or a shadow effect's deadline", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-09-06T00:00:00.000Z"));
+    const write = vi.fn(async (deps: WriteLiveTrafficDeps) => writeResult(deps));
+    const handles = setupCronWithSeams({ roadConditionsMode: "shadow", writeLiveTraffic: write });
+    await handles.runTrafficLiveNow();
+    expect(write.mock.calls[0]?.[0].overrides?.size).toBe(0);
+    expect(write.mock.calls[0]?.[0].validUntil).toBe("2026-09-06T00:05:00.000Z");
+    handles.stop();
+  });
+
+  it("holds written overrides to the policy lease and renews them before it lapses", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-09-06T00:00:00.000Z"));
+    const write = vi.fn(async (deps: WriteLiveTrafficDeps) => writeResult(deps));
+    const handles = setupCronWithSeams({
+      // The next scheduled cycle is a year away: only a renewal can come in time.
+      trafficLiveCronExpression: "0 0 1 1 *",
+      writeLiveTraffic: write,
+    });
+    await handles.runTrafficLiveNow();
+    expect(write.mock.calls[0]?.[0].overrides?.size).toBe(1);
+    expect(write.mock.calls[0]?.[0].validUntil).toBe("2026-09-06T00:02:30.000Z");
+
+    await vi.advanceTimersByTimeAsync(150_000 - TRAFFIC_LEASE_RENEWAL_MS - 1);
+    expect(write).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1);
+    await vi.waitFor(() => expect(write).toHaveBeenCalledTimes(2));
+    expect(Date.parse(write.mock.calls[1]?.[0].validUntil ?? "")).toBeGreaterThan(
+      Date.parse("2026-09-06T00:02:30.000Z"),
+    );
+    handles.stop();
+  });
+
+  it("leaves out an effect that ends before a renewal could replace it", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-09-06T00:00:00.000Z"));
+    const write = vi.fn(async (deps: WriteLiveTrafficDeps) => writeResult(deps));
+    const handles = setupCronWithSeams({
+      writeLiveTraffic: write,
+      fetchConditionsJson: async () =>
+        conditionsBody([
+          conditionRow("a:1", {
+            evidence: {
+              source_checked_at: new Date(Date.now() - 60_000).toISOString(),
+              fresh_until: new Date(Date.now() + TRAFFIC_LEASE_RENEWAL_MS - 1).toISOString(),
+            },
+          }),
+        ]),
+    });
+    await handles.runTrafficLiveNow();
+    expect(write.mock.calls[0]?.[0].overrides?.size).toBe(0);
+    expect(write.mock.calls[0]?.[0].validUntil).toBe("2026-09-06T00:05:00.000Z");
     handles.stop();
   });
 

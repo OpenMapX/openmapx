@@ -1,0 +1,597 @@
+{
+  "records": [
+    {
+      "id": "oc:situation:eu-meteoalarm-alerts:2.49.0.0.40.0.AT.-20261005084325_ATNT_803",
+      "temporality": "live",
+      "externalIds": [
+        {
+          "scheme": "cap",
+          "id": "2.49.0.0.40.0.AT.-20261005084325_ATNT_803",
+          "authority": "cap@zamg.ac.at"
+        }
+      ],
+      "location": {
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            [
+              [9.6495, 47.3674],
+              [9.6653, 47.3595],
+              [9.673, 47.3442],
+              [9.7238, 47.3428],
+              [9.7593, 47.3059],
+              [9.7795, 47.3063],
+              [9.7881, 47.2966],
+              [9.8217, 47.289],
+              [9.8466, 47.2971],
+              [9.8176, 47.3168],
+              [9.8218, 47.3511],
+              [9.8443, 47.3603],
+              [9.8066, 47.4079],
+              [9.8019, 47.4204],
+              [9.8093, 47.4445],
+              [9.7472, 47.4395],
+              [9.6665, 47.4552],
+              [9.6444, 47.4357],
+              [9.6544, 47.4044],
+              [9.6739, 47.3839],
+              [9.6495, 47.3674]
+            ]
+          ]
+        },
+        "extent": "area",
+        "geometryOrigin": "derived",
+        "fuzziness": "exact",
+        "admin": {
+          "country": "AT",
+          "geocodes": [
+            {
+              "scheme": "emma_id",
+              "code": "AT803"
+            }
+          ]
+        },
+        "areaDescription": [
+          {
+            "lang": "de-DE",
+            "text": "Dornbirn"
+          },
+          {
+            "lang": "en-GB",
+            "text": "Dornbirn"
+          }
+        ]
+      },
+      "relations": [
+        {
+          "ref": {
+            "class": "situation",
+            "id": "oc:situation:eu-meteoalarm-alerts:2.49.0.0.40.0.AT.-20261005083327_ATNT_803"
+          },
+          "relation": "update_of"
+        }
+      ],
+      "provenance": {
+        "origin": "feed",
+        "sourceId": "eu-meteoalarm-alerts",
+        "sourceFormat": "meteoalarm",
+        "accessMode": "bulk",
+        "recordId": "2.49.0.0.40.0.AT.-20261005084325_ATNT_803",
+        "sourceUpdatedAt": "2026-10-05T08:43:25+02:00",
+        "attribution": {
+          "provider": "EUMETNET - MeteoAlarm",
+          "license": "LicenseRef-MeteoAlarm-Terms",
+          "licenseUrl": "https://meteoalarm.org/en/live/page/terms-and-conditions"
+        },
+        "privacy": {
+          "class": "authoritative"
+        },
+        "instanceId": "hazards.example"
+      },
+      "freshness": {
+        "fetchedAt": "2026-10-05T06:50:00Z",
+        "expiresAt": "2026-10-05T06:55:00Z"
+      },
+      "class": "situation",
+      "kind": "alert",
+      "type": "thunderstorm",
+      "planned": false,
+      "certainty": "likely",
+      "severity": {
+        "label": "moderate",
+        "source": "declared",
+        "declaredRaw": "Moderate"
+      },
+      "headline": [
+        {
+          "lang": "de-DE",
+          "text": "Gewitterwarnung"
+        },
+        {
+          "lang": "en-GB",
+          "text": "Thunderstormwarning"
+        }
+      ],
+      "description": [
+        {
+          "lang": "de-DE",
+          "text": "Ab sofort (05.10.2026 08:43) ist mit Gewittern zu rechnen."
+        },
+        {
+          "lang": "en-GB",
+          "text": "Henceforth (05.10.2026 08:43) thunderstorms are possible."
+        }
+      ],
+      "instruction": [
+        {
+          "lang": "de-DE",
+          "text": "VORSICHT bei Aktivitäten im Freien, Gewitter sind möglich. Achtung an exponierten Stellen, wie auf Bergen und freien Flächen sowie im Wald."
+        },
+        {
+          "lang": "en-GB",
+          "text": "BE AWARE that thunderstorms may occur. Take extra care in exposed areas, like mountains, forest and open terrain. Disruption to outdoor activities is possible."
+        }
+      ],
+      "validity": {
+        "status": "active",
+        "start": "2026-10-05T08:43:25+02:00",
+        "end": "2026-10-05T09:43:25+02:00"
+      },
+      "effects": [],
+      "groupId": "2.49.0.0.40.0.AT.-20261005083327_ATNT_803",
+      "details": {
+        "kind": "alert",
+        "v": 1,
+        "cap": {
+          "identifier": "2.49.0.0.40.0.AT.-20261005084325_ATNT_803",
+          "sender": "cap@zamg.ac.at",
+          "sent": "2026-10-05T08:43:25+02:00",
+          "status": "actual",
+          "msgType": "update",
+          "scope": "public",
+          "references": [
+            {
+              "sender": "cap@zamg.ac.at",
+              "identifier": "2.49.0.0.40.0.AT.-20261005083327_ATNT_803",
+              "sent": "2026-10-05T08:33:27+02:00"
+            }
+          ],
+          "category": ["met"],
+          "event": [
+            {
+              "lang": "de-DE",
+              "text": "Gewitterwarnung"
+            },
+            {
+              "lang": "en-GB",
+              "text": "Thunderstormwarning"
+            }
+          ],
+          "responseType": ["monitor"],
+          "urgency": "future",
+          "severity": "moderate",
+          "certainty": "likely",
+          "effective": "2026-10-05T08:43:25+02:00",
+          "onset": "2026-10-05T08:43:25+02:00",
+          "parameters": [
+            {
+              "valueName": "awareness_level",
+              "value": "2; yellow; Moderate"
+            },
+            {
+              "valueName": "awareness_type",
+              "value": "3; Thunderstorm"
+            }
+          ],
+          "web": "http://warnungen.zamg.at/html/de/heute/Gewitter/at/vorarlberg/",
+          "senderName": [
+            {
+              "lang": "de-DE",
+              "text": "GeoSphere Austria"
+            },
+            {
+              "lang": "en-GB",
+              "text": "GeoSphere Austria"
+            }
+          ]
+        }
+      },
+      "canonicalId": "9432e03093e1c70557c22a99a424b1fe4c33b9583de6bc4eff7fab5c5a017ea0",
+      "domain": "hazards",
+      "revision": 1,
+      "recordedAt": "2026-10-05T06:50:00Z",
+      "contentHash": "d6138cd1e7aad1a40ee842e2aeb384266cdc20ca0cc49b00a3cb092230efc029"
+    },
+    {
+      "id": "oc:situation:eu-meteoalarm-alerts:2.49.0.0.250.0.FR.20261008160042.082021",
+      "temporality": "forecast",
+      "externalIds": [
+        {
+          "scheme": "cap",
+          "id": "2.49.0.0.250.0.FR.20261008160042.082021",
+          "authority": "vigilance@meteo.fr"
+        }
+      ],
+      "location": {
+        "geometry": null,
+        "extent": "area",
+        "geometryOrigin": "none",
+        "fuzziness": "exact",
+        "admin": {
+          "country": "FR",
+          "geocodes": [
+            {
+              "scheme": "nuts",
+              "code": "FR815"
+            },
+            {
+              "scheme": "nuts",
+              "code": "FR821"
+            },
+            {
+              "scheme": "nuts",
+              "code": "FR831"
+            },
+            {
+              "scheme": "nuts",
+              "code": "FR824"
+            },
+            {
+              "scheme": "nuts",
+              "code": "FR832"
+            },
+            {
+              "scheme": "nuts",
+              "code": "FR826"
+            }
+          ]
+        },
+        "areaDescription": [
+          {
+            "lang": "fr-FR",
+            "text": "Pyrénées-Orientales; Alpes-de-Haute-Provence; Corse-du-Sud; Bouches-du-Rhône; Haute-Corse; Vaucluse"
+          },
+          {
+            "lang": "en-GB",
+            "text": "Pyrénées-Orientales; Alpes-de-Haute-Provence; Corse-du-Sud; Bouches-du-Rhône; Haute-Corse; Vaucluse"
+          }
+        ]
+      },
+      "provenance": {
+        "origin": "feed",
+        "sourceId": "eu-meteoalarm-alerts",
+        "sourceFormat": "meteoalarm",
+        "accessMode": "bulk",
+        "recordId": "2.49.0.0.250.0.FR.20261008160042.082021",
+        "sourceUpdatedAt": "2026-10-08T16:00:42+02:00",
+        "attribution": {
+          "provider": "EUMETNET - MeteoAlarm",
+          "license": "LicenseRef-MeteoAlarm-Terms",
+          "licenseUrl": "https://meteoalarm.org/en/live/page/terms-and-conditions"
+        },
+        "privacy": {
+          "class": "authoritative"
+        },
+        "instanceId": "hazards.example"
+      },
+      "freshness": {
+        "fetchedAt": "2026-10-08T15:00:00Z",
+        "expiresAt": "2026-10-08T15:05:00Z"
+      },
+      "class": "situation",
+      "kind": "alert",
+      "type": "wind",
+      "planned": false,
+      "certainty": "likely",
+      "severity": {
+        "label": "moderate",
+        "source": "declared",
+        "declaredRaw": "Moderate"
+      },
+      "headline": [
+        {
+          "lang": "fr-FR",
+          "text": "Vigilance jaune vent-violent"
+        },
+        {
+          "lang": "en-GB",
+          "text": "Moderate wind warning"
+        }
+      ],
+      "description": [
+        {
+          "lang": "fr-FR",
+          "text": "Des phénomènes habituels dans la région mais occasionnellement et localement dangereux sont prévus (exemple : mistral, orage d'été, montée des eaux, fortes vagues submergeant le littoral)."
+        },
+        {
+          "lang": "en-GB",
+          "text": "Moderate damages may occur, especially in vulnerable or in exposed areas and to people who carry out weather-related activities."
+        }
+      ],
+      "instruction": [
+        {
+          "lang": "fr-FR",
+          "text": "Soyez attentifs si vous pratiquez des activités sensibles au risque météorologique ou à proximité d'un rivage ou d'un cours d'eau. Tenez-vous au courant de l'évolution de la situation."
+        },
+        {
+          "lang": "en-GB",
+          "text": "Be careful, keep informed of the latest weather forecast."
+        }
+      ],
+      "validity": {
+        "status": "active",
+        "start": "2026-10-09T00:00:00+02:00",
+        "end": "2026-10-10T00:00:00+02:00"
+      },
+      "effects": [],
+      "groupId": "2.49.0.0.250.0.FR.20261008160042.082021",
+      "details": {
+        "kind": "alert",
+        "v": 1,
+        "cap": {
+          "identifier": "2.49.0.0.250.0.FR.20261008160042.082021",
+          "sender": "vigilance@meteo.fr",
+          "sent": "2026-10-08T16:00:42+02:00",
+          "status": "actual",
+          "msgType": "alert",
+          "scope": "public",
+          "category": ["met"],
+          "event": [
+            {
+              "lang": "fr-FR",
+              "text": "Vigilance jaune vent-violent"
+            },
+            {
+              "lang": "en-GB",
+              "text": "Moderate wind warning"
+            }
+          ],
+          "responseType": ["monitor"],
+          "urgency": "future",
+          "severity": "moderate",
+          "certainty": "likely",
+          "effective": "2026-10-09T00:00:00+02:00",
+          "onset": "2026-10-09T00:00:00+02:00",
+          "parameters": [
+            {
+              "valueName": "awareness_level",
+              "value": "2; yellow; Moderate"
+            },
+            {
+              "valueName": "awareness_type",
+              "value": "1; Wind"
+            }
+          ],
+          "web": "https://vigilance.meteofrance.fr/",
+          "senderName": [
+            {
+              "lang": "fr-FR",
+              "text": "METEO-FRANCE"
+            },
+            {
+              "lang": "en-GB",
+              "text": "METEO-FRANCE"
+            }
+          ],
+          "contact": [
+            {
+              "lang": "fr-FR",
+              "text": "METEO-FRANCE"
+            },
+            {
+              "lang": "en-GB",
+              "text": "METEO-FRANCE"
+            }
+          ]
+        }
+      },
+      "canonicalId": "96ac4aef44e4e2a70c50d5ac215556fcac5f0449e6ad2ea172c8a3b42c8d8bdd",
+      "domain": "hazards",
+      "revision": 1,
+      "recordedAt": "2026-10-08T15:00:00Z",
+      "contentHash": "b432b39ec54b6320fd0d722a5f9a529d12150209dc6fc7ab08cddeadb48a44bd"
+    },
+    {
+      "id": "oc:situation:us-nws-alerts:urn:oid:2.49.0.1.840.0.58efb8d5eadaa26c8c504963d5795835caecf788.004.1",
+      "temporality": "forecast",
+      "externalIds": [
+        {
+          "scheme": "cap",
+          "id": "urn:oid:2.49.0.1.840.0.58efb8d5eadaa26c8c504963d5795835caecf788.004.1",
+          "authority": "w-nws.webmaster@noaa.gov"
+        }
+      ],
+      "location": {
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            [
+              [-134.7495, 55.742],
+              [-137.6216, 56.3706],
+              [-136.2064, 56.836],
+              [-136.1479, 56.8041],
+              [-136.0261, 56.7631],
+              [-135.968, 56.7319],
+              [-135.8839, 56.6684],
+              [-135.7021, 56.5917],
+              [-135.5236, 56.4817],
+              [-135.4059, 56.3558],
+              [-135.3671, 56.2902],
+              [-135.2774, 56.1872],
+              [-135.1769, 56.0954],
+              [-134.9509, 55.9506],
+              [-134.7783, 55.7917],
+              [-134.7495, 55.742]
+            ]
+          ]
+        },
+        "extent": "area",
+        "geometryOrigin": "derived",
+        "fuzziness": "exact",
+        "admin": {
+          "country": "US",
+          "geocodes": [
+            {
+              "scheme": "same",
+              "code": "058662"
+            },
+            {
+              "scheme": "ugc",
+              "code": "PKZ662"
+            }
+          ]
+        },
+        "areaDescription": [
+          {
+            "lang": "en-US",
+            "text": "Cape Decision to Cape Edgecumbe from 15 to 80 NM"
+          }
+        ]
+      },
+      "provenance": {
+        "origin": "feed",
+        "sourceId": "us-nws-alerts",
+        "sourceFormat": "nws",
+        "accessMode": "bulk",
+        "recordId": "urn:oid:2.49.0.1.840.0.58efb8d5eadaa26c8c504963d5795835caecf788.004.1",
+        "sourceUpdatedAt": "2026-10-08T12:03:00-08:00",
+        "attribution": {
+          "provider": "National Weather Service (NOAA)",
+          "license": "LicenseRef-US-Gov-Public-Domain",
+          "licenseUrl": "https://www.weather.gov/disclaimer"
+        },
+        "privacy": {
+          "class": "authoritative"
+        },
+        "instanceId": "hazards.example"
+      },
+      "freshness": {
+        "fetchedAt": "2026-10-08T21:10:00Z",
+        "expiresAt": "2026-10-08T20:15:00-08:00"
+      },
+      "class": "situation",
+      "kind": "alert",
+      "type": "marine",
+      "subtype": "small_craft",
+      "planned": false,
+      "certainty": "likely",
+      "severity": {
+        "label": "minor",
+        "source": "declared",
+        "declaredRaw": "Minor"
+      },
+      "headline": [
+        {
+          "lang": "en-US",
+          "text": "Small Craft Advisory issued October 8 at 12:03PM AKDT until October 9 at 6:00PM AKDT by NWS Juneau AK"
+        }
+      ],
+      "description": [
+        {
+          "lang": "en-US",
+          "text": "* WHAT...Northwest winds 15 to 25 kt and seas 6 to 9 ft expected.\n\n* WHERE...Cape Decision to Cape Edgecumbe from 15 to 80 NM.\n\n* WHEN...From 1 AM to 6 PM AKDT Friday.\n\n* IMPACTS...Conditions will be hazardous to small craft."
+        }
+      ],
+      "instruction": [
+        {
+          "lang": "en-US",
+          "text": "Inexperienced mariners, especially those operating smaller\nvessels, should avoid navigating in hazardous conditions."
+        }
+      ],
+      "validity": {
+        "status": "active",
+        "start": "2026-10-08T12:03:00-08:00",
+        "end": "2026-10-08T20:15:00-08:00"
+      },
+      "effects": [],
+      "groupId": "urn:oid:2.49.0.1.840.0.58efb8d5eadaa26c8c504963d5795835caecf788.004.1",
+      "details": {
+        "kind": "alert",
+        "v": 1,
+        "cap": {
+          "identifier": "urn:oid:2.49.0.1.840.0.58efb8d5eadaa26c8c504963d5795835caecf788.004.1",
+          "sender": "w-nws.webmaster@noaa.gov",
+          "sent": "2026-10-08T12:03:00-08:00",
+          "status": "actual",
+          "msgType": "alert",
+          "scope": "public",
+          "codes": ["IPAWSv1.0"],
+          "category": ["met"],
+          "event": [
+            {
+              "lang": "en-US",
+              "text": "Small Craft Advisory"
+            }
+          ],
+          "eventCodes": [
+            {
+              "valueName": "SAME",
+              "value": "NWS"
+            },
+            {
+              "valueName": "NationalWeatherService",
+              "value": "SCY"
+            }
+          ],
+          "responseType": ["avoid"],
+          "urgency": "expected",
+          "severity": "minor",
+          "certainty": "likely",
+          "effective": "2026-10-08T12:03:00-08:00",
+          "onset": "2026-10-09T01:00:00-08:00",
+          "parameters": [
+            {
+              "valueName": "AWIPSidentifier",
+              "value": "MWWAJK"
+            },
+            {
+              "valueName": "WMOidentifier",
+              "value": "WHAK77 PAJK 082003"
+            },
+            {
+              "valueName": "NWSheadline",
+              "value": "SMALL CRAFT ADVISORY REMAINS IN EFFECT FROM 1 AM TO 6 PM AKDT FRIDAY"
+            },
+            {
+              "valueName": "BLOCKCHANNEL",
+              "value": "EAS"
+            },
+            {
+              "valueName": "BLOCKCHANNEL",
+              "value": "NWEM"
+            },
+            {
+              "valueName": "BLOCKCHANNEL",
+              "value": "CMAS"
+            },
+            {
+              "valueName": "VTEC",
+              "value": "/O.CON.PAJK.SC.Y.0322.261009T0900Z-261010T0200Z/"
+            },
+            {
+              "valueName": "eventEndingTime",
+              "value": "2026-10-09T18:00:00-08:00"
+            },
+            {
+              "valueName": "expiredReferences",
+              "value": "w-nws.webmaster@noaa.gov,urn:oid:2.49.0.1.840.0.f2495123a73bdf07f23ed1776c91a43a545b7173.004.1,2026-10-08T03:50:00-08:00"
+            }
+          ],
+          "web": "https://api.weather.gov/alerts/urn:oid:2.49.0.1.840.0.58efb8d5eadaa26c8c504963d5795835caecf788.004.1",
+          "senderName": [
+            {
+              "lang": "en-US",
+              "text": "NWS Juneau AK"
+            }
+          ]
+        }
+      },
+      "canonicalId": "736f7c3544f5239876681616c43c5f5e1a6c7d12bda5a5f8f246ffc2ed4f1c93",
+      "domain": "hazards",
+      "revision": 1,
+      "recordedAt": "2026-10-08T21:10:00Z",
+      "contentHash": "daea2e0d7bc9a9f282ed245bd8f041c26fa3fe702c701151da45bffe5541ec51"
+    }
+  ],
+  "next": null
+}

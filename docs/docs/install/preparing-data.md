@@ -267,7 +267,7 @@ pnpm openmapx data search-index status
 pnpm openmapx data notable-places build
 pnpm openmapx data notable-places status
 
-# Regional Overture Places synchronization and conflation
+# Regional or planet Overture Places synchronization and conflation
 pnpm openmapx data overture-sync [region]     # end-to-end pull, ingest, and conflation
 pnpm openmapx data overture-pull [region]     # pull Parquet partitions from STAC catalog
 pnpm openmapx data overture-ingest [region]   # ingest raw Places into database staging
@@ -275,6 +275,13 @@ pnpm openmapx data overture-conflate [region] # rebuild OSM <-> Overture GERS en
 pnpm openmapx data overture-status            # inspect active and staging Overture snapshots
 pnpm openmapx data overture-extract           # extract regional boundaries from OSM PBF
 ```
+
+For global ambient maps, explicitly prepare `planet` with the OSM download,
+format 2 search-index build and `overture-sync planet` commands before selecting
+**Planet** in the admin publication card. Keep the same planet PBF across both
+source builds. This is a sized preparation workload, not a boot-time task. See the
+[global publication runbook](../developer/ambient-places-publication.md#planet-preparation-restart-and-deployment)
+for ordered commands, persistent checkpoints, resource budgets and recovery.
 
 ## Sharing data with hardlinks
 

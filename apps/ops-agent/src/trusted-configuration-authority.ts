@@ -6,8 +6,9 @@ import {
   type TrustedAuthorityReadHooks,
 } from "./trusted-authority-filesystem";
 import type { TrustedConfigurationAuthoritySnapshot } from "./trusted-config-runtime";
-import { assertTrustedConfigurationSchema } from "./trusted-config-schema";
 import { loadTrustedIntegrationSchemas } from "./trusted-integration-registry";
+
+const { assertTrustedConfigurationSchema } = coreServices;
 
 const FAILED = "Trusted configuration authority rejected";
 const REPOSITORY = /^[a-f0-9]{16}$/;

@@ -28,7 +28,6 @@ COPY packages/noaa-coops-data/package.json packages/noaa-coops-data/
 COPY packages/openconditions-contrib-client/package.json packages/openconditions-contrib-client/
 COPY packages/ourairports-data/package.json packages/ourairports-data/
 COPY packages/place-ids/package.json packages/place-ids/
-COPY packages/poi-source-registry/package.json packages/poi-source-registry/
 COPY packages/presets/package.json packages/presets/
 COPY packages/brands/package.json packages/brands/
 COPY apps/api/package.json apps/api/
@@ -57,7 +56,6 @@ COPY packages/noaa-coops-data/package.json packages/noaa-coops-data/
 COPY packages/openconditions-contrib-client/package.json packages/openconditions-contrib-client/
 COPY packages/ourairports-data/package.json packages/ourairports-data/
 COPY packages/place-ids/package.json packages/place-ids/
-COPY packages/poi-source-registry/package.json packages/poi-source-registry/
 COPY packages/presets/package.json packages/presets/
 COPY packages/brands/package.json packages/brands/
 COPY apps/api/package.json apps/api/
@@ -171,7 +169,6 @@ COPY packages/noaa-coops-data/ packages/noaa-coops-data/
 COPY packages/openconditions-contrib-client/ packages/openconditions-contrib-client/
 COPY packages/ourairports-data/ packages/ourairports-data/
 COPY packages/place-ids/ packages/place-ids/
-COPY packages/poi-source-registry/ packages/poi-source-registry/
 COPY packages/presets/ packages/presets/
 COPY packages/brands/ packages/brands/
 COPY --from=prod-deps /app/packages/core/node_modules ./packages/core/node_modules
@@ -182,7 +179,6 @@ COPY --from=prod-deps /app/packages/ev-charge-planner/node_modules ./packages/ev
 COPY --from=prod-deps /app/packages/mobility-formats/node_modules ./packages/mobility-formats/node_modules
 COPY --from=prod-deps /app/packages/air-quality/node_modules ./packages/air-quality/node_modules
 COPY --from=prod-deps /app/packages/integration-framework/node_modules ./packages/integration-framework/node_modules
-COPY --from=prod-deps /app/packages/poi-source-registry/node_modules ./packages/poi-source-registry/node_modules
 COPY --from=prod-deps /app/packages/mangrove-client/node_modules ./packages/mangrove-client/node_modules
 COPY --from=prod-deps /app/packages/noaa-coops-data/node_modules ./packages/noaa-coops-data/node_modules
 COPY --from=prod-deps /app/packages/openconditions-contrib-client/node_modules ./packages/openconditions-contrib-client/node_modules

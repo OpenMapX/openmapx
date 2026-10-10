@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { resolveToken } from "../src/resolver.js";
+import { money, sharedStrings } from "../src/token.js";
+
+const charging = {
+  en: { price: { energy: "{amount}/kWh" } },
+  de: { price: { energy: "{amount}/kWh" } },
+};
 
 const shared = {
   en: {
@@ -42,6 +48,26 @@ describe("resolveToken", () => {
       { locale: "de", fallbackLocale: "en", shared, integration: parking },
     );
     expect(out).toBe("Freie Plätze/10 frei");
+  });
+
+  it("formats a money placeholder in the reader's locale", () => {
+    const price = money(0.389, "EUR");
+    const at = (locale: string) =>
+      resolveToken(
+        { $t: "price.energy", values: { amount: price } },
+        { locale, fallbackLocale: "en", shared: sharedStrings, integration: charging },
+      );
+    expect(at("en")).toBe("€0.389/kWh");
+    expect(at("de")).toBe("0,389 €/kWh");
+    // A money token stands alone too, e.g. as a table cell.
+    expect(
+      resolveToken(money(2, "CHF"), {
+        locale: "de",
+        fallbackLocale: "en",
+        shared: sharedStrings,
+        integration: undefined,
+      }),
+    ).toBe("2,00 CHF");
   });
 
   it("passes a null or undefined placeholder through as before", () => {

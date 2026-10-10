@@ -17,7 +17,7 @@ function osmResultLinkKey(id: string): string | null {
 /**
  * Applies the same fusion rules as the union-find path: OSM wins core fields,
  * Overture gap-fills brand/category, carries gersId. Extracted so both the
- * link-first pass and the union-find path produce identical output for a matched
+ * identity and link passes and the union-find path produce identical output for a matched
  * OSM↔Overture pair.
  */
 function fuseOsmOverturePair(osmR: PoiSearchResult, overtR: PoiSearchResult): PoiSearchResult {
@@ -64,14 +64,18 @@ function mergeProvenance(
 /**
  * Fuses OSM and Overture POI results.
  *
+ * An accepted canonical OSM id on an Overture result is authoritative: equal ids
+ * fuse directly, and a different OSM entity cannot acquire that result's GERS id.
+ *
  * When a precomputed `link` map is supplied (keyed `${osm_type}/${osm_id}` →
  * `gers_id`), each OSM result is first checked against the link. A hit fuses
  * the OSM result with the Overture entry whose `gersId` matches immediately,
- * marking both as consumed. The union-find spatial+name cascade then runs over
- * the remaining (unconsumed) results.
+ * marking both as consumed. Links cannot override an accepted canonical id.
+ * The union-find spatial+name cascade then runs over unconsumed results without
+ * an accepted OSM identity on the Overture side.
  *
  * Absent or empty `link` (undefined or `new Map()`) produces output deep-equal
- * to the 3-arg form — the union-find runs over all results unchanged.
+ * to the 3-arg form.
  *
  * Matched pairs keep the OSM id, carry gersId from Overture, and merge attributes
  * (OSM wins presence; Overture fills gaps + always supplies brand fields).
@@ -90,31 +94,45 @@ export function fusePoiResults(
     overture.filter((r) => r.gersId).map((r) => [r.gersId as string, r]),
   );
 
-  const linkFused: PoiSearchResult[] = [];
+  const identityFused: PoiSearchResult[] = [];
   const consumedOsmIds = new Set<string>();
   const consumedOvertureIds = new Set<string>();
 
+  for (const overtR of overture) {
+    if (!osmResultLinkKey(overtR.id)) continue;
+    const osmR = osmById.get(overtR.id);
+    if (!osmR) continue;
+    identityFused.push(fuseOsmOverturePair(osmR, overtR));
+    consumedOsmIds.add(osmR.id);
+    consumedOvertureIds.add(overtR.id);
+  }
+
   if (link && link.size > 0) {
     for (const osmR of osm) {
+      if (consumedOsmIds.has(osmR.id)) continue;
       const key = osmResultLinkKey(osmR.id);
       if (!key) continue;
       const gersId = link.get(key);
       if (!gersId) continue;
       const overtR = overtureByGers.get(gersId);
-      if (!overtR) continue;
-      linkFused.push(fuseOsmOverturePair(osmR, overtR));
+      if (!overtR || consumedOvertureIds.has(overtR.id)) continue;
+      if (osmResultLinkKey(overtR.id) && overtR.id !== osmR.id) continue;
+      identityFused.push(fuseOsmOverturePair(osmR, overtR));
       consumedOsmIds.add(osmR.id);
       consumedOvertureIds.add(overtR.id);
     }
   }
 
-  const remainingOsm = link && link.size > 0 ? osm.filter((r) => !consumedOsmIds.has(r.id)) : osm;
-  const remainingOverture =
-    link && link.size > 0 ? overture.filter((r) => !consumedOvertureIds.has(r.id)) : overture;
+  const remainingOsm = osm.filter((r) => !consumedOsmIds.has(r.id));
+  const canonicalOnly = overture.filter(
+    (r) => !consumedOvertureIds.has(r.id) && osmResultLinkKey(r.id),
+  );
+  const remainingOverture = overture.filter(
+    (r) => !consumedOvertureIds.has(r.id) && !osmResultLinkKey(r.id),
+  );
 
   if (remainingOverture.length === 0) {
-    const remainingOsmOnly = remainingOsm;
-    return [...linkFused, ...remainingOsmOnly];
+    return [...identityFused, ...remainingOsm, ...canonicalOnly];
   }
 
   // Carry phone/website so the query-time residual conflation uses the same
@@ -161,5 +179,5 @@ export function fusePoiResults(
     return r ? [r] : [];
   });
 
-  return [...linkFused, ...unionFused, ...osmOnly, ...overtureOnly];
+  return [...identityFused, ...unionFused, ...osmOnly, ...canonicalOnly, ...overtureOnly];
 }

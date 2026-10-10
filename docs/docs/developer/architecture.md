@@ -81,9 +81,8 @@ up without a separate build step.
 | `@openmapx/mobility-formats-tomp`                                                                                                                                                                                                                                    | The TOMP-API (OpenAPI-generated) client, split out so its codegen dependencies don't bleed into every bundle that touches the other formats.                                                                                                                                                             |
 | `@openmapx/mobility-core`                                                                                                                                                                                                                                            | The canonical mobility model — one entity type per domain, plus `Attribution`, `Freshness`, `MobilityResult<T>`, the TTL/dedup policy constants, and the GBFS client.                                                                                                                                    |
 | `@openmapx/db-schema`                                                                                                                                                                                                                                                | Drizzle ORM table definitions shared between `apps/api` and `services/data-manager` (job tables, feed state, provider health).                                                                                                                                                                           |
-| `@openmapx/cli`                                                                                                                                                                                                                                                      | The `openmapx` operator command line — services, compose, data/POI ingest, integrations/extensions, users, backups, cache, Transitous, and diagnostic checks.                                                                                                                                            |
+| `@openmapx/cli`                                                                                                                                                                                                                                                      | The `openmapx` operator command line — services, compose, data, integrations/extensions, users, backups, cache, Transitous, and diagnostic checks.                                                                                                                                                       |
 | `@openmapx/i18n`                                                                                                                                                                                                                                                     | Locale JSON for `en` and `de`, plus a `check-translations` gate that fails CI when locales drift. Consumed by `apps/web` (next-intl) and `apps/api` (integration string lookups).                                                                                                                        |
-| `@openmapx/poi-source-registry`                                                                                                                                                                                                                                      | A mutable in-process store of trusted built-in POI declarations. The data manager imports only image-baked integration modules; community POI JavaScript is rejected.                                                                                                                                    |
 | `@openmapx/presets`                                                                                                                                                                                                                                                  | OSM preset matching and category chips, built on iD's tagging schema.                                                                                                                                                                                                                                    |
 | `@openmapx/ev-charge-planner`                                                                                                                                                                                                                                        | Pure EV trip planning: vehicle energy models, charge curves, corridor candidates, matrix scoring, network/availability/tariff policy, and itinerary estimates.                                                                                                                                           |
 | `@openmapx/extension-cli`                                                                                                                                                                                                                                            | Community-extension manifest/service scaffolding, validation, and declarative packaging. Executable behavior belongs in an isolated service container.                                                                                                                                                   |
@@ -275,6 +274,15 @@ domain deliberately does not replace the
 geocoding fallback chain; `SearchBar` merges both responses after each has
 applied its own semantics.
 
+The client merge in `packages/core/src/utils/searchSuggestion.ts` gives exact
+result IDs and shared external identities precedence over spatial heuristics.
+Ordinary POIs require independent source-record namespaces, equivalent concrete
+address context and compatible category/entity evidence; same name and proximity
+alone must not erase separate branches or tenants. Manifest `sourceIds` are
+attribution only. City, transit and landmark reconciliation remain entity-specific.
+The [search policy](../features/search.md#keeping-distinct-places-in-the-list)
+documents the fallback's conservative address limits and source-identity rules.
+
 The OSM alias index is an ODbL-derived data product owned by `data-manager`.
 The manager streams a selected PBF through Osmium into an
 `osm_search__staging` schema, validates it, and atomically swaps it into
@@ -308,9 +316,9 @@ graph LR
 6. **`setup(ctx)`** — call every enabled built-in integration with a rich
    `IntegrationContext`. Through `ctx`, an integration registers providers
    (`ctx.registerTransitProvider`, `ctx.registerMobilityDataSource`,
-   `ctx.registerProvider(domain, …)` for the rest), declares POI sources, mounts
-   HTTP routes (`ctx.registerRoute`), and reaches its cache, logger, secrets, and
-   bound services.
+   `ctx.registerProvider(domain, …)` for the rest), mounts HTTP routes
+   (`ctx.registerRoute`), and reaches its cache, logger, secrets, and bound
+   services.
 7. **Seed health** — an initial health sweep runs ~5 s after startup and repeats
    every 60 s, populating the per-integration health the admin panel surfaces.
 
@@ -389,8 +397,9 @@ of the typed contracts in `@openmapx/integration-framework/src/contracts/` —
 `TransitProvider` (stops, departures, planning, alerts, with a capability bitmap
 so the orchestrator dispatches by declared capability rather than reflection),
 `RealtimeProvider` (vehicle positions, trip updates, situation feeds), or
-`MobilityDataSourceProvider` (bike/scooter/car-sharing, parking, fuel, EV
-charging). Each provider declares its coverage box, priority, and a static
+`MobilityDataSourceProvider` (bike/scooter/car-sharing). Parking, fuel, EV
+charging, and webcams read OpenConditions through the typed `ParkingSiteProvider`,
+`FuelStationProvider`, `ChargingSiteProvider`, and `CameraProvider` contracts. Each provider declares its coverage box, priority, and a static
 `attribution`, and returns `MobilityResult<T>`. The orchestrator dispatches on
 capability, coverage, and current health.
 
@@ -412,17 +421,15 @@ use ad-hoc provider shapes registered through `ctx.registerProvider(domain, …)
 there is no comparable canonical cross-domain model for them yet, and the merge
 logic lives entirely in each orchestrator.
 
-### The POI ingest exception
+### Bulk datasets live in OpenConditions
 
-A few sources — national EV-charging registries, parking catalogs — are too
-large to load per request. Instead of the eager `search(bbox)` shape, the
-integration declares its sources (`ctx.registerPoiSources(...)`) and an
-off-request pipeline in `data-manager` fetches, parses, validates, and writes
-them: static rows land in PostGIS with a GiST index (swapped in atomically via
-`DROP`/`RENAME`), and live rows land in Redis with a TTL. At request time a thin
-`apps/api` provider does a bounding-box `ST_Intersects` query plus a Redis read
-and wraps the result back into a `MobilityResult<T>` — so even bulk POI datasets
-present the same canonical shape to the orchestrator.
+Registries too large to fetch per request (national EV-charging, parking, fuel
+and traffic-camera registers) and the hazard feeds (weather alerts, fire
+detections, earthquakes, natural events) are not ingested by OpenMapX.
+OpenConditions fetches, parses and links them, and OpenMapX's orchestrators read
+the result through the `charging-sites`, `parking-sites`, `fuel-stations`,
+`cameras` and `hazards` providers, so bulk datasets present the same canonical
+shape as every other source.
 
 ## Where to go next
 

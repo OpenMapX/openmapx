@@ -15,9 +15,10 @@ function renderIn(locale: "en" | "de", onZoomIn = vi.fn()) {
 }
 
 describe("DataSourcePartialNotice", () => {
-  it("asks to zoom in to load more stations, and zooms in", () => {
+  it("asks to zoom in to load more, naming no kind of place, and zooms in", () => {
     const onZoomIn = renderIn("en");
-    expect(screen.getByRole("status").textContent).toContain("Zoom in to load more stations");
+    expect(screen.getByRole("status").textContent).toContain("Zoom in to load more");
+    expect(screen.getByRole("status").textContent).not.toContain("stations");
     fireEvent.click(screen.getByRole("button", { name: "Zoom in" }));
     expect(onZoomIn).toHaveBeenCalledTimes(1);
   });
@@ -25,7 +26,7 @@ describe("DataSourcePartialNotice", () => {
   it("is translated", () => {
     renderIn("de");
     expect(screen.getByRole("status").textContent).toContain(
-      "Für weitere Stationen näher heranzoomen",
+      "Für mehr Ergebnisse näher heranzoomen",
     );
   });
 });

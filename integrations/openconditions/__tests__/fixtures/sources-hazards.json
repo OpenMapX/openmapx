@@ -1,0 +1,417 @@
+{
+  "generatedAt": "2026-10-09T01:15:00.000Z",
+  "scope": "operator",
+  "sources": [
+    {
+      "id": "ca-eccc-alerts",
+      "name": "ECCC weather alerts",
+      "domain": "hazards",
+      "product": "alerts",
+      "format": "cap",
+      "operator": "eccc",
+      "region": "ca",
+      "country": "CA",
+      "accessMode": "bulk",
+      "restricted": false,
+      "license": "LicenseRef-ECCC-Data-Servers-End-use",
+      "licenseName": "Environment and Climate Change Canada Data Servers End-use Licence",
+      "licenseUrl": "https://eccc-msc.github.io/open-data/licence/readme_en/",
+      "attribution": "Data Source: Environment and Climate Change Canada",
+      "homepage": "https://weather.gc.ca/",
+      "privacyUrl": "https://www.canada.ca/en/transparency/privacy.html",
+      "terms": {
+        "url": "https://eccc-msc.github.io/open-data/licence/readme_en/",
+        "reviewedAt": "2026-10-08",
+        "note": "Weather alerts must be reproduced without alteration of their content or intent: their texts are kept verbatim in every language."
+      },
+      "rights": {
+        "redistribution": true,
+        "derivedRedistribution": true,
+        "commercialUse": true,
+        "attributionRequired": true,
+        "retention": true,
+        "shareAlike": false
+      },
+      "coverage": {
+        "countries": ["CA"]
+      }
+    },
+    {
+      "id": "de-dwd-alerts",
+      "name": "DWD weather warnings",
+      "domain": "hazards",
+      "product": "alerts",
+      "format": "cap",
+      "operator": "dwd",
+      "region": "de",
+      "country": "DE",
+      "accessMode": "bulk",
+      "restricted": false,
+      "license": "CC-BY-4.0",
+      "licenseName": "Creative Commons Attribution 4.0",
+      "licenseUrl": "https://www.dwd.de/DE/service/rechtliche_hinweise/rechtliche_hinweise_node.html",
+      "attribution": "Deutscher Wetterdienst; Geobasisdaten © GeoBasis-DE / BKG 2021 (Daten modifiziert)",
+      "homepage": "https://www.dwd.de/",
+      "privacyUrl": "https://www.dwd.de/EN/service/dataprotection/dataprotection_node.html",
+      "rights": {
+        "redistribution": true,
+        "derivedRedistribution": true,
+        "commercialUse": true,
+        "attributionRequired": true,
+        "retention": true,
+        "shareAlike": false
+      },
+      "coverage": {
+        "countries": ["DE"],
+        "bbox": [5.5, 47.2, 15.1, 55.1]
+      }
+    },
+    {
+      "id": "eu-effis-fires",
+      "name": "EFFIS burnt areas",
+      "domain": "hazards",
+      "product": "fires",
+      "format": "effis",
+      "operator": "effis",
+      "region": "eu",
+      "accessMode": "bulk",
+      "restricted": false,
+      "license": "CC-BY-4.0",
+      "licenseName": "Creative Commons Attribution 4.0",
+      "licenseUrl": "https://forest-fire.emergency.copernicus.eu/about-effis/data-license",
+      "attribution": "© European Union, 1995-2025, EFFIS (Copernicus Emergency Management Service), modified",
+      "homepage": "https://forest-fire.emergency.copernicus.eu/",
+      "privacyUrl": "https://commission.europa.eu/privacy-policy-websites-managed-european-commission_en",
+      "rights": {
+        "redistribution": true,
+        "derivedRedistribution": true,
+        "commercialUse": true,
+        "attributionRequired": true,
+        "retention": true,
+        "shareAlike": false
+      },
+      "coverage": {
+        "bbox": [-25, 25, 45, 72]
+      }
+    },
+    {
+      "id": "eu-meteoalarm-alerts",
+      "name": "MeteoAlarm warnings",
+      "domain": "hazards",
+      "product": "alerts",
+      "format": "meteoalarm",
+      "operator": "meteoalarm",
+      "region": "eu",
+      "accessMode": "bulk",
+      "restricted": true,
+      "license": "LicenseRef-MeteoAlarm-Terms",
+      "licenseName": "MeteoAlarm Terms and Conditions",
+      "licenseUrl": "https://meteoalarm.org/en/live/page/terms-and-conditions",
+      "attribution": "EUMETNET – MeteoAlarm",
+      "homepage": "https://www.meteoalarm.org/",
+      "privacyUrl": "https://api.meteoalarm.org/privacy",
+      "terms": {
+        "url": "https://meteoalarm.org/en/live/page/terms-and-conditions",
+        "reviewedAt": "2026-10-08",
+        "note": "Served in the operator's scope only: the shapes of areas named by EMMA id come from EUMETNET's geocode file, which no licence grants, and the terms require redistribution within ten minutes of MeteoAlarm's site, which the archive and federation cannot keep. A display shows the issuing service (\"EUMETNET – MeteoAlarm\" across countries), the issue time, a link to www.meteoalarm.org and the notice, and keeps the warning's text unaltered."
+      },
+      "notice": "Time delays between this website and the www.meteoalarm.org website are possible. For the most up-to-date awareness information as published by the participating National Meteorological and Hydrological Services, please refer to www.meteoalarm.org.",
+      "rights": {
+        "redistribution": false,
+        "derivedRedistribution": true,
+        "commercialUse": true,
+        "attributionRequired": true,
+        "retention": true,
+        "shareAlike": false
+      },
+      "coverage": {
+        "countries": [
+          "AD",
+          "AT",
+          "BE",
+          "BA",
+          "BG",
+          "HR",
+          "CY",
+          "CZ",
+          "DK",
+          "EE",
+          "FI",
+          "FR",
+          "GR",
+          "HU",
+          "IS",
+          "IE",
+          "IL",
+          "IT",
+          "LV",
+          "LT",
+          "LU",
+          "MT",
+          "MD",
+          "ME",
+          "NL",
+          "NO",
+          "PL",
+          "PT",
+          "MK",
+          "RO",
+          "RS",
+          "SK",
+          "SI",
+          "ES",
+          "SE",
+          "CH",
+          "UA",
+          "GB"
+        ]
+      }
+    },
+    {
+      "id": "gdacs-events",
+      "name": "GDACS disaster alerts",
+      "domain": "hazards",
+      "product": "events",
+      "format": "gdacs",
+      "operator": "gdacs",
+      "region": "global",
+      "accessMode": "bulk",
+      "restricted": false,
+      "license": "CC-BY-4.0",
+      "licenseName": "Creative Commons Attribution 4.0",
+      "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+      "attribution": "GDACS, European Union (CC BY 4.0)",
+      "homepage": "https://www.gdacs.org/",
+      "privacyUrl": "https://commission.europa.eu/privacy-policy-websites-managed-european-commission_en",
+      "terms": {
+        "url": "https://www.gdacs.org/About/termofuse.aspx",
+        "reviewedAt": "2026-10-08",
+        "note": "Licence stated in the RSS and CAP feeds; GDACS alerts are automatic model estimates, not official warnings."
+      },
+      "rights": {
+        "redistribution": true,
+        "derivedRedistribution": true,
+        "commercialUse": true,
+        "attributionRequired": true,
+        "retention": true,
+        "shareAlike": false
+      },
+      "coverage": {
+        "bbox": [-180, -90, 180, 90]
+      }
+    },
+    {
+      "id": "nasa-eonet-events",
+      "name": "NASA EONET natural events",
+      "domain": "hazards",
+      "product": "events",
+      "format": "eonet",
+      "qualifier": "eonet",
+      "operator": "nasa",
+      "region": "global",
+      "accessMode": "bulk",
+      "restricted": false,
+      "license": "CC0-1.0",
+      "licenseName": "Creative Commons Zero 1.0",
+      "licenseUrl": "https://www.earthdata.nasa.gov/engage/open-data-services-software-policies/data-use-guidance",
+      "attribution": "NASA Earth Observatory Natural Event Tracker (EONET)",
+      "homepage": "https://eonet.gsfc.nasa.gov",
+      "privacyUrl": "https://www.nasa.gov/privacy/",
+      "terms": {
+        "url": "https://eonet.gsfc.nasa.gov/what-is-eonet",
+        "reviewedAt": "2026-10-08",
+        "note": "Metadata for visualisation and general information, not official extents."
+      },
+      "rights": {
+        "redistribution": true,
+        "derivedRedistribution": true,
+        "commercialUse": true,
+        "attributionRequired": false,
+        "retention": true,
+        "shareAlike": false
+      },
+      "coverage": {
+        "bbox": [-180, -90, 180, 90]
+      }
+    },
+    {
+      "id": "nasa-firms-modis-fires",
+      "name": "NASA FIRMS MODIS active fires",
+      "domain": "hazards",
+      "product": "fires",
+      "format": "firms",
+      "qualifier": "firms-modis",
+      "operator": "nasa",
+      "region": "global",
+      "accessMode": "bulk",
+      "restricted": false,
+      "license": "CC0-1.0",
+      "licenseName": "Creative Commons Zero 1.0",
+      "licenseUrl": "https://www.earthdata.nasa.gov/engage/open-data-services-software-policies/data-use-guidance",
+      "attribution": "NASA FIRMS (LANCE / ESDIS)",
+      "homepage": "https://www.earthdata.nasa.gov/data/tools/firms",
+      "privacyUrl": "https://www.nasa.gov/privacy/",
+      "rights": {
+        "redistribution": true,
+        "derivedRedistribution": true,
+        "commercialUse": true,
+        "attributionRequired": false,
+        "retention": true,
+        "shareAlike": false
+      },
+      "coverage": {
+        "bbox": [-180, -90, 180, 90]
+      }
+    },
+    {
+      "id": "nasa-firms-viirs-fires",
+      "name": "NASA FIRMS VIIRS active fires",
+      "domain": "hazards",
+      "product": "fires",
+      "format": "firms",
+      "qualifier": "firms-viirs",
+      "operator": "nasa",
+      "region": "global",
+      "accessMode": "bulk",
+      "restricted": false,
+      "license": "CC0-1.0",
+      "licenseName": "Creative Commons Zero 1.0",
+      "licenseUrl": "https://www.earthdata.nasa.gov/engage/open-data-services-software-policies/data-use-guidance",
+      "attribution": "NASA FIRMS (LANCE / ESDIS)",
+      "homepage": "https://www.earthdata.nasa.gov/data/tools/firms",
+      "privacyUrl": "https://www.nasa.gov/privacy/",
+      "rights": {
+        "redistribution": true,
+        "derivedRedistribution": true,
+        "commercialUse": true,
+        "attributionRequired": false,
+        "retention": true,
+        "shareAlike": false
+      },
+      "coverage": {
+        "bbox": [-180, -90, 180, 90]
+      }
+    },
+    {
+      "id": "us-nifc-fires",
+      "name": "NIFC wildland fires",
+      "domain": "hazards",
+      "product": "fires",
+      "format": "wfigs",
+      "operator": "nifc",
+      "region": "us",
+      "country": "US",
+      "accessMode": "bulk",
+      "restricted": false,
+      "license": "LicenseRef-US-Gov-Public-Domain",
+      "licenseName": "U.S. Government Public Domain (17 U.S.C. §105)",
+      "licenseUrl": "https://www.arcgis.com/home/item.html?id=d1c32af3212341869b3c810f1a215824",
+      "attribution": "National Interagency Fire Center (NIFC) / WFIGS and contributing agencies — dynamic data, not legal documents.",
+      "homepage": "https://www.nifc.gov/",
+      "privacyUrl": "https://www.doi.gov/privacy",
+      "terms": {
+        "reviewedAt": "2026-10-08",
+        "note": "Federal compilation (IRWIN) with state contributions; NIFC's disclaimer: dynamic data, not legal documents, no warranty."
+      },
+      "rights": {
+        "redistribution": true,
+        "derivedRedistribution": true,
+        "commercialUse": true,
+        "attributionRequired": false,
+        "retention": true,
+        "shareAlike": false
+      },
+      "coverage": {
+        "countries": ["US"]
+      }
+    },
+    {
+      "id": "us-noaa-hms-smoke",
+      "name": "NOAA HMS smoke",
+      "domain": "hazards",
+      "product": "smoke",
+      "format": "hms",
+      "qualifier": "hms",
+      "operator": "noaa",
+      "region": "us",
+      "country": "US",
+      "accessMode": "bulk",
+      "restricted": false,
+      "license": "CC0-1.0",
+      "licenseName": "Creative Commons Zero 1.0",
+      "licenseUrl": "https://www.arcgis.com/home/item.html?id=ab7a5fbd76e3499296350eabf599fc63",
+      "attribution": "NOAA/NESDIS Hazard Mapping System (HMS)",
+      "homepage": "https://www.ospo.noaa.gov/products/land/hms.html",
+      "privacyUrl": "https://www.noaa.gov/protecting-your-privacy",
+      "rights": {
+        "redistribution": true,
+        "derivedRedistribution": true,
+        "commercialUse": true,
+        "attributionRequired": false,
+        "retention": true,
+        "shareAlike": false
+      },
+      "coverage": {
+        "countries": ["US", "CA", "MX"],
+        "bbox": [-170, 10, -50, 75]
+      }
+    },
+    {
+      "id": "us-nws-alerts",
+      "name": "NWS weather alerts",
+      "domain": "hazards",
+      "product": "alerts",
+      "format": "nws",
+      "operator": "nws",
+      "region": "us",
+      "country": "US",
+      "accessMode": "bulk",
+      "restricted": false,
+      "license": "LicenseRef-US-Gov-Public-Domain",
+      "licenseName": "U.S. Government Public Domain (17 U.S.C. §105)",
+      "licenseUrl": "https://www.weather.gov/disclaimer",
+      "attribution": "National Weather Service (NOAA)",
+      "homepage": "https://www.weather.gov/",
+      "privacyUrl": "https://www.weather.gov/privacy",
+      "rights": {
+        "redistribution": true,
+        "derivedRedistribution": true,
+        "commercialUse": true,
+        "attributionRequired": false,
+        "retention": true,
+        "shareAlike": false
+      },
+      "coverage": {
+        "countries": ["US", "PR", "GU", "AS", "VI", "MP"]
+      }
+    },
+    {
+      "id": "usgs-quakes",
+      "name": "USGS earthquakes",
+      "domain": "hazards",
+      "product": "quakes",
+      "format": "usgs",
+      "operator": "usgs",
+      "region": "global",
+      "accessMode": "bulk",
+      "restricted": false,
+      "license": "LicenseRef-US-Gov-Public-Domain",
+      "licenseName": "U.S. Government Public Domain (17 U.S.C. §105)",
+      "licenseUrl": "https://www.usgs.gov/information-policies-and-instructions/copyrights-and-credits",
+      "attribution": "U.S. Geological Survey",
+      "homepage": "https://earthquake.usgs.gov",
+      "privacyUrl": "https://www.doi.gov/privacy",
+      "rights": {
+        "redistribution": true,
+        "derivedRedistribution": true,
+        "commercialUse": true,
+        "attributionRequired": false,
+        "retention": true,
+        "shareAlike": false
+      },
+      "coverage": {
+        "bbox": [-180, -90, 180, 90]
+      }
+    }
+  ]
+}

@@ -1,0 +1,665 @@
+{
+  "records": [
+    {
+      "id": "oc:observation:nasa-firms-viirs-fires:c61930de1c1164f25a7626714e76c1552c6db58243d90c9d1cd38db3018f4b0b",
+      "temporality": "live",
+      "location": {
+        "geometry": {
+          "type": "Point",
+          "coordinates": [12.35023, -0.64101]
+        },
+        "extent": "point",
+        "geometryOrigin": "source",
+        "fuzziness": "medium_res"
+      },
+      "provenance": {
+        "origin": "feed",
+        "sourceId": "nasa-firms-viirs-fires",
+        "sourceFormat": "firms",
+        "accessMode": "bulk",
+        "recordId": "N21:-0.64101,12.35023:2026-10-07T0001",
+        "attribution": {
+          "provider": "NASA FIRMS (LANCE / ESDIS)",
+          "license": "CC0-1.0",
+          "licenseUrl": "https://www.earthdata.nasa.gov/engage/open-data-services-software-policies/data-use-guidance"
+        },
+        "privacy": {
+          "class": "authoritative"
+        },
+        "instanceId": "hazards.example"
+      },
+      "freshness": {
+        "fetchedAt": "2026-10-08T21:10:00Z",
+        "expiresAt": "2026-10-10T00:01:00Z"
+      },
+      "extras": {
+        "instrument": "viirs",
+        "satellite": "N21",
+        "brightnessK": 303.36,
+        "backgroundK": 286.44,
+        "daynight": "night",
+        "scan": 0.37,
+        "track": 0.58,
+        "version": "2.0NRT"
+      },
+      "class": "observation",
+      "kind": "observation",
+      "property": "fire.frp",
+      "subject": {
+        "kind": "location"
+      },
+      "result": {
+        "type": "quantity",
+        "value": 0.69,
+        "unit": "MW"
+      },
+      "phenomenonTime": {
+        "instant": "2026-10-07T00:01:00Z"
+      },
+      "aggregation": "instantaneous",
+      "quality": {
+        "supplierCode": "nominal"
+      },
+      "canonicalId": "dd6d355811d0085a4e0f12513b818260fc4058f63334034185684f5ee5535ecb",
+      "domain": "hazards",
+      "revision": 1,
+      "recordedAt": "2026-10-08T21:10:00Z",
+      "contentHash": "50136632dfb7cee2bc5794fc7bba37e5fe18272d352fe1d50ba07d09bac2757d"
+    },
+    {
+      "id": "oc:observation:nasa-firms-viirs-fires:242d04058a261d1c544a46474727eba8e257b4706d820c2e256a414c3585b499",
+      "temporality": "live",
+      "location": {
+        "geometry": {
+          "type": "Point",
+          "coordinates": [12.65875, -0.86221]
+        },
+        "extent": "point",
+        "geometryOrigin": "source",
+        "fuzziness": "medium_res"
+      },
+      "provenance": {
+        "origin": "feed",
+        "sourceId": "nasa-firms-viirs-fires",
+        "sourceFormat": "firms",
+        "accessMode": "bulk",
+        "recordId": "N21:-0.86221,12.65875:2026-10-07T0001",
+        "attribution": {
+          "provider": "NASA FIRMS (LANCE / ESDIS)",
+          "license": "CC0-1.0",
+          "licenseUrl": "https://www.earthdata.nasa.gov/engage/open-data-services-software-policies/data-use-guidance"
+        },
+        "privacy": {
+          "class": "authoritative"
+        },
+        "instanceId": "hazards.example"
+      },
+      "freshness": {
+        "fetchedAt": "2026-10-08T21:10:00Z",
+        "expiresAt": "2026-10-10T00:01:00Z"
+      },
+      "extras": {
+        "instrument": "viirs",
+        "satellite": "N21",
+        "brightnessK": 298.38,
+        "backgroundK": 282.81,
+        "daynight": "night",
+        "scan": 0.35,
+        "track": 0.57,
+        "version": "2.0NRT"
+      },
+      "class": "observation",
+      "kind": "observation",
+      "property": "fire.frp",
+      "subject": {
+        "kind": "location"
+      },
+      "result": {
+        "type": "quantity",
+        "value": 0.71,
+        "unit": "MW"
+      },
+      "phenomenonTime": {
+        "instant": "2026-10-07T00:01:00Z"
+      },
+      "aggregation": "instantaneous",
+      "quality": {
+        "supplierCode": "nominal"
+      },
+      "canonicalId": "6d55f1ebf4d4e1ae0201548ff73314bd1c26c1e4482662e397f592eb28899e9e",
+      "domain": "hazards",
+      "revision": 1,
+      "recordedAt": "2026-10-08T21:10:00Z",
+      "contentHash": "8d16c0c6e9d58d5aa0af53fc7cbdeca8572142a45cf5808da3aa655bbae6ac24"
+    },
+    {
+      "id": "oc:observation:nasa-firms-viirs-fires:2b39f1a70bd0724257c204100e2f2ec04411f87b8081facbaeb6c5031bc7341a",
+      "temporality": "live",
+      "location": {
+        "geometry": {
+          "type": "Point",
+          "coordinates": [11.91726, -0.77691]
+        },
+        "extent": "point",
+        "geometryOrigin": "source",
+        "fuzziness": "medium_res"
+      },
+      "provenance": {
+        "origin": "feed",
+        "sourceId": "nasa-firms-viirs-fires",
+        "sourceFormat": "firms",
+        "accessMode": "bulk",
+        "recordId": "N21:-0.77691,11.91726:2026-10-07T0001",
+        "attribution": {
+          "provider": "NASA FIRMS (LANCE / ESDIS)",
+          "license": "CC0-1.0",
+          "licenseUrl": "https://www.earthdata.nasa.gov/engage/open-data-services-software-policies/data-use-guidance"
+        },
+        "privacy": {
+          "class": "authoritative"
+        },
+        "instanceId": "hazards.example"
+      },
+      "freshness": {
+        "fetchedAt": "2026-10-08T21:10:00Z",
+        "expiresAt": "2026-10-10T00:01:00Z"
+      },
+      "extras": {
+        "instrument": "viirs",
+        "satellite": "N21",
+        "brightnessK": 328.68,
+        "backgroundK": 285.5,
+        "daynight": "night",
+        "scan": 0.4,
+        "track": 0.6,
+        "version": "2.0NRT"
+      },
+      "class": "observation",
+      "kind": "observation",
+      "property": "fire.frp",
+      "subject": {
+        "kind": "location"
+      },
+      "result": {
+        "type": "quantity",
+        "value": 3.69,
+        "unit": "MW"
+      },
+      "phenomenonTime": {
+        "instant": "2026-10-07T00:01:00Z"
+      },
+      "aggregation": "instantaneous",
+      "quality": {
+        "supplierCode": "nominal"
+      },
+      "canonicalId": "a18addafd504d3bb3fa1037da00e8e741cafaec7013753f9258f49ac65b953d2",
+      "domain": "hazards",
+      "revision": 1,
+      "recordedAt": "2026-10-08T21:10:00Z",
+      "contentHash": "8eae7e23fc63bcba4045f827de04c1f8e1af3d23c75fb86d1eae6633c446688e"
+    },
+    {
+      "id": "oc:observation:nasa-firms-viirs-fires:0e513e46ba36dc258131cf0df44633f2878ec5cbc9ca5be0d3f8688ed2351832",
+      "temporality": "live",
+      "location": {
+        "geometry": {
+          "type": "Point",
+          "coordinates": [11.9138, -0.77636]
+        },
+        "extent": "point",
+        "geometryOrigin": "source",
+        "fuzziness": "medium_res"
+      },
+      "provenance": {
+        "origin": "feed",
+        "sourceId": "nasa-firms-viirs-fires",
+        "sourceFormat": "firms",
+        "accessMode": "bulk",
+        "recordId": "N21:-0.77636,11.9138:2026-10-07T0001",
+        "attribution": {
+          "provider": "NASA FIRMS (LANCE / ESDIS)",
+          "license": "CC0-1.0",
+          "licenseUrl": "https://www.earthdata.nasa.gov/engage/open-data-services-software-policies/data-use-guidance"
+        },
+        "privacy": {
+          "class": "authoritative"
+        },
+        "instanceId": "hazards.example"
+      },
+      "freshness": {
+        "fetchedAt": "2026-10-08T21:10:00Z",
+        "expiresAt": "2026-10-10T00:01:00Z"
+      },
+      "extras": {
+        "instrument": "viirs",
+        "satellite": "N21",
+        "brightnessK": 304.44,
+        "backgroundK": 285.56,
+        "daynight": "night",
+        "scan": 0.4,
+        "track": 0.6,
+        "version": "2.0NRT"
+      },
+      "class": "observation",
+      "kind": "observation",
+      "property": "fire.frp",
+      "subject": {
+        "kind": "location"
+      },
+      "result": {
+        "type": "quantity",
+        "value": 3.27,
+        "unit": "MW"
+      },
+      "phenomenonTime": {
+        "instant": "2026-10-07T00:01:00Z"
+      },
+      "aggregation": "instantaneous",
+      "quality": {
+        "supplierCode": "nominal"
+      },
+      "canonicalId": "60a3d2e21a33723f279162ade7605485564c0d5078cb817f4b6e70787e710b8d",
+      "domain": "hazards",
+      "revision": 1,
+      "recordedAt": "2026-10-08T21:10:00Z",
+      "contentHash": "3cd9b8de950dbecc26667aa99e30b5349565b1e1b843f2544557b4d0289a7a75"
+    },
+    {
+      "id": "oc:observation:nasa-firms-viirs-fires:54bfd3db9328353606ac3980391f1cb57fdadc2e714754c447aa69aabf4b8b9e",
+      "temporality": "live",
+      "location": {
+        "geometry": {
+          "type": "Point",
+          "coordinates": [18.16956, -16.92929]
+        },
+        "extent": "point",
+        "geometryOrigin": "source",
+        "fuzziness": "medium_res"
+      },
+      "provenance": {
+        "origin": "feed",
+        "sourceId": "nasa-firms-viirs-fires",
+        "sourceFormat": "firms",
+        "accessMode": "bulk",
+        "recordId": "N20:-16.92929,18.16956:2026-10-07T0100",
+        "attribution": {
+          "provider": "NASA FIRMS (LANCE / ESDIS)",
+          "license": "CC0-1.0",
+          "licenseUrl": "https://www.earthdata.nasa.gov/engage/open-data-services-software-policies/data-use-guidance"
+        },
+        "privacy": {
+          "class": "authoritative"
+        },
+        "instanceId": "hazards.example"
+      },
+      "freshness": {
+        "fetchedAt": "2026-10-08T21:10:00Z",
+        "expiresAt": "2026-10-10T01:00:00Z"
+      },
+      "extras": {
+        "instrument": "viirs",
+        "satellite": "N20",
+        "brightnessK": 300.46,
+        "backgroundK": 290.36,
+        "daynight": "night",
+        "scan": 0.65,
+        "track": 0.73,
+        "version": "2.0NRT"
+      },
+      "class": "observation",
+      "kind": "observation",
+      "property": "fire.frp",
+      "subject": {
+        "kind": "location"
+      },
+      "result": {
+        "type": "quantity",
+        "value": 1.96,
+        "unit": "MW"
+      },
+      "phenomenonTime": {
+        "instant": "2026-10-07T01:00:00Z"
+      },
+      "aggregation": "instantaneous",
+      "quality": {
+        "supplierCode": "nominal"
+      },
+      "canonicalId": "1c301a540210c2fc3162db9773e997d39fcd8f9b17bf4f28eaa4142409ce126f",
+      "domain": "hazards",
+      "revision": 1,
+      "recordedAt": "2026-10-08T21:10:00Z",
+      "contentHash": "63ecade2bd481912d6bc047aa1639e8e7902a29a89d34ef3fd4e37d7a1049ca4"
+    },
+    {
+      "id": "oc:observation:nasa-firms-viirs-fires:d724b43925ec528da7c35b65a0c4eed714e30be07f9e28c263cd13f845fdd7de",
+      "temporality": "live",
+      "location": {
+        "geometry": {
+          "type": "Point",
+          "coordinates": [15.16359, -16.64557]
+        },
+        "extent": "point",
+        "geometryOrigin": "source",
+        "fuzziness": "medium_res"
+      },
+      "provenance": {
+        "origin": "feed",
+        "sourceId": "nasa-firms-viirs-fires",
+        "sourceFormat": "firms",
+        "accessMode": "bulk",
+        "recordId": "N20:-16.64557,15.16359:2026-10-07T0100",
+        "attribution": {
+          "provider": "NASA FIRMS (LANCE / ESDIS)",
+          "license": "CC0-1.0",
+          "licenseUrl": "https://www.earthdata.nasa.gov/engage/open-data-services-software-policies/data-use-guidance"
+        },
+        "privacy": {
+          "class": "authoritative"
+        },
+        "instanceId": "hazards.example"
+      },
+      "freshness": {
+        "fetchedAt": "2026-10-08T21:10:00Z",
+        "expiresAt": "2026-10-10T01:00:00Z"
+      },
+      "extras": {
+        "instrument": "viirs",
+        "satellite": "N20",
+        "brightnessK": 299.34,
+        "backgroundK": 287.06,
+        "daynight": "night",
+        "scan": 0.41,
+        "track": 0.6,
+        "version": "2.0NRT"
+      },
+      "class": "observation",
+      "kind": "observation",
+      "property": "fire.frp",
+      "subject": {
+        "kind": "location"
+      },
+      "result": {
+        "type": "quantity",
+        "value": 0.7,
+        "unit": "MW"
+      },
+      "phenomenonTime": {
+        "instant": "2026-10-07T01:00:00Z"
+      },
+      "aggregation": "instantaneous",
+      "quality": {
+        "supplierCode": "nominal"
+      },
+      "canonicalId": "8e5ef676596fb2d6597fe4fb3dd79da206b82addbaa12276210fc228fb7cf9fa",
+      "domain": "hazards",
+      "revision": 1,
+      "recordedAt": "2026-10-08T21:10:00Z",
+      "contentHash": "34e80e46f661f6ad214fbeaeb02e90852ae1877e4401037d57f96339ac3be7a7"
+    },
+    {
+      "id": "oc:observation:nasa-firms-viirs-fires:a8744f3204adf250674b5e6579f30f0d0f993baf7783e2763f1d5bd7bb35d28d",
+      "temporality": "live",
+      "location": {
+        "geometry": {
+          "type": "Point",
+          "coordinates": [15.16382, -16.64456]
+        },
+        "extent": "point",
+        "geometryOrigin": "source",
+        "fuzziness": "medium_res"
+      },
+      "provenance": {
+        "origin": "feed",
+        "sourceId": "nasa-firms-viirs-fires",
+        "sourceFormat": "firms",
+        "accessMode": "bulk",
+        "recordId": "N20:-16.64456,15.16382:2026-10-07T0100",
+        "attribution": {
+          "provider": "NASA FIRMS (LANCE / ESDIS)",
+          "license": "CC0-1.0",
+          "licenseUrl": "https://www.earthdata.nasa.gov/engage/open-data-services-software-policies/data-use-guidance"
+        },
+        "privacy": {
+          "class": "authoritative"
+        },
+        "instanceId": "hazards.example"
+      },
+      "freshness": {
+        "fetchedAt": "2026-10-08T21:10:00Z",
+        "expiresAt": "2026-10-10T01:00:00Z"
+      },
+      "extras": {
+        "instrument": "viirs",
+        "satellite": "N20",
+        "brightnessK": 296.99,
+        "backgroundK": 286.5,
+        "daynight": "night",
+        "scan": 0.41,
+        "track": 0.61,
+        "version": "2.0NRT"
+      },
+      "class": "observation",
+      "kind": "observation",
+      "property": "fire.frp",
+      "subject": {
+        "kind": "location"
+      },
+      "result": {
+        "type": "quantity",
+        "value": 0.56,
+        "unit": "MW"
+      },
+      "phenomenonTime": {
+        "instant": "2026-10-07T01:00:00Z"
+      },
+      "aggregation": "instantaneous",
+      "quality": {
+        "supplierCode": "nominal"
+      },
+      "canonicalId": "6457dab9ea4d30edc649fd96cfcb4912fb2a7a85bee59f28b2053fdc0cf7e1de",
+      "domain": "hazards",
+      "revision": 1,
+      "recordedAt": "2026-10-08T21:10:00Z",
+      "contentHash": "fef7f7a168154d12503f9a939f74c62a4082784f89b2e8800842c10cdc979ce4"
+    },
+    {
+      "id": "oc:observation:nasa-firms-modis-fires:74120847f689d0c1b0440c914d028f26005e54cc148e1faff6abf99b0e711b73",
+      "temporality": "live",
+      "location": {
+        "geometry": {
+          "type": "Point",
+          "coordinates": [31.67576, 45.2613]
+        },
+        "extent": "point",
+        "geometryOrigin": "source",
+        "fuzziness": "low_res"
+      },
+      "provenance": {
+        "origin": "feed",
+        "sourceId": "nasa-firms-modis-fires",
+        "sourceFormat": "firms",
+        "accessMode": "bulk",
+        "recordId": "A:45.2613,31.67576:2026-09-29T0202",
+        "attribution": {
+          "provider": "NASA FIRMS (LANCE / ESDIS)",
+          "license": "CC0-1.0",
+          "licenseUrl": "https://www.earthdata.nasa.gov/engage/open-data-services-software-policies/data-use-guidance"
+        },
+        "privacy": {
+          "class": "authoritative"
+        },
+        "instanceId": "hazards.example"
+      },
+      "freshness": {
+        "fetchedAt": "2026-10-08T21:10:00Z",
+        "expiresAt": "2026-10-02T02:02:00Z"
+      },
+      "extras": {
+        "instrument": "modis",
+        "satellite": "A",
+        "brightnessK": 313.83,
+        "backgroundK": 289.76,
+        "daynight": "night",
+        "scan": 1.07,
+        "track": 1.03,
+        "version": "6.1NRT"
+      },
+      "class": "observation",
+      "kind": "observation",
+      "property": "fire.frp",
+      "subject": {
+        "kind": "location"
+      },
+      "result": {
+        "type": "quantity",
+        "value": 14.13,
+        "unit": "MW"
+      },
+      "phenomenonTime": {
+        "instant": "2026-09-29T02:02:00Z"
+      },
+      "aggregation": "instantaneous",
+      "quality": {
+        "confidence": 0.83
+      },
+      "canonicalId": "9d887e43afa5e1db6c82ddbb33fe8a7c50407aecd1b02c5fd94472df156dbf4b",
+      "domain": "hazards",
+      "revision": 1,
+      "recordedAt": "2026-10-08T21:10:00Z",
+      "contentHash": "37f7f82dde96814916b324d6e4f35014f0285fe1a0b3bac4dfe92612ef8cb3a1"
+    },
+    {
+      "id": "oc:observation:nasa-firms-modis-fires:18e0c3f8b6dbb3128abb359299a2be38e799315ed7776b98c9a46eded356f8db",
+      "temporality": "live",
+      "location": {
+        "geometry": {
+          "type": "Point",
+          "coordinates": [9.94186, 45.15001]
+        },
+        "extent": "point",
+        "geometryOrigin": "source",
+        "fuzziness": "low_res"
+      },
+      "provenance": {
+        "origin": "feed",
+        "sourceId": "nasa-firms-modis-fires",
+        "sourceFormat": "firms",
+        "accessMode": "bulk",
+        "recordId": "A:45.15001,9.94186:2026-09-29T0338",
+        "attribution": {
+          "provider": "NASA FIRMS (LANCE / ESDIS)",
+          "license": "CC0-1.0",
+          "licenseUrl": "https://www.earthdata.nasa.gov/engage/open-data-services-software-policies/data-use-guidance"
+        },
+        "privacy": {
+          "class": "authoritative"
+        },
+        "instanceId": "hazards.example"
+      },
+      "freshness": {
+        "fetchedAt": "2026-10-08T21:10:00Z",
+        "expiresAt": "2026-10-02T03:38:00Z"
+      },
+      "extras": {
+        "instrument": "modis",
+        "satellite": "A",
+        "brightnessK": 300.18,
+        "backgroundK": 284.44,
+        "daynight": "night",
+        "scan": 1.01,
+        "track": 1,
+        "version": "6.1NRT"
+      },
+      "class": "observation",
+      "kind": "observation",
+      "property": "fire.frp",
+      "subject": {
+        "kind": "location"
+      },
+      "result": {
+        "type": "quantity",
+        "value": 6.49,
+        "unit": "MW"
+      },
+      "phenomenonTime": {
+        "instant": "2026-09-29T03:38:00Z"
+      },
+      "aggregation": "instantaneous",
+      "quality": {
+        "confidence": 0.2
+      },
+      "canonicalId": "20073f4a164c6c0c14f0d825b1ae3fb98d19164c33f9b1fc7daf3fc2db86ef6b",
+      "domain": "hazards",
+      "revision": 1,
+      "recordedAt": "2026-10-08T21:10:00Z",
+      "contentHash": "cf007d070b9212899956b6760ab188fe5f9bebf543e1789037d69830ea88e15d"
+    },
+    {
+      "id": "oc:observation:nasa-firms-modis-fires:01f8fa436a67a9b8ca651ddef284d9b302c1606d3e1e0ff167157bd7869ad9ed",
+      "temporality": "live",
+      "location": {
+        "geometry": {
+          "type": "Point",
+          "coordinates": [33.02452, 55.79964]
+        },
+        "extent": "point",
+        "geometryOrigin": "source",
+        "fuzziness": "low_res"
+      },
+      "provenance": {
+        "origin": "feed",
+        "sourceId": "nasa-firms-modis-fires",
+        "sourceFormat": "firms",
+        "accessMode": "bulk",
+        "recordId": "T:55.79964,33.02452:2026-09-29T0748",
+        "attribution": {
+          "provider": "NASA FIRMS (LANCE / ESDIS)",
+          "license": "CC0-1.0",
+          "licenseUrl": "https://www.earthdata.nasa.gov/engage/open-data-services-software-policies/data-use-guidance"
+        },
+        "privacy": {
+          "class": "authoritative"
+        },
+        "instanceId": "hazards.example"
+      },
+      "freshness": {
+        "fetchedAt": "2026-10-08T21:10:00Z",
+        "expiresAt": "2026-10-02T07:48:00Z"
+      },
+      "extras": {
+        "instrument": "modis",
+        "satellite": "T",
+        "brightnessK": 341.04,
+        "backgroundK": 284.69,
+        "daynight": "day",
+        "scan": 1.68,
+        "track": 1.28,
+        "version": "6.1NRT"
+      },
+      "class": "observation",
+      "kind": "observation",
+      "property": "fire.frp",
+      "subject": {
+        "kind": "location"
+      },
+      "result": {
+        "type": "quantity",
+        "value": 101.39,
+        "unit": "MW"
+      },
+      "phenomenonTime": {
+        "instant": "2026-09-29T07:48:00Z"
+      },
+      "aggregation": "instantaneous",
+      "quality": {
+        "confidence": 0.92
+      },
+      "canonicalId": "3a1c4fd2707af97c2e1387a742c32e6b408fe85e15c88268e72416451d746b7f",
+      "domain": "hazards",
+      "revision": 1,
+      "recordedAt": "2026-10-08T21:10:00Z",
+      "contentHash": "63bcd7a40a44d460238b862292b09bc90781767cb71e160473d872de0e20b8c1"
+    }
+  ],
+  "next": null
+}

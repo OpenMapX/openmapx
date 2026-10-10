@@ -8,7 +8,7 @@ import {
 
 function displayRegion(key: string): string {
   if (key === "unassigned") return "Region not specified";
-  const value = key.replace(/^(extract|country|regional-scope):/, "").replaceAll("/", " / ");
+  const value = key.replace(/^(extract|country):/, "").replaceAll("/", " / ");
   return value
     .split(/[-_ ]+/)
     .filter(Boolean)
@@ -23,9 +23,7 @@ export function regionForKey(key: string): CoverageRegion {
     ? "extract"
     : isCountryRegionKey(key)
       ? "country"
-      : key === "unassigned"
-        ? "unassigned"
-        : "regional-scope";
+      : "unassigned";
   return {
     key,
     label: displayRegion(key),
@@ -44,15 +42,5 @@ export function collectCoverageRegions(
     for (const key of stream.region.keys) keys.add(key);
     if (stream.region.keys.length === 0) keys.add("unassigned");
   }
-  return [...keys]
-    .sort((a, b) => a.localeCompare(b))
-    .map((key) => {
-      const region = regionForKey(key);
-      const scope = streams.find(
-        (stream) => stream.region.keys.includes(key) && stream.region.bounds,
-      )?.region;
-      return scope
-        ? { ...region, bounds: scope.bounds, label: scope.label ?? region.label }
-        : region;
-    });
+  return [...keys].sort((a, b) => a.localeCompare(b)).map(regionForKey);
 }

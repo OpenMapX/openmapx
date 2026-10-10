@@ -49,6 +49,7 @@ export const OPS_OPERATION_KINDS = [
   "extension.update",
   "extension.remove",
   "serviceSelection.apply",
+  "serviceSelection.inspect",
   "serviceConfig.apply",
   "integrationConfig.apply",
   "vault.apply",
@@ -144,6 +145,7 @@ export const OPS_KIND_POLICIES = {
   "extension.update": asyncEffect("api", 30 * 60_000),
   "extension.remove": asyncEffect("api", 15 * 60_000),
   "serviceSelection.apply": asyncEffect("api", 2 * 60_000),
+  "serviceSelection.inspect": sync("api", 15_000),
   "serviceConfig.apply": asyncEffect("api", 2 * 60_000),
   "integrationConfig.apply": asyncEffect("api", 2 * 60_000),
   "vault.apply": asyncEffect("api", 2 * 60_000),
@@ -309,6 +311,7 @@ export const opsOperationSchema = z.discriminatedUnion("kind", [
   }),
   z.strictObject({ kind: z.literal("extension.remove"), extensionId: serviceIdSchema }),
   z.strictObject({ kind: z.literal("serviceSelection.apply"), revisionId: stableIdSchema }),
+  kindOnly("serviceSelection.inspect"),
   z.strictObject({
     kind: z.literal("serviceConfig.apply"),
     serviceId: serviceIdSchema,
@@ -669,7 +672,10 @@ const backupInventoryEntry = z
     }
   });
 const extension = z.strictObject({ extensionId: serviceIdSchema, revisionId: stableIdSchema });
-const revision = z.strictObject({ revisionId: stableIdSchema });
+const revision = z.strictObject({
+  revisionId: stableIdSchema,
+  enabledServiceIds: z.array(serviceIdSchema).max(256),
+});
 const data = z.strictObject({
   completed: z.literal(true),
   resourceId: resourceIdSchema.optional(),
@@ -868,6 +874,10 @@ export const OPS_RESULT_SCHEMAS = {
   "extension.update": extension,
   "extension.remove": z.strictObject({ extensionId: serviceIdSchema, removed: z.boolean() }),
   "serviceSelection.apply": revision,
+  "serviceSelection.inspect": z.strictObject({
+    source: z.enum(["env", "file", "default"]),
+    roots: z.array(serviceIdSchema).max(256),
+  }),
   "serviceConfig.apply": revision,
   "integrationConfig.apply": revision,
   "vault.apply": revision,

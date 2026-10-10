@@ -246,3 +246,23 @@ describe("computeLinks", () => {
     expect(embedFn).not.toHaveBeenCalled();
   });
 });
+
+it("refuses dense scoring pages before retaining an unbounded candidate graph", async () => {
+  const places = Array.from({ length: 501 }, (_, i) =>
+    makePlace({ gersId: `dense-${i}`, lat: BASE_LAT, lng: BASE_LNG }),
+  );
+  const osm = Array.from({ length: 101 }, (_, i) =>
+    makeOsm({ osm_id: i + 1, lat: BASE_LAT, lng: BASE_LNG }),
+  );
+  let error: unknown;
+  try {
+    await scoreLinkCandidates(places, osm, {
+      thresholds: DEFAULT_CONFLATION_THRESHOLDS,
+      release: RELEASE,
+    });
+  } catch (e) {
+    error = e;
+  }
+  expect(error).toBeInstanceOf(Error);
+  expect((error as Error).message).toMatch(/candidate.*50000/i);
+});

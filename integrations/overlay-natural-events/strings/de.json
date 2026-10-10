@@ -1,16 +1,4 @@
 {
-  "name": "Naturereignisse (NASA EONET + GDACS)",
-  "description": "Globale Naturereignisse wie Vulkane, Stürme, Überschwemmungen, Erdrutsche, Dürre und mehr von NASA EONET und GDACS mit Warnstufen",
-  "dataSources": {
-    "eonet": {
-      "purpose": "Naturereignisse (Vulkane, Stürme, Überschwemmungen, Erdrutsche). Erdbeben und Waldbrände ausgeschlossen.",
-      "dataSent": "Ereignisstatus-Filter, optionaler Zeitraum und Kategorie",
-      "dataReceived": "GeoJSON-Features mit Ereignistitel, Beschreibung, Datum, Magnitude, Kategorien, Quell-URLs"
-    },
-    "gdacs": {
-      "purpose": "Katastrophenereignisse mit Alarmstufen; gegen EONET dedupliziert (80-km-Schwelle)",
-      "dataSent": "Ereignistypfilter, Zeitraum, Alarmstufen-Filter",
-      "dataReceived": "GeoJSON-Features mit Ereignistyp/ID, Name, Alarmstufe/Bewertung, Land, Schwere, Bericht-URLs"
-    }
-  }
+  "name": "Naturereignisse",
+  "description": "Vulkane, tropische Wirbelstürme, Überschwemmungen, Erdrutsche, See- und Meereis, Dürre und Staubstürme weltweit, mit Warnstufen, wo veröffentlicht"
 }

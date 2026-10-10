@@ -1,8 +1,6 @@
 export type DataManagerStartupPhase =
   | "offline-storage"
-  | "redis"
   | "job-reconciliation"
-  | "poi-source-discovery"
   | "cron-schedulers"
   | "complete";
 

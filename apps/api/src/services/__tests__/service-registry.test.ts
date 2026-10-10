@@ -1,6 +1,7 @@
 import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { services } from "@openmapx/core/server";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { getServiceRegistry, initServiceRegistry } from "../service-registry";
 
@@ -22,6 +23,7 @@ const baseManifest = {
 
 beforeEach(() => {
   delete process.env.OPENMAPX_ENABLED_SERVICES;
+  delete process.env.OPENMAPX_APPLIED_SERVICES;
   originalCwd = process.cwd();
   tmp = mkdtempSync(join(tmpdir(), "openmapx-api-service-registry-"));
   mkdirSync(join(tmp, "apps", "api"), { recursive: true });
@@ -89,20 +91,26 @@ describe("initServiceRegistry", () => {
     expect(enabled).toEqual(["app-api", "postgis"]);
   });
 
-  it("prefers the committed trusted generation over a stale baked environment after restart", async () => {
+  it("follows the applied generation rather than the selection it has not applied yet", async () => {
     writeManifest("app-api", { ...baseManifest, id: "app-api" });
-    writeManifest("postgis", { ...baseManifest, id: "postgis" });
     writeManifest("valhalla", { ...baseManifest, id: "valhalla" });
-    const revision = `cfg1_${"a".repeat(43)}`;
-    const current = join(tmp, "infra", "docker", ".trusted-config-current");
-    const generation = join(tmp, "infra", "docker", ".trusted-config-generations", revision);
-    mkdirSync(generation, { recursive: true });
-    symlinkSync(join(".trusted-config-generations", revision), current);
+    const loaded = new services.ServiceRegistry({ rootDir: tmp });
+    await loaded.load();
+    await services.commitConfigurationGeneration({
+      infraDir: join(tmp, "infra", "docker"),
+      services: loaded.list(),
+      input: {
+        domain: "localhost",
+        selectedRoots: ["valhalla"],
+        serviceConfigs: [],
+        integrationConfigs: [],
+        serviceSecrets: [],
+      },
+    });
     writeFileSync(
-      join(generation, "service-selection.json"),
-      JSON.stringify({ selected: ["valhalla"] }),
+      join(tmp, "infra", "docker", "service-selection.json"),
+      JSON.stringify({ selected: ["app-api"] }),
     );
-    process.env.OPENMAPX_ENABLED_SERVICES = "app-api,postgis";
 
     await initServiceRegistry();
 
@@ -111,6 +119,22 @@ describe("initServiceRegistry", () => {
         .enabled()
         .map((service) => service.manifest.id),
     ).toEqual(["valhalla"]);
+  });
+
+  it("takes the applied services its render baked into app-api", async () => {
+    writeManifest("app-api", { ...baseManifest, id: "app-api" });
+    writeManifest("postgis", { ...baseManifest, id: "postgis" });
+    writeManifest("valhalla", { ...baseManifest, id: "valhalla" });
+    process.env.OPENMAPX_APPLIED_SERVICES = "app-api,postgis";
+
+    await initServiceRegistry();
+
+    expect(
+      getServiceRegistry()
+        .enabled()
+        .map((service) => service.manifest.id)
+        .sort(),
+    ).toEqual(["app-api", "postgis"]);
   });
 
   it("fails closed on a malformed or dangling trusted selection pointer", async () => {

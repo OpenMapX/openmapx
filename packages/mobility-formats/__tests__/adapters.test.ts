@@ -7,8 +7,6 @@ import {
   listSiriMonitoredStopVisitRecords,
   listSiriSituations,
   listSiriVehicleActivityRecords,
-  parseDatexParkingStatus,
-  parseDatexParkingTable,
   resolveNetexJourneyPatternForServiceJourney,
   resolveNetexLineForServiceJourney,
   resolveNetexQuaysForScheduledStopPoint,
@@ -16,122 +14,6 @@ import {
   resolveNetexScheduledStopPointsForJourneyPattern,
   resolveNetexStopPlacesForScheduledStopPoint,
 } from "../index.js";
-
-describe("DATEX parking adapter", () => {
-  it("parses parking tables and statuses across DATEX II wrapper variants", () => {
-    const tableXml = `<?xml version="1.0" encoding="UTF-8"?>
-<d2LogicalModel xmlns="http://datex2.eu/schema/2/2_0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
-  <payloadPublication xsi:type="GenericPublication" lang="en">
-    <publicationTime>2026-04-21T10:22:00Z</publicationTime>
-    <genericPublicationExtension>
-      <parkingTablePublication>
-        <parkingTable id="PT:1">
-          <parkingRecord id="TRUCK:1">
-            <parkingName>
-              <values>
-                <value lang="en">Truck Parking A</value>
-                <value lang="nl">Vrachtwagen Parking A</value>
-              </values>
-            </parkingName>
-            <parkingLocation>
-              <pointByCoordinates>
-                <pointCoordinates>
-                  <latitude>52.1001</latitude>
-                  <longitude>5.1002</longitude>
-                </pointCoordinates>
-              </pointByCoordinates>
-            </parkingLocation>
-            <tariffsAndPayment>
-              <freeOfCharge>false</freeOfCharge>
-            </tariffsAndPayment>
-            <groupOfParkingSpaces>
-              <parkingNumberOfSpaces>12</parkingNumberOfSpaces>
-            </groupOfParkingSpaces>
-            <groupOfParkingSpaces>
-              <parkingNumberOfSpaces>8</parkingNumberOfSpaces>
-            </groupOfParkingSpaces>
-            <parkingEquipmentOrServiceFacility>
-              <equipmentOrServiceFacilityType>electricChargingStation</equipmentOrServiceFacilityType>
-            </parkingEquipmentOrServiceFacility>
-          </parkingRecord>
-        </parkingTable>
-      </parkingTablePublication>
-    </genericPublicationExtension>
-  </payloadPublication>
-</d2LogicalModel>`;
-
-    const statusXml = `<?xml version="1.0" encoding="UTF-8"?>
-<messageContainer xmlns="http://datex2.eu/schema/3/messageContainer" xmlns:park="http://datex2.eu/schema/3/parking" xmlns:com="http://datex2.eu/schema/3/common" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
-  <payload xsi:type="park:GenericPublication" lang="en" modelBaseVersion="3">
-    <com:publicationTime>2026-04-21T10:30:00Z</com:publicationTime>
-    <park:parkingRecordStatus>
-      <park:parkingRecordReference id="TRUCK:1" />
-      <park:parkingOccupancy>
-        <park:parkingNumberOfVacantSpaces>4</park:parkingNumberOfVacantSpaces>
-        <park:parkingNumberOfOccupiedSpaces>16</park:parkingNumberOfOccupiedSpaces>
-        <park:parkingOccupancy>80</park:parkingOccupancy>
-      </park:parkingOccupancy>
-      <park:parkingSiteStatus>open</park:parkingSiteStatus>
-      <park:parkingStatusOriginTime>2026-04-21T10:29:00Z</park:parkingStatusOriginTime>
-    </park:parkingRecordStatus>
-  </payload>
-</messageContainer>`;
-
-    const genericStatusXml = `<?xml version="1.0" encoding="UTF-8"?>
-<d2LogicalModel modelBaseVersion="2" xmlns="http://datex2.eu/schema/2/2_0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
-  <payloadPublication xsi:type="GenericPublication" lang="en">
-    <publicationTime>2026-04-21T10:30:00Z</publicationTime>
-    <genericPublicationName>ParkingStatusPublication</genericPublicationName>
-    <genericPublicationExtension>
-      <parkingStatusPublication>
-        <parkingRecordStatus xsi:type="ParkingSiteStatus">
-          <parkingRecordReference targetClass="ParkingRecord" id="TRUCK:1" version="1" />
-          <parkingStatusOriginTime>2026-04-21T10:29:00Z</parkingStatusOriginTime>
-          <parkingOccupancy>
-            <parkingNumberOfVacantSpaces>4</parkingNumberOfVacantSpaces>
-            <parkingNumberOfOccupiedSpaces>16</parkingNumberOfOccupiedSpaces>
-            <parkingOccupancy>80</parkingOccupancy>
-          </parkingOccupancy>
-          <parkingSiteStatus>full</parkingSiteStatus>
-        </parkingRecordStatus>
-      </parkingStatusPublication>
-    </genericPublicationExtension>
-  </payloadPublication>
-</d2LogicalModel>`;
-
-    expect(parseDatexParkingTable(tableXml)).toEqual([
-      {
-        equipmentTypes: ["electricChargingStation"],
-        freeOfCharge: false,
-        id: "TRUCK:1",
-        latitude: 52.1001,
-        longitude: 5.1002,
-        name: "Truck Parking A",
-        totalSpaces: 20,
-      },
-    ]);
-    expect(parseDatexParkingStatus(statusXml)).toEqual([
-      {
-        occupancyPercent: 80,
-        occupiedSpaces: 16,
-        originTime: "2026-04-21T10:29:00Z",
-        recordId: "TRUCK:1",
-        siteStatus: "open",
-        vacantSpaces: 4,
-      },
-    ]);
-    expect(parseDatexParkingStatus(genericStatusXml)).toEqual([
-      {
-        occupancyPercent: 80,
-        occupiedSpaces: 16,
-        originTime: "2026-04-21T10:29:00Z",
-        recordId: "TRUCK:1",
-        siteStatus: "full",
-        vacantSpaces: 4,
-      },
-    ]);
-  });
-});
 
 describe("SIRI transit adapter", () => {
   it("normalizes deliveries, realtime visits, and situations", () => {

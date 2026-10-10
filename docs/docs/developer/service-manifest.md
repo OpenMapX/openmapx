@@ -181,8 +181,8 @@ exception are accepted, not accidental:
 - The bridge is bidirectional. A network carries traffic both ways, so the
   OpenConditions containers can also open connections to `app-api` and
   `data-manager`, including their unauthenticated internal endpoints
-  (`/internal/metrics`, `/internal/poi-sources/count`, the data-manager's
-  `/live`, `/status` and `/internal/metrics`), which the proxy denies publicly.
+  (`/internal/metrics`, the data-manager's `/live` and `/status`), which the
+  proxy denies publicly.
 
 If multiple community containers need to discover each other, define an
 explicit reviewed multi-component service bundle instead of widening

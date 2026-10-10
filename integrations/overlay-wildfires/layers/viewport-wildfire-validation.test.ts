@@ -26,21 +26,40 @@ function collection(
     fetchedAt: "2026-08-12T12:00:00.000Z",
     stale: false,
     truncated: false,
+    sources: [String(properties.provider)],
   };
 }
 
 const NIFC_PROPERTIES = {
   kind: "reported-perimeter",
-  provider: "nifc",
-  coverage: "United States",
+  provider: "us-nifc-fires",
   name: "Pine Fire",
 };
 
 const EFFIS_PROPERTIES = {
   kind: "satellite-burned-area",
-  provider: "effis",
+  provider: "eu-effis-fires",
   areaHectares: 42,
 };
+
+describe("isViewportWildfireFeatureCollection sources", () => {
+  it("accepts a perimeter whose provider is the source that reported it", () => {
+    expect(isViewportWildfireFeatureCollection(collection("nifc", NIFC_PROPERTIES), "nifc")).toBe(
+      true,
+    );
+  });
+
+  it("rejects a feature without a source id and an envelope without its sources", () => {
+    expect(
+      isViewportWildfireFeatureCollection(
+        collection("nifc", { ...NIFC_PROPERTIES, provider: "" }),
+        "nifc",
+      ),
+    ).toBe(false);
+    const { sources: _sources, ...withoutSources } = collection("effis", EFFIS_PROPERTIES);
+    expect(isViewportWildfireFeatureCollection(withoutSources, "effis")).toBe(false);
+  });
+});
 
 describe("isViewportWildfireFeatureCollection timestamps", () => {
   it("accepts canonical UTC millisecond timestamps for both providers", () => {

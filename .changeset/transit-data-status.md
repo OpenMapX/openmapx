@@ -6,4 +6,4 @@
 "@openmapx/integration-transit-motis": patch
 ---
 
-Explain scheduled, realtime, stale and unknown transit data consistently across departure, journey and navigation views. Preserve useful results during partial failures, distinguish source age from request time, and show cancellation and platform changes in text.
+Explain scheduled and outdated times with concise traveler-facing hints across departure, journey and navigation views. Preserve useful results with a single refresh/partial-results warning and retry. Keep source-age evidence internal, and show cancellation and platform changes clearly.

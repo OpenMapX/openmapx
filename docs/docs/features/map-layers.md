@@ -53,6 +53,21 @@ additional destinations that are not labeled on the map. See the
 [comparison baseline](../developer/map-comparison-baseline.md) for fixed German
 examples and how to assess cartography changes.
 
+When an operator publishes a regional place snapshot, **Nearby places** adds
+ranked named OSM and Overture destinations during ordinary browsing, without a
+category search. Essential destinations start at zoom 13; everyday businesses
+appear later, and indoor/non-ground tenants wait until zoom 18. Label collisions
+still limit what is visible. These ranks express usefulness and source importance,
+not ratings, popularity, or a promise that a business is currently open.
+
+The overlay avoids repeating a confidently matched owned-basemap label or an
+already selected/category-result marker. Tapping a matched label opens the same
+canonical place identity as search. The legend identifies the published region,
+snapshot date and whether coverage is OSM-only or combined. Outside that region,
+or before publication, normal map browsing continues with the basemap. You can
+toggle **Nearby places** in Layers. See [Overture Places](./overture-places.md)
+for source policies and operator setup.
+
 ## How overlays work
 
 Every overlay is an [integration](../overview/how-it-works.md). A map-overlay
@@ -124,6 +139,29 @@ than inventing a speed.
 These overlays complement the dedicated [public transit](./public-transit.md) and
 [directions](./directions.md) features rather than replacing them.
 
+The **Traffic flow** legend uses a compact **Fast–Slow** color scale. Open
+**About traffic** with the info button in either traffic legend for its source
+and limitations. The owned legend also explains measured, estimated and typical
+readings there, using the same opacity as the renderer. A hidden layer stays
+explicitly labelled hidden.
+
+The tile formats expose no usable upstream/publication time or completeness
+metadata, so the details say the update time is unknown and some roads may be
+missing. Downloading a tile does not establish fresh measurements. Road colors
+do not establish whether traffic delays are included in a route's travel time.
+
+Traffic publication/check evidence exists in authenticated admin coverage, but
+is not exposed by these public tile contracts. The legends do not fetch admin
+diagnostics or borrow check/request times as observation age. A public, bounded
+publication metadata contract remains follow-up work.
+
+**Map colors do not verify traffic influence on a route.** The routing engine can
+differ from the displayed overlay: hosted TomTom traffic over a self-hosted
+Valhalla route is still a map visualization. Directions cards show estimated
+traffic delays when comparison data is available and explain road-update
+verification separately; see
+[Reading traffic information](./directions.md#reading-traffic-information).
+
 ### Context-aware layers
 
 Useful layers follow the task without becoming permanent preferences. Opening a
@@ -138,7 +176,7 @@ and layers enabled only by the context switch back off when it ends.
 | Overlay            | Shows                                                                                   | Data                                                                |
 | ------------------ | --------------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
 | **Weather**        | Precipitation radar animation, plus temperature/precipitation/cloud/wind/pressure tiles | RainViewer, OpenWeather, Open-Meteo                                 |
-| **Weather alerts** | Active severe-weather warnings                                                          | NOAA, Environment Canada, DWD, MeteoAlarm                           |
+| **Weather alerts** | Active severe-weather warnings                                                          | NWS, Environment Canada, DWD, MeteoAlarm, through OpenConditions    |
 | **Air quality**    | Raw pollutant concentrations from monitoring stations                                   | Canonical provider orchestration (including OpenAQ when configured) |
 | **Environment**    | Readings from community environmental sensors                                           | openSenseMap, Sensor.Community                                      |
 
@@ -173,14 +211,25 @@ with `pnpm --filter @openmapx/integration-overlay-sun-time refresh-timezones`.
 
 ### Hazards & natural events
 
-| Overlay            | Shows                                               | Data              |
-| ------------------ | --------------------------------------------------- | ----------------- |
-| **Earthquakes**    | Recent earthquakes, sized by magnitude              | USGS              |
-| **Wildfires**      | Active fire hotspots                                | NASA FIRMS        |
-| **Natural events** | Storms, volcanoes, floods, and other ongoing events | NASA EONET, GDACS |
+| Overlay            | Shows                                                                   | Data                              |
+| ------------------ | ----------------------------------------------------------------------- | --------------------------------- |
+| **Earthquakes**    | Recent earthquakes, sized by magnitude                                  | USGS                              |
+| **Wildfires**      | Fire hotspots, active fire perimeters, burnt areas and smoke            | NASA FIRMS, NIFC, EFFIS, NOAA HMS |
+| **Natural events** | Tropical cyclones, volcanoes, floods, droughts and other ongoing events | NASA EONET, GDACS                 |
 
-These pull from public hazard feeds and are useful for situational awareness at
-a glance.
+All four hazard overlays, weather alerts included, read their data through
+[OpenConditions](../developer/building-an-external-extension.md): it fetches the
+public hazard feeds, and OpenMapX reads the result from the instance at
+`OPENCONDITIONS_URL`. Without it the overlays stay in the layer list and their
+legends say the data is unavailable. The weather alert layer, which loads the
+whole world at once, credits every feed it loaded; the other layers credit the
+feeds of what they drew. Weather alerts are cleared from the map four minutes
+after the last successful refresh, so a failed refresh never leaves old
+warnings on screen.
+Fire hotspots load for the visible area: below zoom 7 they are drawn as a
+density grid, from zoom 7 as individual detections. MeteoAlarm's European
+warnings are drawn with the area shapes MeteoAlarm publishes for redistributors,
+and their popup shows the publisher's notice, the issue time and the issuer.
 
 ### Recreation & specialty
 

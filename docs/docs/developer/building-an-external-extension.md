@@ -25,9 +25,8 @@ tooling differ.
 An **external extension** is one or both of:
 
 - An **integration** — a manifest plus optional presentation assets. Community
-  artifacts are declarative/frontend-only; app-api and data-manager reject
-  backend and POI-source entry points instead of importing them with control-plane
-  authority.
+  artifacts are declarative/frontend-only; app-api rejects backend entry points
+  instead of importing them with control-plane authority.
 - A **companion service** — a separately containerized daemon described by a
   `service.json`, managed by the OpenMapX compose renderer, and registered in the
   host's service registry. Services do their own Postgres schema migrations and
@@ -76,7 +75,7 @@ This creates `integrations/conditions/` with `manifest.json`, `package.json`, an
 
 Describe the feature, data flows, attribution, configuration keys, and companion
 service requirements in `manifest.json`. Do not add `index.ts`, `index.js`,
-`poi-sources.*`, `map-layer.tsx`, `legend.tsx`, `panel.tsx`, or `dist` runtime
+`map-layer.tsx`, `legend.tsx`, `panel.tsx`, or `dist` runtime
 bundles: packaging and installation reject them until an appropriate isolation
 boundary exists.
 
@@ -193,9 +192,9 @@ and it's required once your extension also ships a companion service.
 
 ### Reload `app-api`
 
-Community artifacts are declarative/frontend-only. Backend and POI-source
-JavaScript is rejected because app-api and data-manager are privileged control
-plane processes, not sandboxes; backend behavior must live in the companion
+Community artifacts are declarative/frontend-only. Backend
+JavaScript is rejected because app-api is a privileged control plane process,
+not a sandbox; backend behavior must live in the companion
 service described below. After a manual CLI install, restart the API so the new
 manifest is discovered (the Extensions store performs a transactional reload):
 

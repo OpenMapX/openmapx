@@ -146,6 +146,21 @@ describe("data-source list route", () => {
     expect(await list()).toEqual([]);
   });
 
+  it("lists the filters the running provider defines, never a cached earlier set", async () => {
+    let filters = [{ id: "old", label: "Old", type: "toggle" as const }];
+    const ctx = ctxWith(provider({ getFilters: async () => filters }));
+    const list = async () => {
+      const res = reply();
+      await route(ctx, "/")({ query: {}, params: {}, body: undefined, headers: {} }, res);
+      return (res.send.mock.calls[0]![0] as { sources: { filters: { id: string }[] }[] })
+        .sources[0]!.filters;
+    };
+
+    expect((await list()).map((f) => f.id)).toEqual(["old"]);
+    filters = [{ id: "new", label: "New", type: "toggle" as const }];
+    expect((await list()).map((f) => f.id)).toEqual(["new"]);
+  });
+
   it("lists a data source that does not say whether it is available", async () => {
     const ctx = ctxWith(provider());
     const res = reply();

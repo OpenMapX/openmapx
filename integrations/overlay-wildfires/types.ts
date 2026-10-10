@@ -1,41 +1,55 @@
+/** The layer a viewport or world wildfire response feeds; its feature ids carry it as a prefix. */
 export type WildfireProvider = "nifc" | "effis" | "noaa-hms";
 
-export type WildfireSourceFailureKind =
-  | "upstream-status"
-  | "upstream-payload"
-  | "network"
-  | "timeout"
-  | "feature-cap";
+/** The satellite instrument family of a hotspot. */
+export type FirmsInstrument = "viirs" | "modis";
+export type FirmsDayRange = 1 | 2 | 3;
 
-export interface WildfireSourceErrorOptions {
-  provider: WildfireProvider;
-  kind: WildfireSourceFailureKind;
-  upstreamStatus?: number;
-  cause?: unknown;
+export interface FireFeature {
+  type: "Feature";
+  id: string;
+  geometry: { type: "Point"; coordinates: [number, number] };
+  properties: {
+    latitude: number;
+    longitude: number;
+    /** Brightness temperature in kelvin, when the detection carries one. */
+    brightness: number | null;
+    /** Fire radiative power in MW. */
+    frp: number;
+    /** VIIRS: `low`, `nominal` or `high`; MODIS: a percentage, as text. */
+    confidence: string | null;
+    satellite: string | null;
+    /** `YYYY-MM-DD` and `HHMM`, UTC. */
+    acqDate: string;
+    acqTime: string;
+    dayNight: "D" | "N" | null;
+    ageMs: number;
+    instrument: FirmsInstrument;
+  };
 }
 
-/** A known provider failure that public routes may safely translate to a 503. */
-export class WildfireSourceError extends Error {
-  readonly provider: WildfireProvider;
-  readonly kind: WildfireSourceFailureKind;
-  readonly upstreamStatus?: number;
-
-  constructor(message: string, options: WildfireSourceErrorOptions) {
-    super(message, options.cause === undefined ? undefined : { cause: options.cause });
-    this.name = "WildfireSourceError";
-    this.provider = options.provider;
-    this.kind = options.kind;
-    this.upstreamStatus = options.upstreamStatus;
-  }
+export interface FireFeatureCollection {
+  type: "FeatureCollection";
+  features: FireFeature[];
 }
 
-export function isAbortError(error: unknown): boolean {
-  return (
-    typeof error === "object" &&
-    error !== null &&
-    "name" in error &&
-    (error as { name?: unknown }).name === "AbortError"
-  );
+/** Fire detections aggregated into one grid cell, drawn at the cell's centre. */
+export interface FireDensityFeature {
+  type: "Feature";
+  geometry: { type: "Point"; coordinates: [number, number] };
+  properties: {
+    count: number;
+    /** Summed and largest fire radiative power in MW. */
+    frpSum: number;
+    frpMax: number;
+  };
+}
+
+export interface FireDensityCollection {
+  type: "FeatureCollection";
+  features: FireDensityFeature[];
+  /** The feed ids the cells were built from, for the map credits. */
+  sources: string[];
 }
 
 export interface NormalizedViewport {
@@ -49,6 +63,8 @@ export interface NormalizedViewport {
 export interface WildfireProviderData extends GeoJSON.FeatureCollection {
   source: WildfireProvider;
   truncated: boolean;
+  /** The feed ids behind the features, for the map credits. */
+  sources: string[];
 }
 
 export interface WildfireFeatureCollection extends WildfireProviderData {
@@ -59,8 +75,8 @@ export interface WildfireFeatureCollection extends WildfireProviderData {
 export interface NifcProperties {
   id: string;
   kind: "reported-perimeter";
-  provider: "nifc";
-  coverage: "United States";
+  /** The id of the source that reported the perimeter. */
+  provider: string;
   name: string;
   areaAcres?: number;
   observedAt?: string;
@@ -74,7 +90,8 @@ export interface NifcProperties {
 export interface EffisProperties {
   id: string;
   kind: "satellite-burned-area";
-  provider: "effis";
+  /** The id of the source that mapped the burned area. */
+  provider: string;
   detectedAt?: string;
   updatedAt?: string;
   countryCode?: string;
@@ -87,7 +104,8 @@ export interface EffisProperties {
 export interface NoaaSmokeProperties {
   id: string;
   kind: "observed-smoke";
-  provider: "noaa-hms";
+  /** The id of the source that observed the smoke. */
+  provider: string;
   density: "light" | "medium" | "heavy";
   satellite?: string;
   startedAt?: string;

@@ -17,7 +17,6 @@ import type {
   RouteImpactUnavailableReason,
 } from "@openmapx/core";
 import {
-  bandForDelayRatio,
   buildElevationProfile,
   estimateDrivingCo2Grams,
   formatDistance,
@@ -43,12 +42,11 @@ import { useStartNavigation } from "@/lib/mobile/useStartNavigation";
 import { primeSpeechSynthesis } from "@/lib/navigation/useNavigationVoice";
 import { requestHeadingPermission } from "@/lib/useHeading";
 import { useNow } from "@/lib/useNow";
+import { useRouteTrafficPresentation } from "@/lib/useRouteTrafficPresentation";
+import { RouteTrafficStatus } from "./RouteTrafficStatus";
 import { type RouteArrivalContext, resolveRouteArrival } from "./routeArrival";
 
 const GROUND_MODES = new Set<Route["mode"]>(["driving", "walking", "cycling", "motorcycle"]);
-
-/** Absolute floor for showing a traffic delay, in seconds. */
-const MIN_TRAFFIC_DELAY_SECONDS = 300;
 
 function RouteArrivalCaption({
   context,
@@ -135,6 +133,7 @@ export function RouteCard({
   const t = useTranslations("directions");
   const tc = useTranslations("common");
   const tNav = useTranslations("navigation");
+  const tTraffic = useTranslations("trafficStatus");
   const locale = useLocale();
   const { startGround } = useStartNavigation();
   const waypoints = useDirectionsStore((s) => s.waypoints);
@@ -148,6 +147,17 @@ export function RouteCard({
   const [startError, setStartError] = useState<string | null>(null);
   const [impactDetailsOpen, setImpactDetailsOpen] = useState(false);
   const arrivalCaptionId = useId();
+  const trafficCaptionId = useId();
+  const traffic = useRouteTrafficPresentation(route);
+  const selectionDescription =
+    [
+      route.mode === "driving" && arrivalContext ? arrivalCaptionId : null,
+      (route.mode === "driving" || route.mode === "motorcycle") && traffic.kind !== "clear"
+        ? trafficCaptionId
+        : null,
+    ]
+      .filter(Boolean)
+      .join(" ") || undefined;
   const roadConditionNotice = roadConditionRouteNotice(roadConditionImpact);
 
   const handleStart = async () => {
@@ -230,28 +240,46 @@ export function RouteCard({
       <DirectionsBikeIcon sx={{ fontSize: 22, color: active ? BRAND : "text.disabled" }} />
     );
 
-  // Only worth surfacing when it clears both an absolute floor and a relative
-  // one: a 90-second delta on a two-hour drive tells the user nothing, and a
-  // large ratio on a very short hop is mostly snapping noise.
-  const trafficDelay = (() => {
-    const baseline = route.baselineDuration;
-    if (baseline === undefined || baseline <= 0) return null;
-    const delaySeconds = route.duration - baseline;
-    if (delaySeconds < MIN_TRAFFIC_DELAY_SECONDS) return null;
-    const band = bandForDelayRatio(delaySeconds / baseline);
-    if (!band) return null;
-    return { band, delaySeconds, baseline };
-  })();
-
   const selectionLabel = `${route.summary ?? t("bestRoute")}, ${formatDuration(route.duration)}, ${dist}${ascentLabel ? `, ${ascentLabel}` : ""}`;
   const summaryContent = (
     <>
       <Typography
         variant="h6"
-        color={active ? BRAND : "text.primary"}
-        sx={{ fontWeight: 700, lineHeight: 1.25, fontVariantNumeric: "tabular-nums" }}
+        sx={{
+          color:
+            route.mode === "driving" || route.mode === "motorcycle"
+              ? traffic.kind === "delay"
+                ? TRAFFIC_TEXT_COLOR[traffic.band]
+                : traffic.kind === "clear"
+                  ? BRAND
+                  : "text.primary"
+              : active
+                ? BRAND
+                : "text.primary",
+          fontWeight: 700,
+          lineHeight: 1.25,
+          fontVariantNumeric: "tabular-nums",
+          display: "flex",
+          alignItems: "baseline",
+          flexWrap: "wrap",
+          columnGap: 0.5,
+          pr: route.mode === "driving" || route.mode === "motorcycle" ? 4 : 0,
+          py: route.mode === "driving" || route.mode === "motorcycle" ? 0.5 : 0,
+        }}
       >
-        {formatDuration(route.duration)}
+        <span>{formatDuration(route.duration)}</span>
+        {traffic.kind === "delay" && (
+          <Typography
+            component="span"
+            variant="caption"
+            id={trafficCaptionId}
+            data-testid="traffic-delay"
+            sx={{ color: "inherit", fontWeight: 500, whiteSpace: "nowrap", lineHeight: 1.35 }}
+          >
+            {" "}
+            ({tTraffic("delay", { delay: formatDuration(traffic.seconds) })})
+          </Typography>
+        )}
       </Typography>
       <Box sx={{ display: "flex", alignItems: "baseline", gap: 1, mt: 0.25, minWidth: 0 }}>
         <Typography variant="body2" noWrap sx={{ color: "text.secondary", flex: 1, minWidth: 0 }}>
@@ -275,17 +303,6 @@ export function RouteCard({
           sx={{ color: "text.secondary", display: "block", mt: 0.25 }}
         >
           {ascentLabel}
-        </Typography>
-      )}
-      {trafficDelay && (
-        <Typography
-          variant="caption"
-          data-testid="traffic-delay"
-          sx={{ color: TRAFFIC_TEXT_COLOR[trafficDelay.band], display: "block", mt: 0.25 }}
-        >
-          {t("trafficDelay", { delay: formatDuration(trafficDelay.delaySeconds) })}
-          {" · "}
-          {t("trafficDelayNormally", { baseline: formatDuration(trafficDelay.baseline) })}
         </Typography>
       )}
       {roadConditionNotice && (
@@ -345,44 +362,73 @@ export function RouteCard({
         transition: "background-color 0.15s",
       }}
     >
-      <Box sx={{ flexShrink: 0, mt: 0.25 }}>{modeIcon}</Box>
+      <Box
+        sx={{
+          flexShrink: 0,
+          mt: route.mode === "driving" || route.mode === "motorcycle" ? 0.75 : 0.25,
+        }}
+      >
+        {modeIcon}
+      </Box>
       <Box sx={{ flex: 1, minWidth: 0 }}>
-        {selectionKind === "peek" ? (
-          <Box
-            component="button"
-            type="button"
-            aria-label={selectionLabel}
-            aria-describedby={
-              route.mode === "driving" && arrivalContext ? arrivalCaptionId : undefined
-            }
-            onClick={onSelect}
-            sx={selectionSx}
-          >
-            {summaryContent}
-          </Box>
-        ) : (
-          <Box component="label" sx={{ ...selectionSx, position: "relative" }}>
+        <Box sx={{ position: "relative" }}>
+          {selectionKind === "peek" ? (
             <Box
-              component="input"
-              type="radio"
-              name="alternative-route"
+              component="button"
+              type="button"
               aria-label={selectionLabel}
-              aria-describedby={
-                route.mode === "driving" && arrivalContext ? arrivalCaptionId : undefined
-              }
-              checked={active}
-              onChange={onSelect}
-              onClick={() => {
-                if (active) onSelect();
-              }}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") onSelect();
-              }}
-              sx={{ position: "absolute", opacity: 0, width: "1px", height: "1px", m: 0 }}
-            />
-            {summaryContent}
+              aria-describedby={selectionDescription}
+              onClick={onSelect}
+              sx={selectionSx}
+            >
+              {summaryContent}
+            </Box>
+          ) : (
+            <Box component="label" sx={{ ...selectionSx, position: "relative" }}>
+              <Box
+                component="input"
+                type="radio"
+                name="alternative-route"
+                aria-label={selectionLabel}
+                aria-describedby={selectionDescription}
+                checked={active}
+                onChange={onSelect}
+                onClick={() => {
+                  if (active) onSelect();
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") onSelect();
+                }}
+                sx={{ position: "absolute", opacity: 0, width: "1px", height: "1px", m: 0 }}
+              />
+              {summaryContent}
+            </Box>
+          )}
+          <Box sx={{ position: "absolute", right: "-13px", top: "-9px" }}>
+            <RouteTrafficStatus route={route} impact={roadConditionImpact} provider={provider} />
           </Box>
-        )}
+        </Box>
+        {(route.mode === "driving" || route.mode === "motorcycle") &&
+          traffic.kind === "unavailable" && (
+            <Box
+              id={trafficCaptionId}
+              component="span"
+              data-testid="route-traffic-status"
+              sx={{
+                border: 0,
+                clip: "rect(0 0 0 0)",
+                height: "1px",
+                margin: "-1px",
+                overflow: "hidden",
+                padding: 0,
+                position: "absolute",
+                whiteSpace: "nowrap",
+                width: "1px",
+              }}
+            >
+              {tTraffic("summary")}
+            </Box>
+          )}
         {impact ? (
           <Box
             sx={{ mt: 0.5 }}

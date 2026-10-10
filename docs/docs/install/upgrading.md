@@ -88,7 +88,7 @@ Heavy region-derived index volumes (Nominatim, Pelias/Elasticsearch, Valhalla,
 MOTIS, Photon, TileServer, Overpass) are intentionally **excluded** — they rebuild
 from source data and would dominate the snapshot for no recovery benefit. What
 the backup captures is the irreplaceable state: your database (users, admin
-config, integration settings, ingested POI data).
+config, integration settings, imported place data).
 
 You may also copy your environment file aside, since it holds the secrets the
 whole stack depends on and is never part of a code pull:
@@ -114,8 +114,21 @@ can change dependencies, the CLI, or the manifests, so always reinstall after a
 pull:
 
 ```bash
-git pull
+(umask 022 && git pull)
 pnpm install
+```
+
+The ops-agent refuses to start while a service manifest, an integration
+manifest or their directories are writable by the group or by others. Some
+distributions give user accounts a umask of `002`, under which `git pull`
+writes every changed file group-writable; pulling with umask `022`, as above,
+keeps them private. If the ops-agent stops with "Release service authority is
+unavailable" or "Trusted configuration authority rejected" after a pull, clear
+the group and other write bits and restart it:
+
+```bash
+git ls-files -z | xargs -0 chmod go-w
+git ls-tree -rd --name-only -z HEAD | xargs -0 chmod go-w
 ```
 
 At this point your checkout is current — new manifests, new CLI behavior, and any
@@ -139,9 +152,10 @@ regenerated from the updated manifests:
 pnpm openmapx compose render
 ```
 
-This rewrites `infra/docker/docker-compose.generated.yml` and the hardlink plan
-from your current manifests and `infra/docker/.env`. The output is deterministic,
-and re-rendering when nothing changed is harmless — so when in doubt, render. The
+This applies a new configuration generation (compose file and hardlink plan)
+from your current manifests, `infra/docker/.env` and the settings saved in the
+admin panel. The output is deterministic, and re-rendering when nothing changed
+is harmless — so when in doubt, render. The
 update command in the next step also re-renders for you, so you can skip this
 as a standalone step unless you want to inspect the diff first.
 
@@ -218,7 +232,7 @@ services:
     image: $release_transitous_runner
 EOF
 
-release_compose=(docker compose -f infra/docker/docker-compose.generated.yml -f infra/docker/docker-compose.release.yml)
+release_compose=(docker compose --env-file infra/docker/.env -f infra/docker/.trusted-config-current/docker-compose.generated.yml -f infra/docker/docker-compose.release.yml)
 "${release_compose[@]}" pull app-api app-web data-manager ops-agent transitous-runner
 "${release_compose[@]}" up -d --force-recreate app-api app-web data-manager ops-agent transitous-runner
 ```

@@ -25,7 +25,7 @@ export interface RestaurantLinksResult {
 
 const FETCH_TIMEOUT_MS = 8000;
 const MAX_BYTES = 800_000;
-const USER_AGENT = "OpenMapXBot/1.0 (+https://github.com/openmapx; restaurant menu-link finder)";
+const USER_AGENT = "Open-MapXBot/1.0 (restaurant menu-link finder)";
 
 /**
  * Menu-link keywords across the languages OpenMapX is most likely to encounter.

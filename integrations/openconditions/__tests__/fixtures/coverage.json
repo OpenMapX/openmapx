@@ -1,0 +1,175 @@
+{
+  "generatedAt": "2026-10-06T10:00:00.000Z",
+  "coverage": [
+    {
+      "country": "DE",
+      "subdivision": null,
+      "class": "feature",
+      "kind": "charging_site",
+      "accessMode": "bulk",
+      "records": 118204,
+      "sources": ["de-bnetza-charging"],
+      "lastSuccessAt": "2026-10-06T02:00:00.000Z",
+      "freshUntil": "2026-10-07T02:00:00.000Z"
+    },
+    {
+      "country": "DE",
+      "subdivision": null,
+      "class": "feature",
+      "kind": "charging_site",
+      "accessMode": "on_demand",
+      "records": 41,
+      "sources": ["ocm-charging", "osm-charging"],
+      "lastSuccessAt": "2026-10-06T09:50:00.000Z",
+      "freshUntil": "2026-10-06T15:50:00.000Z"
+    },
+    {
+      "country": "DE",
+      "subdivision": null,
+      "class": "feature",
+      "kind": "fuel_station",
+      "accessMode": "on_demand",
+      "records": 212,
+      "sources": ["de-tankerkoenig-fuel"],
+      "lastSuccessAt": "2026-10-06T09:58:00.000Z",
+      "freshUntil": "2026-10-06T10:13:00.000Z"
+    },
+    {
+      "country": "DE",
+      "subdivision": null,
+      "class": "feature",
+      "kind": "parking_site",
+      "accessMode": "on_demand",
+      "records": 96,
+      "sources": ["osm-parking"],
+      "lastSuccessAt": "2026-10-06T09:40:00.000Z",
+      "freshUntil": "2026-10-06T15:40:00.000Z"
+    },
+    {
+      "country": "DE",
+      "subdivision": null,
+      "class": "observation",
+      "kind": "observation",
+      "property": "fuel.price",
+      "accessMode": "on_demand",
+      "records": 610,
+      "sources": ["de-tankerkoenig-fuel"],
+      "lastSuccessAt": "2026-10-06T09:58:00.000Z",
+      "freshUntil": "2026-10-06T10:13:00.000Z"
+    },
+    {
+      "country": "DE",
+      "subdivision": "BW",
+      "class": "feature",
+      "kind": "charging_site",
+      "accessMode": "bulk",
+      "records": 5210,
+      "sources": ["de-bw-mobidata-charging"],
+      "lastSuccessAt": "2026-10-06T09:55:00.000Z",
+      "freshUntil": "2026-10-06T10:25:00.000Z"
+    },
+    {
+      "country": "DE",
+      "subdivision": "BW",
+      "class": "feature",
+      "kind": "parking_site",
+      "accessMode": "bulk",
+      "records": 812,
+      "sources": ["de-bw-mobidata-parking"],
+      "lastSuccessAt": "2026-10-06T09:55:00.000Z",
+      "freshUntil": "2026-10-06T10:25:00.000Z"
+    },
+    {
+      "country": "DE",
+      "subdivision": "BW",
+      "class": "observation",
+      "kind": "observation",
+      "property": "charging.evse_status",
+      "accessMode": "bulk",
+      "records": 9034,
+      "sources": ["de-bw-mobidata-charging"],
+      "lastSuccessAt": "2026-10-06T09:55:00.000Z",
+      "freshUntil": "2026-10-06T10:25:00.000Z"
+    },
+    {
+      "country": "DE",
+      "subdivision": "BW",
+      "class": "observation",
+      "kind": "observation",
+      "property": "parking.available",
+      "accessMode": "bulk",
+      "records": 640,
+      "sources": ["de-bw-mobidata-parking"],
+      "lastSuccessAt": "2026-10-06T09:55:00.000Z",
+      "freshUntil": "2026-10-06T10:25:00.000Z"
+    },
+    {
+      "country": "DE",
+      "subdivision": "BW",
+      "class": "offer",
+      "kind": "energy_tariff",
+      "accessMode": "bulk",
+      "records": 311,
+      "sources": ["de-bw-mobidata-charging"],
+      "lastSuccessAt": "2026-10-06T09:55:00.000Z",
+      "freshUntil": "2026-10-06T10:25:00.000Z"
+    },
+    {
+      "country": "FR",
+      "subdivision": null,
+      "class": "feature",
+      "kind": "charging_site",
+      "accessMode": "on_demand",
+      "records": 12,
+      "sources": ["osm-charging"],
+      "lastSuccessAt": "2026-10-06T09:50:00.000Z",
+      "freshUntil": "2026-10-06T15:50:00.000Z"
+    },
+    {
+      "country": "FR",
+      "subdivision": null,
+      "class": "feature",
+      "kind": "fuel_station",
+      "accessMode": "bulk",
+      "records": 11032,
+      "sources": ["fr-prixcarburants-fuel"],
+      "lastSuccessAt": "2026-10-06T09:50:00.000Z",
+      "freshUntil": "2026-10-06T10:50:00.000Z"
+    },
+    {
+      "country": "FR",
+      "subdivision": null,
+      "class": "observation",
+      "kind": "observation",
+      "property": "fuel.price",
+      "accessMode": "bulk",
+      "records": 52011,
+      "sources": ["fr-prixcarburants-fuel"],
+      "lastSuccessAt": "2026-10-06T09:50:00.000Z",
+      "freshUntil": "2026-10-06T10:50:00.000Z"
+    },
+    {
+      "country": "NL",
+      "subdivision": null,
+      "class": "situation",
+      "kind": "roadworks",
+      "accessMode": "bulk",
+      "records": 1302,
+      "sources": ["nl-ndw-events"],
+      "lastSuccessAt": "2026-10-06T09:59:00.000Z",
+      "freshUntil": "2026-10-06T10:14:00.000Z"
+    },
+    {
+      "country": null,
+      "subdivision": null,
+      "class": "observation",
+      "kind": "observation",
+      "property": "charging.evse_status",
+      "accessMode": "bulk",
+      "records": 3,
+      "sources": ["crowd"],
+      "lastSuccessAt": null,
+      "freshUntil": null
+    }
+  ]
+}

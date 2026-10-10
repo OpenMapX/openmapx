@@ -34,7 +34,11 @@ function fixture(mode = "matching", crash = false) {
   writeFileSync(join(directory, "test-release.json"), services.canonicalReleaseManifest(manifest), {
     mode: 0o600,
   });
-  writeFileSync(join(root, "infra/docker/docker-compose.generated.yml"), "services: {}\n");
+  mkdirSync(join(root, "infra/docker/.trusted-config-current"), { recursive: true });
+  writeFileSync(
+    join(root, "infra/docker/.trusted-config-current/docker-compose.generated.yml"),
+    "services: {}\n",
+  );
   const calls: string[][] = [];
   const context = { signal: new AbortController().signal, emitLog: vi.fn() };
   const docker = vi.fn(async (args: readonly string[]) => {

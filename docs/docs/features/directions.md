@@ -122,6 +122,51 @@ selected travel time. The system evaluates these in the closure's local timezone
 fine-grained recurring schedule windows). This prevents routing detours around
 future closures that haven't started yet or nightly closures during daytime trips.
 
+### Reading traffic information
+
+Driving and motorcycle cards color the travel time by the estimated traffic
+delay and show a short caption such as **(+12 min)** directly after the duration. The estimate compares
+the same route with and without current traffic speeds. It appears when the
+extra time is at least five minutes and at least 10% of the comparison duration;
+the existing severity bands distinguish light, moderate, heavy and severe
+delays. The text supplies the amount so color is not the only signal.
+
+When there is no usable delay estimate or congestion data is missing,
+incomplete or stale, the duration uses the normal text color without an extra
+visible note. **Traffic data unavailable** remains in **About traffic** and the
+route's screen-reader description. A route with fresh, complete congestion coverage
+and a comparison below the display thresholds has a **green duration** and no
+additional caption. Significant estimated delays retain their severity color
+and the inline **(+12 min)** amount. The **About traffic** button is aligned
+with the duration, above the distance, for all traffic states.
+
+A zero delay comparison alone cannot establish fresh congestion coverage.
+The route contract's optional `trafficCoverage` evidence must confirm that
+current congestion speeds cover the exact route and were used in its duration;
+its lease expires within two minutes of evaluation. Current routing providers
+**do not yet emit this evidence**, so low-delay comparisons currently use the
+unavailable state rather than green. Adding trustworthy engine-side congestion
+coverage remains part of the traffic follow-up; closure proofs and map-layer
+colors cannot substitute for it. Positive delay estimates remain useful even
+without complete coverage of every road.
+
+Open **About traffic** with the info button for a plain-language explanation of
+the estimate, road updates and the route provider. These details do not interrupt
+route selection or Start.
+
+Road updates are described as used only when this route has current, matching
+engine and server evidence. That explanation expires automatically; missing,
+failed or conflicting checks never carry a previous success forward. This
+road-update verification is separate from the engine's estimated delay. The
+estimate reflects the selected path at calculation time, can include applied
+speed restrictions, and does not establish a fresh congestion measurement for
+every road or the extra time versus a different traffic-free route.
+
+Map colors are separate from travel-time estimates. The
+[traffic legends](./map-layers.md#transportation) explain their sources and
+limitations on demand. This presentation applies to directions cards, not every
+navigation/EV surface.
+
 ## Stop times and dwell
 
 Any stop on a trip can carry a time of its own. The clock button on a waypoint
@@ -172,8 +217,8 @@ The directions panel exposes the tuning knobs that map onto the routing API:
   engine's live-traffic request when one is available. The result is graph- and
   request-dependent: the engine may return only the primary route when no
   distinct alternative satisfies its cost and safety filters. Baseline durations
-  are shown for comparison when supplied; a baseline can legitimately be slower
-  than the live route.
+  supply the same-path estimated traffic-delay comparison shown on route cards;
+  they can legitimately be slower than the live route.
 - **Stops and optimization** — add intermediate waypoints, and ask the engine to
   reorder them into the shortest trip while keeping the first and last fixed.
 
@@ -216,21 +261,42 @@ limits, taper point, and connector set. Then set starting charge, target charge
 at stops, minimum arrival reserve, preferred or excluded charging networks, and
 an optional home-energy price and currency.
 
-The planner first computes the road route, searches compatible chargers along
-its corridor, evaluates detours with a route matrix, and reroutes through the
-selected stops. It accounts for elevation and temperature, the vehicle's charge
-curve and connector limits, station power, network preferences, and live
-availability when it is useful for a near-term trip. The result separates drive
-and charge time and shows distance, estimated energy, arrival charge, and cost
-only where the source data supports a meaningful price. Warnings explain missing
-availability or tariff data, tight reserves, and cases where no compatible or
-allowed network can make the trip. Selecting a charge stop opens its charger
+The planner first computes the road route, searches charging sites along its
+corridor, evaluates detours with a route matrix, and reroutes through the
+selected stops. At each site it picks the charge point the vehicle would use: a
+connector it plugs into, on a charge point that is in service (one a live status
+reports out of order, or one still planned, is skipped), at the highest power,
+and at equal power one that is free right now. It accounts for elevation and
+temperature, the vehicle's charge curve and AC/DC limits, network preferences,
+and live availability when the stop is reached soon after you plan; a status
+past its validity never counts as free.
+
+A stop's cost comes from the tariffs that apply to the chosen connector, matched
+on the station's local clock from the time you arrive there: time-of-day and
+weekday windows (a night rate past midnight counts for the evening it began),
+validity dates and power limits all count, so a departure time moves a stop into
+or out of a night rate, and a charge that runs into one pays it from the
+window's edge on. Energy and duration limits price tiers within the
+session ("the first 20 kWh at one price, then another"), assuming the energy
+arrives evenly over the charge. Energy, charge-time and per-session prices are
+summed (VAT added where the tariff quotes prices without it) and held within
+the tariff's minimum and maximum price. Parking-time prices are not added: a
+tariff bills them for time plugged in but not charging, and a planned stop
+leaves when its charge ends. The cheapest applicable tariff is shown with its
+main price; a tariff anyone can pay ad hoc is preferred over subscription or
+profile tariffs whenever one applies. The result separates drive and charge
+time and shows distance, estimated energy, arrival charge, and cost (rounded to
+the currency's smallest unit) only where the source data supports a meaningful
+price. Warnings explain missing charger data, charger sources that did not
+answer or answered only in part, tight reserves, and cases where no compatible
+or allowed network can make the trip. Selecting a charge stop opens its charger
 place card.
 
 EV planning currently supports one origin and one destination; arbitrary user
 waypoints are not accepted because the planner owns the charging stops. It
-requires Valhalla routing plus enabled EV-charging data sources. Live occupancy
-and tariffs depend on the feeds available in the trip region.
+requires Valhalla routing plus a charging-site provider (OpenConditions);
+without one the plan says no charger data is available instead of failing. Live
+occupancy and tariffs depend on the feeds available in the trip region.
 
 ## Turn-by-turn navigation
 
@@ -292,6 +358,44 @@ normalized into a single shape regardless of which engine produced them, so the
 navigation UI behaves the same on Valhalla and OSRM. Valhalla additionally backs a
 map-matching endpoint that snaps a recorded GPS trace to the road network — used
 for features such as placing traffic-signal markers along the active route.
+
+### Search for a stop along your route
+
+Choose a category or chain from **Search along route** while navigating. Discovery
+looks up to 25 km ahead within a 1,200 m geometric corridor. That cheap discovery
+step does not prove road access: a nearby service area may be across a motorway
+or river.
+
+For a shortlist of six stops, OpenMapX compares the complete remaining itinerary
+with and without each stop. **By road** labels show the extra routing time; the
+card also shows extra distance. Both itineraries use the active mode, avoidance
+preferences and routing provider. Existing user stops keep their order, and the
+new stop is inserted before the next stop beyond its position on the route.
+
+A known routing entrance is preferred when the place source supplies one.
+Otherwise the card explicitly says it routes to place coordinates and the
+entrance is unknown. A network estimate does not verify that a coordinate is an
+entrance or that a business is open.
+
+- **Straight-line estimate / ~**: only geometric distance and speed are available.
+- **Checking**: the road comparison is pending.
+- **Unavailable / unknown**: the provider failed, returned unusable data, or could
+  not honor the pinned routing request.
+- **No route / unreachable**: the provider returned no route through that stop.
+  Adding it is disabled.
+
+Comparisons use a route position rounded down to 500 m and expire after 60 seconds.
+Position fixes within that bucket do not issue new routing requests; passing a
+user waypoint changes the remaining itinerary immediately. Route, provider,
+preference and search changes remove old estimates. Expiry restores approximate
+labels without polling the provider. The browser cache holds at most 64
+comparisons, and only two candidate requests run concurrently after one shared
+baseline. Discovery bounds move every 5 km.
+
+**Add** replans from the current position using the same insertion rules. **Cancel**
+can dismiss a pending selection; a late response cannot change a newer route or
+navigation session. This uses the existing routing configuration and adds no
+admin setting.
 
 ## Flights: a deep-link, not live data
 

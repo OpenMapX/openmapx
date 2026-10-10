@@ -12,17 +12,6 @@ import {
   scheduleNotablePlaces,
 } from "./jobs/notable-places/schedule.js";
 import { createNotablePlacesRuntimeState } from "./jobs/notable-places/state.js";
-import { registerPoiIngestApi } from "./jobs/poi-ingest/api.js";
-import { runBootstrap } from "./jobs/poi-ingest/bootstrap.js";
-import { createDriftGuard, type DriftGuard } from "./jobs/poi-ingest/drift-guard.js";
-import { createLogMetricsSink, type PoiIngestMetricsSink } from "./jobs/poi-ingest/metrics.js";
-import {
-  combineMetricsSinks,
-  createOtelMetricsSink,
-  getPoiMetrics,
-} from "./jobs/poi-ingest/otel-metrics.js";
-import { type PoiSchedulerHandles, setupPoiIngestCron } from "./jobs/poi-ingest/scheduler.js";
-import { createPoiSingleFlight } from "./jobs/poi-ingest/single-flight.js";
 import { reconcileOrphanedJobs } from "./jobs/reconcile.js";
 import { createNotablePlacesOperationLock } from "./jobs/search-index/operation-lock.js";
 import { bakePredicted } from "./jobs/traffic/bake-predicted.js";
@@ -34,9 +23,7 @@ import { OfflinePackageGenerator } from "./offline-packages/generator.js";
 import { PostgresOfflinePackageAccountingStore } from "./offline-packages/postgres-accounting.js";
 import { createOpenMapxPackageSourceFactory } from "./offline-packages/source-catalog.js";
 import { OfflinePackageStorage } from "./offline-packages/storage.js";
-import { discoverPoiSources } from "./poi-source-discovery.js";
 import { DataManagerReadiness } from "./readiness.js";
-import { createDataManagerRedisClient } from "./redis.js";
 import { initializeRequiredSubsystems } from "./startup.js";
 import { StateStore } from "./state.js";
 
@@ -57,17 +44,6 @@ const offlinePackages = new OfflinePackageGenerator({
   },
 });
 const repoRoot = process.env.OPENMAPX_ROOT_DIR ?? "";
-// Where to discover POI sources (`integrations/*/poi-sources.ts`) from. This
-// is decoupled from `repoRoot`: repoRoot stays the host bind-mount used for
-// lockfile write-backs (POST /transit/bump, gbfs-catalog-lock.ts, promote.ts's
-// `docker compose -f ${repoRoot}/...`), but the image now bakes its own copy
-// of `integrations/` so discovery shouldn't depend on that mount being
-// present. In the built image `dist/index.js` lives at
-// `/app/services/data-manager/dist` — three levels up is `/app`, the same
-// depth `src/` sits at relative to the repo root in dev.
-const integrationsRootDir =
-  process.env.OPENMAPX_INTEGRATIONS_DIR ??
-  (import.meta.dirname ? join(import.meta.dirname, "..", "..", "..") : repoRoot);
 const singleFlight = getSingleFlightController();
 const operationsPolicy = resolveOperationsProfileFromEnv();
 
@@ -150,59 +126,7 @@ const host = process.env.HOST ?? "127.0.0.1";
 
 // Track cron handles so the SIGTERM hook can stop them cleanly.
 let cronHandles: CronHandles | null = null;
-let poiHandles: PoiSchedulerHandles | null = null;
 let notablePlacesSchedule: NotablePlacesSchedule | null = null;
-
-// Single authenticated Redis client for the POI ingest pipeline. Defined at module
-// scope so `shutdown()` can disconnect it explicitly — otherwise SIGTERM
-// hangs on the open socket. `lazyConnect: true` defers the first TCP attempt
-// until the mandatory startup ping. Both connection coordinates and the
-// deployment-owned password file must be explicit; production never falls
-// back to an unauthenticated localhost client.
-const redis = await createDataManagerRedisClient();
-
-// POI ingest singleFlight + metricsSink + drift guard are constructed BEFORE
-// `app.listen()` so the HTTP routes can be registered against them — Fastify
-// disallows `app.get(...)` calls after listen. setupPoiIngestCron takes the
-// same instances via opts so the cron + HTTP triggers
-// share the same lock + metrics writer.
-const poiAdapter = {
-  info: (m: string, e?: Record<string, unknown>) => (e ? app.log.info(e, m) : app.log.info(m)),
-  warn: (m: string, e?: Record<string, unknown>) => (e ? app.log.warn(e, m) : app.log.warn(m)),
-  error: (m: string, e?: Record<string, unknown>) => (e ? app.log.error(e, m) : app.log.error(m)),
-  debug: (m: string, e?: Record<string, unknown>) => (e ? app.log.debug(e, m) : app.log.debug(m)),
-};
-const poiSingleFlight = createPoiSingleFlight();
-const poiMetricsSink: PoiIngestMetricsSink = combineMetricsSinks(
-  createLogMetricsSink(poiAdapter),
-  createOtelMetricsSink(),
-);
-let poiDriftGuard: DriftGuard | undefined;
-const appApiBaseUrl = process.env.APP_API_BASE_URL;
-if (appApiBaseUrl) {
-  poiDriftGuard = createDriftGuard({
-    appApiBaseUrl,
-    logger: { warn: (m, e) => (e ? app.log.warn(e, m) : app.log.warn(m)) },
-  });
-}
-registerPoiIngestApi(app, {
-  sql,
-  redis,
-  singleFlight: poiSingleFlight,
-  metricsSink: poiMetricsSink,
-  driftGuard: poiDriftGuard,
-});
-
-// Prometheus scrape endpoint. Auth is bypassed (see auth.ts HEALTH_PATHS)
-// because the data-manager port is bound to 127.0.0.1 on the host — only
-// an in-cluster scraper can reach it. Mirrors apps/api's posture for the
-// sibling `/internal/metrics` route. Registered pre-listen to satisfy
-// Fastify's no-routes-after-listen invariant.
-app.get("/internal/metrics", async (_request, reply) => {
-  const handle = getPoiMetrics();
-  const text = await handle.renderPrometheus();
-  reply.header("Content-Type", "text/plain; version=0.0.4; charset=utf-8").send(text);
-});
 
 async function start(): Promise<void> {
   const store = new StateStore(dataDir);
@@ -213,14 +137,7 @@ async function start(): Promise<void> {
       await offlinePackages.initialize();
       app.log.info("offline package storage reconciled");
     },
-    verifyRedis: async () => {
-      await redis.ping();
-    },
     reconcileJobs: reconcileOrphanedJobs,
-    discoverPoiSources: async () => {
-      if (!integrationsRootDir) throw new Error("no integrations root resolved");
-      await discoverPoiSources({ rootDir: integrationsRootDir, logger: poiAdapter });
-    },
     setupCronSchedulers: () =>
       setupCron({
         dataDir,
@@ -245,17 +162,8 @@ async function start(): Promise<void> {
           ? () => fetchCoveredWayIds(openConditionsUrl, openConditionsToken)
           : undefined,
       }),
-    setupPoiScheduler: () =>
-      setupPoiIngestCron({
-        sql,
-        redis,
-        logger: poiAdapter,
-        singleFlight: poiSingleFlight,
-        metricsSink: poiMetricsSink,
-      }),
   });
   cronHandles = initialized.cronHandles;
-  poiHandles = initialized.poiHandles;
   if (initialized.interruptedJobIds.length > 0) {
     app.log.warn(
       {
@@ -278,31 +186,12 @@ async function start(): Promise<void> {
   if ((process.env.OVERTURE_ENABLED || "").trim().toLowerCase() === "true") {
     void cronHandles.runOvertureConflationRetryNow();
   }
-
-  if (process.env.POI_INGEST_BOOTSTRAP === "true") {
-    app.log.info("poi-ingest-bootstrap: starting");
-    void runBootstrap({
-      sql,
-      redis,
-      singleFlight: poiSingleFlight,
-      metricsSink: poiMetricsSink,
-      logger: poiAdapter,
-    })
-      .then((result) => app.log.info(result, "poi-ingest-bootstrap: complete"))
-      .catch((err) => app.log.error({ err }, "poi-ingest-bootstrap: threw"));
-  }
 }
 
 void start().catch(async (err) => {
   readiness.markFailed();
   app.log.error({ err, readiness: readiness.snapshot() }, "data-manager startup failed");
   cronHandles?.stop();
-  poiHandles?.stop();
-  try {
-    redis.disconnect();
-  } catch {
-    // The failed mandatory Redis probe may already have closed the client.
-  }
   await app.close().catch(() => {});
   process.exit(1);
 });
@@ -317,13 +206,7 @@ async function shutdown(signal: NodeJS.Signals): Promise<void> {
   process.stderr.write(`data-manager: shutdown signal=${signal}\n`);
   app.log.info({ signal }, "data-manager: shutdown requested");
   cronHandles?.stop();
-  poiHandles?.stop();
   notablePlacesSchedule?.stop();
-  try {
-    redis.disconnect();
-  } catch {
-    // Closing an already-closed socket throws; ignore.
-  }
   await offlinePackages.close();
   await cronHandles?.closeTrafficWriter();
   const result = await awaitInflightSync(singleFlight, 30_000);

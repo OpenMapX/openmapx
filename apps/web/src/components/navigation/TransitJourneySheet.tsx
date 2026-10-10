@@ -203,6 +203,7 @@ export function TransitJourneySheet({
   currentLegIndex,
   transitProgress: _transitProgress,
   scroll = true,
+  showQueryNotice = true,
 }: {
   itinerary: TripItinerary;
   currentLegIndex: number;
@@ -213,6 +214,8 @@ export function TransitJourneySheet({
    * the menu below stays reachable instead of adding a nested scrollbar.
    */
   scroll?: boolean;
+  /** Navigation already displays the same query warning above the map. */
+  showQueryNotice?: boolean;
 }) {
   const t = useTranslations("navigation");
   const now = useNow(30_000);
@@ -251,7 +254,7 @@ export function TransitJourneySheet({
         />
       )}
       {isTransitLeg && (
-        <Box sx={{ px: 2, py: 0.5 }}>
+        <Box sx={{ px: 2, py: 0.5, "&:empty": { display: "none" } }}>
           <TransitDataStatus
             now={now}
             realtime={currentLeg.realtime}
@@ -261,7 +264,7 @@ export function TransitJourneySheet({
           />
         </Box>
       )}
-      {isTransitLeg && (
+      {isTransitLeg && showQueryNotice && (
         <TransitQueryNotice
           failed={journeyQuery.isError}
           partial={journeyQuery.freshness?.isPartial}

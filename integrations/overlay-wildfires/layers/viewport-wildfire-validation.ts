@@ -1,3 +1,4 @@
+import { isSourceId } from "../source-id";
 import type { EffisProperties, NifcProperties, WildfireFeatureCollection } from "../types";
 
 export type ViewportWildfireSourceId = "nifc" | "effis";
@@ -83,8 +84,7 @@ function hasStableId(
 function isNifcProperties(value: UnknownRecord): value is UnknownRecord & NifcProperties {
   return (
     value.kind === "reported-perimeter" &&
-    value.provider === "nifc" &&
-    value.coverage === "United States" &&
+    isSourceId(value.provider) &&
     typeof value.name === "string" &&
     isOptionalNonNegativeNumber(value.areaAcres) &&
     isOptionalCanonicalIsoUtcTimestamp(value.observedAt) &&
@@ -103,7 +103,7 @@ function isNifcProperties(value: UnknownRecord): value is UnknownRecord & NifcPr
 function isEffisProperties(value: UnknownRecord): value is UnknownRecord & EffisProperties {
   return (
     value.kind === "satellite-burned-area" &&
-    value.provider === "effis" &&
+    isSourceId(value.provider) &&
     isOptionalCanonicalIsoUtcTimestamp(value.detectedAt) &&
     isOptionalCanonicalIsoUtcTimestamp(value.updatedAt) &&
     isOptionalString(value.countryCode) &&
@@ -137,6 +137,8 @@ export function isViewportWildfireFeatureCollection(
     value.source === sourceId &&
     isCanonicalIsoUtcTimestamp(value.fetchedAt) &&
     typeof value.stale === "boolean" &&
-    typeof value.truncated === "boolean"
+    typeof value.truncated === "boolean" &&
+    Array.isArray(value.sources) &&
+    value.sources.every(isSourceId)
   );
 }

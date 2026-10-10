@@ -1,0 +1,56 @@
+[
+  {
+    "id": "maptiler:poi.15539884",
+    "label": "MediaMarkt",
+    "sublabel": "MediaMarkt, Pr Willem Alexander Prom 69-83, 2284 DJ Rijswijk, Netherlands",
+    "coordinates": [4.316869229078293, 52.03636822992996],
+    "type": "poi",
+    "rawCategory": "electronics",
+    "provider": "geocoding-maptiler"
+  },
+  {
+    "id": "maptiler:poi.15422100",
+    "label": "MediaMarkt",
+    "sublabel": "MediaMarkt, Grunerstraße 20, 10179 Berlin, Germany",
+    "coordinates": [13.414790779352188, 52.51986159027454],
+    "type": "poi",
+    "rawCategory": "electronics",
+    "provider": "geocoding-maptiler"
+  },
+  {
+    "id": "maptiler:poi.15388462",
+    "label": "MediaMarkt",
+    "sublabel": "MediaMarkt, Äußere Schneeberger Straße 95, 08056 Zwickau, Germany",
+    "coordinates": [12.499412186443806, 50.70416170071806],
+    "type": "poi",
+    "rawCategory": "electronics",
+    "provider": "geocoding-maptiler"
+  },
+  {
+    "id": "maptiler:poi.15513302",
+    "label": "MediaMarkt",
+    "sublabel": "MediaMarkt, Waldershofer Straße 10, 95615 Marktredwitz, Germany",
+    "coordinates": [12.077845813448675, 49.99956173454102],
+    "type": "poi",
+    "rawCategory": "electronics",
+    "provider": "geocoding-maptiler"
+  },
+  {
+    "id": "maptiler:poi.27301831",
+    "label": "MediaMarkt",
+    "sublabel": "MediaMarkt, Schloßplatz 8, 26122 Oldenburg, Germany",
+    "coordinates": [8.216576837003231, 53.13856416583732],
+    "type": "poi",
+    "rawCategory": "electronics",
+    "provider": "geocoding-maptiler"
+  },
+  {
+    "id": "maptiler:poi.31290179",
+    "label": "MediaMarkt",
+    "sublabel": "MediaMarkt, Posthalterweg 15, 26129 Oldenburg, Germany",
+    "coordinates": [8.172727230560895, 53.16099834226386],
+    "type": "poi",
+    "rawCategory": "electronics",
+    "provider": "geocoding-maptiler"
+  }
+]

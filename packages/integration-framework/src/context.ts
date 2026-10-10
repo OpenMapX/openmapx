@@ -1,10 +1,13 @@
-import type { PoiSource } from "@openmapx/poi-source-registry";
 import type { AirQualityProvider } from "./contracts/air-quality-provider.js";
+import type { CameraProvider } from "./contracts/camera-provider.js";
+import type { ChargingSiteProvider } from "./contracts/charging-site-provider.js";
 import type { FuelStationProvider } from "./contracts/fuel-station-provider.js";
 import type { GeocodingProvider } from "./contracts/geocoding-provider.js";
 import type { GtfsCatalogProvider } from "./contracts/gtfs-catalog-provider.js";
+import type { HazardsProvider } from "./contracts/hazards-provider.js";
 import type { KnowledgeProvider } from "./contracts/knowledge-provider.js";
 import type { MobilityDataSourceProvider } from "./contracts/mobility-data-source-provider.js";
+import type { ParkingSiteProvider } from "./contracts/parking-site-provider.js";
 import type { PhotoProvider } from "./contracts/photo-provider.js";
 import type { PoiSearchProvider } from "./contracts/poi-search-provider.js";
 import type { RealtimeProvider } from "./contracts/realtime-provider.js";
@@ -86,28 +89,6 @@ export interface CacheClient {
   ): Promise<T>;
 }
 
-/**
- * Cross-process hash-store reader for the shared `poi:live:<sourceId>`
- * keyspace written by services/data-manager.
- *
- * Distinct from `CacheClient` because the keys are NOT integration-namespaced
- * — `data-manager` knows nothing about integration ids, only the source ids
- * registered in `@openmapx/poi-source-registry`. The host must NOT prefix
- * the key with `int:<integration>:` or reads will silently miss the writes.
- *
- * Currently only `createTwoTierPoiReader` uses this; widen the interface if
- * other shared Redis structures emerge.
- */
-export interface LiveStoreClient {
-  /**
-   * Bulk-read fields from a Redis hash at the literal `key` (no prefixing).
-   * Returns one entry per requested field, in the same order; null for
-   * missing fields. JSON-decoded; values written via Redis `HSET` with a
-   * JSON-stringified payload (data-manager's `write-live` stage) decode cleanly.
-   */
-  hmget<T = unknown>(key: string, fields: readonly string[]): Promise<(T | null)[]>;
-}
-
 export interface Logger {
   info(message: string, ...args: unknown[]): void;
   warn(message: string, ...args: unknown[]): void;
@@ -126,6 +107,10 @@ export interface DatabaseClient {
 export type RouteHandler = (
   req: {
     query: RouteQuery;
+    /**
+     * Path params, already decoded exactly once by the host (an encoded `/`
+     * stays inside its param). Handlers must not decode them again.
+     */
     params: Record<string, string>;
     body: unknown;
     /**
@@ -440,12 +425,6 @@ export interface IntegrationContext {
 
   readonly http: HttpClient;
   readonly cache: CacheClient;
-  /**
-   * Reader for the shared cross-process `poi:live:<sourceId>` keyspace
-   * written by `services/data-manager`. Distinct from `cache` because
-   * it must not be integration-namespaced. See `LiveStoreClient`.
-   */
-  readonly liveStore: LiveStoreClient;
   readonly db?: DatabaseClient;
   readonly log: Logger;
   readonly secrets: SecretsClient;
@@ -524,6 +503,30 @@ export interface IntegrationContext {
    * registered providers.
    */
   registerFuelStationProvider(provider: FuelStationProvider): void;
+  /**
+   * Typed registrar for parking-site providers (sites, areas, counts, rates).
+   * Stored under the `parking-sites` key; the `parking` orchestrator merges
+   * all registered providers.
+   */
+  registerParkingSiteProvider(provider: ParkingSiteProvider): void;
+  /**
+   * Typed registrar for charging-site providers (sites, EVSEs, connectors,
+   * live status, tariffs). Stored under the `charging-sites` key; the
+   * `ev-charging` orchestrator merges all registered providers.
+   */
+  registerChargingSiteProvider(provider: ChargingSiteProvider): void;
+  /**
+   * Typed registrar for camera providers (cameras, views, current stills).
+   * Stored under the `cameras` key; the `webcam` orchestrator merges all
+   * registered providers.
+   */
+  registerCameraProvider(provider: CameraProvider): void;
+  /**
+   * Typed registrar for hazards providers (alerts, natural hazards, fire
+   * detections). Stored under the `hazards` key; the hazards orchestrator
+   * merges all registered providers.
+   */
+  registerHazardsProvider(provider: HazardsProvider): void;
   /** Typed registrar for photo providers. Stored under the `photos` key. */
   registerPhotoProvider(provider: PhotoProvider): void;
   /** Typed registrar for street-level imagery providers. Stored under the `street-level-imagery` key. */
@@ -538,16 +541,6 @@ export interface IntegrationContext {
   registerKnowledgeProvider(provider: KnowledgeProvider): void;
   /** Typed registrar for GTFS catalog providers. Stored under the `gtfs-catalog` key. */
   registerGtfsCatalogProvider(provider: GtfsCatalogProvider): void;
-  /**
-   * Typed registrar for POI sources (EV charging, parking, etc.) that the
-   * data-manager ingest pipeline consumes. The host forwards to the shared
-   * `@openmapx/poi-source-registry` store; the same store is read by both
-   * the data-source provider chain on apps/api and the ingest scheduler on
-   * data-manager. Re-registering an id (within one integration or across
-   * two) is warn-and-drop, not throw — operator drift surfaces in the admin
-   * UI rather than crashing the host.
-   */
-  registerPoiSources(sources: readonly PoiSource[]): void;
   registerRoute(method: string, path: string, handler: RouteHandler, options?: RouteOptions): void;
   registerHealthCheck(fn: CustomHealthCheckFn): void;
   registerDisclosure(disclosure: Disclosure): void;

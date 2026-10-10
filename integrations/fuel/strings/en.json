@@ -8,6 +8,9 @@
     "fuelType": "Fuel Type",
     "price": "Price"
   },
+  "price": {
+    "per": "{price}/{unit}"
+  },
   "product": {
     "notSold": "Not sold",
     "noPrice": "No price reported",

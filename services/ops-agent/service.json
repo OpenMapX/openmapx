@@ -21,7 +21,7 @@
       "HOST": "0.0.0.0",
       "PORT": "4300",
       "OPENMAPX_ROOT_DIR": "${OPENMAPX_HOST_DIR:?OPENMAPX_HOST_DIR must be set}",
-      "OPENMAPX_ENABLED_SERVICES": "${OPENMAPX_ENABLED_SERVICES:-traefik,well-known,app-api,app-web,postgis,redis,data-manager}",
+      "OPENMAPX_ENABLED_SERVICES": "${OPENMAPX_ENABLED_SERVICES:-}",
       "OPENMAPX_REGION": "${OPENMAPX_REGION:-europe/germany}",
       "OPENMAPX_ALLOWED_REGIONS": "${OPENMAPX_ALLOWED_REGIONS:-europe/germany}",
       "OPENMAPX_ALLOWED_COUNTRIES": "${OPENMAPX_ALLOWED_COUNTRIES:-DE}",

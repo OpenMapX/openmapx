@@ -10,7 +10,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 // them inside the (hoisted) vi.mock factories.
 const mockFetchWithRedirects = vi.fn();
 const mockResolveGooglePhotosLink = vi.fn();
+const mockLookup = vi.fn();
 
+// The proxy's private-address guard resolves each hop's host itself; stubbing
+// the resolver decides where a declared host "points".
+vi.mock("node:dns/promises", () => ({
+  lookup: (...args: unknown[]) => mockLookup(...args),
+}));
 vi.mock("@openmapx/core", () => ({
   fetchWithRedirects: (...args: unknown[]) => mockFetchWithRedirects(...args),
   USER_AGENT: "test-agent",
@@ -26,12 +32,35 @@ import {
 } from "../../server-wiring.js";
 import { buildTestApp } from "../../test/app.js";
 import { createSafePinoOptions } from "../../utils/safe-log-fields.js";
-import { imageProxyRoute, isAllowedHost } from "../image-proxy.js";
+import {
+  cameraMediaSourcesOf,
+  isAllowedHost,
+  isCameraHost,
+  isStaticImageHost,
+  setCameraMediaSources,
+  setGatedImageSourceResolver,
+} from "../image-hosts.js";
+import { imageProxyRoute, withPublisherHeaders } from "../image-proxy.js";
+
+const CAMERA_SOURCE = "fi-digitraffic-cameras";
+
+function declareCameraHosts(hosts: readonly string[]): void {
+  setCameraMediaSources(hosts.length > 0 ? [{ sourceId: CAMERA_SOURCE, mediaHosts: hosts }] : []);
+}
 
 const ALLOWED_REFERER = "http://localhost:3000/some/page";
 const ALLOWED = "https://upload.wikimedia.org/wikipedia/commons/a/ab/x.png";
+const DIGITRAFFIC_STILL = "https://weathercam.digitraffic.fi/C0150301.jpg";
+const TFL_HOSTS = ["s3-eu-west-1.amazonaws.com/jamcams.tfl.gov.uk/"];
+const TFL_STILL = "https://s3-eu-west-1.amazonaws.com/jamcams.tfl.gov.uk/00001.06514.jpg";
+const CAMERA_HOSTS = ["weathercam.digitraffic.fi", "*.thb.gov.tw", ...TFL_HOSTS];
 
-describe("image-proxy isAllowedHost (SSRF allowlist)", () => {
+afterEach(() => {
+  declareCameraHosts([]);
+  setGatedImageSourceResolver(() => new Set());
+});
+
+describe("image-proxy static allowlist (SSRF)", () => {
   it.each([
     "upload.wikimedia.org",
     "commons.wikimedia.org",
@@ -40,29 +69,19 @@ describe("image-proxy isAllowedHost (SSRF allowlist)", () => {
     "live.staticflickr.com",
     "api.entur.io",
     "tile.openstreetmap.org",
-    "weathercam.digitraffic.fi",
-    "api.trafikinfo.trafikverket.se",
-    "kamera.atlas.vegvesen.no",
-    "www.vegagerdin.is",
-    "etraffic.dgt.es",
-    "511on.ca",
-    "tdcctv.data.one.gov.hk",
-    "webcams.transport.nsw.gov.au",
-    "cctvn01.freeway.gov.tw",
   ])("allows exact allowlisted host %s", (host) => {
-    expect(isAllowedHost(host)).toBe(true);
+    expect(isStaticImageHost(host)).toBe(true);
+    expect(isAllowedHost(new URL(`https://${host}/a.jpg`))).toBe(true);
   });
 
   it.each([
     "scontent-fra5-2.xx.fbcdn.net", // Mapillary regional CDN subdomain
-    "www.511pa.com",
-    "cwwp2.dot.ca.gov",
     "sub.upload.wikimedia.org",
     "www.gravatar.com", // OSM avatars served via Gravatar
     "secure.gravatar.com",
     "0.gravatar.com", // Gravatar CDN subdomain
   ])("allows subdomains of an allowlisted host (%s)", (host) => {
-    expect(isAllowedHost(host)).toBe(true);
+    expect(isStaticImageHost(host)).toBe(true);
   });
 
   it.each([
@@ -71,7 +90,7 @@ describe("image-proxy isAllowedHost (SSRF allowlist)", () => {
     "openstreetmap-user-avatars.s3.amazonaws.com", // legacy global virtual-host form
     "openstreetmap-user-avatars.s3.eu-west-1.amazonaws.com", // non-dualstack regional form
   ])("allows the OSM avatar S3 bucket (%s)", (host) => {
-    expect(isAllowedHost(host)).toBe(true);
+    expect(isStaticImageHost(host)).toBe(true);
   });
 
   it.each([
@@ -89,8 +108,135 @@ describe("image-proxy isAllowedHost (SSRF allowlist)", () => {
     "openstreetmap-user-avatars-evil.s3.amazonaws.com", // different bucket, leftmost label must match exactly
     "openstreetmap-user-avatars.s3.dualstack.eu-west-1.amazonaws.com.attacker.com", // suffix-spoof past .amazonaws.com
     "gravatar.com.attacker.com", // Gravatar suffix-spoof
+    // Camera operators are no longer static entries: only a live source's
+    // declared media hosts admit them.
+    "weathercam.digitraffic.fi",
+    "kamera.atlas.vegvesen.no",
+    "www.511pa.com",
+    "cwwp2.dot.ca.gov",
+    "images-webcams.windy.com",
   ])("rejects non-allowlisted / spoofed host %s", (host) => {
-    expect(isAllowedHost(host)).toBe(false);
+    expect(isStaticImageHost(host)).toBe(false);
+    expect(isAllowedHost(new URL(`https://${host}/a.jpg`))).toBe(false);
+  });
+});
+
+describe("image-proxy camera media hosts", () => {
+  it("admits a declared camera host only once the live sources declared it", () => {
+    const still = new URL(DIGITRAFFIC_STILL);
+    expect(isAllowedHost(still)).toBe(false);
+    declareCameraHosts(CAMERA_HOSTS);
+    expect(isAllowedHost(still)).toBe(true);
+    expect(isCameraHost(still)).toBe(true);
+    expect(isAllowedHost(new URL("https://cctv1.thb.gov.tw/a.jpg"))).toBe(true);
+    declareCameraHosts([]);
+    expect(isAllowedHost(still)).toBe(false);
+  });
+
+  it("admits only the declared path prefix on a shared host", () => {
+    declareCameraHosts(TFL_HOSTS);
+    expect(isAllowedHost(new URL(TFL_STILL))).toBe(true);
+    expect(
+      isAllowedHost(new URL("https://s3-eu-west-1.amazonaws.com/other-bucket/secret.jpg")),
+    ).toBe(false);
+    expect(isAllowedHost(new URL("https://evil.amazonaws.com/jamcams.tfl.gov.uk/a.jpg"))).toBe(
+      false,
+    );
+  });
+
+  it("keeps place photos on the static list", () => {
+    declareCameraHosts(CAMERA_HOSTS);
+    expect(isStaticImageHost("weathercam.digitraffic.fi")).toBe(false);
+    expect(isStaticImageHost("s3-eu-west-1.amazonaws.com")).toBe(false);
+  });
+
+  it("treats a static host as a static host even when a source also declares it", () => {
+    declareCameraHosts(["upload.wikimedia.org"]);
+    expect(isCameraHost(new URL(ALLOWED))).toBe(false);
+  });
+
+  it("collects media hosts from the enabled integrations' live data sources only", () => {
+    const sources = cameraMediaSourcesOf([
+      {
+        enabled: true,
+        manifest: {
+          dataSources: [
+            { sourceId: "fi-digitraffic-cameras", mediaHosts: ["weathercam.digitraffic.fi"] },
+            { sourceId: "de-osm-cameras" },
+            { sourceId: "gb-tfl-jamcams", mediaHosts: TFL_HOSTS },
+            { sourceId: "xx-empty-cameras", mediaHosts: [] },
+          ],
+        },
+      },
+      {
+        enabled: false,
+        manifest: {
+          dataSources: [{ sourceId: "xx-off-cameras", mediaHosts: ["cams.example.org"] }],
+        },
+      },
+      { enabled: true, manifest: {} },
+    ]);
+    expect(sources).toEqual([
+      { sourceId: "fi-digitraffic-cameras", mediaHosts: ["weathercam.digitraffic.fi"] },
+      { sourceId: "gb-tfl-jamcams", mediaHosts: TFL_HOSTS },
+    ]);
+  });
+
+  it("refuses a host whose only declaring source the data-use policy disallows", () => {
+    setCameraMediaSources([
+      { sourceId: CAMERA_SOURCE, mediaHosts: ["weathercam.digitraffic.fi"] },
+      { sourceId: "gb-tfl-jamcams", mediaHosts: TFL_HOSTS },
+    ]);
+    let gated = new Set([CAMERA_SOURCE]);
+    setGatedImageSourceResolver(() => gated);
+    expect(isAllowedHost(new URL(DIGITRAFFIC_STILL))).toBe(false);
+    expect(isCameraHost(new URL(DIGITRAFFIC_STILL))).toBe(false);
+    expect(isAllowedHost(new URL(TFL_STILL))).toBe(true);
+
+    // The policy is read per check, so allowing the source again re-admits it.
+    gated = new Set();
+    expect(isAllowedHost(new URL(DIGITRAFFIC_STILL))).toBe(true);
+  });
+
+  it("admits a host another allowed source also declares", () => {
+    setCameraMediaSources([
+      { sourceId: CAMERA_SOURCE, mediaHosts: ["weathercam.digitraffic.fi"] },
+      { sourceId: "fi-other-cameras", mediaHosts: ["weathercam.digitraffic.fi"] },
+    ]);
+    setGatedImageSourceResolver(() => new Set([CAMERA_SOURCE]));
+    expect(isAllowedHost(new URL(DIGITRAFFIC_STILL))).toBe(true);
+  });
+});
+
+describe("image-proxy publisher identification", () => {
+  const headersOf = async (url: string): Promise<Headers> => {
+    let sent = new Headers();
+    const pinned = withPublisherHeaders(
+      async (_input: string | URL, _addresses: unknown[], init) => {
+        sent = new Headers(init.headers);
+        return new Response(null);
+      },
+    );
+    await pinned(url, [], { headers: { "User-Agent": "test-agent" } });
+    return sent;
+  };
+
+  it("names the application to Digitraffic, whose image limit rises for identified clients", async () => {
+    const sent = await headersOf("https://weathercam.digitraffic.fi/C0150301.jpg");
+    expect(sent.get("Digitraffic-User")).toBe("test-agent");
+    expect(sent.get("User-Agent")).toBe("test-agent");
+  });
+
+  it("sends the Digitraffic header to no other host, including a redirect target", async () => {
+    for (const url of [
+      "https://cwwp2.dot.ca.gov/data/d7/cctv/image/x.jpg",
+      "https://digitraffic.fi.evil.example/a.jpg",
+      "https://evildigitraffic.fi/a.jpg",
+    ]) {
+      const sent = await headersOf(url);
+      expect(sent.has("Digitraffic-User"), url).toBe(false);
+      expect(sent.get("User-Agent"), url).toBe("test-agent");
+    }
   });
 });
 
@@ -391,6 +537,107 @@ describe("image-proxy route", () => {
       if (!upstreamCancelled) finishStream?.();
       request.destroy();
     }
+  });
+
+  it("refuses a camera still before the sources load and serves it uncached after", async () => {
+    const before = await inject({ referer: ALLOWED_REFERER, url: DIGITRAFFIC_STILL });
+    expect(before.statusCode).toBe(403);
+    expect(mockFetchWithRedirects).not.toHaveBeenCalled();
+
+    declareCameraHosts(CAMERA_HOSTS);
+    mockFetchWithRedirects.mockResolvedValueOnce(imageResponse(3));
+    const after = await inject({ referer: ALLOWED_REFERER, url: DIGITRAFFIC_STILL });
+    expect(after.statusCode).toBe(200);
+    expect(after.headers["cache-control"]).toBe("no-store");
+  });
+
+  it("refuses a camera still whose source the data-use policy disallows", async () => {
+    declareCameraHosts(CAMERA_HOSTS);
+    setGatedImageSourceResolver(() => new Set([CAMERA_SOURCE]));
+    const res = await inject({ referer: ALLOWED_REFERER, url: DIGITRAFFIC_STILL });
+    expect(res.statusCode).toBe(403);
+    expect(mockFetchWithRedirects).not.toHaveBeenCalled();
+  });
+
+  it("keeps the day-long cache for a static host", async () => {
+    declareCameraHosts(CAMERA_HOSTS);
+    mockFetchWithRedirects.mockResolvedValueOnce(imageResponse(3));
+    const res = await inject({ referer: ALLOWED_REFERER });
+    expect(res.statusCode).toBe(200);
+    expect(res.headers["cache-control"]).toBe("public, max-age=86400, s-maxage=86400");
+  });
+
+  it("admits the declared TfL bucket and refuses another bucket on the same host", async () => {
+    declareCameraHosts(TFL_HOSTS);
+    mockFetchWithRedirects.mockResolvedValueOnce(imageResponse(3));
+    const tfl = await inject({ referer: ALLOWED_REFERER, url: TFL_STILL });
+    expect(tfl.statusCode).toBe(200);
+    expect(tfl.headers["cache-control"]).toBe("no-store");
+
+    const other = await inject({
+      referer: ALLOWED_REFERER,
+      url: "https://s3-eu-west-1.amazonaws.com/other-bucket/secret.jpg",
+    });
+    expect(other.statusCode).toBe(403);
+    expect(mockFetchWithRedirects).toHaveBeenCalledTimes(1);
+  });
+
+  it("re-checks a camera still's redirects against the declared hosts", async () => {
+    declareCameraHosts(CAMERA_HOSTS);
+    mockFetchWithRedirects.mockResolvedValue({ ok: false, status: 502, headers: new Headers() });
+    await inject({ referer: ALLOWED_REFERER, url: TFL_STILL });
+    const opts = mockFetchWithRedirects.mock.calls[0]?.[1] as {
+      validateRedirectUrl: (url: URL) => boolean;
+    };
+    expect(
+      opts.validateRedirectUrl(
+        new URL("https://s3-eu-west-1.amazonaws.com/jamcams.tfl.gov.uk/00002.jpg"),
+      ),
+    ).toBe(true);
+    expect(opts.validateRedirectUrl(new URL("https://weathercam.digitraffic.fi/a.jpg"))).toBe(true);
+    expect(
+      opts.validateRedirectUrl(new URL("https://s3-eu-west-1.amazonaws.com/other-bucket/a.jpg")),
+    ).toBe(false);
+    expect(opts.validateRedirectUrl(new URL("https://cams.undeclared.example/a.jpg"))).toBe(false);
+    expect(opts.validateRedirectUrl(new URL("ftp://weathercam.digitraffic.fi/a.jpg"))).toBe(false);
+  });
+
+  it("refuses a declared host that resolves to a private address, on every hop", async () => {
+    declareCameraHosts(CAMERA_HOSTS);
+    // Stand in for fetchWithRedirects' contract: every hop's addresses come
+    // from the proxy's resolver before a socket is opened.
+    mockFetchWithRedirects.mockImplementation(
+      async (url: string, opts: { resolveConnectionAddresses: (u: URL) => Promise<unknown> }) => {
+        await opts.resolveConnectionAddresses(new URL(url));
+        return imageResponse(3);
+      },
+    );
+
+    mockLookup.mockResolvedValue([{ address: "10.0.0.5", family: 4 }]);
+    const privateTarget = await inject({ referer: ALLOWED_REFERER, url: DIGITRAFFIC_STILL });
+    expect(privateTarget.statusCode).toBe(502);
+
+    mockLookup.mockResolvedValue([{ address: "::1", family: 6 }]);
+    const loopback = await inject({ referer: ALLOWED_REFERER, url: DIGITRAFFIC_STILL });
+    expect(loopback.statusCode).toBe(502);
+
+    mockLookup.mockResolvedValue([{ address: "169.254.169.254", family: 4 }]);
+    const linkLocal = await inject({ referer: ALLOWED_REFERER, url: TFL_STILL });
+    expect(linkLocal.statusCode).toBe(502);
+
+    mockLookup.mockResolvedValue([{ address: "93.184.216.34", family: 4 }]);
+    const publicTarget = await inject({ referer: ALLOWED_REFERER, url: DIGITRAFFIC_STILL });
+    expect(publicTarget.statusCode).toBe(200);
+    expect(mockLookup).toHaveBeenLastCalledWith("weathercam.digitraffic.fi", expect.anything());
+  });
+
+  it("pins every hop's socket to the addresses it checked", async () => {
+    mockFetchWithRedirects.mockResolvedValue({ ok: false, status: 404, headers: new Headers() });
+    await inject({ referer: ALLOWED_REFERER });
+    const opts = mockFetchWithRedirects.mock.calls[0]?.[1] as Record<string, unknown>;
+    expect(typeof opts.resolveConnectionAddresses).toBe("function");
+    expect(typeof opts.pinnedFetchImplementation).toBe("function");
+    expect(typeof opts.releaseResponse).toBe("function");
   });
 
   it("re-checks redirect targets against the allowlist", async () => {

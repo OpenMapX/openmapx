@@ -1,295 +1,104 @@
-export type ParkingType = "garage" | "surface" | "underground" | "on-street" | "unknown";
+import type { Attribution } from "./attribution.js";
+
+export type ParkingSiteType =
+  | "off_street"
+  | "on_street"
+  | "park_and_ride"
+  | "truck_parking"
+  | "rest_area_parking";
+
+export type ParkingLayout =
+  | "single_level"
+  | "multi_storey"
+  | "underground"
+  | "surface"
+  | "automated"
+  | "covered"
+  | "nested"
+  | "unknown";
+
+export type ParkingStatus =
+  | "open"
+  | "closed"
+  | "full"
+  | "almost_full"
+  | "spaces_available"
+  | "closed_abnormally"
+  | "unknown";
+
+export type ParkingTrend = "filling" | "clearing" | "steady";
 
 /**
- * Structural mirror of `I18nToken` from `@openmapx/integration-framework/strings`,
- * inlined here to avoid a `mobility-core` → `integration-framework` import cycle.
- * Provider mappers/parsers populate `tariffRows` with the real `I18nToken`
- * objects; this type just describes the JSON-serializable shape they carry.
+ * What a site, or one of its areas, reports about its spaces. A count is
+ * absent when the source does not give it, never a zero standing in for
+ * "unknown".
  */
-export interface I18nTokenLike {
-  $t: string;
-  values?: Record<string, string | number | I18nTokenLike>;
+export interface ParkingCounts {
+  capacity?: number;
+  /** Free spaces. */
+  available?: number;
+  status?: ParkingStatus;
+  trend?: ParkingTrend;
+  /** ISO 8601 time the counts were reported upstream. */
+  at?: string;
+  /** True when a reading the counts come from is past its `validUntil`. */
+  stale: boolean;
 }
 
-export interface ParkingSourceAttribution {
-  name?: string;
-  url?: string;
-  contributor?: string;
-  license?: string;
-  licenseUrl?: string;
+/**
+ * The spaces of one vehicle type reserved for one user group at a site.
+ * Presence without a count is an area with no `capacity`.
+ */
+export interface ParkingArea extends ParkingCounts {
+  /** `<vehicleType>:<userGroup>`, unique within the site. */
+  key: string;
+  vehicleType: string;
+  /** `any` for untyped spaces. */
+  userGroup: string;
 }
 
-export interface ParkingFacility {
+/**
+ * A tariff. A `flat` row is a price for a stay up to `toMin`, starting at
+ * `fromMin`. A `per_hour` row is an hourly price charged in steps of
+ * `stepMin`, applying from `fromMin` to `toMin`.
+ */
+export interface ParkingRate {
+  currency: string;
+  rows: {
+    kind: "flat" | "per_hour";
+    amount: number;
+    fromMin?: number;
+    toMin?: number;
+    stepMin?: number;
+    userGroups?: string[];
+  }[];
+  text?: string;
+}
+
+export interface ParkingSite extends ParkingCounts {
   id: string;
   name: string;
-  coordinates: [number, number]; // [lng, lat]
-  sources: string[];
-  sourceUid?: string;
-  sourceName?: string;
-  sourceUrl?: string;
-  sourceAttribution?: ParkingSourceAttribution;
-
-  parkingType: ParkingType;
-
-  capacity?: number;
-  freeSpaces?: number;
-  hasRealtimeData: boolean;
-  /** ISO timestamp of the freshest data used for this facility. */
-  dataUpdatedAt?: string;
-  /** ISO timestamp of the last static import/update when exposed by the source. */
-  staticDataUpdatedAt?: string;
-  /** ISO timestamp of the last realtime update when exposed by the source. */
-  realtimeDataUpdatedAt?: string;
-  /** True when availability exists but is older than the source's freshness window. */
-  isStale?: boolean;
-  qualityWarnings?: string[];
-
-  disabledSpaces?: number;
-  /** Reserved women's parking spaces (Frauenparkplätze) when the upstream exposes a count. */
-  womenSpaces?: number;
-  chargingSpaces?: number;
-  maxHeight?: number; // centimeters
-
-  /**
-   * Direction of recent occupancy change. Many German parking guidance
-   * systems (PLS) publish a fill-trend indicator alongside the free-space
-   * count; we surface it so a user comparing two equally-empty garages can
-   * pick the one that's emptying rather than filling.
-   */
-  trend?: "increasing" | "decreasing" | "constant";
-
-  fee?: "free" | "paid" | "unknown";
-  feeDescription?: string;
-  /**
-   * Structured pricing rows: `[durationLabel, formattedPrice]`. The label is
-   * an `I18nToken` emitted by parsers (use `tariff.literal` with a `value`
-   * placeholder for upstream-supplied labels that have no known mapping);
-   * the price is a pre-formatted string (`€2.10`, `CHF 1.50`).
-   */
-  tariffRows?: [I18nTokenLike, string][];
-  access?: "public" | "customers" | "private" | "permit";
-
+  /** ISO 3166-1 alpha-2 code of the site's country, when known. */
+  country?: string;
+  /** [lng, lat] */
+  coordinates: [number, number];
+  type?: ParkingSiteType;
+  layout?: ParkingLayout;
+  closed: boolean;
   operator?: string;
+  website?: string;
   address?: string;
-
+  /** OSM-format opening_hours string. */
   openingHours?: string;
-  state?: "open" | "closed" | "unknown";
-
-  parkAndRide?: boolean;
-  nearestStation?: string;
-  chargingDetails?: string;
-  paymentMethods?: string;
-  url?: string;
-  /** Raw OSM tags, present only when OSM contributed to this facility (directly, or via a dedup merge). */
-  osmTags?: Record<string, string>;
-}
-
-/** Raw response shape from the ParkenDD v2 root endpoint. */
-export interface ParkApiV2City {
-  name: string;
-  coords: { lat: number; lng: number };
-  url: string;
-  source?: string;
-  attribution?: { contributor: string; url: string; license?: string };
-  active_support: boolean;
-}
-
-/** Raw lot shape from the ParkenDD v2 per-city endpoint. */
-export interface ParkApiV2Lot {
-  id: string;
-  name: string;
-  address?: string;
-  coords?: { lat: number; lng: number };
-  total?: number;
-  free?: number;
-  lot_type?: string;
-  state?: string;
-  forecast?: boolean;
-  region?: string;
-}
-
-/** Raw parking site from ParkAPI v3 (MobiData BW). */
-export interface ParkApiV3Site {
-  id: number;
-  original_uid?: string;
-  name: string;
-  address?: string;
-  lat?: string;
-  lon?: string;
-  capacity?: number;
-  realtime_free_capacity?: number | null;
-  realtime_capacity?: number | null;
-  type?: string;
-  purpose?: string;
-  has_realtime_data?: boolean;
-  has_fee?: boolean;
-  fee_description?: string;
-  opening_hours?: string;
-  operator_name?: string;
-  public_url?: string;
-  capacity_disabled?: number | null;
-  capacity_charging?: number | null;
-  capacity_woman?: number | null;
-  max_height?: number | null;
-  source_uid?: string;
-  static_data_updated_at?: string | null;
-  realtime_data_updated_at?: string | null;
-}
-
-export interface ParkApiV3Source {
-  uid: string;
-  name: string;
-  public_url?: string | null;
-  static_data_updated_at?: string | null;
-  realtime_data_updated_at?: string | null;
-  attribution_license?: string | null;
-  attribution_contributor?: string | null;
-  attribution_url?: string | null;
-  static_status?: string | null;
-  realtime_status?: string | null;
-}
-
-/** Raw record from RDW Socrata GEO parking datasets (t5pc-eb34, 6wzd-evwu, 9c54-cmfx). */
-export interface RdwGeoRecord {
-  areamanagerid: string;
-  areaid: string;
-  areadesc: string;
-  location: { latitude: string; longitude: string };
-  startdataarea?: string;
-  enddataarea?: string;
-  usageid: string;
-  /** Carpool-specific: number of parking spaces. */
-  aantal_parkeer_plaatsen?: string;
-  /** Carpool-specific: number of charging points. */
-  aantal_laad_punten?: string;
-  /** Carpool-specific: accessible for disabled ("Ja"/"Nee"). */
-  toegankelijk_voor_gehandicapten?: string;
-  /** Carpool-specific: maximum entry height. */
-  maximale_inrij_hoogte?: string;
-}
-
-/** Raw record from RDW Socrata SPECIFICATIES PARKEERGEBIED (b3us-f26s). */
-export interface RdwSpecsRecord {
-  areamanagerid: string;
-  areaid: string;
-  capacity?: string;
-  chargingpointcapacity?: string;
-  disabledaccess?: string;
-  maximumvehicleheight?: string;
-  limitedaccess?: string;
-}
-
-/** Raw properties from BNLS France Opendatasoft record. */
-export interface BnlsFrRecord {
-  id: string;
-  name: string | null;
-  geo_point_2d?: { lon: number; lat: number };
-  xlong?: number;
-  ylat?: number;
-  space_count?: number | null;
-  is_free?: number | null;
-  facilities_type?: string | null;
-  cost_1h?: number | null;
-  cost_2h?: number | null;
-  cost_3h?: number | null;
-  cost_4h?: number | null;
-  cost_24h?: number | null;
-  resident_sub?: number | null;
-  non_resident_sub?: number | null;
-  disable_count?: number | null;
-  electric_car_count?: number | null;
-  park_ride_count?: number | null;
-  max_height?: number | null;
-  address?: string | null;
-  url?: string | null;
-  com_name?: string | null;
-  user_type?: string | null;
-  info?: string | null;
-}
-
-/** Raw facility from DB BahnPark Parking Information API v2. */
-export interface DbBahnParkFacility {
-  id: string;
-  name: { name: string; context: string }[];
-  url?: string;
-  type?: { name?: string; nameEn?: string };
-  operator?: { name?: string; url?: string };
-  address?: {
-    streetAndNumber?: string;
-    zip?: string;
-    city?: string;
-    phone?: string | null;
-    location?: { latitude: number; longitude: number };
-  };
-  station?: {
-    stationId?: { identifier?: string };
-    name?: string;
-    distance?: string;
-  };
-  capacity?: { type: string; total: string }[];
-  hasPrognosis?: boolean;
-  access?: {
-    outOfService?: { isOutOfService: boolean };
-    openingHours?: { text?: string; textEn?: string; is24h?: boolean };
-    restrictions?: {
-      clearance?: { height?: string | null; width?: string | null };
-    };
-  };
-  equipment?: {
-    charging?: { hasChargingStation?: boolean; details?: string };
-  };
-  tariff?: {
-    information?: {
-      dynamic?: {
-        tariffPaymentOptions?: string;
-        tariffMaxParkingTime?: string;
-      };
-    };
-    prices?: {
-      group?: { groupName?: string };
-      duration?: string;
-      price?: number | null;
-    }[];
-  };
-}
-
-/** Raw parking item from the Autobahn API (verkehr.autobahn.de). */
-export interface AutobahnParkingLorry {
-  identifier: string;
-  isBlocked: string;
-  future: boolean;
-  subtitle: string;
-  title: string;
-  coordinate: { long: string; lat: string };
-  description: string[];
-  lorryParkingFeatureIcons: Array<{
-    icon: string;
-    description: string;
-    style: string;
-  }>;
-}
-
-/** Raw station record from Open Data Hub ParkingStation endpoint. */
-export interface OdhParkingStation {
-  scode: string;
-  sname: string;
-  scoordinate: { x: number; y: number; srid: number };
-  smetadata: Record<string, unknown> & {
-    capacity?: number;
-    municipality?: string;
-    standard_name?: string;
-    netex_parking?: {
-      type?: string;
-      layout?: string;
-      charging?: boolean;
-    };
-  };
-}
-
-/** Raw measurement from Open Data Hub latest endpoint. */
-export interface OdhParkingMeasurement {
-  scode: string;
-  tname: string;
-  mvalue: number;
-  mvalidtime: string;
+  openingHoursText?: string;
+  audience?: "public" | "customers" | "permit" | "private" | "restricted" | "unknown";
+  free?: boolean;
+  /** Maximum vehicle height in centimetres. */
+  heightLimitCm?: number;
+  areas: ParkingArea[];
+  rates: ParkingRate[];
+  tariffText?: string;
+  notes?: string;
+  sources: string[];
+  attributions: Attribution[];
 }

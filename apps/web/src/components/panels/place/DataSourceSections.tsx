@@ -40,7 +40,6 @@ import { useDataSourceI18nResolver } from "./useDataSourceI18nResolver";
 const SOURCE_HEADERS: Record<string, { icon: ReactNode; titleKey: string }> = {
   // EV Charging
   "ev-charging": { icon: <EvStationIcon sx={{ fontSize: 20 }} />, titleKey: "evCharging" },
-  ocm: { icon: <EvStationIcon sx={{ fontSize: 20 }} />, titleKey: "evCharging" },
   // Fuel
   fuel: { icon: <LocalGasStationIcon sx={{ fontSize: 20 }} />, titleKey: "fuelPrices" },
   // Bike Sharing
@@ -69,69 +68,10 @@ const SOURCE_HEADERS: Record<string, { icon: ReactNode; titleKey: string }> = {
   gbfs: { icon: <InfoIcon sx={{ fontSize: 20 }} />, titleKey: "sharedMobility" },
   // Parking
   parking: { icon: <LocalParkingIcon sx={{ fontSize: 20 }} />, titleKey: "parking" },
-  "de-parkapi-v2": { icon: <LocalParkingIcon sx={{ fontSize: 20 }} />, titleKey: "parking" },
-  "de-parkapi-v3": { icon: <LocalParkingIcon sx={{ fontSize: 20 }} />, titleKey: "parking" },
-  "de-db-bahnpark": { icon: <LocalParkingIcon sx={{ fontSize: 20 }} />, titleKey: "parking" },
-  "nl-rdw": { icon: <LocalParkingIcon sx={{ fontSize: 20 }} />, titleKey: "parking" },
-  "fr-bnls": { icon: <LocalParkingIcon sx={{ fontSize: 20 }} />, titleKey: "parking" },
-  "be-vlg-ghent": { icon: <LocalParkingIcon sx={{ fontSize: 20 }} />, titleKey: "parking" },
-  "be-bru-brussels": { icon: <LocalParkingIcon sx={{ fontSize: 20 }} />, titleKey: "parking" },
-  "ch-bs-basel": { icon: <LocalParkingIcon sx={{ fontSize: 20 }} />, titleKey: "parking" },
-  "it-52-florence": { icon: <LocalParkingIcon sx={{ fontSize: 20 }} />, titleKey: "parking" },
-  "es-ct-barcelona": { icon: <LocalParkingIcon sx={{ fontSize: 20 }} />, titleKey: "parking" },
-  "at-9-vienna": { icon: <LocalParkingIcon sx={{ fontSize: 20 }} />, titleKey: "parking" },
-  "dk-84-copenhagen": { icon: <LocalParkingIcon sx={{ fontSize: 20 }} />, titleKey: "parking" },
-  "sg-hdb": { icon: <LocalParkingIcon sx={{ fontSize: 20 }} />, titleKey: "parking" },
-  "es-md-madrid": { icon: <LocalParkingIcon sx={{ fontSize: 20 }} />, titleKey: "parking" },
-  "gb-eng-utmc": { icon: <LocalParkingIcon sx={{ fontSize: 20 }} />, titleKey: "parking" },
-  "au-nsw": { icon: <LocalParkingIcon sx={{ fontSize: 20 }} />, titleKey: "parking" },
-  "nl-ndw-truck": { icon: <LocalParkingIcon sx={{ fontSize: 20 }} />, titleKey: "parking" },
-  "de-autobahn": { icon: <LocalParkingIcon sx={{ fontSize: 20 }} />, titleKey: "parking" },
-  "it-32-opendatahub": { icon: <LocalParkingIcon sx={{ fontSize: 20 }} />, titleKey: "parking" },
-  "ch-otd": {
-    icon: <LocalParkingIcon sx={{ fontSize: 20 }} />,
-    titleKey: "parking",
-  },
-  "lu-cita": { icon: <LocalParkingIcon sx={{ fontSize: 20 }} />, titleKey: "parking" },
-  "de-nw-mobidrom": {
-    icon: <LocalParkingIcon sx={{ fontSize: 20 }} />,
-    titleKey: "parking",
-  },
-  "de-nw-mobidrom-pr": { icon: <LocalParkingIcon sx={{ fontSize: 20 }} />, titleKey: "parking" },
-  "de-apcoa": { icon: <LocalParkingIcon sx={{ fontSize: 20 }} />, titleKey: "parking" },
-  "de-apag": { icon: <LocalParkingIcon sx={{ fontSize: 20 }} />, titleKey: "parking" },
-  "de-goldbeck": { icon: <LocalParkingIcon sx={{ fontSize: 20 }} />, titleKey: "parking" },
   // DB Station (RIS::Stations)
   "db-station": { icon: <TrainIcon sx={{ fontSize: 20 }} />, titleKey: "dbStation" },
-  // Webcam
+  // Webcam: camera details carry OpenConditions feed ids, so the header is matched by provider.
   webcam: { icon: <VideocamIcon sx={{ fontSize: 20 }} />, titleKey: "webcams" },
-  windy: { icon: <VideocamIcon sx={{ fontSize: 20 }} />, titleKey: "webcams" },
-  "us-ca-caltrans": { icon: <VideocamIcon sx={{ fontSize: 20 }} />, titleKey: "webcams" },
-  "gb-eng-tfl": { icon: <VideocamIcon sx={{ fontSize: 20 }} />, titleKey: "webcams" },
-  "us-nps": { icon: <VideocamIcon sx={{ fontSize: 20 }} />, titleKey: "webcams" },
-  "us-ny-511": { icon: <VideocamIcon sx={{ fontSize: 20 }} />, titleKey: "webcams" },
-  "us-or-tripcheck": { icon: <VideocamIcon sx={{ fontSize: 20 }} />, titleKey: "webcams" },
-  "us-ga-511": { icon: <VideocamIcon sx={{ fontSize: 20 }} />, titleKey: "webcams" },
-  "us-fl-511": { icon: <VideocamIcon sx={{ fontSize: 20 }} />, titleKey: "webcams" },
-  "us-az-511": { icon: <VideocamIcon sx={{ fontSize: 20 }} />, titleKey: "webcams" },
-  "us-id-511": { icon: <VideocamIcon sx={{ fontSize: 20 }} />, titleKey: "webcams" },
-  "us-ut-511": { icon: <VideocamIcon sx={{ fontSize: 20 }} />, titleKey: "webcams" },
-  "us-la-511": { icon: <VideocamIcon sx={{ fontSize: 20 }} />, titleKey: "webcams" },
-  "us-pa-511": { icon: <VideocamIcon sx={{ fontSize: 20 }} />, titleKey: "webcams" },
-  "us-sc-511": { icon: <VideocamIcon sx={{ fontSize: 20 }} />, titleKey: "webcams" },
-  "us-ma-511": { icon: <VideocamIcon sx={{ fontSize: 20 }} />, titleKey: "webcams" },
-  "fi-digitraffic-webcam": { icon: <VideocamIcon sx={{ fontSize: 20 }} />, titleKey: "webcams" },
-  "se-trafikverket": { icon: <VideocamIcon sx={{ fontSize: 20 }} />, titleKey: "webcams" },
-  "no-npra": { icon: <VideocamIcon sx={{ fontSize: 20 }} />, titleKey: "webcams" },
-  "is-road-administration": {
-    icon: <VideocamIcon sx={{ fontSize: 20 }} />,
-    titleKey: "webcams",
-  },
-  "es-dgt-webcam": { icon: <VideocamIcon sx={{ fontSize: 20 }} />, titleKey: "webcams" },
-  "ca-ontario": { icon: <VideocamIcon sx={{ fontSize: 20 }} />, titleKey: "webcams" },
-  "hk-transport": { icon: <VideocamIcon sx={{ fontSize: 20 }} />, titleKey: "webcams" },
-  "au-nsw-webcam": { icon: <VideocamIcon sx={{ fontSize: 20 }} />, titleKey: "webcams" },
-  "tw-tdx-webcam": { icon: <VideocamIcon sx={{ fontSize: 20 }} />, titleKey: "webcams" },
 };
 
 export function resolveSourceHeader(
@@ -219,6 +159,7 @@ function translateStructuredSection(
     imageUrl: section.imageUrl,
     imageAlt: section.imageAlt === undefined ? undefined : resolveT(section.imageAlt),
     linkUrl: section.linkUrl,
+    refreshSec: section.refreshSec,
     embedUrl: section.embedUrl,
     embedType: section.embedType,
     sectionIcon: section.sectionIcon,

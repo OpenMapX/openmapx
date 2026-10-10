@@ -50,6 +50,14 @@ const TRAFFIC_TILE_HEADER_SIZE = 32;
 const TRAFFIC_TILE_LAST_UPDATE_OFFSET = 8;
 const TRAFFIC_SPEED_RECORD_SIZE = 8;
 
+/**
+ * Longest lease one write may grant. Valhalla's watchdog stops the engine when
+ * a lease with live effects lapses, so it must outlast the two-minute write
+ * cadence plus a cycle's own work, with room for one cycle that fails. The
+ * watchdog enforces the same bound.
+ */
+export const TRAFFIC_LEASE_MAX_MS = 300_000;
+
 interface TrafficLogger {
   warn: (msg: string, extra?: Record<string, unknown>) => void;
 }
@@ -57,7 +65,7 @@ interface TrafficLogger {
 export interface WriteLiveTrafficDeps {
   /** Path to the Valhalla `traffic.tar` extract, as seen by this process. */
   tarPath: string;
-  /** Earliest source, policy or observation deadline; also capped to two minutes. */
+  /** Earliest source, policy or observation deadline; also capped to the longest lease. */
   validUntil?: string;
   graphGeneration?: string;
   /** Identifies this publication to the engine-owned response attestation. */
@@ -586,9 +594,11 @@ async function writeLiveTrafficLocked(deps: WriteLiveTrafficDeps): Promise<Write
     for (const { offset } of planned.values())
       identities.set(edgeKey(offset.identity), offset.identity);
     const requestedDeadline =
-      deps.validUntil === undefined ? Date.now() + 120_000 : Date.parse(deps.validUntil);
+      deps.validUntil === undefined
+        ? Date.now() + TRAFFIC_LEASE_MAX_MS
+        : Date.parse(deps.validUntil);
     if (!Number.isFinite(requestedDeadline)) throw new Error("Invalid traffic write deadline");
-    const validUntil = Math.min(requestedDeadline, Date.now() + 120_000);
+    const validUntil = Math.min(requestedDeadline, Date.now() + TRAFFIC_LEASE_MAX_MS);
     const journal: TrafficJournal = {
       schemaVersion: 1,
       graphGeneration,
@@ -737,7 +747,7 @@ async function readJournal(statePath: string): Promise<TrafficJournal | null> {
     !value.graphGeneration ||
     !["pending", "committed"].includes(value.phase) ||
     !Number.isFinite(value.validUntil) ||
-    value.validUntil > Date.now() + 120_000 ||
+    value.validUntil > Date.now() + TRAFFIC_LEASE_MAX_MS ||
     (value.uncertain !== undefined && typeof value.uncertain !== "boolean") ||
     !Array.isArray(value.identities) ||
     value.identities.some(

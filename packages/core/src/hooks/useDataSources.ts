@@ -120,7 +120,8 @@ export function useDataSourceDetail(
     queryKey: ["data-source-detail", sourceId, itemId],
     queryFn: ({ signal }) =>
       apiClient.get<MobilityEnvelope<DataSourceDetail>>(
-        `${API_ENDPOINTS.dataSourceDetail}/${sourceId}/detail/${itemId}`,
+        // An item id may hold `/`, `:` and `#` (a feature id carrying a URL): one encoded segment.
+        `${API_ENDPOINTS.dataSourceDetail}/${sourceId}/detail/${encodeURIComponent(itemId ?? "")}`,
         undefined,
         apiQueryRequestOptions(signal, DETAIL_QUERY_POLICY),
       ),

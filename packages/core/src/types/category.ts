@@ -467,6 +467,8 @@ export interface CategoryPlace {
   gersId?: string;
   name: string;
   coordinates: LngLat;
+  /** Explicit source-supplied routing entrance; ordinary coordinates remain a fallback. */
+  routingEntrance?: LngLat;
   category?: string;
   address?: string;
   phone?: string;

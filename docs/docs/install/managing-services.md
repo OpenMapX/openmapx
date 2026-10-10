@@ -114,6 +114,10 @@ When `OPENMAPX_ENABLED_SERVICES` is set, `enable` and `disable` refuse to edit
 the file — the environment variable is the source of truth in that case, and the
 CLI keeps it unambiguous.
 
+The admin panel works on the same selection: **Save Selection** writes
+`infra/docker/service-selection.json` too, and its Services page shows the
+selection exactly as `services selected` does.
+
 :::note[Selection is not the same as running]
 Editing the selection changes what _will_ be rendered and started. It does not
 touch running containers. Enabling a service is followed by a render and a start
@@ -155,23 +159,41 @@ pnpm openmapx services start postgis --preset routing
 ## Rendering the stack
 
 OpenMapX has no hand-maintained compose file. The renderer reads the enabled
-manifests and writes the stack:
+manifests and applies the stack:
 
 ```bash
 pnpm openmapx compose render
 ```
 
-This produces two files under `infra/docker/`, both gitignored build outputs:
+Each render writes a **configuration generation** under
+`infra/docker/.trusted-config-generations/` and points
+`infra/docker/.trusted-config-current` at it. A generation holds:
 
-- `docker-compose.generated.yml` — the compose file every `docker compose -f …`
-  command consumes
+- `docker-compose.generated.yml` — the compose file of the stack
 - `docker-compose.generated.hardlinks.json` — the plan that maps each consumer
   to its data producer (applied later by `openmapx data link`)
+- the selection it was rendered from, and the service settings and vault
+  credentials saved in the admin panel
 
-Render is deterministic — same manifests and `.env` in, same YAML out — so it's
-cheap to re-run. Re-render any time the manifests, your `.env`, the selection, or
-the registered community repos change. You can override the selection or domain
-for a single render without touching the persisted selection:
+The admin panel's **Apply changes** writes the same kind of generation, so the
+CLI and the admin panel always run the same stack. A CLI render keeps what was
+saved in the admin panel: it cannot read the database, so it takes those
+settings and credentials from the current generation. Settings in `.env`
+(`SERVICE_<ID>_<KEY>`) win over them in both.
+
+The stack is addressed as Compose project `docker` with `infra/docker/.env` as
+its environment. To run Compose by hand, name both:
+
+```bash
+docker compose --env-file infra/docker/.env \
+  -f infra/docker/.trusted-config-current/docker-compose.generated.yml ps
+```
+
+Render is deterministic — same manifests, `.env` and saved settings in, same
+generation out — so it's cheap to re-run. Re-render any time the manifests, your
+`.env`, the selection, or the registered community repos change. You can
+override the selection or domain for a single render without touching the
+persisted selection:
 
 ```bash
 pnpm openmapx compose render --services valhalla,photon
@@ -319,10 +341,10 @@ created; after changing a variable they read, recreate them from the host with
 fits in, see [Configuration](./configuration.md).
 
 :::note[Data-manager credentials are separate]
-The POI ingest pipeline runs inside the `data-manager` container, which can't
-see the integration host's config cascade. Sources that need API keys (certain
-parking and transit feeds) read them from data-manager environment variables set
-directly in `infra/docker/.env`, not from the admin UI.
+The transit pipelines run inside the `data-manager` container, which can't
+see the integration host's config cascade. Feeds that need API keys read them
+from data-manager environment variables set directly in `infra/docker/.env`,
+not from the admin UI.
 :::
 
 ## Exposure: what's reachable from outside

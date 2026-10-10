@@ -125,7 +125,9 @@ describe("bundled basemap POI sprites", () => {
           expect(resolvedIcon(layer, "atm", availableImages)).toBe("poi-atm");
           expect(resolvedIcon(layer, "toilets", availableImages)).toBe("poi-toilets");
           expect(resolvedIcon(layer, "office", availableImages)).toBe("poi-office");
-          expect(resolvedIcon(layer, "unmapped_class", availableImages)).toBe("marker_11");
+          expect(resolvedIcon(layer, "unmapped_class", availableImages)).toBe("poi-place");
+          expect(resolvedIcon(layer, "place", availableImages)).toBe("poi-place");
+          expect(resolvedIcon(layer, "multi", availableImages)).toBe("poi-multi");
           expect(resolvedIcon(layer, "restaurant", availableImages)).toBe("poi-restaurant");
           expect(resolvedIcon(layer, "bus", availableImages, "bus_stop")).toBe("poi-bus");
           expect(resolvedIcon(layer, "school", availableImages, "kindergarten")).toBe("poi-school");
@@ -189,6 +191,7 @@ describe("bundled basemap POI sprites", () => {
         );
 
         for (const name of [
+          "poi-place",
           "poi-restaurant",
           "poi-shop-beauty",
           "poi-railway-tram_stop",

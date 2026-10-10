@@ -68,6 +68,26 @@ const data: CoverageRegionsResponse = {
           attention: 1,
           reasons: [],
         },
+        fuel: {
+          domain: "fuel",
+          status: "limited",
+          operational: 0,
+          limited: 1,
+          unavailable: 0,
+          unknown: 0,
+          attention: 1,
+          reasons: ["source_partial"],
+        },
+        cameras: {
+          domain: "cameras",
+          status: "operational",
+          operational: 1,
+          limited: 0,
+          unavailable: 0,
+          unknown: 0,
+          attention: 0,
+          reasons: [],
+        },
         traffic: {
           domain: "traffic",
           status: "operational",
@@ -105,5 +125,18 @@ describe("RegionCoverageMatrix", () => {
       screen.getAllByRole("button", { name: "adminCoverage.matrix.selectDomain" })[0],
     );
     expect(onSelect).toHaveBeenCalledWith("extract:first", "addresses");
+  });
+
+  it("shows a column for the cameras domain", async () => {
+    const onSelect = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <RegionCoverageMatrix data={data} selectedRegionId="extract:first" onSelect={onSelect} />,
+    );
+
+    expect(screen.getByRole("columnheader", { name: "adminCoverage.domain.cameras" })).toBeTruthy();
+    const buttons = screen.getAllByRole("button", { name: "adminCoverage.matrix.selectDomain" });
+    await user.click(buttons[buttons.length - 2]);
+    expect(onSelect).toHaveBeenCalledWith("extract:first", "cameras");
   });
 });

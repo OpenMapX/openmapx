@@ -40,6 +40,8 @@ export const coverageDomainSchema = z.enum([
   "transit",
   "ev",
   "parking",
+  "fuel",
+  "cameras",
   "traffic",
 ]);
 
@@ -133,6 +135,10 @@ export const coverageOperationIdSchema = z.enum([
   "ev.route-planning",
   "parking.facility-discovery",
   "parking.occupancy",
+  "fuel.station-discovery",
+  "fuel.prices",
+  "cameras.discovery",
+  "cameras.images",
   "traffic.flow",
   "traffic.road-conditions",
   "traffic.traffic-aware-routing",
@@ -207,7 +213,7 @@ export const coverageRegionSchema = z
   .object({
     key: boundedString(256),
     label: boundedString(256),
-    kind: z.enum(["extract", "country", "regional-scope", "unassigned"]),
+    kind: z.enum(["extract", "country", "unassigned"]),
     originalId: boundedString(256).optional(),
     bounds: boundsSchema.optional(),
     aliases: z.array(boundedString(256)).max(32).optional(),

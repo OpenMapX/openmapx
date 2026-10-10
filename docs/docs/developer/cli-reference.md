@@ -1,6 +1,6 @@
 ---
 title: CLI reference
-description: Every command group of the openmapx self-hosting CLI — services, integrations, compose, data, poi-ingest, ext, backup, users, check, cache, and transitous.
+description: Every command group of the openmapx self-hosting CLI — services, integrations, compose, data, ext, backup, users, check, cache, and transitous.
 sidebar_position: 8
 ---
 
@@ -48,7 +48,7 @@ where the CLI points and how it authenticates:
 | Variable                       | Default                 | Used by                                     |
 | ------------------------------ | ----------------------- | ------------------------------------------- |
 | `DOMAIN`                       | `localhost`             | the public domain baked into renders        |
-| `DATA_MANAGER_URL`             | `http://localhost:4000` | the `data` and `poi-ingest` commands        |
+| `DATA_MANAGER_URL`             | `http://localhost:4000` | the `data` commands                         |
 | `DATA_MANAGER_AUTH_TOKEN`      | (unset)                 | bearer token for data-manager mutations     |
 | `OPENMAPX_API_URL` / `API_URL` | `http://localhost:3001` | the `ext` admin commands                    |
 | `OPENMAPX_REGION`              | (unset)                 | fallback region for `data` downloads/builds |
@@ -95,8 +95,8 @@ hand-written compose file — the renderer derives it from the enabled manifests
 
 | Command                         | Description                                                                                                                                                                                                                                                                                                          |
 | ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `compose render`                | Render `docker-compose.generated.yml` and the hardlink plan from the manifests. Flags: `--domain <d>` (default `$DOMAIN`), `--services <ids>`, `--preset <names>`, `--drop-secrets`.                                                                                                                                 |
-| `compose up`                    | Render, apply hardlinks, resolve the release overlay if it is missing, then `docker compose up -d` the whole selection. Flags: `--domain <d>`, `--services <ids>`, `--preset <names>`, `--drop-secrets`.                                                                                                             |
+| `compose render`                | Apply the selection as a new configuration generation: compose file and hardlink plan from the manifests, with the settings and credentials the admin panel last applied. Flags: `--domain <d>` (default `$DOMAIN`), `--services <ids>`, `--preset <names>`.                                                         |
+| `compose up`                    | Render, apply hardlinks, resolve the release overlay if it is missing, then `docker compose up -d` the whole selection. Flags: `--domain <d>`, `--services <ids>`, `--preset <names>`.                                                                                                                               |
 | `compose release`               | Resolve `ghcr.io/openmapx/release-manifest:latest` and write `infra/docker/docker-compose.release.yml`, pinning `app-api`, `app-web`, `data-manager`, `ops-agent`, `transitous-runner`, and the Transitous helper image by digest. Every service/compose command includes this overlay automatically once it exists. |
 | `compose down`                  | Stop the stack (`docker compose down`). Flag: `--volumes` removes named volumes (**destructive**).                                                                                                                                                                                                                   |
 | `compose pull [ids...]`         | Pull the images named in the generated Compose file (no args pulls all services). For core OpenMapX app releases, use the aggregate release-manifest procedure in [Upgrading](../install/upgrading.md).                                                                                                              |
@@ -266,19 +266,6 @@ Compose network) that catch wedged-but-running states a plain healthcheck misses
 Pass `--no-probe` to skip the deep probes and report engine-level health only.
 The command exits non-zero if any service is unhealthy, restarting, or fails its
 probe.
-
-## `poi-ingest`
-
-Inspect and trigger the POI ingest sources (EV charging, parking, and the like)
-that the data-manager runs. These commands talk to the data-manager at
-`$DATA_MANAGER_URL`.
-
-| Command                      | Description                                                                                                    |
-| ---------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| `poi-ingest state`           | Print the overall ingest state — counts by domain and status, in-flight jobs, recent failures.                 |
-| `poi-ingest list`            | List registered POI sources as a table. Flags: `--domain <name>`, `--status <active\|stale\|failed\|unknown>`. |
-| `poi-ingest show <sourceId>` | Print full detail for one source (declaration, last run, recent jobs) as JSON.                                 |
-| `poi-ingest sync <sourceId>` | Trigger a sync for one source. Flags: `--live-only` (refresh the live cache only), `--idempotency-key <key>`.  |
 
 ## `transitous`
 

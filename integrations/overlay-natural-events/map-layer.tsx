@@ -1,35 +1,33 @@
 "use client";
 
 import { escapeHtml, sanitizeUrl, useOverlayExclusion } from "@openmapx/core";
+import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import type { MapLayerMouseEvent } from "maplibre-gl";
 import * as maplibregl from "maplibre-gl";
-import { useTranslations } from "next-intl";
-import { useCallback, useEffect, useRef } from "react";
+import { useLocale, useTranslations } from "next-intl";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { INTERACTIVE_LAYER_IDS } from "@/integration-api/map/interactiveLayers";
 import { addLayerInSlot, unregisterLayerSlot } from "@/integration-api/map/layerStack";
 import { useMap } from "@/integration-api/map/MapContext";
 import { getMapClickOwner } from "@/integration-api/map/mapClickOwnership";
 import { useGeoJsonSourceDataBridge } from "@/integration-api/map/useGeoJsonSourceDataBridge";
-import { useIntegrationAttribution } from "@/integration-api/overlay/useIntegrationAttribution";
+import { useSourceAttributions } from "@/integration-api/overlay/useIntegrationAttribution";
 import { useEnv } from "@/integration-api/runtime/EnvProvider";
-import { useNaturalEventStore } from "./store";
+import { ALL_CATEGORIES, useNaturalEventStore } from "./store";
 
 const SOURCE_ID = "openmapx-natural-events-source";
 const CIRCLE_LAYER_ID = "openmapx-natural-events-circles";
 const REFRESH_INTERVAL_MS = 900_000; // 15 minutes
+const NO_SOURCES: readonly string[] = [];
 
 export const CATEGORY_COLORS: Record<string, string> = {
   volcanoes: "#e53935",
   severeStorms: "#7b1fa2",
   floods: "#1565c0",
   landslides: "#6d4c41",
-  snow: "#90caf9",
-  tempExtremes: "#ff6f00",
-  dustHaze: "#bcaaa4",
   seaLakeIce: "#4dd0e1",
-  waterColor: "#00897b",
   drought: "#f9a825",
-  manmade: "#546e7a",
+  dustHaze: "#bcaaa4",
 };
 
 const ALERT_STROKE_COLORS: Record<string, string> = {
@@ -98,14 +96,18 @@ function buildFilterExpr(active: Set<string>): maplibregl.ExpressionSpecificatio
 export function NaturalEventLayer() {
   const { mapRef, mapReady, styleVersion } = useMap();
   const env = useEnv();
+  const locale = useLocale();
+  const registry = useIntegrationRegistry();
   const t = useTranslations("naturalEvents");
   const layerVisible = useNaturalEventStore((s) => s.layerVisible);
-  useIntegrationAttribution("overlay-natural-events", layerVisible);
+  const [sourceIds, setSourceIds] = useState<readonly string[]>(NO_SOURCES);
+  useSourceAttributions("natural-events", layerVisible ? sourceIds : NO_SOURCES);
   const days = useNaturalEventStore((s) => s.days);
   const activeCategories = useNaturalEventStore((s) => s.activeCategories);
   const setLoading = useNaturalEventStore((s) => s.setLoading);
   const setEventCount = useNaturalEventStore((s) => s.setEventCount);
   const setLastUpdated = useNaturalEventStore((s) => s.setLastUpdated);
+  const setUnavailable = useNaturalEventStore((s) => s.setUnavailable);
 
   useOverlayExclusion("natural-events", layerVisible);
 
@@ -123,7 +125,7 @@ export function NaturalEventLayer() {
     const map = mapRef.current;
     if (!map) return;
 
-    let url = `${env.apiUrl}/api/integrations/overlay-natural-events/events?status=open`;
+    let url = `${env.apiUrl}/api/integrations/overlay-natural-events/events?status=open&lang=${encodeURIComponent(locale)}`;
     if (days != null) {
       url += `&days=${days}`;
     }
@@ -132,27 +134,39 @@ export function NaturalEventLayer() {
     setLoading(true);
     try {
       const res = await fetch(url, { signal: request.signal });
-      if (!request.isCurrent() || !res.ok) return;
+      if (!request.isCurrent()) return;
+      if (!res.ok) {
+        setUnavailable(true);
+        return;
+      }
       const data = await res.json();
       if (!request.isCurrent()) return;
+      setUnavailable(false);
       setEventCount(data.features?.length ?? 0);
       setLastUpdated(Date.now());
 
       publishGeoJson([{ sourceId: SOURCE_ID, data }]);
+      const ids: string[] = Array.isArray(data.sources) ? data.sources : [];
+      setSourceIds((prev) =>
+        prev.length === ids.length && prev.every((id, i) => id === ids[i]) ? prev : ids,
+      );
     } catch {
-      // silent
+      // A network failure leaves the layer as it was; an aborted request says nothing.
+      if (request.isCurrent()) setUnavailable(true);
     } finally {
       if (request.isLatest()) setLoading(false);
     }
   }, [
     beginRequest,
     env.apiUrl,
+    locale,
     mapRef,
     days,
     publishGeoJson,
     setLoading,
     setEventCount,
     setLastUpdated,
+    setUnavailable,
   ]);
 
   // Refetch when days changes
@@ -269,7 +283,11 @@ export function NaturalEventLayer() {
 
       const title = escapeHtml(String(p.title || "Unknown Event"));
       const catId = String(p.categoryId || "");
-      const catTitle = escapeHtml(String(p.categoryTitle || catId));
+      const catTitle = escapeHtml(
+        (ALL_CATEGORIES as readonly string[]).includes(catId)
+          ? t(catId)
+          : String(p.categoryTitle || catId),
+      );
       const catColor = CATEGORY_COLORS[catId] || "#78909c";
       const date = p.date
         ? new Date(String(p.date)).toLocaleDateString(undefined, {
@@ -282,7 +300,8 @@ export function NaturalEventLayer() {
       const sourceUrl = sanitizeUrl(String(p.sourceUrl ?? ""));
       const link = sanitizeUrl(String(p.link ?? ""));
       const alertLevel = p.alertLevel ? String(p.alertLevel) : null;
-      const dataSource = p.source === "gdacs" ? "GDACS" : "NASA EONET";
+      const sourceId = String(p.source ?? "");
+      const dataSource = escapeHtml(registry.findDataSource(sourceId)?.name ?? sourceId);
 
       const alertBadge =
         alertLevel && alertLevel !== "green"
@@ -336,7 +355,7 @@ export function NaturalEventLayer() {
       popupRef.current?.remove();
       INTERACTIVE_LAYER_IDS.delete(CIRCLE_LAYER_ID);
     };
-  }, [mapReady, styleVersion, mapRef, layerVisible, t]);
+  }, [mapReady, styleVersion, mapRef, layerVisible, registry, t]);
 
   return null;
 }

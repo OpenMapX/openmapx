@@ -17,13 +17,6 @@ vi.mock("../health-history", () => ({
   recordHealthResult: vi.fn().mockResolvedValue(undefined),
 }));
 
-// Mock the browser-fingerprint client so tests never load the native `impit`
-// module or hit the network.
-vi.mock("@openmapx/integration-framework/impersonate", () => ({
-  impersonatingFetch: vi.fn().mockResolvedValue({ ok: true, status: 200 }),
-}));
-
-import { impersonatingFetch } from "@openmapx/integration-framework/impersonate";
 import {
   executeAllIntegrationHealthChecks,
   executeIntegrationHealthCheck,
@@ -321,57 +314,6 @@ describe("integration-health secret redaction", () => {
   });
 });
 
-describe("integration-health impersonation", () => {
-  let fetchSpy: ReturnType<typeof vi.spyOn>;
-
-  beforeEach(() => {
-    fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(null, { status: 200 }));
-    vi.mocked(impersonatingFetch).mockClear();
-    vi.mocked(impersonatingFetch).mockResolvedValue({ ok: true, status: 200 } as never);
-  });
-
-  afterEach(() => {
-    vi.restoreAllMocks();
-  });
-
-  it("routes an impersonate:true probe through the browser-fingerprint client, not global fetch", async () => {
-    const integration = makeIntegration({
-      type: "http",
-      url: "https://api.openchargemap.io/v3/poi/",
-      impersonate: true,
-    });
-
-    const results = await executeIntegrationHealthCheck(integration);
-
-    expect(results[0]?.status).toBe("up");
-    expect(impersonatingFetch).toHaveBeenCalledOnce();
-    expect(fetchSpy).not.toHaveBeenCalled();
-  });
-
-  it("surfaces a 403 from the impersonated probe as down", async () => {
-    vi.mocked(impersonatingFetch).mockResolvedValue({ ok: false, status: 403 } as never);
-    const integration = makeIntegration({
-      type: "http",
-      url: "https://api.openchargemap.io/v3/poi/",
-      impersonate: true,
-    });
-
-    const results = await executeIntegrationHealthCheck(integration);
-
-    expect(results[0]?.status).toBe("down");
-    expect(results[0]?.error).toBe("HTTP 403");
-  });
-
-  it("leaves a normal probe on global fetch (no impersonation)", async () => {
-    const integration = makeIntegration({ type: "http", url: "https://api.example.com/health" });
-
-    await executeIntegrationHealthCheck(integration);
-
-    expect(fetchSpy).toHaveBeenCalledOnce();
-    expect(impersonatingFetch).not.toHaveBeenCalled();
-  });
-});
-
 describe("metered DB API Marketplace health checks", () => {
   let fetchSpy: ReturnType<typeof vi.spyOn>;
 
@@ -385,14 +327,11 @@ describe("metered DB API Marketplace health checks", () => {
     vi.restoreAllMocks();
   });
 
-  it.each([
-    ["bike-sharing", "Deutsche Bahn GBFS"],
-    ["parking", "DB BahnPark"],
-  ])("probes %s without sending credentials", async (integrationId, checkName) => {
+  it("probes bike-sharing without sending credentials", async () => {
     const manifest = JSON.parse(
-      readFileSync(resolve(REPO_ROOT, "integrations", integrationId, "manifest.json"), "utf8"),
+      readFileSync(resolve(REPO_ROOT, "integrations", "bike-sharing", "manifest.json"), "utf8"),
     ) as { healthCheck: Array<Record<string, unknown>> };
-    const healthCheck = manifest.healthCheck.find((check) => check.name === checkName);
+    const healthCheck = manifest.healthCheck.find((check) => check.name === "Deutsche Bahn GBFS");
 
     expect(healthCheck).toBeDefined();
     expect(healthCheck?.type).toBe("ping");
@@ -403,8 +342,6 @@ describe("metered DB API Marketplace health checks", () => {
     integration.config = {
       "db-bike-client-id": "must-not-be-sent",
       "db-bike-api-key": "must-not-be-sent",
-      "de-db-bahnpark-client-id": "must-not-be-sent",
-      "de-db-bahnpark-api-key": "must-not-be-sent",
     };
 
     const results = await executeIntegrationHealthCheck(integration);

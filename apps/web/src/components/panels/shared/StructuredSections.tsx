@@ -17,8 +17,9 @@ import IconButton from "@mui/material/IconButton";
 import Link from "@mui/material/Link";
 import Typography from "@mui/material/Typography";
 import { type PricingPlanEntry, proxyImageUrl, safeHref } from "@openmapx/core";
-import { useTranslations } from "next-intl";
-import { type ReactNode, useState } from "react";
+import { formatMoney } from "@openmapx/integration-framework/strings";
+import { useLocale, useTranslations } from "next-intl";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import { HlsVideo } from "@/components/ui/HlsVideo";
 import { BRAND } from "@/integration-api/runtime/theme";
 import { useDateTimeFormat } from "@/integration-api/runtime/useDateTimeFormat";
@@ -40,6 +41,8 @@ export interface StructuredSection {
   imageUrl?: string;
   imageAlt?: string;
   linkUrl?: string;
+  /** Seconds between new stills; an image section re-requests its still at that pace while on screen. */
+  refreshSec?: number;
   embedUrl?: string;
   embedType?: "iframe" | "video";
   sectionIcon?: ReactNode | string;
@@ -91,12 +94,16 @@ function renderSectionIcon(sectionIcon?: ReactNode | string): ReactNode {
   }
 }
 
+/** The colour of a connector row's status, by the status kind its last cell names. */
+const STATUS_KIND_COLOR: Readonly<Record<string, string>> = {
+  available: "success.main",
+  busy: "warning.main",
+  out: "error.main",
+};
+
 function ConnectorRow({ row }: { row: (string | number)[] }) {
-  const [type, power, current, qty, status] = row;
+  const [type, power, current, qty, status, kind] = row;
   const statusStr = String(status ?? "");
-  const isAvailable =
-    statusStr.toLowerCase().includes("operational") ||
-    statusStr.toLowerCase().includes("available");
 
   return (
     <Box
@@ -127,7 +134,7 @@ function ConnectorRow({ row }: { row: (string | number)[] }) {
       <Typography
         variant="caption"
         sx={{
-          color: isAvailable ? "success.main" : "text.disabled",
+          color: STATUS_KIND_COLOR[String(kind ?? "")] ?? "text.disabled",
           fontWeight: 500,
           flexShrink: 0,
           ml: 1,
@@ -295,10 +302,12 @@ function PricingPlansSection({
     perHour: labels?.perHour ?? "Per hour",
     free: labels?.free ?? "Free",
   };
+  const locale = useLocale();
   return (
     <Box>
       {plans.map((plan, i) => {
-        const sym = plan.currency === "EUR" ? "€" : plan.currency;
+        // The reader's locale places the symbol and the decimal separator.
+        const price = (amount: number) => formatMoney(amount, plan.currency, locale);
         const name = plan.name || resolvedLabels.standard;
         const showName = plans.length > 1 || !!plan.name;
         const planKey = `${plan.name}-${plan.currency}-${plan.unlockFee ?? ""}-${plan.perKm ?? ""}-${plan.perHour ?? ""}`;
@@ -321,21 +330,15 @@ function PricingPlansSection({
             ) : (
               <>
                 {plan.unlockFee !== undefined && (
-                  <PricingPlanRow
-                    label={resolvedLabels.unlockFee}
-                    value={`${plan.unlockFee.toFixed(2)} ${sym}`}
-                  />
+                  <PricingPlanRow label={resolvedLabels.unlockFee} value={price(plan.unlockFee)} />
                 )}
                 {plan.perKm !== undefined && (
-                  <PricingPlanRow
-                    label={resolvedLabels.perKm}
-                    value={`${plan.perKm.toFixed(2)} ${sym}/km`}
-                  />
+                  <PricingPlanRow label={resolvedLabels.perKm} value={`${price(plan.perKm)}/km`} />
                 )}
                 {plan.perHour !== undefined && (
                   <PricingPlanRow
                     label={resolvedLabels.perHour}
-                    value={`${plan.perHour.toFixed(2)} ${sym}/h`}
+                    value={`${price(plan.perHour)}/h`}
                   />
                 )}
               </>
@@ -347,30 +350,105 @@ function PricingPlansSection({
   );
 }
 
+/** The shortest pause between two requests of one still, whatever the source says. */
+const MIN_REFRESH_SEC = 30;
+
+function pageShown(): boolean {
+  return typeof document === "undefined" || document.visibilityState !== "hidden";
+}
+
+/**
+ * When the still should be re-requested: a new stamp every `refreshSec`
+ * seconds (at least 30), counted only while the element is on screen and the
+ * page is shown. A hidden section or tab asks for nothing. The element is
+ * taken through the returned callback ref, so a frame that mounts after the
+ * first render (a new still after a failed one) is observed too.
+ */
+function useRefreshStamp(
+  refreshSec: number | undefined,
+): [
+  (element: HTMLElement | null) => void,
+  number | undefined,
+  (stamp: number | undefined) => void,
+] {
+  const [element, setElement] = useState<HTMLElement | null>(null);
+  const [stamp, setStamp] = useState<number | undefined>(undefined);
+  const [onScreen, setOnScreen] = useState(false);
+  const [shown, setShown] = useState(pageShown);
+  const refreshing = refreshSec !== undefined && refreshSec > 0;
+
+  useEffect(() => {
+    if (!refreshing || !element || typeof IntersectionObserver === "undefined") return;
+    const observer = new IntersectionObserver((entries) => {
+      const last = entries.at(-1);
+      if (last) setOnScreen(last.isIntersecting);
+    });
+    observer.observe(element);
+    return () => {
+      observer.disconnect();
+      // A frame that is gone is not on screen; the next one reports for itself.
+      setOnScreen(false);
+    };
+  }, [element, refreshing]);
+
+  useEffect(() => {
+    if (!refreshing) return;
+    const onChange = () => setShown(pageShown());
+    document.addEventListener("visibilitychange", onChange);
+    return () => document.removeEventListener("visibilitychange", onChange);
+  }, [refreshing]);
+
+  useEffect(() => {
+    if (!refreshing || !onScreen || !shown) return;
+    const every = Math.max(refreshSec, MIN_REFRESH_SEC) * 1000;
+    const timer = setInterval(() => setStamp(Date.now()), every);
+    return () => clearInterval(timer);
+  }, [refreshing, refreshSec, onScreen, shown]);
+
+  return [setElement, stamp, setStamp];
+}
+
 function ImageSection({ section }: { section: StructuredSection }) {
   const [failedImageUrl, setFailedImageUrl] = useState<string | null>(null);
+  const [frame, stamp, setStamp] = useRefreshStamp(section.refreshSec);
+  // The stamp of the last still that loaded, so a failed refresh falls back to it.
+  const loadedStamp = useRef<number | undefined>(undefined);
   if (!section.imageUrl || failedImageUrl === section.imageUrl) return null;
 
+  const proxied = proxyImageUrl(section.imageUrl);
+  // A changed query parameter makes the browser ask the proxy again; the proxy ignores it.
+  const src =
+    stamp === undefined ? proxied : `${proxied}${proxied.includes("?") ? "&" : "?"}t=${stamp}`;
   const image = (
     <Box
       component="img"
-      src={proxyImageUrl(section.imageUrl)}
+      src={src}
       alt={section.imageAlt ?? section.title}
-      onError={() => setFailedImageUrl(section.imageUrl ?? null)}
+      onLoad={() => {
+        loadedStamp.current = stamp;
+      }}
+      onError={() => {
+        if (stamp !== undefined && stamp !== loadedStamp.current) setStamp(loadedStamp.current);
+        else setFailedImageUrl(section.imageUrl ?? null);
+      }}
       sx={{ width: "100%", borderRadius: 2, display: "block" }}
     />
   );
-  return section.linkUrl ? (
-    <Link
-      href={safeHref(section.linkUrl)}
-      target="_blank"
-      rel="noopener noreferrer"
-      sx={{ display: "block", mb: 1 }}
-    >
-      {image}
-    </Link>
-  ) : (
-    <Box sx={{ mb: 1 }}>{image}</Box>
+  return (
+    <Box ref={frame} sx={{ mb: 1 }}>
+      {section.linkUrl ? (
+        <Link
+          href={safeHref(section.linkUrl)}
+          target="_blank"
+          rel="noopener noreferrer"
+          sx={{ display: "block" }}
+        >
+          {image}
+        </Link>
+      ) : (
+        image
+      )}
+    </Box>
   );
 }
 

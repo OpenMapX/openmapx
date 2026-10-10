@@ -3,7 +3,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useMapAttributionStore } from "./mapAttributionStore";
 import {
   useIntegrationDomainAttribution,
-  useIntegrationSourceAttributions,
   useSourceAttributions,
 } from "./useIntegrationAttribution";
 
@@ -16,14 +15,6 @@ vi.mock("@openmapx/integration-framework/react", () => {
       license: "U.S. Public Domain",
       providerCountry: "US",
       providerPrivacyUrl: "https://www.nasa.gov/privacy/",
-    },
-    {
-      sourceId: "nifc-wfigs",
-      name: "NIFC WFIGS Current Interagency Fire Perimeters",
-      url: "https://example.test/nifc",
-      license: "U.S. Government data",
-      providerCountry: "US",
-      providerPrivacyUrl: "https://example.test/privacy",
     },
     {
       sourceId: "noaa-hms",
@@ -72,40 +63,6 @@ vi.mock("@openmapx/integration-framework/react", () => {
         dataSources.find((source) => source.sourceId === sourceId),
     }),
   };
-});
-
-describe("useIntegrationSourceAttributions", () => {
-  beforeEach(() => {
-    useMapAttributionStore.setState({ byLayer: {} });
-  });
-
-  afterEach(() => {
-    cleanup();
-  });
-
-  it("does not register NOAA when the enabled source IDs exclude noaa-hms", () => {
-    renderHook(() =>
-      useIntegrationSourceAttributions("overlay-wildfires", ["firms", "nifc-wfigs"]),
-    );
-
-    const credits =
-      useMapAttributionStore.getState().byLayer["integration:overlay-wildfires"] ?? [];
-    expect(credits).toHaveLength(2);
-    expect(credits.join(" ")).toContain("NASA FIRMS");
-    expect(credits.join(" ")).not.toContain("NOAA");
-  });
-
-  it("registers NOAA exactly once when noaa-hms is included more than once", () => {
-    renderHook(() =>
-      useIntegrationSourceAttributions("overlay-wildfires", ["firms", "noaa-hms", "noaa-hms"]),
-    );
-
-    const credits =
-      useMapAttributionStore.getState().byLayer["integration:overlay-wildfires"] ?? [];
-    expect(credits.filter((credit) => credit.includes("NOAA"))).toEqual([
-      "NOAA / NESDIS HMS Smoke Detection",
-    ]);
-  });
 });
 
 describe("useIntegrationDomainAttribution", () => {
