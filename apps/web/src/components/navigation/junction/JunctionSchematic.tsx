@@ -37,19 +37,19 @@ export function JunctionSchematicView({ schematic }: { schematic: JunctionSchema
         <g key={branch.wayId} data-branch-road data-selected={String(branch.selected)}>
           <path
             d={branch.path}
-            fill="none"
-            stroke="#3a3d42"
-            strokeWidth={branch.lanePaths.length > 0 ? branch.lanePaths.length * 8 + 3 : 12}
+            fill={branch.lanePolygons.length > 0 ? "#3a3d42" : "#565b63"}
+            stroke="#2b2e33"
+            strokeWidth={1}
           />
-          {branch.lanePaths.map((path, index) => (
+          {branch.lanePolygons.map((path, index) => (
             <path
               // biome-ignore lint/suspicious/noArrayIndexKey: branch lane bands have no stable id
               key={index}
               data-branch-lane
               d={path}
-              fill="none"
-              stroke={branch.selected ? "#9fd0ff" : "#565b63"}
-              strokeWidth={6}
+              fill={branch.selected ? "#9fd0ff" : "#565b63"}
+              stroke={branch.selected ? "#ffffff" : "#2b2e33"}
+              strokeWidth={1}
             />
           ))}
         </g>

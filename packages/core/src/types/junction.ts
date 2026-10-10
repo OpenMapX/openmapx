@@ -149,6 +149,6 @@ export interface JunctionSchematic {
   lanePolygons: string[];
   /** Where each panel's label sits (x centre, y) in viewBox units. */
   panelAnchors: Array<{ x: number; y: number }>;
-  /** Symbolic road paths sharing a junction point, with no incoming-to-outgoing lane mapping. */
-  branches?: Array<{ wayId: number; selected: boolean; path: string; lanePaths: string[] }>;
+  /** Symbolic roads above a neutral junction area, with no incoming-to-outgoing lane mapping. */
+  branches?: Array<{ wayId: number; selected: boolean; path: string; lanePolygons: string[] }>;
 }

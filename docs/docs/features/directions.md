@@ -326,8 +326,9 @@ appears under the banner. Its schematic shows the lane layout at the upcoming
 split, highlighting the recommended lanes when their assignment is known.
 Connected outgoing roads are also shown with their own destination boards and
 known lane counts, including the continuing motorway at a fork. These symbolic
-roads share a junction point without assigning incoming lanes to either branch. OpenStreetMap's approach lane count and turn
-arrows remain useful even without per-lane destination names. With network
+roads meet a neutral junction area, with lane markings stopping on either side
+so incoming lanes are not assigned to either branch. OpenStreetMap's approach
+lane count and turn arrows remain useful even without per-lane destination names. With network
 access, the card also shows the real per-lane destinations where OpenStreetMap
 carries them (`destination:*:lanes`, fetched once per route through Overpass —
 set `OVERPASS_URL` to a self-hosted instance for multi-user deployments).

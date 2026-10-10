@@ -50,14 +50,20 @@ export function buildJunctionSchematic(
 
   const throughPath = `M ${left} ${HEIGHT} L ${left + topInset} ${top} L ${right - topInset} ${top} L ${right} ${HEIGHT} Z`;
 
+  const hasBranches = (model.branches?.length ?? 0) > 0;
+  // Leave a neutral road area between incoming and outgoing markings rather
+  // than connecting lane indices whose assignment is unknown.
+  const laneTopY = hasBranches ? top + 30 : top;
+  const laneTopInset = (topInset * (HEIGHT - laneTopY)) / (HEIGHT - top);
+  const laneTopWidth = BOTTOM_WIDTH - 2 * laneTopInset;
   const lanePolygons: string[] = [];
   for (let i = 0; i < laneCount; i += 1) {
     const x0b = left + (BOTTOM_WIDTH / laneCount) * i;
     const x1b = left + (BOTTOM_WIDTH / laneCount) * (i + 1);
-    const x0t = left + topInset + (TOP_WIDTH / laneCount) * i;
-    const x1t = left + topInset + (TOP_WIDTH / laneCount) * (i + 1);
+    const x0t = left + laneTopInset + (laneTopWidth / laneCount) * i;
+    const x1t = left + laneTopInset + (laneTopWidth / laneCount) * (i + 1);
     lanePolygons.push(
-      `M ${x0b.toFixed(1)} ${HEIGHT} L ${x0t.toFixed(1)} ${top} L ${x1t.toFixed(1)} ${top} L ${x1b.toFixed(1)} ${HEIGHT} Z`,
+      `M ${x0b.toFixed(1)} ${HEIGHT} L ${x0t.toFixed(1)} ${laneTopY} L ${x1t.toFixed(1)} ${laneTopY} L ${x1b.toFixed(1)} ${HEIGHT} Z`,
     );
   }
 
@@ -88,18 +94,33 @@ export function buildJunctionSchematic(
       ].join(" ")
     : "";
 
-  const branches = model.branches?.map((branch, index, all) => {
-    const x = 70 + (180 * index) / Math.max(1, all.length - 1);
-    const path = `M 160 ${top} Q ${x} ${top - 10} ${x} 8`;
+  const roads = hasBranches ? model.branches : undefined;
+  const weighted = roads?.every((branch) => branch.laneCount !== undefined && branch.laneCount > 0);
+  const weights = roads?.map((branch) => (weighted ? (branch.laneCount ?? 1) : 1)) ?? [];
+  const totalWeight = weights.reduce((sum, weight) => sum + weight, 0);
+  let precedingWeight = 0;
+  const branches = roads?.map((branch, index) => {
+    const fraction = weights[index] / totalWeight;
+    const startLeft = left + topInset + (TOP_WIDTH * precedingWeight) / totalWeight;
+    const startWidth = TOP_WIDTH * fraction;
+    const endCentre = left + (BOTTOM_WIDTH * (precedingWeight + weights[index] / 2)) / totalWeight;
+    const endWidth = startWidth * 0.9;
+    const endLeft = endCentre - endWidth / 2;
+    precedingWeight += weights[index];
+    const band = (from: number, to: number) =>
+      [
+        `M ${(startLeft + startWidth * from).toFixed(1)} ${top}`,
+        `L ${(endLeft + endWidth * from).toFixed(1)} 8`,
+        `L ${(endLeft + endWidth * to).toFixed(1)} 8`,
+        `L ${(startLeft + startWidth * to).toFixed(1)} ${top}`,
+        "Z",
+      ].join(" ");
     const count = branch.laneCount;
-    const lanePaths =
+    const lanePolygons =
       count === undefined
         ? []
-        : Array.from({ length: count }, (_, lane) => {
-            const end = x + (lane - (count - 1) / 2) * 8;
-            return `M 160 ${top} Q ${end} ${top - 10} ${end} 8`;
-          });
-    return { wayId: branch.wayId, selected: branch.selected, path, lanePaths };
+        : Array.from({ length: count }, (_, lane) => band(lane / count, (lane + 1) / count));
+    return { wayId: branch.wayId, selected: branch.selected, path: band(0, 1), lanePolygons };
   });
 
   const panelAnchors = model.panels.map((panel) => {
@@ -121,7 +142,7 @@ export function buildJunctionSchematic(
     side: point.side,
     divergenceDeg: point.divergenceDeg,
     throughPath,
-    rampPath: branches ? "" : rampPath,
+    rampPath: hasBranches ? "" : rampPath,
     lanePolygons,
     panelAnchors,
     ...(branches ? { branches } : {}),
