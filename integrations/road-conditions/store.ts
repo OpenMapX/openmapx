@@ -21,11 +21,12 @@ export function horizonDaysParam(horizon: Horizon): string | undefined {
 
 /**
  * Overlay store for the road-conditions layer. Beyond the shared
- * `layerVisible`/`panelOpen` flags, it holds the legend's filter state — a set
- * of registry kinds to show (empty = all), a minimum-severity threshold, and a
- * time horizon. All three are forwarded to the `/events` query, so filtering
- * happens server-side across every road-conditions provider (the route accepts
- * `kinds`/`minSeverity`/`horizonDays`), not just client-side hiding.
+ * `layerVisible`/`panelOpen` flags, it holds the legend's filter state — the
+ * registry kinds the user hid (none by default, so every kind shows), a
+ * minimum-severity threshold, and a time horizon. All three are forwarded to
+ * the `/events` query, so filtering happens server-side across every
+ * road-conditions provider (the route accepts
+ * `excludeKinds`/`minSeverity`/`horizonDays`), not just client-side hiding.
  *
  * The horizon defaults to `"active"`: planned-works feeds announce months of
  * future closures, and showing them by default buries what is actually in the
@@ -34,7 +35,7 @@ export function horizonDaysParam(horizon: Horizon): string | undefined {
 export const useRoadConditionsStore = createOverlayStore({
   overlayId: "road-conditions",
   extra: {
-    kinds: [] as string[],
+    hiddenKinds: [] as string[],
     minSeverity: "all" as MinSeverity,
     horizon: "active" as Horizon,
     viewportFetchStatus: "idle" as RoadConditionFetchStatus,
@@ -43,13 +44,15 @@ export const useRoadConditionsStore = createOverlayStore({
   actions: (set) => ({
     toggleKind: (kind: string) =>
       set((s) => ({
-        kinds: s.kinds.includes(kind) ? s.kinds.filter((k) => k !== kind) : [...s.kinds, kind],
+        hiddenKinds: s.hiddenKinds.includes(kind)
+          ? s.hiddenKinds.filter((k) => k !== kind)
+          : [...s.hiddenKinds, kind],
       })),
     setMinSeverity: (minSeverity: MinSeverity) => set({ minSeverity }),
     setHorizon: (horizon: Horizon) => set({ horizon }),
     setViewportFetchStatus: (viewportFetchStatus: RoadConditionFetchStatus) =>
       set({ viewportFetchStatus }),
     setRouteFetchStatus: (routeFetchStatus: RoadConditionFetchStatus) => set({ routeFetchStatus }),
-    resetFilters: () => set({ kinds: [], minSeverity: "all", horizon: "active" }),
+    resetFilters: () => set({ hiddenKinds: [], minSeverity: "all", horizon: "active" }),
   }),
 });

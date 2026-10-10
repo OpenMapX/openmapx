@@ -45,11 +45,21 @@ describe("RoadConditionsLegend time-horizon control", () => {
     expect(screen.getByText("roadConditions.reset")).toBeTruthy();
   });
 
-  it("filters by registry kind and severity label", async () => {
+  it("shows every kind as on, hides one on click, and filters by severity label", async () => {
     render(<RoadConditionsLegend />);
+    const closure = () => screen.getByRole("button", { name: "roadConditions.kind.closure" });
+    expect(closure().getAttribute("aria-pressed")).toBe("true");
+    expect(screen.queryByText("roadConditions.reset")).toBeNull();
 
-    await userEvent.click(screen.getByRole("button", { name: "roadConditions.kind.closure" }));
-    expect(useRoadConditionsStore.getState().kinds).toEqual(["closure"]);
+    await userEvent.click(closure());
+    expect(useRoadConditionsStore.getState().hiddenKinds).toEqual(["closure"]);
+    expect(closure().getAttribute("aria-pressed")).toBe("false");
+    expect(
+      screen
+        .getByRole("button", { name: "roadConditions.kind.roadworks" })
+        .getAttribute("aria-pressed"),
+    ).toBe("true");
+    expect(screen.getByText("roadConditions.reset")).toBeTruthy();
 
     await userEvent.click(screen.getByRole("button", { name: /roadConditions\.sev\.major/ }));
     expect(useRoadConditionsStore.getState().minSeverity).toBe("major");

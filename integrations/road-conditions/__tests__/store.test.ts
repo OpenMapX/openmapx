@@ -17,15 +17,16 @@ describe("road-conditions overlay store", () => {
     expect(useRoadConditionsStore.getState().horizon).toBe("all");
   });
 
-  it("toggleKind adds and removes a kind", () => {
+  it("shows every kind by default; toggleKind hides a kind and shows it again", () => {
+    expect(useRoadConditionsStore.getState().hiddenKinds).toEqual([]);
     useRoadConditionsStore.getState().toggleKind("roadworks");
     useRoadConditionsStore.getState().toggleKind("closure");
-    expect(useRoadConditionsStore.getState().kinds).toEqual(["roadworks", "closure"]);
+    expect(useRoadConditionsStore.getState().hiddenKinds).toEqual(["roadworks", "closure"]);
     useRoadConditionsStore.getState().toggleKind("roadworks");
-    expect(useRoadConditionsStore.getState().kinds).toEqual(["closure"]);
+    expect(useRoadConditionsStore.getState().hiddenKinds).toEqual(["closure"]);
   });
 
-  it("resetFilters restores the horizon along with kinds and severity", () => {
+  it("resetFilters restores the horizon along with hidden kinds and severity", () => {
     const s = useRoadConditionsStore.getState();
     s.setHorizon("all");
     s.toggleKind("roadworks");
@@ -35,7 +36,7 @@ describe("road-conditions overlay store", () => {
 
     const after = useRoadConditionsStore.getState();
     expect(after.horizon).toBe("active");
-    expect(after.kinds).toEqual([]);
+    expect(after.hiddenKinds).toEqual([]);
     expect(after.minSeverity).toBe("all");
   });
 

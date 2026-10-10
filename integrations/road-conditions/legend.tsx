@@ -20,9 +20,9 @@ import {
 
 /**
  * Registry kinds offered as filter chips — also the glyph legend, so the same
- * row both explains the marker icons and drives the `kinds` query filter.
- * Curated to the common road situations; the rest still show when no kind
- * filter is active.
+ * row both explains the marker icons and hides a kind from the query when
+ * turned off. Curated to the common road situations; the other kinds always
+ * show.
  */
 const FILTER_KINDS = [
   "roadworks",
@@ -63,7 +63,7 @@ export function RoadConditionsLegend() {
   const t = useTranslations("roadConditions");
   const panelOpen = useRoadConditionsStore((s) => s.panelOpen);
   const layerVisible = useRoadConditionsStore((s) => s.layerVisible);
-  const kinds = useRoadConditionsStore((s) => s.kinds);
+  const hiddenKinds = useRoadConditionsStore((s) => s.hiddenKinds);
   const minSeverity = useRoadConditionsStore((s) => s.minSeverity);
   const horizon = useRoadConditionsStore((s) => s.horizon);
   const setLayerVisible = useOverlayVisibilitySetter("road-conditions");
@@ -73,7 +73,7 @@ export function RoadConditionsLegend() {
   const resetFilters = useRoadConditionsStore((s) => s.resetFilters);
   const viewportFetchStatus = useRoadConditionsStore((s) => s.viewportFetchStatus);
   const routeFetchStatus = useRoadConditionsStore((s) => s.routeFetchStatus);
-  const filtersActive = kinds.length > 0 || minSeverity !== "all" || horizon !== "active";
+  const filtersActive = hiddenKinds.length > 0 || minSeverity !== "all" || horizon !== "active";
   const fetchStatus = [viewportFetchStatus, routeFetchStatus].includes("loading")
     ? "loading"
     : [viewportFetchStatus, routeFetchStatus].includes("error")
@@ -148,7 +148,7 @@ export function RoadConditionsLegend() {
         </Typography>
         <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5, maxWidth: 320 }}>
           {FILTER_KINDS.map((kind) => {
-            const selected = kinds.includes(kind);
+            const shown = !hiddenKinds.includes(kind);
             return (
               <Chip
                 key={kind}
@@ -156,8 +156,9 @@ export function RoadConditionsLegend() {
                 icon={<Glyph kind={kind} />}
                 label={t(`kind.${kind}`)}
                 onClick={() => toggleKind(kind)}
-                color={selected ? "primary" : "default"}
-                variant={selected ? "filled" : "outlined"}
+                aria-pressed={shown}
+                color={shown ? "primary" : "default"}
+                variant={shown ? "filled" : "outlined"}
                 sx={{ fontSize: 10.5, height: 24, "& .MuiChip-icon": { ml: 0.75, mr: -0.25 } }}
               />
             );
