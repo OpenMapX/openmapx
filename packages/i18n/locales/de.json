@@ -1623,7 +1623,15 @@
     "alertInfo": "Info",
     "alertWarning": "Warnung",
     "alertSevere": "Betriebsstörung",
-    "alertCritical": "Schwere Störung"
+    "alertCritical": "Schwere Störung",
+    "platformChanged": "geändert",
+    "dataStatus": {
+      "scheduled": "Laut Fahrplan",
+      "stale": "Zeiten können sich geändert haben",
+      "refreshFailed": "Zeiten konnten nicht aktualisiert werden. Sie können sich geändert haben.",
+      "partial": "Einige Abfahrten fehlen möglicherweise."
+    },
+    "nextServiceCanceled": "Nächste Verbindung fällt aus"
   },
   "category": {
     "openNow": "Jetzt geöffnet",

@@ -77,6 +77,41 @@ const timed = async <T>(
 };
 
 describe("enrichDeparturesWithRealtime", () => {
+  it("retains scheduled data and labels failed realtime enrichment as incomplete", async () => {
+    const base = { data: [dep({ tripId: "ms:trip-1" })], attributions: [], freshness: fresh() };
+    const provider = makeProvider({
+      getTripUpdate: vi.fn(async () => {
+        throw new Error("failure");
+      }),
+    });
+    const out = await enrichDeparturesWithRealtime({ ctx: makeCtx([provider]), timed }, base, {
+      stopId: "ms:s",
+    });
+    expect(out.data).toEqual(base.data);
+    expect(out.freshness).toMatchObject({ isPartial: true, hasRealtimeData: false });
+  });
+
+  it("does not use static source age for realtime deltas and retains partial metadata", async () => {
+    const base = {
+      data: [dep({ tripId: "ms:trip-1" })],
+      attributions: [],
+      freshness: fresh({ dataAsOf: "2026-05-22T08:00:00Z", isPartial: true }),
+    };
+    const provider = makeProvider({
+      getTripUpdate: vi.fn(async () => ({
+        data: { tripId: "ms:trip-1", expectedAt: "2026-05-22T08:03:00Z" },
+        attributions: [],
+        freshness: fresh({ hasRealtimeData: true }),
+      })),
+    });
+    const out = await enrichDeparturesWithRealtime({ ctx: makeCtx([provider]), timed }, base, {
+      stopId: "ms:s",
+    });
+    expect(out.data[0].expectedAt).toBe("2026-05-22T08:03:00Z");
+    expect(out.freshness).toMatchObject({ isPartial: true, hasRealtimeData: true });
+    expect(out.freshness.dataAsOf).toBeUndefined();
+  });
+
   it("returns the base result unchanged when no realtime providers match", async () => {
     const base: MobilityResult<Departure[]> = {
       data: [dep({ tripId: "ms:trip-1" })],
@@ -365,3 +400,33 @@ describe("realtime internals", () => {
     expect(providerMatches(noMethod, undefined)).toBe(false);
   });
 });
+
+it.each(["batch empty", "batch no-op", "single null", "single no-op"])(
+  "preserves declared partial coverage for %s realtime responses",
+  async (mode) => {
+    const base = { data: [dep({ tripId: "ms:trip-1" })], attributions: [], freshness: fresh() };
+    const metadata = fresh({ hasRealtimeData: true, isPartial: true });
+    const provider = makeProvider(
+      mode.startsWith("batch")
+        ? {
+            getTripUpdates: async () => ({
+              data: mode === "batch empty" ? {} : { "ms:trip-1": { tripId: "ms:trip-1" } },
+              attributions: [],
+              freshness: metadata,
+            }),
+          }
+        : {
+            getTripUpdate: async () => ({
+              data: mode === "single null" ? null : { tripId: "ms:trip-1" },
+              attributions: [],
+              freshness: metadata,
+            }),
+          },
+    );
+    const out = await enrichDeparturesWithRealtime({ ctx: makeCtx([provider]), timed }, base, {
+      stopId: "ms:s",
+    });
+    expect(out.data).toEqual(base.data);
+    expect(out.freshness).toMatchObject({ isPartial: true, hasRealtimeData: false });
+  },
+);

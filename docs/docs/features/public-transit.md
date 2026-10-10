@@ -99,7 +99,7 @@ so, keeping the part of the schedule it did work out.
 
 ## Departures, stops, and alerts
 
-Open any stop or station and OpenMapX shows a live departure board: the next
+Open any stop or station and OpenMapX shows a departure board: the next
 departures with their lines, destinations, scheduled and real-time times, delays,
 platform or track, and cancellations. The same surfaces back stop-detail views in
 [places](./places.md) — search a station and you get its departures, the lines
@@ -111,6 +111,49 @@ the actual delay, a platform change, a cancellation — are merged in on top fro
 any real-time provider that covers the area. When the underlying provider already
 returns real-time-aware times (MOTIS does this natively from GTFS-RT), OpenMapX
 skips the redundant second lookup.
+
+### Understanding timetable status
+
+Departure rows, the journey sheet and transit navigation keep the focus on
+when to leave, delays, cancellations and platform changes. **Scheduled time**
+means the service is explicitly timetable-only. Predictions do not add a status
+row in the normal case, and missing service evidence does not create a live or
+scheduled label. Raw source ages, provider hosting details and diagnostic
+status labels are not displayed in these traveler views; source-aware metadata
+and existing feed credits are retained.
+
+Known outdated predictions show **Times may have changed**. The policy uses a
+valid upstream `freshness.dataAsOf` timestamp with realtime envelope metadata:
+observations older than 90 seconds, or an explicit stale flag, trigger the
+warning. This trip-update window follows the
+[GTFS realtime best practices](https://gtfs.org/documentation/realtime/realtime-best-practices/).
+Missing, invalid or future timestamps stay unknown internally; they neither
+trigger a stale warning by themselves nor establish that a prediction is live.
+Local adapter `observedAt`, request `fetchedAt`, and itinerary
+`plannedAt`/`refreshedAt` are not upstream publication times. Current
+MOTIS/Transitous timetable wrappers do not supply upstream age. Differing
+predicted departure times are displayed even for early services or when no
+numeric delay is supplied.
+
+Stop, route and trip identifiers remain source-aware; similarly named
+parent/sibling stations are not merged by the UI. Platform changes show both
+planned and current codes when available, plus a **changed** label. Cancelled
+services retain a clear cancellation label and struck-through times; a
+cancelled navigation leg does not issue a boarding or get-off cue. The get-off
+alarm is also suppressed until the rider has boarded.
+
+A failed refresh retains previously loaded times with one concise warning and
+retry action aligned to the right of the warning, rather than repeating a
+failure label on every row. A partially successful linked board retains
+successful sources and warns that some
+departures may be missing; it does not claim there are no departures when
+remaining sources failed. A successful empty timetable remains a valid empty
+result. Source age is reevaluated every 30 seconds while these views are
+mounted; this adds no provider polling or installed-shell live-data owner.
+Station discovery happens before these timetable queries: legacy stop-name
+discovery failures can still produce an empty linked-stop result, especially
+with a cold cache. Offline/native navigation lifecycle validation remains
+separate.
 
 ## Live vehicles on the map
 

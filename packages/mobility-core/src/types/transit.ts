@@ -236,6 +236,7 @@ export interface TransitObservationProvenance {
   instance: string;
   datasetEpoch?: string;
   realtimeCompleteness: "none" | "merged" | "changed" | "unknown";
+  /** Local adapter observation time, not upstream publication/validity time. */
   observedAt: string;
 }
 

@@ -188,3 +188,17 @@ describe("TransitLegBanner while waiting at the boarding stop", () => {
     expect(notifyGetOff).not.toHaveBeenCalled();
   });
 });
+
+it("never sounds an alight alarm for a cancelled current service, even with riding progress", () => {
+  vi.clearAllMocks();
+  render(
+    <TransitLegBanner
+      leg={{ ...freshLeg(), cancelled: true }}
+      legIndex={0}
+      totalLegs={2}
+      transitProgress={progressAt(0.0035)}
+    />,
+  );
+  expect(playAlarmTone).not.toHaveBeenCalled();
+  expect(notifyGetOff).not.toHaveBeenCalled();
+});

@@ -5,16 +5,23 @@ import Box from "@mui/material/Box";
 import ButtonBase from "@mui/material/ButtonBase";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
+import type { Freshness } from "@openmapx/mobility-core/freshness";
 import type { Departure, TripRemark } from "@openmapx/mobility-core/transit";
 import { useTranslations } from "next-intl";
 import { useDateTimeFormat } from "@/integration-api/runtime/useDateTimeFormat";
+import { departureRealtimeEvidence } from "@/lib/transit-data-status";
 import { OccupancyIndicator } from "./OccupancyIndicator";
+import { PlatformBadge } from "./PlatformBadge";
 import { REMARK_PRIORITY, RemarkChip } from "./RemarkChip";
 import { RouteBadge } from "./RouteBadge";
+import { TransitDataStatus } from "./TransitDataStatus";
 
 interface DepartureRowProps {
   departure: Departure;
   showPlatform?: boolean;
+  freshness?: Freshness;
+  queryFailed?: boolean;
+  now?: number;
   onClick?: (dep: Departure) => void;
   /** Show a warning indicator when the route has an active severe/critical alert. */
   hasAlert?: boolean;
@@ -29,11 +36,21 @@ export function DepartureRow({
   showPlatform = true,
   onClick,
   hasAlert = false,
+  freshness,
+  queryFailed,
+  now = Date.now(),
 }: DepartureRowProps) {
   const t = useTranslations("transit");
   const fmt = useDateTimeFormat();
   const isDelayed = departure.delaySeconds != null && departure.delaySeconds > 60;
   const isCanceled = departure.canceled === true;
+  const scheduledTime = fmt.time(departure.scheduledAt);
+  const validExpectedAt =
+    departure.expectedAt && Number.isFinite(Date.parse(departure.expectedAt))
+      ? departure.expectedAt
+      : undefined;
+  const expectedTime = validExpectedAt ? fmt.time(validExpectedAt) : undefined;
+  const timeChanged = expectedTime !== undefined && expectedTime !== scheduledTime;
   const hasRemarks = departure.remarks && departure.remarks.length > 0;
 
   const inner = (
@@ -51,21 +68,17 @@ export function DepartureRow({
           >
             {departure.headsign}
           </Typography>
-          <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, mt: 0.25 }}>
+          <Box sx={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 0.5, mt: 0.25 }}>
             <RouteBadge
               shortName={departure.route.shortName}
               color={departure.route.color}
               mode={departure.route.mode}
             />
             {showPlatform && departure.platform && (
-              <Typography
-                variant="caption"
-                sx={{
-                  color: "text.secondary",
-                }}
-              >
-                {t("platform")} {departure.platform}
-              </Typography>
+              <PlatformBadge
+                code={departure.platform}
+                scheduledCode={departure.scheduledPlatform}
+              />
             )}
             {hasAlert && (
               <Tooltip title={t("activeServiceAlert")} placement="top" arrow>
@@ -80,21 +93,21 @@ export function DepartureRow({
             variant="body2"
             sx={{
               fontWeight: 500,
-              textDecoration: isCanceled || isDelayed ? "line-through" : "none",
+              textDecoration: isCanceled || timeChanged ? "line-through" : "none",
               color: isCanceled ? "text.disabled" : "text.primary",
             }}
           >
-            {fmt.time(departure.scheduledAt)}
+            {scheduledTime}
           </Typography>
-          {isDelayed && !isCanceled && departure.expectedAt && (
+          {timeChanged && !isCanceled && (
             <Typography
               variant="body2"
               sx={{
                 fontWeight: 600,
-                color: "error.main",
+                color: isDelayed ? "error.main" : "text.primary",
               }}
             >
-              {fmt.time(departure.expectedAt)}
+              {expectedTime}
             </Typography>
           )}
           {isCanceled && (
@@ -110,6 +123,14 @@ export function DepartureRow({
           )}
         </Box>
       </Box>
+
+      <TransitDataStatus
+        now={now}
+        realtime={departureRealtimeEvidence(departure)}
+        freshness={freshness}
+        source={departure.provenance?.instance}
+        queryFailed={queryFailed}
+      />
 
       {/* Trip remarks — in list view show only the top warning/cancellation; in detail view show all */}
       {hasRemarks && departure.remarks && (
@@ -141,7 +162,6 @@ export function DepartureRow({
           px: 1.5,
           borderBottom: "1px solid",
           borderColor: "divider",
-          opacity: isCanceled ? 0.5 : 1,
           "&:hover": { bgcolor: "action.hover" },
           transition: "background-color 0.12s",
         }}
@@ -158,7 +178,6 @@ export function DepartureRow({
         px: 1.5,
         borderBottom: "1px solid",
         borderColor: "divider",
-        opacity: isCanceled ? 0.5 : 1,
       }}
     >
       {inner}

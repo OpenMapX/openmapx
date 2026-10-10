@@ -22,10 +22,15 @@ import { useEffect, useMemo, useRef } from "react";
 import { OccupancyIndicator } from "@/components/panels/transit/OccupancyIndicator";
 import { PlatformBadge } from "@/components/panels/transit/PlatformBadge";
 import { RouteBadge } from "@/components/panels/transit/RouteBadge";
+import {
+  TransitDataStatus,
+  TransitQueryNotice,
+} from "@/components/panels/transit/TransitDataStatus";
 import { haptics } from "@/lib/haptics";
 import { useMobileRuntime } from "@/lib/mobile/useMobileRuntime";
 import { notifyGetOff, playAlarmTone } from "@/lib/navigation/navNotify";
 import { useNavigationVoice } from "@/lib/navigation/useNavigationVoice";
+import { useNow } from "@/lib/useNow";
 import { NavBannerShell } from "./NavBannerShell";
 import { TransitTransferCard } from "./TransitTransferCard";
 
@@ -59,7 +64,9 @@ export function TransitLegBanner({
   totalLegs,
   transitProgress,
   transfer,
+  source,
 }: {
+  source?: string;
   leg: TripLeg;
   legIndex: number;
   totalLegs: number;
@@ -68,6 +75,8 @@ export function TransitLegBanner({
   transfer?: TransitTransfer | null;
 }) {
   const t = useTranslations("navigation");
+  const tt = useTranslations("transit");
+  const now = useNow(30_000);
   const locale = useLocale();
   const speak = useNavigationVoice(locale);
   const voiceEnabled = useNavigationStore((s) => s.voiceEnabled);
@@ -76,9 +85,10 @@ export function TransitLegBanner({
   // in the session. Querying again would be a second live-data owner, and the
   // one that stops working underground.
   const { browserAuthority } = useMobileRuntime();
-  const { data: journey } = useVehicleJourney(
+  const journeyQuery = useVehicleJourney(
     browserAuthority && isTransitLeg ? (leg.tripId ?? null) : null,
   );
+  const { data: journey } = journeyQuery;
   const alertedRef = useRef(false);
   const line = leg.route?.shortName || leg.route?.longName || "";
 
@@ -100,7 +110,8 @@ export function TransitLegBanner({
   const departed = transitProgress?.phase === "riding";
   // Only aboard can the next stop be the one to get off at; waiting at the
   // boarding stop, a fix just past its pole must not sound the get-off alarm.
-  const alightSoon = departed && legStops.length > 0 && stopsRemaining > 0 && stopsRemaining <= 1;
+  const alightSoon =
+    departed && !leg.cancelled && legStops.length > 0 && stopsRemaining > 0 && stopsRemaining <= 1;
   const boardingPlatform = leg.from.platformCode;
   const alightPlatform = leg.to.platformCode;
   // Show the vehicle's destination sign when it adds information beyond the
@@ -137,7 +148,7 @@ export function TransitLegBanner({
       }
       if (voiceEnabled) {
         speak(
-          transfer
+          transfer && !transfer.nextLeg.cancelled
             ? t("voiceTransfer", {
                 stop: leg.to.name,
                 line: transfer.nextLeg.route?.shortName || transfer.nextLeg.route?.longName || "",
@@ -154,7 +165,7 @@ export function TransitLegBanner({
   // boarded (it's moot once under way).
   // biome-ignore lint/correctness/useExhaustiveDependencies: announce once per leg (keyed on tripId).
   useEffect(() => {
-    if (!isTransitLeg || !voiceEnabled || departed) return;
+    if (!isTransitLeg || !voiceEnabled || departed || leg.cancelled) return;
     speak(
       boardingPlatform
         ? t("voiceBoardPlatform", { line, destination: leg.to.name, platform: boardingPlatform })
@@ -186,7 +197,7 @@ export function TransitLegBanner({
   // Sub-row: the live next-stop / alight preview for transit legs. Hidden while
   // `alightSoon`, since the prominent card below carries that message instead.
   const secondary =
-    isTransitLeg && !alightSoon ? (
+    isTransitLeg && !leg.cancelled && !alightSoon ? (
       <Typography variant="body2" sx={{ opacity: 0.9 }} noWrap>
         {departed && nextStopName
           ? t("nextStop", { stop: nextStopName })
@@ -222,9 +233,24 @@ export function TransitLegBanner({
           ) : undefined
         }
       >
-        <Typography variant="h6" sx={{ lineHeight: 1.15 }} noWrap>
+        <Typography
+          variant="h6"
+          sx={{ lineHeight: 1.15, textDecoration: leg.cancelled ? "line-through" : undefined }}
+          noWrap
+        >
           {title}
         </Typography>
+        {leg.cancelled && <Typography sx={{ fontWeight: 700 }}>{tt("canceled")}</Typography>}
+        {isTransitLeg && (
+          <TransitDataStatus
+            now={now}
+            realtime={leg.realtime}
+            freshness={journeyQuery.freshness}
+            source={source}
+            queryFailed={journeyQuery.isError}
+            onBanner
+          />
+        )}
         {isTransitLeg &&
           (headsign ||
             (!departed && (boardingPlatform || boardingStopCode || boardingLevel != null))) && (
@@ -239,6 +265,7 @@ export function TransitLegBanner({
                   code={boardingPlatform}
                   tone="onBanner"
                   changed={!!changedFromPlatform(leg.from)}
+                  scheduledCode={leg.from.scheduledPlatformCode}
                 />
               ) : !departed && boardingStopCode ? (
                 <Typography variant="caption" sx={{ opacity: 0.9 }} noWrap>
@@ -261,7 +288,22 @@ export function TransitLegBanner({
           {t("legCounter", { current: legIndex + 1, total: totalLegs })}
         </Typography>
       </NavBannerShell>
-      {alightSoon && transfer ? (
+      {isTransitLeg && (
+        <TransitQueryNotice
+          onMap
+          failed={journeyQuery.isError}
+          partial={journeyQuery.freshness?.isPartial}
+          onRetry={
+            browserAuthority
+              ? () => {
+                  void journeyQuery.refetch();
+                }
+              : undefined
+          }
+          retrying={journeyQuery.isFetching}
+        />
+      )}
+      {alightSoon && transfer && !transfer.nextLeg.cancelled ? (
         <TransitTransferCard
           fromLeg={leg}
           nextLeg={transfer.nextLeg}
@@ -289,11 +331,23 @@ export function TransitLegBanner({
             <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
               {t("alightSoon")}
             </Typography>
+            {transfer?.nextLeg.cancelled && (
+              <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                {tt("nextServiceCanceled")}
+                {transfer.nextLeg.route?.shortName ? ` · ${transfer.nextLeg.route.shortName}` : ""}
+              </Typography>
+            )}
             <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, minWidth: 0 }}>
               <Typography variant="caption" noWrap>
                 {t("alightAt", { place: leg.to.name })}
               </Typography>
-              {alightPlatform && <PlatformBadge code={alightPlatform} tone="onBanner" />}
+              {alightPlatform && (
+                <PlatformBadge
+                  code={alightPlatform}
+                  scheduledCode={leg.to.scheduledPlatformCode}
+                  tone="onBanner"
+                />
+              )}
               {alightLevel != null && (
                 <Typography variant="caption" noWrap>
                   {t("levelShort", { level: alightLevel })}

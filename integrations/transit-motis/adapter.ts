@@ -344,7 +344,8 @@ export function normalizeStoptime(
       baselineSource: instance.provider === "ms" ? "transit-motis-local" : "transitous",
       instance: instance.provider,
       datasetEpoch: provenance?.datasetEpoch,
-      realtimeCompleteness: provenance?.realtimeEnabled || st.realTime === true ? "merged" : "none",
+      realtimeCompleteness:
+        st.realTime === true ? "merged" : st.realTime === false ? "none" : "unknown",
       observedAt: new Date().toISOString(),
     },
   };
@@ -455,7 +456,7 @@ export async function getDepartures(
 ): Promise<Departure[]> {
   const id = rawId(instance, stopId);
   try {
-    const { data } = await stoptimes({
+    const { data, error } = await stoptimes({
       client: instance.client,
       query: {
         stopId: id,
@@ -465,10 +466,10 @@ export async function getDepartures(
         arriveBy: false,
       },
     });
-    if (!data?.stopTimes) return [];
+    if (error || !Array.isArray(data?.stopTimes)) throw new Error("MOTIS timetable unavailable");
     return data.stopTimes.map((st) => normalizeStoptime(instance, st, "departure", provenance));
   } catch {
-    return [];
+    throw new Error("MOTIS timetable unavailable");
   }
 }
 
@@ -481,7 +482,7 @@ export async function getArrivals(
 ): Promise<Departure[]> {
   const id = rawId(instance, stopId);
   try {
-    const { data } = await stoptimes({
+    const { data, error } = await stoptimes({
       client: instance.client,
       query: {
         stopId: id,
@@ -491,10 +492,10 @@ export async function getArrivals(
         arriveBy: true,
       },
     });
-    if (!data?.stopTimes) return [];
+    if (error || !Array.isArray(data?.stopTimes)) throw new Error("MOTIS timetable unavailable");
     return data.stopTimes.map((st) => normalizeStoptime(instance, st, "arrival", provenance));
   } catch {
-    return [];
+    throw new Error("MOTIS timetable unavailable");
   }
 }
 

@@ -1623,7 +1623,15 @@
     "alertInfo": "Info",
     "alertWarning": "Warning",
     "alertSevere": "Service disruption",
-    "alertCritical": "Major disruption"
+    "alertCritical": "Major disruption",
+    "platformChanged": "changed",
+    "dataStatus": {
+      "scheduled": "Scheduled time",
+      "stale": "Times may have changed",
+      "refreshFailed": "Couldn’t update times. They may have changed.",
+      "partial": "Some departures may be missing."
+    },
+    "nextServiceCanceled": "Next service canceled"
   },
   "category": {
     "openNow": "Open now",

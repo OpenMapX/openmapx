@@ -8,6 +8,7 @@ import type { Attribution } from "@openmapx/mobility-core/attribution";
 import type { Freshness } from "@openmapx/mobility-core/freshness";
 import type { MobilityResult } from "@openmapx/mobility-core/result";
 import type { Departure } from "@openmapx/mobility-core/transit";
+import { mergeFreshness } from "./result-merge.js";
 
 /**
  * Schedule + realtime-delta merger for `getDepartures` / `getArrivals`
@@ -153,6 +154,7 @@ export async function enrichDeparturesWithRealtime(
   const newAttributions: Attribution[] = [];
   const newFreshness: Freshness[] = [];
   let anyApplied = false;
+  let partial = false;
 
   const remaining = new Set(byTrip.keys());
   for (const provider of candidates) {
@@ -166,7 +168,11 @@ export async function enrichDeparturesWithRealtime(
           NonNullable<typeof provider.getTripUpdates>
         >,
     );
-    if (!outcome.ok) continue;
+    if (!outcome.ok) {
+      partial = true;
+      continue;
+    }
+    partial ||= outcome.value.freshness.isPartial === true;
     for (const id of ids) {
       const delta = outcome.value.data[id];
       if (!delta) continue;
@@ -195,7 +201,12 @@ export async function enrichDeparturesWithRealtime(
         const outcome = await deps.timed(provider.id, "getTripUpdate", () =>
           getTripUpdate.call(provider, tripId, opts.stopId),
         );
-        if (!outcome.ok || !outcome.value.data) continue;
+        if (!outcome.ok) {
+          partial = true;
+          continue;
+        }
+        partial ||= outcome.value.freshness.isPartial === true;
+        if (!outcome.value.data) continue;
         let applied = false;
         for (const departure of byTrip.get(tripId) ?? []) {
           applied = applyDelta(departure, outcome.value.data) || applied;
@@ -218,19 +229,18 @@ export async function enrichDeparturesWithRealtime(
     }
   }
 
-  if (!anyApplied) return base;
+  if (!anyApplied)
+    return partial ? { ...base, freshness: { ...base.freshness, isPartial: true } } : base;
 
   const dedupedAttribs = dedupAttributions(deps.ctx, base.attributions, ...newAttributions);
   const freshness: Freshness = {
-    fetchedAt: base.freshness.fetchedAt,
+    ...mergeFreshness(
+      base.freshness,
+      ...newFreshness.map((value) => ({ ...value, hasRealtimeData: true })),
+    ),
     hasRealtimeData: true,
-    isStale: base.freshness.isStale,
-    ...(base.freshness.dataAsOf ? { dataAsOf: base.freshness.dataAsOf } : {}),
+    ...(partial ? { isPartial: true } : {}),
   };
-  // Propagate the strongest staleness signal from the realtime side too.
-  for (const f of newFreshness) {
-    if (f.isStale) freshness.isStale = true;
-  }
 
   return { data: base.data, attributions: dedupedAttribs, freshness };
 }

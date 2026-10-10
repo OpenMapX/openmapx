@@ -14,17 +14,20 @@ import { useTranslations } from "next-intl";
 export function PlatformBadge({
   code,
   changed = false,
+  scheduledCode,
   tone = "surface",
 }: {
   code: string;
   changed?: boolean;
+  scheduledCode?: string;
   tone?: "surface" | "onBanner";
 }) {
   const t = useTranslations("transit");
-  const surface = changed
+  const wasChanged = changed || (!!scheduledCode && scheduledCode !== code);
+  const surface = wasChanged
     ? { bgcolor: "warning.main", color: "warning.contrastText" }
     : { bgcolor: "action.selected", color: "text.primary" };
-  const onBanner = changed
+  const onBanner = wasChanged
     ? { bgcolor: "warning.main", color: "warning.contrastText" }
     : { bgcolor: "rgba(255, 255, 255, 0.22)", color: "inherit" };
   return (
@@ -44,7 +47,9 @@ export function PlatformBadge({
         ...(tone === "onBanner" ? onBanner : surface),
       }}
     >
-      {t("platform")} {code}
+      {t("platform")}{" "}
+      {wasChanged && scheduledCode && scheduledCode !== code ? `${scheduledCode} → ${code}` : code}
+      {wasChanged && ` (${t("platformChanged")})`}
     </Box>
   );
 }

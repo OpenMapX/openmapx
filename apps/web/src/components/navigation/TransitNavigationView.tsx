@@ -185,6 +185,7 @@ export function TransitNavigationView() {
               ) : (
                 <TransitLegBanner
                   leg={currentLeg}
+                  source={itinerary.source ?? itinerary.instance}
                   legIndex={currentLegIndex}
                   totalLegs={legs.length}
                   transitProgress={transitProgress}
@@ -221,6 +222,7 @@ export function TransitNavigationView() {
                   itinerary={itinerary}
                   currentLegIndex={currentLegIndex}
                   transitProgress={transitProgress}
+                  showQueryNotice={false}
                 />
                 {menu}
               </NavSwipeSheet>
@@ -261,6 +263,7 @@ export function TransitNavigationView() {
                       currentLegIndex={currentLegIndex}
                       transitProgress={transitProgress}
                       scroll={false}
+                      showQueryNotice={false}
                     />
                     {menu}
                   </Collapse>
