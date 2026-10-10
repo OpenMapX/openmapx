@@ -38,7 +38,7 @@
     "expo-task-manager": "~57.0.19",
     "react": "19.3.0",
     "react-native": "0.86.3",
-    "react-native-webview": "13.16.1",
+    "react-native-webview": "16.0.0",
     "zod": "^4.6.5"
   },
   "devDependencies": {
