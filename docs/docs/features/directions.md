@@ -322,9 +322,8 @@ Both revert automatically after the maneuver, and a pinch or drag during the
 approach is never interrupted.
 
 For motorway and expressway exits, forks, and splits while driving, a **junction view** card
-appears under the banner. It shows the lanes of the overhead gantry with the
-correct one highlighted and the ramp peeling off at the split angle. The schematic
-is drawn on the client from open data: with network access it shows the real
+appears under the banner. It shows the overhead destination signs with the
+correct panels highlighted. With network access it shows the real
 per-lane destinations OpenStreetMap carries on the approach segment
 (`destination:*:lanes`, fetched once per route through Overpass — set
 `OVERPASS_URL` to a self-hosted instance for multi-user deployments), and offline
@@ -336,6 +335,11 @@ before the exit, a photo preview shows a recent **street-level image** of the
 approach — with its author, licence, and capture date — when coverage from
 [Panoramax](./street-level-imagery.md) exists (Mapillary is never used here: its terms rule out use during navigation). Both the junction view and its photo preview are on by default and can be
 switched off in the navigation settings.
+
+When no photo is available, while it loads, or before its approach window opens,
+the junction card shows only the destination signs. Switching photos off also
+leaves only the signs. No schematic road drawing is shown; if there are neither
+signs nor a photo, the card stays hidden.
 
 Navigation also speaks instructions aloud (voice guidance can be toggled off) and
 offers a **keep-screen-on** option that holds a wake lock so the display does not

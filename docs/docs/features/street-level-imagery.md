@@ -138,7 +138,9 @@ photos off hides them at once, including ones already loaded. A caption below th
 image names the author, the licence, and the capture month — no links, so nothing
 pulls attention off the road while the trip is live. Only providers whose terms allow
 use during navigation are searched, which today means Panoramax. With no
-qualifying image the junction view shows its schematic instead.
+qualifying image the junction view shows only its destination signs. The same
+applies while a photo loads or when junction photos are switched off; no schematic
+road drawing is shown.
 
 The web app talks only to these routes, so it never needs to know which provider
 is behind them.
