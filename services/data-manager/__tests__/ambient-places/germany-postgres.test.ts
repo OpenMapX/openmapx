@@ -295,16 +295,18 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           onProgress: async (p) => {
             if (p.phase !== "validate") return;
             await pg.sql.unsafe(`SELECT pg_sleep(0.2)`);
-            const [clock] = await pg.sql.unsafe<{ at: Date }[]>(`SELECT clock_timestamp() AS at`);
-            activationBoundary = clock.at.getTime();
+            const [clock] = await pg.sql.unsafe<{ at: string }[]>(
+              `SELECT clock_timestamp()::TEXT AS at`,
+            );
+            activationBoundary = new Date(clock.at).getTime();
           },
         });
         expect(Number.isFinite(activationBoundary)).toBe(true);
-        const [retiring] = await pg.sql.unsafe<{ until: Date }[]>(
-          `SELECT cache_lease_until AS until FROM ambient_places.generations WHERE id=$1`,
+        const [retiring] = await pg.sql.unsafe<{ until: string }[]>(
+          `SELECT cache_lease_until::TEXT AS until FROM ambient_places.generations WHERE id=$1`,
           [before.generation],
         );
-        expect(retiring.until.getTime()).toBeGreaterThanOrEqual(
+        expect(new Date(retiring.until).getTime()).toBeGreaterThanOrEqual(
           activationBoundary + (AMBIENT_LIMITS.cacheSeconds + 60) * 1000,
         );
         expect((await readAmbientManifest(pg.sql))?.generation).toBe(country.generation);

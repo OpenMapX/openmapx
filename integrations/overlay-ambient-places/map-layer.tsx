@@ -196,6 +196,19 @@ export function AmbientPlacesLayer() {
         if (typeof name !== "string") return [];
         const osmType = feature.properties?.osm_type;
         const osmId = feature.properties?.osm_id;
+        let identity: string | undefined;
+        if (osmType !== undefined || osmId !== undefined) {
+          if (typeof osmType !== "string" || !/^(node|way|relation)$/.test(osmType)) return [];
+          const id =
+            typeof osmId === "number" && Number.isSafeInteger(osmId) && osmId > 0
+              ? String(osmId)
+              : typeof osmId === "string" && /^[1-9]\d*$/.test(osmId)
+                ? osmId
+                : null;
+          // Invalid explicit identity must never become a proximity-based match.
+          if (id === null) return [];
+          identity = `osm:${osmType}/${id}`;
+        }
         return [
           {
             key: ambientBasemapKey(feature),
@@ -207,10 +220,7 @@ export function AmbientPlacesLayer() {
                 ? feature.properties.class
                 : (feature.properties?.subclass ?? feature.properties?.class ?? ""),
             ),
-            osmId:
-              typeof osmId === "string" && /^(node|way|relation)$/.test(osmType)
-                ? `osm:${osmType}/${osmId}`
-                : undefined,
+            osmId: identity,
           },
         ];
       });

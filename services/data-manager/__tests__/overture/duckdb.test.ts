@@ -77,6 +77,17 @@ it("bounds DuckDB resources and rejects untrusted resource expressions", () => {
   }
 });
 
+it.each(["", " \t "])("uses bounded DuckDB defaults for blank optional settings %j", (value) => {
+  const sql = duck.duckDbResourceSql({
+    OVERTURE_DUCKDB_MEMORY_MB: value,
+    OVERTURE_DUCKDB_THREADS: value,
+    OVERTURE_DUCKDB_TEMP_MB: value,
+  });
+  expect(sql).toContain("memory_limit='2048MiB'");
+  expect(sql).toContain("threads=4");
+  expect(sql).toContain("max_temp_directory_size='32768MiB'");
+});
+
 it("spills DuckDB on the persistent data volume and quotes arbitrary directory names", () => {
   expect(duck.duckDbResourceSql({ DATA_DIR: "/scratch/it's data" })).toContain(
     "temp_directory='/scratch/it''s data/overture/duckdb-tmp'",

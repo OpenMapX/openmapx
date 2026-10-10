@@ -484,6 +484,96 @@ describe("ambient generation lifecycle", () => {
     });
     expect(test.map.setFilter.mock.calls.length).toBeGreaterThan(prior);
   });
+  it.each([2, "2", Number.MAX_SAFE_INTEGER + 1, 0, -2, 2.5, "invalid"])(
+    "does not replace the explicit basemap OSM identity %s with a nearby different place",
+    async (osmId) => {
+      const feature = {
+        type: "Feature",
+        geometry: { type: "Point", coordinates: [6.08, 50.77] },
+        properties: {
+          id: "osm:node/1",
+          name: "Cafe",
+          category: "cafe",
+          rank: 2000,
+          min_zoom: 15,
+          tenant: false,
+          sources: "osm",
+        },
+      } as MapGeoJSONFeature;
+      const basemap = {
+        type: "Feature",
+        source: "basemap",
+        sourceLayer: "poi",
+        id: 77,
+        layer: { id: "poi-level-1" },
+        geometry: { type: "Point", coordinates: [6.08, 50.77] },
+        properties: { name: "Cafe", class: "cafe", osm_type: "node", osm_id: osmId },
+      } as MapGeoJSONFeature;
+      test.map.querySourceFeatures.mockReturnValue([feature]);
+      test.map.queryRenderedFeatures.mockReturnValue([basemap]);
+      test.map.getStyle.mockReturnValue({
+        layers: [{ id: "poi-level-1", type: "symbol", source: "basemap", "source-layer": "poi" }],
+      });
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async () => ({ ok: true, json: async () => ({ manifest }) })),
+      );
+      render(<AmbientPlacesLayer />);
+      await waitFor(() => expect(test.group).not.toBeNull());
+      expect(getAmbientIdentity(test.map as unknown as MapLibreMap, basemap)).toBeUndefined();
+      const filter = [...test.map.setFilter.mock.calls]
+        .reverse()
+        .find(([id]) => id === "ambient-places-labels")?.[1];
+      const expression = createExpression(filter, "layers.ambient-places-labels.filter", {
+        type: "boolean",
+      });
+      expect(expression.result).toBe("success");
+      expect(
+        expression.value.evaluate(
+          { zoom: 16 },
+          { type: "Point", properties: feature.properties, geometry: [] },
+        ),
+      ).toBe(true);
+    },
+  );
+  it.each([1, "1"])("reconciles the exact basemap OSM identity %s", async (osmId) => {
+    const feature = {
+      type: "Feature",
+      geometry: { type: "Point", coordinates: [6.08, 50.77] },
+      properties: {
+        id: "osm:node/1",
+        name: "Cafe",
+        category: "cafe",
+        rank: 2000,
+        min_zoom: 15,
+        tenant: false,
+        sources: "osm",
+      },
+    } as MapGeoJSONFeature;
+    const basemap = {
+      type: "Feature",
+      source: "basemap",
+      sourceLayer: "poi",
+      id: 77,
+      layer: { id: "poi-level-1" },
+      geometry: { type: "Point", coordinates: [6.08, 50.77] },
+      properties: { name: "Basemap translation", class: "cafe", osm_type: "node", osm_id: osmId },
+    } as MapGeoJSONFeature;
+    test.map.querySourceFeatures.mockReturnValue([feature]);
+    test.map.queryRenderedFeatures.mockReturnValue([basemap]);
+    test.map.getStyle.mockReturnValue({
+      layers: [{ id: "poi-level-1", type: "symbol", source: "basemap", "source-layer": "poi" }],
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({ ok: true, json: async () => ({ manifest }) })),
+    );
+    render(<AmbientPlacesLayer />);
+    await waitFor(() => expect(test.group).not.toBeNull());
+    expect(getAmbientIdentity(test.map as unknown as MapLibreMap, basemap)).toMatchObject({
+      id: "osm:node/1",
+    });
+  });
   it.each([-180.00001072883606, 180.00001072883606])(
     "reconciles and selects a buffered dateline copy at longitude %s",
     async (longitude) => {

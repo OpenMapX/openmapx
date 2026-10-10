@@ -1,6 +1,7 @@
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { envString } from "@openmapx/core/server-env";
 import { type Options as ExecaOptions, type Result as ExecaResult, execa } from "execa";
 
 /**
@@ -81,7 +82,7 @@ export function duckDbResourceSql(
   tempDirectory = join(environment.DATA_DIR ?? tmpdir(), "overture", "duckdb-tmp"),
 ): string {
   const setting = (name: string, fallback: number, max: number) => {
-    const value = environment[name] === undefined ? fallback : Number(environment[name]);
+    const value = Number(envString(name, String(fallback), environment));
     if (!Number.isSafeInteger(value) || value <= 0 || value > max)
       throw new Error(`${name} must be a positive bounded integer`);
     return value;

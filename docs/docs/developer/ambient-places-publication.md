@@ -257,7 +257,9 @@ can still exhaust space after admission, in which case the candidate fails safel
 | `OSMIUM_PLANET_INDEX_ESTIMATE_BYTES` | `137438953472` | File-backed node-index admission allowance (128 GiB), plus 5 GiB free on the source volume; adjust for the selected PBF.   |
 
 These settings are forwarded by the data-manager service manifest and can be set
-through its existing deployment configuration. Increase the service's memory/CPU
+through its existing deployment configuration. Unset, empty or whitespace-only
+values use the documented defaults; nonblank invalid or nonpositive values fail
+validation. Increase the service's memory/CPU
 resource limits separately for full source preparation; its 8-GiB default is not a
 planet preparation promise. Overture pull admission additionally uses 512 bytes per
 selected STAC row as a working allowance; ingest/conflation apply their existing
@@ -318,7 +320,11 @@ Accepted OSM↔GERS links determine identity: `osm:<type>/<id>` remains primary 
 GERS remains an alias, including when Overture display fields are excluded and
 the valid OSM place remains. Overture-only places use `overture:<GERS>`. Published
 ambient bigint IDs remain strings in generation SQL, tiles, search aliases and
-details. OSM field values win;
+details. Category search fuses equal accepted canonical OSM IDs directly. An
+accepted canonical ID cannot be reassigned to a nearby, different OSM entity by
+query-time spatial matching or a conflicting link; when its OSM counterpart is
+absent from that query, the canonical result remains a distinct gap-fill.
+OSM field values win;
 Overture fills missing names and unmatched coverage. A known excluded OSM match
 cannot be resurrected by its Overture counterpart. Linked OSM counterparts are
 read and evaluated even across the bbox boundary, within the same OSM input cap.
@@ -333,9 +339,9 @@ format 2 named-POI coverage.
 
 The client suppresses ambient features already owned by a category/selection ID.
 An owned-basemap label can acquire the canonical identity only through an explicit
-OSM ID or, only when no explicit identity is supplied, a unique compatible-category/name
+OSM ID (positive decimal string or safe integer with a valid OSM type) or, only when no explicit identity is supplied, a unique compatible-category/name
 match within ten metres. Worship matching uses its destination class, not the religion subclass. An explicit different OSM identity is never replaced
-by proximity. Ambiguous
+by proximity. Invalid or incomplete explicit OSM identities cannot use the proximity fallback. Ambiguous
 branches and non-ground tenants are not matched by proximity. Mappings belong to
 the map instance and are cleared on style replacement and overlay teardown. The
 existing place-card conversion/resolver handles both tile and basemap clicks.

@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { rmSync, statfsSync, statSync } from "node:fs";
 import { join } from "node:path";
+import { envString } from "@openmapx/core/server-env";
 
 /** Planet exports must not keep every node location in the Node/container heap.
  * dense_file_array is osmium's recommended planet index; area assembly still
@@ -12,7 +13,7 @@ export async function withOsmiumLocationIndex<T>(
   operation: (args: string[]) => Promise<T>,
 ): Promise<T> {
   if (region !== "planet") return operation([]);
-  const required = Number(process.env.OSMIUM_PLANET_INDEX_ESTIMATE_BYTES ?? 128 * 1024 ** 3);
+  const required = Number(envString("OSMIUM_PLANET_INDEX_ESTIMATE_BYTES", String(128 * 1024 ** 3)));
   if (!Number.isSafeInteger(required) || required <= 0)
     throw new Error("OSMIUM_PLANET_INDEX_ESTIMATE_BYTES must be a positive integer");
   const fs = statfsSync(directory);

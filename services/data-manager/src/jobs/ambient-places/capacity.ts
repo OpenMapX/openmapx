@@ -1,3 +1,5 @@
+import { envString } from "@openmapx/core/server-env";
+
 const GIB = 1024 ** 3;
 /** Admission allowance, not measured country sizing. During a build only the reserve is checked. */
 export function assertAmbientDiskCapacity(freeBytes: number, inputCount?: number): void {
@@ -16,7 +18,7 @@ export function assertAmbientDiskCapacity(freeBytes: number, inputCount?: number
 }
 
 function planetSetting(name: string, fallback: number): number {
-  const value = Number(process.env[name] ?? fallback);
+  const value = Number(envString(name, String(fallback)));
   if (!Number.isSafeInteger(value) || value <= 0)
     throw new Error(`${name} must be a positive integer`);
   return value;
