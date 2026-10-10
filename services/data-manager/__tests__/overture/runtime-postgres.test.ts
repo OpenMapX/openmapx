@@ -272,11 +272,12 @@ describe.skipIf(skipE2e)("Overture runtime behavior in PostGIS", () => {
         phase: string;
         source_fingerprint: string;
         extracted_count: string;
-        places_published_at: Date;
+        places_published_at_ms: string;
       }[]
     >(
       `SELECT release, phase, source_fingerprint, extracted_count::TEXT,
-              places_published_at
+              (EXTRACT(EPOCH FROM places_published_at) * 1000)::BIGINT::TEXT
+                AS places_published_at_ms
        FROM "${live}".conflation_state`,
     );
     expect(rows).toEqual([{ osm_id: "42" }]);
@@ -286,7 +287,7 @@ describe.skipIf(skipE2e)("Overture runtime behavior in PostGIS", () => {
         phase: "score",
         source_fingerprint: "same-pbf",
         extracted_count: "1",
-        places_published_at: new Date("2026-09-10T12:00:00.000Z"),
+        places_published_at_ms: String(Date.parse("2026-09-10T12:00:00.000Z")),
       },
     ]);
   });
