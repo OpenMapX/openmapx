@@ -147,7 +147,7 @@ The web app talks only to these routes, so it never needs to know which provider
 is behind them.
 
 Images are addressed by a provider-qualified reference — `panoramax:<id>` — which
-is also what deep links carry (`?sv=panoramax:<id>`). Because the viewer's
+is also what deep links carry (`?sli=panoramax:<id>`). Because the viewer's
 internal node ids use the same form, an arrow can lead from one provider's
 imagery straight into another's.
 
