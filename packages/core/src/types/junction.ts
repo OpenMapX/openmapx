@@ -73,10 +73,14 @@ export interface JunctionLookupPoint {
 
 export interface JunctionLookupResult {
   index: number;
-  /** Tagged approach ways that can be drawn as a gantry. */
+  /** Approach ways carrying lane geometry or destination/turn tags. */
   approach: JunctionWay[];
   /** Tagged ramps leaving the split. */
   ramps: JunctionWay[];
+  /** Roads whose travel start shares the selected approach's final OSM node. */
+  outgoing?: JunctionWay[];
+  /** Approach whose terminal node defines outgoing topology. */
+  outgoingApproachWayId?: number;
   /**
    * Whether a motorway or trunk carriageway (not a link) runs through the
    * decision point in the route's direction, tagged or not. This is what
@@ -98,6 +102,8 @@ export interface JunctionLookupResult {
 }
 
 export interface GantryPanel {
+  /** Destination board for a connected outgoing road, without implied incoming lane indices. */
+  branchWayId?: number;
   /** 0-based lane indices this panel spans (left to right). */
   lanes: number[];
   destinations: string[];
@@ -111,15 +117,25 @@ export interface GantryPanel {
 }
 
 export interface GantryModel {
+  /** Lane count at the split; 0 for an engine sign with no known lane geometry. */
   laneCount: number;
   panels: GantryPanel[];
   activeLanes: number[];
-  /** False when the highlighted outer lane is only a schematic fallback. */
+  /** False when no reliable incoming lane assignment is available for the photo overlay. */
   laneSelectionReliable?: boolean;
   /** Raw OSM `turn:lanes` token per lane, left to right, when the way carries them. */
   laneTurns?: string[];
   /** "osm" when built from way tags; "engine" when only the engine sign was available. */
   source: "osm" | "engine";
+  /** Connected outgoing roads, ordered left to right; independent of incoming lane recommendations. */
+  branches?: Array<{
+    wayId: number;
+    bearing: number;
+    laneCount?: number;
+    selected: boolean;
+    refs?: string[];
+    destinations?: string[];
+  }>;
 }
 
 export interface JunctionSchematic {
@@ -129,11 +145,13 @@ export interface JunctionSchematic {
   activeLanes: number[];
   side: "left" | "right";
   divergenceDeg: number;
-  /** SVG path data for the through carriageway and the ramp, in a 320×140 viewBox. */
+  /** SVG path data in a 320×140 viewBox; rampPath is empty without confirmed edge lanes. */
   throughPath: string;
   rampPath: string;
   /** One polygon per lane (trapezoids under perspective), left to right. */
   lanePolygons: string[];
   /** Where each panel's label sits (x centre, y) in viewBox units. */
   panelAnchors: Array<{ x: number; y: number }>;
+  /** Symbolic roads above a neutral junction area, with no incoming-to-outgoing lane mapping. */
+  branches?: Array<{ wayId: number; selected: boolean; path: string; lanePolygons: string[] }>;
 }

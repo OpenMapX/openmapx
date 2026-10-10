@@ -21,13 +21,28 @@ function rampAngle(divergenceDeg: number): number {
 
 /**
  * Build the schematic for one decision point. The lanes run left to right in
- * driving direction; the ramp leaves from the outermost lane on `point.side`.
+ * driving direction. A ramp is drawn only for a contiguous group of known
+ * exit lanes reaching the edge on `point.side`.
  */
 export function buildJunctionSchematic(
   model: GantryModel,
   point: JunctionDecisionPoint,
 ): JunctionSchematic {
-  const laneCount = Math.max(1, model.laneCount);
+  const laneCount = model.laneCount;
+  if (laneCount < 1) {
+    return {
+      width: WIDTH,
+      height: HEIGHT,
+      laneCount: 0,
+      activeLanes: [],
+      side: point.side,
+      divergenceDeg: point.divergenceDeg,
+      throughPath: "",
+      rampPath: "",
+      lanePolygons: [],
+      panelAnchors: [],
+    };
+  }
   const left = (WIDTH - BOTTOM_WIDTH) / 2;
   const right = left + BOTTOM_WIDTH;
   const topInset = (BOTTOM_WIDTH - TOP_WIDTH) / 2;
@@ -35,34 +50,78 @@ export function buildJunctionSchematic(
 
   const throughPath = `M ${left} ${HEIGHT} L ${left + topInset} ${top} L ${right - topInset} ${top} L ${right} ${HEIGHT} Z`;
 
+  const hasBranches = (model.branches?.length ?? 0) > 0;
+  // Leave a neutral road area between incoming and outgoing markings rather
+  // than connecting lane indices whose assignment is unknown.
+  const laneTopY = hasBranches ? top + 30 : top;
+  const laneTopInset = (topInset * (HEIGHT - laneTopY)) / (HEIGHT - top);
+  const laneTopWidth = BOTTOM_WIDTH - 2 * laneTopInset;
   const lanePolygons: string[] = [];
   for (let i = 0; i < laneCount; i += 1) {
     const x0b = left + (BOTTOM_WIDTH / laneCount) * i;
     const x1b = left + (BOTTOM_WIDTH / laneCount) * (i + 1);
-    const x0t = left + topInset + (TOP_WIDTH / laneCount) * i;
-    const x1t = left + topInset + (TOP_WIDTH / laneCount) * (i + 1);
+    const x0t = left + laneTopInset + (laneTopWidth / laneCount) * i;
+    const x1t = left + laneTopInset + (laneTopWidth / laneCount) * (i + 1);
     lanePolygons.push(
-      `M ${x0b.toFixed(1)} ${HEIGHT} L ${x0t.toFixed(1)} ${top} L ${x1t.toFixed(1)} ${top} L ${x1b.toFixed(1)} ${HEIGHT} Z`,
+      `M ${x0b.toFixed(1)} ${HEIGHT} L ${x0t.toFixed(1)} ${laneTopY} L ${x1t.toFixed(1)} ${laneTopY} L ${x1b.toFixed(1)} ${HEIGHT} Z`,
     );
   }
 
-  // The ramp is the outermost lane on the exit side continuing past the top
-  // edge of the carriageway and bending away by the divergence angle, so the
-  // highlighted lane and the ramp read as one band leaving the road.
+  // Start above the bands: painting the ramp over them erases the seams of a
+  // multi-lane exit. Do not bridge unconfirmed lanes to the carriageway edge.
   const mirror = point.side === "left" ? -1 : 1;
-  const exitLane = point.side === "left" ? 0 : laneCount - 1;
-  const laneBottom = (i: number) => left + (BOTTOM_WIDTH / laneCount) * i;
+  const exitLanes = [...model.activeLanes].sort((a, b) => a - b);
+  const first = exitLanes[0];
+  const last = exitLanes.at(-1);
+  const contiguous =
+    first !== undefined &&
+    last !== undefined &&
+    exitLanes.every((lane, index) => lane === first + index) &&
+    first >= 0 &&
+    last < laneCount &&
+    (point.side === "left" ? first === 0 : last === laneCount - 1);
   const laneTop = (i: number) => left + topInset + (TOP_WIDTH / laneCount) * i;
   const angle = (rampAngle(point.divergenceDeg) * Math.PI) / 180;
   const peelX = mirror * Math.sin(angle) * RAMP_LEN;
   const peelY = Math.cos(angle) * RAMP_LEN * 0.6;
-  const rampPath = [
-    `M ${laneBottom(exitLane).toFixed(1)} ${HEIGHT}`,
-    `L ${laneBottom(exitLane + 1).toFixed(1)} ${HEIGHT}`,
-    `L ${(laneTop(exitLane + 1) + peelX).toFixed(1)} ${(top - peelY).toFixed(1)}`,
-    `L ${(laneTop(exitLane) + peelX).toFixed(1)} ${(top - peelY).toFixed(1)}`,
-    "Z",
-  ].join(" ");
+  const rampPath = contiguous
+    ? [
+        `M ${laneTop(first).toFixed(1)} ${top}`,
+        `L ${laneTop(last + 1).toFixed(1)} ${top}`,
+        `L ${(laneTop(last + 1) + peelX).toFixed(1)} ${(top - peelY).toFixed(1)}`,
+        `L ${(laneTop(first) + peelX).toFixed(1)} ${(top - peelY).toFixed(1)}`,
+        "Z",
+      ].join(" ")
+    : "";
+
+  const roads = hasBranches ? model.branches : undefined;
+  const weighted = roads?.every((branch) => branch.laneCount !== undefined && branch.laneCount > 0);
+  const weights = roads?.map((branch) => (weighted ? (branch.laneCount ?? 1) : 1)) ?? [];
+  const totalWeight = weights.reduce((sum, weight) => sum + weight, 0);
+  let precedingWeight = 0;
+  const branches = roads?.map((branch, index) => {
+    const fraction = weights[index] / totalWeight;
+    const startLeft = left + topInset + (TOP_WIDTH * precedingWeight) / totalWeight;
+    const startWidth = TOP_WIDTH * fraction;
+    const endCentre = left + (BOTTOM_WIDTH * (precedingWeight + weights[index] / 2)) / totalWeight;
+    const endWidth = startWidth * 0.9;
+    const endLeft = endCentre - endWidth / 2;
+    precedingWeight += weights[index];
+    const band = (from: number, to: number) =>
+      [
+        `M ${(startLeft + startWidth * from).toFixed(1)} ${top}`,
+        `L ${(endLeft + endWidth * from).toFixed(1)} 8`,
+        `L ${(endLeft + endWidth * to).toFixed(1)} 8`,
+        `L ${(startLeft + startWidth * to).toFixed(1)} ${top}`,
+        "Z",
+      ].join(" ");
+    const count = branch.laneCount;
+    const lanePolygons =
+      count === undefined
+        ? []
+        : Array.from({ length: count }, (_, lane) => band(lane / count, (lane + 1) / count));
+    return { wayId: branch.wayId, selected: branch.selected, path: band(0, 1), lanePolygons };
+  });
 
   const panelAnchors = model.panels.map((panel) => {
     const first = panel.lanes[0] ?? 0;
@@ -83,8 +142,9 @@ export function buildJunctionSchematic(
     side: point.side,
     divergenceDeg: point.divergenceDeg,
     throughPath,
-    rampPath,
+    rampPath: hasBranches ? "" : rampPath,
     lanePolygons,
     panelAnchors,
+    ...(branches ? { branches } : {}),
   };
 }

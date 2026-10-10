@@ -85,7 +85,7 @@ export function parseJunctionPoints(body: unknown): JunctionLookupPoint[] | null
 
 /** The per-point cache key: position to ~10 m, bearing to 10°. */
 export function junctionCacheKey(point: JunctionLookupPoint): string {
-  return hashKey("cache:nav:junction-ways", [
+  return hashKey("cache:nav:junction-ways:v3", [
     round(point.lng, 4),
     round(point.lat, 4),
     round(point.bearing / 10, 0) * 10,
@@ -107,21 +107,27 @@ export function buildJunctionsQuery(points: JunctionLookupPoint[]): string {
           .join(",")})["highway"~"^(motorway|trunk|motorway_link|trunk_link)$"];`,
     )
     .join("");
-  return `[out:json][timeout:25];(${statements});out tags geom;`;
+  return `[out:json][timeout:25];(${statements});out body geom;`;
 }
 
 export interface OverpassWayElement {
   type: string;
   id: number;
   tags?: Record<string, string>;
+  nodes?: number[];
   geometry?: { lat: number; lon: number }[];
 }
 
 /** Tags the route reads off an approach or ramp way. */
 function laneTags(tags: Record<string, string>): OsmLaneTags {
   const lanes = Number(tags.lanes);
+  // On two-way trunk roads `lanes` counts both directions. A travel-direction
+  // count needs separate tags, which this lookup does not currently resolve.
+  const oneWay =
+    ["yes", "1", "true", "-1"].includes(tags.oneway ?? "") ||
+    (tags.oneway === undefined && ["motorway", "motorway_link"].includes(tags.highway ?? ""));
   return {
-    ...(Number.isFinite(lanes) && lanes > 0 ? { lanes: Math.round(lanes) } : {}),
+    ...(oneWay && Number.isInteger(lanes) && lanes > 0 ? { lanes } : {}),
     ...(tags["turn:lanes"] ? { turnLanes: tags["turn:lanes"] } : {}),
     ...(tags["destination:lanes"] ? { destinationLanes: tags["destination:lanes"] } : {}),
     ...(tags["destination:ref:lanes"]
@@ -227,7 +233,14 @@ export function mapJunctionWays(
     const tagged = Object.keys(element.tags ?? {}).some((key) => GANTRY_TAG.test(key));
     const nodes = element.geometry.map((node) => [node.lon, node.lat] as LngLat);
     if (element.tags?.oneway === "-1") nodes.reverse();
-    return [{ way, tagged, nodes, pointDistance: distanceToPolyline(centre, nodes) }];
+    const nodeIds =
+      Array.isArray(element.nodes) &&
+      element.nodes.length === nodes.length &&
+      element.nodes.every((id) => Number.isSafeInteger(id) && id > 0)
+        ? [...element.nodes]
+        : [];
+    if (element.tags?.oneway === "-1") nodeIds.reverse();
+    return [{ way, tagged, nodes, nodeIds, pointDistance: distanceToPolyline(centre, nodes) }];
   });
   const carriageways = matched.filter(
     ({ way, pointDistance }) =>
@@ -237,7 +250,12 @@ export function mapJunctionWays(
   );
   const onMotorway = carriageways.length > 0;
   const fullLanesFromMeters = fullLanesFrom(matched, carriageways, point);
-  const drawable = matched.filter((entry) => entry.tagged).map((entry) => entry.way);
+  const drawable = matched
+    .filter(
+      ({ way, tagged }) =>
+        tagged || (!way.highway.includes("_link") && way.tags.lanes !== undefined),
+    )
+    .map((entry) => entry.way);
   const approach = drawable.filter(
     (way) =>
       !way.highway.includes("_link") &&
@@ -246,10 +264,23 @@ export function mapJunctionWays(
       way.endDistanceMeters <= APPROACH_MAX_UPSTREAM_METERS,
   );
   const ramps = drawable.filter((way) => way.highway.includes("_link"));
+  const nearestApproach = [...approach].sort(
+    (a, b) => a.endDistanceMeters - b.endDistanceMeters,
+  )[0];
+  const splitNode = matched.find(({ way }) => way.wayId === nearestApproach?.wayId)?.nodeIds.at(-1);
+  const outgoing =
+    splitNode === undefined
+      ? []
+      : matched
+          .filter(
+            ({ way, nodeIds }) => nodeIds[0] === splitNode && way.wayId !== nearestApproach?.wayId,
+          )
+          .map(({ way }) => way);
   return {
     approach,
     ramps,
     onMotorway,
+    ...(outgoing.length > 0 ? { outgoing, outgoingApproachWayId: nearestApproach?.wayId } : {}),
     ...(fullLanesFromMeters !== undefined ? { fullLanesFromMeters } : {}),
   };
 }

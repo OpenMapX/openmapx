@@ -4,6 +4,10 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import { GantryStrip } from "./GantryStrip";
 
+vi.mock("next-intl", () => ({
+  useTranslations: () => (_key: string, values: { total: number }) => `${values.total} lanes`,
+}));
+
 const threePanels: GantryModel = {
   laneCount: 5,
   panels: [
@@ -72,4 +76,37 @@ describe("GantryStrip", () => {
       error.mockRestore();
     }
   });
+});
+
+it("keeps same-ref branch boards distinct and displays known counts", () => {
+  const model: GantryModel = {
+    laneCount: 4,
+    activeLanes: [],
+    source: "osm",
+    panels: [1, 2].map((wayId) => ({
+      branchWayId: wayId,
+      lanes: [],
+      refs: ["A 46"],
+      destinations: [wayId === 1 ? "Neuss" : "Heinsberg"],
+      symbols: [],
+      isExit: wayId === 1,
+    })),
+    branches: [1, 2].map((wayId) => ({
+      wayId,
+      bearing: 350 + wayId,
+      laneCount: wayId === 1 ? 2 : undefined,
+      selected: wayId === 1,
+    })),
+  };
+  const error = vi.spyOn(console, "error").mockImplementation(() => {});
+  try {
+    const { container } = render(<GantryStrip model={model} />);
+    expect(container.querySelectorAll("[data-panel]")).toHaveLength(2);
+    expect(container.querySelectorAll('[data-active="true"]')).toHaveLength(1);
+    expect(container.textContent).toContain("2 lanes");
+    expect(container.textContent).not.toContain("undefined lanes");
+    expect(error.mock.calls.flat().join(" ")).not.toContain("same key");
+  } finally {
+    error.mockRestore();
+  }
 });
