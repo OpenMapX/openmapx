@@ -70,7 +70,11 @@ import {
   type WayEdge,
   defaultOutputPath as waysToEdgesMapPath,
 } from "./jobs/traffic/ways-to-edges.js";
-import type { WriteLiveTrafficDeps, WriteLiveTrafficResult } from "./jobs/traffic/write-live.js";
+import {
+  TRAFFIC_LEASE_MAX_MS,
+  type WriteLiveTrafficDeps,
+  type WriteLiveTrafficResult,
+} from "./jobs/traffic/write-live.js";
 import {
   type CatalogBumpCandidate,
   candidateMatchesLock,
@@ -124,11 +128,18 @@ const TRAFFIC_EXTRACT_CRON_DEFAULT = "0 5 * * *";
 /**
  * Live-speed writer cron: fetches the OpenConditions speed feed and pokes
  * the current values straight into `traffic.tar`'s mmapped records. Every 2
- * minutes — frequent enough that live speeds feel current, infrequent enough
- * that a slow OpenConditions response never overlaps the next tick under
- * `protect: true`.
+ * minutes — frequent enough that live speeds feel current. A tick that finds
+ * the previous cycle still running is skipped.
  */
 const TRAFFIC_LIVE_CRON_DEFAULT = "*/2 * * * *";
+/**
+ * How long before a live write's lease ends the next cycle must run. A cycle
+ * whose lease would end before the next tick plus this margin runs early
+ * instead, and a road-event effect, policy or conditions set that ends sooner
+ * than this is left out of the write: no renewal could replace it in time,
+ * and a lapsed lease makes Valhalla's watchdog stop the engine.
+ */
+export const TRAFFIC_LEASE_RENEWAL_MS = 45_000;
 /** Bounds a single OpenConditions speed-feed fetch; mirrors `fetchJson`'s default. */
 const TRAFFIC_LIVE_FETCH_TIMEOUT_MS = 10_000;
 /**
@@ -1224,7 +1235,43 @@ export function setupCron(options: CronSetupOptions): CronHandles {
   // cron just wires fetch → load → write together and logs the match rate.
   // A falling matched/total ratio over time signals OSM-vintage drift
   // between OpenConditions' spine and this deployment's Valhalla graph.
+  let trafficLiveRunning = false;
+  let leaseRenewal: NodeJS.Timeout | null = null;
+  // Runs the next cycle early when this lease would lapse before the next
+  // scheduled tick could renew it. Without a schedule there is no cadence to
+  // fall behind.
+  const scheduleLeaseRenewal = (leaseEnd: number) => {
+    if (leaseRenewal) clearTimeout(leaseRenewal);
+    leaseRenewal = null;
+    const nextTick = trafficLiveCron?.nextRun()?.getTime();
+    const renewAt = leaseEnd - TRAFFIC_LEASE_RENEWAL_MS;
+    if (nextTick === undefined || renewAt >= nextTick) return;
+    leaseRenewal = setTimeout(
+      () => {
+        leaseRenewal = null;
+        void runTrafficLive().catch((err) => {
+          log.error("traffic-live: lease renewal threw", { err: (err as Error).message });
+        });
+      },
+      Math.max(0, renewAt - Date.now()),
+    );
+    leaseRenewal.unref?.();
+  };
+
   const runTrafficLive = async (): Promise<void> => {
+    if (trafficLiveRunning) {
+      log.info("traffic-live: previous cycle still running, skipped");
+      return;
+    }
+    trafficLiveRunning = true;
+    try {
+      await runTrafficLiveCycle();
+    } finally {
+      trafficLiveRunning = false;
+    }
+  };
+
+  const runTrafficLiveCycle = async (): Promise<void> => {
     if (!openConditionsUrl) {
       log.info("traffic-live: skipped (OPENCONDITIONS_URL not configured)");
       return;
@@ -1329,10 +1376,20 @@ export function setupCron(options: CronSetupOptions): CronHandles {
         wholeWaySpans: 0,
         skipped: { notRelevant: 0, crowdNotEligible: 0, noEffect: 0 },
       };
+      // Anything ending before a renewal could replace it is left out now, so
+      // no lease this write grants can lapse before the next write.
+      const renewBy = Date.now() + TRAFFIC_LEASE_RENEWAL_MS;
+      const lasting = conditions.filter((c) => {
+        const until = conditionRoutingDecision(c).validUntil;
+        return until === null || Date.parse(until) > renewBy;
+      });
       try {
         mapped = conditionsToEdges(
-          policy && conditionsDeadline !== null && Date.now() < conditionsDeadline
-            ? conditions
+          policy &&
+            Date.parse(policy.validUntil) > renewBy &&
+            conditionsDeadline !== null &&
+            conditionsDeadline > renewBy
+            ? lasting
             : [],
           waysToEdges,
           spans?.resolved,
@@ -1359,18 +1416,30 @@ export function setupCron(options: CronSetupOptions): CronHandles {
           log.warn("traffic-live: way→edge refresh failed", { err: (err as Error).message });
         });
       }
-      const conditionDeadlines = conditions
-        .map((c) => conditionRoutingDecision(c))
-        .flatMap((decision) =>
-          decision.eligible && decision.validUntil ? [Date.parse(decision.validUntil)] : [],
-        );
+      // Live speeds alone hold the full lease. Written road-event overrides
+      // also hold it to the policy, the conditions set and each contributing
+      // effect's own deadline.
+      const overrides = roadConditionsMode === "active" ? mapped.overrides : new Map();
+      const contributors = new Set(
+        [...overrides.values()].flatMap((o) => [o.observationId, ...(o.contributorIds ?? [])]),
+      );
+      const overrideDeadlines =
+        overrides.size === 0
+          ? []
+          : [
+              ...(policy ? [Date.parse(policy.validUntil)] : []),
+              ...(conditionsDeadline !== null ? [conditionsDeadline] : []),
+              ...conditions
+                .filter((c) => contributors.has(c.id))
+                .flatMap((c) => {
+                  const decision = conditionRoutingDecision(c);
+                  return decision.eligible && decision.validUntil
+                    ? [Date.parse(decision.validUntil)]
+                    : [];
+                }),
+            ];
       const validUntil = new Date(
-        Math.min(
-          Date.now() + 120_000,
-          ...(policy ? [Date.parse(policy.validUntil)] : []),
-          ...conditionDeadlines,
-          ...(conditions.length && conditionsDeadline !== null ? [conditionsDeadline] : []),
-        ),
+        Math.min(Date.now() + TRAFFIC_LEASE_MAX_MS, ...overrideDeadlines),
       ).toISOString();
       const writeId = randomUUID();
       const result = await writeLive({
@@ -1385,11 +1454,12 @@ export function setupCron(options: CronSetupOptions): CronHandles {
             : engineGeneration,
         csv,
         waysToEdges,
-        overrides: roadConditionsMode === "active" ? mapped.overrides : new Map(),
+        overrides,
         statePath: trafficLiveStatePath,
         evidencePath: trafficEvidenceFile,
         logger: log,
       });
+      scheduleLeaseRenewal(Date.parse(validUntil));
       // The default writer records this itself so direct writer invocations
       // also leave evidence. Custom writers use the same bounded result here.
       if (options.writeLiveTraffic) {
@@ -1598,6 +1668,7 @@ export function setupCron(options: CronSetupOptions): CronHandles {
     overtureConflationRetryCron?.stop();
     trafficExtractCron?.stop();
     trafficLiveCron?.stop();
+    if (leaseRenewal) clearTimeout(leaseRenewal);
     trafficPredictedCron?.stop();
     autoBumpCron?.stop();
   }

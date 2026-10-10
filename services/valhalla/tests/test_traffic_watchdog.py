@@ -195,6 +195,57 @@ class TrafficWatchdogTest(unittest.TestCase):
             path.unlink()
             self.assertFalse(watchdog.lease_allows_serving(path, 1000))
 
+    def test_lease_outlasts_the_two_minute_write_cadence(self):
+        with tempfile.TemporaryDirectory() as root:
+            path = pathlib.Path(root) / "journal.json"
+            now = 1_000_000
+            value = {
+                "schemaVersion": 1,
+                "graphGeneration": "g",
+                "phase": "committed",
+                "validUntil": now + 300_000,
+                "identities": [{"level": 2, "tile": 1, "index": 0}],
+            }
+            path.write_text(json.dumps(value))
+            # The next write is due two minutes on, plus that cycle's own work.
+            self.assertTrue(watchdog.lease_allows_serving(path, now))
+            self.assertTrue(watchdog.lease_allows_serving(path, now + 125_000))
+            value["validUntil"] = now + 301_000
+            path.write_text(json.dumps(value))
+            self.assertFalse(watchdog.lease_allows_serving(path, now))
+
+    def test_route_proof_lasts_two_minutes_however_long_the_lease(self):
+        now = 1_000_000
+        boot = str(uuid.uuid4())
+        journal = {
+            "writeId": str(uuid.uuid4()),
+            "routingGraphGeneration": "b" * 64,
+            "engineBootId": boot,
+            "validUntil": now + 250_000,
+        }
+        graph = {"engineBootId": boot}
+        proof = watchdog.proof_for_request(
+            {"requestId": "r", "endpoint": "route", "costing": "auto"},
+            journal,
+            dict(journal),
+            graph,
+            dict(graph),
+            lambda: True,
+            now,
+        )
+        self.assertEqual(proof["validUntil"], watchdog.iso_timestamp(now + 120_000))
+        journal["validUntil"] = now + 60_000
+        proof = watchdog.proof_for_request(
+            {"requestId": "r", "endpoint": "route", "costing": "auto"},
+            journal,
+            dict(journal),
+            graph,
+            dict(graph),
+            lambda: True,
+            now,
+        )
+        self.assertEqual(proof["validUntil"], watchdog.iso_timestamp(now + 60_000))
+
     def test_pending_empty_and_uncertain_journals_are_never_unbounded(self):
         with tempfile.TemporaryDirectory() as root:
             path = pathlib.Path(root) / "journal.json"
@@ -346,7 +397,7 @@ class TrafficWatchdogTest(unittest.TestCase):
             {"phase": "pending"},
             {"uncertain": True},
             {"validUntil": now - 1},
-            {"validUntil": now + 121_000},
+            {"validUntil": now + 301_000},
             {"writeId": None},
             {"routingGraphGeneration": None},
             {"engineBootId": None},
