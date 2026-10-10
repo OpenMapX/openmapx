@@ -126,6 +126,7 @@ described in [Capability requirement resolution](#capability-requirement-resolut
 {
   frontend?: {
     mapLayer?: boolean;      // ships a code map-layer component
+    sharedMapLayer?: string; // sibling providers mount one common layer/legend
     legend?: boolean;        // ships a code legend component
     panel?: boolean;         // ships a code side-panel component
     searchCategory?: { id: string; label?: string; showInChipBar?: boolean; iconPath?: string };
@@ -164,6 +165,17 @@ optional **declarative legend** the host draws from the manifest, which an
 overlay can use instead of shipping a `legend.tsx`. `backend.routes` signals that
 the integration registers HTTP routes; `backend.cron` declares a recurring task.
 How an overlay renders is detailed in [Map overlays](#map-overlays).
+
+Several enabled providers can intentionally share one overlay, as Mapillary and
+Panoramax do for `street-level-imagery`. Every participant must declare the same
+nonempty `frontend.sharedMapLayer` key. The rendering hosts mount the shared
+layer and legend once, the layer selector exposes one toggle, and the overlay
+registry creates one entry using the first enabled participant's overlay
+metadata in registry order. Participants should declare the same overlay rules
+and selector metadata and render all contributing providers through the common
+component. Provider metadata stays available for domain attribution; sharing a
+frontend does not remove a provider's credits. Two frontend owners resolving to
+the same overlay without a matching shared-layer declaration remain an error.
 
 When `layerSelector.preview` is set, it names an SVG file relative to the
 integration root, such as `preview.svg` or `assets/layer-preview.svg`. The host
