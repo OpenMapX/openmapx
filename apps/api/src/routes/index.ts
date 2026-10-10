@@ -11,6 +11,7 @@ import { adminOperationsRoute } from "./admin-operations";
 import { adminServicesRoute } from "./admin-services";
 import { adminSettingsRoute } from "./admin-settings";
 import { adminSystemRoute } from "./admin-system";
+import { ambientPlacesRoute } from "./ambient-places";
 import { attributionRoute } from "./attribution";
 import { authRoute } from "./auth";
 import { capabilitiesRoute } from "./capabilities";
@@ -84,6 +85,7 @@ export async function registerCoreRoutes(
   await server.register(mobileAuthRoute, { prefix: "/api" });
 
   await server.register(placesRoute, { prefix: "/api" });
+  await server.register(ambientPlacesRoute, { prefix: "/api" });
   await server.register(neighborhoodsRoute, { prefix: "/api" });
   await server.register(offlinePackagesRoute, { prefix: "/api" });
 

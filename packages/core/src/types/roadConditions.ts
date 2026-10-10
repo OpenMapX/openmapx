@@ -195,6 +195,8 @@ export interface RoadConditionsQuery {
   excludedSourceIds?: string[];
   /** Registry kind codes; a situation must be of one of them. */
   kinds?: string[];
+  /** Registry kind codes; a situation must be of none of them. */
+  excludeKinds?: string[];
   /** Bare registry type codes (`accident`, not `incident.accident`), AND-ed with `kinds`. */
   types?: string[];
   minSeverity?: RoadConditionSeverityLabel;

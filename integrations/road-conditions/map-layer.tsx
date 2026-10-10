@@ -180,7 +180,7 @@ export function RoadConditionsLayer() {
   }, [locale]);
   // Legend filter state — threaded into the events query so filtering runs
   // server-side across every provider, not as client-side hiding.
-  const filterKinds = useRoadConditionsStore((s) => s.kinds);
+  const hiddenKinds = useRoadConditionsStore((s) => s.hiddenKinds);
   const minSeverity = useRoadConditionsStore((s) => s.minSeverity);
   const horizon = useRoadConditionsStore((s) => s.horizon);
   const setViewportFetchStatus = useRoadConditionsStore((s) => s.setViewportFetchStatus);
@@ -235,7 +235,7 @@ export function RoadConditionsLayer() {
     const params = new URLSearchParams({
       bbox: `${b.getWest()},${b.getSouth()},${b.getEast()},${b.getNorth()}`,
     });
-    if (filterKinds.length > 0) params.set("kinds", filterKinds.join(","));
+    if (hiddenKinds.length > 0) params.set("excludeKinds", hiddenKinds.join(","));
     if (minSeverity !== "all") params.set("minSeverity", minSeverity);
     const horizonDays = horizonDaysParam(horizon);
     if (horizonDays !== undefined) params.set("horizonDays", horizonDays);
@@ -267,7 +267,7 @@ export function RoadConditionsLayer() {
     apiUrl,
     beginRequest,
     mapRef,
-    filterKinds,
+    hiddenKinds,
     minSeverity,
     horizon,
     minZoom,

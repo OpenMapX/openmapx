@@ -2,6 +2,10 @@ import { mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { createInterface } from "node:readline";
 import { execa } from "execa";
+import { withOsmiumLocationIndex } from "../osm-resources.js";
+
+export { withOsmiumLocationIndex } from "../osm-resources.js";
+
 import { osmPbfName } from "../download-osm.js";
 import { assertValidRegion } from "../overture/pull.js";
 import {
@@ -97,7 +101,6 @@ export function featureToSearchPlace(feature: SearchGeoJsonFeature): SearchPlace
   )
     return null;
   const terms = extractTerms(tags);
-  if (terms.length === 0) return null;
   return {
     ...identity,
     name: tags.name.trim(),
@@ -127,64 +130,67 @@ export async function extractSearchPlaces(
   const tempDir = join(opts.dataDir, "search-index", "extract");
   const filteredPbf = join(tempDir, `${opts.region.replace(/\//g, "-")}-named.osm.pbf`);
   mkdirSync(tempDir, { recursive: true });
-  try {
-    opts.onProgress?.(`Filtering named OSM features from ${pbfPath}`);
-    await execa("osmium", ["tags-filter", pbfPath, "nwr/name", "-o", filteredPbf, "-O"], {
-      stdio: "inherit",
-    });
-    const process = execa(
-      "osmium",
-      [
-        "export",
-        "-f",
-        "geojsonseq",
-        "--add-unique-id=type_id",
-        "--attributes=type,id",
-        filteredPbf,
-      ],
-      {
-        stdout: "pipe",
-        stderr: "inherit",
-        buffer: false,
-      },
-    );
-    if (!process.stdout) throw new Error("osmium export did not provide a stdout stream");
-    const lines = createInterface({ input: process.stdout, crlfDelay: Number.POSITIVE_INFINITY });
-    let emitted = 0;
-    let extracted = 0;
-    let batch: SearchPlaceRecord[] = [];
+  return withOsmiumLocationIndex(opts.region, tempDir, async (indexArgs) => {
     try {
-      for await (const raw of lines) {
-        const line = (raw.charCodeAt(0) === 0x1e ? raw.slice(1) : raw).trim();
-        if (!line) continue;
-        emitted += 1;
-        let feature: SearchGeoJsonFeature;
-        try {
-          feature = JSON.parse(line) as SearchGeoJsonFeature;
-        } catch {
-          continue;
+      opts.onProgress?.(`Filtering named OSM features from ${pbfPath}`);
+      await execa("osmium", ["tags-filter", pbfPath, "nwr/name", "-o", filteredPbf, "-O"], {
+        stdio: "inherit",
+      });
+      const process = execa(
+        "osmium",
+        [
+          "export",
+          ...indexArgs,
+          "-f",
+          "geojsonseq",
+          "--add-unique-id=type_id",
+          "--attributes=type,id",
+          filteredPbf,
+        ],
+        {
+          stdout: "pipe",
+          stderr: "inherit",
+          buffer: false,
+        },
+      );
+      if (!process.stdout) throw new Error("osmium export did not provide a stdout stream");
+      const lines = createInterface({ input: process.stdout, crlfDelay: Number.POSITIVE_INFINITY });
+      let emitted = 0;
+      let extracted = 0;
+      let batch: SearchPlaceRecord[] = [];
+      try {
+        for await (const raw of lines) {
+          const line = (raw.charCodeAt(0) === 0x1e ? raw.slice(1) : raw).trim();
+          if (!line) continue;
+          emitted += 1;
+          let feature: SearchGeoJsonFeature;
+          try {
+            feature = JSON.parse(line) as SearchGeoJsonFeature;
+          } catch {
+            continue;
+          }
+          const record = featureToSearchPlace(feature);
+          if (!record) continue;
+          batch.push(record);
+          extracted += 1;
+          if (batch.length >= 1_000) {
+            await opts.onBatch(batch);
+            batch = [];
+            await opts.onCheckpoint?.(extracted);
+          }
         }
-        const record = featureToSearchPlace(feature);
-        if (!record) continue;
-        batch.push(record);
-        extracted += 1;
-        if (batch.length >= 1_000) {
-          await opts.onBatch(batch);
-          batch = [];
-          await opts.onCheckpoint?.(extracted);
-        }
+        if (batch.length) await opts.onBatch(batch);
+        await process;
+      } catch (error) {
+        process.kill("SIGTERM");
+        await process.catch(() => undefined);
+        throw error;
+      } finally {
+        lines.close();
       }
-      if (batch.length) await opts.onBatch(batch);
-      await process;
-    } catch (error) {
-      process.kill("SIGTERM");
-      await process.catch(() => undefined);
-      throw error;
+      return { emitted, extracted };
     } finally {
-      lines.close();
+      rmSync(filteredPbf, { force: true });
     }
-    return { emitted, extracted };
-  } finally {
-    rmSync(filteredPbf, { force: true });
-  }
+  });
 }

@@ -1,0 +1,165 @@
+{
+  "fixtureOnly": true,
+  "sourceRows": 10001,
+  "continentLocations": ["Tokyo", "New York", "Cape Town", "Sydney", "São Paulo"],
+  "publishedPlaces": 10001,
+  "retainedGenerations": 2,
+  "publicationMs": 508.2285839999995,
+  "indexedGenerationBytes": 2850816,
+  "denseTileFeatures": 256,
+  "denseTileBytes": 19926,
+  "warmTileMs": [
+    7.295665999999983, 5.743624999999156, 8.242207999999664, 6.903250000001208, 6.900125000000116,
+    6.561250000000655, 7.506874999999127, 7.799000000000888, 7.689666999998735, 7.336041999998997,
+    6.275250000000597, 7.1148749999993015, 7.120750000000044, 8.746415999999954, 9.652040999999372,
+    6.47833399999945, 6.667125000001761, 6.886333000000377, 8.569625000000087, 22.605875000001106
+  ],
+  "warmP95Ms": 9.652040999999372,
+  "plan": [
+    {
+      "Plan": {
+        "Node Type": "Append",
+        "Parallel Aware": false,
+        "Async Capable": false,
+        "Startup Cost": 0.29,
+        "Total Cost": 32.72,
+        "Plan Rows": 2,
+        "Plan Width": 22,
+        "Disabled": false,
+        "Subplans Removed": 0,
+        "Plans": [
+          {
+            "Node Type": "Subquery Scan",
+            "Parent Relationship": "Member",
+            "Parallel Aware": false,
+            "Async Capable": false,
+            "Alias": "*SELECT* 1",
+            "Startup Cost": 0.29,
+            "Total Cost": 16.35,
+            "Plan Rows": 1,
+            "Plan Width": 32,
+            "Disabled": false,
+            "Plans": [
+              {
+                "Node Type": "Nested Loop",
+                "Parent Relationship": "Subquery",
+                "Parallel Aware": false,
+                "Async Capable": false,
+                "Join Type": "Inner",
+                "Startup Cost": 0.29,
+                "Total Cost": 16.34,
+                "Plan Rows": 1,
+                "Plan Width": 279,
+                "Disabled": false,
+                "Inner Unique": false,
+                "Plans": [
+                  {
+                    "Node Type": "Index Scan",
+                    "Parent Relationship": "Outer",
+                    "Parallel Aware": false,
+                    "Async Capable": false,
+                    "Scan Direction": "Forward",
+                    "Index Name": "ambient_features_generation_geom",
+                    "Relation Name": "features",
+                    "Alias": "f",
+                    "Startup Cost": 0.14,
+                    "Total Cost": 8.16,
+                    "Plan Rows": 1,
+                    "Plan Width": 48,
+                    "Disabled": false,
+                    "Index Cond": "((generation = '7fc65ba5-fe03-45ae-bae5-a47968a21f0a'::uuid) AND (st_geomfromewkb(geom) && '0103000020110F00000100000005000000F2D93ADF3CA96D41C8BA546A3D3F5041F2D93ADF3CA96D4108F81411DB3F504192F89AB28BA96D4108F81411DB3F504192F89AB28BA96D41C8BA546A3D3F5041F2D93ADF3CA96D41C8BA546A3D3F5041'::geometry))"
+                  },
+                  {
+                    "Node Type": "Index Scan",
+                    "Parent Relationship": "Inner",
+                    "Parallel Aware": false,
+                    "Async Capable": false,
+                    "Scan Direction": "Forward",
+                    "Index Name": "generations_pkey",
+                    "Relation Name": "generations",
+                    "Alias": "g",
+                    "Startup Cost": 0.15,
+                    "Total Cost": 8.17,
+                    "Plan Rows": 1,
+                    "Plan Width": 16,
+                    "Disabled": false,
+                    "Index Cond": "(id = '7fc65ba5-fe03-45ae-bae5-a47968a21f0a'::uuid)",
+                    "Filter": "(publication_status = 'published'::text)"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "Node Type": "Subquery Scan",
+            "Parent Relationship": "Member",
+            "Parallel Aware": false,
+            "Async Capable": false,
+            "Alias": "*SELECT* 2",
+            "Startup Cost": 0.3,
+            "Total Cost": 16.36,
+            "Plan Rows": 1,
+            "Plan Width": 13,
+            "Disabled": false,
+            "Plans": [
+              {
+                "Node Type": "Nested Loop",
+                "Parent Relationship": "Subquery",
+                "Parallel Aware": false,
+                "Async Capable": false,
+                "Join Type": "Inner",
+                "Startup Cost": 0.3,
+                "Total Cost": 16.35,
+                "Plan Rows": 1,
+                "Plan Width": 260,
+                "Disabled": false,
+                "Inner Unique": false,
+                "Plans": [
+                  {
+                    "Node Type": "Index Scan",
+                    "Parent Relationship": "Outer",
+                    "Parallel Aware": false,
+                    "Async Capable": false,
+                    "Scan Direction": "Forward",
+                    "Index Name": "planet_7fc65ba5fe0345aebae5a47968a21f0a_st_geomfromewkb_idx",
+                    "Relation Name": "planet_7fc65ba5fe0345aebae5a47968a21f0a",
+                    "Alias": "f_1",
+                    "Startup Cost": 0.15,
+                    "Total Cost": 8.17,
+                    "Plan Rows": 1,
+                    "Plan Width": 29,
+                    "Disabled": false,
+                    "Index Cond": "(st_geomfromewkb(geom) && '0103000020110F00000100000005000000F2D93ADF3CA96D41C8BA546A3D3F5041F2D93ADF3CA96D4108F81411DB3F504192F89AB28BA96D4108F81411DB3F504192F89AB28BA96D41C8BA546A3D3F5041F2D93ADF3CA96D41C8BA546A3D3F5041'::geometry)",
+                    "Filter": "(generation = '7fc65ba5-fe03-45ae-bae5-a47968a21f0a'::uuid)"
+                  },
+                  {
+                    "Node Type": "Index Scan",
+                    "Parent Relationship": "Inner",
+                    "Parallel Aware": false,
+                    "Async Capable": false,
+                    "Scan Direction": "Forward",
+                    "Index Name": "generations_pkey",
+                    "Relation Name": "generations",
+                    "Alias": "g_1",
+                    "Startup Cost": 0.15,
+                    "Total Cost": 8.17,
+                    "Plan Rows": 1,
+                    "Plan Width": 16,
+                    "Disabled": false,
+                    "Index Cond": "(id = '7fc65ba5-fe03-45ae-bae5-a47968a21f0a'::uuid)",
+                    "Filter": "(publication_status = 'published'::text)"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "measuredAt": "2026-10-10",
+  "test": "services/data-manager/__tests__/ambient-places/planet-serving-postgres.test.ts",
+  "limitations": "Synthetic 10001-row fixture on local PostGIS18/3.6; not planet import, peak RSS/WAL, cold-cache, concurrent origin/CDN or geographic coverage evidence.",
+  "publisherRevision": "abe900b07ce41949f7412d523c1dc41ebe3d2d24",
+  "testSha256": "b92e7561cf612189948c0baa7752d5c3561b48a7b1a67a923afeed43ff0d7c75"
+}

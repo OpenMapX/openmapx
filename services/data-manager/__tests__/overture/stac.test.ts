@@ -213,3 +213,39 @@ describe("local Overture pull contract", () => {
     expect(() => readOverturePullContract(dataDir, release, region)).toThrow(/size.*contract/);
   });
 });
+
+it("selects all worldwide assets while bounding catalog request concurrency", async () => {
+  const overrides: Record<string, unknown> = {};
+  const links = [];
+  for (let i = 0; i < 24; i++) {
+    const id = String(i).padStart(5, "0");
+    links.push({ rel: "item", href: `./${id}/${id}.json` });
+    overrides[`https://stac.overturemaps.org/${release}/places/place/${id}/${id}.json`] = item(
+      id,
+      [-180, -90, 180, 90],
+      10,
+    );
+  }
+  overrides[collectionUrl] = { type: "Collection", id: "place", links };
+  const underlying = stacFetch(overrides);
+  let active = 0;
+  let peak = 0;
+  const fetchImpl: typeof fetch = async (input, init) => {
+    active++;
+    peak = Math.max(peak, active);
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    try {
+      return await underlying(input, init);
+    } finally {
+      active--;
+    }
+  };
+  const contract = await resolveOvertureStacContract(
+    release,
+    { west: -180, south: -90, east: 180, north: 90 },
+    fetchImpl,
+  );
+  expect(contract.assets).toHaveLength(24);
+  expect(contract.selectedAssetRows).toBe(240);
+  expect(peak).toBeLessThanOrEqual(8);
+});

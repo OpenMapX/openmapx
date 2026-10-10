@@ -228,6 +228,7 @@ describe("road-conditions provider", () => {
       capture: (url, params) => url.endsWith("/situations") && calls.push(params),
     }).getEvents([4, 51, 6, 53], {
       kinds: ["closure", "roadworks"],
+      excludeKinds: ["incident", "public_event"],
       types: ["works"],
       minSeverity: "major",
       horizonDays: 7,
@@ -237,6 +238,7 @@ describe("road-conditions provider", () => {
         bbox: "4,51,6,53",
         limit: 1000,
         kind: "closure,roadworks",
+        excludeKind: "incident,public_event",
         type: "works",
         minSeverity: "major",
         horizonDays: 7,

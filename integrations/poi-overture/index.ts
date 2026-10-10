@@ -16,6 +16,7 @@ import type {
 import { registerPlaceResolver } from "@openmapx/place-ids";
 
 interface OvertureRow {
+  canonical_id?: string | null;
   gers_id: string;
   name: string;
   longitude: number;
@@ -140,7 +141,7 @@ function overtureRowToPoiSearchResult(
     });
 
   return {
-    id: `overture:${row.gers_id}`,
+    id: row.canonical_id ?? `overture:${row.gers_id}`,
     gersId: row.gers_id,
     name: localized.name,
     coordinates: [row.longitude, row.latitude],
@@ -173,6 +174,9 @@ async function queryOverturePlaces(
   const { bbox, concepts, minConfidence } = opts;
   const sql = `
     SELECT
+      (SELECT 'osm:' || link.osm_type || '/' || link.osm_id::TEXT
+       FROM overture_places.poi_conflation_link link
+       WHERE link.gers_id = places.gers_id AND link.release = places.release) AS canonical_id,
       gers_id,
       name,
       ST_X(geom) AS longitude,
@@ -219,6 +223,9 @@ async function fetchOverturePlaceByGers(
 ): Promise<OvertureRow | null> {
   const rows = await db.execute<OvertureRow[]>(
     `SELECT
+       (SELECT 'osm:' || link.osm_type || '/' || link.osm_id::TEXT
+        FROM overture_places.poi_conflation_link link
+        WHERE link.gers_id = places.gers_id AND link.release = places.release) AS canonical_id,
        gers_id,
        name,
        ST_X(geom) AS longitude,
@@ -261,9 +268,10 @@ function overtureRowToPlace(row: OvertureRow, lang?: string) {
     alternates: row.taxonomy_alternates,
   });
 
+  const osmId = row.canonical_id?.match(/^osm:((?:node|way|relation)\/\d+)$/)?.[1];
   return createPlace({
-    primaryScheme: "overture",
-    ids: { overture: row.gers_id },
+    primaryScheme: osmId ? "osm" : "overture",
+    ids: { overture: row.gers_id, ...(osmId ? { osm: osmId } : {}) },
     name: localized.name,
     address: address.address ?? "",
     city: address.city,

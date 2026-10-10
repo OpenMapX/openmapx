@@ -90,6 +90,7 @@ export function createRoadConditionsProvider(
           bbox: bbox.join(","),
           limit: routing ? ROUTING_PAGE : DISPLAY_PAGE,
           ...(opts?.kinds?.length ? { kind: opts.kinds.join(",") } : {}),
+          ...(opts?.excludeKinds?.length ? { excludeKind: opts.excludeKinds.join(",") } : {}),
           ...(opts?.types?.length ? { type: opts.types.join(",") } : {}),
           ...(opts?.minSeverity ? { minSeverity: opts.minSeverity } : {}),
           // Only narrow when the caller asked: routing reads unfiltered so it

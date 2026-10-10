@@ -114,8 +114,21 @@ can change dependencies, the CLI, or the manifests, so always reinstall after a
 pull:
 
 ```bash
-git pull
+(umask 022 && git pull)
 pnpm install
+```
+
+The ops-agent refuses to start while a service manifest, an integration
+manifest or their directories are writable by the group or by others. Some
+distributions give user accounts a umask of `002`, under which `git pull`
+writes every changed file group-writable; pulling with umask `022`, as above,
+keeps them private. If the ops-agent stops with "Release service authority is
+unavailable" or "Trusted configuration authority rejected" after a pull, clear
+the group and other write bits and restart it:
+
+```bash
+git ls-files -z | xargs -0 chmod go-w
+git ls-tree -rd --name-only -z HEAD | xargs -0 chmod go-w
 ```
 
 At this point your checkout is current — new manifests, new CLI behavior, and any

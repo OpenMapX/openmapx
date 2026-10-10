@@ -2,7 +2,7 @@
 import { describe, expect, it } from "vitest";
 import { localizeTextField } from "./localizeTextField";
 
-const GERMAN = ["coalesce", ["get", "name:de"], ["get", "name"]];
+const GERMAN = ["coalesce", ["get", "name:de"], ["get", "name_de"], ["get", "name"]];
 
 describe("localizeTextField", () => {
   it("turns a legacy name token into the localized name", () => {
@@ -35,7 +35,7 @@ describe("localizeTextField", () => {
 
   it("switches language when run again, without nesting", () => {
     const english = localizeTextField(GERMAN, "en");
-    expect(english).toEqual(["coalesce", ["get", "name:en"], ["get", "name"]]);
+    expect(english).toEqual(["coalesce", ["get", "name:en"], ["get", "name_en"], ["get", "name"]]);
     expect(localizeTextField(english, "en")).toEqual(english);
   });
 

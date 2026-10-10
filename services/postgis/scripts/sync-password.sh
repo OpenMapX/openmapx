@@ -35,6 +35,20 @@ forward_signal() {
 trap 'forward_signal TERM' TERM
 trap 'forward_signal INT'  INT
 
+# Size the buffer pool and the planner's cache estimate from the container's
+# memory limit (POSTGIS_MEMORY): a quarter for shared buffers, three quarters
+# for the cache estimate. Postgres's own defaults (128MB, 4GB) ignore the
+# limit, and a buffer pool that small sends a busy database to disk for
+# every page. Without a limit the defaults stand: the host is shared.
+if [ "${1:-}" = "postgres" ]; then
+  limit=$(cat /sys/fs/cgroup/memory.max 2>/dev/null || cat /sys/fs/cgroup/memory/memory.limit_in_bytes 2>/dev/null || true)
+  host_kb=$(awk '/^MemTotal:/ { print $2 }' /proc/meminfo)
+  if [[ "$limit" =~ ^[0-9]+$ ]] && [ $((limit / 1024)) -lt "$host_kb" ]; then
+    mb=$((limit / 1024 / 1024))
+    set -- "$@" -c "shared_buffers=$((mb / 4))MB" -c "effective_cache_size=$((mb * 3 / 4))MB"
+  fi
+fi
+
 # Background-start the upstream entrypoint with whatever args compose passed
 # (typically `postgres`).
 docker-entrypoint.sh "$@" &

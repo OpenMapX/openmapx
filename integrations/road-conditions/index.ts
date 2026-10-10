@@ -70,12 +70,13 @@ function parseHorizonDays(raw: string | undefined): number | undefined {
 }
 
 export function setup(ctx: IntegrationContext): void {
-  // GET /events?bbox=west,south,east,north[&kinds=&types=&minSeverity=&horizonDays=]
+  // GET /events?bbox=west,south,east,north[&kinds=&excludeKinds=&types=&minSeverity=&horizonDays=]
   // Aggregates every enabled road-conditions provider into one GeoJSON
   // FeatureCollection — consumed by both the map overlay and navigation.
-  // `kinds` are registry kinds and `types` bare registry type codes, AND-ed
-  // as OpenConditions filters them; `minSeverity` is a severity label, and an
-  // unknown label reads as no threshold.
+  // `kinds` are registry kinds to keep, `excludeKinds` registry kinds to leave
+  // out and `types` bare registry type codes, AND-ed as OpenConditions
+  // filters them; `minSeverity` is a severity label, and an unknown label
+  // reads as no threshold.
   ctx.registerRoute("GET", "/events", async (req, reply) => {
     const query = scalarQueries(req.query);
     const bbox = parseBbox(query.bbox);
@@ -85,18 +86,20 @@ export function setup(ctx: IntegrationContext): void {
     }
 
     const kinds = listParam(query.kinds);
+    const excludeKinds = listParam(query.excludeKinds);
     const types = listParam(query.types);
     const minSeverity = isSeverityLabel(query.minSeverity) ? query.minSeverity : undefined;
     const horizonDays = parseHorizonDays(query.horizonDays);
 
     // Namespaced by the contract version: a cache entry written in an older
     // shape must not be served against the new one.
-    const key = `conditions:query:roads:situations-v2:${bboxKey(bbox)}:${kinds.join("+")}:${types.join("+")}:${minSeverity ?? ""}:${horizonDays ?? ""}`;
+    const key = `conditions:query:roads:situations-v2:${bboxKey(bbox)}:${kinds.join("+")}:${excludeKinds.join("+")}:${types.join("+")}:${minSeverity ?? ""}:${horizonDays ?? ""}`;
 
     try {
       const fc = await ctx.cache.withCache(key, ROAD_EVENT_CACHE_MAX_AGE_S, async () => {
         const events = await aggregateRoadConditions(ctx, bbox, {
           ...(kinds.length > 0 ? { kinds } : {}),
+          ...(excludeKinds.length > 0 ? { excludeKinds } : {}),
           ...(types.length > 0 ? { types } : {}),
           ...(minSeverity ? { minSeverity } : {}),
           ...(horizonDays !== undefined ? { horizonDays } : {}),

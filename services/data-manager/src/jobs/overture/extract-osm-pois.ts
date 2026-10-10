@@ -6,6 +6,7 @@ import { execa } from "execa";
 import { latLngToCell } from "h3-js";
 import { sql } from "../../db/index.js";
 import { osmPbfName } from "../download-osm.js";
+import { withOsmiumLocationIndex } from "../osm-resources.js";
 import { assertValidRegion } from "./pull.js";
 import { assertValidOvertureSchema } from "./schema.js";
 
@@ -190,124 +191,127 @@ export async function extractOsmPois(
   // osmium tags-filter only emits OSM formats, so filter to a temp PBF first,
   // then convert that to GeoJSON via osmium export (a single tags-filter →
   // geojson step is rejected by osmium).
-  try {
-    await execa(
-      "osmium",
-      ["tags-filter", pbfPath, ...uniqueFilters.map((f) => `nwr/${f}`), "-o", filteredPbf, "-O"],
-      { stdio: "inherit" },
-    );
-    const stagingTable = "osm_pois__staging";
-    opts.onProgress?.("Preparing a fresh OSM POI staging table...");
-    await sql.unsafe(`DROP TABLE IF EXISTS "${schema}"."${stagingTable}"`);
-    await sql.unsafe(
-      `CREATE TABLE "${schema}"."${stagingTable}"
-       (LIKE "${schema}".osm_pois INCLUDING DEFAULTS INCLUDING CONSTRAINTS)`,
-    );
-    await sql.unsafe(
-      `ALTER TABLE "${schema}"."${stagingTable}" ADD PRIMARY KEY (osm_type, osm_id)`,
-    );
-
-    // GeoJSON Text Sequence (one feature per line). Stream stdout directly into
-    // the database pipeline: a country-sized intermediate is gigabytes and does
-    // not need to exist either as one Node string or as another on-disk file.
-    const exportProcess = execa(
-      "osmium",
-      [
-        "export",
-        "-f",
-        "geojsonseq",
-        "--add-unique-id=type_id",
-        "--attributes=type,id",
-        filteredPbf,
-      ],
-      // Execa buffers piped output by default. Germany-scale GeoJSON exceeds
-      // that buffer, so consume stdout exclusively through the line iterator.
-      OSMIUM_EXPORT_STREAM_OPTIONS,
-    );
-    opts.onProgress?.("Streaming osmium GeoJSON output into PostGIS...");
-    const { createInterface } = await import("node:readline");
-    if (!exportProcess.stdout) {
-      exportProcess.kill("SIGTERM");
-      await exportProcess.catch(() => undefined);
-      throw new Error("osmium export did not provide a stdout stream");
-    }
-    const rl = createInterface({
-      input: exportProcess.stdout,
-      crlfDelay: Number.POSITIVE_INFINITY,
-    });
-
-    let emitted = 0;
-    let records: OsmPoiRecord[] = [];
+  return withOsmiumLocationIndex(opts.region, outDir, async (indexArgs) => {
     try {
-      for await (const rawLine of rl) {
-        // geojsonseq may prefix each record with the RS (0x1e) control character.
-        const line = (rawLine.charCodeAt(0) === 0x1e ? rawLine.slice(1) : rawLine).trim();
-        if (!line) continue;
-        let feature: GeoJsonFeature;
-        try {
-          feature = JSON.parse(line);
-        } catch {
-          continue;
-        }
-        const record = featureToOsmPoiRecord(feature);
-        if (!record) continue;
-        records.push(record);
-        emitted += 1;
-        if (records.length >= OSM_POIS_INSERT_BATCH) {
-          await insertOsmPois(schema, stagingTable, records);
-          records = [];
-          await opts.onCheckpoint?.(emitted);
-          if (emitted % 25_000 === 0) {
-            opts.onProgress?.(`Streamed ${emitted} OSM geometries into PostGIS...`);
+      await execa(
+        "osmium",
+        ["tags-filter", pbfPath, ...uniqueFilters.map((f) => `nwr/${f}`), "-o", filteredPbf, "-O"],
+        { stdio: "inherit" },
+      );
+      const stagingTable = "osm_pois__staging";
+      opts.onProgress?.("Preparing a fresh OSM POI staging table...");
+      await sql.unsafe(`DROP TABLE IF EXISTS "${schema}"."${stagingTable}"`);
+      await sql.unsafe(
+        `CREATE TABLE "${schema}"."${stagingTable}"
+       (LIKE "${schema}".osm_pois INCLUDING DEFAULTS INCLUDING CONSTRAINTS)`,
+      );
+      await sql.unsafe(
+        `ALTER TABLE "${schema}"."${stagingTable}" ADD PRIMARY KEY (osm_type, osm_id)`,
+      );
+
+      // GeoJSON Text Sequence (one feature per line). Stream stdout directly into
+      // the database pipeline: a country-sized intermediate is gigabytes and does
+      // not need to exist either as one Node string or as another on-disk file.
+      const exportProcess = execa(
+        "osmium",
+        [
+          "export",
+          ...indexArgs,
+          "-f",
+          "geojsonseq",
+          "--add-unique-id=type_id",
+          "--attributes=type,id",
+          filteredPbf,
+        ],
+        // Execa buffers piped output by default. Germany-scale GeoJSON exceeds
+        // that buffer, so consume stdout exclusively through the line iterator.
+        OSMIUM_EXPORT_STREAM_OPTIONS,
+      );
+      opts.onProgress?.("Streaming osmium GeoJSON output into PostGIS...");
+      const { createInterface } = await import("node:readline");
+      if (!exportProcess.stdout) {
+        exportProcess.kill("SIGTERM");
+        await exportProcess.catch(() => undefined);
+        throw new Error("osmium export did not provide a stdout stream");
+      }
+      const rl = createInterface({
+        input: exportProcess.stdout,
+        crlfDelay: Number.POSITIVE_INFINITY,
+      });
+
+      let emitted = 0;
+      let records: OsmPoiRecord[] = [];
+      try {
+        for await (const rawLine of rl) {
+          // geojsonseq may prefix each record with the RS (0x1e) control character.
+          const line = (rawLine.charCodeAt(0) === 0x1e ? rawLine.slice(1) : rawLine).trim();
+          if (!line) continue;
+          let feature: GeoJsonFeature;
+          try {
+            feature = JSON.parse(line);
+          } catch {
+            continue;
+          }
+          const record = featureToOsmPoiRecord(feature);
+          if (!record) continue;
+          records.push(record);
+          emitted += 1;
+          if (records.length >= OSM_POIS_INSERT_BATCH) {
+            await insertOsmPois(schema, stagingTable, records);
+            records = [];
+            await opts.onCheckpoint?.(emitted);
+            if (emitted % 25_000 === 0) {
+              opts.onProgress?.(`Streamed ${emitted} OSM geometries into PostGIS...`);
+            }
           }
         }
+        await insertOsmPois(schema, stagingTable, records);
+        await exportProcess;
+      } catch (error) {
+        exportProcess.kill("SIGTERM");
+        await exportProcess.catch(() => undefined);
+        throw error;
+      } finally {
+        rl.close();
       }
-      await insertOsmPois(schema, stagingTable, records);
-      await exportProcess;
-    } catch (error) {
-      exportProcess.kill("SIGTERM");
-      await exportProcess.catch(() => undefined);
-      throw error;
-    } finally {
-      rl.close();
-    }
 
-    const [{ count: uniqueCountText }] = await sql.unsafe<{ count: string }[]>(
-      `SELECT COUNT(*)::TEXT AS count FROM "${schema}"."${stagingTable}"`,
-      [],
-    );
-    const extracted = Number(uniqueCountText ?? 0);
-    opts.onProgress?.(
-      `Emitted ${emitted} OSM geometries and retained ${extracted} unique POIs; ` +
-        "publishing the staged snapshot...",
-    );
-    await sql.begin(async (tx) => {
-      await tx.unsafe(`DROP TABLE IF EXISTS "${schema}".osm_pois__previous`);
-      await tx.unsafe(`ALTER TABLE "${schema}".osm_pois RENAME TO osm_pois__previous`);
-      await tx.unsafe(`ALTER TABLE "${schema}"."${stagingTable}" RENAME TO osm_pois`);
-      await tx.unsafe(`DROP TABLE "${schema}".osm_pois__previous`);
-      await tx.unsafe(`CREATE INDEX idx_osm_pois_category ON "${schema}".osm_pois (category)`);
-      await tx.unsafe(
-        `CREATE INDEX idx_osm_pois_h3
+      const [{ count: uniqueCountText }] = await sql.unsafe<{ count: string }[]>(
+        `SELECT COUNT(*)::TEXT AS count FROM "${schema}"."${stagingTable}"`,
+        [],
+      );
+      const extracted = Number(uniqueCountText ?? 0);
+      opts.onProgress?.(
+        `Emitted ${emitted} OSM geometries and retained ${extracted} unique POIs; ` +
+          "publishing the staged snapshot...",
+      );
+      await sql.begin(async (tx) => {
+        await tx.unsafe(`DROP TABLE IF EXISTS "${schema}".osm_pois__previous`);
+        await tx.unsafe(`ALTER TABLE "${schema}".osm_pois RENAME TO osm_pois__previous`);
+        await tx.unsafe(`ALTER TABLE "${schema}"."${stagingTable}" RENAME TO osm_pois`);
+        await tx.unsafe(`DROP TABLE "${schema}".osm_pois__previous`);
+        await tx.unsafe(`CREATE INDEX idx_osm_pois_category ON "${schema}".osm_pois (category)`);
+        await tx.unsafe(
+          `CREATE INDEX idx_osm_pois_h3
          ON "${schema}".osm_pois (h3_r8, osm_type, osm_id)`,
-      );
-      await tx.unsafe(
-        `CREATE INDEX idx_osm_pois_geom
+        );
+        await tx.unsafe(
+          `CREATE INDEX idx_osm_pois_geom
          ON "${schema}".osm_pois USING GIST (ST_Point(lng, lat))`,
+        );
+        await tx.unsafe(`ANALYZE "${schema}".osm_pois`);
+      });
+      opts.onProgress?.(
+        `Published ${extracted} unique OSM POIs to ${schema}.osm_pois ` +
+          `(${emitted} geometries emitted).`,
       );
-      await tx.unsafe(`ANALYZE "${schema}".osm_pois`);
-    });
-    opts.onProgress?.(
-      `Published ${extracted} unique OSM POIs to ${schema}.osm_pois ` +
-        `(${emitted} geometries emitted).`,
-    );
 
-    return { emitted, extracted };
-  } finally {
-    // This country-scale intermediate is consumed only by `osmium export`.
-    // Keeping it provided no resume value and caused silent disk growth.
-    cleanupFilteredOsmPbf(filteredPbf, opts.onProgress);
-  }
+      return { emitted, extracted };
+    } finally {
+      // This country-scale intermediate is consumed only by `osmium export`.
+      // Keeping it provided no resume value and caused silent disk growth.
+      cleanupFilteredOsmPbf(filteredPbf, opts.onProgress);
+    }
+  });
 }
 
 /**

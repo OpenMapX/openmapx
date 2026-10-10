@@ -251,6 +251,14 @@ export const poiIconGroups = [
       stile: "maki:gate",
     },
   },
+  // Unknown destinations have the same neutral badge shape as known POIs.
+  {
+    category: "place",
+    colour: "#5f6368",
+    text: "#5f6368",
+    darkText: "#9aa0a6",
+    icons: { place: "maki:marker" },
+  },
 ];
 
 // Classes the registry does not know keep the neutral grey all labels used to have.
@@ -258,7 +266,7 @@ export const poiFallbackTextColour = "#5f6368";
 
 /**
  * A POI's badge: its subclass's if there is one, else its class's, else the
- * basemap's older `<class>_11` glyph, else a marker. Every image is named
+ * basemap's older `<class>_11` glyph, else a neutral POI badge. Every image is named
  * outright rather than tried in turn, because MapLibre warns about each name
  * it asks the sprite for and does not find.
  */
@@ -285,7 +293,7 @@ export function poiIconImageExpression(glyphNames) {
     "match",
     ["concat", ["get", "class"], "/", ["coalesce", ["get", "subclass"], ""]],
     ...subclassBranches,
-    ["match", ["get", "class"], ...classBranches, ["image", "marker_11"]],
+    ["match", ["get", "class"], ...classBranches, ["image", "poi-place"]],
   ];
 }
 

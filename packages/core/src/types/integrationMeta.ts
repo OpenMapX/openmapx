@@ -52,6 +52,7 @@ export interface IntegrationHealthCheck {
 
 export interface IntegrationFrontendMeta {
   mapLayer?: boolean;
+  sharedMapLayer?: string;
   legend?: boolean;
   panel?: boolean;
   searchCategory?: {

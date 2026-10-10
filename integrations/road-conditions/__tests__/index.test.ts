@@ -440,17 +440,19 @@ describe("GET /events filters", () => {
     return { h, seen };
   }
 
-  it("forwards kinds, types and a severity label to the providers", async () => {
+  it("forwards kinds, excluded kinds, types and a severity label to the providers", async () => {
     const { h, seen } = capturing();
     await h.get({
       bbox: BBOX,
       kinds: "roadworks, closure",
+      excludeKinds: "public_event,incident",
       types: "works",
       minSeverity: "major",
       horizonDays: "7",
     });
     expect(seen[0]).toEqual({
       kinds: ["closure", "roadworks"],
+      excludeKinds: ["incident", "public_event"],
       types: ["works"],
       minSeverity: "major",
       horizonDays: 7,
@@ -469,8 +471,10 @@ describe("GET /events filters", () => {
     await h.get({ bbox: BBOX, kinds: "closure,roadworks,closure" });
     await h.get({ bbox: BBOX, kinds: "closure" });
     await h.get({ bbox: BBOX, minSeverity: "major" });
+    await h.get({ bbox: BBOX, excludeKinds: "closure" });
+    await h.get({ bbox: BBOX });
     expect(h.cacheKeys[0]).toBe(h.cacheKeys[1]);
-    expect(new Set(h.cacheKeys).size).toBe(3);
+    expect(new Set(h.cacheKeys).size).toBe(5);
   });
 
   it("serves each situation whole, effects included", async () => {

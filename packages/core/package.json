@@ -141,6 +141,14 @@
     "./navigation/photo": {
       "types": "./src/navigation/photo.ts",
       "default": "./src/navigation/photo.ts"
+    },
+    "./ambient-places": {
+      "types": "./src/ambient-places.ts",
+      "default": "./src/ambient-places.ts"
+    },
+    "./ambient-places-server": {
+      "types": "./src/server/ambient-places.ts",
+      "default": "./src/server/ambient-places.ts"
     }
   },
   "scripts": {
@@ -157,13 +165,18 @@
     "esbuild": "^0.28.2",
     "react-dom": "19.3.0",
     "typescript": "^6.0.3",
-    "vitest": "^5.0.1"
+    "vitest": "^5.0.1",
+    "postgres": "^3.4.9"
   },
   "peerDependencies": {
-    "esbuild": "^0.28.0"
+    "esbuild": "^0.28.0",
+    "postgres": "^3.4.9"
   },
   "peerDependenciesMeta": {
     "esbuild": {
+      "optional": true
+    },
+    "postgres": {
       "optional": true
     }
   },

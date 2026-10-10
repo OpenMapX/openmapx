@@ -81,6 +81,22 @@ describe("overture place resolver", () => {
     expect(place).toBeNull();
   });
 
+  it("keeps accepted OSM primary identity and GERS metadata in enabled-provider details", async () => {
+    const db = makeFakeDb({ ...FIXTURE_ROW, canonical_id: "osm:node/9007199254740993" });
+    const ctx = createMockIntegrationContext({ db });
+    const { setup } = await import("../index.js");
+    const { getPlaceResolver } = await import("@openmapx/place-ids");
+    setup(ctx);
+    const place = await getPlaceResolver("overture")?.(GERS_ID, { lang: "de-DE" });
+    expect(place).toMatchObject({
+      id: "osm:node/9007199254740993",
+      primaryScheme: "osm",
+      ids: { osm: "node/9007199254740993", overture: GERS_ID },
+      name: "Testcafé Berlin",
+      website: "https://example.test/location",
+    });
+  });
+
   it("does not register the resolver when ctx.db is undefined", async () => {
     const ctx = createMockIntegrationContext();
 
