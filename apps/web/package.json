@@ -4,18 +4,19 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "NODE_OPTIONS='--max-old-space-size=16384' pnpm build:maplibre-runtime && pnpm build:licenses && next dev",
-    "prebuild": "node scripts/copy-preset-icons.mjs && pnpm build:maplibre-runtime && pnpm build:licenses",
+    "dev": "NODE_OPTIONS='--max-old-space-size=16384' pnpm build:maplibre-runtime && pnpm build:licenses && pnpm build:photo-worker && next dev",
+    "prebuild": "node scripts/copy-preset-icons.mjs && pnpm build:maplibre-runtime && pnpm build:licenses && pnpm build:photo-worker",
     "build": "next build && pnpm build:sw && pnpm build:copy-assets",
     "build:maplibre-runtime": "node scripts/copy-maplibre-runtime.mjs",
     "build:licenses": "node --experimental-strip-types --no-warnings=ExperimentalWarning scripts/generate-license-notices.mjs",
     "build:sw": "node scripts/build-sw.mjs",
     "build:copy-assets": "mkdir -p .next/standalone/apps/web/public .next/standalone/apps/web/.next/static && cp -R public/. .next/standalone/apps/web/public/ && cp -R .next/static/. .next/standalone/apps/web/.next/static/",
     "start": "node .next/standalone/apps/web/server.js",
-    "check-types": "pnpm build:licenses && tsc --noEmit && tsc --noEmit -p tsconfig.sw.json && tsc --noEmit -p tsconfig.integrations.json",
+    "check-types": "pnpm build:licenses && pnpm build:photo-worker && tsc --noEmit && tsc --noEmit -p tsconfig.sw.json && tsc --noEmit -p tsconfig.integrations.json",
     "icons:sync": "node scripts/copy-preset-icons.mjs",
     "icons:basemap": "node scripts/generate-poi-sprites.mjs",
-    "style:poi": "node scripts/apply-poi-visibility.mjs && node scripts/generate-dark-map-style.mjs"
+    "style:poi": "node scripts/apply-poi-visibility.mjs && node scripts/generate-dark-map-style.mjs",
+    "build:photo-worker": "node scripts/build-photo-worker.mjs"
   },
   "dependencies": {
     "@better-auth/core": "1.7.5",

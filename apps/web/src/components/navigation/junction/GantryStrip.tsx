@@ -3,6 +3,7 @@
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
 import type { GantryModel } from "@openmapx/core";
+import { useTranslations } from "next-intl";
 
 interface Props {
   model: GantryModel;
@@ -55,7 +56,11 @@ function GantryPanel({
   panel: Panel;
   size: "banner" | "compact";
 }) {
-  const active = panel.lanes.some((lane) => model.activeLanes.includes(lane));
+  const t = useTranslations("navigation");
+  const branch = model.branches?.find((entry) => entry.wayId === panel.branchWayId);
+  const active = branch
+    ? branch.selected
+    : panel.lanes.some((lane) => model.activeLanes.includes(lane));
   const colours = panelColours(panel, active);
   const glyphs = panel.symbols.map((symbol) => SYMBOL_GLYPHS[symbol]).filter(Boolean);
   return (
@@ -110,6 +115,11 @@ function GantryPanel({
           {glyphs.join(" ")}
         </Typography>
       )}
+      {branch?.laneCount !== undefined && (
+        <Typography component="span" sx={{ fontSize: size === "banner" ? 10 : 9 }}>
+          {t("junctionLaneCount", { total: branch.laneCount })}
+        </Typography>
+      )}
     </Box>
   );
 }
@@ -120,7 +130,11 @@ export function GantryStrip({ model, size = "banner" }: Props) {
     <Box sx={{ display: "flex", gap: 0.5, alignItems: "stretch" }}>
       {model.panels.map((panel) => (
         <GantryPanel
-          key={`${panel.isExit ? "exit" : "lanes"}-${panel.lanes.join("-")}`}
+          key={
+            panel.branchWayId !== undefined
+              ? `branch-${panel.branchWayId}`
+              : `${panel.isExit ? "exit" : "lanes"}-${panel.lanes.join("-")}`
+          }
           model={model}
           panel={panel}
           size={size}

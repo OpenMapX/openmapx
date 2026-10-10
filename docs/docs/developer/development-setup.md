@@ -146,6 +146,11 @@ pnpm dev
 
 The web app runs on `http://localhost:3000`.
 
+Startup also builds the junction-photo alignment worker as a standalone browser
+asset. After changing its source or the core photo-registration helpers while
+the dev server is running, run `pnpm -C apps/web build:photo-worker` from the
+repository root and reload the page. Production builds regenerate it automatically.
+
 :::note[Street-level imagery]
 Street-level imagery works out of the box: the default provider is Panoramax,
 which needs no credentials. Imagery is proxied through the API, so no provider

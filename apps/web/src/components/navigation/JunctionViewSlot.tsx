@@ -44,6 +44,15 @@ export function JunctionViewSlot() {
   const gantry = point && gantryByStep.get(upcomingIndex);
   const photo = point && photoByStep.get(upcomingIndex);
 
+  // The photo waits until its scene is nearly in front of the windscreen.
+  // Photos switched off mid-drive leave at once, including fetched ones.
+  const photoVisible =
+    junctionPhotos &&
+    distanceToNextManeuver !== undefined &&
+    distanceToNextManeuver <= junctionPhotoApproachMeters(mode, speedMps ?? 0);
+  const readyPhoto =
+    photoVisible && photo?.status === "ready" && photo.image && photo.objectUrl && geometry;
+
   const visible =
     junctionView &&
     !!point &&
@@ -51,17 +60,8 @@ export function JunctionViewSlot() {
     (mode === "driving" || mode === "motorcycle") &&
     distanceToNextManeuver !== undefined &&
     distanceToNextManeuver <= guidanceApproachMeters(mode, speedMps ?? 0) &&
-    // Something to draw: a sign, engine lanes, or a fetched gantry. A bare
-    // `keep` with none of those stays hidden.
-    (!!point.sign || (point.laneCount ?? 0) > 0 || !!gantry);
-
-  // The gantry goes up with the rest of the guidance; the photo waits until
-  // what it shows is nearly in front of the windscreen. Photos switched off
-  // mid-drive leave at once, including ones already fetched.
-  const photoVisible =
-    junctionPhotos &&
-    distanceToNextManeuver !== undefined &&
-    distanceToNextManeuver <= junctionPhotoApproachMeters(mode, speedMps ?? 0);
+    // A photo-only junction can render without sign or lane metadata.
+    (!!point.sign || (point.laneCount ?? 0) > 0 || !!gantry || !!readyPhoto);
 
   useMapAttributions("nav-junction", visible && gantry?.source === "osm" ? OSM_CREDIT : NO_CREDIT);
 

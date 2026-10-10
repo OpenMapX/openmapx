@@ -350,7 +350,7 @@ async function searchPhoto(
       }
     }
   } catch {
-    // A photo is decoration: any failure below shows the schematic instead.
+    // A photo is decoration: any failure leaves the destination signs alone.
   }
   if (generation === routeGeneration) store.setPhoto(point.stepIndex, { status: "none" });
 }
@@ -396,7 +396,7 @@ async function fetchPhotoBytes(
     if (photo?.image?.id !== image.id) return;
     store.setPhoto(stepIndex, { ...photo, objectUrl: URL.createObjectURL(blob) });
   } catch {
-    // No bytes: the panel falls back to the schematic.
+    // No bytes: the panel shows the destination signs alone.
   }
 }
 
@@ -444,10 +444,15 @@ function buildGantry(
   result: JunctionLookupResult,
   point: JunctionDecisionPoint,
 ): GantryModel | null {
-  const approach = selectApproachWay(result.approach, point);
+  const approach =
+    result.outgoingApproachWayId !== undefined
+      ? result.approach.find((way) => way.wayId === result.outgoingApproachWayId)
+      : selectApproachWay(result.approach, point);
   if (!approach) return null;
   const model = parseLaneTags(approach.tags, point.laneCount);
   if (!model) return null;
   const rampWay = selectRampWay(result.ramps, point)[0];
-  return mergeExitPanel(model, point, rampWay?.tags);
+  return mergeExitPanel(model, point, rampWay?.tags, {
+    ways: result.outgoing ?? [],
+  });
 }

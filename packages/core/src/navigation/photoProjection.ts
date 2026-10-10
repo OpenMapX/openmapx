@@ -6,13 +6,9 @@ import { angularDifference, bearingBetween } from "./bearing";
 import { cumulativeDistances, positionAt } from "./deadReckon";
 
 /**
- * Projection of the route ahead onto a street-level photo taken on the
- * approach. Pure geometry: the photo is snapped onto the route (so its own
- * GPS scatter never moves the path sideways), the camera is assumed to face
- * along the road, and the route is projected through a pinhole camera.
- *
- * Coordinates come back as percentages of the *source image*, not of the box
- * it is displayed in, so the overlay can be cropped exactly like the image.
+ * Ground-plane projection in source-image coordinates. Registered overlays
+ * use a fitted camera pose and fixed corridors for each permitted lane; the
+ * caller crops the image and these coordinates together.
  */
 
 /** Eye height of a dash-mounted camera above the road, metres. */
@@ -83,6 +79,30 @@ export interface PhotoPathPoint {
   widthPercent: number;
   /** Distance from the camera to this sample, metres. */
   distanceMeters: number;
+  /** Independently projected ground edges; a skewed lens does not preserve a symmetric width. */
+  left?: PhotoImagePoint;
+  right?: PhotoImagePoint;
+}
+
+export interface PhotoImagePoint {
+  xPercent: number;
+  yPercent: number;
+}
+
+export interface PhotoCameraPose {
+  headingDeg: number;
+  cameraHeightM: number;
+  /** Positive when the camera looks down. */
+  pitchDeg: number;
+  /** Clockwise camera roll. */
+  rollDeg: number;
+  lateralOffsetMeters: number;
+}
+
+/** A fitted camera pose and the stretch of road supported by visible markings. */
+export interface PhotoRoadAlignment extends PhotoCameraPose {
+  fromMeters: number;
+  toMeters: number;
 }
 
 /** The slice of a panorama that shows the approach. */
@@ -104,6 +124,10 @@ export interface PhotoRoutePath {
    */
   laneShiftMeters: number;
   visible: boolean;
+  /** Source-image heading after registration, also used to position the panorama crop. */
+  imageHeadingDeg?: number;
+  /** One ribbon per permitted lane after registration. */
+  ribbons?: PhotoPathPoint[][];
 }
 
 export interface PhotoProjectionOptions {
@@ -114,12 +138,59 @@ export interface PhotoProjectionOptions {
    * Wins over `image.aspectRatio`, which is only what the provider claims.
    */
   aspectRatio?: number;
-  /**
-   * The lanes at the split and the ones the exit leaves from (0 = leftmost),
-   * from the gantry. With them the path moves from the camera's own lane into
-   * the exit lane; without them it follows the route's centreline.
-   */
+  /** Permitted approach lanes, indexed from the left. Registration draws each separately. */
   exitLanes?: { laneCount: number; activeLanes: number[] };
+  alignment?: PhotoRoadAlignment;
+}
+
+/** Project a ground-plane ray through the source camera, before any display crop. */
+export function photoGroundProjector(
+  image: StreetLevelImage,
+  pose: PhotoCameraPose,
+  aspectRatio = image.aspectRatio ?? DEFAULT_ASPECT_RATIO,
+): ((east: number, north: number) => PhotoImagePoint | null) | null {
+  if (
+    !Number.isFinite(aspectRatio) ||
+    aspectRatio <= 0 ||
+    !Number.isFinite(pose.cameraHeightM) ||
+    pose.cameraHeightM <= 0 ||
+    !Number.isFinite(pose.headingDeg) ||
+    !Number.isFinite(pose.pitchDeg) ||
+    !Number.isFinite(pose.rollDeg)
+  )
+    return null;
+  if (!image.isPano && (!image.fovDeg || image.fovDeg <= 0 || image.fovDeg >= 180)) return null;
+  const heading = toRadians(pose.headingDeg);
+  const pitch = toRadians(pose.pitchDeg);
+  const roll = toRadians(pose.rollDeg);
+  const sh = Math.sin(heading),
+    ch = Math.cos(heading);
+  const sp = Math.sin(pitch),
+    cp = Math.cos(pitch);
+  const sr = Math.sin(roll),
+    cr = Math.cos(roll);
+  const scale = image.isPano ? 0 : 50 / Math.tan(toRadians((image.fovDeg ?? 0) / 2));
+  return (east, north) => {
+    const right = east * ch - north * sh;
+    const forward = east * sh + north * ch;
+    const down = pose.cameraHeightM * cp - forward * sp;
+    const depth = forward * cp + pose.cameraHeightM * sp;
+    const x = right * cr + down * sr;
+    const y = down * cr - right * sr;
+    if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(depth)) return null;
+    if (image.isPano)
+      return {
+        xPercent: 50 + (toDegrees(Math.atan2(x, depth)) / PANO_WIDTH_DEG) * 100,
+        yPercent:
+          HORIZON_PERCENT +
+          (toDegrees(Math.atan2(y, Math.hypot(x, depth))) / PANO_HEIGHT_DEG) * 100,
+      };
+    if (depth <= 0) return null;
+    return {
+      xPercent: 50 + (scale * x) / depth,
+      yPercent: HORIZON_PERCENT + (scale * aspectRatio * y) / depth,
+    };
+  };
 }
 
 /**
@@ -139,9 +210,6 @@ export function projectRoutePath(
 
   const cum = cumulativeDistances(geometry);
   const camera = approachCamera(geometry, cum, point, image.lngLat);
-  // A dash camera points where the car drives, so the route's own bearing is a
-  // steadier optical axis than the photo's compass reading. The heading is
-  // still checked below, to catch a frame that does not look along the road.
   const axisBearing = camera.bearing;
   const panoCrop = image.isPano ? cropWindow(axisBearing) : undefined;
   if (!camera.onApproach) return hidden(panoCrop);
@@ -158,14 +226,91 @@ export function projectRoutePath(
   // An equirectangular frame is centred on the photo's heading, not on the
   // road: a panorama's horizontal position is read against that, and without
   // it there is nothing to place the path against.
-  if (image.isPano && image.heading === undefined) return hidden(panoCrop);
-  const panoCentreBearing = image.heading ?? axisBearing;
+  if (image.heading === undefined) return hidden(panoCrop);
   const halfWidthDeg = image.isPano ? PANO_WIDTH_DEG / 2 : Math.max((image.fovDeg ?? 0) / 2, 1);
   const aspectRatio = options.aspectRatio ?? image.aspectRatio ?? DEFAULT_ASPECT_RATIO;
   const halfHeightDeg = image.isPano
     ? PANO_HEIGHT_DEG / 2
     : toDegrees(Math.atan(Math.tan(toRadians(halfWidthDeg)) / aspectRatio));
   const cameraHeight = options.cameraHeightM ?? CAMERA_HEIGHT_M;
+  const pose: PhotoCameraPose = options.alignment ?? {
+    headingDeg: image.heading,
+    cameraHeightM: cameraHeight,
+    pitchDeg: 0,
+    rollDeg: 0,
+    lateralOffsetMeters: 0,
+  };
+  const project = photoGroundProjector(image, pose, aspectRatio);
+  if (!project) return hidden(panoCrop);
+  if (options.alignment) {
+    const { alignment, exitLanes } = options;
+    if (
+      !Number.isFinite(alignment.lateralOffsetMeters) ||
+      !Number.isFinite(alignment.fromMeters) ||
+      !Number.isFinite(alignment.toMeters) ||
+      alignment.fromMeters < NEAR_CLIP_METERS ||
+      alignment.toMeters <= alignment.fromMeters ||
+      !exitLanes ||
+      !Number.isInteger(exitLanes.laneCount) ||
+      exitLanes.laneCount < 1 ||
+      exitLanes.laneCount > 6 ||
+      exitLanes.activeLanes.length === 0 ||
+      exitLanes.activeLanes.some(
+        (lane) => !Number.isInteger(lane) || lane < 0 || lane >= exitLanes.laneCount,
+      )
+    )
+      return hidden(panoCrop);
+    const eye = offsetRight(camera.point, axisBearing, alignment.lateralOffsetMeters);
+    const imagePoint = (ground: LngLat) =>
+      project(
+        (ground[0] - eye[0]) * METERS_PER_DEGREE * Math.cos(toRadians(eye[1])),
+        (ground[1] - eye[1]) * METERS_PER_DEGREE,
+      );
+    const end = Math.min(alignment.toMeters, point.alongMeters - camera.alongMeters - 8);
+    const ribbons = [...new Set(exitLanes.activeLanes)]
+      .map((lane) => {
+        const points: PhotoPathPoint[] = [];
+        const offset = (lane - (exitLanes.laneCount - 1) / 2) * LANE_WIDTH_M;
+        for (let meters = alignment.fromMeters; meters <= end; meters += SAMPLE_STEP_METERS) {
+          const onRoute = positionAt(geometry, cum, camera.alongMeters + meters);
+          const sample = offsetRight(onRoute.point, onRoute.bearing, offset);
+          const centre = imagePoint(sample);
+          const left = imagePoint(offsetRight(sample, onRoute.bearing, -PATH_HALF_WIDTH_M));
+          const right = imagePoint(offsetRight(sample, onRoute.bearing, PATH_HALF_WIDTH_M));
+          if (
+            !centre ||
+            !left ||
+            !right ||
+            centre.xPercent < 0 ||
+            centre.xPercent > 100 ||
+            centre.yPercent < 0 ||
+            centre.yPercent > 100
+          )
+            continue;
+          points.push({
+            ...centre,
+            left,
+            right,
+            widthPercent: right.xPercent - left.xPercent,
+            distanceMeters: meters,
+          });
+        }
+        return points;
+      })
+      .filter((points) => points.length >= 2);
+    if (ribbons.length === 0) return hidden(panoCrop);
+    return {
+      points: ribbons[0],
+      ribbons,
+      visible: true,
+      laneShiftMeters: 0,
+      imageHeadingDeg: alignment.headingDeg,
+      headRotateDeg: normalizeSigned(
+        positionAt(geometry, cum, camera.alongMeters + end).bearing - axisBearing,
+      ),
+      ...(panoCrop ? { crop: panoCrop } : {}),
+    };
+  }
 
   // The path starts where the road enters the bottom of the frame. A narrow
   // or wide-format lens sees the road only from further out than the near
@@ -215,21 +360,24 @@ export function projectRoutePath(
     const relativeDeg = normalizeSigned(sampleBearing - axisBearing);
     if (Math.abs(relativeDeg) > halfWidthDeg - FRAME_EDGE_MARGIN_DEG) break;
     const distanceMeters = along - camera.alongMeters;
-    const belowHorizonDeg = toDegrees(Math.atan(cameraHeight / distanceMeters));
-    const xPercent = image.isPano
-      ? HORIZON_PERCENT +
-        (normalizeSigned(sampleBearing - panoCentreBearing) / PANO_WIDTH_DEG) * 100
-      : 50 + (Math.tan(toRadians(relativeDeg)) / Math.tan(toRadians(halfWidthDeg))) * 50;
-    const yPercent = image.isPano
-      ? HORIZON_PERCENT + (belowHorizonDeg / PANO_HEIGHT_DEG) * 100
-      : HORIZON_PERCENT +
-        (Math.tan(toRadians(belowHorizonDeg)) / Math.tan(toRadians(halfHeightDeg))) * 50;
-    if (yPercent > 100) break;
-    const laneHalfDeg = toDegrees(Math.atan(PATH_HALF_WIDTH_M / distanceMeters));
-    const widthPercent = image.isPano
-      ? ((2 * laneHalfDeg) / PANO_WIDTH_DEG) * 100
-      : (Math.tan(toRadians(laneHalfDeg)) / Math.tan(toRadians(halfWidthDeg))) * 100;
-    points.push({ xPercent, yPercent, widthPercent, distanceMeters });
+    const imagePoint = (ground: LngLat) =>
+      project(
+        (ground[0] - eye[0]) * METERS_PER_DEGREE * Math.cos(toRadians(eye[1])),
+        (ground[1] - eye[1]) * METERS_PER_DEGREE,
+      );
+    const centre = imagePoint(sample);
+    const left = imagePoint(offsetRight(sample, onRoute.bearing, -PATH_HALF_WIDTH_M));
+    const right = imagePoint(offsetRight(sample, onRoute.bearing, PATH_HALF_WIDTH_M));
+    if (!centre || !left || !right) break;
+    if (centre.yPercent > 100) continue;
+    if (centre.xPercent < 0 || centre.xPercent > 100 || centre.yPercent < 0) break;
+    points.push({
+      ...centre,
+      left,
+      right,
+      widthPercent: right.xPercent - left.xPercent,
+      distanceMeters,
+    });
   }
 
   if (points.length < 2) return hidden(panoCrop);

@@ -134,12 +134,15 @@ export { navOptionsForMode } from "./options";
 export {
   type ApproachCamera,
   approachCamera,
+  type PhotoCameraPose,
   type PhotoCropWindow,
   type PhotoPathPoint,
   type PhotoProjectionOptions,
+  type PhotoRoadAlignment,
   type PhotoRoutePath,
   projectRoutePath,
 } from "./photoProjection";
+export { alignPhotoRoad, type PhotoPixels } from "./photoRoadAlignment";
 export { processFix } from "./processFix";
 export {
   DEFAULT_TRANSIT_TICK_OPTIONS,

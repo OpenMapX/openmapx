@@ -138,6 +138,10 @@
       "types": "./src/coverage/index.ts",
       "default": "./src/coverage/index.ts"
     },
+    "./navigation/photo": {
+      "types": "./src/navigation/photo.ts",
+      "default": "./src/navigation/photo.ts"
+    },
     "./ambient-places": {
       "types": "./src/ambient-places.ts",
       "default": "./src/ambient-places.ts"

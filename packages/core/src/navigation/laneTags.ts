@@ -103,22 +103,21 @@ function joinKeys(values: string[]): string {
 }
 
 /**
- * Build a gantry model from one way's OSM tags. `null` when the tags carry no
- * per-lane destinations at all, or when a `:lanes` value disagrees with the
- * lane count and the fallback — a half-parsed gantry would lie about where
- * the lanes point.
+ * Lane geometry does not require destination panels. Malformed destination
+ * lists are withheld while a known lane count and valid turn arrows survive.
+ * `null` means neither OSM nor the engine supplied a usable lane count.
  */
 export function parseLaneTags(tags: OsmLaneTags, fallbackLaneCount?: number): GantryModel | null {
   const laneCount = tags.lanes ?? fallbackLaneCount;
-  if (!laneCount || laneCount < 1) return null;
-  const destinationLanes = laneValues(splitLaneValues(tags.destinationLanes), laneCount);
-  const destinationRefLanes = laneValues(splitLaneValues(tags.destinationRefLanes), laneCount);
-  if (destinationLanes === undefined && destinationRefLanes === undefined) return null;
-  if (
+  if (laneCount === undefined || !Number.isInteger(laneCount) || laneCount < 1) return null;
+  let destinationLanes = laneValues(splitLaneValues(tags.destinationLanes), laneCount);
+  let destinationRefLanes = laneValues(splitLaneValues(tags.destinationRefLanes), laneCount);
+  const malformedDestinations =
     (tags.destinationLanes !== undefined && destinationLanes === undefined) ||
-    (tags.destinationRefLanes !== undefined && destinationRefLanes === undefined)
-  ) {
-    return null;
+    (tags.destinationRefLanes !== undefined && destinationRefLanes === undefined);
+  if (malformedDestinations) {
+    destinationLanes = undefined;
+    destinationRefLanes = undefined;
   }
   const turnLanes = laneValues(splitLaneValues(tags.turnLanes), laneCount);
   const symbolLanes = laneValues(splitLaneValues(tags.destinationSymbolLanes), laneCount);
@@ -153,7 +152,6 @@ export function parseLaneTags(tags: OsmLaneTags, fallbackLaneCount?: number): Ga
       isExit: false,
     });
   }
-  if (panels.length === 0) return null;
   return {
     laneCount,
     panels,
@@ -166,16 +164,106 @@ export function parseLaneTags(tags: OsmLaneTags, fallbackLaneCount?: number): Ga
 /**
  * Append (or mark) the exit panel: destination text from the ramp's
  * `destination`/`destination:ref`, else the engine sign; exit number from the
- * engine sign, else the ramp's `junction:ref`. When the gantry way's lane
- * count disagrees with the decision point's (a lane gain before or after the
- * way was tagged), the exit panel spans the single outermost lane on the
- * point's side, so the highlight never lands on a lane the drawn gantry
- * does not have.
+ * engine sign, else the ramp's `junction:ref`. Lane assignments require engine
+ * lanes for this lane count, OSM arrows agreeing with the maneuver side,
+ * or per-lane destinations identifying the selected branch.
+ * Unknown assignments retain the sign without lighting an inferred lane.
  */
 export function mergeExitPanel(
   model: GantryModel,
   point: JunctionDecisionPoint,
   rampTags?: OsmLaneTags,
+  outgoing?: { ways: JunctionWay[] },
+): GantryModel {
+  if (!outgoing || outgoing.ways.length < 2) return mergePrimaryExitPanel(model, point, rampTags);
+  const routeWay = selectOutgoingBySign(outgoing.ways, point);
+  // A nearest link candidate is not route identity at a shared-node fork.
+  // Fall back to the engine sign when no outgoing destination distinguishes it.
+  const merged = mergePrimaryExitPanel(model, point, routeWay?.tags, routeWay ? "subset" : "none");
+  const primary = merged.panels.find((panel) => panel.isExit);
+  const offset = (bearing: number) => ((bearing - point.approachBearing + 540) % 360) - 180;
+  const ways = [...outgoing.ways].sort(
+    (a, b) => offset(a.bearing) - offset(b.bearing) || a.wayId - b.wayId,
+  );
+  const panels: GantryPanel[] = ways.flatMap((way) => {
+    const labels = branchLabels(way);
+    const selected = way.wayId === routeWay?.wayId;
+    const destinations =
+      labels.destinations.length > 0
+        ? labels.destinations
+        : selected
+          ? (primary?.destinations ?? [])
+          : [];
+    const refs = labels.refs.length > 0 ? labels.refs : selected ? (primary?.refs ?? []) : [];
+    if (destinations.length === 0 && refs.length === 0 && !(selected && primary?.exitNumber))
+      return [];
+    return [
+      {
+        branchWayId: way.wayId,
+        lanes: [],
+        destinations,
+        refs,
+        symbols: splitParts(way.tags.destinationSymbol ?? ""),
+        isExit: selected,
+        ...(selected && primary?.exitNumber ? { exitNumber: primary.exitNumber } : {}),
+      },
+    ];
+  });
+  const branches = ways.map((way) => {
+    const panel = panels.find((entry) => entry.branchWayId === way.wayId);
+    const count = way.tags.lanes;
+    return {
+      wayId: way.wayId,
+      bearing: way.bearing,
+      ...(count !== undefined && Number.isInteger(count) && count > 0 ? { laneCount: count } : {}),
+      selected: way.wayId === routeWay?.wayId,
+      refs: panel?.refs ?? [],
+      destinations: panel?.destinations ?? [],
+    };
+  });
+  // Actual per-lane boards retain their layout; outgoing labels also travel
+  // with the branch model for accessibility without implying lane assignments.
+  if (model.panels.length > 0) return { ...merged, branches };
+  if (!routeWay && primary) panels.push(primary);
+  return { ...merged, branches, panels: panels.length > 0 ? panels : merged.panels };
+}
+
+function branchLabels(way: JunctionWay): { refs: string[]; destinations: string[] } {
+  const refs = splitRefParts(splitParts(way.tags.destinationRef ?? ""));
+  return {
+    refs: refs.refs,
+    destinations: union(splitParts(way.tags.destination ?? ""), refs.places),
+  };
+}
+
+/** Destination text can distinguish branches sharing the same road ref. */
+function selectOutgoingBySign(
+  ways: JunctionWay[],
+  point: JunctionDecisionPoint,
+): JunctionWay | undefined {
+  const normalize = (value: string) => value.toLocaleLowerCase().replace(/\s+/g, "");
+  const toward = (point.sign?.exitToward ?? []).map(normalize);
+  const refs = (point.sign?.exitBranches ?? []).map(normalize);
+  const labeled = ways.map((way) => ({ way, ...branchLabels(way) }));
+  const destinations = labeled.filter((entry) =>
+    entry.destinations.some((place) => toward.includes(normalize(place))),
+  );
+  if (destinations.length > 0) return destinations.length === 1 ? destinations[0].way : undefined;
+  // A reference alone may identify a destination-less road, but cannot override
+  // an explicit, different destination or resolve two same-ref roads.
+  const references = labeled.filter(
+    (entry) =>
+      (toward.length === 0 || entry.destinations.length === 0) &&
+      entry.refs.some((ref) => refs.includes(normalize(ref))),
+  );
+  return references.length === 1 ? references[0].way : undefined;
+}
+
+function mergePrimaryExitPanel(
+  model: GantryModel,
+  point: JunctionDecisionPoint,
+  rampTags?: OsmLaneTags,
+  destinationEvidence: "any" | "subset" | "none" = "any",
 ): GantryModel {
   const exitNumber = point.sign?.exitNumbers?.[0] ?? rampTags?.junctionRef;
   const rampRefs = rampTags?.destinationRef
@@ -186,17 +274,28 @@ export function mergeExitPanel(
     rampRefs?.places ?? [],
   );
   const refs = rampRefs ? rampRefs.refs : (point.sign?.exitBranches ?? []);
-  // The engine's own lanes win whenever it sent them for this gantry. Without
-  // them (a routing backend that omits `turn_lanes`), OSM's per-lane turn
-  // arrows name the exit lanes; only if neither speaks does the outermost lane
-  // on the exit's side stand in.
+  // A different lane count is a different layout: the engine's indices cannot
+  // be shifted onto it. Opposite-side OSM arrows cannot resolve that mismatch.
   const engineLanes =
     model.laneCount === point.laneCount && point.activeLanes.length > 0 ? point.activeLanes : null;
   const taggedLanes = lanesTurningToward(model.laneTurns, point.side);
+  // A shared ref cannot assign incoming lanes until the outgoing road is identified.
+  const matchingLanes =
+    destinationEvidence !== "none" ? lanesToDestination(model, point.side, refs, destinations) : [];
+  const destinationLanes =
+    matchingLanes.length === model.laneCount &&
+    (destinationEvidence === "subset" ||
+      (rampTags?.lanes !== undefined && rampTags.lanes < model.laneCount))
+      ? []
+      : matchingLanes;
   const panelLanes =
     engineLanes ??
-    (taggedLanes.length > 0 ? taggedLanes : [point.side === "left" ? 0 : model.laneCount - 1]);
+    (taggedLanes.length > 0 ? taggedLanes : destinationLanes.length > 0 ? destinationLanes : []);
+  const laneSelectionReliable = panelLanes.length > 0;
   const carried = model.panels.filter((panel) => !panel.isExit);
+  if (destinations.length === 0 && refs.length === 0 && !exitNumber) {
+    return { ...model, panels: carried, activeLanes: [...panelLanes], laneSelectionReliable };
+  }
   // A gantry often already boards the exit lane on its own ("A 46 /
   // Neuss-Zentrum"). Marking that board as the exit keeps one board lit per
   // decision instead of two over the same lane.
@@ -222,7 +321,12 @@ export function mergeExitPanel(
     existing >= 0
       ? carried.map((panel, index) => (index === existing ? exitPanel : panel))
       : [...carried, exitPanel];
-  return { ...model, panels, activeLanes: [...panelLanes] };
+  return {
+    ...model,
+    panels,
+    activeLanes: [...panelLanes],
+    laneSelectionReliable,
+  };
 }
 
 function sameLanes(a: number[], b: number[]): boolean {
@@ -244,7 +348,32 @@ function lanesTurningToward(laneTurns: string[] | undefined, side: "left" | "rig
     side === "left"
       ? ["left", "slight_left", "sharp_left"]
       : ["right", "slight_right", "sharp_right"];
-  return laneTurns.flatMap((token, lane) => (leaving.includes(token.trim()) ? [lane] : []));
+  return laneTurns.flatMap((token, lane) =>
+    splitParts(token).some((turn) => leaving.includes(turn)) ? [lane] : [],
+  );
+}
+
+function lanesToDestination(
+  model: GantryModel,
+  side: "left" | "right",
+  refs: string[],
+  destinations: string[],
+): number[] {
+  const key = (value: string) => value.toLocaleLowerCase().replace(/\s/g, "");
+  const wantedRefs = refs.map(key);
+  const wantedPlaces = destinations.map(key);
+  const lanes = model.panels.flatMap((panel) => {
+    const refMatch =
+      !wantedRefs.length || panel.refs.some((value) => wantedRefs.includes(key(value)));
+    const placeMatch =
+      !wantedPlaces.length ||
+      (wantedRefs.length > 0 && panel.destinations.length === 0) ||
+      panel.destinations.some((value) => wantedPlaces.includes(key(value)));
+    return refMatch && placeMatch && (wantedRefs.length > 0 || wantedPlaces.length > 0)
+      ? panel.lanes
+      : [];
+  });
+  return lanes.includes(side === "left" ? 0 : model.laneCount - 1) ? [...new Set(lanes)] : [];
 }
 
 /** Keep approach ways heading the same way as the route, upstream of the point. */

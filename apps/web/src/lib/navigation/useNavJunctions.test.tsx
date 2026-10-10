@@ -33,6 +33,9 @@ const fixture = await import(
 );
 
 const a57Route = fixture.route as unknown as Route;
+const holz = await import(
+  "../../../../../packages/core/src/navigation/__fixtures__/junction/a44-kreuz-holz-a46.json"
+);
 
 const fixtureResponse = [
   {
@@ -144,6 +147,59 @@ describe("useNavJunctions gantry fetch", () => {
   afterEach(() => {
     useNavigationStore.getState().stopNavigation();
     useNavJunctionStore.getState().reset();
+  });
+
+  it("uses the graph approach even when a different approach matches the engine count", async () => {
+    const graph = holz.lookup.approach[0];
+    const farther = {
+      ...graph,
+      wayId: 999,
+      endDistanceMeters: graph.endDistanceMeters + 100,
+      tags: { lanes: 3 },
+    };
+    fetchJunctionLookups.mockResolvedValue([
+      { ...holz.lookup, outgoingApproachWayId: graph.wayId, approach: [farther, graph] },
+    ]);
+    start();
+    const route = holz.route as unknown as Route;
+    useNavigationStore.setState({
+      route: {
+        ...route,
+        steps: route.steps.map((step, index) =>
+          index === 1
+            ? {
+                ...step,
+                lanes: Array.from({ length: 3 }, () => ({
+                  indications: ["straight"],
+                  valid: false,
+                })),
+              }
+            : step,
+        ),
+      },
+    });
+    renderHook(() => useNavJunctions());
+    await waitFor(() => expect(useNavJunctionStore.getState().gantryByStep.get(1)).toBeDefined());
+    const model = useNavJunctionStore.getState().gantryByStep.get(1)!;
+    expect(model.laneCount).toBe(4);
+    expect(model.branches).toHaveLength(2);
+  });
+
+  it("stores lane geometry from the turn-only Kreuz Holz approach", async () => {
+    fetchJunctionLookups.mockResolvedValue([holz.lookup]);
+    start();
+    useNavigationStore.setState({ route: holz.route as unknown as Route });
+    renderHook(() => useNavJunctions());
+    await waitFor(() =>
+      expect(useNavJunctionStore.getState().gantryByStep.get(1)?.laneCount).toBe(4),
+    );
+    const model = useNavJunctionStore.getState().gantryByStep.get(1)!;
+    expect(model.activeLanes).toEqual([]);
+    expect(model.panels.map((panel) => panel.destinations)).toEqual([
+      ["Düsseldorf", "Neuss"],
+      ["Heinsberg", "Venlo", "Mönchengladbach"],
+    ]);
+    expect(model.branches?.map((branch) => branch.laneCount)).toEqual([2, 2]);
   });
 
   it("promotes a candidate exit once OpenStreetMap puts the route on the motorway there", async () => {

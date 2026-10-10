@@ -1,6 +1,7 @@
-import { fireEvent, render } from "@testing-library/react";
+import { readFileSync } from "node:fs";
+import { act, fireEvent, render } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("next-intl", () => ({
   useTranslations: () => (key: string, values?: Record<string, unknown>) => {
@@ -11,8 +12,17 @@ vi.mock("next-intl", () => ({
   useLocale: () => "en",
 }));
 
-import type { JunctionDecisionPoint, LngLat, StreetLevelImage } from "@openmapx/core";
+import type {
+  JunctionDecisionPoint,
+  LngLat,
+  PhotoRoutePath,
+  StreetLevelImage,
+} from "@openmapx/core";
+import { alignPhotoRoad, projectRoutePath } from "@openmapx/core/navigation";
 import { JunctionPhoto } from "./JunctionPhoto";
+import type { PhotoAlignmentRequest } from "./photoAlignment.worker";
+
+const resetCss = readFileSync("apps/web/src/app/reset.css", "utf8");
 
 /** A straight road running due east, ~314 m long, at the fixture's latitude. */
 const geometry: LngLat[] = [
@@ -45,17 +55,8 @@ const flatImage: StreetLevelImage = {
   license: "CC BY-SA 4.0",
 };
 
-/** The centre-line samples the overlay drew, as `[x, y]` pairs. */
-function pathPoints(html: string): [number, number][] {
-  const attribute = html.match(/data-photo-path="([^"]+)"/)?.[1];
-  return (attribute ?? "")
-    .split(" ")
-    .filter(Boolean)
-    .map((pair) => pair.split(",").map(Number) as [number, number]);
-}
-
 describe("JunctionPhoto", () => {
-  it("renders a hidden image, the projected route path, and a licence caption", () => {
+  it("shows the credited photo without a guessed path before image registration", () => {
     const html = renderToStaticMarkup(
       <JunctionPhoto
         image={flatImage}
@@ -67,44 +68,12 @@ describe("JunctionPhoto", () => {
     expect(html).toContain("aria-hidden");
     expect(html).toContain('alt=""');
     expect(html).toContain("blob:photo-1");
-    expect(html).toContain("data-photo-path");
+    expect(html).not.toContain("data-photo-path");
     expect(html).toContain("© motocultrice · CC BY-SA 4.0 · Sep 2019");
     expect(html).not.toContain("<a ");
-    // A straight road ahead projects up the middle of the frame, near points low.
-    const points = pathPoints(html);
-    expect(points.length).toBeGreaterThan(5);
-    expect(points[0][0]).toBeCloseTo(50, 0);
-    expect(points[0][1]).toBeGreaterThan(points[points.length - 1][1]);
   });
 
-  it("crops the overlay with the photo instead of stretching it", () => {
-    const html = renderToStaticMarkup(
-      <JunctionPhoto
-        image={flatImage}
-        objectUrl="blob:photo-1"
-        point={point}
-        geometry={geometry}
-      />,
-    );
-    // The image is displayed with `cover`; the overlay uses the matching SVG
-    // rule over a viewBox of the source's own shape, so both crop alike.
-    expect(html).toContain('preserveAspectRatio="xMidYMid slice"');
-    expect(html).toContain('viewBox="0 0 100 75"');
-  });
-
-  it("shapes the overlay to the photo's own frame when the provider reports it", () => {
-    const html = renderToStaticMarkup(
-      <JunctionPhoto
-        image={{ ...flatImage, aspectRatio: 16 / 9 }}
-        objectUrl="blob:photo-1"
-        point={point}
-        geometry={geometry}
-      />,
-    );
-    expect(html).toContain('viewBox="0 0 100 56.25"');
-  });
-
-  it("re-shapes the overlay once the loaded photo reveals its own frame", () => {
+  it("keeps a photo without lane evidence bare even after it loads", () => {
     const { container } = render(
       <JunctionPhoto
         image={flatImage}
@@ -113,30 +82,11 @@ describe("JunctionPhoto", () => {
         geometry={geometry}
       />,
     );
-    expect(container.querySelector("[data-photo-path]")?.getAttribute("viewBox")).toBe(
-      "0 0 100 75",
-    );
     const img = container.querySelector("img") as HTMLImageElement;
-    Object.defineProperty(img, "naturalWidth", { value: 2048, configurable: true });
-    Object.defineProperty(img, "naturalHeight", { value: 1024, configurable: true });
+    Object.defineProperty(img, "naturalWidth", { value: 640, configurable: true });
+    Object.defineProperty(img, "naturalHeight", { value: 480, configurable: true });
     fireEvent.load(img);
-    expect(container.querySelector("[data-photo-path]")?.getAttribute("viewBox")).toBe(
-      "0 0 100 50",
-    );
-  });
-
-  it("moves the drawn path into the exit lane the gantry names", () => {
-    // Shot on the carriageway's centre line of three lanes; the exit leaves the right one.
-    const html = renderToStaticMarkup(
-      <JunctionPhoto
-        image={flatImage}
-        objectUrl="blob:photo-1"
-        point={point}
-        geometry={geometry}
-        exitLanes={{ laneCount: 3, activeLanes: [2] }}
-      />,
-    );
-    expect(html).toContain('data-lane-shift="3.5"');
+    expect(container.querySelector("[data-photo-path]")).toBeNull();
   });
 
   it("leaves the photo bare when the route cannot be projected onto it", () => {
@@ -178,6 +128,34 @@ describe("JunctionPhoto", () => {
     expect(offsets[1]).toBeCloseTo(-(285 / 90) * 100 + 400, 1);
   });
 
+  it.each([90, 300])(
+    "keeps the panorama strip unconstrained by the image reset at heading %s",
+    (heading) => {
+      const reset = document.createElement("style");
+      // jsdom does not apply cascade layers, so apply the reset's rules without its wrapper.
+      reset.textContent = resetCss.replace(/@layer base\s*\{/, "").replace(/\}\s*$/, "");
+      document.head.append(reset);
+      try {
+        const { container } = render(
+          <JunctionPhoto
+            image={{ ...flatImage, isPano: true, fovDeg: 360, heading }}
+            objectUrl="blob:pano-1"
+            point={point}
+            geometry={geometry}
+          />,
+        );
+        const images = container.querySelectorAll("[data-pano] img");
+        expect(images).toHaveLength(heading === 300 ? 2 : 1);
+        for (const image of images) {
+          expect(getComputedStyle(image).maxWidth).toBe("none");
+          expect(getComputedStyle(image).width).toBe("400%");
+        }
+      } finally {
+        reset.remove();
+      }
+    },
+  );
+
   it("credits the provider when the image carries no author", () => {
     const html = renderToStaticMarkup(
       <JunctionPhoto
@@ -188,5 +166,237 @@ describe("JunctionPhoto", () => {
       />,
     );
     expect(html).toContain("© panoramax · CC BY-SA 4.0 · Sep 2019");
+  });
+});
+
+class RoadWorker {
+  static jobs: RoadWorker[] = [];
+  onmessage: ((event: { data: PhotoRoutePath | null }) => void) | null = null;
+  onerror: (() => void) | null = null;
+  request: PhotoAlignmentRequest | undefined;
+  terminated = false;
+  constructor() {
+    RoadWorker.jobs.push(this);
+  }
+  postMessage(request: PhotoAlignmentRequest) {
+    this.request = request;
+  }
+  terminate() {
+    this.terminated = true;
+  }
+  finish() {
+    if (!this.request) throw new Error("Worker did not receive a request");
+    const { geometry, point, image, pixels, exitLanes } = this.request;
+    const alignment = alignPhotoRoad(geometry, point, image, pixels, exitLanes.laneCount);
+    this.onmessage?.({
+      data: alignment
+        ? projectRoutePath(geometry, point, image, {
+            alignment,
+            exitLanes,
+            aspectRatio: pixels.width / pixels.height,
+          })
+        : null,
+    });
+  }
+}
+
+function paintedRoadPixels() {
+  const width = 640,
+    height = 480,
+    data = new Uint8ClampedArray(width * height * 4);
+  for (let y = 0; y < height; y++)
+    for (let x = 0; x < width; x++) {
+      const road = y > 250 && x > 330 - 2.625 * (y - 250) && x < 330 + 4.375 * (y - 250);
+      const paint =
+        road &&
+        [-2.625, -0.875, 0.875, 2.625, 4.375].some(
+          (s) => Math.abs(x - 330 - s * (y - 250)) < Math.max(1, (y - 250) * 0.02),
+        );
+      data.set(
+        paint ? [235, 235, 235, 255] : road ? [85, 85, 85, 255] : [60, 110, 55, 255],
+        (y * width + x) * 4,
+      );
+    }
+  return { width, height, data };
+}
+function loadPhoto(container: HTMLElement) {
+  const img = container.querySelector("img") as HTMLImageElement;
+  Object.defineProperty(img, "naturalWidth", { value: 640, configurable: true });
+  Object.defineProperty(img, "naturalHeight", { value: 480, configurable: true });
+  vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({
+    drawImage() {},
+    getImageData: () => paintedRoadPixels(),
+  } as never);
+  fireEvent.load(img);
+}
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+  RoadWorker.jobs = [];
+});
+
+describe("JunctionPhoto registration lifecycle", () => {
+  const leftLanes = { laneCount: 4, activeLanes: [0, 1] };
+  const image = { ...flatImage, fovDeg: 90 };
+  it("draws two physical lane corridors after registration and crops them with the decoded image", () => {
+    vi.stubGlobal("Worker", RoadWorker);
+    const { container } = render(
+      <JunctionPhoto
+        image={image}
+        objectUrl="blob:photo-1"
+        point={point}
+        geometry={geometry}
+        exitLanes={leftLanes}
+      />,
+    );
+    expect(container.querySelector("[data-photo-path]")).toBeNull();
+    loadPhoto(container);
+    expect(container.querySelector("[data-photo-path]")).toBeNull();
+    act(() => RoadWorker.jobs[0].finish());
+    const svg = container.querySelector("[data-photo-path]") as SVGSVGElement;
+    expect(svg.getAttribute("viewBox")).toBe("0 0 100 75");
+    expect(svg.getAttribute("data-lane-shift")).toBe("0.0");
+    const ribbons = svg.querySelectorAll("polygon");
+    expect(ribbons).toHaveLength(2);
+    for (const ribbon of ribbons)
+      for (const pair of String(ribbon.getAttribute("points")).split(" ")) {
+        const [x, y] = pair.split(",").map(Number);
+        expect(x * 6.4).toBeGreaterThan(330 - 2.625 * (y * 6.4 - 250) - 3);
+        expect(x * 6.4).toBeLessThan(330 + 0.875 * (y * 6.4 - 250) + 3);
+      }
+  });
+  it("never applies a delayed match to a replacement photo", () => {
+    vi.stubGlobal("Worker", RoadWorker);
+    const { container, rerender } = render(
+      <JunctionPhoto
+        image={image}
+        objectUrl="blob:photo-1"
+        point={point}
+        geometry={geometry}
+        exitLanes={leftLanes}
+      />,
+    );
+    loadPhoto(container);
+    const old = RoadWorker.jobs[0];
+    rerender(
+      <JunctionPhoto
+        image={{ ...image, id: "photo-2" }}
+        objectUrl="blob:photo-2"
+        point={point}
+        geometry={geometry}
+        exitLanes={leftLanes}
+      />,
+    );
+    act(() => old.finish());
+    expect(container.querySelector("[data-photo-path]")).toBeNull();
+    expect(container.querySelector("img")?.getAttribute("src")).toBe("blob:photo-2");
+  });
+  it("keeps the credited photo visible if canvas pixels cannot be read", () => {
+    vi.stubGlobal("Worker", RoadWorker);
+    const { container } = render(
+      <JunctionPhoto
+        image={image}
+        objectUrl="blob:photo-1"
+        point={point}
+        geometry={geometry}
+        exitLanes={leftLanes}
+      />,
+    );
+    const img = container.querySelector("img") as HTMLImageElement;
+    Object.defineProperty(img, "naturalWidth", { value: 640 });
+    Object.defineProperty(img, "naturalHeight", { value: 480 });
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({
+      drawImage() {},
+      getImageData() {
+        throw new DOMException("tainted", "SecurityError");
+      },
+    } as never);
+    fireEvent.load(img);
+    expect(container.querySelector("[data-photo-path]")).toBeNull();
+    expect(container.textContent).toContain("CC BY-SA 4.0");
+  });
+  it("registers an image that was already decoded when its ref attaches", () => {
+    vi.stubGlobal("Worker", RoadWorker);
+    const prototype = HTMLImageElement.prototype;
+    const properties = ["complete", "naturalWidth", "naturalHeight"] as const;
+    const originals = properties.map((property) =>
+      Object.getOwnPropertyDescriptor(prototype, property),
+    );
+    properties.forEach((property, index) => {
+      Object.defineProperty(prototype, property, {
+        configurable: true,
+        get: () => [true, 640, 480][index],
+      });
+    });
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({
+      drawImage() {},
+      getImageData: () => paintedRoadPixels(),
+    } as never);
+    try {
+      const { container } = render(
+        <JunctionPhoto
+          image={image}
+          objectUrl="blob:photo-1"
+          point={point}
+          geometry={geometry}
+          exitLanes={leftLanes}
+        />,
+      );
+      expect(RoadWorker.jobs).toHaveLength(1);
+      act(() => RoadWorker.jobs[0].finish());
+      expect(container.querySelectorAll("polygon")).toHaveLength(2);
+    } finally {
+      properties.forEach((property, index) => {
+        const descriptor = originals[index];
+        if (descriptor) Object.defineProperty(prototype, property, descriptor);
+      });
+    }
+  });
+  it("bounds both decoded dimensions before allocating a canvas for a tall photo", () => {
+    vi.stubGlobal("Worker", RoadWorker);
+    const { container } = render(
+      <JunctionPhoto
+        image={image}
+        objectUrl="blob:photo-1"
+        point={point}
+        geometry={geometry}
+        exitLanes={leftLanes}
+      />,
+    );
+    const img = container.querySelector("img") as HTMLImageElement;
+    Object.defineProperty(img, "naturalWidth", { value: 500 });
+    Object.defineProperty(img, "naturalHeight", { value: 4000 });
+    const drawImage = vi.fn();
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({
+      drawImage,
+      getImageData: (_x: number, _y: number, width: number, height: number) => ({
+        width,
+        height,
+        data: new Uint8ClampedArray(width * height * 4),
+      }),
+    } as never);
+    fireEvent.load(img);
+    expect(drawImage).toHaveBeenCalledWith(img, 0, 0, 128, 1024);
+    expect(RoadWorker.jobs[0].request?.pixels.height).toBe(1024);
+  });
+  it("ignores a load whose decoded source differs from the requested photo", () => {
+    vi.stubGlobal("Worker", RoadWorker);
+    const { container } = render(
+      <JunctionPhoto
+        image={image}
+        objectUrl="blob:photo-2"
+        point={point}
+        geometry={geometry}
+        exitLanes={leftLanes}
+      />,
+    );
+    const img = container.querySelector("img") as HTMLImageElement;
+    Object.defineProperty(img, "currentSrc", { value: "blob:photo-1" });
+    Object.defineProperty(img, "naturalWidth", { value: 640 });
+    Object.defineProperty(img, "naturalHeight", { value: 480 });
+    const context = vi.spyOn(HTMLCanvasElement.prototype, "getContext");
+    fireEvent.load(img);
+    expect(context).not.toHaveBeenCalled();
+    expect(RoadWorker.jobs).toHaveLength(0);
   });
 });

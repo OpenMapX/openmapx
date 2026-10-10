@@ -92,13 +92,15 @@ describe("JunctionViewSlot", () => {
     };
     useNavJunctionStore.getState().setPhoto(decisionPoints[0].stepIndex, photo);
     // 2 km out at motorway speed: inside the guidance window, well outside the
-    // photo's own, so the card shows the schematic.
+    // photo's own, so the card shows only signs.
     setState({
       progress: { ...baseProgress, distanceToNextManeuver: 2000 },
     });
     const far = mount();
     expect(far.queryByTestId("junction-view-panel")).toBeTruthy();
     expect(far.queryByTestId("junction-photo")).toBeNull();
+    expect(far.queryByTestId("junction-schematic")).toBeNull();
+    expect(far.getByText("Neuss-Zentrum")).toBeTruthy();
     cleanup();
 
     setState({ progress: { ...baseProgress, distanceToNextManeuver: 700 } });
@@ -178,7 +180,8 @@ describe("JunctionViewSlot", () => {
       useSettingsStore.setState({ junctionPhotos: false });
     });
     expect(view.queryByTestId("junction-photo")).toBeNull();
-    expect(view.queryByTestId("junction-schematic")).toBeTruthy();
+    expect(view.queryByTestId("junction-schematic")).toBeNull();
+    expect(view.getByText("Neuss-Zentrum")).toBeTruthy();
   });
 
   it("renders nothing for a decision point with no sign and no lanes", () => {
@@ -191,6 +194,39 @@ describe("JunctionViewSlot", () => {
     useNavJunctionStore.getState().setDecisionPoints("route-1", [barePoint]);
     setState();
     const view = mount();
+    expect(view.queryByTestId("junction-view-panel")).toBeNull();
+  });
+
+  it("shows a photo-only junction inside its window and hides it when photos are off", () => {
+    const point = { ...decisionPoints[0], sign: undefined, laneCount: undefined, activeLanes: [] };
+    useNavJunctionStore.getState().setDecisionPoints("route-1", [point]);
+    useNavJunctionStore.getState().setPhoto(point.stepIndex, {
+      status: "ready",
+      image: {
+        id: "photo-1",
+        providerId: "panoramax",
+        lngLat: [6.679, 51.1786],
+        heading: 283,
+        capturedAt: "2019-09-10T06:24:40+00:00",
+        isPano: false,
+        fovDeg: 70,
+        assets: {},
+        author: "motocultrice",
+        license: "CC BY-SA 4.0",
+      },
+      objectUrl: "blob:photo-1",
+    });
+    setState({ progress: { ...baseProgress, distanceToNextManeuver: 2000 } });
+    const view = mount();
+    expect(view.queryByTestId("junction-view-panel")).toBeNull();
+    act(() => {
+      setState({ progress: { ...baseProgress, distanceToNextManeuver: 400 } });
+    });
+    expect(view.queryByTestId("junction-photo")).toBeTruthy();
+    expect(view.queryByTestId("junction-schematic")).toBeNull();
+    act(() => {
+      useSettingsStore.setState({ junctionPhotos: false });
+    });
     expect(view.queryByTestId("junction-view-panel")).toBeNull();
   });
 });
