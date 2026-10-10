@@ -75,13 +75,20 @@ value):
 
 ```bash
 # infra/docker/.env
+INTEGRATION_STREET_LEVEL_IMAGERY_MAPILLARY_ENABLED=true
 INTEGRATION_STREET_LEVEL_IMAGERY_MAPILLARY_ACCESSTOKEN=MLY|<app_id>|<token>
 INTEGRATION_PHOTOS_MAPILLARY_ACCESSTOKEN=MLY|<app_id>|<token>
 ```
 
-With no token configured, the integration's backend routes return a "not
-configured" response and its coverage stays empty — nothing breaks, it is
-simply inactive.
+The overlay/viewer and photos on place panels are separate integrations. They
+can use the same token, but it must be configured for each. The enabled flag
+opts the overlay/viewer in; setting its token alone does not enable it. After
+editing `.env`, recreate the API container with `pnpm openmapx services start
+app-api` so it receives the new environment.
+
+When enabled with no token configured, the imagery routes return a "not
+configured" response and coverage stays empty. A disabled integration does not
+register those routes or appear in the active provider list.
 
 The token stays server-side. Imagery is proxied through the OpenMapX API, so no
 provider token is bundled into the browser JavaScript.
