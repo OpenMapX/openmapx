@@ -49,6 +49,44 @@ if [ "${1:-}" = "postgres" ]; then
   fi
 fi
 
+# Resolve the effective preload list through postgres itself, including command
+# overrides and postgresql.auto.conf. Never guess on an uninitialized data dir.
+for flag in "${POSTGIS_DIAGNOSTICS:-false}" "${POSTGIS_TRACK_IO_TIMING:-false}"; do
+  case "$flag" in
+    true|false) ;;
+    *) echo "[openmapx-postgis] diagnostics flags must be true or false" >&2; exit 1 ;;
+  esac
+done
+if [ "${1:-}" = "postgres" ]; then
+  if [ "${POSTGIS_DIAGNOSTICS:-false}" = "true" ]; then
+    if [ "$EUID" -eq 0 ]; then
+      preload=$(gosu postgres "$@" -C shared_preload_libraries 2>/dev/null) || {
+        echo "[openmapx-postgis] cannot resolve preloads; initialize database before diagnostics opt-in" >&2
+        exit 1
+      }
+    else
+      preload=$("$@" -C shared_preload_libraries 2>/dev/null) || {
+        echo "[openmapx-postgis] cannot resolve preloads; initialize database before diagnostics opt-in" >&2
+        exit 1
+      }
+    fi
+    # Only unquoted comma-separated library names can be merged unambiguously.
+    if [[ ! "$preload" =~ ^[[:space:]]*([a-zA-Z0-9_/$.-]+[[:space:]]*(,[[:space:]]*[a-zA-Z0-9_/$.-]+[[:space:]]*)*)?$ ]]; then
+      echo "[openmapx-postgis] preload syntax cannot be safely merged" >&2
+      exit 1
+    fi
+    preload=${preload//[[:space:]]/}
+    case ",$preload," in
+      *,pg_stat_statements,*) ;;
+      *) preload="${preload:+$preload,}pg_stat_statements" ;;
+    esac
+    set -- "$@" -c "shared_preload_libraries=$preload" -c "pg_stat_statements.track_planning=off"
+  fi
+  if [ "${POSTGIS_TRACK_IO_TIMING:-false}" = "true" ]; then
+    set -- "$@" -c "track_io_timing=on"
+  fi
+fi
+
 # Background-start the upstream entrypoint with whatever args compose passed
 # (typically `postgres`).
 docker-entrypoint.sh "$@" &
