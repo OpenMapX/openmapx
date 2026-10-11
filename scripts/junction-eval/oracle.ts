@@ -18,9 +18,13 @@ export interface ReferenceFrame {
     photoRelevant: boolean;
     clearMarkedSupported: boolean;
     preferredLanes: number[];
+    /** Zero means no photographed layout is claimed for an irrelevant scene. */
     laneCount: number;
     signSpans: number[][];
     travelLanes: Pixel[][];
+    /** Separate labelled patches; unlabelled pixels have unknown lane-surface status. */
+    travelLaneFragments?: { lane: number; polygon: Pixel[] }[];
+    maskScope?: "complete" | "visible-fragments";
     forbidden: Pixel[][];
   };
 }
@@ -79,15 +83,25 @@ export function validateCorpus(frames: ReferenceFrame[]): string[] {
       fail("certain truth requires independent reviewers");
     if (truth.certainty !== "certain" && truth.clearMarkedSupported)
       fail("uncertain truth cannot be a supported positive");
-    const indices = [...truth.preferredLanes, ...truth.signSpans.flat()];
+    const fragments = truth.travelLaneFragments ?? [];
+    if (fragments.length && truth.maskScope !== "visible-fragments")
+      fail("fragment truth requires visible-fragments scope");
+    const indices = [
+      ...truth.preferredLanes,
+      ...truth.signSpans.flat(),
+      ...fragments.map((f) => f.lane),
+    ];
     if (
       !Number.isInteger(truth.laneCount) ||
-      truth.laneCount < 1 ||
+      truth.laneCount < (truth.photoRelevant ? 1 : 0) ||
+      (truth.laneCount === 0 && truth.travelLanes.length > 0) ||
       indices.some((i) => !Number.isInteger(i) || i < 0 || i >= truth.laneCount)
     )
       fail("lane index outside layout");
     if (truth.signSpans.some((span) => span.some((lane, i) => i > 0 && lane !== span[i - 1] + 1)))
       fail("sign span is not contiguous");
+    if (truth.clearMarkedSupported && truth.maskScope === "visible-fragments")
+      fail("fragment truth cannot certify complete-layout usefulness");
     if (
       truth.clearMarkedSupported &&
       (!photo ||
@@ -96,7 +110,11 @@ export function validateCorpus(frames: ReferenceFrame[]): string[] {
         !truth.preferredLanes.length)
     )
       fail("supported positive lacks target masks");
-    for (const polygon of [...truth.travelLanes, ...truth.forbidden]) {
+    for (const polygon of [
+      ...truth.travelLanes,
+      ...fragments.map((f) => f.polygon),
+      ...truth.forbidden,
+    ]) {
       if (
         !hasArea(polygon) ||
         polygon.some(
@@ -139,14 +157,15 @@ function edgeDistance([x, y]: Pixel, polygon: Pixel[]): number {
 
 function contained(
   polygon: Pixel[],
-  mask: Pixel[],
+  masks: Pixel[][],
   forbidden: Pixel[][],
   tolerance: number,
   spacing: number,
 ): boolean {
-  if (!hasArea(polygon) || !hasArea(mask) || !forbidden.every(hasArea)) return false;
+  if (!hasArea(polygon) || !masks.length || !masks.every(hasArea) || !forbidden.every(hasArea))
+    return false;
   const valid = (p: Pixel) =>
-    (inside(p, mask) || edgeDistance(p, mask) <= tolerance) &&
+    masks.some((mask) => inside(p, mask) || edgeDistance(p, mask) <= tolerance) &&
     !forbidden.some((area) => inside(p, area));
   if (!polygon.every(valid)) return false;
   const xs = polygon.map(([x]) => x);
@@ -158,6 +177,23 @@ function contained(
     }
   }
   return true;
+}
+
+function overlapsInterior(polygon: Pixel[], mask: Pixel[]): boolean {
+  if (polygon.some((point) => inside(point, mask)) || mask.some((point) => inside(point, polygon)))
+    return true;
+  const cross = (a: Pixel, b: Pixel, c: Pixel) =>
+    (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
+  for (let i = 0; i < polygon.length; i++) {
+    const a = polygon[i];
+    const b = polygon[(i + 1) % polygon.length];
+    for (let j = 0; j < mask.length; j++) {
+      const c = mask[j];
+      const d = mask[(j + 1) % mask.length];
+      if (cross(a, b, c) * cross(a, b, d) < 0 && cross(c, d, a) * cross(c, d, b) < 0) return true;
+    }
+  }
+  return false;
 }
 
 export function scoreFrames(frames: ReferenceFrame[], outputs: FrameOutput[]) {
@@ -175,7 +211,8 @@ export function scoreFrames(frames: ReferenceFrame[], outputs: FrameOutput[]) {
       unscorable++;
       continue;
     }
-    if (truth.clearMarkedSupported) positives++;
+    const usefulReference = truth.clearMarkedSupported && truth.maskScope !== "visible-fragments";
+    if (usefulReference) positives++;
     const output = byId.get(frame.id);
     if (!output) {
       missing++;
@@ -192,21 +229,42 @@ export function scoreFrames(frames: ReferenceFrame[], outputs: FrameOutput[]) {
           truth.preferredLanes.includes(r.lane) &&
           contained(
             r.polygon,
-            truth.travelLanes[r.lane] ?? [],
+            [
+              ...(truth.travelLanes[r.lane] ? [truth.travelLanes[r.lane]] : []),
+              ...(truth.travelLaneFragments ?? [])
+                .filter((f) => f.lane === r.lane)
+                .map((f) => f.polygon),
+            ],
             truth.forbidden,
             2 * scale,
             Math.max(0.5, scale),
           ),
       );
     if (!valid) {
-      wrongLane++;
+      const knownFailure =
+        !output.photoShown ||
+        !truth.photoRelevant ||
+        output.ribbons.some(
+          (r) =>
+            !truth.preferredLanes.includes(r.lane) ||
+            !hasArea(r.polygon) ||
+            [
+              ...truth.forbidden,
+              ...truth.travelLanes.filter((_, lane) => lane !== r.lane),
+              ...(truth.travelLaneFragments ?? [])
+                .filter((f) => f.lane !== r.lane)
+                .map((f) => f.polygon),
+            ].some((mask) => overlapsInterior(r.polygon, mask)),
+        );
+      if (truth.maskScope === "visible-fragments" && !knownFailure) unscorable++;
+      else wrongLane++;
       continue;
     }
     accepted++;
     const complete = truth.preferredLanes.every((lane) =>
       output.ribbons.some((ribbon) => ribbon.lane === lane),
     );
-    if (truth.clearMarkedSupported && complete) positiveAccepted++;
+    if (usefulReference && complete) positiveAccepted++;
   }
   return {
     wrongLane,

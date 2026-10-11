@@ -1,0 +1,530 @@
+[
+  {
+    "id": "north-5",
+    "site": "public-junction-north-5",
+    "sequence": "7f3a2b50-e9a6-441a-84c5-aed0a8b017c9",
+    "region": "north",
+    "split": "development",
+    "source": "pr-raw-osm",
+    "collectedAt": "2026-10-11T14:27:29.841235+00:00",
+    "revision": "b44abb77df8e543e3eddb13d59fe9050a9163705",
+    "evidenceHash": "60fba1d71df69407f397a7663f97c588a209e1632a9e44715e72be0be2010749",
+    "categories": ["unscorable-source-reference"],
+    "photo": {
+      "id": "4dcbbbf6-2dba-496a-bb08-68f28f62e073",
+      "hash": "30c75277ff09d9815d52a9522f93319ca377eb18b7bd3d400d54d0257bb4511c",
+      "license": "CC BY-SA 4.0",
+      "width": 2048,
+      "height": 1532
+    }
+  },
+  {
+    "id": "north-6",
+    "site": "public-junction-north-6",
+    "sequence": "5d0f174b-a709-481b-a332-fcea8cd14a80",
+    "region": "north",
+    "split": "development",
+    "source": "pr-raw-osm",
+    "collectedAt": "2026-10-11T14:27:29.841235+00:00",
+    "revision": "b44abb77df8e543e3eddb13d59fe9050a9163705",
+    "evidenceHash": "9b47d5011b1b95ab31d8e5718d44def22009fd9e6279d8c2f6fdd0a9beb06555",
+    "categories": ["unscorable-source-reference"],
+    "photo": {
+      "id": "66315fdf-53de-4ef0-b406-fb86b71892b4",
+      "hash": "f1512837baf5f5008e84e263e5970e2261d4a36815db6e69482b6fc7cafe67dc",
+      "license": "CC BY-SA 4.0",
+      "width": 2048,
+      "height": 1024
+    }
+  },
+  {
+    "id": "northeast-9",
+    "site": "public-junction-northeast-9",
+    "sequence": "6f4144aa-f22a-41f1-a8fc-ccbf97f5bb98",
+    "region": "northeast",
+    "split": "development",
+    "source": "pr-raw-osm",
+    "collectedAt": "2026-10-11T14:27:29.841235+00:00",
+    "revision": "b44abb77df8e543e3eddb13d59fe9050a9163705",
+    "evidenceHash": "16d18c758f02473c6d0556150582365e01108069bc752b3d5aaad3cf2f8713c5",
+    "categories": ["partial-source-reference"],
+    "photo": {
+      "id": "919bb6a9-54ce-4174-962d-1444f3b19dce",
+      "hash": "3a89cc17437e563e853201a5a3ded020c9fcffe5f6ff8039da73c41d0d0a7983",
+      "license": "CC BY-SA 4.0",
+      "width": 2048,
+      "height": 996
+    },
+    "truth": {
+      "certainty": "certain",
+      "reviewers": ["/root/junction_reference_review", "/root/junction_reference_second_review"],
+      "evidence": "source-review-records.json case northeast-9; original masks and actual cross-review decisions; not complete-layout or held-out evidence.",
+      "photoRelevant": true,
+      "clearMarkedSupported": false,
+      "preferredLanes": [0, 1, 2],
+      "laneCount": 5,
+      "signSpans": [],
+      "travelLanes": [],
+      "travelLaneFragments": [
+        {
+          "lane": 0,
+          "polygon": [[20, 861], [369, 818], [451, 817], [123, 863]]
+        },
+        {
+          "lane": 1,
+          "polygon": [[82, 926], [553, 836], [614, 829], [389, 913], [184, 963], [20, 963]]
+        },
+        {
+          "lane": 2,
+          "polygon": [[737, 919], [922, 814], [983, 808], [1065, 851], [1167, 949], [553, 949]]
+        },
+        {
+          "lane": 3,
+          "polygon": [[1188, 844], [1147, 815], [1208, 817], [1475, 883], [1659, 951], [1352, 951]]
+        },
+        {
+          "lane": 4,
+          "polygon": [[1638, 846], [1536, 808], [1597, 809], [1966, 863], [1987, 898], [1843, 896]]
+        }
+      ],
+      "maskScope": "visible-fragments",
+      "forbidden": [
+        [[0, 780], [475, 780], [188, 825], [0, 825]],
+        [[1850, 800], [2047, 815], [2047, 830], [1980, 830]],
+        [[979, 713], [1003, 713], [1005, 731], [979, 731]],
+        [[700, 985], [1700, 985], [1700, 995], [700, 995]]
+      ]
+    }
+  },
+  {
+    "id": "northeast-10",
+    "site": "public-junction-northeast-10",
+    "sequence": "6f4144aa-f22a-41f1-a8fc-ccbf97f5bb98",
+    "region": "northeast",
+    "split": "development",
+    "source": "pr-raw-osm",
+    "collectedAt": "2026-10-11T14:27:29.841235+00:00",
+    "revision": "b44abb77df8e543e3eddb13d59fe9050a9163705",
+    "evidenceHash": "cea0800e3ec0b3232c20b3b0fadfbd4f69b0886cea7a6a9d1d74f971370c44cb",
+    "categories": ["partial-source-reference"],
+    "photo": {
+      "id": "06eb92a1-62e9-4bd2-99b1-4b71bebbbd9a",
+      "hash": "1e633dcd7d4c5dd37e0ff4bed60df64cc96452c04beccaba9315a7b2e82329e4",
+      "license": "CC BY-SA 4.0",
+      "width": 2048,
+      "height": 996
+    },
+    "truth": {
+      "certainty": "certain",
+      "reviewers": ["/root/junction_reference_review", "/root/junction_reference_second_review"],
+      "evidence": "source-review-records.json case northeast-10; original masks and actual cross-review decisions; not complete-layout or held-out evidence.",
+      "photoRelevant": true,
+      "clearMarkedSupported": false,
+      "preferredLanes": [2, 3],
+      "laneCount": 4,
+      "signSpans": [],
+      "travelLanes": [],
+      "travelLaneFragments": [
+        {
+          "lane": 0,
+          "polygon": [[82, 929], [492, 862], [614, 847], [471, 916], [348, 954], [82, 954]]
+        },
+        {
+          "lane": 1,
+          "polygon": [[717, 909], [952, 817], [1004, 817], [1126, 916], [1167, 954], [614, 954]]
+        },
+        {
+          "lane": 2,
+          "polygon": [[1270, 902], [1208, 863], [1270, 847], [1352, 860], [1638, 951], [1413, 953]]
+        },
+        {
+          "lane": 3,
+          "polygon": [
+            [1659, 871],
+            [1577, 838],
+            [1618, 826],
+            [1905, 863],
+            [1987, 879],
+            [1987, 928],
+            [1884, 924]
+          ]
+        }
+      ],
+      "maskScope": "visible-fragments",
+      "forbidden": [
+        [[0, 805], [350, 805], [120, 850], [0, 850]],
+        [[1166, 636], [1207, 604], [1294, 604], [1303, 737], [1176, 739]],
+        [[800, 984], [1750, 984], [1750, 995], [800, 995]]
+      ]
+    }
+  },
+  {
+    "id": "central-11",
+    "site": "public-junction-central-11",
+    "sequence": "8b65d7d3-2c38-4bcb-9e75-80b24b09e7e5",
+    "region": "central",
+    "split": "development",
+    "source": "pr-raw-osm",
+    "collectedAt": "2026-10-11T14:27:29.841235+00:00",
+    "revision": "b44abb77df8e543e3eddb13d59fe9050a9163705",
+    "evidenceHash": "80d08d95c6cd3d15a76ca9c90ceab710a70ae9fffa40936ca3db02889b7db9e8",
+    "categories": ["unscorable-source-reference"],
+    "photo": {
+      "id": "211e4798-35d6-4634-a2a9-422406fcb18e",
+      "hash": "ddd24823720103199a76718dee4d3fcce44b66876c789df07b7766362f2e44cb",
+      "license": "CC BY-SA 4.0",
+      "width": 2048,
+      "height": 1532
+    }
+  },
+  {
+    "id": "west-10",
+    "site": "public-junction-west-10",
+    "sequence": "3ca2b916-00aa-4bad-a646-92ba5cf1e833",
+    "region": "west",
+    "split": "development",
+    "source": "pr-raw-osm",
+    "collectedAt": "2026-10-11T14:27:29.841235+00:00",
+    "revision": "b44abb77df8e543e3eddb13d59fe9050a9163705",
+    "evidenceHash": "030abecd65ff581bb86d1a31935ae61c55cdb0fb9413ab71e930b60590ce900b",
+    "categories": ["partial-source-reference"],
+    "photo": {
+      "id": "5e0c4ae8-e9dc-4b98-8478-aa00f7665f9f",
+      "hash": "ee8990df7c9403d28e254453aa8bd10685eb5787962e52d1c48c25b99047dc68",
+      "license": "CC BY-SA 4.0",
+      "width": 2048,
+      "height": 1536
+    },
+    "truth": {
+      "certainty": "certain",
+      "reviewers": ["/root/junction_reference_review", "/root/junction_reference_second_review"],
+      "evidence": "source-review-records.json case west-10; original masks and actual cross-review decisions; not complete-layout or held-out evidence.",
+      "photoRelevant": true,
+      "clearMarkedSupported": false,
+      "preferredLanes": [0, 1],
+      "laneCount": 5,
+      "signSpans": [],
+      "travelLanes": [],
+      "travelLaneFragments": [
+        {
+          "lane": 0,
+          "polygon": [[61, 714], [205, 691], [276, 687], [205, 707], [82, 725]]
+        },
+        {
+          "lane": 1,
+          "polygon": [[143, 785], [389, 740], [502, 722], [430, 753], [266, 791]]
+        },
+        {
+          "lane": 2,
+          "polygon": [[410, 997], [635, 799], [758, 750], [788, 759], [635, 937]]
+        },
+        {
+          "lane": 3,
+          "polygon": [[819, 876], [942, 722], [1004, 722], [1229, 1075], [1331, 1167], [635, 1167]]
+        },
+        {
+          "lane": 4,
+          "polygon": [
+            [1720, 876],
+            [1802, 922],
+            [1987, 1014],
+            [1987, 1106],
+            [1925, 1106],
+            [1782, 998]
+          ]
+        }
+      ],
+      "maskScope": "visible-fragments",
+      "forbidden": [
+        [[0, 650], [340, 650], [80, 685], [0, 685]],
+        [[812, 584], [850, 584], [858, 617], [809, 617]],
+        [[450, 1522], [1050, 1522], [1050, 1535], [450, 1535]]
+      ]
+    }
+  },
+  {
+    "id": "ruhr-7",
+    "site": "public-junction-ruhr-7",
+    "sequence": "f73f63cb-6913-4996-b30d-89356c6d576a",
+    "region": "ruhr",
+    "split": "development",
+    "source": "pr-raw-osm",
+    "collectedAt": "2026-10-11T14:27:29.841235+00:00",
+    "revision": "b44abb77df8e543e3eddb13d59fe9050a9163705",
+    "evidenceHash": "5270945b0eb366041716550b023fbfbb202222a372d29184309f78bc8eee443a",
+    "categories": ["partial-source-reference"],
+    "photo": {
+      "id": "cc8eda1d-a0e2-4004-b9d0-0a7d5e4ce340",
+      "hash": "33b6f3759d7d6767a6d8bd6d26e3d4629330ff9d7ce217e1fa91054e7521518e",
+      "license": "CC BY-SA 4.0",
+      "width": 2048,
+      "height": 1024
+    },
+    "truth": {
+      "certainty": "certain",
+      "reviewers": ["/root/junction_reference_review", "/root/junction_reference_second_review"],
+      "evidence": "source-review-records.json case ruhr-7; original masks and actual cross-review decisions; not complete-layout or held-out evidence.",
+      "photoRelevant": true,
+      "clearMarkedSupported": false,
+      "preferredLanes": [0, 1],
+      "laneCount": 3,
+      "signSpans": [],
+      "travelLanes": [],
+      "travelLaneFragments": [
+        {
+          "lane": 1,
+          "polygon": [[1802, 634], [1843, 630], [1853, 634], [1847, 643], [1808, 647]]
+        },
+        {
+          "lane": 2,
+          "polygon": [[4, 551], [18, 563], [18, 579], [4, 570]]
+        }
+      ],
+      "maskScope": "visible-fragments",
+      "forbidden": [
+        [[1500, 540], [1740, 540], [1600, 575], [1500, 575]],
+        [
+          [0, 750],
+          [200, 750],
+          [450, 700],
+          [700, 640],
+          [950, 600],
+          [1100, 600],
+          [1400, 640],
+          [1700, 695],
+          [2047, 750],
+          [2047, 1023],
+          [0, 1023]
+        ],
+        [[2002, 520], [2024, 520], [2030, 538], [1998, 539]]
+      ]
+    }
+  },
+  {
+    "id": "south-6",
+    "site": "public-junction-south-6",
+    "sequence": "be0e1909-f899-4dbf-962c-034ea41b627a",
+    "region": "south",
+    "split": "development",
+    "source": "pr-raw-osm",
+    "collectedAt": "2026-10-11T14:27:29.841235+00:00",
+    "revision": "b44abb77df8e543e3eddb13d59fe9050a9163705",
+    "evidenceHash": "a85a09a1be101538c79c25108ce2163692d9def10a8382b72656f4f7bb2b9aed",
+    "categories": ["partial-source-reference"],
+    "photo": {
+      "id": "165fbc8a-a514-4e3e-adda-6c3f51f43e9c",
+      "hash": "5b9a6c81bfc21a96cf565731022e013521eb442b9ab541fe4ca769346e0abc4f",
+      "license": "CC BY-SA 4.0",
+      "width": 2048,
+      "height": 1152
+    },
+    "truth": {
+      "certainty": "certain",
+      "reviewers": ["/root/junction_reference_review", "/root/junction_reference_second_review"],
+      "evidence": "source-review-records.json case south-6; original masks and actual cross-review decisions; not complete-layout or held-out evidence.",
+      "photoRelevant": true,
+      "clearMarkedSupported": false,
+      "preferredLanes": [0, 1],
+      "laneCount": 4,
+      "signSpans": [],
+      "travelLanes": [],
+      "travelLaneFragments": [
+        {
+          "lane": 0,
+          "polygon": [[307, 1106], [563, 1071], [594, 1071], [512, 1129], [164, 1129]]
+        },
+        {
+          "lane": 1,
+          "polygon": [[840, 1025], [901, 979], [963, 984], [1004, 1037], [1147, 1129], [778, 1129]]
+        },
+        {
+          "lane": 2,
+          "polygon": [[1290, 1071], [1137, 991], [1208, 994], [1597, 1129], [1393, 1129]]
+        },
+        {
+          "lane": 3,
+          "polygon": [
+            [1597, 1016],
+            [1741, 1022],
+            [1905, 1066],
+            [1966, 1094],
+            [1843, 1071],
+            [1700, 1037]
+          ]
+        }
+      ],
+      "maskScope": "visible-fragments",
+      "forbidden": [
+        [[0, 1020], [390, 1020], [100, 1090], [0, 1090]],
+        [[905, 844], [955, 844], [957, 924], [904, 924]],
+        [[1017, 899], [1057, 899], [1063, 939], [1013, 939]],
+        [[828, 904], [856, 904], [859, 922], [826, 922]]
+      ]
+    }
+  },
+  {
+    "id": "saar-10",
+    "site": "public-junction-saar-10",
+    "sequence": "1b10e413-da21-4055-941a-e5bf6905beb2",
+    "region": "saar",
+    "split": "development",
+    "source": "pr-raw-osm",
+    "collectedAt": "2026-10-11T14:27:29.841235+00:00",
+    "revision": "b44abb77df8e543e3eddb13d59fe9050a9163705",
+    "evidenceHash": "44e9a28a36f6a81d6b4b1667801aec28c3405b27eaa77fc6a080674286dd95d5",
+    "categories": ["scene-negative"],
+    "photo": {
+      "id": "45d76771-56e6-4228-9a0c-cceb7d48ee2f",
+      "hash": "ff999443f2b47c349495e82950950d80684fa808a4819444e93d132537270462",
+      "license": "CC BY-SA 4.0",
+      "width": 2048,
+      "height": 1536
+    },
+    "truth": {
+      "certainty": "certain",
+      "reviewers": ["/root/junction_reference_review", "/root/junction_reference_second_review"],
+      "evidence": "source-review-records.json case saar-10; original masks and actual cross-review decisions; not complete-layout or held-out evidence.",
+      "photoRelevant": false,
+      "clearMarkedSupported": false,
+      "preferredLanes": [],
+      "laneCount": 2,
+      "signSpans": [],
+      "travelLanes": [],
+      "travelLaneFragments": [],
+      "maskScope": "visible-fragments",
+      "forbidden": []
+    }
+  },
+  {
+    "id": "palatinate-10",
+    "site": "public-junction-palatinate-10",
+    "sequence": "e1b149a3-24c6-4d02-a173-a291ba9b3da1",
+    "region": "palatinate",
+    "split": "development",
+    "source": "pr-raw-osm",
+    "collectedAt": "2026-10-11T14:27:29.841235+00:00",
+    "revision": "b44abb77df8e543e3eddb13d59fe9050a9163705",
+    "evidenceHash": "5f45d9a3264e692ecc377a7c0d3a4ee5257f7197cda1c20552c6d8291643d5cf",
+    "categories": ["scene-negative"],
+    "photo": {
+      "id": "909a0b63-a31c-4acb-8c3c-a49ca5d629f8",
+      "hash": "14fa114e09bf5a0cc4bd98b3a4463e952979e6877da54029d78a4b44afd6cbb2",
+      "license": "CC BY-SA 4.0",
+      "width": 2048,
+      "height": 1152
+    },
+    "truth": {
+      "certainty": "certain",
+      "reviewers": ["/root/junction_reference_review", "/root/junction_reference_second_review"],
+      "evidence": "source-review-records.json case palatinate-10; original masks and actual cross-review decisions; not complete-layout or held-out evidence.",
+      "photoRelevant": false,
+      "clearMarkedSupported": false,
+      "preferredLanes": [],
+      "laneCount": 0,
+      "signSpans": [],
+      "travelLanes": [],
+      "travelLaneFragments": [],
+      "maskScope": "visible-fragments",
+      "forbidden": []
+    }
+  },
+  {
+    "id": "west-7",
+    "site": "public-junction-west-7",
+    "sequence": "b76c388a-3ef7-458e-ad43-7e78a744c870",
+    "region": "west",
+    "split": "development",
+    "source": "pr-raw-osm",
+    "collectedAt": "2026-10-11T14:27:29.841235+00:00",
+    "revision": "b44abb77df8e543e3eddb13d59fe9050a9163705",
+    "evidenceHash": "863281a1b35e40ebc5f17f55b05a3ea5814a74705807bb36cf902acdc59bcb80",
+    "categories": ["partial-source-reference"],
+    "photo": {
+      "id": "d37e7bd9-05b4-45b7-a7ad-6eea31358bff",
+      "hash": "f3f0a451b97e0b9135907b4d10c0056fa7b036671464b2a6d3b20818fb404286",
+      "license": "CC BY-SA 4.0",
+      "width": 2048,
+      "height": 1536
+    },
+    "truth": {
+      "certainty": "certain",
+      "reviewers": ["/root/junction_reference_review", "/root/junction_reference_second_review"],
+      "evidence": "source-review-records.json case west-7; original masks and actual cross-review decisions; not complete-layout or held-out evidence.",
+      "photoRelevant": true,
+      "clearMarkedSupported": false,
+      "preferredLanes": [2, 3],
+      "laneCount": 4,
+      "signSpans": [],
+      "travelLanes": [],
+      "travelLaneFragments": [
+        {
+          "lane": 0,
+          "polygon": [[143, 796], [410, 756], [522, 737], [440, 773], [205, 822]]
+        },
+        {
+          "lane": 1,
+          "polygon": [[82, 998], [430, 876], [594, 829], [584, 860], [369, 1014]]
+        },
+        {
+          "lane": 2,
+          "polygon": [[737, 1290], [963, 998], [1085, 998], [1331, 1367], [1270, 1459], [594, 1459]]
+        },
+        {
+          "lane": 3,
+          "polygon": [
+            [1434, 1044],
+            [1331, 906],
+            [1454, 952],
+            [1884, 1137],
+            [1925, 1229],
+            [1659, 1213]
+          ]
+        }
+      ],
+      "maskScope": "visible-fragments",
+      "forbidden": [
+        [[0, 750], [200, 750], [0, 790]],
+        [[1900, 840], [2047, 885], [2047, 850], [1980, 840]],
+        [[760, 629], [834, 629], [852, 695], [751, 700]]
+      ]
+    }
+  },
+  {
+    "id": "thuringia-15",
+    "site": "public-junction-thuringia-15",
+    "sequence": "f63c526f-7921-4238-9ab2-9e18ab4659c5",
+    "region": "thuringia",
+    "split": "development",
+    "source": "pr-raw-osm",
+    "collectedAt": "2026-10-11T14:27:29.841235+00:00",
+    "revision": "b44abb77df8e543e3eddb13d59fe9050a9163705",
+    "evidenceHash": "9620d9e0df8e5e15bbd3ace85c6903c774d531d97f3f3d6e47c37c08a7f3d3c9",
+    "categories": ["unscorable-source-reference"],
+    "photo": {
+      "id": "2559897f-342f-4316-84f1-17a77f861919",
+      "hash": "1e0b756985fdcdb2dc630a1386e17f21a4046c479705aa905de45c8a58660d6c",
+      "license": "CC BY-SA 4.0",
+      "width": 2048,
+      "height": 1152
+    }
+  },
+  {
+    "id": "brandenburg-8",
+    "site": "public-junction-brandenburg-8",
+    "sequence": "ee622819-e193-4484-a787-d63e5e4d64cd",
+    "region": "brandenburg",
+    "split": "development",
+    "source": "pr-raw-osm",
+    "collectedAt": "2026-10-11T14:27:29.841235+00:00",
+    "revision": "b44abb77df8e543e3eddb13d59fe9050a9163705",
+    "evidenceHash": "154d37a517694aa91729c97285d7b7ee3e135e3eaae9ecc7dc525df93f2886aa",
+    "categories": ["unscorable-source-reference"],
+    "photo": {
+      "id": "efd1f6cd-a32c-4921-a858-338523cb9f59",
+      "hash": "6ed1100eacab41606f5ddf573494e5d3c1291efba0f82825b5d6c53a7b11579b",
+      "license": "CC BY-SA 4.0",
+      "width": 2048,
+      "height": 1792
+    }
+  }
+]

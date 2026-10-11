@@ -68,6 +68,29 @@ describe("junction reference oracle", () => {
     expect(errors).toContain("control-01: sign span is not contiguous");
   });
 
+  it("scores a known wrong scene without inventing a photographed lane count", () => {
+    const negative = {
+      ...reference,
+      truth: {
+        ...reference.truth,
+        photoRelevant: false,
+        clearMarkedSupported: false,
+        laneCount: 0,
+        preferredLanes: [],
+        signSpans: [],
+        travelLanes: [],
+        forbidden: [],
+      },
+    };
+    expect(validateCorpus([negative])).toEqual([]);
+    expect(
+      scoreFrames([negative], [{ id: negative.id, photoShown: true, ribbons: [] }]).wrongScene,
+    ).toBe(1);
+    expect(
+      validateCorpus([{ ...negative, truth: { ...negative.truth, photoRelevant: true } }]),
+    ).toContain("control-01: lane index outside layout");
+  });
+
   it("does not certify a single annotation or an uncertain target", () => {
     expect(
       validateCorpus([{ ...reference, truth: { ...reference.truth, reviewers: ["reviewer-01"] } }]),
@@ -148,6 +171,177 @@ describe("junction reference oracle", () => {
   it("a reject-all pipeline earns zero usefulness", () => {
     expect(
       scoreFrames([reference], [{ id: reference.id, photoShown: false, ribbons: [] }]).usefulness,
+    ).toBe(0);
+  });
+
+  it("accepts separate visible fragments of the same lane without filling the gap", () => {
+    const frame = {
+      ...reference,
+      truth: {
+        ...reference.truth,
+        clearMarkedSupported: false,
+        maskScope: "visible-fragments" as const,
+        travelLanes: [],
+        travelLaneFragments: [
+          { lane: 0, polygon: square(10, 30) },
+          { lane: 0, polygon: square(60, 80) },
+        ],
+      },
+    };
+    const result = scoreFrames(
+      [frame],
+      [
+        {
+          id: frame.id,
+          photoShown: true,
+          ribbons: [
+            { lane: 0, polygon: square(15, 25) },
+            { lane: 0, polygon: square(65, 75) },
+          ],
+        },
+      ],
+    );
+    expect(validateCorpus([frame])).toEqual([]);
+    expect(result.accepted).toBe(1);
+    expect(result.usefulness).toBe(0);
+  });
+
+  it("leaves an unlabelled gap between valid fragments unscorable", () => {
+    const frame = {
+      ...reference,
+      truth: {
+        ...reference.truth,
+        travelLanes: [],
+        clearMarkedSupported: false,
+        maskScope: "visible-fragments" as const,
+        travelLaneFragments: [
+          { lane: 0, polygon: square(10, 30) },
+          { lane: 0, polygon: square(60, 80) },
+        ],
+      },
+    };
+    const result = scoreFrames(
+      [frame],
+      [{ id: frame.id, photoShown: true, ribbons: [{ lane: 0, polygon: square(20, 70) }] }],
+    );
+    expect(result.wrongLane).toBe(0);
+    expect(result.accepted).toBe(0);
+    expect(result.unscorable).toBe(1);
+  });
+
+  it.each(["other-lane", "forbidden", "invalid-shape", "wrong-index"])(
+    "still rejects known %s failures with partial masks",
+    (failure) => {
+      const frame = {
+        ...reference,
+        truth: {
+          ...reference.truth,
+          travelLanes: [],
+          clearMarkedSupported: false,
+          maskScope: "visible-fragments" as const,
+          travelLaneFragments: [
+            { lane: 0, polygon: square(10, 30) },
+            { lane: 1, polygon: square(60, 80) },
+          ],
+        },
+      };
+      const polygon =
+        failure === "forbidden"
+          ? square(95, 99)
+          : failure === "invalid-shape"
+            ? ([
+                [20, 50],
+                [20, 50],
+                [20, 50],
+              ] as [number, number][])
+            : failure === "other-lane"
+              ? square(65, 75)
+              : square(15, 25);
+      const result = scoreFrames(
+        [frame],
+        [
+          {
+            id: frame.id,
+            photoShown: true,
+            ribbons: [{ lane: failure === "wrong-index" ? 1 : 0, polygon }],
+          },
+        ],
+      );
+      expect(result.wrongLane).toBe(1);
+      expect(result.unscorable).toBe(0);
+      expect(result.accepted).toBe(0);
+    },
+  );
+
+  it("validates fragment indices, area and source bounds", () => {
+    const frame = {
+      ...reference,
+      truth: {
+        ...reference.truth,
+        travelLaneFragments: [
+          { lane: 2, polygon: square(15, 25) },
+          {
+            lane: 0,
+            polygon: [
+              [20, 20],
+              [20, 20],
+              [20, 20],
+            ] as [number, number][],
+          },
+          { lane: 0, polygon: square(95, 105) },
+        ],
+      },
+    };
+    expect(validateCorpus([frame])).toContain("control-01: lane index outside layout");
+    expect(validateCorpus([frame])).toContain("control-01: invalid pixel mask");
+  });
+
+  it("does not promote partial capture references to the complete-layout usefulness denominator", () => {
+    const frame = {
+      ...reference,
+      truth: {
+        ...reference.truth,
+        travelLanes: [],
+        travelLaneFragments: [{ lane: 0, polygon: square(10, 30) }],
+      },
+    };
+    expect(validateCorpus([frame])).toContain("control-01: supported positive lacks target masks");
+  });
+
+  it("requires fragment references to declare their partial scope", () => {
+    const frame = {
+      ...reference,
+      truth: {
+        ...reference.truth,
+        clearMarkedSupported: false,
+        travelLaneFragments: [{ lane: 0, polygon: square(10, 30) }],
+      },
+    };
+    expect(validateCorpus([frame])).toContain(
+      "control-01: fragment truth requires visible-fragments scope",
+    );
+  });
+
+  it("keeps fragment scope explicit even when every lane has a labelled patch", () => {
+    const frame = {
+      ...reference,
+      truth: {
+        ...reference.truth,
+        maskScope: "visible-fragments" as const,
+        travelLaneFragments: [
+          { lane: 0, polygon: square(10, 30) },
+          { lane: 1, polygon: square(60, 80) },
+        ],
+      },
+    };
+    expect(validateCorpus([frame])).toContain(
+      "control-01: fragment truth cannot certify complete-layout usefulness",
+    );
+    expect(
+      scoreFrames(
+        [frame],
+        [{ id: frame.id, photoShown: true, ribbons: [{ lane: 0, polygon: square(20, 25) }] }],
+      ).positives,
     ).toBe(0);
   });
   it("does not count incomplete preferred-lane guidance as useful", () => {
