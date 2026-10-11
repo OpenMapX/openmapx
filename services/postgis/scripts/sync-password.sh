@@ -84,5 +84,10 @@ fi
 touch "$SYNC_SENTINEL"
 
 # Hand control back to postgres in the foreground; container exit code
-# matches postgres'.
+# matches postgres'. A trapped signal ends `wait` at once, so wait again
+# until postgres has finished its shutdown: exiting earlier ends the
+# container, and Docker kills postgres before its shutdown checkpoint.
+while kill -0 "$PG_PID" 2>/dev/null; do
+  wait "$PG_PID" || true
+done
 wait "$PG_PID"
