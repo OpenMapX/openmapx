@@ -324,7 +324,7 @@ approach is never interrupted.
 
 For motorway and expressway exits, forks, and splits while driving, a **junction view** card
 appears under the banner. It shows destination boards for the upcoming split,
-including connected outgoing roads' destinations and known lane counts.
+including connected outgoing roads' destinations.
 With network access, the card shows OpenStreetMap's real per-lane destinations
 when tagged on the approach segment (`destination:*:lanes`, fetched once per
 route through Overpass — set `OVERPASS_URL` to a self-hosted instance for

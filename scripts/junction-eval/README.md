@@ -59,3 +59,11 @@ The frozen strict release gates remain unmet: no independently reviewed holdout
 exists, and registration has not demonstrated useful coverage on the expanded
 German acquisition. CI validates provenance and exercises the deterministic
 oracle; it does not certify the release gates. Reject-all remains a failing result.
+
+See [the method comparison](METHODS.md) for the measured lightweight and learned
+detector experiments. These development results do not certify a release.
+
+Rendering is an explicit local developer operation. Its case manifest supplies
+public imagery URLs for GET requests; it does not upload local file contents.
+The JPEG cache uses bounded streaming, safe image identifiers and exclusive file
+creation. Existing cache entries must be regular files; symlinks are rejected.

@@ -92,6 +92,50 @@ describe("junction reference oracle", () => {
     expect(result.usefulness).toBe(1);
   });
 
+  it.each([
+    [
+      [20, 50],
+      [20, 50],
+      [20, 50],
+    ],
+    [
+      [20, 20],
+      [25, 50],
+      [30, 80],
+    ],
+  ] as [number, number][][])("rejects invisible zero-area ribbons: %j", (...polygon) => {
+    const result = scoreFrames(
+      [reference],
+      [{ id: reference.id, photoShown: true, ribbons: [{ lane: 0, polygon }] }],
+    );
+    expect(result.accepted).toBe(0);
+    expect(result.usefulness).toBe(0);
+    expect(result.wrongLane).toBe(1);
+  });
+
+  it.each(["travelLanes", "forbidden"] as const)(
+    "rejects zero-area %s reference masks",
+    (field) => {
+      expect(
+        validateCorpus([
+          {
+            ...reference,
+            truth: {
+              ...reference.truth,
+              [field]: [
+                [
+                  [20, 50],
+                  [20, 50],
+                  [20, 50],
+                ],
+              ],
+            },
+          },
+        ]),
+      ).toContain("control-01: invalid pixel mask");
+    },
+  );
+
   it("rejects a filled polygon that crosses another lane despite a correct center", () => {
     const result = scoreFrames(
       [reference],

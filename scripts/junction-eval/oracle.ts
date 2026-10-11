@@ -29,6 +29,19 @@ export interface FrameOutput {
   photoShown: boolean;
   ribbons: { lane: number; polygon: Pixel[] }[];
 }
+
+function hasArea(polygon: Pixel[]): boolean {
+  if (polygon.length < 3 || polygon.some(([x, y]) => !Number.isFinite(x) || !Number.isFinite(y)))
+    return false;
+  let area = 0;
+  for (let i = 0; i < polygon.length; i++) {
+    const [x, y] = polygon[i];
+    const [nextX, nextY] = polygon[(i + 1) % polygon.length];
+    area += x * nextY - nextX * y;
+  }
+  return Number.isFinite(area) && area !== 0;
+}
+
 export function validateCorpus(frames: ReferenceFrame[]): string[] {
   const errors: string[] = [];
   const ids = new Set<string>();
@@ -85,7 +98,7 @@ export function validateCorpus(frames: ReferenceFrame[]): string[] {
       fail("supported positive lacks target masks");
     for (const polygon of [...truth.travelLanes, ...truth.forbidden]) {
       if (
-        polygon.length < 3 ||
+        !hasArea(polygon) ||
         polygon.some(
           ([x, y]) =>
             !Number.isFinite(x) ||
@@ -131,12 +144,7 @@ function contained(
   tolerance: number,
   spacing: number,
 ): boolean {
-  if (
-    polygon.length < 3 ||
-    mask.length < 3 ||
-    polygon.some(([x, y]) => !Number.isFinite(x) || !Number.isFinite(y))
-  )
-    return false;
+  if (!hasArea(polygon) || !hasArea(mask) || !forbidden.every(hasArea)) return false;
   const valid = (p: Pixel) =>
     (inside(p, mask) || edgeDistance(p, mask) <= tolerance) &&
     !forbidden.some((area) => inside(p, area));

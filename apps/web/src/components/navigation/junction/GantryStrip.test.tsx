@@ -1,10 +1,46 @@
 import { type GantryModel, mergeExitPanel, parseLaneTags } from "@openmapx/core";
-import { render } from "@testing-library/react";
+import { act, render } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { GantryStrip } from "./GantryStrip";
 
 vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntl());
+
+const observers = new Set<BoardObserver>();
+class BoardObserver {
+  target?: Element;
+  constructor(readonly callback: ResizeObserverCallback) {
+    observers.add(this);
+  }
+  observe(target: Element) {
+    this.target = target;
+    this.resize(600);
+  }
+  disconnect() {
+    observers.delete(this);
+  }
+  resize(width: number) {
+    if (!this.target) return;
+    const size = [{ inlineSize: width, blockSize: 0 }];
+    this.callback(
+      [
+        {
+          target: this.target,
+          contentRect: new DOMRect(0, 0, width, 0),
+          contentBoxSize: size,
+          borderBoxSize: size,
+          devicePixelContentBoxSize: size,
+        },
+      ],
+      this as unknown as ResizeObserver,
+    );
+  }
+}
+beforeEach(() => vi.stubGlobal("ResizeObserver", BoardObserver));
+afterEach(() => {
+  observers.clear();
+  vi.unstubAllGlobals();
+});
 
 const threePanels: GantryModel = {
   laneCount: 5,
@@ -37,6 +73,32 @@ const threePanels: GantryModel = {
 };
 
 describe("GantryStrip", () => {
+  it("keeps complete route cards when a narrow lane span cannot fit a readable board", () => {
+    const view = render(<GantryStrip model={threePanels} />);
+    act(() => {
+      for (const observer of observers) observer.resize(272);
+    });
+    expect(view.container.querySelector('[data-layout="route-card"]')).toBeTruthy();
+    expect(view.container.querySelector('[data-layout="lane-grid"]')).toBeNull();
+    expect(view.container.querySelectorAll("[data-panel]")).toHaveLength(3);
+    expect(view.container.querySelector("[data-selected-route]")?.textContent).toContain(
+      "Neuss-Zentrum",
+    );
+    expect(view.container.textContent).toContain("Heinsberg");
+  });
+  it("restores physical board proportions when its containing panel becomes wide enough", () => {
+    const view = render(<GantryStrip model={threePanels} />);
+    act(() => {
+      for (const observer of observers) observer.resize(272);
+    });
+    expect(view.container.querySelector('[data-layout="route-card"]')).toBeTruthy();
+    act(() => {
+      for (const observer of observers) observer.resize(600);
+    });
+    expect(view.container.querySelector('[data-layout="lane-grid"]')).toBeTruthy();
+    expect(view.container.querySelector('[data-lane-span="0-2"]')).toBeTruthy();
+    expect(view.container.querySelector('[data-lane-span="4-4"]')).toBeTruthy();
+  });
   it("keeps one shared physical board when only a subset of its lanes is preferred", () => {
     const model = mergeExitPanel(parseLaneTags({ lanes: 2, destinationLanes: "Target|Target" })!, {
       stepIndex: 1,

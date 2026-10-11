@@ -4,6 +4,7 @@ import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
 import { cleanSignTexts, exitNumberLabel, type GantryModel } from "@openmapx/core";
 import { useTranslations } from "next-intl";
+import { useEffect, useRef, useState } from "react";
 import { laneIndicationIcon } from "@/lib/navigation/maneuverIcon";
 import { RouteShield } from "../signs/RouteShield";
 
@@ -83,7 +84,7 @@ function GantryPanel({
           grid && first !== undefined && last !== undefined
             ? `${first + 1} / ${last + 2}`
             : undefined,
-        flex: grid ? undefined : "1 1 140px",
+        flex: grid ? undefined : "1 1 120px",
         minWidth: 0,
         bgcolor: colours.bg,
         color: colours.fg,
@@ -134,11 +135,29 @@ function GantryPanel({
 /** Only known, nonoverlapping incoming spans form a spatial gantry. */
 export function GantryStrip({ model, size = "banner", country }: Props) {
   const t = useTranslations("navigation");
+  const container = useRef<HTMLElement>(null);
+  const [width, setWidth] = useState<number | null>(null);
+  useEffect(() => {
+    const element = container.current;
+    if (!element || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(([entry]) => {
+      if (entry) setWidth(entry.contentRect.width);
+    });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
   const selected = model.selectedRoute ?? model.panels.find((panel) => panel.isExit);
   const occupied = new Set<number>();
   const grid =
     model.laneCount > 0 &&
     model.panels.length > 0 &&
+    width !== null &&
+    model.panels.every(
+      (panel) =>
+        ((width - (model.laneCount - 1) * 4) / model.laneCount) * panel.lanes.length +
+          Math.max(0, panel.lanes.length - 1) * 4 >=
+        80,
+    ) &&
     model.panels.every(
       (panel) =>
         panel.lanes.length > 0 &&
@@ -159,7 +178,7 @@ export function GantryStrip({ model, size = "banner", country }: Props) {
   const exitNumber = exitNumberLabel(selected?.exitNumber);
   const showTitle = refs.length > 0 || destinations.length > 0 || !!exitNumber;
   return (
-    <Box sx={{ display: "flex", flexDirection: "column", gap: 0.75 }}>
+    <Box ref={container} sx={{ display: "flex", flexDirection: "column", gap: 0.75 }}>
       {showTitle && (
         <Box
           data-selected-route

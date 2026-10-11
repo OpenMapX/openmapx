@@ -16,6 +16,7 @@ import type {
 } from "../../packages/core/src/types/junction.ts";
 import type { Route, RouteStep } from "../../packages/core/src/types/routing.ts";
 import type { StreetLevelImage } from "../../packages/core/src/types/streetLevel.ts";
+import { cacheEvaluationImage } from "./imageCache.ts";
 
 const repo = fileURLToPath(new URL("../../", import.meta.url));
 const args = process.argv.slice(2);
@@ -78,21 +79,14 @@ for (const c of cases) {
     continue;
   }
   const asset = c.image.isPano ? c.image.assets.sd : (c.image.assets.thumb ?? c.image.assets.sd);
-  const target = `${output}/assets/${c.image.id}.jpg`;
-  if (!existsSync(target) && asset) {
-    try {
-      const res = await fetch(asset, { signal: AbortSignal.timeout(20000) });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const bytes = Buffer.from(await res.arrayBuffer());
-      if (bytes.length > 8_000_000) throw new Error("asset-too-large");
-      writeFileSync(target, bytes);
-    } catch (error) {
-      c.assetError = String(error);
-    }
+  c.photo = { status: "none" };
+  if (!asset) continue;
+  try {
+    const filename = await cacheEvaluationImage(`${output}/assets`, c.image.id, asset);
+    c.photo = { status: "ready", image: c.image, objectUrl: `/assets/${filename}` };
+  } catch (error) {
+    c.assetError = String(error);
   }
-  c.photo = existsSync(target)
-    ? { status: "ready", image: c.image, objectUrl: `/assets/${c.image.id}.jpg` }
-    : { status: "none" };
 }
 writeFileSync(`${output}/cases.json`, JSON.stringify(cases));
 writeFileSync(
