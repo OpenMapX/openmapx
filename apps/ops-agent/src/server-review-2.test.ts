@@ -379,6 +379,8 @@ describe("reviewed durable admission boundary", () => {
     roots.push(root);
     const path = join(root, "journal", "jobs-v1.json");
     const durable = await openOpsJobJournal(path);
+    let resolveTerminalSnapshot!: () => void;
+    const terminalSnapshot = new Promise<void>((resolve) => (resolveTerminalSnapshot = resolve));
     let blockAdmission = false;
     let entered!: () => void;
     let unblock!: () => void;
@@ -393,6 +395,8 @@ describe("reviewed durable admission boundary", () => {
           await admissionBlocked;
         }
         await durable.replace(records);
+        if (records.length === 2 && records.every((record) => record.state === "succeeded"))
+          resolveTerminalSnapshot();
       },
     };
     let releaseFirst!: () => void;
@@ -433,10 +437,7 @@ describe("reviewed durable admission boundary", () => {
     releaseFirst();
     unblock();
     expect((await secondPromise).statusCode).toBe(202);
-    for (let attempt = 0; attempt < 100; attempt += 1) {
-      if (durable.records().every((record) => record.state === "succeeded")) break;
-      await new Promise((resolve) => setTimeout(resolve, 1));
-    }
+    await terminalSnapshot;
     await app.close();
     const reopened = await openOpsJobJournal(path);
     expect(reopened.records()).toHaveLength(2);
