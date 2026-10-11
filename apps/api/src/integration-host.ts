@@ -748,14 +748,15 @@ export async function initIntegrations(
   resetIntegrationRoutes();
 
   const discovered = await discoverManifests(_integrationDirs);
+  const sorted = topologicalSort(discovered);
 
-  // Hard-fail at startup when any installed integration declares vault-backed
+  // Hard-fail at startup when any selected integration declares vault-backed
   // secret fields but OPENMAPX_SECRETS_KEY is missing. The lazy fallback in
   // secrets.ts already throws on first decrypt, but lazy failure means the
   // operator only finds out via a 500 from a user-facing route; bailing here
   // surfaces it as a boot error with a clear remediation hint.
   if (!isSecretsConfigured()) {
-    const requiringSecrets = discovered.filter((d) =>
+    const requiringSecrets = sorted.filter((d) =>
       manifestDeclaresSecretFields(d.manifest as IntegrationManifest),
     );
     if (requiringSecrets.length > 0) {
@@ -769,9 +770,6 @@ export async function initIntegrations(
       "OPENMAPX_SECRETS_KEY is not set — vault-backed integration secrets cannot be stored or decrypted",
     );
   }
-
-  // Topological sort by manifest.dependencies to ensure deps load first
-  const sorted = topologicalSort(discovered);
 
   // Load all capability bindings once for requires: resolution.
   // Falls back gracefully if DB is unavailable (e.g. no PostgreSQL in dev).

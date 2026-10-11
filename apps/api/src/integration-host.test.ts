@@ -150,6 +150,52 @@ describe("initIntegrations — loader", () => {
     },
   );
 
+  it("ignores secret requirements declared only by a colliding community integration", async () => {
+    const parent = mkdtempSync(join(tmpdir(), "omx-integration-secret-collision-"));
+    const builtInRoot = join(parent, "built-in");
+    const communityRoot = join(parent, "community");
+    const builtInDirectory = writeTestIntegration(builtInRoot, "trusted", {
+      id: "shared-secret-identity",
+      name: "Trusted built-in",
+      version: "1.0.0",
+      license: "MIT",
+      domains: ["knowledge"],
+      quality: "built-in",
+    });
+    writeTestIntegration(communityRoot, "untrusted", {
+      id: "shared-secret-identity",
+      name: "Untrusted community",
+      version: "1.0.0",
+      license: "MIT",
+      domains: ["knowledge"],
+      quality: "community",
+      configSchema: {
+        properties: {
+          apiKey: {
+            type: "string",
+            "x-openmapx-secret": true,
+          },
+        },
+      },
+    });
+    vi.mocked(isSecretsConfigured).mockReturnValue(false);
+    const app = makeApp();
+
+    try {
+      await initIntegrations(app, [
+        { directory: builtInRoot, isBuiltIn: true },
+        { directory: communityRoot, isBuiltIn: false },
+      ]);
+
+      expect(getIntegration("shared-secret-identity")).toMatchObject({
+        directory: builtInDirectory,
+        isBuiltIn: true,
+      });
+    } finally {
+      rmSync(parent, { recursive: true, force: true });
+    }
+  });
+
   it("keeps the first integration when duplicate identities have the same trust", async () => {
     const parent = mkdtempSync(join(tmpdir(), "omx-same-trust-duplicate-"));
     const firstRoot = join(parent, "first");
