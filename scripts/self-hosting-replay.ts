@@ -1,9 +1,13 @@
 import { execFileSync } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
 import {
+  closeSync,
+  constants,
   existsSync,
+  fstatSync,
   lstatSync,
   mkdirSync,
+  openSync,
   readdirSync,
   readFileSync,
   realpathSync,
@@ -268,10 +272,23 @@ export async function runReplayInvocation(
   let previousReport: unknown;
   try {
     const previous = resolve(output, "runs.json");
-    if (existsSync(previous)) {
-      if (!lstatSync(previous).isFile() || lstatSync(previous).isSymbolicLink())
-        throw new Error("Prior build report may not be a symlink");
-      previousReport = JSON.parse(readFileSync(previous, "utf8"));
+    let descriptor: number | undefined;
+    try {
+      descriptor = openSync(
+        previous,
+        constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
+      );
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    }
+    if (descriptor !== undefined) {
+      try {
+        if (!fstatSync(descriptor).isFile())
+          throw new Error("Prior build report must be a regular owned file");
+        previousReport = JSON.parse(readFileSync(descriptor, "utf8"));
+      } finally {
+        closeSync(descriptor);
+      }
     }
   } finally {
     const prior = previousReport as { identities?: unknown; builds?: unknown } | undefined;

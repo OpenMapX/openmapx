@@ -1,10 +1,12 @@
 import { execFileSync, spawn, spawnSync } from "node:child_process";
 import {
+  fstatSync,
   mkdirSync,
   mkdtempSync,
   readdirSync,
   readFileSync,
   realpathSync,
+  renameSync,
   rmSync,
   symlinkSync,
   writeFileSync,
@@ -13,7 +15,7 @@ import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   compareLogical,
   comparePair,
@@ -26,8 +28,29 @@ import {
   validateBuildReuse,
 } from "./self-hosting-replay";
 
+const reportRace = vi.hoisted(() => ({
+  afterAccess: undefined as ((path: unknown, descriptor?: number) => void) | undefined,
+}));
+vi.mock("node:fs", async () => {
+  const actual = await vi.importActual<typeof import("node:fs")>("node:fs");
+  return {
+    ...actual,
+    lstatSync: (...args: Parameters<typeof actual.lstatSync>) => {
+      const stat = actual.lstatSync(...args);
+      reportRace.afterAccess?.(args[0]);
+      return stat;
+    },
+    openSync: (...args: Parameters<typeof actual.openSync>) => {
+      const fd = actual.openSync(...args);
+      reportRace.afterAccess?.(args[0], fd);
+      return fd;
+    },
+  };
+});
+
 const roots: string[] = [];
 afterEach(() => {
+  reportRace.afterAccess = undefined;
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
 });
 const args = [
@@ -115,6 +138,92 @@ describe("disposable replay boundary", () => {
     expect(summary.invocationId).not.toBe("old");
     expect(runs.invocationId).toBe(summary.invocationId);
     expect(runs.status).toBe("INCOMPLETE");
+  });
+  it("retains the opened prior report when its pathname is replaced", async () => {
+    const output = mkdtempSync(join(tmpdir(), "replay-report-race-"));
+    roots.push(output);
+    const previous = join(output, "runs.json");
+    const original = { identities: ["captured"], builds: ["original"], results: [] };
+    writeFileSync(previous, JSON.stringify(original));
+    reportRace.afterAccess = (path) => {
+      if (path !== previous) return;
+      reportRace.afterAccess = undefined;
+      renameSync(previous, join(output, "captured.json"));
+      writeFileSync(previous, JSON.stringify({ identities: ["replacement"], builds: [] }));
+    };
+    await runReplayInvocation(output, async ({ previousReport }) => {
+      expect(previousReport).toEqual(original);
+      return { runs: { results: [] }, summary: { correctness: { equal: true } } };
+    });
+    const runs = JSON.parse(readFileSync(previous, "utf8"));
+    const summary = JSON.parse(readFileSync(join(output, "summary.json"), "utf8"));
+    expect(runs.status).toBe("COMPLETE");
+    expect(summary.invocationId).toBe(runs.invocationId);
+  });
+  it.each(["symlink", "directory", "invalid-json"])(
+    "leaves completion invalidated when the prior report is %s",
+    async (kind) => {
+      const output = mkdtempSync(join(tmpdir(), "replay-invalid-report-"));
+      roots.push(output);
+      const previous = join(output, "runs.json");
+      writeFileSync(join(output, "summary.json"), JSON.stringify({ status: "COMPLETE" }));
+      if (kind === "symlink") {
+        writeFileSync(join(output, "target.json"), "{}");
+        symlinkSync(join(output, "target.json"), previous);
+      } else if (kind === "directory") mkdirSync(previous);
+      else writeFileSync(previous, "invalid");
+      let reachedWork = false;
+      await expect(
+        runReplayInvocation(output, async () => {
+          reachedWork = true;
+          return { runs: {}, summary: {} };
+        }),
+      ).rejects.toThrow();
+      expect(reachedWork).toBe(false);
+      expect(JSON.parse(readFileSync(join(output, "summary.json"), "utf8")).status).toBe(
+        "INCOMPLETE",
+      );
+    },
+  );
+  it("rejects a prior FIFO through a bounded owned child", () => {
+    const output = mkdtempSync(join(tmpdir(), "replay-report-fifo-"));
+    roots.push(output);
+    const previous = join(output, "runs.json");
+    expect(spawnSync("/usr/bin/mkfifo", [previous]).status).toBe(0);
+    const program = `
+import { runReplayInvocation } from ${JSON.stringify(pathToFileURL(resolve(import.meta.dirname, "self-hosting-replay.ts")).href)};
+runReplayInvocation(process.argv[1], async () => { throw new Error('unexpected work'); })
+  .then(() => { process.exitCode = 2; })
+  .catch(error => { console.error(error.message); process.exitCode = 1; });
+`;
+    const result = spawnSync(
+      process.execPath,
+      ["--experimental-strip-types", "--input-type=module", "-e", program, output],
+      { encoding: "utf8", timeout: 10_000 },
+    );
+    expect(result.error).toBeUndefined();
+    expect(result.signal).toBeNull();
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("regular owned file");
+    expect(JSON.parse(readFileSync(join(output, "summary.json"), "utf8")).status).toBe(
+      "INCOMPLETE",
+    );
+  });
+  it("closes the prior report descriptor when parsing fails", async () => {
+    const output = mkdtempSync(join(tmpdir(), "replay-report-close-"));
+    roots.push(output);
+    const previous = join(output, "runs.json");
+    writeFileSync(previous, "invalid JSON");
+    let descriptor: number | undefined;
+    reportRace.afterAccess = (path, opened) => {
+      if (path === previous && opened !== undefined) descriptor = opened;
+    };
+    await expect(
+      runReplayInvocation(output, async () => ({ runs: {}, summary: {} })),
+    ).rejects.toThrow();
+    expect(descriptor).toBeTypeOf("number");
+    if (descriptor === undefined) throw new Error("Expected an opened report descriptor");
+    expect(() => fstatSync(descriptor)).toThrow(expect.objectContaining({ code: "EBADF" }));
   });
   it("resolves CLI output under the harness worktree regardless of cwd", () => {
     const root = realpathSync(mkdtempSync(join(tmpdir(), "replay-")));

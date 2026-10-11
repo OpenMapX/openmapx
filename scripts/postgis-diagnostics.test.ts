@@ -2,21 +2,21 @@ import { spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 function run(flags: Record<string, string> = {}, preloads = "", lookupFails = false) {
   const root = mkdtempSync(join(tmpdir(), "postgis-diagnostics-"));
   try {
-    const stub = `#!/usr/bin/env python3
-import json, os, pathlib, sys
-name = pathlib.Path(sys.argv[0]).name
-if name == 'docker-entrypoint.sh':
-    pathlib.Path(os.environ['ARGS']).write_text(json.dumps(sys.argv[1:]))
-elif name in ['postgres', 'gosu']:
-    if os.environ['LOOKUP_FAIL'] == '1': sys.exit(1)
-    print(os.environ['PRELOADS'])
-elif name == 'cat': print(os.environ.get('FIXTURE_LIMIT', 'max'))
-elif name == 'awk': print('1024000')
+    const stub = `#!${process.execPath}
+const fs = require('node:fs');
+const name = require('node:path').basename(process.argv[1]);
+if (name === 'docker-entrypoint.sh') {
+  fs.writeFileSync(process.env.ARGS, JSON.stringify(process.argv.slice(2)));
+} else if (name === 'postgres' || name === 'gosu') {
+  if (process.env.LOOKUP_FAIL === '1') process.exit(1);
+  console.log(process.env.PRELOADS);
+} else if (name === 'cat') console.log(process.env.FIXTURE_LIMIT || 'max');
+else if (name === 'awk') console.log('1024000');
 `;
     for (const name of [
       "docker-entrypoint.sh",
@@ -31,16 +31,16 @@ elif name == 'awk': print('1024000')
     ])
       writeFileSync(join(root, name), stub, { mode: 0o755 });
     const result = spawnSync(
-      "bash",
-      [resolve("services/postgis/scripts/sync-password.sh"), "postgres", "-c", "max_wal_size=4GB"],
+      resolve("services/postgis/scripts/sync-password.sh"),
+      ["postgres", "-c", "max_wal_size=4GB"],
       {
         encoding: "utf8",
         env: {
-          PATH: `${root}:${process.env.PATH}`,
           ARGS: join(root, "args"),
           PRELOADS: preloads,
           LOOKUP_FAIL: lookupFails ? "1" : "0",
           ...flags,
+          PATH: `${root}:/usr/bin:/bin`,
         },
       },
     );
@@ -56,6 +56,20 @@ elif name == 'awk': print('1024000')
 describe("PostGIS diagnostics opt-in", () => {
   it("leaves the default postgres command unchanged", () => {
     expect(run().args).toEqual(["postgres", "-c", "max_wal_size=4GB"]);
+  });
+  it("ignores hostile inherited executable search paths", () => {
+    const hostile = mkdtempSync(join(tmpdir(), "postgis-hostile-path-"));
+    try {
+      for (const name of ["bash", "python3", "seq"])
+        writeFileSync(join(hostile, name), "#!/bin/sh\nexit 86\n", { mode: 0o755 });
+      vi.stubEnv("PATH", `${hostile}:${process.env.PATH}`);
+      const result = run({ POSTGIS_DIAGNOSTICS: "true" }, "auto_explain");
+      expect(result.status).toBe(0);
+      expect(result.args).toContain("shared_preload_libraries=auto_explain,pg_stat_statements");
+    } finally {
+      vi.unstubAllEnvs();
+      rmSync(hostile, { recursive: true, force: true });
+    }
   });
   it("merges preloads and keeps planning disabled", () => {
     const result = run({ POSTGIS_DIAGNOSTICS: "true" }, "auto_explain, pg_prewarm");
