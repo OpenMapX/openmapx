@@ -125,6 +125,7 @@ export function useFasterRoute(): void {
             if (!faster) return;
             useNavigationStore.getState().proposeFasterRoute({
               route: faster.route,
+              destinationWaypoints: waypoints,
               alternatives: candidates.filter((r) => r !== faster.route),
               savedSeconds: faster.savedSeconds,
               proposedAtMs: Date.now(),

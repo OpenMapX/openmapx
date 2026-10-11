@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
+import type { LngLat } from "../../types/geometry";
 import {
   remainingWaypoints,
   shouldReroute,
   shouldRerouteForClosure,
   updateOffRouteScore,
 } from "../reroute";
+import { asRouteMatcher, snapPreparedRoute } from "../routeMatcher";
 
 const opts = {
   thresholdMeters: 45,
@@ -112,4 +114,72 @@ describe("remainingWaypoints", () => {
       [0.003, 0],
     ]);
   });
+});
+
+describe("remainingWaypoints ordered occurrences", () => {
+  const origin: LngLat = [0, 0];
+  const a: LngLat = [0.02, 0];
+  const b: LngLat = [0.01, 0];
+  const destination: LngLat = [0.03, 0];
+  const from: LngLat = [0.0175, 0.002];
+  const retraced = [origin, b, a, b, destination];
+  const itinerary = [origin, a, b, destination];
+
+  for (const prepared of [false, true]) {
+    describe(prepared ? "prepared geometry" : "raw geometry", () => {
+      it.each([
+        [1500, [from, a, b, destination]],
+        [2500, [from, b, destination]],
+        [3500, [from, destination]],
+        [10000, [from, destination]],
+      ])("keeps itinerary occurrences at %im", (alongMeters, expected) => {
+        const geometry = structuredClone(retraced);
+        const waypoints = structuredClone(itinerary);
+        expect(
+          remainingWaypoints(
+            prepared ? asRouteMatcher(geometry) : geometry,
+            waypoints,
+            from,
+            alongMeters,
+          ),
+        ).toEqual(expected);
+        expect(geometry).toEqual(retraced);
+        expect(waypoints).toEqual(itinerary);
+      });
+
+      it("retains a later repeated stop after its earlier visit", () => {
+        const geometry = [origin, a, b, a, destination];
+        expect(
+          remainingWaypoints(prepared ? asRouteMatcher(geometry) : geometry, geometry, from, 2500),
+        ).toEqual([from, b, a, destination]);
+        expect(
+          remainingWaypoints(prepared ? asRouteMatcher(geometry) : geometry, geometry, from, 3500),
+        ).toEqual([from, a, destination]);
+      });
+
+      it("preserves consecutive equal-coordinate stops ahead of progress", () => {
+        expect(
+          remainingWaypoints(
+            prepared ? asRouteMatcher(retraced) : retraced,
+            [origin, a, a, b, destination],
+            from,
+            1500,
+          ),
+        ).toEqual([from, a, a, b, destination]);
+      });
+
+      it("drops an intermediate stop exactly at its occurrence boundary", () => {
+        const straight = [origin, b, a, destination];
+        const boundary = snapPreparedRoute(asRouteMatcher(straight), b).alongMeters;
+        expect(
+          remainingWaypoints(
+            prepared ? asRouteMatcher(straight) : straight,
+            straight,
+            from,
+            boundary,
+          ),
+        ).toEqual([from, a, destination]);
+      });
+    });
+  }
 });

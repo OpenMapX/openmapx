@@ -5,6 +5,7 @@ import {
   type FixInput,
   type IncidentAlert,
   readRouteMatcherCounters,
+  remainingWaypoints,
   resetRouteMatcherCounters,
   setRouteMatcherCounting,
   useNavigationStore,
@@ -144,6 +145,27 @@ describe("useNavigationEngine", () => {
     expect(useNavigationStore.getState().route?.distance).toBe(999);
   });
 
+  it("adopts the captured remaining itinerary and cannot resurrect visited stops", async () => {
+    const a: [number, number] = [0.001, 0];
+    const b: [number, number] = [0.003, 0];
+    const destination: [number, number] = [0.004, 0];
+    useNavigationStore
+      .getState()
+      .startGroundNavigation(route, "driving", [[0, 0], a, b, destination]);
+    const replacement = { ...route, geometry: [[0.0018, 0.002], b, destination] } as Route;
+    fetchDirections.mockResolvedValue({ routes: [replacement], activeRouteIndex: 0 });
+    renderHook(() => useNavigationEngine(disabledResource));
+    const fixes = await triggerOffRoute();
+    const captured = [fixes[4].coords, b, destination];
+    expect(fetchDirections).toHaveBeenCalledWith(expect.objectContaining({ waypoints: captured }));
+    const state = useNavigationStore.getState();
+    expect(state.destinationWaypoints).toEqual(captured);
+    expect(state.progress).toBeNull();
+    expect(
+      remainingWaypoints(replacement.geometry, state.destinationWaypoints, [0.002, 0.002], 0),
+    ).toEqual([[0.002, 0.002], b, destination]);
+  });
+
   it("keeps the old route and suppresses directions while offline", async () => {
     useNavigationStore.getState().startGroundNavigation(route, "driving", [
       [0, 0],
@@ -188,6 +210,10 @@ describe("useNavigationEngine", () => {
     const state = useNavigationStore.getState();
     expect(state.status).toBe("navigating");
     expect(state.route).toBe(route);
+    expect(state.destinationWaypoints).toEqual([
+      [0, 0],
+      [0.004, 0],
+    ]);
     expect(state.rerouteFailedNonce).toBe(1);
     expect(state.rerouteUnavailable).toBe(true);
   });
@@ -240,6 +266,41 @@ describe("useNavigationEngine", () => {
 
     expect(useNavigationStore.getState().status).toBe("navigating");
     expect(useNavigationStore.getState().route).toBe(route);
+    expect(useNavigationStore.getState().destinationWaypoints).toEqual([
+      [0, 0],
+      [0.004, 0],
+    ]);
+  });
+
+  it("cannot replace the itinerary after another route wins", async () => {
+    useNavigationStore.getState().startGroundNavigation(route, "driving", [
+      [0, 0],
+      [0.004, 0],
+    ]);
+    let resolveResponse: (response: { routes: Route[]; activeRouteIndex: number }) => void =
+      () => {};
+    fetchDirections.mockReturnValue(
+      new Promise((resolve) => {
+        resolveResponse = resolve;
+      }),
+    );
+    renderHook(() => useNavigationEngine(disabledResource));
+    await triggerOffRoute();
+    const captured: [number, number][] = [
+      [0.003, 0.002],
+      [0.004, 0],
+    ];
+    const replacement = { ...route, geometry: captured } as Route;
+    act(() =>
+      useNavigationStore
+        .getState()
+        .applyReroute(replacement, undefined, undefined, undefined, captured),
+    );
+    await act(async () => {
+      resolveResponse({ routes: [{ ...route, distance: 999 } as Route], activeRouteIndex: 0 });
+    });
+    expect(useNavigationStore.getState().route).toBe(replacement);
+    expect(useNavigationStore.getState().destinationWaypoints).toEqual(captured);
   });
 
   it("suppresses concurrent reroute attempts", async () => {
@@ -568,6 +629,52 @@ describe("useNavigationEngine incident-resource baseline", () => {
 
     expect(fetchDirections).toHaveBeenCalledWith(expect.objectContaining({ avoidClosures: true }));
   });
+
+  it.each([1500, 2500])(
+    "retains ordered retraced stops in a closure replacement at %im",
+    async (alongMeters) => {
+      const origin: [number, number] = [0, 0];
+      const a: [number, number] = [0.02, 0];
+      const b: [number, number] = [0.01, 0];
+      const destination: [number, number] = [0.03, 0];
+      const from: [number, number] = [0.0175, 0];
+      const retraced = { ...route, geometry: [origin, b, a, b, destination] } as Route;
+      const captured = alongMeters === 1500 ? [from, a, b, destination] : [from, b, destination];
+      const replacement = { ...route, geometry: captured } as Route;
+      fetchDirections.mockResolvedValue({ routes: [replacement], activeRouteIndex: 0 });
+      useNavigationStore
+        .getState()
+        .startGroundNavigation(retraced, "driving", [origin, a, b, destination]);
+      const { rerender } = renderHook(({ resource }) => useNavigationEngine(resource), {
+        initialProps: { resource: resourceWith({ status: "fresh", successfulRevision: 1 }) },
+      });
+      act(() =>
+        useNavigationStore.getState().applyProgress({ snapped: from, alongMeters } as never),
+      );
+      await act(async () => {
+        rerender({
+          resource: resourceWith({
+            status: "fresh",
+            successfulRevision: 2,
+            incidents: [closureIncident("future-closure")],
+          }),
+        });
+      });
+      expect(fetchDirections).toHaveBeenCalledWith(
+        expect.objectContaining({ waypoints: captured, avoidClosures: true }),
+      );
+      expect(useNavigationStore.getState().destinationWaypoints).toEqual(captured);
+      expect(useNavigationStore.getState().route).toBe(replacement);
+      expect(
+        remainingWaypoints(
+          replacement.geometry,
+          useNavigationStore.getState().destinationWaypoints,
+          from,
+          0,
+        ),
+      ).toEqual(captured);
+    },
+  );
 
   it("a stale revision never arms an empty baseline nor triggers a reroute", () => {
     useNavigationStore.getState().startGroundNavigation(route, "driving", waypoints);

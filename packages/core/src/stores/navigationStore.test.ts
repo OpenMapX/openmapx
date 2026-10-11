@@ -1,8 +1,10 @@
 import type { TripItinerary } from "@openmapx/mobility-core/transit";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { remainingWaypoints } from "../navigation/reroute";
 import type { TransitProgress } from "../navigation/transitProgress";
 import type { NavProgress } from "../navigation/types";
 import { configureStorage, type StorageAdapter } from "../platform/storage";
+import type { LngLat } from "../types/geometry";
 import type { Route } from "../types/routing";
 import type { NativeNavigationProjection } from "./navigationStore";
 import { useNavigationStore } from "./navigationStore";
@@ -167,6 +169,49 @@ describe("navigationStore", () => {
     expect(s.progress).toBeNull();
   });
 
+  it("atomically pairs a reroute with the requested remaining itinerary", () => {
+    const original: LngLat[] = [
+      [0, 0],
+      [0.02, 0],
+      [0.01, 0],
+      [0.03, 0],
+    ];
+    const captured: LngLat[] = [
+      [0.0175, 0],
+      [0.01, 0],
+      [0.03, 0],
+    ];
+    const replacement = { ...route, geometry: captured } as Route;
+    useNavigationStore.getState().startGroundNavigation(route, "driving", original);
+    const seen: LngLat[][] = [];
+    const unsubscribe = useNavigationStore.subscribe((state) => {
+      if (state.route === replacement) seen.push(state.destinationWaypoints);
+    });
+    useNavigationStore
+      .getState()
+      .applyReroute(replacement, undefined, undefined, undefined, captured);
+    unsubscribe();
+    expect(seen).toEqual([captured]);
+    expect(
+      remainingWaypoints(
+        replacement.geometry,
+        useNavigationStore.getState().destinationWaypoints,
+        [0.017, 0],
+        0,
+      ),
+    ).toEqual([
+      [0.017, 0],
+      [0.01, 0],
+      [0.03, 0],
+    ]);
+    expect(original).toEqual([
+      [0, 0],
+      [0.02, 0],
+      [0.01, 0],
+      [0.03, 0],
+    ]);
+  });
+
   it("applyReroute swaps the route and returns to navigating", () => {
     const store = useNavigationStore.getState();
     store.startGroundNavigation(route, "driving", [
@@ -181,6 +226,10 @@ describe("navigationStore", () => {
     store.applyReroute(route2);
     expect(useNavigationStore.getState().status).toBe("navigating");
     expect(useNavigationStore.getState().route?.distance).toBe(200);
+    expect(useNavigationStore.getState().destinationWaypoints).toEqual([
+      [0, 0],
+      [1, 1],
+    ]);
     expect(useNavigationStore.getState().progress).toBeNull();
   });
 

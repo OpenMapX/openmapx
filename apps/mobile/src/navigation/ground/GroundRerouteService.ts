@@ -124,9 +124,10 @@ export class GroundRerouteService {
     try {
       const { startPackage } = session.payload;
       const routeOptions = startPackage.routeOptions as Record<string, unknown>;
+      const waypoints = rerouteWaypoints(request);
       const result = await fetchDirections(
         {
-          waypoints: rerouteWaypoints(request),
+          waypoints,
           mode: startPackage.mode,
           units: startPackage.units,
           lang: startPackage.locale,
@@ -147,7 +148,12 @@ export class GroundRerouteService {
       // Validated through exactly the schema a captured package uses. A server
       // response is not more trustworthy than the page, and a malformed route
       // must leave the old one in place rather than half-replace it.
-      const replacement = { ...startPackage, route: candidate, alternatives: [] };
+      const replacement = {
+        ...startPackage,
+        route: candidate,
+        alternatives: [],
+        destinationWaypoints: waypoints,
+      };
       const validated = validateGroundStartPackage(replacement);
       if (!validated.ok) return { ...base, ok: false, code: "invalid-response" };
 

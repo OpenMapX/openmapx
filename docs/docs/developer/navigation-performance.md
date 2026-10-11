@@ -224,6 +224,23 @@ geometric approximation. A source can supply `CategoryPlace.routingEntrance`;
 ordinary coordinates remain an explicit fallback. This contract can be reused by
 future richer stop discovery without changing its routing semantics.
 
+Rerouting uses the same ordered occurrence resolver, starting from the itinerary
+origin before comparing stop positions with current geometry-measured progress.
+This retains a later stop on a retraced road and distinct repeated stops when
+the intervening itinerary establishes their order. Consecutive equal-coordinate
+stops share a position; coordinate-only itineraries cannot disambiguate every
+intended later visit to the first intermediate stop. Provider leg distances are
+not interchangeable with metres measured along the route geometry.
+
+An accepted replacement route must adopt the exact remaining itinerary captured
+for its request, including that request's origin. Web reroutes commit both in one
+store update, faster-route offers carry the itinerary until acceptance, and the
+mobile reroute producer includes it in the validated replacement package. Failed
+or obsolete responses and declined offers leave the active itinerary unchanged.
+This prevents a second reroute from resurrecting stops visited on the old route.
+Legacy internal callers that omit replacement waypoints retain their existing
+itinerary; callers requesting a pruned route must pass its captured waypoint list.
+
 The web hook evaluates six candidates, two at a time, after one baseline. It
 pins an enabled integration using the optional directions `provider` parameter;
 normal unpinned routing retains its fallback chain, while a pin never falls back
