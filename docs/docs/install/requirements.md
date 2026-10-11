@@ -23,13 +23,13 @@ run, and any one of them can be left out in favor of a hosted endpoint.
 Everything is run from a clone of the repository; there is nothing to install
 globally beyond the host tooling below.
 
-| Software           | Version            | Why it's needed                                                           |
-| ------------------ | ------------------ | ------------------------------------------------------------------------- |
-| **Docker Engine**  | recent (27+)       | Runs every OpenMapX service as a container                                |
-| **Docker Compose** | v2                 | Orchestrates the generated stack (`docker compose`, not `docker-compose`) |
-| **Node.js**        | 24.21.0 or newer   | Runs the `openmapx` CLI directly off TypeScript — no build step           |
-| **pnpm**           | 12                 | Workspace package manager for the monorepo                                |
-| **git**            | any                | Cloning the repo and any community extensions that ship a service         |
+| Software           | Version          | Why it's needed                                                           |
+| ------------------ | ---------------- | ------------------------------------------------------------------------- |
+| **Docker Engine**  | recent (27+)     | Runs every OpenMapX service as a container                                |
+| **Docker Compose** | v2               | Orchestrates the generated stack (`docker compose`, not `docker-compose`) |
+| **Node.js**        | 24.21.0 or newer | Runs the `openmapx` CLI directly off TypeScript — no build step           |
+| **pnpm**           | 12               | Workspace package manager for the monorepo                                |
+| **git**            | any              | Cloning the repo and any community extensions that ship a service         |
 
 A few notes:
 
