@@ -95,6 +95,130 @@
       ]
     },
     {
+      "id": "oc:situation:nl-ndw-events:RWS01_SM1080891_D2_WWA#RWS01_M1080891_EMERGENCY_SERVICES_D2_WWA/access",
+      "record_id": "oc:situation:nl-ndw-events:RWS01_SM1080891_D2_WWA",
+      "effect_id": "RWS01_M1080891_EMERGENCY_SERVICES_D2_WWA/access",
+      "source": "test-child",
+      "kind": "roadworks",
+      "type": "works",
+      "subtype": "maintenance",
+      "severity": "moderate",
+      "effect": {
+        "id": "RWS01_M1080891_EMERGENCY_SERVICES_D2_WWA/access",
+        "v": 1,
+        "kind": "access",
+        "mode": "prohibited",
+        "applicability": {
+          "kind": "classes",
+          "include": [
+            {
+              "usage": "emergency_services"
+            }
+          ]
+        },
+        "direction": {
+          "value": "positive",
+          "basis": "alert_c",
+          "text": "aligned"
+        },
+        "compliance": "advisory",
+        "normalization": "complete",
+        "actionStatus": "implemented",
+        "source": {
+          "path": "situationRecord.forVehiclesWithCharacteristicsOf[0].vehicleUsage[0]",
+          "tokens": {
+            "sourcePath": "situationRecord.forVehiclesWithCharacteristicsOf[0].vehicleUsage[0]",
+            "sourceName": "ZN-ZO [RWS Zuid-Nederland District Zuid-Oost]",
+            "vehicleUsage": "emergencyServices",
+            "locationRefs": {
+              "scheme": "alert_c",
+              "countryCode": "8",
+              "tableNumber": "6.13",
+              "tableVersion": "A",
+              "primaryLocation": "10439",
+              "secondaryLocation": "10436",
+              "directionCoded": "positive",
+              "affectedDirection": "aligned"
+            }
+          }
+        },
+        "sourceRecordRef": "RWS01_M1080891_EMERGENCY_SERVICES_D2_WWA/133"
+      },
+      "origin": "feed",
+      "evidence_state": null,
+      "routing_eligible": true,
+      "binding": {
+        "status": "exact",
+        "confidence": 0.99,
+        "direction_mode": "single"
+      },
+      "routing_evidence": {
+        "schema_version": 2,
+        "record_class": "situation",
+        "record_id": "oc:situation:nl-ndw-events:RWS01_SM1080891_D2_WWA",
+        "effect_id": "RWS01_M1080891_EMERGENCY_SERVICES_D2_WWA/access",
+        "record_revision": 1,
+        "binding_revision": 1,
+        "effect_kind": "access",
+        "graph_generation": "graph-generation-1",
+        "resolver_version": "2.0.0",
+        "source_id": "test-parent",
+        "child_source_id": "test-child",
+        "source_license": "CC0-1.0",
+        "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+        "attribution": "Example road authority",
+        "record_url": "https://example.test/conditions/1",
+        "source_checked_at": "2026-09-11T11:59:00.000Z",
+        "fresh_until": "2026-09-11T12:15:00.000Z",
+        "expires_at": "2026-09-11T12:15:00.000Z",
+        "valid_from": "2026-09-11T11:59:00.000Z",
+        "valid_to": "2026-09-11T12:15:00.000Z",
+        "next_transition_at": "2026-09-11T12:15:00.000Z",
+        "direction_mode": "forward",
+        "applicability": {
+          "kind": "classes",
+          "include": [
+            {
+              "usage": "emergency_services"
+            }
+          ]
+        },
+        "rights": {
+          "source_redistribution": "yes",
+          "derived_redistribution": "yes",
+          "commercial_use": "yes",
+          "attribution_required": "yes",
+          "retention": "yes",
+          "evidence_origin": "feed-descriptor",
+          "evidence_version": "1",
+          "reviewed_at": "2026-09-10T12:00:00.000Z"
+        },
+        "segments": [
+          {
+            "segment_id": "123:f",
+            "direction": "forward",
+            "from_fraction": 0,
+            "to_fraction": 1
+          }
+        ],
+        "binding_status": "exact",
+        "reason_codes": [],
+        "evaluated_at": "2026-09-11T12:00:00.000Z"
+      },
+      "segments": [
+        {
+          "way_id": 123,
+          "dir": "f",
+          "start_fraction": 0,
+          "end_fraction": 1,
+          "geometry": {
+            "type": "LineString",
+            "coordinates": [[13.4, 52.5], [13.41, 52.5]]
+          }
+        }
+      ]
+    },
+    {
       "id": "oc:situation:nl-ndw-events:RWS01_SM1080891_D2_WWA#RWS01_M1080891_NARROW_LANES_D2_WWA/closure",
       "record_id": "oc:situation:nl-ndw-events:RWS01_SM1080891_D2_WWA",
       "effect_id": "RWS01_M1080891_NARROW_LANES_D2_WWA/closure",
@@ -201,130 +325,6 @@
                   }
                 }
               ]
-            }
-          ]
-        },
-        "rights": {
-          "source_redistribution": "yes",
-          "derived_redistribution": "yes",
-          "commercial_use": "yes",
-          "attribution_required": "yes",
-          "retention": "yes",
-          "evidence_origin": "feed-descriptor",
-          "evidence_version": "1",
-          "reviewed_at": "2026-09-10T12:00:00.000Z"
-        },
-        "segments": [
-          {
-            "segment_id": "123:f",
-            "direction": "forward",
-            "from_fraction": 0,
-            "to_fraction": 1
-          }
-        ],
-        "binding_status": "exact",
-        "reason_codes": [],
-        "evaluated_at": "2026-09-11T12:00:00.000Z"
-      },
-      "segments": [
-        {
-          "way_id": 123,
-          "dir": "f",
-          "start_fraction": 0,
-          "end_fraction": 1,
-          "geometry": {
-            "type": "LineString",
-            "coordinates": [[13.4, 52.5], [13.41, 52.5]]
-          }
-        }
-      ]
-    },
-    {
-      "id": "oc:situation:nl-ndw-events:RWS01_SM1080891_D2_WWA#RWS01_M1080891_EMERGENCY_SERVICES_D2_WWA/access",
-      "record_id": "oc:situation:nl-ndw-events:RWS01_SM1080891_D2_WWA",
-      "effect_id": "RWS01_M1080891_EMERGENCY_SERVICES_D2_WWA/access",
-      "source": "test-child",
-      "kind": "roadworks",
-      "type": "works",
-      "subtype": "maintenance",
-      "severity": "moderate",
-      "effect": {
-        "id": "RWS01_M1080891_EMERGENCY_SERVICES_D2_WWA/access",
-        "v": 1,
-        "kind": "access",
-        "mode": "prohibited",
-        "applicability": {
-          "kind": "classes",
-          "include": [
-            {
-              "usage": "emergency_services"
-            }
-          ]
-        },
-        "direction": {
-          "value": "positive",
-          "basis": "alert_c",
-          "text": "aligned"
-        },
-        "compliance": "advisory",
-        "normalization": "complete",
-        "actionStatus": "implemented",
-        "source": {
-          "path": "situationRecord.forVehiclesWithCharacteristicsOf[0].vehicleUsage[0]",
-          "tokens": {
-            "sourcePath": "situationRecord.forVehiclesWithCharacteristicsOf[0].vehicleUsage[0]",
-            "sourceName": "ZN-ZO [RWS Zuid-Nederland District Zuid-Oost]",
-            "vehicleUsage": "emergencyServices",
-            "locationRefs": {
-              "scheme": "alert_c",
-              "countryCode": "8",
-              "tableNumber": "6.13",
-              "tableVersion": "A",
-              "primaryLocation": "10439",
-              "secondaryLocation": "10436",
-              "directionCoded": "positive",
-              "affectedDirection": "aligned"
-            }
-          }
-        },
-        "sourceRecordRef": "RWS01_M1080891_EMERGENCY_SERVICES_D2_WWA/133"
-      },
-      "origin": "feed",
-      "evidence_state": null,
-      "routing_eligible": true,
-      "binding": {
-        "status": "exact",
-        "confidence": 0.99,
-        "direction_mode": "single"
-      },
-      "routing_evidence": {
-        "schema_version": 2,
-        "record_class": "situation",
-        "record_id": "oc:situation:nl-ndw-events:RWS01_SM1080891_D2_WWA",
-        "effect_id": "RWS01_M1080891_EMERGENCY_SERVICES_D2_WWA/access",
-        "record_revision": 1,
-        "binding_revision": 1,
-        "effect_kind": "access",
-        "graph_generation": "graph-generation-1",
-        "resolver_version": "2.0.0",
-        "source_id": "test-parent",
-        "child_source_id": "test-child",
-        "source_license": "CC0-1.0",
-        "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
-        "attribution": "Example road authority",
-        "record_url": "https://example.test/conditions/1",
-        "source_checked_at": "2026-09-11T11:59:00.000Z",
-        "fresh_until": "2026-09-11T12:15:00.000Z",
-        "expires_at": "2026-09-11T12:15:00.000Z",
-        "valid_from": "2026-09-11T11:59:00.000Z",
-        "valid_to": "2026-09-11T12:15:00.000Z",
-        "next_transition_at": "2026-09-11T12:15:00.000Z",
-        "direction_mode": "forward",
-        "applicability": {
-          "kind": "classes",
-          "include": [
-            {
-              "usage": "emergency_services"
             }
           ]
         },
