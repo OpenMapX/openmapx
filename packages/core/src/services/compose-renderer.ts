@@ -391,6 +391,7 @@ export interface ComposeServiceSnippet {
   secrets?: Array<{ source: string; target: string }>;
   labels?: Record<string, string>;
   restart?: string;
+  stop_grace_period?: string;
   healthcheck?: Record<string, unknown>;
   depends_on?: Record<string, { condition: string }>;
   logging?: { driver: string; options?: Record<string, string> };
@@ -686,6 +687,7 @@ export function renderServiceSnippet(
   }
 
   if (c.restart) snippet.restart = c.restart;
+  if (c.stopGracePeriod) snippet.stop_grace_period = c.stopGracePeriod;
 
   if (c.healthcheck) {
     snippet.healthcheck = renderHealthcheck(c.healthcheck, c);

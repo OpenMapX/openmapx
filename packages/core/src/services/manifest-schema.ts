@@ -329,6 +329,10 @@ const containerSchema = z.object({
   networkMode: z.enum(["bridge", "host"]).optional(),
   memory: z.string().optional(),
   restart: z.enum(["no", "on-failure", "always", "unless-stopped"]).optional(),
+  stopGracePeriod: z
+    .string()
+    .regex(/^(\d+(h|m|s|ms))+$/, "a duration such as 30s, 5m or 1m30s")
+    .optional(),
   healthcheck: healthcheckSchema.optional(),
   dependsOn: z.array(dependsOnSchema).optional(),
   logging: z

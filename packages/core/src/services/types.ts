@@ -207,6 +207,8 @@ export interface ServiceContainer {
   networkMode?: "bridge" | "host";
   memory?: string;
   restart?: "no" | "on-failure" | "always" | "unless-stopped";
+  /** How long Docker waits for the container to stop before killing it (Compose duration, e.g. `5m`). */
+  stopGracePeriod?: string;
   healthcheck?: ServiceHealthCheck;
   dependsOn?: Array<{ service: string; condition?: "service_started" | "service_healthy" }>;
   logging?: { driver: string; options?: Record<string, string> };

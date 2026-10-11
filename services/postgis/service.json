@@ -27,6 +27,7 @@
     "shmSize": "1g",
     "memory": "${POSTGIS_MEMORY:-2g}",
     "restart": "unless-stopped",
+    "stopGracePeriod": "5m",
     "entrypoint": ["/usr/local/bin/openmapx-postgis-entrypoint.sh"],
     "command": [
       "postgres",
