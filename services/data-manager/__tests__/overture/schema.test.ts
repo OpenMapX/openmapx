@@ -79,6 +79,16 @@ describe("current Overture taxonomy schema", () => {
     expect(ddl).not.toContain("opening_hours");
   });
 
+  it("keeps the active link unique constraint and cascade without a duplicate index", () => {
+    const ddl = buildSchemaDDL("overture_places");
+    expect(ddl).toContain(
+      'gers_id           TEXT NOT NULL UNIQUE REFERENCES "overture_places".places(gers_id) ON DELETE CASCADE',
+    );
+    expect(ddl).not.toMatch(
+      /CREATE INDEX \w+ ON "overture_places"\.poi_conflation_link \(gers_id\)/,
+    );
+  });
+
   it("can defer Places indexes until after a bulk ingest", () => {
     const ddl = buildSchemaDDL("overture_places", { deferPlacesIndexes: true });
     expect(ddl).toContain('CREATE TABLE "overture_places".places');
