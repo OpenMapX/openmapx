@@ -9,6 +9,58 @@ function read(relativePath: string): string {
 }
 
 describe("production supply-chain policy", () => {
+  it("keeps runtime and mobile release toolchain declarations aligned", () => {
+    const nodeVersion = read(".nvmrc").trim();
+    const rootPackage = JSON.parse(read("package.json")) as {
+      packageManager?: string;
+      engines?: { node?: string };
+    };
+    const docsPackage = JSON.parse(read("docs/package.json")) as {
+      packageManager?: string;
+      engines?: { node?: string };
+    };
+    const mobilePackage = JSON.parse(read("apps/mobile/package.json")) as {
+      dependencies?: Record<string, string>;
+    };
+    const releaseToolchains = JSON.parse(read("apps/mobile/release/toolchains.json")) as {
+      node?: string;
+      pnpm?: string;
+      expoSdk?: string;
+      reactNative?: string;
+    };
+    const packageManager = rootPackage.packageManager?.match(/^pnpm@([^+]+)/)?.[1];
+    const expoVersion = mobilePackage.dependencies?.expo?.replace(/^[~^]/, "");
+
+    expect(rootPackage.engines?.node).toBe(`>=${nodeVersion}`);
+    expect(docsPackage.engines?.node).toBe(`>=${nodeVersion}`);
+    expect(docsPackage.packageManager).toBe(rootPackage.packageManager);
+    expect(releaseToolchains.node).toBe(`>=${nodeVersion}`);
+    expect(releaseToolchains.pnpm).toBe(packageManager);
+    expect(releaseToolchains.expoSdk).toBe(expoVersion?.split(".")[0]);
+    expect(releaseToolchains.reactNative).toBe(mobilePackage.dependencies?.["react-native"]);
+
+    for (const dockerfile of [
+      "apps/api/Dockerfile",
+      "apps/ops-agent/Dockerfile",
+      "apps/transitous-runner/Dockerfile",
+      "apps/web/Dockerfile",
+      "docs/Dockerfile",
+      "services/data-manager/Dockerfile",
+    ]) {
+      const contents = read(dockerfile);
+      const nodeImages = contents.match(/^FROM node:([^@\s]+)/gm) ?? [];
+      expect(nodeImages.length, dockerfile).toBeGreaterThan(0);
+      expect(contents, `${dockerfile} must prime pnpm before offline build stages`).toContain(
+        "pnpm --version",
+      );
+      for (const image of nodeImages) {
+        expect(image, dockerfile).toMatch(
+          new RegExp(`^FROM node:${nodeVersion.replaceAll(".", "\\.")}-`),
+        );
+      }
+    }
+  });
+
   it("keeps the React Native Jest preset exactly aligned with the runtime", () => {
     const mobilePackage = JSON.parse(read("apps/mobile/package.json")) as {
       dependencies?: Record<string, string>;
@@ -141,6 +193,13 @@ describe("production supply-chain policy", () => {
 
     // DuckDB is the image's one downloaded executable.
     expect(dataManagerDockerfile.match(/sha256sum -c -/g)).toHaveLength(1);
+    expect(dataManagerDockerfile).toContain("ARG DUCKDB_VERSION=1.5.6");
+    expect(dataManagerDockerfile).toContain(
+      "ARG DUCKDB_SHA256_AMD64=6e89deac1ebbc36eed0291caf8b567b030c7b86ac35998f71854e22b3c5d5e2f",
+    );
+    expect(dataManagerDockerfile).toContain(
+      "ARG DUCKDB_SHA256_ARM64=c544e92c9b7c31fc53c2139802cabd8e2d1b2b3e3f933117f31611239c1402db",
+    );
     expect(dataManagerDockerfile).not.toMatch(/download\.docker\.com|docker\/compose\/releases/);
     expect(dataManagerDockerfile).toMatch(/pip3 install[^\n]*--require-hashes/);
     expect(transitousDockerfile).not.toContain('MOTIS_SHA256_AMD64=""');

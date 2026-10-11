@@ -94,7 +94,7 @@ body:
       placeholder: |
         OS: macOS 15.0 / Ubuntu 24.04
         Node: 24.x
-        pnpm: 11.x
+        pnpm: 12.x
         Browser: Chrome 132 (if a web issue)
         Docker: 27.x (if self-hosted)
         Services enabled: postgis, martin, valhalla, motis, …
