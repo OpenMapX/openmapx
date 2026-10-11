@@ -319,7 +319,9 @@ time:
 On the approach to any maneuver, the camera **tilts and closes in** so the turn
 reads as a place, and an **arrow on the map** traces the route through the split.
 Both revert automatically after the maneuver, and a pinch or drag during the
-approach is never interrupted.
+approach is never interrupted. Small speed changes keep the same maneuver in
+focus; the emphasis resets when the maneuver passes, the route changes, or you
+move back far enough to leave its approach.
 
 For motorway and expressway exits, forks, and splits while driving, a **junction view** card
 appears under the banner. It shows the lanes of the overhead gantry with the

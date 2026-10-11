@@ -34,7 +34,7 @@ export interface NavProgress extends ProgressResult {
   bearing: number;
   /**
    * Ground speed at this fix, m/s. Prefers the GPS-reported speed; falls back to
-   * the along-route distance covered since the previous fix. Drives the
+   * an accuracy-weighted trend of real along-route fixes. Drives the
    * dead-reckoning follow camera between fixes.
    */
   speedMps: number;
@@ -124,6 +124,19 @@ export interface FixInput {
   coasted?: boolean;
 }
 
+/** Constant-space speed-fit statistics; never a sequence of past positions. */
+export interface NavigationSpeedState {
+  timestampMs: number;
+  weight: number;
+  meanAgeSeconds: number;
+  meanAlongMeters: number;
+  varianceSeconds: number;
+  covarianceMetersSeconds: number;
+  reportedSpeedMps: number;
+  reportedSpeedWeight: number;
+  speedMps: number;
+}
+
 export interface NavTickState {
   /**
    * Accrued off-route evidence: +2 per off-route fix while moving, +1 while
@@ -135,10 +148,12 @@ export interface NavTickState {
   /** Current reroute debounce (ms); grows on repeat reroutes, resets on route. 0 = use base. */
   rerouteBackoffMs: number;
   spokenCues: string[];
-  /** Snapped arc-length of the previous fix, m — for the speed fallback. */
+  /** Snapped arc-length of the previous fix, m. */
   lastAlongMeters?: number;
-  /** Timestamp of the previous fix, ms — for the speed fallback. */
+  /** Timestamp of the previous fix, ms. */
   lastFixMs?: number;
+  /** Accuracy-weighted speed trend from real fixes only; synthetic coasts leave it alone. */
+  speedEstimate?: NavigationSpeedState;
   /** Previous raw fix position — for deriving the motion bearing when GPS heading is absent. */
   lastRaw?: LngLat;
   /** Previous perpendicular deviation (m) — for the stationary-jitter dead-band. */

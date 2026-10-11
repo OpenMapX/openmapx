@@ -2,7 +2,6 @@ import type { Route } from "@integrations/routing/types";
 import type { LngLat } from "@openmapx/core";
 import {
   cumulativeDistances,
-  guidanceApproachMeters,
   positionAt,
   stepDeadReckon,
   useNavigationStore,
@@ -17,6 +16,7 @@ import {
   subscribeCameraPaddingTarget,
 } from "@/lib/cameraPadding";
 import { prefersReducedMotion } from "@/lib/reducedMotion";
+import { type NavCameraApproach, navCameraApproach } from "./navCameraApproach";
 import {
   CAMERA_PADDING_EPSILON,
   CAMERA_PITCH_SETTLED_DEG,
@@ -213,7 +213,7 @@ export function useNavCamera(): void {
   // mode pitch or the approach pitch.
   const displayedPitchRef = useRef<number | null>(null);
   // The approach predicate the frame loop reads imperatively.
-  const approachRef = useRef(false);
+  const approachRef = useRef<NavCameraApproach | null>(null);
   // Eased camera padding, so a chrome change slides the framing instead of
   // stepping it. null = "take whatever the map currently shows".
   const displayedPaddingRef = useRef<ResolvedPadding | null>(null);
@@ -318,18 +318,13 @@ export function useNavCamera(): void {
     requestFrame();
   }, [progress, requestFrame]);
 
-  // The approach predicate for the camera tilt, written for the frame loop to
-  // read imperatively. Re-evaluated from the distance to the next maneuver,
-  // the speed and the travel mode — two comparisons per fix, no allocation.
+  // Hold approach emphasis for this maneuver through speed/GPS jitter, releasing
+  // it on a new maneuver/route or a meaningful retreat. The frame loop reads it
+  // imperatively; the gate only runs when a fix or route/mode changes.
   useEffect(() => {
-    const motorised = mode === "driving" || mode === "motorcycle";
-    const distance = progress?.distanceToNextManeuver;
-    approachRef.current =
-      motorised &&
-      distance !== undefined &&
-      distance <= guidanceApproachMeters(mode, progress?.speedMps ?? 0);
+    approachRef.current = navCameraApproach(approachRef.current, route, mode, progress);
     requestFrame();
-  }, [requestFrame, mode, progress?.distanceToNextManeuver, progress?.speedMps]);
+  }, [requestFrame, route, mode, progress]);
 
   // (Re)entering follow: establish zoom + pitch with a short ease, then let the
   // per-frame loop take over centre/bearing once it settles.
@@ -482,7 +477,7 @@ export function useNavCamera(): void {
           // taken zoom control — then leave zoom untouched so navigation
           // continues at their chosen zoom.
           const commandZoom = !userZoomedRef.current;
-          const approaching = approachRef.current;
+          const approaching = approachRef.current !== null;
           const speed = useNavigationStore.getState().progress?.speedMps ?? 0;
           let zoom = map.getZoom();
           if (commandZoom) {
@@ -603,7 +598,7 @@ export function useNavCamera(): void {
       displayedPaddingRef.current = null;
       paddingTargetRef.current = null;
       displayedPitchRef.current = null;
-      approachRef.current = false;
+      approachRef.current = null;
       userZoomedRef.current = false;
       userCamActivityUntilRef.current = 0;
       userInteractingRef.current = false;
