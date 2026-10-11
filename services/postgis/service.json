@@ -33,7 +33,7 @@
       "-c",
       "max_wal_size=${POSTGIS_MAX_WAL_SIZE:-4GB}",
       "-c",
-      "checkpoint_timeout=15min",
+      "checkpoint_timeout=${POSTGIS_CHECKPOINT_TIMEOUT:-15min}",
       "-c",
       "wal_compression=zstd"
     ],
