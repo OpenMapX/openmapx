@@ -33,8 +33,12 @@ export function useNlpSearch(
 ) {
   const centerKey = mapCenter ? `${mapCenter[0].toFixed(2)},${mapCenter[1].toFixed(2)}` : null;
 
+  const boundsKey = mapBbox
+    ? ([mapBbox.south, mapBbox.west, mapBbox.north, mapBbox.east] as const)
+    : null;
+
   return useQuery<NlpParseResponse>({
-    queryKey: ["nlp-search", query, lang, centerKey, cloudAccess],
+    queryKey: ["nlp-search", query, lang, centerKey, boundsKey, cloudAccess],
     queryFn: ({ signal }) =>
       apiClient.post<NlpParseResponse>(
         API_ENDPOINTS.nlpParse,
