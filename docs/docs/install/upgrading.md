@@ -393,6 +393,23 @@ for stored provider tokens as well as sessions. Rotating it deliberately is
 supported, but every linked OAuth account will need to be re-linked afterwards —
 Better Auth does not re-encrypt existing tokens under a new secret.
 
+## Martin's own database login
+
+Martin used to log in as the `postgres` superuser and publish every table it
+could see, including the OpenConditions records and crowd reports kept in the
+same database. It now serves only the traffic-flow tiles and logs in as
+`openmapx_tiles`, which can read no table. If Martin is enabled, set its
+password before rendering, then restart PostGIS so it applies it:
+
+```bash
+echo "MARTIN_DB_PASSWORD=$(openssl rand -hex 32)" >> infra/docker/.env
+pnpm openmapx compose render
+pnpm openmapx services update postgis --no-deps
+pnpm openmapx services update martin
+```
+
+Without the password, rendering fails with `MARTIN_DB_PASSWORD must be set`.
+
 ## Reclaiming disk after an upgrade
 
 Pulling a new release leaves the previous images on disk as dangling layers.

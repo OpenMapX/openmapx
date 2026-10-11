@@ -64,19 +64,72 @@ until pg_isready -U "$PG_USER" -d postgres -h /var/run/postgresql -q 2>/dev/null
   sleep 1
 done
 
+# Run the SQL on stdin in one transaction. On a first start the upstream
+# entrypoint initialises through a temporary server, which can answer before
+# it has created the database and stops while it is used; every statement
+# here is idempotent, so try again until the server that stays answers.
+# `log_statement=none` keeps passwords off the postgres logs.
+run_sql() {
+  local db="$1" sql
+  sql=$(cat)
+  for _ in $(seq 30); do
+    if PGOPTIONS="-c log_statement=none" \
+      psql -U "$PG_USER" -d "$db" -h /var/run/postgresql \
+        -v ON_ERROR_STOP=1 --no-psqlrc -q --single-transaction \
+        >/dev/null 2>&1 <<<"$sql"; then
+      return 0
+    fi
+    kill -0 "$PG_PID" 2>/dev/null || break
+    sleep 1
+  done
+  PGOPTIONS="-c log_statement=none" \
+    psql -U "$PG_USER" -d "$db" -h /var/run/postgresql \
+      -v ON_ERROR_STOP=1 --no-psqlrc -q --single-transaction >/dev/null <<<"$sql"
+}
+
 # Resync the superuser password from env. Embedded single quotes (the only
 # character that can break out of a SQL string literal in standard-conforming
-# mode) are doubled before interpolation. `log_statement=none` keeps the
-# ALTER off the postgres logs so the password doesn't land there in
-# plaintext.
+# mode) are doubled before interpolation.
 if [ -n "${POSTGRES_PASSWORD:-}" ]; then
   ESCAPED_PASSWORD=${POSTGRES_PASSWORD//\'/\'\'}
-  PGOPTIONS="-c log_statement=none" \
-    psql -U "$PG_USER" -d postgres -h /var/run/postgresql \
-      -v ON_ERROR_STOP=1 --no-psqlrc -q \
-      -c "ALTER USER \"${PG_USER}\" WITH PASSWORD '${ESCAPED_PASSWORD}';" >/dev/null
+  run_sql postgres <<<"ALTER USER \"${PG_USER}\" WITH PASSWORD '${ESCAPED_PASSWORD}';"
   echo "[openmapx-postgis] superuser password synced from env"
 fi
+
+# The tile server's login. It may only call the functions in the `tiles`
+# schema; each runs as its owner and returns one finished tile, so the role
+# itself can read no table. The traffic-flow function looks up OpenConditions'
+# `conditions.segment_flow` when called, so it can be created before
+# OpenConditions is installed; that function calls PostGIS unqualified, hence
+# `public` on the search path, which only the database owner may write to.
+# Without MARTIN_DB_PASSWORD the role cannot log in.
+TILES_ROLE="openmapx_tiles"
+if [ -n "${MARTIN_DB_PASSWORD:-}" ]; then
+  ESCAPED_TILES_PASSWORD=${MARTIN_DB_PASSWORD//\'/\'\'}
+  TILES_LOGIN="LOGIN PASSWORD '${ESCAPED_TILES_PASSWORD}'"
+else
+  TILES_LOGIN="NOLOGIN PASSWORD NULL"
+fi
+run_sql "${POSTGRES_DB:-$PG_USER}" <<SQL
+SELECT 'CREATE ROLE ${TILES_ROLE}' WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '${TILES_ROLE}')
+\gexec
+ALTER ROLE ${TILES_ROLE} NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS NOINHERIT ${TILES_LOGIN};
+CREATE SCHEMA IF NOT EXISTS tiles;
+REVOKE ALL ON SCHEMA tiles FROM PUBLIC;
+GRANT USAGE ON SCHEMA tiles TO ${TILES_ROLE};
+CREATE OR REPLACE FUNCTION tiles.segment_flow(z integer, x integer, y integer, query_params json)
+  RETURNS bytea
+  LANGUAGE plpgsql STABLE STRICT PARALLEL SAFE SECURITY DEFINER
+  SET search_path = public, pg_temp
+AS \$\$
+BEGIN
+  RETURN conditions.segment_flow(z, x, y, query_params);
+END;
+\$\$;
+REVOKE ALL ON FUNCTION tiles.segment_flow(integer, integer, integer, json) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION tiles.segment_flow(integer, integer, integer, json) TO ${TILES_ROLE};
+SQL
+echo "[openmapx-postgis] tile server role ${TILES_ROLE} ready"
 
 # Mark the sync as done. Healthcheck only returns success after this exists,
 # so dependents waiting on `condition: service_healthy` start with a known-

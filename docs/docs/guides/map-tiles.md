@@ -225,11 +225,16 @@ against refreshed source data produces a new content-addressed identity.
 
 ## Martin overlays
 
-Martin publishes PostGIS tables, views, and tile functions as dynamic vector
-tile endpoints. Enable it when application or integration data should be drawn
-as an overlay:
+Martin serves PostGIS tile functions as dynamic vector tile endpoints. It
+serves only the sources declared in `services/martin/config/martin.yaml`,
+today the traffic-flow overlay's `segment_flow`, and logs in as
+`openmapx_tiles`, a role that can call the functions in the `tiles` schema and
+read no table. Set its password before enabling Martin; PostGIS applies it on
+its next start:
 
 ```bash
+echo "MARTIN_DB_PASSWORD=$(openssl rand -hex 32)" >> infra/docker/.env
+pnpm openmapx services update postgis --no-deps
 pnpm openmapx services enable martin
 pnpm openmapx compose render
 pnpm openmapx services start martin
