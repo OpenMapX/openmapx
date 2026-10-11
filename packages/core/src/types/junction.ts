@@ -1,3 +1,4 @@
+import type { ResolvedLaneGuidance } from "../navigation/lanes";
 import type { LngLat } from "./geometry";
 import type { ManeuverSign } from "./routing";
 
@@ -9,6 +10,8 @@ export interface JunctionDecisionPoint {
   stepIndex: number;
   kind: JunctionKind;
   side: "left" | "right";
+  /** Provider's selected maneuver direction; absence must not imply a turn. */
+  direction?: string;
   point: LngLat;
   /** Arc-length on route geometry in metres; engine-distance fallback when step coordinates are missing. */
   alongMeters: number;
@@ -17,8 +20,14 @@ export interface JunctionDecisionPoint {
   /** Signed ramp divergence: bearingAfter − bearingBefore normalised to (−180, 180]; geometry fallback. */
   divergenceDeg: number;
   laneCount?: number;
-  /** 0-based indices of lanes the engine marks valid/active (after resolveRecommendedLanes). */
+  /** Preferred lane indices when supplied, otherwise initially usable indices. */
   activeLanes: number[];
+  laneGuidance?: ResolvedLaneGuidance;
+  /** Ordered route samples after this occurrence, used to identify the connected branch. */
+  departureTrace?: LngLat[];
+  /** Ordered route samples on the incoming layout. */
+  approachTrace?: LngLat[];
+  roadNames?: string[];
   sign?: ManeuverSign;
 }
 
@@ -54,6 +63,11 @@ export interface JunctionWay {
   /** Metres from the way's travel-direction start node to the decision point; a ramp leaving the split starts near 0. */
   startDistanceMeters: number;
   tags: OsmLaneTags;
+  /** Bounded local shape in legal travel direction. */
+  geometry?: LngLat[];
+  layer?: number;
+  tunnel?: boolean;
+  bridge?: boolean;
 }
 
 /** One decision point as sent to the junctions endpoint. */
@@ -121,6 +135,13 @@ export interface GantryModel {
   laneCount: number;
   panels: GantryPanel[];
   activeLanes: number[];
+  laneGuidance?: ResolvedLaneGuidance;
+  /** The route title is separate from physical overhead-board content. */
+  selectedRoute?: { refs: string[]; destinations: string[]; exitNumber?: string; turn?: string };
+  approachWay?: JunctionWay;
+  /** Local incoming intervals used to verify the road level and lane count at the camera. */
+  approachWays?: JunctionWay[];
+  laneEvidence?: "engine" | "osm-destination" | "unknown" | "conflict";
   /** False when no reliable incoming lane assignment is available for the photo overlay. */
   laneSelectionReliable?: boolean;
   /** Raw OSM `turn:lanes` token per lane, left to right, when the way carries them. */

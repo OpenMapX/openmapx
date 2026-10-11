@@ -3,6 +3,7 @@ import type { ManeuverLane } from "../../types/routing";
 import {
   guidanceApproachMeters,
   junctionPhotoApproachMeters,
+  resolveLaneGuidance,
   resolveRecommendedLanes,
   shouldPreviewNextStep,
 } from "../lanes";
@@ -10,38 +11,60 @@ import {
 const lane = (indications: string[], valid = false): ManeuverLane => ({ indications, valid });
 
 describe("resolveRecommendedLanes", () => {
+  it("does not turn unknown arrows into an invented recommendation", () => {
+    const result = resolveLaneGuidance([{ indications: ["left"] }, { indications: ["through"] }]);
+    expect(result.state).toBe("unknown");
+    expect(result.usableLanes).toEqual([]);
+    expect(result.preferredLanes).toEqual([]);
+  });
+  it("keeps initially usable and preferred sets distinct", () => {
+    const result = resolveLaneGuidance([
+      { indications: ["left"], valid: true, preferred: false },
+      { indications: ["left"], valid: true, preferred: true },
+      { indications: ["right"], valid: false, preferred: false },
+    ]);
+    expect(result.usableLanes).toEqual([0, 1]);
+    expect(result.preferredLanes).toEqual([1]);
+    expect(result.state).toBe("known");
+  });
+  it("preserves explicit engine rejection instead of guessing from turn arrows", () => {
+    const lanes = [lane(["left"], false), lane(["through"], false), lane(["right"], false)];
+    expect(
+      resolveRecommendedLanes(lanes, { type: "turn", modifier: "left" }).map((l) => l.valid),
+    ).toEqual([false, false, false]);
+  });
   it("trusts the engine when a lane is already valid", () => {
     const lanes = [lane(["left"], true), lane(["through"])];
     expect(resolveRecommendedLanes(lanes, { type: "turn", modifier: "right" })).toBe(lanes);
   });
 
-  it("recommends an exact-match lane when the engine didn't decide", () => {
+  it("does not override rejection even for an exact turn match", () => {
     const lanes = [lane(["left"]), lane(["through"]), lane(["right"])];
     const out = resolveRecommendedLanes(lanes, { type: "turn", modifier: "left" });
-    expect(out.map((l) => l.valid)).toEqual([true, false, false]);
-    expect(out[0].active).toBe("left");
+    expect(out.map((l) => l.valid)).toEqual([false, false, false]);
+    expect(out[0].active).toBeUndefined();
   });
 
-  it("falls back to the same side when there's no exact match", () => {
+  it("does not infer branch identity from the same side", () => {
     const lanes = [lane(["slight left"]), lane(["through"])];
     const out = resolveRecommendedLanes(lanes, { type: "turn", modifier: "left" });
-    expect(out[0].valid).toBe(true); // slight left serves a left turn
+    expect(out[0].valid).toBe(false);
   });
 
-  it("marks through/straight lanes for a straight maneuver", () => {
+  it("retains rejected through lanes for a straight maneuver", () => {
     const lanes = [lane(["left"]), lane(["through"])];
     const out = resolveRecommendedLanes(lanes, { type: "turn", modifier: "straight" });
-    expect(out.map((l) => l.valid)).toEqual([false, true]);
+    expect(out.map((l) => l.valid)).toEqual([false, false]);
   });
 
   it("returns [] for no lanes", () => {
     expect(resolveRecommendedLanes(undefined, { type: "turn", modifier: "left" })).toEqual([]);
   });
 
-  it("highlights through lanes for keep-left when a right exit peels away", () => {
+  it("does not invent through recommendations for a keep maneuver", () => {
     const lanes = [lane(["through"]), lane(["through"]), lane(["slight_right"])];
     const out = resolveRecommendedLanes(lanes, { type: "keep", modifier: "left" });
-    expect(out.map((l) => l.valid)).toEqual([true, true, false]);
+    expect(out.map((l) => l.valid)).toEqual([false, false, false]);
   });
 });
 
@@ -112,4 +135,11 @@ describe("shouldPreviewNextStep", () => {
     expect(shouldPreviewNextStep("driving", 14, 300, 0, 200)).toBe(true);
     expect(shouldPreviewNextStep("driving", 14, 300, 0, 800)).toBe(false);
   });
+});
+
+it("keeps contradictory preferred/rejected lane evidence in conflict", () => {
+  const result = resolveLaneGuidance([{ indications: ["through"], valid: false, preferred: true }]);
+  expect(result.state).toBe("conflict");
+  expect(result.preferredLanes).toEqual([]);
+  expect(result.usableLanes).toEqual([]);
 });

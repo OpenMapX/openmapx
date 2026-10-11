@@ -1,22 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
-vi.mock("next-intl", () => ({
-  useTranslations: () => (key: string, values?: Record<string, unknown>) => {
-    if (key === "junctionLaneSummary")
-      return `Use lane ${String(values?.lane)} of ${String(values?.total)}`;
-    if (key === "junctionLanesSummary")
-      return `Use lanes ${String(values?.lanes)} of ${String(values?.total)}`;
-    if (key === "junctionLaneCount") return `${String(values?.total)} lanes`;
-    if (key === "junctionViewLabel") return "Junction view";
-    if (key === "junctionBranchesSummary") return `Branches: ${String(values?.branches)}`;
-    if (key === "toward") return `toward ${String(values?.places)}`;
-    if (key === "junctionPhotoCaption")
-      return `© ${String(values?.author)} · ${String(values?.license)} · ${String(values?.date)}`;
-    return key;
-  },
-  useLocale: () => "en",
-}));
+vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntl());
 
 import type { GantryModel, JunctionLookupResult, Route, StreetLevelImage } from "@openmapx/core";
 import {
@@ -65,6 +50,21 @@ const threePanels: GantryModel = {
   source: "osm",
 };
 
+const prepared: import("@/lib/navigation/prepareJunctionPhoto").PreparedJunctionPhoto = {
+  key: "test",
+  width: 640,
+  height: 480,
+  aspectRatio: 4 / 3,
+  path: { points: [], visible: false, laneShiftMeters: 0, headRotateDeg: 0 },
+  registration: {
+    version: "observed-boundaries-v2",
+    scene: "relevant",
+    alignment: null,
+    evidence: { roadFraction: 1, markingFraction: 1, observedBoundaries: 0 },
+  },
+  preparationMs: 1,
+};
+
 describe("GantryStrip", () => {
   it("renders one panel per destination group with the exit panel active and badged", () => {
     const html = renderToStaticMarkup(<GantryStrip model={threePanels} />);
@@ -80,10 +80,25 @@ describe("GantryStrip", () => {
 });
 
 describe("JunctionViewPanel", () => {
+  it("announces the selected road before lane guidance without an alternative-branch inventory", () => {
+    const point = { ...a57Point, sign: { exitBranches: ["A1"], exitToward: ["Target"] } };
+    const model: GantryModel = {
+      ...threePanels,
+      selectedRoute: { refs: ["A1"], destinations: ["Target"] },
+      branches: [{ wayId: 999, bearing: 90, selected: false, destinations: ["Other"] }],
+    };
+    const host = document.createElement("div");
+    host.innerHTML = renderToStaticMarkup(<JunctionViewPanel point={point} gantry={model} />);
+    const label = host.querySelector('[role="img"]')?.getAttribute("aria-label");
+    expect(label).toMatch(/^A1, Target/);
+    expect(label).not.toContain("Other");
+  });
   it("is an accessible image with the lane summary and toward places", () => {
     const html = renderToStaticMarkup(<JunctionViewPanel point={a57Point} gantry={threePanels} />);
     expect(html).toContain('role="img"');
-    expect(html).toContain('aria-label="Use lane 5 of 5, toward Neuss-Zentrum"');
+    expect(html).toContain(
+      'aria-label="Neuss-Zentrum, navigation.exitNumber, navigation.junctionUsableLanes"',
+    );
     expect(html).not.toContain('data-testid="junction-schematic"');
     expect(html).toContain("Neuss-Zentrum");
   });
@@ -113,31 +128,40 @@ describe("JunctionViewPanel", () => {
   it("announces Kreuz Holz's four lanes without drawing a schematic or recommending an unresolved lane", () => {
     const point = findJunctionCandidates(holz.route as unknown as Route)[0];
     const result = holz.lookup as JunctionLookupResult;
-    const approach = selectApproachWay(result.approach, point)!;
+    const approach = {
+      ...selectApproachWay(result.approach, point)!,
+      geometry: holz.route.geometry as [number, number][],
+    };
     const parsed = parseLaneTags(approach.tags, point.laneCount);
     expect(parsed).not.toBeNull();
-    const model = mergeExitPanel(parsed!, point, result.ramps[0].tags);
+    const model = mergeExitPanel(parsed!, point, result.ramps[0].tags, { ways: [], approach });
     const html = renderToStaticMarkup(<JunctionViewPanel point={point} gantry={model} />);
     expect(html).not.toContain('data-testid="junction-schematic"');
     expect(html).toContain("Düsseldorf");
-    expect(html).not.toContain('data-active="true"');
+    expect(html).not.toContain("Prefer lanes");
     expect(html).not.toContain("data-ramp");
     expect(html).not.toContain("Use lane");
-    expect(html).toContain('aria-label="4 lanes, toward Düsseldorf, Neuss"');
+    expect(html).toContain(
+      'aria-label="A 46, Düsseldorf, Neuss, navigation.junctionLaneGuidanceUnknown"',
+    );
   });
 
   it("announces all confirmed lanes of a multi-lane exit", () => {
     const html = renderToStaticMarkup(
       <JunctionViewPanel point={a57Point} gantry={{ ...threePanels, activeLanes: [3, 4] }} />,
     );
-    expect(html).toContain('aria-label="Use lanes 4, 5 of 5, toward Neuss-Zentrum"');
+    expect(html).toContain(
+      'aria-label="Neuss-Zentrum, navigation.exitNumber, navigation.junctionUsableLanes"',
+    );
   });
 
   it("does not claim a lane recommendation just because the count is known", () => {
     const html = renderToStaticMarkup(
-      <JunctionViewPanel point={{ ...a57Point, activeLanes: [] }} />,
+      <JunctionViewPanel point={{ ...a57Point, activeLanes: [], laneGuidance: undefined }} />,
     );
-    expect(html).toContain('aria-label="5 lanes, toward Neuss-Zentrum"');
+    expect(html).toContain(
+      'aria-label="Neuss-Zentrum, navigation.exitNumber, navigation.junctionLaneGuidanceUnknown"',
+    );
     expect(html).not.toContain('data-testid="junction-schematic"');
     expect(html).not.toContain("Use lane");
     expect(html).not.toContain("data-ramp");
@@ -168,7 +192,7 @@ describe("JunctionViewPanel photo integration", () => {
       <JunctionViewPanel
         point={a57Point}
         gantry={threePanels}
-        photo={{ status: "ready", image: photoImage, objectUrl: "blob:photo-1" }}
+        photo={{ status: "ready", image: photoImage, objectUrl: "blob:photo-1", prepared }}
         geometry={a57Route.geometry}
       />,
     );
@@ -181,14 +205,16 @@ describe("JunctionViewPanel photo integration", () => {
     const html = renderToStaticMarkup(
       <JunctionViewPanel
         point={{ ...a57Point, sign: undefined, laneCount: undefined, activeLanes: [] }}
-        photo={{ status: "ready", image: photoImage, objectUrl: "blob:photo-1" }}
+        photo={{ status: "ready", image: photoImage, objectUrl: "blob:photo-1", prepared }}
         geometry={a57Route.geometry}
       />,
     );
     expect(html).toContain('data-testid="junction-photo"');
     expect(html).not.toContain("data-panel");
     expect(html).not.toContain('data-testid="junction-schematic"');
-    expect(html).toContain('aria-label="Junction view"');
+    expect(html).toContain(
+      'aria-label="navigation.junctionViewLabel, navigation.junctionPhotoCaption"',
+    );
   });
 
   it.each<{ name: string; photo?: JunctionPhotoState }>([
@@ -217,7 +243,7 @@ describe("JunctionViewPanel photo integration", () => {
       <JunctionViewPanel
         point={a57Point}
         gantry={threePanels}
-        photo={{ status: "ready", image: photoImage, objectUrl: "blob:photo-1" }}
+        photo={{ status: "ready", image: photoImage, objectUrl: "blob:photo-1", prepared }}
       />,
     );
     expect(html).toContain("Neuss-Zentrum");
@@ -230,7 +256,7 @@ describe("JunctionViewPanel photo integration", () => {
       <JunctionViewPanel
         point={a57Point}
         gantry={threePanels}
-        photo={{ status: "ready", image: photoImage, objectUrl: "blob:photo-1" }}
+        photo={{ status: "ready", image: photoImage, objectUrl: "blob:photo-1", prepared }}
         geometry={a57Route.geometry}
       />,
     );
@@ -243,24 +269,24 @@ it("shows both connected Kreuz Holz boards without a schematic or incoming lane 
   const parsed = parseLaneTags(holz.lookup.approach[0].tags)!;
   const model = mergeExitPanel(parsed, point, holz.lookup.ramps[0].tags, {
     ways: holz.lookup.outgoing,
+    approach: { ...holz.lookup.approach[0], geometry: holz.route.geometry as [number, number][] },
   });
   const host = document.createElement("div");
   host.innerHTML = renderToStaticMarkup(<JunctionViewPanel point={point} gantry={model} />);
   expect(host.querySelectorAll("[data-panel]")).toHaveLength(2);
   expect(host.textContent).toContain("Heinsberg");
-  expect(host.textContent).toContain("Venlo");
-  expect(host.textContent).toContain("Mönchengladbach");
+  expect(host.textContent).not.toContain("2 lanes");
   expect(host.querySelector('[data-testid="junction-schematic"]')).toBeNull();
   expect(host.querySelector('[data-testid="junction-photo"]')).toBeNull();
   expect(host.querySelectorAll("[data-branch-road]")).toHaveLength(0);
   expect(host.querySelectorAll("[data-branch-lane]")).toHaveLength(0);
-  expect(host.textContent?.match(/2 lanes/g)).toHaveLength(2);
+  expect(host.textContent?.match(/2 lanes/g)).toBeNull();
   expect(host.querySelectorAll('[data-lane][data-active="true"]')).toHaveLength(0);
-  expect(host.querySelector('[role="img"]')?.getAttribute("aria-label")).toContain("Heinsberg");
+  expect(host.querySelector('[role="img"]')?.getAttribute("aria-label")).not.toContain("Heinsberg");
   expect(host.innerHTML).not.toContain("Use lane");
 });
 
-it("announces outgoing destinations when per-lane boards remain in use", () => {
+it("keeps the selected route first when alternative lane boards remain in use", () => {
   const point = findJunctionCandidates(holz.route as unknown as Route)[0];
   const model = mergeExitPanel(
     parseLaneTags({ lanes: 4, destinationLanes: "X|X|Y|Y" })!,
@@ -269,6 +295,6 @@ it("announces outgoing destinations when per-lane boards remain in use", () => {
     { ways: holz.lookup.outgoing },
   );
   const html = renderToStaticMarkup(<JunctionViewPanel point={point} gantry={model} />);
-  expect(html.match(/aria-label="([^"]+)"/)?.[1]).toContain("Heinsberg");
-  expect(html.match(/aria-label="([^"]+)"/)?.[1]).toContain("2 lanes");
+  expect(html.match(/aria-label="([^"]+)"/)?.[1]).toContain("Düsseldorf");
+  expect(html.match(/aria-label="([^"]+)"/)?.[1]).not.toContain("Heinsberg");
 });

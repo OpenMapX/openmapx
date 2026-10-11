@@ -51,12 +51,14 @@ export interface Waypoint {
 export interface ManeuverLane {
   /** Allowed turn indications for this lane, e.g. ["straight","slight right"]. */
   indications: string[];
-  /** Whether this lane is valid for the recommended maneuver. */
-  valid: boolean;
+  /** Initially usable for the maneuver. False is explicit rejection; absent is unknown. */
+  valid?: boolean;
+  /** Best lane for following the route without a later lane change, when the engine reports it. */
+  preferred?: boolean;
   /**
    * The single recommended indication to follow within a valid lane, when the
    * engine reports it (OSRM `valid_indication`, Valhalla active/valid lane
-   * direction). Lets the UI brighten the exact arrow to take in a multi-arrow
+   * direction). Lets the UI identify the exact arrow to take in a multi-arrow
    * lane. Undefined when unknown.
    */
   active?: string;

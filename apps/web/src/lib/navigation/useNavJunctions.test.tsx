@@ -5,6 +5,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const fetchJunctionLookups = vi.fn();
 const searchStreetLevelImages = vi.fn();
+const prepareJunctionPhoto = vi.hoisted(() => vi.fn());
+vi.mock("./prepareJunctionPhoto", async (original) => ({
+  ...(await original<Record<string, unknown>>()),
+  prepareJunctionPhoto,
+}));
 
 vi.mock("@openmapx/core", async (importOriginal) => {
   const actual = await importOriginal<Record<string, unknown>>();
@@ -22,8 +27,9 @@ const providers = [
   { id: "panoramax-ign", allowsNavigationUse: true },
   { id: "mapillary", allowsNavigationUse: false },
 ];
+let currentProviders = providers;
 vi.mock("@/integration-api/components/useStreetLevelProviders", () => ({
-  useStreetLevelProviders: () => ({ providers, isLoading: false }),
+  useStreetLevelProviders: () => ({ providers: currentProviders, isLoading: false }),
 }));
 
 const { useNavJunctions } = await import("./useNavJunctions");
@@ -47,6 +53,7 @@ const fixtureResponse = [
         bearing: 283,
         endDistanceMeters: 0,
         startDistanceMeters: 190,
+        geometry: a57Route.geometry,
         tags: {
           lanes: 5,
           destinationLanes:
@@ -150,7 +157,10 @@ describe("useNavJunctions gantry fetch", () => {
   });
 
   it("uses the graph approach even when a different approach matches the engine count", async () => {
-    const graph = holz.lookup.approach[0];
+    const graph = {
+      ...holz.lookup.approach[0],
+      geometry: holz.route.geometry as [number, number][],
+    };
     const farther = {
       ...graph,
       wayId: 999,
@@ -186,7 +196,12 @@ describe("useNavJunctions gantry fetch", () => {
   });
 
   it("stores lane geometry from the turn-only Kreuz Holz approach", async () => {
-    fetchJunctionLookups.mockResolvedValue([holz.lookup]);
+    fetchJunctionLookups.mockResolvedValue([
+      {
+        ...holz.lookup,
+        approach: holz.lookup.approach.map((way) => ({ ...way, geometry: holz.route.geometry })),
+      },
+    ]);
     start();
     useNavigationStore.setState({ route: holz.route as unknown as Route });
     renderHook(() => useNavJunctions());
@@ -248,7 +263,7 @@ describe("useNavJunctions gantry fetch", () => {
 
     await waitFor(() => {
       const gantry = useNavJunctionStore.getState().gantryByStep.get(1);
-      expect(gantry?.panels).toHaveLength(3);
+      expect(gantry?.panels).toHaveLength(2);
       expect(gantry?.source).toBe("osm");
     });
   });
@@ -535,7 +550,7 @@ describe("useNavJunctions gantry fetch", () => {
   });
 
   it("clears the store when navigation ends", async () => {
-    fetchJunctionLookups.mockResolvedValue([]);
+    fetchJunctionLookups.mockResolvedValue(fixtureResponse);
     start();
     renderHook(() => useNavJunctions());
     expect(useNavJunctionStore.getState().decisionPoints).toHaveLength(1);
@@ -565,11 +580,21 @@ describe("useNavJunctions photo window", () => {
   const originalRevokeObjectURL = URL.revokeObjectURL;
 
   beforeEach(() => {
+    currentProviders = providers;
     useSettingsStore.setState({ junctionView: true, junctionPhotos: true });
     useNavJunctionStore.getState().reset();
     fetchJunctionLookups.mockReset();
-    fetchJunctionLookups.mockResolvedValue([]);
+    fetchJunctionLookups.mockResolvedValue(fixtureResponse);
     searchStreetLevelImages.mockReset();
+    prepareJunctionPhoto.mockReset();
+    prepareJunctionPhoto.mockResolvedValue({
+      key: "prepared-test",
+      width: 640,
+      height: 480,
+      aspectRatio: 4 / 3,
+      path: { points: [], visible: false, laneShiftMeters: 0, headRotateDeg: 0 },
+      registration: { scene: "relevant" },
+    });
     URL.createObjectURL = vi.fn(() => "blob:photo-1") as typeof URL.createObjectURL;
     URL.revokeObjectURL = vi.fn() as typeof URL.revokeObjectURL;
     vi.stubGlobal(
@@ -603,9 +628,167 @@ describe("useNavJunctions photo window", () => {
     ];
     expect(providerId).toBe("panoramax");
     expect(query.lookingAt).toEqual(query.lngLat);
-    expect(query.heading).toBeCloseTo(283, 0);
+    expect(query.heading).toBeUndefined();
   });
 
+  it("drops an in-flight search when its provider is removed", async () => {
+    let deliver: (() => void) | undefined;
+    searchStreetLevelImages.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          deliver = () => resolve([PHOTO_IMAGE]);
+        }),
+    );
+    start();
+    const { rerender } = renderHook(() => useNavJunctions());
+    await waitFor(() => expect(deliver).toBeDefined());
+    currentProviders = [];
+    rerender();
+    await act(async () => {
+      deliver?.();
+    });
+    expect(useNavJunctionStore.getState().photoByStep.get(1)?.image).toBeUndefined();
+    expect(fetch).not.toHaveBeenCalled();
+    expect(prepareJunctionPhoto).not.toHaveBeenCalled();
+  });
+
+  it("aborts preparation and releases settled photos when navigation permission is removed", async () => {
+    let signal: AbortSignal | undefined;
+    let deliver: (() => void) | undefined;
+    prepareJunctionPhoto.mockImplementationOnce(
+      (...args: unknown[]) =>
+        new Promise((resolve) => {
+          signal = args[6] as AbortSignal;
+          deliver = () => resolve({ registration: { scene: "relevant" } });
+        }),
+    );
+    searchStreetLevelImages.mockResolvedValue([PHOTO_IMAGE]);
+    start();
+    const { rerender } = renderHook(() => useNavJunctions());
+    await waitFor(() => expect(deliver).toBeDefined());
+    currentProviders = providers.map((provider) => ({ ...provider, allowsNavigationUse: false }));
+    rerender();
+    expect(signal?.aborted).toBe(true);
+    await act(async () => {
+      deliver?.();
+    });
+    expect(useNavJunctionStore.getState().photoByStep.get(1)?.prepared).toBeUndefined();
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:photo-1");
+  });
+
+  it("releases an already prepared photo from a provider that becomes ineligible", async () => {
+    searchStreetLevelImages.mockResolvedValue([PHOTO_IMAGE]);
+    start();
+    const { rerender } = renderHook(() => useNavJunctions());
+    await waitFor(() =>
+      expect(useNavJunctionStore.getState().photoByStep.get(1)?.prepared).toBeDefined(),
+    );
+    currentProviders = [];
+    rerender();
+    expect(useNavJunctionStore.getState().photoByStep.get(1)?.prepared).toBeUndefined();
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:photo-1");
+  });
+
+  it("searches a newly eligible source after the old sources were exhausted", async () => {
+    currentProviders = [providers[0]];
+    searchStreetLevelImages.mockResolvedValue([]);
+    start();
+    const { rerender } = renderHook(() => useNavJunctions());
+    await waitFor(() =>
+      expect(useNavJunctionStore.getState().photoByStep.get(1)?.status).toBe("none"),
+    );
+    searchStreetLevelImages.mockImplementation(async (id: unknown) =>
+      id === "panoramax-ign" ? [{ ...PHOTO_IMAGE, providerId: id }] : [],
+    );
+    currentProviders = providers;
+    rerender();
+    await waitFor(() =>
+      expect(useNavJunctionStore.getState().photoByStep.get(1)?.prepared).toBeDefined(),
+    );
+    expect(useNavJunctionStore.getState().photoByStep.get(1)?.image?.providerId).toBe(
+      "panoramax-ign",
+    );
+  });
+
+  it("continues after a provider fails and filters local road direction after acquisition", async () => {
+    searchStreetLevelImages
+      .mockRejectedValueOnce(new Error("provider offline"))
+      .mockImplementationOnce(async () => [PHOTO_IMAGE]);
+    start();
+    renderHook(() => useNavJunctions());
+    await waitFor(() =>
+      expect(useNavJunctionStore.getState().photoByStep.get(1)?.image?.id).toBe(PHOTO_IMAGE.id),
+    );
+    expect(searchStreetLevelImages.mock.calls.map(([id]) => id)).toEqual([
+      "panoramax",
+      "panoramax-ign",
+    ]);
+    expect(
+      (searchStreetLevelImages.mock.calls[0][1] as { heading?: number }).heading,
+    ).toBeUndefined();
+  });
+
+  it("leaves signs alone after invalid image bytes and releases the failed URL", async () => {
+    prepareJunctionPhoto.mockResolvedValue(null);
+    searchStreetLevelImages.mockImplementationOnce(async () => [PHOTO_IMAGE]).mockResolvedValue([]);
+    start();
+    renderHook(() => useNavJunctions());
+    await waitFor(() =>
+      expect(useNavJunctionStore.getState().photoByStep.get(1)?.status).toBe("none"),
+    );
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:photo-1");
+    expect(useNavJunctionStore.getState().decisionPoints).toHaveLength(1);
+    expect(useNavJunctionStore.getState().photoByStep.get(1)?.prepared).toBeUndefined();
+  });
+  it("tries a second candidate after decode fails", async () => {
+    prepareJunctionPhoto.mockImplementationOnce(async () => null);
+    searchStreetLevelImages.mockResolvedValue([PHOTO_IMAGE, { ...PHOTO_IMAGE, id: "second" }]);
+    start();
+    renderHook(() => useNavJunctions());
+    await waitFor(() =>
+      expect(useNavJunctionStore.getState().photoByStep.get(1)?.prepared).toBeDefined(),
+    );
+    expect(useNavJunctionStore.getState().photoByStep.get(1)?.image?.id).toBe("second");
+    expect(prepareJunctionPhoto).toHaveBeenCalledTimes(2);
+  });
+  it("withholds photos when the approach lookup is unavailable", async () => {
+    fetchJunctionLookups.mockResolvedValue(null);
+    searchStreetLevelImages.mockResolvedValue([PHOTO_IMAGE]);
+    start();
+    renderHook(() => useNavJunctions());
+    await waitFor(() => expect(searchStreetLevelImages).toHaveBeenCalled());
+    await flush();
+    expect(prepareJunctionPhoto).not.toHaveBeenCalled();
+    expect(fetch).not.toHaveBeenCalled();
+    expect(useNavJunctionStore.getState().photoByStep.get(1)?.prepared).toBeUndefined();
+  });
+  it("bounds a streamed image even without a content-length header", async () => {
+    let cancelled = false;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(
+            new ReadableStream({
+              pull(controller) {
+                controller.enqueue(new Uint8Array(4_100_000));
+              },
+              cancel() {
+                cancelled = true;
+              },
+            }),
+          ),
+      ),
+    );
+    searchStreetLevelImages.mockImplementationOnce(async () => [PHOTO_IMAGE]).mockResolvedValue([]);
+    start();
+    renderHook(() => useNavJunctions());
+    await waitFor(() =>
+      expect(useNavJunctionStore.getState().photoByStep.get(1)?.status).toBe("none"),
+    );
+    expect(cancelled).toBe(true);
+    expect(URL.createObjectURL).not.toHaveBeenCalled();
+  });
   it("waits for OpenStreetMap to say where the exit lanes begin before choosing a frame", async () => {
     let answer: (value: unknown) => void = () => {};
     fetchJunctionLookups.mockImplementation(
@@ -814,6 +997,28 @@ describe("useNavJunctions photo window", () => {
     });
     expect(useNavJunctionStore.getState().photoByStep.size).toBe(0);
     expect(URL.createObjectURL).not.toHaveBeenCalled();
+  });
+
+  it("recomputes the selected signs when a reroute shares the physical approach", async () => {
+    fetchJunctionLookups.mockResolvedValue(fixtureResponse);
+    start();
+    renderHook(() => useNavJunctions());
+    await waitFor(() => expect(useNavJunctionStore.getState().gantryByStep.get(1)).toBeDefined());
+    const replacement = {
+      ...a57Route,
+      steps: a57Route.steps.map((step, i) =>
+        i === 1 ? { ...step, sign: { exitToward: ["Other"] } } : step,
+      ),
+    };
+    act(() => {
+      useNavigationStore.setState({ route: replacement });
+    });
+    await waitFor(() =>
+      expect(
+        useNavJunctionStore.getState().gantryByStep.get(1)?.selectedRoute?.destinations,
+      ).toEqual(["Other"]),
+    );
+    expect(fetchJunctionLookups).toHaveBeenCalledTimes(1);
   });
 
   it("keeps the gantry and photo of a junction the replacement route shares", async () => {

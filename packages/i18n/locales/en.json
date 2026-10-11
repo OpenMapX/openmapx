@@ -238,7 +238,12 @@
     "junctionLanesSummary": "Use lanes {lanes} of {total}",
     "junctionLaneCount": "{total, plural, one {# lane} other {# lanes}}",
     "junctionBranchesSummary": "Branches: {branches}",
-    "junctionPhotoCaption": "© {author} · {license} · {date}"
+    "junctionPhotoCaption": "© {author} · {license} · {date}",
+    "junctionFollowRoute": "Follow",
+    "junctionPreferredLanes": "Prefer lanes {lanes} of {total}",
+    "junctionUsableLanes": "Initially usable lanes {lanes} of {total}",
+    "junctionLaneGuidanceUnknown": "Lane guidance unavailable",
+    "junctionPhotoCredit": "© {author} · {license}"
   },
   "common": {
     "close": "Close",

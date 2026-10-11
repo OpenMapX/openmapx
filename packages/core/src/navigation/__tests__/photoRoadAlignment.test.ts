@@ -6,7 +6,7 @@ import type { JunctionDecisionPoint } from "../../types/junction";
 import type { StreetLevelImage } from "../../types/streetLevel";
 import fixture from "../__fixtures__/junction/aachen-two-lane.json";
 import { projectRoutePath } from "../photoProjection";
-import { alignPhotoRoad } from "../photoRoadAlignment";
+import { alignPhotoRoad, registerPhotoRoad } from "../photoRoadAlignment";
 
 const geometry: LngLat[] = [
   [0, 51.18],
@@ -133,6 +133,20 @@ const realPoint = fixture.point as unknown as JunctionDecisionPoint;
 const realImage = fixture.image as StreetLevelImage;
 const realGeometry = fixture.geometry as LngLat[];
 describe("real motorway photo", () => {
+  it("preserves canvas ImageData dimensions when rotating the panorama", () => {
+    const pixels = Object.defineProperties(
+      {},
+      {
+        width: { value: realPixels.width },
+        height: { value: realPixels.height },
+        data: { value: realPixels.data },
+      },
+    ) as typeof realPixels;
+    const expected = registerPhotoRoad(realGeometry, realPoint, realImage, realPixels, 2);
+    const actual = registerPhotoRoad(realGeometry, realPoint, realImage, pixels, 2);
+    expect(actual.alignment).not.toBeNull();
+    expect(actual).toEqual(expected);
+  });
   it("registers dashed lanes with grey hard shoulders on the correct carriageway", () => {
     const alignment = alignPhotoRoad(realGeometry, realPoint, realImage, realPixels, 2);
     expect(alignment).not.toBeNull();
@@ -143,8 +157,44 @@ describe("real motorway photo", () => {
   it.each([1, 3, 4])("rejects a %s-lane interpretation of the two-lane photo", (count) => {
     expect(alignPhotoRoad(realGeometry, realPoint, realImage, realPixels, count)).toBeNull();
   });
+  it("keeps lane boundaries continuous when the road crosses a panorama seam", () => {
+    const pixels = { ...realPixels, data: new Uint8ClampedArray(realPixels.data.length) };
+    for (let y = 0; y < pixels.height; y++)
+      for (let x = 0; x < pixels.width; x++) {
+        const old = (y * pixels.width + x) * 4,
+          shifted = (y * pixels.width + ((x + pixels.width / 2) % pixels.width)) * 4;
+        pixels.data.set(realPixels.data.subarray(old, old + 4), shifted);
+      }
+    const seamImage = { ...realImage, heading: (realImage.heading ?? 0) + 180 };
+    const original = registerPhotoRoad(realGeometry, realPoint, realImage, realPixels, 2);
+    const result = registerPhotoRoad(realGeometry, realPoint, seamImage, pixels, 2);
+    expect(result.alignment).not.toBeNull();
+    expect(result.alignment?.observed?.map((sample) => sample.distanceMeters)).toEqual(
+      original.alignment?.observed?.map((sample) => sample.distanceMeters),
+    );
+    for (const [i, sample] of result.alignment?.observed?.entries() ?? []) {
+      for (const [lane, boundary] of sample.boundaries.entries()) {
+        const before = original.alignment!.observed![i].boundaries[lane];
+        expect(boundary.xPercent - before.xPercent).toBeCloseTo(50, 8);
+        expect(boundary.yPercent).toBeCloseTo(before.yPercent, 8);
+      }
+    }
+    const path = projectRoutePath(realGeometry, realPoint, seamImage, {
+      alignment: result.alignment ?? undefined,
+      exitLanes: { laneCount: 2, activeLanes: [0, 1] },
+    });
+    expect(path.ribbons).toHaveLength(2);
+    for (const ribbon of path.ribbons ?? [])
+      for (const sample of ribbon) expect(sample.widthPercent).toBeLessThan(5);
+  });
   it("keeps real-photo ribbons between independently traced paint boundaries", () => {
-    const alignment = alignPhotoRoad(realGeometry, realPoint, realImage, realPixels, 2);
+    const alignment = registerPhotoRoad(
+      realGeometry,
+      realPoint,
+      realImage,
+      realPixels,
+      2,
+    ).alignment;
     expect(alignment).not.toBeNull();
     const path = projectRoutePath(realGeometry, realPoint, realImage, {
       alignment: alignment ?? undefined,
@@ -169,11 +219,13 @@ describe("real motorway photo", () => {
     };
     // Source photo inspected at its original 2048 × 1024 size; these are the
     // asphalt-facing edges of the solid outer paint, independent of the fit.
-    for (const [y, left, right] of [
-      [545, 954, 1050],
-      [560, 903, 1061],
-      [580, 829, 1077],
-    ]) {
+    // The observed divider starts at 15 m; do not demand extrapolation into
+    // closer rows whose lane correspondence has no observed support.
+    expect(alignment?.observed?.[0].distanceMeters).toBeGreaterThanOrEqual(8);
+    expect(alignment?.observed?.at(-1)?.distanceMeters).toBeLessThanOrEqual(
+      alignment?.toMeters ?? 0,
+    );
+    for (const [y, left, right] of [[545, 954, 1050]]) {
       for (const ribbon of path.ribbons ?? []) {
         expect(xAtRow(ribbon, "left", y)).toBeGreaterThan(left - 3);
         expect(xAtRow(ribbon, "right", y)).toBeLessThan(right + 3);
@@ -184,5 +236,35 @@ describe("real motorway photo", () => {
     const [leftLane, rightLane] = path.ribbons ?? [];
     expect(xAtRow(leftLane, "right", 550)).toBeLessThan(989);
     expect(xAtRow(rightLane, "left", 550)).toBeGreaterThan(990);
+  });
+});
+
+describe("registration diagnostics", () => {
+  it("separates a wrong-level scene from a lane-fit failure", () => {
+    const result = registerPhotoRoad(geometry, point, image, paintedRoad(), 4, {
+      wayId: 1,
+      highway: "motorway",
+      bearing: 90,
+      startDistanceMeters: 200,
+      endDistanceMeters: 0,
+      tags: {},
+      tunnel: true,
+      layer: -1,
+    });
+    expect(result.scene).toBe("rejected");
+    expect(result.reason).toBe("wrong-level");
+    expect(result.alignment).toBeNull();
+  });
+  it("rejects scenery without a marked travel-road scene", () => {
+    const result = registerPhotoRoad(geometry, point, image, paintedRoad(false, true), 4);
+    expect(result.scene).toBe("rejected");
+    expect(result.reason).toBe("unclear-scene");
+  });
+  it("records observed image-space boundaries separately from the camera pose", () => {
+    const result = registerPhotoRoad(geometry, point, image, paintedRoad(), 4);
+    expect(result.scene).toBe("relevant");
+    expect(result.alignment).not.toBeNull();
+    expect(result.evidence.observedBoundaries).toBe(5);
+    expect(result.alignment?.observed?.length).toBeGreaterThanOrEqual(4);
   });
 });

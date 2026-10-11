@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  countryAtMeters,
   guidanceApproachMeters,
   junctionPhotoApproachMeters,
   upcomingManeuverIndex,
@@ -26,8 +27,10 @@ const NO_CREDIT: typeof OSM_CREDIT = [];
 export function JunctionViewSlot() {
   const status = useNavigationStore((s) => s.status);
   const mode = useNavigationStore((s) => s.mode);
+  const routeCountries = useNavigationStore((s) => s.routeCountries);
   const stepCount = useNavigationStore((s) => s.route?.steps.length ?? 0);
   const geometry = useNavigationStore((s) => s.route?.geometry);
+  const route = useNavigationStore((s) => s.route);
   const currentStepIndex = useNavigationStore((s) => s.progress?.currentStepIndex);
   const distanceToNextManeuver = useNavigationStore((s) => s.progress?.distanceToNextManeuver);
   const speedMps = useNavigationStore((s) => s.progress?.speedMps);
@@ -35,12 +38,14 @@ export function JunctionViewSlot() {
   const junctionPhotos = useSettingsStore((s) => s.junctionPhotos);
 
   const routeKey = useNavJunctionStore((s) => s.routeKey);
+  const junctionRoute = useNavJunctionStore((s) => s.routeIdentity);
   const byStep = useNavJunctionStore((s) => s.byStep);
   const gantryByStep = useNavJunctionStore((s) => s.gantryByStep);
   const photoByStep = useNavJunctionStore((s) => s.photoByStep);
 
   const upcomingIndex = upcomingManeuverIndex(currentStepIndex ?? 0, stepCount);
-  const point = routeKey !== null ? byStep.get(upcomingIndex) : undefined;
+  const point =
+    routeKey !== null && junctionRoute === route ? byStep.get(upcomingIndex) : undefined;
   const gantry = point && gantryByStep.get(upcomingIndex);
   const photo = point && photoByStep.get(upcomingIndex);
 
@@ -51,7 +56,12 @@ export function JunctionViewSlot() {
     distanceToNextManeuver !== undefined &&
     distanceToNextManeuver <= junctionPhotoApproachMeters(mode, speedMps ?? 0);
   const readyPhoto =
-    photoVisible && photo?.status === "ready" && photo.image && photo.objectUrl && geometry;
+    photoVisible &&
+    photo?.status === "ready" &&
+    photo.image &&
+    photo.objectUrl &&
+    photo.prepared &&
+    geometry;
 
   const visible =
     junctionView &&
@@ -69,6 +79,7 @@ export function JunctionViewSlot() {
   return (
     <JunctionViewPanel
       point={point}
+      country={routeCountries ? countryAtMeters(routeCountries, point.alongMeters) : undefined}
       gantry={gantry}
       photo={photoVisible ? photo : undefined}
       geometry={geometry}

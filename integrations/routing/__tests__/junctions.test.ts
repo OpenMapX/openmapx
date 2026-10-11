@@ -147,6 +147,18 @@ describe("junctionCacheKey", () => {
 });
 
 describe("mapJunctionWays", () => {
+  it("preserves travel-direction geometry and road-level evidence for scene matching", () => {
+    const result = mapJunctionWays(
+      [{ ...APPROACH_WAY, tags: { ...APPROACH_WAY.tags, layer: "-1", tunnel: "yes" } }],
+      point(),
+    );
+    expect(result.approach[0].geometry).toEqual([
+      [6.6785, 51.1786],
+      [6.6768301, 51.1788713],
+    ]);
+    expect(result.approach[0].layer).toBe(-1);
+    expect(result.approach[0].tunnel).toBe(true);
+  });
   const mapped = () => parseJunctionPoints({ points: [point()] })?.[0] as ReturnType<typeof point>;
 
   it("reads the bearing at the node nearest the point, splits ramps off, and signs the end distance", () => {

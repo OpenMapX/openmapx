@@ -114,6 +114,59 @@ describe("transformTraceEdge", () => {
 });
 
 describe("valhallaLanes", () => {
+  it("distinguishes initially usable lanes from preferred lanes requiring no later change", () => {
+    const result = valhallaLanes({
+      type: 24,
+      instruction: "",
+      length: 0,
+      time: 0,
+      begin_shape_index: 0,
+      end_shape_index: 0,
+      lanes: [
+        { directions: 10, valid: 8, active: 0 },
+        { directions: 10, valid: 8, active: 8 },
+      ],
+    });
+    expect(result).toEqual([
+      { indications: ["through", "left"], valid: true, preferred: false, active: "left" },
+      { indications: ["through", "left"], valid: true, preferred: true, active: "left" },
+    ]);
+  });
+  it("preserves omitted zero flags in a maneuver with reported active lanes", () => {
+    const lanes = valhallaLanes({
+      type: 24,
+      instruction: "",
+      length: 0,
+      time: 0,
+      begin_shape_index: 0,
+      end_shape_index: 0,
+      lanes: [{ directions: 32, active: 32 }, { directions: 96, valid: 32 }, { directions: 64 }],
+    });
+    expect(lanes).toEqual([
+      { indications: ["slight_right"], valid: true, preferred: true, active: "slight_right" },
+      {
+        indications: ["slight_right", "right"],
+        valid: true,
+        preferred: false,
+        active: "slight_right",
+      },
+      { indications: ["right"], valid: false, preferred: false },
+    ]);
+  });
+  it("leaves a direction-only maneuver without reported flags unknown", () => {
+    const lanes = valhallaLanes({
+      type: 24,
+      instruction: "",
+      length: 0,
+      time: 0,
+      begin_shape_index: 0,
+      end_shape_index: 0,
+      lanes: [{ directions: 2 }, { directions: 64 }],
+    });
+    expect(lanes?.every((lane) => lane.valid === undefined && lane.preferred === undefined)).toBe(
+      true,
+    );
+  });
   it("returns undefined when the maneuver carries no lanes", () => {
     expect(
       valhallaLanes({
@@ -141,8 +194,8 @@ describe("valhallaLanes", () => {
       ],
     });
     expect(lanes).toEqual([
-      { indications: ["through", "left"], valid: true, active: "left" },
-      { indications: ["right"], valid: false },
+      { indications: ["through", "left"], valid: true, preferred: true, active: "left" },
+      { indications: ["right"], valid: false, preferred: false },
     ]);
   });
 });

@@ -312,7 +312,8 @@ time:
   in the banner and the directions list, straight from the routing engine's sign
   data;
 - **lane guidance** at junctions that have it, dimming the lanes you should not
-  take and brightening the one to follow;
+  take. Preferred lanes have a solid outline and check; initially usable lanes
+  have a dashed outline, since a later lane change may still be needed;
 - a **speed-limit badge** when the road's limit is known;
 - an **arrival card** with the remaining distance and estimated time of arrival.
 
@@ -331,14 +332,21 @@ multi-user deployments). The approach lane count and turn arrows remain useful
 even without per-lane destination names. Offline it falls back to the engine's
 exit sign and any lane data it supplies.
 
-Lane recommendations come from the routing engine when its lane count matches
-the approach layout; otherwise OpenStreetMap's per-lane turn arrows
-(`turn:lanes`) must agree with the maneuver's exit side, or per-lane destinations
-must identify the selected branch. Missing or conflicting lane assignments do
-not highlight an inferred lane. A connected branch's board is highlighted only
-when its destination or reference distinguishes it; missing tags preserve the
-engine sign. No incoming-to-outgoing lane assignment is inferred from branch
-lane counts alone.
+The selected road and destinations appear first, separately from the wording
+on the physical boards. Boards span their mapped contiguous incoming lanes
+when those spans are known; otherwise they are destination cards without an
+implied lane position. Outgoing lane counts cannot assign incoming lanes.
+
+Lane evidence distinguishes initially usable lanes from preferred lanes where
+no further change is needed. Valhalla supplies both meanings; OSRM supplies
+usable lanes without a separate preference. Unknown or conflicting guidance
+stays unknown. The banner and junction view consume the same resolved evidence.
+Specific per-lane destinations can identify lanes only for the selected branch
+and incoming layout; an arrow pointing to the same side cannot distinguish two
+branches. Route geometry identifies a connected branch, with references and
+labels used as corroboration. Reroutes reuse raw road evidence but recompute the
+selected movement. Maneuver timing uses ordered positions on route geometry;
+remaining travel distance and ETA retain the provider's distance and duration.
 
 About half a minute
 before the exit, a photo preview shows a recent **street-level image** of the

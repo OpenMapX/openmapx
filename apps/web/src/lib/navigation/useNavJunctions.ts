@@ -10,11 +10,11 @@ import {
   mergeExitPanel,
   parseLaneTags,
   proxyImageUrl,
+  rankJunctionPhotos,
   type StreetLevelImage,
   sameJunction,
   searchStreetLevelImages,
   selectApproachWay,
-  selectJunctionPhoto,
   selectRampWay,
   useNavigationStore,
   useSettingsStore,
@@ -26,12 +26,26 @@ import {
   type JunctionPhotoState,
   useNavJunctionStore,
 } from "./junctionStore";
+import { photoPreparationKey, prepareJunctionPhoto } from "./prepareJunctionPhoto";
 
 /**
  * Monotonic route generation; bumped on every route identity change so a
  * response that arrives after a reroute is recognised as stale and dropped.
  */
 let routeGeneration = 0;
+let photoEpoch = 0;
+let photoProviderIds: string[] = [];
+let eligiblePhotoProviderIds: string[] = [];
+const photoJobs = new Map<number, AbortController>();
+const photoRetries = new Map<number, ReturnType<typeof setTimeout>>();
+
+function cancelPhotoWork(): void {
+  photoEpoch += 1;
+  for (const job of photoJobs.values()) job.abort();
+  photoJobs.clear();
+  for (const timer of photoRetries.values()) clearTimeout(timer);
+  photoRetries.clear();
+}
 
 /** One junction (accepted or candidate) awaiting, riding, or done with its OSM lookup. */
 interface LookupEntry {
@@ -42,6 +56,7 @@ interface LookupEntry {
   status: "pending" | "sent" | "done";
   /** Settles when the batch carrying it lands. Photo selection waits for it. */
   settled: Promise<void>;
+  result?: JunctionLookupResult;
 }
 
 /** The current route's lookups, in route order. */
@@ -70,7 +85,6 @@ const PHOTO_WINDOW_AHEAD = 4;
 const PHOTO_BYTES_AHEAD = 2;
 /** Search radius around the decision point, metres; the selector keeps 30–200 m. */
 const PHOTO_SEARCH_RADIUS_M = 200;
-const PHOTO_HEADING_TOLERANCE_DEG = 30;
 /** Motorway coverage is often years old; the selector applies the 8-year cap itself. */
 const PHOTO_CAPTURED_AFTER = "2018-01-01T00:00:00Z";
 /** Search results per provider request. */
@@ -107,6 +121,7 @@ export function useNavJunctions(): void {
   useEffect(() => {
     const store = useNavJunctionStore.getState();
     routeGeneration += 1;
+    cancelPhotoWork();
     cancelLookupRetry();
     const previousEntries = lookupEntries;
     lookupEntries = [];
@@ -131,8 +146,38 @@ export function useNavJunctions(): void {
       }))
       .sort((a, b) => a.point.stepIndex - b.point.stepIndex);
     const { accepted, carried } = carryOver(store, previousEntries, lookupEntries, decisionPoints);
-    store.setDecisionPoints(`route-${generation}`, accepted, carried);
+    store.setDecisionPoints(`route-${generation}`, accepted, carried, route);
   }, [route]);
+
+  useEffect(() => {
+    if (
+      providerIds.length === eligiblePhotoProviderIds.length &&
+      providerIds.every((id, i) => id === eligiblePhotoProviderIds[i])
+    )
+      return;
+    const added = providerIds.some((id) => !eligiblePhotoProviderIds.includes(id));
+    eligiblePhotoProviderIds = providerIds;
+    photoProviderIds = [];
+    cancelPhotoWork();
+    const store = useNavJunctionStore.getState();
+    for (const [step, photo] of store.photoByStep) {
+      if (photo.image && !providerIds.includes(photo.image.providerId)) {
+        if (photo.objectUrl) URL.revokeObjectURL(photo.objectUrl);
+        store.setPhoto(step, { status: "idle" });
+      } else if (photo.status === "loading" || (added && photo.status === "none")) {
+        store.setPhoto(step, { status: "idle" });
+      } else if (photo.status === "ready") {
+        store.setPhoto(step, {
+          ...photo,
+          bytesRequested: !!photo.prepared,
+          alternatives: photo.alternatives?.filter((image) =>
+            providerIds.includes(image.providerId),
+          ),
+          nextProviders: photo.nextProviders?.filter((id) => providerIds.includes(id)),
+        });
+      }
+    }
+  }, [providerIds]);
 
   useEffect(() => {
     if (!route || !online || !junctionView) return;
@@ -140,8 +185,19 @@ export function useNavJunctions(): void {
   }, [route, currentStepIndex, online, junctionView]);
 
   useEffect(() => {
-    if (!route || !online || !junctionView || !junctionPhotos) return;
+    photoProviderIds = [];
+    if (!route || !online || !junctionView || !junctionPhotos) {
+      cancelPhotoWork();
+      for (const [step, photo] of useNavJunctionStore.getState().photoByStep) {
+        if (photo.status === "loading")
+          useNavJunctionStore.getState().setPhoto(step, { status: "idle" });
+        else if (photo.bytesRequested && !photo.prepared)
+          useNavJunctionStore.getState().setPhoto(step, { ...photo, bytesRequested: false });
+      }
+      return;
+    }
     if (providerIds.length === 0 || decisionPointCount === 0) return;
+    photoProviderIds = providerIds;
     advancePhotoWindow(routeGeneration, currentStepIndex ?? 0, providerIds);
   }, [
     route,
@@ -158,11 +214,14 @@ export function useNavJunctions(): void {
       // Anything still in flight belongs to a view that is gone; it must not
       // write into the cleared store (or leave an object URL there).
       routeGeneration += 1;
+      cancelPhotoWork();
       cancelLookupRetry();
       const store = useNavJunctionStore.getState();
       revokePhotoUrls(store.photoByStep);
       store.reset();
       lookupEntries = [];
+      photoProviderIds = [];
+      eligiblePhotoProviderIds = [];
     },
     [],
   );
@@ -204,17 +263,30 @@ function carryOver(
       if (!wasAccepted) continue;
       accepted.push(entry.point);
     }
-    const gantry = store.gantryByStep.get(oldStep);
+    entry.result = previous.result;
+    const gantry = entry.result ? buildGantry(entry.result, entry.point) : undefined;
     if (gantry) carried.gantryByStep.set(newStep, gantry);
     const fullLanes = store.fullLanesByStep.get(oldStep);
     if (fullLanes !== undefined) carried.fullLanesByStep.set(newStep, fullLanes);
     const photo = store.photoByStep.get(oldStep);
     // A search or byte fetch still in flight belongs to the old route and is
     // dropped on arrival, so only settled photos move over.
-    if (photo?.status === "ready" || photo?.status === "none") {
+    const sameDecision =
+      JSON.stringify({
+        sign: previous.point.sign,
+        lanes: previous.point.laneGuidance,
+        departure: previous.point.departureTrace,
+      }) ===
+      JSON.stringify({
+        sign: entry.point.sign,
+        lanes: entry.point.laneGuidance,
+        departure: entry.point.departureTrace,
+      });
+    if (photo?.status === "ready" && sameDecision) {
       carried.photoByStep.set(newStep, {
         ...photo,
-        bytesRequested: photo.objectUrl !== undefined,
+        prepared: undefined,
+        bytesRequested: false,
       });
       if (photo.objectUrl) keptUrls.add(photo.objectUrl);
     }
@@ -293,10 +365,25 @@ function advancePhotoWindow(
   providerIds: string[],
 ): void {
   const store = useNavJunctionStore.getState();
+  const byteWindow = new Set(
+    pointsAhead(currentStepIndex, PHOTO_BYTES_AHEAD).map((point) => point.stepIndex),
+  );
   for (const [stepIndex, photo] of store.photoByStep) {
-    if (stepIndex <= currentStepIndex && photo.objectUrl) {
+    if (!byteWindow.has(stepIndex)) {
+      photoJobs.get(stepIndex)?.abort();
+      photoJobs.delete(stepIndex);
+      const retry = photoRetries.get(stepIndex);
+      if (retry) clearTimeout(retry);
+      photoRetries.delete(stepIndex);
+    }
+    if (!byteWindow.has(stepIndex) && photo.objectUrl) {
       URL.revokeObjectURL(photo.objectUrl);
-      store.setPhoto(stepIndex, { ...photo, objectUrl: undefined });
+      store.setPhoto(stepIndex, {
+        ...photo,
+        objectUrl: undefined,
+        prepared: undefined,
+        bytesRequested: false,
+      });
     }
   }
   for (const point of pointsAhead(currentStepIndex, PHOTO_WINDOW_AHEAD)) {
@@ -313,13 +400,12 @@ async function searchPhoto(
   point: JunctionDecisionPoint,
   providerIds: string[],
 ): Promise<void> {
+  const epoch = photoEpoch;
   const store = useNavJunctionStore.getState();
   store.setPhoto(point.stepIndex, { status: "loading" });
   const query = {
     lngLat: point.point,
     radiusM: PHOTO_SEARCH_RADIUS_M,
-    heading: point.approachBearing,
-    headingToleranceDeg: PHOTO_HEADING_TOLERANCE_DEG,
     capturedAfter: PHOTO_CAPTURED_AFTER,
     lookingAt: point.point,
     limit: PHOTO_SEARCH_LIMIT,
@@ -328,22 +414,43 @@ async function searchPhoto(
     lookupEntries.find((entry) => entry.point.stepIndex === point.stepIndex)?.settled ??
     Promise.resolve();
   try {
-    for (const providerId of providerIds) {
-      const images = await searchStreetLevelImages(providerId, query);
+    for (const [providerIndex, providerId] of providerIds.entries()) {
+      let images: StreetLevelImage[];
+      try {
+        images = await searchStreetLevelImages(providerId, query);
+      } catch {
+        if (generation !== routeGeneration || epoch !== photoEpoch) return;
+        continue;
+      }
       await lookup;
-      if (generation !== routeGeneration) return;
+      if (generation !== routeGeneration || epoch !== photoEpoch) return;
+      const context = lookupEntries.find(
+        (entry) => entry.point.stepIndex === point.stepIndex,
+      )?.result;
+      if (!context) {
+        // A successful retry resumes this window. Missing road evidence cannot
+        // establish the image's carriageway or level.
+        store.setPhoto(point.stepIndex, { status: "idle" });
+        return;
+      }
       // Read after the generation check, so a superseded route can never be
       // the one a photo is judged against.
       const geometry = useNavigationStore.getState().route?.geometry;
       const fullLanesFromMeters = useNavJunctionStore
         .getState()
         .fullLanesByStep.get(point.stepIndex);
-      const selected = selectJunctionPhoto(images, point, new Date(), {
+      const ranked = rankJunctionPhotos(images, point, new Date(), {
+        approachWays: context.approach,
         ...(geometry ? { geometry } : {}),
         ...(fullLanesFromMeters !== undefined ? { fullLanesFromMeters } : {}),
       });
-      if (selected) {
-        store.setPhoto(point.stepIndex, { status: "ready", image: selected });
+      if (ranked.length) {
+        store.setPhoto(point.stepIndex, {
+          status: "ready",
+          image: ranked[0],
+          alternatives: ranked.slice(1, 3),
+          nextProviders: providerIds.slice(providerIndex + 1),
+        });
         const currentStepIndex = useNavigationStore.getState().progress?.currentStepIndex ?? 0;
         prefetchWindowBytes(generation, currentStepIndex);
         return;
@@ -352,7 +459,8 @@ async function searchPhoto(
   } catch {
     // A photo is decoration: any failure leaves the destination signs alone.
   }
-  if (generation === routeGeneration) store.setPhoto(point.stepIndex, { status: "none" });
+  if (generation === routeGeneration && epoch === photoEpoch)
+    store.setPhoto(point.stepIndex, { status: "none" });
 }
 
 /** Start fetching bytes for the ready photos of the next decision points. */
@@ -360,7 +468,14 @@ function prefetchWindowBytes(generation: number, currentStepIndex: number): void
   const store = useNavJunctionStore.getState();
   for (const point of pointsAhead(currentStepIndex, PHOTO_BYTES_AHEAD)) {
     const photo = store.photoByStep.get(point.stepIndex);
-    if (photo?.status !== "ready" || !photo.image || photo.bytesRequested) continue;
+    if (
+      photo?.status !== "ready" ||
+      !photo.image ||
+      photo.bytesRequested ||
+      photo.prepared ||
+      photoJobs.has(point.stepIndex)
+    )
+      continue;
     store.setPhoto(point.stepIndex, { ...photo, bytesRequested: true });
     void fetchPhotoBytes(generation, point.stepIndex, photo.image);
   }
@@ -375,28 +490,118 @@ async function fetchPhotoBytes(
   stepIndex: number,
   image: StreetLevelImage,
 ): Promise<void> {
-  // The panel shows the scene, not legible sign text (the gantry strip above
-  // draws that), so a flat frame's thumbnail is enough: Panoramax's 500 px
-  // frame is ~30 KB against ~500 KB for its 2048 px one, on mobile data, per
-  // junction. A panorama's thumbnail is only a crop from its middle, while the
-  // panel lays out the full 360°, so a panorama needs the whole frame.
+  const controller = new AbortController();
+  photoJobs.set(stepIndex, controller);
+  const signal = controller.signal;
   const source = image.isPano ? image.assets.sd : (image.assets.thumb ?? image.assets.sd);
-  if (!source) return;
+  let objectUrl: string | undefined;
+  let ownsUrl = false;
+  let transient = false;
+  const current = () =>
+    generation === routeGeneration &&
+    !signal.aborted &&
+    stepIndex > (useNavigationStore.getState().progress?.currentStepIndex ?? 0);
   try {
-    const res = await fetch(proxyImageUrl(source));
-    if (!res.ok) return;
-    const blob = await res.blob();
-    if (generation !== routeGeneration) return;
-    // Bytes landing after the junction was passed would never be released:
-    // the window already revoked that step and does not look back.
-    const currentStepIndex = useNavigationStore.getState().progress?.currentStepIndex ?? 0;
-    if (stepIndex <= currentStepIndex) return;
+    const store = useNavJunctionStore.getState();
+    objectUrl = store.photoByStep.get(stepIndex)?.objectUrl;
+    if (!objectUrl) {
+      if (!source) throw new Error("missing-asset");
+      const res = await fetch(proxyImageUrl(source), {
+        signal: AbortSignal.any([signal, AbortSignal.timeout(8000)]),
+      });
+      transient = res.status >= 500 || res.status === 429;
+      if (!res.ok) throw new Error("image-fetch");
+      // Refuse oversized assets before and after transfer; these are transient navigation thumbnails.
+      if (Number(res.headers.get("content-length")) > 8_000_000) throw new Error("image-size");
+      const blob = await boundedImageBlob(res, signal);
+      if (!current()) return;
+      if (!blob.size || blob.size > 8_000_000) throw new Error("image-size");
+      objectUrl = URL.createObjectURL(blob);
+      ownsUrl = true;
+    }
+    const photo = store.photoByStep.get(stepIndex);
+    const point = store.byStep.get(stepIndex);
+    const route = useNavigationStore.getState().route;
+    if (!point || !route || photo?.image?.id !== image.id || !current()) return;
+    const model = store.gantryByStep.get(stepIndex);
+    const key = photoPreparationKey(generation, point, image, model);
+    const prepared = await prepareJunctionPhoto(
+      objectUrl,
+      route.geometry,
+      point,
+      image,
+      model,
+      key,
+      signal,
+      (diagnostic) => {
+        if (current()) {
+          const latest = store.photoByStep.get(stepIndex);
+          if (latest?.image?.id === image.id) store.setPhoto(stepIndex, { ...latest, diagnostic });
+        }
+      },
+    );
+    if (!current()) return;
+    if (!prepared) throw new Error("image-preparation");
+    store.setPhoto(stepIndex, {
+      ...photo,
+      diagnostic: store.photoByStep.get(stepIndex)?.diagnostic,
+      objectUrl,
+      prepared,
+      byteAttempts: 0,
+    });
+    ownsUrl = false;
+  } catch (error) {
+    if (!current()) return;
     const store = useNavJunctionStore.getState();
     const photo = store.photoByStep.get(stepIndex);
     if (photo?.image?.id !== image.id) return;
-    store.setPhoto(stepIndex, { ...photo, objectUrl: URL.createObjectURL(blob) });
-  } catch {
-    // No bytes: the panel shows the destination signs alone.
+    const attempt = (photo.byteAttempts ?? 0) + 1;
+    transient ||=
+      error instanceof TypeError ||
+      (error instanceof DOMException && error.name === "TimeoutError");
+    if (transient && attempt < 2) {
+      store.setPhoto(stepIndex, { ...photo, bytesRequested: false, byteAttempts: attempt });
+      photoRetries.set(
+        stepIndex,
+        setTimeout(() => {
+          photoRetries.delete(stepIndex);
+          if (current())
+            prefetchWindowBytes(
+              generation,
+              useNavigationStore.getState().progress?.currentStepIndex ?? 0,
+            );
+        }, 1000),
+      );
+    } else {
+      if (photo.objectUrl) URL.revokeObjectURL(photo.objectUrl);
+      const [next, ...rest] = photo.alternatives ?? [];
+      store.setPhoto(
+        stepIndex,
+        next
+          ? {
+              ...photo,
+              image: next,
+              alternatives: rest,
+              objectUrl: undefined,
+              prepared: undefined,
+              bytesRequested: false,
+              byteAttempts: 0,
+            }
+          : { status: "none", diagnostic: photo.diagnostic },
+      );
+      if (!next && photo.nextProviders?.length) {
+        const point = store.byStep.get(stepIndex);
+        if (point) void searchPhoto(generation, point, photo.nextProviders);
+      }
+    }
+  } finally {
+    if (ownsUrl && objectUrl) URL.revokeObjectURL(objectUrl);
+    if (photoJobs.get(stepIndex) === controller) photoJobs.delete(stepIndex);
+    if (current() && !photoRetries.has(stepIndex))
+      prefetchWindowBytes(
+        generation,
+        useNavigationStore.getState().progress?.currentStepIndex ?? 0,
+      );
   }
 }
 
@@ -417,6 +622,7 @@ async function fetchGantries(generation: number, batch: LookupEntry[]): Promise<
       return [];
     }
     entry.status = "done";
+    entry.result = result;
     return [{ entry, result }];
   });
   if (answered.length < batch.length) scheduleLookupRetry(generation);
@@ -437,6 +643,41 @@ async function fetchGantries(generation: number, batch: LookupEntry[]): Promise<
     const model = buildGantry(result, point);
     if (model) store.setGantry(point.stepIndex, model);
   }
+  if (photoProviderIds.length) {
+    advancePhotoWindow(
+      generation,
+      useNavigationStore.getState().progress?.currentStepIndex ?? 0,
+      photoProviderIds,
+    );
+  }
+}
+
+/** Stop reading at the asset limit, including chunked responses without a size header. */
+async function boundedImageBlob(response: Response, signal: AbortSignal): Promise<Blob> {
+  const reader = response.body?.getReader();
+  if (!reader) throw new Error("missing-image-body");
+  const chunks: Uint8Array<ArrayBuffer>[] = [];
+  let size = 0;
+  const abort = () => {
+    void reader.cancel();
+  };
+  signal.addEventListener("abort", abort, { once: true });
+  try {
+    for (;;) {
+      if (signal.aborted) throw signal.reason;
+      const { value, done } = await reader.read();
+      if (done) break;
+      size += value.byteLength;
+      if (size > 8_000_000) throw new Error("image-size");
+      chunks.push(value);
+    }
+    if (!size) throw new Error("image-size");
+    return new Blob(chunks, { type: response.headers.get("content-type") ?? "image/jpeg" });
+  } finally {
+    signal.removeEventListener("abort", abort);
+    await reader.cancel();
+    reader.releaseLock();
+  }
 }
 
 /** Approach way → parsed lane tags → exit panel from the ramp or the engine sign. */
@@ -452,7 +693,8 @@ function buildGantry(
   const model = parseLaneTags(approach.tags, point.laneCount);
   if (!model) return null;
   const rampWay = selectRampWay(result.ramps, point)[0];
-  return mergeExitPanel(model, point, rampWay?.tags, {
-    ways: result.outgoing ?? [],
-  });
+  return {
+    ...mergeExitPanel(model, point, rampWay?.tags, { ways: result.outgoing ?? [], approach }),
+    approachWays: result.approach,
+  };
 }

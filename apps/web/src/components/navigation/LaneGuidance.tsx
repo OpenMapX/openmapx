@@ -1,5 +1,6 @@
 "use client";
 
+import Check from "@mui/icons-material/Check";
 import Box from "@mui/material/Box";
 import { type ManeuverLane, resolveRecommendedLanes } from "@openmapx/core";
 import {
@@ -32,8 +33,7 @@ export function LaneGuidance({
   /** "compact" shrinks the cells for the directions list rows. */
   size?: "regular" | "compact";
 }) {
-  // Trust the engine's valid/active lanes; otherwise recommend them from the
-  // maneuver (exact → same-side → unrestricted) so under-tagged lanes still light up.
+  // Arrows describe lane direction; only reported routing evidence recommends a lane.
   const resolved = resolveRecommendedLanes(lanes, maneuver);
   if (resolved.length === 0) return null;
   const banner = variant === "banner";
@@ -49,6 +49,14 @@ export function LaneGuidance({
       }}
     >
       {resolved.map((lane, i) => {
+        const state =
+          lane.preferred === true && lane.valid === true
+            ? "preferred"
+            : lane.valid === true
+              ? "usable"
+              : lane.valid === false
+                ? "rejected"
+                : "unknown";
         const arrows = lane.indications
           .map((ind) => ({ ind, icon: laneIndicationIcon(ind) }))
           .filter((a): a is { ind: string; icon: NonNullable<typeof a.icon> } => a.icon !== null);
@@ -58,12 +66,20 @@ export function LaneGuidance({
             // biome-ignore lint/suspicious/noArrayIndexKey: lanes have no stable id
             key={i}
             data-valid={String(lane.valid)}
+            data-lane-state={state}
             data-arrow-count={String(arrows.length)}
             sx={{
               position: "relative",
               width: cell,
               height: cell,
               borderRadius: 1,
+              boxSizing: "border-box",
+              border:
+                state === "preferred"
+                  ? "2px solid currentColor"
+                  : state === "usable"
+                    ? "1px dashed currentColor"
+                    : "2px solid transparent",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
@@ -74,6 +90,21 @@ export function LaneGuidance({
                 : "transparent",
             }}
           >
+            {state === "preferred" && (
+              <Check
+                data-preferred-marker
+                aria-hidden
+                sx={{
+                  position: "absolute",
+                  top: -5,
+                  right: -4,
+                  fontSize: 14,
+                  zIndex: 1,
+                  bgcolor: banner ? "#1d641e" : "background.paper",
+                  borderRadius: "50%",
+                }}
+              />
+            )}
             {arrows.length === 0 ? (
               <Box
                 data-empty="true"

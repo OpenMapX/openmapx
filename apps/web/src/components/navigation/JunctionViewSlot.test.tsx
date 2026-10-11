@@ -17,7 +17,7 @@ const a57Route = fixture.route as unknown as Route;
 const decisionPoints = findJunctionDecisionPoints(a57Route);
 
 function populateStore(): void {
-  useNavJunctionStore.getState().setDecisionPoints("route-1", decisionPoints);
+  useNavJunctionStore.getState().setDecisionPoints("route-1", decisionPoints, undefined, a57Route);
 }
 
 const baseProgress = {
@@ -74,7 +74,7 @@ describe("JunctionViewSlot", () => {
   });
 
   it("holds the photo back until the exit is close, showing the gantry meanwhile", () => {
-    const photo = {
+    const photo: import("@/lib/navigation/junctionStore").JunctionPhotoState = {
       status: "ready" as const,
       image: {
         id: "photo-1",
@@ -89,6 +89,20 @@ describe("JunctionViewSlot", () => {
         license: "CC BY-SA 4.0",
       },
       objectUrl: "blob:photo-1",
+      prepared: {
+        key: "test",
+        width: 640,
+        height: 480,
+        aspectRatio: 4 / 3,
+        path: { points: [], visible: false, laneShiftMeters: 0, headRotateDeg: 0 },
+        registration: {
+          version: "observed-boundaries-v2",
+          scene: "relevant",
+          alignment: null,
+          evidence: { roadFraction: 1, markingFraction: 1, observedBoundaries: 0 },
+        },
+        preparationMs: 1,
+      },
     };
     useNavJunctionStore.getState().setPhoto(decisionPoints[0].stepIndex, photo);
     // 2 km out at motorway speed: inside the guidance window, well outside the
@@ -100,7 +114,7 @@ describe("JunctionViewSlot", () => {
     expect(far.queryByTestId("junction-view-panel")).toBeTruthy();
     expect(far.queryByTestId("junction-photo")).toBeNull();
     expect(far.queryByTestId("junction-schematic")).toBeNull();
-    expect(far.getByText("Neuss-Zentrum")).toBeTruthy();
+    expect(far.getAllByText("Neuss-Zentrum")[0]).toBeTruthy();
     cleanup();
 
     setState({ progress: { ...baseProgress, distanceToNextManeuver: 700 } });
@@ -170,6 +184,20 @@ describe("JunctionViewSlot", () => {
         license: "CC BY-SA 4.0",
       },
       objectUrl: "blob:photo-1",
+      prepared: {
+        key: "test",
+        width: 640,
+        height: 480,
+        aspectRatio: 4 / 3,
+        path: { points: [], visible: false, laneShiftMeters: 0, headRotateDeg: 0 },
+        registration: {
+          version: "observed-boundaries-v2",
+          scene: "relevant",
+          alignment: null,
+          evidence: { roadFraction: 1, markingFraction: 1, observedBoundaries: 0 },
+        },
+        preparationMs: 1,
+      },
     });
     const view = mount();
     expect(view.queryByTestId("junction-photo")).toBeTruthy();
@@ -181,7 +209,7 @@ describe("JunctionViewSlot", () => {
     });
     expect(view.queryByTestId("junction-photo")).toBeNull();
     expect(view.queryByTestId("junction-schematic")).toBeNull();
-    expect(view.getByText("Neuss-Zentrum")).toBeTruthy();
+    expect(view.getAllByText("Neuss-Zentrum")[0]).toBeTruthy();
   });
 
   it("renders nothing for a decision point with no sign and no lanes", () => {
@@ -191,7 +219,7 @@ describe("JunctionViewSlot", () => {
       laneCount: undefined,
       activeLanes: [],
     };
-    useNavJunctionStore.getState().setDecisionPoints("route-1", [barePoint]);
+    useNavJunctionStore.getState().setDecisionPoints("route-1", [barePoint], undefined, a57Route);
     setState();
     const view = mount();
     expect(view.queryByTestId("junction-view-panel")).toBeNull();
@@ -199,7 +227,7 @@ describe("JunctionViewSlot", () => {
 
   it("shows a photo-only junction inside its window and hides it when photos are off", () => {
     const point = { ...decisionPoints[0], sign: undefined, laneCount: undefined, activeLanes: [] };
-    useNavJunctionStore.getState().setDecisionPoints("route-1", [point]);
+    useNavJunctionStore.getState().setDecisionPoints("route-1", [point], undefined, a57Route);
     useNavJunctionStore.getState().setPhoto(point.stepIndex, {
       status: "ready",
       image: {
@@ -215,6 +243,20 @@ describe("JunctionViewSlot", () => {
         license: "CC BY-SA 4.0",
       },
       objectUrl: "blob:photo-1",
+      prepared: {
+        key: "test",
+        width: 640,
+        height: 480,
+        aspectRatio: 4 / 3,
+        path: { points: [], visible: false, laneShiftMeters: 0, headRotateDeg: 0 },
+        registration: {
+          version: "observed-boundaries-v2",
+          scene: "relevant",
+          alignment: null,
+          evidence: { roadFraction: 1, markingFraction: 1, observedBoundaries: 0 },
+        },
+        preparationMs: 1,
+      },
     });
     setState({ progress: { ...baseProgress, distanceToNextManeuver: 2000 } });
     const view = mount();

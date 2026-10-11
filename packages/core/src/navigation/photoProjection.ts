@@ -103,6 +103,8 @@ export interface PhotoCameraPose {
 export interface PhotoRoadAlignment extends PhotoCameraPose {
   fromMeters: number;
   toMeters: number;
+  /** Independently located paint curves, ordered from the left edge to the right edge. */
+  observed?: Array<{ distanceMeters: number; boundaries: PhotoImagePoint[] }>;
 }
 
 /** The slice of a panorama that shows the approach. */
@@ -214,6 +216,7 @@ export function projectRoutePath(
   const panoCrop = image.isPano ? cropWindow(axisBearing) : undefined;
   if (!camera.onApproach) return hidden(panoCrop);
   if (
+    !image.isPano &&
     image.heading !== undefined &&
     angularDifference(image.heading, axisBearing) > MAX_HEADING_MISMATCH_DEG
   ) {
@@ -260,6 +263,40 @@ export function projectRoutePath(
       )
     )
       return hidden(panoCrop);
+    if (alignment.observed) {
+      const ribbons = [...new Set(exitLanes.activeLanes)]
+        .map((lane) =>
+          alignment.observed!.flatMap((sample): PhotoPathPoint[] => {
+            const a = sample.boundaries[lane],
+              b = sample.boundaries[lane + 1];
+            if (!a || !b || b.xPercent <= a.xPercent) return [];
+            const mix = (fraction: number) => ({
+              xPercent: a.xPercent + (b.xPercent - a.xPercent) * fraction,
+              yPercent: a.yPercent + (b.yPercent - a.yPercent) * fraction,
+            });
+            return [
+              {
+                ...mix(0.5),
+                left: mix(0.27),
+                right: mix(0.73),
+                widthPercent: (b.xPercent - a.xPercent) * 0.46,
+                distanceMeters: sample.distanceMeters,
+              },
+            ];
+          }),
+        )
+        .filter((ribbon) => ribbon.length >= 2);
+      if (ribbons.length !== exitLanes.activeLanes.length) return hidden(panoCrop);
+      return {
+        points: ribbons[0],
+        ribbons,
+        visible: true,
+        laneShiftMeters: 0,
+        headRotateDeg: 0,
+        imageHeadingDeg: alignment.headingDeg,
+        ...(panoCrop ? { crop: panoCrop } : {}),
+      };
+    }
     const eye = offsetRight(camera.point, axisBearing, alignment.lateralOffsetMeters);
     const imagePoint = (ground: LngLat) =>
       project(

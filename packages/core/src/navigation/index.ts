@@ -56,11 +56,17 @@ export {
   sameJunction,
 } from "./junctionDetect";
 export { junctionLookupPoints } from "./junctionLookup";
-export { type SelectJunctionPhotoOptions, selectJunctionPhoto } from "./junctionPhoto";
+export {
+  rankJunctionPhotos,
+  type SelectJunctionPhotoOptions,
+  selectJunctionPhoto,
+} from "./junctionPhoto";
 export { buildJunctionSchematic } from "./junctionSchematic";
 export {
   guidanceApproachMeters,
   junctionPhotoApproachMeters,
+  type ResolvedLaneGuidance,
+  resolveLaneGuidance,
   resolveRecommendedLanes,
   shouldPreviewNextStep,
 } from "./lanes";
@@ -72,6 +78,11 @@ export {
   maneuverArrowSpans,
   maneuverArrowTipBearing,
 } from "./maneuverArrow";
+export {
+  type ManeuverPositions,
+  maneuverStartMeters,
+  prepareManeuverPositions,
+} from "./maneuverPosition";
 export {
   enforceAggregateBounds,
   type GroundNavigationStartPackage,
@@ -142,7 +153,13 @@ export {
   type PhotoRoutePath,
   projectRoutePath,
 } from "./photoProjection";
-export { alignPhotoRoad, type PhotoPixels } from "./photoRoadAlignment";
+export {
+  alignPhotoRoad,
+  PHOTO_REGISTRATION_VERSION,
+  type PhotoPixels,
+  type PhotoRegistrationResult,
+  registerPhotoRoad,
+} from "./photoRoadAlignment";
 export { processFix } from "./processFix";
 export {
   DEFAULT_TRANSIT_TICK_OPTIONS,
@@ -226,7 +243,13 @@ export {
   projectRoutePois,
   routeAheadBounds,
 } from "./searchAlongRoute";
-export { refKind, signHeadline, visibleToward } from "./signFormat";
+export {
+  cleanSignTexts,
+  exitNumberLabel,
+  refKind,
+  signHeadline,
+  visibleToward,
+} from "./signFormat";
 export { simulatePositions } from "./simulatePositions";
 export { snapToRoute } from "./snap";
 export { isOverSpeed, OVER_SPEED_TOLERANCE_KMH } from "./speedAlert";

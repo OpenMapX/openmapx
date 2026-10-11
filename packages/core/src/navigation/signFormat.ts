@@ -23,7 +23,26 @@ export function refKind(ref: string): RefKind {
 
 /** The toward destinations that fit in one strip (the spec's three-town cap). */
 export function visibleToward(list: string[], max = 3): string[] {
-  return list.slice(0, max);
+  return cleanSignTexts(list).slice(0, max);
+}
+
+export function cleanSignTexts(list: string[], refs = false): string[] {
+  const seen = new Set<string>();
+  return list
+    .map((value) => value.trim())
+    .filter((value) => {
+      if (!value || /^(none|null|undefined)$/i.test(value)) return false;
+      const key = value.toLocaleLowerCase().replace(refs ? /\s/g : /\s+/g, refs ? "" : " ");
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+}
+
+/** Numbered interchange identifiers; opaque provider tokens are not exit badges. */
+export function exitNumberLabel(value: string | undefined): string | undefined {
+  const label = value?.trim();
+  return label && /^\d{1,4}[a-z]?$/i.test(label) ? label : undefined;
 }
 
 /**
@@ -32,7 +51,7 @@ export function visibleToward(list: string[], max = 3): string[] {
  * this exit's title, so it must never be shown alongside a toward list.
  */
 export function signHeadline(sign: ManeuverSign | undefined): string[] {
-  if (sign?.exitToward?.length) return sign.exitToward;
-  if (sign?.exitNames?.length) return sign.exitNames;
+  if (sign?.exitToward?.length) return cleanSignTexts(sign.exitToward);
+  if (sign?.exitNames?.length) return cleanSignTexts(sign.exitNames);
   return [];
 }

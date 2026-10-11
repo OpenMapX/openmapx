@@ -2,6 +2,8 @@
 
 import Box from "@mui/material/Box";
 import {
+  cleanSignTexts,
+  exitNumberLabel,
   type GantryModel,
   type JunctionDecisionPoint,
   type LngLat,
@@ -19,6 +21,7 @@ interface Props {
   gantry?: GantryModel;
   /** The prefetched photo for this decision point, when one qualified. */
   photo?: JunctionPhotoState;
+  country?: string;
   /** The route being driven, for projecting the path ahead onto the photo. */
   geometry?: LngLat[];
 }
@@ -31,7 +34,7 @@ interface Props {
  */
 function engineModel(point: JunctionDecisionPoint): GantryModel {
   const headline = visibleToward(signHeadline(point.sign));
-  const exitNumber = point.sign?.exitNumbers?.[0];
+  const exitNumber = exitNumberLabel(point.sign?.exitNumbers?.[0]);
   const laneCount = point.laneCount ?? 0;
   const panels: GantryModel["panels"] =
     headline.length || exitNumber
@@ -50,6 +53,14 @@ function engineModel(point: JunctionDecisionPoint): GantryModel {
     laneCount,
     panels,
     activeLanes: point.activeLanes,
+    laneGuidance: point.laneCount ? point.laneGuidance : undefined,
+    laneSelectionReliable: false,
+    selectedRoute: {
+      refs: cleanSignTexts(point.sign?.exitBranches ?? [], true),
+      destinations: headline,
+      ...(exitNumber ? { exitNumber } : {}),
+      turn: point.direction,
+    },
     source: "engine",
   };
 }
@@ -60,44 +71,43 @@ function engineModel(point: JunctionDecisionPoint): GantryModel {
  * inside are hidden from assistive tech, and the panel is not live, so an
  * approach never chatters. Nothing here is a touch target while navigating.
  */
-export function JunctionViewPanel({ point, gantry, photo, geometry }: Props) {
+export function JunctionViewPanel({ point, gantry, photo, geometry, country }: Props) {
   const t = useTranslations("navigation");
   const model = gantry ?? engineModel(point);
   const readyPhoto =
-    photo?.status === "ready" && photo.image && photo.objectUrl && geometry
-      ? { image: photo.image, objectUrl: photo.objectUrl, geometry }
+    photo?.status === "ready" && photo.image && photo.objectUrl && photo.prepared && geometry
+      ? { image: photo.image, objectUrl: photo.objectUrl, prepared: photo.prepared, geometry }
       : null;
   if (!model.panels.length && !readyPhoto) return null;
-  const toward = visibleToward(signHeadline(point.sign));
-  const laneSummary =
-    model.activeLanes.length === 1
-      ? t("junctionLaneSummary", { lane: model.activeLanes[0] + 1, total: model.laneCount })
-      : model.activeLanes.length > 1
-        ? t("junctionLanesSummary", {
-            lanes: model.activeLanes.map((lane) => lane + 1).join(", "),
-            total: model.laneCount,
-          })
-        : model.laneCount > 0
-          ? t("junctionLaneCount", { total: model.laneCount })
-          : t("junctionViewLabel");
-  const branchSummary = model.branches
-    ?.flatMap((branch) => {
-      const panel = model.panels.find((entry) => entry.branchWayId === branch.wayId);
-      const places = [
-        ...(branch.refs ?? panel?.refs ?? []),
-        ...(branch.destinations ?? panel?.destinations ?? []),
-      ].join(", ");
-      const count =
-        branch.laneCount !== undefined ? t("junctionLaneCount", { total: branch.laneCount }) : "";
-      const summary = [places, count].filter(Boolean).join(", ");
-      return summary ? [summary] : [];
-    })
-    .join("; ");
-  const label = [
-    laneSummary,
-    toward.length > 0 ? t("toward", { places: toward.join(", ") }) : null,
-    branchSummary ? t("junctionBranchesSummary", { branches: branchSummary }) : null,
-  ]
+  const selected = model.selectedRoute ?? {
+    refs: point.sign?.exitBranches ?? [],
+    destinations: signHeadline(point.sign),
+    exitNumber: exitNumberLabel(point.sign?.exitNumbers?.[0]),
+  };
+  const routeSummary = [
+    ...cleanSignTexts(selected.refs, true),
+    ...cleanSignTexts(selected.destinations),
+    ...(selected.exitNumber ? [t("exitNumber", { number: selected.exitNumber })] : []),
+  ].join(", ");
+  const guidance = model.laneGuidance;
+  const preferred = guidance?.preferredLanes ?? [];
+  const usable = guidance?.usableLanes ?? model.activeLanes;
+  const indices = (lanes: number[]) => lanes.map((lane) => lane + 1).join(", ");
+  const laneSummary = preferred.length
+    ? t("junctionPreferredLanes", { lanes: indices(preferred), total: model.laneCount })
+    : usable.length
+      ? t("junctionUsableLanes", { lanes: indices(usable), total: model.laneCount })
+      : model.laneCount > 0
+        ? t("junctionLaneGuidanceUnknown")
+        : "";
+  const credit = readyPhoto
+    ? t("junctionPhotoCaption", {
+        author: readyPhoto.image.author ?? readyPhoto.image.providerId,
+        license: readyPhoto.image.license ?? "",
+        date: readyPhoto.image.capturedAt?.slice(0, 7) ?? "",
+      })
+    : "";
+  const label = [routeSummary || t("junctionViewLabel"), laneSummary, credit]
     .filter(Boolean)
     .join(", ");
   return (
@@ -115,18 +125,16 @@ export function JunctionViewPanel({ point, gantry, photo, geometry }: Props) {
       }}
       data-testid="junction-view-panel"
     >
-      {model.panels.length > 0 && <GantryStrip model={model} />}
+      {model.panels.length > 0 && (
+        <Box aria-hidden>
+          <GantryStrip model={model} country={country} />
+        </Box>
+      )}
       {readyPhoto && (
         <JunctionPhoto
           image={readyPhoto.image}
+          prepared={readyPhoto.prepared}
           objectUrl={readyPhoto.objectUrl}
-          point={point}
-          geometry={readyPhoto.geometry}
-          exitLanes={
-            model.laneCount === 0 || model.laneSelectionReliable === false
-              ? undefined
-              : { laneCount: model.laneCount, activeLanes: model.activeLanes }
-          }
         />
       )}
     </Box>

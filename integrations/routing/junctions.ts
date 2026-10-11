@@ -85,7 +85,7 @@ export function parseJunctionPoints(body: unknown): JunctionLookupPoint[] | null
 
 /** The per-point cache key: position to ~10 m, bearing to 10°. */
 export function junctionCacheKey(point: JunctionLookupPoint): string {
-  return hashKey("cache:nav:junction-ways:v3", [
+  return hashKey("cache:nav:junction-ways:v4", [
     round(point.lng, 4),
     round(point.lat, 4),
     round(point.bearing / 10, 0) * 10,
@@ -199,6 +199,19 @@ function mapWay(element: OverpassWayElement, point: JunctionLookupPoint): Juncti
     endDistance < END_ON_POINT_METERS ||
     angularDifference(bearingBetween(end, centre), endBearing) <= 90;
 
+  const localSegments = nodes.flatMap((node, i) =>
+    i < nodes.length - 1 && distanceToPolyline(centre, [node, nodes[i + 1]]) <= 500
+      ? [i, i + 1]
+      : [],
+  );
+  const first = localSegments.length ? localSegments[0] : 0;
+  const last = localSegments.length ? localSegments[localSegments.length - 1] : nodes.length - 1;
+  const local = nodes.slice(first, last + 1);
+  const geometry =
+    local.length <= 128
+      ? local
+      : Array.from({ length: 128 }, (_, i) => local[Math.round((i * (local.length - 1)) / 127)]);
+  const layer = tags.layer === undefined ? undefined : Number(tags.layer);
   return {
     wayId: element.id,
     highway: tags.highway ?? "",
@@ -208,6 +221,10 @@ function mapWay(element: OverpassWayElement, point: JunctionLookupPoint): Juncti
     endDistanceMeters: leadsIn ? endDistance : -endDistance,
     startDistanceMeters: haversineDistance(nodes[0], centre),
     tags: laneTags(tags),
+    geometry,
+    ...(layer !== undefined && Number.isFinite(layer) ? { layer } : {}),
+    ...(tags.tunnel !== undefined ? { tunnel: tags.tunnel !== "no" } : {}),
+    ...(tags.bridge !== undefined ? { bridge: tags.bridge !== "no" } : {}),
   };
 }
 

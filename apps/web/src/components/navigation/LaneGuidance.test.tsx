@@ -3,6 +3,21 @@ import { describe, expect, it } from "vitest";
 import { LaneGuidance } from "./LaneGuidance";
 
 describe("LaneGuidance", () => {
+  it("distinguishes preferred lanes from initially usable and unknown lanes", () => {
+    const html = renderToStaticMarkup(
+      <LaneGuidance
+        lanes={[
+          { indications: ["left"], valid: true, preferred: true },
+          { indications: ["left"], valid: true, preferred: false },
+          { indications: ["through"] },
+        ]}
+      />,
+    );
+    expect(html).toContain('data-lane-state="preferred"');
+    expect(html).toContain('data-lane-state="usable"');
+    expect(html).toContain('data-lane-state="unknown"');
+    expect(html.match(/data-preferred-marker/g)).toHaveLength(1);
+  });
   it("renders nothing when there are no lanes", () => {
     expect(renderToStaticMarkup(<LaneGuidance lanes={undefined} />)).toBe("");
   });
@@ -42,7 +57,7 @@ describe("LaneGuidance", () => {
     expect(html).toContain('data-active="true"');
   });
 
-  it("highlights through lanes for a keep-left instruction", () => {
+  it("preserves explicit rejection for a keep-left instruction", () => {
     const html = renderToStaticMarkup(
       <LaneGuidance
         maneuver={{ type: "keep", modifier: "left" }}
@@ -53,7 +68,7 @@ describe("LaneGuidance", () => {
         ]}
       />,
     );
-    expect(html.match(/data-valid="true"/g)?.length).toBe(2);
-    expect(html.match(/data-valid="false"/g)?.length).toBe(1);
+    expect(html.match(/data-valid="true"/g)?.length ?? 0).toBe(0);
+    expect(html.match(/data-valid="false"/g)?.length).toBe(3);
   });
 });

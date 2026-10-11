@@ -1,9 +1,10 @@
 import type { LngLat } from "../types/geometry";
-import type { JunctionDecisionPoint } from "../types/junction";
+import type { JunctionDecisionPoint, JunctionWay } from "../types/junction";
 import type { StreetLevelImage } from "../types/streetLevel";
 import { haversineDistance } from "../utils/coordinates";
 import { angularDifference, bearingBetween } from "./bearing";
 import { cumulativeDistances } from "./deadReckon";
+import { photoApproachEvidence } from "./photoApproach";
 import { approachCamera } from "./photoProjection";
 
 /**
@@ -29,6 +30,9 @@ const UPSTREAM_TOLERANCE_DEG = 45;
 /** Photo-selection options; the age limit guards against stale imagery. */
 export interface SelectJunctionPhotoOptions {
   maxAgeYears?: number;
+  /** Road-level evidence for the actual approach; unknown image level cannot corroborate a tunnel. */
+  approachWay?: JunctionWay;
+  approachWays?: JunctionWay[];
   /**
    * The route being driven. With it, each photo's heading is judged against
    * the road where the photo was taken rather than against the approach
@@ -50,14 +54,15 @@ export interface SelectJunctionPhotoOptions {
  * a month (one drive captures a frame every few metres) a frame where the exit
  * lanes already exist beats one before, and then the frame closest to 80 m
  * wins — or closest to where those lanes begin, when that is nearer the split.
- * `null` when nothing qualifies — the schematic shows instead.
+ * `null` when nothing qualifies — destination signs remain alone.
  */
-export function selectJunctionPhoto(
+export function rankJunctionPhotos(
   images: StreetLevelImage[],
   point: JunctionDecisionPoint,
   now: Date,
   opts: SelectJunctionPhotoOptions = {},
-): StreetLevelImage | null {
+): StreetLevelImage[] {
+  if (opts.approachWay?.tunnel || (opts.approachWay?.layer ?? 0) < 0) return [];
   const maxAgeMs = (opts.maxAgeYears ?? DEFAULT_MAX_AGE_YEARS) * 365.25 * 24 * 3600 * 1000;
   const geometry = opts.geometry && opts.geometry.length >= 2 ? opts.geometry : undefined;
   const cum = geometry ? cumulativeDistances(geometry) : undefined;
@@ -68,15 +73,22 @@ export function selectJunctionPhoto(
       : Math.min(TARGET_DISTANCE_METERS, fullLanesFrom);
   const candidates = images.flatMap((image) => {
     if (image.heading === undefined) return [];
+    if (opts.approachWays && geometry) {
+      const evidence = photoApproachEvidence(geometry, point, image, opts.approachWays);
+      if (evidence.state !== "known" || evidence.way?.tunnel || (evidence.way?.layer ?? 0) < 0)
+        return [];
+    }
     const camera = geometry && cum ? approachCamera(geometry, cum, point, image.lngLat) : undefined;
     // Off the route (another carriageway, a service road, or past the split):
     // nothing it shows describes this approach.
     if (camera && !camera.onApproach) return [];
     const roadBearing = camera?.bearing ?? point.approachBearing;
-    if (angularDifference(image.heading, roadBearing) > HEADING_TOLERANCE_DEG) {
+    if (!image.isPano && angularDifference(image.heading, roadBearing) > HEADING_TOLERANCE_DEG) {
       return [];
     }
-    const distance = haversineDistance(image.lngLat, point.point);
+    const distance = camera
+      ? point.alongMeters - camera.alongMeters
+      : haversineDistance(image.lngLat, point.point);
     if (distance < MIN_DISTANCE_METERS || distance > MAX_DISTANCE_METERS) return [];
     // Without the route, a frame past the exit that happens to face along the
     // road has to be caught by the bearing from the image to the point.
@@ -86,7 +98,12 @@ export function selectJunctionPhoto(
     }
     if (!image.capturedAt) return [];
     const capturedAt = new Date(image.capturedAt).getTime();
-    if (!Number.isFinite(capturedAt) || now.getTime() - capturedAt > maxAgeMs) return [];
+    if (
+      !Number.isFinite(capturedAt) ||
+      capturedAt > now.getTime() + 86_400_000 ||
+      now.getTime() - capturedAt > maxAgeMs
+    )
+      return [];
     const captured = new Date(capturedAt);
     return [
       {
@@ -97,10 +114,19 @@ export function selectJunctionPhoto(
       },
     ];
   });
-  if (candidates.length === 0) return null;
+  if (candidates.length === 0) return [];
   candidates.sort(
     (a, b) =>
-      b.month - a.month || a.beforeLanes - b.beforeLanes || a.distanceOffset - b.distanceOffset,
+      a.beforeLanes - b.beforeLanes || b.month - a.month || a.distanceOffset - b.distanceOffset,
   );
-  return candidates[0].image;
+  return candidates.map((candidate) => candidate.image);
+}
+
+export function selectJunctionPhoto(
+  images: StreetLevelImage[],
+  point: JunctionDecisionPoint,
+  now: Date,
+  opts: SelectJunctionPhotoOptions = {},
+): StreetLevelImage | null {
+  return rankJunctionPhotos(images, point, now, opts)[0] ?? null;
 }

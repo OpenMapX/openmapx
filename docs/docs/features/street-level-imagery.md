@@ -128,15 +128,26 @@ show a recent street-level image of an exit's approach, taken 30–200 m upstrea
 and facing along the road — preferably where OpenStreetMap says the exit lanes
 already exist, so every lane to choose from is in the picture. It is prefetched when the route starts (never per GPS fix).
 
-When routing or OpenStreetMap identifies the permitted lanes, the web app matches
-visible road markings against that lane layout in a background worker. Each
-permitted lane gets a separate ribbon inside its own corridor. These show where
-you may stay; the photo's GPS position is not used to suggest a lane change.
-The camera heading, height and tilt are fitted to the image, and the ribbons end
-on the observed approach rather than guessing a path beyond the split. Photos
-with weak markings, an ambiguous lane count, or insufficient lane evidence stay
-visible without ribbons. A regular photo also needs a known lens field of view.
-Matching runs locally on the loaded image and makes no additional provider requests.
+The app verifies the road interval at the camera position, including available
+lane-count and tunnel/level evidence. Surface scenery above a tunnel and
+ambiguous parallel or opposite carriageways are withheld. Full panoramas are
+judged by the relevant viewing slice, rather than their stored centre heading.
+Missing current road evidence leaves the signs alone until the lookup succeeds.
+
+When preferred lanes and the incoming layout are established, a background
+worker checks road/marking evidence and traces supported image-space boundaries.
+A fixed narrow corridor may be drawn within each preferred lane over the observed
+stretch. Initially usable lanes are not presented as lanes where the driver can
+remain throughout the maneuver. The archived camera position never represents
+the driver's current lane or requests a lane change. Unresolved boundaries,
+layout mismatch, missing field of view or ambiguous registration leave a relevant
+photo without ribbons. This registration method has limited demonstrated
+coverage; the single calibration is not general validation across Germany.
+
+Decoding and preparation finish before a photo appears. Invalid images, worker
+failures and timeouts leave the signs stable; downloads and retries are bounded.
+Image and overlay share a source transform, including panorama wrapping. Capture
+month stays visible beside the author/licence credit.
 
 For a regular photo, the provider's thumbnail is used rather than the full frame, to keep mobile data low; a
 360° photo loads its reduced full frame, since its thumbnail is only a crop from the

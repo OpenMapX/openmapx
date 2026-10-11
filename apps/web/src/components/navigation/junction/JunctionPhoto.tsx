@@ -3,14 +3,10 @@
 import Box from "@mui/material/Box";
 import type { SxProps, Theme } from "@mui/material/styles";
 import Typography from "@mui/material/Typography";
-import type {
-  JunctionDecisionPoint,
-  LngLat,
-  PhotoRoutePath,
-  StreetLevelImage,
-} from "@openmapx/core";
+import type { PhotoRoutePath, StreetLevelImage } from "@openmapx/core";
 import { useLocale, useTranslations } from "next-intl";
-import { usePhotoAlignment } from "./usePhotoAlignment";
+import { useState } from "react";
+import type { PreparedJunctionPhoto } from "@/lib/navigation/prepareJunctionPhoto";
 
 const PHOTO_HEIGHT = 180;
 /** Equirectangular frames cover the whole sphere, always 2:1. */
@@ -27,28 +23,18 @@ const FADE_GRADIENT_ID = "junction-path-fade";
 export function JunctionPhoto({
   image,
   objectUrl,
-  point,
-  geometry,
-  exitLanes,
+  prepared,
 }: {
   image: StreetLevelImage;
   objectUrl: string;
-  point: JunctionDecisionPoint;
-  /** The active route, for projecting the path ahead onto the photo. */
-  geometry: LngLat[];
-  /** Permitted lanes with explicit routing or OSM evidence. */
-  exitLanes?: { laneCount: number; activeLanes: number[] };
+  prepared: PreparedJunctionPhoto;
 }) {
   const t = useTranslations("navigation");
   const locale = useLocale();
-  const { path, aspectRatio, onLoad, imageRef } = usePhotoAlignment(
-    geometry,
-    point,
-    image,
-    objectUrl,
-    exitLanes?.laneCount,
-    exitLanes?.activeLanes.join(","),
-  );
+  const { path, aspectRatio } = prepared;
+  const [failedUrl, setFailedUrl] = useState<string | null>(null);
+  const onError = () => setFailedUrl(objectUrl);
+  if (failedUrl === objectUrl) return null;
   const capturedAt = image.capturedAt ? new Date(image.capturedAt) : null;
   const date =
     capturedAt && Number.isFinite(capturedAt.getTime())
@@ -58,13 +44,7 @@ export function JunctionPhoto({
   return (
     <Box sx={{ display: "flex", flexDirection: "column", gap: 0.5 }} data-testid="junction-photo">
       {image.isPano && path.crop ? (
-        <PanoramaWindow
-          image={image}
-          objectUrl={objectUrl}
-          path={path}
-          onLoad={onLoad}
-          imageRef={imageRef}
-        />
+        <PanoramaWindow image={image} objectUrl={objectUrl} path={path} onError={onError} />
       ) : (
         <Box sx={{ height: PHOTO_HEIGHT, position: "relative", overflow: "hidden" }}>
           <Box
@@ -72,8 +52,7 @@ export function JunctionPhoto({
             aria-hidden
             alt=""
             src={objectUrl}
-            onLoad={onLoad}
-            ref={imageRef}
+            onError={onError}
             sx={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
           />
           {path.visible && (
@@ -85,13 +64,32 @@ export function JunctionPhoto({
           )}
         </Box>
       )}
-      <Typography variant="caption" noWrap sx={{ color: "text.secondary" }}>
-        {t("junctionPhotoCaption", {
-          author: image.author ?? image.providerId,
-          license: image.license ?? "",
-          date,
-        })}
-      </Typography>
+      <Box sx={{ display: "flex", gap: 0.5, alignItems: "baseline", minWidth: 0 }}>
+        <Typography
+          variant="caption"
+          noWrap
+          sx={{ color: "text.secondary", minWidth: 0 }}
+          title={t("junctionPhotoCaption", {
+            author: image.author ?? image.providerId,
+            license: image.license ?? "",
+            date,
+          })}
+        >
+          {t("junctionPhotoCredit", {
+            author: image.author ?? image.providerId,
+            license: image.license ?? "",
+          })}
+        </Typography>
+        {date && (
+          <Typography
+            variant="caption"
+            data-capture-month
+            sx={{ color: "text.secondary", whiteSpace: "nowrap", flexShrink: 0 }}
+          >
+            {date}
+          </Typography>
+        )}
+      </Box>
     </Box>
   );
 }
@@ -108,14 +106,12 @@ function PanoramaWindow({
   image,
   objectUrl,
   path,
-  onLoad,
-  imageRef,
+  onError,
 }: {
   image: StreetLevelImage;
   objectUrl: string;
   path: PhotoRoutePath;
-  onLoad: (event: React.SyntheticEvent<HTMLImageElement>) => void;
-  imageRef: (element: HTMLImageElement | null) => void;
+  onError: () => void;
 }) {
   const crop = path.crop ?? { startDeg: 0, spanDeg: 90 };
   const leftEdgeDeg = (path.imageHeadingDeg ?? image.heading ?? 0) - 180;
@@ -144,8 +140,7 @@ function PanoramaWindow({
         alt=""
         src={objectUrl}
         data-left-percent={leftPercent}
-        onLoad={onLoad}
-        ref={imageRef}
+        onError={onError}
         sx={{ ...slice, left: `${leftPercent}%` }}
       />
       {wraps && (
@@ -155,16 +150,19 @@ function PanoramaWindow({
           alt=""
           src={objectUrl}
           data-left-percent={leftPercent + windowsPerTurn * 100}
+          onError={onError}
           sx={{ ...slice, left: `${leftPercent + windowsPerTurn * 100}%` }}
         />
       )}
-      {path.visible && (
-        <RoutePathOverlay
-          path={path}
-          viewBox={PANO_VIEWBOX}
-          sx={{ ...slice, left: `${leftPercent}%` }}
-        />
-      )}
+      {path.visible &&
+        [leftPercent, ...(wraps ? [leftPercent + windowsPerTurn * 100] : [])].map((left) => (
+          <RoutePathOverlay
+            key={left}
+            path={path}
+            viewBox={PANO_VIEWBOX}
+            sx={{ ...slice, overflow: "visible", left: `${left}%` }}
+          />
+        ))}
     </Box>
   );
 }

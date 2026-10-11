@@ -1,8 +1,15 @@
-import type { JunctionDecisionPoint, LngLat, StreetLevelImage } from "@openmapx/core";
+import type {
+  JunctionDecisionPoint,
+  JunctionWay,
+  LngLat,
+  PhotoRoutePath,
+  StreetLevelImage,
+} from "@openmapx/core";
 import {
-  alignPhotoRoad,
   type PhotoPixels,
+  type PhotoRegistrationResult,
   projectRoutePath,
+  registerPhotoRoad,
 } from "@openmapx/core/navigation/photo";
 
 export interface PhotoAlignmentRequest {
@@ -10,19 +17,45 @@ export interface PhotoAlignmentRequest {
   point: JunctionDecisionPoint;
   image: StreetLevelImage;
   pixels: PhotoPixels;
-  exitLanes: { laneCount: number; activeLanes: number[] };
+  exitLanes?: { laneCount: number; activeLanes: number[] };
+  approachWay?: JunctionWay;
+  approachWays?: JunctionWay[];
+}
+
+export interface PhotoAlignmentResponse {
+  registration: PhotoRegistrationResult;
+  path: PhotoRoutePath;
 }
 
 self.onmessage = (event: MessageEvent<PhotoAlignmentRequest>) => {
-  const { geometry, point, image, pixels, exitLanes } = event.data;
-  const alignment = alignPhotoRoad(geometry, point, image, pixels, exitLanes.laneCount);
-  self.postMessage(
-    alignment
-      ? projectRoutePath(geometry, point, image, {
-          alignment,
+  const { geometry, point, image, pixels, exitLanes, approachWay, approachWays } = event.data;
+  const registration = registerPhotoRoad(
+    geometry,
+    point,
+    image,
+    pixels,
+    exitLanes?.laneCount,
+    approachWay,
+    approachWays,
+  );
+  const path = projectRoutePath(
+    geometry,
+    point,
+    image,
+    registration.alignment && exitLanes
+      ? {
+          alignment: registration.alignment,
           exitLanes,
           aspectRatio: pixels.width / pixels.height,
-        })
-      : null,
+        }
+      : {},
   );
+  // The legacy unregistered projection is never a navigation fallback.
+  self.postMessage({
+    registration,
+    path:
+      registration.alignment && exitLanes
+        ? path
+        : { ...path, points: [], ribbons: [], visible: false },
+  } satisfies PhotoAlignmentResponse);
 };

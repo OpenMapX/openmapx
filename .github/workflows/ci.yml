@@ -67,6 +67,9 @@ jobs:
         # Live legal-URL and routing probes remain in scheduled workflows.
         run: pnpm check:policy
 
+      - name: Validate junction reference provenance
+        run: pnpm junction-eval:validate
+
       - name: Probe patched image parsers
         # Keep the child-process timeout visible as a dedicated security gate.
         run: pnpm check-image-size-dos

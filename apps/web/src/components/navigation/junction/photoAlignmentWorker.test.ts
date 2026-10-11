@@ -2,10 +2,10 @@
 import { readFileSync } from "node:fs";
 import { Worker } from "node:worker_threads";
 import { gunzipSync } from "node:zlib";
-import type { PhotoRoutePath } from "@openmapx/core";
 import { build } from "esbuild";
 import { expect, it } from "vitest";
 import fixture from "../../../../../../packages/core/src/navigation/__fixtures__/junction/aachen-two-lane.json";
+import type { PhotoAlignmentResponse } from "./photoAlignment.worker";
 
 it("bundles and runs the photo worker without UI runtime dependencies", async () => {
   const built = await build({
@@ -26,7 +26,7 @@ it("bundles and runs the photo worker without UI runtime dependencies", async ()
   const bootstrap = `const {parentPort} = require('node:worker_threads');globalThis.self={postMessage:data=>parentPort.postMessage(data)};${script};parentPort.on('message',data=>self.onmessage({data}));`;
   const worker = new Worker(bootstrap, { eval: true });
   try {
-    const response = new Promise<PhotoRoutePath>((resolve, reject) => {
+    const response = new Promise<PhotoAlignmentResponse>((resolve, reject) => {
       worker.once("message", resolve);
       worker.once("error", reject);
     });
@@ -50,7 +50,9 @@ it("bundles and runs the photo worker without UI runtime dependencies", async ()
       },
       [data.buffer],
     );
-    const path = await response;
+    const result = await response;
+    const path = result.path;
+    expect(result.registration.scene).toBe("relevant");
     expect(path.visible).toBe(true);
     expect(path.ribbons).toHaveLength(2);
     expect(path.laneShiftMeters).toBe(0);
