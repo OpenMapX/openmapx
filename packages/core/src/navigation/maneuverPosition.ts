@@ -104,10 +104,10 @@ function stepGeometryDistances(route: Route, cum: number[]): number[] {
   const projections = new Map<number, { start: number; prepared: PreparedRouteMatcher }>();
   let geometryIndex = 0;
   let matchedAlongMeters = 0;
-  let engineAlongMeters = 0;
   let confirmedAlongMeters = 0;
   let confirmedIndex = 0;
   let missingShape = false;
+  let hasShapeEnd = false;
   let shapeDistances: number[] | undefined;
   const nearestVertex = (group: number, hint: number): number | undefined => {
     const indices = geometryVertices.get(keys[group]) ?? [];
@@ -137,16 +137,16 @@ function stepGeometryDistances(route: Route, cum: number[]): number[] {
     }
   };
 
-  return route.steps.map((step, stepIndex) => {
+  const starts = route.steps.map<number | undefined>((step, stepIndex) => {
     const coordinates = step.coordinates ?? [];
-    // Engine distances are only a fallback for steps without a usable coordinate.
-    let alongMeters = engineAlongMeters;
-    engineAlongMeters += step.distance;
+    let alongMeters = confirmedAlongMeters;
     if (coordinates.length === 0) {
-      // Retain fractional progress across missing shapes, including repeated visits.
+      const start =
+        stepIndex === 0 ? 0 : !missingShape && hasShapeEnd ? confirmedAlongMeters : undefined;
+      // Retain a distance hint for repeated visits; it cannot replace known boundaries.
       missingShape = true;
       advance(matchedAlongMeters + step.distance);
-      return alongMeters;
+      return start;
     }
     for (let i = 0; i < coordinates.length; i += 1) {
       const coordinate = coordinates[i];
@@ -238,6 +238,24 @@ function stepGeometryDistances(route: Route, cum: number[]): number[] {
       confirmedIndex = geometryIndex;
       if (i === 0) alongMeters = matchedAlongMeters;
     }
+    hasShapeEnd = coordinates.length > 1 || step.distance === 0;
     return alongMeters;
   });
+  // Missing boundaries are relative to the surrounding physical anchors. An
+  // absolute engine prefix would move later confirmed coordinates during clamping.
+  let left = 0;
+  for (let right = 1; right <= starts.length; right += 1) {
+    if (right < starts.length && starts[right] === undefined) continue;
+    const from = starts[left]!;
+    const to = starts[right] ?? cum[cum.length - 1];
+    let distance = 0;
+    for (let i = left; i < right; i += 1) distance += route.steps[i].distance;
+    let traveled = 0;
+    for (let i = left + 1; i < right; i += 1) {
+      traveled += route.steps[i - 1].distance;
+      starts[i] = from + (to - from) * (distance > 0 ? traveled / distance : 0);
+    }
+    left = right;
+  }
+  return starts as number[];
 }

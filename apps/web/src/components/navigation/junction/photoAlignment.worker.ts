@@ -17,6 +17,8 @@ export interface PhotoAlignmentRequest {
   point: JunctionDecisionPoint;
   image: StreetLevelImage;
   pixels: PhotoPixels;
+  /** Confirmed split layout, independent of permission to draw preferred lanes. */
+  layoutLaneCount?: number;
   exitLanes?: { laneCount: number; activeLanes: number[] };
   approachWay?: JunctionWay;
   approachWays?: JunctionWay[];
@@ -28,13 +30,14 @@ export interface PhotoAlignmentResponse {
 }
 
 self.onmessage = (event: MessageEvent<PhotoAlignmentRequest>) => {
-  const { geometry, point, image, pixels, exitLanes, approachWay, approachWays } = event.data;
+  const { geometry, point, image, pixels, exitLanes, layoutLaneCount, approachWay, approachWays } =
+    event.data;
   const registration = registerPhotoRoad(
     geometry,
     point,
     image,
     pixels,
-    exitLanes?.laneCount,
+    layoutLaneCount ?? exitLanes?.laneCount,
     approachWay,
     approachWays,
   );

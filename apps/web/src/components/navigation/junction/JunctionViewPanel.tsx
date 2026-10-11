@@ -78,7 +78,6 @@ export function JunctionViewPanel({ point, gantry, photo, geometry, country }: P
     photo?.status === "ready" && photo.image && photo.objectUrl && photo.prepared && geometry
       ? { image: photo.image, objectUrl: photo.objectUrl, prepared: photo.prepared, geometry }
       : null;
-  if (!model.panels.length && !readyPhoto) return null;
   const selected = model.selectedRoute ?? {
     refs: point.sign?.exitBranches ?? [],
     destinations: signHeadline(point.sign),
@@ -89,6 +88,8 @@ export function JunctionViewPanel({ point, gantry, photo, geometry, country }: P
     ...cleanSignTexts(selected.destinations),
     ...(selected.exitNumber ? [t("exitNumber", { number: selected.exitNumber })] : []),
   ].join(", ");
+  const showSigns = model.panels.length > 0 || routeSummary.length > 0;
+  if (!showSigns && !readyPhoto) return null;
   const guidance = model.laneGuidance;
   const preferred = guidance?.preferredLanes ?? [];
   const usable = guidance?.usableLanes ?? model.activeLanes;
@@ -125,9 +126,9 @@ export function JunctionViewPanel({ point, gantry, photo, geometry, country }: P
       }}
       data-testid="junction-view-panel"
     >
-      {model.panels.length > 0 && (
+      {showSigns && (
         <Box aria-hidden>
-          <GantryStrip model={model} country={country} />
+          <GantryStrip model={{ ...model, selectedRoute: selected }} country={country} />
         </Box>
       )}
       {readyPhoto && (

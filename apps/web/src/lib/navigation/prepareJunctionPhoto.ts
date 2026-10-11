@@ -49,6 +49,7 @@ export function photoPreparationKey(
     image.fovDeg,
     model?.approachWay,
     model?.approachWays,
+    model?.source,
     model?.laneCount,
     model?.laneGuidance,
     model?.laneSelectionReliable,
@@ -145,6 +146,10 @@ export async function prepareJunctionPhoto(
           image,
           pixels,
           exitLanes: lanes,
+          layoutLaneCount:
+            model?.source === "osm" && model.approachWay?.tags.lanes === model.laneCount
+              ? model.laneCount
+              : undefined,
           approachWay: model?.approachWay,
           approachWays: model?.approachWays,
         };

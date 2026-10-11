@@ -129,6 +129,86 @@ describe("offscreen photo preparation", () => {
     expect(await promise).toBeNull();
     expect(TestWorker.jobs[0].terminate).toHaveBeenCalledTimes(1);
   });
+  it.each(["unknown", "partial", "conflict"] as const)(
+    "keeps a mapped physical count for scene checks when lane guidance is %s",
+    async (state) => {
+      const model: GantryModel = {
+        laneCount: 3,
+        panels: [],
+        activeLanes: [],
+        source: "osm",
+        laneSelectionReliable: false,
+        laneGuidance: {
+          lanes: [],
+          preferredLanes: [],
+          usableLanes: state === "partial" ? [0, 1] : [],
+          state,
+        },
+        approachWay: {
+          wayId: 1,
+          highway: "motorway",
+          bearing: 90,
+          endDistanceMeters: 0,
+          startDistanceMeters: 100,
+          tags: { lanes: 3 },
+        },
+      };
+      const promise = prepareJunctionPhoto(
+        "blob:test",
+        [
+          [0.99, 51],
+          [1, 51],
+        ],
+        point,
+        image,
+        model,
+        "key",
+        new AbortController().signal,
+      );
+      await decoded();
+      const worker = TestWorker.jobs[0];
+      expect(worker.request?.layoutLaneCount).toBe(3);
+      expect(worker.request?.exitLanes).toBeUndefined();
+      worker.finish();
+      expect(await promise).not.toBeNull();
+    },
+  );
+  it.each(["engine", "untagged"])(
+    "does not certify a physical count from an %s layout",
+    async (source) => {
+      const model: GantryModel = {
+        laneCount: 3,
+        panels: [],
+        activeLanes: [],
+        source: source === "engine" ? "engine" : "osm",
+        approachWay: {
+          wayId: 1,
+          highway: "motorway",
+          bearing: 90,
+          endDistanceMeters: 0,
+          startDistanceMeters: 100,
+          tags: source === "engine" ? { lanes: 3 } : {},
+        },
+      };
+      const promise = prepareJunctionPhoto(
+        "blob:test",
+        [
+          [0.99, 51],
+          [1, 51],
+        ],
+        { ...point, laneCount: 3 },
+        image,
+        model,
+        "key",
+        new AbortController().signal,
+      );
+      await decoded();
+      const worker = TestWorker.jobs[0];
+      expect(worker.request?.layoutLaneCount).toBeUndefined();
+      worker.finish();
+      await promise;
+    },
+  );
   it("cancels a superseded fit and ignores its late response", async () => {
     const controller = new AbortController();
     const promise = begin(controller.signal);
@@ -172,5 +252,24 @@ describe("offscreen photo preparation", () => {
         laneGuidance: { ...model.laneGuidance!, preferredLanes: [1] },
       }),
     ).not.toBe(a);
+  });
+  it("invalidates preparation when a layout becomes independently confirmed by OSM", () => {
+    const model: GantryModel = {
+      laneCount: 3,
+      panels: [],
+      activeLanes: [],
+      source: "engine",
+      approachWay: {
+        wayId: 1,
+        highway: "motorway",
+        bearing: 90,
+        endDistanceMeters: 0,
+        startDistanceMeters: 100,
+        tags: { lanes: 3 },
+      },
+    };
+    expect(photoPreparationKey(1, point, image, { ...model, source: "osm" })).not.toBe(
+      photoPreparationKey(1, point, image, model),
+    );
   });
 });

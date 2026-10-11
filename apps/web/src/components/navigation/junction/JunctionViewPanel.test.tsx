@@ -187,6 +187,56 @@ describe("JunctionViewPanel photo integration", () => {
     license: "CC BY-SA 4.0",
   };
 
+  it.each([false, true])(
+    "shows a ref-only route title without inventing a physical board (photo %s)",
+    (withPhoto) => {
+      const host = document.createElement("div");
+      host.innerHTML = renderToStaticMarkup(
+        <JunctionViewPanel
+          point={{ ...a57Point, sign: { exitBranches: ["A 1"] } }}
+          photo={
+            withPhoto
+              ? { status: "ready", image: photoImage, objectUrl: "blob:photo-1", prepared }
+              : undefined
+          }
+          geometry={a57Route.geometry}
+        />,
+      );
+      expect(host.querySelector("[data-selected-route]")?.textContent).toContain("A 1");
+      expect(host.querySelectorAll("[data-panel]")).toHaveLength(0);
+      expect(!!host.querySelector('[data-testid="junction-photo"]')).toBe(withPhoto);
+      expect(host.querySelector('[data-testid="junction-schematic"]')).toBeNull();
+    },
+  );
+
+  it.each([false, true])(
+    "shows a resolved road-name title without physical boards (photo %s)",
+    (withPhoto) => {
+      const point = { ...a57Point, sign: undefined, roadNames: ["Example Road"] };
+      const model = mergeExitPanel(
+        { laneCount: 3, panels: [], activeLanes: [], source: "osm" },
+        point,
+      );
+      expect(model.panels).toHaveLength(0);
+      const host = document.createElement("div");
+      host.innerHTML = renderToStaticMarkup(
+        <JunctionViewPanel
+          point={point}
+          gantry={model}
+          photo={
+            withPhoto
+              ? { status: "ready", image: photoImage, objectUrl: "blob:photo-1", prepared }
+              : undefined
+          }
+          geometry={a57Route.geometry}
+        />,
+      );
+      expect(host.querySelector("[data-selected-route]")?.textContent).toContain("Example Road");
+      expect(host.querySelectorAll("[data-panel]")).toHaveLength(0);
+      expect(!!host.querySelector('[data-testid="junction-photo"]')).toBe(withPhoto);
+    },
+  );
+
   it("shows a ready photo below the signs", () => {
     const withPhoto = renderToStaticMarkup(
       <JunctionViewPanel
