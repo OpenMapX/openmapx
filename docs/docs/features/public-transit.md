@@ -138,7 +138,7 @@ numeric delay is supplied.
 Stop, route and trip identifiers remain source-aware; similarly named
 parent/sibling stations are not merged by the UI. Platform changes show both
 planned and current codes when available, plus a **changed** label. Cancelled
-services retain a clear cancellation label and struck-through times; a
+departures retain a clear cancellation label and struck-through times; a
 cancelled navigation leg does not issue a boarding or get-off cue. The get-off
 alarm is also suppressed until the rider has boarded.
 
