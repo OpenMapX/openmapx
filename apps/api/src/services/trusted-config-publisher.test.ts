@@ -12,7 +12,10 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { OPS_TRUSTED_CONFIG_QUEUE_MAX_BYTES } from "@openmapx/core/ops";
+import {
+  OPS_TRUSTED_CONFIG_QUEUE_MAX_BYTES,
+  sealTrustedConfigurationSnapshot,
+} from "@openmapx/core/ops";
 import { afterEach, describe, expect, it } from "vitest";
 import { initializeTrustedSnapshotDirectory } from "../../../ops-agent/src/trusted-config-source";
 import {
@@ -33,6 +36,28 @@ function directory(): string {
   roots.push(root);
   chmodSync(root, 0o700);
   return root;
+}
+
+function seedSnapshot(directory: string, index: number) {
+  const sealed = sealTrustedConfigurationSnapshot({
+    role: "api",
+    operationKey: "opk1_0123456789abcdef",
+    operationForRevision: (revisionId) => ({ kind: "stack.render", revisionId }),
+    payload: {
+      domain: "maps.example.test",
+      selectedRoots: [],
+      serviceConfigs: [],
+      integrationConfigs: [],
+      serviceSecrets: [],
+    },
+    token,
+    issuedAtMs: Date.parse("2026-08-24T08:00:00.000Z"),
+    nonce: `nonce_${index.toString().padStart(16, "0")}`,
+  });
+  const path = join(directory, `${sealed.revisionId}.json`);
+  writeFileSync(path, sealed.bytes, { mode: 0o600 });
+  chmodSync(path, 0o600);
+  return sealed;
 }
 
 describe("trusted configuration snapshot publisher", () => {
@@ -142,7 +167,8 @@ describe("trusted configuration snapshot publisher", () => {
         now: () => Date.parse("2026-08-24T08:00:00.000Z"),
         nonce: () => `nonce_${index.toString().padStart(16, "0")}`,
       });
-    for (let index = 0; index < 128; index += 1) await make(index);
+    for (let index = 0; index < 127; index += 1) seedSnapshot(root, index);
+    await make(127);
     await expect(make(128)).rejects.toThrow("Trusted configuration snapshot publish failed");
     expect(readdirSync(root)).toHaveLength(128);
   }, 60_000);
@@ -173,16 +199,13 @@ describe("trusted configuration snapshot publisher", () => {
       operation: Awaited<ReturnType<typeof make>>["operation"];
       state: "running";
     }> = [];
-    for (let index = 0; index < 128; index += 1) {
-      const published = await make(index);
+    for (let index = 0; index < 127; index += 1) {
+      const published = seedSnapshot(index < 4 ? claimed : root, index);
       if (index < 4) {
-        renameSync(
-          join(root, `${published.revisionId}.json`),
-          join(claimed, `${published.revisionId}.json`),
-        );
         journalRecords.push({ operation: published.operation, state: "running" });
       }
     }
+    await make(127);
 
     const marker = "must-not-appear-in-errors";
     let failure: unknown;

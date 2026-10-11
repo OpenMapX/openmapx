@@ -89,6 +89,7 @@ vi.mock("@openmapx/core/ambient-places-server", () => ({
 // App setup
 
 let app: FastifyInstance;
+const { placesRoute } = await import("../places.js");
 
 beforeAll(async () => {
   // Register the built-in scheme resolvers the route depends on. In the
@@ -106,7 +107,6 @@ beforeAll(async () => {
     return mockLookupDbStation(value, ctx.lang);
   });
 
-  const { placesRoute } = await import("../places.js");
   app = Fastify({ logger: false });
   await app.register(placesRoute);
   await app.ready();
