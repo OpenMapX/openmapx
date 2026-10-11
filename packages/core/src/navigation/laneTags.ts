@@ -7,7 +7,7 @@ import type {
 } from "../types/junction";
 import { angularDifference } from "./bearing";
 import { prepareRouteMatcher, snapPreparedRoute } from "./routeMatcher";
-import { cleanSignTexts, exitNumberLabel, signHeadline } from "./signFormat";
+import { cleanSignTexts, exitNumberLabel, refKind, signHeadline } from "./signFormat";
 
 /**
  * OSM per-lane destination tags → the gantry drawn in the junction panel.
@@ -416,6 +416,11 @@ function mergePrimaryExitPanel(
     ...(exitNumber ? { exitNumber } : {}),
     turn: point.direction,
   };
+  if (!selectedRoute.refs.length && !selectedRoute.destinations.length) {
+    const roadNames = cleanSignTexts(point.roadNames ?? []);
+    selectedRoute.refs = roadNames.filter((name) => refKind(name) !== "other");
+    selectedRoute.destinations = roadNames.filter((name) => refKind(name) === "other");
+  }
   const resolved = { laneGuidance: guidance, selectedRoute, laneEvidence };
   const carried = model.panels.filter((panel) => !panel.isExit);
   if (destinations.length === 0 && refs.length === 0 && !exitNumber) {

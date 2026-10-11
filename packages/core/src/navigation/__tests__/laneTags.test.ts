@@ -159,6 +159,27 @@ describe("parseLaneTags on fixture way 314653469", () => {
     expect(merged.activeLanes).toEqual([4]);
   });
 
+  it.each([
+    { roadNames: ["A 111", "E 26"], refs: ["A 111", "E 26"], destinations: [] },
+    { roadNames: ["Main Street"], refs: [], destinations: ["Main Street"] },
+  ])("uses engine road names for an otherwise empty selected title: $roadNames", (expected) => {
+    const model = parseLaneTags({ lanes: 4, destinationLanes: "none|none|Other|Other" }, 4)!;
+    const merged = mergeExitPanel(model, {
+      ...a57Point,
+      sign: undefined,
+      roadNames: expected.roadNames,
+      laneCount: 4,
+      activeLanes: [0, 1],
+    });
+    expect(merged.selectedRoute).toMatchObject({
+      refs: expected.refs,
+      destinations: expected.destinations,
+    });
+    expect(merged.panels).toHaveLength(1);
+    expect(merged.panels[0].lanes).toEqual([2, 3]);
+    expect(merged.activeLanes).toEqual([0, 1]);
+  });
+
   it("yields three panels for way 314653466 without the ramp", () => {
     const model = parseLaneTags(
       {
