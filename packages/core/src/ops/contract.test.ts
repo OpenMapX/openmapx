@@ -171,6 +171,37 @@ const samples: Record<(typeof OPS_OPERATION_KINDS)[number], OpsOperation> = {
 };
 
 describe("ops contract", () => {
+  it.each([
+    "stack.start",
+    "service.start",
+    "service.stop",
+    "service.restart",
+    "service.recreate",
+    "service.recreateIsolated",
+    "service.remove",
+  ] as const)("bounds %s with shutdown grace and settlement overhead", (kind) => {
+    expect(OPS_KIND_POLICIES[kind]).toMatchObject({
+      execution: "async",
+      role: "api",
+      timeoutMs: 630_000,
+    });
+  });
+
+  it("preserves budgets outside the wired lifecycle operations", () => {
+    for (const [kind, timeoutMs] of [
+      ["docker.status", 5_000],
+      ["stack.status", 15_000],
+      ["stack.render", 120_000],
+      ["service.logs", 30_000],
+      ["service.logs.follow", 900_000],
+      ["service.pull", 900_000],
+      ["service.build", 1_800_000],
+      ["services.buildAll", 1_800_000],
+      ["stack.stop", 300_000],
+      ["service.update", 900_000],
+    ] as const)
+      expect(OPS_KIND_POLICIES[kind].timeoutMs).toBe(timeoutMs);
+  });
   it("freezes one strict schema for every inventoried typed effect", () => {
     expect(Object.keys(samples).sort()).toEqual([...OPS_OPERATION_KINDS].sort());
     for (const operation of Object.values(samples)) {

@@ -16,6 +16,7 @@ import {
 import { createUnavailableRuntime, type OpsRuntime } from "./runtime";
 
 const DEFAULT_TIMEOUT_MS = 120_000;
+const LIFECYCLE_TIMEOUT_MS = 10 * 60_000;
 const PULL_TIMEOUT_MS = 10 * 60_000;
 const MAX_OUTPUT_BYTES = 1024 * 1024;
 const KILL_GRACE_MS = 2_000;
@@ -340,27 +341,45 @@ export function createDockerRuntime(options: DockerRuntimeOptions): OpsRuntime {
     return parseStackStatus(result.stdout);
   };
   runtime["stack.start"] = (_operation, context) =>
-    changed([...composePrefix(), "up", "-d"], context.signal);
+    changed([...composePrefix(), "up", "-d"], context.signal, LIFECYCLE_TIMEOUT_MS);
   runtime["service.start"] = (operation, context) =>
-    changed([...composePrefix(), "up", "-d", operation.serviceId], context.signal);
+    changed(
+      [...composePrefix(), "up", "-d", operation.serviceId],
+      context.signal,
+      LIFECYCLE_TIMEOUT_MS,
+    );
   runtime["service.stop"] = (operation, context) =>
-    changed([...composePrefix(), "stop", operation.serviceId], context.signal);
+    changed(
+      [...composePrefix(), "stop", operation.serviceId],
+      context.signal,
+      LIFECYCLE_TIMEOUT_MS,
+    );
   runtime["service.restart"] = (operation, context) =>
-    changed([...composePrefix(), "restart", operation.serviceId], context.signal);
+    changed(
+      [...composePrefix(), "restart", operation.serviceId],
+      context.signal,
+      LIFECYCLE_TIMEOUT_MS,
+    );
   runtime["service.recreate"] = (operation, context) =>
     changed(
       [...composePrefix(), "up", "-d", "--force-recreate", operation.serviceId],
       context.signal,
+      LIFECYCLE_TIMEOUT_MS,
     );
   runtime["service.recreateIsolated"] = (operation, context) =>
     changed(
       [...composePrefix(), "up", "-d", "--force-recreate", "--no-deps", operation.serviceId],
       context.signal,
+      LIFECYCLE_TIMEOUT_MS,
     );
   runtime["service.pull"] = (operation, context) =>
     changed([...composePrefix(), "pull", operation.serviceId], context.signal, PULL_TIMEOUT_MS);
   runtime["service.remove"] = (operation, context) =>
-    changed([...composePrefix(), "rm", "-sf", operation.serviceId], context.signal);
+    changed(
+      [...composePrefix(), "rm", "-sf", operation.serviceId],
+      context.signal,
+      LIFECYCLE_TIMEOUT_MS,
+    );
   runtime["service.logs"] = async (operation, context) => {
     const result = await run(
       [...composePrefix(), "logs", "--no-color", `--tail=${operation.tail}`, operation.serviceId],
