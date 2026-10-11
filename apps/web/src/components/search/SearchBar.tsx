@@ -78,6 +78,7 @@ import {
   useSearchSuggestions,
   useSettingsStore,
   useSidebarStore,
+  useStreetLevelStore,
 } from "@openmapx/core";
 import { isPlausibleNlSearch } from "@openmapx/integration-framework";
 import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
@@ -140,6 +141,7 @@ export interface SearchBarProps {
 type NlpSubmissionContext = Readonly<{
   query: string;
   aiSearchEnabled: boolean;
+  selectionRevision: number;
   mapCenter: LngLat | null;
   mapBbox: BoundingBox | null;
 }>;
@@ -296,15 +298,23 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
   }, []);
   // Check stores as well as render state: another surface can supersede a
   // submission before React flushes its subscribed state or cancellation effect.
+  const isCurrentSubmission = useCallback(
+    (submission: NlpSubmissionContext) =>
+      nlpSubmissionRef.current === submission &&
+      useSearchStore.getState().query === submission.query &&
+      usePlaceStore.getState().selectionRevision === submission.selectionRevision &&
+      (useStreetLevelStore.getState().activeImage !== null) === (surface === "street-level") &&
+      !useDirectionsStore.getState().isOpen &&
+      (!submission.aiSearchEnabled || useSettingsStore.getState().aiSearchEnabled),
+    [surface],
+  );
   const ownsNlpSubmission = useCallback(
     () =>
       nlpSubmitted &&
       nlpSubmission !== null &&
-      nlpSubmissionRef.current === nlpSubmission &&
-      useSearchStore.getState().query === nlpSubmission.query &&
-      !useDirectionsStore.getState().isOpen &&
+      isCurrentSubmission(nlpSubmission) &&
       useSettingsStore.getState().aiSearchEnabled,
-    [nlpSubmitted, nlpSubmission],
+    [nlpSubmitted, nlpSubmission, isCurrentSubmission],
   );
 
   // Voice dictation and recent-search rows fill the input and then run through
@@ -367,12 +377,21 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
     const stopSettings = useSettingsStore.subscribe((state) => {
       if (!state.aiSearchEnabled && nlpSubmissionRef.current?.aiSearchEnabled) cancel();
     });
+    const stopPlace = usePlaceStore.subscribe((state) => {
+      const submission = nlpSubmissionRef.current;
+      if (submission && state.selectionRevision !== submission.selectionRevision) cancel();
+    });
+    const stopViewer = useStreetLevelStore.subscribe((state) => {
+      if ((state.activeImage !== null) !== (surface === "street-level")) cancel();
+    });
     return () => {
       stopQuery();
       stopDirections();
       stopSettings();
+      stopPlace();
+      stopViewer();
     };
-  }, [cancelPendingSubmit, cancelNlpSubmission]);
+  }, [cancelPendingSubmit, cancelNlpSubmission, surface]);
   const addRecentSearch = useRecentSearchStore((s) => s.add);
   const clearRecentSearches = useRecentSearchStore((s) => s.clear);
 
@@ -950,6 +969,7 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
     const nlpContext: NlpSubmissionContext = {
       query,
       aiSearchEnabled: useSettingsStore.getState().aiSearchEnabled,
+      selectionRevision: usePlaceStore.getState().selectionRevision,
       mapCenter: center ? [center.lng, center.lat] : null,
       mapBbox: bounds
         ? {
@@ -985,14 +1005,7 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
   };
 
   const runSubmit = (nlpContext: NlpSubmissionContext) => {
-    if (
-      !q ||
-      nlpSubmissionRef.current !== nlpContext ||
-      useSearchStore.getState().query !== nlpContext.query ||
-      useDirectionsStore.getState().isOpen ||
-      (nlpContext.aiSearchEnabled && !useSettingsStore.getState().aiSearchEnabled)
-    )
-      return;
+    if (!q || !isCurrentSubmission(nlpContext)) return;
     addRecentSearch(q);
     // Plain Enter opens the first row only when it is plainly the one meant
     // (see `enterAction`): a chain's branches or a word many names start with

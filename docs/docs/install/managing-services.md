@@ -247,6 +247,12 @@ The distinction between `restart` and `start`/`update` matters:
   Redis clients (`app-api`, `data-manager`) are stopped, updating both secret files
   and Redis ACL configuration safely.
 
+The PostGIS entrypoint forwards the first stop signal to PostgreSQL and waits
+for it to exit, preserving its exit status. Docker allows the declared five-minute
+shutdown grace before forcing termination. A stop during startup cancels readiness
+or password synchronization without marking the database healthy. This container
+grace is separate from the deadline of the service-management request.
+
 For a single one-off check of the running containers across the stack:
 
 ```bash

@@ -22,7 +22,8 @@
     "environment": {
       "POSTGRES_DB": "openmapx",
       "POSTGRES_USER": "postgres",
-      "POSTGRES_PASSWORD": "${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set — generate a strong value, do not use the default \"postgres\"}"
+      "POSTGRES_PASSWORD": "${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set — generate a strong value, do not use the default \"postgres\"}",
+      "MARTIN_DB_PASSWORD": "${MARTIN_DB_PASSWORD:-}"
     },
     "shmSize": "1g",
     "memory": "${POSTGIS_MEMORY:-2g}",

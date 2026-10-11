@@ -128,6 +128,7 @@ import type {
 } from "@openmapx/core";
 import {
   apiClient,
+  createPlace,
   PANEL,
   useCategorySearchStore,
   useDirectionsStore,
@@ -137,6 +138,7 @@ import {
   useSearchStore,
   useSettingsStore,
   useSidebarStore,
+  useStreetLevelStore,
 } from "@openmapx/core";
 import type { Disclosure } from "@openmapx/integration-framework";
 import type { TransitStop } from "@openmapx/mobility-core/transit";
@@ -182,6 +184,7 @@ beforeEach(() => {
   useCategorySearchStore.getState().clearCategory();
   useCategorySearchStore.setState({ anchor: null, exploreBoxOpen: false, activeCategory: null });
   usePlaceStore.setState({ selectedPlace: null });
+  useStreetLevelStore.getState().closeViewer();
   useMapStore.setState({ userLocation: null });
   useSidebarStore.setState({ activeSidebarId: null });
   useSettingsStore.setState({ aiSearchEnabled: true, searchHistoryEnabled: true });
@@ -2226,7 +2229,7 @@ describe("SearchBar NLP submission ownership", () => {
     return { promise, resolve, reject };
   }
 
-  async function start(disclosures: Disclosure[] = []) {
+  async function start(disclosures: Disclosure[] = [], surface: "map" | "street-level" = "map") {
     const request = deferred();
     const post = vi.spyOn(apiClient, "post").mockReturnValue(request.promise);
     useNlpSearchMock.mockImplementation((...args: unknown[]) =>
@@ -2235,7 +2238,12 @@ describe("SearchBar NLP submission ownership", () => {
     useSearchStore.setState({ query, isFocused: true });
     const client = createTestQueryClient();
     clients.push(client);
-    const view = renderBar(disclosures, client);
+    const view = render(
+      <IntegrationDisclosuresProvider value={disclosures}>
+        <SearchBar surface={surface} />
+      </IntegrationDisclosuresProvider>,
+      { wrapper: createQueryWrapper(client) },
+    );
     const input = screen.getByLabelText("search.ariaLabel");
     fireEvent.submit(input.closest("form") as HTMLFormElement);
     await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
@@ -2282,6 +2290,136 @@ describe("SearchBar NLP submission ownership", () => {
     for (const client of clients.splice(0)) client.clear();
     vi.restoreAllMocks();
   });
+
+  const mapPlace = createPlace({
+    primaryScheme: "osm",
+    ids: { osm: "node/123" },
+    name: "Map café",
+    address: "Fixture address",
+    coordinates: [1, 1],
+  });
+
+  const viewerImage = { providerId: "panoramax", imageId: "fixture" };
+
+  it.each(["empty", "error", "success", "cloud consent", "cloud open"] as const)(
+    "keeps an external map selection after an obsolete %s response",
+    async (outcome) => {
+      const actual =
+        await vi.importActual<typeof import("@/lib/launchExplore")>("@/lib/launchExplore");
+      launchTextSearch.mockImplementation((...args: unknown[]) =>
+        actual.launchTextSearch(...(args as Parameters<typeof actual.launchTextSearch>)),
+      );
+      const run = await start();
+      act(() => {
+        usePlaceStore.getState().setSelectedPlace(mapPlace);
+        useSidebarStore.getState().openSidebar(PANEL.PLACE);
+      });
+      const state = visibleState();
+      await finish(run, outcome);
+      expect(visibleState()).toEqual(state);
+      expect(run.post).toHaveBeenCalledTimes(1);
+      expect(screen.queryByText("Owned cafés")).toBeNull();
+      expect(screen.queryByText("search.nlpConsentTitle")).toBeNull();
+    },
+  );
+
+  it("cancels a same-place reselection but preserves selection enrichment", async () => {
+    usePlaceStore.getState().setSelectedPlace(mapPlace);
+    const run = await start();
+    act(() => {
+      const revision = usePlaceStore.getState().selectionRevision;
+      usePlaceStore
+        .getState()
+        .enrichSelectedPlace(revision, { ...mapPlace, name: "Enriched café" });
+    });
+    await finish(run, "success");
+    await screen.findByText("Owned cafés");
+    act(() => usePlaceStore.getState().setSelectedPlace(usePlaceStore.getState().selectedPlace));
+    expect(screen.queryByText("Owned cafés")).toBeNull();
+  });
+
+  it.each(["map", "street-level"] as const)(
+    "cancels the %s submission when its surface closes, even if reopened before render",
+    async (surface) => {
+      if (surface === "street-level") useStreetLevelStore.setState({ activeImage: viewerImage });
+      const run = await start([], surface);
+      act(() => {
+        if (surface === "map") {
+          useStreetLevelStore.setState({ activeImage: viewerImage });
+          useStreetLevelStore.getState().closeViewer();
+        } else {
+          useStreetLevelStore.getState().closeViewer();
+          useStreetLevelStore.setState({ activeImage: viewerImage });
+        }
+      });
+      await finish(run, "empty");
+      expect(launchTextSearch).not.toHaveBeenCalled();
+      expect(screen.queryByText("Owned cafés")).toBeNull();
+    },
+  );
+
+  it("hands search ownership to a second mounted viewer bar sharing the query cache", async () => {
+    const run = await start();
+    const next = deferred();
+    run.post.mockReturnValue(next.promise);
+    act(() => useStreetLevelStore.setState({ activeImage: viewerImage }));
+    const viewer = render(
+      <IntegrationDisclosuresProvider value={[]}>
+        <SearchBar surface="street-level" />
+      </IntegrationDisclosuresProvider>,
+      { wrapper: createQueryWrapper(run.client) },
+    );
+    const form = viewer.container.querySelector("form");
+    if (!form) throw new Error("Missing viewer search form");
+    fireEvent.submit(form);
+    await waitFor(() => expect(run.post).toHaveBeenCalledTimes(2));
+    await act(async () => run.request.resolve(empty));
+    expect(launchTextSearch).not.toHaveBeenCalled();
+    await act(async () => next.resolve(response));
+    await screen.findByText("Owned cafés");
+    expect(run.container.textContent).not.toContain("Owned cafés");
+    expect(viewer.container.textContent).toContain("Owned cafés");
+    fireEvent.click(screen.getByText("Owned cafés"));
+    expect(useNlpSearchStore.getState().intent?.explanation).toBe("Owned cafés");
+  });
+
+  it("keeps a viewer submission while changing images", async () => {
+    useStreetLevelStore.setState({ activeImage: viewerImage });
+    const run = await start([], "street-level");
+    act(() => useStreetLevelStore.setState({ activeImage: { ...viewerImage, imageId: "next" } }));
+    await finish(run, "success");
+    fireEvent.click(await screen.findByText("Owned cafés"));
+    expect(useNlpSearchStore.getState().intent?.explanation).toBe("Owned cafés");
+  });
+
+  it.each(["selection", "viewer"])(
+    "cancels pending suggestion settlement on external %s",
+    async (action) => {
+      const post = vi.spyOn(apiClient, "post").mockResolvedValue(response);
+      useNlpSearchMock.mockImplementation((...args: unknown[]) =>
+        useRealNlpSearch(...(args as Parameters<typeof useRealNlpSearch>)),
+      );
+      useAutocompleteMock.mockReturnValue({ data: undefined, isFetching: true });
+      useSearchStore.setState({ query, isFocused: true });
+      renderBar();
+      fireEvent.submit(
+        screen.getByLabelText("search.ariaLabel").closest("form") as HTMLFormElement,
+      );
+      act(() => {
+        if (action === "selection") usePlaceStore.getState().setSelectedPlace(mapPlace);
+        else {
+          useStreetLevelStore.setState({ activeImage: viewerImage });
+          useStreetLevelStore.getState().closeViewer();
+        }
+      });
+      const state = visibleState();
+      useAutocompleteMock.mockReturnValue({ data: undefined, isFetching: false });
+      act(() => useMapStore.setState({ userLocation: [1, 1] }));
+      await act(async () => {});
+      expect(post).not.toHaveBeenCalled();
+      expect(visibleState()).toEqual(state);
+    },
+  );
 
   it.each(["empty", "error"] as const)(
     "keeps Directions after an obsolete %s completion through the actual control",
