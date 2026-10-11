@@ -22,19 +22,37 @@ export async function startPostgis(): Promise<PostgisFixture> {
     .withPassword("postgres")
     .withStartupTimeout(60_000)
     .start();
-  const connectionString = container.getConnectionUri();
-  const sql = postgres(connectionString, { max: 2 });
-  // Production shares its client with drizzle, which replaces the client's
-  // date and JSON serializers and its date parsers.
-  drizzle(sql);
-  await sql.unsafe(`CREATE EXTENSION IF NOT EXISTS postgis`);
-  return {
-    container,
-    sql,
-    connectionString,
-    stop: async () => {
-      await sql.end({ timeout: 2 });
+  let sql: ReturnType<typeof postgres> | undefined;
+  const close = async () => {
+    const errors: unknown[] = [];
+    try {
+      await sql?.end({ timeout: 2 });
+    } catch (error) {
+      errors.push(error);
+    }
+    try {
       await container.stop();
-    },
+    } catch (error) {
+      errors.push(error);
+    }
+    if (errors.length) throw new AggregateError(errors, "PostGIS fixture cleanup failed");
   };
+  try {
+    const connectionString = container.getConnectionUri();
+    sql = postgres(connectionString, { max: 2 });
+    // Production shares its client with drizzle, which replaces the client's
+    // date and JSON serializers and its date parsers.
+    drizzle(sql);
+    await sql.unsafe(`CREATE EXTENSION IF NOT EXISTS postgis`);
+    return { container, sql, connectionString, stop: close };
+  } catch (error) {
+    try {
+      await close();
+    } catch (cleanupError) {
+      throw new AggregateError([error, cleanupError], "PostGIS fixture setup and cleanup failed", {
+        cause: error,
+      });
+    }
+    throw error;
+  }
 }
