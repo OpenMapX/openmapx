@@ -15,8 +15,8 @@
   },
   "container": {
     "image": "ghcr.io/valhalla/valhalla-scripted",
-    "tag": "latest",
-    "digest": "sha256:f9f12c3f835750fc657d1d030a392f7a548699c1c2a961d083ed761e0db8bc14",
+    "tag": "3.9.1",
+    "digest": "sha256:6238809f9dc3057743d70a20efd3911ec38e458bfa13a0601909b58f68dfd956",
     "expose": [8002],
     "environment": {
       "serve_tiles": "True",

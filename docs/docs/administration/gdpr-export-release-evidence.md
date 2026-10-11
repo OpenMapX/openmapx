@@ -22,9 +22,9 @@ revision and generated evidence version before recording an approval:
 | Repository revision                 | the immutable release commit                                                                        |
 | Privacy migration range             | `0020`–`0036` (receipt snapshots, assisted identity, email challenges and delivery leases included) |
 | Catalogue version                   | the `version` field of every registration in `apps/api/src/privacy/catalogue.ts`                    |
-| Managed Dawarich image              | `freikin/dawarich:1.15.2`                                                                           |
-| Managed Dawarich application commit | `d81abc4fc467e119f542c56602c78488fbab86fb`                                                          |
-| Managed Dawarich image digest       | `sha256:e58334ca56976feb4c885a8bd34b251ec2e3f45ffeabd4fd4371b5d2108fc70d`                           |
+| Managed Dawarich image              | `freikin/dawarich:1.15.3`                                                                           |
+| Managed Dawarich application commit | `e32b70701b2467b862d4b5bc27ac428999997c1b`                                                          |
+| Managed Dawarich image digest       | `sha256:589e3606b11b61c3fa2d9661832cb73645a9b93a9cc7d807a071e2bc6c584498`                           |
 | Managed Dawarich schema fingerprint | `4ae830ea67dc4894d814d4e2e2d19cb92571c30f2df1df017417f671e26a1e09`                                  |
 | Backup manifest contract            | format `2`, regular files, size and lowercase SHA-256 verified immediately before extraction        |
 
@@ -234,7 +234,7 @@ for two clean semantic runs. All 30 applicable catalogue registrations had
 exactly one outcome. The managed live collector also passed its separate
 pinned-image fixture.
 
-The 2026-09-26 compatibility refresh advances that gate to Dawarich 1.15.2 on
+The 2026-10-11 compatibility refresh advances that gate to Dawarich 1.15.3 on
 PostgreSQL 18/PostGIS 3.6. Both exact-image fixtures build the fresh upstream
 schema, validate its 39 reviewed relation projections and complete FK graph,
 and cover the added achievement, route-video, service-setting, trip-source,

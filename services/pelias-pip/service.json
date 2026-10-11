@@ -13,8 +13,8 @@
   },
   "container": {
     "image": "pelias/pip-service",
-    "tag": "latest",
-    "digest": "sha256:3921bf7df0b36847b6747f9f4e6ba8243ad463883b4878137e56aee3ee3ba804",
+    "tag": "v5.0.0",
+    "digest": "sha256:6bde49c2a5bd5d6ab80b7ec521500b09ad36c05335db0fa720a96d3fc6e6595a",
     "expose": [4200],
     "environment": { "PELIAS_CONFIG": "/code/pelias.json" },
     "restart": "unless-stopped"

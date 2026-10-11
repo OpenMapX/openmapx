@@ -17,9 +17,9 @@ MAX_INPUT = 64 * 1024
 MAX_ENTRY = 256 * 1024 * 1024
 MAX_TOTAL = 2 * 1024 * 1024 * 1024
 MAX_ENTRIES = 256
-DAWARICH_IMAGE = "freikin/dawarich:1.15.2"
-DAWARICH_IMAGE_DIGEST = "sha256:e58334ca56976feb4c885a8bd34b251ec2e3f45ffeabd4fd4371b5d2108fc70d"
-DAWARICH_COMMIT = "d81abc4fc467e119f542c56602c78488fbab86fb"
+DAWARICH_IMAGE = "freikin/dawarich:1.15.3"
+DAWARICH_IMAGE_DIGEST = "sha256:589e3606b11b61c3fa2d9661832cb73645a9b93a9cc7d807a071e2bc6c584498"
+DAWARICH_COMMIT = "e32b70701b2467b862d4b5bc27ac428999997c1b"
 DAWARICH_SCHEMA_FINGERPRINT = "4ae830ea67dc4894d814d4e2e2d19cb92571c30f2df1df017417f671e26a1e09"
 DAWARICH_RELATION_FINGERPRINT_VERSION = "dawarich-relations-v2"
 SAFE_EXTENSIONS = {"bin", "csv", "fit", "gpx", "json", "jsonl", "jpg", "jpeg", "kml", "mp4", "pdf", "png", "tcx", "txt"}
@@ -148,8 +148,8 @@ def verified_sources(request):
     declared = {(service.get("id"), volume.get("file")): volume for service in manifest.get("services", []) for volume in service.get("volumes", [])}
     contracts = {
         "openmapx-v1": ("openmapx", "postgis", "pg_dump"),
-        "dawarich-1.15.2": ("dawarich", "dawarich-postgis", "pg_dump"),
-        "dawarich-storage-1.15.2": ("dawarich-storage", "dawarich-app", "tar"),
+        "dawarich-1.15.3": ("dawarich", "dawarich-postgis", "pg_dump"),
+        "dawarich-storage-1.15.3": ("dawarich-storage", "dawarich-app", "tar"),
     }
     result = []
     seen = set()
@@ -161,7 +161,7 @@ def verified_sources(request):
         volume = declared.get((source.get("serviceId"), source.get("file")))
         if contract in seen or source.get("family") != family or source.get("serviceId") != service_id or not volume or volume.get("mode") != mode:
             fail("unsupported_schema")
-        if contract == "dawarich-storage-1.15.2" and volume.get("name") != "openmapx-dawarich-storage":
+        if contract == "dawarich-storage-1.15.3" and volume.get("name") != "openmapx-dawarich-storage":
             fail("unsupported_schema")
         path = root / source["file"]
         if path.parent != root or path.is_symlink() or not path.is_file():
@@ -171,11 +171,11 @@ def verified_sources(request):
             fail("backup_digest_changed")
         seen.add(contract)
         result.append({**source, "path": path})
-    if "dawarich-1.15.2" in seen:
+    if "dawarich-1.15.3" in seen:
         managed = manifest.get("privacySourceProvenance", {}).get("managedDawarich")
-        if managed != {"version": "1.15.2", "image": "freikin/dawarich", "imageDigest": DAWARICH_IMAGE_DIGEST, "upstreamCommit": DAWARICH_COMMIT, "schemaContract": "dawarich-1.15.2"}:
+        if managed != {"version": "1.15.3", "image": "freikin/dawarich", "imageDigest": DAWARICH_IMAGE_DIGEST, "upstreamCommit": DAWARICH_COMMIT, "schemaContract": "dawarich-1.15.3"}:
             fail("unsupported_schema")
-    if "dawarich-storage-1.15.2" in seen and "dawarich-1.15.2" not in seen:
+    if "dawarich-storage-1.15.3" in seen and "dawarich-1.15.3" not in seen:
         fail("unsupported_schema")
     return result, manifest
 
@@ -764,8 +764,8 @@ WORK = Path(tempfile.mkdtemp(prefix="restore-", dir="/scratch"))
 try:
     OUTPUT, WARNINGS, DAWARICH_SCHEMA = [], [], None
     ACTIVE_DATABASES = []
-    STORAGE = next((source for source in SOURCES if source["schemaContract"] == "dawarich-storage-1.15.2"), None)
-    databases = [source for source in SOURCES if source["schemaContract"] != "dawarich-storage-1.15.2"]
+    STORAGE = next((source for source in SOURCES if source["schemaContract"] == "dawarich-storage-1.15.3"), None)
+    databases = [source for source in SOURCES if source["schemaContract"] != "dawarich-storage-1.15.3"]
     for index, source in enumerate(databases):
         data = WORK / f"pg-{index}"
         socket = WORK / f"socket-{index}"

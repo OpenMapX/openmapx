@@ -27,8 +27,8 @@ globally beyond the host tooling below.
 | ------------------ | ------------------ | ------------------------------------------------------------------------- |
 | **Docker Engine**  | recent (27+)       | Runs every OpenMapX service as a container                                |
 | **Docker Compose** | v2                 | Orchestrates the generated stack (`docker compose`, not `docker-compose`) |
-| **Node.js**        | 24 or newer        | Runs the `openmapx` CLI directly off TypeScript — no build step           |
-| **pnpm**           | 11 (`pnpm@latest`) | Workspace package manager for the monorepo                                |
+| **Node.js**        | 24.21.0 or newer   | Runs the `openmapx` CLI directly off TypeScript — no build step           |
+| **pnpm**           | 12                 | Workspace package manager for the monorepo                                |
 | **git**            | any                | Cloning the repo and any community extensions that ship a service         |
 
 A few notes:

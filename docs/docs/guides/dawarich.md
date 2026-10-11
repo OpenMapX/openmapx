@@ -91,7 +91,7 @@ timeline viewer on the map and personal visit history badges in place panels.
 OpenMapX ships with a production-ready, four-container Dawarich bundle:
 
 1. **`dawarich-app`**: The Dawarich web server running Puma on Ruby on Rails
-   (`freikin/dawarich:1.15.2`). Exposes port `3000` internally and is routed by
+   (`freikin/dawarich:1.15.3`). Exposes port `3000` internally and is routed by
    Traefik at `timeline.<DOMAIN>`.
 2. **`dawarich-sidekiq`**: The asynchronous background worker running Sidekiq.
    It processes incoming GPS point batches, groups points into stays and visits,

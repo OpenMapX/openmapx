@@ -401,12 +401,12 @@ function parseManifest(rootDir: string, backupId: string): ParsedBackupManifest 
   const managed = provenance?.managedDawarich;
   if (
     managed &&
-    (managed.version !== "1.15.2" ||
+    (managed.version !== "1.15.3" ||
       managed.image !== "freikin/dawarich" ||
       managed.imageDigest !==
-        "sha256:e58334ca56976feb4c885a8bd34b251ec2e3f45ffeabd4fd4371b5d2108fc70d" ||
-      managed.upstreamCommit !== "d81abc4fc467e119f542c56602c78488fbab86fb" ||
-      managed.schemaContract !== "dawarich-1.15.2")
+        "sha256:589e3606b11b61c3fa2d9661832cb73645a9b93a9cc7d807a071e2bc6c584498" ||
+      managed.upstreamCommit !== "e32b70701b2467b862d4b5bc27ac428999997c1b" ||
+      managed.schemaContract !== "dawarich-1.15.3")
   )
     throw new Error("Backup authority rejected");
   return {

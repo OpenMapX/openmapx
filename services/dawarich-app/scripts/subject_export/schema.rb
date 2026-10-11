@@ -1,13 +1,13 @@
 # Frozen compatibility tuple for the audited managed-Dawarich collector.
 module OpenMapxSubjectExport
-  IMAGE = "freikin/dawarich:1.15.2".freeze
-  IMAGE_DIGEST = "sha256:e58334ca56976feb4c885a8bd34b251ec2e3f45ffeabd4fd4371b5d2108fc70d".freeze
-  UPSTREAM_COMMIT = "d81abc4fc467e119f542c56602c78488fbab86fb".freeze
+  IMAGE = "freikin/dawarich:1.15.3".freeze
+  IMAGE_DIGEST = "sha256:589e3606b11b61c3fa2d9661832cb73645a9b93a9cc7d807a071e2bc6c584498".freeze
+  UPSTREAM_COMMIT = "e32b70701b2467b862d4b5bc27ac428999997c1b".freeze
   EXPECTED_SCHEMA_FINGERPRINT = "4ae830ea67dc4894d814d4e2e2d19cb92571c30f2df1df017417f671e26a1e09".freeze
   MAX_INPUT_BYTES = 16 * 1024
   MAX_ENTRY_BYTES = 256 * 1024 * 1024
   MAX_TOTAL_BYTES = 2 * 1024 * 1024 * 1024
-  # This is the reviewed ownership surface for 1.15.2. It intentionally
+  # This is the reviewed ownership surface for 1.15.3. It intentionally
   # contains the columns needed by the collector rather than permitting a
   # reflection-based `select *`; a missing column or ownership FK makes the
   # source unavailable until the tuple is audited again.
@@ -72,7 +72,7 @@ module OpenMapxSubjectExport
     "PlannedUnplannedPlace" => %w[trip_id]
   }.freeze
 
-  # Generated from the reviewed 1.15.2 migration graph.  This inventory is
+  # Generated from the reviewed 1.15.3 migration graph.  This inventory is
   # intentionally wider than the direct user-owned relations above: a
   # polymorphic attachment or a visit/point edge can make a record reachable
   # from a subject-owned row even when the FK does not point directly at

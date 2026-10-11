@@ -220,6 +220,7 @@ jobs:
       - name: Audit exact candidate digest with Trivy
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
+          version: v0.75.0
           image-ref: ${{ env.IMAGE_PREFIX }}/${{ matrix.app }}@${{ steps.candidate.outputs.digest }}
           format: sarif
           output: trivy-${{ matrix.app }}.sarif
@@ -237,6 +238,7 @@ jobs:
       - name: Gate exact candidate digest with Trivy
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
+          version: v0.75.0
           image-ref: ${{ env.IMAGE_PREFIX }}/${{ matrix.app }}@${{ steps.candidate.outputs.digest }}
           format: table
           scanners: vuln

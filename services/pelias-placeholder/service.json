@@ -13,8 +13,8 @@
   },
   "container": {
     "image": "pelias/placeholder",
-    "tag": "latest",
-    "digest": "sha256:cb70a797474bc5ddff5359821873cdf609ef0951ee9b4389fa70a19925a5be08",
+    "tag": "v5.11.0",
+    "digest": "sha256:79a8e55b63d3e0b257f4e72a86250c97d0e33d6880d6f83f4d68bb06a9636ebe",
     "expose": [4100],
     "environment": { "PELIAS_CONFIG": "/code/pelias.json" },
     "restart": "unless-stopped"

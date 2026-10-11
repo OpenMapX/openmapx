@@ -22,7 +22,7 @@ import { parseDawarichTar } from "../../api/src/privacy/dawarich-source-part.js"
 const runExactImage = process.env.OPENMAPX_RUN_DAWARICH_EXPORT_TESTS === "1";
 const IMAGE = `freikin/dawarich@${DAWARICH_SUPPORTED_IMAGE_DIGEST}`;
 const DATABASE_IMAGE =
-  "ghcr.io/baosystems/postgis:18-3.6@sha256:4117c8beae9081e76a23a1577c64d05260a61fb0a3c212f37596054ef4c190d8";
+  "ghcr.io/baosystems/postgis:18-3.6@sha256:8784f86b3e0e046859c96ea25eb8b10f0b801fd891b99a82b82f28ac4a643db8";
 const DATABASE_CONTAINER = `openmapx-dawarich-export-test-${randomBytes(8).toString("hex")}`;
 const DATABASE_PASSWORD = "openmapx-isolated-export-fixture";
 const ROOT = resolve(process.cwd());

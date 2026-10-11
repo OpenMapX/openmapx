@@ -123,6 +123,7 @@ describe("Docker release trust gate", () => {
     expect(release).toContain(["@", "$", "{{ steps.candidate.outputs.digest }}"].join(""));
     expect(release).toContain("severity: CRITICAL,HIGH");
     expect(release).toContain("- name: Audit exact candidate digest with Trivy");
+    expect(release.match(/version: v0\.75\.0/g)).toHaveLength(2);
     expect(release).toContain('ignore-unfixed: "false"');
     expect(release).toContain('exit-code: "0"');
     expect(release).toContain("- name: Gate exact candidate digest with Trivy");
