@@ -1,10 +1,14 @@
 import {
   chmodSync,
+  closeSync,
+  constants,
   cpSync,
   existsSync,
+  fstatSync,
   lstatSync,
   mkdirSync,
   mkdtempSync,
+  openSync,
   readdirSync,
   readFileSync,
   readlinkSync,
@@ -16,6 +20,31 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+const snapshotRace = vi.hoisted(() => ({
+  afterAccess: undefined as ((path: unknown, descriptor?: number) => void) | undefined,
+  readFailure: undefined as Error | undefined,
+}));
+vi.mock("node:fs", async () => {
+  const actual = await vi.importActual<typeof import("node:fs")>("node:fs");
+  return {
+    ...actual,
+    lstatSync: (...args: Parameters<typeof actual.lstatSync>) => {
+      const stat = actual.lstatSync(...args);
+      snapshotRace.afterAccess?.(args[0]);
+      return stat;
+    },
+    openSync: (...args: Parameters<typeof actual.openSync>) => {
+      const fd = actual.openSync(...args);
+      snapshotRace.afterAccess?.(args[0], fd);
+      return fd;
+    },
+    readFileSync: (...args: Parameters<typeof actual.readFileSync>) => {
+      if (typeof args[0] === "number" && snapshotRace.readFailure) throw snapshotRace.readFailure;
+      return actual.readFileSync(...args);
+    },
+  };
+});
 
 const opsCalls: { kind: string }[] = [];
 const opsBehaviour: {
@@ -84,6 +113,8 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  snapshotRace.afterAccess = undefined;
+  snapshotRace.readFailure = undefined;
   globalThis.fetch = originalFetch;
   probeHttp.get = originalProbeGet;
   if (tmp) {
@@ -235,14 +266,27 @@ function makeCtx(opts: {
 function directorySnapshot(root: string): unknown[] {
   const entries: unknown[] = [];
   const visit = (path: string, relative: string): void => {
-    const stat = lstatSync(path);
-    if (stat.isSymbolicLink()) {
-      entries.push([relative, stat.ino, "alias", readlinkSync(path)]);
-    } else if (stat.isDirectory()) {
-      entries.push([relative, stat.ino, "directory"]);
-      for (const name of readdirSync(path).sort()) visit(join(path, name), join(relative, name));
-    } else {
-      entries.push([relative, stat.ino, "file", readFileSync(path, "utf8")]);
+    let descriptor: number;
+    try {
+      descriptor = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ELOOP") throw error;
+      const target = readlinkSync(path);
+      const alias = lstatSync(path);
+      if (!alias.isSymbolicLink()) throw new Error("Snapshot alias changed during capture");
+      entries.push([relative, alias.ino, "alias", target]);
+      return;
+    }
+    try {
+      const stat = fstatSync(descriptor);
+      if (stat.isDirectory()) {
+        entries.push([relative, stat.ino, "directory"]);
+        for (const name of readdirSync(path).sort()) visit(join(path, name), join(relative, name));
+      } else if (stat.isFile()) {
+        entries.push([relative, stat.ino, "file", readFileSync(descriptor, "utf8")]);
+      } else throw new Error("Snapshot entry must be a directory, alias or regular file");
+    } finally {
+      closeSync(descriptor);
     }
   };
   visit(root, ".");
@@ -261,6 +305,40 @@ function readyFixture(layout: "rename" | "two-slot") {
   if (layout === "two-slot") ctx.slotLayout = ensureMotisSlotLayout(fx.dataDir);
   return { fx, ctx };
 }
+
+describe("promotion directory snapshot", () => {
+  it("closes a captured marker descriptor when reading fails", () => {
+    tmp = mkdtempSync(join(tmpdir(), "promotion-snapshot-close-"));
+    const marker = join(tmp, "marker");
+    writeFileSync(marker, "original marker");
+    let descriptor: number | undefined;
+    snapshotRace.afterAccess = (path, opened) => {
+      if (path === marker && opened !== undefined) descriptor = opened;
+    };
+    const failure = new Error("controlled marker read failure");
+    snapshotRace.readFailure = failure;
+    const root = tmp;
+    expect(() => directorySnapshot(root)).toThrow(failure);
+    expect(descriptor).toBeTypeOf("number");
+    if (descriptor === undefined) throw new Error("Expected an opened marker descriptor");
+    const capturedDescriptor = descriptor;
+    expect(() => fstatSync(capturedDescriptor)).toThrow(expect.objectContaining({ code: "EBADF" }));
+  });
+  it("retains the original marker metadata and content when its pathname is replaced", () => {
+    tmp = mkdtempSync(join(tmpdir(), "promotion-snapshot-race-"));
+    const root = tmp;
+    const marker = join(root, "marker");
+    writeFileSync(marker, "original marker");
+    const inode = statSync(marker).ino;
+    snapshotRace.afterAccess = (path) => {
+      if (path !== marker) return;
+      snapshotRace.afterAccess = undefined;
+      renameSync(marker, join(root, "captured"));
+      writeFileSync(marker, "replacement marker");
+    };
+    expect(directorySnapshot(tmp)).toContainEqual(["marker", inode, "file", "original marker"]);
+  });
+});
 
 describe("promote stage", () => {
   describe.each(["rename", "two-slot"] as const)("confirmed stops in %s layout", (layout) => {
