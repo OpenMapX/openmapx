@@ -12,6 +12,8 @@ export interface Freshness {
   hasRealtimeData: boolean;
   /** True when realtime data is stale beyond a per-class threshold. */
   isStale: boolean;
+  /** True when contributing source queries failed or the source declared incomplete coverage. */
+  isPartial?: boolean;
 }
 
 /**

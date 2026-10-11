@@ -18,7 +18,9 @@ import { useTranslations } from "next-intl";
 import { useMemo, useState } from "react";
 import { AttributionStrip } from "@/components/ui/AttributionStrip";
 import { useAttributionFromHooks } from "@/integration-api/overlay/useAttributionFromHooks";
+import { useNow } from "@/lib/useNow";
 import { DepartureRow } from "./DepartureRow";
+import { TransitQueryNotice } from "./TransitDataStatus";
 
 const MODE_LABEL_KEYS: Partial<Record<TransportMode, string>> = {
   rail: "trains",
@@ -49,6 +51,7 @@ export function PlaceDeparturesView({
 }: PlaceDeparturesViewProps) {
   const t = useTranslations("transit");
   const tc = useTranslations("common");
+  const now = useNow(30_000);
   const departuresQuery = useLinkedTransitDepartures(place);
   const { data: departures, isLoading: depsLoading } = departuresQuery;
   const [tab, setTab] = useState<"departures" | "arrivals">("departures");
@@ -69,6 +72,8 @@ export function PlaceDeparturesView({
     [alerts],
   );
 
+  const activeQuery = tab === "departures" ? departuresQuery : arrivalsQuery;
+  const uncertain = activeQuery.isError || activeQuery.freshness?.isPartial;
   const items = tab === "departures" ? departures : arrivals;
   const isLoading = tab === "departures" ? depsLoading : arrivalsLoading;
   const filtered = modeFilter ? items?.filter((d) => d.route.mode === modeFilter) : items;
@@ -151,7 +156,15 @@ export function PlaceDeparturesView({
       />
       {/* Scrollable list area — on desktop this is the only thing that scrolls */}
       <Box sx={{ flex: 1, overflowY: { xs: "visible", sm: "auto" } }}>
-        {isLoading ? (
+        <TransitQueryNotice
+          failed={activeQuery.isError}
+          partial={activeQuery.freshness?.isPartial}
+          onRetry={() => {
+            void activeQuery.refetch();
+          }}
+          retrying={activeQuery.isFetching}
+        />
+        {isLoading && !items ? (
           /* Loading skeletons */
           <Box>
             {[1, 2, 3, 4, 5].map((i) => (
@@ -175,13 +188,16 @@ export function PlaceDeparturesView({
                 <DepartureRow
                   departure={dep}
                   showPlatform
+                  now={now}
+                  freshness={activeQuery.freshness}
+                  queryFailed={activeQuery.isError}
                   onClick={(dep) => onDepartureClick(dep as MergedDeparture)}
                   hasAlert={alertRouteIds.has(dep.route.id)}
                 />
               </Box>
             ))}
           </Box>
-        ) : (
+        ) : !uncertain && !isLoading ? (
           /* Empty state */
           <Box sx={{ px: 2, py: 3, textAlign: "center" }}>
             <Typography
@@ -200,7 +216,7 @@ export function PlaceDeparturesView({
                 : t("noDeparturesGeneric", { tab: t(tab) })}
             </Typography>
           </Box>
-        )}
+        ) : null}
       </Box>
     </Box>
   );

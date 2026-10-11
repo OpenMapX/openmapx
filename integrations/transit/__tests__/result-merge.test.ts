@@ -66,6 +66,24 @@ describe("transit result merging", () => {
     });
   });
 
+  it("does not borrow known upstream age for an unknown-age realtime source", () => {
+    const fetched = "2026-08-31T12:00:00Z";
+    expect(
+      mergeFreshness(
+        freshness(fetched, { hasRealtimeData: true, dataAsOf: "2026-08-31T11:59:30Z" }),
+        freshness(fetched, { hasRealtimeData: true }),
+      ).dataAsOf,
+    ).toBeUndefined();
+  });
+
+  it("preserves incomplete coverage separately from age", () => {
+    const partial = { ...freshness("2026-08-31T12:00:00Z"), isPartial: true };
+    expect(mergeFreshness(partial, freshness("2026-08-31T12:00:00Z"))).toMatchObject({
+      isPartial: true,
+      isStale: false,
+    });
+  });
+
   it("returns current static freshness for an empty merge", () => {
     const before = Date.now();
     const merged = mergeFreshness();
@@ -73,4 +91,25 @@ describe("transit result merging", () => {
     expect(merged).toMatchObject({ hasRealtimeData: false, isStale: false });
     expect(Date.parse(merged.fetchedAt)).toBeGreaterThanOrEqual(before);
   });
+});
+
+it("does not hide a future realtime contributor behind an older valid timestamp", () => {
+  const now = Date.parse("2026-10-07T08:00:00Z");
+  const clock = vi.spyOn(Date, "now").mockReturnValue(now);
+  try {
+    expect(
+      mergeFreshness(
+        freshness(new Date(now).toISOString(), {
+          hasRealtimeData: true,
+          dataAsOf: "2026-10-07T07:59:30Z",
+        }),
+        freshness(new Date(now).toISOString(), {
+          hasRealtimeData: true,
+          dataAsOf: "2026-10-07T08:10:00Z",
+        }),
+      ).dataAsOf,
+    ).toBeUndefined();
+  } finally {
+    clock.mockRestore();
+  }
 });

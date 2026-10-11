@@ -381,6 +381,11 @@ export function createPlaceTransit(
     if (stops.length === 0) return emptyResult<MergedDeparture[]>([], { hasRealtimeData: true });
 
     const results = await Promise.allSettled(stops.map((s) => fetchFn(s.id, minutes)));
+    if (results.every((result) => result.status === "rejected")) {
+      // A transport failure must not replace a cached timetable with a successful empty result.
+      throw new Error("Transit timetable sources unavailable");
+    }
+    const partial = results.some((result) => result.status === "rejected");
     const byKey = new Map<string, MergedDeparture>();
     const allAttribs: Attribution[][] = [];
     const allFresh: Freshness[] = [];
@@ -487,7 +492,7 @@ export function createPlaceTransit(
     return {
       data: unique,
       attributions: mergeAttributions(ctx.attributionIndex, ...allAttribs),
-      freshness: mergeFreshness(...allFresh),
+      freshness: { ...mergeFreshness(...allFresh), ...(partial ? { isPartial: true } : {}) },
     };
   }
 

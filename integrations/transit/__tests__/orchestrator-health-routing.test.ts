@@ -80,7 +80,7 @@ describe("orchestrator prefix routing honours provider health", () => {
     vi.clearAllMocks();
   });
 
-  it("skips an unhealthy provider and returns an empty result when no alternative matches", async () => {
+  it("skips an unhealthy provider and reports unavailability when no alternative matches", async () => {
     const departures = vi
       .fn()
       .mockResolvedValue(
@@ -94,12 +94,29 @@ describe("orchestrator prefix routing honours provider health", () => {
     const ctx = makeCtx([provider], { isHealthy: () => Promise.resolve(false) });
     const orchestrator = createTransitOrchestrator(ctx);
 
-    const res = await orchestrator.getDepartures("tp:stop-1", 30);
-
+    await expect(orchestrator.getDepartures("tp:stop-1", 30)).rejects.toThrow(
+      "Transit timetable source unavailable",
+    );
     expect(departures).not.toHaveBeenCalled();
-    expect(res.data).toEqual([]);
-    expect(res.freshness.hasRealtimeData).toBe(true);
   });
+
+  it.each(["getDepartures", "getArrivals"] as const)(
+    "%s preserves provider failure as an error, not an empty schedule",
+    async (method) => {
+      const provider = makeProvider({
+        getDepartures: vi.fn(async () => {
+          throw new Error("upstream credential details");
+        }),
+        getArrivals: vi.fn(async () => {
+          throw new Error("upstream credential details");
+        }),
+      });
+      const api = createTransitOrchestrator(makeCtx([provider], { isHealthy: async () => true }));
+      await expect(api[method]("tp:stop-1", 30)).rejects.toThrow(
+        "Transit timetable source unavailable",
+      );
+    },
+  );
 
   it("falls through to the next healthy provider sharing the same prefix", async () => {
     const winnerDepartures = vi

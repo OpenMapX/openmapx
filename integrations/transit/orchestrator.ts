@@ -393,14 +393,13 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
     minutes: number,
   ): Promise<MobilityResult<Departure[]>> {
     const provider = await resolveByPrefix(stopId);
-    if (!provider?.getDepartures) return emptyResult<Departure[]>([], { hasRealtimeData: true });
+    if (!provider?.getDepartures) throw new Error("Transit timetable source unavailable");
     const fn = provider.getDepartures.bind(provider);
     const outcome = await timed(providerHealth, metricsRecorder, provider.id, "getDepartures", () =>
       fn(stopId, minutes),
     );
-    const base = outcome.ok
-      ? outcome.value
-      : emptyResult<Departure[]>([], { hasRealtimeData: true });
+    if (!outcome.ok) throw new Error("Transit timetable source unavailable");
+    const base = outcome.value;
     return enrichDeparturesWithRealtime({ ctx, timed: boundTimed }, base, { stopId });
   }
 
@@ -409,14 +408,13 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
     minutes: number,
   ): Promise<MobilityResult<Departure[]>> {
     const provider = await resolveByPrefix(stopId);
-    if (!provider?.getArrivals) return emptyResult<Departure[]>([], { hasRealtimeData: true });
+    if (!provider?.getArrivals) throw new Error("Transit timetable source unavailable");
     const fn = provider.getArrivals.bind(provider);
     const outcome = await timed(providerHealth, metricsRecorder, provider.id, "getArrivals", () =>
       fn(stopId, minutes),
     );
-    const base = outcome.ok
-      ? outcome.value
-      : emptyResult<Departure[]>([], { hasRealtimeData: true });
+    if (!outcome.ok) throw new Error("Transit timetable source unavailable");
+    const base = outcome.value;
     return enrichDeparturesWithRealtime({ ctx, timed: boundTimed }, base, { stopId });
   }
 
