@@ -798,19 +798,21 @@ describe("fixed Docker runtime adapters", () => {
     const root = mkdtempSync(join(tmpdir(), "openmapx-lifecycle-cancel-"));
     const ready = join(root, "ready");
     const marker = join(root, "late-side-effect");
-    const descendant = [
-      'const { writeFileSync } = require("node:fs")',
-      'process.on("SIGTERM", () => {})',
-      `writeFileSync(${JSON.stringify(ready)}, "ready")`,
-      `setTimeout(() => writeFileSync(${JSON.stringify(marker)}, "late"), 5_000)`,
-      "setInterval(() => {}, 1000)",
-    ].join(";");
-    const script = [
-      'const { spawn } = require("node:child_process")',
-      'process.on("SIGTERM", () => {})',
-      `spawn(process.execPath, ["-e", ${JSON.stringify(descendant)}], { stdio: "ignore" })`,
-      "setInterval(() => {}, 1000)",
-    ].join(";");
+    const script = `
+      const { spawn } = require("node:child_process");
+      process.on("SIGTERM", () => {});
+      const descendant = [
+        'const { writeFileSync } = require("node:fs")',
+        'process.on("SIGTERM", () => {})',
+        'writeFileSync(process.argv[1], "ready")',
+        'setTimeout(() => writeFileSync(process.argv[2], "late"), 5_000)',
+        'setInterval(() => {}, 1000)',
+      ].join(";");
+      spawn(process.execPath, ["-e", descendant, process.argv[1], process.argv[2]], {
+        stdio: "ignore",
+      });
+      setInterval(() => {}, 1000);
+    `;
     const runtime = createDockerRuntime({
       stack: {
         infraDir: "/trusted",
@@ -819,7 +821,10 @@ describe("fixed Docker runtime adapters", () => {
       },
       fileExists: () => false,
       execFile: (_file, _args, options) =>
-        runContainedProcess(process.execPath, ["-e", script], { ...options, killGraceMs: 20 }),
+        runContainedProcess(process.execPath, ["-e", script, ready, marker], {
+          ...options,
+          killGraceMs: 20,
+        }),
     });
     const operation = dispatchOpsOperation(
       runtime,
