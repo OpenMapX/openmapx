@@ -2656,10 +2656,12 @@ describe("SearchBar NLP submission ownership", () => {
     },
   );
 
-  it("keeps a successful response through transient blur and consumes it on activation", async () => {
+  it("keeps a successful response through blur and refocus and consumes it on activation", async () => {
     const run = await start();
     fireEvent.blur(run.input);
+    await waitFor(() => expect(useSearchStore.getState().isFocused).toBe(false));
     await finish(run, "success");
+    fireEvent.focus(run.input);
     fireEvent.click(await screen.findByText("Owned cafés"));
     expect(useNlpSearchStore.getState().isNlpActive).toBe(true);
     expect(useCategorySearchStore.getState().searchBbox).toEqual(response.resolvedBbox);
