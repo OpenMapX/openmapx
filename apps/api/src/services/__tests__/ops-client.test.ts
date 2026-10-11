@@ -54,6 +54,52 @@ describe("API ops client construction", () => {
 });
 
 describe("bounded async ops helpers", () => {
+  it.each([
+    "stack.start",
+    "service.start",
+    "service.stop",
+    "service.restart",
+    "service.recreate",
+    "service.recreateIsolated",
+    "service.remove",
+  ] as const)("derives a 635-second bounded result wait for %s", async (kind) => {
+    let now = 0;
+    const admission = {
+      execution: "async" as const,
+      operationId: "job1_abcdefghijklmnop",
+      operationKey: "opk1_abcdefghijklmnop",
+      kind,
+      state: "running" as const,
+    };
+    const client = fakeClient({
+      status: async () => ({
+        version: 1,
+        operationId: admission.operationId,
+        operationKey: admission.operationKey,
+        kind,
+        resourceId: "postgis",
+        state: "running",
+        submittedAt: "2026-08-23T10:00:00.000Z",
+        updatedAt: "2026-08-23T10:00:00.000Z",
+      }),
+    });
+    const checkpoints: number[] = [];
+    await expect(
+      waitForOpsResult(client, kind, admission, {
+        now: () => now,
+        pollIntervalMs: 10_000,
+        sleep: async (ms) => {
+          now += ms;
+          checkpoints.push(now);
+        },
+      }),
+    ).rejects.toMatchObject({ errorClass: "timeout" });
+    expect(checkpoints).toContain(630_000);
+    expect(now).toBe(635_000);
+    expect(client.execute).not.toHaveBeenCalled();
+    expect(client.cancel).not.toHaveBeenCalled();
+  });
+
   it("recovers a disconnected admission by key lookup without creating a fresh follow", async () => {
     const controller = new AbortController();
     controller.abort();

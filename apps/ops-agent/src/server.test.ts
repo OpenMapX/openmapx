@@ -1,6 +1,7 @@
 import type { OpsOperation, OpsResourcePolicy } from "@openmapx/core/ops";
 import { describe, expect, it, vi } from "vitest";
-import { buildOpsAgentServer, type OpsAuditEvent } from "./server";
+import { createDockerRuntime } from "./docker-runtime";
+import { type BuildOpsAgentServerOptions, buildOpsAgentServer, type OpsAuditEvent } from "./server";
 
 const apiToken = Buffer.alloc(32, 1).toString("base64url");
 const dataManagerToken = Buffer.alloc(32, 2).toString("base64url");
@@ -220,4 +221,154 @@ describe("ops-agent request boundary", () => {
     expect(denied.json().error.class).toBe("authorization");
     await app.close();
   });
+});
+
+describe("ops-agent lifecycle deadlines", () => {
+  it.each([
+    ["service.restart", [240_000]],
+    ["service.stop", [299_999]],
+    ["service.recreate", [240_000, 220_000]],
+  ] as const)("allows bounded shutdown and dependency work for %s", async (kind, durations) => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    let aborted = false;
+    const completed: number[] = [];
+    const runtime = createDockerRuntime({
+      stack: {
+        infraDir: "/trusted",
+        composePath: "/trusted/compose.yml",
+        composeReleasePath: "/trusted/release.yml",
+      },
+      fileExists: () => false,
+      execFile: (_file, _args, options) =>
+        new Promise((resolve, reject) => {
+          const timers: ReturnType<typeof setTimeout>[] = [];
+          const cleanup = () => {
+            for (const timer of timers) clearTimeout(timer);
+            options.signal.removeEventListener("abort", abort);
+          };
+          const abort = () => {
+            aborted = true;
+            cleanup();
+            reject(new Error("Contained process failed"));
+          };
+          options.signal.addEventListener("abort", abort, { once: true });
+          timers.push(setTimeout(abort, options.timeout));
+          let elapsed = 0;
+          for (const duration of durations) {
+            elapsed += duration;
+            timers.push(
+              setTimeout(() => {
+                completed.push(duration);
+                if (completed.length === durations.length) {
+                  cleanup();
+                  resolve({ stdout: "", stderr: "" });
+                }
+              }, elapsed),
+            );
+          }
+        }),
+    });
+    const app = buildOpsAgentServer({
+      tokens: { api: apiToken, "data-manager": dataManagerToken },
+      resourcePolicy: allowAll,
+      now: () => new Date(nowIso),
+      runtime,
+    });
+    try {
+      const response = await app.inject({
+        method: "POST",
+        url: "/v1/operations",
+        headers: auth(apiToken),
+        payload: envelope({ kind, serviceId: "postgis" }),
+      });
+      expect(response.statusCode).toBe(202);
+      const { operationId } = response.json().result;
+      await vi.advanceTimersByTimeAsync(durations.reduce((sum, duration) => sum + duration, 0));
+      const status = (
+        await app.inject({
+          method: "GET",
+          url: `/v1/operations/${operationId}`,
+          headers: auth(apiToken),
+        })
+      ).json().result;
+      expect(status).toMatchObject({ state: "succeeded", result: { changed: true } });
+      expect(aborted).toBe(false);
+      expect(completed).toEqual([...durations]);
+    } finally {
+      await app.close();
+      vi.clearAllTimers();
+      vi.useRealTimers();
+    }
+  });
+
+  it.each(["deadline", "cancellation"] as const)(
+    "settles lifecycle %s without retrying",
+    async (mode) => {
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+      let signal: AbortSignal | undefined;
+      const dispatch = vi.fn<NonNullable<BuildOpsAgentServerOptions["dispatch"]>>(
+        (_operation, _runtime, context) =>
+          new Promise((_resolve, reject) => {
+            signal = context.signal;
+            context.signal.addEventListener(
+              "abort",
+              () => reject(new Error("Contained process failed")),
+              { once: true },
+            );
+          }),
+      );
+      const app = buildOpsAgentServer({
+        tokens: { api: apiToken, "data-manager": dataManagerToken },
+        resourcePolicy: allowAll,
+        now: () => new Date(nowIso),
+        dispatch,
+      });
+      try {
+        const response = await app.inject({
+          method: "POST",
+          url: "/v1/operations",
+          headers: auth(apiToken),
+          payload: envelope({ kind: "service.stop", serviceId: "postgis" }),
+        });
+        expect(response.statusCode).toBe(202);
+        const { operationId } = response.json().result;
+        await vi.advanceTimersByTimeAsync(mode === "deadline" ? 629_999 : 1_000);
+        expect(signal?.aborted).toBe(false);
+        expect(
+          (
+            await app.inject({
+              method: "GET",
+              url: `/v1/operations/${operationId}`,
+              headers: auth(apiToken),
+            })
+          ).json().result.state,
+        ).toBe("running");
+        if (mode === "deadline") await vi.advanceTimersByTimeAsync(1);
+        else
+          await app.inject({
+            method: "DELETE",
+            url: `/v1/operations/${operationId}`,
+            headers: auth(apiToken),
+          });
+        expect(signal?.aborted).toBe(true);
+        const status = (
+          await app.inject({
+            method: "GET",
+            url: `/v1/operations/${operationId}`,
+            headers: auth(apiToken),
+          })
+        ).json().result;
+        expect(status).toMatchObject({
+          state: mode === "deadline" ? "timed_out" : "failed",
+          errorClass: mode === "deadline" ? "timeout" : "runtime",
+        });
+        expect(status.result).toBeUndefined();
+        expect(dispatch).toHaveBeenCalledTimes(1);
+      } finally {
+        await app.close();
+        vi.clearAllTimers();
+        vi.useRealTimers();
+      }
+    },
+  );
 });

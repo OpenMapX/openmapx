@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { OpsOperation } from "@openmapx/core/ops";
 import { describe, expect, it, vi } from "vitest";
 import { createDockerRuntime, runContainedLogProcess, runContainedProcess } from "./docker-runtime";
 import { dispatchOpsOperation } from "./runtime";
@@ -17,6 +18,106 @@ const context = () => ({
 });
 
 describe("fixed Docker runtime adapters", () => {
+  it.each([
+    { kind: "stack.start" },
+    { kind: "service.start", serviceId: "postgis" },
+    { kind: "service.stop", serviceId: "postgis" },
+    { kind: "service.restart", serviceId: "postgis" },
+    { kind: "service.recreate", serviceId: "postgis" },
+    { kind: "service.recreateIsolated", serviceId: "postgis" },
+    { kind: "service.remove", serviceId: "postgis" },
+  ] satisfies OpsOperation[])("allows the built-in shutdown grace for $kind", async (operation) => {
+    const runtime = createDockerRuntime({
+      stack: {
+        infraDir: "/trusted",
+        composePath: "/trusted/compose.yml",
+        composeReleasePath: "/trusted/release.yml",
+      },
+      fileExists: () => false,
+      execFile: async (_file, _args, options) => {
+        expect(options.timeout).toBe(600_000);
+        expect(options.signal.aborted).toBe(false);
+        return { stdout: "", stderr: "" };
+      },
+    });
+    await expect(dispatchOpsOperation(runtime, operation, context())).resolves.toEqual({
+      changed: true,
+    });
+  });
+
+  it.each([
+    [{ kind: "docker.status" }, 5_000],
+    [{ kind: "stack.status" }, 120_000],
+    [{ kind: "service.logs", serviceId: "postgis", tail: 10 }, 120_000],
+    [{ kind: "service.pull", serviceId: "postgis" }, 600_000],
+  ] satisfies [OpsOperation, number][])(
+    "preserves the execution budget for %j",
+    async (operation, timeout) => {
+      const runtime = createDockerRuntime({
+        stack: {
+          infraDir: "/trusted",
+          composePath: "/trusted/compose.yml",
+          composeReleasePath: "/trusted/release.yml",
+        },
+        fileExists: () => false,
+        execFile: async (_file, _args, options) => {
+          expect(options.timeout).toBe(timeout);
+          return { stdout: "", stderr: "" };
+        },
+      });
+      await dispatchOpsOperation(runtime, operation, context());
+    },
+  );
+
+  it("terminates aggregate recreation work exactly at the whole-command deadline", async () => {
+    vi.useFakeTimers();
+    const completed: number[] = [];
+    let terminated = false;
+    const runtime = createDockerRuntime({
+      stack: {
+        infraDir: "/trusted",
+        composePath: "/trusted/compose.yml",
+        composeReleasePath: "/trusted/release.yml",
+      },
+      fileExists: () => false,
+      execFile: (_file, _args, options) =>
+        new Promise((resolve, reject) => {
+          const deadline = setTimeout(() => {
+            terminated = true;
+            for (const timer of steps) clearTimeout(timer);
+            reject(new Error("Contained process failed"));
+          }, options.timeout);
+          const steps = [300_000, 600_001].map((delay) =>
+            setTimeout(() => {
+              completed.push(delay);
+              if (delay === 600_001) {
+                clearTimeout(deadline);
+                resolve({ stdout: "", stderr: "" });
+              }
+            }, delay),
+          );
+        }),
+    });
+    try {
+      const result = dispatchOpsOperation(
+        runtime,
+        { kind: "service.recreate", serviceId: "postgis" },
+        context(),
+      );
+      const rejected = expect(result).rejects.toThrow("Contained process failed");
+      await vi.advanceTimersByTimeAsync(599_999);
+      expect(completed).toEqual([300_000]);
+      expect(terminated).toBe(false);
+      await vi.advanceTimersByTimeAsync(1);
+      await rejected;
+      expect(terminated).toBe(true);
+      expect(completed).toEqual([300_000]);
+    } finally {
+      vi.clearAllTimers();
+      vi.useRealTimers();
+    }
+  });
+
   it("maps lifecycle effects to fixed Compose argv without accepting caller argv or paths", async () => {
     const calls: Array<{ file: string; args: readonly string[] }> = [];
     const runtime = createDockerRuntime({
@@ -690,6 +791,56 @@ describe("fixed Docker runtime adapters", () => {
         killGraceMs: 20,
       }),
     ).rejects.toThrow("Contained process failed");
+  });
+
+  it("cancels an extended lifecycle command and contains its process group", async () => {
+    const controller = new AbortController();
+    const root = mkdtempSync(join(tmpdir(), "openmapx-lifecycle-cancel-"));
+    const ready = join(root, "ready");
+    const marker = join(root, "late-side-effect");
+    const descendant = [
+      'const { writeFileSync } = require("node:fs")',
+      'process.on("SIGTERM", () => {})',
+      `writeFileSync(${JSON.stringify(ready)}, "ready")`,
+      `setTimeout(() => writeFileSync(${JSON.stringify(marker)}, "late"), 5_000)`,
+      "setInterval(() => {}, 1000)",
+    ].join(";");
+    const script = [
+      'const { spawn } = require("node:child_process")',
+      'process.on("SIGTERM", () => {})',
+      `spawn(process.execPath, ["-e", ${JSON.stringify(descendant)}], { stdio: "ignore" })`,
+      "setInterval(() => {}, 1000)",
+    ].join(";");
+    const runtime = createDockerRuntime({
+      stack: {
+        infraDir: "/trusted",
+        composePath: "/trusted/compose.yml",
+        composeReleasePath: "/trusted/release.yml",
+      },
+      fileExists: () => false,
+      execFile: (_file, _args, options) =>
+        runContainedProcess(process.execPath, ["-e", script], { ...options, killGraceMs: 20 }),
+    });
+    const operation = dispatchOpsOperation(
+      runtime,
+      { kind: "service.stop", serviceId: "postgis" },
+      { ...context(), signal: controller.signal },
+    );
+    const rejected = expect(operation).rejects.toThrow("Contained process failed");
+    try {
+      const readyDeadline = Date.now() + 4_000;
+      while (!existsSync(ready) && Date.now() < readyDeadline)
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      expect(existsSync(ready)).toBe(true);
+      controller.abort();
+      await rejected;
+      await new Promise((resolve) => setTimeout(resolve, 5_500));
+      expect(existsSync(marker)).toBe(false);
+    } finally {
+      controller.abort();
+      await rejected;
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 
   it.each(["action", "follow"] as const)(

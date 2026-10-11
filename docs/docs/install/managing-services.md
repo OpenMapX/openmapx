@@ -260,6 +260,28 @@ pnpm openmapx services capabilities
 pnpm openmapx services capabilities --unrecognised
 ```
 
+### Lifecycle operation deadlines
+
+Lifecycle operations run through the ops-agent with a finite budget for the
+whole Docker Compose command: ten minutes for stack start and service start,
+stop, restart, recreate, isolated recreate, and removal. This accommodates the
+built-in PostGIS five-minute shutdown grace with room for startup work. The
+broker allows another thirty seconds for settlement, and the API's result wait
+adds five seconds to that broker deadline; async HTTP submission timeouts remain
+unchanged.
+
+The ten-minute limit includes all stop/start work in a command, including
+sequential dependency work. It does not grow with the number of services.
+Longer custom shutdown graces, or a dependency chain whose aggregate work
+exceeds ten minutes, are outside this guarantee and remain subject to the
+bounded deadlines. The manifest duration syntax is unchanged.
+
+Cancellation and deadline expiry terminate the Docker CLI process group, but
+Docker may continue work in the daemon after the CLI exits. A timeout therefore
+does not establish the final container state. Inspect the affected services
+before deciding what to do next; do not automatically retry or repair the
+operation.
+
 ## Viewing logs
 
 ```bash
