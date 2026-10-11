@@ -137,6 +137,12 @@ export interface SearchBarProps {
   surface?: SearchBarSurface;
 }
 
+type NlpSubmissionContext = Readonly<{
+  query: string;
+  mapCenter: LngLat | null;
+  mapBbox: BoundingBox | null;
+}>;
+
 /**
  * How long plain Enter waits for suggestions of the text as typed before it
  * acts on whatever has arrived; a slow provider must not swallow the key.
@@ -191,7 +197,10 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
   const debouncedGeoQuery = useDebounce(query, 400);
   // Plain Enter pressed before the suggestions for the typed text arrived:
   // the text it was pressed for, acted on once they settle (see handleSubmit).
-  const [pendingSubmit, setPendingSubmit] = useState<{ query: string } | null>(null);
+  const [pendingSubmit, setPendingSubmit] = useState<{
+    query: string;
+    nlpContext: NlpSubmissionContext;
+  } | null>(null);
   const pendingSubmitRef = useRef<typeof pendingSubmit>(null);
   const submitTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const cancelPendingSubmit = useCallback(() => {
@@ -262,16 +271,6 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
     isFetching: aggregateSearchFetching,
     isPlaceholderData: aggregateSearchPlaceholder,
   } = useSearchSuggestions(suggestQuery, locale, mapCenter, 8);
-  const mapBoundsRaw = mapRef.current?.getBounds();
-  const mapBbox: BoundingBox | null = mapBoundsRaw
-    ? {
-        west: mapBoundsRaw.getWest(),
-        south: mapBoundsRaw.getSouth(),
-        east: mapBoundsRaw.getEast(),
-        north: mapBoundsRaw.getNorth(),
-      }
-    : null;
-
   // Cloud consent gating is fail-closed: until consent is already stored, the
   // first parse is local-only. The server response then tells us whether cloud
   // is available and whether this deployment requires an explicit opt-in.
@@ -286,6 +285,7 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
   // inference), so it fires only when the user submits (Enter / search button),
   // never per keystroke. Any edit to the query resets this (see handleChange).
   const [nlpSubmitted, setNlpSubmitted] = useState(false);
+  const [nlpSubmission, setNlpSubmission] = useState<NlpSubmissionContext | null>(null);
 
   // Voice dictation and recent-search rows fill the input and then run through
   // the normal submit path, so they behave exactly like typing and Enter.
@@ -295,6 +295,7 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
       cancelPendingSubmit();
       cancelEnrichment();
       setNlpSubmitted(false);
+      setNlpSubmission(null);
       setQuery(transcript);
       if (isFinal) setSubmitAfterFlush(true);
     },
@@ -342,9 +343,9 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
     isFetching: nlpFetching,
     isError: nlpFailed,
   } = useNlpSearch(
-    debouncedQuery,
-    mapCenter,
-    mapBbox,
+    nlpSubmission?.query ?? "",
+    nlpSubmission?.mapCenter ?? null,
+    nlpSubmission?.mapBbox ?? null,
     nlpSubmitted && aiSearchEnabled && !waitingForConsent && !integrationsLoading,
     locale,
     effectiveCloudAccess,
@@ -608,7 +609,7 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
     !aggregateSearchFetching &&
     !aggregateSearchPlaceholder;
   // Assigned below, where the submit logic is defined; effects run after render.
-  const runSubmitRef = useRef<() => void>(() => {});
+  const runSubmitRef = useRef<(context: NlpSubmissionContext) => void>(() => {});
   useEffect(() => {
     if (pendingSubmit === null) return;
     if (directionsOpen || pendingSubmit.query !== query) {
@@ -619,7 +620,7 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
       // A later choice can keep the same label. Only this submission may run.
       if (pendingSubmitRef.current !== pendingSubmit) return;
       cancelPendingSubmit();
-      runSubmitRef.current();
+      runSubmitRef.current(pendingSubmit.nlpContext);
     };
     if (suggestionsSettled) {
       complete();
@@ -839,6 +840,7 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
     // Editing the query invalidates any pending/previous NL parse — it must be
     // re-submitted to fire again (keeps the slow parse off the keystroke path).
     if (nlpSubmitted) setNlpSubmitted(false);
+    setNlpSubmission(null);
     setHighlightedKey(null);
     setQuery(newValue);
   };
@@ -874,6 +876,23 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
     if (isComposingRef.current || !q) return;
     cancelPendingSubmit();
     cancelEnrichment();
+    // Read the submitted viewport before suggestion settlement or any map movement.
+    const center = mapRef.current?.getCenter();
+    const bounds = mapRef.current?.getBounds();
+    const nlpContext: NlpSubmissionContext = {
+      query,
+      mapCenter: center ? [center.lng, center.lat] : null,
+      mapBbox: bounds
+        ? {
+            west: bounds.getWest(),
+            south: bounds.getSouth(),
+            east: bounds.getEast(),
+            north: bounds.getNorth(),
+          }
+        : null,
+    };
+    setNlpSubmitted(false);
+    setNlpSubmission(nlpContext);
     if (nearbyMode) {
       inputRef.current?.blur();
       if (anchor && q.length > 0) launchExploreTextSearch(mapRef.current, anchor, q);
@@ -888,15 +907,15 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
     // Act on the suggestions for exactly this text: wait for them to arrive
     // rather than choosing from rows that belong to an earlier keystroke.
     if (!suggestionsSettled) {
-      const submission = { query };
+      const submission = { query, nlpContext };
       pendingSubmitRef.current = submission;
       setPendingSubmit(submission);
       return;
     }
-    runSubmit();
+    runSubmit(nlpContext);
   };
 
-  const runSubmit = () => {
+  const runSubmit = (nlpContext: NlpSubmissionContext) => {
     if (!q) return;
     addRecentSearch(q);
     // Plain Enter opens the first row only when it is plainly the one meant
@@ -971,7 +990,12 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
     // (place candidates + AI card) so the user disambiguates. Never auto-navigate
     // to a low-relevance geocode result. A parse with nothing to offer falls
     // back to the search of the visible area (see nlpSettledEmpty).
-    if (aiSearchEnabled && q.length >= NLP_MIN_QUERY_LENGTH && mapCenter && mapBbox) {
+    if (
+      aiSearchEnabled &&
+      q.length >= NLP_MIN_QUERY_LENGTH &&
+      nlpContext.mapCenter &&
+      nlpContext.mapBbox
+    ) {
       setNlpSubmitted(true);
       setIsFocused(true);
       return;

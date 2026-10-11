@@ -90,6 +90,7 @@ vi.mock("@/lib/launchExplore", () => ({
 
 import type {
   AutocompleteResult,
+  BoundingBox,
   Place,
   SearchSuggestion,
   SearchSuggestionsResponse,
@@ -1824,6 +1825,273 @@ describe("SearchBar", () => {
     expect(usePlaceStore.getState().selectedPlace?.name).toBe("Alexanderplatz");
     expect(useSidebarStore.getState().activeSidebarId).toBe(PANEL.PLACE);
   });
+});
+
+describe("SearchBar NLP submission context", () => {
+  const query = "cozy cafes with wifi";
+  const bboxA: BoundingBox = { west: 13.3, south: 52.4, east: 13.5, north: 52.6 };
+  const bboxB: BoundingBox = { west: 12.4, south: 51.5, east: 14.4, north: 53.5 };
+  const intent = {
+    filter: { selectors: [{ tags: [{ key: "amenity", value: "cafe" }] }] },
+    spatial_constraint: null,
+    time_constraint: null,
+    sort_by: "relevance" as const,
+    unmapped_attributes: [],
+    confidence: 0.9,
+    explanation: "Cafés with WiFi",
+  };
+
+  function viewport() {
+    let bounds = { ...bboxA };
+    fakeMap.state.center = { lng: 13.4, lat: 52.5 };
+    vi.spyOn(fakeMap.map, "getBounds").mockImplementation(
+      () =>
+        ({
+          getWest: () => bounds.west,
+          getSouth: () => bounds.south,
+          getEast: () => bounds.east,
+          getNorth: () => bounds.north,
+        }) as ReturnType<typeof fakeMap.map.getBounds>,
+    );
+    return (nextBounds: BoundingBox, center: [number, number] = [13.4, 52.5]) => {
+      bounds = { ...nextBounds };
+      fakeMap.state.center.lng = center[0];
+      fakeMap.state.center.lat = center[1];
+    };
+  }
+
+  function lastContext() {
+    const call = useNlpSearchMock.mock.calls.at(-1);
+    return { query: call?.[0], center: call?.[1], bbox: call?.[2], enabled: call?.[3] };
+  }
+
+  function submit(input: HTMLElement) {
+    fireEvent.submit(input.closest("form") as HTMLFormElement);
+  }
+
+  function unrelatedRender() {
+    act(() => useMapStore.setState({ userLocation: [7, 50] }));
+  }
+
+  afterEach(() => vi.restoreAllMocks());
+
+  it("reads the map at explicit submit and retains it while parsing and after success", async () => {
+    const move = viewport();
+    useSearchStore.setState({ query, isFocused: true });
+    useNlpSearchMock.mockReturnValue({ data: undefined, isFetching: true });
+    renderBar();
+    const input = screen.getByLabelText("search.ariaLabel");
+    // No render between map movement and Enter: capture must read the map itself.
+    move(bboxB, [12.8, 52.2]);
+    submit(input);
+    await waitFor(() =>
+      expect(lastContext()).toEqual({ query, center: [12.8, 52.2], bbox: bboxB, enabled: true }),
+    );
+
+    move(bboxA, [14, 53]);
+    unrelatedRender();
+    expect(lastContext()).toEqual({ query, center: [12.8, 52.2], bbox: bboxB, enabled: true });
+
+    useNlpSearchMock.mockReturnValue({
+      data: { intent, resolvedBbox: bboxB, provider: "local" },
+      isFetching: false,
+    });
+    act(() => useMapStore.setState({ userLocation: null }));
+    await screen.findByText("Cafés with WiFi");
+    expect(lastContext()).toEqual({ query, center: [12.8, 52.2], bbox: bboxB, enabled: true });
+    fireEvent.click(screen.getByText("Cafés with WiFi"));
+    expect(useCategorySearchStore.getState().searchBbox).toEqual(bboxB);
+  });
+
+  it("keeps the submitted zoom until the same text is explicitly submitted at new bounds", async () => {
+    const move = viewport();
+    useSearchStore.setState({ query, isFocused: true });
+    renderBar();
+    const input = screen.getByLabelText("search.ariaLabel");
+    submit(input);
+    await waitFor(() =>
+      expect(lastContext()).toEqual({ query, center: [13.4, 52.5], bbox: bboxA, enabled: true }),
+    );
+    move(bboxB);
+    unrelatedRender();
+    expect(lastContext()).toEqual({ query, center: [13.4, 52.5], bbox: bboxA, enabled: true });
+    submit(input);
+    await waitFor(() =>
+      expect(lastContext()).toEqual({ query, center: [13.4, 52.5], bbox: bboxB, enabled: true }),
+    );
+  });
+
+  it("keeps the explicit text and viewport while suggestions for a new query settle", async () => {
+    const move = viewport();
+    useAutocompleteMock.mockReturnValue({ data: undefined, isFetching: true });
+    renderBar();
+    const input = screen.getByLabelText("search.ariaLabel");
+    fireEvent.focus(input);
+    fireEvent.change(input, { target: { value: query } });
+    submit(input);
+    expect(lastContext().enabled).toBe(false);
+    move(bboxB, [14, 53]);
+    unrelatedRender();
+    await waitFor(() => expect(useAutocompleteMock.mock.calls.at(-1)?.[0]).toBe(query));
+    useAutocompleteMock.mockReturnValue({ data: undefined, isFetching: false });
+    act(() => useMapStore.setState({ userLocation: null }));
+    await waitFor(() =>
+      expect(lastContext()).toEqual({ query, center: [13.4, 52.5], bbox: bboxA, enabled: true }),
+    );
+    // Suggestion proximity remains live while NLP uses the submitted context.
+    expect(useAutocompleteMock.mock.calls.at(-1)?.[2]).toEqual({ proximity: [14, 53], zoom: 10 });
+  });
+
+  it("suspends the previous parse when a new submission waits for suggestions", async () => {
+    const move = viewport();
+    useSearchStore.setState({ query, isFocused: true });
+    renderBar();
+    const input = screen.getByLabelText("search.ariaLabel");
+    submit(input);
+    await waitFor(() => expect(lastContext().enabled).toBe(true));
+    move(bboxB);
+    useAutocompleteMock.mockReturnValue({ data: undefined, isFetching: true });
+    unrelatedRender();
+    useNlpSearchMock.mockClear();
+    submit(input);
+    expect(lastContext().enabled).toBe(false);
+    expect(useNlpSearchMock.mock.calls.every((call) => call[3] === false)).toBe(true);
+    move(bboxA, [14, 53]);
+    useAutocompleteMock.mockReturnValue({ data: undefined, isFetching: false });
+    act(() => useMapStore.setState({ userLocation: null }));
+    await waitFor(() =>
+      expect(lastContext()).toEqual({ query, center: [13.4, 52.5], bbox: bboxB, enabled: true }),
+    );
+  });
+
+  it("keeps the original viewport when suggestion settlement times out", async () => {
+    vi.useFakeTimers();
+    try {
+      const move = viewport();
+      useSearchStore.setState({ query, isFocused: true });
+      useAutocompleteMock.mockReturnValue({ data: undefined, isFetching: true });
+      renderBar();
+      submit(screen.getByLabelText("search.ariaLabel"));
+      move(bboxB, [14, 53]);
+      unrelatedRender();
+      await act(async () => vi.advanceTimersByTime(2_500));
+      expect(lastContext()).toEqual({ query, center: [13.4, 52.5], bbox: bboxA, enabled: true });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("retries with cloud consent in the submitted viewport after the map moves", async () => {
+    const move = viewport();
+    useSearchStore.setState({ query, isFocused: true });
+    renderBar([
+      {
+        type: "ai-search",
+        integrationId: "search-nlp",
+        aiActive: true,
+        localActive: true,
+        cloudActive: true,
+        cloudAvailable: true,
+        cloudConsentRequired: true,
+        cloudProviderLabels: ["Cloud test"],
+        cloudProcessors: [],
+      },
+    ]);
+    submit(screen.getByLabelText("search.ariaLabel"));
+    await screen.findByText("search.nlpConsentTitle");
+    move(bboxB, [14, 53]);
+    unrelatedRender();
+    expect(lastContext().enabled).toBe(false);
+    fireEvent.click(screen.getByRole("button", { name: "search.enable" }));
+    await waitFor(() =>
+      expect(lastContext()).toEqual({ query, center: [13.4, 52.5], bbox: bboxA, enabled: true }),
+    );
+    expect(useNlpSearchMock.mock.calls.at(-1)?.[5]).toBe("consented");
+  });
+
+  it("requires another explicit submission after query editing", async () => {
+    viewport();
+    useSearchStore.setState({ query, isFocused: true });
+    renderBar();
+    const input = screen.getByLabelText("search.ariaLabel");
+    submit(input);
+    await waitFor(() => expect(lastContext().enabled).toBe(true));
+    fireEvent.change(input, { target: { value: "quiet cafes with wifi" } });
+    await waitFor(() =>
+      expect(useAutocompleteMock.mock.calls.at(-1)?.[0]).toBe("quiet cafes with wifi"),
+    );
+    expect(lastContext().enabled).toBe(false);
+    submit(input);
+    await waitFor(() =>
+      expect(lastContext()).toEqual({
+        query: "quiet cafes with wifi",
+        center: [13.4, 52.5],
+        bbox: bboxA,
+        enabled: true,
+      }),
+    );
+  });
+
+  it("falls back to plain text search when submitted bounds are missing", async () => {
+    viewport();
+    useSearchStore.setState({ query, isFocused: true });
+    renderBar();
+    vi.spyOn(fakeMap.map, "getBounds").mockReturnValue(null as never);
+    submit(screen.getByLabelText("search.ariaLabel"));
+    await waitFor(() => expect(launchTextSearch).toHaveBeenCalledWith(fakeMap.map, query));
+    expect(lastContext()).toEqual({ query, center: [13.4, 52.5], bbox: null, enabled: false });
+  });
+
+  it.each(["error", "empty"])(
+    "preserves the plain text fallback after an NLP %s",
+    async (outcome) => {
+      viewport();
+      useSearchStore.setState({ query, isFocused: true });
+      useNlpSearchMock.mockImplementation((...args: unknown[]) =>
+        args[3]
+          ? {
+              data:
+                outcome === "empty"
+                  ? {
+                      intent: { ...intent, filter: { selectors: [] } },
+                      resolvedBbox: bboxA,
+                      provider: "local",
+                    }
+                  : undefined,
+              isFetching: false,
+              isError: outcome === "error",
+            }
+          : { data: undefined, isFetching: false },
+      );
+      renderBar();
+      submit(screen.getByLabelText("search.ariaLabel"));
+      await waitFor(() => expect(launchTextSearch).toHaveBeenCalledWith(fakeMap.map, query));
+      expect(lastContext().enabled).toBe(false);
+    },
+  );
+
+  it.each(["recent", "voice"])(
+    "captures a %s submission before its suggestions settle",
+    async (path) => {
+      const move = viewport();
+      useAutocompleteMock.mockReturnValue({ data: undefined, isFetching: true });
+      if (path === "recent") useRecentSearchStore.getState().add(query);
+      renderBar();
+      const input = screen.getByLabelText("search.ariaLabel");
+      fireEvent.focus(input);
+      if (path === "recent") fireEvent.click(screen.getByRole("button", { name: query }));
+      else act(() => voiceResult?.(query, true));
+      expect(useSearchStore.getState().query).toBe(query);
+      move(bboxB, [14, 53]);
+      unrelatedRender();
+      await waitFor(() => expect(useAutocompleteMock.mock.calls.at(-1)?.[0]).toBe(query));
+      useAutocompleteMock.mockReturnValue({ data: undefined, isFetching: false });
+      act(() => useMapStore.setState({ userLocation: null }));
+      await waitFor(() =>
+        expect(lastContext()).toEqual({ query, center: [13.4, 52.5], bbox: bboxA, enabled: true }),
+      );
+    },
+  );
 });
 
 describe("SearchBar map obstruction", () => {
