@@ -118,6 +118,20 @@ describe("applyGroundReplacement", () => {
     applyGroundReplacement(advancedSession(), replacement() as never, NOW)
       .session as GroundMobileSession;
 
+  it("adopts the replacement itinerary together with its route", () => {
+    const waypoints = [
+      [8.7, 50.15],
+      [8.71, 50.11],
+      [8.727, 50.11],
+    ];
+    const source = replacement({ destinationWaypoints: waypoints });
+    const next = applyGroundReplacement(advancedSession(), source as never, NOW)
+      .session as GroundMobileSession;
+    expect(next.payload.startPackage.destinationWaypoints).toEqual(waypoints);
+    waypoints[1][0] = 9;
+    expect(next.payload.startPackage.destinationWaypoints[1]).toEqual([8.71, 50.11]);
+  });
+
   it("advances exactly one revision", () => {
     expect(result().revision).toBe(10);
   });

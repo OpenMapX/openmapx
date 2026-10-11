@@ -162,6 +162,8 @@ export interface TransitReplanOptions {
 export interface FasterRouteProposal {
   route: Route;
   alternatives: Route[];
+  /** Exact requested itinerary for this replacement, including its captured origin. */
+  destinationWaypoints?: LngLat[];
   savedSeconds: number;
   proposedAtMs: number;
 }
@@ -322,6 +324,7 @@ interface NavigationState {
     provider?: string,
     alternatives?: Route[],
     roadConditionImpact?: RoadConditionRouteImpact,
+    destinationWaypoints?: LngLat[],
   ) => void;
   setConnectivity: (value: NavigationConnectivity) => void;
   setRerouteUnavailable: (value: boolean) => void;
@@ -615,7 +618,7 @@ export const useNavigationStore = create<NavigationState>((set, get) => ({
   // Clear progress: it belongs to the OLD route. Leaving the previous route's
   // (larger) alongMeters in place would mislead every progress consumer for one
   // render against the new, often shorter, geometry until the next fix arrives.
-  applyReroute: (route, provider, alternatives, impact) => {
+  applyReroute: (route, provider, alternatives, impact, destinationWaypoints) => {
     clearRoadConditionLeaseTimer();
     const roadConditionImpact = expireRoadConditionRouteImpact(impact, Date.now()) ?? null;
     set((s) => ({
@@ -623,6 +626,7 @@ export const useNavigationStore = create<NavigationState>((set, get) => ({
       route,
       ...ROUTE_IDENTITY_RESET,
       routeProvider: provider ?? s.routeProvider,
+      destinationWaypoints: destinationWaypoints ?? s.destinationWaypoints,
       roadConditionImpact,
       routeSelectionIntent: "automatic",
       fasterRoute: null,
@@ -696,6 +700,7 @@ export const useNavigationStore = create<NavigationState>((set, get) => ({
       return {
         status: "navigating" as const,
         route: proposal.route,
+        destinationWaypoints: proposal.destinationWaypoints ?? s.destinationWaypoints,
         routes: [proposal.route, ...proposal.alternatives],
         activeRouteIndex: 0,
         routeSelectionIntent: routeIntent ?? s.routeSelectionIntent,

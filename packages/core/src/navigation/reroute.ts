@@ -1,6 +1,7 @@
 import type { LngLat } from "../types/geometry";
-import { asRouteMatcher, type RouteMatcherInput, snapPreparedRoute } from "./routeMatcher";
+import type { RouteMatcherInput } from "./routeMatcher";
 import type { RerouteOpts } from "./types";
+import { resolveWaypointOccurrences } from "./waypointOccurrences";
 
 /** Deviation change (m) below which a stationary fix is treated as GPS jitter. */
 const DEAD_BAND_METERS = 0.5;
@@ -66,15 +67,6 @@ export function shouldReroute(
 }
 
 /**
- * Build the waypoint list for a reroute from the current position. The origin is
- * replaced by `from` (the snapped current location); intermediate stops already
- * behind us along the route are dropped so a reroute doesn't send the driver
- * back to a stop they've passed; the final destination is always kept. Each
- * remaining stop is located by projecting it onto the route and comparing its
- * arc-length to how far we've travelled (`alongMeters`). All stops share one
- * prepared index for the active route — the caller's, when it has one.
- */
-/**
  * Drop reroute timestamps (ms) older than `windowMs` relative to `nowMs`, keeping
  * a rolling window for churn detection.
  */
@@ -96,6 +88,12 @@ export function isReroutingTooOften(timestampsMs: number[], maxInWindow: number)
   return timestampsMs.length >= maxInWindow;
 }
 
+/**
+ * Re-anchor the itinerary at `from` and drop passed intermediate stops. Resolve
+ * occurrences in itinerary order from the route origin before comparing them
+ * with current geometry-measured progress; the final destination is always kept.
+ * Reuse the caller's prepared matcher, preparing only future suffixes as needed.
+ */
 export function remainingWaypoints(
   route: RouteMatcherInput,
   destinationWaypoints: LngLat[],
@@ -106,16 +104,10 @@ export function remainingWaypoints(
   if (destinationWaypoints.length <= 2) {
     return [from, ...destinationWaypoints.slice(1)];
   }
-  const matcher = asRouteMatcher(route);
-  const lastIdx = destinationWaypoints.length - 1;
-  const kept: LngLat[] = [];
-  for (let i = 1; i < destinationWaypoints.length; i++) {
-    if (i === lastIdx) {
-      kept.push(destinationWaypoints[i]); // always keep the final destination
-      continue;
-    }
-    const wpAlong = snapPreparedRoute(matcher, destinationWaypoints[i]).alongMeters;
-    if (wpAlong > alongMeters) kept.push(destinationWaypoints[i]); // still ahead
-  }
-  return [from, ...kept];
+  return [
+    from,
+    ...resolveWaypointOccurrences(route, destinationWaypoints)
+      .filter((waypoint) => waypoint.final || waypoint.alongMeters > alongMeters)
+      .map((waypoint) => waypoint.coordinates),
+  ];
 }
