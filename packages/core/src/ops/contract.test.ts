@@ -462,6 +462,34 @@ describe("ops contract", () => {
     }
   });
 
+  describe.each(["motis.primary.stop", "motis.staging.stop"] as const)(
+    "%s confirmation",
+    (kind) => {
+      it.each([
+        { changed: true, state: "stopped" },
+        { changed: false, state: "stopped" },
+        { changed: false, state: "absent" },
+        { changed: true, state: "absent" },
+      ])("accepts a confirmed result %j", (result) => {
+        expect(parseOpsResult(kind, result)).toEqual(result);
+      });
+
+      it.each([
+        { changed: true },
+        { changed: false, state: "running" },
+        { changed: false, state: "unknown" },
+        { changed: true, state: "stopped", environment: ["SECRET=value"] },
+      ])("rejects legacy or unconfirmed result %j", (result) => {
+        expect(() => parseOpsResult(kind, result)).toThrow();
+      });
+
+      it("keeps stop authority limited to the data-manager", () => {
+        expect(authorizeOpsOperation("data-manager", kind)).toBe(true);
+        expect(authorizeOpsOperation("api", kind)).toBe(false);
+      });
+    },
+  );
+
   it("authorizes roles from the operation kind without inspecting operation arguments", () => {
     expect(authorizeOpsOperation("api", "service.start")).toBe(true);
     expect(authorizeOpsOperation("api", "motis.primary.restart")).toBe(false);

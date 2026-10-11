@@ -2,10 +2,13 @@ import {
   chmodSync,
   cpSync,
   existsSync,
+  lstatSync,
   mkdirSync,
   mkdtempSync,
   readdirSync,
   readFileSync,
+  readlinkSync,
+  renameSync,
   rmSync,
   statSync,
   writeFileSync,
@@ -15,12 +18,26 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const opsCalls: { kind: string }[] = [];
-const opsBehaviour: { failPromote: boolean } = { failPromote: false };
+const opsBehaviour: {
+  failPromote: boolean;
+  stopResult?: { changed: boolean; state?: string };
+  stopFailure?: { kind: string; message: string };
+  failRestart?: boolean;
+} = { failPromote: false };
 vi.mock("../../src/ops-client.js", () => ({
   runOpsOperation: vi.fn(async (operation: { kind: string }) => {
     opsCalls.push(operation);
     if (opsBehaviour.failPromote && operation.kind === "motis.primary.promote") {
       throw new Error("recreate failed");
+    }
+    if (opsBehaviour.stopFailure?.kind === operation.kind) {
+      throw new Error(opsBehaviour.stopFailure.message);
+    }
+    if (opsBehaviour.failRestart && operation.kind === "motis.primary.restart") {
+      throw new Error("old primary recovery failed");
+    }
+    if (operation.kind.endsWith(".stop")) {
+      return opsBehaviour.stopResult ?? { changed: true, state: "stopped" };
     }
     return operation.kind === "motis.primary.promote"
       ? { activeRunId: "slot-a" }
@@ -40,6 +57,7 @@ import { buildJobContext } from "../../src/jobs/transitous/pipeline.js";
 import { run as promoteRun } from "../../src/jobs/transitous/promote.js";
 import { aliasSlot, ensureMotisSlotLayout } from "../../src/jobs/transitous/slot-state.js";
 import { TRANSIT_SOURCE_MANIFEST_FILENAME } from "../../src/jobs/transitous/source-manifest.js";
+import { runOpsOperation } from "../../src/ops-client.js";
 import { StateStore } from "../../src/state.js";
 
 vi.mock("../../src/jobs/transitous/feed-state-writer.js", () => ({
@@ -49,12 +67,20 @@ vi.mock("../../src/jobs/transitous/feed-state-writer.js", () => ({
 let tmp: string | undefined;
 let originalFetch: typeof fetch;
 const originalProbeGet = probeHttp.get;
+const defaultOpsImplementation = vi.mocked(runOpsOperation).getMockImplementation();
+if (!defaultOpsImplementation) throw new Error("MOTIS operation test seam is unavailable");
 
 beforeEach(() => {
   originalFetch = globalThis.fetch;
+  vi.mocked(runOpsOperation).mockImplementation(defaultOpsImplementation);
   // Probe HTTP goes through the mocked global fetch (prod uses node:http).
   probeHttp.get = (url) => fetch(url);
   vi.mocked(recordPromotedSource).mockClear();
+  opsCalls.length = 0;
+  opsBehaviour.failPromote = false;
+  delete opsBehaviour.stopResult;
+  delete opsBehaviour.stopFailure;
+  delete opsBehaviour.failRestart;
 });
 
 afterEach(() => {
@@ -206,7 +232,312 @@ function makeCtx(opts: {
   });
 }
 
+function directorySnapshot(root: string): unknown[] {
+  const entries: unknown[] = [];
+  const visit = (path: string, relative: string): void => {
+    const stat = lstatSync(path);
+    if (stat.isSymbolicLink()) {
+      entries.push([relative, stat.ino, "alias", readlinkSync(path)]);
+    } else if (stat.isDirectory()) {
+      entries.push([relative, stat.ino, "directory"]);
+      for (const name of readdirSync(path).sort()) visit(join(path, name), join(relative, name));
+    } else {
+      entries.push([relative, stat.ino, "file", readFileSync(path, "utf8")]);
+    }
+  };
+  visit(root, ".");
+  return entries;
+}
+
+function readyFixture(layout: "rename" | "two-slot") {
+  const fx = setupFixture({ staging: true, current: true });
+  mkdirSync(fx.previousDir, { recursive: true });
+  writeFileSync(join(fx.previousDir, "retained-timetable"), "older rollback data");
+  globalThis.fetch = vi.fn(async (input: unknown) => {
+    const url = typeof input === "string" ? input : (input as Request | URL).toString();
+    return jsonResponse(successfulBody(url));
+  }) as unknown as typeof fetch;
+  const ctx = makeCtx({ dataDir: fx.dataDir, runner: async () => {} });
+  if (layout === "two-slot") ctx.slotLayout = ensureMotisSlotLayout(fx.dataDir);
+  return { fx, ctx };
+}
+
 describe("promote stage", () => {
+  describe.each(["rename", "two-slot"] as const)("confirmed stops in %s layout", (layout) => {
+    it("stops primary then staging before activating the candidate", async () => {
+      const { ctx } = readyFixture(layout);
+      const result = await promoteRun(ctx);
+      expect(result.status).toBe("ok");
+      expect(opsCalls.map(({ kind }) => kind)).toEqual([
+        "motis.primary.stop",
+        "motis.staging.stop",
+        "motis.primary.promote",
+      ]);
+    });
+
+    it.each([
+      { changed: false, state: "absent" },
+      { changed: false, state: "stopped" },
+    ])("accepts a confirmed already $state container", async (stopResult) => {
+      const { ctx } = readyFixture(layout);
+      opsBehaviour.stopResult = stopResult;
+      const result = await promoteRun(ctx);
+      expect(result.status).toBe("ok");
+      expect(opsCalls.map(({ kind }) => kind)).toEqual([
+        "motis.primary.stop",
+        "motis.staging.stop",
+        "motis.primary.promote",
+      ]);
+    });
+
+    it.each([
+      { changed: true },
+      { changed: true, state: "running" },
+      { changed: false, state: "unknown" },
+    ])("preserves all data when primary stop is unconfirmed: %j", async (stopResult) => {
+      const { fx, ctx } = readyFixture(layout);
+      const before = directorySnapshot(fx.dataDir);
+      opsBehaviour.stopResult = stopResult;
+      const result = await promoteRun(ctx);
+      expect(result.status).toBe("error");
+      expect(result.message).toMatch(/primary.*stop.*confirm/i);
+      expect(opsCalls.map(({ kind }) => kind)).toEqual(["motis.primary.stop"]);
+      expect(directorySnapshot(fx.dataDir)).toEqual(before);
+      expect(recordPromotedSource).not.toHaveBeenCalled();
+    });
+
+    it.each(["operation timed out", "permission denied", "Docker daemon unreachable"])(
+      "preserves all data and never blindly restarts an uncertain primary: %s",
+      async (message) => {
+        const { fx, ctx } = readyFixture(layout);
+        const before = directorySnapshot(fx.dataDir);
+        opsBehaviour.stopFailure = { kind: "motis.primary.stop", message };
+        const result = await promoteRun(ctx);
+        expect(result.status).toBe("error");
+        expect(result.message).toContain(message);
+        expect(opsCalls.map(({ kind }) => kind)).toEqual(["motis.primary.stop"]);
+        expect(directorySnapshot(fx.dataDir)).toEqual(before);
+        expect(recordPromotedSource).not.toHaveBeenCalled();
+      },
+    );
+
+    it("acknowledges restarting a primary stopped by this attempt when staging stop fails", async () => {
+      const { fx, ctx } = readyFixture(layout);
+      const before = directorySnapshot(fx.dataDir);
+      opsBehaviour.stopFailure = { kind: "motis.staging.stop", message: "staging stop timed out" };
+      const result = await promoteRun(ctx);
+      expect(result.status).toBe("error");
+      expect(result.message).toContain("staging stop timed out");
+      expect(result.message).toContain("old primary restart acknowledged on unchanged live data");
+      expect(opsCalls.map(({ kind }) => kind)).toEqual([
+        "motis.primary.stop",
+        "motis.staging.stop",
+        "motis.primary.restart",
+      ]);
+      expect(directorySnapshot(fx.dataDir)).toEqual(before);
+      expect(recordPromotedSource).not.toHaveBeenCalled();
+    });
+
+    it.each(["absent", "stopped"])(
+      "preserves an already %s primary on staging failure",
+      async (state) => {
+        const { fx, ctx } = readyFixture(layout);
+        const before = directorySnapshot(fx.dataDir);
+        opsBehaviour.stopResult = { changed: false, state };
+        opsBehaviour.stopFailure = { kind: "motis.staging.stop", message: "staging stop failed" };
+        const result = await promoteRun(ctx);
+        expect(result.status).toBe("error");
+        expect(result.message).toContain("staging stop failed");
+        expect(opsCalls.map(({ kind }) => kind)).toEqual([
+          "motis.primary.stop",
+          "motis.staging.stop",
+        ]);
+        expect(directorySnapshot(fx.dataDir)).toEqual(before);
+      },
+    );
+
+    it("bounds nonterminal old-primary recovery after job cancellation with real status polling", async () => {
+      const { fx, ctx } = readyFixture(layout);
+      const actual =
+        await vi.importActual<typeof import("../../src/ops-client.js")>("../../src/ops-client.js");
+      const tokenFile = join(fx.dataDir, "ops-test-token");
+      writeFileSync(tokenFile, "a".repeat(43));
+      const unchanged = directorySnapshot(fx.dataDir);
+      vi.stubEnv("OPS_AGENT_URL", "http://ops-agent:4300");
+      vi.stubEnv("OPS_AGENT_TOKEN_FILE", tokenFile);
+      actual.resetOpsClient();
+      const cancelled = new AbortController();
+      ctx.abortSignal = cancelled.signal;
+      const cleanup = new AbortController();
+      const nativeTimeout = AbortSignal.timeout.bind(AbortSignal);
+      const timeout = vi
+        .spyOn(AbortSignal, "timeout")
+        .mockImplementation((ms) => nativeTimeout(ms > 120_000 ? 100 : ms));
+      let polls = 0;
+      let deletes = 0;
+      let admitted = false;
+      let operationKey = "";
+      globalThis.fetch = vi.fn(async (input: unknown, init?: RequestInit) => {
+        const url = String(input);
+        if (!url.startsWith("http://ops-agent:4300/")) return jsonResponse(successfulBody(url));
+        init?.signal?.throwIfAborted();
+        if (init?.method === "DELETE") deletes++;
+        const operationId = "job1_pendingRecovery000";
+        let requestId: string | null;
+        let result: unknown;
+        if (init?.method === "POST") {
+          const request = JSON.parse(String(init.body));
+          requestId = request.requestId;
+          operationKey = request.operationKey;
+          admitted = true;
+          result = {
+            execution: "async",
+            operationId,
+            operationKey,
+            kind: "motis.primary.restart",
+            state: "running",
+          };
+        } else {
+          polls++;
+          requestId = new Headers(init?.headers).get("x-ops-request-id");
+          result = {
+            version: 1,
+            operationId,
+            operationKey,
+            kind: "motis.primary.restart",
+            resourceId: "motis",
+            state: "termination_pending",
+            submittedAt: "2026-05-01T00:00:00.000Z",
+            updatedAt: "2026-05-01T00:00:01.000Z",
+          };
+        }
+        return jsonResponse({ version: 1, requestId, ok: true, result });
+      }) as typeof fetch;
+      vi.mocked(runOpsOperation).mockImplementation(async (operation, options) => {
+        opsCalls.push(operation);
+        if (operation.kind === "motis.staging.stop") {
+          cancelled.abort();
+          throw new Error("staging stop timed out");
+        }
+        if (operation.kind === "motis.primary.restart") {
+          return actual.runOpsOperation(operation, {
+            ...options,
+            signal: options?.signal ?? cleanup.signal,
+            pollIntervalMs: 10,
+          });
+        }
+        return { changed: true, state: "stopped" };
+      });
+      const pending = promoteRun(ctx);
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      try {
+        const result = await Promise.race([
+          pending,
+          new Promise<undefined>((resolve) => {
+            timer = setTimeout(() => resolve(undefined), 500);
+          }),
+        ]);
+        expect(cancelled.signal.aborted).toBe(true);
+        expect(admitted).toBe(true);
+        expect(polls).toBeGreaterThan(1);
+        expect(
+          result,
+          "nonterminal recovery must not keep promotion pending indefinitely",
+        ).toBeDefined();
+        expect(result?.status).toBe("error");
+        expect(result?.message).toContain("staging stop timed out");
+        expect(result?.message).toMatch(/recovery completion unknown.*deadline/i);
+        expect(timeout).toHaveBeenCalledWith(125_000);
+        expect(deletes).toBe(0);
+        expect(directorySnapshot(fx.dataDir)).toEqual(unchanged);
+        expect(opsCalls.map(({ kind }) => kind)).toEqual([
+          "motis.primary.stop",
+          "motis.staging.stop",
+          "motis.primary.restart",
+        ]);
+        expect(recordPromotedSource).not.toHaveBeenCalled();
+      } finally {
+        if (timer) clearTimeout(timer);
+        cleanup.abort();
+        await pending;
+        timeout.mockRestore();
+        actual.resetOpsClient();
+        vi.unstubAllEnvs();
+      }
+    });
+
+    it("refuses promotion when the data target changes despite confirmed stops", async () => {
+      const { fx, ctx } = readyFixture(layout);
+      let externallyChanged: unknown[] = [];
+      vi.mocked(runOpsOperation).mockImplementation(async (operation: { kind: string }) => {
+        opsCalls.push(operation);
+        if (operation.kind === "motis.staging.stop") {
+          renameSync(ctx.motisDataDir, `${ctx.motisDataDir}.externally-moved`);
+          mkdirSync(ctx.motisDataDir);
+          writeFileSync(join(ctx.motisDataDir, "external-data"), "replacement");
+          externallyChanged = directorySnapshot(fx.dataDir);
+        }
+        return { changed: true, state: "stopped" };
+      });
+      const result = await promoteRun(ctx);
+      expect(result.status).toBe("error");
+      expect(result.message).toMatch(/identity changed/);
+      expect(opsCalls.map(({ kind }) => kind)).toEqual([
+        "motis.primary.stop",
+        "motis.staging.stop",
+      ]);
+      expect(directorySnapshot(fx.dataDir)).toEqual(externallyChanged);
+    });
+
+    it("refuses recovery when the old live target changes during the staging stop", async () => {
+      const { fx, ctx } = readyFixture(layout);
+      let externallyChanged: unknown[] = [];
+      vi.mocked(runOpsOperation).mockImplementation(async (operation: { kind: string }) => {
+        opsCalls.push(operation);
+        if (operation.kind === "motis.staging.stop") {
+          renameSync(ctx.motisDataDir, `${ctx.motisDataDir}.externally-moved`);
+          mkdirSync(ctx.motisDataDir);
+          writeFileSync(join(ctx.motisDataDir, "external-data"), "replacement");
+          externallyChanged = directorySnapshot(fx.dataDir);
+          throw new Error("staging stop timed out");
+        }
+        return { changed: true, state: "stopped" };
+      });
+      const result = await promoteRun(ctx);
+      expect(result.status).toBe("error");
+      expect(result.message).toContain("staging stop timed out");
+      expect(result.message).not.toContain(
+        "old primary restart acknowledged on unchanged live data",
+      );
+      expect(result.message).toMatch(/identity changed.*recovery refused/);
+      expect(opsCalls.map(({ kind }) => kind)).toEqual([
+        "motis.primary.stop",
+        "motis.staging.stop",
+      ]);
+      expect(directorySnapshot(fx.dataDir)).toEqual(externallyChanged);
+    });
+
+    it("reports both the stop failure and failed old-primary recovery", async () => {
+      const { fx, ctx } = readyFixture(layout);
+      const before = directorySnapshot(fx.dataDir);
+      opsBehaviour.stopFailure = { kind: "motis.staging.stop", message: "staging stop timed out" };
+      opsBehaviour.failRestart = true;
+      const result = await promoteRun(ctx);
+      expect(result.status).toBe("error");
+      expect(result.message).toContain("staging stop timed out");
+      expect(result.message).not.toContain(
+        "old primary restart acknowledged on unchanged live data",
+      );
+      expect(result.message).toContain("old primary recovery failed");
+      expect(opsCalls.map(({ kind }) => kind)).toEqual([
+        "motis.primary.stop",
+        "motis.staging.stop",
+        "motis.primary.restart",
+      ]);
+      expect(directorySnapshot(fx.dataDir)).toEqual(before);
+    });
+  });
+
   it("skips when staging dir is missing", async () => {
     const fx = setupFixture({});
     const result = await promoteRun(
@@ -275,7 +606,7 @@ describe("promote stage", () => {
     // Stops and the post-swap recreate are typed agent operations now; the
     // ordering guarantee (stop before swap, promote after) is unchanged.
     expect(opsCalls.map((call) => call.kind)).toEqual([
-      "motis.staging.stop",
+      "motis.primary.stop",
       "motis.staging.stop",
       "motis.primary.promote",
     ]);
@@ -491,7 +822,7 @@ describe("promote stage", () => {
         if (promoteCalls === 1) throw new Error("injected activation failure");
         return { activeRunId: "slot-a" };
       }
-      return { changed: true };
+      return { changed: true, state: "stopped" };
     });
     const ctx = makeCtx({ dataDir: fx.dataDir, runner: async () => undefined });
     ctx.repoRoot = fx.dataDir;

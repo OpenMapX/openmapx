@@ -1,5 +1,16 @@
-import { chmodSync, existsSync, mkdirSync, renameSync, rmSync, statSync } from "node:fs";
+import {
+  chmodSync,
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  readlinkSync,
+  realpathSync,
+  renameSync,
+  rmSync,
+  statSync,
+} from "node:fs";
 import { join } from "node:path";
+import { OPS_KIND_POLICIES, type OpsResultFor, parseOpsResult } from "@openmapx/core/ops";
 import { runOpsOperation } from "../../ops-client.js";
 import {
   CANDIDATE_MANIFEST_FILENAME,
@@ -27,6 +38,7 @@ const PRIMARY_URL = process.env.MOTIS_URL ?? "http://localhost:8081";
 const STAGING_URL = process.env.MOTIS_STAGING_URL ?? "http://localhost:8082";
 
 const SMOKE_BUDGET_MS = 30_000;
+const RECOVERY_BUDGET_MS = OPS_KIND_POLICIES["motis.primary.restart"].timeoutMs + 5_000;
 // How long to wait for the primary to come back healthy after the swap+restart.
 // The restarted container re-loads the promoted dataset before it binds its
 // server — for a real region (e.g. Germany) that's several minutes, and a
@@ -150,22 +162,81 @@ async function waitForPrimaryHealthy(deadline: number): Promise<string | null> {
   return `primary MOTIS at ${healthUrl(PRIMARY_URL)} did not become healthy within ${RESTART_BUDGET_MS}ms (${fail.reason})`;
 }
 
-/**
- * Stop a container before the rename swap. We stop BOTH the primary and the
- * staging container: the primary so we don't rename its mount out from under it,
- * and staging because it holds the very directory we're about to rename into
- * `live` — if it keeps that bind-mount inode open, the restarted primary ends up
- * sharing the same data dir with a second MOTIS process and its import hangs
- * (the server never binds → promote times out → rollback). The next pipeline
- * cycle's motis-import `docker restart`s staging again. Best effort: a
- * not-running / not-yet-created container makes `docker stop` fail, which is
- * fine — there's nothing to protect.
- */
-async function stopContainer(_ctx: JobContext, _container: string): Promise<void> {
+async function stopContainer(
+  ctx: JobContext,
+  container: typeof PRIMARY_CONTAINER | typeof STAGING_CONTAINER,
+): Promise<OpsResultFor<"motis.primary.stop">> {
+  const kind =
+    container === PRIMARY_CONTAINER
+      ? "motis.primary.stop"
+      : container === STAGING_CONTAINER
+        ? "motis.staging.stop"
+        : null;
+  if (!kind) throw new Error("Unapproved MOTIS stop target");
+  const result = await runOpsOperation({ kind }, { signal: ctx.abortSignal });
   try {
-    await runOpsOperation({ kind: "motis.staging.stop" });
+    return parseOpsResult(kind, result);
   } catch {
-    // Not running / doesn't exist — nothing to protect.
+    throw new Error(`${kind} stop confirmation missing or invalid`);
+  }
+}
+
+function dataIdentity(path: string): string | null {
+  try {
+    const alias = lstatSync(path);
+    const target = statSync(path);
+    return JSON.stringify({
+      aliasDevice: alias.dev,
+      aliasInode: alias.ino,
+      alias: alias.isSymbolicLink() ? readlinkSync(path) : null,
+      target: realpathSync(path),
+      device: target.dev,
+      inode: target.ino,
+    });
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+    throw error;
+  }
+}
+
+async function stopBeforeSwap(ctx: JobContext, prepare?: () => void): Promise<void> {
+  const live = dataIdentity(ctx.motisDataDir);
+  const staging = dataIdentity(ctx.motisStagingDataDir);
+  let primary: OpsResultFor<"motis.primary.stop"> | undefined;
+  try {
+    primary = await stopContainer(ctx, PRIMARY_CONTAINER);
+    await stopContainer(ctx, STAGING_CONTAINER);
+    if (
+      dataIdentity(ctx.motisDataDir) !== live ||
+      dataIdentity(ctx.motisStagingDataDir) !== staging
+    ) {
+      throw new Error("MOTIS data identity changed while stopping; promotion refused");
+    }
+    prepare?.();
+  } catch (error) {
+    const failure = (error as Error).message;
+    if (primary?.state !== "stopped" || !primary.changed || live === null) throw error;
+    const recoverySignal = AbortSignal.timeout(RECOVERY_BUDGET_MS);
+    try {
+      if (
+        dataIdentity(ctx.motisDataDir) !== live ||
+        dataIdentity(ctx.motisStagingDataDir) !== staging
+      ) {
+        throw new Error("old live or staging data identity changed; recovery refused");
+      }
+      // Recovery gets its own deadline even if the job was cancelled; pending termination remains agent-owned.
+      await runOpsOperation({ kind: "motis.primary.restart" }, { signal: recoverySignal });
+    } catch (recoveryError) {
+      if (recoverySignal.aborted) {
+        throw new Error(
+          `${failure}; old primary recovery completion unknown after ${RECOVERY_BUDGET_MS}ms deadline`,
+        );
+      }
+      throw new Error(
+        `${failure}; old primary recovery failed: ${(recoveryError as Error).message}`,
+      );
+    }
+    throw new Error(`${failure}; old primary restart acknowledged on unchanged live data`);
   }
 }
 
@@ -238,8 +309,7 @@ async function promoteTwoSlot(
     return restartPrimary(ctx);
   };
 
-  await stopContainer(ctx, PRIMARY_CONTAINER);
-  await stopContainer(ctx, STAGING_CONTAINER);
+  await stopBeforeSwap(ctx);
   flipMotisSlotAliases(layout, candidate);
   const restartStart = Date.now();
   const restartError = await restartPrimary(ctx);
@@ -412,21 +482,12 @@ export const run: StageFn = async (ctx) => {
       return result;
     }
 
-    // Clear the leftover previous from the last cycle (we only keep one cycle
-    // of rollback history on disk).
-    if (existsSync(previousDir)) {
-      rmSync(previousDir, { recursive: true, force: true });
-    }
-
-    // Stop BOTH containers before touching the data dirs: the primary so the
-    // rename never happens under its running mount, and staging because it holds
-    // the dir we're about to rename into `live` — leaving it running would make
-    // the restarted primary share the same data inode with a second MOTIS and
-    // its import would hang (server never binds). The restart below brings the
-    // primary back against the freshly-promoted data; the next pipeline cycle
-    // restarts staging.
-    await stopContainer(ctx, PRIMARY_CONTAINER);
-    await stopContainer(ctx, STAGING_CONTAINER);
+    await stopBeforeSwap(ctx, () => {
+      // Retain rollback data until both containers are confirmed stopped.
+      if (existsSync(previousDir)) {
+        rmSync(previousDir, { recursive: true, force: true });
+      }
+    });
 
     // First rename: current → previous. If current doesn't exist (first ever
     // promotion) we skip this step and let the staging dir become the live

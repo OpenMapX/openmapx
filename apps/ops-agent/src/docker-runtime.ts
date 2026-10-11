@@ -328,6 +328,42 @@ export function createDockerRuntime(options: DockerRuntimeOptions): OpsRuntime {
     await run(args, signal, timeout);
     return { changed: true } as const;
   };
+  const motisState = async (name: "motis" | "motis-staging", signal: AbortSignal) => {
+    const result = await run(
+      [
+        "container",
+        "ls",
+        "-a",
+        "--filter",
+        `name=^/${name}$`,
+        "--format",
+        "{{.Names}}\t{{.State}}",
+      ],
+      signal,
+      5_000,
+    );
+    const rows = result.stdout.trim().split(/\r?\n/).filter(Boolean);
+    if (rows.length === 0) return "absent" as const;
+    if (rows.length !== 1) throw new Error("MOTIS stop confirmation returned multiple containers");
+    const fields = rows[0]?.split("\t");
+    if (fields?.length !== 2 || fields[0] !== name) {
+      throw new Error("MOTIS stop confirmation returned an unexpected container");
+    }
+    if (fields[1] === "running") return "running" as const;
+    if (["created", "exited", "dead"].includes(fields[1] ?? "")) return "stopped" as const;
+    throw new Error("MOTIS container state cannot be confirmed stopped");
+  };
+  const stopMotis = async (
+    name: "motis" | "motis-staging",
+    signal: AbortSignal,
+  ): Promise<OpsResultFor<"motis.primary.stop">> => {
+    const before = await motisState(name, signal);
+    if (before !== "running") return { changed: false, state: before };
+    await run(["stop", name], signal);
+    const after = await motisState(name, signal);
+    if (after === "running") throw new Error("MOTIS container remains running after stop");
+    return { changed: true, state: after };
+  };
   const runtime = createUnavailableRuntime();
   const followLogs: FollowLogs = options.followLogs ?? runContainedLogProcess;
 
@@ -713,7 +749,7 @@ export function createDockerRuntime(options: DockerRuntimeOptions): OpsRuntime {
   runtime["motis.staging.restart"] = (_operation, context) =>
     changed(["restart", "motis-staging"], context.signal);
   runtime["motis.staging.stop"] = (_operation, context) =>
-    changed(["stop", "motis-staging"], context.signal);
+    stopMotis("motis-staging", context.signal);
   runtime["motis.primary.restart"] = (_operation, context) =>
     changed(["restart", "motis"], context.signal);
   runtime["motis.primary.promote"] = async (operation, context) => {
@@ -730,7 +766,6 @@ export function createDockerRuntime(options: DockerRuntimeOptions): OpsRuntime {
     // The caller performed the data swap; the agent reports the run it activated.
     return { activeRunId: operation.preparedRunId };
   };
-  runtime["motis.primary.stop"] = (_operation, context) =>
-    changed(["stop", "motis"], context.signal);
+  runtime["motis.primary.stop"] = (_operation, context) => stopMotis("motis", context.signal);
   return runtime;
 }
