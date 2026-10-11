@@ -129,8 +129,9 @@ and facing along the road — preferably where OpenStreetMap says the exit lanes
 already exist, so every lane to choose from is in the picture. It is prefetched when the route starts (never per GPS fix).
 
 The app verifies the road interval at the camera position, including available
-lane-count and tunnel/level evidence. Surface scenery above a tunnel and
-ambiguous parallel or opposite carriageways are withheld. Full panoramas are
+lane-count and tunnel/level evidence. A mapped lane-count mismatch, surface
+scenery above a tunnel, and ambiguous parallel or opposite carriageways are
+withheld. Full panoramas are
 judged by the relevant viewing slice, rather than their stored centre heading.
 Missing current road evidence leaves the signs alone until the lookup succeeds.
 
@@ -140,7 +141,7 @@ A fixed narrow corridor may be drawn within each preferred lane over the observe
 stretch. Initially usable lanes are not presented as lanes where the driver can
 remain throughout the maneuver. The archived camera position never represents
 the driver's current lane or requests a lane change. Unresolved boundaries,
-layout mismatch, missing field of view or ambiguous registration leave a relevant
+missing field of view or ambiguous registration leave a relevant
 photo without ribbons. This registration method has limited demonstrated
 coverage; the single calibration is not general validation across Germany.
 

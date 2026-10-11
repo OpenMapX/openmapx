@@ -27,7 +27,7 @@ const image: StreetLevelImage = {
 };
 const response: PhotoAlignmentResponse = {
   registration: {
-    version: "observed-boundaries-v2",
+    version: "observed-boundaries-v3",
     scene: "relevant",
     alignment: null,
     evidence: { roadFraction: 0.7, markingFraction: 0.02, observedBoundaries: 0 },

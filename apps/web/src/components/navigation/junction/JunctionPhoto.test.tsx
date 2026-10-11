@@ -31,7 +31,7 @@ const prepared: PreparedJunctionPhoto = {
   height: 480,
   aspectRatio: 4 / 3,
   registration: {
-    version: "observed-boundaries-v2",
+    version: "observed-boundaries-v3",
     scene: "relevant",
     alignment: null,
     evidence: { roadFraction: 1, markingFraction: 1, observedBoundaries: 0 },

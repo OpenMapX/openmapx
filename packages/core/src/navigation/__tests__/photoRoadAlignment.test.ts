@@ -240,6 +240,19 @@ describe("real motorway photo", () => {
 });
 
 describe("registration diagnostics", () => {
+  it("withholds a photo from a road interval with a different lane layout", () => {
+    const result = registerPhotoRoad(geometry, point, image, paintedRoad(), 4, {
+      wayId: 1,
+      highway: "motorway",
+      bearing: 90,
+      startDistanceMeters: 200,
+      endDistanceMeters: 0,
+      tags: { lanes: 3 },
+    });
+    expect(result.scene).toBe("rejected");
+    expect(result.reason).toBe("layout-mismatch");
+    expect(result.alignment).toBeNull();
+  });
   it("separates a wrong-level scene from a lane-fit failure", () => {
     const result = registerPhotoRoad(geometry, point, image, paintedRoad(), 4, {
       wayId: 1,

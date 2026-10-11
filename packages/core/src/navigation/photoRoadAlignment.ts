@@ -411,7 +411,7 @@ export function alignPhotoRoad(
   return { ...best.pose, fromMeters: longestFirst, toMeters: longestLast };
 }
 
-export const PHOTO_REGISTRATION_VERSION = "observed-boundaries-v2";
+export const PHOTO_REGISTRATION_VERSION = "observed-boundaries-v3";
 export type PhotoRegistrationReason =
   | "wrong-level"
   | "off-approach"
@@ -495,7 +495,7 @@ export function registerPhotoRoad(
     return reject("unclear-scene");
   if (!laneCount) return reject("layout-unknown", "relevant");
   if (approachWay?.tags.lanes !== undefined && approachWay.tags.lanes !== laneCount)
-    return reject("layout-mismatch", "relevant");
+    return reject("layout-mismatch");
   if (!image.isPano && (!image.fovDeg || image.fovDeg <= 0 || image.fovDeg >= 180))
     return reject("missing-fov", "relevant");
   // A sphere has no privileged seam. Fit one road-centred phase so equivalent

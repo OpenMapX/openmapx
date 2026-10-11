@@ -96,7 +96,7 @@ describe("JunctionViewSlot", () => {
         aspectRatio: 4 / 3,
         path: { points: [], visible: false, laneShiftMeters: 0, headRotateDeg: 0 },
         registration: {
-          version: "observed-boundaries-v2",
+          version: "observed-boundaries-v3",
           scene: "relevant",
           alignment: null,
           evidence: { roadFraction: 1, markingFraction: 1, observedBoundaries: 0 },
@@ -191,7 +191,7 @@ describe("JunctionViewSlot", () => {
         aspectRatio: 4 / 3,
         path: { points: [], visible: false, laneShiftMeters: 0, headRotateDeg: 0 },
         registration: {
-          version: "observed-boundaries-v2",
+          version: "observed-boundaries-v3",
           scene: "relevant",
           alignment: null,
           evidence: { roadFraction: 1, markingFraction: 1, observedBoundaries: 0 },
@@ -250,7 +250,7 @@ describe("JunctionViewSlot", () => {
         aspectRatio: 4 / 3,
         path: { points: [], visible: false, laneShiftMeters: 0, headRotateDeg: 0 },
         registration: {
-          version: "observed-boundaries-v2",
+          version: "observed-boundaries-v3",
           scene: "relevant",
           alignment: null,
           evidence: { roadFraction: 1, markingFraction: 1, observedBoundaries: 0 },
