@@ -73,7 +73,7 @@ jobs:
         with:
           ref: ${{ needs.gate.outputs.sha }}
           persist-credentials: false
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version-file: .nvmrc
       - name: Log in to read the previous complete release
@@ -90,7 +90,7 @@ jobs:
           FORCE_REBUILD: ${{ vars.OPENMAPX_FORCE_IMAGE_REBUILD == 'true' }}
         run: node scripts/docker-release-plan.mjs plan release-plan
       - name: Preserve the complete build selection
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: docker-release-plan-${{ github.run_id }}-${{ github.run_attempt }}
           path: release-plan/release-plan.json
@@ -139,12 +139,12 @@ jobs:
           ref: ${{ needs.gate.outputs.sha }}
           persist-credentials: false
 
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version-file: .nvmrc
           package-manager-cache: false
       - name: Download the complete build selection
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: docker-release-plan-${{ github.run_id }}-${{ github.run_attempt }}
           # Keep CI artifacts outside Docker build contexts.
@@ -251,7 +251,7 @@ jobs:
       # actionable-finding gate is fail-closed.
       - name: Upload Trivy results
         if: always() && (github.event.repository.visibility == 'public' || vars.ENABLE_CODE_SCANNING == 'true')
-        uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
+        uses: github/codeql-action/upload-sarif@24c54180a607b1449ed407dd24f251e4e9147c8d # v4.38.3
         with:
           sarif_file: trivy-${{ matrix.app }}.sarif
           category: trivy-${{ matrix.app }}
@@ -268,7 +268,7 @@ jobs:
           touch "digest/${DIGEST#sha256:}"
 
       - name: Preserve approved digest for aggregate promotion
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: docker-digest-${{ matrix.app }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: digest/*
@@ -291,7 +291,7 @@ jobs:
 
       - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
 
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version-file: .nvmrc
           cache: pnpm
@@ -305,7 +305,7 @@ jobs:
         run: pnpm validate:privacy-release "$RUNNER_TEMP/privacy-release-validation.json"
 
       - name: Preserve exact-checkout privacy validation evidence
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: privacy-release-validation-${{ needs.gate.outputs.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/privacy-release-validation.json
@@ -323,18 +323,18 @@ jobs:
       packages: write
     steps:
       - name: Download the complete build selection
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: docker-release-plan-${{ github.run_id }}-${{ github.run_attempt }}
           path: release-plan
       - name: Download every approved digest
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: docker-digest-*-${{ github.run_id }}-${{ github.run_attempt }}
           path: digests
 
       - name: Download exact-checkout privacy validation evidence
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: privacy-release-validation-${{ needs.gate.outputs.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: privacy-release-validation
