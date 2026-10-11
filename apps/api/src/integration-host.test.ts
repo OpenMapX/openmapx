@@ -130,6 +130,7 @@ describe("initIntegrations — loader", () => {
         license: "MIT",
         domains: ["knowledge"],
         quality: "community",
+        dependencies: ["missing-community-dependency"],
       });
       const builtIn = { directory: builtInRoot, isBuiltIn: true };
       const community = { directory: communityRoot, isBuiltIn: false };
