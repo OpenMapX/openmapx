@@ -2,6 +2,7 @@
 
 import {
   readRouteMatcherCounters,
+  remainingWaypoints,
   resetRouteMatcherCounters,
   setRouteMatcherCounting,
   useNavigationStore,
@@ -158,6 +159,62 @@ describe("useFasterRoute", () => {
     await act(async () => vi.advanceTimersByTimeAsync(301_000));
     expect(useNavigationStore.getState().fasterRoute?.savedSeconds).toBeGreaterThanOrEqual(300);
   });
+
+  it.each([true, false])(
+    "keeps the captured remaining itinerary until acceptance=%s",
+    async (accept) => {
+      const original: [number, number][] = [
+        [0, 0],
+        [0.02, 0],
+        [0.12, 0],
+        [0.18, 0],
+      ];
+      useNavigationStore.setState({ destinationWaypoints: original });
+      const candidate = {
+        ...routeOf(2700, 0),
+        geometry: [
+          [0.045, 0],
+          [0.09, 0],
+          [0.11, 0.009],
+          [0.12, 0],
+          [0.18, 0],
+        ] as [number, number][],
+      };
+      fetchDirections.mockResolvedValue({
+        routes: [candidate],
+        waypoints: [],
+        activeRouteIndex: 0,
+      });
+      renderHook(() => useFasterRoute());
+      await act(async () => vi.advanceTimersByTimeAsync(301_000));
+      const captured = [
+        [0.045, 0],
+        [0.12, 0],
+        [0.18, 0],
+      ];
+      expect(fetchDirections).toHaveBeenCalledWith(
+        expect.objectContaining({ waypoints: captured }),
+      );
+      expect(useNavigationStore.getState().fasterRoute).not.toBeNull();
+      expect(useNavigationStore.getState().destinationWaypoints).toEqual(original);
+      act(() => {
+        if (accept) useNavigationStore.getState().acceptFasterRoute();
+        else useNavigationStore.getState().dismissFasterRoute();
+      });
+      const state = useNavigationStore.getState();
+      expect(state.destinationWaypoints).toEqual(accept ? captured : original);
+      if (accept) {
+        expect(state.progress).toBeNull();
+        expect(
+          remainingWaypoints(candidate.geometry, state.destinationWaypoints, [0.05, 0], 0),
+        ).toEqual([
+          [0.05, 0],
+          [0.12, 0],
+          [0.18, 0],
+        ]);
+      }
+    },
+  );
 
   it("does not check while replaying a recording", async () => {
     useNavRecordingStore.setState({ replaying: true });
@@ -336,7 +393,12 @@ describe("useFasterRoute", () => {
     renderHook(() => useFasterRoute());
     await act(async () => vi.advanceTimersByTimeAsync(301_000));
     act(() => {
-      useNavigationStore.getState().applyReroute(routeOf(3000, 0.5));
+      useNavigationStore
+        .getState()
+        .applyReroute(routeOf(3000, 0.5), undefined, undefined, undefined, [
+          [0.045, 0.5],
+          [0.18, 0.5],
+        ]);
       resolve({
         routes: [
           {
@@ -355,5 +417,9 @@ describe("useFasterRoute", () => {
     });
     await act(async () => vi.advanceTimersByTimeAsync(10));
     expect(useNavigationStore.getState().fasterRoute).toBeNull();
+    expect(useNavigationStore.getState().destinationWaypoints).toEqual([
+      [0.045, 0.5],
+      [0.18, 0.5],
+    ]);
   });
 });

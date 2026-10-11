@@ -108,19 +108,22 @@ const asyncEffect = (
   emitsEvents = true,
 ): OpsKindPolicy => ({ role, execution: "async", timeoutMs, maxResultBytes, emitsEvents });
 
+// Leave settlement time after the whole lifecycle command deadline.
+const LIFECYCLE_TIMEOUT_MS = 10 * 60_000 + 30_000;
+
 export const OPS_KIND_POLICIES = {
   "docker.status": sync("api", 5_000),
   "stack.status": sync("api", 15_000, 256 * 1024),
   "stack.render": asyncEffect("api", 120_000),
-  "stack.start": asyncEffect("api", 5 * 60_000),
+  "stack.start": asyncEffect("api", LIFECYCLE_TIMEOUT_MS),
   "stack.stop": asyncEffect("api", 5 * 60_000),
-  "service.start": asyncEffect("api", 3 * 60_000),
-  "service.stop": asyncEffect("api", 3 * 60_000),
-  "service.restart": asyncEffect("api", 2 * 60_000),
-  "service.recreate": asyncEffect("api", 5 * 60_000),
-  "service.recreateIsolated": asyncEffect("api", 5 * 60_000),
+  "service.start": asyncEffect("api", LIFECYCLE_TIMEOUT_MS),
+  "service.stop": asyncEffect("api", LIFECYCLE_TIMEOUT_MS),
+  "service.restart": asyncEffect("api", LIFECYCLE_TIMEOUT_MS),
+  "service.recreate": asyncEffect("api", LIFECYCLE_TIMEOUT_MS),
+  "service.recreateIsolated": asyncEffect("api", LIFECYCLE_TIMEOUT_MS),
   "service.pull": asyncEffect("api", 15 * 60_000),
-  "service.remove": asyncEffect("api", 3 * 60_000),
+  "service.remove": asyncEffect("api", LIFECYCLE_TIMEOUT_MS),
   "service.update": asyncEffect("api", 15 * 60_000),
   "service.build": asyncEffect("api", 30 * 60_000),
   "services.buildAll": asyncEffect("api", 30 * 60_000, 16 * 1024),

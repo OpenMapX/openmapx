@@ -17,6 +17,14 @@ recognizes a query as a question rather than a place name, it offers a separate
 natural-language suggestion above the usual autocomplete results. Pick it and the
 map fills with matches; ignore it and your normal results are untouched.
 
+Parsing starts only when you submit a search. Selecting a result, dismissing the
+search, editing its text, or opening Directions cancels that submission.
+Selecting a place on the map also cancels it; enriching the already selected place
+does not. Opening or closing the street-level viewer cancels submissions from the
+surface being left, while moving between images keeps the viewer search active. A late
+response cannot replace your newer action; submitting again can reuse a valid
+cached result for the same text and map area.
+
 ## What it understands
 
 A parsed query becomes a structured **search intent**:

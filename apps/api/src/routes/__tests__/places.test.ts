@@ -86,6 +86,8 @@ vi.mock("@openmapx/core/ambient-places-server", () => ({
   readAmbientPlaceByGers: (...args: unknown[]) => mockAmbientPlace(...args),
 }));
 
+const { placesRoute } = await import("../places.js");
+
 // App setup
 
 let app: FastifyInstance;
@@ -106,7 +108,6 @@ beforeAll(async () => {
     return mockLookupDbStation(value, ctx.lang);
   });
 
-  const { placesRoute } = await import("../places.js");
   app = Fastify({ logger: false });
   await app.register(placesRoute);
   await app.ready();

@@ -192,7 +192,13 @@ export function useNavigationEngine(incidentResource: NavIncidentResource): void
           tickRef.current = freshTick();
           useNavigationStore
             .getState()
-            .applyReroute(next, response.provider, undefined, response.roadConditionImpact);
+            .applyReroute(
+              next,
+              response.provider,
+              undefined,
+              response.roadConditionImpact,
+              waypoints,
+            );
         })
         .catch((error) => {
           if (!isCurrentAttempt()) return;
