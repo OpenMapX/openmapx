@@ -1,6 +1,12 @@
 // @vitest-environment jsdom
 
-import { useNavigationStore, useSettingsStore } from "@openmapx/core";
+import {
+  cumulativeDistances,
+  type NavProgress,
+  type Route,
+  useNavigationStore,
+  useSettingsStore,
+} from "@openmapx/core";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useNavAlerts } from "./useNavAlerts";
@@ -26,7 +32,7 @@ const geometry: [number, number][] = [
   [13, 52],
   [13.01, 52],
 ];
-const route = {
+const route: Route = {
   distance: 700,
   duration: 90,
   geometry,
@@ -41,7 +47,7 @@ const route = {
       speedLimit: 50,
     },
   ],
-} as never;
+};
 
 function startNavigation() {
   useNavigationStore.getState().startGroundNavigation(route, "driving", geometry);
@@ -136,5 +142,44 @@ describe("offline live-data gating", () => {
       expect(fetchRouteMatchWindow).toHaveBeenCalled();
       expect(fetchRoadAlerts).toHaveBeenCalled();
     });
+  });
+
+  it("fetches distance-bounded windows and publishes later limits at their route indices", async () => {
+    const long: [number, number][] = [
+      [0, 0],
+      [0, 0.3],
+      [0, 0.6],
+      [0, 0.9],
+      [0, 1.2],
+      [0, 1.5],
+    ];
+    const cum = cumulativeDistances(long);
+    fetchRouteMatchWindow.mockImplementation(async (...args: unknown[]) => {
+      const trace = args[0] as [number, number][];
+      return {
+        signals: [],
+        speedLimitsByPoint: trace.map(() => (trace[0][1] === 0 ? 30 : 70)),
+        countriesByPoint: trace.map(() => "DE"),
+      };
+    });
+    useNavigationStore
+      .getState()
+      .startGroundNavigation({ ...route, geometry: long }, "driving", [long[0], long[5]]);
+    useNavigationStore.getState().setConnectivity("online");
+    renderHook(() => useNavTrafficSignals());
+
+    await waitFor(() =>
+      expect(useNavigationStore.getState().liveSpeedLimits).toEqual([30, 30, 30, null, null, null]),
+    );
+
+    act(() => useNavigationStore.setState({ progress: { alongMeters: cum[2] } as NavProgress }));
+    await waitFor(() =>
+      expect(useNavigationStore.getState().liveSpeedLimits).toEqual([30, 30, 70, 70, 70, null]),
+    );
+
+    act(() => useNavigationStore.setState({ progress: { alongMeters: cum[4] } as NavProgress }));
+    await waitFor(() =>
+      expect(useNavigationStore.getState().liveSpeedLimits).toEqual([30, 30, 70, 70, 70, 70]),
+    );
   });
 });

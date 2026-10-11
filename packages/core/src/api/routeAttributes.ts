@@ -35,7 +35,9 @@ export async function fetchRouteMatchWindow(
     const res = await apiClient.post<MatchResult>(API_ENDPOINTS.routingMatch, {
       trace: trace.map(([lng, lat]) => ({ lat, lng })),
       mode,
-      shapeMatch: "walk_or_snap",
+      // Valhalla only returns matched_points for map_snap. A successful
+      // walk_or_snap edge walk omits them, losing both limits and countries.
+      shapeMatch: "map_snap",
     });
     // The caller offsets speedLimitsByPoint into a route-geometry-indexed array
     // (window point j → geometry[start + j]), which is only correct when the

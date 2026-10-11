@@ -10,8 +10,10 @@ import {
 } from "@openmapx/core";
 import { useEffect, useMemo, useRef, useState } from "react";
 
-/** Max points per /match request — safely under Valhalla's 5000-point cap. */
+/** Max points per /match request, below the gateway and Valhalla trace caps. */
 const MAX_TRACE_POINTS = 4500;
+/** Stay below Valhalla's 200 km trace limit even on sparse motorway geometry. */
+const MAX_TRACE_METERS = 100_000;
 /** Fetch the next window once the driver is within this far of its end (m). */
 const PREFETCH_METERS = 2000;
 
@@ -33,7 +35,7 @@ function writeLimits(arr: (number | null)[], start: number, perPoint: (number | 
  *
  * The first window is fetched when the route is set (or replaced on reroute) and
  * later windows are prefetched as the driver nears each window's end. On a route
- * longer than one window (>4500 pts), a position in a not-yet-fetched window
+ * longer than one window (>4500 pts or 100 km), a position in a not-yet-fetched window
  * (e.g. after a large forward GPS jump) reports an unknown limit until the window
  * is prefetched — an accepted trade-off for dropping the per-fix map-match poll.
  */
@@ -83,7 +85,7 @@ export function useNavTrafficSignals(): LngLat[] {
     // the spans rather than appending out of route order.
     countriesRef.current = [];
     setLiveSpeedLimits(null);
-    const w = windowGeometry(route.geometry, 0, MAX_TRACE_POINTS, cum);
+    const w = windowGeometry(route.geometry, 0, MAX_TRACE_POINTS, cum, MAX_TRACE_METERS);
     windowRef.current = { nextStart: w.nextStart, endMeters: w.endMeters, done: w.done };
     fetchingRef.current = true;
     fetchRouteMatchWindow(w.trace, mode)
@@ -127,7 +129,7 @@ export function useNavTrafficSignals(): LngLat[] {
     // Advance the window ref BEFORE the async fetch so a segment with no signals
     // still moves us forward (or to done) and can't re-trigger this effect on
     // every fix.
-    const w = windowGeometry(route.geometry, startIndex, MAX_TRACE_POINTS, cum);
+    const w = windowGeometry(route.geometry, startIndex, MAX_TRACE_POINTS, cum, MAX_TRACE_METERS);
     windowRef.current = { nextStart: w.nextStart, endMeters: w.endMeters, done: w.done };
     fetchRouteMatchWindow(w.trace, mode)
       .then(({ signals: found, speedLimitsByPoint, countriesByPoint }) => {
