@@ -38,6 +38,17 @@ import { resolveRequiresForIntegration } from "./services/service-registry.js";
 
 const integrationHealthMocks = getIntegrationHealthMocks();
 
+function writeTestIntegration(
+  root: string,
+  directoryName: string,
+  manifest: Record<string, unknown>,
+): string {
+  const directory = join(root, directoryName);
+  mkdirSync(directory, { recursive: true });
+  writeFileSync(join(directory, "manifest.json"), JSON.stringify(manifest));
+  return directory;
+}
+
 // Clear module-level state (the integration map, route list, _fastify ref) by
 // shutting down after every test so tests don't bleed into each other.
 afterEach(async () => {
@@ -96,6 +107,131 @@ describe("initIntegrations — loader", () => {
     const ids = all.map((i) => i.id);
     expect(ids).toContain("alpha");
     expect(ids).toContain("beta");
+  });
+
+  it.each(["built-in-first", "community-first"] as const)(
+    "prefers a built-in integration over a colliding community integration (%s)",
+    async (order) => {
+      const parent = mkdtempSync(join(tmpdir(), "omx-integration-id-collision-"));
+      const builtInRoot = join(parent, "built-in");
+      const communityRoot = join(parent, "community");
+      const builtInDirectory = writeTestIntegration(builtInRoot, "trusted", {
+        id: "shared-identity",
+        name: "Trusted built-in",
+        version: "1.0.0",
+        license: "MIT",
+        domains: ["knowledge"],
+        quality: "built-in",
+      });
+      writeTestIntegration(communityRoot, "untrusted", {
+        id: "shared-identity",
+        name: "Untrusted community",
+        version: "1.0.0",
+        license: "MIT",
+        domains: ["knowledge"],
+        quality: "community",
+      });
+      const builtIn = { directory: builtInRoot, isBuiltIn: true };
+      const community = { directory: communityRoot, isBuiltIn: false };
+      const app = makeApp();
+
+      try {
+        await initIntegrations(
+          app,
+          order === "built-in-first" ? [builtIn, community] : [community, builtIn],
+        );
+
+        const loaded = getIntegration("shared-identity");
+        expect(loaded).toMatchObject({ directory: builtInDirectory, isBuiltIn: true });
+        expect(loaded?.manifest.name).toBe("Trusted built-in");
+      } finally {
+        rmSync(parent, { recursive: true, force: true });
+      }
+    },
+  );
+
+  it("keeps the first integration when duplicate identities have the same trust", async () => {
+    const parent = mkdtempSync(join(tmpdir(), "omx-same-trust-duplicate-"));
+    const firstRoot = join(parent, "first");
+    const secondRoot = join(parent, "second");
+    const firstDirectory = writeTestIntegration(firstRoot, "first", {
+      id: "duplicate-community",
+      name: "First community",
+      version: "1.0.0",
+      license: "MIT",
+      domains: ["knowledge"],
+      quality: "community",
+    });
+    writeTestIntegration(secondRoot, "second", {
+      id: "duplicate-community",
+      name: "Second community",
+      version: "1.0.0",
+      license: "MIT",
+      domains: ["knowledge"],
+      quality: "community",
+    });
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const app = makeApp();
+
+    try {
+      await initIntegrations(app, [
+        { directory: firstRoot, isBuiltIn: false },
+        { directory: secondRoot, isBuiltIn: false },
+      ]);
+
+      const loaded = getIntegration("duplicate-community");
+      expect(loaded).toMatchObject({ directory: firstDirectory, isBuiltIn: false });
+      expect(loaded?.manifest.name).toBe("First community");
+      const warningText = warn.mock.calls.flat().join(" ");
+      expect(warningText).toContain('duplicate integration id "duplicate-community"');
+      expect(warningText).not.toContain(parent);
+    } finally {
+      warn.mockRestore();
+      rmSync(parent, { recursive: true, force: true });
+    }
+  });
+
+  it("retains a built-in integration when reload discovers a colliding community identity", async () => {
+    const parent = mkdtempSync(join(tmpdir(), "omx-reload-id-collision-"));
+    const builtInRoot = join(parent, "built-in");
+    const communityRoot = join(parent, "community");
+    mkdirSync(communityRoot, { recursive: true });
+    const builtInDirectory = writeTestIntegration(builtInRoot, "trusted", {
+      id: "reload-identity",
+      name: "Trusted built-in",
+      version: "1.0.0",
+      license: "MIT",
+      domains: ["knowledge"],
+      quality: "built-in",
+    });
+    const app = makeApp();
+
+    try {
+      await initIntegrations(app, [
+        { directory: builtInRoot, isBuiltIn: true },
+        { directory: communityRoot, isBuiltIn: false },
+      ]);
+      expect(getIntegration("reload-identity")).toMatchObject({
+        directory: builtInDirectory,
+        isBuiltIn: true,
+      });
+
+      writeTestIntegration(communityRoot, "untrusted", {
+        id: "reload-identity",
+        name: "Untrusted community",
+        version: "1.0.0",
+        license: "MIT",
+        domains: ["knowledge"],
+        quality: "community",
+      });
+      await reloadIntegrations();
+
+      const loaded = getIntegration("reload-identity");
+      expect(loaded).toMatchObject({ directory: builtInDirectory, isBuiltIn: true });
+      expect(loaded?.manifest.name).toBe("Trusted built-in");
+    } finally {
+      rmSync(parent, { recursive: true, force: true });
+    }
   });
 
   it("discovers, validates, stores, and reloads air-quality providers", async () => {

@@ -219,7 +219,27 @@ function topologicalSort(entries: DiscoveredEntry[]): DiscoveredEntry[] {
   const byId = new Map<string, DiscoveredEntry>();
   for (const entry of entries) {
     const id = entry.manifest.id as string;
-    if (id) byId.set(id, entry);
+    if (!id) continue;
+
+    const existing = byId.get(id);
+    if (!existing) {
+      byId.set(id, entry);
+      continue;
+    }
+
+    if (!existing.isBuiltIn && entry.isBuiltIn) {
+      byId.set(id, entry);
+      console.warn(
+        `[integration-host] Ignoring duplicate integration id "${id}": community integration was replaced by the built-in integration`,
+      );
+      continue;
+    }
+
+    const reason =
+      existing.isBuiltIn && !entry.isBuiltIn
+        ? "community integration was ignored in favor of the built-in integration"
+        : "the later integration was ignored";
+    console.warn(`[integration-host] Ignoring duplicate integration id "${id}": ${reason}`);
   }
 
   const visited = new Set<string>();
