@@ -357,7 +357,10 @@ describe("osrmService requests", () => {
           code: "Ok",
           routes: [route],
           trips: [route],
-          waypoints: [{ waypoint_index: 0 }, { waypoint_index: 1 }],
+          waypoints: [
+            { waypoint_index: 0, trips_index: 0, location: [0, 0] },
+            { waypoint_index: 1, trips_index: 0, location: [0.001, 0] },
+          ],
         });
       });
 

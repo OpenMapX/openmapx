@@ -231,6 +231,14 @@ extract, rebuild the graph, re-link, and restart. While the rebuild runs, the
 live container keeps serving the old data from memory; there's only a brief gap
 during the restart, and driving falls back to Valhalla in the meantime.
 
+### Optimizing waypoint order
+
+OpenMapX keeps the first and last waypoints fixed when optimizing an OSRM trip.
+It converts OSRM's per-input trip positions into `optimizedOrder`: original
+input indexes in visit order. The result's `waypoints` stay in request order. Invalid
+or incomplete orders, changed endpoints, and responses spanning multiple trips
+are rejected.
+
 ### Customizing the car profile
 
 OSRM's routing behavior — speed assumptions per road class, turn penalties,
