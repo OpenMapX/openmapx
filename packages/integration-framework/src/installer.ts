@@ -10,6 +10,7 @@ import { createHash, randomBytes } from "node:crypto";
 import {
   chmodSync,
   cpSync,
+  type Dirent,
   existsSync,
   linkSync,
   lstatSync,
@@ -95,6 +96,33 @@ function readManifest(directory: string): Record<string, unknown> | null {
     return JSON.parse(readFileSync(manifestPath, "utf-8")) as Record<string, unknown>;
   } catch {
     return null;
+  }
+}
+
+function builtInIntegrationIds(rootDir: string): Set<string> {
+  const ids = new Set<string>();
+  let entries: Dirent<string>[];
+  try {
+    entries = readdirSync(builtInDir(rootDir), { withFileTypes: true });
+  } catch {
+    return ids;
+  }
+
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    const manifest = readManifest(join(builtInDir(rootDir), entry.name));
+    if (typeof manifest?.id === "string" && INTEGRATION_ID_REGEX.test(manifest.id)) {
+      ids.add(manifest.id);
+    }
+  }
+  return ids;
+}
+
+function assertDoesNotShadowBuiltIn(rootDir: string, id: string): void {
+  if (builtInIntegrationIds(rootDir).has(id)) {
+    throw new Error(
+      `Built-in integration id "${id}" is reserved and cannot be installed as a community integration`,
+    );
   }
 }
 
@@ -322,13 +350,15 @@ export async function installIntegration(opts: InstallOptions): Promise<InstallR
     if (!validation.valid) {
       throw new Error(`Manifest validation failed:\n  - ${validation.errors.join("\n  - ")}`);
     }
+    const id = manifest.id;
+    assertSafeId(id);
+    assertDoesNotShadowBuiltIn(opts.rootDir, id);
     resolveLayerSelectorPreview(stage, manifest);
     assertNoExecutableCommunityCode(stage, manifest);
 
     // The schema regex already enforces the slug shape, but resolveInstallTarget
     // (via assertSafeId) gives a single point of defense if the schema ever
     // loosens AND verifies the resolved path stays under custom_integrations/.
-    const id = manifest.id;
     const target = resolveInstallTarget(opts.rootDir, id);
     const replaced = existsSync(target);
     validateDeclarativeArtifact(stage);

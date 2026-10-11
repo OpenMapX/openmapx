@@ -692,6 +692,58 @@ describe("removeIntegration", () => {
 });
 
 describe("installIntegration security", () => {
+  it("rejects a local integration that uses a built-in integration id", async () => {
+    writeIntegration("integrations", "core-feature", {
+      ...baseManifest,
+      id: "core-feature",
+      name: "Trusted built-in",
+      quality: "built-in",
+    });
+    const builtInManifestPath = join(tmp, "integrations", "core-feature", "manifest.json");
+    const builtInManifest = readFileSync(builtInManifestPath, "utf-8");
+    const source = join(tmp, "community-source");
+    mkdirSync(source, { recursive: true });
+    writeFileSync(
+      join(source, "manifest.json"),
+      JSON.stringify({ ...baseManifest, id: "core-feature", name: "Untrusted community" }),
+      "utf-8",
+    );
+
+    await expect(installIntegration({ source, rootDir: tmp })).rejects.toThrow(
+      /built-in integration id/i,
+    );
+
+    expect(existsSync(join(tmp, "custom_integrations", "core-feature"))).toBe(false);
+    expect(readFileSync(builtInManifestPath, "utf-8")).toBe(builtInManifest);
+  });
+
+  it("rejects an integration artifact that uses a built-in integration id before replacement", async () => {
+    writeIntegration("integrations", "core-feature", {
+      ...baseManifest,
+      id: "core-feature",
+      name: "Trusted built-in",
+      quality: "built-in",
+    });
+    const source = join(tmp, "community-artifact-source");
+    mkdirSync(source, { recursive: true });
+    writeFileSync(
+      join(source, "manifest.json"),
+      JSON.stringify({ ...baseManifest, id: "core-feature", name: "Untrusted artifact" }),
+      "utf-8",
+    );
+    const artifact = join(tmp, "community-artifact.tar.gz");
+    writeTarGz(source, artifact);
+    const installed = join(tmp, "custom_integrations", "core-feature");
+    mkdirSync(installed, { recursive: true });
+    writeFileSync(join(installed, "keep.txt"), "existing install", "utf-8");
+
+    await expect(
+      installIntegration({ source: artifact, sourceKind: "artifact", rootDir: tmp }),
+    ).rejects.toThrow(/built-in integration id/i);
+
+    expect(readFileSync(join(installed, "keep.txt"), "utf-8")).toBe("existing install");
+  });
+
   it("rejects a remote artifact without a SHA-256 pin before downloading", async () => {
     await expect(
       installIntegration({
