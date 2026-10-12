@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "allowances": [
+    {
+      "advisoryId": "GHSA-86w9-cpqp-85rv",
+      "packageName": "node-forge",
+      "severity": "high",
+      "workspace": "root",
+      "versions": ["1.4.0"],
+      "expiresOn": "2026-11-10",
+      "reason": "No patched node-forge release is published."
+    },
+    {
+      "advisoryId": "GHSA-vfj7-8cjw-p6xm",
+      "packageName": "braces",
+      "severity": "high",
+      "workspace": "root",
+      "versions": ["3.0.3"],
+      "expiresOn": "2026-11-10",
+      "reason": "No patched braces release is published."
+    },
+    {
+      "advisoryId": "GHSA-vfj7-8cjw-p6xm",
+      "packageName": "braces",
+      "severity": "high",
+      "workspace": "docs",
+      "versions": ["3.0.3"],
+      "expiresOn": "2026-11-10",
+      "reason": "No patched braces release is published."
+    }
+  ]
+}

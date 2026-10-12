@@ -54,6 +54,27 @@ describe("repository policy gate", () => {
     expect(preCommit).toContain("pnpm check:policy || exit 1");
   });
 
+  it("runs the live production audit in CI without adding network access to local hooks", () => {
+    const rootPackage = JSON.parse(read("package.json")) as {
+      scripts: Record<string, string>;
+    };
+    const workflow = read(".github/workflows/ci.yml");
+    const preCommit = read(".husky/pre-commit");
+
+    expect(rootPackage.scripts["check-production-audits"]).toBe(
+      "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types scripts/check-production-audits.ts",
+    );
+    expect(rootPackage.scripts["check:policy"]).not.toContain("check-production-audits");
+    expect(preCommit).not.toContain("check-production-audits");
+    expect(workflow).toMatch(
+      /- name: Audit production dependencies\n(?:\s+#.*\n)*\s+run: pnpm check-production-audits/,
+    );
+    const docsInstall = workflow.indexOf("- run: pnpm -C docs install --frozen-lockfile");
+    const auditGate = workflow.indexOf("run: pnpm check-production-audits");
+    expect(docsInstall).toBeGreaterThan(-1);
+    expect(auditGate).toBeGreaterThan(docsInstall);
+  });
+
   it("clears Git hook-local paths before tests create temporary repositories", () => {
     const prePush = read(".husky/pre-push");
     const cleanup = prePush.indexOf("unset \\");

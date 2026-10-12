@@ -67,6 +67,11 @@ jobs:
         # Live legal-URL and routing probes remain in scheduled workflows.
         run: pnpm check:policy
 
+      - name: Audit production dependencies
+        # This live registry check stays out of local hooks. Current no-fix
+        # advisories are narrowly versioned and expire for explicit review.
+        run: pnpm check-production-audits
+
       - name: Probe patched image parsers
         # Keep the child-process timeout visible as a dedicated security gate.
         run: pnpm check-image-size-dos
