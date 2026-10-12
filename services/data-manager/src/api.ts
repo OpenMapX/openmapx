@@ -13,7 +13,7 @@ import { type CoverageApiOptions, registerCoverageEvidenceRoute } from "./covera
 import type { CoverageSnapshotStore } from "./coverage/snapshot-store.js";
 import { db, sql } from "./db/index.js";
 import { registerAmbientPlacesApi } from "./jobs/ambient-places/api.js";
-import { convertPbfToBz2, convertPbfToBz2ForRegion } from "./jobs/convert-overpass.js";
+import { convertPbfToBz2ForRegion } from "./jobs/convert-overpass.js";
 import { downloadFonts } from "./jobs/download-fonts.js";
 import { downloadOsm } from "./jobs/download-osm.js";
 import { applyHardlinkPlan, type HardlinkEntry } from "./jobs/link.js";
@@ -183,6 +183,16 @@ const LINK_ENTRY_KEYS = [
   "instance",
   "targetFilename",
 ] as const;
+
+const CONVERT_OVERPASS_BODY_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    region: { type: "string" },
+  },
+} as const;
+
+const CONVERT_OVERPASS_BODY_KEYS = ["region"] as const;
 
 function hasUnexpectedKeys(value: unknown, allowed: readonly string[]): boolean {
   return (
@@ -1041,21 +1051,23 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
     },
   );
 
-  app.post<{ Body: { sourcePbf?: string; targetBz2?: string; region?: string } }>(
+  app.post<{ Body?: { region?: string } }>(
     "/convert/overpass",
+    {
+      schema: { body: CONVERT_OVERPASS_BODY_SCHEMA },
+      // Fastify removes additional properties during schema validation, so
+      // reject them while the original request body is still available.
+      preValidation: async (req, reply) => {
+        if (hasUnexpectedKeys(req.body, CONVERT_OVERPASS_BODY_KEYS)) {
+          return reply.code(400).send({ error: "unexpected property in convert request" });
+        }
+      },
+    },
     async (req, reply) => {
-      const { sourcePbf, targetBz2, region } = req.body ?? {};
+      const { region } = req.body ?? {};
 
-      // Low-level form: caller supplied explicit paths. Run the raw conversion
-      // and return a simple JSON result (no streaming — legacy behaviour).
-      if (sourcePbf && targetBz2) {
-        await convertPbfToBz2({ sourcePbf, targetBz2 });
-        return { ok: true };
-      }
-
-      // High-level form: stream NDJSON progress and pick source/target from
-      // the state store. Mirrors the /download/osm streaming protocol so the
-      // CLI can reuse the same progress renderer.
+      // Stream NDJSON progress and pick source/target from the state store.
+      // Mirrors the /download/osm protocol so the CLI can reuse its renderer.
       reply.hijack();
       reply.raw.writeHead(200, {
         "Content-Type": "application/x-ndjson",
