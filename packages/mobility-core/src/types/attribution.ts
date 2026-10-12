@@ -26,6 +26,8 @@ export interface Attribution {
 }
 
 export interface DataSourceAttribution {
+  /** Canonical identity when supplied by newer adapters; absent in legacy data. */
+  sourceId?: string;
   text: string;
   url: string;
   license?: string;

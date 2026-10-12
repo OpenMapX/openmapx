@@ -1,6 +1,7 @@
 import { cleanup, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useMapAttributionStore } from "./mapAttributionStore";
+import { useContributorResolver } from "./useContributorResolver";
 import {
   useIntegrationDomainAttribution,
   useSourceAttributions,
@@ -77,9 +78,21 @@ describe("useIntegrationDomainAttribution", () => {
     renderHook(() => useIntegrationDomainAttribution("fuel-stations", true));
 
     const { byLayer } = useMapAttributionStore.getState();
-    expect(byLayer["domain:road-conditions"]?.join(" ")).toContain("NDW");
-    expect(byLayer["domain:road-conditions"]?.join(" ")).not.toContain("OpenStreetMap");
-    expect(byLayer["domain:fuel-stations"]?.join(" ")).toContain("OpenStreetMap");
+    expect(
+      Object.entries(byLayer)
+        .find(([key]) => key.startsWith("domain:road-conditions::"))?.[1]
+        ?.join(" "),
+    ).toContain("NDW");
+    expect(
+      Object.entries(byLayer)
+        .find(([key]) => key.startsWith("domain:road-conditions::"))?.[1]
+        ?.join(" "),
+    ).not.toContain("OpenStreetMap");
+    expect(
+      Object.entries(byLayer)
+        .find(([key]) => key.startsWith("domain:fuel-stations::"))?.[1]
+        ?.join(" "),
+    ).toContain("OpenStreetMap");
   });
 });
 
@@ -94,9 +107,35 @@ describe("useSourceAttributions", () => {
     const view = renderHook(({ sourceIds }) => useSourceAttributions("air-quality", sourceIds), {
       initialProps: { sourceIds: ["firms", "noaa-hms", "firms"] },
     });
-    expect(useMapAttributionStore.getState().byLayer["sources:air-quality"]).toHaveLength(2);
+    expect(
+      Object.entries(useMapAttributionStore.getState().byLayer).find(([key]) =>
+        key.startsWith("sources:air-quality::"),
+      )?.[1],
+    ).toHaveLength(2);
 
     view.rerender({ sourceIds: [] });
-    expect(useMapAttributionStore.getState().byLayer["sources:air-quality"]).toBeUndefined();
+    expect(
+      Object.entries(useMapAttributionStore.getState().byLayer).find(([key]) =>
+        key.startsWith("sources:air-quality::"),
+      )?.[1],
+    ).toBeUndefined();
+  });
+});
+
+describe("useContributorResolver", () => {
+  afterEach(() => cleanup());
+
+  it("captures explicit sources without domain expansion and honors empty snapshots", () => {
+    const { result } = renderHook(() => useContributorResolver());
+    const captured = result.current({ sourceIds: ["firms", "missing"] });
+    expect(captured.map((receipt) => receipt.sourceId)).toEqual(["firms"]);
+    expect(result.current({ contributors: [], sourceIds: ["firms"] })).toEqual([]);
+    expect(
+      result.current({
+        contributors: [{ sourceId: "old", name: "Captured" }],
+        sourceIds: ["firms"],
+      }),
+    ).toEqual([{ sourceId: "old", name: "Captured" }]);
+    expect(result.current({})).toEqual([]);
   });
 });

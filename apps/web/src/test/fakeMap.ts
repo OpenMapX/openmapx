@@ -410,7 +410,31 @@ export function createFakeMap(options: CreateFakeMapOptions = {}): FakeMap {
       api.emit("styledata");
     },
     queryRenderedFeatures: (_point: unknown, queryOptions?: { layers?: string[] }) =>
-      queryOptions?.layers?.flatMap((layerId) => state.renderedFeatures.get(layerId) ?? []) ?? [],
+      queryOptions?.layers?.flatMap((layerId) =>
+        (state.renderedFeatures.get(layerId) ?? []).map((feature) => {
+          // Plain object hits remain untouched for older fixture consumers.
+          if (feature.type !== "Feature") return feature;
+          const layer = state.layers.get(layerId);
+          return {
+            ...feature,
+            layer: {
+              ...layer,
+              ...feature.layer,
+              paint: {
+                ...(layer?.paint as object),
+                ...state.paint.get(layerId),
+                ...feature.layer?.paint,
+              },
+              layout: {
+                ...(layer?.layout as object),
+                ...state.layout.get(layerId),
+                ...feature.layer?.layout,
+              },
+              id: layerId,
+            },
+          } as MapGeoJSONFeature;
+        }),
+      ) ?? [],
     querySourceFeatures: () => [],
     project: (lngLat: unknown) => {
       if (options.project && Array.isArray(lngLat)) {

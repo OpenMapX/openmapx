@@ -13,6 +13,10 @@
       "types": "./src/cache.ts",
       "default": "./src/cache.ts"
     },
+    "./contributors": {
+      "types": "./src/contributors.ts",
+      "default": "./src/contributors.ts"
+    },
     "./camera": {
       "types": "./src/types/camera.ts",
       "default": "./src/types/camera.ts"

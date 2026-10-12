@@ -7,7 +7,8 @@ import {
   sanitizeUrl,
 } from "@openmapx/core";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
-import { useEffect } from "react";
+import { contributorKey } from "@openmapx/mobility-core/contributors";
+import { useEffect, useId } from "react";
 import { useMapAttributionStore } from "./mapAttributionStore";
 
 /**
@@ -74,6 +75,9 @@ export function attributionToHtml(attr: Attribution): string {
 }
 
 export function useMapAttributions(layerKey: string, attributions: Attribution[]): void {
+  // Even reused readable keys cannot let one component clear another's credits.
+  const instance = useId();
+  const owner = `${layerKey}::${instance}`;
   const setLayer = useMapAttributionStore((s) => s.setLayer);
   const clearLayer = useMapAttributionStore((s) => s.clearLayer);
 
@@ -81,17 +85,12 @@ export function useMapAttributions(layerKey: string, attributions: Attribution[]
   // identical contents across renders don't re-register. Covers every field
   // `attributionToHtml` reads — including the license, which the strip now
   // renders — so a metadata change re-runs the effect.
-  const memoKey = attributions
-    .map(
-      (a) =>
-        `${a.sourceId}|${a.url ?? ""}|${a.name}|${a.spdxLicense ?? ""}|${a.licenseUrl ?? ""}|${a.attributionText ?? ""}`,
-    )
-    .join("\n");
+  const memoKey = JSON.stringify(attributions.map(contributorKey));
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: memoKey captures attributions
   useEffect(() => {
-    if (attributions.length === 0) clearLayer(layerKey);
-    else setLayer(layerKey, attributions.map(attributionToHtml));
-    return () => clearLayer(layerKey);
-  }, [layerKey, memoKey, setLayer, clearLayer]);
+    if (attributions.length === 0) clearLayer(owner);
+    else setLayer(owner, attributions.map(attributionToHtml));
+    return () => clearLayer(owner);
+  }, [owner, memoKey, setLayer, clearLayer]);
 }

@@ -40,7 +40,13 @@ function html() {
 beforeEach(() => {
   vi.useFakeTimers();
   fake = createFakeMap();
-  fake.map.addLayer({ id: LAYERS[0]!, type: "symbol", source: "incidents", minzoom: 7 });
+  fake.map.addLayer({
+    id: LAYERS[0]!,
+    type: "symbol",
+    source: "incidents",
+    minzoom: 7,
+    layout: { "icon-image": "pin" },
+  });
   fake.map.addLayer({ id: LAYERS[1]!, type: "line", source: "incidents", minzoom: 7 });
   useMapAttributionStore.setState({ byLayer: {} });
 });
@@ -64,7 +70,7 @@ describe("rendered map attribution lifecycle", () => {
     expect(html()).toContain("marker");
     expect(html()).toContain("line-a");
     expect(html()).toContain("line-b");
-    expect(useMapAttributionStore.getState().byLayer["rendered:area"]).toHaveLength(3);
+    expect(Object.values(useMapAttributionStore.getState().byLayer).flat()).toHaveLength(3);
   });
 
   it("updates during continuous navigation movement without requiring idle", () => {
@@ -166,7 +172,12 @@ describe("rendered map attribution lifecycle", () => {
     act(() => fake.map.setStyle({ version: 8, sources: {}, layers: [] }));
     flush();
     expect(html()).toBe("");
-    fake.map.addLayer({ id: LAYERS[0]!, type: "symbol", source: "incidents" });
+    fake.map.addLayer({
+      id: LAYERS[0]!,
+      type: "symbol",
+      source: "incidents",
+      layout: { "icon-image": "pin" },
+    });
     act(() => fake.emit("sourcedata", { sourceId: "incidents" }));
     flush();
     expect(html()).toContain("replayed");
@@ -209,5 +220,302 @@ describe("rendered map attribution lifecycle", () => {
     expect(html()).toContain("valid");
     expect(html()).not.toContain("<script");
     expect(html()).not.toContain("javascript:");
+  });
+});
+
+describe("evaluated channels and captured receipts", () => {
+  it.each<[string, Record<string, unknown>, Record<string, unknown>, boolean]>([
+    ["line", { "line-color": { r: 0, g: 0, b: 0, a: 0 } }, {}, false],
+    ["line", { "line-color": { r: 0, g: 0, b: 0, a: 0.4 } }, {}, true],
+    ["line", { "line-layer-opacity": 0 }, {}, false],
+    ["circle", { "circle-color": { a: 0 }, "circle-stroke-width": 0 }, {}, false],
+    [
+      "circle",
+      { "circle-opacity": 0, "circle-stroke-width": 2, "circle-stroke-color": { a: 0 } },
+      {},
+      false,
+    ],
+    [
+      "circle",
+      { "circle-color": { a: 0 }, "circle-stroke-width": 2, "circle-stroke-color": { a: 1 } },
+      {},
+      true,
+    ],
+    ["fill", { "fill-color": { a: 0 }, "fill-outline-color": { a: 0 } }, {}, false],
+    ["fill", { "fill-color": { a: 0 }, "fill-outline-color": { a: 1 } }, {}, true],
+    [
+      "fill",
+      { "fill-color": { a: 0 }, "fill-outline-color": { a: 1 }, "fill-antialias": false },
+      {},
+      false,
+    ],
+    ["fill", { "fill-color": { a: 1 }, "fill-layer-opacity": 0 }, {}, false],
+    [
+      "fill-extrusion",
+      { "fill-extrusion-color": { a: 0 }, "fill-extrusion-height": 0, "fill-extrusion-base": 0 },
+      {},
+      true,
+    ],
+    ["line", { "line-width": 0 }, {}, false],
+    ["line", { "line-opacity": 0 }, {}, false],
+    [
+      "circle",
+      { "circle-opacity": 0, "circle-stroke-width": 2, "circle-stroke-opacity": 1 },
+      {},
+      true,
+    ],
+    ["circle", { "circle-opacity": 0, "circle-stroke-width": 0 }, {}, false],
+    ["circle", { "circle-radius": 0, "circle-stroke-width": 0 }, {}, false],
+    [
+      "symbol",
+      { "icon-opacity": 0, "text-opacity": 1, "text-color": { a: 0 } },
+      { "text-field": "label" },
+      false,
+    ],
+    [
+      "symbol",
+      {
+        "text-opacity": 1,
+        "text-color": { a: 0 },
+        "text-halo-width": 2,
+        "text-halo-color": { a: 0 },
+      },
+      { "text-field": "label" },
+      false,
+    ],
+    [
+      "symbol",
+      {
+        "text-opacity": 1,
+        "text-color": { a: 0 },
+        "text-halo-width": 0,
+        "text-halo-color": { a: 1 },
+      },
+      { "text-field": "label" },
+      false,
+    ],
+    [
+      "symbol",
+      { "text-opacity": 1, "text-color": { a: 0 }, "text-halo-width": 2 },
+      { "text-field": "label" },
+      false,
+    ],
+    [
+      "symbol",
+      {
+        "text-opacity": 1,
+        "text-color": { a: 0 },
+        "text-halo-width": 2,
+        "text-halo-color": { a: 1 },
+      },
+      { "text-field": "label" },
+      true,
+    ],
+    [
+      "symbol",
+      { "text-opacity": 1, "text-color": { a: 0 } },
+      { "text-field": { sections: [{ text: "glyph", textColor: { a: 0 } }] } },
+      false,
+    ],
+    [
+      "symbol",
+      { "text-opacity": 1, "text-color": { a: 0 } },
+      { "text-field": { sections: [{ text: "glyph", textColor: { a: 1 } }] } },
+      true,
+    ],
+    [
+      "symbol",
+      { "text-opacity": 1, "text-color": { a: 0 } },
+      { "text-field": { sections: [{ text: "", image: { name: "badge", available: true } }] } },
+      true,
+    ],
+    [
+      "symbol",
+      { "text-opacity": 1, "text-color": { a: 0 } },
+      { "icon-image": "photo", "text-field": "label" },
+      true,
+    ],
+    ["symbol", { "icon-opacity": 0, "text-opacity": 1 }, { "text-field": "label" }, true],
+    ["symbol", { "icon-opacity": 1, "text-opacity": 0 }, { "text-field": "label" }, false],
+    ["symbol", { "icon-opacity": 1 }, { "icon-image": "pin", "icon-size": 0 }, false],
+    ["symbol", { "text-opacity": 1 }, { "text-field": "label", "text-size": 0 }, false],
+    [
+      "symbol",
+      { "icon-opacity": 0, "text-opacity": 1 },
+      { "icon-image": "pin", "text-field": { sections: [] } },
+      false,
+    ],
+    [
+      "symbol",
+      { "icon-opacity": 0, "text-opacity": 1 },
+      { "text-field": { sections: [{ text: "label" }] } },
+      true,
+    ],
+    [
+      "symbol",
+      { "icon-opacity": 1, "text-opacity": 0 },
+      { "icon-image": { name: "pin", available: false } },
+      false,
+    ],
+    [
+      "symbol",
+      { "icon-opacity": 0, "text-opacity": 0 },
+      { "icon-image": "pin", "text-field": "label" },
+      false,
+    ],
+    ["heatmap", { "heatmap-weight": 0 }, {}, false],
+    ["heatmap", { "heatmap-weight": 1, "heatmap-intensity": 0 }, {}, false],
+    ["heatmap", { "heatmap-weight": 1, "heatmap-radius": 10 }, {}, true],
+    ["fill", { "fill-opacity": 0 }, {}, false],
+    ["fill", { "fill-opacity": 1 }, {}, true],
+    ["fill-extrusion", { "fill-extrusion-opacity": 0 }, {}, false],
+  ])("checks %s paint %j with layout %j (visible=%s)", (type, paint, layout, visible) => {
+    fake.map.addLayer({ id: "channel", type, source: "data", paint, layout } as never);
+    const rendered = feature(["channel-credit"]);
+    if (type === "fill" || type === "fill-extrusion")
+      rendered.geometry = {
+        type: "Polygon",
+        coordinates: [
+          [
+            [5, 52],
+            [6, 52],
+            [6, 53],
+            [5, 52],
+          ],
+        ],
+      };
+    fake.setRenderedFeatures("channel", [rendered]);
+    renderHook(() => useRenderedMapAttributions("channel", ["channel"], true));
+    flush();
+    expect(html().includes("channel-credit")).toBe(visible);
+  });
+
+  it("uses exact layer fallback only for missing metadata and respects an explicit empty receipt", () => {
+    fake.map.addLayer({ id: "uniform", type: "circle", source: "data" });
+    const noMetadata = feature([]);
+    delete noMetadata.properties._mapAttributions;
+    fake.setRenderedFeatures("uniform", [noMetadata]);
+    renderHook(() =>
+      useRenderedMapAttributions("uniform", ["uniform"], true, {
+        layerContributors: { uniform: [credit("uniform-source")] },
+      }),
+    );
+    flush();
+    expect(html()).toContain("uniform-source");
+    fake.setRenderedFeatures("uniform", [feature([])]);
+    flush();
+    expect(html()).toBe("");
+  });
+
+  it("projects only the selected field snapshot before serialized and uniform receipts", () => {
+    fake.setRenderedFeatures(LAYERS[1]!, [feature(["all-fields"])]);
+    const options = {
+      layerContributors: { [LAYERS[1]!]: [credit("uniform")] },
+      resolveFeatureContributors: () => [credit("geometry-only")],
+    };
+    const hook = renderHook(
+      ({ resolve }) =>
+        useRenderedMapAttributions("projection", LAYERS, true, {
+          ...options,
+          resolveFeatureContributors: resolve,
+        }),
+      {
+        initialProps: {
+          resolve: options.resolveFeatureContributors as () =>
+            | ReturnType<typeof credit>[]
+            | undefined,
+        },
+      },
+    );
+    flush();
+    expect(html()).toContain("geometry-only");
+    expect(html()).not.toContain("all-fields");
+    hook.rerender({ resolve: () => [] });
+    flush();
+    expect(html()).toBe("");
+    hook.rerender({ resolve: () => undefined });
+    flush();
+    expect(html()).toContain("all-fields");
+    expect(html()).not.toContain("uniform");
+  });
+
+  it("preserves overzoom beyond source max while enforcing the layer max", () => {
+    fake.map.addSource("data", {
+      type: "geojson",
+      data: { type: "FeatureCollection", features: [] },
+      maxzoom: 8,
+    });
+    fake.map.addLayer({ id: "overzoom", type: "circle", source: "data", maxzoom: 15 });
+    fake.setRenderedFeatures("overzoom", [feature(["overzoom"])]);
+    renderHook(() => useRenderedMapAttributions("overzoom", ["overzoom"], true));
+    flush();
+    expect(html()).toContain("overzoom");
+    fake.state.zoom = 15;
+    flush();
+    expect(html()).toBe("");
+  });
+
+  it("routes each layer hit only to subscribed owners and updates options without new listeners", () => {
+    fake.map.addLayer({ id: "other", type: "circle", source: "data" });
+    fake.setRenderedFeatures("other", [feature(["other-credit"])]);
+    fake.setRenderedFeatures(LAYERS[1]!, [feature(["incident-credit"])]);
+    const first = renderHook(({ active }) => useRenderedMapAttributions("first", LAYERS, active), {
+      initialProps: { active: true },
+    });
+    renderHook(() => useRenderedMapAttributions("second", ["other"], true));
+    flush();
+    const byLayer = useMapAttributionStore.getState().byLayer;
+    expect(
+      Object.entries(byLayer)
+        .find(([key]) => key.startsWith("rendered:first::"))?.[1]
+        .join(" ") ?? "",
+    ).not.toContain("other-credit");
+    first.rerender({ active: false });
+    expect(html()).not.toContain("incident-credit");
+    expect(html()).toContain("other-credit");
+    expect(
+      fake.state.listenerCalls.filter((entry) => entry.method === "on" && entry.event === "render"),
+    ).toHaveLength(1);
+  });
+});
+
+describe("map instance replacement", () => {
+  it("moves the owner to the new map and removes the old map's scheduler", () => {
+    fake.setRenderedFeatures(LAYERS[1]!, [feature(["old-map"])]);
+    const hook = renderHook(() => useRenderedMapAttributions("replacement", LAYERS, true));
+    flush();
+    expect(html()).toContain("old-map");
+    const old = fake;
+    fake = createFakeMap();
+    fake.map.addLayer({ id: LAYERS[1]!, type: "line", source: "incidents" });
+    fake.setRenderedFeatures(LAYERS[1]!, [feature(["new-map"])]);
+    hook.rerender();
+    flush();
+    expect(html()).toContain("new-map");
+    expect(html()).not.toContain("old-map");
+    expect(old.state.handlers.get("render")?.size ?? 0).toBe(0);
+  });
+});
+
+describe("evaluated heatmap ramp", () => {
+  it("does not credit a kernel whose entire evaluated color ramp is transparent", () => {
+    fake.map.addLayer({
+      id: "density",
+      type: "heatmap",
+      source: "data",
+      paint: { "heatmap-weight": 1, "heatmap-radius": 25 },
+    });
+    fake.state.layers.get("density")!.colorRamp = {
+      data: new Uint8Array([255, 0, 0, 0, 0, 255, 0, 0]),
+    };
+    fake.setRenderedFeatures("density", [feature(["density-source"])]);
+    renderHook(() => useRenderedMapAttributions("density", ["density"], true));
+    flush();
+    expect(html()).toBe("");
+    fake.state.layers.get("density")!.colorRamp = {
+      data: new Uint8Array([255, 0, 0, 0, 0, 255, 0, 255]),
+    };
+    flush();
+    expect(html()).toContain("density-source");
   });
 });

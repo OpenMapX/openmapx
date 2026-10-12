@@ -165,7 +165,15 @@ describe("RoadConditionsLayer rendered attribution", () => {
 
     const visible = sourceFeatures("Point").find((f) => f.properties?._id === "visible")!;
     fake.setRenderedFeatures(MARKER_LAYER, [
-      { ...visible, layer: { id: MARKER_LAYER, type: "symbol" }, source: SOURCE } as never,
+      {
+        ...visible,
+        layer: {
+          id: MARKER_LAYER,
+          type: "symbol",
+          layout: { "icon-image": visible.properties?._icon, "icon-size": 0.55 },
+        },
+        source: SOURCE,
+      } as never,
     ]);
     act(() => {
       fake.emit("sourcedata", { sourceId: SOURCE });
