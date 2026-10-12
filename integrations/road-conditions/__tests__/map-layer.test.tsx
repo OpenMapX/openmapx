@@ -1,4 +1,7 @@
+import { IntegrationRegistry } from "@openmapx/integration-framework";
+import { IntegrationRegistryContext } from "@openmapx/integration-framework/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { useMapAttributionStore } from "@/integration-api/overlay/mapAttributionStore";
 import { act, createFakeMap, type FakeMap, render, waitFor } from "@/test";
 import { useRoadConditionsStore } from "../store";
 
@@ -8,9 +11,14 @@ let fake: FakeMap;
 let mockStyleVersion = 0;
 const popupHtml = vi.hoisted(() => vi.fn());
 const popupRemove = vi.hoisted(() => vi.fn());
+const MAP_REF = {
+  get current() {
+    return fake.map;
+  },
+};
 
 vi.mock("@/integration-api/map/MapContext", () => ({
-  useMap: () => ({ mapRef: { current: fake.map }, mapReady: true, styleVersion: mockStyleVersion }),
+  useMap: () => ({ mapRef: MAP_REF, mapReady: true, styleVersion: mockStyleVersion }),
 }));
 
 vi.mock("@/integration-api/runtime/EnvProvider", () => ({
@@ -61,6 +69,22 @@ import { effect, situation, text } from "./fixtures";
 const SOURCE = "omx-road-conditions";
 const MARKER_LAYER = "omx-road-conditions-markers";
 const LINE_LAYER = "omx-road-conditions-line";
+
+const creditRegistry = new IntegrationRegistry([
+  {
+    id: "openconditions",
+    enabled: true,
+    domains: ["road-conditions"],
+    dataSources: ["working", "offscreen", "missing-key"].map((sourceId) => ({
+      sourceId,
+      name: sourceId,
+      url: `https://${sourceId}.example`,
+      license: "CC0-1.0",
+      providerCountry: "DE",
+      providerPrivacyUrl: "https://example.com/privacy",
+    })),
+  },
+]);
 
 const fetchMock = vi.fn();
 
@@ -116,6 +140,70 @@ beforeEach(() => {
   vi.stubGlobal("fetch", fetchMock);
   useRoadConditionsStore.setState({ panelOpen: true, layerVisible: true });
   useRoadConditionsStore.getState().resetFilters();
+  useMapAttributionStore.setState({ byLayer: {} });
+});
+
+describe("RoadConditionsLayer rendered attribution", () => {
+  it("credits no configured feed until its incident is rendered, and drops offscreen credits", async () => {
+    respondWith(
+      eventsToFeatureCollection([
+        situation({ id: "visible", source: "working" }),
+        situation({
+          id: "outside",
+          source: "offscreen",
+          geometry: { type: "Point", coordinates: [6, 53] },
+        }),
+      ]).features,
+    );
+    const view = render(
+      <IntegrationRegistryContext.Provider value={creditRegistry}>
+        <RoadConditionsLayer />
+      </IntegrationRegistryContext.Provider>,
+    );
+    await waitFor(() => expect(sourceFeatures("Point")).toHaveLength(2));
+    expect(Object.values(useMapAttributionStore.getState().byLayer).flat().join(" ")).toBe("");
+
+    const visible = sourceFeatures("Point").find((f) => f.properties?._id === "visible")!;
+    fake.setRenderedFeatures(MARKER_LAYER, [
+      { ...visible, layer: { id: MARKER_LAYER, type: "symbol" }, source: SOURCE } as never,
+    ]);
+    act(() => {
+      fake.emit("sourcedata", { sourceId: SOURCE });
+      fake.emit("render");
+      fake.emit("idle");
+    });
+    await waitFor(() => {
+      const html = Object.values(useMapAttributionStore.getState().byLayer).flat().join(" ");
+      expect(html).toContain("working");
+      expect(html).not.toContain("offscreen");
+      expect(html).not.toContain("missing-key");
+    });
+
+    fetchMock.mockRejectedValueOnce(new Error("feed temporarily unavailable"));
+    act(() => useRoadConditionsStore.setState({ horizon: "week" }));
+    await waitFor(() =>
+      expect(useRoadConditionsStore.getState().viewportFetchStatus).toBe("stale"),
+    );
+    act(() => {
+      fake.emit("sourcedata", { sourceId: SOURCE });
+      fake.emit("render");
+    });
+    await waitFor(() =>
+      expect(Object.values(useMapAttributionStore.getState().byLayer).flat().join(" ")).toContain(
+        "working",
+      ),
+    );
+
+    fake.setRenderedFeatures(MARKER_LAYER, []);
+    act(() => {
+      fake.emit("move");
+      fake.emit("render");
+    });
+    await waitFor(() =>
+      expect(Object.values(useMapAttributionStore.getState().byLayer).flat()).toEqual([]),
+    );
+    view.unmount();
+  });
 });
 
 describe("RoadConditionsLayer marker images", () => {

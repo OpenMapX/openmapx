@@ -164,6 +164,19 @@ describe("road-conditions provider and the live source list", () => {
     expect((await p.getRoutingEvents!(BBOX)).events.map((e) => e.id)).toEqual(ids);
   });
 
+  it("carries a catalogue child's parent credit id and required notice into the event", async () => {
+    const live = listed("nl-parent");
+    live.updateDescribed([
+      { id: "nl-parent", format: "datex2", notice: "Required publisher notice" },
+    ]);
+    const [event] = await provider({ serve: api([child]), sources: live }).getEvents(BBOX);
+    expect(event!.source).toBe("nl-child");
+    expect(event!.attribution).toMatchObject({
+      sourceId: "nl-parent",
+      notice: "Required publisher notice",
+    });
+  });
+
   it("credits a listed feed's LicenseRef- licence by the name the list gives it", async () => {
     const LICENSE = "LicenseRef-NDW-Terms";
     const named = situation("n", {

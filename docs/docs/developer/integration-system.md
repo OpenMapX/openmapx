@@ -674,13 +674,21 @@ along the bottom of the map for as long as the layer is drawn. Legends never
 carry credits — they explain colors and symbols only, and can be collapsed away.
 
 Credit an overlay's own `dataSources` with `useIntegrationAttribution(id,
-visible)`. When the overlay paints data published by _sibling_ integrations
-(a domain orchestrator such as live transit or road conditions), its own
-`dataSources` list is empty, so credit the whole domain instead with
-`useIntegrationDomainAttribution(domain, visible)` — crediting an empty list
-registers nothing. Credits that arrive with a response rather than a manifest
-(`MobilityResult.attributions`) go through `useMapAttributions(key, attributions)`.
-Either way the wording comes from the manifest, never from hand-rolled strings.
+visible)`. For sibling integrations, prefer the sources that actually supplied
+the displayed results. Road-condition markers and lines carry their exact
+canonical credits as a JSON string in `_mapAttributions`; the
+`useRenderedMapAttributions(key, layerIds, visible)` hook queries rendered
+features after viewport, source, filter and zoom changes. Each area or route
+layer group uses a separate key. Shared lines retain every contributing
+publisher, catalogue children name their parent credit source, and cached
+features keep their credit snapshot until they disappear from the map.
+
+`useIntegrationDomainAttribution(domain, visible)` remains available for domain
+overlays without contributor metadata; it credits all registered sources in
+that domain, rather than proving that each source supplied visible data.
+Credits that arrive with a response (`MobilityResult.attributions`) go through
+`useMapAttributions(key, attributions)`. Wording comes from source metadata or
+the served record's provenance, never from hand-rolled publisher strings.
 
 ### Community presentation boundary
 

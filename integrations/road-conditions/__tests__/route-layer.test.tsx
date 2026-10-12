@@ -1,6 +1,7 @@
 import { fetchRoadConditions } from "@openmapx/core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { INTERACTIVE_LAYER_IDS } from "@/integration-api/map/interactiveLayers";
+import { useMapAttributionStore } from "@/integration-api/overlay/mapAttributionStore";
 import { act, createFakeMap, type FakeMap, render, waitFor } from "@/test";
 import { useRoadConditionsStore } from "../store";
 import { effect, situation, text } from "./fixtures";
@@ -140,11 +141,49 @@ beforeEach(() => {
   fetchMock.mockResolvedValue(events);
   useRoadConditionsStore.setState({ routeFetchStatus: "idle" });
   popupState.html = "";
+  useMapAttributionStore.setState({ byLayer: {} });
   INTERACTIVE_LAYER_IDS.delete("omx-road-conditions-route-markers");
   INTERACTIVE_LAYER_IDS.delete("omx-road-conditions-route-line");
 });
 
 describe("RouteConditionsLayer", () => {
+  it("credits a visible route line when its marker is offscreen, only in the route zoom band", async () => {
+    fetchMock.mockResolvedValue([
+      {
+        ...events[0]!,
+        attribution: { provider: "Route publisher", license: "CC0-1.0" },
+      },
+    ]);
+    const view = render(<RouteConditionsLayer />);
+    await waitFor(() => expect(sourceFeatures("LineString")).toHaveLength(1));
+    const line = sourceFeatures("LineString")[0]!;
+    fake.setRenderedFeatures("omx-road-conditions-route-line", [
+      {
+        ...line,
+        layer: { id: "omx-road-conditions-route-line", type: "line" },
+        source: SOURCE,
+      } as never,
+    ]);
+    act(() => {
+      fake.emit("sourcedata", { sourceId: SOURCE });
+      fake.emit("render");
+      fake.emit("idle");
+    });
+    await waitFor(() =>
+      expect(Object.values(useMapAttributionStore.getState().byLayer).flat().join(" ")).toContain(
+        "Route publisher",
+      ),
+    );
+    fake.state.zoom = 7;
+    act(() => {
+      fake.emit("move");
+      fake.emit("render");
+    });
+    await waitFor(() =>
+      expect(Object.values(useMapAttributionStore.getState().byLayer).flat()).toEqual([]),
+    );
+    view.unmount();
+  });
   it("replays route data received before the map sources become ready", async () => {
     fake = createFakeMap({ styleLoaded: false, zoom: 5 });
 

@@ -15,6 +15,10 @@ export interface RoadConditionAttribution {
   provider: string;
   license?: string;
   url?: string;
+  /** Credit identity when the record's source is a catalogue child of this feed. */
+  sourceId?: string;
+  /** Additional publisher notice required whenever this incident is displayed. */
+  notice?: string;
 }
 
 export interface RoadConditionRoadRef {

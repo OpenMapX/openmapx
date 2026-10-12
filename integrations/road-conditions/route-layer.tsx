@@ -6,6 +6,7 @@ import {
   type RoadConditionEvent,
   useNavigationStore,
 } from "@openmapx/core";
+import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import type { MapGeoJSONFeature } from "maplibre-gl";
 import * as maplibregl from "maplibre-gl";
 import { useLocale, useTranslations } from "next-intl";
@@ -22,7 +23,9 @@ import { useDrawnDirectionsRoutes } from "@/integration-api/map/useDrawnDirectio
 import { useGeoJsonSourceDataBridge } from "@/integration-api/map/useGeoJsonSourceDataBridge";
 import { useOverlayMinZoom } from "@/integration-api/overlay/overlayZoomGate";
 import { useOverlayLayerVisible } from "@/integration-api/overlay/useOverlayStoreState";
+import { useRenderedMapAttributions } from "@/integration-api/overlay/useRenderedMapAttributions";
 import { useDateTimeFormat } from "@/integration-api/runtime/useDateTimeFormat";
+import { roadConditionAttributions } from "./attributions";
 import { buildRoadConditionDisplayGroups, buildRoadConditionFeatures } from "./display";
 import { buildRoadConditionPopupHtml, type RoadConditionPopupInput } from "./popup";
 import { SEVERITY_LINE_COLOR } from "./severity";
@@ -37,6 +40,7 @@ const OVERLAY_ID = "road-conditions";
 const SOURCE = "omx-road-conditions-route";
 const MARKER_LAYER = "omx-road-conditions-route-markers";
 const LINE_LAYER = "omx-road-conditions-route-line";
+const CREDIT_LAYERS = [MARKER_LAYER, LINE_LAYER];
 
 // Same coarse cadence the nav incident fetch uses (useNavIncidents.ts).
 const REFRESH_MS = 120_000;
@@ -79,6 +83,8 @@ export function RouteConditionsLayer() {
   const { mapRef, mapReady, styleVersion } = useMap();
   const minZoom = useOverlayMinZoom(OVERLAY_ID);
   const layerVisible = useOverlayLayerVisible(OVERLAY_ID);
+  const registry = useIntegrationRegistry();
+  useRenderedMapAttributions("road-conditions-route", CREDIT_LAYERS, layerVisible);
   const drawn = useDrawnDirectionsRoutes();
   const navRoute = useNavigationStore((s) => s.route);
   const navigating = useNavigationStore((s) => s.status) !== "idle";
@@ -338,10 +344,12 @@ export function RouteConditionsLayer() {
     if (!layerVisible) return;
     const data: GeoJsonSourceData = {
       type: "FeatureCollection",
-      features: buildRoadConditionFeatures(displayGroups, locale),
+      features: buildRoadConditionFeatures(displayGroups, locale, Date.now(), (events) =>
+        roadConditionAttributions(events, registry),
+      ),
     };
     publishGeoJson([{ sourceId: SOURCE, data }]);
-  }, [displayGroups, layerVisible, locale, publishGeoJson, styleVersion]);
+  }, [displayGroups, layerVisible, locale, publishGeoJson, styleVersion, registry]);
 
   // Route markers and route lines resolve through the same grouped popup as
   // the area overlay. This keeps a line click and a marker click equivalent,

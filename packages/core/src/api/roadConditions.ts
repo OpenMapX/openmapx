@@ -169,6 +169,8 @@ export function roadConditionFeatureToEvent(
       provider: str(attribution?.provider) ?? str(p.source) ?? "",
       ...(str(attribution?.license) ? { license: str(attribution?.license) } : {}),
       ...(str(attribution?.url) ? { url: str(attribution?.url) } : {}),
+      ...(str(attribution?.sourceId) ? { sourceId: str(attribution?.sourceId) } : {}),
+      ...(str(attribution?.notice) ? { notice: str(attribution?.notice) } : {}),
     },
     ...(str(p.updatedAt) ? { updatedAt: str(p.updatedAt) } : {}),
     fetchedAt: str(p.fetchedAt) ?? "",

@@ -72,7 +72,9 @@ function validityOf(raw: Rec): RoadConditionValidity {
 export function situationToRoadConditionEvent(
   record: Rec,
   provider = "",
-  sources: Pick<CreditSources, "licenseName"> = NO_SOURCES,
+  sources: Pick<CreditSources, "licenseName"> & {
+    noticeOf?: (sourceId: string) => string | undefined;
+  } = NO_SOURCES,
 ): RoadConditionEvent | null {
   const location = obj(record["location"]) ?? {};
   const geometry = obj(location["geometry"]);
@@ -83,6 +85,8 @@ export function situationToRoadConditionEvent(
   const severity = obj(record["severity"]) ?? {};
   const evidence = obj(record["evidence"]);
   const license = str(attribution["license"]);
+  const parentSourceId = str(attribution["parentSourceId"]);
+  const notice = sources.noticeOf?.(parentSourceId ?? String(provenance["sourceId"]));
   const direction = obj(location["direction"]);
   const roads = roadsOf(location);
   return {
@@ -133,6 +137,8 @@ export function situationToRoadConditionEvent(
       provider: str(attribution["provider"]) ?? String(provenance["sourceId"]),
       ...(license ? { license: licenseText(license, sources) } : {}),
       ...strField("url", str(attribution["licenseUrl"]) ?? attribution["url"]),
+      ...(parentSourceId ? { sourceId: parentSourceId } : {}),
+      ...(notice ? { notice } : {}),
     },
     ...strField("updatedAt", provenance["sourceUpdatedAt"]),
     fetchedAt: String(freshness["fetchedAt"]),

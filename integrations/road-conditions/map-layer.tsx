@@ -5,6 +5,8 @@ import {
   roadConditionFeatureToEvent,
   useOverlayExclusion,
 } from "@openmapx/core";
+import type { IntegrationRegistry } from "@openmapx/integration-framework";
+import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import type { GeoJSONSource, MapGeoJSONFeature } from "maplibre-gl";
 import * as maplibregl from "maplibre-gl";
 import { useLocale, useTranslations } from "next-intl";
@@ -18,10 +20,11 @@ import {
 } from "@/integration-api/map/mapInteractionArbiter";
 import { useGeoJsonSourceDataBridge } from "@/integration-api/map/useGeoJsonSourceDataBridge";
 import { useOverlayMinZoom } from "@/integration-api/overlay/overlayZoomGate";
-import { useIntegrationDomainAttribution } from "@/integration-api/overlay/useIntegrationAttribution";
 import { useOverlayLayerVisible } from "@/integration-api/overlay/useOverlayStoreState";
+import { useRenderedMapAttributions } from "@/integration-api/overlay/useRenderedMapAttributions";
 import { useEnv } from "@/integration-api/runtime/EnvProvider";
 import { useDateTimeFormat } from "@/integration-api/runtime/useDateTimeFormat";
+import { roadConditionAttributions } from "./attributions";
 import { buildRoadConditionDisplayGroups, buildRoadConditionFeatures } from "./display";
 import { markerImageData, parseMarkerImageId } from "./markers";
 import { buildRoadConditionPopupHtml } from "./popup";
@@ -46,15 +49,10 @@ export { buildRoadConditionPopupGroups } from "./popup";
 type GeoJsonData = Parameters<GeoJSONSource["setData"]>[0];
 
 const OVERLAY_ID = "road-conditions";
-/**
- * The manifest domain the feeds are published under, which happens to spell the
- * same as this overlay's id — they are separate identifiers, so don't collapse
- * them: renaming the overlay would otherwise silently drop the credits.
- */
-const CREDIT_DOMAIN = "road-conditions";
 const SOURCE = "omx-road-conditions";
 const LINE_LAYER = "omx-road-conditions-line";
 const MARKER_LAYER = "omx-road-conditions-markers";
+const CREDIT_LAYERS = [LINE_LAYER, MARKER_LAYER];
 
 /**
  * The server's own `/events` cache TTL (`index.ts` caches the aggregation for
@@ -110,6 +108,7 @@ export function buildSources(
   features: RawFeature[],
   locale = "en",
   atMs: number = Date.now(),
+  registry?: IntegrationRegistry,
 ): RoadConditionDisplaySources {
   const events = features
     .map(roadConditionFeatureToEvent)
@@ -121,7 +120,9 @@ export function buildSources(
   return {
     data: {
       type: "FeatureCollection",
-      features: buildRoadConditionFeatures(groups, locale, atMs),
+      features: buildRoadConditionFeatures(groups, locale, atMs, (events) =>
+        roadConditionAttributions(events, registry),
+      ),
     } as GeoJsonData,
     eventsByDisplayId,
   };
@@ -130,17 +131,15 @@ export function buildSources(
 export function RoadConditionsLayer() {
   const { mapRef, mapReady, styleVersion } = useMap();
   const { apiUrl } = useEnv();
+  const registry = useIntegrationRegistry();
+  const registryRef = useRef(registry);
+  registryRef.current = registry;
   // Declared in this integration's manifest, the same gate the layer selector
   // applies: below it we skip fetching and keep the layers hidden, so a
   // country-sized viewport can't pull thousands of incidents.
   const minZoom = useOverlayMinZoom(OVERLAY_ID);
   const layerVisible = useOverlayLayerVisible(OVERLAY_ID);
-  // This overlay's manifest declares no dataSources of its own — the feeds it
-  // paints (NDW, Autobahn GmbH, Digitraffic, DriveBC, WZDx) are published by
-  // the `openconditions` integration's provider registered under the shared
-  // domain. Credit the domain, the same way overlay-traffic-flow does;
-  // crediting this integration's own manifest registered nothing at all.
-  useIntegrationDomainAttribution(CREDIT_DOMAIN, layerVisible);
+  useRenderedMapAttributions("road-conditions-area", CREDIT_LAYERS, layerVisible);
   useOverlayExclusion(OVERLAY_ID, layerVisible);
   const popupRef = useRef<maplibregl.Popup | null>(null);
   const popupSelectionRef = useRef<{
@@ -248,6 +247,8 @@ export function RoadConditionsLayer() {
       const { data, eventsByDisplayId } = buildSources(
         Array.isArray(fc.features) ? fc.features : [],
         localeRef.current,
+        Date.now(),
+        registryRef.current,
       );
       eventsByDisplayIdRef.current = eventsByDisplayId;
       viewNeedsRefreshRef.current = false;

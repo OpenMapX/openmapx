@@ -29,6 +29,7 @@ const ATTRIBUTION_WIRES = [
   "useIntegrationDomainAttribution",
   "useSourceAttributions",
   "useMapAttributions",
+  "useRenderedMapAttributions",
   "useAttributionFromHooks",
   "AttributionStrip",
   "SectionAttribution",
