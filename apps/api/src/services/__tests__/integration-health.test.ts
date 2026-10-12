@@ -512,33 +512,37 @@ describe("integration-health secret redaction", () => {
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
-  it("redacts URL-encoded secrets from transport errors", async () => {
-    const secret = "fixture'secret";
-    const integration = makeIntegration(
-      {
-        type: "http",
-        // biome-ignore lint/suspicious/noTemplateCurlyInString: intentional string (manifest template syntax, not JS interpolation)
-        urlTemplate: "https://api.example.com/status?appid=${apiKey}",
-      },
-      {
-        properties: {
-          apiKey: { type: "string", "x-openmapx-secret": true },
+  it.each(["fixture'secret value", "fixture[secret value"])(
+    "redacts the WHATWG URL representation of secret %s from transport errors",
+    async (secret) => {
+      const integration = makeIntegration(
+        {
+          type: "http",
+          // biome-ignore lint/suspicious/noTemplateCurlyInString: intentional string (manifest template syntax, not JS interpolation)
+          urlTemplate: "https://api.example.com/status?appid=${apiKey}",
         },
-      },
-    );
-    integration.config = { apiKey: secret };
-    const serializedUrl = new URL(`https://api.example.com/status?appid=${secret}`).toString();
-    coreServerMocks.safeFetchStatus.mockRejectedValue(
-      new Error(`Too many redirects while fetching ${serializedUrl}`),
-    );
+        {
+          properties: {
+            apiKey: { type: "string", "x-openmapx-secret": true },
+          },
+        },
+      );
+      integration.config = { apiKey: secret };
+      const serializedUrl = new URL(`https://api.example.com/status?appid=${secret}`).toString();
+      coreServerMocks.safeFetchStatus.mockRejectedValue(
+        new Error(`Too many redirects while fetching ${serializedUrl}`),
+      );
 
-    const results = await executeIntegrationHealthCheck(integration);
+      const results = await executeIntegrationHealthCheck(integration);
 
-    expect(results[0]?.error).toContain("***");
-    expect(results[0]?.error).not.toContain(secret);
-    expect(results[0]?.error).not.toContain("fixture%27secret");
-    expect(fetchSpy).not.toHaveBeenCalled();
-  });
+      expect(results[0]?.error).toContain("***");
+      expect(results[0]?.error).not.toContain(secret);
+      expect(results[0]?.error).not.toContain(
+        new URL(serializedUrl).search.slice("?appid=".length),
+      );
+      expect(fetchSpy).not.toHaveBeenCalled();
+    },
+  );
 });
 
 describe("metered DB API Marketplace health checks", () => {

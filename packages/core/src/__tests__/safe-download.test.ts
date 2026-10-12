@@ -347,6 +347,17 @@ describe("assertResolvesToPublicIp", () => {
 
     expect(result).toMatchObject({ name: "TimeoutError" });
   });
+
+  it("does not start DNS resolution for an already-aborted caller", async () => {
+    lookupMock.mockRejectedValue(new Error("late DNS failure"));
+    const controller = new AbortController();
+    controller.abort(new Error("caller already aborted"));
+
+    await expect(
+      resolvePublicConnectionAddresses(new URL("https://fixture.test"), controller.signal),
+    ).rejects.toThrow("caller already aborted");
+    expect(lookupMock).not.toHaveBeenCalled();
+  });
 });
 
 function makeResponse(opts: {

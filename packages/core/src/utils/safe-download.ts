@@ -205,6 +205,7 @@ export async function resolvePublicConnectionAddresses(
   signal?: AbortSignal,
 ): Promise<FetchConnectionAddress[]> {
   validatePublicUrl(url.toString());
+  throwIfAborted(signal);
   const resolution = resolvePublicHostOrThrow(url.hostname);
   return signal ? abortable(resolution, signal) : resolution;
 }

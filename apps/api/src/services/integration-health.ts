@@ -76,6 +76,25 @@ function resolveConfigValue(integration: LoadedIntegration, key: string): string
 // API key is that short.
 const MIN_REDACTABLE_SECRET_LENGTH = 4;
 
+function regexEscape(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function encodedSecretPattern(value: string): RegExp {
+  const pattern = Array.from(value, (character) => {
+    const encoded = [...new TextEncoder().encode(character)]
+      .map((byte) => {
+        const hex = byte.toString(16).padStart(2, "0");
+        return `%${hex.replace(/[a-f]/g, (digit) => `[${digit}${digit.toUpperCase()}]`)}`;
+      })
+      .join("");
+    const representations = new Set([regexEscape(character), encoded]);
+    if (character === " ") representations.add("\\+");
+    return `(?:${[...representations].join("|")})`;
+  }).join("");
+  return new RegExp(pattern, "g");
+}
+
 /**
  * Build a redactor that blanks every resolved secret value, including the
  * encodings produced by URL serialization, wherever it occurs in a string —
@@ -89,30 +108,17 @@ const MIN_REDACTABLE_SECRET_LENGTH = 4;
  * `getSecretFields` is the same reader the admin credential endpoints use.
  */
 function secretRedactor(integration: LoadedIntegration): (text: string) => string {
-  const values = new Set<string>();
+  const values: string[] = [];
   for (const field of getSecretFields(integration.manifest.configSchema)) {
     const value = resolveConfigValue(integration, field.key);
     if (!value || value.length < MIN_REDACTABLE_SECRET_LENGTH) continue;
-    const queryEncoded = new URLSearchParams({ value }).toString().slice("value=".length);
-    const representations = [value, queryEncoded];
-    for (const encode of [encodeURI, encodeURIComponent]) {
-      try {
-        representations.push(encode(value));
-      } catch {
-        // URLSearchParams already provides a safe canonical representation for malformed Unicode.
-      }
-    }
-    for (const representation of representations) {
-      values.add(representation);
-      values.add(representation.replace(/%[0-9A-F]{2}/g, (match) => match.toLowerCase()));
-    }
+    values.push(value);
   }
-  if (values.size === 0) return (text) => text;
-  // Longest first, so an overlapping shorter secret cannot leave a tail behind.
-  const orderedValues = [...values].sort((a, b) => b.length - a.length);
+  if (values.length === 0) return (text) => text;
+  const patterns = values.sort((a, b) => b.length - a.length).map(encodedSecretPattern);
   return (text) => {
     let out = text;
-    for (const value of orderedValues) out = out.split(value).join("***");
+    for (const pattern of patterns) out = out.replace(pattern, "***");
     return out;
   };
 }
