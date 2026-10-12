@@ -52,7 +52,7 @@
     "gtfs-realtime-bindings-transit": "^1.11.0",
     "hafas-client": "^6.3.6",
     "ioredis": "^6.0.0",
-    "lettermint": "^2.7.0",
+    "lettermint": "^3.0.0",
     "nodemailer": "^10.0.10",
     "opening_hours": "^3.14.0",
     "pino": "^10.3.1",
