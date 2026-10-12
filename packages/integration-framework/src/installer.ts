@@ -498,10 +498,15 @@ function validateTarDescriptors(data: Buffer, destDir: string): TarDescriptor[] 
   let pendingLinkPath: string | undefined;
   const base = resolve(destDir);
   let headerCount = 0;
-  for (let offset = 0; offset + TAR_BLOCK_BYTES <= data.length; ) {
+  let offset = 0;
+  let reachedEndBlock = false;
+  for (; offset + TAR_BLOCK_BYTES <= data.length; ) {
     const header = data.subarray(offset, offset + TAR_BLOCK_BYTES);
     offset += TAR_BLOCK_BYTES;
-    if (isZeroBlock(header)) break;
+    if (isZeroBlock(header)) {
+      reachedEndBlock = true;
+      break;
+    }
     headerCount += 1;
     if (headerCount > MAX_TAR_HEADERS) {
       throw new Error(
@@ -607,6 +612,9 @@ function validateTarDescriptors(data: Buffer, destDir: string): TarDescriptor[] 
       payloadLength: size,
       mode,
     });
+  }
+  if (!reachedEndBlock && offset !== data.length) {
+    throw new Error("Artifact contains a partial tar header");
   }
   return descriptors;
 }

@@ -614,6 +614,17 @@ describe("installIntegration (artifact source)", () => {
     await expectArtifactRejection(artifact, id, message);
   });
 
+  it("rejects a trailing partial tar header", async () => {
+    const id = "partial-header-artifact";
+    const artifact = join(tmp, `${id}.tar.gz`);
+    writeFileSync(
+      artifact,
+      gzipSync(Buffer.concat([tarFixtureEntry(manifestTarEntry(id)), Buffer.from([1])])),
+    );
+
+    await expectArtifactRejection(artifact, id, /partial tar header/i);
+  });
+
   it.each([
     {
       id: "length",
