@@ -118,14 +118,20 @@ export {
 // Safe downloader (DNS-aware SSRF protection for server-side fetches).
 export {
   assertResolvesToPublicIp,
+  resolvePublicConnectionAddresses,
   type SafeDownloadOptions,
   type SafeDownloadResult,
   SafeFetchHttpError,
   type SafeFetchJsonOptions,
+  type SafeFetchStatusOptions,
   type SafeJsonResponse,
+  type SafeStatusResponse,
+  type SafeTextResponse,
   safeDownload,
   safeFetchJson,
   safeFetchJsonResponse,
+  safeFetchStatus,
   safeFetchText,
+  safeFetchTextResponse,
 } from "./utils/safe-download";
 export { sectionSlug } from "./utils/sectionSlug";

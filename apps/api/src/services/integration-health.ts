@@ -1,5 +1,6 @@
 import { createConnection } from "node:net";
 import { USER_AGENT, validatePublicUrl } from "@openmapx/core";
+import { resolvePublicConnectionAddresses, safeFetchStatus } from "@openmapx/core/server";
 import { type LoadedIntegration, toIntegrationMeta } from "@openmapx/integration-framework";
 import { getSecretFields } from "../utils/validate-config-body";
 import { recordHealthResult } from "./health-history";
@@ -9,22 +10,32 @@ const TIMEOUT = 5_000;
 const UA = USER_AGENT;
 
 function tcpCheck(
-  host: string,
+  address: string,
   port: number,
+  timeoutMs: number,
 ): Promise<{ ok: boolean; ms: number; error?: string }> {
   return new Promise((resolve) => {
     const start = Date.now();
-    const socket = createConnection({ host, port }, () => {
+    const socket = createConnection({ host: address, port }, () => {
       socket.destroy();
       resolve({ ok: true, ms: Date.now() - start });
     });
-    socket.setTimeout(TIMEOUT);
+    socket.setTimeout(timeoutMs);
     socket.on("timeout", () => {
       socket.destroy();
       resolve({ ok: false, ms: Date.now() - start, error: "Timeout" });
     });
     socket.on("error", (err) => {
-      resolve({ ok: false, ms: Date.now() - start, error: err.message });
+      const code = (err as NodeJS.ErrnoException).code;
+      const error =
+        code === "ECONNREFUSED"
+          ? "Connection refused"
+          : code === "ECONNRESET"
+            ? "Connection reset"
+            : code === "ETIMEDOUT"
+              ? "Timeout"
+              : "Connection failed";
+      resolve({ ok: false, ms: Date.now() - start, error });
     });
   });
 }
@@ -65,11 +76,31 @@ function resolveConfigValue(integration: LoadedIntegration, key: string): string
 // API key is that short.
 const MIN_REDACTABLE_SECRET_LENGTH = 4;
 
+function regexEscape(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function encodedSecretPattern(value: string): RegExp {
+  const pattern = Array.from(value, (character) => {
+    const encoded = [...new TextEncoder().encode(character)]
+      .map((byte) => {
+        const hex = byte.toString(16).padStart(2, "0");
+        return `%${hex.replace(/[a-f]/g, (digit) => `[${digit}${digit.toUpperCase()}]`)}`;
+      })
+      .join("");
+    const representations = new Set([regexEscape(character), encoded]);
+    if (character === " ") representations.add("\\+");
+    return `(?:${[...representations].join("|")})`;
+  }).join("");
+  return new RegExp(pattern, "g");
+}
+
 /**
- * Build a redactor that blanks every resolved secret VALUE wherever it occurs
- * in a string — query value, path segment, or URL userinfo alike. Matching on
- * the value rather than on a parameter name is what makes this robust: a
- * manifest can put its credential anywhere (`?appid=<key>`,
+ * Build a redactor that blanks every resolved secret value, including the
+ * encodings produced by URL serialization, wherever it occurs in a string —
+ * query value, path segment, or URL userinfo alike. Matching on the value
+ * rather than on a parameter name is what makes this robust: a manifest can
+ * put its credential anywhere (`?appid=<key>`,
  * `/api/area/csv/<key>/...`), and a name allowlist can only ever cover the
  * shapes someone remembered to add.
  *
@@ -80,14 +111,14 @@ function secretRedactor(integration: LoadedIntegration): (text: string) => strin
   const values: string[] = [];
   for (const field of getSecretFields(integration.manifest.configSchema)) {
     const value = resolveConfigValue(integration, field.key);
-    if (value && value.length >= MIN_REDACTABLE_SECRET_LENGTH) values.push(value);
+    if (!value || value.length < MIN_REDACTABLE_SECRET_LENGTH) continue;
+    values.push(value);
   }
   if (values.length === 0) return (text) => text;
-  // Longest first, so an overlapping shorter secret cannot leave a tail behind.
-  values.sort((a, b) => b.length - a.length);
+  const patterns = values.sort((a, b) => b.length - a.length).map(encodedSecretPattern);
   return (text) => {
     let out = text;
-    for (const value of values) out = out.split(value).join("***");
+    for (const pattern of patterns) out = out.replace(pattern, "***");
     return out;
   };
 }
@@ -165,29 +196,63 @@ async function executeSingleHealthCheck(
 
   // TCP health check
   if (hc.type === "tcp" && hc.url) {
+    const start = Date.now();
+    const timeoutSignal = AbortSignal.timeout(TIMEOUT);
     const url = new URL(hc.url.startsWith("tcp://") ? hc.url : `tcp://${hc.url}`);
     const host = url.hostname;
     const port = Number(url.port) || 5432;
+    let addresses: Awaited<ReturnType<typeof resolvePublicConnectionAddresses>>;
     try {
-      validatePublicUrl(`http://${host}`);
-    } catch {
+      addresses = await resolvePublicConnectionAddresses(
+        new URL(`http://${url.host}`),
+        timeoutSignal,
+      );
+    } catch (error) {
       return {
         id,
         name,
         category,
         url: `${host}:${port}`,
         status: "down",
+        responseTime: Date.now() - start,
+        error:
+          errMsg(error) === "Timeout"
+            ? "Timeout"
+            : "health-check host not allowed (non-public host)",
+      };
+    }
+    const address = addresses[0];
+    if (!address) {
+      return {
+        id,
+        name,
+        category,
+        url: `${host}:${port}`,
+        status: "down",
+        responseTime: Date.now() - start,
         error: "health-check host not allowed (non-public host)",
       };
     }
-    const result = await tcpCheck(host, port);
+    const remainingMs = TIMEOUT - (Date.now() - start);
+    if (timeoutSignal.aborted || remainingMs <= 0) {
+      return {
+        id,
+        name,
+        category,
+        url: `${host}:${port}`,
+        status: "down",
+        responseTime: Date.now() - start,
+        error: "Timeout",
+      };
+    }
+    const result = await tcpCheck(address.address, port, remainingMs);
     return {
       id,
       name,
       category,
       url: `${host}:${port}`,
       status: result.ok ? "up" : "down",
-      responseTime: result.ms,
+      responseTime: Date.now() - start,
       error: result.error ? redactSecrets(result.error) : undefined,
     };
   }
@@ -290,13 +355,13 @@ async function executeSingleHealthCheck(
 
   const start = Date.now();
   try {
-    const res = await fetch(checkUrl, {
-      method: "GET",
+    const res = await safeFetchStatus(checkUrl, {
       headers: {
         "User-Agent": UA,
         ...interpolatedHeaders,
       },
-      signal: AbortSignal.timeout(TIMEOUT),
+      timeoutMs: TIMEOUT,
+      allowPrivateHosts: hostExempt ? [new URL(checkUrl).hostname] : [],
     });
     const ms = Date.now() - start;
 
@@ -305,7 +370,7 @@ async function executeSingleHealthCheck(
         return { id, name, category, url: displayUrl, status: "up", responseTime: ms };
       }
     } else {
-      if (res.ok) {
+      if (res.status >= 200 && res.status < 300) {
         return { id, name, category, url: displayUrl, status: "up", responseTime: ms };
       }
     }

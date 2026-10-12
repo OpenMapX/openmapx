@@ -27,8 +27,6 @@ const RAW_FETCH_ALLOWLIST: Record<string, string> = {
     "caller-supplied parser: response body may be XML/CSV/etc., not JSON",
   "integrations/geocoding-motis/provider.ts":
     "isMotisLocalReachable() reachability probe: reads only res.status, never the body",
-  "integrations/hotels/official.ts":
-    "manual per-hop redirect loop with SSRF re-check + binary HTML byte cap",
   "integrations/knowledge-tides-norway/index.ts": "Kartverket tide feeds are XML, not JSON",
   "integrations/overlay-hiking/index.ts":
     "tile proxy: forwards the binary PNG tile body and status verbatim",
@@ -44,8 +42,6 @@ const RAW_FETCH_ALLOWLIST: Record<string, string> = {
     "RainViewer + OWM tile proxies: forward binary PNG tiles verbatim",
   "integrations/overlay-winter-sports/index.ts":
     "tile proxy: forwards the binary PNG tile body and status verbatim",
-  "integrations/restaurants/menu.ts":
-    "manual per-hop redirect loop with SSRF re-check + binary HTML byte cap",
   "integrations/search-nlp/index.ts":
     "Ollama generate/pull: streaming responses and multi-minute model downloads",
   "integrations/street-level-imagery-panoramax/index.ts":
