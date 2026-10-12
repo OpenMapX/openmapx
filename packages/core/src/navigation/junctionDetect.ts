@@ -3,8 +3,8 @@ import type { Route } from "../types/routing";
 import { haversineDistance } from "../utils/coordinates";
 import { angularDifference } from "./bearing";
 import { cumulativeDistances, positionAt } from "./deadReckon";
-import { resolveRecommendedLanes } from "./lanes";
-import { stepStartMeters } from "./progress";
+import { resolveLaneGuidance } from "./lanes";
+import { prepareManeuverPositions } from "./maneuverPosition";
 
 /**
  * Route-derived motorway decision points. Everything here reads `RouteStep`
@@ -31,7 +31,13 @@ export function findJunctionDecisionPoints(route: Route): JunctionDecisionPoint[
   if (route.mode !== "driving" && route.mode !== "motorcycle") return [];
   const geometry = route.geometry;
   if (geometry.length < 2) return [];
+  if (!route.steps.some((step) => DECISION_TYPES.has(step.maneuver?.type ?? ""))) return [];
   const cum = cumulativeDistances(geometry);
+  const starts = prepareManeuverPositions(route).starts;
+  return decisionPoints(route, cum, starts);
+}
+
+function decisionPoints(route: Route, cum: number[], starts: number[]): JunctionDecisionPoint[] {
   const points: JunctionDecisionPoint[] = [];
   for (let i = 1; i < route.steps.length; i += 1) {
     const maneuverType = route.steps[i].maneuver?.type ?? "";
@@ -45,7 +51,7 @@ export function findJunctionDecisionPoints(route: Route): JunctionDecisionPoint[
     const fromMotorway =
       route.steps[i - 1]?.motorway === true || points.at(-1)?.stepIndex === i - 1;
     if (!fromMotorway) continue;
-    points.push(buildDecisionPoint(route, cum, i));
+    points.push(buildDecisionPoint(route, cum, i, starts[i]));
   }
   return points;
 }
@@ -63,11 +69,13 @@ const CANDIDATE_TYPES = new Set(["fork", "off ramp"]);
 export function findJunctionCandidates(route: Route): JunctionDecisionPoint[] {
   if (route.mode !== "driving" && route.mode !== "motorcycle") return [];
   if (route.geometry.length < 2) return [];
-  const accepted = new Set(findJunctionDecisionPoints(route).map((point) => point.stepIndex));
+  if (!route.steps.some((step) => CANDIDATE_TYPES.has(step.maneuver?.type ?? ""))) return [];
   const cum = cumulativeDistances(route.geometry);
+  const starts = prepareManeuverPositions(route).starts;
+  const accepted = new Set(decisionPoints(route, cum, starts).map((point) => point.stepIndex));
   return route.steps.flatMap((step, i) =>
     i >= 1 && CANDIDATE_TYPES.has(step.maneuver?.type ?? "") && !accepted.has(i)
-      ? [buildDecisionPoint(route, cum, i)]
+      ? [buildDecisionPoint(route, cum, i, starts[i])]
       : [],
   );
 }
@@ -91,7 +99,12 @@ export function sameJunction(a: JunctionDecisionPoint, b: JunctionDecisionPoint)
 }
 
 /** The decision point at step `i`: position, approach bearing, split angle and lanes. */
-function buildDecisionPoint(route: Route, cum: number[], i: number): JunctionDecisionPoint {
+function buildDecisionPoint(
+  route: Route,
+  cum: number[],
+  i: number,
+  alongMeters: number,
+): JunctionDecisionPoint {
   const geometry = route.geometry;
   const step = route.steps[i];
   const maneuverType = step.maneuver?.type ?? "";
@@ -100,8 +113,7 @@ function buildDecisionPoint(route: Route, cum: number[], i: number): JunctionDec
     maneuverType === "fork" || maneuverType === "off ramp" || hasExitNumber ? "exit" : "fork";
   const modifier = step.maneuver?.modifier ?? "";
   const side: "left" | "right" = modifier.includes("left") ? "left" : "right";
-  const alongMeters = stepStartMeters(route.steps, i);
-  const point = positionAt(geometry, cum, alongMeters).point;
+  const point = step.coordinates[0] ?? positionAt(geometry, cum, alongMeters).point;
   const approachBearing = positionAt(
     geometry,
     cum,
@@ -116,16 +128,29 @@ function buildDecisionPoint(route: Route, cum: number[], i: number): JunctionDec
           positionAt(geometry, cum, alongMeters + DIVERGENCE_OFFSET_METERS).bearing -
             positionAt(geometry, cum, Math.max(alongMeters - DIVERGENCE_OFFSET_METERS, 0)).bearing,
         );
+  const laneGuidance = resolveLaneGuidance(step.lanes);
+  const after = Math.max(0, (prepareManeuverPositions(route).ends[i] ?? alongMeters) - alongMeters);
   return {
     stepIndex: i,
     kind,
     side,
+    ...(modifier
+      ? { direction: modifier === "straight" ? "through" : modifier.replaceAll(" ", "_") }
+      : {}),
     point,
     alongMeters,
     approachBearing,
     divergenceDeg,
     ...(step.lanes?.length ? { laneCount: step.lanes.length } : {}),
     activeLanes: activeLaneIndices(step),
+    laneGuidance,
+    approachTrace: [80, 30, 5].map(
+      (offset) => positionAt(geometry, cum, Math.max(0, alongMeters - offset)).point,
+    ),
+    departureTrace: [15, 40, 80]
+      .filter((offset) => offset <= after)
+      .map((offset) => positionAt(geometry, cum, alongMeters + offset).point),
+    ...(step.roadNames ? { roadNames: step.roadNames } : {}),
     ...(step.sign ? { sign: step.sign } : {}),
   };
 }
@@ -136,8 +161,8 @@ function normalizeSigned(delta: number): number {
   return wrapped === -180 ? 180 : wrapped;
 }
 
-/** Indices of the lanes the engine (or the maneuver fallback) marks valid. */
+/** Preferred lanes when reported, otherwise the engine's initially usable lanes. */
 function activeLaneIndices(step: Route["steps"][number]): number[] {
-  const resolved = resolveRecommendedLanes(step.lanes, step.maneuver);
-  return resolved.flatMap((lane, i) => (lane.valid ? [i] : []));
+  const resolved = resolveLaneGuidance(step.lanes);
+  return resolved.preferredLanes.length > 0 ? resolved.preferredLanes : resolved.usableLanes;
 }

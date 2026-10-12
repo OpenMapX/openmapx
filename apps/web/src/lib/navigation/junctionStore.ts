@@ -1,5 +1,6 @@
-import type { GantryModel, JunctionDecisionPoint, StreetLevelImage } from "@openmapx/core";
+import type { GantryModel, JunctionDecisionPoint, Route, StreetLevelImage } from "@openmapx/core";
 import { create } from "zustand";
+import type { PhotoPreparationDiagnostic, PreparedJunctionPhoto } from "./prepareJunctionPhoto";
 
 /**
  * Photo state for one decision point. `idle` until the rolling photo window
@@ -11,6 +12,11 @@ export interface JunctionPhotoState {
   image?: StreetLevelImage;
   objectUrl?: string;
   bytesRequested?: boolean;
+  prepared?: PreparedJunctionPhoto;
+  diagnostic?: PhotoPreparationDiagnostic;
+  alternatives?: StreetLevelImage[];
+  nextProviders?: string[];
+  byteAttempts?: number;
 }
 
 /** Junction state kept across a route change, keyed by the new route's step indices. */
@@ -27,6 +33,7 @@ export interface CarriedJunctionState {
  */
 interface NavJunctionState {
   routeKey: string | null;
+  routeIdentity: Route | null;
   decisionPoints: JunctionDecisionPoint[];
   byStep: Map<number, JunctionDecisionPoint>;
   gantryByStep: Map<number, GantryModel>;
@@ -39,6 +46,7 @@ interface NavJunctionState {
     routeKey: string,
     points: JunctionDecisionPoint[],
     carried?: CarriedJunctionState,
+    routeIdentity?: Route,
   ) => void;
   /** Add points confirmed after route start (candidates OSM promoted), keeping gantries and photos. */
   addDecisionPoints: (points: JunctionDecisionPoint[]) => void;
@@ -49,6 +57,7 @@ interface NavJunctionState {
 
 export const useNavJunctionStore = create<NavJunctionState>((set) => ({
   routeKey: null,
+  routeIdentity: null,
   decisionPoints: [],
   byStep: new Map(),
   gantryByStep: new Map(),
@@ -57,15 +66,17 @@ export const useNavJunctionStore = create<NavJunctionState>((set) => ({
   reset: () =>
     set({
       routeKey: null,
+      routeIdentity: null,
       decisionPoints: [],
       byStep: new Map(),
       gantryByStep: new Map(),
       fullLanesByStep: new Map(),
       photoByStep: new Map(),
     }),
-  setDecisionPoints: (routeKey, points, carried) =>
+  setDecisionPoints: (routeKey, points, carried, routeIdentity) =>
     set({
       routeKey,
+      routeIdentity: routeIdentity ?? null,
       decisionPoints: points,
       byStep: new Map(points.map((p) => [p.stepIndex, p])),
       gantryByStep: carried?.gantryByStep ?? new Map(),

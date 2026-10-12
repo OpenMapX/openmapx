@@ -126,22 +126,41 @@ contract and exposing the same routes under
 While driving, the [junction view](./directions.md#turn-by-turn-navigation) can
 show a recent street-level image of an exit's approach, taken 30–200 m upstream
 and facing along the road — preferably where OpenStreetMap says the exit lanes
-already exist, so every lane to choose from is in the picture. It is prefetched when the route starts (never per GPS
-fix), the road ahead is projected onto it as a ribbon that narrows with distance
-and bends into the ramp — moving over from the lane the picture was taken in to
-the exit lane the overhead gantry names, and scaled to the frame's own shape,
-taken from the picture's sensor dimensions and the loaded image. The lens's
-field of view comes from Panoramax, else from the photo's focal length, else is
-assumed to be a phone's; for a dashcam or action camera with no lens data the
-road is not drawn at all, since a wide lens would put it off the road. For a regular photo
-the provider's thumbnail is used rather than the full frame, to keep mobile data low; a
+already exist, so every lane to choose from is in the picture. It is prefetched when the route starts (never per GPS fix).
+
+The app verifies the road interval at the camera position, including available
+lane-count and tunnel/level evidence, independently of preferred-lane guidance.
+A mapped lane-count mismatch, surface
+scenery above a tunnel, and ambiguous parallel or opposite carriageways are
+withheld. Full panoramas are
+judged by the relevant viewing slice, rather than their stored centre heading.
+Missing current road evidence leaves the signs alone until the lookup succeeds.
+
+When preferred lanes and the incoming layout are established, a background
+worker checks road/marking evidence and traces supported image-space boundaries.
+A fixed narrow corridor may be drawn within each preferred lane over the observed
+stretch. Initially usable lanes are not presented as lanes where the driver can
+remain throughout the maneuver. The archived camera position never represents
+the driver's current lane or requests a lane change. Unresolved boundaries,
+missing field of view or ambiguous registration leave a relevant
+photo without ribbons. This registration method has limited demonstrated
+coverage; the single calibration is not general validation across Germany.
+
+Decoding and preparation finish before a photo appears. Invalid images, worker
+failures and timeouts leave the signs stable; downloads and retries are bounded.
+Image and overlay share a source transform, including panorama wrapping. Capture
+month stays visible beside the author/licence credit.
+
+For a regular photo, the provider's thumbnail is used rather than the full frame, to keep mobile data low; a
 360° photo loads its reduced full frame, since its thumbnail is only a crop from the
-middle. Switching junction photos off hides them at once, including ones already
-loaded. A caption below the
+middle. It shows a 90° window facing along the route's approach. Switching junction
+photos off hides them at once, including ones already loaded. A caption below the
 image names the author, the licence, and the capture month — no links, so nothing
 pulls attention off the road while the trip is live. Only providers whose terms allow
 use during navigation are searched, which today means Panoramax. With no
-qualifying image the junction view shows its schematic instead.
+qualifying image the junction view shows only its destination signs. The same
+applies while a photo loads or when junction photos are switched off; no schematic
+road drawing is shown.
 
 The web app talks only to these routes, so it never needs to know which provider
 is behind them.

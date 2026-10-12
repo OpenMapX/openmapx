@@ -24,6 +24,39 @@ const gate = (along: number, prev: StepGateState) =>
   advanceStepGate(route, along, prev, ENTRY, EXIT);
 
 describe("advanceStepGate", () => {
+  it("advances at the geometry boundary, not the engine distance boundary", () => {
+    const physical: Route = {
+      ...route,
+      distance: 2640,
+      geometry: [
+        [0, 0],
+        [0.00899320363724538, 0],
+        [0.01798640727449076, 0],
+      ],
+      steps: [
+        {
+          instruction: "a",
+          distance: 1320,
+          duration: 60,
+          coordinates: [
+            [0, 0],
+            [0.00899320363724538, 0],
+          ],
+        },
+        {
+          instruction: "b",
+          distance: 1320,
+          duration: 60,
+          coordinates: [
+            [0.00899320363724538, 0],
+            [0.01798640727449076, 0],
+          ],
+        },
+      ],
+    };
+    expect(advanceStepGate(physical, 990, fresh, ENTRY, EXIT).reachedStepEnd).toBe(true);
+    expect(advanceStepGate(physical, 1006, fresh, ENTRY, EXIT).committedStepIndex).toBe(1);
+  });
   it("does not advance before the step's end is approached", () => {
     expect(gate(50, fresh)).toEqual({ committedStepIndex: 0, reachedStepEnd: false });
   });

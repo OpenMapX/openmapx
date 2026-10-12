@@ -91,6 +91,7 @@ const { placesRoute } = await import("../places.js");
 // App setup
 
 let app: FastifyInstance;
+const { placesRoute } = await import("../places.js");
 
 beforeAll(async () => {
   // Register the built-in scheme resolvers the route depends on. In the

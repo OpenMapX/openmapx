@@ -1,4 +1,5 @@
 import type { Route } from "../types/routing";
+import { prepareManeuverPositions } from "./maneuverPosition";
 
 export interface StepGateState {
   /** The step committed for display/announcement. Monotonic — never decreases. */
@@ -32,13 +33,7 @@ export function advanceStepGate(
   const lastIndex = steps.length - 1;
   if (lastIndex <= 0) return { committedStepIndex: 0, reachedStepEnd: false };
 
-  // Cumulative end arc-length of each step.
-  const ends: number[] = [];
-  let acc = 0;
-  for (const s of steps) {
-    acc += s.distance;
-    ends.push(acc);
-  }
+  const { ends } = prepareManeuverPositions(route);
 
   let committed = Math.min(Math.max(prev.committedStepIndex, 0), lastIndex);
   let entered = prev.reachedStepEnd;

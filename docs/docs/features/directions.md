@@ -312,7 +312,8 @@ time:
   in the banner and the directions list, straight from the routing engine's sign
   data;
 - **lane guidance** at junctions that have it, dimming the lanes you should not
-  take and brightening the one to follow;
+  take. Preferred lanes have a solid outline and check; initially usable lanes
+  have a dashed outline, since a later lane change may still be needed;
 - a **speed-limit badge** when the road's limit is known;
 - an **arrival card** with the remaining distance and estimated time of arrival.
 
@@ -324,20 +325,41 @@ focus; the emphasis resets when the maneuver passes, the route changes, or you
 move back far enough to leave its approach.
 
 For motorway and expressway exits, forks, and splits while driving, a **junction view** card
-appears under the banner. It shows the lanes of the overhead gantry with the
-correct one highlighted and the ramp peeling off at the split angle. The schematic
-is drawn on the client from open data: with network access it shows the real
-per-lane destinations OpenStreetMap carries on the approach segment
-(`destination:*:lanes`, fetched once per route through Overpass — set
-`OVERPASS_URL` to a self-hosted instance for multi-user deployments), and offline
-it falls back to the engine's exit sign. The lane to take comes from the routing
-engine when it reports lanes (a self-hosted Valhalla does); otherwise it is read
-from OpenStreetMap's per-lane turn arrows (`turn:lanes`), and only when neither
-says does the outermost lane on the exit's side stand in. About half a minute
+appears under the banner. It shows destination boards for the upcoming split,
+including connected outgoing roads' destinations.
+With network access, the card shows OpenStreetMap's real per-lane destinations
+when tagged on the approach segment (`destination:*:lanes`, fetched once per
+route through Overpass — set `OVERPASS_URL` to a self-hosted instance for
+multi-user deployments). The approach lane count and turn arrows remain useful
+even without per-lane destination names. Offline it falls back to the engine's
+exit sign and any lane data it supplies.
+
+The selected road and destinations appear first, separately from the wording
+on the physical boards. Boards span their mapped contiguous incoming lanes
+when those spans are known; otherwise they are destination cards without an
+implied lane position. Outgoing lane counts cannot assign incoming lanes.
+
+Lane evidence distinguishes initially usable lanes from preferred lanes where
+no further change is needed. Valhalla supplies both meanings; OSRM supplies
+usable lanes without a separate preference. Unknown or conflicting guidance
+stays unknown. The banner and junction view consume the same resolved evidence.
+Specific per-lane destinations can identify lanes only for the selected branch
+and incoming layout; an arrow pointing to the same side cannot distinguish two
+branches. Route geometry identifies a connected branch, with references and
+labels used as corroboration. Reroutes reuse raw road evidence but recompute the
+selected movement. Maneuver timing uses ordered positions on route geometry;
+remaining travel distance and ETA retain the provider's distance and duration.
+
+About half a minute
 before the exit, a photo preview shows a recent **street-level image** of the
 approach — with its author, licence, and capture date — when coverage from
 [Panoramax](./street-level-imagery.md) exists (Mapillary is never used here: its terms rule out use during navigation). Both the junction view and its photo preview are on by default and can be
 switched off in the navigation settings.
+
+When no photo is available, while it loads, or before its approach window opens,
+the junction card shows only the destination signs. Switching photos off also
+leaves only the signs. No schematic road drawing is shown; if there are neither
+signs nor a photo, the card stays hidden.
 
 Navigation also speaks instructions aloud (voice guidance can be toggled off) and
 offers a **keep-screen-on** option that holds a wake lock so the display does not

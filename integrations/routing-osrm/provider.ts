@@ -147,7 +147,7 @@ function osrmLanes(step: OsrmStep): ManeuverLane[] | undefined {
   return lanes.map((l) => {
     const lane: ManeuverLane = {
       indications: l.indications ?? [],
-      valid: Boolean(l.valid),
+      ...(typeof l.valid === "boolean" ? { valid: l.valid } : {}),
     };
     if (l.valid_indication) lane.active = l.valid_indication;
     return lane;

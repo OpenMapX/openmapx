@@ -235,7 +235,15 @@
     "toward": "Richtung {places}",
     "junctionViewLabel": "Kreuzungsansicht",
     "junctionLaneSummary": "Spur {lane} von {total} nutzen",
-    "junctionPhotoCaption": "© {author} · {license} · {date}"
+    "junctionLanesSummary": "Spuren {lanes} von {total} nutzen",
+    "junctionLaneCount": "{total, plural, one {# Spur} other {# Spuren}}",
+    "junctionBranchesSummary": "Abzweige: {branches}",
+    "junctionPhotoCaption": "© {author} · {license} · {date}",
+    "junctionFollowRoute": "Folgen",
+    "junctionPreferredLanes": "Bevorzugte Fahrstreifen: {lanes} von {total}",
+    "junctionUsableLanes": "Zunächst nutzbare Fahrstreifen: {lanes} von {total}",
+    "junctionLaneGuidanceUnknown": "Fahrstreifenempfehlung nicht verfügbar",
+    "junctionPhotoCredit": "© {author} · {license}"
   },
   "common": {
     "close": "Schließen",

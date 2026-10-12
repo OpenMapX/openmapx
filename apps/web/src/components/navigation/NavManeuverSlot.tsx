@@ -3,14 +3,15 @@
 import {
   countryAtMeters,
   guidanceApproachMeters,
+  maneuverStartMeters,
   shouldPreviewNextStep,
-  stepStartMeters,
   upcomingManeuverIndex,
   useCountryFromCoordinates,
   useNavigationStore,
   useSettingsStore,
 } from "@openmapx/core";
 import { useMemo } from "react";
+import { useNavJunctionStore } from "@/lib/navigation/junctionStore";
 import { ManeuverBanner } from "./ManeuverBanner";
 
 /**
@@ -24,6 +25,8 @@ export function NavManeuverSlot() {
   const mode = useNavigationStore((s) => s.mode);
   const units = useSettingsStore((s) => s.units);
   const routeCountries = useNavigationStore((s) => s.routeCountries);
+  const gantryByStep = useNavJunctionStore((s) => s.gantryByStep);
+  const junctionRoute = useNavJunctionStore((s) => s.routeIdentity);
 
   // Show the nav chrome from the static route immediately on Start; live
   // position (progress) refines it once GPS fixes arrive. Without this, the
@@ -42,7 +45,10 @@ export function NavManeuverSlot() {
   // time before the maneuver that stretches on the motorway) — so on a long
   // stretch neither the lanes nor the "Then …" preview clutter the banner.
   const approaching = distanceToManeuver <= guidanceApproachMeters(mode, speedMps);
-  const showLanes = !!step?.lanes && approaching;
+  const resolvedLanes =
+    (junctionRoute === route ? gantryByStep.get(upcomingIndex)?.laneGuidance?.lanes : undefined) ??
+    step?.lanes;
+  const showLanes = !!resolvedLanes?.length && approaching;
   // Preview the maneuver after this one only when it's both relevant (approaching)
   // and follows closely (a short gap), so back-to-back turns chain but far-apart
   // ones don't.
@@ -57,7 +63,7 @@ export function NavManeuverSlot() {
   const signCountry = useMemo(
     () =>
       route && routeCountries && hasSign
-        ? countryAtMeters(routeCountries, stepStartMeters(route.steps, upcomingIndex))
+        ? countryAtMeters(routeCountries, maneuverStartMeters(route, upcomingIndex))
         : undefined,
     [route, routeCountries, hasSign, upcomingIndex],
   );
@@ -73,7 +79,7 @@ export function NavManeuverSlot() {
       maneuver={step.maneuver}
       nextInstruction={showNextStep ? nextStep?.instruction : undefined}
       nextManeuver={showNextStep ? nextStep?.maneuver : undefined}
-      lanes={showLanes ? step.lanes : undefined}
+      lanes={showLanes ? resolvedLanes : undefined}
       sign={step.sign}
       country={country}
       units={units}
