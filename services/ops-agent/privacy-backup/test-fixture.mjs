@@ -19,9 +19,9 @@ const root = mkdtempSync(join(tmpdir(), "openmapx-privacy-backup-fixture-"));
 chmodSync(root, 0o755);
 const databaseContainer = `openmapx-privacy-backup-${randomBytes(8).toString("hex")}`;
 const databaseImage =
-  "ghcr.io/baosystems/postgis:18-3.6@sha256:4117c8beae9081e76a23a1577c64d05260a61fb0a3c212f37596054ef4c190d8";
+  "ghcr.io/baosystems/postgis:18-3.6@sha256:8784f86b3e0e046859c96ea25eb8b10f0b801fd891b99a82b82f28ac4a643db8";
 const dawarichImage =
-  "freikin/dawarich@sha256:e58334ca56976feb4c885a8bd34b251ec2e3f45ffeabd4fd4371b5d2108fc70d";
+  "freikin/dawarich@sha256:589e3606b11b61c3fa2d9661832cb73645a9b93a9cc7d807a071e2bc6c584498";
 const databasePassword = "isolated-backup-fixture";
 const outputFlag = process.argv.indexOf("--output");
 const retainedOutput = outputFlag >= 0 ? process.argv[outputFlag + 1] : undefined;
@@ -90,7 +90,7 @@ function dawarichDriftRequest(directory, dump, dumpName, backupId) {
       services: [
         {
           id: "dawarich-postgis",
-          version: "1.15.2",
+          version: "1.15.3",
           volumes: [
             {
               name: "database",
@@ -104,11 +104,11 @@ function dawarichDriftRequest(directory, dump, dumpName, backupId) {
       ],
       privacySourceProvenance: {
         managedDawarich: {
-          version: "1.15.2",
+          version: "1.15.3",
           image: "freikin/dawarich",
-          imageDigest: "sha256:e58334ca56976feb4c885a8bd34b251ec2e3f45ffeabd4fd4371b5d2108fc70d",
-          upstreamCommit: "d81abc4fc467e119f542c56602c78488fbab86fb",
-          schemaContract: "dawarich-1.15.2",
+          imageDigest: "sha256:589e3606b11b61c3fa2d9661832cb73645a9b93a9cc7d807a071e2bc6c584498",
+          upstreamCommit: "e32b70701b2467b862d4b5bc27ac428999997c1b",
+          schemaContract: "dawarich-1.15.3",
         },
       },
     }),
@@ -128,7 +128,7 @@ function dawarichDriftRequest(directory, dump, dumpName, backupId) {
           family: "dawarich",
           serviceId: "dawarich-postgis",
           file: dumpName,
-          schemaContract: "dawarich-1.15.2",
+          schemaContract: "dawarich-1.15.3",
         },
       ],
     })}\n`,
@@ -342,7 +342,7 @@ VALUES (1,'Import',1,'source',1,'2026-01-01'),
         },
         {
           id: "dawarich-postgis",
-          version: "1.15.2",
+          version: "1.15.3",
           volumes: [
             {
               name: "database",
@@ -355,7 +355,7 @@ VALUES (1,'Import',1,'source',1,'2026-01-01'),
         },
         {
           id: "dawarich-app",
-          version: "1.15.2",
+          version: "1.15.3",
           volumes: [
             {
               name: "openmapx-dawarich-storage",
@@ -369,11 +369,11 @@ VALUES (1,'Import',1,'source',1,'2026-01-01'),
       ],
       privacySourceProvenance: {
         managedDawarich: {
-          version: "1.15.2",
+          version: "1.15.3",
           image: "freikin/dawarich",
-          imageDigest: "sha256:e58334ca56976feb4c885a8bd34b251ec2e3f45ffeabd4fd4371b5d2108fc70d",
-          upstreamCommit: "d81abc4fc467e119f542c56602c78488fbab86fb",
-          schemaContract: "dawarich-1.15.2",
+          imageDigest: "sha256:589e3606b11b61c3fa2d9661832cb73645a9b93a9cc7d807a071e2bc6c584498",
+          upstreamCommit: "e32b70701b2467b862d4b5bc27ac428999997c1b",
+          schemaContract: "dawarich-1.15.3",
         },
       },
     }),
@@ -394,13 +394,13 @@ VALUES (1,'Import',1,'source',1,'2026-01-01'),
           family: "dawarich",
           serviceId: "dawarich-postgis",
           file: dawarichFile,
-          schemaContract: "dawarich-1.15.2",
+          schemaContract: "dawarich-1.15.3",
         },
         {
           family: "dawarich-storage",
           serviceId: "dawarich-app",
           file: storageFile,
-          schemaContract: "dawarich-storage-1.15.2",
+          schemaContract: "dawarich-storage-1.15.3",
         },
       ],
     })}\n`,

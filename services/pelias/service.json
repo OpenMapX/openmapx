@@ -14,8 +14,8 @@
   },
   "container": {
     "image": "pelias/api",
-    "tag": "latest",
-    "digest": "sha256:12640b4db5740259313ebae3e033b0b3944a8a2c6293ba4152192b6cd78fa88e",
+    "tag": "v7.11.0",
+    "digest": "sha256:7174871a9ecd1343fc0dcb0a0d11848a0b634677de40f9b80ed2ce6b64308080",
     "expose": [4000],
     "environment": { "PELIAS_CONFIG": "/code/pelias.json" },
     "restart": "unless-stopped",
@@ -29,18 +29,18 @@
   "buildImages": {
     "schema": {
       "image": "pelias/schema",
-      "tag": "latest",
-      "digest": "sha256:5093e52a91b051013786d5d51367ea8eb471eac87edc626737b61ae67f89198a"
+      "tag": "v10.1.1",
+      "digest": "sha256:518a5b7772c54594df5155c7525bef4f5de039f4762e7b01d565de2cef44738a"
     },
     "whosonfirst": {
       "image": "pelias/whosonfirst",
-      "tag": "latest",
-      "digest": "sha256:81c842a3f87edc2857f24337b9dfdd6edd3cdd958e178306afbe314d67a96c9b"
+      "tag": "v9.2.0",
+      "digest": "sha256:3226682d028e49ffe49ff051fe739d913df5141ae563bbd2ec606c5bfe5ad2f0"
     },
     "openstreetmap": {
       "image": "pelias/openstreetmap",
-      "tag": "latest",
-      "digest": "sha256:fe640a1ec2ea5bf3a13b89566419b1194c67c4f70a6821d11b6711ad661ebcba"
+      "tag": "v9.5.0",
+      "digest": "sha256:867526e241bdaada37aee9fcca972d26425cac1f5abd46da289cbcaa32cda488"
     }
   },
   "provides": ["geocoder"],

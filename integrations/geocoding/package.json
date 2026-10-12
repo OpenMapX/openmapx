@@ -33,7 +33,7 @@
     }
   },
   "dependencies": {
-    "@fragaria/address-formatter": "^7.1.1",
+    "@fragaria/address-formatter": "^7.1.2",
     "@openmapx/core": "workspace:^",
     "@openmapx/integration-framework": "workspace:^",
     "@openmapx/place-ids": "workspace:^",

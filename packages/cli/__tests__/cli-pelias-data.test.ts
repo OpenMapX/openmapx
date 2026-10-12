@@ -17,11 +17,11 @@ import {
 let tmp: string;
 
 const images = {
-  elasticsearchImage: "elasticsearch:7.17.28",
-  placeholderImage: "pelias/placeholder:latest",
-  schemaImage: "pelias/schema:latest@sha256:1",
-  whosonfirstImage: "pelias/whosonfirst:latest@sha256:2",
-  openstreetmapImage: "pelias/openstreetmap:latest@sha256:3",
+  elasticsearchImage: "elasticsearch:8.19.23",
+  placeholderImage: "pelias/placeholder:v5.11.0",
+  schemaImage: "pelias/schema:v10.1.1@sha256:1",
+  whosonfirstImage: "pelias/whosonfirst:v9.2.0@sha256:2",
+  openstreetmapImage: "pelias/openstreetmap:v9.5.0@sha256:3",
 } satisfies Partial<BuildPeliasDataOptions>;
 
 beforeEach(() => {

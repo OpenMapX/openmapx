@@ -14,7 +14,7 @@
   },
   "container": {
     "image": "maptiler/tileserver-gl",
-    "tag": "latest",
+    "tag": "v5.6.0",
     "digest": "sha256:3a9ccdb24820b6814c8119bcc8a4376c39867cb0ffe69d62919ef898b90c2427",
     "expose": [8080],
     "command": ["--public_url", "https://${DOMAIN:-localhost}/tiles/"],

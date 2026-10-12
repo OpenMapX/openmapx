@@ -161,8 +161,8 @@ See the [Admin panel](https://docs.openmapx.org/administration/admin-panel/) doc
 | Routing & transit | Valhalla, OSRM, MOTIS, OpenTripPlanner                                                               |
 | Geocoding         | Photon, Nominatim, Pelias                                                                            |
 | Tiles             | TileServer GL, Martin (PostGIS vector tiles)                                                         |
-| Tooling           | Turborepo, pnpm 11, Biome, Vitest, Husky + Commitlint, Changesets, Docker Compose v2, Traefik        |
-| Language          | TypeScript end-to-end (Node 24+)                                                                     |
+| Tooling           | Turborepo, pnpm 12, Biome, Vitest, Husky + Commitlint, Changesets, Docker Compose v2, Traefik        |
+| Language          | TypeScript end-to-end (Node 24.21.0+)                                                                |
 
 ## Contributing
 

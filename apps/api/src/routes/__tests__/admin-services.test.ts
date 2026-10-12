@@ -563,7 +563,7 @@ describe("service credentials", () => {
       manifest: {
         id: serviceId,
         name: serviceId,
-        version: "1.15.2",
+        version: "1.15.3",
         quality: "built-in",
         configSchema: {
           properties: {

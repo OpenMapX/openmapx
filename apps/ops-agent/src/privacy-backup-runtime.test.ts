@@ -126,11 +126,11 @@ describe("privacy backup extraction runtime", () => {
         openmapxVersion: "1.0.0",
         privacySourceProvenance: {
           managedDawarich: {
-            version: "1.15.2",
+            version: "1.15.3",
             image: "freikin/dawarich",
             imageDigest: `sha256:${"d".repeat(64)}`,
             upstreamCommit: "c".repeat(40),
-            schemaContract: "dawarich-1.15.2",
+            schemaContract: "dawarich-1.15.3",
           },
         },
       },
@@ -183,8 +183,8 @@ describe("privacy backup extraction runtime", () => {
     for await (const _chunk of output) void _chunk;
     expect(JSON.parse(body)).toMatchObject({
       sources: [
-        { family: "dawarich", schemaContract: "dawarich-1.15.2" },
-        { family: "dawarich-storage", schemaContract: "dawarich-storage-1.15.2" },
+        { family: "dawarich", schemaContract: "dawarich-1.15.3" },
+        { family: "dawarich-storage", schemaContract: "dawarich-storage-1.15.3" },
       ],
     });
   });

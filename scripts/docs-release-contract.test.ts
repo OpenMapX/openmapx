@@ -90,6 +90,7 @@ esac
     }
     expect(workflow).toContain('exit-code: "1"');
     expect(workflow).toContain('ignore-unfixed: "true"');
+    expect(workflow.match(/version: v0\.75\.0/g)).toHaveLength(2);
   });
   it.each([false, true])(
     "publishes only the approved digest and rejects mismatches=%s",

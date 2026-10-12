@@ -7,7 +7,7 @@ RUN GOPROXY=direct go mod init openmapx.local/gtfsclean-build && \
     GOPROXY=direct go get golang.org/x/text@v0.39.0 && \
     GOPROXY=direct go build -trimpath -o /usr/local/bin/gtfsclean github.com/public-transport/gtfsclean
 
-FROM docker.io/debian:bookworm-slim@sha256:3783cc01769c7b2b1b83a5c5ad96c815348e28ed7da68e2e3687004faa906251
+FROM docker.io/debian:bookworm-slim@sha256:7c7b2c966bc9ee8cedfeef67e0e279108992c77681fa595db4a9d65c06ccc587
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
 # Pin the MOTIS release we install. Override with `--build-arg MOTIS_VERSION=vX.Y.Z`.

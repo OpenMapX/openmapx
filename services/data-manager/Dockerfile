@@ -23,12 +23,14 @@ RUN GOPROXY=direct go mod init openmapx.local/gtfsclean-build && \
     GOPROXY=direct go get golang.org/x/text@v0.39.0 && \
     GOPROXY=direct go build -trimpath -o /usr/local/bin/gtfsclean github.com/public-transport/gtfsclean
 
-FROM node:24-slim@sha256:0e0ff40c39bc087845bfb27465a0df4ea419520094bc35842ff83dd8cbe6f9b6 AS base
+FROM node:24.21.0-slim@sha256:d6aa754f16b3197301076f047b5def2f02ea1dbbc2ca920407d46d7ec7f87b20 AS base
 
 # Read the pnpm version directly from the repo root package.json to ensure
 # lockfile resolution stays reproducible across local and CI Docker builds.
 COPY package.json /tmp/package.json
-RUN corepack enable && corepack prepare "$(node -e "console.log(require('/tmp/package.json').packageManager)")" --activate
+RUN corepack enable && \
+    corepack prepare "$(node -e "console.log(require('/tmp/package.json').packageManager)")" --activate && \
+    pnpm --version
 
 FROM base AS deps
 WORKDIR /app
@@ -88,7 +90,7 @@ COPY services/data-manager/ services/data-manager/
 WORKDIR /app/services/data-manager
 RUN pnpm build
 
-FROM node:24-slim@sha256:0e0ff40c39bc087845bfb27465a0df4ea419520094bc35842ff83dd8cbe6f9b6 AS runner
+FROM node:24.21.0-slim@sha256:d6aa754f16b3197301076f047b5def2f02ea1dbbc2ca920407d46d7ec7f87b20 AS runner
 WORKDIR /app
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
@@ -103,9 +105,9 @@ RUN apt-get update \
       libexpat1=2.5.0-1+deb12u4 libpcre2-8-0 \
     && rm -rf /var/lib/apt/lists/*
 
-ARG DUCKDB_VERSION=1.3.1
-ARG DUCKDB_SHA256_AMD64=a43e0156c9799496089dd265605113471df5a30a7db26e1c662484eb1d31fc08
-ARG DUCKDB_SHA256_ARM64=93ddf7bc61d148273b821abbca911053dec3ba5e004d5fa981b4732b7e608905
+ARG DUCKDB_VERSION=1.5.6
+ARG DUCKDB_SHA256_AMD64=6e89deac1ebbc36eed0291caf8b567b030c7b86ac35998f71854e22b3c5d5e2f
+ARG DUCKDB_SHA256_ARM64=c544e92c9b7c31fc53c2139802cabd8e2d1b2b3e3f933117f31611239c1402db
 RUN set -eux; \
     arch="$(uname -m)"; \
     case "$arch" in \
@@ -176,7 +178,7 @@ COPY tsconfig.base.json ./
 # Run as a dedicated non-root user. The data-manager writes to /data which is
 # bind-mounted from the host — the host-side permissions need to allow writes
 # by UID/GID 1001, or operators can override via `docker run --user` /
-# compose `user:`. node:24-slim ships a "node" user at UID 1000 we could reuse,
+# compose `user:`. The Node slim image ships a "node" user at UID 1000 we could reuse,
 # but the 1001 UID aligns with conventions used by the rest of the project's
 # service images and avoids colliding with host user IDs.
 RUN groupadd --system --gid 1001 datamgr \

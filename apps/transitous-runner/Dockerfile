@@ -25,9 +25,11 @@ RUN GOPROXY=direct go mod init openmapx.local/gtfsclean-build && \
     GOPROXY=direct go get golang.org/x/text@v0.39.0 && \
     GOPROXY=direct go build -trimpath -o /usr/local/bin/gtfsclean github.com/public-transport/gtfsclean
 
-FROM node:24-slim@sha256:0e0ff40c39bc087845bfb27465a0df4ea419520094bc35842ff83dd8cbe6f9b6 AS base
+FROM node:24.21.0-slim@sha256:d6aa754f16b3197301076f047b5def2f02ea1dbbc2ca920407d46d7ec7f87b20 AS base
 COPY package.json /tmp/package.json
-RUN corepack enable && corepack prepare "$(node -e "console.log(require('/tmp/package.json').packageManager)")" --activate
+RUN corepack enable && \
+    corepack prepare "$(node -e "console.log(require('/tmp/package.json').packageManager)")" --activate && \
+    pnpm --version
 
 FROM base AS deps
 WORKDIR /app

@@ -1,7 +1,7 @@
 {
   "id": "dawarich-sidekiq",
   "name": "Dawarich Sidekiq",
-  "version": "1.15.2",
+  "version": "1.15.3",
   "description": "Background job worker for the managed multi-user Dawarich timeline.",
   "license": "AGPL-3.0",
   "quality": "built-in",
@@ -15,8 +15,8 @@
   },
   "container": {
     "image": "freikin/dawarich",
-    "tag": "1.15.2",
-    "digest": "sha256:e58334ca56976feb4c885a8bd34b251ec2e3f45ffeabd4fd4371b5d2108fc70d",
+    "tag": "1.15.3",
+    "digest": "sha256:589e3606b11b61c3fa2d9661832cb73645a9b93a9cc7d807a071e2bc6c584498",
     "entrypoint": ["/usr/local/bin/openmapx-entrypoint.sh"],
     "command": ["sidekiq"],
     "environment": {
@@ -43,7 +43,7 @@
       "OIDC_PROVIDER_NAME": "OpenMapX",
       "OIDC_AUTO_REGISTER": "true",
       "OIDC_PKCE_ENABLED": "true",
-      "OPENMAPX_DAWARICH_COMMIT": "d81abc4fc467e119f542c56602c78488fbab86fb",
+      "OPENMAPX_DAWARICH_COMMIT": "e32b70701b2467b862d4b5bc27ac428999997c1b",
       "ALLOW_EMAIL_PASSWORD_REGISTRATION": "true",
       "ALLOW_EMAIL_PASSWORD_LOGIN": "true",
       "BACKGROUND_PROCESSING_CONCURRENCY": "3"

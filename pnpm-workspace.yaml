@@ -33,10 +33,6 @@ blockExoticSubdeps: true
 minimumReleaseAge: 1440
 minimumReleaseAgeStrict: true
 minimumReleaseAgeIgnoreMissingTime: false
-# One-version exception for jsdom's 30.1.1 focus-regression fix. Later jsdom
-# releases remain subject to the normal 24-hour quarantine.
-minimumReleaseAgeExclude:
-  - "jsdom@30.1.1"
 trustPolicy: no-downgrade
 
 # TypeScript 7 has no compiler API yet; keep this workspace's direct compiler
@@ -126,6 +122,11 @@ overrides:
   # jest-expo 57 still pins jest-watch-typeahead 2 even though this workspace
   # runs Jest 30. The plugin's 3.x line is the Jest 30-compatible successor.
   "jest-expo>jest-watch-typeahead": "^3.0.1"
+  # Expo 57.0.26's expo-asset range accepts constants 57.0.20, but the frozen
+  # graph otherwise retains 57.0.19 beside the app's 57.0.20 native module.
+  # Keep a single compatible native runtime while the newer Expo wave remains
+  # ineligible under the no-downgrade trust policy.
+  "expo-asset>expo-constants": "57.0.20"
   # Expo SDK 57 is coupled to React Native 0.86.3. Without this workspace-wide
   # constraint, drizzle-orm's optional expo-sqlite peer in server workspaces
   # auto-installs the newer 0.87.x line and leaves duplicate native modules.

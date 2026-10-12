@@ -36,9 +36,9 @@ function tar(entries: Array<[string, Buffer]>): Buffer {
 
 const tuple = {
   version: 1,
-  image: "freikin/dawarich:1.15.2",
-  imageDigest: "sha256:e58334ca56976feb4c885a8bd34b251ec2e3f45ffeabd4fd4371b5d2108fc70d",
-  upstreamCommit: "d81abc4fc467e119f542c56602c78488fbab86fb",
+  image: "freikin/dawarich:1.15.3",
+  imageDigest: "sha256:589e3606b11b61c3fa2d9661832cb73645a9b93a9cc7d807a071e2bc6c584498",
+  upstreamCommit: "e32b70701b2467b862d4b5bc27ac428999997c1b",
   subjectUserIdDigest: "a".repeat(64),
   cutoff: "2026-01-01T00:00:00Z",
   snapshotAt: "2026-01-01T00:00:00Z",

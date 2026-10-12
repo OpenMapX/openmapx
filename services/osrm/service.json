@@ -15,7 +15,7 @@
   "container": {
     "image": "ghcr.io/project-osrm/osrm-backend",
     "tag": "latest",
-    "digest": "sha256:8a1b1bc938412f15f9b5b32d794c4ec6bf4a85dfbbabfa0a014b70b187edb53b",
+    "digest": "sha256:55dbfd47d984c2cacd64e32901b4321c86b5ec761438e69aa053dc78698a786f",
     "expose": [5000],
     "command": ["osrm-routed", "--algorithm", "mld", "/data/region.osrm"],
     "memory": "8g",

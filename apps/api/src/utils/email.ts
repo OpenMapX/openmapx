@@ -136,11 +136,15 @@ async function sendViaEmailLabs(opts: MailOptions, config: EmailConfig): Promise
 
 async function sendViaLettermint(opts: MailOptions, config: EmailConfig): Promise<void> {
   const { Lettermint } = await import("lettermint");
-  const client = new Lettermint({ apiToken: config.lettermint.apiToken });
+  const client = new Lettermint({ sendingToken: config.lettermint.apiToken });
 
-  let builder = client.email.from(config.from).to(opts.to).subject(opts.subject).text(opts.text);
-  if (opts.html) builder = builder.html(opts.html);
-  await builder.send();
+  await client.emails.send({
+    from: config.from,
+    to: [opts.to],
+    subject: opts.subject,
+    text: opts.text,
+    ...(opts.html ? { html: opts.html } : {}),
+  });
 }
 
 async function sendViaSmtp(opts: MailOptions, config: EmailConfig): Promise<void> {

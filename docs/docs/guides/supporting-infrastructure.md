@@ -56,7 +56,7 @@ human-readable `18-3.6` tag is mutable; its reviewed provenance lives beside the
 service manifest in `services/postgis/image-provenance.json`.
 
 On 2026-08-09, the reviewed OCI index was
-`sha256:4117c8beae9081e76a23a1577c64d05260a61fb0a3c212f37596054ef4c190d8`.
+`sha256:8784f86b3e0e046859c96ea25eb8b10f0b801fd891b99a82b82f28ac4a643db8`.
 Its platform manifests were:
 
 - linux/amd64:
@@ -195,7 +195,7 @@ stays on the private network.
 
 | Property        | Value                                                                          |
 | --------------- | ------------------------------------------------------------------------------ |
-| Image           | `traefik:v3.6`                                                                 |
+| Image           | `traefik:v3.7.14`                                                              |
 | Memory limit    | `256m`                                                                         |
 | Volume          | `openmapx-traefik-acme` at `/etc/traefik` (backed up — holds the certificates) |
 | Published ports | TCP `80`, TCP `443`, UDP `443` (HTTP/3 / QUIC)                                 |

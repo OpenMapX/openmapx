@@ -52,7 +52,7 @@ afterAll(() => {
 });
 
 describe("managed OAuth provider policy", () => {
-  it("pins every runtime Better Auth package and the schema CLI to 1.7.5", () => {
+  it("pins every runtime Better Auth package and the schema CLI to 1.7.7", () => {
     const apiManifest = JSON.parse(
       readFileSync(new URL("../package.json", import.meta.url), "utf8"),
     ) as { dependencies: Record<string, string>; scripts: Record<string, string> };
@@ -83,21 +83,21 @@ describe("managed OAuth provider policy", () => {
     const webPackages = ["@better-auth/core", "@better-auth/passkey", "better-auth"];
 
     for (const packageName of apiPackages) {
-      expect(apiManifest.dependencies[packageName]).toBe("1.7.5");
+      expect(apiManifest.dependencies[packageName]).toBe("1.7.7");
       const lockName = packageName.startsWith("@") ? `'${packageName}'` : packageName;
-      expect(apiLock).toContain(`${lockName}:\n        specifier: 1.7.5`);
+      expect(apiLock).toContain(`${lockName}:\n        specifier: 1.7.7`);
     }
     for (const packageName of corePackages) {
-      expect(coreManifest.dependencies[packageName]).toBe("1.7.5");
+      expect(coreManifest.dependencies[packageName]).toBe("1.7.7");
       const lockName = packageName.startsWith("@") ? `'${packageName}'` : packageName;
-      expect(coreLock).toContain(`${lockName}:\n        specifier: 1.7.5`);
+      expect(coreLock).toContain(`${lockName}:\n        specifier: 1.7.7`);
     }
     for (const packageName of webPackages) {
-      expect(webManifest.dependencies[packageName]).toBe("1.7.5");
+      expect(webManifest.dependencies[packageName]).toBe("1.7.7");
       const lockName = packageName.startsWith("@") ? `'${packageName}'` : packageName;
-      expect(webLock).toContain(`${lockName}:\n        specifier: 1.7.5`);
+      expect(webLock).toContain(`${lockName}:\n        specifier: 1.7.7`);
     }
-    expect(apiManifest.scripts["auth:generate"]).toContain("auth@1.7.5 generate");
+    expect(apiManifest.scripts["auth:generate"]).toContain("auth@1.7.7 generate");
     for (const importer of [apiLock, coreLock, webLock]) {
       expect(importer).not.toContain("specifier: 1.6.");
     }

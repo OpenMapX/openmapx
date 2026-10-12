@@ -1,9 +1,9 @@
 {
   "$comment": "The versions a release is built with. Recorded rather than merely required, because 'it built on my machine' is not a claim anybody can check six months later when a report arrives against this exact build.",
-  "node": ">=24.0.0",
-  "pnpm": "11.15.1",
+  "node": ">=24.21.0",
+  "pnpm": "12.11.2",
   "expoSdk": "57",
-  "reactNative": "0.86.2",
+  "reactNative": "0.86.3",
   "ios": {
     "xcode": ">=26.4",
     "deploymentTarget": "16.4",

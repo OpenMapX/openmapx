@@ -1,7 +1,7 @@
 # Managed Dawarich timeline
 
 OpenMapX can run an optional shared, multi-user [Dawarich](https://dawarich.app/)
-1.15.2 instance for timeline users. The bundle uses stock Dawarich application
+1.15.3 instance for timeline users. The bundle uses stock Dawarich application
 code and consists of four isolated services:
 
 - `dawarich-app` — Rails/Puma web application, 4 GiB memory limit;
@@ -41,7 +41,7 @@ the following vault-backed secrets before it can start:
 
 OpenMapX renders secrets as files below `/run/secrets`; they never appear as
 literal values in generated Compose YAML. Minimal audited wrappers read those
-three Dawarich files and then execute the stock 1.15.2 web and Sidekiq
+three Dawarich files and then execute the stock 1.15.3 web and Sidekiq
 entrypoints. Do not add plaintext environment fallbacks.
 
 ## Provision, enable, and apply
@@ -129,12 +129,12 @@ Better Auth OIDC gives an already signed-in OpenMapX user single sign-on to the
 managed Dawarich web application. Dawarich still owns its own browser cookie,
 so this is not single logout; on shared devices, sign out of both applications.
 
-OIDC authenticates the browser only. Dawarich 1.15.2 does not authorize its API
+OIDC authenticates the browser only. Dawarich 1.15.3 does not authorize its API
 with the Better Auth token or Rails session. Every user must open Dawarich,
 finish OIDC registration or explicit account linking, copy their personal
 Dawarich API key from **Account settings** at `/users/edit`, and paste it into
 OpenMapX Timeline settings. (`/settings` is not a web account route in Dawarich
-1.15.2.) OpenMapX stores that key encrypted and uses it only as a Bearer token
+1.15.3.) OpenMapX stores that key encrypted and uses it only as a Bearer token
 for read-only timeline calls. Tracking, imports, edits, and other writes go
 directly to Dawarich.
 
@@ -204,7 +204,7 @@ Dawarich persistence uses five named volumes:
 | `openmapx-dawarich-redis-data` | transient queues and caches                   | none        |
 
 Backups record the producing service version. A valid Dawarich backup contains
-app version `1.15.2` and PostGIS version `18-3.6`. Redis is deliberately not a
+app version `1.15.3` and PostGIS version `18-3.6`. Redis is deliberately not a
 backup target: jobs and caches are transient and are rebuilt after restore.
 
 Create and copy a backup off-host before upgrades or destructive maintenance:
@@ -239,14 +239,14 @@ location history. Retain off-host backups and follow Dawarich's official
 | -------------------------- | ------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
 | OpenMapX                   | dependency-complete baseline `1a2d0396fb97b1957a6907ef41877f91cab640eb` plus this release change | repository source                                                               | CI targets plus staging host                                                             | Record the final release commit with acceptance evidence                  |
 | Better Auth OAuth Provider | `better-auth` and `@better-auth/oauth-provider`                                                  | exact package lock                                                              | server runtime                                                                           | One persisted confidential client; admin API only, no direct table writes |
-| Dawarich app + worker      | `freikin/dawarich:1.15.2`                                                                        | `sha256:e58334ca56976feb4c885a8bd34b251ec2e3f45ffeabd4fd4371b5d2108fc70d`       | linux/amd64, linux/arm64, linux/arm/v7 inspected; exact image exercised                  | Upstream Dawarich release                                                 |
-| Dedicated PostGIS          | `ghcr.io/baosystems/postgis:18-3.6`                                                              | index `sha256:4117c8beae9081e76a23a1577c64d05260a61fb0a3c212f37596054ef4c190d8` | linux/amd64 + linux/arm64 inspected; clean Dawarich schema and export fixtures exercised | Bao rebuilds weekly and explicitly provides no support                    |
+| Dawarich app + worker      | `freikin/dawarich:1.15.3`                                                                        | `sha256:589e3606b11b61c3fa2d9661832cb73645a9b93a9cc7d807a071e2bc6c584498`       | linux/amd64, linux/arm64, linux/arm/v7 inspected; exact image exercised                  | Upstream Dawarich release                                                 |
+| Dedicated PostGIS          | `ghcr.io/baosystems/postgis:18-3.6`                                                              | index `sha256:8784f86b3e0e046859c96ea25eb8b10f0b801fd891b99a82b82f28ac4a643db8` | linux/amd64 + linux/arm64 inspected; clean Dawarich schema and export fixtures exercised | Bao rebuilds weekly and explicitly provides no support                    |
 | Dedicated Redis            | `redis:7.4-alpine`                                                                               | mutable pinned release tag; re-inspect before release                           | linux/amd64 + linux/arm64 inspected                                                      | Transient queues/cache; not restored                                      |
 
-The application manifest pins the human-readable `freikin/dawarich:1.15.2`
-tag. On 2026-09-26 its OCI index was verified as linux/amd64, linux/arm64, and
+The application manifest pins the human-readable `freikin/dawarich:1.15.3`
+tag. On 2026-10-11 its OCI index was verified as linux/amd64, linux/arm64, and
 linux/arm/v7 at digest
-`sha256:e58334ca56976feb4c885a8bd34b251ec2e3f45ffeabd4fd4371b5d2108fc70d`.
+`sha256:589e3606b11b61c3fa2d9661832cb73645a9b93a9cc7d807a071e2bc6c584498`.
 The exact image exposed Docker ENTRYPOINT `bundle exec` and executable
 stock `/usr/local/bin/web-entrypoint.sh` and
 `/usr/local/bin/sidekiq-entrypoint.sh` paths.
@@ -254,12 +254,12 @@ stock `/usr/local/bin/web-entrypoint.sh` and
 Dawarich's upstream Compose file still defaults to PostgreSQL 17/PostGIS 3.5.
 Because this bundle has no installed legacy database to migrate, OpenMapX uses
 `ghcr.io/baosystems/postgis:18-3.6` and verifies the combination by creating the
-complete 1.15.2 schema and exercising both live and restored-backup collectors.
+complete 1.15.3 schema and exercising both live and restored-backup collectors.
 Bao Systems rebuilds the upstream Debian PostGIS images as multi-architecture
 images, but explicitly provides **no support** for them.
 
-On 2026-09-26 the Bao tag was a linux/amd64 + linux/arm64 index at
-`sha256:4117c8beae9081e76a23a1577c64d05260a61fb0a3c212f37596054ef4c190d8`.
+On 2026-10-11 the Bao tag was a linux/amd64 + linux/arm64 index at
+`sha256:8784f86b3e0e046859c96ea25eb8b10f0b801fd891b99a82b82f28ac4a643db8`.
 The exact arm64 image ran Dawarich's full migration set and both privacy-export
 fixtures successfully. The Redis `7.4-alpine` index was also checked for
 linux/amd64 and linux/arm64.
@@ -267,7 +267,7 @@ linux/amd64 and linux/arm64.
 These tags are mutable. Before every OpenMapX release, rerun:
 
 ```bash
-docker buildx imagetools inspect freikin/dawarich:1.15.2
+docker buildx imagetools inspect freikin/dawarich:1.15.3
 docker buildx imagetools inspect ghcr.io/baosystems/postgis:18-3.6
 docker buildx imagetools inspect redis:7.4-alpine
 ```
@@ -320,7 +320,7 @@ contract, OIDC flow, migrations, health checks, and a full synthetic restore.
    version.
 6. Apply the manifests and watch app/worker logs through health.
 
-The [Dawarich 1.15.2 release](https://github.com/Freika/dawarich/releases/tag/1.15.2)
+The [Dawarich 1.15.3 release](https://github.com/Freika/dawarich/releases/tag/1.15.3)
 is the compatibility baseline for this bundle.
 
 ## Disable and purge
