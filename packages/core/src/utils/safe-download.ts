@@ -591,6 +591,17 @@ export interface SafeJsonResponse<T> {
   finalUrl: string;
 }
 
+export type SafeFetchStatusOptions = Omit<
+  SafeFetchJsonOptions,
+  "acceptedContentTypes" | "body" | "maxBytes" | "method" | "parseJson"
+>;
+
+export interface SafeStatusResponse {
+  status: number;
+  headers: Headers;
+  finalUrl: string;
+}
+
 /** Safe metadata for non-success HTTP responses; deliberately excludes their body and request headers. */
 export class SafeFetchHttpError extends Error {
   readonly status: number;
@@ -675,19 +686,19 @@ export async function assertFeedUrlAllowed(
   await assertFetchTargetAllowed(url, allowPrivateHosts);
 }
 
-/**
- * Fetch and JSON-parse a URL with the same SSRF protection as `safeDownload`:
- * textual public-URL validation, DNS resolution of the initial and final host
- * (rejecting private/link-local/reserved addresses), per-redirect re-validation
- * through `fetchWithRedirects`, and a byte cap (declared Content-Length + a
- * streaming counter). For fetching third-party-author-influenced JSON
- * (catalogs, manifests) from server-side code.
- */
-export async function safeFetchJsonResponse<T = unknown>(
+interface SafeFetchResponseContext {
+  response: Response;
+  finalUrl: string;
+  signal: AbortSignal;
+  openBodyReader(): ReadableStreamDefaultReader<Uint8Array>;
+  markBodyConsumed(): void;
+}
+
+async function consumeSafeFetchResponse<T>(
   url: string,
-  opts: SafeFetchJsonOptions = {},
-): Promise<SafeJsonResponse<T>> {
-  const maxBytes = opts.maxBytes ?? 5 * 1024 * 1024;
+  opts: SafeFetchJsonOptions,
+  consume: (context: SafeFetchResponseContext) => Promise<T>,
+): Promise<T> {
   const timeoutMs = opts.timeoutMs ?? 15_000;
   const maxRedirects = opts.maxRedirects ?? 5;
   const allowPrivateHosts = opts.allowPrivateHosts ?? privateFeedHostAllowlist();
@@ -707,7 +718,7 @@ export async function safeFetchJsonResponse<T = unknown>(
   let forceDestroy = false;
   let responseReleased = false;
   let transportDisposed = false;
-  let result: SafeJsonResponse<T> | undefined;
+  let result: T | undefined;
   let requestFailed = false;
   let primaryError: unknown;
   const cancelUnconsumedBody = async (cleanupDeadlineAt: number): Promise<void> => {
@@ -797,81 +808,27 @@ export async function safeFetchJsonResponse<T = unknown>(
     });
 
     const finalUrl = response.url || url;
-
-    if (!response.ok) {
-      const retryAfterSeconds = parseRetryAfterSeconds(response.headers.get("retry-after"));
-      throw new SafeFetchHttpError(response.status, finalUrl, retryAfterSeconds);
-    }
-
     const finalHostname = new URL(finalUrl).hostname;
     if (finalHostname !== hostname) {
       await assertFetchTargetAllowed(finalUrl, allowPrivateHosts, operationSignal);
     }
 
-    const contentLengthHeader = response.headers.get("content-length");
-    if (contentLengthHeader) {
-      const declared = Number(contentLengthHeader);
-      if (Number.isFinite(declared) && declared > maxBytes) {
-        throw new Error(`Response too large (declared ${declared} > ${maxBytes} bytes)`);
-      }
-    }
-
-    if (opts.acceptedContentTypes) {
-      const contentType = response.headers
-        .get("content-type")
-        ?.split(";", 1)[0]
-        ?.trim()
-        .toLowerCase();
-      const accepted = opts.acceptedContentTypes.map((value) => value.toLowerCase());
-      if (!contentType || !accepted.includes(contentType)) {
-        throw new Error(`Unexpected response content type for ${finalUrl}`);
-      }
-    }
-
-    if (!response.body) {
-      throw new Error(`Empty response body for ${finalUrl}`);
-    }
-
-    reader = response.body.getReader();
-    const chunks: Uint8Array[] = [];
-    let total = 0;
-    for (;;) {
-      const { done, value } = await abortable(reader.read(), operationSignal);
-      if (done) break;
-      total += value.byteLength;
-      if (total > maxBytes) {
-        throw new Error(`Response too large (exceeded ${maxBytes} bytes)`);
-      }
-      chunks.push(value);
-    }
-    bodyConsumed = true;
-    reader.releaseLock?.();
-    reader = undefined;
-
-    const text = Buffer.concat(chunks.map((c) => Buffer.from(c))).toString("utf8");
-    if (opts.parseJson === false) {
-      // The caller verifies a digest over these exact bytes before deciding
-      // whether they may be parsed at all.
-      result = {
-        data: undefined as T,
-        text,
-        status: response.status,
-        headers: response.headers,
-        finalUrl,
-      };
-    } else {
-      try {
-        result = {
-          data: JSON.parse(text) as T,
-          text,
-          status: response.status,
-          headers: response.headers,
-          finalUrl,
-        };
-      } catch {
-        throw new Error(`Invalid JSON response from ${finalUrl}`);
-      }
-    }
+    result = await consume({
+      response,
+      finalUrl,
+      signal: operationSignal,
+      openBodyReader: () => {
+        if (!response?.body) throw new Error(`Empty response body for ${finalUrl}`);
+        if (reader) throw new Error("Response body reader already acquired");
+        reader = response.body.getReader();
+        return reader;
+      },
+      markBodyConsumed: () => {
+        bodyConsumed = true;
+        reader?.releaseLock?.();
+        reader = undefined;
+      },
+    });
   } catch (error) {
     requestFailed = true;
     primaryError = error;
@@ -882,22 +839,121 @@ export async function safeFetchJsonResponse<T = unknown>(
     if (cleanupErrors.length > 0 && primaryError instanceof Error) {
       Object.defineProperty(primaryError, "cause", {
         configurable: true,
-        value: new AggregateError(cleanupErrors, "safeFetchJson cleanup failed"),
+        value: new AggregateError(cleanupErrors, "safe fetch cleanup failed"),
       });
     }
     if (cleanupErrors.length > 0 && !(primaryError instanceof Error)) {
       throw new AggregateError(
         [primaryError, ...cleanupErrors],
-        "safeFetchJson request and cleanup failed",
+        "safe fetch request and cleanup failed",
       );
     }
     throw primaryError;
   }
   if (cleanupErrors.length > 0) {
-    throw new Error("safeFetchJson resource cleanup failed", { cause: cleanupErrors[0] });
+    throw new Error("safe fetch resource cleanup failed", { cause: cleanupErrors[0] });
   }
-  if (!result) throw new Error("safeFetchJson response unavailable");
+  if (result === undefined) throw new Error("safe fetch response unavailable");
   return result;
+}
+
+/**
+ * Fetch only response metadata through the pinned SSRF-safe lifecycle. The
+ * final response body is canceled rather than buffered, including for non-2xx
+ * responses.
+ */
+export async function safeFetchStatus(
+  url: string,
+  opts: SafeFetchStatusOptions = {},
+): Promise<SafeStatusResponse> {
+  return consumeSafeFetchResponse(url, opts, async ({ response, finalUrl }) => ({
+    status: response.status,
+    headers: response.headers,
+    finalUrl,
+  }));
+}
+
+/**
+ * Fetch and JSON-parse a URL with the same SSRF protection as `safeDownload`:
+ * textual public-URL validation, DNS resolution of the initial and final host
+ * (rejecting private/link-local/reserved addresses), per-redirect re-validation
+ * through `fetchWithRedirects`, and a byte cap (declared Content-Length + a
+ * streaming counter). For fetching third-party-author-influenced JSON
+ * (catalogs, manifests) from server-side code.
+ */
+export async function safeFetchJsonResponse<T = unknown>(
+  url: string,
+  opts: SafeFetchJsonOptions = {},
+): Promise<SafeJsonResponse<T>> {
+  const maxBytes = opts.maxBytes ?? 5 * 1024 * 1024;
+  return consumeSafeFetchResponse(
+    url,
+    opts,
+    async ({ response, finalUrl, signal, openBodyReader, markBodyConsumed }) => {
+      if (!response.ok) {
+        const retryAfterSeconds = parseRetryAfterSeconds(response.headers.get("retry-after"));
+        throw new SafeFetchHttpError(response.status, finalUrl, retryAfterSeconds);
+      }
+
+      const contentLengthHeader = response.headers.get("content-length");
+      if (contentLengthHeader) {
+        const declared = Number(contentLengthHeader);
+        if (Number.isFinite(declared) && declared > maxBytes) {
+          throw new Error(`Response too large (declared ${declared} > ${maxBytes} bytes)`);
+        }
+      }
+
+      if (opts.acceptedContentTypes) {
+        const contentType = response.headers
+          .get("content-type")
+          ?.split(";", 1)[0]
+          ?.trim()
+          .toLowerCase();
+        const accepted = opts.acceptedContentTypes.map((value) => value.toLowerCase());
+        if (!contentType || !accepted.includes(contentType)) {
+          throw new Error(`Unexpected response content type for ${finalUrl}`);
+        }
+      }
+
+      const reader = openBodyReader();
+      const chunks: Uint8Array[] = [];
+      let total = 0;
+      for (;;) {
+        const { done, value } = await abortable(reader.read(), signal);
+        if (done) break;
+        total += value.byteLength;
+        if (total > maxBytes) {
+          throw new Error(`Response too large (exceeded ${maxBytes} bytes)`);
+        }
+        chunks.push(value);
+      }
+      markBodyConsumed();
+
+      const text = Buffer.concat(chunks.map((c) => Buffer.from(c))).toString("utf8");
+      if (opts.parseJson === false) {
+        // The caller verifies a digest over these exact bytes before deciding
+        // whether they may be parsed at all.
+        return {
+          data: undefined as T,
+          text,
+          status: response.status,
+          headers: response.headers,
+          finalUrl,
+        };
+      }
+      try {
+        return {
+          data: JSON.parse(text) as T,
+          text,
+          status: response.status,
+          headers: response.headers,
+          finalUrl,
+        };
+      } catch {
+        throw new Error(`Invalid JSON response from ${finalUrl}`);
+      }
+    },
+  );
 }
 
 // A full day bounds automatic retries while covering ordinary rate-limit windows.

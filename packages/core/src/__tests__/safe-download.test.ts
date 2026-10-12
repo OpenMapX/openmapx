@@ -50,6 +50,7 @@ import {
   safeDownload,
   safeFetchJson,
   safeFetchJsonResponse,
+  safeFetchStatus,
 } from "../utils/safe-download";
 
 // dnsLookup has overloads that confuse vi.mocked; cast to a simple mock.
@@ -349,6 +350,113 @@ function stubFetchSequence(...responses: Response[]): ReturnType<typeof vi.fn> {
   for (const response of responses) undiciFetchMock.mockResolvedValueOnce(response);
   return undiciFetchMock;
 }
+
+describe("safeFetchStatus", () => {
+  it("returns successful response metadata without buffering the body", async () => {
+    const cancel = vi.fn().mockResolvedValue(undefined);
+    lookupMock.mockResolvedValue([{ address: "93.184.216.34", family: 4 }]);
+    stubFetchSequence({
+      ...makeResponse({
+        status: 204,
+        url: "https://status.test/health",
+        headers: { "x-request-id": "status-fixture" },
+      }),
+      body: { cancel },
+    } as unknown as Response);
+
+    const result = await safeFetchStatus("https://status.test/health");
+
+    expect(result).toMatchObject({ status: 204, finalUrl: "https://status.test/health" });
+    expect(result.headers.get("x-request-id")).toBe("status-fixture");
+    expect(cancel).toHaveBeenCalledOnce();
+  });
+
+  it("returns non-success status metadata instead of throwing", async () => {
+    const cancel = vi.fn().mockResolvedValue(undefined);
+    lookupMock.mockResolvedValue([{ address: "93.184.216.34", family: 4 }]);
+    stubFetchSequence({
+      ...makeResponse({ status: 503, url: "https://status.test/health" }),
+      body: { cancel },
+    } as unknown as Response);
+
+    await expect(safeFetchStatus("https://status.test/health")).resolves.toMatchObject({
+      status: 503,
+      finalUrl: "https://status.test/health",
+    });
+    expect(cancel).toHaveBeenCalledOnce();
+  });
+
+  it("follows a same-origin redirect and reports the final response", async () => {
+    lookupMock.mockResolvedValue([{ address: "93.184.216.34", family: 4 }]);
+    stubFetchSequence(
+      makeResponse({
+        status: 302,
+        headers: { location: "https://status.test/ready" },
+      }),
+      makeResponse({ status: 200, url: "https://status.test/ready" }),
+    );
+
+    await expect(
+      safeFetchStatus("https://status.test/health", {
+        allowedRedirectOrigin: "https://status.test",
+      }),
+    ).resolves.toMatchObject({ status: 200, finalUrl: "https://status.test/ready" });
+    expect(undiciFetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("rejects a redirect to a private destination", async () => {
+    lookupMock.mockResolvedValue([{ address: "93.184.216.34", family: 4 }]);
+    stubFetchSequence(
+      makeResponse({ status: 302, headers: { location: "http://127.0.0.1/internal" } }),
+    );
+
+    await expect(safeFetchStatus("https://status.test/health")).rejects.toThrow(/not allowed/i);
+    expect(undiciFetchMock).toHaveBeenCalledOnce();
+  });
+
+  it("blocks DNS rebinding before the connection opens", async () => {
+    lookupMock
+      .mockResolvedValueOnce([{ address: "93.184.216.34", family: 4 }])
+      .mockResolvedValueOnce([{ address: "10.0.0.5", family: 4 }]);
+    const fetchMock = stubFetchSequence();
+
+    await expect(safeFetchStatus("https://rebind.test/health")).rejects.toThrow(/not allowed/i);
+    expect(lookupMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("uses caller abort to stop a pending connection-time lookup", async () => {
+    const lookupStarted = deferred();
+    const controller = new AbortController();
+    lookupMock
+      .mockResolvedValueOnce([{ address: "93.184.216.34", family: 4 }])
+      .mockImplementationOnce(async () => {
+        lookupStarted.resolve();
+        return await new Promise<never>(() => {});
+      });
+    const fetchMock = stubFetchSequence();
+    const operation = safeFetchStatus("https://status.test/health", {
+      signal: controller.signal,
+      timeoutMs: 10_000,
+    });
+    await lookupStarted.promise;
+
+    controller.abort(new Error("fixture abort"));
+
+    await expect(operation).rejects.toThrow(/fixture abort/i);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("closes the pinned dispatcher after canceling the final response", async () => {
+    lookupMock.mockResolvedValue([{ address: "93.184.216.34", family: 4 }]);
+    stubFetchSequence(makeResponse({ status: 200, url: "https://status.test/health" }));
+
+    await safeFetchStatus("https://status.test/health");
+
+    expect(undiciLifecycle.close).toHaveBeenCalledOnce();
+    expect(undiciLifecycle.destroy).not.toHaveBeenCalled();
+  });
+});
 
 describe("safeFetchJson", () => {
   it("forwards a bounded JSON request method and body", async () => {
