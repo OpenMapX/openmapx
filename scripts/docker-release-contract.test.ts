@@ -165,7 +165,7 @@ describe("Docker release trust gate", () => {
     expect(promoteJob).not.toContain("matrix:");
   });
 
-  it("writes parseable release JSON even when Docker promotion commands write to stdout", () => {
+  it("promotes attempt-one artifacts when attempt two reruns only failed jobs", () => {
     const promotionStart = release.indexOf(
       "- name: Promote every scanned digest to SHA and assemble the release manifest",
     );
@@ -194,7 +194,7 @@ describe("Docker release trust gate", () => {
         "transitous-runner",
         "transitous-tools",
       ]) {
-        const digestDir = join(temp, "digests", `docker-digest-${app}-1-1`);
+        const digestDir = join(temp, "digests", `docker-digest-${app}-1`);
         mkdirSync(digestDir, { recursive: true });
         writeFileSync(join(digestDir, "a".repeat(64)), "");
       }
@@ -225,7 +225,7 @@ describe("Docker release trust gate", () => {
         join(temp, "release-plan/release-plan.json"),
         JSON.stringify({
           version: 1,
-          release: `${"a".repeat(40)}-1-1`,
+          release: `${"a".repeat(40)}-1`,
           sourceRevision: "a".repeat(40),
           privacyFingerprint: "b".repeat(64),
           images: apps.map((app) => ({ app, rebuild: true })),
@@ -262,11 +262,11 @@ describe("Docker release trust gate", () => {
           ...process.env,
           PATH: `${bin}:${process.env.PATH}`,
           GITHUB_RUN_ID: "1",
-          GITHUB_RUN_ATTEMPT: "1",
+          GITHUB_RUN_ATTEMPT: "2",
           IMAGE_PREFIX: "example.invalid/openmapx",
           RELEASE_MANIFEST_IMAGE: "example.invalid/openmapx/release-manifest",
           RELEASE_SHA: "a".repeat(40),
-          RELEASE_ID: `${"a".repeat(40)}-1-1`,
+          RELEASE_ID: `${"a".repeat(40)}-1`,
         },
       });
 
@@ -274,7 +274,7 @@ describe("Docker release trust gate", () => {
         JSON.parse(readFileSync(join(temp, "release-manifest", "release-manifest.json"), "utf8")),
       ).toEqual({
         schemaVersion: 1,
-        release: `${"a".repeat(40)}-1-1`,
+        release: `${"a".repeat(40)}-1`,
         buildMetadata,
         images: {
           api: `example.invalid/openmapx/api@sha256:${"a".repeat(64)}`,
@@ -295,10 +295,7 @@ describe("Docker release trust gate", () => {
   it("requires one canonical digest artifact per image and a fail-closed docs image reference", () => {
     expect(release).toContain('[[ ! "$DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]');
     expect(release).toContain(
-      'digest_files=("digests/docker-digest-$' +
-        "{app}-$" +
-        "{GITHUB_RUN_ID}-$" +
-        '{GITHUB_RUN_ATTEMPT}"/*)',
+      'digest_files=("digests/docker-digest-$' + "{app}-$" + '{GITHUB_RUN_ID}"/*)',
     );
     expect(release).toContain(
       '[ "$' + '{#digest_files[@]}" -ne 1 ] || [ ! -f "$' + '{digest_files[0]}" ]',
@@ -313,8 +310,9 @@ describe("Docker release trust gate", () => {
 
   it("builds only affected deployable Docker targets without publishing on pull requests", () => {
     expect(ci).toMatch(/^ {2}docker-changes:\n/m);
-    expect(ci).toContain("dorny/paths-filter@");
-    expect(ci).toContain(`apps: \${{ steps.filter.outputs.changes }}`);
+    expect(ci).not.toContain("dorny/paths-filter@");
+    expect(ci).toContain('node scripts/docker-release-plan.mjs changed "$BASE_SHA" "$HEAD_SHA"');
+    expect(ci).toContain(`apps: \${{ steps.select.outputs.apps }}`);
     expect(ci).toMatch(/^ {2}docker-build:\n/m);
     expect(ci).toContain(`app: \${{ fromJSON(needs.docker-changes.outputs.apps) }}`);
     expect(ci).toContain("needs: docker-changes");
@@ -339,8 +337,11 @@ describe("Docker release trust gate", () => {
       "services/data-manager/Dockerfile",
       "services/motis/tools/transitous/Dockerfile",
     ]) {
-      expect(read(dockerfile)).toContain("golang.org/x/text@v0.39.0");
+      expect(read(dockerfile)).toContain("build-gtfsclean.sh");
     }
+    expect(read("services/motis/tools/transitous/build-gtfsclean.sh")).toContain(
+      "golang.org/x/text@v0.39.0",
+    );
   });
 
   it("builds and promotes the isolated privacy backup collector", () => {
@@ -349,8 +350,6 @@ describe("Docker release trust gate", () => {
     expect(release).toContain(
       "for app in api web data-manager ops-agent privacy-backup transitous-runner",
     );
-    expect(ci).toContain("privacy-backup:");
-    expect(ci).toContain("'services/ops-agent/privacy-backup/**'");
     expect(ci).toContain(
       'privacy-backup) echo "context=." >> "$GITHUB_OUTPUT"; echo "dockerfile=services/ops-agent/privacy-backup/Dockerfile"',
     );
@@ -363,11 +362,10 @@ describe("Docker release trust gate", () => {
       'pnpm validate:privacy-release "$RUNNER_TEMP/privacy-release-validation.json"',
     );
     expect(release).toContain(
-      "privacy-release-validation-$" +
-        "{{ needs.gate.outputs.sha }}-$" +
-        "{{ github.run_id }}-$" +
-        "{{ github.run_attempt }}",
+      "privacy-release-validation-$" + "{{ needs.gate.outputs.sha }}-$" + "{{ github.run_id }}",
     );
+    expect(release).not.toContain("github.run_attempt");
+    expect(release).not.toContain("GITHUB_RUN_ATTEMPT");
     const validation = release.indexOf("pnpm validate:privacy-release");
     const releasePointer = release.indexOf('"$' + '{RELEASE_MANIFEST_IMAGE}:latest"');
     expect(validation).toBeGreaterThan(-1);

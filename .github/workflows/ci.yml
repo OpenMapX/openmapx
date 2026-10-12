@@ -323,133 +323,25 @@ jobs:
     timeout-minutes: 5
     permissions:
       contents: read
-      pull-requests: read
     outputs:
-      apps: ${{ steps.filter.outputs.changes }}
+      apps: ${{ steps.select.outputs.apps }}
     steps:
-      - name: Select deployable targets affected by this pull request
-        id: filter
-        uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          filters: |
-            api:
-              - '.github/workflows/ci.yml'
-              - '.github/workflows/docker.yml'
-              - '.dockerignore'
-              - 'package.json'
-              - 'pnpm-lock.yaml'
-              - 'pnpm-workspace.yaml'
-              - 'tsconfig.base.json'
-              - 'turbo.json'
-              - 'apps/api/**'
-              - 'packages/brands/**'
-              - 'packages/cli/**'
-              - 'packages/core/**'
-              - 'packages/db-schema/**'
-              - 'packages/ev-charge-planner/**'
-              - 'packages/hardlinks/**'
-              - 'packages/hey-api-client-fetch/**'
-              - 'packages/i18n/**'
-              - 'packages/integration-framework/**'
-              - 'packages/mangrove-client/**'
-              - 'packages/mobility-core/**'
-              - 'packages/mobility-formats/**'
-              - 'packages/motis-feed-proxy-config/**'
-              - 'packages/noaa-coops-data/**'
-              - 'packages/openconditions-contrib-client/**'
-              - 'packages/ourairports-data/**'
-              - 'packages/place-ids/**'
-              - 'packages/presets/**'
-              - 'packages/transitous-core/**'
-              - 'integrations/**'
-              - 'services/**'
-            web:
-              - '.github/workflows/ci.yml'
-              - '.github/workflows/docker.yml'
-              - '.dockerignore'
-              - 'package.json'
-              - 'pnpm-lock.yaml'
-              - 'pnpm-workspace.yaml'
-              - 'tsconfig.base.json'
-              - 'turbo.json'
-              - 'apps/web/**'
-              - 'apps/api/openapi.json'
-              - 'packages/brands/**'
-              - 'packages/command-palette/**'
-              - 'packages/core/**'
-              - 'packages/ev-charge-planner/**'
-              - 'packages/hey-api-client-fetch/**'
-              - 'packages/i18n/**'
-              - 'packages/integration-framework/**'
-              - 'packages/mangrove-client/**'
-              - 'packages/mangrove-react/**'
-              - 'packages/mobility-core/**'
-              - 'packages/mobility-formats/**'
-              - 'packages/noaa-coops-data/**'
-              - 'packages/openconditions-contrib-client/**'
-              - 'packages/ourairports-data/**'
-              - 'packages/place-ids/**'
-              - 'packages/presets/**'
-              - 'packages/transitous-core/**'
-              - 'integrations/**'
-            data-manager:
-              - '.github/workflows/ci.yml'
-              - '.github/workflows/docker.yml'
-              - '.dockerignore'
-              - 'package.json'
-              - 'pnpm-lock.yaml'
-              - 'pnpm-workspace.yaml'
-              - 'tsconfig.base.json'
-              - 'services/data-manager/**'
-              - 'services/motis/tools/transitous/requirements.txt'
-              - 'packages/air-quality/**'
-              - 'packages/cli/**'
-              - 'packages/core/**'
-              - 'packages/db-schema/**'
-              - 'packages/hardlinks/**'
-              - 'packages/hey-api-client-fetch/**'
-              - 'packages/i18n/**'
-              - 'packages/integration-framework/**'
-              - 'packages/mobility-core/**'
-              - 'packages/mobility-formats/**'
-              - 'packages/motis-feed-proxy-config/**'
-              - 'packages/place-ids/**'
-              - 'packages/transitous-core/**'
-            ops-agent:
-              - '.github/workflows/ci.yml'
-              - '.github/workflows/docker.yml'
-              - '.dockerignore'
-              - 'package.json'
-              - 'pnpm-lock.yaml'
-              - 'pnpm-workspace.yaml'
-              - 'tsconfig.base.json'
-              - 'apps/ops-agent/**'
-              - 'packages/**'
-              - 'services/**/service.json'
-            privacy-backup:
-              - '.github/workflows/ci.yml'
-              - '.github/workflows/docker.yml'
-              - '.dockerignore'
-              - 'services/ops-agent/privacy-backup/**'
-            transitous-runner:
-              - '.github/workflows/ci.yml'
-              - '.github/workflows/docker.yml'
-              - '.dockerignore'
-              - 'package.json'
-              - 'pnpm-lock.yaml'
-              - 'pnpm-workspace.yaml'
-              - 'tsconfig.base.json'
-              - 'apps/transitous-runner/**'
-              - 'packages/core/**'
-              - 'services/motis/tools/transitous/requirements.txt'
-            transitous-tools:
-              - '.github/workflows/ci.yml'
-              - '.github/workflows/docker.yml'
-              - 'services/motis/tools/transitous/**'
-            docs:
-              - '.github/workflows/ci.yml'
-              - '.github/workflows/docker.yml'
-              - 'docs/**'
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          package-manager-cache: false
+
+      - name: Select deployable targets affected by this pull request
+        id: select
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: node scripts/docker-release-plan.mjs changed "$BASE_SHA" "$HEAD_SHA"
 
   docker-build:
     name: build Docker (${{ matrix.app }})

@@ -31,8 +31,13 @@ export const targets = [
     dockerfile: "services/motis/tools/transitous/Dockerfile",
   },
 ];
+export const pullRequestTargets = [
+  ...targets,
+  { app: "docs", context: "docs", dockerfile: "docs/Dockerfile" },
+];
 const shaPattern = /^[a-f0-9]{40}$/;
-const releasePattern = /^[a-f0-9]{40}(?:-[1-9][0-9]*-[1-9][0-9]*)?$/;
+const releasePattern = /^[a-f0-9]{40}(?:-[1-9][0-9]*)?$/;
+const previousReleasePattern = /^[a-f0-9]{40}(?:-[1-9][0-9]*(?:-[1-9][0-9]*)?)?$/;
 const hashPattern = /^[a-f0-9]{64}$/;
 const digestPattern = /^sha256:[a-f0-9]{64}$/;
 const maxColdRefreshAge = 7 * 24 * 60 * 60 * 1000;
@@ -89,6 +94,37 @@ export function dockerInputs(dockerfile, context) {
   return [...new Set(inputs)];
 }
 
+export function targetInputs(target, readDockerfile) {
+  return [
+    ...dockerInputs(readDockerfile(target.dockerfile), target.context),
+    target.dockerfile,
+    posix.join(target.context, ".dockerignore"),
+    `${target.dockerfile}.dockerignore`,
+    ...globalInputs,
+  ];
+}
+
+function coversPath(inputs, path) {
+  return inputs.some((input) => input === "." || path === input || path.startsWith(`${input}/`));
+}
+
+export function selectChangedTargets({
+  changedPaths,
+  readDockerfile,
+  tree = [],
+  candidates = pullRequestTargets,
+}) {
+  return candidates
+    .filter((target) => {
+      const inputs = targetInputs(target, readDockerfile);
+      const copiedSymlink = tree.some(
+        (entry) => entry.mode === "120000" && coversPath(inputs, entry.path),
+      );
+      return changedPaths.some((path) => copiedSymlink || coversPath(inputs, path));
+    })
+    .map((target) => target.app);
+}
+
 export function trackedTree(root) {
   return execFileSync("git", ["ls-tree", "-r", "-z", "HEAD"], {
     cwd: root,
@@ -106,16 +142,8 @@ export function trackedTree(root) {
 
 export function imageFingerprint({ target, tree, readDockerfile, privacyFingerprint }) {
   const dockerfile = readDockerfile(target.dockerfile);
-  const inputs = [
-    ...dockerInputs(dockerfile, target.context),
-    target.dockerfile,
-    posix.join(target.context, ".dockerignore"),
-    `${target.dockerfile}.dockerignore`,
-    ...globalInputs,
-  ];
-  const covered = (path) =>
-    inputs.some((input) => input === "." || path === input || path.startsWith(`${input}/`));
-  let entries = tree.filter((entry) => covered(entry.path));
+  const inputs = targetInputs(target, readDockerfile);
+  let entries = tree.filter((entry) => coversPath(inputs, entry.path));
   // A copied symlink may resolve to another tracked path. Include the whole tree
   // rather than guessing which side of a Docker COPY dereferences it.
   if (entries.some((entry) => entry.mode === "120000")) entries = tree;
@@ -143,7 +171,7 @@ function validatePrevious(previous, imagePrefix) {
   if (!previous) return;
   if (
     previous.schemaVersion !== 1 ||
-    !releasePattern.test(previous.release ?? "") ||
+    !previousReleasePattern.test(previous.release ?? "") ||
     !hashPattern.test(previous.privacyReleaseValidation?.sourceBuildFingerprint ?? "")
   )
     throw new Error("Invalid previous release manifest");
@@ -336,9 +364,30 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
       `rebuild=${selected.rebuild}\nrefresh=${selected.refresh}\ndigest=${selected.rebuild ? "" : selected.digest}\n`,
     );
     console.log(`${argument}: ${selected.rebuild ? "build" : "reuse"} (${selected.reason})`);
+  } else if (command === "changed") {
+    const base = argument;
+    const head = planPath;
+    if (!shaPattern.test(base ?? "") || !shaPattern.test(head ?? ""))
+      throw new Error("Changed-image selection requires exact base and head revisions");
+    if (!process.env.GITHUB_OUTPUT) throw new Error("Missing GitHub output path");
+    const root = process.cwd();
+    const changedPaths = execFileSync(
+      "git",
+      ["diff", "--name-only", "-z", `${base}...${head}`, "--"],
+      { cwd: root, encoding: "utf8", maxBuffer: 32 * 1024 * 1024 },
+    )
+      .split("\0")
+      .filter(Boolean);
+    const apps = selectChangedTargets({
+      changedPaths,
+      readDockerfile: (path) => readFileSync(join(root, path), "utf8"),
+      tree: trackedTree(root),
+    });
+    appendFileSync(process.env.GITHUB_OUTPUT, `apps=${JSON.stringify(apps)}\n`);
+    console.log(apps.length > 0 ? apps.join("\n") : "No Docker targets changed");
   } else {
     throw new Error(
-      "Usage: docker-release-plan.mjs plan <output-directory> | select <app> <plan-path>",
+      "Usage: docker-release-plan.mjs plan <output-directory> | select <app> <plan-path> | changed <base-sha> <head-sha>",
     );
   }
 }
