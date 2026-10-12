@@ -246,6 +246,86 @@ describe("fetchJson", () => {
     expect((init.headers as Record<string, string>)["Accept-Language"]).toBe("de");
   });
 
+  it.each(["Authorization", "X-API-Key", "AccountKey", "X-Provider-Token"])(
+    "rejects redirects when the caller supplies the custom header %s",
+    async (header) => {
+      const fn = mockFetch(() => jsonResponse({}));
+
+      await fetchJson("https://x.test/data", {
+        headers: { [header]: "secret-value" },
+        init: { redirect: "follow" },
+      });
+
+      const init = fn.mock.calls[0][1] as RequestInit;
+      expect(init.redirect).toBe("error");
+      expect((init.headers as Record<string, string>)[header]).toBe("secret-value");
+    },
+  );
+
+  it.each(["Accept", "Accept-Language", "Content-Type", "If-None-Match", "If-Modified-Since"])(
+    "preserves default redirect behavior for the representation header %s",
+    async (header) => {
+      const fn = mockFetch(() => jsonResponse({}));
+
+      await fetchJson("https://x.test/data", { headers: { [header]: "value" } });
+
+      expect((fn.mock.calls[0][1] as RequestInit).redirect).toBeUndefined();
+    },
+  );
+
+  it("classifies caller header names case-insensitively", async () => {
+    const fn = mockFetch(() => jsonResponse({}));
+
+    await fetchJson("https://x.test/data", {
+      headers: { "x-aPi-KeY": "secret-value" },
+      init: { redirect: "manual" },
+    });
+
+    expect((fn.mock.calls[0][1] as RequestInit).redirect).toBe("error");
+  });
+
+  it("preserves a caller redirect mode when all caller headers are allowlisted", async () => {
+    const fn = mockFetch(() => jsonResponse({}));
+
+    await fetchJson("https://x.test/data", {
+      headers: {
+        accept: "application/json",
+        "aCcEpT-LaNgUaGe": "de",
+        "CONTENT-TYPE": "application/json",
+        "if-none-match": '"etag"',
+        "IF-MODIFIED-SINCE": "Sat, 17 Oct 2026 00:00:00 GMT",
+      },
+      init: { redirect: "manual" },
+    });
+
+    expect((fn.mock.calls[0][1] as RequestInit).redirect).toBe("manual");
+  });
+
+  it("does not treat the helper-added User-Agent as a caller-supplied custom header", async () => {
+    const fn = mockFetch(() => jsonResponse({}));
+
+    await fetchJson("https://x.test/data");
+
+    const init = fn.mock.calls[0][1] as RequestInit;
+    expect(init.redirect).toBeUndefined();
+    expect((init.headers as Record<string, string>)["User-Agent"]).toBe(USER_AGENT);
+  });
+
+  it("returns null when a credential-bearing request refuses a redirect", async () => {
+    mockFetch((_url, init) =>
+      init.redirect === "error"
+        ? Promise.reject(new TypeError("fetch failed: redirect mode is set to error"))
+        : jsonResponse({ followed: true }),
+    );
+
+    await expect(
+      fetchJson("https://x.test/data", {
+        headers: { "X-API-Key": "secret-value" },
+        nullOnError: true,
+      }),
+    ).resolves.toBeNull();
+  });
+
   it("omits the User-Agent when userAgent is null", async () => {
     const fn = mockFetch(() => jsonResponse({}));
     await fetchJson("https://x.test/data", { userAgent: null });
