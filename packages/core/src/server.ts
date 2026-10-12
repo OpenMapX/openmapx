@@ -126,10 +126,12 @@ export {
   type SafeFetchStatusOptions,
   type SafeJsonResponse,
   type SafeStatusResponse,
+  type SafeTextResponse,
   safeDownload,
   safeFetchJson,
   safeFetchJsonResponse,
   safeFetchStatus,
   safeFetchText,
+  safeFetchTextResponse,
 } from "./utils/safe-download";
 export { sectionSlug } from "./utils/sectionSlug";

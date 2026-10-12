@@ -557,6 +557,8 @@ export interface SafeFetchJsonOptions {
    * have its digest verified before it is allowed to reach `JSON.parse`.
    */
   parseJson?: boolean;
+  /** Return the first `maxBytes` instead of rejecting. Valid only when `parseJson` is false. */
+  truncate?: boolean;
   /**
    * Hostnames (exact or "*.suffix") permitted to resolve to a private address.
    * Defaults to `privateFeedHostAllowlist()` when omitted.
@@ -591,9 +593,11 @@ export interface SafeJsonResponse<T> {
   finalUrl: string;
 }
 
+export type SafeTextResponse = Omit<SafeJsonResponse<unknown>, "data">;
+
 export type SafeFetchStatusOptions = Omit<
   SafeFetchJsonOptions,
-  "acceptedContentTypes" | "body" | "maxBytes" | "method" | "parseJson"
+  "acceptedContentTypes" | "body" | "maxBytes" | "method" | "parseJson" | "truncate"
 >;
 
 export interface SafeStatusResponse {
@@ -690,6 +694,7 @@ interface SafeFetchResponseContext {
   response: Response;
   finalUrl: string;
   signal: AbortSignal;
+  cancelBody(): Promise<void>;
   openBodyReader(): ReadableStreamDefaultReader<Uint8Array>;
   markBodyConsumed(): void;
 }
@@ -817,6 +822,7 @@ async function consumeSafeFetchResponse<T>(
       response,
       finalUrl,
       signal: operationSignal,
+      cancelBody: () => cancelUnconsumedBody(operationDeadlineAt),
       openBodyReader: () => {
         if (!response?.body) throw new Error(`Empty response body for ${finalUrl}`);
         if (reader) throw new Error("Response body reader already acquired");
@@ -886,10 +892,13 @@ export async function safeFetchJsonResponse<T = unknown>(
   opts: SafeFetchJsonOptions = {},
 ): Promise<SafeJsonResponse<T>> {
   const maxBytes = opts.maxBytes ?? 5 * 1024 * 1024;
+  if (opts.truncate && opts.parseJson !== false) {
+    throw new Error("safeFetchJsonResponse truncation requires parseJson: false");
+  }
   return consumeSafeFetchResponse(
     url,
     opts,
-    async ({ response, finalUrl, signal, openBodyReader, markBodyConsumed }) => {
+    async ({ response, finalUrl, signal, cancelBody, openBodyReader, markBodyConsumed }) => {
       if (!response.ok) {
         const retryAfterSeconds = parseRetryAfterSeconds(response.headers.get("retry-after"));
         throw new SafeFetchHttpError(response.status, finalUrl, retryAfterSeconds);
@@ -898,7 +907,7 @@ export async function safeFetchJsonResponse<T = unknown>(
       const contentLengthHeader = response.headers.get("content-length");
       if (contentLengthHeader) {
         const declared = Number(contentLengthHeader);
-        if (Number.isFinite(declared) && declared > maxBytes) {
+        if (Number.isFinite(declared) && declared > maxBytes && !opts.truncate) {
           throw new Error(`Response too large (declared ${declared} > ${maxBytes} bytes)`);
         }
       }
@@ -921,10 +930,16 @@ export async function safeFetchJsonResponse<T = unknown>(
       for (;;) {
         const { done, value } = await abortable(reader.read(), signal);
         if (done) break;
-        total += value.byteLength;
-        if (total > maxBytes) {
+        const remaining = maxBytes - total;
+        if (value.byteLength > remaining) {
+          if (opts.truncate) {
+            if (remaining > 0) chunks.push(value.subarray(0, remaining));
+            await cancelBody();
+            break;
+          }
           throw new Error(`Response too large (exceeded ${maxBytes} bytes)`);
         }
+        total += value.byteLength;
         chunks.push(value);
       }
       markBodyConsumed();
@@ -974,7 +989,19 @@ export async function safeFetchText(
   url: string,
   opts: Omit<SafeFetchJsonOptions, "parseJson"> = {},
 ): Promise<string> {
-  return (await safeFetchJsonResponse<unknown>(url, { ...opts, parseJson: false })).text;
+  return (await safeFetchTextResponse(url, opts)).text;
+}
+
+/** Fetch bounded text while retaining the final URL and safe response metadata. */
+export async function safeFetchTextResponse(
+  url: string,
+  opts: Omit<SafeFetchJsonOptions, "parseJson"> = {},
+): Promise<SafeTextResponse> {
+  const { data: _data, ...response } = await safeFetchJsonResponse<unknown>(url, {
+    ...opts,
+    parseJson: false,
+  });
+  return response;
 }
 
 /** Compatibility wrapper for callers that need only parsed JSON data. */

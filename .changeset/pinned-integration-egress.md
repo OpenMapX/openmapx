@@ -2,4 +2,4 @@
 "@openmapx/core": patch
 ---
 
-Add a status-only pinned fetch API for SSRF-safe server probes.
+Add status and bounded-text pinned fetch APIs for SSRF-safe server requests.

@@ -51,6 +51,7 @@ import {
   safeFetchJson,
   safeFetchJsonResponse,
   safeFetchStatus,
+  safeFetchText,
 } from "../utils/safe-download";
 
 // dnsLookup has overloads that confuse vi.mocked; cast to a simple mock.
@@ -709,6 +710,44 @@ describe("safeFetchJson", () => {
     await expect(safeFetchJson("https://ex.test/x.json", { maxBytes: 100 })).rejects.toThrow(
       /too large/i,
     );
+  });
+
+  it("truncates text at the byte limit and cancels the remaining body", async () => {
+    const reader = {
+      read: vi.fn().mockResolvedValueOnce({
+        done: false,
+        value: new TextEncoder().encode("abcdef"),
+      }),
+      cancel: vi.fn().mockResolvedValue(undefined),
+      releaseLock: vi.fn(),
+    };
+    lookupMock.mockResolvedValue([{ address: "93.184.216.34", family: 4 }]);
+    stubFetchSequence({
+      ...makeResponse({ status: 200, headers: { "content-type": "text/html" } }),
+      body: { getReader: () => reader },
+    } as unknown as Response);
+
+    await expect(
+      safeFetchText("https://ex.test/page", { maxBytes: 4, truncate: true }),
+    ).resolves.toBe("abcd");
+    expect(reader.cancel).toHaveBeenCalledOnce();
+    expect(reader.releaseLock).toHaveBeenCalledOnce();
+    expect(undiciLifecycle.close).toHaveBeenCalledOnce();
+  });
+
+  it("permits an oversized declared text body when truncation is requested", async () => {
+    lookupMock.mockResolvedValue([{ address: "93.184.216.34", family: 4 }]);
+    stubFetchSequence(
+      makeResponse({
+        status: 200,
+        headers: { "content-length": "100", "content-type": "text/html" },
+        bodyText: "abcdef",
+      }),
+    );
+
+    await expect(
+      safeFetchText("https://ex.test/page", { maxBytes: 4, truncate: true }),
+    ).resolves.toBe("abcd");
   });
 
   it("bounds a never-settling JSON reader cancellation and still settles the transport", async () => {

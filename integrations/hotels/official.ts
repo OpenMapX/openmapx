@@ -1,10 +1,9 @@
-import { readBoundedResponseText, USER_AGENT_CONTACT } from "@openmapx/core";
-import { assertResolvesToPublicIp } from "@openmapx/core/server";
+import { USER_AGENT_CONTACT } from "@openmapx/core";
+import { safeFetchTextResponse } from "@openmapx/core/server";
 import type { Logger } from "@openmapx/integration-framework";
 
 const FETCH_TIMEOUT_MS = 5000;
 const MAX_BYTES = 800_000;
-const MAX_REDIRECTS = 5;
 
 export interface BookingDates {
   checkIn?: string;
@@ -182,34 +181,22 @@ export async function fetchOfficialBookingUrl(
   website: string,
   dates: BookingDates,
   log: Logger,
+  signal?: AbortSignal,
 ): Promise<string | null> {
   try {
-    let current = website;
-    for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
-      const target = new URL(current);
-      if (target.protocol !== "http:" && target.protocol !== "https:") return null;
-      await assertResolvesToPublicIp(target.hostname); // re-checked every hop
-      const res = await fetch(current, {
-        redirect: "manual",
-        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
-        headers: { "User-Agent": USER_AGENT_CONTACT, Accept: "text/html,application/xhtml+xml" },
-      });
-      if ([301, 302, 303, 307, 308].includes(res.status)) {
-        const location = res.headers.get("location");
-        if (!location) return null;
-        current = new URL(location, current).toString();
-        continue;
-      }
-      if (!res.ok) return null;
-      const ct = res.headers.get("content-type") ?? "";
-      if (!ct.includes("html") && !ct.includes("text")) return null;
-      const html = await readBoundedResponseText(res, MAX_BYTES, {
-        truncate: true,
-        label: "hotel website",
-      });
-      return extractOfficialBookingUrl(html, current, dates);
-    }
-    return null;
+    const response = await safeFetchTextResponse(website, {
+      acceptedContentTypes: ["text/html", "application/xhtml+xml", "text/plain"],
+      allowPrivateHosts: [],
+      headers: {
+        "User-Agent": USER_AGENT_CONTACT,
+        Accept: "text/html,application/xhtml+xml",
+      },
+      maxBytes: MAX_BYTES,
+      signal,
+      timeoutMs: FETCH_TIMEOUT_MS,
+      truncate: true,
+    });
+    return extractOfficialBookingUrl(response.text, response.finalUrl, dates);
   } catch (err) {
     log.debug?.(`[hotels] official lookup failed ${website}: ${(err as Error).message}`);
     return null;

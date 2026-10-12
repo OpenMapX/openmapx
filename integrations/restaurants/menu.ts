@@ -1,12 +1,5 @@
-import { readBoundedResponseText } from "@openmapx/core";
-import {
-  assertResolvesToPublicIp,
-  deliveryProviderIdForHost,
-  toHttpUrl,
-} from "@openmapx/core/server";
+import { deliveryProviderIdForHost, safeFetchText, toHttpUrl } from "@openmapx/core/server";
 import type { Logger } from "@openmapx/integration-framework";
-
-const MAX_REDIRECTS = 5;
 
 /** How a menu URL was discovered. */
 export type MenuSource = "jsonld" | "heuristic" | "pdf";
@@ -186,10 +179,8 @@ function containsWord(haystack: string, token: string): boolean {
  * Normalise to a fetchable absolute http(s) URL (adds `https://` when the OSM
  * `website` tag omits a scheme). Returns null for unusable / non-http input.
  *
- * No host allow/deny logic lives here: SSRF protection is enforced at fetch time
- * by `assertResolvesToPublicIp` (DNS-resolved private-IP denylist, re-checked on
- * every redirect hop) — the canonical helper from `@openmapx/core/server`,
- * which is stronger than a literal-host check and avoids duplicating the list.
+ * No host allow/deny logic lives here: the pinned text transport validates and
+ * resolves every redirect hop immediately before opening its socket.
  */
 export function normalizeWebsite(input: string): string | null {
   return toHttpUrl(input);
@@ -199,41 +190,17 @@ function isPdf(path: string): boolean {
   return path.toLowerCase().split("?")[0].endsWith(".pdf");
 }
 
-// Hand-rolled redirect loop rather than the shared `fetchWithRedirects`: that
-// helper only takes a synchronous `validateRedirectUrl`, so it can't run the
-// `await assertResolvesToPublicIp` per-hop DNS check below, and `safeDownload`
-// streams to disk. This loop is the in-memory, byte-capped, per-hop-SSRF-checked
-// variant; it still reuses the canonical SSRF primitive.
-async function fetchText(url: string, log: Logger): Promise<string | null> {
+async function fetchText(url: string, log: Logger, signal?: AbortSignal): Promise<string | null> {
   try {
-    let current = url;
-    for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
-      const target = new URL(current);
-      if (target.protocol !== "http:" && target.protocol !== "https:") return null;
-      // SSRF guard (reused from @openmapx/core/server): DNS-resolve the host and
-      // reject private/reserved targets. Re-checked on every redirect hop so a
-      // public URL cannot bounce us onto an internal address.
-      await assertResolvesToPublicIp(target.hostname);
-      const res = await fetch(current, {
-        redirect: "manual",
-        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
-        headers: { "User-Agent": USER_AGENT, Accept: "text/html,application/xhtml+xml" },
-      });
-      if ([301, 302, 303, 307, 308].includes(res.status)) {
-        const location = res.headers.get("location");
-        if (!location) return null;
-        current = new URL(location, current).toString();
-        continue;
-      }
-      if (!res.ok) return null;
-      const ct = res.headers.get("content-type") ?? "";
-      if (!ct.includes("html") && !ct.includes("text")) return null;
-      return await readBoundedResponseText(res, MAX_BYTES, {
-        truncate: true,
-        label: "restaurant website",
-      });
-    }
-    return null;
+    return await safeFetchText(url, {
+      acceptedContentTypes: ["text/html", "application/xhtml+xml", "text/plain"],
+      allowPrivateHosts: [],
+      headers: { "User-Agent": USER_AGENT, Accept: "text/html,application/xhtml+xml" },
+      maxBytes: MAX_BYTES,
+      signal,
+      timeoutMs: FETCH_TIMEOUT_MS,
+      truncate: true,
+    });
   } catch (err) {
     log.debug?.(`[restaurants] fetch failed ${url}: ${(err as Error).message}`);
     return null;
@@ -245,8 +212,12 @@ async function fetchText(url: string, log: Logger): Promise<string | null> {
  * group disallows the site root (`Disallow: /`). We never crawl beyond the
  * homepage, so this is the only directive that should stop us.
  */
-async function rootCrawlAllowed(origin: string, log: Logger): Promise<boolean> {
-  const txt = await fetchText(`${origin}/robots.txt`, log);
+async function rootCrawlAllowed(
+  origin: string,
+  log: Logger,
+  signal?: AbortSignal,
+): Promise<boolean> {
+  const txt = await fetchText(`${origin}/robots.txt`, log, signal);
   if (!txt) return true; // no robots.txt ⇒ allowed
   const lines = txt.split(/\r?\n/).map((l) => l.replace(/#.*$/, "").trim());
   let groupHasStar = false;
@@ -465,13 +436,18 @@ export function extractOrderUrl(html: string, base: string): string | null {
  * scoring menu-like anchor links. We only ever return a LINK — never rehosted
  * menu content.
  */
-export async function resolveMenuUrl(websiteUrl: string, log: Logger): Promise<MenuResult | null> {
-  return (await resolveRestaurantLinks(websiteUrl, log)).menu;
+export async function resolveMenuUrl(
+  websiteUrl: string,
+  log: Logger,
+  signal?: AbortSignal,
+): Promise<MenuResult | null> {
+  return (await resolveRestaurantLinks(websiteUrl, log, signal)).menu;
 }
 
 export async function resolveRestaurantLinks(
   websiteUrl: string,
   log: Logger,
+  signal?: AbortSignal,
 ): Promise<RestaurantLinksResult> {
   const normalized = normalizeWebsite(websiteUrl);
   if (!normalized) return { menu: null, orderUrl: null, providerOrderUrls: [] };
@@ -481,12 +457,12 @@ export async function resolveRestaurantLinks(
   }
   const origin = new URL(normalized).origin;
 
-  if (!(await rootCrawlAllowed(origin, log))) {
+  if (!(await rootCrawlAllowed(origin, log, signal))) {
     log.debug?.(`[restaurants] robots.txt disallows crawl of ${origin}`);
     return { menu: null, orderUrl: null, providerOrderUrls: [] };
   }
 
-  const html = await fetchText(normalized, log);
+  const html = await fetchText(normalized, log, signal);
   if (!html) return { menu: null, orderUrl: null, providerOrderUrls: [] };
 
   const orderLinks = extractOrderLinks(html, normalized);
