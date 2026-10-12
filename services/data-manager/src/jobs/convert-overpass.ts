@@ -4,16 +4,16 @@ import { dirname, join } from "node:path";
 import { execa } from "execa";
 import type { StateStore } from "../state.js";
 
-export interface ConvertOverpassOptions {
-  /** Explicit input .osm.pbf path (absolute or relative to `dataDir`). */
+interface ConvertOverpassOptions {
+  /** State-store-resolved input .osm.pbf path. */
   sourcePbf: string;
-  /** Explicit output .osm.bz2 path. */
+  /** Canonical output .osm.bz2 path under `dataDir`. */
   targetBz2: string;
   /** Called every second with the current on-disk size of the output bz2. */
   onProgress?: (bytes: number) => void;
 }
 
-export async function convertPbfToBz2(opts: ConvertOverpassOptions): Promise<void> {
+async function convertPbfToBz2(opts: ConvertOverpassOptions): Promise<void> {
   mkdirSync(dirname(opts.targetBz2), { recursive: true });
 
   // Overpass wants bz2-compressed OSM XML (`planet.osm.bz2`). libosmium's bz2
