@@ -1,5 +1,6 @@
 import { createConnection } from "node:net";
 import { USER_AGENT, validatePublicUrl } from "@openmapx/core";
+import { resolvePublicConnectionAddresses, safeFetchStatus } from "@openmapx/core/server";
 import { type LoadedIntegration, toIntegrationMeta } from "@openmapx/integration-framework";
 import { getSecretFields } from "../utils/validate-config-body";
 import { recordHealthResult } from "./health-history";
@@ -9,12 +10,12 @@ const TIMEOUT = 5_000;
 const UA = USER_AGENT;
 
 function tcpCheck(
-  host: string,
+  address: string,
   port: number,
 ): Promise<{ ok: boolean; ms: number; error?: string }> {
   return new Promise((resolve) => {
     const start = Date.now();
-    const socket = createConnection({ host, port }, () => {
+    const socket = createConnection({ host: address, port }, () => {
       socket.destroy();
       resolve({ ok: true, ms: Date.now() - start });
     });
@@ -24,7 +25,16 @@ function tcpCheck(
       resolve({ ok: false, ms: Date.now() - start, error: "Timeout" });
     });
     socket.on("error", (err) => {
-      resolve({ ok: false, ms: Date.now() - start, error: err.message });
+      const code = (err as NodeJS.ErrnoException).code;
+      const error =
+        code === "ECONNREFUSED"
+          ? "Connection refused"
+          : code === "ECONNRESET"
+            ? "Connection reset"
+            : code === "ETIMEDOUT"
+              ? "Timeout"
+              : "Connection failed";
+      resolve({ ok: false, ms: Date.now() - start, error });
     });
   });
 }
@@ -168,8 +178,9 @@ async function executeSingleHealthCheck(
     const url = new URL(hc.url.startsWith("tcp://") ? hc.url : `tcp://${hc.url}`);
     const host = url.hostname;
     const port = Number(url.port) || 5432;
+    let addresses: Awaited<ReturnType<typeof resolvePublicConnectionAddresses>>;
     try {
-      validatePublicUrl(`http://${host}`);
+      addresses = await resolvePublicConnectionAddresses(new URL(`http://${url.host}`));
     } catch {
       return {
         id,
@@ -180,7 +191,18 @@ async function executeSingleHealthCheck(
         error: "health-check host not allowed (non-public host)",
       };
     }
-    const result = await tcpCheck(host, port);
+    const address = addresses[0];
+    if (!address) {
+      return {
+        id,
+        name,
+        category,
+        url: `${host}:${port}`,
+        status: "down",
+        error: "health-check host not allowed (non-public host)",
+      };
+    }
+    const result = await tcpCheck(address.address, port);
     return {
       id,
       name,
@@ -290,13 +312,13 @@ async function executeSingleHealthCheck(
 
   const start = Date.now();
   try {
-    const res = await fetch(checkUrl, {
-      method: "GET",
+    const res = await safeFetchStatus(checkUrl, {
       headers: {
         "User-Agent": UA,
         ...interpolatedHeaders,
       },
-      signal: AbortSignal.timeout(TIMEOUT),
+      timeoutMs: TIMEOUT,
+      allowPrivateHosts: hostExempt ? [new URL(checkUrl).hostname] : [],
     });
     const ms = Date.now() - start;
 
@@ -305,7 +327,7 @@ async function executeSingleHealthCheck(
         return { id, name, category, url: displayUrl, status: "up", responseTime: ms };
       }
     } else {
-      if (res.ok) {
+      if (res.status >= 200 && res.status < 300) {
         return { id, name, category, url: displayUrl, status: "up", responseTime: ms };
       }
     }

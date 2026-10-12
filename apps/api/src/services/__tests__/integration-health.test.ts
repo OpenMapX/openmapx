@@ -4,6 +4,15 @@ import { fileURLToPath } from "node:url";
 import type { LoadedIntegration } from "@openmapx/integration-framework";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+const coreServerMocks = vi.hoisted(() => ({
+  resolvePublicConnectionAddresses: vi.fn(),
+  safeFetchStatus: vi.fn(),
+}));
+const netMocks = vi.hoisted(() => ({ createConnection: vi.fn() }));
+
+vi.mock("@openmapx/core/server", () => coreServerMocks);
+vi.mock("node:net", () => netMocks);
+
 // Mock service-registry before importing the module under test
 vi.mock("../service-registry", () => ({
   serviceUrl: (id: string) => {
@@ -24,6 +33,43 @@ import {
 } from "../integration-health";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../../../../");
+
+beforeEach(() => {
+  coreServerMocks.safeFetchStatus
+    .mockReset()
+    .mockImplementation(
+      async (
+        url: string,
+        opts: { headers?: Record<string, string> } = {},
+      ): Promise<{ status: number; headers: Headers; finalUrl: string }> => {
+        const response = await globalThis.fetch(url, {
+          method: "GET",
+          headers: opts.headers,
+        });
+        return {
+          status: response.status,
+          headers: response.headers,
+          finalUrl: response.url || url,
+        };
+      },
+    );
+  coreServerMocks.resolvePublicConnectionAddresses
+    .mockReset()
+    .mockResolvedValue([{ address: "93.184.216.34", family: 4 }]);
+  netMocks.createConnection
+    .mockReset()
+    .mockImplementation((_options: unknown, onConnect: () => void) => {
+      const socket = {
+        destroy: vi.fn(),
+        on: vi.fn(),
+        setTimeout: vi.fn(),
+      };
+      socket.on.mockReturnValue(socket);
+      socket.setTimeout.mockReturnValue(socket);
+      queueMicrotask(onConnect);
+      return socket;
+    });
+});
 
 function makeIntegration(hc: unknown, configSchema?: Record<string, unknown>): LoadedIntegration {
   return {
@@ -100,6 +146,73 @@ describe("integration-health SSRF guard", () => {
     );
   });
 
+  it("reports a connection-time DNS change as down", async () => {
+    coreServerMocks.safeFetchStatus.mockRejectedValue(
+      new Error('URL host "rebind.example.com" is not allowed'),
+    );
+    const integration = makeIntegration({
+      type: "http",
+      url: "https://rebind.example.com/health",
+    });
+
+    const results = await executeIntegrationHealthCheck(integration);
+
+    expect(results[0]).toMatchObject({ status: "down" });
+    expect(results[0]?.error).toMatch(/not allowed/i);
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("reports a redirect to a private address as down", async () => {
+    coreServerMocks.safeFetchStatus.mockRejectedValue(
+      new Error('URL host "127.0.0.1" is not allowed'),
+    );
+    const integration = makeIntegration({
+      type: "http",
+      url: "https://public.example.com/health",
+    });
+
+    const results = await executeIntegrationHealthCheck(integration);
+
+    expect(results[0]).toMatchObject({ status: "down" });
+    expect(results[0]?.error).toMatch(/not allowed/i);
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("classifies a public non-success response without reading its body", async () => {
+    coreServerMocks.safeFetchStatus.mockResolvedValue({
+      status: 503,
+      headers: new Headers(),
+      finalUrl: "https://api.example.com/health",
+    });
+    const integration = makeIntegration({
+      type: "http",
+      url: "https://api.example.com/health",
+    });
+
+    const results = await executeIntegrationHealthCheck(integration);
+
+    expect(results[0]).toMatchObject({ status: "down", error: "HTTP 503" });
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("delegates final-response cancellation to the status-only transport", async () => {
+    fetchSpy.mockRejectedValue(new Error("raw fetch must not run"));
+    coreServerMocks.safeFetchStatus.mockResolvedValue({
+      status: 200,
+      headers: new Headers(),
+      finalUrl: "https://api.example.com/health",
+    });
+    const integration = makeIntegration({
+      type: "http",
+      url: "https://api.example.com/health",
+    });
+
+    const results = await executeIntegrationHealthCheck(integration);
+
+    expect(results[0]).toMatchObject({ status: "up" });
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
   it("case 4: allows service:-resolved internal host (no false-positive)", async () => {
     const integration = makeIntegration({
       type: "http",
@@ -115,6 +228,10 @@ describe("integration-health SSRF guard", () => {
     expect(fetchSpy).toHaveBeenCalledWith(
       "http://valhalla:8002/health",
       expect.objectContaining({ method: "GET" }),
+    );
+    expect(coreServerMocks.safeFetchStatus).toHaveBeenCalledWith(
+      "http://valhalla:8002/health",
+      expect.objectContaining({ allowPrivateHosts: ["valhalla"] }),
     );
   });
 
@@ -137,6 +254,9 @@ describe("integration-health SSRF guard", () => {
   });
 
   it("case 6: blocks TCP probe to IP-literal private host", async () => {
+    coreServerMocks.resolvePublicConnectionAddresses.mockRejectedValue(
+      new Error("private destination"),
+    );
     const integration = makeIntegration({
       type: "tcp",
       url: "169.254.169.254:80",
@@ -149,6 +269,61 @@ describe("integration-health SSRF guard", () => {
     expect(results[0]?.error).toMatch(/not allowed/i);
     // fetch should not be called for TCP checks
     expect(fetchSpy).not.toHaveBeenCalled();
+    expect(netMocks.createConnection).not.toHaveBeenCalled();
+  });
+
+  it("connects a TCP probe directly to the approved address", async () => {
+    coreServerMocks.resolvePublicConnectionAddresses.mockResolvedValue([
+      { address: "93.184.216.34", family: 4 },
+    ]);
+    const integration = makeIntegration({
+      type: "tcp",
+      url: "rebind.example.com:443",
+    });
+
+    const results = await executeIntegrationHealthCheck(integration);
+
+    expect(results[0]).toMatchObject({ status: "up", url: "rebind.example.com:443" });
+    expect(coreServerMocks.resolvePublicConnectionAddresses).toHaveBeenCalledOnce();
+    expect(netMocks.createConnection).toHaveBeenCalledWith(
+      { host: "93.184.216.34", port: 443 },
+      expect.any(Function),
+    );
+  });
+
+  it("does not expose the approved address when a TCP connection fails", async () => {
+    const approvedAddress = "93.184.216.34";
+    coreServerMocks.resolvePublicConnectionAddresses.mockResolvedValue([
+      { address: approvedAddress, family: 4 },
+    ]);
+    netMocks.createConnection.mockImplementation(() => {
+      const handlers = new Map<string, (error: Error) => void>();
+      const socket = {
+        destroy: vi.fn(),
+        on: vi.fn((event: string, handler: (error: Error) => void) => {
+          handlers.set(event, handler);
+          return socket;
+        }),
+        setTimeout: vi.fn(),
+      };
+      socket.setTimeout.mockReturnValue(socket);
+      queueMicrotask(() => {
+        const error = Object.assign(new Error(`connect ECONNREFUSED ${approvedAddress}:443`), {
+          code: "ECONNREFUSED",
+        });
+        handlers.get("error")?.(error);
+      });
+      return socket;
+    });
+    const integration = makeIntegration({
+      type: "tcp",
+      url: "rebind.example.com:443",
+    });
+
+    const results = await executeIntegrationHealthCheck(integration);
+
+    expect(results[0]).toMatchObject({ status: "down", error: "Connection refused" });
+    expect(results[0]?.error).not.toContain(approvedAddress);
   });
 });
 
@@ -304,13 +479,14 @@ describe("integration-health secret redaction", () => {
       },
     );
     integration.config = { apiKey: secret };
-    fetchSpy.mockRejectedValue(new Error(`${prefix}${secret}`));
+    coreServerMocks.safeFetchStatus.mockRejectedValue(new Error(`${prefix}${secret}`));
 
     const results = await executeIntegrationHealthCheck(integration);
 
     expect(results[0]?.status).toBe("down");
     expect(results[0]?.error).not.toContain(secret);
     expect(results[0]?.error).not.toContain(exposedLeadingFragment);
+    expect(fetchSpy).not.toHaveBeenCalled();
   });
 });
 
