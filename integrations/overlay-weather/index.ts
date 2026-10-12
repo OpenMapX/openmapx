@@ -12,6 +12,34 @@ import {
 
 const FETCH_TIMEOUT_MS = 10_000;
 
+export function canonicalizeRainViewerHost(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    return null;
+  }
+
+  const hostname = url.hostname.toLowerCase();
+  const isRainViewerHost = hostname === "rainviewer.com" || hostname.endsWith(".rainviewer.com");
+  if (
+    url.protocol !== "https:" ||
+    url.username !== "" ||
+    url.password !== "" ||
+    url.port !== "" ||
+    url.pathname !== "/" ||
+    url.search !== "" ||
+    url.hash !== "" ||
+    !isRainViewerHost
+  ) {
+    return null;
+  }
+
+  return url.origin;
+}
+
 interface RadarFrame {
   time: number;
   path: string;
@@ -53,8 +81,12 @@ export function setup(ctx: IntegrationContext): void {
     if (await denyIfRadarGated(reply)) return;
     const cached = await ctx.cache.get<RadarMeta>("weather:radar:meta");
     if (cached) {
-      reply.send(cached);
-      return;
+      const host = canonicalizeRainViewerHost(cached.host);
+      if (host) {
+        reply.send({ ...cached, host });
+        return;
+      }
+      await ctx.cache.del("weather:radar:meta");
     }
 
     try {
@@ -69,8 +101,13 @@ export function setup(ctx: IntegrationContext): void {
         reply.status(502).send({ message: "RainViewer unavailable" });
         return;
       }
+      const host = canonicalizeRainViewerHost(data.host);
+      if (!host) {
+        reply.status(502).send({ message: "RainViewer unavailable" });
+        return;
+      }
       const meta: RadarMeta = {
-        host: data.host,
+        host,
         past: data.radar.past ?? [],
         nowcast: data.radar.nowcast ?? [],
       };
@@ -94,6 +131,11 @@ export function setup(ctx: IntegrationContext): void {
       reply.status(503).send({ message: "Radar metadata not available" });
       return;
     }
+    const radarHost = canonicalizeRainViewerHost(cached.host);
+    if (!radarHost) {
+      reply.status(503).send({ message: "Radar metadata not available" });
+      return;
+    }
 
     const allowedPaths = [...cached.past, ...cached.nowcast].map((f) => f.path);
     if (!allowedPaths.includes(framePath as string)) {
@@ -102,7 +144,7 @@ export function setup(ctx: IntegrationContext): void {
     }
 
     const { z, x, y } = req.params as Record<string, string>;
-    const tileUrl = `${cached.host}${framePath}/256/${z}/${x}/${y}/1/1_1.png`;
+    const tileUrl = `${radarHost}${framePath}/256/${z}/${x}/${y}/1/1_1.png`;
 
     try {
       const timeoutSignal = AbortSignal.timeout(FETCH_TIMEOUT_MS);
