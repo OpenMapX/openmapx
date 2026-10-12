@@ -7,6 +7,7 @@ import {
   createReleasePlan,
   dockerInputs,
   imageFingerprint,
+  selectChangedTargets,
   targets,
   trackedTree,
 } from "./docker-release-plan.mjs";
@@ -86,6 +87,23 @@ describe("Dockerfile build input coverage", () => {
       "apps/web/src/app/(legal)",
     ]);
   });
+
+  it("selects pull-request builds from the same Docker inputs as release fingerprints", () => {
+    const selected = selectChangedTargets({
+      changedPaths: ["packages/mobility-core/src/index.ts"],
+      readDockerfile: (path: string) =>
+        readFileSync(resolve(import.meta.dirname, "..", path), "utf8"),
+    });
+
+    expect(selected).toEqual(["api", "web", "data-manager", "ops-agent", "transitous-runner"]);
+    expect(
+      selectChangedTargets({
+        changedPaths: ["services/ops-agent/privacy-backup/openmapx-backup-subject-export.py"],
+        readDockerfile: (path: string) =>
+          readFileSync(resolve(import.meta.dirname, "..", path), "utf8"),
+      }),
+    ).toContain("privacy-backup");
+  });
 });
 
 describe("selective release planning", () => {
@@ -123,18 +141,19 @@ describe("selective release planning", () => {
       `sha256:${"1".repeat(64)}`,
     );
   });
-  it("gives refreshes of the same commit distinct release identities while accepting older baselines", () => {
-    const first = createReleasePlan({ ...options, releaseId: `${revision}-123-1` });
+  it("gives runs of the same commit distinct retry-stable identities and accepts older baselines", () => {
+    const first = createReleasePlan({ ...options, releaseId: `${revision}-123` });
     const next = createReleasePlan({
       ...options,
-      releaseId: `${revision}-124-1`,
-      previous: { ...baseline(), release: first.release },
+      releaseId: `${revision}-124`,
+      previous: { ...baseline(), release: `${revision}-122-1` },
       force: true,
     });
     expect(next.release).not.toBe(first.release);
     expect(next.sourceRevision).toBe(first.sourceRevision);
     expect(next.images.every((image: { rebuild: boolean }) => image.rebuild)).toBe(true);
-    expect(() => createReleasePlan({ ...options, releaseId: `${"c".repeat(40)}-124-1` })).toThrow();
+    expect(() => createReleasePlan({ ...options, releaseId: `${revision}-124-2` })).toThrow();
+    expect(() => createReleasePlan({ ...options, releaseId: `${"c".repeat(40)}-124` })).toThrow();
   });
   it("does not rebuild application images for a docs edit", () => {
     const changed = tree.map((entry) =>

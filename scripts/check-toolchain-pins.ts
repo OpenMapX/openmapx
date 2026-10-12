@@ -1,6 +1,6 @@
 /**
  * Toolchain-pin gate: the MOTIS version and the `gtfsclean` build commit are
- * each duplicated across Dockerfiles, service manifests, and package.json deps.
+ * each duplicated across build inputs, service manifests, and package.json deps.
  * `@openmapx/transitous-core` holds the single source of truth
  * (`MOTIS_VERSION`, `GTFSCLEAN_COMMIT`); this script asserts every other
  * occurrence matches, so a bump in one place can't silently drift from the
@@ -164,14 +164,20 @@ if (!reactNativeVersion || reactNativeJestPreset !== reactNativeVersion) {
   );
 }
 
-// gtfsclean commit: every image that builds it.
-for (const rel of [
-  "services/motis/tools/transitous/Dockerfile",
-  "services/data-manager/Dockerfile",
-  "apps/transitous-runner/Dockerfile",
-]) {
-  if (!read(rel).includes(`gtfsclean@${GTFSCLEAN_COMMIT}`)) {
-    errors.push(`${rel}: gtfsclean commit != ${GTFSCLEAN_COMMIT}`);
+// gtfsclean commit: one reviewed build script copied by every image that ships it.
+const gtfscleanBuildScript = read("services/motis/tools/transitous/build-gtfsclean.sh");
+if (!gtfscleanBuildScript.includes(`gtfsclean@${GTFSCLEAN_COMMIT}`)) {
+  errors.push(
+    `services/motis/tools/transitous/build-gtfsclean.sh: gtfsclean commit != ${GTFSCLEAN_COMMIT}`,
+  );
+}
+for (const [rel, source] of [
+  ["services/motis/tools/transitous/Dockerfile", "build-gtfsclean.sh"],
+  ["services/data-manager/Dockerfile", "services/motis/tools/transitous/build-gtfsclean.sh"],
+  ["apps/transitous-runner/Dockerfile", "services/motis/tools/transitous/build-gtfsclean.sh"],
+] as const) {
+  if (!read(rel).includes(source)) {
+    errors.push(`${rel}: does not copy the pinned gtfsclean build script`);
   }
 }
 

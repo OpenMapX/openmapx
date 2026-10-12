@@ -15,8 +15,8 @@ concurrency:
 env:
   REGISTRY: ghcr.io
   IMAGE_PREFIX: ghcr.io/openmapx
-  # Distinguish security refreshes and retries of the same source commit.
-  RELEASE_ID: ${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+  # Keep one release identity across failed-job retries of the same workflow.
+  RELEASE_ID: ${{ github.sha }}-${{ github.run_id }}
 
 permissions:
   contents: read
@@ -92,9 +92,10 @@ jobs:
       - name: Preserve the complete build selection
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: docker-release-plan-${{ github.run_id }}-${{ github.run_attempt }}
+          name: docker-release-plan-${{ github.run_id }}
           path: release-plan/release-plan.json
           if-no-files-found: error
+          overwrite: true
           retention-days: 1
 
   build:
@@ -146,7 +147,7 @@ jobs:
       - name: Download the complete build selection
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          name: docker-release-plan-${{ github.run_id }}-${{ github.run_attempt }}
+          name: docker-release-plan-${{ github.run_id }}
           # Keep CI artifacts outside Docker build contexts.
           path: ${{ runner.temp }}/release-plan
       - name: Select build or reuse for this image
@@ -272,9 +273,10 @@ jobs:
       - name: Preserve approved digest for aggregate promotion
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: docker-digest-${{ matrix.app }}-${{ github.run_id }}-${{ github.run_attempt }}
+          name: docker-digest-${{ matrix.app }}-${{ github.run_id }}
           path: digest/*
           if-no-files-found: error
+          overwrite: true
           retention-days: 1
 
   validate-privacy-release:
@@ -309,9 +311,10 @@ jobs:
       - name: Preserve exact-checkout privacy validation evidence
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: privacy-release-validation-${{ needs.gate.outputs.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          name: privacy-release-validation-${{ needs.gate.outputs.sha }}-${{ github.run_id }}
           path: ${{ runner.temp }}/privacy-release-validation.json
           if-no-files-found: error
+          overwrite: true
           retention-days: 1
 
   promote:
@@ -327,18 +330,18 @@ jobs:
       - name: Download the complete build selection
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          name: docker-release-plan-${{ github.run_id }}-${{ github.run_attempt }}
+          name: docker-release-plan-${{ github.run_id }}
           path: release-plan
       - name: Download every approved digest
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          pattern: docker-digest-*-${{ github.run_id }}-${{ github.run_attempt }}
+          pattern: docker-digest-*-${{ github.run_id }}
           path: digests
 
       - name: Download exact-checkout privacy validation evidence
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          name: privacy-release-validation-${{ needs.gate.outputs.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          name: privacy-release-validation-${{ needs.gate.outputs.sha }}-${{ github.run_id }}
           path: privacy-release-validation
 
       - name: Set up Docker Buildx
@@ -398,7 +401,7 @@ jobs:
           image_lines=""
           for app in api web data-manager ops-agent privacy-backup transitous-runner transitous-tools; do
             shopt -s nullglob
-            digest_files=("digests/docker-digest-${app}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"/*)
+            digest_files=("digests/docker-digest-${app}-${GITHUB_RUN_ID}"/*)
             if [ "${#digest_files[@]}" -ne 1 ] || [ ! -f "${digest_files[0]}" ]; then
               echo "Expected exactly one approved digest artifact for ${app}" >&2
               exit 1
@@ -487,7 +490,7 @@ jobs:
         run: |
           for app in api web data-manager ops-agent privacy-backup transitous-runner transitous-tools; do
             shopt -s nullglob
-            digest_files=("digests/docker-digest-${app}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"/*)
+            digest_files=("digests/docker-digest-${app}-${GITHUB_RUN_ID}"/*)
             if [ "${#digest_files[@]}" -ne 1 ] || [ ! -f "${digest_files[0]}" ]; then
               echo "Expected exactly one approved digest artifact for ${app}" >&2
               exit 1

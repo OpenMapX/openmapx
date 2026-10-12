@@ -15,7 +15,7 @@ const apps = [
 ];
 const prefix = "example.invalid/openmapx";
 const sha = "f".repeat(40);
-const releaseId = `${sha}-1-1`;
+const releaseId = `${sha}-1`;
 const digests = Object.fromEntries(
   apps.map((app, i) => [app, `sha256:${String(i + 1).repeat(64)}`]),
 );
@@ -46,7 +46,7 @@ function promote(
     const bin = join(temp, "bin");
     mkdirSync(bin);
     for (const app of apps) {
-      const dir = join(temp, "digests", `docker-digest-${app}-1-1`);
+      const dir = join(temp, "digests", `docker-digest-${app}-1`);
       mkdirSync(dir, { recursive: true });
       writeFileSync(join(dir, digests[app].slice(7)), "");
     }
@@ -118,7 +118,7 @@ if (args[2] === "inspect" && args.includes("--format")) {
           ...process.env,
           PATH: `${bin}:${process.env.PATH}`,
           GITHUB_RUN_ID: "1",
-          GITHUB_RUN_ATTEMPT: "1",
+          GITHUB_RUN_ATTEMPT: "2",
           IMAGE_PREFIX: prefix,
           RELEASE_MANIFEST_IMAGE: `${prefix}/release-manifest`,
           RELEASE_SHA: sha,
