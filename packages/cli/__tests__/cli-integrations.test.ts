@@ -5,6 +5,7 @@ import {
   lstatSync,
   mkdirSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   rmSync,
   statSync,
@@ -13,6 +14,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { gzipSync } from "node:zlib";
 import {
   backupInstalledIntegration,
   packageIntegration,
@@ -56,6 +58,86 @@ function writeTarGz(sourceDir: string, artifactPath: string): void {
   if (result.status !== 0) {
     throw new Error(result.stderr.toString() || `tar exited with ${result.status}`);
   }
+}
+
+interface TarFixtureEntry {
+  name: string;
+  type?: "0" | "2" | "7" | "g" | "x";
+  data?: Buffer | string;
+  linkName?: string;
+  claimedSize?: number;
+  omitPadding?: boolean;
+}
+
+function writeTarOctal(header: Buffer, offset: number, length: number, value: number): void {
+  const encoded = `${value.toString(8).padStart(length - 1, "0")}\0`;
+  header.write(encoded, offset, length, "ascii");
+}
+
+function tarFixtureEntry(entry: TarFixtureEntry): Buffer {
+  const payload = Buffer.isBuffer(entry.data) ? entry.data : Buffer.from(entry.data ?? "", "utf-8");
+  const claimedSize = entry.claimedSize ?? payload.length;
+  const header = Buffer.alloc(512);
+  header.write(entry.name, 0, 100, "utf-8");
+  writeTarOctal(header, 100, 8, 0o644);
+  writeTarOctal(header, 108, 8, 0);
+  writeTarOctal(header, 116, 8, 0);
+  writeTarOctal(header, 124, 12, claimedSize);
+  writeTarOctal(header, 136, 12, 0);
+  header.fill(0x20, 148, 156);
+  header.write(entry.type ?? "0", 156, 1, "ascii");
+  if (entry.linkName) header.write(entry.linkName, 157, 100, "utf-8");
+  header.write("ustar\0", 257, 6, "ascii");
+  header.write("00", 263, 2, "ascii");
+  const checksum = header.reduce((sum, byte) => sum + byte, 0);
+  writeTarOctal(header, 148, 8, checksum);
+
+  if (entry.omitPadding) return Buffer.concat([header, payload]);
+  if (claimedSize !== payload.length) {
+    throw new Error("Padded tar fixtures require payload length to match the claimed size");
+  }
+  const padding = Buffer.alloc((512 - (payload.length % 512)) % 512);
+  return Buffer.concat([header, payload, padding]);
+}
+
+function writeTarFixture(
+  artifactPath: string,
+  entries: TarFixtureEntry[],
+  options: { endBlocks?: boolean } = {},
+): void {
+  const blocks = entries.map(tarFixtureEntry);
+  if (options.endBlocks ?? true) blocks.push(Buffer.alloc(1024));
+  writeFileSync(artifactPath, gzipSync(Buffer.concat(blocks)));
+}
+
+function paxRecord(key: string, value: string): Buffer {
+  const body = Buffer.from(`${key}=${value}\n`, "utf-8");
+  let length = body.length + 2;
+  for (;;) {
+    const next = Buffer.byteLength(String(length)) + 1 + body.length;
+    if (next === length) return Buffer.concat([Buffer.from(`${length} `), body]);
+    length = next;
+  }
+}
+
+function manifestTarEntry(id: string): TarFixtureEntry {
+  return {
+    name: "manifest.json",
+    data: JSON.stringify({ ...baseManifest, id }),
+  };
+}
+
+async function expectArtifactRejection(
+  artifactPath: string,
+  id: string,
+  message: RegExp,
+): Promise<void> {
+  await expect(
+    installIntegration({ source: artifactPath, sourceKind: "artifact", rootDir: tmp }),
+  ).rejects.toThrow(message);
+  expect(existsSync(join(tmp, "custom_integrations", id))).toBe(false);
+  const staging = join(tmp, "custom_integrations", ".staging");
+  expect(existsSync(staging) ? readdirSync(staging) : []).toEqual([]);
 }
 
 function sha256(path: string): string {
@@ -375,6 +457,191 @@ describe("installIntegration (local source)", () => {
 });
 
 describe("installIntegration (artifact source)", () => {
+  it("accepts exactly 4,096 tar headers without materializing metadata entries", async () => {
+    const id = "header-boundary-artifact";
+    const artifact = join(tmp, `${id}.tar.gz`);
+    const metadataHeaders = Array.from<TarFixtureEntry>({ length: 4095 }).fill({
+      name: "GlobalHead",
+      type: "g",
+    });
+    writeTarFixture(artifact, [...metadataHeaders, manifestTarEntry(id)]);
+
+    await installIntegration({ source: artifact, sourceKind: "artifact", rootDir: tmp });
+
+    expect(existsSync(join(tmp, "custom_integrations", id, "manifest.json"))).toBe(true);
+  });
+
+  it("rejects a 4,097th tar header and leaves no extracted tree", async () => {
+    const id = "header-limit-artifact";
+    const artifact = join(tmp, `${id}.tar.gz`);
+    const metadataHeaders = Array.from<TarFixtureEntry>({ length: 4096 }).fill({
+      name: "GlobalHead",
+      type: "g",
+    });
+    writeTarFixture(artifact, [...metadataHeaders, manifestTarEntry(id)]);
+
+    await expectArtifactRejection(artifact, id, /tar header limit.*4,096/i);
+  });
+
+  it("accepts materializable archive paths and PAX records at their structural boundaries", async () => {
+    const id = "structure-boundary-artifact";
+    const artifact = join(tmp, `${id}.tar.gz`);
+    const pathAtDepthLimit = Array.from({ length: 32 }, (_, index) => `d${index}`).join("/");
+    const pathAtComponentLimit = "c".repeat(255);
+    const paxAtRecordLimit = Buffer.concat([
+      ...Array.from({ length: 255 }, (_, index) => paxRecord(`key${index}`, "value")),
+      paxRecord("comment", "record 256"),
+    ]);
+    expect(pathAtDepthLimit.split("/")).toHaveLength(32);
+    expect(Buffer.byteLength(pathAtComponentLimit)).toBe(255);
+
+    writeTarFixture(artifact, [
+      manifestTarEntry(id),
+      { name: "PaxHeader", type: "x", data: paxRecord("path", pathAtDepthLimit) },
+      { name: "depth-limit", data: "depth boundary" },
+      { name: "PaxHeader", type: "x", data: paxRecord("path", pathAtComponentLimit) },
+      { name: "component-limit", data: "component boundary" },
+      { name: "PaxHeader", type: "x", data: paxAtRecordLimit },
+      { name: "pax-limit.txt", data: "record boundary" },
+    ]);
+
+    await installIntegration({ source: artifact, sourceKind: "artifact", rootDir: tmp });
+
+    const installed = join(tmp, "custom_integrations", id);
+    expect(readFileSync(join(installed, pathAtDepthLimit), "utf-8")).toBe("depth boundary");
+    expect(readFileSync(join(installed, pathAtComponentLimit), "utf-8")).toBe("component boundary");
+    expect(readFileSync(join(installed, "pax-limit.txt"), "utf-8")).toBe("record boundary");
+  });
+
+  it("accepts a 1,024-byte resolved path during structural validation", async () => {
+    const id = "path-byte-boundary-artifact";
+    const artifact = join(tmp, `${id}.tar.gz`);
+    const pathAtByteLimit = Array.from({ length: 5 }, () => "a".repeat(204)).join("/");
+    expect(Buffer.byteLength(pathAtByteLimit)).toBe(1024);
+    writeTarFixture(artifact, [
+      manifestTarEntry(id),
+      { name: "PaxHeader", type: "x", data: paxRecord("path", pathAtByteLimit) },
+      { name: "unsupported", type: "7" },
+    ]);
+
+    await expectArtifactRejection(artifact, id, /Unsupported artifact entry type '7'/);
+  });
+
+  it.each([
+    {
+      id: "bytes",
+      label: "a PAX-resolved path over 1,024 bytes",
+      key: "path",
+      value: Array.from({ length: 6 }, () => "a".repeat(204)).join("/"),
+      entry: { name: "byte-limit", data: "x" } satisfies TarFixtureEntry,
+      message: /artifact path.*1,024 UTF-8 bytes/i,
+    },
+    {
+      id: "depth",
+      label: "a path with 33 components",
+      key: "path",
+      value: Array.from({ length: 33 }, () => "a").join("/"),
+      entry: { name: "depth-limit", data: "x" } satisfies TarFixtureEntry,
+      message: /artifact path.*32 components/i,
+    },
+    {
+      id: "component",
+      label: "a path component over 255 bytes",
+      key: "path",
+      value: "a".repeat(256),
+      entry: { name: "component-limit", data: "x" } satisfies TarFixtureEntry,
+      message: /artifact path component.*255 UTF-8 bytes/i,
+    },
+    {
+      id: "link-depth",
+      label: "a link target with 33 components",
+      key: "linkpath",
+      value: Array.from({ length: 33 }, () => "target").join("/"),
+      entry: { name: "linked", type: "2", linkName: "fallback" } satisfies TarFixtureEntry,
+      message: /artifact link target.*32 components/i,
+    },
+  ])("rejects $label before installation", async ({ id: suffix, key, value, entry, message }) => {
+    const id = `path-limit-artifact-${suffix}`;
+    const artifact = join(tmp, `${id}.tar.gz`);
+    writeTarFixture(artifact, [
+      manifestTarEntry(id),
+      { name: "PaxHeader", type: "x", data: paxRecord(key, value) },
+      entry,
+    ]);
+
+    await expectArtifactRejection(artifact, id, message);
+  });
+
+  it("rejects more than 256 records in one PAX payload", async () => {
+    const id = "pax-record-limit-artifact";
+    const artifact = join(tmp, `${id}.tar.gz`);
+    const records = Buffer.concat(
+      Array.from({ length: 257 }, (_, index) => paxRecord(`key${index}`, "value")),
+    );
+    writeTarFixture(artifact, [
+      manifestTarEntry(id),
+      { name: "PaxHeader", type: "x", data: records },
+      { name: "payload.txt", data: "x" },
+    ]);
+
+    await expectArtifactRejection(artifact, id, /PAX payload.*256 records/i);
+  });
+
+  it.each([
+    {
+      id: "truncated",
+      label: "truncated payload bytes",
+      claimedSize: 10,
+      data: "abc",
+      message: /tar payload.*truncated/i,
+    },
+    {
+      id: "padding",
+      label: "missing payload padding",
+      claimedSize: 3,
+      data: "abc",
+      message: /tar payload.*padding/i,
+    },
+  ])("rejects $label", async ({ id: suffix, claimedSize, data, message }) => {
+    const id = `payload-bounds-artifact-${suffix}`;
+    const artifact = join(tmp, `${id}.tar.gz`);
+    writeTarFixture(
+      artifact,
+      [manifestTarEntry(id), { name: "payload.txt", data, claimedSize, omitPadding: true }],
+      { endBlocks: false },
+    );
+
+    await expectArtifactRejection(artifact, id, message);
+  });
+
+  it.each([
+    {
+      id: "length",
+      label: "a PAX record whose declared length omits its newline",
+      payload: Buffer.from("8 path=a\n"),
+    },
+    {
+      id: "trailing",
+      label: "unterminated trailing PAX data",
+      payload: Buffer.from("9 path=a\nx"),
+    },
+    {
+      id: "non-decimal-length",
+      label: "a PAX record with a non-decimal length",
+      payload: Buffer.from("11x path=a\n"),
+    },
+  ])("rejects $label", async ({ id: suffix, payload }) => {
+    const id = `malformed-pax-artifact-${suffix}`;
+    const artifact = join(tmp, `${id}.tar.gz`);
+    writeTarFixture(artifact, [
+      manifestTarEntry(id),
+      { name: "PaxHeader", type: "x", data: payload },
+      { name: "payload.txt", data: "x" },
+    ]);
+
+    await expectArtifactRejection(artifact, id, /invalid PAX|PAX payload/i);
+  });
+
   it("rejects a prebuilt same-origin frontend bundle", async () => {
     const src = join(tmp, "artifact-src");
     mkdirSync(join(src, "dist", "frontend"), { recursive: true });
