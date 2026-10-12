@@ -46,6 +46,7 @@ import { fetch as undiciFetch } from "undici";
 import { createPinnedFetchTransport } from "../utils/pinned-fetch";
 import {
   assertResolvesToPublicIp,
+  resolvePublicConnectionAddresses,
   SafeFetchHttpError,
   safeDownload,
   safeFetchJson,
@@ -329,6 +330,23 @@ describe("assertResolvesToPublicIp", () => {
     expect(error.message).toMatch(/non-public|private/i);
     expect(error.message).not.toContain("10.23.45.67");
   });
+
+  it("bounds public-address resolution with the caller signal", async () => {
+    lookupMock.mockImplementation(async () => await new Promise(() => {}));
+    const controller = new AbortController();
+    const resolution = resolvePublicConnectionAddresses(
+      new URL("https://fixture.test"),
+      controller.signal,
+    );
+
+    controller.abort(new DOMException("The operation timed out", "TimeoutError"));
+    const result = await Promise.race([
+      resolution.catch((error: unknown) => error),
+      new Promise((resolve) => setTimeout(() => resolve("still pending"), 50)),
+    ]);
+
+    expect(result).toMatchObject({ name: "TimeoutError" });
+  });
 });
 
 function makeResponse(opts: {
@@ -413,6 +431,26 @@ describe("safeFetchStatus", () => {
 
     await expect(safeFetchStatus("https://status.test/health")).rejects.toThrow(/not allowed/i);
     expect(undiciFetchMock).toHaveBeenCalledOnce();
+  });
+
+  it("reports a canonical URL after exhausting redirects", async () => {
+    lookupMock.mockResolvedValue([{ address: "93.184.216.34", family: 4 }]);
+    stubFetchSequence(
+      makeResponse({
+        status: 302,
+        headers: { location: "https://status.test/health?appid=fixture'secret" },
+      }),
+      makeResponse({
+        status: 302,
+        headers: { location: "https://status.test/health?appid=fixture'secret" },
+      }),
+    );
+
+    await expect(
+      safeFetchStatus("https://status.test/health?appid=fixture'secret", {
+        maxRedirects: 1,
+      }),
+    ).rejects.toThrow("fixture%27secret");
   });
 
   it("blocks DNS rebinding before the connection opens", async () => {
@@ -531,6 +569,23 @@ describe("safeFetchJson", () => {
       }),
     ).resolves.toMatchObject({ data: { type: "FeatureCollection" } });
   });
+
+  it.each(["text/xml", "application/html", "text/markdown"])(
+    "accepts the configured content-type substring for %s",
+    async (contentType) => {
+      lookupMock.mockResolvedValue([{ address: "93.184.216.34", family: 4 }]);
+      stubFetchSequence(
+        makeResponse({ headers: { "content-type": contentType }, bodyText: "document" }),
+      );
+
+      await expect(
+        safeFetchText("https://ex.test/document", {
+          acceptedContentTypes: ["application/json"],
+          acceptedContentTypeSubstrings: ["html", "text"],
+        }),
+      ).resolves.toBe("document");
+    },
+  );
 
   it("rejects an unexpected HTML content type before buffering it", async () => {
     lookupMock.mockResolvedValue([{ address: "93.184.216.34", family: 4 }]);

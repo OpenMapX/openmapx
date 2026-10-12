@@ -185,7 +185,7 @@ export async function fetchOfficialBookingUrl(
 ): Promise<string | null> {
   try {
     const response = await safeFetchTextResponse(website, {
-      acceptedContentTypes: ["text/html", "application/xhtml+xml", "text/plain"],
+      acceptedContentTypeSubstrings: ["html", "text"],
       allowPrivateHosts: [],
       headers: {
         "User-Agent": USER_AGENT_CONTACT,

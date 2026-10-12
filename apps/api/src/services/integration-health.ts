@@ -12,6 +12,7 @@ const UA = USER_AGENT;
 function tcpCheck(
   address: string,
   port: number,
+  timeoutMs: number,
 ): Promise<{ ok: boolean; ms: number; error?: string }> {
   return new Promise((resolve) => {
     const start = Date.now();
@@ -19,7 +20,7 @@ function tcpCheck(
       socket.destroy();
       resolve({ ok: true, ms: Date.now() - start });
     });
-    socket.setTimeout(TIMEOUT);
+    socket.setTimeout(timeoutMs);
     socket.on("timeout", () => {
       socket.destroy();
       resolve({ ok: false, ms: Date.now() - start, error: "Timeout" });
@@ -76,10 +77,11 @@ function resolveConfigValue(integration: LoadedIntegration, key: string): string
 const MIN_REDACTABLE_SECRET_LENGTH = 4;
 
 /**
- * Build a redactor that blanks every resolved secret VALUE wherever it occurs
- * in a string — query value, path segment, or URL userinfo alike. Matching on
- * the value rather than on a parameter name is what makes this robust: a
- * manifest can put its credential anywhere (`?appid=<key>`,
+ * Build a redactor that blanks every resolved secret value, including the
+ * encodings produced by URL serialization, wherever it occurs in a string —
+ * query value, path segment, or URL userinfo alike. Matching on the value
+ * rather than on a parameter name is what makes this robust: a manifest can
+ * put its credential anywhere (`?appid=<key>`,
  * `/api/area/csv/<key>/...`), and a name allowlist can only ever cover the
  * shapes someone remembered to add.
  *
@@ -87,17 +89,30 @@ const MIN_REDACTABLE_SECRET_LENGTH = 4;
  * `getSecretFields` is the same reader the admin credential endpoints use.
  */
 function secretRedactor(integration: LoadedIntegration): (text: string) => string {
-  const values: string[] = [];
+  const values = new Set<string>();
   for (const field of getSecretFields(integration.manifest.configSchema)) {
     const value = resolveConfigValue(integration, field.key);
-    if (value && value.length >= MIN_REDACTABLE_SECRET_LENGTH) values.push(value);
+    if (!value || value.length < MIN_REDACTABLE_SECRET_LENGTH) continue;
+    const queryEncoded = new URLSearchParams({ value }).toString().slice("value=".length);
+    const representations = [value, queryEncoded];
+    for (const encode of [encodeURI, encodeURIComponent]) {
+      try {
+        representations.push(encode(value));
+      } catch {
+        // URLSearchParams already provides a safe canonical representation for malformed Unicode.
+      }
+    }
+    for (const representation of representations) {
+      values.add(representation);
+      values.add(representation.replace(/%[0-9A-F]{2}/g, (match) => match.toLowerCase()));
+    }
   }
-  if (values.length === 0) return (text) => text;
+  if (values.size === 0) return (text) => text;
   // Longest first, so an overlapping shorter secret cannot leave a tail behind.
-  values.sort((a, b) => b.length - a.length);
+  const orderedValues = [...values].sort((a, b) => b.length - a.length);
   return (text) => {
     let out = text;
-    for (const value of values) out = out.split(value).join("***");
+    for (const value of orderedValues) out = out.split(value).join("***");
     return out;
   };
 }
@@ -175,20 +190,29 @@ async function executeSingleHealthCheck(
 
   // TCP health check
   if (hc.type === "tcp" && hc.url) {
+    const start = Date.now();
+    const timeoutSignal = AbortSignal.timeout(TIMEOUT);
     const url = new URL(hc.url.startsWith("tcp://") ? hc.url : `tcp://${hc.url}`);
     const host = url.hostname;
     const port = Number(url.port) || 5432;
     let addresses: Awaited<ReturnType<typeof resolvePublicConnectionAddresses>>;
     try {
-      addresses = await resolvePublicConnectionAddresses(new URL(`http://${url.host}`));
-    } catch {
+      addresses = await resolvePublicConnectionAddresses(
+        new URL(`http://${url.host}`),
+        timeoutSignal,
+      );
+    } catch (error) {
       return {
         id,
         name,
         category,
         url: `${host}:${port}`,
         status: "down",
-        error: "health-check host not allowed (non-public host)",
+        responseTime: Date.now() - start,
+        error:
+          errMsg(error) === "Timeout"
+            ? "Timeout"
+            : "health-check host not allowed (non-public host)",
       };
     }
     const address = addresses[0];
@@ -199,17 +223,30 @@ async function executeSingleHealthCheck(
         category,
         url: `${host}:${port}`,
         status: "down",
+        responseTime: Date.now() - start,
         error: "health-check host not allowed (non-public host)",
       };
     }
-    const result = await tcpCheck(address.address, port);
+    const remainingMs = TIMEOUT - (Date.now() - start);
+    if (timeoutSignal.aborted || remainingMs <= 0) {
+      return {
+        id,
+        name,
+        category,
+        url: `${host}:${port}`,
+        status: "down",
+        responseTime: Date.now() - start,
+        error: "Timeout",
+      };
+    }
+    const result = await tcpCheck(address.address, port, remainingMs);
     return {
       id,
       name,
       category,
       url: `${host}:${port}`,
       status: result.ok ? "up" : "down",
-      responseTime: result.ms,
+      responseTime: Date.now() - start,
       error: result.error ? redactSecrets(result.error) : undefined,
     };
   }

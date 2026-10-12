@@ -148,7 +148,7 @@ describe("official hotel website acquisition", () => {
     expect(serverMocks.safeFetchTextResponse).toHaveBeenCalledWith(
       "https://hotel.example",
       expect.objectContaining({
-        acceptedContentTypes: ["text/html", "application/xhtml+xml", "text/plain"],
+        acceptedContentTypeSubstrings: ["html", "text"],
         maxBytes: 800_000,
         truncate: true,
       }),

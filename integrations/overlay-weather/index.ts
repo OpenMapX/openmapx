@@ -40,6 +40,22 @@ export function canonicalizeRainViewerHost(value: unknown): string | null {
   return url.origin;
 }
 
+export function buildRainViewerTileUrl(
+  radarHost: string,
+  framePath: string,
+  z: string,
+  x: string,
+  y: string,
+): string {
+  const host = canonicalizeRainViewerHost(radarHost);
+  if (!host) throw new Error("Invalid RainViewer host");
+
+  const tileUrl = new URL(host);
+  const path = framePath.startsWith("/") ? framePath : `/${framePath}`;
+  tileUrl.pathname = `${path}/256/${z}/${x}/${y}/1/1_1.png`;
+  return tileUrl.toString();
+}
+
 interface RadarFrame {
   time: number;
   path: string;
@@ -144,7 +160,7 @@ export function setup(ctx: IntegrationContext): void {
     }
 
     const { z, x, y } = req.params as Record<string, string>;
-    const tileUrl = `${radarHost}${framePath}/256/${z}/${x}/${y}/1/1_1.png`;
+    const tileUrl = buildRainViewerTileUrl(radarHost, framePath as string, z, x, y);
 
     try {
       const timeoutSignal = AbortSignal.timeout(FETCH_TIMEOUT_MS);

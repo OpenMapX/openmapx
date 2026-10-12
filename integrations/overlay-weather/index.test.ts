@@ -2,7 +2,7 @@ import {
   createMockIntegrationContext,
   createPassthroughCache,
 } from "@openmapx/integration-framework/testing";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const coreMocks = vi.hoisted(() => ({
   fetchJson: vi.fn(),
@@ -16,7 +16,7 @@ vi.mock("@openmapx/core", async (importOriginal) => {
   };
 });
 
-import { canonicalizeRainViewerHost, setup } from "./index.js";
+import { buildRainViewerTileUrl, canonicalizeRainViewerHost, setup } from "./index.js";
 
 interface Sent {
   status: number;
@@ -55,6 +55,10 @@ async function callRadarMeta(host: string) {
 
 beforeEach(() => {
   coreMocks.fetchJson.mockReset();
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
 });
 
 describe("RainViewer metadata host", () => {
@@ -100,5 +104,64 @@ describe("RainViewer metadata host", () => {
 
     expect(sent).toEqual({ status: 502, body: { message: "RainViewer unavailable" } });
     expect(cacheSet).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ".attacker.example",
+    "@127.0.0.1",
+    "//attacker.example",
+    "/v2/radar/1?target=attacker.example",
+  ])("keeps the metadata frame path %s inside the trusted origin", (framePath) => {
+    const tileUrl = new URL(
+      buildRainViewerTileUrl("https://tilecache.rainviewer.com", framePath, "8", "130", "84"),
+    );
+
+    expect(tileUrl.origin).toBe("https://tilecache.rainviewer.com");
+    expect(tileUrl.username).toBe("");
+    expect(tileUrl.password).toBe("");
+  });
+
+  it("keeps a malicious cached frame path inside the trusted origin in the tile route", async () => {
+    const framePath = ".attacker.example";
+    const cache = {
+      ...createPassthroughCache(),
+      get: vi.fn(async () => ({
+        host: "https://tilecache.rainviewer.com",
+        past: [{ time: 1, path: framePath }],
+        nowcast: [],
+      })),
+    };
+    const ctx = createMockIntegrationContext({ cache });
+    setup(ctx);
+    const route = ctx.registered.routes.find(
+      (candidate) => candidate.path === "/radar/tile/:z/:x/:y",
+    );
+    if (!route) throw new Error("no radar tile route");
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(new Uint8Array([1, 2, 3]), {
+        status: 200,
+        headers: { "content-type": "image/png" },
+      }),
+    );
+    const reply = {
+      status: vi.fn().mockReturnThis(),
+      header: vi.fn().mockReturnThis(),
+      send: vi.fn().mockReturnThis(),
+    };
+
+    await route.handler(
+      {
+        query: { path: framePath },
+        params: { z: "8", x: "130", y: "84" },
+        headers: {},
+        signal: new AbortController().signal,
+      } as never,
+      reply as never,
+    );
+
+    expect(fetchSpy).toHaveBeenCalledOnce();
+    const requestedUrl = new URL(String(fetchSpy.mock.calls[0]?.[0]));
+    expect(requestedUrl.origin).toBe("https://tilecache.rainviewer.com");
+    expect(requestedUrl.pathname).toContain("/.attacker.example/256/8/130/84/");
   });
 });

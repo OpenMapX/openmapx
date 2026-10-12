@@ -193,7 +193,7 @@ function isPdf(path: string): boolean {
 async function fetchText(url: string, log: Logger, signal?: AbortSignal): Promise<string | null> {
   try {
     return await safeFetchText(url, {
-      acceptedContentTypes: ["text/html", "application/xhtml+xml", "text/plain"],
+      acceptedContentTypeSubstrings: ["html", "text"],
       allowPrivateHosts: [],
       headers: { "User-Agent": USER_AGENT, Accept: "text/html,application/xhtml+xml" },
       maxBytes: MAX_BYTES,

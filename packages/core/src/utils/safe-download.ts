@@ -202,9 +202,11 @@ export async function assertResolvesToPublicIp(hostname: string): Promise<void> 
  */
 export async function resolvePublicConnectionAddresses(
   url: URL,
+  signal?: AbortSignal,
 ): Promise<FetchConnectionAddress[]> {
   validatePublicUrl(url.toString());
-  return resolvePublicHostOrThrow(url.hostname);
+  const resolution = resolvePublicHostOrThrow(url.hostname);
+  return signal ? abortable(resolution, signal) : resolution;
 }
 
 const SAFE_DOWNLOAD_MAX_REDIRECTS = 5;
@@ -579,6 +581,8 @@ export interface SafeFetchJsonOptions {
   fetchImplementation?: FetchImplementation;
   /** Optional allowlist of response media types, compared without parameters. */
   acceptedContentTypes?: string[];
+  /** Optional non-empty substrings accepted in the normalized response media type. */
+  acceptedContentTypeSubstrings?: string[];
 }
 
 export interface SafeJsonResponse<T> {
@@ -597,7 +601,13 @@ export type SafeTextResponse = Omit<SafeJsonResponse<unknown>, "data">;
 
 export type SafeFetchStatusOptions = Omit<
   SafeFetchJsonOptions,
-  "acceptedContentTypes" | "body" | "maxBytes" | "method" | "parseJson" | "truncate"
+  | "acceptedContentTypeSubstrings"
+  | "acceptedContentTypes"
+  | "body"
+  | "maxBytes"
+  | "method"
+  | "parseJson"
+  | "truncate"
 >;
 
 export interface SafeStatusResponse {
@@ -912,14 +922,21 @@ export async function safeFetchJsonResponse<T = unknown>(
         }
       }
 
-      if (opts.acceptedContentTypes) {
+      if (opts.acceptedContentTypes || opts.acceptedContentTypeSubstrings) {
         const contentType = response.headers
           .get("content-type")
           ?.split(";", 1)[0]
           ?.trim()
           .toLowerCase();
-        const accepted = opts.acceptedContentTypes.map((value) => value.toLowerCase());
-        if (!contentType || !accepted.includes(contentType)) {
+        const accepted = (opts.acceptedContentTypes ?? []).map((value) => value.toLowerCase());
+        const acceptedSubstrings = (opts.acceptedContentTypeSubstrings ?? [])
+          .map((value) => value.toLowerCase())
+          .filter((value) => value.length > 0);
+        if (
+          !contentType ||
+          (!accepted.includes(contentType) &&
+            !acceptedSubstrings.some((value) => contentType.includes(value)))
+        ) {
           throw new Error(`Unexpected response content type for ${finalUrl}`);
         }
       }

@@ -291,6 +291,29 @@ describe("integration-health SSRF guard", () => {
     );
   });
 
+  it("bounds TCP address resolution with the health-check timeout", async () => {
+    const controller = new AbortController();
+    const timeoutSpy = vi.spyOn(AbortSignal, "timeout").mockReturnValue(controller.signal);
+    coreServerMocks.resolvePublicConnectionAddresses.mockImplementation(
+      async (_url: URL, signal?: AbortSignal) =>
+        await new Promise((_resolve, reject) => {
+          signal?.addEventListener("abort", () => reject(signal.reason), { once: true });
+        }),
+    );
+    const integration = makeIntegration({
+      type: "tcp",
+      url: "slow-dns.example.com:443",
+    });
+
+    const resultPromise = executeIntegrationHealthCheck(integration);
+    controller.abort(new DOMException("The operation timed out", "TimeoutError"));
+    const results = await resultPromise;
+
+    expect(results[0]).toMatchObject({ status: "down", error: "Timeout" });
+    expect(timeoutSpy).toHaveBeenCalledWith(5_000);
+    expect(netMocks.createConnection).not.toHaveBeenCalled();
+  });
+
   it("does not expose the approved address when a TCP connection fails", async () => {
     const approvedAddress = "93.184.216.34";
     coreServerMocks.resolvePublicConnectionAddresses.mockResolvedValue([
@@ -486,6 +509,34 @@ describe("integration-health secret redaction", () => {
     expect(results[0]?.status).toBe("down");
     expect(results[0]?.error).not.toContain(secret);
     expect(results[0]?.error).not.toContain(exposedLeadingFragment);
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("redacts URL-encoded secrets from transport errors", async () => {
+    const secret = "fixture'secret";
+    const integration = makeIntegration(
+      {
+        type: "http",
+        // biome-ignore lint/suspicious/noTemplateCurlyInString: intentional string (manifest template syntax, not JS interpolation)
+        urlTemplate: "https://api.example.com/status?appid=${apiKey}",
+      },
+      {
+        properties: {
+          apiKey: { type: "string", "x-openmapx-secret": true },
+        },
+      },
+    );
+    integration.config = { apiKey: secret };
+    const serializedUrl = new URL(`https://api.example.com/status?appid=${secret}`).toString();
+    coreServerMocks.safeFetchStatus.mockRejectedValue(
+      new Error(`Too many redirects while fetching ${serializedUrl}`),
+    );
+
+    const results = await executeIntegrationHealthCheck(integration);
+
+    expect(results[0]?.error).toContain("***");
+    expect(results[0]?.error).not.toContain(secret);
+    expect(results[0]?.error).not.toContain("fixture%27secret");
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 });

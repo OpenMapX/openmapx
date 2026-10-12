@@ -159,7 +159,7 @@ describe("restaurant website acquisition", () => {
       2,
       "https://restaurant.example/",
       expect.objectContaining({
-        acceptedContentTypes: ["text/html", "application/xhtml+xml", "text/plain"],
+        acceptedContentTypeSubstrings: ["html", "text"],
         maxBytes: 800_000,
         truncate: true,
       }),
