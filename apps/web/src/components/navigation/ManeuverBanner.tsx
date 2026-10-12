@@ -2,7 +2,12 @@
 
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
-import { formatMeasurementDistance, type ManeuverLane, type ManeuverSign } from "@openmapx/core";
+import {
+  formatMeasurementDistance,
+  type ManeuverLane,
+  type ManeuverSign,
+  signHeadline,
+} from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { type Maneuver, maneuverIconFor } from "@/lib/navigation/maneuverIcon";
 import { LaneGuidance } from "./LaneGuidance";
@@ -25,6 +30,26 @@ export function lowercaseFirstWord(instruction: string): string {
     return instruction[0].toLowerCase() + instruction.slice(1);
   }
   return instruction;
+}
+
+/** Keep the full instruction; suppress sign text only when every name already appears there. */
+function instructionRepeatsSignHeadline(instruction: string, sign?: ManeuverSign): boolean {
+  const headline = signHeadline(sign);
+  if (headline.length === 0) return false;
+  const normalize = (text: string) =>
+    text.normalize("NFC").toLowerCase().replace(/\s+/g, " ").trim();
+  const normalizedInstruction = normalize(instruction);
+  return headline.every((name) => {
+    const normalizedName = normalize(name);
+    if (!normalizedName) return false;
+    const escapedName = normalizedName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    // Separators such as /, · and commas delimit names. Letters, marks, numbers,
+    // hyphens and apostrophes do not: Aachen-West must not match just Aachen.
+    return new RegExp(
+      `(?:^|[^\\p{L}\\p{M}\\p{N}\\p{Pd}'’])${escapedName}(?=$|[^\\p{L}\\p{M}\\p{N}\\p{Pd}'’])`,
+      "u",
+    ).test(normalizedInstruction);
+  });
 }
 
 export interface ManeuverBannerProps {
@@ -109,7 +134,14 @@ export function ManeuverBanner({
       <Typography variant="h6" sx={{ lineHeight: 1.1 }}>
         {t("in", { distance: formatMeasurementDistance(distanceToManeuver, units) })}
       </Typography>
-      {sign && <ExitSignStrip sign={sign} country={country} size="banner" />}
+      {sign && (
+        <ExitSignStrip
+          sign={sign}
+          country={country}
+          size="banner"
+          hideHeadline={instructionRepeatsSignHeadline(instruction, sign)}
+        />
+      )}
       <Typography variant="body1">{instruction}</Typography>
     </NavBannerShell>
   );

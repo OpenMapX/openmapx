@@ -12,6 +12,8 @@ interface Props {
   /** ISO 3166-1 alpha-2 country of the route origin; null falls back to the EU palette. */
   country?: string | null;
   size?: "banner" | "compact";
+  /** The banner's full instruction already includes every headline name. */
+  hideHeadline?: boolean;
 }
 
 /**
@@ -20,11 +22,11 @@ interface Props {
  * line, no wrap, ellipsised from the right. Plain text throughout, so the
  * banner's live region reads it as "Exit 20, A 46, Neuss-Zentrum".
  */
-export function ExitSignStrip({ sign, country, size = "banner" }: Props) {
+export function ExitSignStrip({ sign, country, size = "banner", hideHeadline = false }: Props) {
   const t = useTranslations("navigation");
   const exitNumber = sign.exitNumbers?.[0];
   const shields = visibleToward(sign.exitBranches ?? [], 3);
-  const headline = visibleToward(signHeadline(sign));
+  const headline = hideHeadline ? [] : visibleToward(signHeadline(sign));
   const palette = signPalette(country ?? null);
   if (!exitNumber && shields.length === 0 && headline.length === 0) return null;
   return (
