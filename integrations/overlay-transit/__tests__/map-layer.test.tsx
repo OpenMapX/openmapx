@@ -23,7 +23,7 @@ vi.mock("@/integration-api/overlay/useMapAttributions", () => ({
   useMapAttributions: () => undefined,
 }));
 
-import { TransitLayer } from "../map-layer";
+import { networkRouteFeatures, TransitLayer } from "../map-layer";
 
 const SOURCE_ID = "openmapx-transit-motis-source";
 const MOTIS_LINE_ID = "openmapx-transit-motis-line";
@@ -94,4 +94,29 @@ describe("TransitLayer", () => {
     });
     expect(fake.state.paint.get(MOTIS_LINE_ID)?.["line-opacity"]).toBe(0.9);
   });
+});
+
+it("narrows network feature credits to drawable route snapshots", () => {
+  const a = { sourceId: "a", name: "A" };
+  const b = { sourceId: "b", name: "B" };
+  const features = networkRouteFeatures([
+    {
+      id: "a",
+      contributors: [a],
+      shortName: "A",
+      longName: "",
+      mode: "rail",
+      operatorName: "",
+      geometry: {
+        type: "LineString",
+        coordinates: [
+          [8, 50],
+          [8.1, 50.1],
+        ],
+      },
+    },
+    { id: "b", contributors: [b], shortName: "B", longName: "", mode: "rail", operatorName: "" },
+  ]);
+  expect(features).toHaveLength(1);
+  expect(JSON.parse(String(features[0].properties?._mapAttributions))).toEqual([a]);
 });

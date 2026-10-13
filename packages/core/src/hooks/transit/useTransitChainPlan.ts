@@ -1,3 +1,4 @@
+import { captureTransitContributors } from "@openmapx/mobility-core/transit-contributors";
 import { useQuery } from "@tanstack/react-query";
 import { postTransitChainPlan, type TransitChainPlanRequest } from "../../api/transit";
 import { stableRequestKey } from "../useScheduledDirections";
@@ -15,7 +16,11 @@ export function transitChainQueryKey(request: TransitChainPlanRequest): string[]
 export function useTransitChainPlan(request: TransitChainPlanRequest | null) {
   return useQuery({
     queryKey: request ? transitChainQueryKey(request) : ["transit-chain", "disabled"],
-    queryFn: () => postTransitChainPlan(request as TransitChainPlanRequest),
+    queryFn: async () =>
+      captureTransitContributors(
+        await postTransitChainPlan(request as TransitChainPlanRequest),
+        [],
+      ),
     enabled: request !== null,
     staleTime: 30_000,
     retry: false,

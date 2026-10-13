@@ -176,3 +176,29 @@ describe("search suggestion fan-out", () => {
     await expect(work).rejects.toBeInstanceOf(ProviderCancelledError);
   });
 });
+
+it("unions only row snapshots after ranking/capping a mixed-feed response", async () => {
+  const a = { sourceId: "a", name: "A" };
+  const b = { sourceId: "b", name: "B" };
+  const ctx = context([
+    provider("mixed", {
+      suggestions: [
+        {
+          ...suggestion("mixed", "authoritative_code", "FRA"),
+          contributors: [a],
+          sourceIds: ["a"],
+        },
+        { ...suggestion("mixed", "keyword", "Frankfurt"), contributors: [b], sourceIds: ["b"] },
+      ],
+      attributions: [a, b],
+      freshnessSeconds: 300,
+    }),
+  ]);
+  const response = await createSearchSuggestionsOrchestrator(ctx).search({
+    query: "FRA",
+    lang: "en",
+    limit: 1,
+  });
+  expect(response.suggestions).toHaveLength(1);
+  expect(response.attributions).toEqual([a]);
+});

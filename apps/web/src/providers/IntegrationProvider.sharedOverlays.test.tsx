@@ -12,7 +12,6 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-libra
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { useLayerSelectorConfig } from "@/components/map/layer-selector/useLayerSelectorConfig";
 import { useMapAttributionStore } from "@/integration-api/overlay/mapAttributionStore";
-import { useIntegrationDomainAttribution } from "@/integration-api/overlay/useIntegrationAttribution";
 import { invalidateIntegrationRuntime } from "@/lib/integrationRuntimeQuery";
 import { IntegrationProvider } from "./IntegrationProvider";
 
@@ -30,8 +29,6 @@ const integrations = ["mapillary", "panoramax"].map((provider) => {
 
 function SharedOverlayControls() {
   const { mapDetails } = useLayerSelectorConfig();
-  const visible = useStreetLevelStore((state) => state.layerVisible);
-  useIntegrationDomainAttribution("street-level-imagery", visible);
   return mapDetails.map((entry) => (
     <button
       key={entry.id}
@@ -70,7 +67,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-it("initializes both imagery providers with one toggle and keeps their credits through refresh", async () => {
+it("initializes both imagery providers with one toggle, retaining it through refresh without claiming configured sources", async () => {
   render(
     <QueryClientProvider client={client}>
       <IntegrationProvider>
@@ -85,12 +82,9 @@ it("initializes both imagery providers with one toggle and keeps their credits t
 
   fireEvent.click(toggle);
   expect(useStreetLevelStore.getState().panelOpen).toBe(true);
-  const credits = () =>
-    useMapAttributionStore.getState().byLayer["domain:street-level-imagery"] ?? [];
+  const credits = () => Object.values(useMapAttributionStore.getState().byLayer).flat();
   await waitFor(() => {
-    expect(credits()).toHaveLength(2);
-    expect(credits().join(" ")).toContain("Mapillary");
-    expect(credits().join(" ")).toContain("Panoramax");
+    expect(credits()).toHaveLength(0);
   });
 
   metadata = integrations.filter(
@@ -102,9 +96,7 @@ it("initializes both imagery providers with one toggle and keeps their credits t
       "street-level-imagery-panoramax",
     ]);
     expect(useStreetLevelStore.getState().layerVisible).toBe(true);
-    expect(credits()).toHaveLength(1);
-    expect(credits().join(" ")).toContain("Panoramax");
-    expect(credits().join(" ")).not.toContain("Mapillary");
+    expect(credits()).toHaveLength(0);
   });
 
   metadata = [];

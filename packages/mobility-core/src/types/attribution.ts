@@ -26,8 +26,19 @@ export interface Attribution {
 }
 
 export interface DataSourceAttribution {
+  /** Canonical identity when supplied by newer adapters; absent in legacy data. */
+  sourceId?: string;
   text: string;
   url: string;
   license?: string;
   licenseUrl?: string;
 }
+
+/** Standard receipt for a proven OpenStreetMap dataset, independent of transport host. */
+export const OPENSTREETMAP_ATTRIBUTION: Readonly<Attribution> = Object.freeze({
+  sourceId: "openstreetmap",
+  name: "© OpenStreetMap contributors",
+  url: "https://www.openstreetmap.org/copyright",
+  spdxLicense: "ODbL-1.0",
+  licenseUrl: "https://opendatacommons.org/licenses/odbl/",
+});

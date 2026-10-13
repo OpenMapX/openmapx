@@ -7,6 +7,12 @@ import {
   type SearchSuggestionQuery,
 } from "@openmapx/core";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
+import {
+  captureResultContributors,
+  contributorsForRecords,
+  snapshotContributors,
+  withContributors,
+} from "@openmapx/mobility-core/contributors";
 import type { GeocodingProvider } from "./contracts/geocoding-provider.js";
 import type { SearchSuggestionProvider } from "./contracts/search-suggestion-provider.js";
 import type { Wgs84BoundingBox } from "./geospatial";
@@ -27,7 +33,7 @@ export interface GeocoderSuggestionOptions {
   id: string;
   /** The geocoder whose `autocomplete` backs the suggestions. */
   geocoder: GeocodingProvider;
-  /** Attribution rows attached whenever at least one suggestion is returned. */
+  /** Exact source catalogue for legacy row IDs; untagged rows require a proven uniform supplier. */
   attributions: () => Attribution[];
   /**
    * Optional coverage gate. When the query carries a proximity that lies
@@ -98,6 +104,7 @@ export function createGeocoderSuggestionProvider(
       const box = options.coverage?.();
       if (box && query.proximity && !withinBox(query.proximity, box)) return empty();
 
+      const envelope = snapshotContributors(options.attributions());
       const rows = await options.geocoder.autocomplete(
         query.query,
         query.lang,
@@ -109,11 +116,12 @@ export function createGeocoderSuggestionProvider(
       const suggestions: SearchSuggestion[] = [];
       for (const row of rows) {
         const suggestion = toSuggestion(row, options.id, importance);
-        if (suggestion) suggestions.push(suggestion);
+        if (suggestion)
+          suggestions.push(withContributors(suggestion, captureResultContributors(row, envelope)));
         if (suggestions.length >= query.limit) break;
       }
       if (suggestions.length === 0) return empty();
-      return { suggestions, attributions: options.attributions(), freshnessSeconds };
+      return { suggestions, attributions: contributorsForRecords(suggestions), freshnessSeconds };
     },
   };
 }

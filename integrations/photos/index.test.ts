@@ -10,9 +10,12 @@ describe("photo search route", () => {
       source: "wikimedia",
       author: "CEphoto, Uwe Aranas",
       license: "CC BY-SA 3.0",
+      licenseUrl: "https://creativecommons.org/licenses/by-sa/3.0/",
+      pageUrl: "https://commons.wikimedia.org/wiki/File:Aachen.jpg",
     };
     let handler: ((req: unknown, reply: unknown) => Promise<void>) | undefined;
     setup({
+      registerPhotoProvider: vi.fn(),
       registerRoute: (_method: string, _path: string, routeHandler: typeof handler) => {
         handler = routeHandler;
       },

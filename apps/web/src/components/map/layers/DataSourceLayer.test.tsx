@@ -1,6 +1,7 @@
 import { createPlace, useDataSourceStore, useParkingStore, usePlaceStore } from "@openmapx/core";
 import { act, render, waitFor } from "@testing-library/react";
 import { expect, it, vi } from "vitest";
+import { useMapAttributionStore } from "@/integration-api/overlay/mapAttributionStore";
 import { createFakeMap } from "@/test";
 import { MapClickHandler } from "../MapClickHandler";
 import { DataSourceLayer } from "./DataSourceLayer";
@@ -23,6 +24,9 @@ const results = [
     summary: { $t: "summary" },
     branding: undefined as { logoUrl: string } | undefined,
     availability: undefined as { available: number; total: number } | undefined,
+    contributors: undefined as
+      | { sourceId: string; name: string; attributionText?: string }[]
+      | undefined,
     get coordinates() {
       reads++;
       return [8, 50];
@@ -43,6 +47,7 @@ const sources = {
 };
 let context: { geojson: GeoJSON.FeatureCollection } | undefined;
 const registry = { get: () => undefined };
+let searchIsFetching = false;
 vi.mock("@/integration-api/map/MapContext", () => ({
   useMap: () => ({ mapRef, mapReady: true, styleVersion: 0 }),
 }));
@@ -51,14 +56,13 @@ vi.mock("@/components/panels/place/useDataSourceI18nResolver", () => ({
   useDataSourceI18nResolver: () => resolveToken,
 }));
 vi.mock("@/hooks/usePinMarker", () => ({ usePinMarker: vi.fn() }));
-vi.mock("@/integration-api/overlay/useMapAttributions", () => ({ useMapAttributions: vi.fn() }));
 vi.mock("@openmapx/integration-framework/react", () => ({
   useIntegrationRegistry: () => registry,
 }));
 vi.mock("@openmapx/core", async (original) => ({
   ...(await original<Record<string, unknown>>()),
   useDataSources: () => ({ data: sources }),
-  useDataSourceSearch: () => ({ data: results, attributions: [], isFetching: false }),
+  useDataSourceSearch: () => ({ data: results, attributions: [], isFetching: searchIsFetching }),
   useDataSourceMapContext: () => ({ data: context }),
 }));
 
@@ -172,7 +176,7 @@ it("refreshes locale and context data, clears context, and handles zoom and sour
     },
   };
   const view = render(<DataSourceLayer />);
-  expect(fake.state.sources.get("ds-sample-map-context")?.data).toBe(context.geojson);
+  expect(fake.state.sources.get("ds-sample-map-context")?.data).toMatchObject(context.geojson);
   resolveToken = () => "Deutsch";
   view.rerender(<DataSourceLayer />);
   const markers = fake.state.sources.get("ds-sample")?.data as GeoJSON.FeatureCollection;
@@ -308,4 +312,295 @@ it("selects a branded result once when overlapping layers receive the same click
   view.unmount();
   select.mockRestore();
   fake.state.renderedFeatures.clear();
+});
+
+it("credits only rendered markers and context polygons and retains captured visible credits during refresh", () => {
+  vi.useFakeTimers();
+  fake.state.zoom = 12;
+  useMapAttributionStore.setState({ byLayer: {} });
+  useDataSourceStore.setState({ activeSource: "sample", filters: {}, viewportZoom: 12 });
+  const receipt = { sourceId: "record-a", name: "Record A", attributionText: "Original notice" };
+  results[0].contributors = [receipt];
+  results.push({
+    ...results[0],
+    id: "two",
+    name: "Two",
+    contributors: [{ sourceId: "record-b", name: "Record B" }],
+  });
+  context = {
+    geojson: {
+      type: "FeatureCollection",
+      features: [
+        {
+          type: "Feature",
+          geometry: {
+            type: "Polygon",
+            coordinates: [
+              [
+                [8, 50],
+                [9, 50],
+                [9, 51],
+                [8, 50],
+              ],
+            ],
+          },
+          properties: {
+            _mapAttributions: JSON.stringify([{ sourceId: "context", name: "Context only" }]),
+          },
+        },
+      ],
+    },
+  };
+  const view = render(<DataSourceLayer />);
+  const uploaded = fake.state.sources.get("ds-sample")?.data as GeoJSON.FeatureCollection;
+  const uploadedContext = fake.state.sources.get("ds-sample-map-context")
+    ?.data as GeoJSON.FeatureCollection;
+  fake.setRenderedFeatures("ds-sample-markers", uploaded.features as never);
+  fake.setRenderedFeatures("ds-sample-map-context-fill", uploadedContext.features as never);
+  const flush = () =>
+    act(() => {
+      fake.emit("render");
+      vi.advanceTimersByTime(250);
+    });
+  const html = () => Object.values(useMapAttributionStore.getState().byLayer).flat().join(" ");
+  flush();
+  expect(html()).toContain("Original notice");
+  expect(html()).toContain("Record B");
+  expect(html()).toContain("Context only");
+  fake.setRenderedFeatures("ds-sample-markers", uploaded.features.slice(0, 1) as never);
+  act(() => fake.emit("move"));
+  flush();
+  expect(html()).not.toContain("Record B");
+  searchIsFetching = true;
+  receipt.attributionText = "Mutated later metadata";
+  view.rerender(<DataSourceLayer />);
+  flush();
+  expect(html()).toContain("Original notice");
+  expect(html()).not.toContain("Mutated later metadata");
+  fake.setRenderedFeatures("ds-sample-markers", []);
+  fake.setRenderedFeatures("ds-sample-map-context-fill", []);
+  act(() => fake.emit("move"));
+  flush();
+  expect(html()).toBe("");
+  view.unmount();
+  context = undefined;
+  results.pop();
+  results[0].contributors = undefined;
+  searchIsFetching = false;
+  vi.useRealTimers();
+});
+
+it("serializes independent label, paint and logo channels with authoritative empty fields", async () => {
+  const { buildGeoJson } = await import("./DataSourceLayer");
+  const credit = (sourceId: string) => [{ sourceId, name: sourceId }];
+  const place = {
+    id: "channels",
+    name: "Name",
+    source: "feed",
+    variant: "named",
+    status: "non-operational",
+    summary: { $t: "summary" },
+    coordinates: [8, 50] as [number, number],
+    branding: { logoUrl: "https://provider.example/channel.png" },
+    availability: { available: 0, total: 4 },
+    contributors: credit("hidden"),
+    fieldContributors: {
+      coordinates: credit("coords"),
+      name: credit("name"),
+      summary: credit("summary"),
+      variant: credit("unused-variant"),
+      status: credit("status"),
+      "availability.total": credit("availability"),
+      "availability.available": [],
+      "branding.logoUrl": credit("actual-file"),
+      "branding.name": credit("unused-brand-name"),
+    },
+  };
+  const f = buildGeoJson([place], () => "Summary", "icon", {
+    ...sources.sources[0].markerStyle,
+    type: "icon",
+    iconPath: "",
+  }).features[0];
+  const ids = (key: string) =>
+    JSON.parse(f.properties[key as keyof typeof f.properties] as string).map(
+      (receipt: { sourceId: string }) => receipt.sourceId,
+    );
+  expect(ids("_mapMarkerAttributions")).toEqual(["coords"]);
+  expect(ids("_mapHaloAttributions")).toEqual(["coords", "availability", "status"]);
+  expect(ids("_mapLabelAttributions")).toEqual(["coords", "name"]);
+  expect(ids("_mapSummaryLabelAttributions")).toEqual(["coords", "name", "summary"]);
+  expect(ids("_mapLogoSelectionAttributions")).toEqual(["coords", "actual-file", "status"]);
+  expect(ids("_mapLogoFileAttributions")).toEqual(["actual-file"]);
+});
+
+it("adds captured file receipts only after the actual logo image loads and only to its rendered logo channel", async () => {
+  vi.useFakeTimers();
+  fake.state.zoom = 12;
+  useMapAttributionStore.setState({ byLayer: {} });
+  const old = results[0];
+  const file = {
+    sourceId: "file",
+    name: "Original logo file",
+    attributionText: "Required logo notice",
+  };
+  const row = {
+    id: "loaded-logo",
+    name: "Station",
+    source: "feed",
+    variant: "",
+    coordinates: [8, 50],
+    branding: { name: "Hidden catalog brand", logoUrl: "https://provider.example/receipt.png" },
+    contributors: [{ sourceId: "all", name: "Blended hidden" }],
+    fieldContributors: {
+      coordinates: [{ sourceId: "feed", name: "Feed geometry" }],
+      name: [{ sourceId: "name", name: "Hidden name" }],
+      "branding.name": [{ sourceId: "nsi", name: "Hidden NSI brand" }],
+      "branding.logoUrl": [file],
+    },
+  };
+  results[0] = row as unknown as typeof old;
+  const pending = Promise.withResolvers<boolean>();
+  logoLoad.mockImplementation((...args: unknown[]) => {
+    const [map, url, isCurrent] = args as [import("maplibre-gl").Map, string, () => boolean];
+    return pending.promise.then((loaded) => {
+      if (loaded && isCurrent()) map.addImage(`ds-brand-${encodeURIComponent(url)}`, {} as never);
+      return loaded && isCurrent();
+    });
+  });
+  useDataSourceStore.setState({ activeSource: "sample", filters: {}, viewportZoom: 12 });
+  const view = render(<DataSourceLayer />);
+  const flush = () =>
+    act(() => {
+      fake.emit("render");
+      vi.advanceTimersByTime(250);
+    });
+  const html = () => Object.values(useMapAttributionStore.getState().byLayer).flat().join(" ");
+  try {
+    let data = fake.state.sources.get("ds-sample")?.data as GeoJSON.FeatureCollection;
+    fake.setRenderedFeatures("ds-sample-markers", data.features as never);
+    fake.setRenderedFeatures(
+      "ds-sample-brand-logos",
+      data.features.map((feature) => ({
+        ...feature,
+        layer: {
+          id: "ds-sample-brand-logos",
+          type: "symbol",
+          layout: { "icon-image": feature.properties?.brandImageId ?? "" },
+          paint: { "icon-opacity": 1 },
+        },
+      })) as never,
+    );
+    flush();
+    expect(html()).toContain("Feed geometry");
+    expect(html()).not.toContain("Required logo notice");
+    file.name = "Metadata mutated while pending";
+    await act(async () => {
+      pending.resolve(true);
+      await pending.promise;
+    });
+    data = fake.state.sources.get("ds-sample")?.data as GeoJSON.FeatureCollection;
+    fake.setRenderedFeatures(
+      "ds-sample-brand-logos",
+      data.features.map((feature) => ({
+        ...feature,
+        layer: {
+          id: "ds-sample-brand-logos",
+          type: "symbol",
+          layout: { "icon-image": feature.properties?.brandImageId ?? "" },
+          paint: { "icon-opacity": 1 },
+        },
+      })) as never,
+    );
+    flush();
+    expect(html()).toContain("Required logo notice");
+    expect(
+      JSON.parse(data.features[0].properties?._mapBrandAttributions ?? "[]").find(
+        (receipt: { sourceId: string }) => receipt.sourceId === "file",
+      ).name,
+    ).toBe("Original logo file");
+    expect(html()).not.toContain("Metadata mutated");
+    expect(html()).not.toContain("Hidden NSI");
+    expect(html()).not.toContain("Hidden name");
+    fake.setRenderedFeatures("ds-sample-brand-logos", []);
+    fake.setRenderedFeatures("ds-sample-brand-halos", data.features as never);
+    flush();
+    expect(html()).not.toContain("Required logo notice");
+    expect(html()).toContain("Feed geometry");
+  } finally {
+    view.unmount();
+    results[0] = old;
+    logoLoad.mockReset();
+    fake.setRenderedFeatures("ds-sample-markers", []);
+    fake.setRenderedFeatures("ds-sample-brand-logos", []);
+    fake.setRenderedFeatures("ds-sample-brand-halos", []);
+    vi.useRealTimers();
+  }
+});
+
+it("credits the actual name label and adds summary ownership only after its zoom branch paints", () => {
+  vi.useFakeTimers();
+  fake.state.zoom = 12;
+  useMapAttributionStore.setState({ byLayer: {} });
+  const old = results[0];
+  const style = sources.sources[0].markerStyle;
+  const oldType = style.type;
+  Object.assign(style, { type: "icon", iconPath: "" });
+  fake.map.addImage("ds-marker-sample", {} as never);
+  results[0] = {
+    id: "label-channels",
+    name: "Name",
+    source: "feed",
+    variant: "",
+    coordinates: [8, 50],
+    summary: { $t: "summary" },
+    contributors: [{ sourceId: "all", name: "Hidden blended" }],
+    fieldContributors: {
+      coordinates: [{ sourceId: "coords", name: "Coordinates" }],
+      name: [{ sourceId: "name", name: "Painted name" }],
+      summary: [{ sourceId: "summary", name: "High zoom summary" }],
+    },
+  } as unknown as typeof old;
+  useDataSourceStore.setState({ activeSource: "sample", filters: {}, viewportZoom: 12 });
+  const view = render(<DataSourceLayer />);
+  try {
+    const data = fake.state.sources.get("ds-sample")?.data as GeoJSON.FeatureCollection;
+    const setLabel = (text: string) =>
+      fake.setRenderedFeatures(
+        "ds-sample-labels",
+        data.features.map((feature) => ({
+          ...feature,
+          layer: {
+            id: "ds-sample-labels",
+            type: "symbol",
+            layout: { "text-field": text },
+            paint: { "text-opacity": 1 },
+          },
+        })) as never,
+      );
+    const flush = () =>
+      act(() => {
+        fake.emit("render");
+        vi.advanceTimersByTime(250);
+      });
+    const html = () => Object.values(useMapAttributionStore.getState().byLayer).flat().join(" ");
+    setLabel("Name");
+    flush();
+    expect(html()).toContain("Painted name");
+    expect(html()).not.toContain("High zoom summary");
+    expect(html()).not.toContain("Hidden blended");
+    fake.state.zoom = 13;
+    setLabel("Name\nEnglish");
+    flush();
+    expect(html()).toContain("High zoom summary");
+    fake.state.zoom = 12;
+    setLabel("Name");
+    flush();
+    expect(html()).not.toContain("High zoom summary");
+  } finally {
+    view.unmount();
+    results[0] = old;
+    style.type = oldType;
+    fake.setRenderedFeatures("ds-sample-labels", []);
+    vi.useRealTimers();
+  }
 });

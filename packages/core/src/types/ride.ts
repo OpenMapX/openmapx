@@ -1,3 +1,4 @@
+import type { ContributingRecord } from "@openmapx/mobility-core/contributors";
 import type { LngLat } from "./geometry";
 
 /**
@@ -65,7 +66,7 @@ export interface RideHandoff {
   carriesCoordinates: boolean;
 }
 
-export interface RideQuote {
+export interface RideQuote extends ContributingRecord {
   productId: string;
   product: RideProduct;
   pickupEtaSeconds?: number;

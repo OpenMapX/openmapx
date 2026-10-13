@@ -3,6 +3,7 @@ import { brandToFilter, validateOverpassFilter } from "@openmapx/core";
 import type { IntegrationContext } from "@openmapx/integration-framework";
 import { describe, expect, it, vi } from "vitest";
 import { setup } from "../index";
+import manifest from "../manifest.json";
 
 type RouteHandler = (
   req: { query: Record<string, string | undefined>; params: Record<string, string | undefined> },
@@ -42,6 +43,7 @@ function makeReply(): FakeReply {
 function makeCtx(): IntegrationContext & { routes: Map<string, RouteHandler> } {
   const routes = new Map<string, RouteHandler>();
   const ctx = {
+    manifest,
     registerRoute(_method: string, path: string, handler: RouteHandler) {
       routes.set(path, handler);
     },
@@ -218,4 +220,136 @@ describe("brand catalog behind the routes", () => {
       expect(result.ok).toBe(true);
     }
   });
+});
+
+describe("GET /brand/:qid/logo-attribution per-file receipt", () => {
+  it("returns the complete exact-file credit DTO using host HTTP", async () => {
+    const entry = getBrandByQid(suggestBrands("starbucks", "us", 1)[0].qid);
+    if (!entry) throw new Error("known catalog brand missing");
+    const ctx = makeCtx();
+    const get = vi.fn(async () => ({
+      query: {
+        pages: {
+          1: {
+            title: `File:${entry.logoFile}`,
+            imageinfo: [
+              {
+                url: "https://upload.wikimedia.org/wikipedia/commons/a/ab/Logo.svg",
+                mime: "image/svg+xml",
+                extmetadata: {
+                  Artist: { value: "Logo creator" },
+                  LicenseShortName: { value: "CC BY 4.0" },
+                  LicenseUrl: { value: "https://creativecommons.org/licenses/by/4.0/" },
+                  Credit: { value: "Mandatory logo notice" },
+                },
+              },
+            ],
+          },
+        },
+      },
+    }));
+    Object.assign(ctx, { http: { get } });
+    setup(ctx);
+    const reply = makeReply();
+    await ctx.routes.get("/brand/:qid/logo-attribution")?.(
+      { query: {}, params: { qid: entry.qid } },
+      reply,
+    );
+    expect(reply.statusCode).toBe(200);
+    expect(reply.payload).toMatchObject({
+      logoFile: entry.logoFile,
+      source: "wikimedia-commons",
+      author: "Logo creator",
+      license: "CC BY 4.0",
+      attributionText: "Mandatory logo notice",
+      contributors: [
+        expect.objectContaining({
+          sourceId: "wikimedia-commons",
+          attributionText: expect.stringContaining("Mandatory logo notice"),
+        }),
+      ],
+    });
+    expect(get).toHaveBeenCalledWith(
+      expect.stringContaining("commons.wikimedia.org/w/api.php"),
+      expect.objectContaining({ timeoutMs: 4000 }),
+    );
+  });
+  it("does not cache or advertise an incomplete file as a successful logo", async () => {
+    const entry = getBrandByQid(suggestBrands("starbucks", "us", 1)[0].qid);
+    if (!entry) throw new Error("known catalog brand missing");
+    const ctx = makeCtx();
+    Object.assign(ctx, { http: { get: async () => ({ query: { pages: {} } }) } });
+    setup(ctx);
+    const reply = makeReply();
+    await ctx.routes.get("/brand/:qid/logo-attribution")?.(
+      { query: {}, params: { qid: entry.qid } },
+      reply,
+    );
+    expect(reply.statusCode).toBe(503);
+    expect(reply.headers["Cache-Control"]).toBe("no-store");
+  });
+});
+
+describe("brand catalogue field receipts", () => {
+  it("captures the actual NSI supplier before caching, without attributing logo bytes from a filename", async () => {
+    const ctx = makeCtx();
+    Object.assign(ctx, { manifest: structuredClone(manifest) });
+    const source = ctx.manifest.dataSources?.[0];
+    if (!source) throw new Error("manifest source missing");
+    const originalName = source.name;
+    const pending = Promise.withResolvers<void>();
+    Object.assign(ctx, {
+      cache: {
+        withCache: async (_key: string, _ttl: number, load: () => Promise<unknown>) => {
+          await pending.promise;
+          return load();
+        },
+      },
+    });
+    setup(ctx);
+    const reply = makeReply();
+    const task = ctx.routes.get("/brand-suggest")?.(
+      { query: { q: "starbucks" }, params: {} },
+      reply,
+    );
+    source.name = "Later catalogue name";
+    pending.resolve();
+    await task;
+    const row = (
+      reply.payload as {
+        matches: Array<{
+          contributors: Array<{ sourceId: string; name: string }>;
+          fieldContributors: Record<string, unknown>;
+        }>;
+      }
+    ).matches[0];
+    expect(row.contributors).toContainEqual(
+      expect.objectContaining({ sourceId: "name-suggestion-index", name: originalName }),
+    );
+    expect(row.contributors).toContainEqual(
+      expect.objectContaining({ sourceId: "wikidata", name: "Wikidata" }),
+    );
+    expect(row.fieldContributors.name).toEqual(row.contributors);
+    expect(row.contributors.some((receipt) => receipt.sourceId.includes("commons"))).toBe(false);
+  });
+});
+
+it("preserves an explicitly empty catalogue receipt rather than borrowing current manifest credit", async () => {
+  const entry = getBrandByQid(suggestBrands("starbucks", "us", 1)[0].qid);
+  if (!entry) throw new Error("known catalog brand missing");
+  const old = entry.contributors;
+  const oldFields = entry.fieldContributors;
+  entry.contributors = [];
+  entry.fieldContributors = { name: [] };
+  try {
+    const ctx = makeCtx();
+    setup(ctx);
+    const reply = makeReply();
+    await ctx.routes.get("/brand/:qid")?.({ query: {}, params: { qid: entry.qid } }, reply);
+    expect(reply.payload).toMatchObject({ contributors: [], fieldContributors: { name: [] } });
+  } finally {
+    if (old === undefined) delete entry.contributors;
+    else entry.contributors = old;
+    entry.fieldContributors = oldFields;
+  }
 });

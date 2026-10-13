@@ -1,5 +1,8 @@
+import { contributionState, retainContributions } from "./contribution-merge.js";
+import { withContributors } from "./contributors.js";
 import { dedupStations } from "./dedup.js";
 import type { MotisRentalsClient } from "./motis-rentals.js";
+import type { Attribution } from "./types/attribution.js";
 import type { BoundingBox } from "./types/geometry.js";
 import type {
   MotisRentalSnapshot,
@@ -42,6 +45,7 @@ export interface SharedMobilityOrchestratorConfig {
   denylist?: ReadonlySet<string>;
   onDecision?: (decision: SharedMobilitySourceDecision) => void;
   fetchMotis: MotisRentalsClient["fetchMotisRentals"];
+  resolveContributors?: (sourceIds: readonly string[]) => Attribution[];
 }
 
 export interface SharedMobilityOrchestratorResult extends SharedMobilityInventory {
@@ -112,10 +116,35 @@ function canonicalVehicleIdentity(vehicle: SharedMobilityVehicle): string | null
   return provider && native ? `${provider}\0${native}` : null;
 }
 
+const STATION_METADATA_FIELDS = [
+  "capacity",
+  "address",
+  "crossStreet",
+  "branding",
+  "rentalApps",
+  "rentalUris",
+  "website",
+  "vehicleTypeDetails",
+  "vehicleClassNames",
+  "pricingSummary",
+  "pricingDetails",
+] as const;
+const VEHICLE_METADATA_FIELDS = [
+  "batteryLevel",
+  "rangeMeters",
+  "branding",
+  "rentalApps",
+  "rentalUris",
+  "vehicleImageUrl",
+  "vehicleIconUrl",
+  "vehicleIconUrlDark",
+] as const;
+
 function fillStationMetadata(
   authoritative: SharedMobilityStation,
   enrichment: SharedMobilityStation,
 ): void {
+  const before = contributionState(authoritative, STATION_METADATA_FIELDS);
   authoritative.capacity ??= enrichment.capacity;
   authoritative.address ??= enrichment.address;
   authoritative.crossStreet ??= enrichment.crossStreet;
@@ -127,13 +156,15 @@ function fillStationMetadata(
   authoritative.vehicleClassNames ??= enrichment.vehicleClassNames;
   authoritative.pricingSummary ??= enrichment.pricingSummary;
   authoritative.pricingDetails ??= enrichment.pricingDetails;
-  authoritative.sources = [...new Set([...authoritative.sources, ...enrichment.sources])];
+  if (contributionState(authoritative, STATION_METADATA_FIELDS) !== before)
+    retainContributions(authoritative, enrichment);
 }
 
 function fillVehicleMetadata(
   authoritative: SharedMobilityVehicle,
   enrichment: SharedMobilityVehicle,
 ): void {
+  const before = contributionState(authoritative, VEHICLE_METADATA_FIELDS);
   authoritative.batteryLevel ??= enrichment.batteryLevel;
   authoritative.rangeMeters ??= enrichment.rangeMeters;
   authoritative.branding ??= enrichment.branding;
@@ -142,7 +173,8 @@ function fillVehicleMetadata(
   authoritative.vehicleImageUrl ??= enrichment.vehicleImageUrl;
   authoritative.vehicleIconUrl ??= enrichment.vehicleIconUrl;
   authoritative.vehicleIconUrlDark ??= enrichment.vehicleIconUrlDark;
-  authoritative.sources = [...new Set([...authoritative.sources, ...enrichment.sources])];
+  if (contributionState(authoritative, VEHICLE_METADATA_FIELDS) !== before)
+    retainContributions(authoritative, enrichment);
 }
 
 /**
@@ -226,7 +258,11 @@ export async function orchestrateSharedMobility(
   let local: SharedMobilitySourceDecision["local"] = "error";
   try {
     snapshot = await boundFetch(
-      config.fetchMotis([bbox.west, bbox.south, bbox.east, bbox.north], config.motisFormFactors),
+      config.fetchMotis(
+        [bbox.west, bbox.south, bbox.east, bbox.north],
+        config.motisFormFactors,
+        config.resolveContributors,
+      ),
       MOTIS_FETCH_TIMEOUT_MS,
       null,
     );
@@ -254,7 +290,18 @@ export async function orchestrateSharedMobility(
   const supplements = settled.flatMap((result) =>
     result.status === "fulfilled" ? [result.value] : [],
   );
-  const fanoutInventory = mergeMotisFirstInventory(inventory(snapshot), supplements);
+  const capture = <T extends SharedMobilityStation | SharedMobilityVehicle>(item: T): T =>
+    item.contributors !== undefined || !config.resolveContributors
+      ? item
+      : withContributors(item, config.resolveContributors(item.sources));
+  const capturedInventory = (items: SharedMobilityInventory): SharedMobilityInventory => ({
+    stations: items.stations.map(capture),
+    vehicles: items.vehicles.map(capture),
+  });
+  const fanoutInventory = mergeMotisFirstInventory(
+    capturedInventory(inventory(snapshot)),
+    supplements.map(capturedInventory),
+  );
   const served = policy === "fanout" ? "fanout" : "motis-first";
   const resultInventory = fanoutInventory;
   const decision: SharedMobilitySourceDecision = {

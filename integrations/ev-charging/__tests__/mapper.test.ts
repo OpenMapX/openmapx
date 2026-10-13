@@ -231,7 +231,7 @@ describe("mapChargingSiteToResult", () => {
     );
   });
 
-  it("carries the operator, its logo and the credits", () => {
+  it("keeps the operator and credits while deferring an uncredited catalogue logo", () => {
     const result = mapChargingSiteToResult(
       makeSite({
         operator: { name: "EWE Go" },
@@ -247,7 +247,7 @@ describe("mapChargingSiteToResult", () => {
     );
 
     expect(result.operator).toBe("EWE Go");
-    expect(result.branding?.logoUrl).toMatch(/^https:\/\/.*EWE/);
+    expect(result.branding?.logoUrl).toBeUndefined();
     expect(
       mapChargingSiteToResult(makeSite({ operator: { name: "EWE Go" }, country: "FR" })).branding,
     ).toBeUndefined();
@@ -489,7 +489,7 @@ describe("mapChargingSiteToDetail", () => {
     });
     const emitted = JSON.stringify([mapChargingSiteToResult(site), mapChargingSiteToDetail(site)]);
 
-    expect(emitted).not.toMatch(/javascript:|data:/);
+    expect(emitted).not.toMatch(/"(?:javascript:|data:)/);
     expect(mapChargingSiteToDetail(site).operator).toEqual({ name: "EnBW" });
 
     const fallback = mapChargingSiteToDetail(
@@ -820,4 +820,23 @@ describe("ev-charging strings", () => {
     expect(flatten(de).sort()).toEqual(flatten(en).sort());
     expect(en).not.toHaveProperty("dataSources");
   });
+});
+
+it("captures complete canonical receipts before mapping results and details", () => {
+  const receipt = {
+    sourceId: "exact-feed",
+    name: "Publisher",
+    url: "https://example.com",
+    spdxLicense: "CC-BY-4.0",
+    attributionText: "Required upstream notice",
+    publisher: { name: "Original publisher", url: "https://publisher.example" },
+  };
+  const record = makeSite({ attributions: [receipt] });
+  const result = mapChargingSiteToResult(record);
+  const detail = mapChargingSiteToDetail(record);
+  receipt.attributionText = "changed later";
+  expect(result.contributors).toEqual([
+    { ...receipt, attributionText: "Required upstream notice" },
+  ]);
+  expect(detail.contributors).toEqual(result.contributors);
 });

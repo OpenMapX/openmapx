@@ -49,9 +49,15 @@ vi.mock("@/integration-api/map/MapContext", () => ({
 vi.mock("@/integration-api/map/useDrawnDirectionsRoutes", () => ({
   useDrawnDirectionsRoutes: () => drawn,
 }));
-vi.mock("@/integration-api/overlay/useMapAttributions", () => ({ useMapAttributions: vi.fn() }));
+vi.mock("@/integration-api/overlay/useMapAttributions", async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  useMapAttributions: vi.fn(),
+}));
 vi.mock("@/lib/routeAttributions", () => ({ routeAttributions: () => [] }));
-vi.mock("@openmapx/integration-framework/react", () => ({ useIntegrationRegistry: () => ({}) }));
+vi.mock("@openmapx/integration-framework/react", () => {
+  const registry = {};
+  return { useIntegrationRegistry: () => registry };
+});
 vi.mock("next-intl", () => ({
   useLocale: () => locale,
   useTranslations: () => (key: string, values?: Record<string, string>) => {

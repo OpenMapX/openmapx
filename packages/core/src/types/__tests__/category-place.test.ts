@@ -63,3 +63,18 @@ describe("categoryPlaceToPlace", () => {
     expect(place.provenance).toEqual([{ sourceId: "overture", dataset: "Overture Maps" }]);
   });
 });
+
+it("preserves independent captured record and field credits through category conversion", () => {
+  const receipt = { sourceId: "old", name: "Captured publisher" };
+  const input = makePlace({
+    contributors: [receipt],
+    fieldContributors: { name: [receipt], website: [] },
+  });
+  const place = categoryPlaceToPlace(input);
+  receipt.name = "Current publisher";
+  expect(place.contributors).toEqual([{ sourceId: "old", name: "Captured publisher" }]);
+  expect(place.fieldContributors).toEqual({
+    name: [{ sourceId: "old", name: "Captured publisher" }],
+    website: [],
+  });
+});

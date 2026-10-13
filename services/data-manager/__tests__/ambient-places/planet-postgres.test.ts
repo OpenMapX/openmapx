@@ -96,6 +96,9 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         VALUES('2026-09-23.1','planet',1,now(),'completed','complete','fixture-file',now());
         INSERT INTO overture_places.poi_conflation_link(osm_type,osm_id,gers_id,match_confidence,distance_m,method,evidence,release)
         VALUES('node',1,'g-excluded',1,0,'fixture','{}','2026-09-23.1')`);
+        await pg.sql.unsafe(
+          `UPDATE overture_places.places SET sources='[{"property":"/names/primary","dataset":"meta"}]',sources_catalogue='[{"sourceId":"overture","name":"Captured GERS identity"},{"sourceId":"meta-places","name":"Excluded name supplier"}]'`,
+        );
         const result = await publisher.buildAmbientPlaces(
           pg.sql,
           AMBIENT_PLANET_REGION,
@@ -103,10 +106,18 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           { availableBytes: ample },
         );
         expect(result.placeCount).toBe(4);
+        expect(result.attributionPrecision).toBe("captured-fields");
         expect(await readAmbientPlaceByGers(pg.sql, "g-excluded")).toMatchObject({
           generation: result.generation,
           place: { id: "osm:node/1", gersId: "g-excluded", name: "世界 Clinic 1", sources: "osm" },
         });
+        const resolved = (await readAmbientPlaceByGers(pg.sql, "g-excluded"))!.place;
+        expect(resolved.fieldContributors?.gersId).toEqual([
+          { sourceId: "overture", name: "Captured GERS identity" },
+        ]);
+        expect(resolved.contributors?.some((receipt) => receipt.sourceId === "meta-places")).toBe(
+          false,
+        );
         expect(
           (await readAmbientPlaceByGers(pg.sql, "g-excluded"))?.place.names.en,
         ).toBeUndefined();
@@ -135,6 +146,19 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       );
       expect(stage.status).toBe("failed");
       expect(stage.checkpoint.placeCount).toBe(1999);
+      await pg.sql.unsafe(
+        `UPDATE ambient_places.generations SET manifest=jsonb_set(manifest,'{version}','1') WHERE id=$1`,
+        [stage.generation],
+      );
+      await expect(
+        publisher.resumePlanetPlaces(pg.sql, stage.generation, undefined, {
+          availableBytes: ample,
+        }),
+      ).rejects.toThrow("attribution format changed");
+      await pg.sql.unsafe(
+        `UPDATE ambient_places.generations SET manifest=jsonb_set(manifest,'{version}','2') WHERE id=$1`,
+        [stage.generation],
+      );
       const result = await publisher.resumePlanetPlaces(pg.sql, stage.generation, undefined, {
         availableBytes: ample,
       });

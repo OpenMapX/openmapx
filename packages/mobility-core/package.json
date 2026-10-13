@@ -13,6 +13,10 @@
       "types": "./src/cache.ts",
       "default": "./src/cache.ts"
     },
+    "./contributors": {
+      "types": "./src/contributors.ts",
+      "default": "./src/contributors.ts"
+    },
     "./camera": {
       "types": "./src/types/camera.ts",
       "default": "./src/types/camera.ts"
@@ -160,6 +164,30 @@
     "./transit-reachability": {
       "types": "./src/types/transit-reachability.ts",
       "default": "./src/types/transit-reachability.ts"
+    },
+    "./contribution-merge": {
+      "types": "./src/contribution-merge.ts",
+      "default": "./src/contribution-merge.ts"
+    },
+    "./transit-contributors": {
+      "types": "./src/transit-contributors.ts",
+      "default": "./src/transit-contributors.ts"
+    },
+    "./motis-contributors": {
+      "types": "./src/motis-contributors.ts",
+      "default": "./src/motis-contributors.ts"
+    },
+    "./motis-route-pattern-id": {
+      "types": "./src/motis-route-pattern-id.ts",
+      "default": "./src/motis-route-pattern-id.ts"
+    },
+    "./raster-contributors": {
+      "types": "./src/raster-contributors.ts",
+      "default": "./src/raster-contributors.ts"
+    },
+    "./geometry-contributors": {
+      "types": "./src/geometry-contributors.ts",
+      "default": "./src/geometry-contributors.ts"
     }
   },
   "dependencies": {

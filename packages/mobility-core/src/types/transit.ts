@@ -1,3 +1,4 @@
+import type { ContributingRecord, FieldContributors } from "../contributors.js";
 import type { Attribution } from "./attribution.js";
 import type { Ids } from "./identified.js";
 
@@ -19,12 +20,13 @@ export type TransportMode =
   | "driving";
 
 /** A public, source-backed identifier that riders can search for. */
-export interface TransitStopCode {
+export interface TransitStopCode extends ContributingRecord {
   value: string;
   namespace: "gtfs" | "uic" | "ifopt" | "eva" | "crs" | "naptan" | "nsr";
 }
 
-export interface TransitStop {
+export interface TransitStop extends ContributingRecord {
+  fieldContributors?: FieldContributors;
   /**
    * Canonical `scheme:value` id, typically `<provider>:<nativeId>`
    * (`tfl:490G00099A`, `mb:place-brntn`, `dyn:de/vrs:de:05315:11111`).
@@ -64,7 +66,8 @@ export interface TransitStop {
   reachTransfers?: number;
 }
 
-export interface TransitRoute {
+export interface TransitRoute extends ContributingRecord {
+  fieldContributors?: FieldContributors;
   id: string;
   shortName: string;
   longName: string;
@@ -78,30 +81,30 @@ export interface TransitRoute {
   };
 }
 
-export interface GeoJSONLineString {
+export interface GeoJSONLineString extends ContributingRecord {
   type: "LineString";
   coordinates: [number, number][];
 }
 
-export interface GeoJSONMultiLineString {
+export interface GeoJSONMultiLineString extends ContributingRecord {
   type: "MultiLineString";
   coordinates: [number, number][][];
 }
 
-export interface TripRemark {
+export interface TripRemark extends ContributingRecord {
   text: string;
   type: "info" | "warning" | "cancellation";
 }
 
 export type OccupancyLevel = "low" | "medium" | "high" | "overcrowded";
 
-export interface TransitFormationReference {
+export interface TransitFormationReference extends ContributingRecord {
   operatorRef?: string;
   operatingDayRef?: string;
   trainNumber?: string;
 }
 
-export interface TransitFormationStopSummary {
+export interface TransitFormationStopSummary extends ContributingRecord {
   platform?: string;
   scheduledAt?: string;
   shortFormation?: string;
@@ -109,7 +112,7 @@ export interface TransitFormationStopSummary {
   stopName?: string;
 }
 
-export interface TransitFormationVehicleDetail {
+export interface TransitFormationVehicleDetail extends ContributingRecord {
   bikeSpaces?: number;
   closed?: boolean;
   hasAirConditioning?: boolean;
@@ -126,7 +129,7 @@ export interface TransitFormationVehicleDetail {
   wheelchairSpaces?: number;
 }
 
-export interface TransitFormationDetail {
+export interface TransitFormationDetail extends ContributingRecord {
   lastUpdate?: string;
   lengthMeters?: number;
   operatorCode?: string;
@@ -140,14 +143,15 @@ export interface TransitFormationDetail {
   vehicles?: TransitFormationVehicleDetail[];
 }
 
-export interface TransitServiceAttribute {
+export interface TransitServiceAttribute extends ContributingRecord {
   accessFacility?: string;
   code?: string;
   text?: string;
   userText?: string;
 }
 
-export interface TransitServiceInfo {
+export interface TransitServiceInfo extends ContributingRecord {
+  fieldContributors?: FieldContributors;
   attributes?: TransitServiceAttribute[];
   canceled?: boolean;
   destinationStopPointRef?: string;
@@ -196,7 +200,7 @@ export interface TransitServiceInfo {
   viaTexts?: string[];
 }
 
-export interface TransitIntermodalLeg {
+export interface TransitIntermodalLeg extends ContributingRecord {
   attributes?: TransitServiceAttribute[];
   bufferTimeSeconds?: number;
   durationSeconds?: number;
@@ -213,9 +217,20 @@ export interface TransitIntermodalLeg {
   walkDurationSeconds?: number;
 }
 
-export interface Departure {
+export interface Departure extends ContributingRecord {
+  fieldContributors?: FieldContributors;
   tripId: string;
-  route: Pick<TransitRoute, "id" | "shortName" | "longName" | "mode" | "color" | "textColor">;
+  route: Pick<
+    TransitRoute,
+    | "id"
+    | "shortName"
+    | "longName"
+    | "mode"
+    | "color"
+    | "textColor"
+    | "contributors"
+    | "fieldContributors"
+  >;
   headsign: string;
   scheduledAt: string;
   expectedAt?: string;
@@ -231,7 +246,7 @@ export interface Departure {
   provenance?: TransitObservationProvenance;
 }
 
-export interface TransitObservationProvenance {
+export interface TransitObservationProvenance extends ContributingRecord {
   baselineSource: string;
   instance: string;
   datasetEpoch?: string;
@@ -240,7 +255,7 @@ export interface TransitObservationProvenance {
   observedAt: string;
 }
 
-export interface FareProduct {
+export interface FareProduct extends ContributingRecord {
   authorityName?: string;
   authorityRef?: string;
   id?: string;
@@ -256,7 +271,7 @@ export interface FareProduct {
   vatRate?: number;
 }
 
-export interface TripFare {
+export interface TripFare extends ContributingRecord {
   results?: Array<{
     fromLegId?: string;
     products: FareProduct[];
@@ -274,7 +289,7 @@ export interface TripFare {
  * Vehicle-rental (GBFS bike/scooter/car-share) details for a rental leg,
  * derived from the MOTIS `Rental` object. Present only on `RENTAL` legs.
  */
-export interface TransitRentalInfo {
+export interface TransitRentalInfo extends ContributingRecord {
   systemId: string;
   systemName?: string;
   /** Provider display name (falls back to systemName). */
@@ -294,7 +309,7 @@ export interface TransitRentalInfo {
   bookingUrl?: string;
 }
 
-export interface TransitPlace {
+export interface TransitPlace extends ContributingRecord {
   name: string;
   lat: number;
   lng: number;
@@ -313,7 +328,7 @@ export interface TransitPlace {
   scheduledPlatformCode?: string;
 }
 
-export interface TransitStep {
+export interface TransitStep extends ContributingRecord {
   /** Stable MOTIS direction code; presentation layers localize it. */
   instruction: string;
   streetName?: string;
@@ -335,7 +350,7 @@ export interface TransitStep {
  * `ODM`, `RIDE_SHARING` or `FLEX`. These services usually require advance
  * booking, so the UI surfaces a booking link and pickup window.
  */
-export interface TransitFlexInfo {
+export interface TransitFlexInfo extends ContributingRecord {
   kind: "odm" | "ride_sharing" | "flex";
   /** Booking deep-link (route or agency URL from the feed), when available. */
   bookingUrl?: string;
@@ -348,7 +363,7 @@ export interface TransitFlexInfo {
 }
 
 /** An alternative departure for a transit leg (earlier/later same-route service). */
-export interface TransitLegAlternative {
+export interface TransitLegAlternative extends ContributingRecord {
   startTime: string;
   endTime: string;
   /** Prefixed trip id of the alternative's transit leg, when available. */
@@ -356,7 +371,8 @@ export interface TransitLegAlternative {
   routeShortName?: string;
 }
 
-export interface TripLeg {
+export interface TripLeg extends ContributingRecord {
+  fieldContributors?: FieldContributors;
   mode: TransportMode;
   startTime: string;
   endTime: string;
@@ -370,7 +386,10 @@ export interface TripLeg {
   scheduledEndTime?: string;
   from: TransitPlace;
   to: TransitPlace;
-  route?: Pick<TransitRoute, "shortName" | "longName" | "color" | "textColor">;
+  route?: Pick<
+    TransitRoute,
+    "shortName" | "longName" | "color" | "textColor" | "contributors" | "fieldContributors"
+  >;
   /**
    * Destination sign shown on the vehicle (MOTIS `Leg.headsign`), e.g. the
    * "towards …" text riders match against at the platform. Transit legs only.
@@ -382,7 +401,7 @@ export interface TripLeg {
   tripShortName?: string;
   /** Operating agency/operator display name (MOTIS `Leg.agencyName`). */
   operatorName?: string;
-  geometry: { type: "LineString"; coordinates: [number, number][] };
+  geometry: GeoJSONLineString;
   distanceMeters?: number;
   durationSeconds?: number;
   /** Whether MOTIS had realtime data for this leg. */
@@ -437,7 +456,7 @@ export interface TripLeg {
   attributions?: Attribution[];
 }
 
-export interface TripItinerary {
+export interface TripItinerary extends ContributingRecord {
   id?: string;
   source?: string;
   instance?: string;
@@ -462,7 +481,7 @@ export interface TripItinerary {
   fare?: TripFare;
 }
 
-export interface TripPlan {
+export interface TripPlan extends ContributingRecord {
   from: { name: string; lat: number; lng: number };
   to: { name: string; lat: number; lng: number };
   itineraries: TripItinerary[];
@@ -479,7 +498,7 @@ export interface TripPlan {
 
 export type AlertSeverity = "info" | "warning" | "severe" | "critical";
 
-export interface ServiceAlert {
+export interface ServiceAlert extends ContributingRecord {
   id: string;
   providers: string[];
   severity: AlertSeverity;
@@ -499,7 +518,7 @@ export interface ServiceAlert {
   activePeriods: { start: string; end?: string }[];
 }
 
-export interface VehiclePosition {
+export interface VehiclePosition extends ContributingRecord {
   id: string;
   provider: string;
   tripId?: string;
@@ -530,7 +549,7 @@ export interface LiveTransitVehicle extends VehiclePosition {
   positionKind: LiveTransitPositionKind;
 }
 
-export interface RouteLive {
+export interface RouteLive extends ContributingRecord {
   vehicles: VehiclePosition[];
   alerts: ServiceAlert[];
 }
@@ -540,7 +559,7 @@ export interface RouteLive {
  * `transfers` endpoint. Durations are in minutes; absence means no path was
  * found for that profile (e.g. no `wheelchairMinutes` = no step-free route).
  */
-export interface StopTransfer {
+export interface StopTransfer extends ContributingRecord {
   toStopId: string;
   toName: string;
   /** Walking transfer time for the foot profile. */
@@ -551,7 +570,7 @@ export interface StopTransfer {
   wheelchairUsesElevator?: boolean;
 }
 
-export interface VehicleJourneyStop {
+export interface VehicleJourneyStop extends ContributingRecord {
   stopId: string;
   name: string;
   lat: number;
@@ -570,7 +589,7 @@ export interface VehicleJourneyStop {
   alerts?: ServiceAlert[];
 }
 
-export interface VehicleJourney {
+export interface VehicleJourney extends ContributingRecord {
   id: string;
   name: string;
   provider: string;
@@ -582,7 +601,7 @@ export interface VehicleJourney {
   stops: VehicleJourneyStop[];
 }
 
-export interface Facility {
+export interface Facility extends ContributingRecord {
   id: string;
   stopId: string;
   name: string;
@@ -591,7 +610,7 @@ export interface Facility {
   provider: string;
 }
 
-export interface RouteStop {
+export interface RouteStop extends ContributingRecord {
   id: string;
   name: string;
   lat: number;
@@ -600,7 +619,7 @@ export interface RouteStop {
   sequence: number;
 }
 
-export interface TransitStopAreaSummary {
+export interface TransitStopAreaSummary extends ContributingRecord {
   id: string;
   name: string;
   lat: number;
@@ -612,7 +631,7 @@ export interface TransitStopAreaSummary {
   parentStopId?: string;
 }
 
-export interface TransitPlatformDetail {
+export interface TransitPlatformDetail extends ContributingRecord {
   id: string;
   name: string;
   lat: number;
@@ -627,21 +646,21 @@ export interface TransitPlatformDetail {
   amenityLabels?: string[];
 }
 
-export interface TransitAccessibilityItem {
+export interface TransitAccessibilityItem extends ContributingRecord {
   id: string;
   category: "step_free" | "wheelchair" | "elevator" | "escalator" | "visual" | "audible" | "other";
   label: string;
   available: boolean;
 }
 
-export interface TransitAmenityItem {
+export interface TransitAmenityItem extends ContributingRecord {
   id: string;
   category: "waiting_room" | "ticketing" | "toilets" | "bike_storage" | "parking" | "other";
   label: string;
   count?: number;
 }
 
-export interface TransitStopParking {
+export interface TransitStopParking extends ContributingRecord {
   id: string;
   name: string;
   lat: number;
@@ -659,14 +678,14 @@ export type TransitInterchangeComplexity =
   | "regional_hub"
   | "major_interchange";
 
-export interface TransitStationIntelligence {
+export interface TransitStationIntelligence extends ContributingRecord {
   complexity: TransitInterchangeComplexity;
   modeCount: number;
   hasParking: boolean;
   hasRealtimeParking: boolean;
 }
 
-export interface TransitFareZoneSummary {
+export interface TransitFareZoneSummary extends ContributingRecord {
   id: string;
   name: string;
   authorityId?: string;
@@ -676,39 +695,41 @@ export interface TransitFareZoneSummary {
   isDeprecatedTariffZone?: boolean;
 }
 
-export interface TransitTopographicPlaceSummary {
+export interface TransitTopographicPlaceSummary extends ContributingRecord {
   id: string;
   name: string;
   placeType?: string;
   parentTopographicPlaceId?: string;
 }
 
-export interface TransitStopInfrastructureFact {
+export interface TransitStopInfrastructureFact extends ContributingRecord {
   label: string;
   value: string;
 }
 
-export interface TransitGeoJsonPolygon {
+export interface TransitGeoJsonPolygon extends ContributingRecord {
   type: "Polygon";
   coordinates: [number, number][][];
 }
 
-export interface TransitGeoJsonMultiPolygon {
+export interface TransitGeoJsonMultiPolygon extends ContributingRecord {
   type: "MultiPolygon";
   coordinates: [number, number][][][];
 }
 
-export interface TransitStopInfrastructureGeometry {
+export interface TransitStopInfrastructureGeometry extends ContributingRecord {
   stopArea?: TransitGeoJsonPolygon | TransitGeoJsonMultiPolygon;
   fareZones?: Array<{
+    contributors?: readonly Attribution[];
     fareZoneId: string;
     geometry: TransitGeoJsonPolygon | TransitGeoJsonMultiPolygon;
   }>;
 }
 
-export interface TransitStopInfrastructure {
+export interface TransitStopInfrastructure extends ContributingRecord {
   stopId: string;
   provider: string;
+  /** Legacy native upstream stop reference; use contributors for supplier identity. */
   sourceId: string;
   displayName: string;
   focusLevel: "parent_stop" | "child_stop" | "platform";
@@ -744,7 +765,7 @@ export type TransitStopAreaShape =
  * platform or quay a leg boards or alights at, and the whole stop place around
  * it. Either list may be empty when the source knows only the other.
  */
-export interface TransitStopArea {
+export interface TransitStopArea extends ContributingRecord {
   stopId: string;
   platform: TransitStopAreaShape[];
   station: TransitStopAreaShape[];

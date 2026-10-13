@@ -62,10 +62,6 @@ const PROPS: PropConfig[] = [
 
 // Helpers
 /** Converts a Wikimedia Commons filename to a thumbnail URL. */
-function commonsUrl(filename: string, width = 800): string {
-  const encoded = encodeURIComponent(filename.replace(/ /g, "_"));
-  return `https://commons.wikimedia.org/wiki/Special:FilePath/${encoded}?width=${width}`;
-}
 
 /** Returns the best (preferred > normal) non-deprecated claim for a property, or undefined. */
 function bestClaim(claims: Record<string, Claim[]> | undefined, prop: string): Claim | undefined {
@@ -228,18 +224,7 @@ export const wikidataSource: KnowledgeProvider = {
             ? await fetchCommonsMetadata([p18Filename], { strict: true, signal: context.signal })
             : await fetchCommonsMetadata([p18Filename]);
           const richPhoto = metadata.get(p18Filename.replace(/_/g, " "));
-          if (richPhoto) {
-            result.photos = [richPhoto];
-          } else {
-            // Fallback if metadata fetch fails
-            result.photos = [
-              {
-                url: commonsUrl(p18Filename),
-                source: "wikimedia",
-                pageUrl: `https://commons.wikimedia.org/wiki/File:${encodeURIComponent(p18Filename.replace(/ /g, "_"))}`,
-              },
-            ];
-          }
+          if (richPhoto) result.photos = [richPhoto];
         }
       })(),
       (async () => {

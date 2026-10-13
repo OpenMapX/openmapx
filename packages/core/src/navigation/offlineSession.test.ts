@@ -449,3 +449,34 @@ describe("navigation session snapshot", () => {
     ).not.toBe(navigationSessionFingerprint(a));
   });
 });
+
+describe("offline contributor receipts", () => {
+  it("copies route, leg, step and field receipts without borrowing live catalogue metadata", () => {
+    const a = {
+      sourceId: "same",
+      name: "Supplier",
+      attributionText: "captured A",
+      publisher: { name: "Publisher" },
+    };
+    const b = { ...a, attributionText: "captured B" };
+    const primary = { ...route(), contributors: [a, b], fieldContributors: { geometry: [a] } };
+    primary.legs[0].contributors = [b];
+    primary.steps[0].contributors = [];
+    const snapshot = createNavigationSessionSnapshot(input({ route: primary, routes: [primary] }));
+    const restored = parseNavigationSessionSnapshot(JSON.parse(JSON.stringify(snapshot)));
+    if (!restored) throw new Error("valid captured session did not restore");
+    expect(restored.route.contributors).toEqual([a, b]);
+    expect(restored.route.fieldContributors).toEqual({ geometry: [a] });
+    expect(restored.route.legs[0].contributors).toEqual([b]);
+    expect(restored.route.steps[0].contributors).toEqual([]);
+    a.publisher.name = "changed";
+    expect(snapshot.route.contributors?.[0].publisher?.name).toBe("Publisher");
+    expect(restored.route.contributors?.[0].publisher?.name).toBe("Publisher");
+  });
+
+  it("rejects malformed canonical receipts instead of downgrading to legacy", () => {
+    const snapshot = createNavigationSessionSnapshot(input());
+    snapshot.route.contributors = [{ sourceId: "x", name: 12 }] as never;
+    expect(parseNavigationSessionSnapshot(snapshot)).toBeNull();
+  });
+});

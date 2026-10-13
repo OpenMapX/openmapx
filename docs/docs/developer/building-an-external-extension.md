@@ -69,7 +69,11 @@ openmapx-ext scaffold integration conditions --domain knowledge --out ./integrat
 ```
 
 This creates `integrations/conditions/` with `manifest.json`, `package.json`, and
-`strings/en.json`, with `__ID__` and `__DOMAIN__` tokens substituted throughout.
+`strings/en.json`, a `CONTRIBUTOR-CONTRACT.md` authoring note, and a
+`companion-response.example.json` response example, with `__ID__` and `__DOMAIN__`
+tokens substituted throughout. The response example is for your companion
+service; it is not a manifest field or an automatically consumed host protocol.
+Authoring notes/examples are excluded from the packaged artifact's allowlist.
 
 ## Write the integration metadata
 
@@ -88,6 +92,76 @@ openmapx-ext validate ./integrations/conditions
 ```
 
 Exits non-zero and prints errors if the manifest is invalid.
+
+## Preserve companion-service contributor receipts
+
+An existing versioned host protocol or a reviewed built-in adapter must expose
+your service's data. Contributor metadata does not register a provider, create a
+route, or authorize frontend code. Use the same portable [captured contributor
+contract](./integration-system.md#captured-contributor-contract) as built-ins;
+your service may emit this JSON without depending on an OpenMapX runtime SDK:
+
+```json
+{
+  "id": "observation-1",
+  "name": "Station reading",
+  "value": 12,
+  "contributors": [
+    {
+      "sourceId": "conditions-observations",
+      "name": "Observation publisher",
+      "spdxLicense": "CC-BY-4.0",
+      "attributionText": "Required dataset notice"
+    }
+  ],
+  "fieldContributors": {
+    "name": [],
+    "value": [
+      {
+        "sourceId": "conditions-observations",
+        "name": "Observation publisher",
+        "spdxLicense": "CC-BY-4.0",
+        "attributionText": "Required dataset notice"
+      }
+    ]
+  }
+}
+```
+
+Use stable source IDs declared in source/privacy metadata and localized
+disclosures; fill in the actual publisher, rights and required wording. `[]`
+explicitly means this record/field has no externally owed credit; omit the field
+only for a legacy record with unavailable provenance. Never send `[]` merely
+because exact provenance has not yet been implemented. Missing identities stay
+unknown rather than borrowing every configured feed. Preserve each distinct
+mandatory notice, including notices attached to an explicit canonical parent
+source. `publisher` is optional `{ "name": "...", "url": "..." }`; homepage,
+SPDX license, license URL, retrieval time and notes are also optional strings.
+
+Capture metadata before upstream acquisition and retain it in service caches,
+validation, copies, DTOs and responses. Each row/cell/feature owns its actual
+source; a mixed collection's overall source list cannot establish a cell's
+supplier. Field maps preserve complete container/child ownership, including
+empty child overrides. Views project only actual displayed fields/items and
+geometry channels. A rights/audit dependency list may include other inputs and
+must remain separate from selected display lineage.
+
+For GeoJSON/MVT, serialize the canonical receipt as JSON text in
+`properties._mapAttributions`; preserve field-specific metadata required by the
+reviewed adapter. The trusted host uses shared validation/copy helpers and the
+same geometry/raster visibility machinery. Malformed arrays fail validation;
+canonical `[]` remains authoritative; missing exact evidence cannot trigger
+whole-domain or toggle fallback. The host sanitizes required HTML and validates
+links during rendering. Receipt validation alone never makes arbitrary HTML
+safe. Callbacks, code, rendering certificates and host capabilities are not
+valid contributor payload fields and must not execute.
+
+Conformance tests should exercise the service's real retained/pruned results,
+malformed metadata, explicit empty receipts, field/container ownership and
+required notices. Keep per-file Commons author/license/file-page identity when
+serving photographs; generic Wikimedia source metadata cannot recover those
+requirements. Test the reviewed host adapter as well: a source manifest's
+presence or a companion service's health is not proof that its data was shown.
 
 ## Presentation code is not currently installable
 

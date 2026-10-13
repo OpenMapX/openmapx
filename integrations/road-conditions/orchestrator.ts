@@ -1,5 +1,12 @@
 import type { BBox } from "@openmapx/core";
-import type { IntegrationContext } from "@openmapx/integration-framework";
+import {
+  captureIntegrationContributorCatalogue,
+  type IntegrationContext,
+  parseContributors,
+  resolveCapturedContributors,
+  snapshotContributors,
+} from "@openmapx/integration-framework";
+import { recordedRoadConditionAttributions } from "./attributions.js";
 import { dedupeRoadConditionEvents } from "./dedupe.js";
 import { SEVERITY_RANK } from "./severity.js";
 import type {
@@ -71,14 +78,39 @@ export async function aggregateRoadConditions(
   bbox: BBox,
   opts?: RoadConditionsQuery,
 ): Promise<RoadConditionEvent[]> {
-  const providers = collectProviders(ctx).filter((p) => coversBbox(p.coverage, bbox));
+  const acquisitions = ctx
+    .getIntegrationsByDomain("road-conditions")
+    .flatMap((integration) =>
+      ((integration.providers.get("road-conditions") ?? []) as RoadConditionsProvider[])
+        .filter((provider) => coversBbox(provider.coverage, bbox))
+        .map((provider) => ({ provider, integrationId: integration.id })),
+    );
+  const providers = acquisitions.map(({ provider }) => provider);
   const disallowed = new Set([
     ...((await ctx.getDisallowedSourceIds?.()) ?? []),
     ...(opts?.excludedSourceIds ?? []),
   ]);
   const providerOptions = disallowed.size ? { ...opts, excludedSourceIds: [...disallowed] } : opts;
   const settled = await Promise.allSettled(
-    providers.map((p) => p.getEvents(bbox, providerOptions)),
+    acquisitions.map(async ({ provider: p, integrationId }) => {
+      const catalogue = captureIntegrationContributorCatalogue(ctx, "road-conditions");
+      const events = await p.getEvents(bbox, providerOptions);
+      return events.map((event) => {
+        const native = parseContributors(event.contributors);
+        if (native !== undefined) return { ...event, contributors: native };
+        const sourceId = event.attribution.sourceId ?? event.source;
+        const resolved = resolveCapturedContributors(catalogue, integrationId, {
+          sourceIds: [sourceId],
+        });
+        const contributors = resolved.length
+          ? snapshotContributors(
+              resolved,
+              event.attribution.notice ? [{ sourceId, name: event.attribution.notice }] : [],
+            )
+          : recordedRoadConditionAttributions(event);
+        return { ...event, contributors };
+      });
+    }),
   );
 
   const merged: RoadConditionEvent[] = [];

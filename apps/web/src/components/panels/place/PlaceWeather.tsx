@@ -4,11 +4,11 @@ import Box from "@mui/material/Box";
 import Skeleton from "@mui/material/Skeleton";
 import Typography from "@mui/material/Typography";
 import { useCurrentWeather, weatherCodeToInfo } from "@openmapx/core";
-import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import { useTranslations } from "next-intl";
-import { SectionAttribution } from "@/components/ui/SectionAttribution";
 import { windDirectionLabel } from "@/components/weather/weatherUtils";
+import { AttributionStrip } from "@/integration-api/components/AttributionStrip";
 import { WeatherIcon } from "@/integration-api/components/WeatherIcon";
+import { useContributorResolver } from "@/integration-api/overlay/useContributorResolver";
 
 interface Props {
   lat: number;
@@ -19,7 +19,7 @@ interface Props {
 export function PlaceWeather({ lat, lng, enabled = true }: Props) {
   const t = useTranslations("weather");
   const { data, isLoading } = useCurrentWeather(lat, lng, enabled);
-  const registry = useIntegrationRegistry();
+  const resolve = useContributorResolver();
 
   if (isLoading)
     return (
@@ -33,13 +33,6 @@ export function PlaceWeather({ lat, lng, enabled = true }: Props) {
 
   const { current } = data;
   const info = weatherCodeToInfo(current.weatherCode, current.isDay);
-
-  const weatherMeta = data.source
-    ? registry
-        .getByDomain("weather")
-        .find((m) => m.dataSources?.some((ds) => ds.sourceId === data.source))
-    : undefined;
-  const attributionSource = weatherMeta?.dataSources?.find((ds) => ds.sourceId === data.source);
 
   return (
     <Box sx={{ py: 1 }}>
@@ -67,15 +60,10 @@ export function PlaceWeather({ lat, lng, enabled = true }: Props) {
           {t("pressure")}: {current.pressure} hPa
         </Typography>
       </Box>
-      {attributionSource && (
-        <SectionAttribution
-          name={attributionSource.name}
-          url={attributionSource.url}
-          license={attributionSource.license}
-          licenseUrl={attributionSource.licenseUrl}
-          attribution={attributionSource.attribution}
-        />
-      )}
+      <AttributionStrip
+        variant="plain"
+        attributions={resolve({ contributors: data.contributors, sourceIds: [data.source] })}
+      />
     </Box>
   );
 }

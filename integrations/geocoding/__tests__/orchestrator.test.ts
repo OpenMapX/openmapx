@@ -73,3 +73,71 @@ describe("geocoding orchestrator served-provider tagging", () => {
     expect(res?.provider).toBe("geocoding-maptiler");
   });
 });
+
+it("captures only selected backend credits before cache and does not mutate provider-owned records", async () => {
+  setConfiguredProviderList("photon");
+  const raw = { ...result("cached"), sourceIds: ["selected"] };
+  const selected = {
+    sourceId: "selected",
+    name: "Captured selected",
+    url: "https://selected.example",
+    license: "CC0-1.0",
+  };
+  const sources = [selected, { ...selected, sourceId: "inactive", name: "Missing key backend" }];
+  const ctx = {
+    getIntegrationsByDomain: () => [
+      {
+        id: "geocoding-photon",
+        manifest: { dataSources: sources },
+        providers: new Map([
+          [
+            "geocoding",
+            [
+              {
+                geocode: async () => [raw],
+                autocomplete: async () => [],
+                reverseGeocode: async () => null,
+              },
+            ],
+          ],
+        ]),
+      },
+    ],
+  } as unknown as IntegrationContext;
+  const [captured] = await getGeocodingProvider(ctx).geocode("q");
+  selected.name = "Changed catalogue";
+  expect(captured.contributors?.map((receipt) => receipt.name)).toEqual(["Captured selected"]);
+  expect(raw.provider).toBeUndefined();
+  expect(raw.contributors).toBeUndefined();
+});
+
+it("captures geocoder metadata before the selected backend request resolves", async () => {
+  setConfiguredProviderList("photon");
+  let finish!: (rows: SearchResult[]) => void;
+  const source = {
+    sourceId: "selected",
+    name: "Original acquired notice",
+    url: "https://example.test",
+    license: "CC0-1.0",
+  };
+  const selected = {
+    ...provider([]),
+    geocode: () =>
+      new Promise<SearchResult[]>((resolve) => {
+        finish = resolve;
+      }),
+  };
+  const ctx = {
+    getIntegrationsByDomain: () => [
+      {
+        id: "geocoding-photon",
+        manifest: { dataSources: [source] },
+        providers: new Map([["geocoding", [selected]]]),
+      },
+    ],
+  } as unknown as IntegrationContext;
+  const pending = getGeocodingProvider(ctx).geocode("q");
+  source.name = "Changed catalogue";
+  finish([{ ...result("row"), sourceIds: ["selected"] }]);
+  expect((await pending)[0].contributors?.[0].name).toBe("Original acquired notice");
+});

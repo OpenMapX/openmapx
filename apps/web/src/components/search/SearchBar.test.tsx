@@ -1334,6 +1334,7 @@ describe("SearchBar", () => {
       searchMatch: { kind: "authoritative_code", value: "FRA", normalized: "fra" },
       importance: 0.95,
       provider: "knowledge-ourairports",
+      contributors: [{ sourceId: "ourairports", name: "OurAirports" }],
     });
     useSearchSuggestionsMock.mockReturnValue({
       data: aggregateResponse([airport], [{ sourceId: "ourairports", name: "OurAirports" }]),
@@ -1362,7 +1363,7 @@ describe("SearchBar", () => {
     screen.getByText("OurAirports");
   });
 
-  it("shows response-scoped attribution in the mobile results panel", async () => {
+  it("shows displayed-row attribution in the mobile results panel", async () => {
     useMediaQueryMock.mockReturnValue(true);
     useSearchSuggestionsMock.mockReturnValue({
       data: aggregateResponse(
@@ -1372,6 +1373,7 @@ describe("SearchBar", () => {
             label: "Frankfurt am Main Airport",
             searchMatch: { kind: "authoritative_code", value: "FRA", normalized: "fra" },
             provider: "knowledge-ourairports",
+            contributors: [{ sourceId: "ourairports", name: "OurAirports" }],
           }),
         ],
         [{ sourceId: "ourairports", name: "OurAirports" }],
@@ -1386,6 +1388,27 @@ describe("SearchBar", () => {
 
     await screen.findByRole("option", { name: /Frankfurt am Main Airport/ });
     screen.getByText("OurAirports");
+  });
+
+  it("credits only displayed rows when an aggregate envelope includes another source", async () => {
+    const shown = { sourceId: "shown-feed", name: "Visible supplier" };
+    const hidden = { sourceId: "hidden-feed", name: "Hidden supplier" };
+    useSearchSuggestionsMock.mockReturnValue({
+      data: aggregateResponse(
+        [aggregateSuggestion({ label: "Visible station", contributors: [shown] })],
+        [shown, hidden],
+      ),
+      isFetching: false,
+    });
+
+    renderBar();
+    const input = screen.getByLabelText("search.ariaLabel");
+    fireEvent.focus(input);
+    fireEvent.change(input, { target: { value: "station" } });
+
+    await screen.findByRole("option", { name: /Visible station/ });
+    expect(screen.getByText("Visible supplier")).toBeInTheDocument();
+    expect(screen.queryByText("Hidden supplier")).not.toBeInTheDocument();
   });
 
   it("keeps an explicit alias ahead of a generated acronym collision", async () => {
@@ -2792,4 +2815,39 @@ describe("SearchBar NLP submission ownership", () => {
     fireEvent.click(screen.getByText("Owned tea"));
     expect(useNlpSearchStore.getState().intent?.explanation).toBe("Owned tea");
   });
+});
+
+it("keeps captured source fields when an autocomplete row becomes a selected place", async () => {
+  const name = { sourceId: "name", name: "Name supplier" };
+  const geometry = { sourceId: "geometry", name: "Geometry supplier" };
+  useAutocompleteMock.mockReturnValue({
+    data: [
+      {
+        id: "osm:node/1",
+        label: "Cafe Aurora",
+        sublabel: "Street",
+        type: "poi",
+        coordinates: [8, 50],
+        contributors: [name, geometry],
+        fieldContributors: {
+          label: [name],
+          sublabel: [name],
+          coordinates: [geometry],
+          id: [name],
+          type: [],
+        },
+      },
+    ],
+    isFetching: false,
+  });
+  renderBar();
+  const input = screen.getByLabelText("search.ariaLabel");
+  fireEvent.focus(input);
+  fireEvent.change(input, { target: { value: "Cafe Aurora" } });
+  fireEvent.click(await screen.findByRole("option", { name: /Cafe Aurora/ }));
+  const selected = usePlaceStore.getState().selectedPlace;
+  expect(selected?.fieldContributors?.name).toEqual([name]);
+  expect(selected?.fieldContributors?.coordinates).toEqual([geometry]);
+  name.name = "Changed catalogue";
+  expect(selected?.fieldContributors?.name?.[0].name).toBe("Name supplier");
 });

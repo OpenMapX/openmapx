@@ -99,7 +99,7 @@ describe("live-transit-siri-sx-ch provider", () => {
 
     const result = await provider.getAlertsForStop?.("otdch:8503000");
     expect(otd.getStopAlerts).toHaveBeenCalledWith("otdch:8503000");
-    expect(result?.data).toEqual([sampleAlert]);
+    expect(result?.data).toEqual([{ ...sampleAlert, contributors: result?.attributions }]);
     expect(result?.attributions.map((a) => a.sourceId)).toContain("opentransportdata-ch-siri-sx");
     expect(result?.freshness.hasRealtimeData).toBe(true);
   });

@@ -143,11 +143,38 @@ describe("nautical routes", () => {
   });
 
   describe("/stations", () => {
+    it("preserves an explicit empty NOAA catalog receipt during normalization", async () => {
+      loadStations.mockResolvedValue([
+        {
+          id: "empty",
+          name: "Boston",
+          lat: 42,
+          lng: -71,
+          types: ["water-level"],
+          contributors: [],
+        },
+      ]);
+      fetchJson.mockResolvedValue(null);
+      mockFetch.mockResolvedValue({ ok: false, status: 503 } as Response);
+      const { reply, result } = makeReply();
+      await getRoute("/stations")(
+        {
+          query: { west: "-72", south: "41", east: "-70", north: "43" },
+          params: {},
+          body: undefined,
+        },
+        reply,
+      );
+      const body = result.body as { features: { properties: { _mapAttributions: string } }[] };
+      expect(JSON.parse(body.features[0].properties._mapAttributions)).toEqual([]);
+    });
+
     it("assembles merged GeoJSON with [lng,lat] order, primaryType ranking and capability flags", async () => {
       // NOAA loader returns a tide+water station; non-NOAA loaders return nothing.
       loadStations.mockResolvedValue([
         {
           id: "8443970",
+          contributors: [{ sourceId: "noaa-co-ops", name: "Original NOAA notice" }],
           name: "Boston",
           lat: 42.3539,
           lng: -71.0503,
@@ -186,6 +213,11 @@ describe("nautical routes", () => {
       const boston = body.features.find((f) => f.properties.id === "8443970");
       expect(boston).toBeDefined();
       // [lng, lat] order.
+      expect(
+        JSON.parse(String(boston?.properties._mapAttributions)).map(
+          (a: { sourceId: string }) => a.sourceId,
+        ),
+      ).toEqual(["noaa-co-ops"]);
       expect(boston?.geometry.coordinates).toEqual([-71.0503, 42.3539]);
       expect(boston?.properties).toMatchObject({
         network: "noaa",

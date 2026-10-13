@@ -1,9 +1,20 @@
+import { type Attribution, OPENSTREETMAP_ATTRIBUTION } from "@openmapx/mobility-core/attribution";
+import { snapshotContributors } from "@openmapx/mobility-core/contributors";
 import { USER_AGENT } from "../userAgent";
 import type { OverpassResponse } from "./types";
 
 const DEFAULT_OVERPASS_URL = "https://overpass-api.de/api/interpreter";
 const OVERPASS_FALLBACK_URL = "https://overpass.kumi.systems/api/interpreter";
 let configuredOverpassUrl: string | null = null;
+
+let captureSupplier: (url: string) => readonly Attribution[] = () => [OPENSTREETMAP_ATTRIBUTION];
+
+/** Trusted built-in adapter: resolve the actual endpoint, including a fallback response. */
+export function setOverpassContributorResolver(
+  resolve?: (url: string) => readonly Attribution[],
+): void {
+  captureSupplier = resolve ?? (() => [OPENSTREETMAP_ATTRIBUTION]);
+}
 
 function normalizeOverpassUrl(url: string): string {
   const trimmed = url.replace(/\/$/, "");
@@ -59,6 +70,7 @@ export class OverpassUnavailableError extends Error {
 const OVERPASS_REQUEST_TIMEOUT_MS = 35_000;
 
 async function fetchOverpass(url: string, query: string): Promise<OverpassResponse> {
+  const contributors = snapshotContributors(captureSupplier(url));
   try {
     const res = await fetch(url, {
       method: "POST",
@@ -74,7 +86,7 @@ async function fetchOverpass(url: string, query: string): Promise<OverpassRespon
     if (res.status === 504 || res.status === 408) throw new OverpassUnavailableError();
     if (!res.ok) throw new Error(`Overpass API error: ${res.status}`);
 
-    return (await res.json()) as OverpassResponse;
+    return { ...((await res.json()) as OverpassResponse), contributors };
   } catch (err) {
     // A server that does not answer in time is as unavailable as one that
     // says it is too busy.

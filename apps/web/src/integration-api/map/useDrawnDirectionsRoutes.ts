@@ -225,13 +225,13 @@ export function useDrawnDirectionsRoutes(): DrawnDirectionsRoutes {
   // The result actually drawn on the map: the EV plan (route + inserted
   // charge-stop legs) in EV mode, the scheduled chain when any stop carries a
   // time constraint, the plain route otherwise.
-  const activeResult = isEvMode ? evData : (scheduledData ?? data);
+  const activeResult = isEvMode ? evData : scheduleRequest ? scheduledData : data;
 
   return {
     routes: navigating ? EMPTY_ROUTES : (activeResult?.routes ?? EMPTY_ROUTES),
     // A scheduled trip is a single chained route, so the stored alternate index
     // would point past the end of it.
-    activeRouteIndex: scheduledData && !isEvMode ? 0 : activeRouteIndex,
+    activeRouteIndex: scheduleRequest && !isEvMode ? 0 : activeRouteIndex,
     provider: activeResult?.provider,
     mode,
     isEvMode,

@@ -4,6 +4,7 @@ import {
   type IntegrationContext,
   type RouteHandler,
   scalarQueries,
+  snapshotContributors,
 } from "@openmapx/integration-framework";
 import type { FirePixel, NaturalHazard } from "@openmapx/mobility-core/hazards";
 import {
@@ -132,6 +133,10 @@ function pixelToFeature(pixel: FirePixel): AgelessFireFeature | null {
       acqTime: `${observed.slice(11, 13)}${observed.slice(14, 16)}`,
       dayNight: pixel.dayNight === "day" ? "D" : pixel.dayNight === "night" ? "N" : null,
       instrument: pixel.instrument,
+      sources: [...pixel.sources],
+      ...(pixel.contributors === undefined
+        ? {}
+        : { contributors: snapshotContributors(pixel.contributors) }),
     },
   };
 }
@@ -178,7 +183,18 @@ function nifcFeature(hazard: NaturalHazard): GeoJSON.Feature | null {
   if (hazard.containmentPct !== undefined) properties.containmentPercent = hazard.containmentPct;
   if (hazard.region) properties.region = hazard.region;
   if (hazard.ignitionCause) properties.cause = hazard.ignitionCause;
-  return { type: "Feature", id, geometry: hazard.geometry, properties: { ...properties } };
+  return {
+    type: "Feature",
+    id,
+    geometry: hazard.geometry,
+    properties: {
+      ...properties,
+      sources: [...hazard.sources],
+      ...(hazard.contributors === undefined
+        ? {}
+        : { contributors: snapshotContributors(hazard.contributors) }),
+    },
+  };
 }
 
 function effisFeature(hazard: NaturalHazard): GeoJSON.Feature | null {
@@ -197,7 +213,18 @@ function effisFeature(hazard: NaturalHazard): GeoJSON.Feature | null {
   if (hazard.region) properties.region = hazard.region;
   if (hazard.locality) properties.locality = hazard.locality;
   if (hazard.areaHa !== undefined) properties.areaHectares = hazard.areaHa;
-  return { type: "Feature", id, geometry: hazard.geometry, properties: { ...properties } };
+  return {
+    type: "Feature",
+    id,
+    geometry: hazard.geometry,
+    properties: {
+      ...properties,
+      sources: [...hazard.sources],
+      ...(hazard.contributors === undefined
+        ? {}
+        : { contributors: snapshotContributors(hazard.contributors) }),
+    },
+  };
 }
 
 function smokeFeature(hazard: NaturalHazard): GeoJSON.Feature | null {
@@ -215,7 +242,18 @@ function smokeFeature(hazard: NaturalHazard): GeoJSON.Feature | null {
   if (startedAt) properties.startedAt = startedAt;
   const endedAt = canonicalInstant(hazard.detection?.end);
   if (endedAt) properties.endedAt = endedAt;
-  return { type: "Feature", id, geometry: hazard.geometry, properties: { ...properties } };
+  return {
+    type: "Feature",
+    id,
+    geometry: hazard.geometry,
+    properties: {
+      ...properties,
+      sources: [...hazard.sources],
+      ...(hazard.contributors === undefined
+        ? {}
+        : { contributors: snapshotContributors(hazard.contributors) }),
+    },
+  };
 }
 
 interface LayerRoute {
@@ -292,7 +330,7 @@ export function setup(ctx: IntegrationContext): void {
 
     // The view is quantized, so nearby views share an entry. Namespaced by the response
     // shape: an entry cached in an older shape must not be served against the new one.
-    const key = `wildfires:hotspots-v2:${instrument}:${dayRange}:${viewKey(view)}`;
+    const key = `wildfires:hotspots-v3:${instrument}:${dayRange}:${viewKey(view)}`;
     try {
       const read = await ctx.cache.withCache<HotspotRead>(key, HOTSPOT_TTL_S, async () => {
         const { pixels, partial } = await hazards.firePixels(bboxOf(view), {
@@ -338,7 +376,7 @@ export function setup(ctx: IntegrationContext): void {
       return badRequest(reply, "Viewport too large for its zoom");
     }
 
-    const key = `wildfires:density-v1:${instrument}:${dayRange}:${cellDeg}:${viewKey(view)}`;
+    const key = `wildfires:density-v2:${instrument}:${dayRange}:${cellDeg}:${viewKey(view)}`;
     try {
       const read = await ctx.cache.withCache(key, HOTSPOT_TTL_S, async () => {
         const { cells, sources, partial } = await hazards.fireDensity(bboxOf(view), {
@@ -354,7 +392,16 @@ export function setup(ctx: IntegrationContext): void {
           features: cells.map((cell) => ({
             type: "Feature",
             geometry: { type: "Point", coordinates: cell.point },
-            properties: { count: cell.count, frpSum: cell.frpSumMW, frpMax: cell.frpMaxMW },
+            properties: {
+              count: cell.count,
+              ...(cell.lineageComplete === undefined
+                ? {}
+                : { lineageComplete: cell.lineageComplete }),
+              frpSum: cell.frpSumMW,
+              frpMax: cell.frpMaxMW,
+              sources: [...(cell.sources ?? [])],
+              contributors: snapshotContributors(cell.contributors ?? []),
+            },
           })),
           sources: [...sources].sort(),
         };
@@ -380,7 +427,7 @@ export function setup(ctx: IntegrationContext): void {
     return async (req, reply) => {
       let bbox = WORLD;
       let simplifyDeg: number | undefined;
-      let key = `wildfires:${route.layer}-v2:world`;
+      let key = `wildfires:${route.layer}-v3:world`;
       if (route.viewport) {
         let view: NormalizedViewport;
         try {
@@ -391,7 +438,7 @@ export function setup(ctx: IntegrationContext): void {
         bbox = bboxOf(view);
         // Keyed on the tolerance, one of four values, rather than on the client's zoom.
         simplifyDeg = perimeterSimplifyDeg(view.zoom);
-        key = `wildfires:${route.layer}-v3:${simplifyDeg}:${viewKey(view)}`;
+        key = `wildfires:${route.layer}-v4:${simplifyDeg}:${viewKey(view)}`;
       }
 
       const ttl = LAYER_TTL_S[route.layer];

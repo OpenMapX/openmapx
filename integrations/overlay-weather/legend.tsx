@@ -8,7 +8,9 @@ import { useTheme } from "@mui/material/styles";
 import Typography from "@mui/material/Typography";
 import useMediaQuery from "@mui/material/useMediaQuery";
 import { useOverlayVisibilitySetter, weatherCodeToInfo } from "@openmapx/core";
+import { snapshotContributors } from "@openmapx/integration-framework";
 import { useTranslations } from "next-intl";
+import { AttributionStrip } from "@/integration-api/components/AttributionStrip";
 import { WeatherIcon } from "@/integration-api/components/WeatherIcon";
 import { OverlayLegend } from "@/integration-api/overlay/OverlayLegend";
 import { effectiveWeatherSubLayer, useWeatherStore, WEATHER_SUB_LAYERS } from "./store";
@@ -45,6 +47,8 @@ export function WeatherLegend() {
   const radarNowcastFrames = useWeatherStore((s) => s.radarNowcastFrames);
   const currentWeather = useWeatherStore((s) => s.currentWeather);
   const locationName = useWeatherStore((s) => s.locationName);
+  const weatherContributors = useWeatherStore((s) => s.currentWeatherContributors);
+  const locationContributors = useWeatherStore((s) => s.locationNameContributors);
   const radarUnavailable = useWeatherStore((s) => s.radarUnavailable);
 
   const allFrames = [...radarPastFrames, ...radarNowcastFrames];
@@ -103,6 +107,13 @@ export function WeatherLegend() {
           {t("noData")}
         </Typography>
       ) : null}
+      <AttributionStrip
+        variant="plain"
+        attributions={snapshotContributors(
+          currentWeather ? weatherContributors : [],
+          locationName ? locationContributors : [],
+        )}
+      />
       {/* Sub-layer chips — hidden when only one option available */}
       {availableSubLayers.length > 1 && (
         <Box

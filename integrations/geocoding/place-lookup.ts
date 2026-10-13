@@ -1,3 +1,5 @@
+import { OPENSTREETMAP_ATTRIBUTION } from "@openmapx/mobility-core/attribution";
+import { snapshotContributors, withContributors } from "@openmapx/mobility-core/contributors";
 /**
  * Nominatim place detail lookups.
  * Separate from nominatim geocoding (which handles geocoding/autocomplete)
@@ -237,6 +239,7 @@ function toPlace(r: NominatimDetailResult, id: string): Place {
 
   return createPlace({
     primaryScheme: "osm",
+    contributors: snapshotContributors([OPENSTREETMAP_ATTRIBUTION]),
     ids: buildIds(r, id),
     name,
     address,
@@ -666,7 +669,8 @@ export async function lookupByOsmFilters(
       best = matched;
     }
 
-    return overpassElementToPlace(best.el, best.elLat, best.elLon, originalId);
+    const place = overpassElementToPlace(best.el, best.elLat, best.elLon, originalId);
+    return place ? withContributors(place, data.contributors ?? [OPENSTREETMAP_ATTRIBUTION]) : null;
   } catch {
     return null;
   }
@@ -706,6 +710,7 @@ function overpassElementToPlace(
 
   return createPlace({
     primaryScheme: "osm",
+    contributors: snapshotContributors([OPENSTREETMAP_ATTRIBUTION]),
     ids,
     name,
     address,

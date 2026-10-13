@@ -1,4 +1,8 @@
 import type { BrandPresence } from "@openmapx/core";
+import {
+  captureFieldContributors,
+  contributorsForFields,
+} from "@openmapx/mobility-core/contributors";
 import type { BrandIndex } from "./loader";
 import { normalize } from "./normalize";
 import type { BrandEntry, BrandKind, BrandMatch } from "./types";
@@ -130,6 +134,23 @@ export function searchBrands(index: BrandIndex, opts: BrandSearchOptions): Brand
     };
     if (hit.entry.description) match.description = hit.entry.description;
     if (hit.entry.logoFile) match.logoFile = hit.entry.logoFile;
+    match.fieldContributors = {
+      ...Object.fromEntries(
+        Object.keys(match)
+          .filter((field) => !["matchedOn", "matchedValue", "presence"].includes(field))
+          .flatMap((field) => Object.entries(captureFieldContributors(hit.entry, field))),
+      ),
+      ...captureFieldContributors(
+        hit.entry,
+        hit.matchedOn === "name" ? "name" : "matchNames",
+        "matchedValue",
+      ),
+      ...captureFieldContributors(hit.entry, "countries", "presence"),
+    };
+    match.contributors = contributorsForFields(
+      match.fieldContributors,
+      Object.keys(match.fieldContributors),
+    );
     out.push(match);
   }
   return out;

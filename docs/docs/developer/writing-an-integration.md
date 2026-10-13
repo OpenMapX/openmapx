@@ -152,8 +152,9 @@ A few things worth pausing on:
 - **`backend.routes: true`** advertises that `setup(ctx)` mounts HTTP routes.
   Set `frontend.*` flags for the UI surfaces you contribute instead.
 - **`dataSources`** is not optional bookkeeping. The legal pages and the
-  per-result attribution chips are generated from these entries, and a host-side
-  completeness gate fails the commit if a generated table cell would be empty.
+  receipt metadata derive from these entries, and a host-side completeness gate
+  fails the commit if a generated table cell would be empty. Results capture only
+  their actual suppliers, including runtime-feed/per-file notices.
   Any integration with `backend.routes: true` is required to declare a
   `dataSources` entry per upstream API it calls. Keep `sourceId` stable and
   globally unique — renaming it orphans existing attribution.
@@ -285,7 +286,11 @@ For our route-only example, `setup` registers a single GET route under the
 integration's prefix and uses the namespaced cache for a read-through:
 
 ```ts
-import type { IntegrationContext } from "@openmapx/integration-framework";
+import {
+  type IntegrationContext,
+  resolveIntegrationContributors,
+  withContributors,
+} from "@openmapx/integration-framework";
 
 const API_BASE = "https://api.sunrise-sunset.org/json";
 const CACHE_TTL = 21_600; // 6 hours — sun times change slowly
@@ -303,13 +308,18 @@ export function setup(ctx: IntegrationContext): void {
 
     const cacheKey = `sun-times:${latNum},${lngNum}`;
     const result = await ctx.cache.withCache(cacheKey, CACHE_TTL, async () => {
+      // Capture the known supplier before acquiring this cache generation.
+      const captured = resolveIntegrationContributors(ctx, ["sunrise-sunset"]);
       const url = `${API_BASE}?lat=${latNum}&lng=${lngNum}&formatted=0`;
-      const body = await ctx.http.get<{ status: string; results: unknown }>(url);
+      const body = await ctx.http.get<{
+        status: string;
+        results: { sunrise: string; sunset: string };
+      }>(url);
       if (body.status !== "OK") {
         ctx.log.warn(`Sunrise-Sunset API status: ${body.status}`);
         throw new Error("Sunrise-Sunset data unavailable");
       }
-      return body.results;
+      return withContributors(body.results, captured);
     });
 
     reply.send(result);
@@ -369,10 +379,124 @@ The same shape holds for `registerGeocodingProvider`, `registerRoutingProvider`,
 `registerKnowledgeProvider`, `registerPhotoProvider`, and the rest. The typed
 registrars enforce the contract at compile time, so the orchestrator dispatches
 on a declared capability rather than reflecting over your object. Providers in a
-domain do not hand-roll attribution: the framework turns your `dataSources`
-entries into the canonical attribution shape, so credit metadata lives only in
-the manifest. The two mobility contracts have extra rules (capability
+domain capture exact source receipts from the declared metadata at acquisition,
+then retain them on the records they return. The framework's contributor helpers
+convert, copy and project canonical receipts; a whole manifest/domain is not
+proof that every listed supplier contributed. Runtime feed and per-file notices
+must survive alongside static source metadata. The two mobility contracts have extra rules (capability
 self-description, coverage, priority) covered on their own pages.
+
+### Keep receipts with the data
+
+The route example captures `sunrise-sunset` before its HTTP await and caches the
+receipt with the result. Capture inside the cache-miss callback: a cache hit must
+keep its earlier acquisition metadata. Use `ctx.http` for requests and
+`ctx.upstreamRuntime` for quota-bound work, preserving source-policy controls.
+If the response chooses an unknown backend/feed, capture its lookup catalogue
+before awaiting rather than looking up current registry metadata afterward:
+
+```ts
+import {
+  captureIntegrationContributorCatalogue,
+  resolveCapturedContributors,
+  withContributors,
+} from "@openmapx/integration-framework";
+
+// Inside an acquisition, with ctx and acquire() supplied by this provider:
+const catalogue = captureIntegrationContributorCatalogue(ctx, "transit");
+const rows = await acquire();
+const capturedRows = rows.map((row) =>
+  withContributors(row, resolveCapturedContributors(catalogue, providerId, row)),
+);
+```
+
+Here `row` must supply canonical `contributors` or exact `sourceIds`. Missing
+mixed provenance remains unknown; the catalogue must never be displayed as a
+union. Supplied `contributors: []` cannot fall back to `sourceIds`, provider
+labels, manifests or a domain. The [captured contract](./integration-system.md#captured-contributor-contract)
+also covers field ownership and compatibility boundaries.
+
+For mixed enrichment, project the fields the view actually displays:
+
+```ts
+import {
+  captureFieldContributors,
+  contributorsForRecordFields,
+} from "@openmapx/integration-framework";
+
+// Keep the complete winning container tree, including explicit empty children.
+const winningBrandOwnership = captureFieldContributors(winner, "brand");
+// Website/hidden facts do not get credited just because the record has them.
+const displayedCredits = contributorsForRecordFields(place, ["name", "address"]);
+```
+
+First-wins, gap-fill and replacement merges retain the ownership of the winning
+field; append receipts only when a field/identity is actually kept. A discarded
+duplicate gets no credit. Itemized facts/photos retain their own receipts, and
+Commons photos additionally retain their exact author, license and file page.
+Do not replace selected display lineage with the broader rights-dependency set.
+
+### Register map and panel credits through the host
+
+Trusted map components use
+`@/integration-api/overlay/useRenderedMapAttributions` for captured GeoJSON/MVT
+feature receipts, and `@/integration-api/overlay/useRasterMapAttributions` for
+effective raster supplier descriptors. The [map contract](./integration-system.md#crediting-an-overlays-sources)
+details paint channels, overzoom, field projection, DOM/custom GPU proof and
+raster acquisition order. A minimal uniform-feature example is:
+
+```tsx
+import { withFeatureContributors } from "@openmapx/integration-framework";
+import { useRenderedMapAttributions } from "@/integration-api/overlay/useRenderedMapAttributions";
+
+// Stamp before source/bridge publication, using the acquisition snapshot.
+const ownedFeature =
+  feature.contributors === undefined
+    ? feature
+    : withFeatureContributors(feature, feature.contributors);
+// In the React layer, subscribe to the layers that actually paint this data.
+useRenderedMapAttributions("my-feature", [POINTS_LAYER, LABELS_LAYER], visible);
+```
+
+For a proven uniform layer, `layerContributors` can hold its captured receipt;
+for a heterogeneous layer, attach each feature's own receipt or project its
+captured fields. Authoritative `[]` suppresses fallback. Capture one descriptor
+per raster supplier, call `addAttributedRasterSource` before adding its layer,
+and update future acquisition receipts before changing tile URLs. Successful
+retained content keeps its earlier receipt during refresh failures.
+
+A proxy that can choose a different supplier for each tile must use
+`addAttributedRasterSource(..., [], "response")` (or `RasterBaseLayer`'s
+`receiptMode="response"`). It returns `X-OpenMapX-Contributors` on each successful
+image response: `encodeURIComponent(JSON.stringify(canonicalContributors))`, at
+most 16 KiB, including mandatory underlying-data/style notices. Capture and
+serialize that receipt before awaiting its acquisition. Store the header with
+the corresponding image in HTTP caches and expose it through CORS where needed.
+Do not use a HEAD probe or the latest provider configuration to identify content.
+Missing, malformed and explicit empty receipts all contribute no inferred supplier.
+
+The trusted web host installs `attributedRasterRequestTransform(existingPolicy)`
+on its Map constructor; wrap later `setTransformRequest` policies the same way.
+Policies see the original canonical HTTP URL and keep their request headers,
+credentials, cache mode and referrer policy. The host's per-load protocol token
+never reaches the server or its cache key. The bridge accepts HTTP(S) response
+producers, limits encoded images to 8 MiB, and commits each response snapshot
+only when that same native load commits its texture. Browser HTTP revalidation
+retains body/header identity; a standalone 304 without cached content is an error.
+This is a trusted host transport contract, not executable community extension code.
+
+Panels import `AttributionStrip` from
+`@/integration-api/components/AttributionStrip` and pass the receipts projected
+from the displayed fields/rows, including represented secondary items and
+alerts. Independent map ownership remains necessary when its panel is closed.
+Legends may credit data displayed by the legend itself, such as a fetched weather
+reading; they do not own the map's credits.
+
+Add behavioral tests for malformed/empty receipts, acquisition-time metadata,
+field replacement/container children, retained caches, actual pruning and
+rendered visibility. The static wiring test rejects toggle/domain-only hooks,
+unused imports and test-only mentions, but cannot certify the provenance passed
+to a correctly imported hook.
 
 ### Declaring temporal support
 
@@ -521,3 +645,26 @@ files that own a standalone map.
   context, and the loader-to-host lifecycle in depth.
 - **[Service manifest](./service-manifest.md)** — declaring a backing service
   your integration requires.
+
+### Composed route geometry receipts
+
+A composed road route carries `geometryContributors`, an ordered array of
+`{ startIndex, endIndex, contributors }` spans into its `geometry`. Both indices
+are inclusive; adjacent spans share their endpoint. Each span captures the full
+receipt at acquisition, including distinct required notices. `[]` means unknown
+or explicitly unattributed geometry and is authoritative. Gaps also remain
+unknown. A route without spans can use its captured `geometry` field receipt;
+renderers never reconstruct historical geometry receipts from the current
+catalogue.
+
+Keep these boundaries when joining provider results, caching, serializing or
+restoring navigation. Joining unequal endpoints introduces an unknown connecting
+edge. Aggregate distance/duration credits remain separate from geometry, and
+first-route-only values such as the summary retain only their actual owner.
+
+The web host paints these spans as independently queryable features in planning,
+alternative, proposed and navigation routes. Navigation gives each span a filtered
+traveled/remaining/casing layer group and converts global Mercator progress into
+that span's local gradient interval. GPS updates change paint only; they never
+upload the route again. Only these complementary groups certify full alpha
+coverage; a standalone partial gradient is not proof of visible geometry.

@@ -10,7 +10,9 @@ import {
   isSafeHttpUrl,
   type OsmIdentity,
   validObservedAt,
+  withBrandingContributors,
 } from "@openmapx/core";
+import { siteAttributions } from "@openmapx/integration-framework";
 import {
   type I18nToken,
   money,
@@ -223,7 +225,8 @@ export function mapChargingSiteToResult(site: ChargingSite): DataSourceResult {
     ...fallbackNameOf(site),
     coordinates: site.coordinates,
     source: site.sources[0] ?? "unknown",
-    sources: site.sources,
+    sources: [...site.sources],
+    contributors: siteAttributions([site]),
     variant: variantOf(site),
     status: statusOf(site),
     ...(availability
@@ -237,7 +240,7 @@ export function mapChargingSiteToResult(site: ChargingSite): DataSourceResult {
   if (attributions) result.attributions = attributions;
   const branding = siteBranding(site);
   if (branding) result.branding = branding;
-  return result;
+  return withBrandingContributors(result);
 }
 
 interface ConnectorGroup {
@@ -650,7 +653,8 @@ export function mapChargingSiteToDetail(site: ChargingSite): DataSourceDetail {
   const website = !operatorWebsite && isSafeHttpUrl(site.website) ? site.website : undefined;
   const detail: DataSourceDetail = {
     id: site.id,
-    sources: site.sources,
+    sources: [...site.sources],
+    contributors: siteAttributions([site]),
     name: site.name,
     ...fallbackNameOf(site),
     coordinates: site.coordinates,
@@ -668,5 +672,5 @@ export function mapChargingSiteToDetail(site: ChargingSite): DataSourceDetail {
   if (attributions) detail.attributions = attributions;
   const branding = siteBranding(site);
   if (branding) detail.branding = branding;
-  return detail;
+  return withBrandingContributors(detail);
 }

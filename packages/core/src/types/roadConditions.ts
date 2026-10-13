@@ -1,3 +1,4 @@
+import type { ContributingRecord, FieldContributors } from "@openmapx/mobility-core/contributors";
 import type { Geometry, LineString } from "geojson";
 import type { RoadConditionEffect, VehicleApplicability } from "../utils/roadConditionEffects";
 
@@ -15,6 +16,10 @@ export interface RoadConditionAttribution {
   provider: string;
   license?: string;
   url?: string;
+  /** Credit identity when the record's source is a catalogue child of this feed. */
+  sourceId?: string;
+  /** Additional publisher notice required whenever this incident is displayed. */
+  notice?: string;
 }
 
 export interface RoadConditionRoadRef {
@@ -142,7 +147,7 @@ export interface RoadConditionRoutingEvidence {
  * `effects`. Consumers read the effects (`closesRoadForCars`, `speedCapKph`,
  * `effectInForceAt`, …), never a summary of them.
  */
-export interface RoadConditionEvent {
+export interface RoadConditionEvent extends ContributingRecord {
   /** Globally unique, provider-prefixed (e.g. "oc:situation:nl-ndw:RWS01_…"). */
   id: string;
   /** Upstream feed/source id (e.g. "nl-ndw", "ca-bc-drivebc"). */
@@ -209,6 +214,8 @@ export interface RoadConditionsQuery {
 }
 
 export interface RoadFlowSegment {
+  /** Captured suppliers of individual displayed values, not rights dependencies. */
+  fieldContributors?: FieldContributors;
   /** segment_id */
   id: string;
   geometry: LineString;
@@ -237,6 +244,8 @@ export interface RoadFlowQuery {
  * drawn line rather than on the road segment's own geometry.
  */
 export interface RouteFlowSpan {
+  /** Preserved from the selected segment through projection and progress clipping. */
+  fieldContributors?: FieldContributors;
   startMeters: number;
   endMeters: number;
   los: RoadFlowSegment["los"];

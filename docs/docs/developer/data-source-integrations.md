@@ -202,6 +202,8 @@ wraps the provider's `getDetail` for that.
 The provider itself implements the contract. Trimmed to the load-bearing parts:
 
 ```ts
+import { contributorsForRecords } from "@openmapx/integration-framework";
+
 export function createFuelDataSource(ctx: IntegrationContext): MobilityDataSourceProvider {
   // Every registered FuelStationProvider behind one search and one read by id
   // (`createSiteOrchestrator` from the integration framework).
@@ -228,7 +230,7 @@ export function createFuelDataSource(ctx: IntegrationContext): MobilityDataSourc
       );
       return withAttribution(
         kept.map(mapFuelStationToResult), // each result carries its station's credits
-        kept.flatMap((s) => s.attributions), // deduplicated by sourceId in the real code
+        contributorsForRecords(kept), // preserves distinct mandatory notices
         freshnessNow({ hasRealtimeData: false }),
       );
     },
@@ -238,7 +240,7 @@ export function createFuelDataSource(ctx: IntegrationContext): MobilityDataSourc
       const station = await stations.find(itemId);
       return withAttribution(
         station ? mapFuelStationToDetail(station) : null,
-        station?.attributions ?? [],
+        contributorsForRecords(station ? [station] : []),
         freshnessNow({ hasRealtimeData: false }),
       );
     },
@@ -255,9 +257,10 @@ into the filter panel.
 
 Because `fuel` aggregates providers rather than reading feeds itself, its
 manifest declares no `dataSources`. Credits come from each station's
-`attributions`, which the mapper turns into the per-record
-`DataSourceResult.attributions` / `DataSourceDetail.attributions` that the map
-strip and the place card render (see [Attribution and freshness](#attribution-and-freshness)).
+canonical `contributors`, captured before cache/aggregation and preserved by
+mapping. Older per-record `attributions` remain a compatibility format; do not
+round-trip canonical receipts through their text-only shape (see
+[Attribution and freshness](#attribution-and-freshness)).
 
 ## Multi-source merging
 
@@ -323,32 +326,30 @@ export interface MobilityResult<T> {
 }
 ```
 
-**Attribution.** Credit metadata lives in the manifest's `dataSources` array
-(one entry per upstream feed, each with a stable `sourceId`, license, and privacy
-fields). `createManifestAttribution()` turns that array into the canonical
-`Attribution[]` shape, so the provider never hand-rolls credit literals. The
-store gives you three readers:
+**Attribution.** Declare static source/privacy metadata in the manifest's
+`dataSources`, with stable `sourceId` values and localized disclosures.
+`createManifestAttribution()` supplies metadata lookup readers (`all`,
+`bySource`, `forResults`); those readers do not establish that a configured feed
+supplied visible data. Capture the exact supplier metadata before acquisition,
+then retain canonical `contributors` on each station, vehicle, detail and map
+context polygon. Shared-mobility parser child IDs require an explicitly proven
+canonical parent source, including its mandatory notices.
 
-- `all()` — every declared attribution, for the provider's `attribution` getter.
-- `bySource(sourceId)` — one entry, for a detail response from a single feed.
-- `forResults(results, sourcesFor?)` — the subset actually credited by a search
-  response, deduped. It reads each result's `source` by default; pass a
-  `sourcesFor` extractor (returning `result.sources`) when points merge several
-  feeds.
+Use `contributorsForRecords` from `@openmapx/integration-framework` for envelope
+credits after filtering/deduplication. The mapper retains canonical receipts;
+legacy `DataSourceResult.attributions` remain an explicit compatibility format.
+A discarded duplicate owes no credit unless a field/identity was actually
+merged. Canonical `[]` is authoritative. Missing mixed item provenance cannot
+fall back to every declared source or a provider/domain catalogue.
 
-Returning only the credited subset is what makes the map's attribution strip
-show _just_ the feeds visible right now — browsing EV charging in one city
-credits the feeds with stations there, not every declared registry. The
-frontend layer intersects the manifest's declared sources with the `sourceId`s
-in the response, adds every per-record `result.attributions`, and feeds the
-result into the map's attribution control, which appears while the layer is on
-and clears when it is switched off.
-
-Per-record credits are first-class. An integration that orchestrates other
-providers (such as `fuel`) declares no `dataSources` and credits every result
-and detail through its `attributions` alone. The layer renders those without a
-manifest entry and raises its development warning only for envelope credits
-that neither the manifest declares nor a record carries.
+`DataSourceLayer` publishes per-feature snapshots and registers the actual
+rendered marker/logo/label/context geometry. A query-bbox response is not the
+visible viewport; offscreen, filtered and hidden records do not credit their
+supplier. Successful cached visible data keeps its acquisition-time receipt
+through registry changes and failed refreshes. Detail panels own their selected
+record's displayed-field credits independently of map visibility. See the
+[captured contributor contract](./integration-system.md#captured-contributor-contract)
+and [map contract](./integration-system.md#crediting-an-overlays-sources).
 
 **Freshness.** Every result carries a `Freshness` stamp:
 
@@ -377,9 +378,9 @@ directly instead of using the factory.
    response in Redis keyed by the rounded bbox and a hash of the filters (TTL
    from the provider's `searchCacheTtl`, defaulting to the orchestrator's). A
    popular viewport is not re-fetched on every pan.
-3. `DataSourceLayer` renders `data` as markers, and pushes the envelope's
-   `attributions` into the map's attribution strip — filtered to the sources the
-   response actually credited.
+3. `DataSourceLayer` publishes captured receipts with marker/logo/label/context
+   features and projects the union of actual rendered contributions into the map
+   credits strip. The envelope is not a substitute for individual ownership.
 4. Panning shows a **Search this area** chip; the user refetches for the new
    viewport rather than reloading continuously.
 5. Clicking a marker calls `getDetail`; the place resolver (registered in

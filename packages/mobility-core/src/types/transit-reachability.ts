@@ -1,3 +1,4 @@
+import type { ContributingRecord, FieldContributors } from "../contributors.js";
 import type { TransitStop } from "./transit.js";
 
 export const TRANSIT_WALK_PROFILE = {
@@ -41,12 +42,15 @@ export interface TransitReachabilityCapabilities {
   datasetEpoch: string | null;
 }
 
-export interface TransitReachabilitySeed {
+export interface TransitReachabilitySeed extends ContributingRecord {
+  fieldContributors?: FieldContributors;
+  /** False when timing/walking lineage is absent from the upstream response. */
+  lineageComplete?: boolean;
   lng: number;
   lat: number;
   arrivalSeconds: number;
   /** Retained for the optional reachable-stop diagnostic overlay. */
-  stop?: Pick<TransitStop, "id" | "name" | "modes" | "provider">;
+  stop?: Pick<TransitStop, "id" | "name" | "modes" | "provider" | "contributors">;
 }
 
 export interface TransitReachabilityQuery {
@@ -66,7 +70,8 @@ export interface TransitReachabilityThinning {
   gridMetres: number;
 }
 
-export interface TransitReachabilitySurface {
+export interface TransitReachabilitySurface extends ContributingRecord {
+  lineageComplete?: boolean;
   queryTime: string;
   source: TransitReachabilitySource;
   capabilities: TransitReachabilityCapabilities;
@@ -90,7 +95,8 @@ export interface TransitReachabilityDestinationResult {
   reachable: boolean;
 }
 
-export interface TransitReachabilityCheckResult {
+export interface TransitReachabilityCheckResult extends ContributingRecord {
+  lineageComplete?: boolean;
   queryTime: string;
   results: TransitReachabilityDestinationResult[];
 }

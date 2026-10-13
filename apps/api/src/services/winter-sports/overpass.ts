@@ -8,6 +8,7 @@ import {
   reconstructMultiPolygon,
   reconstructPolygon,
 } from "@openmapx/core";
+import { withContributors } from "@openmapx/mobility-core/contributors";
 import type {
   WinterSportsArea,
   WinterSportsFeaturesResponse,
@@ -156,9 +157,19 @@ export async function fetchWinterSportsFeatures(
 
   if (mainResult.status === "rejected") throw mainResult.reason;
 
-  const pistes = extractPistes(mainResult.value.elements);
-  const lifts = extractLifts(mainResult.value.elements);
-  const areas = areasResult.status === "fulfilled" ? extractAreas(areasResult.value.elements) : [];
+  const mainCredits = mainResult.value.contributors ?? [];
+  const pistes = extractPistes(mainResult.value.elements).map((record) =>
+    withContributors(record, mainCredits),
+  );
+  const lifts = extractLifts(mainResult.value.elements).map((record) =>
+    withContributors(record, mainCredits),
+  );
+  const areas =
+    areasResult.status === "fulfilled"
+      ? extractAreas(areasResult.value.elements).map((record) =>
+          withContributors(record, areasResult.value.contributors ?? []),
+        )
+      : [];
 
   return { pistes, lifts, areas };
 }

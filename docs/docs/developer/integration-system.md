@@ -269,17 +269,17 @@ It is the single home for credit and privacy metadata: the legal pages
 these entries, and a host-side completeness gate blocks a commit if any
 generated table cell would be empty. The `sourceId` is globally unique across all
 integrations, which lets attribution be resolved by source no matter which
-integration declared it. Provider code should not hand-roll `Attribution`
-objects — the framework's `createManifestAttribution()` helper turns
-`dataSources` into the canonical attribution shape so credit metadata lives only
-in the data source list: the static manifest list, or, for a runtime
-integration, the list it supplies with `setDataSources` (see
-[Runtime data sources](#runtime-data-sources)).
+integration declared it. `dataSourceToAttribution()` and the framework's
+contributor helpers convert declared metadata into canonical receipts. Capture
+that metadata when acquiring the data; the current catalogue is not evidence
+that every listed source supplied a result. Runtime integrations supply metadata
+with `setDataSources` (see [Runtime data sources](#runtime-data-sources));
+per-record receipts also retain exact runtime-feed and required notice metadata.
 
 An integration in several domains whose sources serve different ones sets
 `domain` on each source that does not belong to its first domain. The source is
-then listed under that domain's section of the legal pages, and an overlay that
-credits a whole domain credits it only there. The built-in OpenConditions
+then listed under that domain's section of the legal pages. A map overlay
+credits only the sources that supplied its rendered records. The built-in OpenConditions
 integration sets it on every source it supplies at runtime (see below), so its
 fuel feeds are not credited on the traffic overlays.
 
@@ -288,6 +288,92 @@ A provider tags each result with the `sourceId` it came from, and the host maps
 that back to the manifest entry to render the right license. Keep `sourceId`
 values stable; renaming one orphans existing attribution.
 :::
+
+### Captured contributor contract
+
+Canonical `Attribution` is defined in `@openmapx/mobility-core/attribution`:
+
+```ts
+interface Attribution {
+  sourceId: string;
+  name: string;
+  url?: string;
+  spdxLicense?: string;
+  licenseUrl?: string;
+  attributionText?: string;
+  publisher?: { name: string; url?: string };
+  retrievedAt?: string;
+  notes?: string;
+}
+```
+
+A record carries `contributors?: readonly Attribution[]`. A supplied array,
+including `[]`, is authoritative. Only `undefined` means a legacy record without
+a captured receipt. `parseContributors(unknown)` accepts a validated array or
+its JSON encoding and returns a copied snapshot; malformed input returns
+`undefined`, while `"[]"` returns `[]`. Unknown provenance stays unknown. A
+missing exact source/feed identity must never expand to every source in an
+integration or domain, or be guessed from an ID prefix. A proven uniform
+single-supplier acquisition can stamp that supplier at its adapter boundary.
+
+Use `snapshotContributors`, `withContributors`, `contributorsForRecords`, and
+`withFeatureContributors` from `@openmapx/integration-framework` in built-ins.
+The same portable helpers are exported from
+`@openmapx/mobility-core/contributors`. They copy metadata, including publisher
+objects, and preserve distinct notices/URLs/licenses from the same `sourceId`.
+Do not deduplicate by source ID alone. Keep mandatory redistribution notices
+with the supplying dataset. Resolve a catalogue child's explicit canonical
+parent credit identity when the producer contract establishes that relationship;
+never infer the parent from a name or remove its notice.
+
+Capture metadata **before the first await for acquisition**, then stamp returned
+records before caching, validation, deduplication, truncation, or publication.
+For known IDs use `resolveIntegrationContributors(ctx, sourceIds)`; when a
+backend/feed is identified only by the response, capture a resolution catalogue
+with `captureIntegrationContributorCatalogue(ctx, domain)` before awaiting,
+then use `resolveCapturedContributors(catalogue, integrationId, evidence)`.
+That catalogue is a lookup, never a display union. Its single-declared-supplier
+compatibility option requires a proven uniform adapter. Registry reloads and
+new responses must not rewrite old cached record or tile generations.
+
+Road-condition events follow the same contract. Their trusted provider acquisition
+captures exact source or explicit parent receipts before awaiting; paginated
+OpenConditions reads capture each page independently. Source allowlisting and
+routing rights remain separate, live policy checks. GeoJSON, the core API reader
+and derived navigation alerts carry the receipts, including native `[]`.
+Rendering and locale/style republishing use those stored receipts only. Historical
+events without them may use their recorded `attribution` as bounded compatibility;
+a source ID alone cannot reconstruct a publisher or today's required notice.
+
+Compute result-envelope credits from the final retained records. A discarded
+duplicate contributes nothing; an actually merged field or external identity
+keeps its supplier's receipt. Clone cached bases before applying enrichment or
+realtime deltas. DTOs, validation, offline copies, GeoJSON and MVT must retain
+these snapshots. Legacy `attributions` fields remain at named compatibility
+boundaries; normalize their format with `legacyAttributionsToContributors`,
+rather than treating their presence as permission to overwrite `contributors`.
+
+Mixed records also carry `fieldContributors`, keyed by displayed fields such as
+`name`, `externalIds.wikidata`, or a structured container. Use
+`contributorsForRecordFields(record, displayedFields)` to project only fields
+actually displayed. With no field map it uses the record receipt as a legacy
+boundary; with a field map, a missing field stays unknown. An explicit container
+key certifies its child tree, and the nearest child entry overrides it, including
+`[]`. `captureFieldContributors(record, field, targetField?)` copies the entire
+winning container tree when moving or replacing a field; copying just the
+parent would lose authoritative empty children. Facts/photos keep item receipts
+and filtered views union only represented items. A Commons photo also needs its
+own author, license and file-page identity; a Wikimedia publisher receipt cannot
+substitute for that per-file metadata. Recover missing metadata or defer that
+file while keeping valid cached receipts.
+
+Contributor metadata is data, not executable presentation or permission. Host
+renderers use the shared credit HTML builders/sanitizer; names are text, only
+allowed markup and HTTP(S) links survive. Parsing a receipt establishes its
+shape, not HTML safety or a new source's privacy/rights clearance. Static
+upstreams still require manifest source/privacy metadata and source-ID-keyed
+localized disclosures. A producer's selected display lineage must not replace
+its broader rights/audit dependency set.
 
 ### Runtime data sources
 
@@ -669,18 +755,78 @@ imports, path escapes, broad barrels, and dynamic host entry points.
 
 ### Crediting an overlay's sources
 
-The map layer registers its credits, and they appear in the map credits strip
-along the bottom of the map for as long as the layer is drawn. Legends never
-carry credits — they explain colors and symbols only, and can be collapsed away.
+The map layer owns the credits for content actually rendered; a legend's
+visibility never controls that ownership. Trusted built-ins import the focused
+host APIs:
 
-Credit an overlay's own `dataSources` with `useIntegrationAttribution(id,
-visible)`. When the overlay paints data published by _sibling_ integrations
-(a domain orchestrator such as live transit or road conditions), its own
-`dataSources` list is empty, so credit the whole domain instead with
-`useIntegrationDomainAttribution(domain, visible)` — crediting an empty list
-registers nothing. Credits that arrive with a response rather than a manifest
-(`MobilityResult.attributions`) go through `useMapAttributions(key, attributions)`.
-Either way the wording comes from the manifest, never from hand-rolled strings.
+```tsx
+import { useRenderedMapAttributions } from "@/integration-api/overlay/useRenderedMapAttributions";
+import { useRasterMapAttributions } from "@/integration-api/overlay/useRasterMapAttributions";
+import { useMarkerMapAttributions } from "@/integration-api/overlay/useMarkerMapAttributions";
+```
+
+`withFeatureContributors(feature, captured)` writes the immutable receipt as JSON
+in `properties._mapAttributions` for GeoJSON/MVT. Register the actual layer IDs
+with `useRenderedMapAttributions(key, layerIds, visible, options?)`. The shared
+per-map scheduler queries rendered geometry after viewport/filter/zoom/source
+and placement changes, at most four times per second. It preserves visible old
+receipts during refresh/worker lag and does not wait for unrelated sources to
+become idle. Each hook instance owns its registration, even if readable keys
+are reused.
+
+`options.layerContributors` is a captured per-layer lookup only for proven
+uniform supplier layers. A bounded `resolveFeatureContributors(feature)` can
+project captured field ownership for the feature's rendered band. `undefined`
+falls through to the exact serialized feature receipt, then uniform-layer
+receipt; explicit `[]` stops fallback. Never resolve heterogeneous records from
+a whole query response. For example, FLOW casing owns geometry, while a color
+band owns only the fields used for its color/opacity; popup fields are projected
+separately.
+
+Visibility follows evaluated paint and actual rendered channels: stroke-only
+circles, visible labels without icons, and overlapping heatmap kernels can
+contribute. Independently placed icon/text channels require separate query
+layers. Layer min/max zoom governs disappearance; a source's maximum zoom still
+permits overzoom. Partial alpha gradients require split queryable geometry or a
+trusted `complementaryGradientGroups` certificate with the same geometry and
+receipt and complete alpha coverage. Threshold heatmap palettes need a host
+adapter that proves the painted pixels.
+
+DOM markers use `useMarkerMapAttributions(key, element, captured)`, which checks
+painted marker visibility in the map container. Custom GPU/DOM drawing may use
+`options.resolveCustomContributors`, a **trusted host callback** proving the
+currently painted content and returning its captured receipts. It must not be
+a toggle, allocation counter, or response-wide union. Neither callbacks nor
+gradient certificates may come from community payloads.
+
+For raster content, use `useRasterMapAttributions(key, descriptors, visible)`.
+Each descriptor contains `{ layerId, sourceId, contributors }` for the actual
+mounted supplier, captured before its acquisition. Add the source with the
+focused `addAttributedRasterSource` helper **before adding its layer**, and call
+`updateRasterAcquisitionContributors` before changing tiles/URLs for future
+acquisitions. Both live in
+`@/integration-api/overlay/rasterMapContribution`. Opacity-zero preload frames,
+missing-key suppliers and failed first loads owe no active-frame credit;
+retained successful tiles and fading parents keep their original receipt during
+partial failures. The hook combines only content actually sampled by the raster
+renderer, including old and new suppliers during a fade.
+
+The host adapter wraps MapLibre's public `RasterTileSource.loadTile` acquisition
+entry point and observes the texture/loaded commit for each invocation. It also
+uses MapLibre 6.13's retained tile coordinates and evaluated raster paint to
+prove visible content. This engine coupling belongs in the host adapter, not in
+a provider. A MapLibre upgrade needs real-engine tests for initial load/failure,
+concurrent completion order and texture reuse, silent expiry/reload, partial
+failure, eviction/pan, fading parents, overzoom and style reload. A source
+settled event or a successful request in the past cannot prove present pixels.
+
+`useMapAttributions` is a lower-level owner for already projected visible
+popup/custom credits, not a geometry visibility detector. Manifest-toggle
+`useIntegrationAttribution`, whole-domain `useIntegrationDomainAttribution`,
+and current-registry `useSourceAttributions` are deprecated compatibility
+exports and do not satisfy the rendering contract. A static wiring guard checks
+actual focused host calls/imports and excludes test-only mentions; behavioral
+provider/rendering tests must prove the supplied receipts and visible projection.
 
 ### Community presentation boundary
 

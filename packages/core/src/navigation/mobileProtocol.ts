@@ -1,3 +1,5 @@
+import { parseContributors } from "@openmapx/mobility-core/contributors";
+import { parseGeometryContributors } from "@openmapx/mobility-core/geometry-contributors";
 import { z } from "zod";
 
 /**
@@ -121,8 +123,29 @@ export const localeSchema = z.enum(["en", "de"]);
 export const unitsSchema = z.enum(["metric", "imperial"]);
 export const groundModeSchema = z.enum(["driving", "walking", "cycling", "motorcycle"]);
 
+// Canonical receipt validators also copy nested publisher metadata at the wire boundary.
+const contributorSchema = z.unknown().transform((value, ctx) => {
+  const receipts = parseContributors(value);
+  if (receipts !== undefined) return receipts;
+  ctx.addIssue({ code: "custom", message: "Invalid contributor receipts" });
+  return z.NEVER;
+});
+const fieldContributorSchema = z.preprocess(
+  (value) => {
+    if (typeof value !== "string") return value;
+    try {
+      return JSON.parse(value);
+    } catch {
+      return value;
+    }
+  },
+  z.record(z.string(), contributorSchema),
+);
+
 const routeStepSchema = z
   .object({
+    contributors: contributorSchema.optional(),
+    fieldContributors: fieldContributorSchema.optional(),
     instruction: z.string().max(MAX_TEXT_LENGTH).optional(),
     distance: z.number().finite().nonnegative().optional(),
     duration: z.number().finite().nonnegative().optional(),
@@ -133,18 +156,45 @@ const routeStepSchema = z
   // through is intentional, but every one is size-bounded by the byte ceiling.
   .passthrough();
 
+// Legs retain engine-specific fields while their recognized receipt tree is
+// validated and copied just like top-level steps. The same schema covers alternatives.
+const routeLegSchema = z
+  .object({
+    contributors: contributorSchema.optional(),
+    fieldContributors: fieldContributorSchema.optional(),
+    steps: z.array(routeStepSchema).optional(),
+  })
+  .passthrough();
+
 const routeSchema = z
   .object({
+    contributors: contributorSchema.optional(),
+    fieldContributors: fieldContributorSchema.optional(),
+    geometryContributors: z
+      .array(
+        z.object({
+          startIndex: z.number().int().nonnegative(),
+          endIndex: z.number().int().positive(),
+          contributors: contributorSchema,
+        }),
+      )
+      .optional(),
     distance: z.number().finite().nonnegative(),
     duration: z.number().finite().nonnegative(),
     geometry: z.array(lngLatSchema).min(2),
     steps: z.array(routeStepSchema),
-    legs: z.array(z.unknown()).max(MAX_LEGS).optional(),
+    legs: z.array(routeLegSchema).max(MAX_LEGS).optional(),
     mode: z.string().max(64),
     segmentSpeedLimits: z.array(z.number().finite().nonnegative().nullable()).optional(),
     summary: z.string().max(MAX_TEXT_LENGTH).optional(),
   })
-  .passthrough();
+  .passthrough()
+  .refine(
+    (route) =>
+      route.geometryContributors === undefined ||
+      parseGeometryContributors(route.geometryContributors, route.geometry.length) !== undefined,
+    { message: "Invalid geometry contributor spans" },
+  );
 
 export const groundNavigationSettingsSchema = z
   .object({

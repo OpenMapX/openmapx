@@ -4,6 +4,7 @@ import {
   type AmbientOsmRow,
   type AmbientOvertureRow,
   type AmbientPlace,
+  ambientOvertureIdentityEvidence,
   ambientPlaceFromOsm,
   ambientPlaceFromOverture,
   mergeAmbientPlaces,
@@ -43,15 +44,17 @@ export async function planetOsmBatch(
   });
   let overture: AmbientPlace[] = [];
   const links = new Map<string, string>();
+  const identityEvidence = new Map<string, ReturnType<typeof ambientOvertureIdentityEvidence>>();
   if (release) {
     const linked = await tx.unsafe<(OvertureInput & { osm_type: string; osm_id: string })[]>(
-      `SELECT o.gers_id,o.name,ST_X(o.geom) AS longitude,ST_Y(o.geom) AS latitude,o.basic_category,o.taxonomy_primary,o.taxonomy_hierarchy,o.taxonomy_alternates,o.names,o.confidence,o.operating_status,o.sources,o.release,l.osm_type,l.osm_id::TEXT
+      `SELECT o.gers_id,o.name,ST_X(o.geom) AS longitude,ST_Y(o.geom) AS latitude,o.basic_category,o.taxonomy_primary,o.taxonomy_hierarchy,o.taxonomy_alternates,o.names,o.confidence,o.operating_status,o.sources,to_jsonb(o)->'sources_catalogue' AS sources_catalogue,o.release,l.osm_type,l.osm_id::TEXT
     FROM jsonb_to_recordset($1::TEXT::JSONB) AS r(osm_type TEXT,osm_id TEXT)
     JOIN overture_places.poi_conflation_link l ON l.osm_type=r.osm_type AND l.osm_id=r.osm_id::BIGINT AND l.release=$2
     JOIN overture_places.places o USING(gers_id)`,
       [JSON.stringify(rows.map((r) => ({ osm_type: r.osm_type, osm_id: r.osm_id }))), release],
     );
     overture = linked.flatMap((r) => {
+      identityEvidence.set(r.gers_id, ambientOvertureIdentityEvidence(r));
       // Accepted identity survives even when Overture display fields are excluded.
       links.set(`osm:${r.osm_type}/${r.osm_id}`, r.gers_id);
       const p = eligible(r, release);
@@ -63,7 +66,7 @@ export async function planetOsmBatch(
   const excluded = new Set(
     rows.map((r) => `osm:${r.osm_type}/${r.osm_id}`).filter((id) => !eligibleIds.has(id)),
   );
-  const places = mergeAmbientPlaces(osm, overture, links, excluded);
+  const places = mergeAmbientPlaces(osm, overture, links, excluded, identityEvidence);
   const last = rows[rows.length - 1];
   return {
     places,
@@ -90,7 +93,7 @@ export async function planetOvertureBatch(
       linked_osm: AmbientOsmRow | null;
     })[]
   >(
-    `SELECT o.gers_id,o.name,ST_X(o.geom) AS longitude,ST_Y(o.geom) AS latitude,o.basic_category,o.taxonomy_primary,o.taxonomy_hierarchy,o.taxonomy_alternates,o.names,o.confidence,o.operating_status,o.sources,o.release,l.osm_type,l.osm_id::TEXT,p.osm_id::TEXT AS indexed_osm_id,
+    `SELECT o.gers_id,o.name,ST_X(o.geom) AS longitude,ST_Y(o.geom) AS latitude,o.basic_category,o.taxonomy_primary,o.taxonomy_hierarchy,o.taxonomy_alternates,o.names,o.confidence,o.operating_status,o.sources,to_jsonb(o)->'sources_catalogue' AS sources_catalogue,o.release,l.osm_type,l.osm_id::TEXT,p.osm_id::TEXT AS indexed_osm_id,
    CASE WHEN raw.osm_id IS NULL THEN NULL ELSE jsonb_build_object('osm_type',raw.osm_type,'osm_id',raw.osm_id::TEXT,'name',raw.name,'lng',raw.lng,'lat',raw.lat,'category',raw.category,'tags',coalesce(raw.tags,'{}'::JSONB),'importance',0.5) END AS linked_osm
    FROM (SELECT * FROM overture_places.places WHERE gers_id>$1 ORDER BY gers_id LIMIT ${AMBIENT_LIMITS.countryBatch}) o
    LEFT JOIN overture_places.poi_conflation_link l ON l.gers_id=o.gers_id AND l.release=$2

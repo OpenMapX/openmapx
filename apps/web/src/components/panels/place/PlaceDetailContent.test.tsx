@@ -24,16 +24,19 @@ vi.mock("@openmapx/mangrove-react", () => ({
 // untouched — in particular firstBrandIdentity, which PlaceDetailContent
 // itself now calls to resolve a place's brand identity from its osmTags.
 const mockUseBrandDetail = vi.fn();
+const mockUseBrandLogoAttribution = vi.fn();
 vi.mock("@openmapx/core", async () => {
   const actual = await vi.importActual<typeof import("@openmapx/core")>("@openmapx/core");
   return {
     ...actual,
     useBrandDetail: (qid: string | null) => mockUseBrandDetail(qid),
+    useBrandLogoAttribution: () => mockUseBrandLogoAttribution(),
   };
 });
 
 beforeEach(() => {
   mockUseBrandDetail.mockReturnValue({ data: undefined });
+  mockUseBrandLogoAttribution.mockReturnValue({ data: undefined });
 });
 
 vi.mock("./PlacePhotoGallery", () => ({
@@ -434,6 +437,17 @@ describe("PlaceDetailContent brand header", () => {
   // brand:>network:>operator: precedence the pin and the list row use.
   it("shows a logo for a place whose only identity is operator:wikidata (no Overture place.brand)", () => {
     mockUseBrandDetail.mockReturnValue({ data: { logoFile: "Q-Park logo.svg" } });
+    mockUseBrandLogoAttribution.mockReturnValue({
+      data: {
+        logoFile: "Q-Park logo.svg",
+        url: "https://upload.wikimedia.org/wikipedia/commons/a/ab/Logo.svg",
+        source: "wikimedia-commons",
+        author: "Logo creator",
+        license: "CC BY 4.0",
+        licenseUrl: "https://creativecommons.org/licenses/by/4.0/",
+        pageUrl: "https://commons.wikimedia.org/wiki/File:Logo.svg",
+      },
+    });
     const osmPlace = {
       id: "p-op",
       name: "Q-Park Neumarkt",
@@ -448,6 +462,17 @@ describe("PlaceDetailContent brand header", () => {
 
   it("shows a logo for a place whose only identity is network:wikidata (EV charging)", () => {
     mockUseBrandDetail.mockReturnValue({ data: { logoFile: "Ionity logo.svg" } });
+    mockUseBrandLogoAttribution.mockReturnValue({
+      data: {
+        logoFile: "Ionity logo.svg",
+        url: "https://upload.wikimedia.org/wikipedia/commons/a/ab/Logo.svg",
+        source: "wikimedia-commons",
+        author: "Logo creator",
+        license: "CC BY 4.0",
+        licenseUrl: "https://creativecommons.org/licenses/by/4.0/",
+        pageUrl: "https://commons.wikimedia.org/wiki/File:Logo.svg",
+      },
+    });
     const osmPlace = {
       id: "p-net",
       name: "Ionity Charger",

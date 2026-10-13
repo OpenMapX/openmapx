@@ -222,3 +222,32 @@ describe("elevationService", () => {
     });
   });
 });
+
+it.each(["https://api.stadiamaps.com", "http://valhalla.internal:8002"])(
+  "captures only the known height acquisition supplier for %s",
+  async (baseUrl) => {
+    const endpoint = await import("../../utils/valhalla-endpoint.js");
+    vi.spyOn(endpoint, "valhallaEndpoint").mockReturnValue(`${baseUrl}/height`);
+    let resolve!: (value: Response) => void;
+    mockFetch.mockImplementation(
+      () =>
+        new Promise((done) => {
+          resolve = done;
+        }),
+    );
+    const { elevationService } = await import("../elevation.service.js");
+    const pending = elevationService.getElevation(sampleCoords);
+    vi.mocked(endpoint.valhallaEndpoint).mockReturnValue("https://api-eu.stadiamaps.com/height");
+    resolve(mockOk(makeHeightResponse(sampleRangeHeight)));
+    const result = await pending;
+    expect(result?.contributors?.map((item) => item.sourceId)).toEqual(
+      new URL(baseUrl).hostname === "api.stadiamaps.com" ? ["stadia-maps"] : [],
+    );
+    expect(result?.contributorCoverage).toBe("partial");
+    expect(
+      result?.contributors?.some(
+        (item) => item.sourceId === "openstreetmap" || item.spdxLicense === "MIT",
+      ),
+    ).toBe(false);
+  },
+);

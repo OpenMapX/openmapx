@@ -11,11 +11,15 @@ import {
   useRouteStops,
   useTransitRoute,
 } from "@openmapx/core";
+import {
+  contributorsForField,
+  contributorsForRecords,
+  snapshotContributors,
+} from "@openmapx/mobility-core/contributors";
 import type { MergedRoute, TransitRoute, TransitStop } from "@openmapx/mobility-core/transit";
 import { useTranslations } from "next-intl";
 import { useMemo } from "react";
 import { AttributionStrip } from "@/components/ui/AttributionStrip";
-import { useAttributionFromHooks } from "@/integration-api/overlay/useAttributionFromHooks";
 import { PRIMARY_BLUE } from "@/integration-api/runtime/theme";
 import { PanelDetailHeader } from "../shared/PanelDetailHeader";
 import { AlertsBanner } from "./AlertsBanner";
@@ -76,7 +80,21 @@ export function LineDetail({
   // Attribute only the line's displayed data (route, stop sequence, alerts).
   // linkedStopsQuery is plumbing for hintStopId and carries the unfiltered
   // stop-search fan-out, so it is intentionally excluded here.
-  const mergedAttributions = useAttributionFromHooks(routeQuery, stopsQuery, alertsQuery);
+  const mergedAttributions = snapshotContributors(
+    route
+      ? snapshotContributors(
+          ...[
+            "shortName",
+            "longName",
+            "mode",
+            "color",
+            "textColor",
+            ...(route.operatorName ? ["operatorName"] : []),
+          ].map((field) => contributorsForField(route, field)),
+        )
+      : [],
+    contributorsForRecords([...(stops ?? []), ...(alerts ?? [])]),
+  );
 
   const lineColor = routeColor(route, PRIMARY_BLUE);
 
@@ -160,6 +178,21 @@ export function LineDetail({
                   onClick={() => {
                     if (!onSelectStop || !currentStop) return;
                     onSelectStop({
+                      contributors: snapshotContributors(
+                        s.contributors ?? [],
+                        route
+                          ? contributorsForField(route, "mode")
+                          : (currentStop.contributors ?? []),
+                      ),
+                      fieldContributors: {
+                        id: contributorsForField(s, "id"),
+                        name: contributorsForField(s, "name"),
+                        lat: contributorsForField(s, "lat"),
+                        lng: contributorsForField(s, "lng"),
+                        modes: route
+                          ? contributorsForField(route, "mode")
+                          : contributorsForField(currentStop, "modes"),
+                      },
                       id: s.id,
                       name: s.name,
                       lat: s.lat,

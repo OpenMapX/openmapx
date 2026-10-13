@@ -102,7 +102,7 @@ function fixture(): RentalsResponse {
         formFactors: ["BICYCLE", "SCOOTER_STANDING"],
         vehicleTypesAvailable: { "bike/type:ä": 2, scooter: 7 },
         vehicleDocksAvailable: { "bike/type:ä": 0, scooter: 4 },
-        stationArea: polygon,
+        stationArea: structuredClone(polygon),
         bbox: [13.36, 52.52, 13.38, 52.53],
       },
     ],
@@ -146,7 +146,7 @@ function fixture(): RentalsResponse {
         name: "Parking area",
         z: 7,
         bbox: [13.36, 52.51, 13.42, 52.54],
-        area: polygon,
+        area: structuredClone(polygon),
         rules: [
           {
             vehicleTypeIdxs: [0],
@@ -374,4 +374,20 @@ describe("MOTIS rental request fallback", () => {
     expect(snapshot.completeness.warnings).toContain("HTTP 400");
     expect(calls).toHaveLength(1);
   });
+});
+
+it("captures known Transitous branch for stations, vehicles and station-area geometry without guessing unknown networks", () => {
+  const receipt = {
+    sourceId: "transitous",
+    name: "Transitous",
+    attributionText: "Original transit credit",
+  };
+  const mapped = mapMotisRentalSnapshot(fixture(), "transitous", undefined, [], (ids) =>
+    ids.includes("transitous") ? [receipt] : [],
+  );
+  expect(mapped.stations[0].sources).toContain("transitous");
+  expect(mapped.stations[0].contributors).toEqual([receipt]);
+  expect(mapped.vehicles[0].contributors).toEqual([receipt]);
+  expect(mapped.providers[0].contributors).toEqual([receipt]);
+  expect(mapped.zones[0].contributors).toEqual([receipt]);
 });

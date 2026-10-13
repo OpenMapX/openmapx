@@ -49,57 +49,62 @@ vi.mock("next-intl", () => ({
   },
 }));
 
+const secondaryJourney = vi.hoisted(() => ({ current: null as Record<string, unknown> | null }));
+
 vi.mock("@openmapx/core", () => ({
   routeColor: (route?: { color?: string | null; mode?: string }, fallback?: string) =>
     route?.color
       ? `#${String(route.color).replace(/^#/, "")}`
       : ((route?.mode === "rail" ? "#0055aa" : undefined) ?? fallback),
   useRouteAlerts: () => ({ data: [], attributions: [] }),
-  useVehicleJourney: () => ({
-    attributions: [
-      {
-        sourceId: "otdch",
-        name: "OpenTransportData Switzerland",
-        url: "https://opentransportdata.swiss",
-        spdxLicense: "Terms",
-      },
-    ],
-    data: {
-      serviceInfo: {
-        operatorName: "Swiss Federal Railways SBB",
-        trainNumber: "IC6-419",
-        operatorParticipantRef: "SBBP",
-        occupancySource: "opentransportdata.swiss/occupancy-forecast",
-      },
-      formationDetails: {
-        shortFormation: "A-B",
-        vehicleCount: 2,
-        seats: 520,
-        operatorCode: "SBBP",
-        vehicles: [
-          {
-            id: "vehicle-1",
-            typeCode: "IC2000",
-            order: 1,
-            seatsFirstClass: 80,
-            seatsSecondClass: 180,
-            bikeSpaces: 4,
-            wheelchairSpaces: 2,
-            hasAirConditioning: true,
-            hasLowFloorAccess: true,
-            hasToilet: true,
-          },
+  useVehicleJourney: () =>
+    secondaryJourney.current ?? {
+      attributions: [
+        {
+          sourceId: "otdch",
+          name: "OpenTransportData Switzerland",
+          url: "https://opentransportdata.swiss",
+          spdxLicense: "Terms",
+        },
+      ],
+      data: {
+        contributors: [{ sourceId: "otdch", name: "OpenTransportData Switzerland" }],
+        serviceInfo: {
+          contributors: [{ sourceId: "otdch", name: "OpenTransportData Switzerland" }],
+          operatorName: "Swiss Federal Railways SBB",
+          trainNumber: "IC6-419",
+          operatorParticipantRef: "SBBP",
+          occupancySource: "opentransportdata.swiss/occupancy-forecast",
+        },
+        formationDetails: {
+          shortFormation: "A-B",
+          vehicleCount: 2,
+          seats: 520,
+          operatorCode: "SBBP",
+          vehicles: [
+            {
+              id: "vehicle-1",
+              typeCode: "IC2000",
+              order: 1,
+              seatsFirstClass: 80,
+              seatsSecondClass: 180,
+              bikeSpaces: 4,
+              wheelchairSpaces: 2,
+              hasAirConditioning: true,
+              hasLowFloorAccess: true,
+              hasToilet: true,
+            },
+          ],
+        },
+        stops: [
+          { name: "Bern", scheduledDeparture: "2025-02-03T14:47:00Z", platform: "10" },
+          { name: "Thun", scheduledArrival: "2025-02-03T15:20:00Z", platform: "3" },
         ],
       },
-      stops: [
-        { name: "Bern", scheduledDeparture: "2025-02-03T14:47:00Z", platform: "10" },
-        { name: "Thun", scheduledArrival: "2025-02-03T15:20:00Z", platform: "3" },
-      ],
+      isError: false,
+      isLoading: false,
+      refetch: vi.fn(),
     },
-    isError: false,
-    isLoading: false,
-    refetch: vi.fn(),
-  }),
 }));
 
 vi.mock("@/components/ui/AttributionStrip", () => ({
@@ -186,4 +191,43 @@ describe("TripDetailView", () => {
     expect(markup).toContain("Thun");
     expect(markup).toContain("OpenTransportData Switzerland");
   });
+});
+
+it("credits secondary forecast metadata with an empty parent and envelope receipt", () => {
+  secondaryJourney.current = {
+    attributions: [],
+    data: {
+      contributors: [],
+      serviceInfo: {
+        occupancy: "high",
+        occupancySource: "opentransportdata.swiss/occupancy-forecast",
+        contributors: [
+          { sourceId: "forecast", name: "Original forecast", notes: "Original notice" },
+        ],
+      },
+      stops: [],
+    },
+    isLoading: false,
+    isError: false,
+  };
+  try {
+    const markup = renderToStaticMarkup(
+      <TripDetailView
+        departure={{
+          contributors: [],
+          tripId: "otdch:trip",
+          providers: ["otdch"],
+          route: { id: "otdch:route", shortName: "IC6", longName: "Thun", mode: "rail" },
+          headsign: "Thun",
+          scheduledAt: "2025-02-03T14:47:00Z",
+        }}
+        onBack={() => {}}
+      />,
+    );
+    expect(markup).toContain("Forecast");
+    expect(markup).toContain("Original forecast");
+    expect(markup).not.toContain("OpenTransportData Switzerland");
+  } finally {
+    secondaryJourney.current = null;
+  }
 });

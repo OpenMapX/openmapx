@@ -402,3 +402,30 @@ describe("indexed route work", () => {
     }
   });
 });
+
+describe("rendered band contributor snapshots", () => {
+  const a = { sourceId: "a", name: "Ratio A" };
+  const b = { sourceId: "b", name: "LOS B" };
+  it("captures only the color field on static, alternate and current bands", () => {
+    const bands = [
+      { ...span(100, 500), speedRatio: 0.5, fieldContributors: { ratio: [a], los: [b] } },
+    ];
+    const active: BandRoute = { id: "active", geometry: ROUTE, variant: "active" };
+    const alt: BandRoute = { id: "alt", geometry: ROUTE, variant: "alt" };
+    const staticFeatures = buildStaticSpanFeatures([active, alt], {
+      active: bands,
+      alt: bands,
+    }).features;
+    const current = buildCurrentSpanFeatures(active, bands, 250);
+    expect(
+      [...staticFeatures, ...current].map((feature) =>
+        JSON.parse(feature.properties?._mapAttributions),
+      ),
+    ).toEqual([[a], [a], [a]]);
+    expect(
+      buildStaticSpanFeatures([active], { active: [{ ...bands[0], speedRatio: undefined }] })
+        .features[0].properties?._mapAttributions,
+    ).toBe(JSON.stringify([b]));
+    expect(buildCurrentSpanFeatures(active, bands, 600)).toEqual([]);
+  });
+});

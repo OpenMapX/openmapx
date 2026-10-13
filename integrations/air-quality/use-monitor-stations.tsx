@@ -7,9 +7,11 @@ import type {
   Pollutant,
 } from "@openmapx/air-quality";
 import { apiClient, isApiClientError, useDebouncedCallback } from "@openmapx/core";
+import { captureHazardFeatures } from "@openmapx/integration-framework";
 import { useCallback, useEffect, useRef } from "react";
 import { useMap } from "@/integration-api/map/MapContext";
 import { useGeoJsonSourceDataBridge } from "@/integration-api/map/useGeoJsonSourceDataBridge";
+import { useContributorResolver } from "@/integration-api/overlay/useContributorResolver";
 
 import { useAirQualityStore } from "./store";
 
@@ -93,6 +95,7 @@ export function useMonitorStations(): void {
     styleVersion,
     visible: active,
   });
+  const resolveContributors = useContributorResolver();
   const previousPollutantRef = useRef(pollutant);
 
   useEffect(() => {
@@ -144,7 +147,11 @@ export function useMonitorStations(): void {
       publish([
         {
           sourceId: MONITOR_SOURCE_ID,
-          data: { type: "FeatureCollection", features: snapshot.features },
+          data: captureHazardFeatures(
+            { type: "FeatureCollection" as const, features: snapshot.features },
+            resolveContributors,
+            (feature) => feature.properties.sourceIds,
+          ),
         },
       ]);
       if (!request.isCurrent()) return;
@@ -167,6 +174,7 @@ export function useMonitorStations(): void {
     mapRef,
     pollutant,
     publish,
+    resolveContributors,
     setLoading,
     setRequestError,
     setSnapshotStatus,

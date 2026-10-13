@@ -1,8 +1,10 @@
 import {
+  AMBIENT_FORMAT_VERSION,
   AMBIENT_PLANET_REGION,
   AMBIENT_POLICY_VERSION,
   type AmbientManifest,
   type AmbientRegion,
+  ambientHasLegacyAttribution,
   validateAmbientRegion,
 } from "@openmapx/core/ambient-places";
 import postgres from "postgres";
@@ -87,6 +89,7 @@ async function planetTransaction<T>(
 }
 const initial: PlanetCheckpoint = {
   phase: "osm",
+  legacyAttribution: false,
   osmType: "",
   osmId: "0",
   gers: "",
@@ -117,7 +120,8 @@ export async function buildPlanetPlaces(
     await planetTransaction(connection, pid, async (tx) => {
       const generation = await prepareAmbientGeneration(tx);
       manifest = {
-        version: 1,
+        version: AMBIENT_FORMAT_VERSION,
+        attributionPrecision: "captured-fields",
         policyVersion: AMBIENT_POLICY_VERSION,
         generation,
         publishedAt: new Date().toISOString(),
@@ -165,6 +169,8 @@ export async function resumePlanetPlaces(
     );
     if (!stage || stage.publication_status !== "staging")
       throw new Error("Only an unpublished planet candidate can be resumed");
+    if (stage.manifest.version !== AMBIENT_FORMAT_VERSION)
+      throw new Error("Planet attribution format changed; discard and rebuild the candidate");
     if (stage.manifest.policyVersion !== AMBIENT_POLICY_VERSION)
       throw new Error("Planet policy changed; discard and rebuild the candidate");
     const source = await capturePlanetSources(connection);
@@ -219,6 +225,8 @@ async function runPlanet(
             : await planetOvertureBatch(tx, checkpoint, manifest.sources.overture!.release);
         const next = {
           ...batch.checkpoint,
+          legacyAttribution:
+            checkpoint.legacyAttribution || ambientHasLegacyAttribution(batch.places),
           processed: checkpoint.processed + batch.rows,
           batches: checkpoint.batches + (batch.rows ? 1 : 0),
           placeCount: checkpoint.placeCount + batch.places.length,
@@ -252,6 +260,7 @@ async function runPlanet(
     await connection.unsafe(`ANALYZE ${table}`);
     manifest = {
       ...manifest,
+      attributionPrecision: checkpoint.legacyAttribution ? "legacy-aggregate" : "captured-fields",
       placeCount: checkpoint.placeCount,
       publishedAt: new Date().toISOString(),
       sources: {

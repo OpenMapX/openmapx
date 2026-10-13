@@ -1,5 +1,6 @@
 "use client";
 
+import { captureHazardFeatures } from "@openmapx/integration-framework";
 import type { MapLayerMouseEvent } from "maplibre-gl";
 import * as maplibregl from "maplibre-gl";
 import { useLocale, useTranslations } from "next-intl";
@@ -9,6 +10,8 @@ import { addLayerInSlot, unregisterLayerSlot } from "@/integration-api/map/layer
 import { useMap } from "@/integration-api/map/MapContext";
 import { getMapClickOwner } from "@/integration-api/map/mapClickOwnership";
 import { useGeoJsonSourceDataBridge } from "@/integration-api/map/useGeoJsonSourceDataBridge";
+import { useContributorResolver } from "@/integration-api/overlay/useContributorResolver";
+import { useRenderedMapAttributions } from "@/integration-api/overlay/useRenderedMapAttributions";
 import { useEnv } from "@/integration-api/runtime/EnvProvider";
 import type { WildfirePopupController, WildfirePopupLease } from "../popup-controller";
 import {
@@ -208,6 +211,8 @@ export function NifcPerimeterLayer({ active, popupController }: NifcPerimeterLay
   const env = useEnv();
   const locale = useLocale();
   const translate = useTranslations("wildfires") as WildfirePopupTranslate;
+  const resolveContributors = useContributorResolver();
+  useRenderedMapAttributions("wildfires-nifc", [NIFC_FILL, NIFC_LINE], active);
   const bridge = useGeoJsonSourceDataBridge({
     mapRef: mapContext.mapRef,
     mapReady: mapContext.mapReady,
@@ -216,9 +221,16 @@ export function NifcPerimeterLayer({ active, popupController }: NifcPerimeterLay
   });
   const publish = useCallback(
     (data: WildfireFeatureCollection) => {
-      bridge.publish([{ sourceId: NIFC_SOURCE, data }]);
+      const captured = captureHazardFeatures(data, resolveContributors, (feature) =>
+        Array.isArray(feature.properties?.sources)
+          ? feature.properties.sources
+          : typeof feature.properties?.provider === "string"
+            ? [feature.properties.provider]
+            : [],
+      );
+      bridge.publish([{ sourceId: NIFC_SOURCE, data: captured }]);
     },
-    [bridge.publish],
+    [bridge.publish, resolveContributors],
   );
   const clear = useCallback(() => {
     bridge.reset([{ sourceId: NIFC_SOURCE, data: EMPTY_COLLECTION }]);

@@ -1,4 +1,4 @@
-import type { PlacePhoto } from "@openmapx/core";
+import { type PlacePhoto, parseCommonsPage } from "@openmapx/core";
 import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { NextIntlClientProvider } from "next-intl";
@@ -36,6 +36,69 @@ function renderHero(
 }
 
 describe("PlacePhotoHero", () => {
+  it("renders the metadata artist's ampersand as the exact visible credit", () => {
+    const photo = parseCommonsPage({
+      title: "File:Artist.jpg",
+      imageinfo: [
+        {
+          url: "https://upload.wikimedia.org/wikipedia/commons/a/ab/Artist.jpg",
+          mime: "image/jpeg",
+          extmetadata: {
+            Artist: { value: "One &amp; Co" },
+            LicenseShortName: { value: "CC BY 4.0" },
+            LicenseUrl: { value: "https://creativecommons.org/licenses/by/4.0/" },
+          },
+        },
+      ],
+    });
+    if (!photo) throw new Error("complete metadata should parse");
+    const { container } = renderHero([photo]);
+    expect(container.textContent).toContain("One & Co");
+    expect(container.textContent).not.toContain("&amp;");
+    expect(screen.getByRole("link", { name: "CC BY 4.0" })).toHaveAttribute(
+      "href",
+      photo.licenseUrl,
+    );
+  });
+  it("defers incomplete Commons bytes even when labeled as Wikipedia", () => {
+    expect(
+      renderHero([
+        {
+          url: "https://upload.wikimedia.org/wikipedia/commons/a/ab/Photo.jpg",
+          source: "wikipedia",
+        },
+      ]).container.firstChild,
+    ).toBeNull();
+  });
+  it("renders the captured file credit despite later catalogue changes", () => {
+    const photo = {
+      url: "https://upload.wikimedia.org/wikipedia/commons/a/ab/Photo.jpg",
+      source: "wikimedia-commons",
+      author: "Captured artist",
+      license: "CC BY 4.0",
+      licenseUrl: "https://creativecommons.org/licenses/by/4.0/",
+      pageUrl: "https://commons.wikimedia.org/wiki/File:Photo.jpg",
+      attributionText: "Mandatory notice",
+      attributionLinks: [{ label: "Required credit link", url: "https://example.org/credit" }],
+      contributors: [
+        {
+          sourceId: "wikimedia-commons",
+          name: "Captured Commons",
+          url: "https://commons.wikimedia.org/wiki/File:Photo.jpg",
+        },
+      ],
+    };
+    renderHero([photo]);
+    expect(screen.getByText("Mandatory notice", { exact: false })).toBeVisible();
+    expect(screen.getByRole("link", { name: "Captured Commons" })).toHaveAttribute(
+      "href",
+      photo.pageUrl,
+    );
+    expect(screen.getByRole("link", { name: "Required credit link" })).toHaveAttribute(
+      "href",
+      "https://example.org/credit",
+    );
+  });
   it("omits the hero without a usable first photo", () => {
     expect(renderHero([]).container.firstChild).toBeNull();
     expect(renderHero([{ ...firstPhoto, url: "javascript:bad" }]).container.firstChild).toBeNull();
@@ -89,4 +152,36 @@ describe("PlacePhotoHero", () => {
     fireEvent.error(screen.getByRole("img", { name: "Test Place" }));
     expect(onPhotoError).toHaveBeenCalledWith(firstPhoto.url);
   });
+});
+
+it("renders decoded creator and permission query parameters in the file caption", () => {
+  const photo = parseCommonsPage({
+    title: "File:Links.jpg",
+    imageinfo: [
+      {
+        url: "https://upload.wikimedia.org/wikipedia/commons/a/ab/Links.jpg",
+        mime: "image/jpeg",
+        extmetadata: {
+          Artist: { value: '<a href="https://creator.example/?id=7&amp;view=full">Creator</a>' },
+          Permission: {
+            value: '<a href="https://permission.example/?id=7&amp;view=full">permission record</a>',
+          },
+          LicenseShortName: { value: "CC BY 4.0" },
+          LicenseUrl: { value: "https://creativecommons.org/licenses/by/4.0/" },
+        },
+      },
+    ],
+  });
+  if (!photo) throw new Error("complete file should parse");
+  renderHero([photo]);
+  expect(
+    new URL(
+      screen.getByRole("link", { name: "Creator" }).getAttribute("href") ?? "",
+    ).searchParams.get("view"),
+  ).toBe("full");
+  expect(
+    new URL(
+      screen.getByRole("link", { name: "permission record" }).getAttribute("href") ?? "",
+    ).searchParams.get("view"),
+  ).toBe("full");
 });

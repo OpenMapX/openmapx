@@ -1,4 +1,5 @@
 import {
+  captureTransitContributors,
   createManifestAttribution,
   type IntegrationContext,
 } from "@openmapx/integration-framework";
@@ -26,7 +27,6 @@ function buildAttributionFor(
   },
 ): Attribution[] {
   return [
-    ...attribution.all(),
     {
       sourceId: `dyn:${entryId}`,
       name: entryAttribution.name,
@@ -68,11 +68,20 @@ export async function setup(ctx: IntegrationContext): Promise<void> {
 
     const entryAttribution = entry.attribution
       ? buildAttributionFor(entry.id, entry.attribution)
-      : attribution.all();
+      : [];
 
-    const wrap = <T>(data: T) => withAttribution(data, entryAttribution, freshnessNow());
+    const wrap = <T>(data: T) =>
+      withAttribution(
+        captureTransitContributors(data, entryAttribution),
+        entryAttribution,
+        freshnessNow(),
+      );
     const wrapRT = <T>(data: T) =>
-      withAttribution(data, entryAttribution, freshnessNow({ hasRealtimeData: true }));
+      withAttribution(
+        captureTransitContributors(data, entryAttribution),
+        entryAttribution,
+        freshnessNow({ hasRealtimeData: true }),
+      );
 
     ctx.registerTransitProvider({
       id: `dyn:${entry.id}`,

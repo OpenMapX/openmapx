@@ -1,6 +1,15 @@
-import type { IntegrationContext } from "@openmapx/integration-framework";
+import {
+  type IntegrationContext,
+  resolveIntegrationContributors,
+  withKnowledgeContributors,
+} from "@openmapx/integration-framework";
 import { wikipediaSource } from "./provider.js";
 
 export function setup(ctx: IntegrationContext): void {
-  ctx.registerKnowledgeProvider(wikipediaSource);
+  ctx.registerKnowledgeProvider(
+    withKnowledgeContributors(wikipediaSource, () => {
+      const uniform = resolveIntegrationContributors(ctx, ["wikipedia"]);
+      return { uniform };
+    }),
+  );
 }

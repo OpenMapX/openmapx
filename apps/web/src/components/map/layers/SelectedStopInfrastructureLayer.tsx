@@ -1,6 +1,7 @@
 "use client";
 
 import { usePlaceStopInfrastructure, usePlaceStore } from "@openmapx/core";
+import { serializeContributors } from "@openmapx/mobility-core/contributors";
 import type {
   TransitGeoJsonMultiPolygon,
   TransitGeoJsonPolygon,
@@ -10,6 +11,7 @@ import type { Map as MaplibreMap } from "maplibre-gl";
 import { useEffect, useMemo, useRef } from "react";
 import { addLayerInSlot, unregisterLayerSlot } from "@/integration-api/map/layerStack";
 import { useMap } from "@/integration-api/map/MapContext";
+import { useRenderedMapAttributions } from "@/integration-api/overlay/useRenderedMapAttributions";
 
 const STOP_AREA_SOURCE_ID = "selected-stop-area-source";
 const STOP_AREA_FILL_LAYER_ID = "selected-stop-area-fill";
@@ -80,6 +82,11 @@ function stopAreaFeature(
           {
             type: "Feature",
             properties: {
+              _mapAttributions: serializeContributors(
+                infrastructure.geometry?.stopArea?.contributors ??
+                  infrastructure.contributors ??
+                  [],
+              ),
               stopId: infrastructure.stopId,
             },
             geometry,
@@ -108,6 +115,9 @@ function fareZoneFeature(
       {
         type: "Feature",
         properties: {
+          _mapAttributions: serializeContributors(
+            zone.geometry.contributors ?? zone.contributors ?? infrastructure.contributors ?? [],
+          ),
           fareZoneId: zone.fareZoneId,
         },
         geometry: zone.geometry,
@@ -126,6 +136,7 @@ function platformFeatures(
       infrastructure?.platforms.map((platform) => ({
         type: "Feature" as const,
         properties: {
+          _mapAttributions: serializeContributors(platform.contributors ?? []),
           id: platform.id,
           label: platform.publicCode ?? platform.privateCode ?? "",
           isFocused: platform.id === focusedPlatformId,
@@ -148,6 +159,7 @@ function parkingFeatures(
       infrastructure?.parking.map((parking) => ({
         type: "Feature" as const,
         properties: {
+          _mapAttributions: serializeContributors(parking.contributors ?? []),
           id: parking.id,
           isFocused: parking.id === focusedParkingId,
         },
@@ -167,6 +179,24 @@ export function SelectedStopInfrastructureLayer() {
   const revealKeyRef = useRef<string | null>(null);
 
   const isStopMode = selectedPlace?.rawCategory === "transit_stop";
+  useRenderedMapAttributions(
+    "transit-stop-infrastructure",
+    [
+      STOP_AREA_FILL_LAYER_ID,
+      STOP_AREA_OUTLINE_LAYER_ID,
+      FARE_ZONE_FILL_LAYER_ID,
+      FARE_ZONE_OUTLINE_LAYER_ID,
+      PLATFORM_LAYER_ID,
+      PARKING_LAYER_ID,
+    ],
+    Boolean(isStopMode),
+  );
+  useRenderedMapAttributions(
+    "transit-stop-platform-labels",
+    [PLATFORM_LABEL_LAYER_ID],
+    Boolean(isStopMode),
+  );
+
   const focusedPlatformId = transitMapFocus?.kind === "platform" ? transitMapFocus.id : null;
   const focusedFareZoneId = transitMapFocus?.kind === "fare-zone" ? transitMapFocus.id : null;
   const focusedParkingId = transitMapFocus?.kind === "parking" ? transitMapFocus.id : null;

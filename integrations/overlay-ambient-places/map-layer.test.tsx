@@ -59,8 +59,8 @@ vi.mock("@/integration-api/map/useMapLayerGroup", () => ({
     test.group = group;
   },
 }));
-vi.mock("@/integration-api/overlay/useIntegrationAttribution", () => ({
-  useSourceAttributions: test.attribution,
+vi.mock("@/integration-api/overlay/useRenderedMapAttributions", () => ({
+  useRenderedMapAttributions: test.attribution,
 }));
 vi.mock("@/integration-api/runtime/EnvProvider", () => ({
   useEnv: () => ({ apiUrl: "http://fixture" }),
@@ -384,15 +384,18 @@ describe("ambient generation lifecycle", () => {
     // Landmarks use a separate symbol partition with six candidate positions.
     expect(positions(2559)).toHaveLength(12);
 
-    expect(test.attribution).toHaveBeenLastCalledWith("overlay-ambient-places", [
-      "osm-ambient-places",
-    ]);
+    expect(test.attribution).toHaveBeenLastCalledWith(
+      "overlay-ambient-places",
+      expect.arrayContaining(["ambient-places-labels"]),
+      true,
+      expect.objectContaining({ resolveFeatureContributors: expect.any(Function) }),
+    );
     act(() => useAmbientPlacesStore.setState({ layerVisible: false }));
     await waitFor(() => expect(test.group).toBeNull());
     view.unmount();
     expect(test.map.off).toHaveBeenCalled();
   });
-  it("keeps supported contributor credits for a combined publication and clears them on hide", async () => {
+  it("registers combined publication for rendered receipt selection and disables it on hide", async () => {
     const combined = {
       ...manifest,
       sources: {
@@ -411,12 +414,9 @@ describe("ambient generation lifecycle", () => {
     );
     render(<AmbientPlacesLayer />);
     await waitFor(() => expect(test.group).not.toBeNull());
-    const sources = test.attribution.mock.lastCall?.[1] as string[];
-    expect(sources).toEqual(
-      expect.arrayContaining(["osm-ambient-places", "overture", "foursquare"]),
-    );
+    expect(test.attribution.mock.lastCall?.[2]).toBe(true);
     act(() => useAmbientPlacesStore.setState({ layerVisible: false }));
-    expect(test.attribution).toHaveBeenLastCalledWith("overlay-ambient-places", []);
+    expect(test.attribution.mock.lastCall?.[2]).toBe(false);
   });
   it("ignores late discovery after disable and leaves no-data browsing intact", async () => {
     let resolve!: (value: unknown) => void;

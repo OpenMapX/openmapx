@@ -9,8 +9,10 @@ import {
   isSafeHttpUrl,
   type OsmIdentity,
   validObservedAt,
+  withBrandingContributors,
 } from "@openmapx/core";
 import { parseOpeningHours } from "@openmapx/core/server";
+import { siteAttributions } from "@openmapx/integration-framework";
 import {
   type I18nToken,
   money,
@@ -212,7 +214,8 @@ export function mapFuelStationToResult(station: FuelStation): DataSourceResult {
     ...fallbackNameOf(station),
     coordinates: station.coordinates,
     source: station.sources[0] ?? "unknown",
-    sources: station.sources,
+    sources: [...station.sources],
+    contributors: siteAttributions([station]),
     variant,
     status: variant,
     summary,
@@ -225,7 +228,7 @@ export function mapFuelStationToResult(station: FuelStation): DataSourceResult {
   if (attributions) result.attributions = attributions;
   const branding = stationBranding(station);
   if (branding) result.branding = branding;
-  return result;
+  return withBrandingContributors(result);
 }
 
 function priceCell(product: FuelProduct): Translatable {
@@ -279,7 +282,8 @@ export function mapFuelStationToDetail(station: FuelStation): DataSourceDetail {
   const table = buildProductTable(station);
   const detail: DataSourceDetail = {
     id: station.id,
-    sources: station.sources,
+    sources: [...station.sources],
+    contributors: siteAttributions([station]),
     name: station.name,
     ...fallbackNameOf(station),
     coordinates: station.coordinates,
@@ -293,5 +297,5 @@ export function mapFuelStationToDetail(station: FuelStation): DataSourceDetail {
   if (attributions) detail.attributions = attributions;
   const branding = stationBranding(station);
   if (branding) detail.branding = branding;
-  return detail;
+  return withBrandingContributors(detail);
 }

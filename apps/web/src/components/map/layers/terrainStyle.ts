@@ -1,6 +1,17 @@
-import type { ExpressionSpecification, Map as MapLibreMap } from "maplibre-gl";
+import type { Attribution } from "@openmapx/mobility-core/attribution";
+import { snapshotContributors } from "@openmapx/mobility-core/contributors";
+import type {
+  ExpressionSpecification,
+  Map as MapLibreMap,
+  RasterDEMSourceSpecification,
+} from "maplibre-gl";
 import { addLayerWithinBasemap } from "@/integration-api/map/layerStack";
 import { ensureUrlTileSource } from "@/integration-api/map/layerStyleUtils";
+import { demMapContributors } from "@/integration-api/overlay/demMapContribution";
+import {
+  addAttributedRasterSource,
+  updateRasterAcquisitionContributors,
+} from "@/integration-api/overlay/rasterMapContribution";
 
 const DEM = "openmapx-terrain-dem";
 const HILLSHADE_DEM = "openmapx-terrain-hillshade-dem";
@@ -25,6 +36,7 @@ export interface TerrainStyleOptions {
   dark: boolean;
   demEncoding?: "mapbox" | "terrarium";
   generatedContourUrl?: string;
+  contributors?: readonly Attribution[];
 }
 
 type TerrainStyleMap = Pick<
@@ -48,6 +60,44 @@ function setLayersVisible(map: TerrainStyleMap, ids: readonly string[], visible:
     if (map.getLayer(id) && (map.getLayoutProperty(id, "visibility") ?? "visible") !== visibility) {
       map.setLayoutProperty(id, "visibility", visibility);
     }
+  }
+}
+
+const contourReceipts = new WeakMap<object, Attribution[]>();
+const demSpecifications = new WeakMap<object, string>();
+export const TERRAIN_CONTOUR_LAYERS = [CONTOUR_LINES, CONTOUR_LABELS];
+const DEM_LAYERS = [
+  { layerId: RELIEF, sourceId: RELIEF_DEM },
+  { layerId: HILLSHADE, sourceId: HILLSHADE_DEM },
+  { layerId: ELEVATION_TINT, sourceId: HILLSHADE_DEM },
+];
+
+/** Source-object identity retains the supplier of cached/generated contours. */
+export function terrainContourContributors(map: MapLibreMap): Attribution[] {
+  const source = map.getSource(CONTOURS);
+  return source ? snapshotContributors(contourReceipts.get(source) ?? []) : [];
+}
+
+export function terrainDemContributors(map: MapLibreMap): Attribution[] {
+  return demMapContributors(map, DEM_LAYERS, DEM);
+}
+
+function ensureDemSource(
+  map: TerrainStyleMap,
+  id: string,
+  specification: RasterDEMSourceSpecification,
+  contributors: readonly Attribution[],
+): void {
+  const mounted = map.getSource(id);
+  const key = JSON.stringify(specification);
+  if (!mounted) {
+    addAttributedRasterSource(map, id, specification, contributors);
+    const source = map.getSource(id);
+    if (source) demSpecifications.set(source, key);
+  } else if (demSpecifications.get(mounted) === key) {
+    // Configuration changes do not rewrite an already mounted source URL.
+    // Update future notices only while they describe that effective supplier.
+    updateRasterAcquisitionContributors(map, id, contributors);
   }
 }
 
@@ -77,14 +127,20 @@ function syncSubtleRelief(
   demUrl: string,
   demEncoding: "mapbox" | "terrarium",
   dark: boolean,
+  contributors: readonly Attribution[],
 ): void {
-  ensureUrlTileSource(map, RELIEF_DEM, {
-    type: "raster-dem",
-    url: demUrl,
-    tileSize: 512,
-    encoding: demEncoding,
-    maxzoom: 9,
-  });
+  ensureDemSource(
+    map,
+    RELIEF_DEM,
+    {
+      type: "raster-dem",
+      url: demUrl,
+      tileSize: 512,
+      encoding: demEncoding,
+      maxzoom: 9,
+    },
+    contributors,
+  );
   const colors = reliefColors(dark);
   if (!map.getLayer(RELIEF)) {
     addLayerWithinBasemap(
@@ -134,32 +190,50 @@ function syncSubtleRelief(
 export function syncTerrainStyle(
   map: TerrainStyleMap,
   relief: TerrainRelief,
-  { demUrl, contoursUrl, dark, demEncoding = "mapbox", generatedContourUrl }: TerrainStyleOptions,
+  {
+    demUrl,
+    contoursUrl,
+    dark,
+    demEncoding = "mapbox",
+    generatedContourUrl,
+    contributors = [],
+  }: TerrainStyleOptions,
 ): void {
   if (relief !== "subtle") setLayersVisible(map, [RELIEF], false);
   if (relief !== "full") {
     if (map.getTerrain()?.source === DEM) map.setTerrain(null);
     setLayersVisible(map, TERRAIN_LAYERS, false);
-    if (relief === "subtle") syncSubtleRelief(map, demUrl, demEncoding, dark);
+    if (relief === "subtle") syncSubtleRelief(map, demUrl, demEncoding, dark, contributors);
     return;
   }
 
-  ensureUrlTileSource(map, DEM, {
-    type: "raster-dem",
-    url: demUrl,
-    tileSize: 512,
-    encoding: demEncoding,
-  });
+  ensureDemSource(
+    map,
+    DEM,
+    {
+      type: "raster-dem",
+      url: demUrl,
+      tileSize: 512,
+      encoding: demEncoding,
+    },
+    contributors,
+  );
   // MapLibre renders hillshade more reliably when its DEM source is separate
   // from the source used to displace the 3D terrain mesh.
-  ensureUrlTileSource(map, HILLSHADE_DEM, {
-    type: "raster-dem",
-    url: demUrl,
-    tileSize: 512,
-    encoding: demEncoding,
-  });
+  ensureDemSource(
+    map,
+    HILLSHADE_DEM,
+    {
+      type: "raster-dem",
+      url: demUrl,
+      tileSize: 512,
+      encoding: demEncoding,
+    },
+    contributors,
+  );
   const hasContours = Boolean(generatedContourUrl || contoursUrl);
   if (hasContours) {
+    const previousContours = map.getSource(CONTOURS);
     ensureUrlTileSource(
       map,
       CONTOURS,
@@ -167,6 +241,9 @@ export function syncTerrainStyle(
         ? { type: "vector", tiles: [generatedContourUrl], maxzoom: 15 }
         : { type: "vector", url: contoursUrl },
     );
+    const source = map.getSource(CONTOURS);
+    if (!previousContours && source)
+      contourReceipts.set(source, snapshotContributors(contributors));
   }
 
   const elevationTint: ExpressionSpecification = [

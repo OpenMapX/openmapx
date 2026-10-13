@@ -5,7 +5,7 @@ import {
   usePlaceStore,
   useSidebarStore,
 } from "@openmapx/core";
-import { act, render } from "@testing-library/react";
+import { act, render, waitFor } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import { usePinMarker } from "@/hooks/usePinMarker";
 import { createFakeMap } from "@/test";
@@ -151,7 +151,40 @@ it("keeps brand-enriched data on unrelated events and fences old image completio
   const oldResults = reach.filtered;
   try {
     fake.map.setStyle({} as never);
-    fake.map.addImage("brand-marker-Q1", {} as never);
+    const { apiClient } = await import("@openmapx/core");
+    const { loadBrandMarkerImage } = await import("./CategoryResultMarkers");
+    const photo = {
+      logoFile: "Logo.svg",
+      url: "https://upload.wikimedia.org/wikipedia/commons/a/ab/Logo.svg",
+      source: "wikimedia-commons",
+      author: "Logo creator",
+      license: "CC BY 4.0",
+      licenseUrl: "https://creativecommons.org/licenses/by/4.0/",
+      pageUrl: "https://commons.wikimedia.org/wiki/File:Logo.svg",
+      contributors: [
+        {
+          sourceId: "wikimedia-commons",
+          name: "Logo Commons credit",
+          attributionText: "Required logo artist",
+          url: "https://commons.wikimedia.org/wiki/File:Logo.svg",
+        },
+      ],
+    };
+    vi.spyOn(apiClient, "get").mockImplementation(async (url) =>
+      String(url).endsWith("logo-attribution")
+        ? photo
+        : {
+            logoFile: "Logo.svg",
+            fieldContributors: {
+              logoFile: [{ sourceId: "name-suggestion-index", name: "NSI logo selection" }],
+            },
+          },
+    );
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(new Blob(["logo"])));
+    const loaded = loadBrandMarkerImage(fake.map, "Q1");
+    await waitFor(() => expect(images.length).toBeGreaterThan(0));
+    images.at(-1)?.onload?.();
+    expect(await loaded).toBe(true);
     reach.filtered = [
       {
         id: "brand",
@@ -166,6 +199,11 @@ it("keeps brand-enriched data on unrelated events and fences old image completio
     const data = () =>
       fake.state.sources.get("category-results-source")?.data as GeoJSON.FeatureCollection;
     expect(data().features[0].properties?.imageId).toBe("brand-marker-Q1");
+    expect(data().features[0].properties?._mapMarkerAttributions).toContain("Required logo artist");
+    expect(data().features[0].properties?._mapMarkerAttributions).toContain("NSI logo selection");
+    expect(data().features[0].properties?._mapLabelAttributions).not.toContain(
+      "Required logo artist",
+    );
     const uploads = fake.state.counts.setData.get("category-results-source");
     await act(async () => {
       for (let i = 0; i < 100; i++) fake.emit("styledata");
@@ -190,6 +228,7 @@ it("keeps brand-enriched data on unrelated events and fences old image completio
   } finally {
     globalThis.Image = OriginalImage;
     reach.filtered = oldResults;
+    vi.restoreAllMocks();
   }
 });
 
@@ -508,5 +547,99 @@ it("does not register a stale marker image after the category changes", async ()
   } finally {
     view?.unmount();
     globalThis.Image = OriginalImage;
+  }
+});
+
+it("credits only the actually placed marker and label fields, keeping cached receipts", async () => {
+  vi.useFakeTimers();
+  const { useMapAttributionStore } = await import("@/integration-api/overlay/mapAttributionStore");
+  const old = reach.filtered;
+  const geometry = { sourceId: "geometry", name: "Geometry notice" };
+  const label = { sourceId: "label", name: "Label notice" };
+  const contact = { sourceId: "contact", name: "Hidden phone notice" };
+  let view: ReturnType<typeof render> | undefined;
+  try {
+    fake.map.setStyle({} as never);
+    fake.state.zoom = 14;
+    fake.map.addImage("category-marker-restaurant", {} as never);
+    useMapAttributionStore.setState({ byLayer: {} });
+    useCategorySearchStore.setState({ activeCategory: "restaurant", hoveredCategoryPlaceId: null });
+    reach.isTransitCategory = false;
+    reach.filtered = [
+      {
+        id: "receipt",
+        name: "Name",
+        coordinates: [8, 50],
+        phone: "123",
+        contributors: [geometry, label, contact],
+        fieldContributors: {
+          coordinates: [geometry],
+          name: [label],
+          phone: [contact],
+          category: [],
+        },
+      } as typeof result,
+    ];
+    view = render(<CategoryResultMarkers />);
+    await act(async () => {});
+    const data = fake.state.sources.get("category-results-source")
+      ?.data as GeoJSON.FeatureCollection;
+    fake.setRenderedFeatures("category-results-layer", [
+      {
+        ...data.features[0],
+        layer: {
+          id: "category-results-layer",
+          type: "symbol",
+          layout: { "icon-image": "category-marker-restaurant", "icon-size": 0.6 },
+        },
+      } as never,
+    ]);
+    fake.setRenderedFeatures("category-results-labels", [
+      {
+        ...data.features[0],
+        layer: {
+          id: "category-results-labels",
+          type: "symbol",
+          layout: { "text-field": "Name", "text-size": 11 },
+        },
+      } as never,
+    ]);
+    const flush = () =>
+      act(() => {
+        fake.emit("render");
+        vi.advanceTimersByTime(250);
+      });
+    const html = () => Object.values(useMapAttributionStore.getState().byLayer).flat().join(" ");
+    flush();
+    expect(html()).toContain("Geometry notice");
+    expect(html()).not.toContain("Label notice");
+    expect(html()).not.toContain("Hidden phone notice");
+    geometry.name = "Changed catalogue";
+    fake.state.styleLoaded = false;
+    fake.state.zoom = 16;
+    fake.setRenderedFeatures("category-results-layer", []);
+    flush();
+    expect(html()).toContain("Geometry notice");
+    expect(html()).toContain("Label notice");
+    expect(html()).not.toContain("Changed catalogue");
+    fake.setRenderedFeatures("category-results-labels", []);
+    flush();
+    expect(html()).toBe("");
+  } finally {
+    view?.unmount();
+    reach.filtered = old;
+    vi.useRealTimers();
+  }
+});
+
+it("does not trust a pre-existing brand map image with no captured file receipt", async () => {
+  const { loadBrandMarkerImage } = await import("./CategoryResultMarkers");
+  const { apiClient } = await import("@openmapx/core");
+  fake.map.addImage("brand-marker-Q999", {} as never);
+  const get = vi.spyOn(apiClient, "get").mockResolvedValue({ qid: "Q999", logoFile: "Logo.svg" });
+  try {
+    expect(await loadBrandMarkerImage(fake.map, "Q999")).toBe(false);
+  } finally {
+    get.mockRestore();
   }
 });

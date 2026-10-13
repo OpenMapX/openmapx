@@ -1,5 +1,6 @@
 import { feedIdSchema } from "@openmapx/core/feed-id";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
+import { dataSourceToAttribution } from "@openmapx/mobility-core/contributors";
 import z from "zod/v4";
 import { parseMediaHostEntry } from "./media-hosts";
 
@@ -392,17 +393,7 @@ export interface ManifestValidationResult {
  * Attribution objects, so all credit metadata lives in one place — the
  * manifest.
  */
-export function dataSourceToAttribution(ds: IntegrationDataSource): Attribution {
-  return {
-    sourceId: ds.sourceId,
-    name: ds.name,
-    url: ds.url,
-    spdxLicense: ds.license || undefined,
-    licenseUrl: ds.licenseUrl,
-    attributionText: ds.attribution,
-    notes: ds.notes,
-  };
-}
+export { dataSourceToAttribution };
 
 /**
  * Manifest-driven attribution store. Integrations populate it once at

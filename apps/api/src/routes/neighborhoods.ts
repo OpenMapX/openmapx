@@ -48,7 +48,7 @@ export const neighborhoodsRoute: FastifyPluginAsync = async (fastify) => {
       const rw = round(west, 2);
       const rn = round(north, 2);
       const re = round(east, 2);
-      const cacheKey = `cache:neighborhoods:${rs},${rw},${rn},${re}:${lang ?? "en"}`;
+      const cacheKey = `cache:neighborhoods-v2-contributors:${rs},${rw},${rn},${re}:${lang ?? "en"}`;
 
       try {
         const { data, status } = await withCacheStatus(cacheKey, TTL.winterSports, () =>

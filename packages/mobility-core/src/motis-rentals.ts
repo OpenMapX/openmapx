@@ -12,7 +12,9 @@ import type {
   RentalZoneRestrictions,
 } from "@motis-project/motis-client";
 import { rentals } from "@motis-project/motis-client";
+import { withContributors } from "./contributors.js";
 import { decodePolyline } from "./polyline.js";
+import type { Attribution } from "./types/attribution.js";
 import type { LngLat } from "./types/geometry.js";
 import type {
   MotisRentalSnapshot,
@@ -72,6 +74,7 @@ export interface MotisRentalsClient {
   fetchMotisRentals(
     bbox: [number, number, number, number],
     formFactors?: VehicleFormFactor[],
+    resolveContributors?: (sourceIds: readonly string[]) => Attribution[],
   ): Promise<MotisRentalSnapshot>;
 }
 
@@ -535,6 +538,7 @@ export function mapMotisRentalSnapshot(
   origin: RentalServingOrigin,
   formFactors?: VehicleFormFactor[],
   rentalSourceIndex: readonly MotisRentalSourceIndexEntry[] = [],
+  resolveContributors?: (sourceIds: readonly string[]) => Attribution[],
 ): MotisRentalSnapshot {
   const sourceByProvider = sourceIndex(rentalSourceIndex);
   const warnings: string[] = [];
@@ -600,13 +604,22 @@ export function mapMotisRentalSnapshot(
       return mapped ? [mapped] : [];
     })
     .sort((a, b) => a.z - b.z || a.id.localeCompare(b.id));
+  const sourceIds = (ids: readonly string[]) => [
+    ...new Set([...ids, ...(origin === "transitous" ? ["transitous"] : [])]),
+  ];
+  const capture = <T extends object>(record: T, ids: readonly string[]): T =>
+    resolveContributors ? withContributors(record, resolveContributors(sourceIds(ids))) : record;
   return {
     origin,
-    providers,
+    providers: providers.map((item) => capture(item, [item.sourceId])),
     providerGroups,
-    stations,
-    vehicles,
-    zones,
+    stations: stations.map((item) =>
+      capture({ ...item, sources: sourceIds(item.sources) }, item.sources),
+    ),
+    vehicles: vehicles.map((item) =>
+      capture({ ...item, sources: sourceIds(item.sources) }, item.sources),
+    ),
+    zones: zones.map((item) => capture(item, [item.sourceId])),
     completeness: {
       providers: true,
       providerGroups: true,
@@ -676,6 +689,7 @@ export function createMotisRentalsClient(options: {
   motisUrl?: string;
   transitousUrl?: string;
   rentalSourceIndex?: readonly MotisRentalSourceIndexEntry[];
+  resolveContributors?: (sourceIds: readonly string[]) => Attribution[];
 }): MotisRentalsClient {
   const localUrl = options.motisUrl?.trim() || DEFAULT_MOTIS_URL;
   const localInstance: MotisInstance | undefined = localUrl
@@ -690,14 +704,20 @@ export function createMotisRentalsClient(options: {
   let localBreakerOpenUntil = 0;
 
   return {
-    async fetchMotisRentals(bbox, formFactors) {
+    async fetchMotisRentals(bbox, formFactors, resolveContributors = options.resolveContributors) {
       const now = Date.now();
       if (localInstance && now >= localBreakerOpenUntil) {
         const local = await queryRentals(localInstance, bbox);
         if (local.data) {
           localFailures = 0;
           localBreakerOpenUntil = 0;
-          return mapMotisRentalSnapshot(local.data, "motis-local", formFactors, sources);
+          return mapMotisRentalSnapshot(
+            local.data,
+            "motis-local",
+            formFactors,
+            sources,
+            resolveContributors,
+          );
         }
         if (!local.fallbackEligible) {
           return emptySnapshot(
@@ -713,7 +733,13 @@ export function createMotisRentalsClient(options: {
 
       const hosted = await queryRentals(hostedInstance, bbox);
       if (hosted.data) {
-        return mapMotisRentalSnapshot(hosted.data, "transitous", formFactors, sources);
+        return mapMotisRentalSnapshot(
+          hosted.data,
+          "transitous",
+          formFactors,
+          sources,
+          resolveContributors,
+        );
       }
       return emptySnapshot("transitous", hosted.failure ?? "hosted Transitous rentals unavailable");
     },

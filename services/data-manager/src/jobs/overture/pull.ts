@@ -1,7 +1,8 @@
-import { mkdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import { execa } from "execa";
 import { resolveOsmPolyUrl } from "../download-osm.js";
+import { captureOvertureCatalogue } from "./attribution-capture.js";
 import { assertOvertureDiskCapacity, estimateOverturePullBytes, freeBytesAt } from "./capacity.js";
 import { runDuckDb } from "./duckdb.js";
 import {
@@ -131,6 +132,7 @@ function requireTextStdout(stdout: unknown, label: string): string {
 }
 
 export async function pullOverture(opts: PullOvertureOptions): Promise<string> {
+  const sourcesCatalogue = captureOvertureCatalogue(new Date().toISOString());
   const release = opts.release ?? (await discoverLatestOvertureRelease(opts.fetchImpl ?? fetch));
   assertValidOvertureRelease(release);
   opts.onProgress?.(`Resolving ${opts.region} boundary from Geofabrik...`);
@@ -149,32 +151,36 @@ export async function pullOverture(opts: PullOvertureOptions): Promise<string> {
     freeBytes: freeBytesAt(opts.dataDir),
   });
   const outPath = join(outDir, `${slug}.parquet`);
-  const partialPath = join(outDir, `${slug}.${process.pid}.${Date.now()}.partial.parquet`);
   const contractPath = pullContractPath(opts.dataDir, release, opts.region);
-  const partialContractPath = `${contractPath}.${process.pid}.${Date.now()}.partial`;
+  // Stage on the publication filesystem for atomic renames. mkdtemp creates a
+  // random, owner-only directory so neither COPY nor the contract write can
+  // follow a pre-created staging symlink.
+  const stagingDir = mkdtempSync(join(outDir, `.${slug}-`));
+  const partialPath = join(stagingDir, "snapshot.parquet");
+  const partialContractPath = join(stagingDir, "contract.json");
 
-  const sqlLiteral = (value: string): string => `'${value.replaceAll("'", "''")}'`;
-  const assetList = stac.assets.map((asset) => sqlLiteral(asset.href)).join(", ");
-  const projectedColumns = OVERTURE_PLACE_COLUMNS.map((column) => `  ${column}`).join(",\n");
-
-  const duckSql = [
-    "INSTALL httpfs; LOAD httpfs;",
-    "INSTALL spatial; LOAD spatial;",
-    `COPY (`,
-    `  SELECT`,
-    projectedColumns,
-    `  FROM read_parquet([${assetList}], union_by_name=false)`,
-    `  WHERE bbox.xmin <= ${bbox.east}`,
-    `    AND bbox.xmax >= ${bbox.west}`,
-    `    AND bbox.ymin <= ${bbox.north}`,
-    `    AND bbox.ymax >= ${bbox.south}`,
-    `) TO ${sqlLiteral(partialPath)} (FORMAT parquet);`,
-  ].join("\n");
-
-  opts.onProgress?.(
-    `Pulling Overture ${release} for ${opts.region} from ${stac.assets.length} exact STAC asset(s)...`,
-  );
   try {
+    const sqlLiteral = (value: string): string => `'${value.replaceAll("'", "''")}'`;
+    const assetList = stac.assets.map((asset) => sqlLiteral(asset.href)).join(", ");
+    const projectedColumns = OVERTURE_PLACE_COLUMNS.map((column) => `  ${column}`).join(",\n");
+
+    const duckSql = [
+      "INSTALL httpfs; LOAD httpfs;",
+      "INSTALL spatial; LOAD spatial;",
+      `COPY (`,
+      `  SELECT`,
+      projectedColumns,
+      `  FROM read_parquet([${assetList}], union_by_name=false)`,
+      `  WHERE bbox.xmin <= ${bbox.east}`,
+      `    AND bbox.xmax >= ${bbox.west}`,
+      `    AND bbox.ymin <= ${bbox.north}`,
+      `    AND bbox.ymax >= ${bbox.south}`,
+      `) TO ${sqlLiteral(partialPath)} (FORMAT parquet);`,
+    ].join("\n");
+
+    opts.onProgress?.(
+      `Pulling Overture ${release} for ${opts.region} from ${stac.assets.length} exact STAC asset(s)...`,
+    );
     await runDuckDb(["-c", duckSql], { stdio: "inherit" });
 
     // This compatibility probe intentionally exercises every nested field used
@@ -245,11 +251,16 @@ export async function pullOverture(opts: PullOvertureOptions): Promise<string> {
         contributors: contributorRows.map((row) => row.dataset),
       },
       basename(outPath),
+      sourcesCatalogue,
     );
 
+    // Persist validated provider metadata as data, never executable content.
+    // The destination uses only the operator's dataDir, validated release and
+    // region, and the private staging directory; upstream fields are contents.
     writeFileSync(partialContractPath, `${JSON.stringify(contract, null, 2)}\n`, {
       encoding: "utf8",
       flag: "wx",
+      mode: 0o600,
     });
     renameSync(partialPath, outPath);
     // Publish the contract last: ingest never observes a new contract pointing
@@ -261,7 +272,6 @@ export async function pullOverture(opts: PullOvertureOptions): Promise<string> {
     opts.onProgress?.(`Done: ${outPath}`);
     return outPath;
   } finally {
-    rmSync(partialPath, { force: true });
-    rmSync(partialContractPath, { force: true });
+    rmSync(stagingDir, { force: true, recursive: true });
   }
 }

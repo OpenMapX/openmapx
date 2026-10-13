@@ -1,8 +1,11 @@
+import type { ContributingRecord, FieldContributors } from "@openmapx/mobility-core/contributors";
 import type { LngLat } from "../types/geometry";
 import type { Ids } from "../types/identified";
 import type { AirportInfo, PlaceFact, PlacePhoto, PlaceProvenance } from "../types/place";
 
-export interface KnowledgeResult {
+export interface KnowledgeResult extends ContributingRecord {
+  /** Exact captured suppliers for each scalar or externalIds.<key>. */
+  fieldContributors?: FieldContributors;
   photos?: PlacePhoto[];
   description?: string;
   wikipediaExtract?: string;

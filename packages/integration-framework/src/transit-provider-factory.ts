@@ -1,3 +1,10 @@
+import {
+  captureTransitContributors,
+  transitDataContributors,
+} from "@openmapx/mobility-core/transit-contributors";
+
+export { captureTransitContributors } from "@openmapx/mobility-core/transit-contributors";
+
 import { freshnessNow } from "@openmapx/mobility-core/freshness";
 import { type MobilityResult, withAttribution } from "@openmapx/mobility-core/result";
 import type { IntegrationContext } from "./context";
@@ -32,9 +39,9 @@ export interface TransitProviderScaffold {
   /** Manifest-driven attribution store, shared with the provider registration. */
   readonly attribution: ManifestAttributionStore;
   /** Tag a result with manifest attribution and a non-realtime freshness stamp. */
-  wrap<T>(data: T): MobilityResult<T>;
+  wrap<T>(data: T, sourceIds?: readonly string[]): MobilityResult<T>;
   /** Tag a result with manifest attribution and a realtime freshness stamp. */
-  wrapRT<T>(data: T): MobilityResult<T>;
+  wrapRT<T>(data: T, sourceIds?: readonly string[]): MobilityResult<T>;
   /**
    * Populate the attribution store from the integration manifest. Call once at
    * the top of `setup(ctx)`; equivalent to the repeated
@@ -45,10 +52,24 @@ export interface TransitProviderScaffold {
 
 export function defineTransitProvider(): TransitProviderScaffold {
   const attribution = createManifestAttribution();
-  const wrap = <T>(data: T): MobilityResult<T> =>
-    withAttribution(data, attribution.all(), freshnessNow());
-  const wrapRT = <T>(data: T): MobilityResult<T> =>
-    withAttribution(data, attribution.all(), freshnessNow({ hasRealtimeData: true }));
+  const selected = (sourceIds?: readonly string[]) =>
+    sourceIds === undefined
+      ? attribution.all()
+      : sourceIds.flatMap((id) => attribution.bySource(id) ?? []);
+  const wrap = <T>(data: T, sourceIds?: readonly string[]): MobilityResult<T> => {
+    const receipts = selected(sourceIds);
+    const captured = captureTransitContributors(data, receipts);
+    return withAttribution(captured, transitDataContributors(captured), freshnessNow());
+  };
+  const wrapRT = <T>(data: T, sourceIds?: readonly string[]): MobilityResult<T> => {
+    const receipts = selected(sourceIds);
+    const captured = captureTransitContributors(data, receipts);
+    return withAttribution(
+      captured,
+      transitDataContributors(captured),
+      freshnessNow({ hasRealtimeData: true }),
+    );
+  };
 
   return {
     attribution,

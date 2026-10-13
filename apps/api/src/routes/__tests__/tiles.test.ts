@@ -6,6 +6,9 @@ let app: FastifyInstance;
 beforeAll(async () => {
   const { tilesRoute } = await import("../tiles.js");
   app = Fastify({ logger: false });
+  app.addHook("onRequest", async (_req, reply) => {
+    reply.header("Access-Control-Expose-Headers", "ETag, Content-Range");
+  });
   await app.register(tilesRoute);
   await app.ready();
 });
@@ -16,6 +19,7 @@ afterAll(async () => {
 
 afterEach(() => {
   vi.unstubAllEnvs();
+  vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
 
@@ -48,5 +52,37 @@ describe("GET /tiles/cyclosm — empty-string env regression", () => {
     expect(calledUrl).toMatch(
       /^https:\/\/[abc]\.tile-cyclosm\.openstreetmap\.fr\/cyclosm\/3\/4\/2\.png$/,
     );
+  });
+});
+
+describe("cycling tile content receipts", () => {
+  const receipts = (value: unknown) => JSON.parse(decodeURIComponent(String(value)));
+  it("pairs each primary/fallback body with its own supplier and mandatory OSM notice", async () => {
+    vi.stubEnv("THUNDERFOREST_API_KEY", "fixture-key");
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(new Uint8Array([1])))
+      .mockResolvedValueOnce(new Response(null, { status: 503 }))
+      .mockResolvedValueOnce(new Response(new Uint8Array([2])));
+    vi.stubGlobal("fetch", fetchMock);
+    const primary = await app.inject({ method: "GET", url: "/tiles/cyclosm/3/4/2.png" });
+    const fallback = await app.inject({ method: "GET", url: "/tiles/cyclosm/3/5/2.png" });
+    expect(primary.rawPayload).toEqual(Buffer.from([1]));
+    expect(fallback.rawPayload).toEqual(Buffer.from([2]));
+    expect(receipts(primary.headers["x-openmapx-contributors"])).toEqual([
+      expect.objectContaining({ sourceId: "thunderforest", name: "Maps © Thunderforest" }),
+      expect.objectContaining({ sourceId: "openstreetmap", spdxLicense: "ODbL-1.0" }),
+    ]);
+    expect(receipts(fallback.headers["x-openmapx-contributors"])).toEqual([
+      expect.objectContaining({
+        sourceId: "cyclosm",
+        publisher: { name: "OpenStreetMap France", url: "https://openstreetmap.fr/" },
+      }),
+      expect.objectContaining({ sourceId: "openstreetmap", spdxLicense: "ODbL-1.0" }),
+    ]);
+    expect(primary.headers["cache-control"]).toContain("max-age=604800");
+    expect(primary.headers["access-control-expose-headers"]).toContain("X-OpenMapX-Contributors");
+    expect(primary.headers["access-control-expose-headers"]).toContain("ETag, Content-Range");
+    expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 });

@@ -7,6 +7,9 @@ import {
   usePlaceStore,
   useSidebarStore,
 } from "@openmapx/core";
+import { dataSourceToAttribution } from "@openmapx/integration-framework";
+import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
+import { parseContributors, withFeatureContributors } from "@openmapx/mobility-core/contributors";
 import type { MapLayerMouseEvent } from "maplibre-gl";
 import { useCallback, useEffect, useRef } from "react";
 import { INTERACTIVE_LAYER_IDS } from "@/integration-api/map/interactiveLayers";
@@ -15,7 +18,7 @@ import { useMap } from "@/integration-api/map/MapContext";
 import { getMapClickOwner } from "@/integration-api/map/mapClickOwnership";
 import { useGeoJsonSourceDataBridge } from "@/integration-api/map/useGeoJsonSourceDataBridge";
 import { useOverlayMinZoom } from "@/integration-api/overlay/overlayZoomGate";
-import { useIntegrationAttribution } from "@/integration-api/overlay/useIntegrationAttribution";
+import { useRenderedMapAttributions } from "@/integration-api/overlay/useRenderedMapAttributions";
 import { useEnv } from "@/integration-api/runtime/EnvProvider";
 import { type AirportTypeFilter, useAirportsOverlayStore } from "./store";
 
@@ -91,7 +94,8 @@ export function AirportsOverlay() {
   // applies: below it we skip fetching and keep the markers hidden, so an
   // overlay left on while zooming out can't pull a world-sized airport list.
   const minZoom = useOverlayMinZoom("ourairports");
-  useIntegrationAttribution("overlay-ourairports", layerVisible);
+  const registry = useIntegrationRegistry();
+  useRenderedMapAttributions("ourairports", [CIRCLE_LAYER_ID, LABEL_LAYER_ID], layerVisible);
   const filter = useAirportsOverlayStore((s) => s.filter);
   const setLoading = useAirportsOverlayStore((s) => s.setLoading);
   const setLastUpdated = useAirportsOverlayStore((s) => s.setLastUpdated);
@@ -135,14 +139,37 @@ export function AirportsOverlay() {
       if (!request.isCurrent() || !res.ok) return;
       const data = await res.json();
       if (!request.isCurrent()) return;
-      publishGeoJson([{ sourceId: SOURCE_ID, data }]);
+      const source = registry.findDataSource("ourairports");
+      const contributors = source ? [dataSourceToAttribution(source)] : [];
+      const captured = {
+        ...data,
+        features: (data.features as GeoJSON.Feature[]).map((feature) =>
+          withFeatureContributors(
+            feature,
+            parseContributors(feature.properties?.contributors) ??
+              parseContributors(feature.properties?._mapAttributions) ??
+              contributors,
+          ),
+        ),
+      };
+      publishGeoJson([{ sourceId: SOURCE_ID, data: captured }]);
       setLastUpdated(Date.now());
     } catch {
       // silent
     } finally {
       if (request.isLatest()) setLoading(false);
     }
-  }, [beginRequest, env, mapRef, filter, publishGeoJson, setLoading, setLastUpdated, minZoom]);
+  }, [
+    beginRequest,
+    env,
+    registry,
+    mapRef,
+    filter,
+    publishGeoJson,
+    setLoading,
+    setLastUpdated,
+    minZoom,
+  ]);
 
   // Layer add / remove + initial load
   useEffect(() => {

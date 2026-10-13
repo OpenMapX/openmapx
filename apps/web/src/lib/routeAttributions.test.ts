@@ -34,13 +34,36 @@ describe("routeAttributions", () => {
     expect(credits.map((a) => a.name)).toEqual(["Stadia Maps"]);
   });
 
-  it("falls back to every declared source when the route reports none", () => {
-    expect(routeAttributions(registry, "routing-osrm", {}).map((a) => a.name)).toEqual(["OSRM"]);
-    expect(routeAttributions(registry, "routing-osrm", null).map((a) => a.name)).toEqual(["OSRM"]);
+  it("resolves only explicitly named legacy suppliers", () => {
+    expect(routeAttributions(registry, "routing-osrm", {})).toEqual([]);
+    expect(
+      routeAttributions(registry, "routing-osrm", { sourceIds: ["osrm"] }).map((a) => a.name),
+    ).toEqual(["OSRM"]);
+    expect(routeAttributions(registry, "routing-osrm", null)).toEqual([]);
   });
 
   it("credits nothing without a provider", () => {
     expect(routeAttributions(registry, undefined, { sourceIds: ["valhalla"] })).toEqual([]);
     expect(routeAttributions(registry, "unknown", { sourceIds: ["valhalla"] })).toEqual([]);
   });
+});
+
+it("keeps captured mixed provider credits and explicit empty snapshots", () => {
+  const a = { sourceId: "a", name: "A", attributionText: "notice A" };
+  const b = { sourceId: "a", name: "A", attributionText: "notice B" };
+  expect(routeAttributions(registry, "unknown", { contributors: [a, b] })).toEqual([a, b]);
+  expect(routeAttributions(registry, "routing-osrm", { contributors: [] })).toEqual([]);
+  expect(routeAttributions(registry, "routing-valhalla", {})).toEqual([]);
+});
+
+it("projects only drawn geometry or displayed duration from captured field receipts", () => {
+  const geometry = { sourceId: "geometry", name: "Geometry" };
+  const summary = { sourceId: "summary", name: "Summary" };
+  const route = {
+    contributors: [geometry, summary],
+    fieldContributors: { geometry: [geometry], duration: [] },
+  };
+  expect(routeAttributions(registry, "unknown", route, ["geometry"])).toEqual([geometry]);
+  expect(routeAttributions(registry, "unknown", route, ["duration"])).toEqual([]);
+  expect(routeAttributions(registry, "unknown", route, ["summary"])).toEqual([]);
 });

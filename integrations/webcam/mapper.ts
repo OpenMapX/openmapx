@@ -6,6 +6,7 @@ import {
   isSafeHttpUrl,
   validObservedAt,
 } from "@openmapx/core";
+import { siteAttributions } from "@openmapx/integration-framework";
 import {
   type I18nToken,
   sharedT,
@@ -185,7 +186,8 @@ export function mapCameraToResult(camera: Camera): DataSourceResult {
     ...fallbackNameOf(camera),
     coordinates: camera.coordinates,
     source: camera.sources[0] ?? "unknown",
-    sources: camera.sources,
+    sources: [...camera.sources],
+    contributors: siteAttributions([camera]),
     variant: camera.type,
     status: statusOf(camera),
     summary: summaryOf(camera),
@@ -233,7 +235,8 @@ export function mapCameraToDetail(camera: Camera): DataSourceDetail {
     : undefined;
   const detail: DataSourceDetail = {
     id: camera.id,
-    sources: camera.sources,
+    sources: [...camera.sources],
+    contributors: siteAttributions([camera]),
     name: camera.name,
     ...fallbackNameOf(camera),
     coordinates: camera.coordinates,

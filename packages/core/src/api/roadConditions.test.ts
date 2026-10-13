@@ -119,7 +119,12 @@ describe("fetchRoadConditions", () => {
             validity: { status: "active", start: "2026-09-11T08:00:00Z" },
             effects: [],
             origin: "feed",
-            attribution: { provider: "NDW", license: "CC0-1.0" },
+            attribution: {
+              provider: "NDW",
+              license: "CC0-1.0",
+              sourceId: "ndw-parent",
+              notice: "Required publisher notice",
+            },
             fetchedAt: "2026-09-11T08:01:00Z",
           },
         },
@@ -159,7 +164,12 @@ describe("fetchRoadConditions", () => {
         validity: { status: "active", start: "2026-09-11T08:00:00Z" },
         effects: [],
         origin: "feed",
-        attribution: { provider: "NDW", license: "CC0-1.0" },
+        attribution: {
+          provider: "NDW",
+          license: "CC0-1.0",
+          sourceId: "ndw-parent",
+          notice: "Required publisher notice",
+        },
         fetchedAt: "2026-09-11T08:01:00Z",
       },
     ]);
@@ -270,8 +280,8 @@ describe("roadConditionFeatureToEvent", () => {
       updatedAt: "2026-10-01T10:00:00Z",
       fetchedAt: "2026-10-01T10:01:00Z",
       expiresAt: "2026-10-01T10:11:00Z",
-      // Attribution falls back to the source id when the provider gives no name.
-      attribution: { provider: "de-autobahn" },
+      // Missing recorded attribution stays unknown; a source ID is not a publisher receipt.
+      attribution: { provider: "" },
     });
   });
 

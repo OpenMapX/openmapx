@@ -6,7 +6,7 @@ import Box from "@mui/material/Box";
 import ButtonBase from "@mui/material/ButtonBase";
 import IconButton from "@mui/material/IconButton";
 import Typography from "@mui/material/Typography";
-import { type PlacePhoto, proxyImageUrl } from "@openmapx/core";
+import { isDisplayablePhoto, type PlacePhoto, proxyImageUrl } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { PhotoAttribution } from "./PhotoAttribution";
 
@@ -34,7 +34,7 @@ export function PlacePhotoHero({
 }: Props) {
   const tc = useTranslations("common");
   const tp = useTranslations("photoGallery");
-  const photo = photos[0];
+  const photo = photos.find(isDisplayablePhoto);
   if (!photo) return null;
 
   const photoUrl = proxyImageUrl(photo.url);
@@ -121,9 +121,10 @@ export function PlacePhotoHero({
           borderRadius: 0.5,
           px: 0.75,
           py: 0.25,
+          maxWidth: "calc(100% - 12px)",
           fontSize: 10,
           color: "#fff",
-          lineHeight: 1,
+          lineHeight: 1.3,
           "& a": { fontSize: "inherit" },
         }}
       >

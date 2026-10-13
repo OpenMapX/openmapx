@@ -383,7 +383,7 @@ describe("POST /flow-along-route", () => {
     // Simulate a failure that has nothing to do with any provider (e.g. a
     // cache backend error) for r0's cache key specifically, so a pass on r1
     // in the same request proves the failure is scoped to one route.
-    const failingKey = `conditions:query:flowroute:${routeFingerprint(r0Geometry)}`;
+    const failingKey = `conditions:query:flowroute:v2:${routeFingerprint(r0Geometry)}`;
     const harness = flowRouteHarness({
       providers: [
         flowProvider("congestion", async (bbox) => {
@@ -481,7 +481,10 @@ describe("GET /events filters", () => {
     const served = event({ id: "oc:1", kind: "closure", type: "closure" });
     const h = eventsHarness({ providers: [eventsProvider("p", async () => [served])] });
     const res = await h.get({ bbox: BBOX });
-    const { geometry, ...properties } = served;
+    const { geometry, ...properties } = {
+      ...served,
+      contributors: [{ sourceId: "s", name: "NDW", spdxLicense: "CC0-1.0" }],
+    };
     expect(res.body).toEqual({
       type: "FeatureCollection",
       features: [

@@ -148,7 +148,7 @@ describe("orchestrator prefix routing honours provider health", () => {
 
     expect(broken.getDepartures).not.toHaveBeenCalled();
     expect(winnerDepartures).toHaveBeenCalledOnce();
-    expect(res.data).toEqual([{ tripId: "tp:trip-from-backup" }]);
+    expect(res.data).toEqual([{ tripId: "tp:trip-from-backup", contributors: ATTR }]);
   });
 
   it("uses the only matching provider when it is healthy", async () => {
@@ -168,7 +168,7 @@ describe("orchestrator prefix routing honours provider health", () => {
     const res = await orchestrator.getDepartures("tp:stop-1", 30);
 
     expect(departures).toHaveBeenCalledOnce();
-    expect(res.data).toEqual([{ tripId: "tp:trip-ok" }]);
+    expect(res.data).toEqual([{ tripId: "tp:trip-ok", contributors: ATTR }]);
   });
 });
 

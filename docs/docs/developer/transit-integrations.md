@@ -229,10 +229,14 @@ many declared sources — implement `getFeedAttribution()`:
 getFeedAttribution?(): Promise<Record<string, ProviderAttribution>>;
 ```
 
-The keys must match what your results carry on `TransitStop.provider`,
-`VehicleJourney.provider`, and `ServiceAlert.providers[]`, so the frontend can
-resolve the right license chip per result. A single-license provider doesn't need
-this — its `attribution` array is enough.
+The keys must match the exact feed identities your records carry. Capture that
+lookup before acquisition, then stamp each stop/departure/journey/alert with its
+own canonical `contributors` before caching or merging. Current frontend
+registry metadata must not rewrite old records. A proven uniform supplier can
+stamp its single-source receipt at the adapter boundary; a heterogeneous MOTIS
+result needs actual per-item feed evidence. Missing/unknown feeds cannot inherit
+all provider credits. Keep required notices and explicit canonical parent source
+identity alongside each receipt.
 
 ## How the orchestrator picks a provider
 
@@ -312,11 +316,15 @@ const { attribution, wrap, wrapRT, init } = defineTransitProvider();
 - **`init(ctx)`** — call once at the top of `setup`; it loads the attribution
   store from `ctx.manifest.dataSources`.
 - **`attribution.all()`** — the resolved `Attribution[]` to put on the provider.
-- **`wrap(data)` / `wrapRT(data)`** — tag a payload with that attribution and a
-  freshness stamp, producing the `MobilityResult<T>` every method must return.
-  `wrapRT` is the same but flips the `hasRealtimeData` flag — use it for
-  departures, vehicle positions, and alerts; use `wrap` for static stops and
-  routes.
+- **`wrap(data, sourceIds?)` / `wrapRT(data, sourceIds?)`** — retain captured
+  record contributors and derive envelope credits from those records, with a
+  freshness stamp. The optional IDs narrow declared metadata for an explicitly
+  known acquisition. Uniform single-source legacy payloads have a compatibility
+  boundary; a multi-source manifest cannot prove an untagged item's supplier.
+  Capture metadata before the upstream await and stamp returned records before
+  caching; a wrapping call after acquisition cannot capture the old metadata. `wrapRT` sets
+  `hasRealtimeData`; use it for departures, vehicles and alerts, and `wrap` for
+  static stops/routes.
 
 Everything that genuinely differs between providers stays explicit in `setup` —
 the `id`, `prefix`, `coverage`, `priority`, the `capabilities` object, any
@@ -326,11 +334,16 @@ that are identical across the board.
 ### Attribution and freshness
 
 Provider code should not hand-roll `Attribution` objects. Declaring upstream
-licenses in the manifest's `dataSources` and letting `defineTransitProvider()`
-turn them into the attribution shape keeps credit metadata in one place — where
-the legal pages and per-result credit chips also read it. Each `dataSources` entry
-needs a globally unique `sourceId`; results are tagged with that id, and the host
-maps it back to the right license. See the
+licenses in the manifest's `dataSources` gives the adapter canonical metadata
+for acquisition-time receipts. Each `dataSources` entry needs a globally unique
+`sourceId`. Preserve per-item/per-feed `contributors`, including distinct
+mandatory notices, through caches, realtime application, merged records,
+pagination and DTOs. A supplied `[]` stops fallback. Discarded duplicates and
+no-op realtime deltas contribute nothing; actually applied fields keep their
+own suppliers. Boards credit displayed tab/mode rows and represented alerts,
+while selected itinerary details and core map geometry use their own captured
+receipts. The [captured contract](./integration-system.md#captured-contributor-contract)
+explains exact resolution and field/container ownership. See the
 [integration system](./integration-system.md#data-sources) reference for the full
 `dataSources` field list and the completeness gate that enforces it.
 

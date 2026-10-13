@@ -5,6 +5,7 @@ import {
   isSafeHttpUrl,
 } from "@openmapx/core";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
+import { snapshotContributors } from "@openmapx/mobility-core/contributors";
 import { freshnessNow } from "@openmapx/mobility-core/freshness";
 import { type MobilityResult, withAttribution } from "@openmapx/mobility-core/result";
 import {
@@ -162,19 +163,12 @@ export const wrapSiteResult = <T>(data: T, attributions: Attribution[]): Mobilit
   );
 
 /**
- * Every contributing credit, once, in first-seen order: keyed by source and
- * name, so an upstream publisher credited under its feed's source stays.
+ * Every contributing credit, once, preserving distinct required notices and
+ * upstream publishers credited under a feed's source identity.
  * Their links come from upstream data, so only http(s) ones are kept.
  */
 export function siteAttributions(sites: readonly { attributions: Attribution[] }[]): Attribution[] {
-  const byCredit = new Map<string, Attribution>();
-  for (const site of sites) {
-    for (const attribution of site.attributions) {
-      const key = `${attribution.sourceId}\u0000${attribution.name}`;
-      if (!byCredit.has(key)) byCredit.set(key, safeAttribution(attribution));
-    }
-  }
-  return [...byCredit.values()];
+  return snapshotContributors(...sites.map((site) => site.attributions.map(safeAttribution)));
 }
 
 /** The selected option ids of a multi-select filter; none selected keeps every site. */

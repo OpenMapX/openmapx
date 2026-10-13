@@ -74,27 +74,7 @@ export const wikipediaSource: KnowledgeProvider = {
           ? await fetchCommonsMetadata([filename], { strict: true, signal: context.signal })
           : await fetchCommonsMetadata([filename]);
         const richPhoto = metadata.get(filename.replace(/_/g, " "));
-        if (richPhoto) {
-          richPhoto.source = "wikipedia";
-          result.photos = [richPhoto];
-        } else {
-          result.photos = [
-            {
-              url: imgSource,
-              thumbnailUrl: data.thumbnail?.source,
-              source: "wikipedia",
-              pageUrl: `https://commons.wikimedia.org/wiki/File:${encodeURIComponent(filename.replace(/ /g, "_"))}`,
-            },
-          ];
-        }
-      } else {
-        result.photos = [
-          {
-            url: imgSource,
-            thumbnailUrl: data.thumbnail?.source,
-            source: "wikipedia",
-          },
-        ];
+        if (richPhoto) result.photos = [richPhoto];
       }
     }
 

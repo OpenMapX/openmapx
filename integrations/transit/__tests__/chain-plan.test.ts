@@ -535,3 +535,40 @@ describe("backward actual transit times", () => {
     expect(plan.schedule.arrival).toBe("2026-09-01T10:45:00+00:00");
   });
 });
+
+describe("chain contributor receipts", () => {
+  it("credits chosen timing suppliers while keeping unused alternatives independent", async () => {
+    const a = { sourceId: "feed-a", name: "A", url: "https://a.test", spdxLicense: "CC0" };
+    const b = { sourceId: "feed-b", name: "B", url: "https://b.test", spdxLicense: "CC0" };
+    const c = { sourceId: "feed-c", name: "C", url: "https://c.test", spdxLicense: "CC0" };
+    const selectedA = itinerary("2026-09-01T09:10:00Z", "2026-09-01T09:30:00Z", {
+      contributors: [a],
+    });
+    const unusedB = itinerary("2026-09-01T09:15:00Z", "2026-09-01T09:40:00Z", {
+      contributors: [b],
+    });
+    const selectedC = itinerary("2026-09-01T09:45:00Z", "2026-09-01T10:00:00Z", {
+      contributors: [c],
+    });
+    const planTrip = vi
+      .fn()
+      .mockResolvedValueOnce(result([selectedA, unusedB]))
+      .mockResolvedValueOnce(result([selectedC]));
+    const plan = await planTransitChain({
+      waypoints: [COLOGNE, BONN, AACHEN],
+      schedules: [null, null, null],
+      anchor: { kind: "departAt", wallClock: "2026-09-01T09:00" },
+      baseRequest: {},
+      capabilities: CAPABILITIES,
+      planTrip,
+    });
+    expect(plan.contributors?.map((x) => x.sourceId)).toEqual(["feed-a", "feed-c"]);
+    expect(plan.segments[0].contributors?.map((x) => x.sourceId)).toEqual(["feed-a"]);
+    expect(plan.segments[0].alternatives[0].contributors).toEqual([b]);
+    expect(plan.segments[1].fieldContributors?.boardingWaitSeconds?.map((x) => x.sourceId)).toEqual(
+      ["feed-c", "feed-a"],
+    );
+    expect(plan.fieldContributors?.schedule?.map((x) => x.sourceId)).toEqual(["feed-a", "feed-c"]);
+    expect(selectedA).not.toHaveProperty("fieldContributors");
+  });
+});

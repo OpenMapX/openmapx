@@ -30,22 +30,26 @@ describe("transit result merging", () => {
     expect(Date.parse(result.freshness.fetchedAt)).toBeGreaterThanOrEqual(before);
   });
 
-  it("deduplicates fallback attribution in first-seen order", () => {
+  it("preserves distinct wording for one source in captured receipt order", () => {
     const first = attribution("first", "First");
     const duplicate = attribution("first", "Duplicate");
     const second = attribution("second", "Second");
 
-    expect(mergeAttributions(undefined, [first], [duplicate, second])).toEqual([first, second]);
+    expect(mergeAttributions(undefined, [first], [duplicate, second])).toEqual([
+      first,
+      duplicate,
+      second,
+    ]);
     expect(mergeAttributions(undefined)).toEqual([]);
   });
 
-  it("delegates flattened attribution to the host index", () => {
+  it("preserves acquisition snapshots instead of re-resolving current host metadata", () => {
     const ordered = [attribution("curated")];
     const dedupAndOrder = vi.fn(() => ordered);
     const input = [attribution("second"), attribution("first")];
 
-    expect(mergeAttributions({ dedupAndOrder }, [input[0]], [input[1]])).toBe(ordered);
-    expect(dedupAndOrder).toHaveBeenCalledWith(input);
+    expect(mergeAttributions({ dedupAndOrder }, [input[0]], [input[1]])).toEqual(input);
+    expect(dedupAndOrder).not.toHaveBeenCalled();
   });
 
   it("uses the oldest timestamps and strongest realtime and stale signals", () => {

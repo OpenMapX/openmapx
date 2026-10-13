@@ -1,9 +1,19 @@
 import { fetchJson } from "@openmapx/core";
 import {
+  type ContributingRecord,
+  dataSourceToAttribution,
   type IntegrationContext,
   type Logger,
   scalarQueries,
+  snapshotContributors,
 } from "@openmapx/integration-framework";
+
+import manifest from "./manifest.json";
+
+const supplierReceipt = (sourceId: string) =>
+  snapshotContributors(
+    manifest.dataSources.filter((s) => s.sourceId === sourceId).map(dataSourceToAttribution),
+  );
 
 const FETCH_TIMEOUT_MS = 15_000;
 const STATION_CACHE_TTL = 600;
@@ -92,7 +102,7 @@ interface SensorReading {
   unit: string;
 }
 
-interface Station {
+interface Station extends ContributingRecord {
   id: string;
   name: string;
   lat: number;
@@ -135,7 +145,7 @@ export function setup(ctx: IntegrationContext): void {
       return;
     }
 
-    const cacheKey = `env:${sensorType}:${exposure ?? "outdoor"}:${roundBbox(s, w, n, e)}`;
+    const cacheKey = `env:contributors-v1:${sensorType}:${exposure ?? "outdoor"}:${roundBbox(s, w, n, e)}`;
     const cached = await ctx.cache.get<Station[]>(cacheKey);
     if (cached) {
       reply.send(cached);
@@ -207,6 +217,7 @@ async function fetchOpenSenseMap(
         if (Number.isNaN(val)) continue;
 
         stations.push({
+          contributors: supplierReceipt("opensensemap"),
           id: box._id,
           name: box.name,
           lat: box.currentLocation.coordinates[1],
@@ -329,6 +340,7 @@ async function fetchSensorCommunity(
     if (primaryValue === undefined) continue;
 
     stations.push({
+      contributors: supplierReceipt("sensor-community"),
       id: `sc-${locId}`,
       name: `Sensor.Community #${entries[0].sensor.id}`,
       lat,

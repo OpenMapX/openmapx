@@ -1,3 +1,4 @@
+import type { Attribution } from "@openmapx/mobility-core/attribution";
 import type { LngLat } from "./geometry";
 
 /** A provider-qualified reference to one street-level image. */
@@ -61,6 +62,10 @@ export type StreetLevelCoverage =
       minzoom: number;
       maxzoom: number;
       layers: { sequences: string; pictures: string; grid?: string };
+      /** Exact declared dataset IDs per MVT source-layer, never provider prefixes. */
+      layerSourceIds?: Readonly<Record<string, readonly string[]>>;
+      /** Captured by the serving host before capabilities caching; [] is authoritative. */
+      layerContributors?: Readonly<Record<string, readonly Attribution[]>>;
       props: {
         id: string;
         isPano?: string;

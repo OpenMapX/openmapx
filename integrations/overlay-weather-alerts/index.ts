@@ -3,7 +3,9 @@ import {
   createHazardsOrchestrator,
   type IntegrationContext,
   scalarQueries,
+  snapshotContributors,
 } from "@openmapx/integration-framework";
+import type { Attribution } from "@openmapx/mobility-core/attribution";
 import type { HazardAlert } from "@openmapx/mobility-core/hazards";
 
 const CACHE_TTL_S = 60;
@@ -34,6 +36,7 @@ export interface NormalizedFeature {
     senderName: string | null;
     notices: string[];
     sources: string[];
+    contributors?: readonly Attribution[];
   };
 }
 
@@ -71,6 +74,9 @@ export function alertToFeature(alert: HazardAlert): NormalizedFeature {
       senderName: alert.senderName ?? null,
       notices: alert.notices,
       sources: alert.sources,
+      ...(alert.contributors === undefined
+        ? {}
+        : { contributors: snapshotContributors(alert.contributors) }),
     },
   };
 }
@@ -97,7 +103,7 @@ export function setup(ctx: IntegrationContext): void {
     const lang = parseLang(scalarQueries(req.query).lang);
     // Namespaced by the response shape: an entry cached in an older shape must not be served
     // against the new one.
-    const key = `weather-alerts:events-v2:${lang}`;
+    const key = `weather-alerts:events-v3:${lang}`;
 
     try {
       const fc = await ctx.cache.withCache(key, CACHE_TTL_S, async () => {

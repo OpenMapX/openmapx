@@ -13,6 +13,7 @@ import Link from "@mui/material/Link";
 import Modal from "@mui/material/Modal";
 import Typography from "@mui/material/Typography";
 import {
+  isDisplayablePhoto,
   type PlacePhoto,
   proxyImageUrl,
   safeHref,
@@ -21,7 +22,6 @@ import {
   usePlaceStore,
   useSidebarStore,
 } from "@openmapx/core";
-import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useState } from "react";
 import { LocationMinimap } from "@/integration-api/components/LocationMinimap";
@@ -52,13 +52,14 @@ function PlacePhotoGalleryInner({ open, onClose, placeName, placeId, lat, lng }:
   const setClickedLngLat = useMapClickStore((s) => s.setClickedLngLat);
   const setSelectedPlace = usePlaceStore((s) => s.setSelectedPlace);
   // Single API call — server handles tag-based + coordinate-based providers + dedup
-  const { data: allPhotos = [], isLoading } = usePlacePhotos(lat, lng, {
+  const { data: receivedPhotos = [], isLoading } = usePlacePhotos(lat, lng, {
     name: placeName,
     placeId,
     limit: 30,
     enabled: open,
   });
 
+  const allPhotos = receivedPhotos.filter(isDisplayablePhoto);
   const clampedIdx = Math.min(selectedIdx, Math.max(0, allPhotos.length - 1));
   const selectedPhoto = allPhotos[clampedIdx];
 
@@ -248,7 +249,7 @@ function PlacePhotoGalleryInner({ open, onClose, placeName, placeId, lat, lng }:
                 }}
               >
                 <Box sx={{ minWidth: 0, flex: 1 }}>
-                  <Typography variant="body2" sx={{ color: "#fff" }} noWrap>
+                  <Typography variant="body2" sx={{ color: "#fff" }}>
                     <PhotoAttribution photo={selectedPhoto} />
                   </Typography>
                   {selectedPhoto.capturedAt && (
@@ -354,9 +355,6 @@ function GalleryThumbnail({
   isSelected: boolean;
   onClick: () => void;
 }) {
-  const registry = useIntegrationRegistry();
-  const resolveSourceName = (sid: string) => registry.findDataSource(sid)?.name ?? sid;
-
   // 0 = try thumbnailUrl, 1 = try full url, 2 = broken
   const [attempt, setAttempt] = useState(0);
 
@@ -410,36 +408,9 @@ function GalleryThumbnail({
           <BrokenImageIcon sx={{ fontSize: 32, color: "rgba(255,255,255,0.3)" }} />
         </Box>
       )}
-      {/* Source badge */}
-      <Box
-        sx={{
-          position: "absolute",
-          bottom: 4,
-          left: 4,
-          bgcolor: "rgba(0,0,0,0.6)",
-          borderRadius: 0.5,
-          px: 0.5,
-          py: 0.25,
-        }}
-      >
-        <Typography sx={{ fontSize: 10, color: "rgba(255,255,255,0.8)", lineHeight: 1 }}>
-          {resolveSourceName(photo.source)}
-        </Typography>
-      </Box>
-      {/* Author */}
-      {photo.author && imgSrc && (
-        <Box sx={{ position: "absolute", bottom: 4, right: 4 }}>
-          <Typography
-            sx={{
-              fontSize: 10,
-              color: "rgba(255,255,255,0.7)",
-              lineHeight: 1,
-              textShadow: "0 1px 2px rgba(0,0,0,0.8)",
-            }}
-            noWrap
-          >
-            {photo.author}
-          </Typography>
+      {imgSrc && (
+        <Box sx={{ px: 0.75, py: 0.5, fontSize: 10, color: "#fff", overflowWrap: "anywhere" }}>
+          <PhotoAttribution photo={photo} />
         </Box>
       )}
     </Box>
@@ -470,8 +441,7 @@ function MobileThumbnail({
     <Box
       onClick={onClick}
       sx={{
-        width: 60,
-        height: 60,
+        width: 120,
         flexShrink: 0,
         borderRadius: 0.5,
         overflow: "hidden",
@@ -486,7 +456,7 @@ function MobileThumbnail({
           alt=""
           loading="lazy"
           onError={() => setAttempt((a) => a + 1)}
-          sx={{ width: "100%", height: "100%", objectFit: "cover" }}
+          sx={{ width: "100%", height: 60, objectFit: "cover" }}
         />
       ) : (
         <Box
@@ -500,6 +470,11 @@ function MobileThumbnail({
           }}
         >
           <BrokenImageIcon sx={{ fontSize: 20, color: "rgba(255,255,255,0.3)" }} />
+        </Box>
+      )}
+      {imgSrc && (
+        <Box sx={{ px: 0.5, py: 0.25, fontSize: 9, color: "#fff", overflowWrap: "anywhere" }}>
+          <PhotoAttribution photo={photo} />
         </Box>
       )}
     </Box>

@@ -1,105 +1,120 @@
+import escapeHtml from "escape-html";
+import { type DefaultTreeAdapterTypes, parseFragment } from "parse5";
 import type { DataSourceAttribution } from "../types/dataSource";
 import type { IntegrationDataSource } from "../types/integrationMeta";
 
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
-
-function safeExternalUrl(value: string | undefined): string | undefined {
+function safeExternalUrl(value: string | undefined, baseUrl?: string): string | undefined {
   if (!value) return undefined;
   try {
-    const url = new URL(value);
-    return url.protocol === "https:" || url.protocol === "http:" ? value : undefined;
+    const url = new URL(value, baseUrl);
+    return url.protocol === "https:" || url.protocol === "http:"
+      ? baseUrl
+        ? url.href
+        : value
+      : undefined;
   } catch {
     return undefined;
   }
 }
 
-/**
- * Allowlist HTML sanitizer for manifest `dataSources[].attribution` strings.
- *
- * Parse-and-rebuild: output contains only escapeHtml()-escaped text plus
- * tags reconstructed here. Allowed elements:
- * - `<a>` — href must be http(s) (validated via safeExternalUrl); rebuilt
- *   as `<a href="…" target="_blank" rel="noopener noreferrer">`. All other
- *   attributes are dropped. Anchors with a missing/invalid href are
- *   unwrapped (children kept).
- * - `<code>` — rebuilt with no attributes.
- * Any other element is unwrapped (tag dropped, children kept), matching the
- * DOMParser sanitizer in apps/web/src/lib/useMapAttributions.ts. Tag-shaped
- * input that is not a valid tag (e.g. "a < b") is escaped as text.
- * Unclosed allowed tags are auto-closed at the end of the string.
- */
-export function sanitizeAttributionHtml(html: string): string {
-  let out = "";
-  const stack: { tag: "a" | "code"; emitted: boolean }[] = [];
-  let i = 0;
-  while (i < html.length) {
-    const lt = html.indexOf("<", i);
-    if (lt === -1) {
-      out += escapeHtml(html.slice(i));
-      break;
-    }
-    out += escapeHtml(html.slice(i, lt));
-    const gt = html.indexOf(">", lt + 1);
-    if (gt === -1) {
-      out += escapeHtml(html.slice(lt));
-      break;
-    }
-    const raw = html.slice(lt + 1, gt).trim();
-    const isClosing = raw.startsWith("/");
-    const body = isClosing ? raw.slice(1).trim() : raw;
-    const nameMatch = /^[a-zA-Z][a-zA-Z0-9]*/.exec(body);
-    if (!nameMatch) {
-      out += escapeHtml(html.slice(lt, gt + 1));
-      i = gt + 1;
-      continue;
-    }
-    const tag = nameMatch[0].toLowerCase();
-    if (isClosing) {
-      let idx = -1;
-      for (let j = stack.length - 1; j >= 0; j--) {
-        if (stack[j].tag === tag) {
-          idx = j;
-          break;
-        }
-      }
-      if (idx !== -1) {
-        for (let j = stack.length - 1; j > idx; j--) {
-          if (stack[j].emitted) out += `</${stack[j].tag}>`;
-        }
-        if (stack[idx].emitted) out += `</${tag}>`;
-        stack.length = idx;
-      }
-    } else if (tag === "a") {
-      const href = safeExternalUrl(extractHref(body.slice(nameMatch[0].length)));
-      if (href) {
-        out += `<a href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer">`;
-        stack.push({ tag: "a", emitted: true });
-      } else {
-        stack.push({ tag: "a", emitted: false });
-      }
-    } else if (tag === "code") {
-      out += "<code>";
-      stack.push({ tag: "code", emitted: true });
-    }
-    i = gt + 1;
-  }
-  for (let j = stack.length - 1; j >= 0; j--) {
-    if (stack[j].emitted) out += `</${stack[j].tag}>`;
-  }
-  return out;
+type HtmlNode = DefaultTreeAdapterTypes.Node;
+
+function attributionFragment(html: string): DefaultTreeAdapterTypes.DocumentFragment {
+  let incompleteTag = false;
+  const fragment = parseFragment(html, {
+    onParseError: (error) => {
+      if (error.code === "eof-in-tag") incompleteTag = true;
+    },
+  });
+  // The HTML parser drops dangling tags. Keep malformed notices in full as
+  // literal text, rather than silently losing their trailing source wording.
+  return incompleteTag ? parseFragment(escapeHtml(html)) : fragment;
 }
 
-function extractHref(attrs: string): string | undefined {
-  const match = /(?:^|\s)href\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'>]+))/i.exec(attrs);
-  if (!match) return undefined;
-  return match[1] ?? match[2] ?? match[3];
+function children(node: HtmlNode): HtmlNode[] {
+  if ("content" in node) return node.content.childNodes;
+  return "childNodes" in node ? node.childNodes : [];
+}
+
+function hiddenSpan(node: HtmlNode): boolean {
+  if (!("tagName" in node) || node.tagName !== "span") return false;
+  const style = node.attrs.find((attr) => attr.name === "style")?.value;
+  return (
+    style
+      ?.split(";")
+      .some((declaration) => /^\s*display\s*:\s*none\s*(?:!important)?\s*$/i.test(declaration)) ??
+    false
+  );
+}
+
+/** Plain text and HTTP(S) links, never HTML suitable for insertion into a DOM. */
+export function parseAttributionHtml(
+  html: string,
+  options: { linkBaseUrl?: string; omitHiddenSpans?: boolean } = {},
+): { text: string; links: { label: string; url: string }[] } {
+  const parts: string[] = [];
+  const links: { label: string; url: string }[] = [];
+  const pending: ({ node: HtmlNode } | { url: string; start: number })[] = [
+    { node: attributionFragment(html) },
+  ];
+  while (pending.length) {
+    const item = pending.pop();
+    if (!item) break;
+    if ("url" in item) {
+      links.push({ label: parts.slice(item.start).join("").trim(), url: item.url });
+      continue;
+    }
+    const node = item.node;
+    if (options.omitHiddenSpans && hiddenSpan(node)) continue;
+    if ("value" in node) {
+      parts.push(node.value.replace(/\u00a0/g, " "));
+      continue;
+    }
+    if ("tagName" in node && node.tagName === "a") {
+      const url = safeExternalUrl(
+        node.attrs.find((attr) => attr.name === "href")?.value,
+        options.linkBaseUrl,
+      );
+      if (url) pending.push({ url, start: parts.length });
+    }
+    const childNodes = children(node);
+    for (let i = childNodes.length - 1; i >= 0; i--) pending.push({ node: childNodes[i] });
+  }
+  return { text: parts.join("").trim(), links };
+}
+
+/**
+ * Parse-and-rebuild manifest HTML with only HTTP(S) anchors and bare code tags.
+ * Parsed text and attribute values are escaped; input never supplies tag syntax.
+ */
+export function sanitizeAttributionHtml(html: string): string {
+  const out: string[] = [];
+  const pending: (HtmlNode | "</a>" | "</code>")[] = [attributionFragment(html)];
+  while (pending.length) {
+    const node = pending.pop();
+    if (!node) break;
+    if (typeof node === "string") {
+      out.push(node);
+      continue;
+    }
+    if ("value" in node) {
+      out.push(escapeHtml(node.value.replace(/\u00a0/g, " ")));
+      continue;
+    }
+    if ("tagName" in node && node.tagName === "a") {
+      const href = safeExternalUrl(node.attrs.find((attr) => attr.name === "href")?.value);
+      if (href) {
+        out.push(`<a href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer">`);
+        pending.push("</a>");
+      }
+    } else if ("tagName" in node && node.tagName === "code") {
+      out.push("<code>");
+      pending.push("</code>");
+    }
+    const childNodes = children(node);
+    for (let i = childNodes.length - 1; i >= 0; i--) pending.push(childNodes[i]);
+  }
+  return out.join("");
 }
 
 /**

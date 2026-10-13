@@ -1,3 +1,9 @@
+import type { Attribution } from "@openmapx/mobility-core/attribution";
+import {
+  type ContributingRecord,
+  snapshotContributors,
+  withContributors,
+} from "@openmapx/mobility-core/contributors";
 /**
  * Nextbike API client.
  * Covers 300+ cities across 30+ countries with a single open endpoint.
@@ -13,9 +19,9 @@ const FETCH_TIMEOUT_MS = 10_000;
 // The global feed was 28.6 MB in August 2026. Keep this bulk-only ceiling
 // separate from the ordinary 8 MiB API limit and leave bounded growth room.
 const MAX_RESPONSE_BYTES = 40 * 1024 * 1024;
-const CACHE_KEY = "shared-mobility:nextbike:all";
+const CACHE_KEY = "shared-mobility:nextbike:all:contributors-v1";
 
-interface NextbikeCountry {
+interface NextbikeCountry extends ContributingRecord {
   country: string;
   country_name: string;
   cities: NextbikeCity[];
@@ -55,6 +61,7 @@ interface NextbikeBike {
 export async function searchNextbike(
   bbox: BoundingBox,
   cache: CacheClient,
+  contributors?: readonly Attribution[],
 ): Promise<SharedMobilityStation[]> {
   const allData = await withCache<NextbikeCountry[]>(
     cache,
@@ -66,7 +73,9 @@ export async function searchNextbike(
         maxBytes: MAX_RESPONSE_BYTES,
         errorMessage: ({ status }) => `Nextbike API error: ${status}`,
       });
-      return json.countries;
+      return json.countries.map((country) =>
+        contributors === undefined ? country : withContributors(country, contributors),
+      );
     },
   );
 
@@ -101,6 +110,9 @@ export async function searchNextbike(
           vehicleTypes: ["bicycle"],
           isActive: place.bikes > 0 || place.free_racks > 0,
           sources: [`nextbike/${city.uid}`],
+          ...(country.contributors === undefined
+            ? {}
+            : { contributors: snapshotContributors(country.contributors) }),
         });
       }
     }

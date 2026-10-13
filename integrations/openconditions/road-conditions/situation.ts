@@ -5,7 +5,9 @@ import type {
   RoadConditionRoadRef,
   RoadConditionValidity,
 } from "@openmapx/integration-framework";
+import { parseContributors, snapshotContributors } from "@openmapx/integration-framework";
 import { type CreditSources, licenseText, NO_SOURCES } from "../features/record.js";
+import type { CapturedSourceCredits } from "../sources.js";
 
 type Rec = Record<string, unknown>;
 
@@ -72,7 +74,10 @@ function validityOf(raw: Rec): RoadConditionValidity {
 export function situationToRoadConditionEvent(
   record: Rec,
   provider = "",
-  sources: Pick<CreditSources, "licenseName"> = NO_SOURCES,
+  sources: Pick<CreditSources, "licenseName"> & {
+    noticeOf?: CapturedSourceCredits["noticeOf"];
+    contributors?: CapturedSourceCredits["contributors"];
+  } = NO_SOURCES,
 ): RoadConditionEvent | null {
   const location = obj(record["location"]) ?? {};
   const geometry = obj(location["geometry"]);
@@ -83,10 +88,36 @@ export function situationToRoadConditionEvent(
   const severity = obj(record["severity"]) ?? {};
   const evidence = obj(record["evidence"]);
   const license = str(attribution["license"]);
+  const parentSourceId = str(attribution["parentSourceId"]);
+  const notice = sources.noticeOf?.(parentSourceId ?? String(provenance["sourceId"]));
+  const sourceId = parentSourceId ?? str(provenance["sourceId"]);
+  const native = parseContributors(record["contributors"]);
+  const recordedNotice = str(attribution["notice"]);
+  const resolved = sourceId ? sources.contributors?.(sourceId) : undefined;
+  const contributors =
+    native ??
+    snapshotContributors(
+      resolved?.length
+        ? resolved
+        : sourceId && str(attribution["provider"])
+          ? [
+              {
+                sourceId,
+                name: String(attribution["provider"]),
+                ...strField("url", attribution["url"]),
+                ...(license ? { spdxLicense: licenseText(license, sources) } : {}),
+                ...strField("licenseUrl", attribution["licenseUrl"]),
+              },
+            ]
+          : [],
+      sourceId && notice ? [{ sourceId, name: notice }] : [],
+      sourceId && recordedNotice ? [{ sourceId, name: recordedNotice }] : [],
+    );
   const direction = obj(location["direction"]);
   const roads = roadsOf(location);
   return {
     id: String(record["id"]),
+    contributors,
     source: String(provenance["sourceId"]),
     provider,
     ...strField("groupId", record["groupId"]),
@@ -133,6 +164,8 @@ export function situationToRoadConditionEvent(
       provider: str(attribution["provider"]) ?? String(provenance["sourceId"]),
       ...(license ? { license: licenseText(license, sources) } : {}),
       ...strField("url", str(attribution["licenseUrl"]) ?? attribution["url"]),
+      ...(parentSourceId ? { sourceId: parentSourceId } : {}),
+      ...(notice ? { notice } : {}),
     },
     ...strField("updatedAt", provenance["sourceUpdatedAt"]),
     fetchedAt: String(freshness["fetchedAt"]),

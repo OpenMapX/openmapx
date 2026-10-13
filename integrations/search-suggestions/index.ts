@@ -51,7 +51,7 @@ export function setup(ctx: IntegrationContext): void {
       ? query.proximity.map((value) => Math.round(value * 100) / 100).join(",")
       : "none";
     const key = [
-      "aggregate",
+      "aggregate:v2-contributors",
       normalized,
       query.lang,
       proximityKey,

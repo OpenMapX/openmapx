@@ -13,6 +13,8 @@ import {
   normalizeOperator,
   timeZoneAt,
 } from "@openmapx/core";
+import type { Attribution } from "@openmapx/mobility-core/attribution";
+import { snapshotContributors } from "@openmapx/mobility-core/contributors";
 import {
   availabilityOf,
   type ChargingConnector,
@@ -587,6 +589,7 @@ export async function planCharges(input: PlanInput, cb: PlanCallbacks): Promise<
   const totalDistM = sampleDistM[sampleDistM.length - 1] || 1;
 
   let startIdx = 0;
+  let matrixContributors: Attribution[] = [];
   let elapsedSec = 0; // wall-clock into the trip (drive so far + prior charge times)
   for (let iter = 0; iter < MAX_STOPS; iter++) {
     // reachable (REACH_EPS_KWH absorbs float error when a prior charge was exactly enough)
@@ -779,10 +782,18 @@ export async function planCharges(input: PlanInput, cb: PlanCallbacks): Promise<
         addedKwh,
         chargeSeconds,
       }) ?? undefined;
+    // The approach cell supplies arrival SOC and arrival time. Earlier selected
+    // approaches also affect the later tariff's wall-clock arrival time.
+    matrixContributors = snapshotContributors(
+      matrixContributors,
+      matrix[0]?.[best.idx]?.contributors ?? [],
+    );
     stops.push({
+      matrixContributors: snapshotContributors(matrixContributors),
       site: chosen.s,
       evse: chosen.pick.evse,
       connector: chosen.pick.standard,
+      connectorKey: chosen.pick.connector.key,
       powerKw: chosen.pick.powerKw,
       coordinates: chosen.s.coordinates,
       arriveSocKwh: arriveKwh,

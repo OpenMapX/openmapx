@@ -1,4 +1,5 @@
 import type { LngLat, RouteFlowSpan } from "@openmapx/core";
+import { contributorsForFields, serializeContributors } from "@openmapx/mobility-core/contributors";
 import { lineString } from "@turf/helpers";
 import length from "@turf/length";
 import lineSliceAlong from "@turf/line-slice-along";
@@ -116,6 +117,7 @@ export function buildStaticSpanFeatures(
         type: "Feature",
         geometry: sliced.geometry,
         properties: {
+          ...bandReceiptProperties(span),
           variant: route.variant,
           los: span.los,
           confidence: span.confidence,
@@ -163,6 +165,7 @@ export function buildCurrentSpanFeatures(
       type: "Feature",
       geometry: sliced.geometry,
       properties: {
+        ...bandReceiptProperties(span),
         variant: route.variant,
         los: span.los,
         confidence: span.confidence,
@@ -190,4 +193,14 @@ export function activeSpanFilter(alongMeters: number): maplibregl.FilterSpecific
     ["==", ["get", "variant"], "active"],
     ["<=", alongMeters, ["get", "startMeters"]],
   ] as maplibregl.FilterSpecification;
+}
+
+/** Route geometry is supplied by its route; these bands display only FLOW color. */
+function bandReceiptProperties(span: RouteFlowSpan): Record<string, string> {
+  if (span.fieldContributors === undefined) return {};
+  return {
+    _mapAttributions: serializeContributors(
+      contributorsForFields(span.fieldContributors, [span.speedRatio == null ? "los" : "ratio"]),
+    ),
+  };
 }

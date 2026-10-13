@@ -405,7 +405,7 @@ export const osrmService: RoutingProvider = {
 
     return {
       waypoints,
-      routes: data.routes.map((r) => transformRoute(r, "driving")),
+      routes: data.routes.map((r) => ({ ...transformRoute(r, "driving"), sourceIds: ["osrm"] })),
       activeRouteIndex: 0,
     };
   },
@@ -443,7 +443,7 @@ export const osrmService: RoutingProvider = {
 
     return {
       waypoints,
-      routes: data.trips.map((r) => transformRoute(r, "driving")),
+      routes: data.trips.map((r) => ({ ...transformRoute(r, "driving"), sourceIds: ["osrm"] })),
       activeRouteIndex: 0,
       optimizedOrder,
     };

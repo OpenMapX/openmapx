@@ -3,6 +3,11 @@ import { photonService, photonSourceIds, setPhotonUrl } from "./provider.js";
 
 let mockFetch: ReturnType<typeof vi.fn>;
 
+function requiredAutocomplete(query: string) {
+  if (!photonService.autocomplete) throw new Error("Photon autocomplete method missing");
+  return photonService.autocomplete(query);
+}
+
 function mockOk(data: unknown) {
   return Response.json(data);
 }
@@ -309,6 +314,7 @@ describe("Photon geocoding provider", () => {
     expect(result).toEqual({
       address: "Bahnhofsvorplatz 1, Köln, Germany",
       city: "Köln, North Rhine-Westphalia",
+      sourceIds: photonSourceIds(),
     });
     expect(String(mockFetch.mock.calls[0]?.[0])).toContain("/reverse");
   });
@@ -317,4 +323,81 @@ describe("Photon geocoding provider", () => {
     mockFetch.mockResolvedValueOnce(mockOk({ features: [] }));
     expect(await photonService.reverseGeocode(0, 0)).toBeNull();
   });
+});
+
+it.each(["geocode", "reverseGeocode", "autocomplete"] as const)(
+  "%s retains the endpoint certificate acquired before a runtime switch",
+  async (method) => {
+    const data = {
+      features: [
+        {
+          geometry: { coordinates: [6.95, 50.94] },
+          properties: {
+            osm_id: 7,
+            osm_type: "N",
+            osm_key: "place",
+            osm_value: "city",
+            name: "Köln",
+          },
+        },
+      ],
+    };
+    mockFetch.mockImplementationOnce(() => {
+      setPhotonUrl("https://photon.komoot.io");
+      return Promise.resolve(mockOk(data));
+    });
+    const result =
+      method === "reverseGeocode"
+        ? await photonService.reverseGeocode(50.94, 6.95)
+        : method === "geocode"
+          ? await photonService.geocode("Köln")
+          : await requiredAutocomplete("Köln");
+    const row = Array.isArray(result) ? result[0] : result;
+    expect(row?.sourceIds).toEqual(["photon"]);
+    expect(new URL(String(mockFetch.mock.calls[0][0])).hostname).toBe("photon.test");
+  },
+);
+it("keeps the same acquired endpoint for supplemental native-name data", async () => {
+  mockFetch.mockImplementationOnce(() => {
+    setPhotonUrl("https://photon.komoot.io");
+    return Promise.resolve(
+      mockOk({
+        features: [
+          {
+            geometry: { coordinates: [6.95, 50.94] },
+            properties: {
+              osm_id: 7,
+              osm_type: "N",
+              osm_key: "place",
+              osm_value: "city",
+              name: "Cologne",
+            },
+          },
+        ],
+      }),
+    );
+  });
+  mockFetch.mockResolvedValueOnce(
+    mockOk({
+      features: [
+        {
+          geometry: { coordinates: [6.95, 50.94] },
+          properties: {
+            osm_id: 7,
+            osm_type: "N",
+            osm_key: "place",
+            osm_value: "city",
+            name: "Köln",
+          },
+        },
+      ],
+    }),
+  );
+  const [result] = await requiredAutocomplete("Köln");
+  expect(mockFetch.mock.calls.map((call) => new URL(String(call[0])).hostname)).toEqual([
+    "photon.test",
+    "photon.test",
+  ]);
+  expect(result.searchMatch?.value).toBe("Köln");
+  expect(result.sourceIds).toEqual(["photon"]);
 });

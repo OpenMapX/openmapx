@@ -66,14 +66,16 @@ export function dedupeAttributionHtml(items: string[]): string[] {
 // Base-map credits lead the strip — the imagery/map data the whole view rests
 // on comes first, then per-layer credits in registration order.
 const BASE_LAYER_KEY = "base";
+const isBaseOwner = (key: string) =>
+  key === BASE_LAYER_KEY || key.startsWith(`${BASE_LAYER_KEY}::`);
 
 /** Deduped credits for the current map, in display order. */
 export function useMapAttributionHtml(): string[] {
   const byLayer = useMapAttributionStore((s) => s.byLayer);
   return useMemo(() => {
     const keys = Object.keys(byLayer).sort((a, b) => {
-      if (a === BASE_LAYER_KEY) return -1;
-      if (b === BASE_LAYER_KEY) return 1;
+      if (isBaseOwner(a) && !isBaseOwner(b)) return -1;
+      if (isBaseOwner(b) && !isBaseOwner(a)) return 1;
       return 0;
     });
     return dedupeAttributionHtml(keys.flatMap((key) => byLayer[key] ?? []));

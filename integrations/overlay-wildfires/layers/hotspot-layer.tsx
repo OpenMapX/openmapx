@@ -1,6 +1,7 @@
 "use client";
 
 import { escapeHtml, relativeTime } from "@openmapx/core";
+import { captureHazardFeatures } from "@openmapx/integration-framework";
 import type { MapLayerMouseEvent } from "maplibre-gl";
 import * as maplibregl from "maplibre-gl";
 import { useTranslations } from "next-intl";
@@ -11,6 +12,8 @@ import { addLayerInSlot, unregisterLayerSlot } from "@/integration-api/map/layer
 import { useMap } from "@/integration-api/map/MapContext";
 import { getMapClickOwner } from "@/integration-api/map/mapClickOwnership";
 import { useGeoJsonSourceDataBridge } from "@/integration-api/map/useGeoJsonSourceDataBridge";
+import { useContributorResolver } from "@/integration-api/overlay/useContributorResolver";
+import { useRenderedMapAttributions } from "@/integration-api/overlay/useRenderedMapAttributions";
 import { useEnv } from "@/integration-api/runtime/EnvProvider";
 import { HOTSPOT_POINTS_MIN_ZOOM } from "../bounds";
 import {
@@ -216,6 +219,12 @@ export function HotspotLayer({ active, popupController }: HotspotLayerProps) {
   const showHeatmap = useWildfireStore((s) => s.showHeatmap);
   const t = useTranslations("wildfires");
   const popupLease = useRef<WildfirePopupLease>({});
+  const resolveContributors = useContributorResolver();
+  useRenderedMapAttributions(
+    "wildfires-hotspots",
+    [CIRCLE_LAYER_ID, HEATMAP_LAYER_ID, DENSITY_LAYER_ID, DENSITY_HEATMAP_LAYER_ID],
+    active,
+  );
   const bridge = useGeoJsonSourceDataBridge({
     mapRef,
     mapReady,
@@ -268,19 +277,24 @@ export function HotspotLayer({ active, popupController }: HotspotLayerProps) {
 
   const publish = useCallback(
     (data: HotspotData) => {
+      const collection = captureHazardFeatures(
+        data.collection,
+        resolveContributors,
+        (feature) => feature.properties?.sources ?? [],
+      );
       bridge.publish(
         data.kind === "points"
           ? [
-              { sourceId: SOURCE_ID, data: data.collection },
+              { sourceId: SOURCE_ID, data: collection },
               { sourceId: DENSITY_SOURCE_ID, data: EMPTY_COLLECTION },
             ]
           : [
-              { sourceId: DENSITY_SOURCE_ID, data: data.collection },
+              { sourceId: DENSITY_SOURCE_ID, data: collection },
               { sourceId: SOURCE_ID, data: EMPTY_COLLECTION },
             ],
       );
     },
-    [bridge.publish],
+    [bridge.publish, resolveContributors],
   );
 
   const clear = useCallback(() => {

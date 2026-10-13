@@ -1,3 +1,4 @@
+import { parseContributors } from "@openmapx/mobility-core/contributors";
 import type { BBox } from "../types/geometry";
 import type {
   LocalizedText,
@@ -137,10 +138,12 @@ export function roadConditionFeatureToEvent(
   const evidence = object(p.evidence);
   const roadRefs = roads(p.roads);
   const affectedDirection = direction(p.direction);
+  const contributors = parseContributors(p.contributors);
   const headline = text(p.headline);
   const description = text(p.description);
   return {
     id,
+    ...(contributors === undefined ? {} : { contributors }),
     source: str(p.source) ?? "",
     provider: str(p.provider) ?? "",
     ...(str(p.groupId) ? { groupId: str(p.groupId) } : {}),
@@ -166,9 +169,11 @@ export function roadConditionFeatureToEvent(
       ? { evidence: evidence as RoadConditionEvent["evidence"] }
       : {}),
     attribution: {
-      provider: str(attribution?.provider) ?? str(p.source) ?? "",
+      provider: str(attribution?.provider) ?? "",
       ...(str(attribution?.license) ? { license: str(attribution?.license) } : {}),
       ...(str(attribution?.url) ? { url: str(attribution?.url) } : {}),
+      ...(str(attribution?.sourceId) ? { sourceId: str(attribution?.sourceId) } : {}),
+      ...(str(attribution?.notice) ? { notice: str(attribution?.notice) } : {}),
     },
     ...(str(p.updatedAt) ? { updatedAt: str(p.updatedAt) } : {}),
     fetchedAt: str(p.fetchedAt) ?? "",

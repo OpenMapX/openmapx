@@ -1391,6 +1391,7 @@ describe("visible category card enrichment", () => {
       url: "https://upload.wikimedia.org/wikipedia/commons/a/ab/Dom.jpg",
       source: "wikimedia",
       author: "Draupnir3",
+      licenseUrl: "https://creativecommons.org/licenses/by-sa/3.0/",
       authorUrl: "https://commons.wikimedia.org/wiki/User:Draupnir3",
       license: "CC BY-SA 3.0",
       pageUrl: "https://commons.wikimedia.org/wiki/File:Dom.jpg",
@@ -1777,4 +1778,153 @@ describe("CategoryResultsContent brand empty state", () => {
     expect(screen.getByText("search.noBrandLocationsInView")).toBeInTheDocument();
     expect(screen.queryByText("search.noResultsFound")).not.toBeInTheDocument();
   });
+});
+
+it("credits captured retained row fields without consulting diagnostic provenance", () => {
+  const exact = { sourceId: "exact", name: "Exact row supplier" };
+  mockUseExploreReachResults.mockReturnValue({
+    filtered: [
+      {
+        id: "osm:node/80",
+        name: "Receipt cafe",
+        coordinates: [8, 50],
+        address: "",
+        provenance: [{ sourceId: "discarded", dataset: "Unused enrichment" }],
+        fieldContributors: {
+          name: [exact],
+          phone: [{ sourceId: "hidden", name: "Hidden phone supplier" }],
+        },
+      },
+    ],
+    isLoading: false,
+    isError: false,
+    partial: false,
+    truncated: false,
+    relaxed: [],
+    isTransitCategory: false,
+    refetch: vi.fn(),
+  });
+  renderPanel(vi.fn());
+  expect(screen.getByText("Receipt cafe")).toBeInTheDocument();
+  expect(screen.getByText("Exact row supplier")).toBeInTheDocument();
+  expect(screen.queryByText("Hidden phone supplier")).toBeNull();
+});
+
+it("projects only capped displayed attributes, distance, hours and independent captured rating", async () => {
+  const { categoryCardContributors } = await import("./CategoryResultsContent");
+  const credit = (sourceId: string) => [{ sourceId, name: sourceId }];
+  const place: CategoryPlace = {
+    id: "osm:node/82",
+    name: "Cafe",
+    coordinates: [8, 50],
+    address: "Street",
+    category: "cafe",
+    isOpen: false,
+    osmTags: { cuisine: "italian", outdoor_seating: "yes", wheelchair: "yes" },
+    fieldContributors: {
+      name: credit("name"),
+      coordinates: credit("distance"),
+      address: credit("address"),
+      category: credit("category"),
+      isOpen: credit("hours"),
+      "osmTags.cuisine": credit("cuisine"),
+      "osmTags.outdoor_seating": credit("seating"),
+      "osmTags.wheelchair": credit("capped"),
+      phone: credit("hidden"),
+    },
+  };
+  const summary = {
+    id: place.id,
+    rating: { stars: 4, count: 5, source: "rating", contributors: credit("rating") },
+  };
+  expect(categoryCardContributors(place, summary, null).map((r) => r.sourceId)).toEqual([
+    "name",
+    "category",
+    "address",
+    "cuisine",
+    "seating",
+    "hours",
+    "rating",
+  ]);
+  expect(
+    categoryCardContributors(
+      place,
+      { ...summary, rating: { ...summary.rating, contributors: [] } },
+      null,
+    ).map((r) => r.sourceId),
+  ).not.toContain("rating");
+});
+
+it("uses the captured rating source label and keeps native empty receipts independent of the live registry", async () => {
+  const { categoryRatingSourceName } = await import("./CategoryResultsContent");
+  const rating = {
+    stars: 4,
+    count: 5,
+    source: "rating",
+    contributors: [{ sourceId: "rating", name: "Captured original" }],
+  };
+  const catalogue = { findDataSource: () => ({ name: "Changed live label" }) };
+  expect(categoryRatingSourceName(rating, catalogue)).toBe("Captured original");
+  expect(categoryRatingSourceName({ ...rating, contributors: [] }, catalogue)).toBe("rating");
+  expect(categoryRatingSourceName({ ...rating, contributors: undefined }, catalogue)).toBe(
+    "Changed live label",
+  );
+});
+
+it("credits displayed transit fields with full notices, native empty rows and nearest child ownership", async () => {
+  const receipt = (name: string) => ({
+    sourceId: "same-feed",
+    name,
+    attributionText: `${name} required notice`,
+  });
+  const a = receipt("Name supplier");
+  const b = receipt("Mode supplier");
+  const hidden = receipt("Hidden supplier");
+  vi.spyOn(apiClient, "get").mockResolvedValue({
+    data: [
+      {
+        id: "stop:one",
+        name: "Displayed station",
+        modes: ["bus", "rail", "rail"],
+        coordinates: { lat: 51, lng: 6 },
+        provider: "test",
+        contributors: [hidden],
+        fieldContributors: {
+          name: [a],
+          modes: [hidden],
+          "modes.0": [],
+          "modes.1": [b],
+          "modes.2": [hidden],
+          coordinates: [hidden],
+        },
+      },
+      {
+        id: "stop:empty",
+        name: "Empty station",
+        modes: ["bus"],
+        coordinates: { lat: 51, lng: 6 },
+        provider: "test",
+        contributors: [],
+      },
+    ],
+    attributions: [hidden],
+    freshness: undefined,
+  } as never);
+  act(() => {
+    useCategorySearchStore.getState().setActiveCategory("transit");
+    useCategorySearchStore.getState().setSearchBbox({ west: 5, east: 7, south: 50, north: 52 });
+  });
+  mockUseExploreReachResults.mockReturnValue({
+    filtered: undefined,
+    isLoading: false,
+    isError: false,
+    isTransitCategory: true,
+    refetch: vi.fn(),
+  });
+  renderPanel(vi.fn());
+  await screen.findByText("Displayed station");
+  expect(screen.getByText("Empty station")).toBeInTheDocument();
+  expect(screen.getByText("Name supplier")).toBeInTheDocument();
+  expect(screen.getByText("Mode supplier")).toBeInTheDocument();
+  expect(screen.queryByText("Hidden supplier")).toBeNull();
 });

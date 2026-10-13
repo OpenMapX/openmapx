@@ -246,6 +246,11 @@ export function createPanoramaxProvider(options: {
           minzoom: 0,
           maxzoom: 15,
           layers: { sequences: "sequences", pictures: "pictures", grid: "grid" },
+          layerSourceIds: {
+            sequences: ["panoramax"],
+            pictures: ["panoramax"],
+            grid: ["panoramax"],
+          },
           props: {
             id: "id",
             isPano: "type",

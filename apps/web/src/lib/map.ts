@@ -1,6 +1,7 @@
 import type { OfflineMapPackageManifest } from "@openmapx/core";
 import { escapeHtml, sanitizeUrl } from "@openmapx/core";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
+import { OPENSTREETMAP_ATTRIBUTION } from "@openmapx/mobility-core/attribution";
 import type { ClientEnv } from "@/integration-api/runtime/env";
 import { resolveOfflinePackageStyle } from "./offlineAreas/packageStyle";
 
@@ -17,13 +18,7 @@ import { resolveOfflinePackageStyle } from "./offlineAreas/packageStyle";
  * providers treat them as untranslated identifiers); the leading "©" is
  * universal. Do not pipe these through next-intl.
  */
-export const OSM_ATTRIBUTION: Attribution = {
-  sourceId: "openstreetmap",
-  name: "© OpenStreetMap contributors",
-  url: "https://www.openstreetmap.org/copyright",
-  spdxLicense: "ODbL-1.0",
-  licenseUrl: "https://opendatacommons.org/licenses/odbl/",
-};
+export const OSM_ATTRIBUTION: Attribution = OPENSTREETMAP_ATTRIBUTION;
 
 export const OPENMAPTILES_ATTRIBUTION: Attribution = {
   sourceId: "openmaptiles",

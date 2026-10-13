@@ -164,6 +164,19 @@ describe("road-conditions provider and the live source list", () => {
     expect((await p.getRoutingEvents!(BBOX)).events.map((e) => e.id)).toEqual(ids);
   });
 
+  it("carries a catalogue child's parent credit id and required notice into the event", async () => {
+    const live = listed("nl-parent");
+    live.updateDescribed([
+      { id: "nl-parent", format: "datex2", notice: "Required publisher notice" },
+    ]);
+    const [event] = await provider({ serve: api([child]), sources: live }).getEvents(BBOX);
+    expect(event!.source).toBe("nl-child");
+    expect(event!.attribution).toMatchObject({
+      sourceId: "nl-parent",
+      notice: "Required publisher notice",
+    });
+  });
+
   it("credits a listed feed's LicenseRef- licence by the name the list gives it", async () => {
     const LICENSE = "LicenseRef-NDW-Terms";
     const named = situation("n", {
@@ -644,6 +657,14 @@ describe("situationToRoadConditionEvent", () => {
       id: "oc:situation:fi-digitraffic-events:GUID1",
       source: "fi-digitraffic-events",
       provider: "road-conditions-openconditions",
+      contributors: [
+        {
+          sourceId: "fi-digitraffic-events",
+          name: "Fintraffic / Digitraffic",
+          spdxLicense: "CC-BY-4.0",
+          licenseUrl: "https://creativecommons.org/licenses/by/4.0/",
+        },
+      ],
       groupId: "GUID1",
       kind: "roadworks",
       type: "works",
@@ -920,5 +941,106 @@ describe("featureCollectionToRoadFlowSegments", () => {
       "road-conditions-openconditions",
     );
     expect(segments[0]!.direction).toBe("b");
+  });
+});
+
+describe("situation acquisition receipts", () => {
+  it("captures each page before its acquisition and never guesses a catalogue parent", async () => {
+    const sources = createLiveSources();
+    const metadata = (name: string) => [
+      { sourceId: "parent", name, url: "https://parent.test", license: "CC0-1.0" },
+    ];
+    sources.update(metadata("First page"));
+    let page = 0;
+    const client = {
+      async get(path: string) {
+        if (path !== "/situations") return { schema_version: 2, complete: true, conditions: [] };
+        page++;
+        const records = [
+          situation(String(page), {
+            provenance: {
+              sourceId: page === 3 ? "parent-child" : "child",
+              origin: "federation",
+              attribution: page === 3 ? {} : { parentSourceId: "parent" },
+            },
+          }),
+        ];
+        sources.update(metadata(page === 1 ? "Second page" : "Later"));
+        return { records, next: page < 3 ? String(page) : null };
+      },
+    };
+    const events = await createRoadConditionsProvider(client as never, sources).getEvents([
+      4, 51, 6, 53,
+    ]);
+    expect(events.map((event) => event.contributors?.map((c) => c.name))).toEqual([
+      ["First page"],
+      ["Second page"],
+      [],
+    ]);
+  });
+  it("captures the catalogue before a delayed page and preserves native empty receipts", async () => {
+    const sources = createLiveSources();
+    const old = {
+      sourceId: "parent",
+      name: "Old publisher",
+      url: "https://old.test",
+      license: "CC-BY-4.0",
+      attribution: "Old required notice",
+    };
+    sources.update([old]);
+    sources.updateDescribed([{ id: "parent", format: "datex", notice: "Old extra notice" }]);
+    let started!: () => void;
+    let release!: () => void;
+    const ready = new Promise<void>((r) => {
+      started = r;
+    });
+    const pending = new Promise<void>((r) => {
+      release = r;
+    });
+    const records = [
+      situation("a", {
+        provenance: {
+          sourceId: "child",
+          origin: "feed",
+          attribution: { provider: "Child", parentSourceId: "parent", notice: "Record notice" },
+        },
+      }),
+      situation("b", {
+        contributors: [],
+        provenance: {
+          sourceId: "child",
+          origin: "feed",
+          attribution: { parentSourceId: "parent" },
+        },
+      }),
+    ];
+    const client = {
+      async get(path: string) {
+        if (path === "/situations") {
+          started();
+          await pending;
+          return { records, next: null };
+        }
+        return { schema_version: 2, complete: true, conditions: [] };
+      },
+    };
+    const read = createRoadConditionsProvider(client as never, sources).getEvents([4, 51, 6, 53]);
+    await ready;
+    sources.update([{ ...old, name: "New publisher", attribution: "New required notice" }]);
+    sources.updateDescribed([{ id: "parent", format: "datex", notice: "New extra notice" }]);
+    release();
+    const result = await read;
+    expect(result[0]?.contributors).toEqual([
+      {
+        sourceId: "parent",
+        name: "Old publisher",
+        url: "https://old.test",
+        spdxLicense: "CC-BY-4.0",
+        attributionText: "Old required notice",
+      },
+      { sourceId: "parent", name: "Old extra notice" },
+      { sourceId: "parent", name: "Record notice" },
+    ]);
+    expect(result[1]?.contributors).toEqual([]);
   });
 });

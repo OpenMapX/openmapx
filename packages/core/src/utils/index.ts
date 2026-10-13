@@ -1,3 +1,4 @@
+export { dataSourceToAttribution } from "@openmapx/mobility-core/contributors";
 export { isCityOrSmaller } from "./administrativePlace";
 export {
   buildAttributionHtml,
@@ -6,16 +7,19 @@ export {
   buildSourceAttribution,
   combineAttributions,
   extractSourcePrefix,
+  parseAttributionHtml,
   pickIntegrationForSources,
   sanitizeAttributionHtml,
 } from "./attribution";
 export { bboxAroundPoint, bboxCacheKey, geoJsonBBox } from "./bbox";
 export {
   BRAND_QID_KEYS,
+  brandForPlaceLogo,
   brandToFilter,
   commonsLogoUrl,
   firstBrandIdentity,
   gapFillBranding,
+  withBrandingContributors,
 } from "./brandFilter";
 export { isBuildingStyleLayer } from "./buildingStyle";
 export { withCache } from "./cache-helpers";
@@ -139,6 +143,11 @@ export {
 } from "./gridOrientation";
 export { buildHotelOpenUrl } from "./hotelLink";
 export { bareDomain } from "./httpUrl";
+export {
+  captureKnowledgeResult,
+  knowledgeFieldContributors,
+  mergeKnowledgeResults,
+} from "./knowledgeContributors";
 export { formatAddress, legalConfig } from "./legalConfig";
 export { isLodging } from "./lodgingPlace";
 export { type MatchRange, matchRanges } from "./matchRanges";
@@ -166,6 +175,7 @@ export {
   reconstructMultiLineString,
   reconstructMultiPolygon,
   reconstructPolygon,
+  setOverpassContributorResolver,
   setOverpassUrl,
 } from "./overpass";
 export type {
@@ -205,11 +215,14 @@ export {
 } from "./overtureCategoryTyped";
 export {
   assertSupportedOvertureContributors,
+  captureOvertureFieldContributors,
   normalizeOvertureProvenance,
   OVERTURE_PLACE_DATASET_SOURCE_IDS,
   type OverturePlaceDataset,
   type OvertureSourceItem,
   overtureDatasetSourceId,
+  overturePropertyContributors,
+  selectOvertureName,
 } from "./overtureSource";
 export {
   parseCoordinateInput,

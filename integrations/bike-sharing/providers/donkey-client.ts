@@ -1,3 +1,5 @@
+import type { Attribution } from "@openmapx/mobility-core/attribution";
+import { snapshotContributors } from "@openmapx/mobility-core/contributors";
 /**
  * Donkey Republic API client.
  * Multi-vehicle hubs (bikes, e-bikes, e-scooters) across European cities.
@@ -31,7 +33,10 @@ interface DonkeyResponse {
 /**
  * Search Donkey Republic hubs within a bounding box.
  */
-export async function searchDonkey(bbox: BoundingBox): Promise<SharedMobilityStation[]> {
+export async function searchDonkey(
+  bbox: BoundingBox,
+  contributors?: readonly Attribution[],
+): Promise<SharedMobilityStation[]> {
   const url = new URL("https://stables.donkey.bike/api/public/nearby");
   url.searchParams.set("top_right", `${bbox.north},${bbox.east}`);
   url.searchParams.set("bottom_left", `${bbox.south},${bbox.west}`);
@@ -65,6 +70,7 @@ export async function searchDonkey(bbox: BoundingBox): Promise<SharedMobilitySta
       vehicleTypes,
       isActive: totalBikes > 0,
       sources: ["donkey"],
+      ...(contributors === undefined ? {} : { contributors: snapshotContributors(contributors) }),
     };
   });
 }

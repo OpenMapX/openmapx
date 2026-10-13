@@ -6,6 +6,7 @@ import type {
   NaturalHazard,
   NaturalHazardType,
 } from "@openmapx/integration-framework";
+import { parseContributors, snapshotContributors } from "@openmapx/integration-framework";
 import {
   credit,
   list,
@@ -14,6 +15,7 @@ import {
   rec,
   sourcesOf,
   str,
+  upstreamCredits,
 } from "../features/record.js";
 import type { LiveSources } from "../sources.js";
 
@@ -62,6 +64,26 @@ const bool = (value: unknown): boolean | undefined =>
 
 const field = <K extends string, V>(key: K, value: V | undefined): { [P in K]?: V } =>
   (value === undefined ? {} : { [key]: value }) as { [P in K]?: V };
+
+/** Capture at acquisition; explicit producer receipts, including [], are authoritative. */
+function contributorsOf(record: Rec, sources: LiveSources) {
+  const captured = parseContributors(
+    record["contributors"] ?? rec(record["provenance"])["contributors"],
+  );
+  if (captured !== undefined) return snapshotContributors(captured);
+  const members = sourcesOf(record);
+  return snapshotContributors(
+    members.flatMap((member) => {
+      const own = credit(member, sources);
+      const described = sources.contributors?.(member.id) ?? [];
+      const notice = sources.noticeOf(member.id);
+      const catalogue = described.find((a) => a.name !== notice);
+      const captured = { ...catalogue, ...own };
+      return [captured, ...(notice ? [{ sourceId: member.id, name: notice }] : [])];
+    }),
+    upstreamCredits(members, sources),
+  );
+}
 
 function creditsOf(record: Rec): { ids: string[]; credits: RecordSource[] } {
   const credits = sourcesOf(record);
@@ -119,6 +141,7 @@ export function situationToAlert(
     ...field("web", str(cap["web"])),
     sources: ids,
     attributions: credits.map((s) => credit(s, sources)),
+    contributors: contributorsOf(record, sources),
     notices,
   };
 }
@@ -268,6 +291,7 @@ export function situationToNaturalHazard(
     ...field("detailUrl", str(details["detailUrl"])),
     sources: ids,
     attributions: credits.map((s) => credit(s, sources)),
+    contributors: contributorsOf(record, sources),
   };
 }
 
@@ -276,7 +300,11 @@ export function situationToNaturalHazard(
  * or a radiative power. The instrument is the reading's own, else the one
  * of the feed it was read from.
  */
-export function readingToFirePixel(record: Rec, instrument: FireInstrument): FirePixel | null {
+export function readingToFirePixel(
+  record: Rec,
+  instrument: FireInstrument,
+  sources?: LiveSources,
+): FirePixel | null {
   const geometry = rec(rec(record["location"])["geometry"]);
   const point = geometry["type"] === "Point" ? pointOf(geometry) : null;
   const result = rec(record["result"]);
@@ -313,12 +341,22 @@ export function readingToFirePixel(record: Rec, instrument: FireInstrument): Fir
     ...(Object.keys(confidence).length > 0 ? { confidence } : {}),
     ...(daynight === "day" || daynight === "night" ? { dayNight: daynight } : {}),
     sources: sourceId ? [sourceId] : [],
+    ...(sources ? { contributors: contributorsOf(record, sources) } : {}),
   };
 }
 
 /** The cells of a `/observations/grid` answer; a malformed cell is left out. */
-export function gridCellsOf(cells: unknown): FireDensityCell[] {
+export function gridCellsOf(cells: unknown, metadata?: unknown): FireDensityCell[] {
   if (!Array.isArray(cells)) throw new Error("Malformed grid answer");
+  const receipts = new Map<string, Rec>();
+  for (const entry of list(metadata)) {
+    const lon = num(entry["longitude"]);
+    const lat = num(entry["latitude"]);
+    if (lon === undefined || lat === undefined) continue;
+    const key = `${lon},${lat}`;
+    // Ambiguous repeated metadata must not assign a guessed supplier.
+    receipts.set(key, receipts.has(key) ? {} : entry);
+  }
   return cells.flatMap((cell) => {
     if (
       !Array.isArray(cell) ||
@@ -328,12 +366,27 @@ export function gridCellsOf(cells: unknown): FireDensityCell[] {
       return [];
     }
     const [lon, lat, count, sum, max] = cell as number[];
+    const metadata = receipts.get(`${lon},${lat}`);
+    const captured = parseContributors(metadata?.["contributors"]);
+    const nativeIds = metadata?.["native_sources"];
+    const nativeSources =
+      Array.isArray(nativeIds) && nativeIds.every((id) => typeof id === "string")
+        ? (nativeIds as string[])
+        : undefined;
+    const ids = metadata?.["sources"];
+    const exactIds =
+      Array.isArray(ids) && ids.every((id) => typeof id === "string") ? (ids as string[]) : [];
+
     return [
       {
         point: [lon!, lat!] as [number, number],
         count: count!,
         frpSumMW: sum!,
         frpMaxMW: max!,
+        sources: [...exactIds],
+        ...field("lineageComplete", bool(metadata?.["lineage_complete"])),
+        ...(nativeSources === undefined ? {} : { nativeSources: [...nativeSources] }),
+        contributors: snapshotContributors(captured ?? []),
       },
     ];
   });

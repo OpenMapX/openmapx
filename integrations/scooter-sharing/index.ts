@@ -1,6 +1,7 @@
 import { mobilityHttpTransport } from "@openmapx/core/mobility-http-transport";
 import { createDataSourceResolver } from "@openmapx/integration-data-source/resolver";
 import type { IntegrationContext } from "@openmapx/integration-framework";
+import { createSharedMobilityContributorResolver } from "@openmapx/integration-framework/shared-mobility-provider";
 import { createSharedMobilityRuntime } from "@openmapx/mobility-core/shared-mobility-runtime";
 import { registerPlaceResolver } from "@openmapx/place-ids";
 import { createDeNwMobidromScooterClient } from "./providers/de-nw-mobidrom-scooter-client.js";
@@ -10,7 +11,11 @@ import { createScooterSharingProvider } from "./providers/provider.js";
 export function setup(ctx: IntegrationContext): void {
   const motis = ctx.getRequiredService("motis");
   const nominatim = ctx.getRequiredService("nominatim");
+  const resolveContributors = createSharedMobilityContributorResolver(
+    ctx.manifest.dataSources ?? [],
+  );
   const runtime = createSharedMobilityRuntime({
+    resolveContributors,
     cache: ctx.cache,
     transport: mobilityHttpTransport,
     motisUrl: motis?.url,
@@ -33,6 +38,7 @@ export function setup(ctx: IntegrationContext): void {
       clientId: ctx.config["de-nw-mobidrom-scooter-client-id"] as string | undefined,
       clientSecret: ctx.config["de-nw-mobidrom-scooter-client-secret"] as string | undefined,
       transport: runtime.transport,
+      contributors: resolveContributors(["de-nw-mobidrom-scooter"]),
     }),
     searchFelyx,
   });

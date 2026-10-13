@@ -68,23 +68,23 @@ describe("gapFillBranding", () => {
     expect(gapFillBranding(existing, resolvableTags, resolveBrand)).toBe(existing);
   });
 
-  it("fills in a catalog logo when existing branding has no logoUrl, keeping other fields", () => {
+  it("keeps catalog identity without creating an uncredited Commons logo", () => {
     const existing = { name: "Feed's Own Name", color: "#ff0000" };
     const resolveBrand = vi.fn(() => catalogued);
 
     expect(gapFillBranding(existing, resolvableTags, resolveBrand)).toEqual({
       name: "Feed's Own Name",
       color: "#ff0000",
-      logoUrl: commonsLogoUrl(catalogued.logoFile, 96),
     });
   });
 
-  it("fills in the catalog name and logo when existing is undefined and tags resolve", () => {
+  it("fills in the catalog name without uncredited logo bytes", () => {
     const resolveBrand = vi.fn(() => catalogued);
 
     expect(gapFillBranding(undefined, resolvableTags, resolveBrand)).toEqual({
       name: catalogued.name,
-      logoUrl: commonsLogoUrl(catalogued.logoFile, 96),
+      contributors: [],
+      fieldContributors: { name: [] },
     });
   });
 
@@ -93,4 +93,49 @@ describe("gapFillBranding", () => {
 
     expect(gapFillBranding(undefined, undefined, resolveBrand)).toBeUndefined();
   });
+});
+
+it("captures the selected catalogue name receipt while excluding hidden logo evidence", () => {
+  const name = { sourceId: "wikidata", name: "Actual label supplier" };
+  const logo = { sourceId: "hidden-logo", name: "Hidden filename" };
+  const branding = gapFillBranding(undefined, {}, () => ({
+    name: "Catalogue supplied brand",
+    logoFile: "Logo.svg",
+    contributors: [name, logo],
+    fieldContributors: { name: [name], logoFile: [logo] },
+  }));
+  expect(branding).toMatchObject({
+    name: "Catalogue supplied brand",
+    contributors: [name],
+    fieldContributors: { name: [name] },
+  });
+  expect(branding?.contributors).not.toContainEqual(logo);
+});
+
+it("preserves a place label while projecting the catalogue's selected logo field only", async () => {
+  const { brandForPlaceLogo } = await import("../brandFilter");
+  const placeCredit = { sourceId: "place", name: "Place label" },
+    fileHint = { sourceId: "wikidata", name: "Selected file hint" },
+    hidden = { sourceId: "hidden", name: "Hidden catalogue description" };
+  const row = brandForPlaceLogo(
+    {
+      name: "Place name",
+      contributors: [placeCredit],
+      fieldContributors: { name: [placeCredit], "osmTags.brand:wikidata": [placeCredit] },
+    },
+    {
+      qid: "Q1",
+      name: "Different catalogue name",
+      kind: ["brand"],
+      logoFile: "Logo.svg",
+      contributors: [fileHint, hidden],
+      fieldContributors: { logoFile: [fileHint], name: [hidden], description: [hidden] },
+    },
+    "Q1",
+    "brand",
+  );
+  expect(row.name).toBe("Place name");
+  expect(row.fieldContributors?.name).toEqual([placeCredit]);
+  expect(row.fieldContributors?.logoFile).toEqual([fileHint]);
+  expect(row.contributors).not.toContainEqual(hidden);
 });

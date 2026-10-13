@@ -148,14 +148,14 @@ describe("loadBrandMarkerImage", () => {
     vi.restoreAllMocks();
   });
 
-  it("resolves true without any request when the image is already registered", async () => {
+  it("does not trust an already registered image without captured file credit", async () => {
     hasImage.mockReturnValue(true);
-    const spy = vi.spyOn(apiClient, "get");
+    const spy = vi.spyOn(apiClient, "get").mockRejectedValue(new Error("unknown metadata"));
 
     const ok = await loadBrandMarkerImage(map, "Q1");
 
-    expect(ok).toBe(true);
-    expect(spy).not.toHaveBeenCalled();
+    expect(ok).toBe(false);
+    expect(spy).toHaveBeenCalled();
   });
 
   it("resolves false without registering an image when the brand-detail fetch throws", async () => {
@@ -180,12 +180,20 @@ describe("loadBrandMarkerImage", () => {
   });
 
   it("resolves false without registering an image when the logo fetch is not ok", async () => {
-    vi.spyOn(apiClient, "get").mockResolvedValue({
-      qid: "Q1",
-      name: "Q1",
-      kind: ["brand"],
-      logoFile: "Aldi_logo.svg",
-    });
+    vi.spyOn(apiClient, "get").mockImplementation(async (path) =>
+      String(path).endsWith("logo-attribution")
+        ? {
+            logoFile: "Aldi_logo.svg",
+            url: "https://upload.wikimedia.org/wikipedia/commons/a/ab/Aldi_logo.svg",
+            source: "wikimedia-commons",
+            author: "Logo creator",
+            license: "CC BY 4.0",
+            licenseUrl: "https://creativecommons.org/licenses/by/4.0/",
+            pageUrl: "https://commons.wikimedia.org/wiki/File:Aldi_logo.svg",
+            contributors: [{ sourceId: "wikimedia-commons", name: "Wikimedia Commons" }],
+          }
+        : { qid: "Q1", name: "Q1", kind: ["brand"], logoFile: "Aldi_logo.svg" },
+    );
     vi.stubGlobal(
       "fetch",
       // `blob` is a valid resolver here (not just `ok: false` with no body) so
@@ -207,12 +215,20 @@ describe("loadBrandMarkerImage", () => {
 
   it("resolves false without registering an image when the rasterized logo fails to load", async () => {
     imageOutcome = "error";
-    vi.spyOn(apiClient, "get").mockResolvedValue({
-      qid: "Q1",
-      name: "Q1",
-      kind: ["brand"],
-      logoFile: "Aldi_logo.svg",
-    });
+    vi.spyOn(apiClient, "get").mockImplementation(async (path) =>
+      String(path).endsWith("logo-attribution")
+        ? {
+            logoFile: "Aldi_logo.svg",
+            url: "https://upload.wikimedia.org/wikipedia/commons/a/ab/Aldi_logo.svg",
+            source: "wikimedia-commons",
+            author: "Logo creator",
+            license: "CC BY 4.0",
+            licenseUrl: "https://creativecommons.org/licenses/by/4.0/",
+            pageUrl: "https://commons.wikimedia.org/wiki/File:Aldi_logo.svg",
+            contributors: [{ sourceId: "wikimedia-commons", name: "Wikimedia Commons" }],
+          }
+        : { qid: "Q1", name: "Q1", kind: ["brand"], logoFile: "Aldi_logo.svg" },
+    );
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue({
@@ -228,12 +244,20 @@ describe("loadBrandMarkerImage", () => {
   });
 
   it("registers the image and resolves true when the full chain succeeds", async () => {
-    vi.spyOn(apiClient, "get").mockResolvedValue({
-      qid: "Q1",
-      name: "Q1",
-      kind: ["brand"],
-      logoFile: "Aldi_logo.svg",
-    });
+    vi.spyOn(apiClient, "get").mockImplementation(async (path) =>
+      String(path).endsWith("logo-attribution")
+        ? {
+            logoFile: "Aldi_logo.svg",
+            url: "https://upload.wikimedia.org/wikipedia/commons/a/ab/Aldi_logo.svg",
+            source: "wikimedia-commons",
+            author: "Logo creator",
+            license: "CC BY 4.0",
+            licenseUrl: "https://creativecommons.org/licenses/by/4.0/",
+            pageUrl: "https://commons.wikimedia.org/wiki/File:Aldi_logo.svg",
+            contributors: [{ sourceId: "wikimedia-commons", name: "Wikimedia Commons" }],
+          }
+        : { qid: "Q1", name: "Q1", kind: ["brand"], logoFile: "Aldi_logo.svg" },
+    );
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue({

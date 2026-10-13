@@ -8,10 +8,15 @@ import manifest from "../manifest.json";
 import { useAirportsOverlayStore } from "../store";
 
 let fake: FakeMap;
+const mapRef = {
+  get current() {
+    return fake.map;
+  },
+};
 
 vi.mock("@/integration-api/map/MapContext", () => ({
   useMap: () => ({
-    mapRef: { current: fake.map },
+    mapRef,
     mapReady: true,
     styleVersion: 0,
   }),
@@ -32,6 +37,7 @@ const registry = new IntegrationRegistry([
     name: "Airports",
     enabled: true,
     domains: ["map-overlay"],
+    dataSources: manifest.dataSources,
     isBuiltIn: true,
     frontend: { overlay: { minZoom: MIN_ZOOM } },
   },
@@ -56,7 +62,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  useAirportsOverlayStore.setState({ layerVisible: false });
+  act(() => useAirportsOverlayStore.setState({ layerVisible: false }));
   vi.unstubAllGlobals();
 });
 
@@ -102,4 +108,44 @@ describe("AirportsOverlay zoom gate", () => {
     });
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
+});
+
+import type { MapGeoJSONFeature } from "maplibre-gl";
+import { useMapAttributionStore } from "@/integration-api/overlay/mapAttributionStore";
+
+it("credits actual airport markers/labels and clears below minzoom or outside viewport", async () => {
+  vi.useFakeTimers();
+  const fixture = {
+    type: "FeatureCollection",
+    features: [
+      {
+        type: "Feature",
+        geometry: { type: "Point", coordinates: [0, 0] },
+        properties: { rank: 0, name: "Airport", ident: "A" },
+      },
+    ],
+  };
+  fetchMock.mockImplementation(async () => ({ ok: true, json: async () => fixture }));
+  useMapAttributionStore.setState({ byLayer: {} });
+  render(<AirportsOverlay />, { wrapper });
+  await act(async () => {});
+  const data = fake.state.sources.get("openmapx-airports-source")
+    ?.data as GeoJSON.FeatureCollection;
+  fake.setRenderedFeatures(CIRCLE_LAYER_ID, data.features as MapGeoJSONFeature[]);
+  const flush = () =>
+    act(() => {
+      fake.emit("render");
+      vi.advanceTimersByTime(250);
+    });
+  const html = () => Object.values(useMapAttributionStore.getState().byLayer).flat().join(" ");
+  flush();
+  expect(html()).toContain("OurAirports");
+  fake.state.zoom = MIN_ZOOM - 1;
+  flush();
+  expect(html()).toBe("");
+  fake.state.zoom = MIN_ZOOM;
+  fake.setRenderedFeatures(CIRCLE_LAYER_ID, []);
+  flush();
+  expect(html()).toBe("");
+  vi.useRealTimers();
 });

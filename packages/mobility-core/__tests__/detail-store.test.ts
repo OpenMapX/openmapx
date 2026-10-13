@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, assert, describe, expect, it, vi } from "vitest";
 import type { CacheClient } from "../src/cache.js";
 import { SharedMobilityDetailStore } from "../src/detail-store.js";
 import { createMotisRentalId } from "../src/motis-rentals.js";
@@ -18,7 +18,30 @@ function sharedCache() {
     },
     withCache: async (_key, _ttl, load) => load(),
   };
-  return { cache, writes };
+  return { cache, writes, values };
+}
+
+function pauseNextLookup(cache: CacheClient, prefix: string) {
+  let started!: () => void;
+  let release!: () => void;
+  const waiting = new Promise<void>((resolve) => {
+    started = resolve;
+  });
+  const resumed = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const get = cache.get;
+  let armed = true;
+  cache.get = async <T>(key: string) => {
+    const value = structuredClone(await get<T>(key));
+    if (armed && key.startsWith(prefix)) {
+      armed = false;
+      started();
+      await resumed;
+    }
+    return value;
+  };
+  return { waiting, release };
 }
 
 function station(provider: string, nativeId: string): SharedMobilityStation {
@@ -94,4 +117,128 @@ describe("SharedMobilityDetailStore", () => {
     const reader = new SharedMobilityDetailStore(cache, 600, 1);
     expect(await reader.get(direct.id)).toEqual(direct);
   });
+});
+
+afterEach(() => vi.useRealTimers());
+it("a fresh subset acquisition cannot renew unrelated retained item deadlines", async () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(0);
+  const { cache } = sharedCache();
+  const writer = new SharedMobilityDetailStore(cache, 600, 100);
+  const first = station("same-provider", "first");
+  const second = station("same-provider", "second");
+  await writer.store([first]);
+  vi.setSystemTime(300_000);
+  await writer.store([second]);
+  vi.setSystemTime(700_000);
+  const replica = new SharedMobilityDetailStore(cache, 600, 100);
+  expect(await replica.get(first.id)).toBeNull();
+  expect(await replica.get(second.id)).toEqual(second);
+});
+
+describe.each([
+  ["inventory", "shared-mobility-detail:v2:"],
+  ["enrichment", "shared-mobility-detail:enrichment:v1:"],
+])("a paused %s lookup", (_seam, prefix) => {
+  it("cannot replace a newer acquisition in this process or a fresh replica", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(0);
+    const { cache, writes } = sharedCache();
+    const store = new SharedMobilityDetailStore(cache, 600, 100);
+    const first = {
+      ...station("provider", "one"),
+      contributors: [{ sourceId: "first", name: "First" }],
+    };
+    await store.store([first]);
+    if (_seam === "inventory") store.clearL1();
+    const pause = pauseNextLookup(cache, prefix);
+    const pending = store.getRetained(first.id);
+    await pause.waiting;
+    vi.setSystemTime(100_000);
+    const second = {
+      ...first,
+      availableVehicles: 7,
+      contributors: [{ sourceId: "second", name: "Second" }],
+    };
+    await store.store([second]);
+    pause.release();
+    await pending;
+
+    for (const reader of [store, new SharedMobilityDetailStore(cache, 600, 100)]) {
+      const retained = await reader.getRetained(first.id);
+      expect(retained).toMatchObject({ item: second, acquiredAt: 100_000, expiresAt: 700_000 });
+      assert(retained);
+      expect(await reader.updateRetained(retained, second)).toBe(false);
+    }
+    expect(writes).toHaveLength(2);
+    vi.setSystemTime(700_000);
+    expect(await store.get(first.id)).toBeNull();
+    expect(await new SharedMobilityDetailStore(cache, 600, 100).get(first.id)).toBeNull();
+    expect(writes).toHaveLength(2);
+  });
+
+  it("cannot repopulate L1 after clear while its shared inventory is removed", async () => {
+    const { cache, values, writes } = sharedCache();
+    const store = new SharedMobilityDetailStore(cache, 600, 100);
+    const first = station("provider", "one");
+    await store.store([first]);
+    if (_seam === "inventory") store.clearL1();
+    const pause = pauseNextLookup(cache, prefix);
+    const pending = store.getRetained(first.id);
+    await pause.waiting;
+    store.clearL1();
+    values.clear();
+    pause.release();
+    await pending;
+    expect(await store.get(first.id)).toBeNull();
+    expect(await new SharedMobilityDetailStore(cache, 600, 100).get(first.id)).toBeNull();
+    expect(writes).toHaveLength(1);
+  });
+
+  it("cannot retain an acquisition that expires while the lookup is paused", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(0);
+    const { cache, writes } = sharedCache();
+    const store = new SharedMobilityDetailStore(cache, 600, 100);
+    const first = station("provider", "one");
+    await store.store([first]);
+    if (_seam === "inventory") store.clearL1();
+    const pause = pauseNextLookup(cache, prefix);
+    const pending = store.getRetained(first.id);
+    await pause.waiting;
+    vi.setSystemTime(600_000);
+    pause.release();
+    expect(await pending).toBeNull();
+    expect(await store.get(first.id)).toBeNull();
+    expect(writes).toHaveLength(1);
+  });
+});
+
+it("a paused patch lookup cannot discard enrichment already retained for the same acquisition", async () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(0);
+  const { cache, writes } = sharedCache();
+  const store = new SharedMobilityDetailStore(cache, 600, 100);
+  const first = station("provider", "one");
+  await store.store([first]);
+  const retained = await store.getRetained(first.id);
+  assert(retained);
+  const pause = pauseNextLookup(cache, "shared-mobility-detail:enrichment:v1:");
+  const pending = store.getRetained(first.id);
+  await pause.waiting;
+  vi.setSystemTime(100_000);
+  const enriched = {
+    ...first,
+    name: "Enriched station",
+    contributors: [{ sourceId: "enricher", name: "Enricher" }],
+  };
+  expect(await store.updateRetained(retained, enriched)).toBe(true);
+  pause.release();
+  expect(await pending).toMatchObject({ item: enriched, acquiredAt: 0, expiresAt: 600_000 });
+  expect(await store.getRetained(first.id)).toMatchObject({
+    item: enriched,
+    acquiredAt: 0,
+    expiresAt: 600_000,
+  });
+  expect(writes).toHaveLength(2);
 });

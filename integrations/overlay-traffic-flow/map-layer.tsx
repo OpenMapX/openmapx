@@ -1,9 +1,10 @@
 "use client";
 
 import { useOverlayExclusion } from "@openmapx/core";
+import type { Attribution } from "@openmapx/mobility-core/attribution";
 import * as maplibregl from "maplibre-gl";
 import { useTranslations } from "next-intl";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { addLayerInSlot } from "@/integration-api/map/layerStack";
 import { useMap } from "@/integration-api/map/MapContext";
 import {
@@ -14,7 +15,9 @@ import {
 import { buildPopupCard, type PopupCardSpec } from "@/integration-api/map/popupCard";
 import { flowColorExpression } from "@/integration-api/map/trafficFlowExpression";
 import { useStyleSyncedLayer } from "@/integration-api/map/useStyleSyncedLayer";
-import { useIntegrationDomainAttribution } from "@/integration-api/overlay/useIntegrationAttribution";
+import { flowFeatureContributors } from "@/integration-api/overlay/flowContributors";
+import { useMapAttributions } from "@/integration-api/overlay/useMapAttributions";
+import { useRenderedMapAttributions } from "@/integration-api/overlay/useRenderedMapAttributions";
 import { useEnv } from "@/integration-api/runtime/EnvProvider";
 import { useTrafficFlowStore } from "./store";
 import { TRAFFIC_FLOW_OPACITY_EXPRESSION } from "./visual-style";
@@ -101,7 +104,7 @@ const POPUP_SPEC: PopupCardSpec = {
 
 /** `123.4` → `"123 km/h"`; anything non-finite → "" so the row drops. */
 function formatKph(raw: unknown): string {
-  const n = Number(raw);
+  const n = raw == null || raw === "" ? Number.NaN : Number(raw);
   return Number.isFinite(n) ? `${Math.round(n)} km/h` : "";
 }
 
@@ -125,7 +128,8 @@ function buildPopupProperties(
   const highway = typeof p.highway === "string" && p.highway ? p.highway : undefined;
   const los = typeof p.los === "string" && p.los ? p.los : undefined;
   const confidence = typeof p.confidence === "string" && p.confidence ? p.confidence : undefined;
-  const speedRatio = Number(p.speed_ratio);
+  const speedRatio =
+    p.speed_ratio == null || p.speed_ratio === "" ? Number.NaN : Number(p.speed_ratio);
   return {
     roadRef: ref ?? (highway ? humanizeHighway(highway) : ""),
     currentSpeedText: formatKph(p.current_kph),
@@ -139,9 +143,18 @@ function buildPopupProperties(
 export function TrafficFlowLayer() {
   const map = useMap();
   const { mapRef, mapReady, styleVersion } = map;
+  const glMap = mapRef.current;
   const env = useEnv();
   const showFlow = useTrafficFlowStore((s) => s.panelOpen && s.layerVisible);
-  useIntegrationDomainAttribution("road-conditions", showFlow);
+  const [popupContributors, setPopupContributors] = useState<Attribution[]>([]);
+  useMapAttributions("traffic-flow-popup", showFlow ? popupContributors : []);
+  useRenderedMapAttributions("traffic-flow", [CASING, COLOR], showFlow, {
+    resolveFeatureContributors: (feature) =>
+      flowFeatureContributors(
+        feature.properties ?? {},
+        feature.layer.id === CASING ? "casing" : "color",
+      ),
+  });
   useOverlayExclusion("traffic-flow", showFlow);
 
   const martinBase = env.martinBaseUrl;
@@ -235,7 +248,6 @@ export function TrafficFlowLayer() {
   // pointer cursor and popup replacement for this map.
   useEffect(() => {
     void styleVersion;
-    const glMap = mapRef.current;
     if (!glMap || !mapReady || !showFlow) return;
 
     const unregister = registerMapOverlayInteraction(glMap, {
@@ -258,6 +270,13 @@ export function TrafficFlowLayer() {
             ),
           );
         popupRef.current = popup;
+        setPopupContributors(flowFeatureContributors(properties, "popup"));
+        popup.on("close", () => {
+          if (popupRef.current === popup) {
+            popupRef.current = null;
+            setPopupContributors([]);
+          }
+        });
         replaceMapOverlayPopup(glMap, popup);
       },
     });
@@ -267,8 +286,9 @@ export function TrafficFlowLayer() {
         removeMapOverlayPopup(glMap, popupRef.current);
         popupRef.current = null;
       }
+      setPopupContributors([]);
     };
-  }, [mapReady, mapRef, styleVersion, showFlow]);
+  }, [mapReady, glMap, styleVersion, showFlow]);
 
   return null;
 }

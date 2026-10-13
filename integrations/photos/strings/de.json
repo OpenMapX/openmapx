@@ -11,6 +11,11 @@
       "purpose": "Link-Vorschaubilder für Orte, deren OpenStreetMap-Bild-Tag auf einen Google-Photos-Freigabelink verweist",
       "dataSent": "Die Google-Photos-Freigabe-URL aus dem OpenStreetMap-Bild-Tag des Ortes (keine Nutzer- oder Kontodaten)",
       "dataReceived": "Die von der Freigabeseite zum Einbetten bereitgestellte Open-Graph-Vorschaubild-URL"
+    },
+    "wikimedia-commons": {
+      "purpose": "Commons-Bildreferenzen aus OSM-Tags mit Urheber, Lizenz und vorgeschriebenen Hinweisen der jeweiligen Datei auflösen",
+      "dataSent": "Wikimedia-Commons-Dateiname aus dem Bild-Tag",
+      "dataReceived": "Bild-URL, Dateiseite, Urheber, Lizenz und erforderliche Hinweise"
     }
   }
 }

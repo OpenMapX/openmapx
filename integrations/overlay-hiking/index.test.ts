@@ -261,7 +261,12 @@ describe("/hiking/shelters route", () => {
     expect(body.type).toBe("FeatureCollection");
     expect(body.features).toHaveLength(2);
     expect(body.features[0].geometry).toEqual({ type: "Point", coordinates: [6.82, 45.85] });
-    expect(body.features[0].properties).toEqual({
+    expect(
+      JSON.parse(String(body.features[0].properties._mapAttributions)).map(
+        (a: { sourceId: string }) => a.sourceId,
+      ),
+    ).toEqual(["refuges-info"]);
+    expect(body.features[0].properties).toMatchObject({
       id: 555,
       name: "Refuge du Goûter",
       type: "refuge",

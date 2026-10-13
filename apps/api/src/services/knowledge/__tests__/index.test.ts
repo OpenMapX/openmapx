@@ -143,6 +143,24 @@ describe("getPlaceKnowledge", () => {
     );
   });
 
+  it("preserves exact winning scalar and item receipts through the real fan-out", async () => {
+    const first = { sourceId: "first", name: "First supplier" };
+    const second = { sourceId: "second", name: "Second supplier" };
+    wikidataLookup.mockResolvedValueOnce({ description: "Winner", contributors: [first] });
+    wikipediaLookup.mockResolvedValueOnce({
+      description: "Discarded",
+      phone: "+49",
+      contributors: [second],
+      photos: [{ url: "https://example.com/photo", source: "file", contributors: [second] }],
+    });
+    const { getPlaceKnowledge } = await import("../index.js");
+    const result = await getPlaceKnowledge(makePlace({ wikidata: "Q42" }));
+    expect(result.fieldContributors?.description).toEqual([first]);
+    expect(result.fieldContributors?.phone).toEqual([second]);
+    expect(result.photos?.[0]?.contributors).toEqual([second]);
+    expect(result.contributors).toEqual([first, second]);
+  });
+
   it("scalar fields: first non-null description wins", async () => {
     wikidataLookup.mockResolvedValueOnce({ description: "Wikidata desc" });
     wikipediaLookup.mockResolvedValueOnce({ description: "Wikipedia desc" });

@@ -5,7 +5,10 @@ import type * as maplibregl from "maplibre-gl";
 import { useCallback, useEffect, useRef } from "react";
 import { addLayerInSlot, unregisterLayerSlot } from "@/integration-api/map/layerStack";
 import { useMap } from "@/integration-api/map/MapContext";
-import { useIntegrationAttribution } from "@/integration-api/overlay/useIntegrationAttribution";
+import { subscribeStyleLoaded } from "@/integration-api/map/styleLoadedSync";
+import { addAttributedRasterSource } from "@/integration-api/overlay/rasterMapContribution";
+import { useContributorResolver } from "@/integration-api/overlay/useContributorResolver";
+import { useRasterMapAttributions } from "@/integration-api/overlay/useRasterMapAttributions";
 import { useEnv } from "@/integration-api/runtime/EnvProvider";
 import { type Capabilities, GIBS_LAYERS, useSatelliteStore } from "./store";
 
@@ -20,7 +23,13 @@ export function SatelliteLayer() {
   const { mapRef, mapReady, styleVersion } = useMap();
   const env = useEnv();
   const layerVisible = useSatelliteStore((s) => s.layerVisible);
-  useIntegrationAttribution("overlay-satellite", layerVisible);
+  const resolve = useContributorResolver();
+  const credits = resolve({ sourceIds: ["nasa-gibs"] });
+  useRasterMapAttributions(
+    "satellite",
+    [{ sourceId: SOURCE_ID, layerId: LAYER_ID, contributors: credits }],
+    layerVisible,
+  );
   const activeLayer = useSatelliteStore((s) => s.activeLayer);
   const date = useSatelliteStore((s) => s.date);
   const opacity = useSatelliteStore((s) => s.opacity);
@@ -119,11 +128,6 @@ export function SatelliteLayer() {
     }
 
     const buildLayer = () => {
-      if (!map.isStyleLoaded()) {
-        map.once("idle", buildLayer);
-        return;
-      }
-
       // Handle key change requiring full rebuild (layer definition changed, different maxZoom)
       if (prevKeyRef.current !== key) {
         const prevLayerId = prevKeyRef.current ? prevKeyRef.current.split(":")[0] : "";
@@ -140,12 +144,17 @@ export function SatelliteLayer() {
       }
 
       if (!map.getSource(SOURCE_ID)) {
-        map.addSource(SOURCE_ID, {
-          type: "raster",
-          tiles: [tileUrl],
-          tileSize: 256,
-          maxzoom: def.maxZoom,
-        });
+        addAttributedRasterSource(
+          map,
+          SOURCE_ID,
+          {
+            type: "raster",
+            tiles: [tileUrl],
+            tileSize: 256,
+            maxzoom: def.maxZoom,
+          },
+          credits,
+        );
       }
 
       if (!map.getLayer(LAYER_ID)) {
@@ -164,20 +173,18 @@ export function SatelliteLayer() {
       }
     };
 
-    buildLayer();
-
-    map.on("styledata", syncLayer);
-    return () => {
-      map.off("styledata", syncLayer);
-    };
-
-    function syncLayer() {
-      if (!map?.isStyleLoaded()) return;
-      if (!map.getSource(SOURCE_ID)) {
-        prevKeyRef.current = "";
-      }
-    }
-  }, [mapReady, styleVersion, mapRef, layerVisible, activeLayer, date, opacity, env.apiUrl]);
+    return subscribeStyleLoaded(map, buildLayer);
+  }, [
+    mapReady,
+    styleVersion,
+    mapRef,
+    layerVisible,
+    activeLayer,
+    date,
+    opacity,
+    env.apiUrl,
+    resolve,
+  ]);
 
   // Update opacity without rebuilding source
   useEffect(() => {

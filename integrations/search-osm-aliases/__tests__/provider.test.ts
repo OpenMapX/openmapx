@@ -38,6 +38,7 @@ describe("OSM alias suggestion provider", () => {
       ids: { osm: "node/42", wikidata: "Q46033" },
       searchMatch: { kind: "authoritative_code", value: "FRA", namespace: "iata" },
     });
+    expect(result.suggestions[0]?.contributors).toEqual(result.attributions);
     expect(result.attributions).toEqual([
       expect.objectContaining({ sourceId: "openstreetmap", spdxLicense: "ODbL-1.0" }),
     ]);

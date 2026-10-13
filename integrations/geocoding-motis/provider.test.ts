@@ -49,6 +49,17 @@ describe("MOTIS geocoder attribution", () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 
+  it("credits the actual reverse-geocoding fallback rather than both configured instances", async () => {
+    setMotisLocalUrl("http://motis:8080");
+    vi.mocked(motisClient.reverseGeocode)
+      .mockResolvedValueOnce({ data: [] } as never)
+      .mockResolvedValueOnce({
+        data: [{ ...MATCH, areas: [{ default: true, name: "Aachen" }] }],
+      } as never);
+    const result = await motisGeocodingService.reverseGeocode(50.776, 6.09, "de");
+    expect(result?.sourceIds).toEqual(["transitous"]);
+  });
+
   it("credits Transitous when the local MOTIS is unreachable", async () => {
     setMotisLocalUrl("http://motis:8080");
     vi.stubGlobal(

@@ -9,7 +9,9 @@ export function assertAmbientDiskCapacity(freeBytes: number, inputCount?: number
     (inputCount !== undefined && (!Number.isSafeInteger(inputCount) || inputCount < 0))
   )
     throw new Error("Invalid Germany publication disk capacity");
-  const working = inputCount === undefined ? 0 : Math.max(GIB, inputCount * 2048);
+  // Format 2 includes immutable field receipts and raw source lineage. This is
+  // an admission allowance, not a measured country/planet storage claim.
+  const working = inputCount === undefined ? 0 : Math.max(GIB, inputCount * 8192);
   const required = 5 * GIB + working;
   if (freeBytes < required)
     throw new Error(
@@ -28,7 +30,7 @@ export function planetPlaceLimit(): number {
 }
 export function assertPlanetDiskCapacity(available: number, remainingRows: number): void {
   const reserve = planetSetting("AMBIENT_PLANET_RESERVE_BYTES", 20 * 1024 ** 3);
-  const required = reserve + Math.max(1024 ** 3, remainingRows * 2048);
+  const required = reserve + Math.max(1024 ** 3, remainingRows * 8192);
   if (
     !Number.isSafeInteger(available) ||
     available < 0 ||

@@ -7,11 +7,13 @@ import {
   isSafeHttpUrl,
   matchesAnyOperator,
   normalizeOperator,
+  type Route,
   type RoutingOptions,
 } from "@openmapx/core";
 import {
   ChargerSourcesUnavailableError,
   getVehiclePreset,
+  type PlannedStop,
   planCharges,
   routeEnergyKwh,
 } from "@openmapx/ev-charge-planner";
@@ -24,7 +26,15 @@ import {
   type SiteOrchestrator,
   toBBox,
 } from "@openmapx/integration-framework";
-import { availabilityOf } from "@openmapx/mobility-core/ev-charging";
+import {
+  captureFieldContributors,
+  contributorsForField,
+  contributorsForRecordFields,
+  contributorsForRecords,
+  snapshotContributors,
+  withContributors,
+} from "@openmapx/mobility-core/contributors";
+import { availabilityOf, freshEvseStatusSelection } from "@openmapx/mobility-core/ev-charging";
 import { applyClosureExclusions, resolveTravelInstant } from "./closure-exclusions.js";
 import { roadConditionImpactForRequest } from "./road-condition-routing.js";
 import { verifyRouteTraffic } from "./traffic-application.js";
@@ -112,11 +122,79 @@ function chargingSites(ctx: IntegrationContext): ChargingSites {
  */
 function stopCredits(site: ChargingSite): DataSourceAttribution[] {
   return site.attributions.map((a) => ({
+    sourceId: a.sourceId,
     text: a.name,
     url: isSafeHttpUrl(a.url) ? a.url : "",
     ...(a.spdxLicense ? { license: a.spdxLicense } : {}),
     ...(isSafeHttpUrl(a.licenseUrl) ? { licenseUrl: a.licenseUrl } : {}),
   }));
+}
+
+/** Match routeEnergyKwh's actual branch; route.distance is not read by that model. */
+function energyContributors(route: Route) {
+  return contributorsForRecordFields(
+    route,
+    route.elevation && route.elevation.length >= 2 && route.elevationInterval
+      ? ["elevation", "elevationInterval"]
+      : ["geometry"],
+  );
+}
+
+/** Project actual selected charger/model inputs onto the normalized stop DTO. */
+function stopContributorFields(stop: PlannedStop, route: Route) {
+  const site = withContributors(stop.site, stop.site.contributors ?? stop.site.attributions);
+  const fields: Record<string, ReturnType<typeof snapshotContributors>> = {};
+  for (const key of ["id", "name", "coordinates"])
+    Object.assign(fields, captureFieldContributors(site, key, `station.${key}`));
+  fields.operator = contributorsForField(site, "operator.name");
+  const evseIndex = site.evses.findIndex((item) => item.key === stop.evse.key);
+  const connectorIndex = stop.evse.connectors.findIndex((item) => item.key === stop.connectorKey);
+  const connector =
+    evseIndex >= 0 && connectorIndex >= 0
+      ? contributorsForField(site, `evses.${evseIndex}.connectors.${connectorIndex}`)
+      : [];
+  fields.connector = snapshotContributors(connector);
+  fields.powerKw = snapshotContributors(connector);
+  if (availabilityOf(site)) {
+    fields.availability = snapshotContributors(
+      ...site.evses.flatMap((evse, index) => {
+        const selected = freshEvseStatusSelection(evse);
+        if (!selected) return [];
+        const prefix =
+          selected.connectorIndex === undefined
+            ? `evses.${index}`
+            : `evses.${index}.connectors.${selected.connectorIndex}`;
+        return [
+          contributorsForRecordFields(site, [
+            `${prefix}.status`,
+            `${prefix}.stale`,
+            `evses.${index}.quantity`,
+            ...(selected.at ? [`${prefix}.statusAt`] : []),
+          ]),
+        ];
+      }),
+    );
+  }
+  const model = snapshotContributors(
+    contributorsForField(site, "coordinates"),
+    snapshotContributors(contributorsForField(route, "geometry"), energyContributors(route)),
+    stop.matrixContributors ?? [],
+  );
+  for (const field of ["arriveSocPct", "departSocPct", "addedKwh"])
+    fields[field] = snapshotContributors(model);
+  fields.chargeSeconds = snapshotContributors(model, connector);
+  if (stop.estimatedCost) {
+    const index = site.tariffs.findIndex((item) => item.id === stop.estimatedCost?.tariffId);
+    const tariff = index >= 0 ? contributorsForField(site, `tariffs.${index}`) : [];
+    fields.tariffPrice = snapshotContributors(tariff);
+    fields.estimatedCost = snapshotContributors(
+      model,
+      connector,
+      tariff,
+      contributorsForField(route, "duration"),
+    );
+  }
+  return fields;
 }
 
 /** An amount rounded to its currency's minor unit (cents, or none for yen). */
@@ -326,28 +404,82 @@ export async function runEvPlan(
         responseRoadConditionImpact,
         resolved.integrationId,
       ),
-      stops: plan.stops.map((s) => ({
-        station: { id: s.site.id, name: s.site.name, coordinates: s.site.coordinates },
-        connector: s.connector,
-        powerKw: s.powerKw,
-        operator: s.site.operator?.name,
-        isPreferredNetwork: matchesAnyOperator(
-          normalizeOperator(s.site.operator?.name),
-          preferredNetworkKeys,
-        ),
-        arriveSocPct: Math.round((s.arriveSocKwh / vehicle.batteryKwh) * 100),
-        departSocPct: Math.round((s.departSocKwh / vehicle.batteryKwh) * 100),
-        chargeSeconds: Math.round(s.chargeSeconds),
-        addedKwh: Math.round(s.addedKwh * 10) / 10,
-        availability: availabilityOf(s.site),
-        tariffPrice: s.estimatedCost?.price,
-        estimatedCost: s.estimatedCost && {
-          amount: roundToMinorUnit(s.estimatedCost.amount, s.estimatedCost.currency),
-          currency: s.estimatedCost.currency,
-        },
-        attributions: stopCredits(s.site),
-      })),
+      stops: plan.stops.map((s) => {
+        const fieldContributors = stopContributorFields(s, baseRoute);
+        return {
+          fieldContributors,
+          contributors: contributorsForRecords(
+            Object.values(fieldContributors).map((contributors) => ({ contributors })),
+          ),
+          station: {
+            id: s.site.id,
+            name: s.site.name,
+            coordinates: s.site.coordinates,
+            contributors:
+              s.site.fieldContributors === undefined
+                ? snapshotContributors(s.site.contributors ?? s.site.attributions)
+                : contributorsForRecordFields(s.site, ["id", "name", "coordinates"]),
+            ...(s.site.fieldContributors === undefined
+              ? {}
+              : {
+                  fieldContributors: {
+                    ...captureFieldContributors(s.site, "id"),
+                    ...captureFieldContributors(s.site, "name"),
+                    ...captureFieldContributors(s.site, "coordinates"),
+                  },
+                }),
+          },
+          connector: s.connector,
+          powerKw: s.powerKw,
+          operator: s.site.operator?.name,
+          isPreferredNetwork: matchesAnyOperator(
+            normalizeOperator(s.site.operator?.name),
+            preferredNetworkKeys,
+          ),
+          arriveSocPct: Math.round((s.arriveSocKwh / vehicle.batteryKwh) * 100),
+          departSocPct: Math.round((s.departSocKwh / vehicle.batteryKwh) * 100),
+          chargeSeconds: Math.round(s.chargeSeconds),
+          addedKwh: Math.round(s.addedKwh * 10) / 10,
+          availability: availabilityOf(s.site),
+          tariffPrice: s.estimatedCost?.price,
+          estimatedCost: s.estimatedCost && {
+            amount: roundToMinorUnit(s.estimatedCost.amount, s.estimatedCost.currency),
+            currency: s.estimatedCost.currency,
+          },
+          attributions: stopCredits(s.site),
+        };
+      }),
       totals: {
+        contributors: snapshotContributors(
+          contributorsForField(finalRoute, "duration"),
+          energyContributors(baseRoute),
+          ...plan.stops.map((stop) =>
+            contributorsForRecordFields(
+              { fieldContributors: stopContributorFields(stop, baseRoute) },
+              ["chargeSeconds", "estimatedCost"],
+            ),
+          ),
+        ),
+        fieldContributors: {
+          driveSeconds: contributorsForField(finalRoute, "duration"),
+          chargeSeconds: snapshotContributors(
+            ...plan.stops.map((stop) => stopContributorFields(stop, baseRoute).chargeSeconds ?? []),
+          ),
+          energyKwh: energyContributors(baseRoute),
+          ...(tripCost
+            ? {
+                estimatedCost: snapshotContributors(
+                  energyContributors(baseRoute),
+                  ...plan.stops.map((stop) =>
+                    contributorsForRecordFields(
+                      { fieldContributors: stopContributorFields(stop, baseRoute) },
+                      ["addedKwh", "estimatedCost"],
+                    ),
+                  ),
+                ),
+              }
+            : {}),
+        },
         driveSeconds: Math.round(finalRoute.duration),
         chargeSeconds: Math.round(plan.totalChargeSeconds),
         energyKwh: Math.round(plan.totalEnergyKwh * 10) / 10,

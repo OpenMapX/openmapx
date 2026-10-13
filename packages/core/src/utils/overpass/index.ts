@@ -5,6 +5,7 @@ export {
   OverpassUnavailableError,
   overpassQuery,
   overpassQuerySafe,
+  setOverpassContributorResolver,
   setOverpassUrl,
 } from "./client";
 export {

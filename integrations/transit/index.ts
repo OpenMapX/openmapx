@@ -20,6 +20,11 @@ import {
   type TripPlanRequest,
 } from "@openmapx/integration-framework";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
+import {
+  captureResultContributors,
+  contributorsForRecords,
+  snapshotContributors,
+} from "@openmapx/mobility-core/contributors";
 import type { Freshness } from "@openmapx/mobility-core/freshness";
 import type { MobilityEnvelope, MobilityResult } from "@openmapx/mobility-core/result";
 import type {
@@ -115,6 +120,7 @@ export function createTransitSuggestionProvider(
           );
           const matchedValue = exactCode?.value ?? stop.name;
           return {
+            contributors: captureResultContributors(stop, result.attributions),
             id: stop.id,
             ids: stop.ids,
             label: stop.name,
@@ -134,7 +140,11 @@ export function createTransitSuggestionProvider(
             contributingProviders: ["transit"],
           };
         }),
-        attributions: result.attributions,
+        attributions: contributorsForRecords(
+          result.data.map((stop) => ({
+            contributors: captureResultContributors(stop, result.attributions),
+          })),
+        ),
         freshnessSeconds: 300,
       };
     },
@@ -636,13 +646,7 @@ export function setup(ctx: IntegrationContext): void {
       orchestrator.getVehiclePositions(routeId),
       orchestrator.getRouteAlerts(routeId),
     ]);
-    const seen = new Set<string>();
-    const mergedAttrs: Attribution[] = [];
-    for (const a of [...vehicles.attributions, ...alerts.attributions]) {
-      if (seen.has(a.sourceId)) continue;
-      seen.add(a.sourceId);
-      mergedAttrs.push(a);
-    }
+    const mergedAttrs = snapshotContributors(vehicles.attributions, alerts.attributions);
     const mergedFreshness: Freshness = {
       fetchedAt:
         vehicles.freshness.fetchedAt < alerts.freshness.fetchedAt
@@ -1205,6 +1209,8 @@ export function setup(ctx: IntegrationContext): void {
         const field = fieldResult.data;
         const sampling = samplingFromField(field);
         const data: TransitIsochroneResult = {
+          contributors: field.contributors,
+          lineageComplete: field.lineageComplete,
           queryTime: request.queryTime,
           source: "self-hosted-motis",
           method: TRANSIT_ISOCHRONE_METHOD,

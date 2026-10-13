@@ -48,6 +48,36 @@ describe("PlaceInfoTab visitor details", () => {
     expect(screen.getByText("The Museum")).toBeVisible();
   });
 
+  it("credits the displayed extract and facts, adding a hidden raw tag only when expanded", async () => {
+    const user = userEvent.setup();
+    const short = { sourceId: "short", name: "Hidden short supplier" };
+    const extract = { sourceId: "extract", name: "Extract supplier" };
+    const raw = { sourceId: "raw", name: "Raw supplier" };
+    const fact = { sourceId: "fact", name: "Fact supplier" };
+    render(
+      <PlaceInfoTab
+        place={{
+          ...PLACE,
+          description: "Hidden short description",
+          wikipediaExtract: "Displayed extract",
+          facts: [{ label: "Founded", value: "1900", contributors: [fact] }],
+          fieldContributors: {
+            description: [short],
+            wikipediaExtract: [extract],
+            "osmTags.seamark:light:range": [raw],
+          },
+        }}
+        isLoading={false}
+      />,
+    );
+    expect(screen.getByText("Extract supplier")).toBeVisible();
+    expect(screen.getByText("Fact supplier")).toBeVisible();
+    expect(screen.queryByText("Hidden short supplier")).not.toBeInTheDocument();
+    expect(screen.queryByText("Raw supplier")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "allOpenStreetMapTags" }));
+    expect(screen.getByText("Raw supplier")).toBeVisible();
+  });
+
   it("groups all payment tags with other visitor amenities and humanizes readable values", () => {
     render(<PlaceInfoTab place={PLACE} isLoading={false} />);
 

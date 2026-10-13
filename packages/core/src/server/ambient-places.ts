@@ -83,12 +83,22 @@ export async function readAmbientPlaceByGers(
       (Record<string, unknown> & { generation: string; lng: number; lat: number })[]
     >(
       `SELECT generation,id,gers_id,name,name_de,name_en,category,rank,min_zoom,tenant,sources,
+        to_jsonb(f)->'contributors' AS "_mapAttributions",to_jsonb(f)->'field_contributors' AS field_contributors,to_jsonb(f)->'source_lineage' AS source_lineage,
         ST_X(ST_Transform(ST_GeomFromEWKB(geom),4326)) AS lng,ST_Y(ST_Transform(ST_GeomFromEWKB(geom),4326)) AS lat
-        FROM ${store.table} WHERE generation=ANY($1::UUID[]) AND gers_id=$2
+        FROM ${store.table} f WHERE generation=ANY($1::UUID[]) AND gers_id=$2
         ORDER BY array_position($1::UUID[],generation),id COLLATE "C" LIMIT 1`,
       [generations, gers],
     );
-    const place = row ? ambientPlaceFromTile(row, [row.lng, row.lat]) : null;
+    const place = row
+      ? ambientPlaceFromTile(
+          {
+            ...row,
+            format_version: candidates.find((candidate) => candidate.generation === row.generation)
+              ?.manifest.version,
+          },
+          [row.lng, row.lat],
+        )
+      : null;
     return place ? { generation: row.generation, place } : null;
   });
 }
@@ -107,33 +117,60 @@ export async function readAmbientTile(
     );
     if (!exists.exists) return null;
     const store = await featureStore(tx);
-    const [known] = await tx.unsafe<{ exists: boolean }[]>(
-      `SELECT EXISTS(SELECT 1 FROM ambient_places.generations g WHERE id=$1 ${store.published}) AS exists`,
+    const [known] = await tx.unsafe<{ version: number }[]>(
+      `SELECT (manifest->>'version')::INT AS version FROM ambient_places.generations g WHERE id=$1 ${store.published}`,
       [generation],
     );
-    if (!known.exists) return null;
+    if (!known || ![1, 2].includes(known.version)) return null;
+    // The v1 select order, budget and MVT attributes are deliberately preserved.
+    // Additive storage migration never changes a lease-addressable v1 encoder.
+    const lineage =
+      known.version === 2
+        ? ",2 AS format_version,coalesce(contributors,'[]'::JSONB)::TEXT AS \"_mapAttributions\",field_contributors::TEXT AS field_contributors,source_lineage::TEXT AS source_lineage"
+        : "";
+    const lineageBounded =
+      known.version === 2
+        ? ',format_version,"_mapAttributions",field_contributors,source_lineage'
+        : "";
+    // MVT interns string values. Charge each receipt/lineage string once, while
+    // retaining per-feature overhead; repeated notices must not displace POIs.
+    const lineageRanks =
+      known.version === 2
+        ? `, lineage_ranked AS (
+      SELECT *,row_number() OVER(PARTITION BY "_mapAttributions" ORDER BY rank DESC,id COLLATE "C") AS contributors_first,
+      row_number() OVER(PARTITION BY field_contributors ORDER BY rank DESC,id COLLATE "C") AS fields_first,
+      row_number() OVER(PARTITION BY source_lineage ORDER BY rank DESC,id COLLATE "C") AS lineage_first FROM candidates
+    )`
+        : "";
+    const budgetInput = known.version === 2 ? "lineage_ranked" : "candidates";
+    const lineageBytes =
+      known.version === 2
+        ? `+CASE WHEN contributors_first=1 THEN coalesce(octet_length("_mapAttributions"),0) ELSE 0 END
+      +CASE WHEN fields_first=1 THEN coalesce(octet_length(field_contributors),0) ELSE 0 END
+      +CASE WHEN lineage_first=1 THEN coalesce(octet_length(source_lineage),0) ELSE 0 END+160`
+        : "";
     const worldWidth = 40075016.68557849;
     const shift = x === 0 ? worldWidth : x === 2 ** z - 1 ? -worldWidth : 0;
     const [result] = await tx.unsafe<{ tile: Buffer }[]>(
       `
       WITH spatial AS (
-        SELECT id,gers_id,name,name_de,name_en,category,rank,min_zoom,tenant,sources,ST_GeomFromEWKB(geom) AS geom
+        SELECT id,gers_id,name,name_de,name_en,category,rank,min_zoom,tenant,sources${lineage},ST_GeomFromEWKB(geom) AS geom
         FROM ${store.table}
         WHERE generation=$1 AND min_zoom<=$2 AND ST_GeomFromEWKB(geom) && ST_TileEnvelope($2,$3,$4,margin=>64.0/4096)
         UNION ALL
-        SELECT id,gers_id,name,name_de,name_en,category,rank,min_zoom,tenant,sources,ST_Translate(ST_GeomFromEWKB(geom),-$5::FLOAT8,0) AS geom
+        SELECT id,gers_id,name,name_de,name_en,category,rank,min_zoom,tenant,sources${lineage},ST_Translate(ST_GeomFromEWKB(geom),-$5::FLOAT8,0) AS geom
         FROM ${store.table}
         WHERE $5::FLOAT8<>0 AND generation=$1 AND min_zoom<=$2 AND ST_GeomFromEWKB(geom) && ST_Translate(ST_TileEnvelope($2,$3,$4,margin=>64.0/4096),$5::FLOAT8,0)
       ), candidates AS MATERIALIZED (
         SELECT * FROM spatial ORDER BY rank DESC,id COLLATE "C" LIMIT ${AMBIENT_LIMITS.tileFeatures}
-      ), budgeted AS (
+      )${lineageRanks}, budgeted AS (
         SELECT *, sum(octet_length(id)+coalesce(octet_length(gers_id),0)+octet_length(name)
           +coalesce(octet_length(name_de),0)+coalesce(octet_length(name_en),0)
-          +octet_length(category)+octet_length(sources)+160)
+          +octet_length(category)+octet_length(sources)+160${lineageBytes})
           OVER(ORDER BY rank DESC,id COLLATE "C" ROWS UNBOUNDED PRECEDING) AS bytes
-        FROM candidates
+        FROM ${budgetInput}
       ), bounded AS (
-        SELECT id,gers_id,name,name_de,name_en,category,rank,min_zoom,tenant,sources,
+        SELECT id,gers_id,name,name_de,name_en,category,rank,min_zoom,tenant,sources${lineageBounded},
           ST_AsMVTGeom(geom,ST_TileEnvelope($2,$3,$4),4096,64,true) AS geom
         FROM budgeted WHERE bytes<=${AMBIENT_LIMITS.tileBytes - 1024}
         ORDER BY rank DESC,id COLLATE "C"

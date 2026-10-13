@@ -1,10 +1,17 @@
 import { createWriteStream } from "node:fs";
-import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
+import { mkdtemp, open, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pipeline } from "node:stream/promises";
 import { fetchWithRedirects, haversineMeters, USER_AGENT } from "@openmapx/core";
 import { createBoundedBinaryProxyStream, readBoundedBinaryResponse } from "@openmapx/core/server";
+import type { Attribution } from "@openmapx/mobility-core/attribution";
+import {
+  type ContributingRecord,
+  contributorsForFields,
+  type FieldContributors,
+  snapshotContributors,
+} from "@openmapx/mobility-core/contributors";
 import { parseCsvRecords } from "@openmapx/mobility-formats";
 import { strFromU8, unzipSync } from "fflate";
 
@@ -114,7 +121,8 @@ export interface SwissStopDatasets {
   trafficPointsBySloid: Map<string, SwissTrafficPoint>;
 }
 
-export interface SwissBusinessOrganisation {
+export interface SwissBusinessOrganisation extends ContributingRecord {
+  fieldContributors?: FieldContributors;
   abbreviation?: string;
   comment?: string;
   description?: string;
@@ -162,7 +170,7 @@ export interface SwissOccupancyForecastTrain {
   trainNumber?: string;
 }
 
-export interface SwissOccupancyForecastDataset {
+export interface SwissOccupancyForecastDataset extends ContributingRecord {
   dataSource?: string;
   lastUpdated?: string;
   opDate?: string;
@@ -182,8 +190,12 @@ const occupancyDatasetCache = new Map<
   string,
   { expiresAt: number; value: SwissOccupancyForecastDataset | null }
 >();
-let occupancyZipCache: { expiresAt: number; path: string } | null = null;
-let occupancyZipLoading: Promise<string | null> | null = null;
+interface SwissOccupancyArchive {
+  readonly path: string;
+  readonly contributors: readonly Attribution[];
+}
+let occupancyZipCache: { expiresAt: number; archive: SwissOccupancyArchive } | null = null;
+let occupancyZipLoading: Promise<SwissOccupancyArchive | null> | null = null;
 
 function normalizeWhitespace(value: string): string {
   return value.toLowerCase().replace(/\s+/g, " ").trim();
@@ -338,10 +350,14 @@ export async function extractZipEntryText(
   zipPath: string,
   entryName: string,
 ): Promise<string | null> {
+  let archive: Awaited<ReturnType<typeof open>> | undefined;
   try {
-    const { size } = await stat(zipPath);
+    // Bind the size limit and bytes to one generation even if refresh removes
+    // or replaces the archive path while an existing reader is using it.
+    archive = await open(zipPath, "r");
+    const { size } = await archive.stat();
     if (size > MAX_OCCUPANCY_ZIP_BYTES) return null;
-    const files = unzipSync(new Uint8Array(await readFile(zipPath)), {
+    const files = unzipSync(new Uint8Array(await archive.readFile()), {
       filter: (file) => file.name === entryName && file.originalSize <= MAX_OCCUPANCY_ENTRY_BYTES,
     });
     const entry = files[entryName];
@@ -349,29 +365,36 @@ export async function extractZipEntryText(
     return strFromU8(entry).replace(/^\uFEFF/, "") || null;
   } catch {
     return null;
+  } finally {
+    // Archive lookup is best-effort; cleanup must not replace its result.
+    await archive?.close().catch(() => {});
   }
 }
 
-async function ensureSwissOccupancyZipPath(): Promise<string | null> {
+async function ensureSwissOccupancyArchive(): Promise<SwissOccupancyArchive | null> {
   if (occupancyZipCache && occupancyZipCache.expiresAt > Date.now()) {
-    return occupancyZipCache.path;
+    return occupancyZipCache.archive;
   }
   if (occupancyZipLoading) {
     return occupancyZipLoading;
   }
 
+  const contributors = snapshotContributors(
+    businessContributorReceipts["opentransportdata-ch-occupancy-forecast"] ?? [],
+  );
   occupancyZipLoading = (async () => {
     const path = await downloadToTempFile(OCCUPANCY_FORECAST_JSON_PERMALINK, "swiss-occupancy");
-    const previous = occupancyZipCache;
+    const previous = occupancyZipCache?.archive;
+    const archive: SwissOccupancyArchive = Object.freeze({ path, contributors });
     occupancyZipCache = {
       expiresAt: Date.now() + OCCUPANCY_FORECAST_REFRESH_MS,
-      path,
+      archive,
     };
     if (previous?.path && previous.path !== path) {
       await rm(previous.path, { force: true }).catch(() => {});
       await rm(join(previous.path, ".."), { force: true, recursive: true }).catch(() => {});
     }
-    return path;
+    return archive;
   })()
     .catch((error) => {
       occupancyZipLoading = null;
@@ -698,11 +721,55 @@ function registerBusinessOrganisationLookup(
   map.set(normalized, value);
 }
 
+let businessContributorReceipts: Readonly<Record<string, readonly Attribution[]>> = {};
+export function setSwissDatasetContributors(
+  receipts: Readonly<Record<string, readonly Attribution[]>>,
+): void {
+  businessContributorReceipts = Object.fromEntries(
+    Object.entries(receipts).map(([id, value]) => [id, snapshotContributors(value)]),
+  );
+}
+function businessFieldReceipts(
+  record: Partial<SwissBusinessOrganisation>,
+  sourceId: string,
+): FieldContributors {
+  return Object.fromEntries(
+    Object.entries(record)
+      .filter(([, value]) => Boolean(value))
+      .map(([field]) => [field, snapshotContributors(businessContributorReceipts[sourceId] ?? [])]),
+  );
+}
+
 function mergeBusinessOrganisationRecords(
   base: SwissBusinessOrganisation | undefined,
   next: Partial<SwissBusinessOrganisation>,
 ): SwissBusinessOrganisation {
+  const fields = Object.fromEntries(
+    [
+      "abbreviation",
+      "comment",
+      "description",
+      "organisationNumber",
+      "participantRef",
+      "sboid",
+      "sboidOwnerRef",
+      "source",
+      "hasRealtimeData",
+      "hasSituationExchangeData",
+    ].map((field) => {
+      const value = next[field as keyof SwissBusinessOrganisation];
+      const supplied = Boolean(value) && value !== base?.[field as keyof SwissBusinessOrganisation];
+      return [
+        field,
+        snapshotContributors(
+          (supplied ? next.fieldContributors : base?.fieldContributors)?.[field] ?? [],
+        ),
+      ];
+    }),
+  );
   return {
+    fieldContributors: fields,
+    contributors: contributorsForFields(fields, Object.keys(fields)),
     abbreviation: next.abbreviation || base?.abbreviation,
     comment: next.comment || base?.comment,
     description: next.description || base?.description,
@@ -759,6 +826,7 @@ export async function loadSwissBusinessOrganisationDatasets(): Promise<SwissBusi
     };
     const key = canonicalBusinessOrganisationKey(partial);
     if (!key) continue;
+    partial.fieldContributors = businessFieldReceipts(partial, "opentransportdata-ch-go-realtime");
     merged.set(key, mergeBusinessOrganisationRecords(merged.get(key), partial));
   }
   for (const record of situationExchangeRecords) {
@@ -774,6 +842,7 @@ export async function loadSwissBusinessOrganisationDatasets(): Promise<SwissBusi
     };
     const key = canonicalBusinessOrganisationKey(partial);
     if (!key) continue;
+    partial.fieldContributors = businessFieldReceipts(partial, "opentransportdata-ch-go-siri-sx");
     merged.set(key, mergeBusinessOrganisationRecords(merged.get(key), partial));
   }
 
@@ -826,8 +895,8 @@ export async function loadSwissOccupancyForecastDataset(
     return cached.value;
   }
 
-  const zipPath = await ensureSwissOccupancyZipPath().catch(() => null);
-  if (!zipPath) {
+  const archive = await ensureSwissOccupancyArchive().catch(() => null);
+  if (!archive) {
     occupancyDatasetCache.set(cacheKey, {
       expiresAt: Date.now() + 5 * 60 * 1000,
       value: null,
@@ -836,8 +905,14 @@ export async function loadSwissOccupancyForecastDataset(
   }
 
   const entryName = `${normalizedDate}/operator-${normalizedOperator}.json`;
-  const text = await extractZipEntryText(zipPath, entryName);
-  const parsed = text ? ((JSON.parse(text) as SwissOccupancyForecastDataset) ?? null) : null;
+  const text = await extractZipEntryText(archive.path, entryName);
+  const raw = text ? ((JSON.parse(text) as SwissOccupancyForecastDataset) ?? null) : null;
+  const parsed = raw
+    ? {
+        ...raw,
+        contributors: snapshotContributors(archive.contributors),
+      }
+    : null;
 
   occupancyDatasetCache.set(cacheKey, {
     expiresAt: Date.now() + OCCUPANCY_FORECAST_REFRESH_MS,

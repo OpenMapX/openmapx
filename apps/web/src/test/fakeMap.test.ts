@@ -470,3 +470,64 @@ describe.each(eventHarnesses)("$name", ({ create }) => {
     expect(calls).toBe(1);
   });
 });
+
+describe("rendered feature association", () => {
+  it("returns evaluated layer metadata for GeoJSON hits without changing fixture input", () => {
+    const fake = createFakeMap();
+    fake.map.addLayer({
+      id: "ring",
+      type: "circle",
+      source: "points",
+      paint: { "circle-opacity": 0, "circle-stroke-width": 2 },
+    });
+    const point = {
+      type: "Feature",
+      geometry: { type: "Point", coordinates: [6, 51] },
+      properties: {},
+    } as never;
+    fake.setRenderedFeatures("ring", [point]);
+    const hit = fake.map.queryRenderedFeatures(undefined, { layers: ["ring"] })[0]!;
+    expect(hit.layer).toMatchObject({
+      id: "ring",
+      type: "circle",
+      paint: { "circle-opacity": 0, "circle-stroke-width": 2 },
+    });
+    expect(point).not.toHaveProperty("layer");
+    fake.map.setPaintProperty("ring", "circle-stroke-width", 0);
+    expect(
+      fake.map.queryRenderedFeatures(undefined, { layers: ["ring"] })[0]!.layer.paint,
+    ).toMatchObject({ "circle-stroke-width": 0 });
+  });
+});
+
+describe("partial rendered layer metadata", () => {
+  it("merges evaluated feature overrides into mounted paint and layout without losing unrelated fields", () => {
+    const fake = createFakeMap();
+    fake.map.addLayer({
+      id: "symbol",
+      type: "symbol",
+      source: "data",
+      paint: { "icon-opacity": 1, "text-opacity": 0.5 },
+      layout: { "icon-image": "pin", "text-field": "label" },
+    });
+    fake.setRenderedFeatures("symbol", [
+      {
+        type: "Feature",
+        geometry: { type: "Point", coordinates: [5, 52] },
+        properties: {},
+        layer: {
+          id: "symbol",
+          type: "symbol",
+          paint: { "icon-opacity": 0 },
+          layout: { "text-field": "evaluated label" },
+        },
+      },
+    ] as never);
+    const hit = fake.map.queryRenderedFeatures(undefined, { layers: ["symbol"] })[0]!;
+    expect(hit.layer.paint).toMatchObject({ "icon-opacity": 0, "text-opacity": 0.5 });
+    expect(hit.layer.layout).toMatchObject({
+      "icon-image": "pin",
+      "text-field": "evaluated label",
+    });
+  });
+});

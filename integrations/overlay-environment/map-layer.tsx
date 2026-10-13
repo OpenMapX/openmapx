@@ -1,6 +1,11 @@
 "use client";
 
 import { escapeHtml, useDebouncedCallback, useOverlayExclusion } from "@openmapx/core";
+import {
+  type ContributingRecord,
+  parseContributors,
+  withFeatureContributors,
+} from "@openmapx/integration-framework";
 import type { MapLayerMouseEvent } from "maplibre-gl";
 import * as maplibregl from "maplibre-gl";
 import { useCallback, useEffect, useRef } from "react";
@@ -10,7 +15,8 @@ import { useMap } from "@/integration-api/map/MapContext";
 import { getMapClickOwner } from "@/integration-api/map/mapClickOwnership";
 import { useGeoJsonSourceDataBridge } from "@/integration-api/map/useGeoJsonSourceDataBridge";
 import { useOverlayMinZoom } from "@/integration-api/overlay/overlayZoomGate";
-import { useIntegrationAttribution } from "@/integration-api/overlay/useIntegrationAttribution";
+import { attributionToHtml } from "@/integration-api/overlay/useMapAttributions";
+import { useRenderedMapAttributions } from "@/integration-api/overlay/useRenderedMapAttributions";
 import { useEnv } from "@/integration-api/runtime/EnvProvider";
 import { type EnvironmentSensorType, useEnvironmentStore } from "./store";
 
@@ -97,7 +103,7 @@ interface SensorReading {
   unit: string;
 }
 
-interface EnvStation {
+interface EnvStation extends ContributingRecord {
   id: string;
   name: string;
   lat: number;
@@ -115,21 +121,26 @@ interface EnvStation {
 function buildGeoJson(stations: EnvStation[]) {
   return {
     type: "FeatureCollection" as const,
-    features: stations.map((s) => ({
-      type: "Feature" as const,
-      geometry: { type: "Point" as const, coordinates: [s.lng, s.lat] },
-      properties: {
-        id: s.id,
-        name: s.name,
-        value: s.value,
-        unit: s.unit,
-        sensorTitle: s.sensorTitle,
-        lastUpdated: s.lastUpdated,
-        model: s.model,
-        allSensors: JSON.stringify(s.allSensors),
-        label: `${Math.round(s.value)}`,
-      },
-    })),
+    features: stations.map((s) =>
+      withFeatureContributors(
+        {
+          type: "Feature" as const,
+          geometry: { type: "Point" as const, coordinates: [s.lng, s.lat] },
+          properties: {
+            id: s.id,
+            name: s.name,
+            value: s.value,
+            unit: s.unit,
+            sensorTitle: s.sensorTitle,
+            lastUpdated: s.lastUpdated,
+            model: s.model,
+            allSensors: JSON.stringify(s.allSensors),
+            label: `${Math.round(s.value)}`,
+          },
+        },
+        s.contributors ?? [],
+      ),
+    ),
   };
 }
 
@@ -149,7 +160,7 @@ export function EnvironmentLayer() {
   // applies: below it we skip fetching and keep the circles hidden, so an
   // overlay left on while zooming out can't pull stations for a continent.
   const minZoom = useOverlayMinZoom("environment");
-  useIntegrationAttribution("overlay-environment", layerVisible);
+  useRenderedMapAttributions("environment", [ENV_LAYER_ID, ENV_LABEL_LAYER_ID], layerVisible);
   const sensorType = useEnvironmentStore((s) => s.sensorType);
   const setLoading = useEnvironmentStore((s) => s.setLoading);
   const setStationCount = useEnvironmentStore((s) => s.setStationCount);
@@ -394,7 +405,7 @@ export function EnvironmentLayer() {
           <div style="font-size:12px;margin-bottom:4px">${sensorsHtml}</div>
           ${lastUp ? `<div style="font-size:11px;color:#999;margin-bottom:4px">${lastUp}</div>` : ""}
           <div style="font-size:10px;color:#aaa;border-top:1px solid #eee;padding-top:4px">
-            <a href="https://opensensemap.org/explore/${escapeHtml(String(p.id))}" target="_blank" rel="noreferrer" style="color:inherit;text-decoration:underline">openSenseMap</a> (ODbL 1.0)
+            ${(parseContributors(p._mapAttributions) ?? []).map(attributionToHtml).join(" · ")}
           </div>
         </div>`;
 

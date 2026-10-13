@@ -1,4 +1,6 @@
+import { snapshotContributors } from "@openmapx/mobility-core/contributors";
 import type { PlacePhoto } from "../types/place";
+import { buildRuntimeAttributionHtml, parseAttributionHtml } from "./attribution";
 import { fetchJson } from "./fetchJson";
 import { USER_AGENT } from "./userAgent";
 
@@ -23,6 +25,14 @@ export interface CommonsPage {
       LicenseShortName?: { value: string };
       LicenseUrl?: { value: string };
       DateTimeOriginal?: { value: string };
+      Credit?: { value: string };
+      Attribution?: { value: string };
+      Permission?: { value: string };
+      UsageTerms?: { value: string };
+      NonFree?: { value: string };
+      Copyright?: { value: string };
+      Restrictions?: { value: string };
+      AttributionRequired?: { value: string };
     };
   }>;
   coordinates?: Array<{ lat: number; lon: number }>;
@@ -42,7 +52,8 @@ function isExplicitNonImage(info: { mime?: string; mediatype?: string }): boolea
  */
 export function parseCommonsPage(page: CommonsPage): PlacePhoto | undefined {
   const info = page.imageinfo?.[0];
-  if (!info) return undefined;
+  if (!info || /^(?:true|1|yes)$/i.test(info.extmetadata?.NonFree?.value?.trim() ?? ""))
+    return undefined;
   // MediaWiki also supplies a PNG file-type icon as `thumburl` for audio and
   // video. Classify the original file, never the thumbnail's HTTP MIME type.
   if (!info.mime?.startsWith("image/") || isExplicitNonImage(info)) return undefined;
@@ -66,7 +77,7 @@ export function parseCommonsPage(page: CommonsPage): PlacePhoto | undefined {
   const photo: PlacePhoto = {
     url: imageUrl,
     thumbnailUrl: info.thumburl ?? undefined,
-    source: "wikimedia",
+    source: "wikimedia-commons",
     author,
     authorUrl,
     license,
@@ -77,13 +88,113 @@ export function parseCommonsPage(page: CommonsPage): PlacePhoto | undefined {
     capturedAt,
     coordinates,
   };
-  return isDisplayablePhoto(photo) ? photo : undefined;
+  photo.attributionOverride = ext?.Attribution?.value
+    ? stripHtml(ext.Attribution.value)
+    : undefined;
+  const notices = [
+    photo.attributionOverride ? ext?.Attribution?.value : ext?.Credit?.value,
+    ext?.Permission?.value,
+    ext?.UsageTerms?.value,
+    ext?.Copyright?.value,
+    ext?.Restrictions?.value,
+  ].filter((v): v is string => Boolean(v));
+  photo.attributionText = notices.map(stripHtml).filter(Boolean).join(" / ") || undefined;
+  photo.attributionLinks = [photo.attributionOverride ? undefined : artistHtml, ...notices]
+    .filter((value): value is string => Boolean(value))
+    .flatMap(extractLinks)
+    .filter((link) => link.url !== authorUrl);
+  photo.attributionRequired = /^(?:true|1|yes)$/i.test(
+    ext?.AttributionRequired?.value?.trim() ?? "",
+  );
+  if (!isDisplayablePhoto(photo)) return undefined;
+  photo.contributors = snapshotContributors([
+    {
+      sourceId: "wikimedia-commons",
+      name: "Wikimedia Commons",
+      url: photo.pageUrl,
+      spdxLicense: photo.license,
+      licenseUrl: photo.licenseUrl,
+      publisher: photo.author ? { name: photo.author, url: photo.authorUrl } : undefined,
+      attributionText: [
+        photo.author && !photo.attributionOverride
+          ? buildRuntimeAttributionHtml({
+              text: photo.author,
+              url: photo.authorUrl ?? photo.pageUrl ?? "",
+            })
+          : undefined,
+        buildRuntimeAttributionHtml({
+          text: "Wikimedia Commons",
+          url: photo.pageUrl ?? "",
+          license: photo.license,
+          licenseUrl: photo.licenseUrl,
+        }),
+        photo.attributionText
+          ? buildRuntimeAttributionHtml({ text: photo.attributionText, url: "" })
+          : undefined,
+        ...(photo.attributionLinks ?? []).map((link) =>
+          buildRuntimeAttributionHtml({ text: link.label, url: link.url }),
+        ),
+      ]
+        .filter(Boolean)
+        .join(" / "),
+      retrievedAt: new Date().toISOString(),
+    },
+  ]);
+  return photo;
 }
 
 /** Reject known Commons file icons from responses cached before MIME filtering. */
 export function isDisplayablePhoto(photo: PlacePhoto): boolean {
   try {
     const image = new URL(photo.url);
+    const commons =
+      ["wikimedia", "wikimedia-commons", "wikimedia-commons-logos"].includes(photo.source) ||
+      image.hostname === "commons.wikimedia.org" ||
+      [photo.thumbnailUrl, photo.pageUrl].some((raw) => {
+        if (!raw) return false;
+        try {
+          const url = new URL(raw);
+          return (
+            url.hostname === "commons.wikimedia.org" ||
+            (["upload.wikimedia.org", "thumb.wikimedia.org"].includes(url.hostname) &&
+              url.pathname.startsWith("/wikipedia/commons/"))
+          );
+        } catch {
+          return false;
+        }
+      }) ||
+      (["upload.wikimedia.org", "thumb.wikimedia.org"].includes(image.hostname) &&
+        image.pathname.startsWith("/wikipedia/commons/"));
+    if (commons) {
+      if (!photo.license?.trim() || !photo.pageUrl) return false;
+      const page = new URL(photo.pageUrl);
+      if (
+        page.protocol !== "https:" ||
+        page.hostname !== "commons.wikimedia.org" ||
+        !page.pathname.startsWith("/wiki/File:")
+      )
+        return false;
+      const publicDomain = /^(?:public domain|CC0(?: 1\.0)?|PDM(?: 1\.0)?)$/i.test(
+        photo.license.trim(),
+      );
+      if (
+        (!publicDomain || photo.attributionRequired) &&
+        !photo.attributionOverride?.trim() &&
+        (!photo.author?.trim() || /^(?:unknown(?: author)?|anonymous)$/i.test(photo.author.trim()))
+      )
+        return false;
+      if (!publicDomain && (!photo.licenseUrl || !/^https?:\/\//i.test(photo.licenseUrl)))
+        return false;
+      if (
+        photo.contributors !== undefined &&
+        !photo.contributors.some(
+          (receipt) =>
+            receipt.sourceId === "wikimedia-commons" ||
+            receipt.sourceId === "wikimedia-commons-logos",
+        )
+      )
+        return false;
+    }
     const nonImageFile =
       /\.(?:ogg|oga|ogv|opus|mp3|wav|flac|m4a|aac|mid|midi|webm|mp4|m4v|mov|avi|mpeg|mpg|pdf|djvu|xcf|stl)$/i;
     if (
@@ -107,6 +218,8 @@ export function isDisplayablePhoto(photo: PlacePhoto): boolean {
         return false;
     }
   } catch {
+    if (["wikimedia", "wikimedia-commons", "wikimedia-commons-logos"].includes(photo.source))
+      return false;
     // Other providers' URLs retain their existing validation downstream.
   }
   return true;
@@ -120,10 +233,22 @@ export function isDisplayablePhoto(photo: PlacePhoto): boolean {
  */
 export async function fetchCommonsMetadata(
   filenames: string[],
-  options?: { rejectedNonImageFiles?: Set<string>; strict?: boolean; signal?: AbortSignal },
+  options?: {
+    rejectedNonImageFiles?: Set<string>;
+    strict?: boolean;
+    signal?: AbortSignal;
+    getJson?: <T>(
+      url: string,
+      options: { headers: Record<string, string>; timeoutMs: number; signal?: AbortSignal },
+    ) => Promise<T>;
+  },
 ): Promise<Map<string, PlacePhoto>> {
   const result = new Map<string, PlacePhoto>();
   if (filenames.length === 0) return result;
+  if (options?.signal?.aborted) {
+    if (options.strict) options.signal.throwIfAborted();
+    return result;
+  }
 
   const titles = filenames.map((f) => `File:${f.replace(/ /g, "_")}`).join("|");
 
@@ -143,23 +268,27 @@ export async function fetchCommonsMetadata(
       redirects?: Array<{ from: string; to: string }>;
     };
   };
-  let data: CommonsResponse;
-  if (options?.strict) {
+  let data: CommonsResponse | null;
+  if (options?.getJson) {
+    try {
+      data = await options.getJson<CommonsResponse>(url.toString(), {
+        headers: HEADERS,
+        timeoutMs: 4000,
+        signal: options.signal,
+      });
+    } catch (error) {
+      if (options.strict) throw error;
+      return result;
+    }
+  } else {
     data = await fetchJson<CommonsResponse>(url.toString(), {
       headers: HEADERS,
       timeoutMs: 4000,
-      signal: options.signal,
+      signal: options?.signal,
+      ...(options?.strict ? {} : { nullOnError: true as const }),
     });
-  } else {
-    let res: Response;
-    try {
-      res = await fetch(url.toString(), { headers: HEADERS, signal: AbortSignal.timeout(4000) });
-    } catch {
-      return result;
-    }
-    if (!res.ok) return result;
-    data = (await res.json()) as CommonsResponse;
   }
+  if (!data) return result;
   const pages = data.query?.pages;
   if (!pages) return result;
 
@@ -197,26 +326,24 @@ export async function fetchCommonsMetadata(
   return result;
 }
 
-/** Strip HTML tags and Commons hidden author markers. */
-function stripHtml(html: string): string {
-  // Commons Unknown author emits a second copy in a hidden
-  // span. Removing tags alone would concatenate it with the visible author.
-  return html
-    .replace(
-      /<span\b[^>]*\bstyle\s*=\s*(["'])[^"']*\bdisplay\s*:\s*none\s*(?:;[^"']*)?\1[^>]*>[\s\S]*?<\/span\s*>/gi,
-      "",
-    )
-    .replace(/<[^>]*>/g, "")
-    .trim();
+/** Author markers and their links are omitted together, including nested spans. */
+function parseCommonsHtml(html: string) {
+  return parseAttributionHtml(html, {
+    linkBaseUrl: "https://commons.wikimedia.org",
+    omitHiddenSpans: true,
+  });
 }
 
-/** Extract the first href from HTML. */
+function stripHtml(html: string): string {
+  return parseCommonsHtml(html).text;
+}
+
+function extractLinks(html: string): { label: string; url: string }[] {
+  return parseCommonsHtml(html).links;
+}
+
 function extractHref(html: string): string | undefined {
-  const match = html.match(/href="([^"]+)"/);
-  if (!match) return undefined;
-  const href = match[1];
-  if (href.startsWith("/wiki/")) return `https://commons.wikimedia.org${href}`;
-  return href;
+  return extractLinks(html)[0]?.url;
 }
 
 /** Parse Wikimedia DateTimeOriginal into ISO string. */

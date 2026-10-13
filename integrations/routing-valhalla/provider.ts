@@ -778,6 +778,7 @@ export const valhallaService: RoutingProvider = {
     mode: TravelMode,
     options: RoutingOptions = {},
   ): Promise<DirectionsResult> {
+    const sourceIds = valhallaSourceIds();
     const { costingOptions, usesCurrentClosures } = buildClosureSafeCostingOptions(options, mode);
     const effectiveTrafficOptions = { ...options, useLiveTraffic: usesCurrentClosures };
 
@@ -858,7 +859,6 @@ export const valhallaService: RoutingProvider = {
       }
     }
 
-    const sourceIds = valhallaSourceIds();
     for (const route of routes) {
       route.sourceIds = sourceIds;
       if (trafficProof) route.trafficProof = trafficProof;
@@ -876,6 +876,7 @@ export const valhallaService: RoutingProvider = {
     mode: TravelMode,
     options: RoutingOptions = {},
   ): Promise<DirectionsResult> {
+    const sourceIds = valhallaSourceIds();
     const { costingOptions, usesCurrentClosures } = buildClosureSafeCostingOptions(options, mode);
 
     const locations = waypoints.map((wp) => ({
@@ -926,7 +927,6 @@ export const valhallaService: RoutingProvider = {
     const optimizedOrder =
       data.trip.locations?.map((loc) => loc.original_index ?? 0) ?? waypoints.map((_, i) => i);
 
-    const sourceIds = valhallaSourceIds();
     for (const route of routes) {
       route.sourceIds = sourceIds;
       if (trafficProof) route.trafficProof = trafficProof;

@@ -193,3 +193,64 @@ describe("getQuotes", () => {
     expect(result.quotes).toEqual([]);
   });
 });
+
+describe("quote contributor ownership", () => {
+  it.each(["unsupported", "failed", "empty"])(
+    "credits no supplier for %s quote output",
+    async (outcome) => {
+      const provider = makeProvider({
+        id: "supplier",
+        capabilities: {
+          deepLink: true,
+          quote: outcome !== "unsupported",
+          booking: false,
+          tracking: false,
+        },
+        getQuotes: async () => {
+          if (outcome === "failed") throw new Error("offline");
+          return {
+            data: [],
+            attributions: [{ sourceId: "supplier", name: "Supplier" }],
+            freshness,
+          };
+        },
+      });
+      const [result] = await createRideOrchestrator(ctxWith([provider])).getQuotes(request, [
+        "supplier",
+      ]);
+      expect(result.quotes).toEqual([]);
+      expect(result.attributions).toEqual([]);
+    },
+  );
+  it("captures per quote notices and treats explicit empty contributors as authoritative", async () => {
+    const a = { sourceId: "supplier", name: "Supplier", attributionText: "quoted notice" };
+    const provider = makeProvider({
+      id: "supplier",
+      capabilities: { deepLink: true, quote: true, booking: false, tracking: false },
+      getQuotes: async () => ({
+        data: [
+          {
+            productId: "one",
+            product: { id: "one", name: "One" },
+            expiresAt: "",
+            contributors: [a],
+          },
+          {
+            productId: "two",
+            product: { id: "two", name: "Two" },
+            expiresAt: "",
+            contributors: [],
+          },
+        ],
+        attributions: [{ sourceId: "supplier", name: "Supplier", attributionText: "other notice" }],
+        freshness,
+      }),
+    });
+    const [result] = await createRideOrchestrator(ctxWith([provider])).getQuotes(request, [
+      "supplier",
+    ]);
+    expect(result.quotes[0].contributors).toEqual([a]);
+    expect(result.quotes[1].contributors).toEqual([]);
+    expect(result.attributions).toEqual([a]);
+  });
+});

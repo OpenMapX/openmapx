@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   ambientCategory,
+  ambientOvertureIdentityEvidence,
+  ambientPlaceContributors,
   ambientPlaceFromOsm,
   ambientPlaceFromOverture,
   ambientPlaceFromTile,
@@ -32,6 +34,140 @@ const overture = {
 };
 
 describe("ambient place policy", () => {
+  it("captures exact localized label publishers and excludes phone-only publishers", () => {
+    const row = {
+      ...overture,
+      sources: [
+        { property: "/names/primary", dataset: "meta" },
+        { property: "/names/common/de", dataset: "Microsoft" },
+        { property: "/phones", dataset: "Foursquare" },
+      ],
+      sources_catalogue: [
+        { sourceId: "overture", name: "Captured Overture" },
+        { sourceId: "meta-places", name: "Captured Meta" },
+        { sourceId: "microsoft-places", name: "Captured Microsoft" },
+        { sourceId: "foursquare", name: "Phone only" },
+      ],
+      release: "2026-10-01.0",
+    };
+    const place = ambientPlaceFromOverture(row)!;
+    expect(ambientPlaceContributors(place, "de").map((r) => r.sourceId)).toEqual([
+      "overture",
+      "microsoft-places",
+    ]);
+    expect(ambientPlaceContributors(place, "fr").map((r) => r.sourceId)).toEqual([
+      "overture",
+      "meta-places",
+    ]);
+    expect(place.sourceLineage).toEqual({ sources: row.sources, release: row.release });
+    expect(ambientPlaceToCategoryPlace(place, "de").contributors?.map((r) => r.sourceId)).toEqual([
+      "overture",
+      "microsoft-places",
+    ]);
+    expect(
+      ambientPlaceContributors(ambientPlaceFromOverture({ ...row, sources_catalogue: [] })!, "de"),
+    ).toEqual([]);
+  });
+  it("credits the selected taxonomy array element without absent or unmatched category fields", () => {
+    const place = ambientPlaceFromOverture({
+      ...overture,
+      basic_category: null,
+      taxonomy_primary: "unmatched",
+      taxonomy_hierarchy: ["cafe"],
+      sources: [
+        { property: "/names/primary", dataset: "meta" },
+        { property: "/taxonomy/hierarchy/0", dataset: "Microsoft" },
+        { property: "/taxonomy/primary", dataset: "Foursquare" },
+      ],
+      sources_catalogue: [
+        { sourceId: "overture", name: "Overture" },
+        { sourceId: "meta-places", name: "Name" },
+        { sourceId: "microsoft-places", name: "Selected taxonomy" },
+        { sourceId: "foursquare", name: "Unmatched taxonomy" },
+      ],
+    })!;
+    expect(place.category).toBe("cafe");
+    expect(place.fieldContributors?.category.map((r) => r.sourceId)).toEqual([
+      "overture",
+      "microsoft-places",
+    ]);
+  });
+  it("preserves OSM winners and only adds the Overture localized gap and identity receipts", () => {
+    const o = ambientPlaceFromOverture({
+      ...overture,
+      sources: [{ property: "", dataset: "Microsoft" }],
+      sources_catalogue: [
+        { sourceId: "overture", name: "Overture" },
+        { sourceId: "microsoft-places", name: "Microsoft" },
+      ],
+    })!;
+    const merged = mergeAmbientPlaces(
+      [ambientPlaceFromOsm(osm)!],
+      [o],
+      new Map([[`osm:node/${osm.osm_id}`, o.gersId!]]),
+    )[0];
+    expect(ambientPlaceContributors(merged, "en").map((r) => r.sourceId)).toEqual([
+      "openstreetmap",
+      "overture",
+    ]);
+    expect(ambientPlaceContributors(merged, "de").map((r) => r.sourceId)).toEqual([
+      "overture",
+      "microsoft-places",
+      "openstreetmap",
+    ]);
+    expect(merged.contributors?.some((r) => r.sourceId === "microsoft-places")).toBe(true);
+  });
+  it("retains the captured accepted GERS identity when Overture display fields are excluded", () => {
+    const row = {
+      ...overture,
+      operating_status: "permanently_closed",
+      release: "2026-10-01.0",
+      sources: [{ property: "/names/primary", dataset: "meta" }],
+      sources_catalogue: [
+        { sourceId: "overture", name: "Captured historical GERS notice" },
+        { sourceId: "meta-places", name: "Excluded display supplier" },
+      ],
+    };
+    expect(ambientPlaceFromOverture(row)).toBeNull();
+    const p = ambientPlaceFromOsm(osm)!;
+    const merged = mergeAmbientPlaces(
+      [p],
+      [],
+      new Map([[p.id, row.gers_id]]),
+      new Set(),
+      new Map([[row.gers_id, ambientOvertureIdentityEvidence(row)]]),
+    )[0];
+    expect(ambientPlaceContributors(merged, "en").map((r) => r.name)).toEqual([
+      "© OpenStreetMap contributors",
+      "Captured historical GERS notice",
+    ]);
+    expect(merged.legacyAttribution).toBe(false);
+    expect(merged.sourceLineage?.sources).toEqual(row.sources);
+  });
+  it("does not invent publisher receipts for legacy tiles and keeps explicit empty canonical receipts", () => {
+    const p = { id: "overture:old", name: "Legacy", sources: "overture" };
+    expect(
+      ambientPlaceContributors(ambientPlaceFromTile(p, [6, 50])!, "en").map((r) => r.sourceId),
+    ).toEqual(["overture"]);
+    expect(
+      ambientPlaceContributors(
+        ambientPlaceFromTile(
+          { ...p, format_version: 2, _mapAttributions: "[]", field_contributors: '{"name":[]}' },
+          [6, 50],
+        )!,
+        "en",
+      ),
+    ).toEqual([]);
+    const legacy = ambientPlaceFromOverture({
+      ...overture,
+      sources: [{ property: "/phones", dataset: "Foursquare" }],
+      release: "2026-10-01.0",
+    })!;
+    expect(legacy.sourceLineage).toEqual({
+      sources: [{ property: "/phones", dataset: "Foursquare" }],
+      release: "2026-10-01.0",
+    });
+  });
   it("keeps strict source bounds and rejects non-finite/polar tile geometry", () => {
     for (const [lng, lat] of [
       [181, 0],

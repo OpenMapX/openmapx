@@ -1,5 +1,6 @@
 import type { MapGeoJSONFeature } from "maplibre-gl";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { useMapAttributionStore } from "@/integration-api/overlay/mapAttributionStore";
 import { act, createFakeMap, type FakeMap, render, waitFor } from "@/test";
 import { useWildfireStore } from "./store";
 
@@ -147,6 +148,7 @@ beforeEach(() => {
     source: "viirs",
   });
   attributionState.filtered.mockClear();
+  useMapAttributionStore.setState({ byLayer: {} });
 });
 
 afterEach(() => {
@@ -154,7 +156,7 @@ afterEach(() => {
 });
 
 describe("WildfireLayer hotspot composition", () => {
-  it("composes both polygon sources and credits exactly the sources they drew", async () => {
+  it("composes both polygon sources without crediting offscreen geometry", async () => {
     useWildfireStore.setState({ showNifcPerimeters: true, showEffisBurnedAreas: true });
     vi.stubGlobal(
       "fetch",
@@ -185,10 +187,8 @@ describe("WildfireLayer hotspot composition", () => {
       expect(fake.state.sources.has("openmapx-wildfires-effis-source")).toBe(true),
     );
     await waitFor(() => {
-      expect(attributionState.filtered).toHaveBeenLastCalledWith("wildfires", [
-        "eu-effis-fires",
-        "us-nifc-fires",
-      ]);
+      // Loaded data with no rendered query hits owes no credits.
+      expect(Object.values(useMapAttributionStore.getState().byLayer).flat()).toEqual([]);
     });
   });
 

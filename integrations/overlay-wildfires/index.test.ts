@@ -169,6 +169,8 @@ describe("GET /wildfires", () => {
             acqTime: "0930",
             dayNight: "D",
             ageMs: 2.5 * 3_600_000,
+            sources: ["nasa-firms-viirs-fires"],
+            contributors: [],
             instrument: "viirs",
           },
         },
@@ -314,7 +316,7 @@ describe("GET /wildfires/density", () => {
         {
           type: "Feature",
           geometry: { type: "Point", coordinates: [11.25, -0.75] },
-          properties: { count: 3, frpSum: 9.5, frpMax: 6.1 },
+          properties: { count: 3, frpSum: 9.5, frpMax: 6.1, sources: [], contributors: [] },
         },
       ],
       sources: ["nasa-firms-viirs-fires"],
@@ -402,6 +404,8 @@ describe("GET /perimeters/nifc", () => {
             id: "nifc:oc:situation:us-nifc-fires:{ABC-123}",
             kind: "reported-perimeter",
             provider: "us-nifc-fires",
+            sources: ["us-nifc-fires"],
+            contributors: [],
             name: "Pine Fire",
             areaAcres: 100,
             observedAt: "2026-10-09T08:00:00.000Z",
@@ -548,6 +552,8 @@ describe("GET /smoke/noaa", () => {
           id: "noaa-hms:oc:situation:us-noaa-hms-smoke:2026282_17",
           kind: "observed-smoke",
           provider: "us-noaa-hms-smoke",
+          sources: ["us-noaa-hms-smoke"],
+          contributors: [],
           density: "medium",
           satellite: "GOES-EAST",
           startedAt: "2026-10-09T13:10:00.000Z",
@@ -564,5 +570,39 @@ describe("GET /smoke/noaa", () => {
     const sent = await call("/smoke/noaa", [provider({ getNaturalHazards })]);
     expect(sent.status).toBe(503);
     expect(sent.body).toEqual({ code: "noaa_hms_unavailable" });
+  });
+});
+
+it("preserves known partial cell receipts and lineage diagnostics without expanding whole-grid suppliers", async () => {
+  const a = { sourceId: "parent-a", name: "Captured A" };
+  const sent = await call(
+    "/wildfires/density",
+    [
+      provider({
+        getFireDensity: async () => ({
+          cells: [
+            {
+              point: [-120.5, 38.5],
+              count: 2,
+              frpSumMW: 30,
+              frpMaxMW: 20,
+              sources: ["parent-a"],
+              nativeSources: ["child-a", "historic-unknown"],
+              contributors: [a],
+              lineageComplete: false,
+            },
+          ],
+          sources: ["child-a", "historic-unknown", "other-cell-supplier"],
+        }),
+      }),
+    ],
+    { ...VIEW, zoom: "4" },
+  );
+  expect(sent.status).toBe(200);
+  expect(sent.body).toMatchObject({
+    features: [
+      { properties: { contributors: [a], sources: ["parent-a"], lineageComplete: false } },
+    ],
+    sources: ["child-a", "historic-unknown"],
   });
 });

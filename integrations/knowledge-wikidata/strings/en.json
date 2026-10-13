@@ -11,6 +11,11 @@
       "purpose": "Fetch metadata for the Wikidata main image (P18 claim)",
       "dataSent": "Image filename (from Wikidata P18 claim)",
       "dataReceived": "Thumbnail URL, artist, license, capture date, coordinates"
+    },
+    "wikipedia": {
+      "purpose": "Show the Wikipedia extract linked by the Wikidata entity",
+      "dataSent": "Article title from the selected Wikidata sitelink, language code",
+      "dataReceived": "Article summary extract"
     }
   }
 }

@@ -8,11 +8,18 @@ import {
   useDirectionsStore,
   useNavigationStore,
 } from "@openmapx/core";
+import {
+  contributorsForField,
+  serializeContributors,
+  snapshotContributors,
+} from "@openmapx/mobility-core/contributors";
+import type { MobilityEnvelope } from "@openmapx/mobility-core/result";
 import type { GeoJSONLineString, TransportMode } from "@openmapx/mobility-core/transit";
 import type { ExpressionSpecification } from "maplibre-gl";
 import { useEffect, useRef, useState } from "react";
 import { addLayerInSlot, unregisterLayerSlot } from "@/integration-api/map/layerStack";
 import { useMap } from "@/integration-api/map/MapContext";
+import { useRenderedMapAttributions } from "@/integration-api/overlay/useRenderedMapAttributions";
 import { PRIMARY_BLUE_HEX } from "@/integration-api/runtime/theme";
 import { ROUTE_COLORS, ROUTE_WIDTHS } from "@/lib/routeStyle";
 import { shouldRefineLegGeometry } from "./legGeometryRefine";
@@ -31,6 +38,12 @@ const POINTS_LAYER_ID = "transit-itinerary-points";
 export function TransitItineraryLayer() {
   const { mapRef, mapReady, styleVersion, fitBounds } = useMap();
   const { mode, transitItineraries, activeItineraryIndex } = useDirectionsStore();
+
+  useRenderedMapAttributions(
+    "transit-itinerary",
+    [WALK_LAYER_ID, TRANSIT_LAYER_ID, POINTS_LAYER_ID],
+    mode === "transit" && transitItineraries.length > 0,
+  );
 
   // During transit follow-along navigation, dim every leg except the one the
   // traveller is currently on so the active segment stands out. When not
@@ -75,10 +88,11 @@ export function TransitItineraryLayer() {
           const params: Record<string, string> = { trip_id: tripId };
           if (leg.from.stopId) params.from_stop_id = leg.from.stopId;
           if (leg.to.stopId) params.to_stop_id = leg.to.stopId;
-          const geo = await apiClient.get<GeoJSONLineString>(
+          const env = await apiClient.get<MobilityEnvelope<GeoJSONLineString>>(
             API_ENDPOINTS.transitLegGeometry,
             params,
           );
+          const geo = env.data;
           if (fetchGenRef.current === gen && geo?.coordinates?.length >= 2) {
             setLegGeometries((prev) => ({ ...prev, [tripId]: geo }));
           }
@@ -132,7 +146,17 @@ export function TransitItineraryLayer() {
 
       return {
         type: "Feature" as const,
-        properties: { isStreet, color, index: i },
+        properties: {
+          _mapAttributions: serializeContributors(
+            snapshotContributors(
+              geometry.contributors ?? contributorsForField(leg, "geometry"),
+              contributorsForField(leg, isStreet || !leg.route?.color ? "mode" : "route.color"),
+            ),
+          ),
+          isStreet,
+          color,
+          index: i,
+        },
         geometry,
       };
     });
@@ -140,14 +164,19 @@ export function TransitItineraryLayer() {
     // Build transfer point features
     const pointFeatures: Array<{
       type: "Feature";
-      properties: { name: string };
+      properties: { name: string; _mapAttributions: string };
       geometry: { type: "Point"; coordinates: [number, number] };
     }> = [];
 
     for (const leg of itinerary.legs) {
       pointFeatures.push({
         type: "Feature",
-        properties: { name: leg.from.name },
+        properties: {
+          name: leg.from.name,
+          _mapAttributions: serializeContributors(
+            leg.from.contributors ?? contributorsForField(leg, "from"),
+          ),
+        },
         geometry: { type: "Point", coordinates: [leg.from.lng, leg.from.lat] },
       });
     }
@@ -155,7 +184,12 @@ export function TransitItineraryLayer() {
     const lastLeg = itinerary.legs[itinerary.legs.length - 1];
     pointFeatures.push({
       type: "Feature",
-      properties: { name: lastLeg.to.name },
+      properties: {
+        name: lastLeg.to.name,
+        _mapAttributions: serializeContributors(
+          lastLeg.to.contributors ?? contributorsForField(lastLeg, "to"),
+        ),
+      },
       geometry: { type: "Point", coordinates: [lastLeg.to.lng, lastLeg.to.lat] },
     });
 

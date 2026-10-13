@@ -1,7 +1,13 @@
-import type { LoadedIntegration, PlacePhoto } from "@openmapx/core";
-import { describe, expect, it, vi } from "vitest";
-import { getPhotoProviders, searchHeroPhotos } from "../orchestrator.js";
+import type { LoadedIntegration } from "@openmapx/core";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import {
+  createOsmImagePhotoProvider,
+  getPhotoProviders,
+  searchHeroPhotos,
+} from "../orchestrator.js";
 import type { PhotoProvider } from "../types.js";
+
+afterEach(() => vi.restoreAllMocks());
 
 function photoProvider(id: string): PhotoProvider {
   return {
@@ -67,7 +73,14 @@ describe("getPhotoProviders", () => {
 
 describe("searchHeroPhotos", () => {
   it("reports failed providers in strict lookup while retaining another provider's photo", async () => {
-    const photo = { url: "https://upload.wikimedia.org/a.jpg", source: "wikimedia" };
+    const photo = {
+      url: "https://upload.wikimedia.org/a.jpg",
+      source: "wikimedia",
+      author: "Artist",
+      license: "CC BY 4.0",
+      licenseUrl: "https://creativecommons.org/licenses/by/4.0/",
+      pageUrl: "https://commons.wikimedia.org/wiki/File:A.jpg",
+    };
     const error = Object.assign(new Error("throttled"), { status: 429, retryAfterMs: 7000 });
     const failed = {
       ...photoProvider("failed"),
@@ -85,26 +98,71 @@ describe("searchHeroPhotos", () => {
     expect(photos).toEqual([photo]);
     expect(errors).toEqual([error]);
   });
-  it("returns OSM image tag photos without registered providers", async () => {
-    const photos = await searchHeroPhotos(
-      {
-        image: "https://example.com/place.jpg",
-        "image:0": "File:Example.jpg",
-      },
-      [],
+  it("resolves OSM Commons filenames through per-file metadata", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          query: {
+            pages: {
+              1: {
+                title: "File:Example.jpg",
+                imageinfo: [
+                  {
+                    url: "https://upload.wikimedia.org/wikipedia/commons/a/ab/Example.jpg",
+                    mime: "image/jpeg",
+                    extmetadata: {
+                      Artist: { value: "Creator" },
+                      LicenseShortName: { value: "CC BY 4.0" },
+                      LicenseUrl: { value: "https://creativecommons.org/licenses/by/4.0/" },
+                    },
+                  },
+                ],
+              },
+            },
+          },
+        }),
+      ),
     );
-
-    expect(photos).toEqual<PlacePhoto[]>([
-      {
-        url: "https://example.com/place.jpg",
-        source: "osm",
-        pageUrl: undefined,
-      },
-      {
-        url: "https://commons.wikimedia.org/wiki/Special:FilePath/Example.jpg?width=1200",
-        source: "osm",
-        pageUrl: undefined,
-      },
-    ]);
+    const photos = await searchHeroPhotos(
+      { image: "https://example.com/place.jpg", "image:0": "File:Example.jpg" },
+      [
+        createOsmImagePhotoProvider({
+          http: {
+            get: async () => ({
+              query: {
+                pages: {
+                  1: {
+                    title: "File:Example.jpg",
+                    imageinfo: [
+                      {
+                        url: "https://upload.wikimedia.org/wikipedia/commons/a/ab/Example.jpg",
+                        mime: "image/jpeg",
+                        extmetadata: {
+                          Artist: { value: "Creator" },
+                          LicenseShortName: { value: "CC BY 4.0" },
+                          LicenseUrl: { value: "https://creativecommons.org/licenses/by/4.0/" },
+                        },
+                      },
+                    ],
+                  },
+                },
+              },
+            }),
+          },
+        } as never),
+      ],
+    );
+    expect(photos).toHaveLength(2);
+    expect(photos[0]).toEqual({ url: "https://example.com/place.jpg", source: "osm" });
+    expect(photos[1]).toMatchObject({
+      source: "wikimedia-commons",
+      author: "Creator",
+      license: "CC BY 4.0",
+      contributors: [expect.objectContaining({ sourceId: "wikimedia-commons" })],
+    });
+  });
+  it("does not display a Commons filename when metadata acquisition fails", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("busy", { status: 503 }));
+    expect(await searchHeroPhotos({ image: "File:Missing.jpg" }, [])).toEqual([]);
   });
 });

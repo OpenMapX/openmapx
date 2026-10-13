@@ -6,6 +6,7 @@ import type {
 import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "../../api/client";
 import { API_ENDPOINTS } from "../../api/endpoints";
+import { captureIsochroneContributors } from "./travelTimeContributors";
 import { type MobilityEnvelopeQueryResult, wrapMobilityEnvelope } from "./useMobilityEnvelope";
 
 export function transitIsochroneKey(request: TransitIsochroneRequest | null) {
@@ -22,16 +23,22 @@ export function transitIsochroneKey(request: TransitIsochroneRequest | null) {
 export function useTransitIsochrone(
   request: TransitIsochroneRequest | null,
   enabled = false,
-): MobilityEnvelopeQueryResult<TransitIsochroneResult> {
+): MobilityEnvelopeQueryResult<
+  TransitIsochroneResult & {
+    contributors: readonly import("@openmapx/mobility-core/attribution").Attribution[];
+  }
+> {
   const query = useQuery({
     queryKey: transitIsochroneKey(request),
     queryFn: ({ signal }) => {
       if (!request) throw new Error("Transit isochrone request required");
-      return apiClient.post<MobilityEnvelope<TransitIsochroneResult>>(
-        API_ENDPOINTS.transitReachabilityIsochrone,
-        request,
-        { signal, timeoutMs: 70_000 },
-      );
+      return apiClient
+        .post<MobilityEnvelope<TransitIsochroneResult>>(
+          API_ENDPOINTS.transitReachabilityIsochrone,
+          request,
+          { signal, timeoutMs: 70_000 },
+        )
+        .then(captureIsochroneContributors);
     },
     enabled: enabled && request !== null,
     staleTime: 900_000,

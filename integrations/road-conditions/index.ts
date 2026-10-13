@@ -93,7 +93,7 @@ export function setup(ctx: IntegrationContext): void {
 
     // Namespaced by the contract version: a cache entry written in an older
     // shape must not be served against the new one.
-    const key = `conditions:query:roads:situations-v2:${bboxKey(bbox)}:${kinds.join("+")}:${excludeKinds.join("+")}:${types.join("+")}:${minSeverity ?? ""}:${horizonDays ?? ""}`;
+    const key = `conditions:query:roads:situations-contributors-v3:${bboxKey(bbox)}:${kinds.join("+")}:${excludeKinds.join("+")}:${types.join("+")}:${minSeverity ?? ""}:${horizonDays ?? ""}`;
 
     try {
       const fc = await ctx.cache.withCache(key, ROAD_EVENT_CACHE_MAX_AGE_S, async () => {

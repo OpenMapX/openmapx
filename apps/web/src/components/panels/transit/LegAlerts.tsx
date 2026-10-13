@@ -4,9 +4,11 @@ import Box from "@mui/material/Box";
 import Collapse from "@mui/material/Collapse";
 import Typography from "@mui/material/Typography";
 import { useRouteAlerts } from "@openmapx/core";
+import { contributorsForRecords } from "@openmapx/mobility-core/contributors";
 import type { ServiceAlert } from "@openmapx/mobility-core/transit";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
+import { AttributionStrip } from "@/components/ui/AttributionStrip";
 import { AlertCard, SEVERITY_PRIORITY } from "./AlertCard";
 
 interface LegAlertsProps {
@@ -36,6 +38,7 @@ export function LegAlerts({ routeId, legAlerts }: LegAlertsProps) {
   return (
     <Box sx={{ mt: 0.75, mb: 0.25, display: "flex", flexDirection: "column", gap: 0.5 }}>
       <AlertCard alert={sorted[0]} compact />
+      <AttributionStrip attributions={contributorsForRecords(sorted)} variant="inline" />
       {hiddenCount > 0 && (
         <>
           <Typography

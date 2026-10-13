@@ -80,6 +80,36 @@ describe("createGeocoderSuggestionProvider", () => {
     expect(result.suggestions.map((s) => s.id)).toEqual(["row-0", "row-1"]);
   });
 
+  it("captures exact row suppliers before limiting and preserves authoritative empty receipts", async () => {
+    const other = { sourceId: "other", name: "Other", attributionText: "Other notice" };
+    const notice = { ...ATTRIBUTION, attributionText: "Second mandatory notice" };
+    const provider = createGeocoderSuggestionProvider({
+      id: "mixed",
+      geocoder: geocoder([
+        { ...OSLO_S, sourceIds: [ATTRIBUTION.sourceId] },
+        { ...OSLO_S, id: "other", sourceIds: [other.sourceId] },
+      ]),
+      attributions: () => [ATTRIBUTION, notice, other],
+    });
+    const result = await provider.searchSuggestions({ query: "Oslo", lang: "en", limit: 1 }, CALL);
+    expect(result.suggestions[0]?.contributors).toEqual([ATTRIBUTION, notice]);
+    expect(result.attributions).toEqual([ATTRIBUTION, notice]);
+    notice.attributionText = "Updated catalogue";
+    expect(result.suggestions[0]?.contributors?.[1]?.attributionText).toBe(
+      "Second mandatory notice",
+    );
+
+    const emptyProvider = createGeocoderSuggestionProvider({
+      id: "empty",
+      geocoder: geocoder([{ ...OSLO_S, contributors: [], sourceIds: [ATTRIBUTION.sourceId] }]),
+      attributions: () => [ATTRIBUTION],
+    });
+    expect(
+      (await emptyProvider.searchSuggestions({ query: "Oslo", lang: "en", limit: 1 }, CALL))
+        .attributions,
+    ).toEqual([]);
+  });
+
   it("passes the query proximity to the geocoder as a location bias", async () => {
     const upstream = geocoder();
     const provider = createGeocoderSuggestionProvider({
@@ -169,4 +199,24 @@ describe("createGeocoderSuggestionProvider", () => {
       ),
     ).rejects.toThrow();
   });
+});
+
+it("captures the legacy uniform supplier before autocomplete acquisition resolves", async () => {
+  const captured = { ...ATTRIBUTION, name: "Original supplier" };
+  const upstream = geocoder();
+  let finish!: (rows: AutocompleteResult[]) => void;
+  upstream.autocomplete.mockReturnValue(
+    new Promise<AutocompleteResult[]>((resolve) => {
+      finish = resolve;
+    }),
+  );
+  const provider = createGeocoderSuggestionProvider({
+    id: "g",
+    geocoder: upstream,
+    attributions: () => [captured],
+  });
+  const pending = provider.searchSuggestions({ query: "Oslo", lang: "en", limit: 8 }, CALL);
+  captured.name = "Changed catalogue";
+  finish([{ id: "one", label: "Oslo", coordinates: [10.7, 59.9], type: "region" }]);
+  expect((await pending).suggestions[0].contributors?.[0].name).toBe("Original supplier");
 });

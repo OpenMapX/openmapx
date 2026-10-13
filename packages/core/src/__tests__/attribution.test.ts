@@ -106,6 +106,34 @@ describe("buildRuntimeAttributionHtml", () => {
 });
 
 describe("sanitizeAttributionHtml", () => {
+  it("retains incomplete markup as escaped text instead of losing a required notice", () => {
+    expect(sanitizeAttributionHtml('Notice <a href="https://example.org"')).toBe(
+      "Notice &lt;a href=&quot;https://example.org&quot;",
+    );
+    expect(sanitizeAttributionHtml('Notice <a title="A > B" href="https://example.org"')).toBe(
+      "Notice &lt;a title=&quot;A &gt; B&quot; href=&quot;https://example.org&quot;",
+    );
+  });
+
+  it("preserves a quoted greater-than in the URL without leaking attribute text", () => {
+    expect(
+      sanitizeAttributionHtml(
+        '<a href="https://example.org/?q=>&amp;owner=&quot;A&quot;" title="notice">A &copy; B</a>',
+      ),
+    ).toBe(
+      '<a href="https://example.org/?q=&gt;&amp;owner=&quot;A&quot;" target="_blank" rel="noopener noreferrer">A © B</a>',
+    );
+  });
+
+  it("cannot create executable markup from nested tags or entity-encoded protocol names", () => {
+    expect(
+      sanitizeAttributionHtml(
+        '<a href="java&#x73;cript:alert(1)"><code onclick="bad()">&lt;img src=x onerror=bad()&gt;</code></a>',
+      ),
+    ).toBe("<code>&lt;img src=x onerror=bad()&gt;</code>");
+    expect(sanitizeAttributionHtml("<scr<script>ipt>notice")).toBe("ipt&gt;notice");
+  });
+
   it("escapes special characters in plain text", () => {
     expect(sanitizeAttributionHtml("A & B's data")).toBe("A &amp; B&#39;s data");
   });
@@ -266,4 +294,22 @@ describe("pickIntegrationForSources", () => {
     const picked = pickIntegrationForSources([evCharging, fuel, parking], ["osm:way/123"]);
     expect(picked?.id).toBe("ev-charging");
   });
+});
+
+describe("attribution entity handling", () => {
+  it("keeps escaped credit text idempotent without turning encoded markup into tags", () => {
+    const html =
+      '<a href="https://example.org/?one=1&amp;two=2">One &amp; Co</a> / &lt;script&gt;literal&lt;/script&gt;';
+    const once = sanitizeAttributionHtml(html);
+    expect(once).toContain("One &amp; Co");
+    expect(once).toContain("&lt;script&gt;literal&lt;/script&gt;");
+    expect(once).not.toContain("<script>");
+    expect(sanitizeAttributionHtml(once)).toBe(once);
+  });
+  it.each(["javascript&#58;alert(1)", "java&#x73;cript:alert(1)", "data&#58;text/html,evil"])(
+    "does not allow entity-encoded unsafe link %s",
+    (href) => {
+      expect(sanitizeAttributionHtml(`<a href="${href}">credit</a>`)).toBe("credit");
+    },
+  );
 });

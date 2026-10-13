@@ -91,7 +91,7 @@ describe("Wikimedia photo provider — File: tag", () => {
     expect(photos[0]).toMatchObject({
       author: "Jane Doe",
       license: "CC BY-SA 4.0",
-      source: "wikimedia",
+      source: "wikimedia-commons",
     });
   });
   it("preserves rich credit through an explicit Commons redirect", async () => {
@@ -204,7 +204,7 @@ describe("Wikimedia photo provider — File: tag", () => {
 
     expect(photos[0]).toMatchObject({
       url: "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a8/Eiffel.jpg/800px.jpg",
-      source: "wikimedia",
+      source: "wikimedia-commons",
       author: "Jane Doe",
       authorUrl: "https://commons.wikimedia.org/wiki/User:Jane",
       license: "CC BY-SA 4.0",
@@ -214,7 +214,7 @@ describe("Wikimedia photo provider — File: tag", () => {
     expect(photos[0]?.pageUrl).toContain("commons.wikimedia.org/wiki/File:Eiffel_Tower.jpg");
   });
 
-  it("falls back to a Special:FilePath URL when Commons returns no metadata", async () => {
+  it("defers the image when Commons returns no metadata", async () => {
     routes = {
       "titles=": { query: { pages: {} } },
       "generator=geosearch": { query: { pages: {} } },
@@ -226,13 +226,7 @@ describe("Wikimedia photo provider — File: tag", () => {
       osmTags: { wikimedia_commons: "File:Missing.jpg" },
     });
 
-    expect(photos[0]).toEqual({
-      url: "https://commons.wikimedia.org/wiki/Special:FilePath/Missing.jpg?width=800",
-      source: "wikimedia",
-      // Metadata fetch failed, so author/license are unknown, but the filename
-      // is known — link to the Commons file page instead.
-      pageUrl: "https://commons.wikimedia.org/wiki/File:Missing.jpg",
-    });
+    expect(photos).toEqual([]);
   });
 });
 

@@ -1,3 +1,5 @@
+import { parseContributors, parseFieldContributors } from "@openmapx/mobility-core/contributors";
+import { parseGeometryContributors } from "@openmapx/mobility-core/geometry-contributors";
 import type { LngLat } from "../types/geometry";
 import type { Route, TravelMode } from "../types/routing";
 import { type GroundNavigationStartPackage, groundStartPackageSchema } from "./mobileProtocol";
@@ -82,6 +84,13 @@ function projectRoute(route: Route): Record<string, unknown> {
   for (const key of ["legs", "segmentSpeedLimits", "summary"] as const) {
     if (source[key] !== undefined) projected[key] = source[key];
   }
+  if (route.contributors !== undefined)
+    projected.contributors = parseContributors(route.contributors) ?? [];
+  if (route.fieldContributors !== undefined)
+    projected.fieldContributors = parseFieldContributors(route.fieldContributors) ?? {};
+  if (route.geometryContributors !== undefined)
+    projected.geometryContributors =
+      parseGeometryContributors(route.geometryContributors, route.geometry.length) ?? [];
   return projected;
 }
 
@@ -150,6 +159,9 @@ export function buildGroundNavigationPackage(
     settings: input.settings,
   };
 
+  // The shared boundary validates and copies receipt trees on steps, legs and
+  // nested leg steps as well as route roots, for the primary and alternatives.
+  // Keep engine extras intact; do not shallow-stamp child receipts before parsing.
   const parsed = groundStartPackageSchema.safeParse(candidate);
   if (!parsed.success) return { ok: false, code: "invalid-package" };
   return { ok: true, startPackage: parsed.data };

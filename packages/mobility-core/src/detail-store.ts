@@ -1,11 +1,20 @@
+import { randomUUID } from "node:crypto";
 import type { CacheClient } from "./cache.js";
 import type { SharedMobilityStation, SharedMobilityVehicle } from "./types/shared-mobility.js";
 
 export type SharedMobilityDetailItem = SharedMobilityStation | SharedMobilityVehicle;
 
+/** The immutable acquisition identity and deadline of an inventory record. */
+export interface RetainedSharedMobilityDetail {
+  readonly item: SharedMobilityDetailItem;
+  readonly acquisitionToken: string;
+  readonly acquiredAt: number;
+  readonly expiresAt: number;
+}
+
 interface DetailSnapshot {
-  schemaVersion: 1;
-  items: SharedMobilityDetailItem[];
+  schemaVersion: 2;
+  items: RetainedSharedMobilityDetail[];
 }
 
 const PROVIDER_SCOPED_PREFIXES = new Set([
@@ -45,7 +54,7 @@ export function sharedMobilityDetailScope(id: string): string | null {
 }
 
 function cacheKey(scope: string): string {
-  return `shared-mobility-detail:v1:${encodeURIComponent(scope)}`;
+  return `shared-mobility-detail:v2:${encodeURIComponent(scope)}`;
 }
 
 /**
@@ -53,7 +62,9 @@ function cacheKey(scope: string): string {
  * Search performs one shared write per provider/source instead of one write per item.
  */
 export class SharedMobilityDetailStore {
-  private readonly l1 = new Map<string, SharedMobilityDetailItem>();
+  private readonly l1 = new Map<string, RetainedSharedMobilityDetail>();
+  private publicationGeneration = 0;
+  private clearGeneration = 0;
 
   constructor(
     private readonly cache: CacheClient,
@@ -63,12 +74,15 @@ export class SharedMobilityDetailStore {
   ) {}
 
   clearL1(): void {
+    this.publicationGeneration++;
+    this.clearGeneration++;
     this.l1.clear();
   }
 
-  private remember(item: SharedMobilityDetailItem): void {
-    this.l1.delete(item.id);
-    this.l1.set(item.id, item);
+  private remember(record: RetainedSharedMobilityDetail): void {
+    this.publicationGeneration++;
+    this.l1.delete(record.item.id);
+    this.l1.set(record.item.id, structuredClone(record));
     while (this.l1.size > this.maxL1Items) {
       const oldest = this.l1.keys().next().value;
       if (typeof oldest !== "string") break;
@@ -76,33 +90,57 @@ export class SharedMobilityDetailStore {
     }
   }
 
-  private async mergeAndStore(key: string, incoming: SharedMobilityDetailItem[]): Promise<void> {
+  private async readSnapshot(key: string): Promise<RetainedSharedMobilityDetail[]> {
     try {
-      const previous = await this.cache.get<DetailSnapshot>(key);
-      const byId = new Map<string, SharedMobilityDetailItem>();
-      for (const item of previous?.schemaVersion === 1 ? previous.items : []) {
-        byId.set(item.id, item);
-      }
-      for (const item of incoming) byId.set(item.id, item);
-      const items = [...byId.values()].slice(-this.maxSnapshotItems);
-      await this.cache.set(
-        key,
-        { schemaVersion: 1, items } satisfies DetailSnapshot,
-        this.ttlSeconds,
-      );
+      const snapshot = await this.cache.get<DetailSnapshot>(key);
+      return snapshot?.schemaVersion === 2
+        ? snapshot.items.filter((record) => record.expiresAt > Date.now())
+        : [];
     } catch {
-      // Search/detail remain available through L1 when the shared cache is degraded.
+      return [];
     }
   }
 
+  private async mergeAndStore(
+    key: string,
+    incoming: RetainedSharedMobilityDetail[],
+  ): Promise<void> {
+    try {
+      const byId = new Map(
+        (await this.readSnapshot(key)).map((record) => [record.item.id, record]),
+      );
+      for (const record of incoming) byId.set(record.item.id, record);
+      const items = [...byId.values()].slice(-this.maxSnapshotItems);
+      const remainingSeconds = Math.floor(
+        (Math.max(...items.map((record) => record.expiresAt)) - Date.now()) / 1000,
+      );
+      if (remainingSeconds <= 0) return;
+      await this.cache.set(
+        key,
+        { schemaVersion: 2, items } satisfies DetailSnapshot,
+        remainingSeconds,
+      );
+    } catch {
+      // Search remains available through bounded L1 when the shared cache is degraded.
+    }
+  }
+
+  /** Only a new inventory acquisition establishes a new deadline/token. */
   async store(items: SharedMobilityDetailItem[]): Promise<void> {
-    const byScope = new Map<string, SharedMobilityDetailItem[]>();
+    const byScope = new Map<string, RetainedSharedMobilityDetail[]>();
+    const acquiredAt = Date.now();
     for (const item of items) {
-      this.remember(item);
+      const record: RetainedSharedMobilityDetail = {
+        item: structuredClone(item),
+        acquisitionToken: randomUUID(),
+        acquiredAt,
+        expiresAt: acquiredAt + this.ttlSeconds * 1000,
+      };
+      this.remember(record);
       const scope = sharedMobilityDetailScope(item.id);
       if (scope) {
         const scoped = byScope.get(scope) ?? [];
-        scoped.push(item);
+        scoped.push(record);
         byScope.set(scope, scoped);
       }
     }
@@ -111,26 +149,88 @@ export class SharedMobilityDetailStore {
     );
   }
 
-  private async readSnapshot(key: string): Promise<SharedMobilityDetailItem[]> {
+  private patchKey(record: RetainedSharedMobilityDetail): string {
+    return `shared-mobility-detail:enrichment:v1:${encodeURIComponent(record.item.id)}:${record.acquisitionToken}`;
+  }
+
+  /** Persist enrichment separately; an old read can never rewrite a newer inventory envelope. */
+  async updateRetained(
+    record: RetainedSharedMobilityDetail,
+    item: SharedMobilityDetailItem,
+  ): Promise<boolean> {
+    if (
+      item.id !== record.item.id ||
+      record.expiresAt <= Date.now() ||
+      JSON.stringify(item) === JSON.stringify(record.item)
+    )
+      return false;
+    const remainingSeconds = Math.floor((record.expiresAt - Date.now()) / 1000);
+    if (remainingSeconds <= 0) return false;
+    const updated = { ...record, item: structuredClone(item) };
     try {
-      const snapshot = await this.cache.get<DetailSnapshot>(key);
-      return snapshot?.schemaVersion === 1 ? snapshot.items : [];
+      await this.cache.set(this.patchKey(record), updated, remainingSeconds);
     } catch {
-      return [];
+      // A degraded shared cache does not prevent this process retaining its bounded enrichment.
     }
+    const current = this.l1.get(item.id);
+    if (current?.acquisitionToken === record.acquisitionToken) this.remember(updated);
+    return true;
+  }
+
+  async getRetained(id: string): Promise<RetainedSharedMobilityDetail | null> {
+    const publicationGeneration = this.publicationGeneration;
+    const clearGeneration = this.clearGeneration;
+    let record = this.l1.get(id);
+    if (record && record.expiresAt <= Date.now()) {
+      this.l1.delete(id);
+      record = undefined;
+    }
+    const initialRecord = record;
+    // Only a replacement of this item or an explicit clear supersedes its read.
+    // Unrelated L1 publications must not skip this acquisition's enrichment patch.
+    const supersedingRecord = (): RetainedSharedMobilityDetail | null | undefined => {
+      const current = this.l1.get(id);
+      if (
+        clearGeneration !== this.clearGeneration ||
+        (current !== undefined && current !== initialRecord)
+      )
+        return current && current.expiresAt > Date.now() ? structuredClone(current) : null;
+      return undefined;
+    };
+    if (!record) {
+      const scope = sharedMobilityDetailScope(id);
+      if (!scope) return null;
+      record = (await this.readSnapshot(cacheKey(scope))).find(
+        (candidate) => candidate.item.id === id,
+      );
+      const superseding = supersedingRecord();
+      if (superseding !== undefined) return superseding;
+    }
+    if (!record) return null;
+    try {
+      const patch = await this.cache.get<RetainedSharedMobilityDetail>(this.patchKey(record));
+      if (
+        patch?.acquisitionToken === record.acquisitionToken &&
+        patch.item.id === id &&
+        patch.expiresAt === record.expiresAt &&
+        patch.acquiredAt === record.acquiredAt &&
+        patch.expiresAt > Date.now()
+      )
+        record = patch;
+    } catch {
+      /* Retained inventory still answers during cache failure. */
+    }
+    const superseding = supersedingRecord();
+    if (superseding !== undefined) return superseding;
+    if (record.expiresAt <= Date.now()) return null;
+    // A replacement may already have been evicted while we awaited the cache.
+    // Keep this conservative publication guard without interrupting a valid read:
+    // no stale resurrection and no unbounded per-item generation history.
+    if (publicationGeneration === this.publicationGeneration) this.remember(record);
+    return structuredClone(record);
   }
 
   async get(id: string): Promise<SharedMobilityDetailItem | null> {
-    const l1 = this.l1.get(id);
-    if (l1) return l1;
-
-    const scope = sharedMobilityDetailScope(id);
-    if (!scope) return null;
-    const item = (await this.readSnapshot(cacheKey(scope))).find(
-      (candidate) => candidate.id === id,
-    );
-    if (!item) return null;
-    this.remember(item);
-    return item;
+    return (await this.getRetained(id))?.item ?? null;
   }
 }

@@ -36,6 +36,12 @@ import {
   walkStepInfo,
 } from "@openmapx/core/navigation";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
+import {
+  captureResultContributors,
+  contributorKey,
+  contributorsForField,
+  snapshotContributors,
+} from "@openmapx/mobility-core/contributors";
 import type {
   MergedDeparture,
   TransportMode,
@@ -90,12 +96,17 @@ function isPerLegRedundant(
   if (!legAttrs || legAttrs.length === 0) return true;
   const trip = tripAttrs ?? [];
   if (legAttrs.length !== trip.length) return false;
-  const legIds = new Set(legAttrs.map((a) => a.sourceId));
-  return trip.every((a) => legIds.has(a.sourceId));
+  const legIds = new Set(legAttrs.map(contributorKey));
+  return trip.every((a) => legIds.has(contributorKey(a)));
 }
 
 function legToMergedDeparture(leg: TripLeg, provider?: string): MergedDeparture {
   return {
+    contributors: snapshotContributors(
+      ...["route", "mode", "from", "to", "startTime", "headsign"].map((field) =>
+        contributorsForField(leg, field),
+      ),
+    ),
     tripId: leg.tripId ?? "",
     route: {
       id: leg.routeId ?? "",
@@ -218,6 +229,14 @@ export function TransitDetailsView({
   destinationTimeZone?: string | null;
   onBack: () => void;
 }) {
+  const selectedAttributions =
+    itinerary.contributors !== undefined
+      ? snapshotContributors(itinerary.contributors)
+      : snapshotContributors(
+          captureResultContributors(itinerary, attributions ?? []),
+          ...itinerary.legs.map((leg) => leg.contributors ?? leg.attributions ?? []),
+          itinerary.fare?.contributors ?? [],
+        );
   const t = useTranslations("directions");
   const tc = useTranslations("common");
   const tNav = useTranslations("navigation");
@@ -656,9 +675,17 @@ export function TransitDetailsView({
                       />
                       <LegAlerts routeId={leg.routeId} legAlerts={leg.alerts} />
                       {leg.tripId && <LegRemarks tripId={leg.tripId} />}
-                      {!isPerLegRedundant(leg.attributions, attributions) && (
+                      {!isPerLegRedundant(
+                        snapshotContributors(leg.contributors ?? leg.attributions ?? []),
+                        selectedAttributions,
+                      ) && (
                         <Box sx={{ mt: 0.5 }}>
-                          <AttributionStrip attributions={leg.attributions} variant="inline" />
+                          <AttributionStrip
+                            attributions={snapshotContributors(
+                              leg.contributors ?? leg.attributions ?? [],
+                            )}
+                            variant="inline"
+                          />
                         </Box>
                       )}
                     </Box>
@@ -814,7 +841,7 @@ export function TransitDetailsView({
       })()}
       {/* Data source attribution */}
       <AttributionStrip
-        attributions={attributions ?? []}
+        attributions={selectedAttributions}
         variant="panel-header"
         label={tc("dataSources")}
       />

@@ -1,4 +1,5 @@
 import { localizedTextFor, type RoadConditionEvent } from "@openmapx/core";
+import type { RoadConditionCredit } from "./attributions";
 import { isUnconfirmedCrowd } from "./evidence";
 import { markerImageIdFor, markerPoints, representativePoint } from "./markers";
 import { mostSevereEvent, SEVERITY_RANK } from "./severity";
@@ -215,7 +216,16 @@ export function buildRoadConditionFeatures(
   groups: RoadConditionDisplayGroup[],
   locale: string,
   atMs: number = Date.now(),
+  attributionsForEvents?: (events: RoadConditionEvent[]) => RoadConditionCredit[],
 ): GeoJSON.Feature[] {
+  // Serialize as a string: MapLibre's tiled feature properties do not preserve
+  // nested objects. Each rendered feature owns its credit snapshot, including
+  // every child of a grouped marker or shared line. Async source replacement
+  // cannot accidentally resolve an old rendered feature against newer records.
+  const credits = (events: RoadConditionEvent[]) =>
+    attributionsForEvents
+      ? { _mapAttributions: JSON.stringify(attributionsForEvents(events)) }
+      : {};
   const future = (events: RoadConditionEvent[]) =>
     events.every((event) => isFutureRoadCondition(event, atMs));
   const markers = groups.flatMap((group) => {
@@ -232,6 +242,7 @@ export function buildRoadConditionFeatures(
       _sev: SEVERITY_RANK[event.severity.label],
       _unconfirmed: group.events.some(isUnconfirmedCrowd),
       future: future(group.events),
+      ...credits(group.events),
     };
     return group.markerCoordinates.map(
       (point): GeoJSON.Feature => ({
@@ -258,6 +269,7 @@ export function buildRoadConditionFeatures(
           // every group represented by an exact-overlap visual line.
           _displayId: line.displayIds[0],
           _displayIds: line.displayIds,
+          ...credits(lineEvents),
         },
       },
     ];

@@ -1,3 +1,5 @@
+import type { Attribution } from "@openmapx/mobility-core/attribution";
+import { snapshotContributors } from "@openmapx/mobility-core/contributors";
 /**
  * Factory for creating RegionalCarSharingClient from static data URLs.
  * Handles fetch, caching, and bbox filtering. Caller provides the parser.
@@ -38,9 +40,12 @@ export interface StaticCarSharingConfig {
 export function createStaticCarSharingClient(
   config: StaticCarSharingConfig,
 ): RegionalCarSharingClient {
-  const cacheKey = `cache:carsharing:static:${config.id}`;
+  const cacheKey = `cache:carsharing:static:contributors-v1:${config.id}`;
 
-  async function fetchData(cache: CacheClient): Promise<SharedMobilityStation[]> {
+  async function fetchData(
+    cache: CacheClient,
+    contributors?: readonly Attribution[],
+  ): Promise<SharedMobilityStation[]> {
     const cached = await cacheGet<SharedMobilityStation[]>(cache, cacheKey);
     if (cached) return cached;
 
@@ -53,7 +58,13 @@ export function createStaticCarSharingClient(
       if (!res.ok) return [];
 
       const body = await res.text();
-      const stations = config.parse(body);
+      const stations = config
+        .parse(body)
+        .map((station) =>
+          contributors === undefined
+            ? station
+            : { ...station, contributors: snapshotContributors(contributors) },
+        );
 
       await cacheSet(cache, cacheKey, stations, TTL.sharedMobility.stations);
       return stations;
@@ -68,8 +79,12 @@ export function createStaticCarSharingClient(
     name: config.name,
     regions: config.regions,
     attribution: config.attribution,
-    async search(bbox: BoundingBox, cache: CacheClient): Promise<SharedMobilityStation[]> {
-      const all = await fetchData(cache);
+    async search(
+      bbox: BoundingBox,
+      cache: CacheClient,
+      contributors?: readonly Attribution[],
+    ): Promise<SharedMobilityStation[]> {
+      const all = await fetchData(cache, contributors);
       return all.filter((s) => bboxContains(bbox, s.coordinates[1], s.coordinates[0]));
     },
   };

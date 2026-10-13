@@ -9,6 +9,7 @@ import type {
   TemporalCapabilities,
   TravelMode,
 } from "@openmapx/core";
+import type { ContributingRecord } from "@openmapx/mobility-core/contributors";
 
 export type {
   DirectionsResult,
@@ -99,7 +100,7 @@ export interface RoutingProvider {
     sources: LngLat[],
     targets: LngLat[],
     opts?: { mode?: TravelMode },
-  ): Promise<({ seconds: number; km: number } | null)[][]>;
+  ): Promise<(({ seconds: number; km: number } & ContributingRecord) | null)[][]>;
 }
 
 export type RoutingProviderErrorCode = "unsupported-exclusions";

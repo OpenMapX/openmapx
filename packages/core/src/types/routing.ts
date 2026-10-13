@@ -1,3 +1,5 @@
+import type { ContributingRecord, FieldContributors } from "@openmapx/mobility-core/contributors";
+import type { GeometryContributorSpan } from "@openmapx/mobility-core/geometry-contributors";
 import type { DataSourceAttribution } from "./dataSource";
 import type { ConnectorStandard, EvVehicleSpec } from "./ev";
 import type { LngLat } from "./geometry";
@@ -74,7 +76,8 @@ export interface ManeuverSign {
   exitNames?: string[];
 }
 
-export interface RouteStep {
+export interface RouteStep extends ContributingRecord {
+  fieldContributors?: FieldContributors;
   instruction: string;
   distance: number;
   duration: number;
@@ -126,7 +129,8 @@ export interface RouteStep {
   motorway?: boolean;
 }
 
-export interface RouteLeg {
+export interface RouteLeg extends ContributingRecord {
+  fieldContributors?: FieldContributors;
   distance: number;
   duration: number;
   geometry: LngLat[];
@@ -134,7 +138,10 @@ export interface RouteLeg {
   summary?: string;
 }
 
-export interface Route {
+export interface Route extends ContributingRecord {
+  /** Captured suppliers per inclusive geometry vertex span; gaps stay unknown. */
+  geometryContributors?: GeometryContributorSpan[];
+  fieldContributors?: FieldContributors;
   /** Request-bound engine proof; route handlers verify receipts before claiming current. */
   trafficProof?: RoutingTrafficProof;
   distance: number;
@@ -184,7 +191,7 @@ export interface Route {
    * Manifest `sourceId`s of the backend that computed this route, for
    * attribution. Set by engines whose integration declares several possible
    * backends (e.g. self-hosted Valhalla vs Stadia Maps); absent otherwise, and
-   * consumers then credit the provider's declared sources.
+   * legacy consumers resolve only named identities or a proven single supplier.
    */
   sourceIds?: string[];
   /**
@@ -248,12 +255,12 @@ export interface IsochroneMultiPolygon {
 
 export type IsochroneGeometry = IsochronePolygon | IsochroneMultiPolygon;
 
-export interface IsochroneContour {
+export interface IsochroneContour extends ContributingRecord {
   time: number;
   geometry: IsochroneGeometry;
 }
 
-export interface IsochroneResult {
+export interface IsochroneResult extends ContributingRecord {
   origin: LngLat;
   mode: IsochroneTravelMode;
   contours: IsochroneContour[];
@@ -438,9 +445,15 @@ export interface TariffPrice {
   unit: "kWh" | "h" | "session";
 }
 
-export interface EvChargeStop {
+export interface EvChargeStop extends ContributingRecord {
+  fieldContributors?: FieldContributors;
   /** Subset of the charging station identity/location needed to render the stop — not the full provider record. */
-  station: { id: string; name: string; coordinates: LngLat };
+  station: ContributingRecord & {
+    fieldContributors?: FieldContributors;
+    id: string;
+    name: string;
+    coordinates: LngLat;
+  };
   connector: ConnectorStandard;
   powerKw: number;
   /** Network/operator display name, for badge + display. */
@@ -491,7 +504,8 @@ export type EvPlanWarning =
 export interface EvDirectionsResult extends DirectionsResult {
   /** Charge stops, aligned to `routes[activeRouteIndex]`'s inserted legs. */
   stops: EvChargeStop[];
-  totals: {
+  totals: ContributingRecord & {
+    fieldContributors?: FieldContributors;
     driveSeconds: number;
     chargeSeconds: number;
     energyKwh: number;

@@ -1,9 +1,16 @@
 "use client";
 
 import { routeColor, usePlaceStore, useRouteStops, useTransitRoute } from "@openmapx/core";
+import {
+  contributorsForField,
+  contributorsForRecords,
+  serializeContributors,
+  snapshotContributors,
+} from "@openmapx/mobility-core/contributors";
 import { useEffect } from "react";
 import { addLayerInSlot, unregisterLayerSlot } from "@/integration-api/map/layerStack";
 import { useMap } from "@/integration-api/map/MapContext";
+import { useRenderedMapAttributions } from "@/integration-api/overlay/useRenderedMapAttributions";
 import { PRIMARY_BLUE_HEX } from "@/integration-api/runtime/theme";
 
 const SOURCE_ID = "transit-route-detail-source";
@@ -17,6 +24,12 @@ export function TransitRouteLayer() {
   const { selectedPlace, activeRouteId } = usePlaceStore();
   const { data: route } = useTransitRoute(activeRouteId);
   const { data: stops } = useRouteStops(activeRouteId);
+
+  useRenderedMapAttributions(
+    "transit-route-detail",
+    [LINE_LAYER_ID, STOPS_LAYER_ID, CURRENT_STOP_LAYER_ID],
+    Boolean(activeRouteId),
+  );
 
   useEffect(() => {
     void styleVersion;
@@ -61,7 +74,19 @@ export function TransitRouteLayer() {
       type: "geojson",
       data: {
         type: "Feature",
-        properties: {},
+        properties: {
+          _mapAttributions: serializeContributors(
+            route?.geometry
+              ? snapshotContributors(
+                  contributorsForField(route, "geometry"),
+                  contributorsForField(route, route.color ? "color" : "mode"),
+                )
+              : snapshotContributors(
+                  route ? contributorsForField(route, route.color ? "color" : "mode") : [],
+                  contributorsForRecords(stops),
+                ),
+          ),
+        },
         geometry:
           routeGeometry.type === "MultiLineString"
             ? {
@@ -96,7 +121,12 @@ export function TransitRouteLayer() {
       type: "FeatureCollection" as const,
       features: stops.map((s) => ({
         type: "Feature" as const,
-        properties: { id: s.id, name: s.name, isCurrent: s.id === selectedPlace?.id },
+        properties: {
+          _mapAttributions: serializeContributors(s.contributors ?? []),
+          id: s.id,
+          name: s.name,
+          isCurrent: s.id === selectedPlace?.id,
+        },
         geometry: { type: "Point" as const, coordinates: [s.lng, s.lat] },
       })),
     };

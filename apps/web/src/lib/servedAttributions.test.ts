@@ -32,7 +32,7 @@ describe("servedAttributions", () => {
     expect(credits.map((a) => a.name)).toEqual(["Photon"]);
   });
 
-  it("keeps every declared source of a contributor that reported none", () => {
+  it("does not add an unreported contributor when the legacy item names explicit source IDs", () => {
     const credits = servedAttributions(registry, [
       {
         provider: "geocoding-entur",
@@ -40,7 +40,7 @@ describe("servedAttributions", () => {
         sourceIds: ["komoot"],
       },
     ]);
-    expect(credits.map((a) => a.name)).toEqual(["Entur", "Photon (Komoot)"]);
+    expect(credits.map((a) => a.name)).toEqual(["Photon (Komoot)"]);
   });
 
   it("dedupes across items and skips unknown providers", () => {
@@ -52,4 +52,28 @@ describe("servedAttributions", () => {
     ]);
     expect(credits.map((a) => a.name)).toEqual(["Photon"]);
   });
+});
+
+it("keeps captured notices and authoritative empty receipts regardless of current manifests", () => {
+  const captured = [
+    { sourceId: "old", name: "Old notice" },
+    { sourceId: "old", name: "Second required notice" },
+  ];
+  expect(
+    servedAttributions(registry, [
+      { provider: "geocoding-photon", sourceIds: ["photon"], contributors: captured },
+    ]),
+  ).toEqual(captured);
+  expect(
+    servedAttributions(registry, [
+      { provider: "geocoding-photon", sourceIds: ["photon"], contributors: [] },
+    ]),
+  ).toEqual([]);
+});
+
+it("never expands unknown or missing multi-backend identities to an entire manifest", () => {
+  expect(servedAttributions(registry, [{ provider: "geocoding-photon" }])).toEqual([]);
+  expect(
+    servedAttributions(registry, [{ provider: "geocoding-photon", sourceIds: ["unknown"] }]),
+  ).toEqual([]);
 });

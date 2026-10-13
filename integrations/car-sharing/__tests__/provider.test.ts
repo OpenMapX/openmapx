@@ -87,8 +87,8 @@ describe("carSharingProvider.search", () => {
 
     const results = (await carSharingProvider.search(makeBbox())).data;
 
-    expect(mapVehicleToResult).toHaveBeenCalledWith(gbfsVehicle);
-    expect(mapVehicleToResult).toHaveBeenCalledWith(motisVehicle);
+    expect(mapVehicleToResult).toHaveBeenCalledWith(expect.objectContaining(gbfsVehicle));
+    expect(mapVehicleToResult).toHaveBeenCalledWith(expect.objectContaining(motisVehicle));
     expect(results).toHaveLength(2);
   });
 

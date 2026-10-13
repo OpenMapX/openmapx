@@ -1,3 +1,8 @@
+import {
+  contributorsForField,
+  type FieldContributors,
+  snapshotContributors,
+} from "@openmapx/mobility-core/contributors";
 import type { TransitStop } from "@openmapx/mobility-core/transit";
 import { apiClient } from "../api/client";
 import { API_ENDPOINTS } from "../api/endpoints";
@@ -36,6 +41,19 @@ export function makeSyntheticStopPlace(stop: TransitStop): Place {
   return createPlace({
     primaryScheme,
     ids,
+    contributors: snapshotContributors(stop.contributors ?? []),
+    fieldContributors: {
+      name: contributorsForField(stop, "name"),
+      address: contributorsForField(stop, "name"),
+      coordinates: snapshotContributors(
+        contributorsForField(stop, "lat"),
+        contributorsForField(stop, "lng"),
+      ),
+      ids: snapshotContributors(
+        contributorsForField(stop, "id"),
+        contributorsForField(stop, "ids"),
+      ),
+    },
     name: stop.name,
     address: stop.name,
     coordinates: [stop.lng, stop.lat],
@@ -91,6 +109,29 @@ export async function geocodeStopAsPlace(stop: TransitStop): Promise<Place | nul
     return createPlace({
       primaryScheme,
       ids,
+      contributors: snapshotContributors(stop.contributors ?? [], match.contributors ?? []),
+      fieldContributors: {
+        name: contributorsForField(
+          match as SearchResult & { fieldContributors?: FieldContributors },
+          "label",
+        ),
+        address: contributorsForField(
+          match as SearchResult & { fieldContributors?: FieldContributors },
+          "label",
+        ),
+        coordinates: contributorsForField(
+          match as SearchResult & { fieldContributors?: FieldContributors },
+          "coordinates",
+        ),
+        ids: snapshotContributors(
+          contributorsForField(stop, "id"),
+          contributorsForField(stop, "ids"),
+          contributorsForField(
+            match as SearchResult & { fieldContributors?: FieldContributors },
+            "id",
+          ),
+        ),
+      },
       name: match.label,
       address: match.label,
       coordinates: match.coordinates,

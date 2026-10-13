@@ -1,10 +1,13 @@
 "use client";
 
 import type { LngLat } from "@openmapx/core";
+import type { Attribution } from "@openmapx/mobility-core/attribution";
+import { parseContributors, serializeContributors } from "@openmapx/mobility-core/contributors";
 import type * as maplibregl from "maplibre-gl";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMap } from "@/integration-api/map/MapContext";
 import { getMapClickOwner } from "@/integration-api/map/mapClickOwnership";
+import { useMarkerMapAttributions } from "@/integration-api/overlay/useMarkerMapAttributions";
 import { getMapObstructionInsets, subscribeMapObstructions } from "@/lib/mapObstructions";
 
 interface PinColor {
@@ -12,6 +15,7 @@ interface PinColor {
   stroke: string;
 }
 
+const NO_CONTRIBUTORS: readonly Attribution[] = [];
 const PIN_RED: PinColor = { fill: "#EA4335", stroke: "#C5221F" };
 const LABEL_MAX_WIDTH = 200;
 const LABEL_GAP = 8;
@@ -40,9 +44,12 @@ function fitPinLabel(
   const leftRoom = Math.max(0, pinRect.left - leftEdge);
   const desiredWidth = Math.min(LABEL_MAX_WIDTH, Math.max(label.scrollWidth, labelRect.width));
   const useLeft = rightRoom < desiredWidth && leftRoom > rightRoom;
+  const previousFit = [container.style.left, container.style.right, label.style.maxWidth].join(";");
   container.style.left = useLeft ? "auto" : "20px";
   container.style.right = useLeft ? "20px" : "auto";
   label.style.maxWidth = `${Math.min(LABEL_MAX_WIDTH, useLeft ? leftRoom : rightRoom)}px`;
+  if (previousFit !== [container.style.left, container.style.right, label.style.maxWidth].join(";"))
+    map.triggerRepaint();
 }
 
 /**
@@ -56,8 +63,37 @@ export function usePinMarker(
   showLabel = true,
   color: PinColor = PIN_RED,
   onActivate?: () => void,
+  contributors: readonly Attribution[] = NO_CONTRIBUTORS,
+  /** Native field-aware callers supply name receipts separately; undefined preserves legacy root ownership. */
+  labelContributors?: readonly Attribution[],
 ) {
   const { mapRef, mapReady, styleVersion } = useMap();
+  const receiptKey = serializeContributors(contributors);
+  const labelReceiptKey = serializeContributors(labelContributors ?? []);
+  const separateChannels = labelContributors !== undefined;
+  const [markerEvidence, setMarkerEvidence] = useState<{
+    element: Element | null;
+    labelElement: HTMLElement | null;
+    receiptKey: string;
+    labelReceiptKey: string;
+    labelContributors: readonly Attribution[];
+    contributors: readonly Attribution[];
+  }>({
+    element: null,
+    labelElement: null,
+    receiptKey: "[]",
+    labelReceiptKey: "[]",
+    labelContributors: [],
+    contributors: [],
+  });
+  useMarkerMapAttributions("pin-marker", markerEvidence.element, markerEvidence.contributors);
+  useMarkerMapAttributions(
+    "pin-label",
+    markerEvidence.labelElement,
+    markerEvidence.labelContributors,
+    "text",
+  );
+  const geometryRef = useRef<SVGSVGElement | null>(null);
   const markerRef = useRef<maplibregl.Marker | null>(null);
   const markerMapRef = useRef<maplibregl.Map | null>(null);
   const labelRef = useRef<HTMLSpanElement | null>(null);
@@ -142,9 +178,42 @@ export function usePinMarker(
       markerMapRef.current = null;
       elementRef.current = null;
       labelContainerRef.current = null;
+      setMarkerEvidence((current) =>
+        current.element === null
+          ? current
+          : {
+              element: null,
+              labelElement: null,
+              receiptKey: "[]",
+              labelReceiptKey: "[]",
+              labelContributors: [],
+              contributors: [],
+            },
+      );
       return;
     }
 
+    const captured = parseContributors(receiptKey) ?? [];
+    const capturedLabel = parseContributors(labelReceiptKey) ?? [];
+    const publishMarkerEvidence = (root: HTMLElement) => {
+      const element = separateChannels ? geometryRef.current : root;
+      const labelElement = separateChannels && showLabel ? labelRef.current : null;
+      setMarkerEvidence((current) =>
+        current.element === element &&
+        current.labelElement === labelElement &&
+        current.receiptKey === receiptKey &&
+        current.labelReceiptKey === labelReceiptKey
+          ? current
+          : {
+              element,
+              labelElement,
+              receiptKey,
+              labelReceiptKey,
+              contributors: captured,
+              labelContributors: capturedLabel,
+            },
+      );
+    };
     let destroyed = false;
 
     void import("maplibre-gl")
@@ -173,9 +242,13 @@ export function usePinMarker(
             }
           }
           if (labelContainerRef.current) {
+            if (showLabel && elementRef.current && !labelContainerRef.current.isConnected)
+              elementRef.current.appendChild(labelContainerRef.current);
+            if (!showLabel) labelContainerRef.current.remove();
             labelContainerRef.current.style.pointerEvents = onActivate ? "auto" : "none";
             labelContainerRef.current.style.cursor = onActivate ? "pointer" : "";
           }
+          if (elementRef.current) publishMarkerEvidence(elementRef.current);
           scheduleLabelFitRef.current();
           return;
         }
@@ -228,6 +301,7 @@ export function usePinMarker(
           "font-family:'Plus Jakarta Sans Variable',Arial,sans-serif",
         ].join(";");
 
+        geometryRef.current = svgDiv.querySelector("svg");
         labelRef.current = labelSpan;
         labelContainerRef.current = labelContainer;
         elementRef.current = el;
@@ -239,6 +313,7 @@ export function usePinMarker(
           .setLngLat(coords)
           .addTo(mapRef.current);
         markerMapRef.current = mapRef.current;
+        publishMarkerEvidence(el);
         scheduleLabelFitRef.current();
       })
       .catch(() => undefined);
@@ -246,5 +321,17 @@ export function usePinMarker(
     return () => {
       destroyed = true;
     };
-  }, [coords, label, mapRef, mapReady, styleVersion, showLabel, color, onActivate]);
+  }, [
+    coords,
+    label,
+    mapRef,
+    mapReady,
+    styleVersion,
+    showLabel,
+    color,
+    onActivate,
+    receiptKey,
+    labelReceiptKey,
+    separateChannels,
+  ]);
 }

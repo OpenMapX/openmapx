@@ -23,6 +23,7 @@ import {
   useSidebarStore,
   withId,
 } from "@openmapx/core";
+import { contributorsForRecords } from "@openmapx/mobility-core/contributors";
 import type {
   TransitFareZoneSummary,
   TransitInterchangeComplexity,
@@ -34,6 +35,7 @@ import type {
 } from "@openmapx/mobility-core/transit";
 import { useTranslations } from "next-intl";
 import type { ReactNode } from "react";
+import { AttributionStrip } from "@/components/ui/AttributionStrip";
 import { useMap } from "@/integration-api/map/MapContext";
 import { BRAND } from "@/integration-api/runtime/theme";
 import { type StructuredSection, StructuredSections } from "../shared/StructuredSections";
@@ -873,6 +875,7 @@ export function StopInfrastructureSection({
           (section) => section.id !== "area" && section.id !== "platforms",
         )}
       />
+      <AttributionStrip attributions={contributorsForRecords([data])} variant="inline" />
     </Box>
   );
 }

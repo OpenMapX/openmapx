@@ -200,3 +200,25 @@ describe("searchBrands", () => {
     expect(result[0].matchedOn).toBe("name");
   });
 });
+
+it("projects canonical and alias matches from their actual selected artifact fields", () => {
+  const wd = { sourceId: "wikidata", name: "Selected canonical label" };
+  const nsi = { sourceId: "name-suggestion-index", name: "Catalogue alias" };
+  const hidden = { sourceId: "hidden-website", name: "Undisplayed website" };
+  const catalogue = index([
+    entry({
+      qid: "Q1",
+      name: "Canonical",
+      matchNames: ["alias"],
+      website: "https://hidden.example",
+      contributors: [wd, nsi, hidden],
+      fieldContributors: { name: [wd], matchNames: [nsi], website: [hidden] },
+    }),
+  ]);
+  const canonical = searchBrands(catalogue, { q: "canonical", limit: 1 })[0];
+  expect(canonical.fieldContributors?.matchedValue).toEqual([wd]);
+  const alias = searchBrands(catalogue, { q: "alias", limit: 1 })[0];
+  expect(alias.fieldContributors?.matchedValue).toEqual([nsi]);
+  expect(alias.fieldContributors?.name).toEqual([wd]);
+  expect(alias.contributors).not.toContainEqual(hidden);
+});

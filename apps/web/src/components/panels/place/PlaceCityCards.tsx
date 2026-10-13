@@ -63,12 +63,14 @@ export function CityCardRow({
  */
 export function CityCard({
   imageUrl,
+  imageAttribution,
   name,
   subtitle,
   placeholder,
   onClick,
 }: {
   imageUrl?: string;
+  imageAttribution?: ReactNode;
   name: string;
   subtitle?: ReactNode;
   /** Shown centred in the image area when no `imageUrl` is available. */
@@ -76,72 +78,79 @@ export function CityCard({
   onClick: () => void;
 }) {
   return (
-    <ButtonBase
-      onClick={onClick}
-      sx={{
-        width: CARD_WIDTH,
-        flexShrink: 0,
-        display: "block",
-        textAlign: "left",
-        borderRadius: 2,
-        overflow: "hidden",
-        border: "1px solid var(--omx-border-light)",
-        bgcolor: "background.paper",
-        "&:hover": { boxShadow: 2 },
-      }}
-    >
-      <Box
+    <Box sx={{ width: CARD_WIDTH, flexShrink: 0 }}>
+      <ButtonBase
+        onClick={onClick}
         sx={{
-          height: CARD_IMAGE_HEIGHT,
-          bgcolor: "action.hover",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          color: "text.disabled",
+          width: CARD_WIDTH,
+          flexShrink: 0,
+          display: "block",
+          textAlign: "left",
+          borderRadius: 2,
+          overflow: "hidden",
+          border: "1px solid var(--omx-border-light)",
+          bgcolor: "background.paper",
+          "&:hover": { boxShadow: 2 },
         }}
       >
-        {imageUrl ? (
-          <Box
-            component="img"
-            src={imageUrl}
-            alt={name}
-            loading="lazy"
-            sx={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
-          />
-        ) : (
-          placeholder
-        )}
-      </Box>
-      <Box sx={{ p: 1 }}>
-        <Typography
-          variant="body2"
+        <Box
           sx={{
-            fontWeight: 600,
-            color: "text.primary",
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap",
+            height: CARD_IMAGE_HEIGHT,
+            bgcolor: "action.hover",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            color: "text.disabled",
           }}
         >
-          {name}
-        </Typography>
-        {subtitle && (
+          {imageUrl ? (
+            <Box
+              component="img"
+              src={imageUrl}
+              alt={name}
+              loading="lazy"
+              sx={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+            />
+          ) : (
+            placeholder
+          )}
+        </Box>
+        <Box sx={{ p: 1 }}>
           <Typography
-            variant="caption"
-            component="div"
+            variant="body2"
             sx={{
-              color: "text.secondary",
-              mt: 0.25,
-              display: "-webkit-box",
-              WebkitLineClamp: 2,
-              WebkitBoxOrient: "vertical",
+              fontWeight: 600,
+              color: "text.primary",
               overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
             }}
           >
-            {subtitle}
+            {name}
           </Typography>
-        )}
-      </Box>
-    </ButtonBase>
+          {subtitle && (
+            <Typography
+              variant="caption"
+              component="div"
+              sx={{
+                color: "text.secondary",
+                mt: 0.25,
+                display: "-webkit-box",
+                WebkitLineClamp: 2,
+                WebkitBoxOrient: "vertical",
+                overflow: "hidden",
+              }}
+            >
+              {subtitle}
+            </Typography>
+          )}
+        </Box>
+      </ButtonBase>
+      {imageUrl && imageAttribution && (
+        <Box component="span" sx={{ display: "block", px: 1, fontSize: 10, textAlign: "left" }}>
+          {imageAttribution}
+        </Box>
+      )}
+    </Box>
   );
 }

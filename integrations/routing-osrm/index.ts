@@ -1,4 +1,8 @@
-import type { IntegrationContext } from "@openmapx/integration-framework";
+import {
+  type IntegrationContext,
+  resolveIntegrationContributors,
+  withRoutingContributors,
+} from "@openmapx/integration-framework";
 import { osrmService, setOsrmUrl } from "./provider.js";
 
 export function setup(ctx: IntegrationContext): void {
@@ -10,5 +14,7 @@ export function setup(ctx: IntegrationContext): void {
 
   ctx.onActivate(() => setOsrmUrl(url));
 
-  ctx.registerRoutingProvider(osrmService);
+  ctx.registerRoutingProvider(
+    withRoutingContributors(osrmService, () => resolveIntegrationContributors(ctx, ["osrm"])),
+  );
 }

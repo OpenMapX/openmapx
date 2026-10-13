@@ -50,6 +50,7 @@ describe("notable-places suggestion provider", () => {
         provider: "search-notable-places",
       }),
     ]);
+    expect(result.suggestions[0]?.contributors).toEqual(result.attributions);
     expect(result.attributions).toEqual([
       expect.objectContaining({ sourceId: "wikidata", spdxLicense: "CC0-1.0" }),
     ]);

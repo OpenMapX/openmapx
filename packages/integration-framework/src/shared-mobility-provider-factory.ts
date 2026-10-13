@@ -6,7 +6,16 @@ import type {
   DataSourceResult,
 } from "@openmapx/core";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
-import { SharedMobilityDetailStore } from "@openmapx/mobility-core/detail-store";
+import {
+  contributorsForRecords,
+  parseContributors,
+  snapshotContributors,
+  withContributors,
+} from "@openmapx/mobility-core/contributors";
+import {
+  type SharedMobilityDetailItem,
+  SharedMobilityDetailStore,
+} from "@openmapx/mobility-core/detail-store";
 import { freshnessNow } from "@openmapx/mobility-core/freshness";
 import { type MobilityResult, withAttribution } from "@openmapx/mobility-core/result";
 import type { VehicleFormFactor } from "@openmapx/mobility-core/shared-mobility";
@@ -23,6 +32,14 @@ import {
   mapVehicleToResult,
   stripMobilityKindPrefix,
 } from "./shared-mobility/mapper";
+
+/** Capture the explicit acquisition owner's canonical declared sources. */
+export function createSharedMobilityContributorResolver(dataSources: IntegrationDataSource[]) {
+  const attribution = createManifestAttribution();
+  attribution.set(dataSources);
+  return (sourceIds: readonly string[]) =>
+    snapshotContributors(attribution.forResults([...sourceIds], (id) => id));
+}
 
 export interface SharedMobilityProviderConfig {
   id: string;
@@ -53,10 +70,23 @@ export function createSharedMobilityProvider(
     config.detailStore.maxL1Items,
     config.detailStore.maxSnapshotItems,
   );
-  const wrapRealtime = <T>(data: T, attributions: Attribution[]): MobilityResult<T> =>
-    withAttribution(data, attributions, freshnessNow({ hasRealtimeData: true }));
+  const wrapRealtime = <T>(
+    data: T,
+    attributions: Attribution[],
+    acquiredAt?: number,
+  ): MobilityResult<T> =>
+    withAttribution(data, attributions, {
+      ...freshnessNow({ hasRealtimeData: true }),
+      ...(acquiredAt === undefined ? {} : { fetchedAt: new Date(acquiredAt).toISOString() }),
+    });
   const wrapStatic = <T>(data: T, attributions: Attribution[]): MobilityResult<T> =>
     withAttribution(data, attributions, freshnessNow({ hasRealtimeData: false }));
+
+  const captureItem = <T extends SharedMobilityDetailItem>(item: T) =>
+    withContributors(
+      item,
+      item.contributors ?? attribution.forResults([item], (record) => record.sources),
+    );
 
   const provider: MobilityDataSourceProvider = {
     id: config.id,
@@ -78,33 +108,46 @@ export function createSharedMobilityProvider(
           inventory.stations,
           inventory.vehicles,
           "map",
+          (ids) => attribution.forResults([...ids], (id) => id),
         );
       } catch (error) {
         console.warn(`[${config.id}] Entur enrichment failed`, error);
       }
 
-      await detailStore.store([...inventory.stations, ...inventory.vehicles]);
+      // Capture the provider generation's metadata before detail caching or mapping.
+      const stations = inventory.stations.map((item) => captureItem(item));
+      const vehicles = inventory.vehicles.map((item) => captureItem(item));
+      await detailStore.store([...stations, ...vehicles]);
       const results = [
-        ...inventory.stations.map((station) => mapStationToResult(station)),
-        ...inventory.vehicles.map((vehicle) => mapVehicleToResult(vehicle)),
+        ...stations.map((station) => mapStationToResult(station)),
+        ...vehicles.map((vehicle) => mapVehicleToResult(vehicle)),
       ];
-      return wrapRealtime(
-        results,
-        attribution.forResults(results, (result) => result.sources ?? result.source),
-      );
+      return wrapRealtime(results, contributorsForRecords(results));
     },
     async getDetail(itemId: string): Promise<MobilityResult<DataSourceDetail | null>> {
-      const cached = await detailStore.get(stripMobilityKindPrefix(itemId));
-      if (!cached) return wrapRealtime(null, []);
+      const retained = await detailStore.getRetained(stripMobilityKindPrefix(itemId));
+      if (!retained) return wrapRealtime(null, []);
+      const cached = structuredClone(retained.item);
 
       const isStation = "availableVehicles" in cached;
       await config.runtime
-        .enrichEnturMobilityItems(isStation ? [cached] : [], isStation ? [] : [cached], "detail")
+        .enrichEnturMobilityItems(
+          isStation ? [cached] : [],
+          isStation ? [] : [cached],
+          "detail",
+          (ids) => attribution.forResults([...ids], (id) => id),
+        )
         .catch(() => undefined);
-      const attributions = attribution.forResults([cached], (item) => item.sources);
+      const captured = captureItem(cached);
+      // Preserve the inventory's original deadline; enrichment cannot renew availability.
+      await detailStore.updateRetained(retained, captured);
+      if (retained.expiresAt <= Date.now()) return wrapRealtime(null, []);
       return wrapRealtime(
-        isStation ? mapStationToDetail(cached) : mapVehicleToDetail(cached),
-        attributions,
+        "availableVehicles" in captured
+          ? mapStationToDetail(captured)
+          : mapVehicleToDetail(captured),
+        captured.contributors,
+        retained.acquiredAt,
       );
     },
     async getMapContext(
@@ -112,9 +155,20 @@ export function createSharedMobilityProvider(
       _filters?: Record<string, unknown>,
       options?: DataSourceMapContextSelection,
     ) {
+      const context = await buildSharedMobilityMapContext(
+        bbox,
+        config.formFactors,
+        config.runtime,
+        options,
+        (ids) => attribution.forResults([...ids], (id) => id),
+      );
       return wrapStatic(
-        await buildSharedMobilityMapContext(bbox, config.formFactors, config.runtime, options),
-        attribution.all(),
+        context,
+        snapshotContributors(
+          ...(context?.geojson.features ?? []).map(
+            (feature) => parseContributors(feature.properties?._mapAttributions) ?? [],
+          ),
+        ),
       );
     },
   };

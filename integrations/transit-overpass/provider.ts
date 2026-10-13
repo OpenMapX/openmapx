@@ -1,5 +1,6 @@
 import type { BBox, OverpassNode } from "@openmapx/core";
 import { overpassQuerySafe } from "@openmapx/core";
+import { snapshotContributors } from "@openmapx/mobility-core/contributors";
 import type { TransitStop, TransportMode } from "@openmapx/mobility-core/transit";
 
 function tagsToModes(tags: Record<string, string>): TransportMode[] {
@@ -36,6 +37,7 @@ export async function getStops(bbox: BBox): Promise<TransitStop[]> {
     return {
       // Canonical OSM ref form so the `osm:` place resolver can round-trip
       // it — transit stops from Overpass are always nodes.
+      contributors: snapshotContributors(data.contributors ?? []),
       id: `osm:node/${node.id}`,
       name: tags.name ?? tags["name:en"] ?? "Unknown",
       lat: node.lat,

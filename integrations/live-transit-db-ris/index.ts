@@ -1,6 +1,7 @@
 import type { BBox } from "@openmapx/core";
 import { mobilityHttpTransport } from "@openmapx/core/mobility-http-transport";
 import {
+  captureTransitContributors,
   createManifestAttribution,
   type IntegrationContext,
   type RealtimeProvider,
@@ -163,7 +164,11 @@ export function setup(ctx: IntegrationContext): void {
     },
     async getVehiclePositions(bbox: BBox) {
       const data = await getDbLiveTransitVehicles(bbox, administrationIds);
-      return withAttribution(data, attribution.all(), freshnessNow({ hasRealtimeData: true }));
+      return withAttribution(
+        captureTransitContributors(data, attribution.all()),
+        attribution.all(),
+        freshnessNow({ hasRealtimeData: true }),
+      );
     },
   };
 

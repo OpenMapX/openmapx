@@ -1,8 +1,11 @@
 "use client";
 
 import type { BrandSummary } from "@openmapx/core";
-import { commonsLogoUrl, proxyImageUrl } from "@openmapx/core";
+import { isDisplayablePhoto, proxyImageUrl, useBrandLogoAttribution } from "@openmapx/core";
+import { contributorsForField } from "@openmapx/mobility-core/contributors";
 import { useState } from "react";
+import { AttributionStrip } from "@/components/ui/AttributionStrip";
+import { PhotoAttribution } from "../panels/place/PhotoAttribution";
 import { PresetIcon } from "./PresetIcon";
 
 interface BrandLogoProps {
@@ -21,22 +24,35 @@ interface BrandLogoProps {
  */
 export function BrandLogo({ brand, size = 20 }: BrandLogoProps) {
   const [failedUrl, setFailedUrl] = useState<string | null>(null);
-  const url = brand.logoFile ? proxyImageUrl(commonsLogoUrl(brand.logoFile, size * 2)) : null;
+  const { data: photo } = useBrandLogoAttribution(brand.qid, Boolean(brand.logoFile));
+  const validPhoto =
+    photo && photo.logoFile === brand.logoFile && isDisplayablePhoto(photo) ? photo : undefined;
+  const url = validPhoto ? proxyImageUrl(validPhoto.thumbnailUrl ?? validPhoto.url) : null;
 
   if (!url || failedUrl === url) {
     return <PresetIcon iconKey={undefined} size={size} />;
   }
 
   return (
-    // biome-ignore lint/performance/noImgElement: the logo is a Commons file fetched through the API image proxy at runtime, not an app image the Next.js loader can optimize
-    <img
-      src={url}
-      alt={brand.name}
-      width={size}
-      height={size}
-      loading="lazy"
-      onError={() => setFailedUrl(url)}
-      style={{ objectFit: "contain", borderRadius: 2 }}
-    />
+    <div style={{ display: "inline-flex", flexDirection: "column", alignItems: "center" }}>
+      {/* biome-ignore lint/performance/noImgElement: the logo is a Commons file fetched through the API image proxy at runtime, not an app image the Next.js loader can optimize */}
+      <img
+        src={url}
+        alt={brand.name}
+        width={size}
+        height={size}
+        loading="lazy"
+        onError={() => setFailedUrl(url)}
+        style={{ objectFit: "contain", borderRadius: 2 }}
+      />
+      {validPhoto && (
+        <span style={{ fontSize: 9, whiteSpace: "normal", maxWidth: 180 }}>
+          <PhotoAttribution photo={validPhoto} color="currentColor" />
+        </span>
+      )}
+      {contributorsForField(brand, "logoFile").length > 0 && (
+        <AttributionStrip attributions={contributorsForField(brand, "logoFile")} variant="plain" />
+      )}
+    </div>
   );
 }

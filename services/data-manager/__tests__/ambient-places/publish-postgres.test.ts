@@ -13,6 +13,7 @@ import {
   rollbackAmbientPlaces,
   setAmbientEnabled,
 } from "../../src/jobs/ambient-places/build.js";
+import { ambientSchemaDDL } from "../../src/jobs/ambient-places/schema.js";
 import { buildSchemaDDL } from "../../src/jobs/overture/schema.js";
 import {
   buildSearchIndexIndexesDDL,
@@ -33,6 +34,135 @@ const tile = {
 describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
   "ambient PostGIS publication",
   () => {
+    it("keeps v1 lease bytes across migration while v2 carries captured field lineage", async () => {
+      const pg = await startPostgis();
+      try {
+        await pg.sql.unsafe(
+          buildSearchIndexSchemaDDL("osm_search") + buildSearchIndexIndexesDDL("osm_search"),
+        );
+        await pg.sql.unsafe(`INSERT INTO osm_search.index_state(singleton,region,source_path,source_fingerprint,current_fingerprint,epoch,status,started_at,published_at,updated_at) VALUES(1,'aachen','fixture','fixture','fixture','receipt','ready',now(),now(),now());
+          INSERT INTO osm_search.places(osm_type,osm_id,name,lat,lng,category,tags,importance) VALUES('node',1,'Clinic',50.77,6.08,'amenity/hospital','{}',0.8)`);
+        // Start with a genuinely pre-receipt store and active v1 publication.
+        await pg.sql.unsafe(
+          ambientSchemaDDL.replace(
+            /^ALTER TABLE .* ADD COLUMN IF NOT EXISTS (?:contributors|field_contributors|source_lineage) JSONB;\n/gm,
+            "",
+          ),
+        );
+        const legacy = {
+          generation: "11111111-1111-4111-8111-111111111111",
+          version: 1,
+          policyVersion: 2,
+          publishedAt: new Date().toISOString(),
+          region,
+          placeCount: 1,
+          enabled: true,
+          sources: {
+            osm: {
+              region: "aachen",
+              epoch: "receipt",
+              publishedAt: new Date().toISOString(),
+              count: 1,
+            },
+            overture: null,
+          },
+        };
+        await pg.sql.unsafe(
+          `INSERT INTO ambient_places.generations(id,manifest) VALUES($1,$2::JSONB)`,
+          [legacy.generation, JSON.stringify(legacy)],
+        );
+        await pg.sql.unsafe(
+          `INSERT INTO ambient_places.features(generation,id,name,category,rank,min_zoom,tenant,sources,geom) VALUES($1,'osm:node/1','Clinic','hospital',3079,13,false,'osm',ST_AsEWKB(ST_Transform(ST_SetSRID(ST_MakePoint(6.08,50.77),4326),3857)))`,
+          [legacy.generation],
+        );
+        await pg.sql.unsafe(`UPDATE ambient_places.state SET active=$1 WHERE singleton=1`, [
+          legacy.generation,
+        ]);
+        const bytes = await readAmbientTile(pg.sql, legacy.generation, tile.z, tile.x, tile.y);
+        const before = new VectorTile(new PbfReader(bytes!)).layers.ambient_places.feature(
+          0,
+        ).properties;
+        expect(before._mapAttributions).toBeUndefined();
+        await pg.sql.unsafe(buildSchemaDDL("overture_places"));
+        await pg.sql.unsafe(
+          `INSERT INTO overture_places.places(gers_id,name,names,geom,basic_category,confidence,operating_status,sources,sources_catalogue,release) VALUES('gers-receipt','Cafe','{"common":{"de":"Kaffee"}}',ST_SetSRID(ST_MakePoint(6.081,50.7701),4326),'cafe',0.8,'open','[{"property":"/names/primary","dataset":"meta"},{"property":"/names/common/de","dataset":"Microsoft"},{"property":"/phones","dataset":"Foursquare"}]',$1::JSONB,'2026-10-01.0')`,
+          [
+            JSON.stringify([
+              { sourceId: "overture", name: "Captured Overture" },
+              { sourceId: "meta-places", name: "Captured Meta" },
+              { sourceId: "microsoft-places", name: "Captured Microsoft" },
+              { sourceId: "foursquare", name: "Phone only" },
+            ]),
+          ],
+        );
+        await pg.sql.unsafe(
+          `INSERT INTO overture_places.conflation_state(singleton,release,region,place_count,places_published_at,status,phase) VALUES(1,'2026-10-01.0','aachen',1,now(),'completed','complete')`,
+        );
+        const next = await buildAmbientPlaces(pg.sql, region);
+        expect(next.version).toBe(2);
+        const current = await readAmbientTile(pg.sql, next.generation, tile.z, tile.x, tile.y);
+        const decoded = new VectorTile(new PbfReader(current!)).layers.ambient_places;
+        const feature = Array.from(
+          { length: decoded.length },
+          (_, i) => decoded.feature(i).properties,
+        ).find((p) => p.gers_id === "gers-receipt")!;
+        expect(feature.format_version).toBe(2);
+        expect(
+          JSON.parse(String(feature.field_contributors))["names.de"].map(
+            (r: { sourceId: string }) => r.sourceId,
+          ),
+        ).toEqual(["overture", "microsoft-places"]);
+        expect(String(feature._mapAttributions)).not.toContain("Phone only");
+        expect(JSON.parse(String(feature.source_lineage)).sources[2]).toEqual({
+          property: "/phones",
+          dataset: "Foursquare",
+        });
+        expect(await readAmbientTile(pg.sql, legacy.generation, tile.z, tile.x, tile.y)).toEqual(
+          bytes,
+        );
+        await rollbackAmbientPlaces(pg.sql);
+        expect(await readAmbientTile(pg.sql, legacy.generation, tile.z, tile.x, tile.y)).toEqual(
+          bytes,
+        );
+        expect(current!.length).toBeLessThan(AMBIENT_LIMITS.tileBytes);
+        // Distinct snapshots and lineage values cannot be charged as a single
+        // interned MVT string; clipping keeps complete receipts on retained rows.
+        await pg.sql.unsafe(`DELETE FROM overture_places.places;
+          INSERT INTO overture_places.places(gers_id,name,geom,basic_category,confidence,operating_status,sources,sources_catalogue,release)
+          SELECT 'dense-'||lpad(i::TEXT,5,'0'),'Cafe '||i,ST_SetSRID(ST_MakePoint(6.081,50.7701),4326),'cafe',0.8,'open',
+            jsonb_build_array(jsonb_build_object('property','/names/primary','dataset','meta','record_id',repeat('x',10000)||i)),
+            jsonb_build_array(jsonb_build_object('sourceId','overture','name','Captured Overture'),jsonb_build_object('sourceId','meta-places','name','Meta','notes',repeat('n',8000)||i)),
+            '2026-10-01.0' FROM generate_series(1,300) i`);
+        const distinct = await buildAmbientPlaces(pg.sql, region);
+        const pathological = await readAmbientTile(
+          pg.sql,
+          distinct.generation,
+          tile.z,
+          tile.x,
+          tile.y,
+        );
+        const bounded = new VectorTile(new PbfReader(pathological!)).layers.ambient_places;
+        expect(bounded.length).toBeGreaterThan(0);
+        expect(bounded.length).toBeLessThan(AMBIENT_LIMITS.tileFeatures);
+        expect(pathological!.length).toBeLessThanOrEqual(AMBIENT_LIMITS.tileBytes);
+        const first = Array.from(
+          { length: bounded.length },
+          (_, i) => bounded.feature(i).properties,
+        ).find((p) => p.gers_id)!;
+        expect(first.gers_id).toBe("dense-00001");
+        expect(JSON.parse(String(first.source_lineage)).sources[0].record_id).toBe(
+          "x".repeat(10000) + "1",
+        );
+        expect(JSON.parse(String(first.field_contributors)).name[1].notes).toBe(
+          "n".repeat(8000) + "1",
+        );
+        expect(await readAmbientTile(pg.sql, distinct.generation, tile.z, tile.x, tile.y)).toEqual(
+          pathological,
+        );
+      } finally {
+        await pg.stop();
+      }
+    }, 120_000);
     it("keeps exact GERS identity from readable retained generations after replacement and rollback", async () => {
       const pg = await startPostgis();
       try {
@@ -257,6 +387,80 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         await pg.stop();
       }
     }, 120_000);
+
+    it.each([
+      { catalogue: [] as { sourceId: string; name: string }[] },
+      { catalogue: [{ sourceId: "overture", name: "Captured boundary notice" }] },
+      { catalogue: null },
+    ])(
+      "retains only captured GERS identity evidence for an outside-boundary Overture counterpart: %j",
+      async ({ catalogue: sources_catalogue }) => {
+        const pg = await startPostgis();
+        try {
+          await pg.sql.unsafe(
+            buildSearchIndexSchemaDDL("osm_search") + buildSearchIndexIndexesDDL("osm_search"),
+          );
+          await pg.sql.unsafe(`INSERT INTO osm_search.index_state(singleton,region,source_path,source_fingerprint,current_fingerprint,epoch,status,started_at,published_at,updated_at) VALUES(1,'aachen','fixture','fixture','fixture','boundary-inside','ready',now(),now(),now());
+          INSERT INTO osm_search.places(osm_type,osm_id,name,lat,lng,category,tags,importance) VALUES('node',1,'Inside Clinic',50.77,5.9001,'amenity/hospital','{}',0.8)`);
+          await pg.sql.unsafe(buildSchemaDDL("overture_places"));
+          await pg.sql.unsafe(`INSERT INTO overture_places.conflation_state(singleton,release,region,place_count,places_published_at,status,phase) VALUES(1,'2026-10-01.0','aachen',1,now(),'completed','complete');
+          INSERT INTO overture_places.places(gers_id,name,names,geom,basic_category,confidence,operating_status,sources,release) VALUES('boundary-gers','Excluded outside name','{"common":{"de":"Excluded outside locale"}}',ST_SetSRID(ST_MakePoint(5.8999,50.77),4326),'cafe',0.1,'permanently_closed','[{"property":"/phones","dataset":"Foursquare"}]','2026-10-01.0');
+          INSERT INTO overture_places.poi_conflation_link(osm_type,osm_id,gers_id,source_confidence,match_confidence,distance_m,method,evidence,release) VALUES('node',1,'boundary-gers',0.8,1,14,'fixture','{}','2026-10-01.0')`);
+          await pg.sql.unsafe(`UPDATE overture_places.places SET sources_catalogue=$1::JSONB`, [
+            sources_catalogue === null ? null : JSON.stringify(sources_catalogue),
+          ]);
+          const manifest = await buildAmbientPlaces(pg.sql, region);
+          const first = (await readAmbientPlaceByGers(pg.sql, "boundary-gers"))!.place;
+          expect(manifest.attributionPrecision).toBe(
+            sources_catalogue === null ? "legacy-aggregate" : "captured-fields",
+          );
+          expect(first.sourceLineage).toEqual({
+            sources: [{ property: "/phones", dataset: "Foursquare" }],
+            release: "2026-10-01.0",
+          });
+          expect(first.fieldContributors?.gersId).toEqual(
+            sources_catalogue ?? [
+              {
+                sourceId: "overture",
+                name: "Overture Maps",
+                url: "https://overturemaps.org",
+                spdxLicense: "CDLA-Permissive-2.0",
+                licenseUrl: "https://cdla.dev/permissive-2-0/",
+              },
+            ],
+          );
+          expect(first.name).toBe("Inside Clinic");
+          expect(first.names).toEqual({});
+          expect(first.category).toBe("hospital");
+          expect(first.contributors?.some((r) => r.sourceId === "foursquare")).toBe(false);
+          const [{ source_lineage }] = await pg.sql.unsafe<{ source_lineage: unknown }[]>(
+            `SELECT source_lineage FROM ambient_places.features WHERE generation=$1 AND id='osm:node/1'`,
+            [manifest.generation],
+          );
+          expect(source_lineage).toEqual(first.sourceLineage);
+          // A later source edit cannot rewrite the retained publication snapshot.
+          await pg.sql.unsafe(
+            `UPDATE overture_places.places SET sources_catalogue='[{"sourceId":"overture","name":"Changed current source"}]'`,
+          );
+          const stable = await buildAmbientPlaces(pg.sql, region);
+          const [{ field_contributors }] = await pg.sql.unsafe<
+            { field_contributors: { gersId: unknown } }[]
+          >(
+            `SELECT field_contributors FROM ambient_places.features WHERE generation=$1 AND id='osm:node/1'`,
+            [manifest.generation],
+          );
+          expect(field_contributors.gersId).toEqual(first.fieldContributors?.gersId);
+          await pg.sql.unsafe(`UPDATE overture_places.places SET release='2026-09-01.0'`);
+          await expect(buildAmbientPlaces(pg.sql, region)).rejects.toThrow(
+            "Regional accepted GERS identity does not match published Overture places",
+          );
+          expect((await readAmbientManifest(pg.sql))?.generation).toBe(stable.generation);
+        } finally {
+          await pg.stop();
+        }
+      },
+      120_000,
+    );
 
     it("keeps recently retired old publications available through rapid builds and rollback", async () => {
       const pg = await startPostgis();

@@ -16,6 +16,7 @@ import type * as maplibregl from "maplibre-gl";
 import { useLocale, useTranslations } from "next-intl";
 import { useEffect, useRef, useState } from "react";
 import { useMap } from "@/integration-api/map/MapContext";
+import { attributedRasterRequestTransform } from "@/integration-api/overlay/rasterResponseProtocol";
 import { useEnv } from "@/integration-api/runtime/EnvProvider";
 import { loadMaptilerStyle, loadOpenMapXStyle, type MapStyleVariant } from "@/lib/map";
 import { initializeMapClickModes } from "@/lib/mapClickModes";
@@ -174,6 +175,7 @@ export function MapCanvas() {
         bearing,
         pitch,
         attributionControl: false,
+        transformRequest: attributedRasterRequestTransform(),
         canvasContextAttributes: { antialias: true },
       });
       activeMap = map;

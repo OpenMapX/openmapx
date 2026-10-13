@@ -493,6 +493,8 @@ describe("fire detections", () => {
       count: 2,
       frpSumMW: 6.96,
       frpMaxMW: 3.69,
+      sources: [],
+      contributors: [],
     });
     expect(result.sources).toEqual([MODIS, VIIRS]);
     expect(result.partial).toBeUndefined();
@@ -632,4 +634,110 @@ describe("setup and legal disclosure", () => {
     expect(named.every((id) => ids.has(id))).toBe(true);
     expect(situationIds(alertsAnswer as unknown as { records: Rec[] })).toHaveLength(3);
   });
+});
+
+describe("captured hazard contributor receipts", () => {
+  test("density metadata belongs to its keyed cell and never expands the collection sources", async () => {
+    const a = { sourceId: "parent-a", name: "Publisher A" };
+    const notice = { sourceId: "parent-a", name: "Required notice" };
+    const b = { sourceId: "parent-b", name: "Publisher B" };
+    const answer = {
+      cells: [
+        [10.5, 45.5, 1, 10, 10],
+        [12.5, 47.5, 2, 30, 20],
+      ],
+      sources: [VIIRS, MODIS],
+      cell_contributors: [
+        {
+          longitude: 12.5,
+          latitude: 47.5,
+          sources: ["parent-b"],
+          native_sources: [VIIRS],
+          contributors: [b],
+          lineage_complete: false,
+        },
+        {
+          longitude: 10.5,
+          latitude: 45.5,
+          sources: ["parent-a"],
+          native_sources: [VIIRS],
+          contributors: [a, notice],
+        },
+      ],
+    };
+    const { provider } = providerWith(() => answer);
+    const result = await provider.getFireDensity([10, 45, 13, 48], {
+      since: "2026-10-09T00:00:00Z",
+      instrument: "viirs",
+      cellDeg: 1,
+    });
+    expect(result.cells).toMatchObject([
+      {
+        point: [10.5, 45.5],
+        sources: ["parent-a"],
+        nativeSources: [VIIRS],
+        contributors: [a, notice],
+      },
+      { point: [12.5, 47.5], sources: ["parent-b"], contributors: [b], lineageComplete: false },
+    ]);
+    a.name = "Changed upstream";
+    expect((result.cells[0] as { contributors?: { name: string }[] }).contributors?.[0]?.name).toBe(
+      "Publisher A",
+    );
+  });
+
+  test("legacy density retains usable values with unknown per-cell receipts", async () => {
+    const { provider } = providerWith(() => ({
+      cells: [[10.5, 45.5, 1, 10, 10]],
+      sources: [VIIRS, MODIS],
+    }));
+    const result = await provider.getFireDensity([10, 45, 13, 48], {
+      since: "2026-10-09T00:00:00Z",
+      instrument: "viirs",
+      cellDeg: 1,
+    });
+    expect(result.cells).toMatchObject([{ count: 1, contributors: [], sources: [] }]);
+  });
+
+  test("a captured canonical receipt overrides current catalogue metadata including an explicit empty receipt", async () => {
+    const record = clone(alertsAnswer.records[0]) as unknown as Rec;
+    const captured = [
+      { sourceId: "canonical-parent", name: "Captured publisher" },
+      { sourceId: "canonical-parent", name: "Captured notice" },
+    ];
+    record["contributors"] = captured;
+    const { provider } = providerWith(() => ({ records: [record], next: null }));
+    const alert = (await provider.getAlerts(BBOX)).alerts[0]!;
+    expect(alert).toMatchObject({ contributors: captured });
+    captured[0]!.name = "Changed after acquisition";
+    expect((alert as { contributors?: { name: string }[] }).contributors?.[0]?.name).toBe(
+      "Captured publisher",
+    );
+    record["contributors"] = [];
+    expect((await provider.getAlerts(BBOX)).alerts[0]).toMatchObject({ contributors: [] });
+  });
+});
+
+test("copies exact live metadata and required notices when a legacy hazard is acquired", async () => {
+  const live = liveSources();
+  const { provider } = providerWith(() => clone(alertsAnswer), live);
+  const alert = (await provider.getAlerts(BBOX)).alerts[0]!;
+  const receipt = structuredClone(alert.contributors);
+  expect(receipt?.some((a) => a.name === NOTICE)).toBe(true);
+  expect(
+    receipt?.some(
+      (a) => a.sourceId === METEOALARM && a.licenseUrl?.includes("terms-and-conditions"),
+    ),
+  ).toBe(true);
+  const updated = ocSources().map((source) => ({
+    ...source,
+    name: "Changed catalogue",
+    notice: "Changed notice",
+  }));
+  live.update(updated.flatMap((source) => toDataSource(source) ?? []));
+  live.updateDescribed(updated);
+  expect(alert.contributors).toEqual(receipt);
+  const obtained = live.contributors?.(METEOALARM);
+  if (obtained?.[0]) obtained[0].name = "Caller changed its copy";
+  expect(live.contributors?.(METEOALARM)?.[0]?.name).toBe("Changed catalogue");
 });

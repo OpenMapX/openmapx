@@ -6,6 +6,7 @@ import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import { safeHref, sanitizeAttributionHtml } from "@openmapx/core";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
+import { contributorKey } from "@openmapx/mobility-core/contributors";
 import { useTranslations } from "next-intl";
 import { type JSX, useState } from "react";
 
@@ -68,25 +69,18 @@ function displayLabel(attr: Attribution): string {
   return text ? `${attr.name} · ${text}` : attr.name;
 }
 
-/**
- * Dedupe by sourceId, then collapse chips that would render identically (same
- * name + license). Distinct feeds operated by the same agency — e.g. two HAFAS
- * registry instances both crediting "Deutsche Bahn AG" — otherwise show as
- * duplicate chips even though they read the same.
- */
+/** Collapse identical displayed receipts, preserving every distinct required notice. */
 function dedupeForDisplay(attributions: Attribution[]): Attribution[] {
-  const seenIds = new Set<string>();
-  const seenLabels = new Set<string>();
-  const out: Attribution[] = [];
-  for (const a of attributions) {
-    if (!a?.sourceId || seenIds.has(a.sourceId)) continue;
-    seenIds.add(a.sourceId);
-    const label = displayLabel(a);
-    if (seenLabels.has(label)) continue;
-    seenLabels.add(label);
-    out.push(a);
-  }
-  return out;
+  const seen = new Set<string>();
+  return attributions.filter((receipt) => {
+    if (!receipt?.sourceId) return false;
+    // Multiple feeds can credit the same agency. Their full credit, links and
+    // license must match before one presentation can discharge both receipts.
+    const key = contributorKey({ ...receipt, sourceId: "" });
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 /**
@@ -214,7 +208,7 @@ export function AttributionStrip({
         );
         const node = navigable ? (
           <Link
-            key={attr.sourceId}
+            key={contributorKey(attr)}
             href={link.href}
             target={link.external ? "_blank" : undefined}
             rel={link.external ? "noopener noreferrer" : undefined}
@@ -229,13 +223,13 @@ export function AttributionStrip({
             {chipContent}
           </Link>
         ) : (
-          <Box key={attr.sourceId} component="span" sx={fitSx}>
+          <Box key={contributorKey(attr)} component="span" sx={fitSx}>
             {chipContent}
           </Box>
         );
         return (
           <Box
-            key={attr.sourceId}
+            key={contributorKey(attr)}
             component="span"
             sx={{ minWidth: 0, overflowWrap: "anywhere", ...fitSx }}
           >

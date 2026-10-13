@@ -4,7 +4,9 @@ import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
 import { timeZoneAt, useCurrentWeather, weatherCodeToInfo } from "@openmapx/core";
 import { useEffect, useMemo, useState } from "react";
+import { AttributionStrip } from "@/integration-api/components/AttributionStrip";
 import { WeatherIcon } from "@/integration-api/components/WeatherIcon";
+import { useContributorResolver } from "@/integration-api/overlay/useContributorResolver";
 import { useDateTimeFormat } from "@/integration-api/runtime/useDateTimeFormat";
 
 interface Props {
@@ -20,6 +22,7 @@ interface Props {
 export function PlaceHeaderWeather({ lat, lng }: Props) {
   const fmt = useDateTimeFormat();
   const { data } = useCurrentWeather(lat, lng);
+  const resolve = useContributorResolver();
   const [now, setNow] = useState(() => new Date());
 
   // Re-render every minute so the displayed local time stays current.
@@ -56,6 +59,10 @@ export function PlaceHeaderWeather({ lat, lng }: Props) {
       <Typography variant="body2" sx={{ color: "text.secondary", whiteSpace: "nowrap" }}>
         {localTime}
       </Typography>
+      <AttributionStrip
+        variant="plain"
+        attributions={resolve({ contributors: data.contributors, sourceIds: [data.source] })}
+      />
     </Box>
   );
 }

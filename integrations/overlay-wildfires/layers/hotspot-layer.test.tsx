@@ -192,7 +192,7 @@ describe("HotspotLayer", () => {
       `https://api.test/api/integrations/overlay-wildfires/wildfires?dayRange=1&instrument=viirs&${VIEW_QUERY}&zoom=8`,
     );
     await waitFor(() => {
-      expect(fake.state.sources.get(SOURCE_ID)?.data).toEqual(HOTSPOT_COLLECTION);
+      expect(fake.state.sources.get(SOURCE_ID)?.data).toEqual(published(HOTSPOT_COLLECTION));
     });
     expect(fake.state.sources.get(DENSITY_SOURCE_ID)?.data).toEqual(EMPTY);
     expect(useWildfireStore.getState().statuses.firms).toMatchObject({
@@ -218,7 +218,9 @@ describe("HotspotLayer", () => {
       `https://api.test/api/integrations/overlay-wildfires/wildfires/density?dayRange=1&instrument=viirs&${VIEW_QUERY}&zoom=4`,
     );
     await waitFor(() => {
-      expect(fake.state.sources.get(DENSITY_SOURCE_ID)?.data).toEqual(DENSITY_COLLECTION);
+      expect(fake.state.sources.get(DENSITY_SOURCE_ID)?.data).toEqual(
+        published(DENSITY_COLLECTION),
+      );
     });
     expect(fake.state.sources.get(SOURCE_ID)?.data).toEqual(EMPTY);
     expect(useWildfireStore.getState().statuses.firms).toMatchObject({
@@ -234,7 +236,7 @@ describe("HotspotLayer", () => {
     expect(String(fetchMock.mock.calls[1]?.[0])).toContain("/overlay-wildfires/wildfires?");
     expect(String(fetchMock.mock.calls[1]?.[0])).toContain("zoom=7");
     await waitFor(() => {
-      expect(fake.state.sources.get(SOURCE_ID)?.data).toEqual(HOTSPOT_COLLECTION);
+      expect(fake.state.sources.get(SOURCE_ID)?.data).toEqual(published(HOTSPOT_COLLECTION));
     });
     expect(fake.state.sources.get(DENSITY_SOURCE_ID)?.data).toEqual(EMPTY);
   });
@@ -388,18 +390,18 @@ describe("HotspotLayer", () => {
     vi.stubGlobal("fetch", fetchMock);
     render(<HotspotLayer active popupController={popupController()} />);
     await waitFor(() => {
-      expect(fake.state.sources.get(SOURCE_ID)?.data).toEqual(HOTSPOT_COLLECTION);
+      expect(fake.state.sources.get(SOURCE_ID)?.data).toEqual(published(HOTSPOT_COLLECTION));
     });
 
     act(() => useWildfireStore.getState().setSource("modis"));
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
-    expect(fake.state.sources.get(SOURCE_ID)?.data).toEqual(HOTSPOT_COLLECTION);
+    expect(fake.state.sources.get(SOURCE_ID)?.data).toEqual(published(HOTSPOT_COLLECTION));
 
     await act(async () => {
       resolveSecond?.(response(MODIS_COLLECTION, FRESH_HEADERS));
     });
     await waitFor(() => {
-      expect(fake.state.sources.get(SOURCE_ID)?.data).toEqual(MODIS_COLLECTION);
+      expect(fake.state.sources.get(SOURCE_ID)?.data).toEqual(published(MODIS_COLLECTION));
     });
   });
 
@@ -468,7 +470,7 @@ describe("HotspotLayer", () => {
     vi.stubGlobal("fetch", fetchMock);
     render(<HotspotLayer active popupController={popupController()} />);
     await waitFor(() =>
-      expect(fake.state.sources.get(SOURCE_ID)?.data).toEqual(HOTSPOT_COLLECTION),
+      expect(fake.state.sources.get(SOURCE_ID)?.data).toEqual(published(HOTSPOT_COLLECTION)),
     );
 
     act(() => useWildfireStore.getState().setSource("modis"));
@@ -476,7 +478,7 @@ describe("HotspotLayer", () => {
     await waitFor(() =>
       expect(useWildfireStore.getState().statuses.firms.error).toBe("unavailable"),
     );
-    expect(fake.state.sources.get(SOURCE_ID)?.data).toEqual(HOTSPOT_COLLECTION);
+    expect(fake.state.sources.get(SOURCE_ID)?.data).toEqual(published(HOTSPOT_COLLECTION));
     expect(useWildfireStore.getState().statuses.firms).toMatchObject({
       fetchedAt: Date.parse("2026-10-09T10:00:00.000Z"),
       featureCount: 1,
@@ -599,3 +601,13 @@ describe("HotspotLayer", () => {
     expect(popup?.html).toContain("totalFirePower: 21.5 MW");
   });
 });
+
+function published<T extends { features: { properties: object }[] }>(data: T) {
+  return {
+    ...data,
+    features: data.features.map((feature) => ({
+      ...feature,
+      properties: { ...feature.properties, _mapAttributions: "[]" },
+    })),
+  };
+}

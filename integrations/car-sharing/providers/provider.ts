@@ -6,7 +6,10 @@
 import type { BoundingBox, DataSourceMeta } from "@openmapx/core";
 import { CATEGORY_FILTERS } from "@openmapx/core";
 import type { IntegrationDataSource } from "@openmapx/integration-framework";
-import { createSharedMobilityProvider } from "@openmapx/integration-framework/shared-mobility-provider";
+import {
+  createSharedMobilityContributorResolver,
+  createSharedMobilityProvider,
+} from "@openmapx/integration-framework/shared-mobility-provider";
 import type {
   SharedMobilityStation,
   VehicleFormFactor,
@@ -42,9 +45,11 @@ export function createCarSharingProvider(options: {
   dataSources: IntegrationDataSource[];
   searchRegionalClients(bbox: BoundingBox): Promise<SharedMobilityStation[]>;
 }) {
+  const resolveContributors = createSharedMobilityContributorResolver(options.dataSources);
   const loadCarInventory = (bbox: BoundingBox) =>
     options.runtime.orchestrate(bbox, {
       category: "car",
+      resolveContributors,
       motisFormFactors: ["car"],
       adapters: [
         {

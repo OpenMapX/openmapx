@@ -25,6 +25,7 @@ import {
 } from "@openmapx/core";
 import { changedFromPlatform, itineraryTransferRisk } from "@openmapx/core/navigation";
 import { apiClient } from "@openmapx/core/navigation/api";
+import { contributorsForRecords } from "@openmapx/mobility-core/contributors";
 import type { OccupancyLevel, TripItinerary, TripLeg } from "@openmapx/mobility-core/transit";
 import { useLocale, useTranslations } from "next-intl";
 import { useState } from "react";
@@ -32,6 +33,7 @@ import { OccupancyIndicator } from "@/components/panels/transit/OccupancyIndicat
 import { PlatformBadge } from "@/components/panels/transit/PlatformBadge";
 import { RemarkChip } from "@/components/panels/transit/RemarkChip";
 import { RouteBadge } from "@/components/panels/transit/RouteBadge";
+import { AttributionStrip } from "@/components/ui/AttributionStrip";
 import { BRAND, BRAND_HEX } from "@/integration-api/runtime/theme";
 import { useDateTimeFormat } from "@/integration-api/runtime/useDateTimeFormat";
 import { extractFareSummary, formatFare } from "@/lib/fareUtils";
@@ -121,6 +123,7 @@ function LegRemarks({ tripId }: { tripId: string }) {
   if (!journey?.remarks?.length) return null;
   return (
     <Box sx={{ mt: 0.5, display: "flex", flexDirection: "column", gap: 0.25 }}>
+      <AttributionStrip attributions={contributorsForRecords(journey.remarks)} variant="inline" />
       {journey.remarks.map((remark, i) => (
         // biome-ignore lint/suspicious/noArrayIndexKey: static ordered remark list
         <RemarkChip key={i} remark={remark} inline />
@@ -146,6 +149,12 @@ function TransitLiveBadge({ tripId }: { tripId: string }) {
         bgcolor: `${BRAND_HEX}1a`,
       }}
     >
+      <AttributionStrip
+        attributions={contributorsForRecords(
+          journey?.stops.filter((stop) => stop.delaySeconds !== undefined) ?? [],
+        )}
+        variant="inline"
+      />
       <Box sx={{ width: 5, height: 5, borderRadius: "50%", bgcolor: "#4caf50", flexShrink: 0 }} />
       <Typography
         variant="caption"
@@ -192,6 +201,9 @@ function LiveStopTime({
       <Typography variant="caption" color={hasDelay ? "error.main" : "text.secondary"}>
         {displayTime}
       </Typography>
+      {hasDelay && (
+        <AttributionStrip attributions={contributorsForRecords([stop])} variant="inline" />
+      )}
       {hasDelay && (
         <Typography
           variant="caption"

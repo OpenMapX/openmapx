@@ -26,6 +26,10 @@ export function createRepoVitestAliases(repoRoot: string) {
   }));
 
   return [
+    // All integration React tests use the web host's declared runtime, even
+    // when an integration package exposes its frontend only through the host.
+    { find: "react", replacement: resolve(repoRoot, "apps/web/node_modules/react") },
+    { find: "react-dom", replacement: resolve(repoRoot, "apps/web/node_modules/react-dom") },
     {
       find: /^@openmapx\/brands$/,
       replacement: resolve(repoRoot, "packages/brands/src/index.ts"),

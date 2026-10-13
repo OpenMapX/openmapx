@@ -1,7 +1,9 @@
 import { act, render } from "@testing-library/react";
 import { lineString } from "@turf/helpers";
 import length from "@turf/length";
+import type { MapGeoJSONFeature } from "maplibre-gl";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { useMapAttributionStore } from "@/integration-api/overlay/mapAttributionStore";
 import { ROUTE_COLORS } from "@/lib/routeStyle";
 import { createFakeMap, expectStyleSwapIsLossless } from "@/test";
 
@@ -18,6 +20,7 @@ const route = {
   ],
   distance: 2200,
   duration: 120,
+  contributors: [{ sourceId: "same", name: "Supplier", attributionText: "captured notice" }],
 };
 
 const navState = {
@@ -39,9 +42,21 @@ const mapRef: { current: unknown } = { current: fake.map };
 vi.mock("@/integration-api/map/MapContext", () => ({
   useMap: () => ({ mapRef, mapReady: true, styleVersion: 0 }),
 }));
-vi.mock("@/integration-api/overlay/useMapAttributions", () => ({ useMapAttributions: vi.fn() }));
-vi.mock("@/lib/routeAttributions", () => ({ routeAttributions: () => [] }));
-vi.mock("@openmapx/integration-framework/react", () => ({ useIntegrationRegistry: () => ({}) }));
+vi.mock("@/integration-api/overlay/useMapAttributions", async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  useMapAttributions: vi.fn(),
+}));
+vi.mock("@/lib/routeAttributions", () => ({
+  routeAttributions: (
+    _registry: unknown,
+    _provider: unknown,
+    route: { contributors?: unknown[] } | null,
+  ) => route?.contributors ?? [],
+}));
+vi.mock("@openmapx/integration-framework/react", () => {
+  const registry = {};
+  return { useIntegrationRegistry: () => registry };
+});
 vi.mock("@openmapx/core", async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   useNavigationStore: Object.assign(
@@ -293,4 +308,145 @@ describe("NavigationRouteLayer progress-driven gradients", () => {
     expectStyleSwapIsLossless(fake);
     expect(gradientFraction(REMAINING)).toBeCloseTo(expectedF, 10);
   });
+});
+
+it("publishes the navigation route snapshot once while progress only updates paint", () => {
+  const view = render(<NavigationRouteLayer />);
+  const data = fake.state.sources.get(SOURCE)?.data as {
+    features: { properties: { _mapAttributions: string } }[];
+  };
+  expect(JSON.parse(data.features[0].properties._mapAttributions)).toEqual(route.contributors);
+  const initial = fake.state.sources.get(SOURCE)?.data;
+  navState.progress = { alongMeters: 500 };
+  view.rerender(<NavigationRouteLayer />);
+  expect(fake.state.sources.get(SOURCE)?.data).toBe(initial);
+  view.unmount();
+});
+
+it("credits only actual line hits through progress, empty viewport and unrelated loading", () => {
+  vi.useFakeTimers();
+  useMapAttributionStore.setState({ byLayer: { base: ["Base map credit"] } });
+  const originalReceipts = route.contributors;
+  route.contributors = [
+    ...originalReceipts,
+    { sourceId: "same", name: "Supplier", attributionText: "second required notice" },
+  ];
+  const view = render(<NavigationRouteLayer />);
+  const data = fake.state.sources.get(SOURCE)?.data as { features: unknown[] };
+  fake.setRenderedFeatures(TRAVELED, data.features as MapGeoJSONFeature[]);
+  const styleDescriptor = Object.getOwnPropertyDescriptor(fake.map, "style");
+  Object.defineProperty(fake.map, "style", {
+    configurable: true,
+    value: {
+      tileManagers: {
+        [SOURCE]: {
+          getVisibleCoordinates: () => [{}],
+          getTile: () => ({
+            hasData: () => true,
+            querySourceFeatures: (records: unknown[]) => records.push(...data.features),
+            getBucket: () => ({
+              uploaded: true,
+              isEmpty: () => false,
+              gradients: Object.fromEntries(
+                [TRAVELED, REMAINING, REMAINING_CASING].map((id) => [
+                  id,
+                  {
+                    gradient: { data: new Uint8Array([255, 0, 0, 255, 255, 0, 0, 0]) },
+                    texture: {},
+                  },
+                ]),
+              ),
+            }),
+          }),
+        },
+      },
+    },
+  });
+  const flush = () =>
+    act(() => {
+      fake.emit("render");
+      vi.advanceTimersByTime(250);
+    });
+  const html = () => Object.values(useMapAttributionStore.getState().byLayer).flat().join(" ");
+  flush();
+  expect(html()).toContain("captured notice");
+  expect(html()).toContain("second required notice");
+  fake.state.styleLoaded = false;
+  navState.progress = { alongMeters: 999999 };
+  view.rerender(<NavigationRouteLayer />);
+  flush();
+  expect(html()).toContain("captured notice");
+  fake.setRenderedFeatures(TRAVELED, []);
+  flush();
+  expect(html()).toBe("Base map credit");
+  view.unmount();
+  route.contributors = originalReceipts;
+  fake.state.styleLoaded = true;
+  if (styleDescriptor) Object.defineProperty(fake.map, "style", styleDescriptor);
+  else Reflect.deleteProperty(fake.map, "style");
+  vi.useRealTimers();
+});
+
+it("draws captured route segments with global progress and no GPS geometry uploads", () => {
+  const a = { sourceId: "a", name: "A" },
+    b = { sourceId: "b", name: "B" };
+  Object.assign(route, {
+    geometryContributors: [
+      { startIndex: 0, endIndex: 1, contributors: [a] },
+      { startIndex: 1, endIndex: 2, contributors: [b] },
+    ],
+  });
+  navState.progress = { alongMeters: routeTotalMeters * 0.75 };
+  const view = render(<NavigationRouteLayer />);
+  const data = fake.state.sources.get(SOURCE)?.data as {
+    features: { geometry: { coordinates: number[][] }; properties: { _mapAttributions: string } }[];
+  };
+  expect(data.features.map((f) => JSON.parse(f.properties._mapAttributions))).toEqual([[a], [b]]);
+  expect(data.features.map((f) => f.geometry.coordinates)).toEqual([
+    route.geometry.slice(0, 2),
+    route.geometry.slice(1),
+  ]);
+  expect(gradientFraction(REMAINING)).toBeGreaterThan(1);
+  expect(gradientFraction(`${REMAINING}-1`)).toBeCloseTo(0.5, 2);
+  fake.state.counts.setData.delete(SOURCE);
+  for (let i = 0; i < 100; i++) {
+    navState.progress = { alongMeters: i * 10 };
+    view.rerender(<NavigationRouteLayer />);
+  }
+  expect(fake.state.counts.setData.get(SOURCE) ?? 0).toBe(0);
+  expectStyleSwapIsLossless(fake);
+  view.unmount();
+  Reflect.deleteProperty(route, "geometryContributors");
+  navState.progress = { alongMeters: 0 };
+});
+
+it("projects alternative and proposed geometry with the same captured span contract", () => {
+  const originalRoutes = navState.routes;
+  const a = { sourceId: "a", name: "A" },
+    b = { sourceId: "b", name: "B" };
+  const alternative = {
+    ...route,
+    geometryContributors: [
+      { startIndex: 0, endIndex: 1, contributors: [a] },
+      { startIndex: 1, endIndex: 2, contributors: [b] },
+    ],
+  };
+  navState.routes = [route, alternative];
+  Object.assign(navState, { fasterRoute: { route: alternative } });
+  const view = render(<NavigationRouteLayer />);
+  const data = fake.state.sources.get("nav-route-alts-source")?.data as {
+    features: { properties: { kind: string; routeIndex?: number; _mapAttributions: string } }[];
+  };
+  expect(
+    data.features.map((f) => [f.properties.kind, JSON.parse(f.properties._mapAttributions)]),
+  ).toEqual([
+    ["alt", [a]],
+    ["alt", [b]],
+    ["proposed", [a]],
+    ["proposed", [b]],
+  ]);
+  expect(data.features.slice(0, 2).every((f) => f.properties.routeIndex === 1)).toBe(true);
+  view.unmount();
+  navState.routes = originalRoutes;
+  navState.fasterRoute = null;
 });

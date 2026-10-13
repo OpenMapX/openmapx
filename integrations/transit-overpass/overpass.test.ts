@@ -280,3 +280,12 @@ describe("overpass provider", () => {
     });
   });
 });
+
+it("preserves the actual Overpass response supplier on converted transit stops", async () => {
+  mockFetch.mockResolvedValueOnce(
+    mockOk({ elements: [{ id: 1, lat: 50, lon: 8, tags: { name: "Stop" } }] }),
+  );
+  const { getStops } = await loadModule();
+  const stops = await getStops([7, 49, 9, 51]);
+  expect(stops[0].contributors?.map((receipt) => receipt.sourceId)).toContain("openstreetmap");
+});

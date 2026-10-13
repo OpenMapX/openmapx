@@ -4,6 +4,7 @@ import type { MapGeoJSONFeature } from "maplibre-gl";
 import { StrictMode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { INTERACTIVE_LAYER_IDS } from "@/integration-api/map/interactiveLayers";
+import { useMapAttributionStore } from "@/integration-api/overlay/mapAttributionStore";
 import {
   act,
   createFakeMap,
@@ -262,7 +263,11 @@ describe("canonical air-quality monitor layer", () => {
     expect(fake.state.canvas.style.cursor).toBe("");
     expect(popupState.instances[0]?.removeCalls).toBe(1);
     expect(INTERACTIVE_LAYER_IDS.has(MONITOR_LAYER_ID)).toBe(false);
-    expect(attributionState.sources).toHaveBeenLastCalledWith("air-quality", []);
+    expect(
+      Object.keys(useMapAttributionStore.getState().byLayer).filter((key) =>
+        key.startsWith("rendered:air-quality::"),
+      ),
+    ).toEqual([]);
   });
 
   it("survives repeated and full style replacement without losing source data or stacking handlers", () => {
@@ -344,7 +349,11 @@ describe("canonical air-quality monitor layer", () => {
     act(() => useAirQualityStore.getState().setRasterFrame(null));
     expect(fake.state.sources.size).toBe(0);
     expect(fake.state.layers.size).toBe(0);
-    expect(attributionState.sources).toHaveBeenLastCalledWith("air-quality", []);
+    expect(
+      Object.keys(useMapAttributionStore.getState().byLayer).filter((key) =>
+        key.startsWith("rendered:air-quality::"),
+      ),
+    ).toEqual([]);
 
     act(() => useAirQualityStore.getState().setMonitorPollutant("o3"));
     expect(fake.state.sources.size).toBe(1);

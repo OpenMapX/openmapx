@@ -82,6 +82,11 @@ import {
 } from "@openmapx/core";
 import { isPlausibleNlSearch } from "@openmapx/integration-framework";
 import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
+import type { ContributingRecord, FieldContributors } from "@openmapx/mobility-core/contributors";
+import {
+  captureFieldContributors,
+  contributorsForRecords,
+} from "@openmapx/mobility-core/contributors";
 import type { TransitStop } from "@openmapx/mobility-core/transit";
 import { useLocale, useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -93,7 +98,6 @@ import { hasNlpConsent, isNlpCloudDeclined, setNlpConsent } from "@/components/u
 import { usePlaceEnrichment } from "@/hooks/usePlaceEnrichment";
 import { useMap } from "@/integration-api/map/MapContext";
 import { BRAND } from "@/integration-api/runtime/theme";
-import { mergeAttributions } from "@/lib/attributionForProviders";
 import {
   useAiSearchDisclosure,
   useIntegrationDisclosures,
@@ -158,6 +162,38 @@ const NLP_MIN_QUERY_LENGTH = 4;
 /** Rows are keyed by type and id together: a category and a place can share an id. */
 function rowKey(row: AutocompleteResult): string {
   return `${row.type}:${row.id}`;
+}
+
+/** Carry displayed search fields into the selected place without blending hidden ranking metadata. */
+function searchSelectionContributors(
+  result: ContributingRecord & {
+    fieldContributors?: FieldContributors;
+    ids?: Record<string, string | undefined>;
+  },
+  nameField = "label",
+  addressField = "label",
+) {
+  const fieldContributors = Object.fromEntries(
+    Object.entries({
+      name: nameField,
+      address: addressField,
+      coordinates: "coordinates",
+      category: "type",
+      rawCategory: "rawCategory",
+    }).flatMap(([target, source]) =>
+      Object.entries(captureFieldContributors(result, source, target)),
+    ),
+  );
+  for (const scheme of Object.keys(result.ids ?? {}))
+    Object.assign(fieldContributors, captureFieldContributors(result, `ids.${scheme}`));
+  // Primary identity is retained even when the suggestion has no secondary IDs.
+  Object.assign(fieldContributors, captureFieldContributors(result, "id", "ids"));
+  return {
+    fieldContributors,
+    contributors: contributorsForRecords(
+      Object.values(fieldContributors).map((contributors) => ({ contributors })),
+    ),
+  };
 }
 
 export function SearchBar({ surface = "map" }: SearchBarProps) {
@@ -764,35 +800,9 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
     inputRef.current?.blur();
   };
 
-  // Credit only the geocoder(s) that actually produced the suggestions on
-  // screen. Each geocoded item carries its serving integration id
-  // (AutocompleteResult.provider, tagged by the geocoding orchestrator) and,
-  // for a geocoder with several possible backends, the one that answered
-  // (`sourceIds`); category / NLP / labeled / preset suggestions have none, so a dropdown
-  // without geocoded results shows no geocoder credit — rather than the old
-  // behaviour of crediting every healthy geocoder regardless of who served.
-  // Plain const (not a hook): this sits below an early return, and the lookup
-  // is a handful of registry reads that <AttributionStrip> dedupes downstream.
-  const visibleProviderIds = new Set(
-    effectiveSuggestions.flatMap((suggestion) => [
-      suggestion.provider,
-      ...(suggestion.contributingProviders ?? []),
-    ]),
-  );
-  const aggregateProviderIds = new Set(
-    (aggregateSearchData?.suggestions ?? []).flatMap((suggestion) => [
-      suggestion.provider,
-      ...(suggestion.contributingProviders ?? []),
-    ]),
-  );
-  const hasVisibleAggregateSuggestion = [...aggregateProviderIds].some((provider) =>
-    visibleProviderIds.has(provider),
-  );
-  const geocodingAttributions = servedAttributions(registry, effectiveSuggestions);
-  const visibleAttributions = mergeAttributions(
-    hasVisibleAggregateSuggestion ? (aggregateSearchData?.attributions ?? []) : [],
-    geocodingAttributions,
-  );
+  // Receipts follow the rows after deduplication, ranking and mode selection.
+  // A response envelope can include sources whose rows are no longer displayed.
+  const visibleAttributions = servedAttributions(registry, effectiveSuggestions);
   // The NLP card is additive and only shown for plausible natural-language
   // intents (confidence + at least one category). It never replaces the
   // parallel geocode/autocomplete suggestions below it.
@@ -1057,6 +1067,7 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
         if (first.type !== "region") flyTo(first.coordinates, 15);
         const firstPlace = createPlace({
           ...idsFromPrimaryOrCoords(first.id, first.coordinates),
+          ...searchSelectionContributors(first),
           name: address ?? first.label,
           address: first.label,
           coordinates: first.coordinates,
@@ -1119,6 +1130,11 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
       setSelectedPlace(
         createPlace({
           ...idsFromPrimaryOrCoords(result.id, result.coordinates),
+          ...searchSelectionContributors(
+            result,
+            result.sublabel ? "sublabel" : "label",
+            result.sublabel ? "sublabel" : "label",
+          ),
           name: result.sublabel?.split(" — ")[0] ?? result.label,
           address: result.sublabel?.split(" — ")[1] ?? result.sublabel ?? result.label,
           coordinates: result.coordinates,
@@ -1173,6 +1189,8 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
       if (result.type !== "region") flyTo(coords, 15);
       const suggestionPlace = createPlace({
         ...idsFromPrimaryOrCoords(result.id, coords),
+        ids: { ...result.ids, ...idsFromPrimaryOrCoords(result.id, coords).ids },
+        ...searchSelectionContributors(result, "label", result.sublabel ? "sublabel" : "label"),
         name: result.label,
         address: result.sublabel ?? result.label,
         coordinates: coords,

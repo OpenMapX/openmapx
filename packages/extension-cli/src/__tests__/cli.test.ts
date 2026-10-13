@@ -44,6 +44,31 @@ describe("scaffold integration", () => {
     expect(pkg.name).toBe("@openmapx/integration-demo");
   });
 
+  it("scaffolds a portable companion receipt example without executable presentation code", () => {
+    const destDir = scaffoldIntegration({ id: "observations", domain: "knowledge", outDir: tmp });
+    const examplePath = join(destDir, "companion-response.example.json");
+    expect(existsSync(examplePath)).toBe(true);
+    if (!existsSync(examplePath)) return;
+    const example = JSON.parse(readFileSync(examplePath, "utf-8"));
+    expect(example.records[0].contributors).toEqual([
+      {
+        sourceId: "observations-observations",
+        name: "Example observations",
+        attributionText: "Required dataset notice",
+      },
+      {
+        sourceId: "observations-observations",
+        name: "Example observations",
+        attributionText: "Required redistribution notice",
+      },
+    ]);
+    expect(example.records[0].fieldContributors["details.website"]).toEqual([]);
+    expect(example.records[1].contributors).toEqual([]);
+    expect(JSON.stringify(example)).not.toContain("__ID__");
+    expect(existsSync(join(destDir, "index.ts"))).toBe(false);
+    expect(existsSync(join(destDir, "map-layer.tsx"))).toBe(false);
+  });
+
   it("rejects an invalid id", () => {
     expect(() => scaffoldIntegration({ id: "MyDemo", outDir: tmp })).toThrow(
       /Invalid integration id/,
@@ -150,6 +175,8 @@ describe("CLI binary (integration + validate + package)", () => {
       const tarContents = execFileSync("tar", ["-tzf", outFile], { encoding: "utf-8" });
       expect(tarContents).not.toContain("dist/frontend/index.js");
       expect(tarContents).not.toContain("dist/backend/index.mjs");
+      expect(tarContents).not.toContain("companion-response.example.json");
+      expect(tarContents).not.toContain("CONTRIBUTOR-CONTRACT.md");
     },
   );
 });

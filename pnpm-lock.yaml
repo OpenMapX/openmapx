@@ -2260,6 +2260,9 @@ importers:
       '@openmapx/core':
         specifier: workspace:^
         version: link:../core
+      '@openmapx/mobility-core':
+        specifier: workspace:^
+        version: link:../mobility-core
     devDependencies:
       '@types/node':
         specifier: ^26.6.5
@@ -2358,12 +2361,18 @@ importers:
       better-auth:
         specifier: 1.7.7
         version: 1.7.7(78b9b23a2609169d8bff27d72efd429e)
+      escape-html:
+        specifier: 1.0.3
+        version: 1.0.3
       js-yaml:
         specifier: ^5.2.1
         version: 5.4.3
       opening_hours:
         specifier: ^3.15.0
         version: 3.15.0(typescript@6.0.3)
+      parse5:
+        specifier: 8.0.1
+        version: 8.0.1
       react:
         specifier: 19.3.0
         version: 19.3.0
@@ -2383,6 +2392,9 @@ importers:
       '@testing-library/react':
         specifier: ^16.3.3
         version: 16.3.3(@testing-library/dom@10.4.1)(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
+      '@types/escape-html':
+        specifier: 1.0.4
+        version: 1.0.4
       '@types/node':
         specifier: ^26.6.5
         version: 26.6.5
@@ -6141,6 +6153,9 @@ packages:
 
   '@types/dockerode@4.0.2':
     resolution: {integrity: sha512-hA4myZ0XzwHG/p/eCLElYsQS3y1XZfvi6AfLFKVp1SNpPkO6J3xLatacAFVkReTxXRoIa3eHJmhJi9w6I3+zNA==}
+
+  '@types/escape-html@1.0.4':
+    resolution: {integrity: sha512-qZ72SFTgUAZ5a7Tj6kf2SHLetiH5S6f8G5frB2SPQ3EyF02kxdyBFf4Tz4banE3xCgGnKgWLt//a6VuYHKYJTg==}
 
   '@types/estree@1.0.9':
     resolution: {integrity: sha512-GhdPgy1el4/ImP05X05Uw4cw2/M93BCUmnEvWZNStlCzEKME4Fkk+YpoA5OiHNQmoS7Cafb8Xa3Pya8m1Qrzeg==}
@@ -14791,6 +14806,8 @@ snapshots:
       '@types/docker-modem': 3.0.6
       '@types/node': 26.6.5
       '@types/ssh2': 1.15.6
+
+  '@types/escape-html@1.0.4': {}
 
   '@types/estree@1.0.9': {}
 

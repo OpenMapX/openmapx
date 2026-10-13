@@ -1,5 +1,11 @@
 import type { KnowledgeResult, NeighborhoodCard, OverpassElement, Place } from "@openmapx/core";
-import { overpassQuery } from "@openmapx/core";
+import { isDisplayablePhoto, overpassQuery } from "@openmapx/core";
+import type { Attribution } from "@openmapx/mobility-core/attribution";
+import {
+  contributorsForField,
+  contributorsForRecords,
+  snapshotContributors,
+} from "@openmapx/mobility-core/contributors";
 import { getPlaceKnowledge } from "../knowledge/index.js";
 
 /** Settlement sub-divisions we surface as "neighbourhoods" in the city panel. */
@@ -26,6 +32,7 @@ function buildQuery(south: number, west: number, north: number, east: number): s
 }
 
 interface RawNeighborhood {
+  contributors: Attribution[];
   id: string;
   name: string;
   lat: number;
@@ -43,7 +50,10 @@ function elementCenter(el: OverpassElement): { lat: number; lng: number } | null
   return null;
 }
 
-function extractRaw(elements: OverpassElement[]): RawNeighborhood[] {
+function extractRaw(
+  elements: OverpassElement[],
+  contributors: readonly Attribution[],
+): RawNeighborhood[] {
   const seen = new Set<string>();
   const out: RawNeighborhood[] = [];
   for (const el of elements) {
@@ -58,6 +68,7 @@ function extractRaw(elements: OverpassElement[]): RawNeighborhood[] {
     if (seen.has(key)) continue;
     seen.add(key);
     out.push({
+      contributors: snapshotContributors(contributors),
       id: `${OSM_REF_PREFIX[el.type]}/${el.id}`,
       name,
       lat: center.lat,
@@ -81,6 +92,10 @@ async function enrich(raw: RawNeighborhood, lang?: string): Promise<Neighborhood
     id: raw.id,
     name: raw.name,
     coordinates: [raw.lng, raw.lat],
+    contributors: snapshotContributors(raw.contributors),
+    fieldContributors: Object.fromEntries(
+      ["id", "name", "coordinates"].map((field) => [field, snapshotContributors(raw.contributors)]),
+    ),
   };
   if (!raw.hasWiki) return card;
 
@@ -94,10 +109,28 @@ async function enrich(raw: RawNeighborhood, lang?: string): Promise<Neighborhood
   const knowledge = await getPlaceKnowledge(place, lang).catch((): KnowledgeResult => ({}));
 
   const extract = knowledge.wikipediaExtract ?? knowledge.description;
-  if (extract) card.description = firstSentence(extract);
-  if (knowledge.wikipediaUrl) card.wikipediaUrl = knowledge.wikipediaUrl;
-  const photo = knowledge.photos?.[0];
-  if (photo) card.photoUrl = photo.thumbnailUrl ?? photo.url;
+  const fields = { ...card.fieldContributors };
+  if (extract) {
+    card.description = firstSentence(extract);
+    fields.description = contributorsForField(
+      knowledge,
+      knowledge.wikipediaExtract ? "wikipediaExtract" : "description",
+    );
+  }
+  if (knowledge.wikipediaUrl) {
+    card.wikipediaUrl = knowledge.wikipediaUrl;
+    fields.wikipediaUrl = contributorsForField(knowledge, "wikipediaUrl");
+  }
+  const photo = knowledge.photos?.find(isDisplayablePhoto);
+  if (photo) {
+    card.photo = { ...photo, contributors: snapshotContributors(photo.contributors ?? []) };
+    card.photoUrl = photo.thumbnailUrl ?? photo.url;
+    fields.photoUrl = snapshotContributors(photo.contributors ?? []);
+  }
+  card.fieldContributors = fields;
+  card.contributors = contributorsForRecords(
+    Object.values(fields).map((contributors) => ({ contributors })),
+  );
   return card;
 }
 
@@ -116,7 +149,7 @@ export async function fetchNeighborhoods(
   lang?: string,
 ): Promise<{ neighborhoods: NeighborhoodCard[] }> {
   const data = await overpassQuery(buildQuery(south, west, north, east));
-  const raw = extractRaw(data.elements as OverpassElement[]);
+  const raw = extractRaw(data.elements as OverpassElement[], data.contributors ?? []);
 
   raw.sort((a, b) => {
     if (a.hasWiki !== b.hasWiki) return a.hasWiki ? -1 : 1;

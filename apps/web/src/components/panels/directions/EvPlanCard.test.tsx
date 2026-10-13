@@ -201,3 +201,53 @@ describe("EvPlanCard", () => {
     expect(onRetry).toHaveBeenCalledTimes(1);
   });
 });
+
+it("credits captured routing totals and respects a canonical empty charge-stop receipt", () => {
+  const route = { sourceId: "routing", name: "Captured route" };
+  const result = {
+    ...baseResult,
+    routes: baseResult.routes.map((item) => ({ ...item, contributors: [route] })),
+    stops: baseResult.stops.map((stop) => ({ ...stop, contributors: [] })),
+  };
+  render(<EvPlanCard result={result} />, { wrapper: createQueryWrapper() });
+  expect(screen.getByText("Captured route")).toBeTruthy();
+  expect(screen.queryByText("OpenChargeMap")).toBeNull();
+});
+
+it("projects actual visible stop fields and captured totals independently", () => {
+  const visible = { sourceId: "same", name: "Visible model", attributionText: "Visible notice" };
+  const hidden = { sourceId: "same", name: "Hidden model", attributionText: "Hidden notice" };
+  const stop = {
+    ...baseResult.stops[0],
+    operator: undefined,
+    isPreferredNetwork: false,
+    availability: undefined,
+    tariffPrice: undefined,
+    estimatedCost: undefined,
+    contributors: [],
+    fieldContributors: {
+      "station.name": [visible],
+      addedKwh: [hidden],
+      operator: [hidden],
+      availability: [hidden],
+      tariffPrice: [hidden],
+      estimatedCost: [hidden],
+    },
+  };
+  render(
+    <EvPlanCard
+      result={{
+        ...baseResult,
+        stops: [stop],
+        totals: {
+          ...baseResult.totals,
+          contributors: [visible],
+          fieldContributors: { energyKwh: [visible], estimatedCost: [hidden] },
+        },
+      }}
+    />,
+    { wrapper: createQueryWrapper() },
+  );
+  expect(screen.getAllByText("Visible model").length).toBe(2);
+  expect(screen.queryByText("Hidden model")).toBeNull();
+});

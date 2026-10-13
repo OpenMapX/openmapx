@@ -6,15 +6,26 @@ import type {
 } from "@openmapx/core";
 import {
   CATEGORY_FILTERS,
+  captureOvertureFieldContributors,
   nameSimilarity,
   normalizeOvertureProvenance,
   openMapXCategoryToOvertureConcepts,
 } from "@openmapx/core";
-import type { DatabaseClient } from "@openmapx/integration-framework";
+import { AMBIENT_LEGACY_OVERTURE_ATTRIBUTION } from "@openmapx/core/ambient-places";
+import type { DatabaseClient, IntegrationContext } from "@openmapx/integration-framework";
+import type { Attribution } from "@openmapx/mobility-core/attribution";
+import {
+  contributorsForRecords,
+  parseContributors,
+  snapshotContributors,
+} from "@openmapx/mobility-core/contributors";
 
 let db: DatabaseClient | undefined;
 
-export function bindDb(database: DatabaseClient): void {
+export function bindDb(
+  database: DatabaseClient,
+  _ctx?: Pick<IntegrationContext, "manifest" | "attributionIndex">,
+): void {
   db = database;
 }
 
@@ -41,6 +52,7 @@ interface OvertureDetailRow {
     country?: string | null;
   }> | null;
   sources: OvertureSourceItem[] | null;
+  sources_catalogue?: Attribution[] | null;
   release: string;
 }
 
@@ -193,7 +205,7 @@ async function fetchOverturePlaceByGers(
   const rows = await database.execute<OvertureDetailRow[]>(
     `
     SELECT gers_id, name, names, brand, phones, websites, socials, emails, addresses,
-           sources, release
+           sources, to_jsonb(places)->'sources_catalogue' AS sources_catalogue, release
     FROM overture_places.places
     WHERE gers_id = $1
     LIMIT 1
@@ -205,6 +217,9 @@ async function fetchOverturePlaceByGers(
 }
 
 function overtureRowToKnowledgeResult(row: OvertureDetailRow): KnowledgeResult | null {
+  const catalogue = parseContributors(row.sources_catalogue) ?? [
+    AMBIENT_LEGACY_OVERTURE_ATTRIBUTION,
+  ];
   // A successful match always credits Overture as a source via its GERS id,
   // which surfaces as an "Overture Maps" external reference on the place card.
   const result: KnowledgeResult = {
@@ -244,8 +259,46 @@ function overtureRowToKnowledgeResult(row: OvertureDetailRow): KnowledgeResult |
     result.countryCode = address.country?.toLowerCase() ?? undefined;
   }
 
-  // Always non-empty: externalIds.gers is set for every match.
-  return result;
+  const pointers: Record<string, string[]> = {};
+  for (const field of ["phone", "website", "email"] as const) {
+    if (result[field])
+      pointers[field] = [
+        `/${field === "phone" ? "phones" : field === "email" ? "emails" : "websites"}/0`,
+      ];
+  }
+  if (result.socials) pointers.socials = result.socials.map((_, index) => `/socials/${index}`);
+  if (result.names) {
+    pointers.names = [];
+    for (const key of Object.keys(result.names)) {
+      const pointer = `/names/common/${key.replace(/~/g, "~0").replace(/\//g, "~1")}`;
+      pointers[`names.${key}`] = [pointer];
+      pointers.names.push(pointer);
+    }
+  }
+  if (result.brand) {
+    pointers.brand = ["/brand/names/primary"];
+    pointers["brand.name"] = ["/brand/names/primary"];
+    if (result.brand.wikidata) {
+      pointers.brand.push("/brand/wikidata");
+      pointers["brand.wikidata"] = ["/brand/wikidata"];
+    }
+  }
+  if (result.externalIds?.wikidata) pointers["externalIds.wikidata"] = ["/brand/wikidata"];
+  if (result.address) {
+    pointers.address = [];
+    for (const field of ["freeform", "postcode", "locality"] as const)
+      if (address?.[field]) pointers.address.push(`/addresses/0/${field}`);
+  }
+  if (result.city) pointers.city = ["/addresses/0/locality"];
+  if (result.countryCode) pointers.countryCode = ["/addresses/0/country"];
+  const captured = captureOvertureFieldContributors(result, row.sources, catalogue, pointers);
+  captured.fieldContributors["externalIds.gers"] = snapshotContributors(
+    catalogue.filter((receipt) => receipt.sourceId === "overture"),
+  );
+  captured.contributors = contributorsForRecords(
+    Object.values(captured.fieldContributors).map((contributors) => ({ contributors })),
+  );
+  return captured;
 }
 
 export const overtureKnowledgeSource: KnowledgeProvider = {

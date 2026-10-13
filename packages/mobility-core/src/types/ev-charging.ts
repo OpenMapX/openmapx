@@ -1,3 +1,4 @@
+import type { ContributingRecord, FieldContributors } from "../contributors.js";
 import type { Attribution } from "./attribution.js";
 
 export type EvseStatus =
@@ -92,7 +93,8 @@ export interface EnergyTariff {
   sourceId: string;
 }
 
-export interface ChargingSite {
+export interface ChargingSite extends ContributingRecord {
+  fieldContributors?: FieldContributors;
   id: string;
   name: string;
   country?: string;
@@ -140,14 +142,27 @@ function fresh(status: EvseStatus | undefined, stale: boolean): EvseStatus | und
  * so it is available when any of its connectors is. Identical charge points
  * the source does not tell apart (`quantity` above 1) have none.
  */
-export function freshEvseStatus(evse: Evse): { status: EvseStatus; at?: string } | undefined {
+export function freshEvseStatusSelection(
+  evse: Evse,
+): { status: EvseStatus; at?: string; connectorIndex?: number } | undefined {
   if (evse.quantity > 1) return undefined;
   const own = fresh(evse.status, evse.stale);
   if (own) return { status: own, ...(evse.statusAt ? { at: evse.statusAt } : {}) };
   const byConnector = evse.connectors.filter((c) => fresh(c.status, c.stale));
   const pick = byConnector.find((c) => c.status === "available") ?? byConnector[0];
   if (!pick?.status) return undefined;
-  return { status: pick.status, ...(pick.statusAt ? { at: pick.statusAt } : {}) };
+  return {
+    status: pick.status,
+    ...(pick.statusAt ? { at: pick.statusAt } : {}),
+    connectorIndex: evse.connectors.indexOf(pick),
+  };
+}
+
+/** The public status value, selected by the same winner used for provenance. */
+export function freshEvseStatus(evse: Evse): { status: EvseStatus; at?: string } | undefined {
+  const selected = freshEvseStatusSelection(evse);
+  if (!selected) return undefined;
+  return { status: selected.status, ...(selected.at ? { at: selected.at } : {}) };
 }
 
 /**

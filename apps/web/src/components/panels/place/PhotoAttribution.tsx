@@ -12,10 +12,13 @@ interface Props {
 export function PhotoAttribution({ photo, color = "#fff" }: Props) {
   const registry = useIntegrationRegistry();
 
-  const ds = registry.findDataSource(photo.source);
+  const ds = photo.contributors === undefined ? registry.findDataSource(photo.source) : undefined;
+  const captured =
+    photo.contributors?.find((receipt) => receipt.sourceId === photo.source) ??
+    photo.contributors?.[0];
 
-  const sourceName = ds?.name ?? photo.source;
-  const sourceUrl = photo.pageUrl ?? ds?.url;
+  const sourceName = captured?.name ?? ds?.name ?? photo.source;
+  const sourceUrl = photo.pageUrl ?? captured?.url ?? ds?.url;
 
   const linkSx = {
     color,
@@ -26,10 +29,11 @@ export function PhotoAttribution({ photo, color = "#fff" }: Props) {
 
   return (
     <>
-      {photo.author && (
+      {photo.author && !photo.attributionOverride && (
         <>
           {photo.authorUrl ? (
             <Link
+              onClick={(event) => event.stopPropagation()}
               href={safeHref(photo.authorUrl)}
               target="_blank"
               rel="noopener noreferrer"
@@ -44,7 +48,13 @@ export function PhotoAttribution({ photo, color = "#fff" }: Props) {
         </>
       )}
       {sourceUrl ? (
-        <Link href={safeHref(sourceUrl)} target="_blank" rel="noopener noreferrer" sx={linkSx}>
+        <Link
+          onClick={(event) => event.stopPropagation()}
+          href={safeHref(sourceUrl)}
+          target="_blank"
+          rel="noopener noreferrer"
+          sx={linkSx}
+        >
           {sourceName}
         </Link>
       ) : (
@@ -55,6 +65,7 @@ export function PhotoAttribution({ photo, color = "#fff" }: Props) {
           {" / "}
           {photo.licenseUrl ? (
             <Link
+              onClick={(event) => event.stopPropagation()}
               href={safeHref(photo.licenseUrl)}
               target="_blank"
               rel="noopener noreferrer"
@@ -67,6 +78,26 @@ export function PhotoAttribution({ photo, color = "#fff" }: Props) {
           )}
         </>
       )}
+      {photo.attributionText && (
+        <>
+          {" / "}
+          {photo.attributionText}
+        </>
+      )}
+      {photo.attributionLinks?.map((link) => (
+        <span key={link.url}>
+          {" / "}
+          <Link
+            onClick={(event) => event.stopPropagation()}
+            href={safeHref(link.url)}
+            target="_blank"
+            rel="noopener noreferrer"
+            sx={linkSx}
+          >
+            {link.label}
+          </Link>
+        </span>
+      ))}
     </>
   );
 }

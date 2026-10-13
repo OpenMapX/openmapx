@@ -62,6 +62,17 @@ describe("AttributionStrip", () => {
     expect(markup).not.toContain('data-source-id="dyn:de/db-smartrbl"');
   });
 
+  it("preserves distinct required notices and links even when source and label match", () => {
+    const credits: Attribution[] = [
+      { sourceId: "agency", name: "Agency", attributionText: "Required notice A" },
+      { sourceId: "agency", name: "Agency", attributionText: "Required notice B" },
+      { sourceId: "other-feed", name: "Agency", url: "https://other.example" },
+    ];
+    const markup = renderToStaticMarkup(<AttributionStrip attributions={credits} />);
+    expect(markup.match(/data-source-id=/g)?.length).toBe(3);
+    expect(markup).toContain('href="https://other.example"');
+  });
+
   it("falls back to /licenses anchor when attribution has no url", () => {
     const markup = renderToStaticMarkup(<AttributionStrip attributions={[tfl]} />);
     expect(markup).toContain("/licenses#source-tfl");

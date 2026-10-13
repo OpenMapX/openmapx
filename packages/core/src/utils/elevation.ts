@@ -1,3 +1,7 @@
+import {
+  type ContributingRecord,
+  snapshotContributors,
+} from "@openmapx/mobility-core/contributors";
 import type { ElevationPoint, ElevationProfile, ElevationStats } from "../types/elevation";
 import type { LngLat } from "../types/geometry";
 import { haversineDistance } from "./coordinates";
@@ -10,6 +14,7 @@ export function buildElevationProfile(
   geometry: LngLat[],
   elevation: number[],
   interval: number,
+  provenance?: ContributingRecord & { contributorCoverage?: "partial" },
 ): ElevationProfile {
   // Compute cumulative distances along the geometry
   const geoDist: number[] = [0];
@@ -26,7 +31,18 @@ export function buildElevationProfile(
     points.push({ distance: dist, elevation: elevation[i], lngLat });
   }
 
-  return { points, stats: computeElevationStats(points) };
+  return {
+    points,
+    stats: computeElevationStats(points),
+    ...(provenance
+      ? {
+          contributors: snapshotContributors(provenance.contributors ?? []),
+          ...(provenance.contributorCoverage
+            ? { contributorCoverage: provenance.contributorCoverage }
+            : {}),
+        }
+      : {}),
+  };
 }
 
 /**
@@ -36,6 +52,7 @@ export function buildElevationProfile(
 export function buildElevationProfileFromApi(
   geometry: LngLat[],
   apiPoints: Array<{ distance: number; elevation: number }>,
+  provenance?: ContributingRecord & { contributorCoverage?: "partial" },
 ): ElevationProfile {
   const geoDist: number[] = [0];
   for (let i = 1; i < geometry.length; i++) {
@@ -49,7 +66,18 @@ export function buildElevationProfileFromApi(
     lngLat: interpolateAlongGeometry(geometry, geoDist, Math.min(distance, totalGeoDist)),
   }));
 
-  return { points, stats: computeElevationStats(points) };
+  return {
+    points,
+    stats: computeElevationStats(points),
+    ...(provenance
+      ? {
+          contributors: snapshotContributors(provenance.contributors ?? []),
+          ...(provenance.contributorCoverage
+            ? { contributorCoverage: provenance.contributorCoverage }
+            : {}),
+        }
+      : {}),
+  };
 }
 
 /** Interpolate a point along a geometry at a given cumulative distance. */

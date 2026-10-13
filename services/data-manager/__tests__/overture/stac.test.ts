@@ -2,6 +2,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { captureOvertureCatalogue } from "../../src/jobs/overture/attribution-capture.js";
 import {
   buildOverturePullContract,
   OVERTURE_PLACE_COLUMNS,
@@ -164,6 +165,8 @@ describe("local Overture pull contract", () => {
       { west: 13, south: 52, east: 14, north: 53 },
       parquetPath,
       { rowCount: 42, contributors: ["meta", "Overture", "meta"] },
+      undefined,
+      captureOvertureCatalogue("2026-10-13T00:00:00.000Z"),
     );
     writeFileSync(pullContractPath(dataDir, release, region), JSON.stringify(contract));
 
@@ -173,8 +176,16 @@ describe("local Overture pull contract", () => {
       rowCount: 42,
       contributors: ["Overture", "meta"],
       columns: [...OVERTURE_PLACE_COLUMNS],
+      sourcesCatalogue: expect.arrayContaining([
+        expect.objectContaining({ sourceId: "foursquare" }),
+      ]),
       parquetFile: "europe-germany-berlin.parquet",
     });
+    writeFileSync(
+      pullContractPath(dataDir, release, region),
+      JSON.stringify({ ...contract, contractVersion: 1 }),
+    );
+    expect(readOverturePullContract(dataDir, release, region).sourcesCatalogue).toBeUndefined();
   });
 
   it("fails closed when the parquet no longer matches the contract", () => {
@@ -206,6 +217,8 @@ describe("local Overture pull contract", () => {
       { west: 13, south: 52, east: 14, north: 53 },
       parquetPath,
       { rowCount: 1, contributors: ["meta"] },
+      undefined,
+      captureOvertureCatalogue("2026-10-13T00:00:00.000Z"),
     );
     writeFileSync(pullContractPath(dataDir, release, region), JSON.stringify(contract));
     writeFileSync(parquetPath, "a different size");

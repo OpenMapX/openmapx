@@ -7,6 +7,7 @@ import {
 } from "@openmapx/core";
 import type { IntegrationContext, SearchSuggestionProvider } from "@openmapx/integration-framework";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
+import { snapshotContributors } from "@openmapx/mobility-core/contributors";
 
 interface IndexStateRow {
   epoch: string;
@@ -97,6 +98,7 @@ function mapRow(row: SearchRow): SearchSuggestion {
     importance: Number(row.importance),
     provider: "search-osm-aliases",
     contributingProviders: ["search-osm-aliases"],
+    contributors: snapshotContributors([OSM_ATTRIBUTION]),
   };
 }
 
@@ -123,7 +125,7 @@ export function createOsmAliasSuggestionProvider(
       const normalized = normalizeSearchTerm(query.query);
       const proximity = query.proximity;
       const key = [
-        "osm-alias",
+        "osm-alias-v2-contributors",
         state.epoch,
         normalized,
         query.lang,

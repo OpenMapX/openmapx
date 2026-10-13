@@ -38,6 +38,12 @@ module.exports = {
   preset: "jest-expo/ios",
   rootDir: __dirname,
   moduleNameMapper: {
+    // Expo's TS mapper substitutes a standalone "*" but leaves "*.ts"
+    // literal. Shared contributor runtime imports need real capture paths.
+    "^@openmapx/mobility-core/(.*)$": [
+      "<rootDir>/../../packages/mobility-core/src/$1.ts",
+      "<rootDir>/../../packages/mobility-core/src/types/$1.ts",
+    ],
     ...(iosPreset.moduleNameMapper ?? {}),
     "^react$": pinnedRuntime("react"),
     "^react/(.*)$": `${pinnedRuntime("react")}/$1`,

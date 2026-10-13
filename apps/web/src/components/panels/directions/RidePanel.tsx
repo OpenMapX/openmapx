@@ -17,6 +17,10 @@ import {
   useRideQuotes,
   useRideStore,
 } from "@openmapx/core";
+import {
+  captureResultContributors,
+  contributorsForRecords,
+} from "@openmapx/mobility-core/contributors";
 import { useLocale, useTranslations } from "next-intl";
 import { type ChangeEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { RideQuoteList } from "@/components/panels/directions/RideQuoteList";
@@ -264,7 +268,12 @@ export function RidePanel({ route }: { route?: RideQuoteRequest["route"] }) {
   const comparisonResults = useMemo(() => {
     const sorted = results.map((result) => ({
       ...result,
-      quotes: [...result.quotes].sort((a, b) => compareRanks(quoteRank(a), quoteRank(b))),
+      quotes: result.quotes
+        .map((quote) => ({
+          ...quote,
+          contributors: captureResultContributors(quote, result.attributions),
+        }))
+        .sort((a, b) => compareRanks(quoteRank(a), quoteRank(b))),
     }));
     const rank = (result: (typeof sorted)[number]) => {
       const ranks = result.quotes.map(quoteRank);
@@ -351,8 +360,9 @@ export function RidePanel({ route }: { route?: RideQuoteRequest["route"] }) {
     ? (chipProviders.find((p) => p.id === selected?.id) ?? null)
     : selected;
   // Whoever supplied the numbers gets credited beside them.
-  const detailAttributions =
-    results.find((r) => r.providerId === detailProvider?.id)?.attributions ?? [];
+  const detailAttributions = contributorsForRecords(
+    results.find((r) => r.providerId === detailProvider?.id)?.quotes ?? [],
+  );
 
   return (
     <Box sx={{ px: 2, py: 1.5, display: "flex", flexDirection: "column", gap: 1.75 }}>
@@ -387,8 +397,11 @@ export function RidePanel({ route }: { route?: RideQuoteRequest["route"] }) {
                   locale={locale}
                   onBook={(productId) => openProvider(result.providerId, productId)}
                 />
-                {result.attributions.length > 0 && (
-                  <AttributionStrip attributions={result.attributions} variant="inline" />
+                {contributorsForRecords(result.quotes).length > 0 && (
+                  <AttributionStrip
+                    attributions={contributorsForRecords(result.quotes)}
+                    variant="inline"
+                  />
                 )}
               </Box>
             );

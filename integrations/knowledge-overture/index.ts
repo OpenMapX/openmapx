@@ -10,7 +10,7 @@ export function setup(ctx: IntegrationContext): void {
     return;
   }
 
-  bindDb(db);
+  bindDb(db, ctx);
 
   ctx.registerHealthCheck(async () => {
     try {

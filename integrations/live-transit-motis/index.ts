@@ -8,6 +8,7 @@ import {
 } from "@motis-project/motis-client";
 import { type BBox, USER_AGENT_TRANSIT } from "@openmapx/core";
 import {
+  captureTransitContributors,
   createManifestAttribution,
   type IntegrationContext,
   type RealtimeProvider,
@@ -17,6 +18,7 @@ import type { Attribution } from "@openmapx/mobility-core/attribution";
 import { freshnessNow } from "@openmapx/mobility-core/freshness";
 import { mapMotisAlert, mapMotisAlertSeverity } from "@openmapx/mobility-core/motis-alerts";
 import { createMotisInstance, type MotisInstance } from "@openmapx/mobility-core/motis-client";
+import { wrapMotisWithFeedAttribution } from "@openmapx/mobility-core/motis-contributors";
 import { getMotisVehicleRadar } from "@openmapx/mobility-core/motis-radar";
 import { withAttribution } from "@openmapx/mobility-core/result";
 import type { LiveTransitVehicle } from "@openmapx/mobility-core/transit";
@@ -212,7 +214,13 @@ export function setup(ctx: IntegrationContext): void {
       const { instance, sourceId } = vehicleSource(instances);
       const attr = attribution.bySource(sourceId);
       const data = await getInterpolatedVehicles(instance, sourceId, bbox);
-      return withAttribution(data, attr ? [attr] : [], freshnessNow({ hasRealtimeData: true }));
+      if (sourceId === SOURCE_ID)
+        return wrapMotisWithFeedAttribution(data, ctx.attributionIndex, true);
+      return withAttribution(
+        captureTransitContributors(data, attr ? [attr] : []),
+        attr ? [attr] : [],
+        freshnessNow({ hasRealtimeData: true }),
+      );
     },
     async getAlertsForStop(stopId) {
       const { client, sourceId, attribution: attr } = routeForId(stopId, instances);
@@ -230,7 +238,13 @@ export function setup(ctx: IntegrationContext): void {
             affectedStopIds: [stopId],
           }),
         );
-        return withAttribution(mapped, attr, freshnessNow({ hasRealtimeData: true }));
+        if (sourceId === SOURCE_ID)
+          return wrapMotisWithFeedAttribution(mapped, ctx.attributionIndex, true);
+        return withAttribution(
+          captureTransitContributors(mapped, attr),
+          attr,
+          freshnessNow({ hasRealtimeData: true }),
+        );
       } catch {
         return withAttribution([], attr, freshnessNow({ hasRealtimeData: true }));
       }
@@ -242,7 +256,7 @@ export function setup(ctx: IntegrationContext): void {
       if (!MOTIS_ID_PREFIX_RE.test(tripId)) {
         return withAttribution(null, attribution.all(), freshnessNow({ hasRealtimeData: true }));
       }
-      const { client, attribution: attr } = routeForId(tripId, instances);
+      const { client, sourceId, attribution: attr } = routeForId(tripId, instances);
       try {
         const { data } = await motisTrip({
           client,
@@ -250,7 +264,13 @@ export function setup(ctx: IntegrationContext): void {
         });
         const itinerary = data as Itinerary | undefined;
         const delta = itinerary ? deltaFromItinerary(itinerary, tripId, stopId) : null;
-        return withAttribution(delta, attr, freshnessNow({ hasRealtimeData: true }));
+        if (sourceId === SOURCE_ID)
+          return wrapMotisWithFeedAttribution(delta, ctx.attributionIndex, true);
+        return withAttribution(
+          captureTransitContributors(delta, attr),
+          attr,
+          freshnessNow({ hasRealtimeData: true }),
+        );
       } catch {
         return withAttribution(null, attr, freshnessNow({ hasRealtimeData: true }));
       }

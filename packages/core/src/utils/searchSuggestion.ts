@@ -1,3 +1,8 @@
+import {
+  captureFieldContributors,
+  contributorsForRecords,
+  type snapshotContributors,
+} from "@openmapx/mobility-core/contributors";
 import { isTransitRawCategory } from "../hooks/transit/transitEligibility";
 import type { AutocompleteResult } from "../types/geocoding";
 import type { LngLat } from "../types/geometry";
@@ -782,11 +787,6 @@ function mergeDuplicate(
   weaker: AutocompleteResult,
   query: string,
 ): AutocompleteResult {
-  const contributingProviders = [...providerIds(stronger)];
-  for (const provider of providerIds(weaker)) {
-    if (!contributingProviders.includes(provider)) contributingProviders.push(provider);
-  }
-  const sourceIds = [...new Set([...(stronger.sourceIds ?? []), ...(weaker.sourceIds ?? [])])];
   // A geocoder's row for the Louvre and the notable-places row are one place;
   // it keeps the fame either of them knew.
   const fame = Math.max(stronger.fame ?? 0, weaker.fame ?? 0);
@@ -801,11 +801,54 @@ function mergeDuplicate(
       textMatchScore(stronger, query)
       ? weaker.searchMatch
       : stronger.searchMatch;
+  const ids =
+    stronger.ids || weaker.ids ? { ...(weaker.ids ?? {}), ...(stronger.ids ?? {}) } : undefined;
+  const retainedWeaker =
+    fame > (stronger.fame ?? 0) ||
+    searchMatch !== stronger.searchMatch ||
+    Object.entries(ids ?? {}).some(
+      ([scheme, value]) => value !== undefined && value !== stronger.ids?.[scheme],
+    );
+  if (!retainedWeaker) return stronger;
+  const contributingProviders = [...new Set([...providerIds(stronger), ...providerIds(weaker)])];
+  const sourceIds = [...new Set([...(stronger.sourceIds ?? []), ...(weaker.sourceIds ?? [])])];
+  const fieldContributors: Record<string, ReturnType<typeof snapshotContributors>> = {};
+  const capture = (field: string, owner: AutocompleteResult) =>
+    Object.assign(fieldContributors, captureFieldContributors(owner, field));
+  for (const [field, value] of Object.entries(stronger)) {
+    if (
+      value !== undefined &&
+      ![
+        "contributors",
+        "fieldContributors",
+        "sourceIds",
+        "contributingProviders",
+        "provider",
+      ].includes(field)
+    )
+      capture(field, stronger);
+  }
+  if (fame > 0) capture("fame", fame > (stronger.fame ?? 0) ? weaker : stronger);
+  if (searchMatch) capture("searchMatch", searchMatch === stronger.searchMatch ? stronger : weaker);
+  for (const [scheme, value] of Object.entries(ids ?? {})) {
+    if (value !== undefined)
+      capture(`ids.${scheme}`, stronger.ids?.[scheme] === value ? stronger : weaker);
+  }
   return {
     ...stronger,
+    ...(stronger.contributors === undefined &&
+    weaker.contributors === undefined &&
+    stronger.fieldContributors === undefined &&
+    weaker.fieldContributors === undefined
+      ? {}
+      : {
+          fieldContributors,
+          contributors: contributorsForRecords(
+            Object.values(fieldContributors).map((contributors) => ({ contributors })),
+          ),
+        }),
     ...(searchMatch ? { searchMatch } : {}),
-    ids:
-      stronger.ids || weaker.ids ? { ...(weaker.ids ?? {}), ...(stronger.ids ?? {}) } : undefined,
+    ids,
     ...(fame > 0 ? { fame } : {}),
     contributingProviders: contributingProviders.length > 0 ? contributingProviders : undefined,
     ...(sourceIds.length > 0 ? { sourceIds } : {}),

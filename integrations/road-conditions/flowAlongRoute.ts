@@ -128,7 +128,7 @@ export async function flowSpansForRoutes(
   const results = await Promise.all(
     routes.map(async (route) => {
       try {
-        const key = `conditions:query:flowroute:${routeFingerprint(route.geometry)}`;
+        const key = `conditions:query:flowroute:v2:${routeFingerprint(route.geometry)}`;
         const spans = await ctx.cache.withCache<RouteFlowSpan[]>(key, 60, async () => {
           const boxes = routeCorridorBboxes(route.geometry);
           const perBox = await Promise.all(boxes.map((box) => aggregateRoadFlow(ctx, box)));

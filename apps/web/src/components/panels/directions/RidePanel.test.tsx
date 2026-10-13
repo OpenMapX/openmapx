@@ -254,4 +254,35 @@ describe("RidePanel", () => {
     await userEvent.click(await screen.findByText("Bolt"));
     expect(await screen.findByText(/cannot carry your pickup/i)).not.toBeNull();
   });
+  it("does not render a failed quote envelope's static supplier notice", () => {
+    comparison();
+    quoteResults = [
+      {
+        providerId: "uber",
+        quotes: [],
+        attributions: [{ sourceId: "uber", name: "FAILED QUOTE SUPPLIER" }],
+      },
+    ];
+    renderPanel();
+    expect(screen.queryByText("FAILED QUOTE SUPPLIER")).toBeNull();
+  });
+
+  it("renders only the displayed quotes' canonical notices", () => {
+    comparison();
+    quoteResults = [
+      {
+        providerId: "uber",
+        quotes: [
+          {
+            ...quote("Quoted ride", 12),
+            contributors: [{ sourceId: "served", name: "Served quote notice" }],
+          },
+        ],
+        attributions: [{ sourceId: "unused", name: "Unused envelope notice" }],
+      },
+    ];
+    renderPanel();
+    expect(screen.getByText("Served quote notice")).toBeInTheDocument();
+    expect(screen.queryByText("Unused envelope notice")).toBeNull();
+  });
 });

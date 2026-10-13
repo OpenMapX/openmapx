@@ -1,3 +1,4 @@
+import { contributorsForField } from "@openmapx/mobility-core/contributors";
 import { encodeGtfsRtFeed } from "@openmapx/mobility-formats";
 import { strToU8, zipSync } from "fflate";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -688,18 +689,38 @@ afterEach(() => {
 async function loadProvider() {
   vi.resetModules();
   const provider = await import("../provider.js");
-  provider.setOpenTransportDataChConfig({
-    apiKey: "test-key",
-    formationEndpoint: FORMATION_ENDPOINT,
-    gtfsRtEndpoint: GTFS_RT_ENDPOINT,
-    gtfsSaEndpoint: GTFS_SA_ENDPOINT,
-    ojpEndpoint: OJP_ENDPOINT,
-    ojpFareEndpoint: OJP_FARE_ENDPOINT,
-    requestLanguage: "de",
-    requestorRef: "OpenMapX-Tests",
-    siriSxEndpoint: SIRI_SX_ENDPOINT,
-    siriSxUnplannedEndpoint: SIRI_SX_UNPLANNED_ENDPOINT,
-  });
+  provider.setOpenTransportDataChConfig(
+    {
+      apiKey: "test-key",
+      formationEndpoint: FORMATION_ENDPOINT,
+      gtfsRtEndpoint: GTFS_RT_ENDPOINT,
+      gtfsSaEndpoint: GTFS_SA_ENDPOINT,
+      ojpEndpoint: OJP_ENDPOINT,
+      ojpFareEndpoint: OJP_FARE_ENDPOINT,
+      requestLanguage: "de",
+      requestorRef: "OpenMapX-Tests",
+      siriSxEndpoint: SIRI_SX_ENDPOINT,
+      siriSxUnplannedEndpoint: SIRI_SX_UNPLANNED_ENDPOINT,
+    },
+    Object.fromEntries(
+      [
+        "ojp",
+        "master-data",
+        "gtfs-rt",
+        "gtfs-sa",
+        "siri-sx",
+        "ojp-fare",
+        "formation",
+        "occupancy-forecast",
+        "ojp-geometry-osm",
+        "go-realtime",
+        "go-siri-sx",
+      ].map((id) => [
+        `opentransportdata-ch-${id}`,
+        [{ sourceId: `opentransportdata-ch-${id}`, name: id }],
+      ]),
+    ),
+  );
   return provider;
 }
 
@@ -865,7 +886,7 @@ describe("transit-opentransportdata-ch provider", () => {
       "otdch:ch:1:sloid:7100:3:4",
     );
 
-    expect(geometry).toEqual({
+    expect(geometry).toMatchObject({
       type: "LineString",
       coordinates: [
         [7.4393, 46.949],
@@ -907,7 +928,13 @@ describe("transit-opentransportdata-ch provider", () => {
         id: "otdch:2025-02-03|ojp-92-12-_-j25-1-419-TA",
         name: "IC6",
         occupancy: "medium",
-        remarks: [{ text: "Bike spaces limited", type: "info" }],
+        remarks: [
+          {
+            text: "Bike spaces limited",
+            type: "info",
+            contributors: [{ sourceId: "opentransportdata-ch-ojp", name: "ojp" }],
+          },
+        ],
         serviceInfo: expect.objectContaining({
           occupancy: "medium",
           occupancyRaw: "standingAvailable",
@@ -956,6 +983,12 @@ describe("transit-opentransportdata-ch provider", () => {
     });
 
     const departures = await provider.getDepartures("otdch:8507000", 30);
+    expect(contributorsForField(departures[0], "occupancy").map((r) => r.sourceId)).toEqual([
+      "opentransportdata-ch-occupancy-forecast",
+    ]);
+    expect(
+      contributorsForField(departures[0], "serviceInfo.occupancy").map((r) => r.sourceId),
+    ).toEqual(["opentransportdata-ch-occupancy-forecast"]);
 
     expect(departures).toEqual([
       expect.objectContaining({
@@ -1031,4 +1064,135 @@ describe("transit-opentransportdata-ch provider", () => {
       ]),
     );
   });
+});
+
+it("captures OJP search and static master infrastructure as distinct acquisition receipts", async () => {
+  const provider = await loadProvider();
+  const stops = await provider.searchByName("Bern", 5);
+  const infrastructure = await provider.getStopInfrastructure("otdch:8507000");
+  expect(stops[0].contributors?.map((receipt) => receipt.sourceId)).toContain(
+    "opentransportdata-ch-ojp",
+  );
+  expect(infrastructure?.contributors?.map((receipt) => receipt.sourceId)).toEqual([
+    "opentransportdata-ch-master-data",
+  ]);
+  expect(infrastructure?.platforms[0].contributors?.map((receipt) => receipt.sourceId)).toEqual([
+    "opentransportdata-ch-master-data",
+  ]);
+});
+
+it("credits retained SIRI business metadata fields independently of realtime catalogue fields", async () => {
+  const provider = await loadProvider();
+  const departures = await provider.getDepartures("otdch:8507000", 60);
+  expect(departures[0].serviceInfo?.operatorParticipantRef).toBe("SBBP");
+  expect(departures[0].contributors?.map((receipt) => receipt.sourceId)).toContain(
+    "opentransportdata-ch-go-siri-sx",
+  );
+});
+
+it("credits changed GTFS-RT fields and nested cancellation without replacing scheduled owners", async () => {
+  const provider = await loadProvider();
+  const departures = await provider.getDepartures("otdch:8507000", 30);
+  const departure = departures[0];
+  expect(departure.canceled).toBe(true);
+  expect(contributorsForField(departure, "serviceInfo.canceled").map((r) => r.sourceId)).toEqual([
+    "opentransportdata-ch-gtfs-rt",
+  ]);
+  expect(departure.contributors?.map((r) => r.sourceId)).toContain("opentransportdata-ch-gtfs-rt");
+  expect(contributorsForField(departure, "canceled").map((r) => r.sourceId)).toEqual([
+    "opentransportdata-ch-gtfs-rt",
+  ]);
+  expect(contributorsForField(departure, "expectedAt").map((r) => r.sourceId)).toEqual([
+    "opentransportdata-ch-ojp",
+  ]);
+  expect(departure.serviceInfo?.contributors?.map((r) => r.sourceId)).toContain(
+    "opentransportdata-ch-gtfs-rt",
+  );
+  expect(
+    contributorsForField(departure.serviceInfo ?? {}, "canceled").map((r) => r.sourceId),
+  ).toEqual(["opentransportdata-ch-gtfs-rt"]);
+});
+
+it("credits retained GTFS-RT missing times but excludes a no-op update", async () => {
+  const provider = await loadProvider();
+  const defaultImpl = fetchMock.getMockImplementation();
+  fetchMock.mockImplementation(async (input: string | URL, init?: RequestInit) => {
+    if (String(input) === OJP_ENDPOINT && String(init?.body ?? "").includes("OJPStopEventRequest"))
+      return new Response(
+        STOP_EVENT_RESPONSE_XML.replace(/<EstimatedTime>.*?<\/EstimatedTime>/gs, ""),
+      );
+    if (!defaultImpl) throw new Error("missing fixture");
+    return defaultImpl(input, init);
+  });
+  const departure = (await provider.getDepartures("otdch:8507000", 30))[0];
+  expect(departure.delaySeconds).toBe(120);
+  expect(contributorsForField(departure, "delaySeconds").map((r) => r.sourceId)).toEqual([
+    "opentransportdata-ch-gtfs-rt",
+  ]);
+  expect(contributorsForField(departure, "expectedAt").map((r) => r.sourceId)).toEqual([
+    "opentransportdata-ch-gtfs-rt",
+  ]);
+  const noOpProvider = await loadProvider();
+  fetchMock.mockImplementation(async (input: string | URL, init?: RequestInit) => {
+    if (String(input) === GTFS_RT_ENDPOINT)
+      return new Response(
+        encodeGtfsRtFeed({
+          header: { gtfsRealtimeVersion: "2.0" },
+          entity: [
+            {
+              id: "noop",
+              tripUpdate: {
+                trip: { routeId: "IC6", startDate: "20250203", tripId: "gtfs-trip-1" },
+                stopTimeUpdate: [
+                  { departure: { delay: 120 }, stopId: "ch:1:sloid:7000:5:10", stopSequence: 1 },
+                ],
+              },
+            },
+          ],
+        }),
+      );
+    if (!defaultImpl) throw new Error("missing fixture");
+    return defaultImpl(input, init);
+  });
+  const unchanged = (await noOpProvider.getDepartures("otdch:8507000", 30))[0];
+  expect(unchanged.delaySeconds).toBe(60);
+  expect(unchanged.contributors?.map((r) => r.sourceId)).not.toContain(
+    "opentransportdata-ch-gtfs-rt",
+  );
+  expect(unchanged.serviceInfo?.contributors?.map((r) => r.sourceId)).not.toContain(
+    "opentransportdata-ch-gtfs-rt",
+  );
+});
+
+it("captures secondary journey forecast fields and keeps the archive's original receipt across config changes", async () => {
+  const provider = await loadProvider();
+  const defaultImpl = fetchMock.getMockImplementation();
+  fetchMock.mockImplementation(async (input: string | URL, init?: RequestInit) => {
+    if (String(input) === OJP_ENDPOINT && String(init?.body ?? "").includes("OJPTripInfoRequest"))
+      return new Response(TRIP_INFO_RESPONSE_XML.replace(/<Occupancy>.*?<\/Occupancy>/gs, ""));
+    if (!defaultImpl) throw new Error("missing fixture");
+    return defaultImpl(input, init);
+  });
+  const original = {
+    sourceId: "opentransportdata-ch-occupancy-forecast",
+    name: "Original forecast",
+    notes: "Original notice",
+  };
+  const datasets = await import("../datasets.js");
+  datasets.setSwissDatasetContributors({ [original.sourceId]: [original] });
+  const journey = await provider.getVehicleJourney("otdch:2025-02-03|ojp-92-12-_-j25-1-419-TA");
+  expect(journey?.serviceInfo?.occupancySource).toBe("opentransportdata.swiss/occupancy-forecast");
+  expect(journey?.serviceInfo?.contributors).toContainEqual(original);
+  expect(contributorsForField(journey?.serviceInfo ?? {}, "occupancy")).toEqual([original]);
+  expect(
+    contributorsForField(journey?.serviceInfo ?? {}, "trainNumber").map((r) => r.sourceId),
+  ).not.toContain(original.sourceId);
+  const cached = await datasets.loadSwissOccupancyForecastDataset("2025-02-03", "11");
+  original.name = "Changed registry";
+  datasets.setSwissDatasetContributors({ [original.sourceId]: [original] });
+  expect(cached?.contributors).toEqual([{ ...original, name: "Original forecast" }]);
+  const again = await provider.getVehicleJourney("otdch:2025-02-03|ojp-92-12-_-j25-1-419-TA");
+  expect(contributorsForField(again?.serviceInfo ?? {}, "occupancy")).toEqual([
+    { ...original, name: "Original forecast" },
+  ]);
 });

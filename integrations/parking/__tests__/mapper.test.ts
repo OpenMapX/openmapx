@@ -131,7 +131,7 @@ describe("mapParkingSiteToResult", () => {
     expect(mapParkingSiteToResult(makeSite()).summary).toBeUndefined();
   });
 
-  it("carries the operator's logo, the credits and a fallback name", () => {
+  it("keeps the operator, credits and fallback name without uncredited Commons bytes", () => {
     const result = mapParkingSiteToResult(
       makeSite({
         name: "",
@@ -148,7 +148,7 @@ describe("mapParkingSiteToResult", () => {
     );
 
     expect(result.operator).toBe("APCOA");
-    expect(result.branding?.logoUrl).toMatch(/^https:\/\/commons\.wikimedia\.org\//);
+    expect(result.branding?.logoUrl).toBeUndefined();
     expect(result.attributions).toEqual([
       { text: "MobiData BW", url: "https://mobidata-bw.de", license: "DL-DE-BY-2.0" },
     ]);
@@ -316,7 +316,7 @@ describe("mapParkingSiteToDetail", () => {
     ]);
     expect(detail.operator).toEqual({ name: "APCOA", url: "https://apcoa.de" });
     expect(detail.identity).toEqual({ operator: "APCOA" });
-    expect(detail.branding?.logoUrl).toMatch(/^https:\/\/commons\.wikimedia\.org\//);
+    expect(detail.branding?.logoUrl).toBeUndefined();
     expect(detail.parkAndRide).toBeUndefined();
   });
 
@@ -335,7 +335,7 @@ describe("mapParkingSiteToDetail", () => {
     });
     const emitted = JSON.stringify([mapParkingSiteToResult(site), mapParkingSiteToDetail(site)]);
 
-    expect(emitted).not.toMatch(/javascript:|data:/);
+    expect(emitted).not.toMatch(/"(?:javascript:|data:)/);
     expect(mapParkingSiteToDetail(site).operator).toEqual({ name: "APCOA" });
   });
 });
@@ -482,4 +482,23 @@ describe("parking strings", () => {
     expect(en).not.toHaveProperty("dataSources");
     expect(en).not.toHaveProperty("quality");
   });
+});
+
+it("captures complete canonical receipts before mapping results and details", () => {
+  const receipt = {
+    sourceId: "exact-feed",
+    name: "Publisher",
+    url: "https://example.com",
+    spdxLicense: "CC-BY-4.0",
+    attributionText: "Required upstream notice",
+    publisher: { name: "Original publisher", url: "https://publisher.example" },
+  };
+  const record = makeSite({ attributions: [receipt] });
+  const result = mapParkingSiteToResult(record);
+  const detail = mapParkingSiteToDetail(record);
+  receipt.attributionText = "changed later";
+  expect(result.contributors).toEqual([
+    { ...receipt, attributionText: "Required upstream notice" },
+  ]);
+  expect(detail.contributors).toEqual(result.contributors);
 });

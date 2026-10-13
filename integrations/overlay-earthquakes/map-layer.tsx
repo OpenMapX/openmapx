@@ -1,17 +1,19 @@
 "use client";
 
 import { escapeHtml, relativeTime, sanitizeUrl, useOverlayExclusion } from "@openmapx/core";
+import { captureHazardFeatures } from "@openmapx/integration-framework";
 import type { MapLayerMouseEvent } from "maplibre-gl";
 import * as maplibregl from "maplibre-gl";
 import { useLocale, useTranslations } from "next-intl";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { syncHeatmapLayer } from "@/integration-api/map/heatmapLayer";
 import { INTERACTIVE_LAYER_IDS } from "@/integration-api/map/interactiveLayers";
 import { addLayerInSlot, unregisterLayerSlot } from "@/integration-api/map/layerStack";
 import { useMap } from "@/integration-api/map/MapContext";
 import { getMapClickOwner } from "@/integration-api/map/mapClickOwnership";
 import { useGeoJsonSourceDataBridge } from "@/integration-api/map/useGeoJsonSourceDataBridge";
-import { useSourceAttributions } from "@/integration-api/overlay/useIntegrationAttribution";
+import { useContributorResolver } from "@/integration-api/overlay/useContributorResolver";
+import { useRenderedMapAttributions } from "@/integration-api/overlay/useRenderedMapAttributions";
 import { useEnv } from "@/integration-api/runtime/EnvProvider";
 import { useEarthquakeStore } from "./store";
 
@@ -193,8 +195,6 @@ export function buildEarthquakePopupHtml(
       </div>`;
 }
 
-const NO_SOURCES: readonly string[] = [];
-
 function startPulseAnimation(map: maplibregl.Map, pulseAnimRef: { current: number | null }) {
   if (pulseAnimRef.current !== null) {
     cancelAnimationFrame(pulseAnimRef.current);
@@ -231,8 +231,12 @@ export function EarthquakeLayer() {
   const env = useEnv();
   const locale = useLocale();
   const layerVisible = useEarthquakeStore((s) => s.layerVisible);
-  const [sourceIds, setSourceIds] = useState<readonly string[]>(NO_SOURCES);
-  useSourceAttributions("earthquakes", layerVisible ? sourceIds : NO_SOURCES);
+  const resolveContributors = useContributorResolver();
+  useRenderedMapAttributions(
+    "earthquakes",
+    [CIRCLE_LAYER_ID, HEATMAP_LAYER_ID, PULSE_LAYER_ID],
+    layerVisible,
+  );
   const timeRange = useEarthquakeStore((s) => s.timeRange);
   const minMagnitude = useEarthquakeStore((s) => s.minMagnitude);
   const colorMode = useEarthquakeStore((s) => s.colorMode);
@@ -271,11 +275,10 @@ export function EarthquakeLayer() {
       const data = await res.json();
       if (!request.isCurrent()) return;
 
-      publishGeoJson([{ sourceId: SOURCE_ID, data }]);
-      const ids: string[] = Array.isArray(data.sources) ? data.sources : [];
-      setSourceIds((prev) =>
-        prev.length === ids.length && prev.every((id, i) => id === ids[i]) ? prev : ids,
+      const captured = captureHazardFeatures(data, resolveContributors, (feature) =>
+        Array.isArray(feature.properties?.sources) ? feature.properties.sources : [],
       );
+      publishGeoJson([{ sourceId: SOURCE_ID, data: captured }]);
       setUnavailable(false);
       setLastUpdated(Date.now());
     } catch {
@@ -285,6 +288,7 @@ export function EarthquakeLayer() {
       if (request.isLatest()) setLoading(false);
     }
   }, [
+    resolveContributors,
     beginRequest,
     env,
     locale,

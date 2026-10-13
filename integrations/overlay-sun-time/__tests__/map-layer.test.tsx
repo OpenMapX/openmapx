@@ -87,12 +87,14 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  useSunTimeStore.setState({
-    layerVisible: false,
-    panelOpen: false,
-    timeMs: null,
-    showTimeZones: false,
-  });
+  act(() =>
+    useSunTimeStore.setState({
+      layerVisible: false,
+      panelOpen: false,
+      timeMs: null,
+      showTimeZones: false,
+    }),
+  );
   vi.useRealTimers();
 });
 
@@ -547,4 +549,56 @@ describe("SunTimeLayer sub-toggle transitions", () => {
       | undefined;
     expect(tzData?.features).toHaveLength(1);
   });
+});
+
+import { IntegrationRegistry } from "@openmapx/integration-framework";
+import { IntegrationRegistryContext } from "@openmapx/integration-framework/react";
+import type { MapGeoJSONFeature } from "maplibre-gl";
+import type { ReactNode } from "react";
+import { useMapAttributionStore } from "@/integration-api/overlay/mapAttributionStore";
+import manifest from "../manifest.json";
+
+const attributionRegistry = new IntegrationRegistry([
+  {
+    id: "overlay-sun-time",
+    name: "Sun",
+    enabled: true,
+    isBuiltIn: true,
+    domains: ["map-overlay"],
+    dataSources: manifest.dataSources,
+  },
+]);
+const attributionWrapper = ({ children }: { children: ReactNode }) => (
+  <IntegrationRegistryContext.Provider value={attributionRegistry}>
+    {children}
+  </IntegrationRegistryContext.Provider>
+);
+it("credits visible timezone boundaries only below zoom8 and never the computed terminator", async () => {
+  vi.useFakeTimers();
+  useSunTimeStore.setState({ showTimeZones: true });
+  fake.state.zoom = 4;
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => ({ ok: true, json: async () => TZ_FIXTURE })),
+  );
+  useMapAttributionStore.setState({ byLayer: {} });
+  render(<SunTimeLayer />, { wrapper: attributionWrapper });
+  await act(async () => {});
+  const data = fake.state.sources.get(TZ_SOURCE_ID)?.data as GeoJSON.FeatureCollection;
+  fake.setRenderedFeatures(TZ_FILL_LAYER_ID, data.features as MapGeoJSONFeature[]);
+  const flush = () =>
+    act(() => {
+      fake.emit("render");
+      vi.advanceTimersByTime(250);
+    });
+  const html = () => Object.values(useMapAttributionStore.getState().byLayer).flat().join(" ");
+  flush();
+  expect(html()).toContain("OpenStreetMap contributors");
+  fake.state.zoom = 8;
+  flush();
+  expect(html()).toBe("");
+  fake.state.zoom = 4;
+  fake.setRenderedFeatures(TZ_FILL_LAYER_ID, []);
+  flush();
+  expect(html()).toBe("");
 });

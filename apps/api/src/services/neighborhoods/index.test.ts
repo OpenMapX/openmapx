@@ -109,6 +109,37 @@ describe("fetchNeighborhoods", () => {
     const { neighborhoods } = await fetchNeighborhoods(51, 6, 52, 7);
 
     expect(getPlaceKnowledge).not.toHaveBeenCalled();
-    expect(neighborhoods[0]).toEqual({ id: "node/1", name: "Plain", coordinates: [6.8, 51.2] });
+    expect(neighborhoods[0]).toEqual({
+      id: "node/1",
+      name: "Plain",
+      coordinates: [6.8, 51.2],
+      contributors: [],
+      fieldContributors: { id: [], name: [], coordinates: [] },
+    });
   });
+});
+
+it("retains exact base and chosen enrichment fields on capped neighborhood cards", async () => {
+  const a = { sourceId: "osm-acquired", name: "OSM original" };
+  const b = { sourceId: "wiki-extract", name: "Extract supplier" };
+  const c = { sourceId: "discarded", name: "Unused description" };
+  overpassQuery.mockResolvedValue({
+    contributors: [a],
+    elements: [
+      { type: "node", id: 1, lat: 51.2, lon: 6.8, tags: { name: "Quarter", wikidata: "Q1" } },
+    ],
+  });
+  getPlaceKnowledge.mockResolvedValue({
+    wikipediaExtract: "First sentence. Second sentence.",
+    description: "Unused",
+    contributors: [b, c],
+    fieldContributors: { wikipediaExtract: [b], description: [c] },
+  });
+  const result = await fetchNeighborhoods(51, 6, 52, 7);
+  const card = result.neighborhoods[0];
+  expect(card.fieldContributors?.name).toEqual([a]);
+  expect(card.fieldContributors?.description).toEqual([b]);
+  expect(card.contributors).toEqual([a, b]);
+  a.name = "Changed";
+  expect(card.fieldContributors?.name?.[0].name).toBe("OSM original");
 });
