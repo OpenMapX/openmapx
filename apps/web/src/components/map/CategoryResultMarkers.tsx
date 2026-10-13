@@ -5,10 +5,11 @@ import {
   API_ENDPOINTS,
   apiClient,
   categoryPlaceToPlace,
-  commonsLogoUrl,
   firstBrandIdentity,
+  isDisplayablePhoto,
   makeSyntheticStopPlace,
   PANEL,
+  type PlacePhoto,
   poiCategoryIconPath,
   proxyImageUrl,
   resolvePoiCategoryId,
@@ -18,6 +19,15 @@ import {
   useSidebarStore,
   useTransitStops,
 } from "@openmapx/core";
+import type { Attribution } from "@openmapx/mobility-core/attribution";
+import {
+  contributorsForField,
+  contributorsForRecordFields,
+  parseContributors,
+  parseFieldContributors,
+  serializeContributors,
+  snapshotContributors,
+} from "@openmapx/mobility-core/contributors";
 import type { TransitStop, TransportMode } from "@openmapx/mobility-core/transit";
 import type { FilterSpecification, Map as MaplibreMap, MapMouseEvent } from "maplibre-gl";
 import { useCallback, useEffect, useMemo, useRef } from "react";
@@ -28,6 +38,7 @@ import { createGeoJsonSourcePublisher } from "@/integration-api/map/layerStyleUt
 import { useMap } from "@/integration-api/map/MapContext";
 import { getMapClickOwner } from "@/integration-api/map/mapClickOwnership";
 import { subscribeStyleLoaded } from "@/integration-api/map/styleLoadedSync";
+import { useRenderedMapAttributions } from "@/integration-api/overlay/useRenderedMapAttributions";
 import { createBrandMarkerSvg, createMarkerSvg } from "@/lib/markerSvg";
 import { useExploreReachResults } from "@/lib/useExploreReachResults";
 
@@ -105,19 +116,36 @@ export function brandImageId(qid: string): string {
  * any step fails; callers fall back to the category marker, so a broken or
  * missing logo costs a plain pin rather than a missing one.
  */
+const brandAssetReceipts = new WeakMap<MaplibreMap, Map<string, readonly Attribution[]>>();
+
 export async function loadBrandMarkerImage(
   map: MaplibreMap,
   qid: string,
   isCurrent: () => boolean = () => true,
 ): Promise<boolean> {
   const imageId = brandImageId(qid);
-  if (map.hasImage(imageId)) return true;
+  if (map.hasImage(imageId) && brandAssetReceipts.get(map)?.has(imageId)) return true;
 
   try {
-    const detail = await apiClient.get<BrandDetail>(`${API_ENDPOINTS.brandDetail}/${qid}`);
+    const detail = await apiClient.get<BrandDetail>(`${API_ENDPOINTS.brandDetail}/${qid}`, {
+      catalogue: "2",
+    });
     if (!detail.logoFile) return false;
 
-    const response = await fetch(proxyImageUrl(commonsLogoUrl(detail.logoFile, 72)));
+    const photo = await apiClient.get<PlacePhoto & { logoFile: string }>(
+      `${API_ENDPOINTS.brandLogoAttribution}/${qid}/logo-attribution`,
+    );
+    if (
+      photo.logoFile !== detail.logoFile ||
+      !isDisplayablePhoto(photo) ||
+      !photo.contributors?.length
+    )
+      return false;
+    const receipts = snapshotContributors(
+      contributorsForField(detail, "logoFile"),
+      photo.contributors,
+    );
+    const response = await fetch(proxyImageUrl(photo.thumbnailUrl ?? photo.url));
     if (!response.ok) return false;
     const blob = await response.blob();
     const dataUri = await new Promise<string>((resolve, reject) => {
@@ -134,7 +162,15 @@ export async function loadBrandMarkerImage(
           resolve(false);
           return;
         }
-        if (!map.hasImage(imageId)) map.addImage(imageId, img, { pixelRatio: 2 });
+        // An old uncredited image cannot certify the newly acquired file.
+        if (map.hasImage(imageId)) map.removeImage(imageId);
+        map.addImage(imageId, img, { pixelRatio: 2 });
+        let captured = brandAssetReceipts.get(map);
+        if (!captured) {
+          captured = new Map();
+          brandAssetReceipts.set(map, captured);
+        }
+        captured.set(imageId, receipts);
         resolve(true);
       };
       img.onerror = () => resolve(false);
@@ -178,12 +214,32 @@ export function buildGeoJson(
   results: CategoryPlace[],
   markerImageFor: (place: CategoryPlace) => string,
   brandImageIds: ReadonlySet<string>,
+  categoryFromResult = false,
+  assetReceipts: ReadonlyMap<string, readonly Attribution[]> = new Map(),
 ) {
   return {
     type: "FeatureCollection" as const,
     features: results.map((place) => {
       const qid = placeBrandQid(place);
       const branded = qid !== undefined && brandImageIds.has(brandImageId(qid));
+      const imageId = branded && qid !== undefined ? brandImageId(qid) : markerImageFor(place);
+      const markerFields = ["coordinates"];
+      if (branded) {
+        const identity = placeBrandIdentity(place);
+        if (identity) markerFields.push(`osmTags.${identity.kind}:wikidata`);
+      } else if (categoryFromResult) {
+        for (const [field, candidate] of [
+          ["category", place.category],
+          ["osmTags.amenity", place.osmTags?.amenity],
+          ["osmTags.shop", place.osmTags?.shop],
+          ["osmTags.tourism", place.osmTags?.tourism],
+        ] as const) {
+          if (candidate && resolvePoiCategoryId(candidate)) {
+            markerFields.push(field);
+            break;
+          }
+        }
+      }
       return {
         type: "Feature" as const,
         geometry: { type: "Point" as const, coordinates: place.coordinates },
@@ -195,7 +251,16 @@ export function buildGeoJson(
           phone: place.phone ?? "",
           website: place.website ?? "",
           openingHours: place.openingHours ?? "",
-          imageId: branded && qid !== undefined ? brandImageId(qid) : markerImageFor(place),
+          imageId,
+          _mapMarkerAttributions: serializeContributors(
+            snapshotContributors(
+              contributorsForRecordFields(place, markerFields),
+              branded ? (assetReceipts.get(imageId) ?? []) : [],
+            ),
+          ),
+          _mapLabelAttributions: serializeContributors(
+            contributorsForRecordFields(place, ["coordinates", "name"]),
+          ),
         },
       };
     }),
@@ -263,6 +328,14 @@ function buildTransitGeoJson(stops: TransitStop[]) {
         platformCode: stop.platformCode ?? "",
         parentStationId: stop.parentStationId ?? "",
         imageId: `transit-marker-${stop.modes[0] ?? "bus"}`,
+        _mapMarkerAttributions: serializeContributors(
+          contributorsForRecordFields(stop, ["lat", "lng", "modes"]),
+        ),
+        _mapLabelAttributions: serializeContributors(
+          contributorsForRecordFields(stop, ["lat", "lng", "name"]),
+        ),
+        _recordContributors: serializeContributors(stop.contributors ?? []),
+        _fieldContributors: JSON.stringify(stop.fieldContributors),
       },
     })),
   };
@@ -271,6 +344,21 @@ function buildTransitGeoJson(stops: TransitStop[]) {
 export function CategoryResultMarkers() {
   const publish = useRef(createGeoJsonSourcePublisher()).current;
   const { mapRef, mapReady, styleVersion, flyTo } = useMap();
+  useRenderedMapAttributions(
+    "category-results",
+    [LAYER_ID, LABEL_LAYER_ID, TRANSIT_LAYER_ID, TRANSIT_LABEL_LAYER_ID],
+    true,
+    {
+      resolveFeatureContributors: (feature) =>
+        parseContributors(
+          feature.properties?.[
+            feature.layer.id === LABEL_LAYER_ID || feature.layer.id === TRANSIT_LABEL_LAYER_ID
+              ? "_mapLabelAttributions"
+              : "_mapMarkerAttributions"
+          ],
+        ) ?? [],
+    },
+  );
   const activeCategory = useCategorySearchStore((s) => s.activeCategory);
   const mode = useCategorySearchStore((s) => s.mode);
   const textQuery = useCategorySearchStore((s) => s.textQuery);
@@ -309,6 +397,8 @@ export function CategoryResultMarkers() {
     true,
     undefined,
     hoverPinPlace ? activateHoverPin : undefined,
+    hoverPinPlace ? contributorsForField(hoverPinPlace, "coordinates") : [],
+    hoverPinPlace ? contributorsForRecordFields(hoverPinPlace, ["coordinates", "name"]) : [],
   );
 
   const focusFilter = useMemo<FilterSpecification>(
@@ -346,8 +436,8 @@ export function CategoryResultMarkers() {
     [mode, activeCategory],
   );
   const categoryGeojson = useMemo(
-    () => buildGeoJson(results ?? [], markerImageFor, new Set()),
-    [results, markerImageFor],
+    () => buildGeoJson(results ?? [], markerImageFor, new Set(), mode === "text"),
+    [results, markerImageFor, mode],
   );
   const markerImageIds = useMemo(
     () => [...new Set((results ?? []).map(markerImageFor))],
@@ -602,7 +692,13 @@ export function CategoryResultMarkers() {
           const revision = [...brandImageIds].join(",");
           if (brandImageIds.size === 0 || brandPublished.get(source) === revision) return;
           brandPublished.set(source, revision);
-          categoryData = buildGeoJson(results, markerImageFor, brandImageIds);
+          categoryData = buildGeoJson(
+            results,
+            markerImageFor,
+            brandImageIds,
+            mode === "text",
+            brandAssetReceipts.get(map),
+          );
           publish(map, SOURCE_ID, categoryData);
         });
       }
@@ -733,6 +829,8 @@ export function CategoryResultMarkers() {
         provider: props.provider,
         platformCode: props.platformCode || undefined,
         parentStationId: props.parentStationId || undefined,
+        contributors: parseContributors(features[0].properties?._recordContributors) ?? [],
+        fieldContributors: parseFieldContributors(features[0].properties?._fieldContributors),
       };
       flyTo([stop.lng, stop.lat], 16);
       selectWithEnrichment(makeSyntheticStopPlace(stop), () => resolveStopAsPlace(stop));

@@ -1,3 +1,5 @@
+import type { Attribution } from "@openmapx/mobility-core/attribution";
+import { snapshotContributors } from "@openmapx/mobility-core/contributors";
 /**
  * Stadtteilauto Münster car-sharing client.
  * Open data from Stadt Münster: stations + vehicle class metadata.
@@ -12,7 +14,7 @@ import type { RegionalCarSharingClient } from "./regional-client-types.js";
 const STATIONS_URL = "https://www.muenster01.de/stadtteilauto/stations.json";
 const VEHICLES_URL = "https://www.muenster01.de/stadtteilauto/vehicles.json";
 const FETCH_TIMEOUT_MS = 10_000;
-const CACHE_KEY = "cache:de-stadtteilauto:data";
+const CACHE_KEY = "cache:de-stadtteilauto:data:contributors-v1";
 
 interface DeStadtteilautoStation {
   id: string;
@@ -58,7 +60,10 @@ const ATTRIBUTION = {
 };
 
 /** Fetch + cache both endpoints, join vehicle metadata to stations. */
-async function fetchData(cache: CacheClient): Promise<SharedMobilityStation[]> {
+async function fetchData(
+  cache: CacheClient,
+  contributors?: readonly Attribution[],
+): Promise<SharedMobilityStation[]> {
   const cached = await cacheGet<SharedMobilityStation[]>(cache, CACHE_KEY);
   if (cached) return cached;
 
@@ -116,6 +121,7 @@ async function fetchData(cache: CacheClient): Promise<SharedMobilityStation[]> {
         vehicleTypes: ["car"],
         isActive: (raw.vehicleCount ?? 0) > 0,
         sources: ["de-stadtteilauto"],
+        ...(contributors === undefined ? {} : { contributors: snapshotContributors(contributors) }),
         accessMethod: raw.information?.access,
         transitInfo:
           raw.information?.ptLines || raw.information?.ptStops
@@ -151,8 +157,12 @@ export const deStadtteilautoClient: RegionalCarSharingClient = {
   // Münster center, ~20km radius covers all stations
   regions: [{ center: [7.626, 51.962] as LngLat, radiusKm: 20 }],
   attribution: ATTRIBUTION,
-  async search(bbox: BoundingBox, cache: CacheClient): Promise<SharedMobilityStation[]> {
-    const all = await fetchData(cache);
+  async search(
+    bbox: BoundingBox,
+    cache: CacheClient,
+    contributors?: readonly Attribution[],
+  ): Promise<SharedMobilityStation[]> {
+    const all = await fetchData(cache, contributors);
     return all.filter((s) => bboxContains(bbox, s.coordinates[1], s.coordinates[0]));
   },
 };

@@ -1,4 +1,8 @@
-import { defineTransitProvider, type IntegrationContext } from "@openmapx/integration-framework";
+import {
+  defineTransitProvider,
+  type IntegrationContext,
+  resolveIntegrationContributors,
+} from "@openmapx/integration-framework";
 import * as swiss from "./provider.js";
 
 const SWITZERLAND_BBOX: [number, number, number, number] = [5.96, 45.82, 10.49, 47.81];
@@ -8,22 +12,30 @@ const { attribution, wrap, wrapRT, init } = defineTransitProvider();
 export function setup(ctx: IntegrationContext): void {
   init(ctx);
   ctx.onActivate(() => {
-    swiss.setOpenTransportDataChConfig({
-      apiKey: ctx.config.apiKey as string | undefined,
-      cache: ctx.cache,
-      fallbackEndpoint: ctx.config.fallbackEndpoint as string | undefined,
-      formationEndpoint: ctx.config.formationEndpoint as string | undefined,
-      gtfsRtEndpoint: ctx.config.gtfsRtEndpoint as string | undefined,
-      gtfsSaEndpoint: ctx.config.gtfsSaEndpoint as string | undefined,
-      log: ctx.log,
-      ojpEndpoint: ctx.config.ojpEndpoint as string | undefined,
-      ojpFareEndpoint: ctx.config.ojpFareEndpoint as string | undefined,
-      requestLanguage: ctx.config.requestLanguage as string | undefined,
-      requestorRef: ctx.config.requestorRef as string | undefined,
-      siriSxEndpoint: ctx.config.siriSxEndpoint as string | undefined,
-      siriSxUnplannedEndpoint: ctx.config.siriSxUnplannedEndpoint as string | undefined,
-      userAgent: ctx.config.userAgent as string | undefined,
-    });
+    swiss.setOpenTransportDataChConfig(
+      {
+        apiKey: ctx.config.apiKey as string | undefined,
+        cache: ctx.cache,
+        fallbackEndpoint: ctx.config.fallbackEndpoint as string | undefined,
+        formationEndpoint: ctx.config.formationEndpoint as string | undefined,
+        gtfsRtEndpoint: ctx.config.gtfsRtEndpoint as string | undefined,
+        gtfsSaEndpoint: ctx.config.gtfsSaEndpoint as string | undefined,
+        log: ctx.log,
+        ojpEndpoint: ctx.config.ojpEndpoint as string | undefined,
+        ojpFareEndpoint: ctx.config.ojpFareEndpoint as string | undefined,
+        requestLanguage: ctx.config.requestLanguage as string | undefined,
+        requestorRef: ctx.config.requestorRef as string | undefined,
+        siriSxEndpoint: ctx.config.siriSxEndpoint as string | undefined,
+        siriSxUnplannedEndpoint: ctx.config.siriSxUnplannedEndpoint as string | undefined,
+        userAgent: ctx.config.userAgent as string | undefined,
+      },
+      Object.fromEntries(
+        (ctx.manifest.dataSources ?? []).map((source) => [
+          source.sourceId,
+          resolveIntegrationContributors(ctx, [source.sourceId]),
+        ]),
+      ),
+    );
   });
   ctx.registerHealthCheck(async () => {
     const hasKey = Boolean((ctx.config.apiKey as string | undefined)?.trim());

@@ -1,4 +1,6 @@
 import type { BBox, DataSourcePartialReason } from "@openmapx/core";
+import type { Attribution } from "@openmapx/mobility-core/attribution";
+import { snapshotContributors } from "@openmapx/mobility-core/contributors";
 import {
   type CollectionOrchestrator,
   coversBbox,
@@ -12,6 +14,7 @@ import type {
   HazardsProvider,
   NaturalHazard,
 } from "./contracts/hazards-provider.js";
+import { resolveContributors } from "./contributors";
 
 type AlertQuery = Parameters<HazardsProvider["getAlerts"]>[1];
 type NaturalHazardQuery = Parameters<HazardsProvider["getNaturalHazards"]>[1];
@@ -23,7 +26,10 @@ interface WithPartial {
 }
 
 /** A density cell with the sources its provider built the cells from. */
-type SourcedCell = FireDensityCell & { sources: readonly string[] };
+type SourcedCell = FireDensityCell & {
+  policySources: readonly string[];
+  collectionSources: readonly string[];
+};
 
 export interface HazardsOrchestrator {
   /** The current alerts of every provider, geometry simplified when `simplifyDeg` is set. */
@@ -92,6 +98,35 @@ async function readHalves<T extends { id: string }>(
  * call.
  */
 export function createHazardsOrchestrator(ctx: IntegrationContext): HazardsOrchestrator {
+  const capture = <
+    T extends {
+      sources: readonly string[];
+      contributors?: readonly Attribution[];
+      attributions?: readonly Attribution[];
+      notices?: readonly string[];
+    },
+  >(
+    item: T,
+  ): T & { contributors: Attribution[] } => {
+    const contributors = resolveContributors(
+      {
+        contributors:
+          item.contributors ?? (item.attributions?.length ? item.attributions : undefined),
+        sourceIds: item.sources,
+      },
+      (id) => ctx.attributionIndex?.getById(id),
+    );
+    // Legacy notices only belong to explicitly named suppliers. Authoritative receipts already carry their wording.
+    const notices =
+      item.contributors === undefined
+        ? (item.notices ?? []).flatMap((name) =>
+            item.sources.length === 1 && item.sources[0]
+              ? [{ sourceId: item.sources[0], name }]
+              : [],
+          )
+        : [];
+    return { ...item, contributors: snapshotContributors(contributors, notices) };
+  };
   const alerts = createCollectionOrchestrator<
     HazardsProvider,
     HazardAlert,
@@ -102,7 +137,7 @@ export function createHazardsOrchestrator(ctx: IntegrationContext): HazardsOrche
     name: "getAlerts",
     run: async (provider, bbox, query) => {
       const { alerts: items, partial } = await provider.getAlerts(bbox, query);
-      return partial ? { items, partial } : { items };
+      return partial ? { items: items.map(capture), partial } : { items: items.map(capture) };
     },
     sourcesOf: (alert) => alert.sources,
   });
@@ -119,7 +154,7 @@ export function createHazardsOrchestrator(ctx: IntegrationContext): HazardsOrche
         bbox,
         query as NaturalHazardQuery,
       );
-      return partial ? { items, partial } : { items };
+      return partial ? { items: items.map(capture), partial } : { items: items.map(capture) };
     },
     sourcesOf: (hazard) => hazard.sources,
   });
@@ -132,7 +167,7 @@ export function createHazardsOrchestrator(ctx: IntegrationContext): HazardsOrche
         bbox,
         query as FirePixelQuery,
       );
-      return partial ? { items, partial } : { items };
+      return partial ? { items: items.map(capture), partial } : { items: items.map(capture) };
     },
     sourcesOf: (pixel) => pixel.sources,
   });
@@ -147,10 +182,20 @@ export function createHazardsOrchestrator(ctx: IntegrationContext): HazardsOrche
           bbox,
           query as FireDensityQuery,
         );
-        const items = cells.map((cell) => ({ ...cell, sources }));
+        const items = cells.map((cell) => ({
+          ...capture({ ...cell, sources: [...(cell.sources ?? [])] }),
+          // Collection IDs remain a conservative rights gate/diagnostic, never display evidence.
+          policySources: [
+            ...new Set([
+              ...(cell.nativeSources ?? (cell.sources?.length ? cell.sources : sources)),
+              ...(cell.sources ?? []),
+            ]),
+          ],
+          collectionSources: sources,
+        }));
         return partial ? { items, partial } : { items };
       },
-      sourcesOf: (cell) => cell.sources,
+      sourcesOf: (cell) => cell.policySources,
     },
   );
 
@@ -177,9 +222,9 @@ export function createHazardsOrchestrator(ctx: IntegrationContext): HazardsOrche
       const cells: FireDensityCell[] = [];
       const sources = new Set<string>();
       for (const answer of answers) {
-        for (const { sources: cellSources, ...cell } of answer.items) {
+        for (const { policySources: _policySources, collectionSources, ...cell } of answer.items) {
           cells.push(cell);
-          for (const id of cellSources) sources.add(id);
+          for (const id of cell.nativeSources ?? collectionSources) sources.add(id);
         }
       }
       const partial = mergePartial(answers.map((a) => a.partial));

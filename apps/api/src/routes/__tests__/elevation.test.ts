@@ -169,3 +169,25 @@ describe("POST /elevation", () => {
     expect(res.statusCode).toBe(400);
   });
 });
+
+it("serializes captured height receipts and separates historical cache entries", async () => {
+  const receipt = { sourceId: "height", name: "Height", attributionText: "Captured notice" };
+  mockGetElevation.mockResolvedValue({
+    points: [
+      { distance: 0, elevation: 1 },
+      { distance: 50, elevation: 2 },
+    ],
+    interval: 50,
+    contributors: [receipt],
+    contributorCoverage: "partial",
+  });
+  const response = await app.inject({
+    method: "POST",
+    url: "/elevation",
+    payload: { coordinates: VALID_COORDINATES },
+  });
+  expect(response.json().contributors).toEqual([receipt]);
+  expect(response.json().contributorCoverage).toBe("partial");
+  const { hashKey } = await import("../../utils/cache.js");
+  expect(hashKey).toHaveBeenCalledWith("cache:elevation:v2-contributors", expect.anything());
+});

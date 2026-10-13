@@ -1,9 +1,14 @@
 import { createHash } from "node:crypto";
-import type { AmbientBuildProgress, AmbientManifest } from "@openmapx/core/ambient-places";
+import {
+  AMBIENT_FORMAT_VERSION,
+  type AmbientBuildProgress,
+  type AmbientManifest,
+} from "@openmapx/core/ambient-places";
 import type postgres from "postgres";
 import { fresh } from "./publication.js";
 
 export interface PlanetCheckpoint extends AmbientBuildProgress {
+  legacyAttribution?: boolean;
   osmType: string;
   osmId: string;
   gers: string;
@@ -52,6 +57,7 @@ export async function capturePlanetSources(sql: postgres.Sql): Promise<PlanetSou
     overture: null,
   };
   const pin: Record<string, unknown> = {
+    ambientFormat: AMBIENT_FORMAT_VERSION,
     osm: {
       oid: osm.oid,
       epoch: osm.state.epoch,

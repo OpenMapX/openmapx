@@ -1,12 +1,15 @@
 "use client";
 
 import { subsolarPoint, twilightBands, tzOffsetLabel, tzOffsetMinutes } from "@openmapx/core";
+import { dataSourceToAttribution } from "@openmapx/integration-framework";
+import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
+import { parseContributors, withFeatureContributors } from "@openmapx/mobility-core/contributors";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { addLayerInSlot, unregisterLayerSlot } from "@/integration-api/map/layerStack";
 import type { GeoJsonSourceDataEntry } from "@/integration-api/map/layerStyleUtils";
 import { useMap } from "@/integration-api/map/MapContext";
 import { useGeoJsonSourceDataBridge } from "@/integration-api/map/useGeoJsonSourceDataBridge";
-import { useIntegrationAttribution } from "@/integration-api/overlay/useIntegrationAttribution";
+import { useRenderedMapAttributions } from "@/integration-api/overlay/useRenderedMapAttributions";
 import { useEnv } from "@/integration-api/runtime/EnvProvider";
 import { useSunTimeStore } from "./store";
 
@@ -59,7 +62,7 @@ const TZ_LABEL_ORDER = 16;
 
 interface TimeZoneFeature {
   type: "Feature";
-  properties: { tzid: string };
+  properties: { tzid: string; contributors?: unknown; _mapAttributions?: unknown };
   geometry: GeoJSON.Geometry;
 }
 
@@ -97,11 +100,12 @@ export default function SunTimeLayer() {
   const setTzLoading = useSunTimeStore((s) => s.setTzLoading);
   const tzActive = layerVisible && showTimeZones;
 
-  // Credits the vendored boundary source only while the time zone toggle
-  // itself is on, not merely while the overlay is — the terminator shading
-  // owes nobody, so crediting it whenever the layer is visible would credit
-  // a source for pixels it did not draw.
-  useIntegrationAttribution("overlay-sun-time", tzActive);
+  const registry = useIntegrationRegistry();
+  useRenderedMapAttributions(
+    "timezone-boundary-builder",
+    [TZ_FILL_LAYER_ID, TZ_LINE_LAYER_ID, TZ_LABEL_LAYER_ID],
+    tzActive,
+  );
 
   const [zones, setZones] = useState<TimeZoneFeatureCollection | null>(null);
 
@@ -132,7 +136,21 @@ export default function SunTimeLayer() {
     fetch(`${env.apiUrl}/api/integrations/overlay-sun-time/timezones`, { signal: request.signal })
       .then((res) => (res.ok ? res.json() : null))
       .then((data: TimeZoneFeatureCollection | null) => {
-        if (request.isCurrent() && data) setZones(data);
+        if (request.isCurrent() && data) {
+          const source = registry.findDataSource("timezone-boundary-builder");
+          const contributors = source ? [dataSourceToAttribution(source)] : [];
+          setZones({
+            ...data,
+            features: data.features.map((feature) =>
+              withFeatureContributors(
+                feature,
+                parseContributors(feature.properties?.contributors) ??
+                  parseContributors(feature.properties?._mapAttributions) ??
+                  contributors,
+              ),
+            ),
+          });
+        }
       })
       .catch(() => {
         // The overlay simply stays empty; the legend's loading bar clears below.
@@ -140,7 +158,7 @@ export default function SunTimeLayer() {
       .finally(() => {
         if (request.isLatest()) setTzLoading(false);
       });
-  }, [tzActive, zones, env.apiUrl, setTzLoading, beginRequest]);
+  }, [tzActive, zones, env.apiUrl, registry, setTzLoading, beginRequest]);
 
   // The legend can be showing a clock (panelOpen) even while the shading
   // itself is hidden or switched off, so the tick has to keep the store's

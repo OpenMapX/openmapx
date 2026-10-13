@@ -1,3 +1,4 @@
+import type { ContributingRecord, FieldContributors } from "@openmapx/mobility-core/contributors";
 import type { TripItinerary } from "@openmapx/mobility-core/transit";
 import type { ScheduleFidelity, TripSchedule } from "./routing";
 
@@ -13,7 +14,8 @@ export type ChainPlanWarning =
   | { kind: "no-connection"; segmentIndex: number };
 
 /** One origin-to-destination hop of a chained transit trip. */
-export interface ChainedTripSegment {
+export interface ChainedTripSegment extends ContributingRecord {
+  fieldContributors?: FieldContributors;
   fromIndex: number;
   toIndex: number;
   itinerary: TripItinerary;
@@ -30,7 +32,8 @@ export interface ChainedTripSegment {
 }
 
 /** A multi-stop transit trip planned around per-waypoint constraints. */
-export interface ChainedTripPlan {
+export interface ChainedTripPlan extends ContributingRecord {
+  fieldContributors?: FieldContributors;
   segments: ChainedTripSegment[];
   schedule: TripSchedule;
   fidelity: ScheduleFidelity;

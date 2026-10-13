@@ -199,9 +199,11 @@ describe("wildfire perimeter layers", () => {
       </>,
     );
 
-    await waitFor(() => expect(fake.state.sources.get(NIFC_SOURCE)?.data).toEqual(NIFC_COLLECTION));
     await waitFor(() =>
-      expect(fake.state.sources.get(EFFIS_SOURCE)?.data).toEqual(EFFIS_COLLECTION),
+      expect(fake.state.sources.get(NIFC_SOURCE)?.data).toEqual(published(NIFC_COLLECTION)),
+    );
+    await waitFor(() =>
+      expect(fake.state.sources.get(EFFIS_SOURCE)?.data).toEqual(published(EFFIS_COLLECTION)),
     );
     expect(fake.state.layers.get(EFFIS_FILL)).toMatchObject({ type: "fill", minzoom: 3 });
     expect(fake.state.layers.get(EFFIS_LINE)).toMatchObject({ type: "line", minzoom: 3 });
@@ -245,7 +247,9 @@ describe("wildfire perimeter layers", () => {
       </>,
     );
 
-    await waitFor(() => expect(fake.state.sources.get(NIFC_SOURCE)?.data).toEqual(NIFC_COLLECTION));
+    await waitFor(() =>
+      expect(fake.state.sources.get(NIFC_SOURCE)?.data).toEqual(published(NIFC_COLLECTION)),
+    );
     await waitFor(() =>
       expect(useWildfireStore.getState().statuses.effis.error).toBe("unavailable"),
     );
@@ -266,15 +270,17 @@ describe("wildfire perimeter layers", () => {
       </>,
     );
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
-    await waitFor(() => expect(fake.state.sources.get(NIFC_SOURCE)?.data).toEqual(NIFC_COLLECTION));
+    await waitFor(() =>
+      expect(fake.state.sources.get(NIFC_SOURCE)?.data).toEqual(published(NIFC_COLLECTION)),
+    );
 
     act(() => fake.map.setStyle({} as never));
     await act(async () => {});
 
     expect(fake.state.layers.has(NIFC_FILL)).toBe(true);
     expect(fake.state.layers.has(EFFIS_FILL)).toBe(true);
-    expect(fake.state.sources.get(NIFC_SOURCE)?.data).toEqual(NIFC_COLLECTION);
-    expect(fake.state.sources.get(EFFIS_SOURCE)?.data).toEqual(EFFIS_COLLECTION);
+    expect(fake.state.sources.get(NIFC_SOURCE)?.data).toEqual(published(NIFC_COLLECTION));
+    expect(fake.state.sources.get(EFFIS_SOURCE)?.data).toEqual(published(EFFIS_COLLECTION));
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
@@ -290,7 +296,9 @@ describe("wildfire perimeter layers", () => {
         <NifcPerimeterLayer active popupController={controller} />
       </>,
     );
-    await waitFor(() => expect(fake.state.sources.get(NIFC_SOURCE)?.data).toEqual(NIFC_COLLECTION));
+    await waitFor(() =>
+      expect(fake.state.sources.get(NIFC_SOURCE)?.data).toEqual(published(NIFC_COLLECTION)),
+    );
 
     act(() => {
       delegatedHandler(
@@ -438,3 +446,13 @@ describe("wildfire perimeter layers", () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 });
+
+function published<T extends { features: { properties: object }[] }>(data: T) {
+  return {
+    ...data,
+    features: data.features.map((feature) => ({
+      ...feature,
+      properties: { ...feature.properties, _mapAttributions: "[]" },
+    })),
+  };
+}

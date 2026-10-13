@@ -226,7 +226,7 @@ describe("NoaaSmokeLayer", () => {
     render(<NoaaSmokeLayer active popupController={popupController()} />);
 
     await waitFor(() =>
-      expect(fake.state.sources.get(NOAA_SMOKE_SOURCE)?.data).toEqual(smokeCollection()),
+      expect(fake.state.sources.get(NOAA_SMOKE_SOURCE)?.data).toEqual(published(smokeCollection())),
     );
     expect(fetchMock).toHaveBeenCalledWith(
       "https://api.test/api/integrations/overlay-wildfires/smoke/noaa",
@@ -292,7 +292,7 @@ describe("NoaaSmokeLayer", () => {
     view.rerender(<NoaaSmokeLayer active popupController={controller} />);
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
     await waitFor(() =>
-      expect(fake.state.sources.get(NOAA_SMOKE_SOURCE)?.data).toEqual(smokeCollection()),
+      expect(fake.state.sources.get(NOAA_SMOKE_SOURCE)?.data).toEqual(published(smokeCollection())),
     );
 
     styleVersion += 1;
@@ -311,14 +311,16 @@ describe("NoaaSmokeLayer", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     render(<NoaaSmokeLayer active popupController={popupController()} />);
-    await vi.waitFor(() => expect(fake.state.sources.get(NOAA_SMOKE_SOURCE)?.data).toEqual(first));
+    await vi.waitFor(() =>
+      expect(fake.state.sources.get(NOAA_SMOKE_SOURCE)?.data).toEqual(published(first)),
+    );
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(600_000);
     });
     await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
 
-    expect(fake.state.sources.get(NOAA_SMOKE_SOURCE)?.data).toEqual(first);
+    expect(fake.state.sources.get(NOAA_SMOKE_SOURCE)?.data).toEqual(published(first));
     expect(useWildfireStore.getState().statuses["noaa-hms"]).toMatchObject({
       loading: false,
       error: "unavailable",
@@ -338,7 +340,9 @@ describe("NoaaSmokeLayer", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     render(<NoaaSmokeLayer active popupController={popupController()} />);
-    await vi.waitFor(() => expect(fake.state.sources.get(NOAA_SMOKE_SOURCE)?.data).toEqual(first));
+    await vi.waitFor(() =>
+      expect(fake.state.sources.get(NOAA_SMOKE_SOURCE)?.data).toEqual(published(first)),
+    );
     await act(async () => {
       await vi.advanceTimersByTimeAsync(600_000);
     });
@@ -346,7 +350,7 @@ describe("NoaaSmokeLayer", () => {
       expect(useWildfireStore.getState().statuses["noaa-hms"].error).toBe("unavailable"),
     );
 
-    expect(fake.state.sources.get(NOAA_SMOKE_SOURCE)?.data).toEqual(first);
+    expect(fake.state.sources.get(NOAA_SMOKE_SOURCE)?.data).toEqual(published(first));
   });
 
   it("aborts the previous refresh and publishes only the newest response", async () => {
@@ -384,13 +388,13 @@ describe("NoaaSmokeLayer", () => {
 
     render(<NoaaSmokeLayer active popupController={popupController()} />);
     await waitFor(() =>
-      expect(fake.state.sources.get(NOAA_SMOKE_SOURCE)?.data).toEqual(collection),
+      expect(fake.state.sources.get(NOAA_SMOKE_SOURCE)?.data).toEqual(published(collection)),
     );
 
     act(() => fake.map.setStyle({ version: 8, sources: {}, layers: [] }));
 
     await waitFor(() =>
-      expect(fake.state.sources.get(NOAA_SMOKE_SOURCE)?.data).toEqual(collection),
+      expect(fake.state.sources.get(NOAA_SMOKE_SOURCE)?.data).toEqual(published(collection)),
     );
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
@@ -469,3 +473,13 @@ describe("NoaaSmokeLayer", () => {
     }
   });
 });
+
+function published<T extends { features: { properties: object }[] }>(data: T) {
+  return {
+    ...data,
+    features: data.features.map((feature) => ({
+      ...feature,
+      properties: { ...feature.properties, _mapAttributions: "[]" },
+    })),
+  };
+}

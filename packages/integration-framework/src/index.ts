@@ -273,8 +273,10 @@ export {
   type Wgs84BoundingBox,
   type Wgs84Point,
 } from "./geospatial";
+export { captureHazardFeatures } from "./hazards-features";
 export { createHazardsOrchestrator, type HazardsOrchestrator } from "./hazards-orchestrator";
 export { httpError } from "./http-error";
+export { withKnowledgeContributors } from "./knowledge-contributors";
 // Installer exports (`installIntegration` / `listIntegrations` /
 // `removeIntegration` / `validateIntegrationDirectory` and their option/result
 // types) intentionally do NOT live in this barrel. `installer.ts` imports
@@ -330,6 +332,7 @@ export {
   scalarQuery,
 } from "./query";
 export { IntegrationRegistry } from "./registry";
+export { withRoutingContributors } from "./routing-contributors";
 export {
   createSiteOrchestrator,
   type SiteOrchestrator,
@@ -367,7 +370,11 @@ export {
   type TidesResponse,
   type WaterLevelObservation,
 } from "./tides-integration-factory";
-export { defineTransitProvider, type TransitProviderScaffold } from "./transit-provider-factory";
+export {
+  captureTransitContributors,
+  defineTransitProvider,
+  type TransitProviderScaffold,
+} from "./transit-provider-factory";
 export type {
   QuotaDecision,
   QuotaWindow,

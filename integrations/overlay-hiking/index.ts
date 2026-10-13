@@ -4,13 +4,20 @@ import {
   MAX_RASTER_TILE_BYTES,
   RASTER_IMAGE_MEDIA_TYPES,
 } from "@openmapx/core/server";
-import { type IntegrationContext, scalarQueries } from "@openmapx/integration-framework";
+import {
+  dataSourceToAttribution,
+  type IntegrationContext,
+  scalarQueries,
+  serializeContributors,
+} from "@openmapx/integration-framework";
 import { fetchRouteGeometry } from "./overpass-geometry.js";
 import { searchTrails, trailDetail, trailsByArea } from "./waymarked-trails.js";
 
 const MAX_BBOX_SPAN = 1.0;
 const CACHE_TTL_SHORT = 300;
 const CACHE_TTL_LONG = 3600;
+
+import manifest from "./manifest.json";
 
 export function classifyShelterType(rawType: string): string {
   const t = rawType.toLowerCase();
@@ -190,7 +197,7 @@ export function setup(ctx: IntegrationContext): void {
       return;
     }
 
-    const cacheKey = `shelters:${bboxCacheKey({ south, west, north, east })}:${typeFilter}`;
+    const cacheKey = `shelters:contributors-v1:${bboxCacheKey({ south, west, north, east })}:${typeFilter}`;
 
     try {
       const cached = await ctx.cache.get(cacheKey);
@@ -239,6 +246,11 @@ export function setup(ctx: IntegrationContext): void {
             geometry: f.geometry,
             properties: {
               id: f.id,
+              _mapAttributions: serializeContributors(
+                manifest.dataSources
+                  .filter((s) => s.sourceId === "refuges-info")
+                  .map(dataSourceToAttribution),
+              ),
               name: f.properties.nom ?? "",
               type: classifyShelterType(rawType),
               altitude: f.properties.coord?.alt ?? null,

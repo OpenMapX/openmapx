@@ -1,3 +1,5 @@
+import type { Attribution } from "@openmapx/mobility-core/attribution";
+import { snapshotContributors } from "@openmapx/mobility-core/contributors";
 /**
  * Deutsche Bahn Shared Mobility GBFS client.
  * Fetches Call-a-Bike / StadtRad / RegioRad stations via DB API Marketplace.
@@ -67,6 +69,7 @@ async function fetchProvider(
   creds: { clientId: string; apiKey: string },
   transport: MobilityHttpTransport,
   cache: Map<string, CachedData>,
+  contributors?: readonly Attribution[],
 ): Promise<{
   stations: SharedMobilityStation[];
   vehicles: SharedMobilityVehicle[];
@@ -128,6 +131,7 @@ async function fetchProvider(
       vehicleTypes: ["bicycle"],
       isActive: true,
       sources: [source],
+      ...(contributors === undefined ? {} : { contributors: snapshotContributors(contributors) }),
     });
   }
 
@@ -156,6 +160,7 @@ async function fetchProvider(
       isDisabled: bike.is_disabled,
       operator,
       sources: [source],
+      ...(contributors === undefined ? {} : { contributors: snapshotContributors(contributors) }),
     });
   }
 
@@ -181,6 +186,7 @@ export function createDbBikeClient(options: {
   clientId?: string;
   apiKey?: string;
   transport: MobilityHttpTransport;
+  contributors?: readonly Attribution[];
 }): (bbox: BoundingBox) => Promise<{
   stations: SharedMobilityStation[];
   vehicles: SharedMobilityVehicle[];
@@ -193,7 +199,9 @@ export function createDbBikeClient(options: {
   return async (bbox) => {
     if (!credentials) return { stations: [], vehicles: [] };
     const results = await Promise.allSettled(
-      PROVIDER_IDS.map((id) => fetchProvider(id, bbox, credentials, options.transport, cache)),
+      PROVIDER_IDS.map((id) =>
+        fetchProvider(id, bbox, credentials, options.transport, cache, options.contributors),
+      ),
     );
     const stations: SharedMobilityStation[] = [];
     const vehicles: SharedMobilityVehicle[] = [];

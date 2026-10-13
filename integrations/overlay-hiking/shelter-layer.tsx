@@ -9,6 +9,7 @@ import { addLayerInSlot, unregisterLayerSlot } from "@/integration-api/map/layer
 import { useMap } from "@/integration-api/map/MapContext";
 import { getMapClickOwner } from "@/integration-api/map/mapClickOwnership";
 import { useGeoJsonSourceDataBridge } from "@/integration-api/map/useGeoJsonSourceDataBridge";
+import { useRenderedMapAttributions } from "@/integration-api/overlay/useRenderedMapAttributions";
 import { useEnv } from "@/integration-api/runtime/EnvProvider";
 import { useHikingStore } from "./store";
 
@@ -38,6 +39,7 @@ export function MountainShelterLayer() {
   const { mapRef, mapReady, styleVersion } = useMap();
   const env = useEnv();
   const layerVisible = useHikingStore((s) => s.layerVisible);
+  useRenderedMapAttributions("hiking-shelters", [CIRCLE_LAYER_ID, LABEL_LAYER_ID], layerVisible);
   const t = useTranslations("hiking");
   const fetchedRef = useRef(false);
   const popupRef = useRef<maplibregl.Popup | null>(null);
@@ -100,8 +102,6 @@ export function MountainShelterLayer() {
           map.addSource(SOURCE_ID, {
             type: "geojson",
             data: { type: "FeatureCollection", features: [] },
-            attribution:
-              '<a href="https://www.refuges.info" target="_blank" rel="noreferrer">Refuges.info</a> (<a href="https://creativecommons.org/licenses/by-sa/2.0/" target="_blank" rel="noreferrer">CC BY-SA 2.0</a>)',
           });
         }
 

@@ -8,6 +8,11 @@ import {
   useOverlayExclusion,
 } from "@openmapx/core";
 import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
+import {
+  contributorsForRecords,
+  serializeContributors,
+  snapshotContributors,
+} from "@openmapx/mobility-core/contributors";
 import type { LiveTransitVehicle } from "@openmapx/mobility-core/transit";
 import type { GeoJSONFeatureDiff, GeoJSONSourceDiff, MapLayerMouseEvent } from "maplibre-gl";
 import * as maplibregl from "maplibre-gl";
@@ -23,7 +28,7 @@ import {
 } from "@/integration-api/map/transitMarkers";
 import { useGeoJsonSourceDataBridge } from "@/integration-api/map/useGeoJsonSourceDataBridge";
 import { useOverlayMinZoom } from "@/integration-api/overlay/overlayZoomGate";
-import { useIntegrationDomainAttribution } from "@/integration-api/overlay/useIntegrationAttribution";
+import { useRenderedMapAttributions } from "@/integration-api/overlay/useRenderedMapAttributions";
 import { useEnv } from "@/integration-api/runtime/EnvProvider";
 import { isFreshVehicleObservation } from "./freshness";
 import { useLiveTransitStore } from "./store";
@@ -51,6 +56,7 @@ interface ParsedVehicle extends LiveTransitVehicle {
 type VehicleFeature = GeoJSON.Feature<
   GeoJSON.Point,
   {
+    _mapAttributions: string;
     id: string;
     sourceId: string;
     mode: string;
@@ -145,12 +151,15 @@ function toParsedVehicles(snapshot: LiveTransitSnapshot | null): ParsedVehicle[]
     }));
 }
 
-function toFeature(vehicle: ParsedVehicle): VehicleFeature {
+export function toFeature(vehicle: ParsedVehicle): VehicleFeature {
   return {
     id: vehicle.id,
     type: "Feature",
     geometry: { type: "Point", coordinates: [vehicle.lng, vehicle.lat] },
     properties: {
+      _mapAttributions: serializeContributors(
+        snapshotContributors(vehicle.contributors ?? [], contributorsForRecords(vehicle.alerts)),
+      ),
       id: vehicle.id,
       sourceId: vehicle.sourceId,
       mode: vehicle.mode,
@@ -313,11 +322,7 @@ export function LiveTransitLayer() {
   const env = useEnv();
   const registry = useIntegrationRegistry();
   const layerVisible = useLiveTransitStore((s) => s.layerVisible);
-  // Credit every live-transit feed integration whose data the overlay is
-  // currently rendering (Entur, DB RIS, MOTIS, SIRI-SX CH). The overlay
-  // itself has no dataSources — its credits live on the sibling integrations
-  // that publish the feeds.
-  useIntegrationDomainAttribution("live-transit", layerVisible);
+  useRenderedMapAttributions("live-transit", [ICON_LAYER, LABEL_LAYER, RING_LAYER], layerVisible);
   const excludedProviders = useLiveTransitStore((s) => s.excludedProviders);
   const excludedModes = useLiveTransitStore((s) => s.excludedModes);
   const excludedCodespaces = useLiveTransitStore((s) => s.excludedCodespaces);
@@ -616,6 +621,7 @@ export function LiveTransitLayer() {
       map,
       {
         id: RING_LAYER,
+        minzoom: minFetchZoom,
         type: "circle",
         source: SOURCE_ID,
         filter: MATCH_NONE,
@@ -634,6 +640,7 @@ export function LiveTransitLayer() {
       map,
       {
         id: ICON_LAYER,
+        minzoom: minFetchZoom,
         type: "symbol",
         source: SOURCE_ID,
         layout: {
@@ -665,7 +672,7 @@ export function LiveTransitLayer() {
         id: LABEL_LAYER,
         type: "symbol",
         source: SOURCE_ID,
-        minzoom: 9,
+        minzoom: Math.max(9, minFetchZoom),
         layout: {
           "text-field": ["get", "displayLabel"],
           "text-size": 11,

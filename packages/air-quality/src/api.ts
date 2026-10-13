@@ -351,6 +351,22 @@ export const airQualityStationFeatureSchema = z
       .strict(),
     properties: z
       .object({
+        // The API package stays independent of mobility-core; this is the portable receipt shape.
+        contributors: z
+          .array(
+            z.object({
+              sourceId: z.string().min(1),
+              name: z.string().min(1),
+              url: z.string().optional(),
+              spdxLicense: z.string().optional(),
+              licenseUrl: z.string().optional(),
+              attributionText: z.string().optional(),
+              retrievedAt: z.string().optional(),
+              notes: z.string().optional(),
+              publisher: z.object({ name: z.string(), url: z.string().optional() }).optional(),
+            }),
+          )
+          .optional(),
         stationId: stationIdSchema,
         name: z.string().max(512).nullable(),
         pollutant: pollutantSchema,

@@ -1,3 +1,5 @@
+import type { Attribution } from "@openmapx/mobility-core/attribution";
+import { snapshotContributors } from "@openmapx/mobility-core/contributors";
 /**
  * CityBikes API client (api.citybik.es/v2).
  * Provides station-based bike sharing data for ~900 networks worldwide.
@@ -106,8 +108,9 @@ export async function fetchNetworkStations(
   network: CityBikesNetwork,
   bbox: BoundingBox,
   cache: CacheClient,
+  contributors?: readonly Attribution[],
 ): Promise<SharedMobilityStation[]> {
-  const cacheKey = `shared-mobility:citybikes:${network.id}`;
+  const cacheKey = `shared-mobility:citybikes:contributors-v1:${network.id}`;
   const stations = await withCache<SharedMobilityStation[]>(
     cache,
     cacheKey,
@@ -129,6 +132,9 @@ export async function fetchNetworkStations(
           vehicleTypes: ["bicycle"],
           isActive: true,
           sources: [`citybikes/${network.id}`],
+          ...(contributors === undefined
+            ? {}
+            : { contributors: snapshotContributors(contributors) }),
         }),
       );
     },
@@ -145,6 +151,7 @@ export async function fetchNetworkStations(
 export async function searchCityBikes(
   bbox: BoundingBox,
   cache: CacheClient,
+  contributors?: readonly Attribution[],
 ): Promise<SharedMobilityStation[]> {
   const networks = await findNetworksInBbox(bbox, cache);
   if (networks.length === 0) return [];
@@ -153,7 +160,7 @@ export async function searchCityBikes(
   const limited = networks.slice(0, 5);
 
   const results = await Promise.allSettled(
-    limited.map((network) => fetchNetworkStations(network, bbox, cache)),
+    limited.map((network) => fetchNetworkStations(network, bbox, cache, contributors)),
   );
 
   const stations: SharedMobilityStation[] = [];

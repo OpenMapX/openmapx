@@ -1,10 +1,13 @@
 "use client";
 
+import { captureHazardFeatures } from "@openmapx/integration-framework";
 import type * as maplibregl from "maplibre-gl";
 import { useLocale, useTranslations } from "next-intl";
 import { useCallback } from "react";
 import { useMap } from "@/integration-api/map/MapContext";
 import { useGeoJsonSourceDataBridge } from "@/integration-api/map/useGeoJsonSourceDataBridge";
+import { useContributorResolver } from "@/integration-api/overlay/useContributorResolver";
+import { useRenderedMapAttributions } from "@/integration-api/overlay/useRenderedMapAttributions";
 import { useEnv } from "@/integration-api/runtime/EnvProvider";
 import type { WildfirePopupController } from "../popup-controller";
 import {
@@ -47,6 +50,8 @@ export function EffisBurnedAreaLayer({ active, popupController }: EffisBurnedAre
   const env = useEnv();
   const locale = useLocale();
   const translate = useTranslations("wildfires") as WildfirePopupTranslate;
+  const resolveContributors = useContributorResolver();
+  useRenderedMapAttributions("wildfires-effis", [EFFIS_FILL, EFFIS_LINE], active);
   const bridge = useGeoJsonSourceDataBridge({
     mapRef: mapContext.mapRef,
     mapReady: mapContext.mapReady,
@@ -55,9 +60,16 @@ export function EffisBurnedAreaLayer({ active, popupController }: EffisBurnedAre
   });
   const publish = useCallback(
     (data: WildfireFeatureCollection) => {
-      bridge.publish([{ sourceId: EFFIS_SOURCE, data }]);
+      const captured = captureHazardFeatures(data, resolveContributors, (feature) =>
+        Array.isArray(feature.properties?.sources)
+          ? feature.properties.sources
+          : typeof feature.properties?.provider === "string"
+            ? [feature.properties.provider]
+            : [],
+      );
+      bridge.publish([{ sourceId: EFFIS_SOURCE, data: captured }]);
     },
-    [bridge.publish],
+    [bridge.publish, resolveContributors],
   );
   const clear = useCallback(() => {
     bridge.reset([{ sourceId: EFFIS_SOURCE, data: EMPTY_COLLECTION }]);

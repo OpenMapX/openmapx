@@ -12,7 +12,7 @@ describe("useIsochrone", () => {
   beforeEach(() => vi.restoreAllMocks());
 
   it("fetches with sorted contours joined into the contours param", async () => {
-    const isochrone = { features: [] };
+    const isochrone = { origin, mode: "driving", contours: [] };
     const spy = vi.spyOn(apiClient, "get").mockResolvedValue(isochrone as never);
 
     const { result } = renderHook(
@@ -21,7 +21,7 @@ describe("useIsochrone", () => {
     );
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(result.current.data).toEqual(isochrone);
+    expect(result.current.data).toEqual({ ...isochrone, contributors: [] });
     expect(spy).toHaveBeenCalledWith(
       API_ENDPOINTS.isochrone,
       { lat: "52.5", lng: "13.4", mode: "driving", contours: "5,10,15" },

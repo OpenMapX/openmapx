@@ -11,7 +11,7 @@ import type { MapLayerGroup, SlottedLayer } from "@/integration-api/map/mapLayer
 import { flowColorExpression } from "@/integration-api/map/trafficFlowExpression";
 import { useDrawnDirectionsRoutes } from "@/integration-api/map/useDrawnDirectionsRoutes";
 import { useMapLayerGroup } from "@/integration-api/map/useMapLayerGroup";
-import { useIntegrationDomainAttribution } from "@/integration-api/overlay/useIntegrationAttribution";
+import { useRenderedMapAttributions } from "@/integration-api/overlay/useRenderedMapAttributions";
 import { ROUTE_ALT_OPACITY, ROUTE_WIDTHS } from "@/lib/routeStyle";
 import {
   activeSpanFilter,
@@ -97,8 +97,7 @@ export function RouteTrafficLayer() {
   const live = !navigating || isLiveNavigationStatus(navStatus);
   const spansByRoute = useRouteFlow(flowInputs, enabled && live);
 
-  const hasBands = Object.values(spansByRoute).some((spans) => spans.length > 0);
-  useIntegrationDomainAttribution("road-conditions", enabled && hasBands);
+  useRenderedMapAttributions("route-flow", [ACTIVE_LAYER, CURRENT_LAYER, ALT_LAYER], enabled);
 
   // The whole picture, untrimmed — never re-published on progress alone (see
   // `routes`'s own comment above).

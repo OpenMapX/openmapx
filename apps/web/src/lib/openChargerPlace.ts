@@ -1,5 +1,12 @@
 import { createPlace, type LngLat, PANEL, usePlaceStore, useSidebarStore } from "@openmapx/core";
 
+import {
+  type ContributingRecord,
+  contributorsForField,
+  contributorsForRecordFields,
+  type FieldContributors,
+} from "@openmapx/mobility-core/contributors";
+
 /**
  * Data-source id the ev-charging integration registers its stations under. A
  * charge-planning stop and a browsed charger are the same station: both ids come
@@ -8,7 +15,8 @@ import { createPlace, type LngLat, PANEL, usePlaceStore, useSidebarStore } from 
 export const EV_CHARGING_SOURCE_ID = "ev-charging";
 
 /** Station fields needed to preview a charger; a charge stop's `station` satisfies it. */
-export interface ChargerPlaceTarget {
+export interface ChargerPlaceTarget extends ContributingRecord {
+  fieldContributors?: FieldContributors;
   id: string;
   name: string;
   coordinates: LngLat;
@@ -34,6 +42,13 @@ export function openChargerPlace(
       name: station.name,
       address: station.name,
       coordinates: station.coordinates,
+      contributors: contributorsForRecordFields(station, ["id", "name", "coordinates"]),
+      fieldContributors: {
+        name: contributorsForField(station, "name"),
+        address: contributorsForField(station, "name"),
+        coordinates: contributorsForField(station, "coordinates"),
+        [`ids.${EV_CHARGING_SOURCE_ID}`]: contributorsForField(station, "id"),
+      },
       category: meta?.placeCategory,
       rawCategory: meta?.placeCategoryRaw,
     }),

@@ -6,6 +6,7 @@ import type {
 } from "@openmapx/integration-framework";
 import type { OpenConditionsClient } from "../client.js";
 import { operationalEvidenceOf, type RawOperationalStatus } from "../evidence/read.js";
+import { NO_SOURCES } from "../features/record.js";
 import type { LiveSources } from "../sources.js";
 import { featureCollectionToRoadFlowSegments } from "./flow.js";
 import { situationToRoadConditionEvent } from "./situation.js";
@@ -80,10 +81,12 @@ export function createRoadConditionsProvider(
     bbox: BBox,
     opts: RoadConditionsQuery | undefined,
     routing: boolean,
-  ): Promise<Rec[]> {
+  ): Promise<{ records: Rec[]; events: RoadConditionEvent[] }> {
     const records: Rec[] = [];
+    const capturedEvents = new Map<Rec, RoadConditionEvent>();
     let cursor: string | null = null;
     do {
+      const credits = sources.captureCredits?.() ?? NO_SOURCES;
       const page: SituationPage = await client.get<SituationPage>(
         "/situations",
         {
@@ -103,24 +106,16 @@ export function createRoadConditionsProvider(
       if (!Array.isArray(page.records) || (page.next !== null && typeof page.next !== "string")) {
         throw new Error("Malformed situation page");
       }
-      records.push(...(page.records as Rec[]));
+      for (const record of page.records as Rec[]) {
+        records.push(record);
+        const event = situationToRoadConditionEvent(record, PROVIDER_ID, credits);
+        if (event) capturedEvents.set(record, { ...event, routingEvidence: {} });
+      }
       cursor = page.next as string | null;
     } while (cursor !== null && (routing || records.length < DISPLAY_MAX));
     const without = new Set(opts?.excludedSourceIds ?? []);
-    return records.filter((r) => listed(r, sources) && !excluded(r, without));
-  }
-
-  /**
-   * The events of `records`, each with an evidence map that starts empty.
-   * OpenConditions publishes routing evidence for every effect it binds, so an
-   * effect without an entry is unbound, stale or not licensed for routing: the
-   * host must not stand in its raw geometry for a binding.
-   */
-  function eventsOf(records: readonly Rec[]): RoadConditionEvent[] {
-    return records.flatMap((record) => {
-      const event = situationToRoadConditionEvent(record, PROVIDER_ID, sources);
-      return event ? [{ ...event, routingEvidence: {} }] : [];
-    });
+    const allowed = records.filter((r) => listed(r, sources) && !excluded(r, without));
+    return { records: allowed, events: allowed.flatMap((r) => capturedEvents.get(r) ?? []) };
   }
 
   /**
@@ -136,6 +131,7 @@ export function createRoadConditionsProvider(
     bbox: BBox,
     records: readonly Rec[],
     strict: boolean,
+    capturedEvents: readonly RoadConditionEvent[],
   ): Promise<RoadConditionEvent[]> {
     const snapshot = await client.get<SegmentConditionEvidenceResponse>(
       "/segments/conditions.json",
@@ -150,7 +146,7 @@ export function createRoadConditionsProvider(
       throw new Error("Incomplete routing evidence snapshot");
     }
     const byId = new Map(records.map((r) => [String(r["id"]), r]));
-    const events = new Map(eventsOf(records).map((e) => [e.id, e]));
+    const events = new Map(capturedEvents.map((e) => [e.id, { ...e, routingEvidence: {} }]));
     const changed = new Set<string>();
     for (const condition of snapshot.conditions) {
       const evidence = condition.routing_evidence;
@@ -185,19 +181,19 @@ export function createRoadConditionsProvider(
      */
     async getEvents(bbox, opts) {
       if (!sources.ready) return [];
-      const records = await readSituations(bbox, opts, false);
+      const { records, events } = await readSituations(bbox, opts, false);
       try {
-        return await withEvidence(bbox, records, false);
+        return await withEvidence(bbox, records, false, events);
       } catch {
-        return eventsOf(records);
+        return events;
       }
     },
     async getRoutingEvents(bbox) {
       if (!sources.ready) throw new Error("OpenConditions source list not read yet");
-      const records = await readSituations(bbox, undefined, true);
-      return { complete: true, events: await withEvidence(bbox, records, true) };
+      const { records, events } = await readSituations(bbox, undefined, true);
+      return { complete: true, events: await withEvidence(bbox, records, true, events) };
     },
-    /** Flow is fused across sources and carries none; it is held back only until the first list. */
+    /** Fused flow carries captured per-field contributor receipts when the producer supports them. */
     async getFlow(bbox) {
       if (!sources.ready) return [];
       const body = await client.get<unknown>("/segments.geojson", { bbox: bbox.join(",") });

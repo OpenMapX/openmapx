@@ -407,6 +407,8 @@ export interface MetricsRecorder {
  * compile time.
  */
 export interface AttributionIndexHandle {
+  /** Capture named source metadata before an acquisition; never display the whole catalogue. */
+  list?(): import("@openmapx/mobility-core/attribution").Attribution[];
   getById(sourceId: string): import("@openmapx/mobility-core/attribution").Attribution | undefined;
   getForMotisFile(
     filename: string,

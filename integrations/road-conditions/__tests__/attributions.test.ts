@@ -1,4 +1,4 @@
-import { IntegrationRegistry } from "@openmapx/integration-framework";
+import { dataSourceToAttribution, IntegrationRegistry } from "@openmapx/integration-framework";
 import { describe, expect, it } from "vitest";
 import { roadConditionAttributions } from "../attributions";
 import { buildRoadConditionDisplayGroups, buildRoadConditionFeatures } from "../display";
@@ -23,16 +23,17 @@ const registry = new IntegrationRegistry([
 ]);
 
 describe("road incident contributor credits", () => {
-  it("resolves only the contributing parent feed and retains publisher notices", () => {
-    const credits = roadConditionAttributions(
-      [
-        situation({
-          source: "child",
-          attribution: { provider: "Child", sourceId: "parent", notice: "Required extra notice" },
-        }),
-      ],
-      registry,
-    );
+  it("projects only the captured parent feed and retains publisher notices", () => {
+    const credits = roadConditionAttributions([
+      situation({
+        source: "child",
+        contributors: [
+          dataSourceToAttribution(registry.findDataSource("parent")!),
+          { sourceId: "parent", name: "Required extra notice" },
+        ],
+        attribution: { provider: "Child", sourceId: "parent", notice: "Required extra notice" },
+      }),
+    ]);
     expect(credits).toEqual([
       {
         sourceId: "parent",
@@ -48,19 +49,16 @@ describe("road incident contributor credits", () => {
 
   it("falls back to a served event's credit when its source is outside the feed registry", () => {
     expect(
-      roadConditionAttributions(
-        [
-          situation({
-            source: "federated",
-            attribution: {
-              provider: "Remote publisher",
-              license: "CC-BY-4.0",
-              url: "https://remote.example/license",
-            },
-          }),
-        ],
-        registry,
-      ),
+      roadConditionAttributions([
+        situation({
+          source: "federated",
+          attribution: {
+            provider: "Remote publisher",
+            license: "CC-BY-4.0",
+            url: "https://remote.example/license",
+          },
+        }),
+      ]),
     ).toEqual([
       {
         sourceId: "federated",
@@ -80,11 +78,21 @@ describe("road incident contributor credits", () => {
       ],
     };
     const groups = buildRoadConditionDisplayGroups([
-      situation({ id: "a", source: "parent", geometry }),
-      situation({ id: "b", source: "other", geometry }),
+      situation({
+        id: "a",
+        source: "parent",
+        geometry,
+        contributors: [dataSourceToAttribution(registry.findDataSource("parent")!)],
+      }),
+      situation({
+        id: "b",
+        source: "other",
+        geometry,
+        contributors: [dataSourceToAttribution(registry.findDataSource("other")!)],
+      }),
     ]);
     const features = buildRoadConditionFeatures(groups, "en", Date.now(), (events) =>
-      roadConditionAttributions(events, registry),
+      roadConditionAttributions(events),
     );
     const [markerA, markerB, line] = features;
     expect(

@@ -1,11 +1,13 @@
 import type { DataSourceAttribution } from "@openmapx/mobility-core/attribution";
+import type { ContributingRecord, FieldContributors } from "@openmapx/mobility-core/contributors";
 import type { OsmFilter } from "../utils/overpass.service";
 import type { LngLat } from "./geometry";
 import type { I18nToken, Translatable } from "./i18nToken";
 
 export type { DataSourceAttribution } from "@openmapx/mobility-core/attribution";
 
-export interface DataSourceBranding {
+export interface DataSourceBranding extends ContributingRecord {
+  fieldContributors?: FieldContributors;
   name?: string;
   legalName?: string;
   logoUrl?: string;
@@ -33,7 +35,7 @@ export type DataSourceGeoJsonGeometry =
       coordinates: number[][][][];
     };
 
-export interface DataSourceGeoJsonFeature {
+export interface DataSourceGeoJsonFeature extends ContributingRecord {
   type: "Feature";
   geometry: DataSourceGeoJsonGeometry;
   properties: Record<string, unknown> | null;
@@ -44,7 +46,7 @@ export interface DataSourceGeoJsonFeatureCollection {
   features: DataSourceGeoJsonFeature[];
 }
 
-export interface DataSourceMapContext {
+export interface DataSourceMapContext extends ContributingRecord {
   geojson: DataSourceGeoJsonFeatureCollection;
 }
 
@@ -90,7 +92,8 @@ export interface DataSourceFilterDef {
   clientSide?: boolean;
 }
 
-export interface DataSourceResult {
+export interface DataSourceResult extends ContributingRecord {
+  fieldContributors?: FieldContributors;
   id: string;
   name: string;
   /** The title shown, translated, when `name` is empty: what the item is (e.g. "Fuel station"). */
@@ -257,7 +260,8 @@ export interface OsmIdentity {
   brand?: string;
 }
 
-export interface DataSourceDetail {
+export interface DataSourceDetail extends ContributingRecord {
+  fieldContributors?: FieldContributors;
   id: string;
   sources: string[];
   /**

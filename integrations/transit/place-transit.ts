@@ -1,11 +1,17 @@
 import type { BBox } from "@openmapx/core";
 import { diceSimilarity, haversineMeters } from "@openmapx/core";
 import type { IntegrationContext, TransitProvider } from "@openmapx/integration-framework";
+import { captureTransitContributors } from "@openmapx/integration-framework";
 import {
   expandSearchQuery,
   getQueryVariants,
 } from "@openmapx/integration-geocoding/query-expansion";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
+import {
+  contributorsForField,
+  contributorsForRecords,
+  snapshotContributors,
+} from "@openmapx/mobility-core/contributors";
 import type { Freshness } from "@openmapx/mobility-core/freshness";
 import { TTL as TTL_POLICY } from "@openmapx/mobility-core/policy";
 import type { MobilityResult } from "@openmapx/mobility-core/result";
@@ -19,7 +25,35 @@ import type {
 } from "@openmapx/mobility-core/transit";
 import { bucketTimestamps, isTripNumber, normalizeHeadsign, normalizeShortName } from "./dedup.js";
 import type { TransitOrchestrator } from "./orchestrator.js";
-import { emptyResult, mergeAttributions, mergeFreshness } from "./result-merge.js";
+import { emptyResult, mergeFreshness } from "./result-merge.js";
+
+/** Preserve scalar ownership when a weaker row supplies a missing field. */
+function retainFieldReceipt(
+  record: {
+    contributors?: readonly Attribution[];
+    fieldContributors?: import("@openmapx/mobility-core/contributors").FieldContributors;
+  },
+  field: string,
+  supplied: readonly Attribution[],
+  append = false,
+): void {
+  const baseline =
+    record.fieldContributors ??
+    Object.fromEntries(
+      Object.entries(record)
+        .filter(([key]) => key !== "contributors" && key !== "fieldContributors")
+        .map(([key, value]) => [
+          key,
+          value === undefined || value === null || (Array.isArray(value) && value.length === 0)
+            ? []
+            : snapshotContributors(record.contributors ?? []),
+        ]),
+    );
+  record.fieldContributors = {
+    ...baseline,
+    [field]: snapshotContributors(append ? (baseline[field] ?? []) : [], supplied),
+  };
+}
 
 /** Extended Departure with optional feedTag (set by some providers like MOTIS). */
 interface DepartureWithFeed extends Departure {
@@ -176,14 +210,10 @@ export function createPlaceTransit(
       const variantResults = await Promise.all(
         variants.map((v) => orchestrator.searchByNameRaw(v, 30, placeBbox)),
       );
-      const attributions = mergeAttributions(
-        ctx.attributionIndex,
-        ...variantResults.map((r) => r.attributions),
-      );
       const freshness = mergeFreshness(...variantResults.map((r) => r.freshness));
       const seen = new Set<string>();
       const raw = variantResults
-        .flatMap((r) => r.data)
+        .flatMap((r) => captureTransitContributors(r.data, r.attributions))
         .filter((s) => {
           if (seen.has(s.id)) return false;
           seen.add(s.id);
@@ -207,7 +237,7 @@ export function createPlaceTransit(
       });
 
       if (prelim.length === 0) {
-        return { stops: [], attributions, freshness };
+        return { stops: [], attributions: [], freshness };
       }
 
       // Second-pass pruning: avoid linking by city token only.
@@ -240,7 +270,7 @@ export function createPlaceTransit(
           ? prelim
           : prelim.filter((_, i) => informativeTokens.some((t) => prelimTokenSets[i].has(t)));
 
-      return { stops: linked, attributions, freshness };
+      return { stops: linked, attributions: contributorsForRecords(linked), freshness };
     });
     return {
       data: envelope.stops,
@@ -285,11 +315,11 @@ export function createPlaceTransit(
     if (stops.length === 0) {
       const envelope: CachedRoutes = {
         routes: [],
-        attributions: stopsRes.attributions,
+        attributions: [],
         freshness: stopsRes.freshness,
       };
       await cache.set(key, envelope, TTL.placeRoutes);
-      return { data: [], attributions: stopsRes.attributions, freshness: stopsRes.freshness };
+      return { data: [], attributions: [], freshness: stopsRes.freshness };
     }
 
     // Fetch routes for all stops in parallel
@@ -302,17 +332,18 @@ export function createPlaceTransit(
     // Attribute only providers that actually returned routes — NOT the stop-search
     // fan-out, which queries every provider (and the dynamic registry's whole
     // operator catalog) regardless of whether they contribute displayed lines.
-    const allAttribs: Attribution[][] = [];
     const allFresh: Freshness[] = [stopsRes.freshness];
 
     for (let i = 0; i < stops.length; i++) {
       const result = routeResults[i];
       if (result.status !== "fulfilled") continue;
       const providerName = stops[i].provider;
-      if (result.value.data.length > 0) allAttribs.push(result.value.attributions);
       allFresh.push(result.value.freshness);
 
-      for (const route of result.value.data) {
+      for (const route of captureTransitContributors(
+        result.value.data,
+        result.value.attributions,
+      )) {
         if (isTripNumber(route.shortName)) continue;
         const k = `${route.mode}:${normalizeShortName(route.shortName)}`;
         const existing = byKey.get(k);
@@ -325,18 +356,31 @@ export function createPlaceTransit(
             hintStopId: stops[i].id,
           } as MergedRoute);
         } else {
+          let contributed = false;
           // Already seen — merge providers
           if (!existing.providers.includes(providerName)) {
+            retainFieldReceipt(existing, "providers", route.contributors ?? [], true);
             existing.providers.push(providerName);
+            contributed = true;
           }
           if (!existing.hintStopId) {
+            retainFieldReceipt(existing, "hintStopId", route.contributors ?? []);
             existing.hintStopId = stops[i].id;
+            contributed = true;
           }
           // Prefer entry with color data
           if (!existing.color && route.color) {
+            retainFieldReceipt(existing, "color", contributorsForField(route, "color"));
+            retainFieldReceipt(existing, "textColor", contributorsForField(route, "textColor"));
             existing.color = route.color;
+            contributed = true;
             existing.textColor = route.textColor;
           }
+          if (contributed)
+            existing.contributors = snapshotContributors(
+              existing.contributors ?? [],
+              route.contributors ?? [],
+            );
         }
       }
     }
@@ -354,7 +398,7 @@ export function createPlaceTransit(
       route.providerNames = resolveProviderNames(providerDefs, route.providers);
     }
 
-    const attributions = mergeAttributions(ctx.attributionIndex, ...allAttribs);
+    const attributions = contributorsForRecords(merged);
     const freshness = mergeFreshness(...allFresh);
     const envelope: CachedRoutes = { routes: merged, attributions, freshness };
     await cache.set(key, envelope, TTL.placeRoutes);
@@ -387,7 +431,6 @@ export function createPlaceTransit(
     }
     const partial = results.some((result) => result.status === "rejected");
     const byKey = new Map<string, MergedDeparture>();
-    const allAttribs: Attribution[][] = [];
     const allFresh: Freshness[] = [];
 
     function mergeInto(
@@ -395,45 +438,85 @@ export function createPlaceTransit(
       dep: DepartureWithFeed,
       providerNames: string[],
     ): void {
+      let contributed = false;
       for (const p of providerNames) {
-        if (!existing.providers.includes(p)) existing.providers.push(p);
+        if (!existing.providers.includes(p)) {
+          retainFieldReceipt(existing, "providers", dep.contributors ?? [], true);
+          existing.providers.push(p);
+          contributed = true;
+        }
       }
       if (dep.tripId) {
-        if (!existing.tripId) existing.tripId = dep.tripId;
+        if (!existing.tripId) {
+          retainFieldReceipt(existing, "tripId", contributorsForField(dep, "tripId"));
+          existing.tripId = dep.tripId;
+          contributed = true;
+        }
         // Collect all non-empty tripIds for fallback lookups
         if (!existing.tripIds) existing.tripIds = existing.tripId ? [existing.tripId] : [];
-        if (!existing.tripIds.includes(dep.tripId)) existing.tripIds.push(dep.tripId);
+        if (!existing.tripIds.includes(dep.tripId)) {
+          retainFieldReceipt(existing, "tripIds", contributorsForField(dep, "tripId"), true);
+          existing.tripIds.push(dep.tripId);
+          contributed = true;
+        }
       }
       // Keep the earlier scheduledAt (providers may differ by 1-2 min for the same departure)
       if (dep.scheduledAt && dep.scheduledAt < existing.scheduledAt) {
+        retainFieldReceipt(existing, "scheduledAt", contributorsForField(dep, "scheduledAt"));
         existing.scheduledAt = dep.scheduledAt;
+        contributed = true;
       }
       if (!existing.expectedAt && dep.expectedAt) {
+        retainFieldReceipt(existing, "expectedAt", contributorsForField(dep, "expectedAt"));
+        retainFieldReceipt(existing, "delaySeconds", contributorsForField(dep, "delaySeconds"));
         existing.expectedAt = dep.expectedAt;
+        contributed = true;
         existing.delaySeconds = dep.delaySeconds;
       }
-      if (!existing.platform && dep.platform) existing.platform = dep.platform;
-      if (dep.canceled) existing.canceled = true;
+      if (!existing.platform && dep.platform) {
+        retainFieldReceipt(existing, "platform", contributorsForField(dep, "platform"));
+        existing.platform = dep.platform;
+        contributed = true;
+      }
+      if (dep.canceled && !existing.canceled) {
+        retainFieldReceipt(existing, "canceled", contributorsForField(dep, "canceled"));
+        existing.canceled = true;
+        contributed = true;
+      }
       if (dep.remarks?.length) {
         const existingTexts = new Set((existing.remarks ?? []).map((r) => r.text));
         for (const r of dep.remarks) {
           if (!existingTexts.has(r.text)) {
             existing.remarks = existing.remarks ?? [];
+            retainFieldReceipt(
+              existing,
+              "remarks",
+              r.contributors ?? contributorsForField(dep, "remarks"),
+              true,
+            );
             existing.remarks.push(r);
+            contributed = true;
             existingTexts.add(r.text);
           }
         }
       }
+      if (contributed)
+        existing.contributors = snapshotContributors(
+          existing.contributors ?? [],
+          dep.contributors ?? [],
+        );
     }
 
     for (let i = 0; i < stops.length; i++) {
       const result = results[i];
       if (result.status !== "fulfilled") continue;
       const stopProvider = stops[i].provider;
-      if (result.value.data.length > 0) allAttribs.push(result.value.attributions);
       allFresh.push(result.value.freshness);
 
-      for (const dep of result.value.data as DepartureWithFeed[]) {
+      for (const dep of captureTransitContributors(
+        result.value.data,
+        result.value.attributions,
+      ) as DepartureWithFeed[]) {
         // Include both feed-level tag (e.g. "de_DELFI") and instance provider (e.g. "mo")
         const feedProviders: string[] = [];
         if (dep.feedTag) feedProviders.push(dep.feedTag);
@@ -491,7 +574,7 @@ export function createPlaceTransit(
     );
     return {
       data: unique,
-      attributions: mergeAttributions(ctx.attributionIndex, ...allAttribs),
+      attributions: contributorsForRecords(unique),
       freshness: { ...mergeFreshness(...allFresh), ...(partial ? { isPartial: true } : {}) },
     };
   }
@@ -571,11 +654,11 @@ export function createPlaceTransit(
     if (stops.length === 0) {
       const envelope: CachedAlerts = {
         alerts: [],
-        attributions: stopsRes.attributions,
+        attributions: [],
         freshness: stopsRes.freshness,
       };
       await cache.set(key, envelope, TTL.placeAlerts);
-      return { data: [], attributions: stopsRes.attributions, freshness: stopsRes.freshness };
+      return { data: [], attributions: [], freshness: stopsRes.freshness };
     }
 
     const alertResults = await Promise.allSettled(
@@ -583,28 +666,38 @@ export function createPlaceTransit(
     );
     const byId = new Map<string, ServiceAlert>();
     // Attribute only providers that returned alerts, not the stop-search fan-out.
-    const allAttribs: Attribution[][] = [];
     const allFresh: Freshness[] = [stopsRes.freshness];
 
     for (const result of alertResults) {
       if (result.status !== "fulfilled") continue;
-      if (result.value.data.length > 0) allAttribs.push(result.value.attributions);
       allFresh.push(result.value.freshness);
-      for (const alert of result.value.data) {
+      for (const alert of captureTransitContributors(
+        result.value.data,
+        result.value.attributions,
+      )) {
         const existing = byId.get(alert.id);
         if (!existing) {
           byId.set(alert.id, alert);
         } else {
-          // Same alert from a second stop — merge providers
+          // A retained provider identity is a contribution; identical duplicates are not.
+          let added = false;
           for (const p of alert.providers) {
-            if (!existing.providers.includes(p)) existing.providers.push(p);
+            if (!existing.providers.includes(p)) {
+              existing.providers.push(p);
+              added = true;
+            }
           }
+          if (added)
+            existing.contributors = snapshotContributors(
+              existing.contributors ?? [],
+              alert.contributors ?? [],
+            );
         }
       }
     }
 
     const merged = Array.from(byId.values());
-    const attributions = mergeAttributions(ctx.attributionIndex, ...allAttribs);
+    const attributions = contributorsForRecords(merged);
     const freshness = mergeFreshness(...allFresh);
     const envelope: CachedAlerts = { alerts: merged, attributions, freshness };
     await cache.set(key, envelope, TTL.placeAlerts);
@@ -644,30 +737,28 @@ export function createPlaceTransit(
     if (stops.length === 0) {
       const envelope: CachedFacilities = {
         facilities: [],
-        attributions: stopsRes.attributions,
+        attributions: [],
         freshness: stopsRes.freshness,
       };
       await cache.set(key, envelope, TTL.placeFacilities);
-      return { data: [], attributions: stopsRes.attributions, freshness: stopsRes.freshness };
+      return { data: [], attributions: [], freshness: stopsRes.freshness };
     }
 
     const facResults = await Promise.allSettled(stops.map((s) => orchestrator.getFacilities(s.id)));
     const byId = new Map<string, Facility>();
     // Attribute only providers that returned facilities, not the stop-search fan-out.
-    const allAttribs: Attribution[][] = [];
     const allFresh: Freshness[] = [stopsRes.freshness];
 
     for (const result of facResults) {
       if (result.status !== "fulfilled") continue;
-      if (result.value.data.length > 0) allAttribs.push(result.value.attributions);
       allFresh.push(result.value.freshness);
-      for (const fac of result.value.data) {
+      for (const fac of captureTransitContributors(result.value.data, result.value.attributions)) {
         if (!byId.has(fac.id)) byId.set(fac.id, fac);
       }
     }
 
     const merged = Array.from(byId.values());
-    const attributions = mergeAttributions(ctx.attributionIndex, ...allAttribs);
+    const attributions = contributorsForRecords(merged);
     const freshness = mergeFreshness(...allFresh);
     const envelope: CachedFacilities = { facilities: merged, attributions, freshness };
     await cache.set(key, envelope, TTL.placeFacilities);

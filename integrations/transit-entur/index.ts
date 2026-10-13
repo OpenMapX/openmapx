@@ -1,12 +1,18 @@
-import { defineTransitProvider, type IntegrationContext } from "@openmapx/integration-framework";
+import {
+  defineTransitProvider,
+  type IntegrationContext,
+  resolveIntegrationContributors,
+} from "@openmapx/integration-framework";
 import * as entur from "./provider.js";
 
 const NORWAY_BBOX: [number, number, number, number] = [4.0, 57.0, 32.0, 71.5];
 
-const { attribution, wrap, wrapRT, init } = defineTransitProvider();
+const { attribution, wrap: wrapSource, wrapRT: wrapRealtimeSource, init } = defineTransitProvider();
 
 export function setup(ctx: IntegrationContext): void {
   init(ctx);
+  const wrap = <T>(data: T) => wrapSource(data, ["entur-journey-planner"]);
+  const wrapRT = <T>(data: T) => wrapRealtimeSource(data, ["entur-journey-planner"]);
   ctx.onActivate(() => {
     entur.setEnturTransitConfig({
       geocoderEndpoint: ctx.config.geocoderEndpoint as string | undefined,
@@ -56,13 +62,19 @@ export function setup(ctx: IntegrationContext): void {
       return wrap(await entur.getStopsNearby(lat, lng, radiusMeters));
     },
     async searchStopsByName(query, limit, context) {
-      return wrap(await entur.searchByName(query, limit ?? 10, context?.signal));
+      return wrapSource(await entur.searchByName(query, limit ?? 10, context?.signal), [
+        "entur-geocoder",
+      ]);
     },
     async getStop(stopId) {
       return wrap(await entur.getStop(stopId));
     },
     async getStopInfrastructure(stopId) {
-      return wrap(await entur.getStopInfrastructure(stopId));
+      const data = await entur.getStopInfrastructure(stopId);
+      return wrapSource(
+        data ? { ...data, contributors: resolveIntegrationContributors(ctx, ["entur-nsr"]) } : data,
+        ["entur-nsr"],
+      );
     },
     async getStopPlatforms(stopId) {
       return wrap(await entur.getStopPlatforms(stopId));
@@ -88,6 +100,7 @@ export function setup(ctx: IntegrationContext): void {
       const stops = await entur.getRouteStops(routeId, hintStopId);
       return wrap(
         stops.map((s) => ({
+          contributors: s.contributors,
           id: s.id,
           name: s.name,
           lat: s.lat,
@@ -116,16 +129,16 @@ export function setup(ctx: IntegrationContext): void {
       return wrapRT(await entur.getRouteAlerts(routeId));
     },
     async getVehiclePositions(routeId) {
-      return wrapRT(await entur.getVehiclePositions(routeId));
+      return wrapRealtimeSource(await entur.getVehiclePositions(routeId), ["entur-vehicles"]);
     },
     async getVehicleRadar(bbox) {
-      return wrapRT(await entur.getVehicleRadar(bbox));
+      return wrapRealtimeSource(await entur.getVehicleRadar(bbox), ["entur-vehicles"]);
     },
     async getVehicleJourney(tripId, fallbackIds) {
       return wrapRT(await entur.getVehicleJourney(tripId, fallbackIds));
     },
     async getFacilities(stopId) {
-      return wrap(await entur.getFacilities(stopId));
+      return wrapSource(await entur.getFacilities(stopId), ["entur-nsr"]);
     },
   });
 }

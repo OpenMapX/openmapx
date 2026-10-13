@@ -5,10 +5,16 @@ import Divider from "@mui/material/Divider";
 import Typography from "@mui/material/Typography";
 import type { ChainedTripPlan, ChainPlanWarning } from "@openmapx/core";
 import { formatDuration } from "@openmapx/core";
+import {
+  contributorsForField,
+  contributorsForRecords,
+  snapshotContributors,
+} from "@openmapx/mobility-core/contributors";
 import { useTranslations } from "next-intl";
 import { Fragment } from "react";
 import { TransitItineraryCard } from "@/components/panels/directions/TransitRouteView";
 import { TripScheduleCard } from "@/components/panels/directions/TripScheduleCard";
+import { AttributionStrip } from "@/components/ui/AttributionStrip";
 
 /** Stable identity for a warning: its kind plus the segment it points at. */
 function warningKey(warning: ChainPlanWarning): string {
@@ -65,6 +71,13 @@ export function TransitChainView({
         warnings={[]}
         waypointLabels={waypointLabels}
       />
+      <AttributionStrip
+        attributions={
+          plan.fieldContributors
+            ? contributorsForField(plan, "schedule")
+            : contributorsForRecords(plan.segments.map((segment) => segment.itinerary))
+        }
+      />
       <Divider />
       {plan.segments.map((segment, index) => (
         <Fragment key={`${segment.fromIndex}-${segment.toIndex}`}>
@@ -95,6 +108,15 @@ export function TransitChainView({
             active
             onSelect={() => undefined}
             onDetails={() => onSegmentDetails?.(index)}
+          />
+          <AttributionStrip
+            attributions={snapshotContributors(
+              segment.itinerary.contributors ?? [],
+              segment.boardingWaitSeconds > 0
+                ? contributorsForField(segment, "boardingWaitSeconds")
+                : [],
+              segment.delaySeconds > 0 ? contributorsForField(segment, "delaySeconds") : [],
+            )}
           />
           {plan.warnings
             .filter((warning) => warningSegment(warning) === segment.fromIndex)

@@ -24,6 +24,15 @@ import {
 import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import { isI18nToken, type Translatable } from "@openmapx/integration-framework/strings";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
+import {
+  contributorsForField,
+  contributorsForRecordFields,
+  parseContributors,
+  serializeContributors,
+  snapshotContributors,
+  withContributors,
+  withFeatureContributors,
+} from "@openmapx/mobility-core/contributors";
 import type * as maplibregl from "maplibre-gl";
 import type { Map as MaplibreMap, MapMouseEvent } from "maplibre-gl";
 import { useTranslations } from "next-intl";
@@ -36,8 +45,8 @@ import { createGeoJsonSourcePublisher } from "@/integration-api/map/layerStyleUt
 import { useMap } from "@/integration-api/map/MapContext";
 import { getMapClickOwner } from "@/integration-api/map/mapClickOwnership";
 import { subscribeStyleLoaded } from "@/integration-api/map/styleLoadedSync";
-import { useMapAttributions } from "@/integration-api/overlay/useMapAttributions";
-import { dataSourceLayerCredits } from "@/lib/attributionForProviders";
+import { useRenderedMapAttributions } from "@/integration-api/overlay/useRenderedMapAttributions";
+import { dataSourceRecordContributors } from "@/lib/attributionForProviders";
 import { dataSourceBrandImageId, loadDataSourceBrandMarker } from "@/lib/dataSourceBrandMarker";
 import { translateDataSourceSummary } from "@/lib/dataSourceSummaryI18n";
 import { createMarkerSvg } from "@/lib/markerSvg";
@@ -85,6 +94,8 @@ function mapContextOutlineLayerId(dsId: string) {
   return `ds-${dsId}-map-context-outline`;
 }
 
+const loadedBrandAssets = new WeakMap<MaplibreMap, Map<string, readonly Attribution[]>>();
+
 const ZONE_LABEL_KEYS = {
   no_ride: "contextNoRide",
   no_parking: "contextNoParking",
@@ -107,33 +118,69 @@ export function availStateOf(result: {
   return a.available > 0 ? "available" : "busy";
 }
 
-function buildGeoJson(
+export function buildGeoJson(
   results: DataSourceResult[],
   translate: (value: Translatable | undefined) => string | undefined,
   imageId?: string,
+  markerStyle?: DataSourceMeta["markerStyle"],
 ) {
   return {
     type: "FeatureCollection" as const,
-    features: results.map((r) => ({
-      type: "Feature" as const,
-      geometry: {
-        type: "Point" as const,
-        coordinates: r.coordinates,
-      },
-      properties: {
-        id: r.id,
-        name: r.name || (translate(r.fallbackName) ?? ""),
-        source: r.source,
-        variant: r.variant,
-        status: r.status ?? "",
-        summary: translate(r.summary) ?? "",
-        operator: r.operator ?? "",
-        kind: r.kind ?? "",
-        availState: availStateOf(r),
-        logoUrl: r.branding?.logoUrl ?? "",
-        ...(imageId ? { imageId } : {}),
-      },
-    })),
+    features: results.map((r) => {
+      const circleFields = ["coordinates"];
+      if (r.availability) {
+        circleFields.push("availability.total");
+        if (r.availability.total > 0) circleFields.push("availability.available");
+      }
+      if (availStateOf(r) === "unknown" && Object.keys(markerStyle?.variantColors ?? {}).length)
+        circleFields.push("variant");
+      if (markerStyle?.inactiveOpacity !== 1 && r.status) circleFields.push("status");
+      const marker = contributorsForRecordFields(r, imageId ? ["coordinates"] : circleFields);
+      const summary = translate(r.summary) ?? "";
+      const nameField = r.name ? "name" : "fallbackName";
+      const labelFields = ["coordinates", nameField];
+      const logoFields = [
+        "coordinates",
+        "branding.logoUrl",
+        ...(markerStyle?.inactiveOpacity !== 1 && r.status ? ["status"] : []),
+      ];
+      return withFeatureContributors(
+        {
+          type: "Feature" as const,
+          geometry: { type: "Point" as const, coordinates: r.coordinates },
+          properties: {
+            id: r.id,
+            name: r.name || (translate(r.fallbackName) ?? ""),
+            source: r.source,
+            variant: r.variant,
+            status: r.status ?? "",
+            summary,
+            operator: r.operator ?? "",
+            kind: r.kind ?? "",
+            availState: availStateOf(r),
+            logoUrl: r.branding?.logoUrl ?? "",
+            ...(imageId ? { imageId } : {}),
+            _mapMarkerAttributions: serializeContributors(marker),
+            _mapHaloAttributions: serializeContributors(
+              contributorsForRecordFields(r, circleFields),
+            ),
+            _mapLabelAttributions: serializeContributors(
+              contributorsForRecordFields(r, labelFields),
+            ),
+            _mapSummaryLabelAttributions: serializeContributors(
+              contributorsForRecordFields(r, [...labelFields, ...(summary ? ["summary"] : [])]),
+            ),
+            _mapLogoSelectionAttributions: serializeContributors(
+              contributorsForRecordFields(r, logoFields),
+            ),
+            _mapLogoFileAttributions: serializeContributors(
+              contributorsForField(r, "branding.logoUrl"),
+            ),
+          },
+        },
+        marker,
+      );
+    }),
   };
 }
 
@@ -293,22 +340,47 @@ export function DataSourceLayer() {
     searchBbox !== null &&
     (activeMeta ? viewportZoom >= activeMeta.minZoom : true);
 
-  const {
-    data: searchResults,
-    attributions: searchAttributions,
-    isFetching: searchIsFetching,
-  } = useDataSourceSearch(
+  const { data: searchResults, attributions: searchAttributions } = useDataSourceSearch(
     shouldFetch ? activeSource : null,
     shouldFetch ? searchBbox : null,
     serverFilters,
   );
 
+  // Keep a legacy record's receipt with its identity while the same cached
+  // record remains visible, even if a refresh or registry generation changes.
+  const capturedRecords = useRef(new WeakMap<DataSourceResult, DataSourceResult>());
+  const previousCapturedResults = useRef<DataSourceResult[]>([]);
+  const capturedResults = useMemo(() => {
+    const next = (searchResults ?? []).map((record) => {
+      const retained = capturedRecords.current.get(record);
+      if (retained) return retained;
+      const captured = withContributors(
+        record,
+        dataSourceRecordContributors(
+          record,
+          searchAttributions,
+          registry.get(activeSource ?? "")?.dataSources ?? [],
+        ),
+      );
+      capturedRecords.current.set(record, captured);
+      return captured;
+    });
+    const previous = previousCapturedResults.current;
+    if (
+      next.length === previous.length &&
+      next.every((record, index) => record === previous[index])
+    )
+      return previous;
+    previousCapturedResults.current = next;
+    return next;
+  }, [searchResults, searchAttributions, registry, activeSource]);
+
   // Apply client-side filters (speed, operator, opening hours) to the search
   // results from React Query. No manual accumulation — React Query is the
   // single source of truth and handles caching/staleness.
   const filteredResults = useMemo(
-    () => applyClientSideFilters(searchResults ?? [], filters, openingHoursFilter),
-    [searchResults, filters, openingHoursFilter],
+    () => applyClientSideFilters(capturedResults, filters, openingHoursFilter),
+    [capturedResults, filters, openingHoursFilter],
   );
 
   const mapContextSelection = useMemo(
@@ -318,32 +390,81 @@ export function DataSourceLayer() {
 
   const shouldFetchMapContext = shouldFetch && viewportBbox !== null;
 
-  const { data: mapContext } = useDataSourceMapContext(
+  const { data: fetchedMapContext } = useDataSourceMapContext(
     shouldFetchMapContext ? activeSource : null,
     shouldFetchMapContext ? viewportBbox : null,
     serverFilters,
     mapContextSelection,
   );
 
-  // Attribution for the active layer: the manifest's declared sources the
-  // envelope credited for this response, plus every visible record's own
-  // credits — see `dataSourceLayerCredits` for the fallback and in-flight rules.
-  const dataSourceAttributions = useMemo<Attribution[]>(() => {
-    if (!activeSource) return [];
-    return dataSourceLayerCredits({
-      sourceLabel: activeSource,
-      dataSources: registry.get(activeSource)?.dataSources ?? [],
-      envelope: searchAttributions,
-      results: filteredResults,
-      isFetching: searchIsFetching,
-      // Credits nothing can render are flagged in dev so manifests and
-      // providers can be reconciled.
-      warn: process.env.NODE_ENV !== "production" ? console.warn : undefined,
-    });
-  }, [activeSource, registry, searchAttributions, searchIsFetching, filteredResults]);
-  useMapAttributions(
+  const mapContext = useMemo(
+    () =>
+      fetchedMapContext
+        ? {
+            ...fetchedMapContext,
+            geojson: {
+              ...fetchedMapContext.geojson,
+              features: fetchedMapContext.geojson.features.map((feature) =>
+                withFeatureContributors(
+                  feature,
+                  feature.contributors ??
+                    parseContributors(feature.properties?._mapAttributions) ??
+                    [],
+                ),
+              ),
+            },
+          }
+        : fetchedMapContext,
+    [fetchedMapContext],
+  );
+  const attributionLayerIds = useMemo(
+    () =>
+      activeSource
+        ? [
+            markersLayerId(activeSource),
+            labelsLayerId(activeSource),
+            brandLogosLayerId(activeSource),
+            brandHalosLayerId(activeSource),
+            mapContextFillLayerId(activeSource),
+            mapContextOutlineLayerId(activeSource),
+          ]
+        : [],
+    [activeSource],
+  );
+  useRenderedMapAttributions(
     activeSource ? `data-source:${activeSource}` : "data-source",
-    dataSourceAttributions,
+    attributionLayerIds,
+    activeSource !== null && !!activeMeta && viewportZoom >= activeMeta.minZoom,
+    {
+      resolveFeatureContributors: (feature) => {
+        const properties = feature.properties ?? {};
+        if (!activeSource) return [];
+        if (feature.layer.id === labelsLayerId(activeSource)) {
+          const summaryZoom = Math.max(11, (activeMeta?.minZoom ?? 0) + 2) + 2;
+          return (
+            parseContributors(
+              properties[
+                (mapRef.current?.getZoom() ?? 0) >= summaryZoom
+                  ? "_mapSummaryLabelAttributions"
+                  : "_mapLabelAttributions"
+              ],
+            ) ?? []
+          );
+        }
+        if (feature.layer.id === brandLogosLayerId(activeSource))
+          return properties.brandImageId
+            ? (parseContributors(properties._mapBrandAttributions) ?? [])
+            : [];
+        if (feature.layer.id === brandHalosLayerId(activeSource))
+          return properties.brandImageId
+            ? (parseContributors(properties._mapHaloAttributions) ?? [])
+            : [];
+        if (feature.layer.id === markersLayerId(activeSource))
+          return parseContributors(properties._mapMarkerAttributions) ?? [];
+        // Shared-mobility context geometry carries its own producer receipts.
+        return undefined;
+      },
+    },
   );
 
   // Show pin marker for hovered item
@@ -351,6 +472,16 @@ export function DataSourceLayer() {
   usePinMarker(
     hoveredResult?.coordinates ?? null,
     hoveredResult ? hoveredResult.name || resolveToken(hoveredResult.fallbackName) : "",
+    true,
+    undefined,
+    undefined,
+    hoveredResult ? contributorsForField(hoveredResult, "coordinates") : [],
+    hoveredResult
+      ? contributorsForRecordFields(hoveredResult, [
+          "coordinates",
+          hoveredResult.name ? "name" : "fallbackName",
+        ])
+      : [],
   );
 
   // Track whether we've set the initial searchBbox
@@ -422,6 +553,7 @@ export function DataSourceLayer() {
           return translateDataSourceSummary(summary, t);
         },
         activeMeta?.markerStyle.type === "icon" ? `ds-marker-${activeSource}` : undefined,
+        activeMeta?.markerStyle,
       ),
     [filteredResults, activeMeta, activeSource, resolveToken, t],
   );
@@ -459,7 +591,7 @@ export function DataSourceLayer() {
 
       const urls = [...new Set(geojson.features.map((f) => f.properties.logoUrl).filter(Boolean))];
       const ready = urls.filter((url) => map.hasImage(dataSourceBrandImageId(url)));
-      const key = JSON.stringify(ready);
+      const key = JSON.stringify(ready.map((url) => [url, loadedBrandAssets.get(map)?.get(url)]));
       if (key !== brandedKey) {
         brandedKey = key;
         brandedData = ready.length
@@ -470,7 +602,16 @@ export function DataSourceLayer() {
                 properties: {
                   ...feature.properties,
                   ...(ready.includes(feature.properties.logoUrl)
-                    ? { brandImageId: dataSourceBrandImageId(feature.properties.logoUrl) }
+                    ? {
+                        brandImageId: dataSourceBrandImageId(feature.properties.logoUrl),
+                        _mapBrandAttributions: serializeContributors(
+                          snapshotContributors(
+                            parseContributors(feature.properties._mapLogoSelectionAttributions) ??
+                              [],
+                            loadedBrandAssets.get(map)?.get(feature.properties.logoUrl) ?? [],
+                          ),
+                        ),
+                      }
                     : {}),
                 },
               })),
@@ -484,9 +625,24 @@ export function DataSourceLayer() {
         if (map.hasImage(dataSourceBrandImageId(url)) || sourceAttempts.has(url)) continue;
         sourceAttempts.add(url);
         const isCurrent = () => !cancelled && map.getSource(sid) === source;
+        // This URL's first retained owner initiated the acquisition. Other rows
+        // keep their selector receipts; they do not retroactively supply its bytes.
+        const acquisitionReceipts = snapshotContributors(
+          parseContributors(
+            geojson.features.find((feature) => feature.properties.logoUrl === url)?.properties
+              ._mapLogoFileAttributions,
+          ) ?? [],
+        );
         void loadDataSourceBrandMarker(map, url, isCurrent).then((loaded) => {
-          if (loaded && isCurrent()) syncLayer();
-          else if (!isCurrent()) sourceAttempts.delete(url);
+          if (loaded && isCurrent()) {
+            let assets = loadedBrandAssets.get(map);
+            if (!assets) {
+              assets = new Map();
+              loadedBrandAssets.set(map, assets);
+            }
+            assets.set(url, acquisitionReceipts);
+            syncLayer();
+          } else if (!isCurrent()) sourceAttempts.delete(url);
         });
       }
       if (urls.length) {

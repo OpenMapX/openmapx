@@ -39,7 +39,7 @@ import {
   parseJunctionPoints,
 } from "./junctions.js";
 import { routeUsesLocalAccessRoad } from "./local-access.js";
-import { createRoutingOrchestrator } from "./orchestrator.js";
+import { captureRoutingResult, createRoutingOrchestrator } from "./orchestrator.js";
 import { roadConditionImpactForRequest } from "./road-condition-routing.js";
 import { NoScheduleProviderError, runSchedulePlan } from "./schedule-plan.js";
 import {
@@ -430,7 +430,7 @@ export function setup(ctx: IntegrationContext): void {
     try {
       const result = await withOptionalCache(
         ctx,
-        hashKey("cache:directions", keyParams),
+        hashKey("cache:directions:contributors-v3", keyParams),
         ttl,
         async () => {
           let lastErr: unknown;
@@ -446,8 +446,7 @@ export function setup(ctx: IntegrationContext): void {
                 },
                 performance.now() - providerStartedAt,
               );
-              r.provider = resolved.integrationId;
-              return r;
+              return captureRoutingResult(r, resolved);
             } catch (err) {
               ctx.metricsRecorder?.recordProviderCall(
                 { providerId: resolved.integrationId, method: "getRoute", outcome: "error" },
@@ -573,7 +572,7 @@ export function setup(ctx: IntegrationContext): void {
     try {
       const result = await withOptionalCache(
         ctx,
-        hashKey("cache:directions:optimize", keyParams),
+        hashKey("cache:directions:optimize:contributors-v3", keyParams),
         ttl,
         async () => {
           let lastErr: unknown;
@@ -591,8 +590,7 @@ export function setup(ctx: IntegrationContext): void {
                 },
                 performance.now() - providerStartedAt,
               );
-              r.provider = resolved.integrationId;
-              return r;
+              return captureRoutingResult(r, resolved);
             } catch (err) {
               ctx.metricsRecorder?.recordProviderCall(
                 {
@@ -927,7 +925,10 @@ export function setup(ctx: IntegrationContext): void {
     try {
       const result = await withOptionalCache(
         ctx,
-        hashKey("cache:directions:schedule", createScheduleCacheIdentity(request, exclusionsHash)),
+        hashKey(
+          "cache:directions:schedule:contributors-v3",
+          createScheduleCacheIdentity(request, exclusionsHash),
+        ),
         ttl,
         () =>
           runSchedulePlan(request, chain, {

@@ -10,6 +10,7 @@ import Tabs from "@mui/material/Tabs";
 import Typography from "@mui/material/Typography";
 import type { Place } from "@openmapx/core";
 import {
+  brandForPlaceLogo,
   firstBrandIdentity,
   isCityOrSmaller,
   isLodging,
@@ -423,12 +424,12 @@ function PlaceDetailContentInner({ place, isLoading, onClose, clearSearchBar = f
             {brandQid ? (
               <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
                 <BrandLogo
-                  brand={{
-                    qid: brandQid,
-                    name: place.brand?.name ?? place.name,
-                    logoFile: brandDetail?.logoFile,
-                    kind: brandIdentity ? [brandIdentity.kind] : ["brand"],
-                  }}
+                  brand={brandForPlaceLogo(
+                    place,
+                    brandDetail,
+                    brandQid,
+                    brandIdentity?.kind ?? "brand",
+                  )}
                   size={24}
                 />
                 <Typography {...titleProps} sx={{ ...titleSx, flex: 1, minWidth: 0 }}>

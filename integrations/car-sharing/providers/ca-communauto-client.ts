@@ -1,3 +1,5 @@
+import type { Attribution } from "@openmapx/mobility-core/attribution";
+import { snapshotContributors } from "@openmapx/mobility-core/contributors";
 /**
  * Communauto car-sharing client (Canada).
  *
@@ -135,8 +137,9 @@ async function fetchCityStations(
   city: (typeof CA_COMMUNAUTO_CITIES)[number],
   bbox: BoundingBox,
   cache: CacheClient,
+  contributors?: readonly Attribution[],
 ): Promise<SharedMobilityStation[]> {
-  const cacheKey = `cache:carsharing:ca-communauto:${city.cityId}`;
+  const cacheKey = `cache:carsharing:ca-communauto:contributors-v1:${city.cityId}`;
   let stations = await cacheGet<SharedMobilityStation[]>(cache, cacheKey);
 
   if (!stations) {
@@ -150,7 +153,11 @@ async function fetchCityStations(
       const body = await fetchJson<CommunautoStationAvailabilityResponse>(url, {
         timeoutMs: FETCH_TIMEOUT_MS,
       });
-      stations = parseCommunautoStations(city.cityId, body);
+      stations = parseCommunautoStations(city.cityId, body).map((station) =>
+        contributors === undefined
+          ? station
+          : { ...station, contributors: snapshotContributors(contributors) },
+      );
       await cacheSet(cache, cacheKey, stations, TTL.sharedMobility.stations);
     } catch {
       return [];
@@ -164,6 +171,7 @@ async function fetchCityStations(
 async function searchCaCommunauto(
   bbox: BoundingBox,
   cache: CacheClient,
+  contributors?: readonly Attribution[],
 ): Promise<SharedMobilityStation[]> {
   const padding = 1; // ~1° latitude of slack around each city centroid
   const cities = CA_COMMUNAUTO_CITIES.filter((c) => {
@@ -178,7 +186,7 @@ async function searchCaCommunauto(
   if (cities.length === 0) return [];
 
   const results = await Promise.allSettled(
-    cities.map((city) => fetchCityStations(city, bbox, cache)),
+    cities.map((city) => fetchCityStations(city, bbox, cache, contributors)),
   );
 
   const stations: SharedMobilityStation[] = [];

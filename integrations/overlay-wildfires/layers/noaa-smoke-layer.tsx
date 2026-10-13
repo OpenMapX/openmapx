@@ -1,5 +1,6 @@
 "use client";
 
+import { captureHazardFeatures } from "@openmapx/integration-framework";
 import type { MapLayerMouseEvent } from "maplibre-gl";
 import * as maplibregl from "maplibre-gl";
 import { useLocale, useTranslations } from "next-intl";
@@ -9,6 +10,8 @@ import { addLayerInSlot, unregisterLayerSlot } from "@/integration-api/map/layer
 import { useMap } from "@/integration-api/map/MapContext";
 import { getMapClickOwner } from "@/integration-api/map/mapClickOwnership";
 import { useGeoJsonSourceDataBridge } from "@/integration-api/map/useGeoJsonSourceDataBridge";
+import { useContributorResolver } from "@/integration-api/overlay/useContributorResolver";
+import { useRenderedMapAttributions } from "@/integration-api/overlay/useRenderedMapAttributions";
 import { useEnv } from "@/integration-api/runtime/EnvProvider";
 import type { WildfirePopupController, WildfirePopupLease } from "../popup-controller";
 import {
@@ -164,6 +167,8 @@ export function NoaaSmokeLayer({ active, popupController }: NoaaSmokeLayerProps)
   const popupLease = useRef<WildfirePopupLease>({});
   const setSourceStatus = useWildfireStore((state) => state.setSourceStatus);
   const resetSourceStatus = useWildfireStore((state) => state.resetSourceStatus);
+  const resolveContributors = useContributorResolver();
+  useRenderedMapAttributions("wildfires-smoke", [NOAA_SMOKE_FILL, NOAA_SMOKE_LINE], active);
   const bridge = useGeoJsonSourceDataBridge({
     mapRef: mapContext.mapRef,
     mapReady: mapContext.mapReady,
@@ -186,7 +191,14 @@ export function NoaaSmokeLayer({ active, popupController }: NoaaSmokeLayerProps)
       if (!isNoaaSmokeFeatureCollection(data)) {
         throw new Error("Invalid NOAA smoke FeatureCollection");
       }
-      bridge.publish([{ sourceId: NOAA_SMOKE_SOURCE, data }]);
+      const captured = captureHazardFeatures(data, resolveContributors, (feature) =>
+        Array.isArray(feature.properties?.sources)
+          ? feature.properties.sources
+          : typeof feature.properties?.provider === "string"
+            ? [feature.properties.provider]
+            : [],
+      );
+      bridge.publish([{ sourceId: NOAA_SMOKE_SOURCE, data: captured }]);
       setSourceStatus("noaa-hms", {
         loading: false,
         fetchedAt: Date.parse(data.fetchedAt),
@@ -208,6 +220,7 @@ export function NoaaSmokeLayer({ active, popupController }: NoaaSmokeLayerProps)
     mapContext.mapReady,
     mapContext.mapRef,
     setSourceStatus,
+    resolveContributors,
   ]);
 
   useEffect(() => {

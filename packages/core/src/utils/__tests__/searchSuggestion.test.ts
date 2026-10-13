@@ -107,8 +107,9 @@ describe("business duplicate evidence", () => {
       }),
     ]);
     expect(rows).toHaveLength(1);
-    expect(rows[0].contributingProviders).toEqual(["geocoding-maptiler", "geocoding-photon"]);
-    expect(rows[0].sourceIds).toEqual(["photon"]);
+    expect(rows[0].contributingProviders).toEqual(["geocoding-maptiler"]);
+    expect(rows[0].sourceIds).toBeUndefined();
+    expect(rows[0].ids).toEqual({ osm: "way/1" });
   });
 
   it("merges valid shared identity despite conflicting addresses and provider IDs", () => {
@@ -563,7 +564,7 @@ describe("search suggestion primitives", () => {
       id: "oa:EDDF",
       ids: { icao: "EDDF", iata: "FRA" },
       searchMatch: { kind: "authoritative_code" },
-      contributingProviders: ["knowledge-ourairports", "geocoder"],
+      contributingProviders: ["knowledge-ourairports"],
     });
   });
 
@@ -686,7 +687,7 @@ describe("search suggestion primitives", () => {
       { query: "oslo" },
     );
     expect(merged).toHaveLength(1);
-    expect(merged[0].contributingProviders).toEqual(["geocoding-entur", "geocoder"]);
+    expect(merged[0].contributingProviders).toEqual(["geocoding-entur"]);
   });
 
   it("keeps the reported backends of both conflated suggestions", () => {
@@ -706,6 +707,7 @@ describe("search suggestion primitives", () => {
           type: "poi",
           provider: "geocoding-photon",
           sourceIds: ["photon"],
+          ids: { osm: "node/1" },
         },
       ],
       { query: "oslo" },
@@ -765,4 +767,65 @@ describe("search suggestion primitives", () => {
     );
     expect(merged).toHaveLength(2);
   });
+});
+
+describe("retained suggestion contributor receipts", () => {
+  const a = { sourceId: "a", name: "A" };
+  const b = { sourceId: "b", name: "B" };
+  const row = (
+    provider: string,
+    contributors: (typeof a)[],
+    extra: Partial<AutocompleteResult> = {},
+  ): AutocompleteResult => ({
+    id: `${provider}:1`,
+    label: "Landmark",
+    coordinates: BERLIN,
+    type: "poi",
+    ids: { wikidata: "Q1" },
+    provider,
+    contributors,
+    ...extra,
+  });
+  it("excludes a discarded duplicate that supplies no retained metadata", () => {
+    const [result] = mergeAutocompleteSuggestions(
+      [row("a", [a], { importance: 1 }), row("b", [b], { importance: 0 })],
+      { query: "Landmark" },
+    );
+    expect(result.contributors).toEqual([a]);
+    expect(result.contributingProviders).toEqual(["a"]);
+  });
+  it("unions the supplier of a genuinely retained identity field", () => {
+    const [result] = mergeAutocompleteSuggestions(
+      [
+        row("a", [a], { importance: 1 }),
+        row("b", [b], { importance: 0, ids: { wikidata: "Q1", osm: "node/1" } }),
+      ],
+      { query: "Landmark" },
+    );
+    expect(result.ids).toEqual({ wikidata: "Q1", osm: "node/1" });
+    expect(result.contributors).toEqual([a, b]);
+  });
+});
+
+it("keeps retained duplicate field owners separate from the winning label and coordinates", () => {
+  const a = { sourceId: "a", name: "Label supplier" };
+  const b = { sourceId: "b", name: "Ranking supplier" };
+  const result = mergeAutocompleteSuggestions(
+    [
+      { id: "one", label: "Cafe", type: "poi", coordinates: [6, 51], fame: 0.1, contributors: [a] },
+      {
+        id: "one",
+        label: "Other",
+        type: "poi",
+        coordinates: [6, 51],
+        fame: 0.9,
+        contributors: [b],
+      },
+    ],
+    { query: "Cafe" },
+  )[0];
+  expect(result.fieldContributors?.label).toEqual([a]);
+  expect(result.fieldContributors?.coordinates).toEqual([a]);
+  expect(result.fieldContributors?.fame).toEqual([b]);
+  expect(result.contributors).toEqual([a, b]);
 });

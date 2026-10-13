@@ -15,6 +15,7 @@ import {
   type CategoryCardEnrichmentResponse,
   categoryPlaceToPlace,
   isDisplayablePhoto,
+  type KnowledgeResult,
   openingHoursSourceFromOsm,
   type Place,
   type PlaceIds,
@@ -25,6 +26,16 @@ import {
 import { ambientPlaceToCategoryPlace } from "@openmapx/core/ambient-places";
 import { readAmbientPlaceByGers } from "@openmapx/core/ambient-places-server";
 import { currentOpeningHoursInfo } from "@openmapx/core/server";
+import type { Attribution } from "@openmapx/mobility-core/attribution";
+import {
+  captureFieldContributors,
+  contributorsForField,
+  contributorsForFields,
+  contributorsForRecords,
+  narrowContributors,
+  parseContributors,
+  snapshotContributors,
+} from "@openmapx/mobility-core/contributors";
 import {
   buildFacebookUrl,
   buildFoursquareUrl,
@@ -38,6 +49,7 @@ import {
 import type { FastifyPluginAsync } from "fastify";
 import { sql } from "../db/index.js";
 import { getAllIntegrations, isEnabledIntegrationScheme } from "../integration-host.js";
+import { getAttributionIndex } from "../services/attribution/index.js";
 import { getPlaceKnowledge } from "../services/knowledge/index";
 import { recordCardEnrichment } from "../services/metrics/index";
 import { buildReviewLinks } from "../services/review-links";
@@ -223,7 +235,7 @@ async function cardPhoto(input: CardInput, lang: string | undefined): Promise<Pl
     Object.entries(input.photoTags ?? {}).sort(([left], [right]) => left.localeCompare(right)),
   ) as Record<string, string>;
   if (Object.keys(tags).length === 0) return null;
-  const key = hashKey("cache:card-photo", {
+  const key = hashKey("cache:card-photo:v2", {
     id: input.id,
     coordinates: input.coordinates,
     name: input.name,
@@ -324,12 +336,13 @@ async function cardRating(input: CardInput): Promise<CardResult["rating"] | null
     name: input.name,
     osmId: match ? `${match[1]}/${match[2]}` : undefined,
   };
-  const key = hashKey("cache:card-rating", subject);
+  const key = hashKey("cache:card-rating:v2", subject);
   const { rating } = await withCardCache(key, 600, async () => {
     if (pendingCardRating.has(key)) throw new Error("Previous rating request is still settling");
     if (pendingCardRating.size >= 4) throw new Error("Rating providers are still settling");
     const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout> | undefined;
+    const catalogue = snapshotContributors(getAttributionIndex()?.list() ?? []);
     const work = fetchAggregate(subject, getReviewProviders(getAllIntegrations()), {
       signal: controller.signal,
       strict: true,
@@ -369,7 +382,15 @@ async function cardRating(input: CardInput): Promise<CardResult["rating"] | null
       )
         return { rating: null };
       return {
-        rating: { stars: aggregate.stars, count: ratedCount, source: aggregate.source },
+        rating: {
+          stars: aggregate.stars,
+          count: ratedCount,
+          source: aggregate.source,
+          contributors: snapshotContributors(
+            parseContributors("contributors" in aggregate ? aggregate.contributors : undefined) ??
+              narrowContributors(catalogue, [aggregate.source]),
+          ),
+        },
       };
     } finally {
       if (timer) clearTimeout(timer);
@@ -645,7 +666,7 @@ async function enrichPlace(place: Place, lang: string | undefined): Promise<Plac
   } = knowledgeResult;
   const enriched = foldExternalIdsIntoPlace(place, externalIds);
   const photos = deduplicatePhotos([...heroPhotos, ...(knowledgePhotos ?? [])]);
-  return {
+  const result: Place = {
     ...enriched,
     ...knowledge,
     // Social profiles: gap-fill the OSM `contact:*` tags from a knowledge
@@ -671,6 +692,108 @@ async function enrichPlace(place: Place, lang: string | undefined): Promise<Plac
     reviewCount: reviewStats?.count,
     boundary: adminBoundary?.boundary,
     boundingBox: adminBoundary?.boundingBox,
+  };
+  return captureEnrichedPlaceContributors(place, knowledgeResult, result);
+}
+
+/** Ownership mirrors the actual enrichment policies above, including tag/ID gap fills. */
+function captureEnrichedPlaceContributors(
+  base: Place,
+  knowledge: KnowledgeResult,
+  result: Place,
+): Place {
+  const fields: Record<string, Attribution[]> = {};
+  const metadata = new Set([
+    "contributors",
+    "fieldContributors",
+    "provenance",
+    "photos",
+    "facts",
+    "externalIds",
+    "osmTags",
+    "ids",
+  ]);
+  for (const [field, value] of Object.entries(base)) {
+    if (value !== undefined && !metadata.has(field))
+      Object.assign(fields, captureFieldContributors(base, field));
+  }
+  const contacts = new Set([
+    "phone",
+    "email",
+    "website",
+    "socials",
+    "address",
+    "city",
+    "countryCode",
+  ]);
+  for (const [field, value] of Object.entries(knowledge)) {
+    if (value !== undefined && !metadata.has(field) && !contacts.has(field)) {
+      Object.assign(fields, captureFieldContributors(knowledge, field));
+    }
+  }
+  for (const field of contacts) {
+    const key = field as
+      | "phone"
+      | "email"
+      | "website"
+      | "socials"
+      | "address"
+      | "city"
+      | "countryCode";
+    if (!result[key]) continue;
+    const baseWins =
+      key === "website"
+        ? pickMoreSpecificWebsite(base.website, knowledge.website) === base.website &&
+          base.website !== undefined
+        : key === "address"
+          ? Boolean(base.address)
+          : base[key] !== undefined && base[key] !== null;
+    Object.assign(fields, captureFieldContributors(baseWins ? base : knowledge, key));
+  }
+  for (const [scheme, value] of Object.entries(result.ids)) {
+    const key = `ids.${scheme}`;
+    if (base.ids[scheme] === value) {
+      fields[key] = contributorsForField(base, key);
+    } else {
+      const externalKey = scheme === "googleMaps" ? "google_maps" : scheme;
+      const fromKnowledge = knowledge.externalIds?.[externalKey] === value;
+      fields[key] = contributorsForField(
+        fromKnowledge ? knowledge : base,
+        fromKnowledge ? `externalIds.${externalKey}` : "osmTags",
+      );
+    }
+  }
+  for (const [key, value] of Object.entries(result.osmTags ?? {})) {
+    const field = `osmTags.${key}`;
+    const knowledgeField =
+      key === "brand"
+        ? "brand.name"
+        : key === "brand:wikidata"
+          ? "brand.wikidata"
+          : key === "email"
+            ? "email"
+            : "socials";
+    fields[field] =
+      base.osmTags?.[key] === value
+        ? contributorsForField(base, field)
+        : contributorsForField(knowledge, knowledgeField);
+  }
+  fields.osmTags = contributorsForFields(
+    fields,
+    Object.keys(fields).filter((key) => key.startsWith("osmTags.")),
+  );
+  fields.ids = contributorsForFields(
+    fields,
+    Object.keys(fields).filter((key) => key.startsWith("ids.")),
+  );
+  return {
+    ...result,
+    fieldContributors: fields,
+    contributors: snapshotContributors(
+      contributorsForFields(fields, Object.keys(fields)),
+      contributorsForRecords(result.photos ?? []),
+      contributorsForRecords(result.facts ?? []),
+    ),
   };
 }
 
@@ -762,7 +885,7 @@ export const placesRoute: FastifyPluginAsync = async (fastify) => {
             ? await readAmbientPlaceByGers(sql, parsed.value)
             : null;
         const cacheKey = hashKey(
-          "cache:place",
+          "cache:place-v2-contributors",
           published
             ? { ...placeRequest.identity, ambientGeneration: published.generation }
             : placeRequest.identity,

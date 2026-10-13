@@ -36,7 +36,9 @@ function makePhoto(url: string) {
     url,
     author: "Author",
     license: "CC BY-SA 4.0",
-    source: "wikimedia",
+    source: "wikimedia-commons",
+    licenseUrl: "https://creativecommons.org/licenses/by-sa/4.0/",
+    pageUrl: "https://commons.wikimedia.org/wiki/File:Photo.jpg",
   };
 }
 
@@ -72,7 +74,7 @@ describe("wikimediaProvider.searchByTags", () => {
     expect(mockFetch).not.toHaveBeenCalled();
   });
 
-  it("File mode: falls back to constructed URL when metadata fails", async () => {
+  it("File mode: defers unknown file metadata", async () => {
     mockFetchCommonsMetadata.mockResolvedValueOnce(new Map());
 
     const searchByTags = await getSearchByTags();
@@ -80,13 +82,7 @@ describe("wikimediaProvider.searchByTags", () => {
       wikimedia_commons: "File:Berlin Skyline.jpg",
     });
 
-    expect(result).toHaveLength(1);
-    expect(result[0].url).toContain("Special:FilePath/Berlin_Skyline.jpg");
-    // Metadata fetch failed, so author/license are unknown — but the filename
-    // is known, so we still link to the Commons file page.
-    expect(result[0].pageUrl).toBe("https://commons.wikimedia.org/wiki/File:Berlin_Skyline.jpg");
-    expect(result[0].author).toBeUndefined();
-    expect(result[0].license).toBeUndefined();
+    expect(result).toEqual([]);
   });
 
   it('"Category:Name" → category mode, fetches category members via API', async () => {
@@ -203,7 +199,11 @@ describe("wikimediaProvider.searchByTags", () => {
   });
 
   it("trims whitespace from tag value", async () => {
-    mockFetchCommonsMetadata.mockResolvedValueOnce(new Map([["Test.jpg", makePhoto("t.jpg")]]));
+    mockFetchCommonsMetadata.mockResolvedValueOnce(
+      new Map([
+        ["Test.jpg", makePhoto("https://upload.wikimedia.org/wikipedia/commons/a/ab/Test.jpg")],
+      ]),
+    );
 
     const searchByTags = await getSearchByTags();
     const result = await searchByTags({

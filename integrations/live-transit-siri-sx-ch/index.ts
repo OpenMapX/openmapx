@@ -1,6 +1,7 @@
 import * as otdCh from "@integrations/transit-opentransportdata-ch/provider.js";
 import type { BBox } from "@openmapx/core";
 import {
+  captureTransitContributors,
   createManifestAttribution,
   type IntegrationContext,
   type RealtimeProvider,
@@ -27,15 +28,27 @@ export function setup(ctx: IntegrationContext): void {
     },
     async getAlertsForStop(stopId) {
       const data = await otdCh.getStopAlerts(stopId);
-      return withAttribution(data, attribution.all(), freshnessNow({ hasRealtimeData: true }));
+      return withAttribution(
+        captureTransitContributors(data, attribution.all()),
+        attribution.all(),
+        freshnessNow({ hasRealtimeData: true }),
+      );
     },
     async getAlertsForRoute(routeId) {
       const data = await otdCh.getRouteAlerts(routeId);
-      return withAttribution(data, attribution.all(), freshnessNow({ hasRealtimeData: true }));
+      return withAttribution(
+        captureTransitContributors(data, attribution.all()),
+        attribution.all(),
+        freshnessNow({ hasRealtimeData: true }),
+      );
     },
     async getAlertsForBbox(bbox) {
       const data = await otdCh.getAlerts(bbox);
-      return withAttribution(data, attribution.all(), freshnessNow({ hasRealtimeData: true }));
+      return withAttribution(
+        captureTransitContributors(data, attribution.all()),
+        attribution.all(),
+        freshnessNow({ hasRealtimeData: true }),
+      );
     },
   };
 

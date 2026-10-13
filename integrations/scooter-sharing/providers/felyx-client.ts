@@ -1,3 +1,5 @@
+import type { Attribution } from "@openmapx/mobility-core/attribution";
+import { snapshotContributors } from "@openmapx/mobility-core/contributors";
 /**
  * Felyx moped/e-scooter API client (FleetBird platform).
  * Covers Netherlands and Belgium.
@@ -23,7 +25,10 @@ interface FelyxVehicle {
 /**
  * Fetch Felyx vehicles within a bounding box.
  */
-export async function searchFelyx(bbox: BoundingBox): Promise<SharedMobilityVehicle[]> {
+export async function searchFelyx(
+  bbox: BoundingBox,
+  contributors?: readonly Attribution[],
+): Promise<SharedMobilityVehicle[]> {
   try {
     const vehicles = await fetchJson<FelyxVehicle[]>(FELYX_URL, { timeoutMs: FETCH_TIMEOUT_MS });
 
@@ -40,6 +45,9 @@ export async function searchFelyx(bbox: BoundingBox): Promise<SharedMobilityVehi
           isDisabled: v.isActivated === false,
           operator: "Felyx",
           sources: ["felyx"],
+          ...(contributors === undefined
+            ? {}
+            : { contributors: snapshotContributors(contributors) }),
         }),
       );
   } catch {

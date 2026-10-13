@@ -89,6 +89,21 @@
   ],
   "dataSources": [
     {
+      "sourceId": "entur-geocoder",
+      "name": "Entur Geocoder",
+      "url": "https://developer.entur.org/pages-geocoder-intro/",
+      "license": "NLOD 2.0",
+      "licenseUrl": "https://data.norge.no/nlod/en/2.0",
+      "attribution": "Inneholder data under Norsk lisens for offentlige data (NLOD) tilgjengeliggjort av Entur AS.",
+      "commercialUse": "yes",
+      "providerCountry": "NO",
+      "providerPrivacyUrl": "https://om.entur.no/personvern/",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    },
+    {
       "sourceId": "entur-journey-planner",
       "name": "Entur Journey Planner v3",
       "url": "https://developer.entur.org/pages-journeyplanner-journeyplanner/",

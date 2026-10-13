@@ -3,14 +3,14 @@
   "description": "Fuß- und Fahrradrouten-Berechnung über Valhalla",
   "dataSources": {
     "valhalla": {
-      "purpose": "Multimodales Routing (Gehen, Radfahren, Autofahren) mit Höhenprofilen und lokalisierten Anweisungen; Wegpunktoptimierung",
-      "dataSent": "Routen-Wegpunktkoordinaten, Fortbewegungsart, Vermeidungsoptionen (Autobahn, Fähre), Einheitenpräferenz, Sprache",
-      "dataReceived": "Route mit Polyline6-Geometrie, lokalisierten Abbiegeanweisungen, Entfernung/Dauer, Höhenprofil, bis zu 3 Alternativen. Optimierte Wegpunktfolge."
+      "purpose": "Multimodales Routing (Gehen, Radfahren, Autofahren) mit Höhenprofilen und lokalisierten Anweisungen; Wegpunktoptimierung; separat abgetastete Routen-Höhendaten für Autofahrtprofile",
+      "dataSent": "Routen-Wegpunktkoordinaten, Fortbewegungsart, Vermeidungsoptionen (Autobahn, Fähre), Einheitenpräferenz, Sprache. Bei separaten Höhenanfragen: Koordinaten der Routengeometrie, geschätzte Routenlänge, Abtastintervall, Polyline-Kodierung und Genauigkeit",
+      "dataReceived": "Route mit Polyline6-Geometrie, lokalisierten Abbiegeanweisungen, Entfernung/Dauer, Höhenprofil, bis zu 3 Alternativen. Optimierte Wegpunktfolge. Separate Höhenantworten enthalten abgetastete Höhen und kumulierte Entfernungen; sie benennen das zugrunde liegende Höhenmodell nicht."
     },
     "stadia-maps": {
-      "purpose": "Multimodales Routing (Gehen, Radfahren, Autofahren) mit Höhenprofilen und lokalisierten Anweisungen; Wegpunktoptimierung",
-      "dataSent": "Routen-Wegpunktkoordinaten, Fortbewegungsart, Vermeidungsoptionen (Autobahn, Fähre), Einheitenpräferenz, Sprache",
-      "dataReceived": "Route mit Polyline6-Geometrie, lokalisierten Abbiegeanweisungen, Entfernung/Dauer, Höhenprofil, bis zu 3 Alternativen. Optimierte Wegpunktfolge."
+      "purpose": "Multimodales Routing (Gehen, Radfahren, Autofahren) mit Höhenprofilen und lokalisierten Anweisungen; Wegpunktoptimierung; separat abgetastete Routen-Höhendaten für Autofahrtprofile",
+      "dataSent": "Routen-Wegpunktkoordinaten, Fortbewegungsart, Vermeidungsoptionen (Autobahn, Fähre), Einheitenpräferenz, Sprache. Bei separaten Höhenanfragen: Koordinaten der Routengeometrie, geschätzte Routenlänge, Abtastintervall, Polyline-Kodierung und Genauigkeit",
+      "dataReceived": "Route mit Polyline6-Geometrie, lokalisierten Abbiegeanweisungen, Entfernung/Dauer, Höhenprofil, bis zu 3 Alternativen. Optimierte Wegpunktfolge. Separate Höhenantworten enthalten abgetastete Höhen und kumulierte Entfernungen; sie benennen das zugrunde liegende Höhenmodell nicht."
     }
   }
 }

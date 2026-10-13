@@ -3,7 +3,9 @@
  * Used as a fallback for driving routes (OSRM doesn't provide elevation).
  */
 
+import type { ElevationApiResponse } from "@openmapx/core";
 import { encodePolyline } from "@openmapx/core";
+import { snapshotContributors } from "@openmapx/mobility-core/contributors";
 import { valhallaEndpoint } from "../utils/valhalla-endpoint.js";
 
 interface HeightResponse {
@@ -29,9 +31,28 @@ function computeResampleDistance(routeLengthKm: number): number {
   return 200;
 }
 
-export interface ElevationResult {
-  points: Array<{ distance: number; elevation: number }>;
-  interval: number;
+export type ElevationResult = ElevationApiResponse;
+
+/** A successful call proves its endpoint provider, not its underlying DEM.
+ * Stadia's Other APIs guidance requires its attribution page, which lists the
+ * original elevation sources: https://docs.stadiamaps.com/attribution/.
+ * Custom/self-hosted height servers expose no DEM certificate in range_height.
+ */
+function heightProviderContributors(endpoint: string) {
+  const host = new URL(endpoint).hostname.toLowerCase();
+  return snapshotContributors(
+    ["api.stadiamaps.com", "api-eu.stadiamaps.com"].includes(host)
+      ? [
+          {
+            sourceId: "stadia-maps",
+            name: "Stadia Maps",
+            url: "https://stadiamaps.com/attribution/",
+            attributionText:
+              'Elevation © <a href="https://stadiamaps.com/attribution/">Stadia Maps and original data sources</a>',
+          },
+        ]
+      : [],
+  );
 }
 
 export const elevationService = {
@@ -57,9 +78,11 @@ export const elevationService = {
         shape_format: "polyline6",
       };
 
+      const endpoint = valhallaEndpoint("/height");
+      const contributors = heightProviderContributors(endpoint);
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 10_000);
-      const res = await fetch(valhallaEndpoint("/height"), {
+      const res = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
@@ -73,6 +96,8 @@ export const elevationService = {
       if (!data.range_height || data.range_height.length === 0) return null;
 
       return {
+        contributors,
+        contributorCoverage: "partial",
         points: data.range_height.map(([distance, elevation]) => ({
           distance,
           elevation,

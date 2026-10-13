@@ -1,6 +1,8 @@
 import type { PlacePhoto } from "@openmapx/core";
 
 export interface PhotoQuery {
+  /** Host/cache operation cancellation for acquisition; never sent upstream as data. */
+  signal?: AbortSignal;
   lat: number;
   lng: number;
   /** Place name — used by sources that support text search. */

@@ -59,7 +59,7 @@ function vehicle(id = "gbfs/provider/vehicle-1"): SharedMobilityVehicle {
 
 function cacheClient() {
   const values = new Map<string, unknown>();
-  const set = vi.fn(async (key: string, value: unknown) => {
+  const set = vi.fn(async (key: string, value: unknown, _ttl?: number) => {
     values.set(key, value);
   });
   const cache: CacheClient = {
@@ -151,10 +151,12 @@ describe("createSharedMobilityProvider", () => {
     expect(result.attributions.map((item) => item.sourceId)).toEqual(["gbfs"]);
     expect(result.freshness.hasRealtimeData).toBe(true);
     expect(set).toHaveBeenCalledWith(
-      "shared-mobility-detail:v1:gbfs%2Fprovider",
+      "shared-mobility-detail:v2:gbfs%2Fprovider",
       expect.any(Object),
-      900,
+      expect.any(Number),
     );
+    expect(set.mock.calls[0]?.[2]).toBeGreaterThan(0);
+    expect(set.mock.calls[0]?.[2]).toBeLessThanOrEqual(900);
   });
 
   it("returns mapped inventory when optional enrichment fails", async () => {
@@ -212,6 +214,7 @@ describe("createSharedMobilityProvider", () => {
       FORM_FACTORS,
       expect.any(Object),
       options,
+      expect.any(Function),
     );
     expect(result?.data).toBe(context);
     expect(result?.freshness.hasRealtimeData).toBe(false);
@@ -247,14 +250,122 @@ describe("createSharedMobilityProvider", () => {
     expect(secondResult.data.map((item) => item.id)).toEqual(["s:second/station"]);
     expect(secondResult.attributions.map((item) => item.sourceId)).toEqual(["second"]);
     expect(firstCache.set).toHaveBeenCalledWith(
-      "shared-mobility-detail:v1:first",
+      "shared-mobility-detail:v2:first",
       expect.any(Object),
-      900,
+      expect.any(Number),
     );
     expect(secondCache.set).toHaveBeenCalledWith(
-      "shared-mobility-detail:v1:second",
+      "shared-mobility-detail:v2:second",
       expect.any(Object),
-      900,
+      expect.any(Number),
     );
+    for (const write of [firstCache.set, secondCache.set]) {
+      expect(write.mock.calls[0]?.[2]).toBeGreaterThan(0);
+      expect(write.mock.calls[0]?.[2]).toBeLessThanOrEqual(900);
+    }
   });
+});
+
+it("captures secondary inventory sources for both search records and cached details", async () => {
+  const item = station();
+  item.sources = ["transitous", "gbfs"];
+  const shared = definition(
+    vi.fn(async () => ({ stations: [item], vehicles: [] })),
+    {
+      dataSources: [
+        manifestSource("gbfs", "GBFS", "https://gbfs.example"),
+        manifestSource("transitous", "Transitous", "https://transitous.example"),
+        manifestSource("unused", "Unused", "https://unused.example"),
+      ],
+    },
+  );
+  const response = await shared.search(BBOX);
+  expect(response.data[0].contributors?.map((a) => a.sourceId)).toEqual(["transitous", "gbfs"]);
+  expect(response.attributions.map((a) => a.sourceId)).toEqual(["transitous", "gbfs"]);
+  const detail = await shared.getDetail(response.data[0].id);
+  expect(detail.data?.contributors).toEqual(response.data[0].contributors);
+});
+
+it("credits only the map context feature receipts, including no credit for empty context", async () => {
+  const receipt = { sourceId: "entur-mobility", name: "Entur", attributionText: "Context notice" };
+  vi.mocked(buildSharedMobilityMapContext).mockResolvedValue({
+    geojson: {
+      type: "FeatureCollection",
+      features: [
+        {
+          type: "Feature",
+          geometry: {
+            type: "Polygon",
+            coordinates: [
+              [
+                [0, 0],
+                [1, 0],
+                [1, 1],
+                [0, 0],
+              ],
+            ],
+          },
+          properties: { _mapAttributions: JSON.stringify([receipt]) },
+        },
+      ],
+    },
+  });
+  const shared = definition(undefined, {
+    dataSources: [manifestSource("unused", "Unused", "https://unused.example")],
+  });
+  expect((await shared.getMapContext?.(BBOX))?.attributions).toEqual([receipt]);
+  vi.mocked(buildSharedMobilityMapContext).mockResolvedValue(null);
+  expect((await shared.getMapContext?.(BBOX))?.attributions).toEqual([]);
+});
+
+it("keeps cached receipt wording across provider metadata generations", async () => {
+  const { cache } = cacheClient();
+  const first = definition(undefined, {
+    cache,
+    dataSources: [manifestSource("gbfs", "Original GBFS credit", "https://original.example")],
+  });
+  await first.search(BBOX);
+  const second = definition(undefined, {
+    cache,
+    dataSources: [manifestSource("gbfs", "New unrelated wording", "https://new.example")],
+  });
+  const detail = await second.getDetail("s:gbfs/provider/station-1");
+  expect(detail.data?.contributors?.map((a) => a.name)).toEqual(["Original GBFS credit"]);
+  expect(detail.attributions.map((a) => a.name)).toEqual(["Original GBFS credit"]);
+});
+
+it("treats explicit empty inventory receipts as authoritative", async () => {
+  const item = station();
+  item.contributors = [];
+  const shared = definition(
+    vi.fn(async () => ({ stations: [item], vehicles: [] })),
+    { dataSources: [manifestSource("gbfs", "GBFS", "https://gbfs.example")] },
+  );
+  const response = await shared.search(BBOX);
+  expect(response.data[0].contributors).toEqual([]);
+  expect(response.attributions).toEqual([]);
+});
+
+it("adds only newly supplied detail enrichment sources to cached receipts", async () => {
+  const shared = definition(undefined, {
+    dataSources: [
+      manifestSource("gbfs", "GBFS", "https://gbfs.example"),
+      manifestSource("entur-mobility", "Entur", "https://entur.example"),
+    ],
+  });
+  await shared.search(BBOX);
+  vi.mocked(enrichEnturMobilityItems).mockImplementationOnce(
+    async (stations, _vehicles, options) => {
+      stations[0].address = { street: "Newly acquired field" };
+      stations[0].contributors = [
+        ...(stations[0].contributors ?? []),
+        ...(options.resolveContributors?.(["entur-mobility"]) ?? []),
+      ];
+      stations[0].sources = [...stations[0].sources, "entur-mobility"];
+    },
+  );
+  const response = await shared.getDetail("s:gbfs/provider/station-1");
+  expect(response.data?.contributors?.map((a) => a.sourceId)).toEqual(["gbfs", "entur-mobility"]);
+  const retained = await shared.getDetail("s:gbfs/provider/station-1");
+  expect(retained.data?.contributors).toEqual(response.data?.contributors);
 });

@@ -1,10 +1,11 @@
+import type { ContributingRecord, FieldContributors } from "@openmapx/mobility-core/contributors";
 import type { OpeningHoursSource } from "../utils/openingHoursSource";
 import type { DataSourceDetail } from "./dataSource";
 import type { AreaGeometry, BBox, LngLat } from "./geometry";
 import type { Identified, Ids } from "./identified";
 import type { OpeningHoursInfo } from "./openingHoursInfo";
 
-export interface PlacePhoto {
+export interface PlacePhoto extends ContributingRecord {
   url: string;
   thumbnailUrl?: string;
   source: string;
@@ -13,12 +14,18 @@ export interface PlacePhoto {
   license?: string;
   licenseUrl?: string;
   pageUrl?: string;
+  /** File-specific credit/copyright/restriction notices from the metadata acquisition. */
+  attributionText?: string;
+  attributionLinks?: { label: string; url: string }[];
+  attributionRequired?: boolean;
+  /** Commons custom credit explicitly replaces Artist + Credit. */
+  attributionOverride?: string;
   capturedAt?: string;
   /** Photo-specific coordinates [lng, lat] — used for minimap in gallery. */
   coordinates?: LngLat;
 }
 
-export interface PlaceFact {
+export interface PlaceFact extends ContributingRecord {
   label: string;
   value: string;
 }
@@ -114,7 +121,9 @@ export interface PlaceReviewLink {
  */
 export type PlaceIds = Ids;
 
-export interface Place extends Identified {
+export interface Place extends Identified, ContributingRecord {
+  /** Captured suppliers of individually displayed fields. */
+  fieldContributors?: FieldContributors;
   name: string;
   address: string;
   city?: string;

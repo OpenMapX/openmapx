@@ -1,6 +1,34 @@
 import type { DataSourceAttribution } from "../types/dataSource";
 import type { IntegrationDataSource } from "../types/integrationMeta";
 
+/** Decode text tokens only, after HTML tokenization; decoded tags never execute. */
+export function decodeAttributionEntities(text: string): string {
+  return text.replace(
+    /&(amp|quot|apos|lt|gt|nbsp|#39|#\d+|#x[0-9a-f]+);/gi,
+    (match, entity: string) => {
+      const named: Record<string, string> = {
+        amp: "&",
+        quot: '"',
+        apos: "'",
+        lt: "<",
+        gt: ">",
+        nbsp: " ",
+        "#39": "'",
+      };
+      const name = entity.toLowerCase();
+      if (named[name] !== undefined) return named[name];
+      const code =
+        name[1] === "x" ? Number.parseInt(name.slice(2), 16) : Number.parseInt(name.slice(1), 10);
+      return Number.isFinite(code) &&
+        code > 0 &&
+        code <= 0x10ffff &&
+        !(code >= 0xd800 && code <= 0xdfff)
+        ? String.fromCodePoint(code)
+        : match;
+    },
+  );
+}
+
 function escapeHtml(value: string): string {
   return value
     .replace(/&/g, "&amp;")
@@ -42,13 +70,13 @@ export function sanitizeAttributionHtml(html: string): string {
   while (i < html.length) {
     const lt = html.indexOf("<", i);
     if (lt === -1) {
-      out += escapeHtml(html.slice(i));
+      out += escapeHtml(decodeAttributionEntities(html.slice(i)));
       break;
     }
-    out += escapeHtml(html.slice(i, lt));
+    out += escapeHtml(decodeAttributionEntities(html.slice(i, lt)));
     const gt = html.indexOf(">", lt + 1);
     if (gt === -1) {
-      out += escapeHtml(html.slice(lt));
+      out += escapeHtml(decodeAttributionEntities(html.slice(lt)));
       break;
     }
     const raw = html.slice(lt + 1, gt).trim();
@@ -56,7 +84,7 @@ export function sanitizeAttributionHtml(html: string): string {
     const body = isClosing ? raw.slice(1).trim() : raw;
     const nameMatch = /^[a-zA-Z][a-zA-Z0-9]*/.exec(body);
     if (!nameMatch) {
-      out += escapeHtml(html.slice(lt, gt + 1));
+      out += escapeHtml(decodeAttributionEntities(html.slice(lt, gt + 1)));
       i = gt + 1;
       continue;
     }
@@ -77,7 +105,9 @@ export function sanitizeAttributionHtml(html: string): string {
         stack.length = idx;
       }
     } else if (tag === "a") {
-      const href = safeExternalUrl(extractHref(body.slice(nameMatch[0].length)));
+      const href = safeExternalUrl(
+        decodeAttributionEntities(extractHref(body.slice(nameMatch[0].length)) ?? ""),
+      );
       if (href) {
         out += `<a href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer">`;
         stack.push({ tag: "a", emitted: true });

@@ -1,24 +1,25 @@
 "use client";
 
 import { escapeHtml, sanitizeUrl, useOverlayExclusion } from "@openmapx/core";
+import { captureHazardFeatures } from "@openmapx/integration-framework";
 import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import type { MapLayerMouseEvent } from "maplibre-gl";
 import * as maplibregl from "maplibre-gl";
 import { useLocale, useTranslations } from "next-intl";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { INTERACTIVE_LAYER_IDS } from "@/integration-api/map/interactiveLayers";
 import { addLayerInSlot, unregisterLayerSlot } from "@/integration-api/map/layerStack";
 import { useMap } from "@/integration-api/map/MapContext";
 import { getMapClickOwner } from "@/integration-api/map/mapClickOwnership";
 import { useGeoJsonSourceDataBridge } from "@/integration-api/map/useGeoJsonSourceDataBridge";
-import { useSourceAttributions } from "@/integration-api/overlay/useIntegrationAttribution";
+import { useContributorResolver } from "@/integration-api/overlay/useContributorResolver";
+import { useRenderedMapAttributions } from "@/integration-api/overlay/useRenderedMapAttributions";
 import { useEnv } from "@/integration-api/runtime/EnvProvider";
 import { ALL_CATEGORIES, useNaturalEventStore } from "./store";
 
 const SOURCE_ID = "openmapx-natural-events-source";
 const CIRCLE_LAYER_ID = "openmapx-natural-events-circles";
 const REFRESH_INTERVAL_MS = 900_000; // 15 minutes
-const NO_SOURCES: readonly string[] = [];
 
 export const CATEGORY_COLORS: Record<string, string> = {
   volcanoes: "#e53935",
@@ -100,8 +101,8 @@ export function NaturalEventLayer() {
   const registry = useIntegrationRegistry();
   const t = useTranslations("naturalEvents");
   const layerVisible = useNaturalEventStore((s) => s.layerVisible);
-  const [sourceIds, setSourceIds] = useState<readonly string[]>(NO_SOURCES);
-  useSourceAttributions("natural-events", layerVisible ? sourceIds : NO_SOURCES);
+  const resolveContributors = useContributorResolver();
+  useRenderedMapAttributions("natural-events", [CIRCLE_LAYER_ID], layerVisible);
   const days = useNaturalEventStore((s) => s.days);
   const activeCategories = useNaturalEventStore((s) => s.activeCategories);
   const setLoading = useNaturalEventStore((s) => s.setLoading);
@@ -145,11 +146,10 @@ export function NaturalEventLayer() {
       setEventCount(data.features?.length ?? 0);
       setLastUpdated(Date.now());
 
-      publishGeoJson([{ sourceId: SOURCE_ID, data }]);
-      const ids: string[] = Array.isArray(data.sources) ? data.sources : [];
-      setSourceIds((prev) =>
-        prev.length === ids.length && prev.every((id, i) => id === ids[i]) ? prev : ids,
+      const captured = captureHazardFeatures(data, resolveContributors, (feature) =>
+        Array.isArray(feature.properties?.sources) ? feature.properties.sources : [],
       );
+      publishGeoJson([{ sourceId: SOURCE_ID, data: captured }]);
     } catch {
       // A network failure leaves the layer as it was; an aborted request says nothing.
       if (request.isCurrent()) setUnavailable(true);
@@ -157,6 +157,7 @@ export function NaturalEventLayer() {
       if (request.isLatest()) setLoading(false);
     }
   }, [
+    resolveContributors,
     beginRequest,
     env.apiUrl,
     locale,

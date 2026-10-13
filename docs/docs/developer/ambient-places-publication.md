@@ -52,12 +52,54 @@ clients read `/api/ambient-places/manifest` (`no-store`), then
 valid tiles are immutable for seven days. Unknown generations return `404`.
 
 The public manifest contains only generation/policy version, publication time,
-region bounds/name, optional `coverage: "germany"` or `"planet"`, counts and source release provenance. Source filesystem
-paths/fingerprints, contributor record IDs and raw ingest state are not exposed.
+region bounds/name, optional `coverage: "germany"` or `"planet"`, counts, attribution precision and source release provenance. Source filesystem
+paths/fingerprints and raw ingest state are not exposed by discovery. Format 2
+tiles retain public Overture source properties and release, including upstream
+record identities, alongside captured attribution snapshots.
 Source publication time means local snapshot publication, not real-world
 verification of every business. The UI identifies OSM-only versus combined
 coverage. Filters, missing source coverage, ranking and collisions remain visible
 limits; the layer is not a complete business directory.
+
+### Captured contribution format
+
+New publications use manifest/feature format `2`. The Overture pull captures
+trusted built-in source notices before acquisition, stores that catalogue in its
+version 2 pull contract, and retains it as `sources_catalogue` with the ingested
+release. Field receipts apply Overture JSON Pointer inheritance to the scalar
+actually retained: a specific property overrides its ancestors, including the
+whole-feature root. A phone-only supplier does not become a label supplier.
+Localized names have separate receipts. OSM names, position and category remain
+authoritative after conflation; only retained Overture gaps and GERS identity
+add their corresponding receipts.
+
+Format 2 feature properties include `format_version`, `_mapAttributions`
+(canonical JSON receipt array), `field_contributors` (JSON field receipt map),
+and `source_lineage` (public source properties plus release). Receipts retain
+their captured wording after registry reloads. A captured empty array is
+authoritative. Old snapshots without a producer catalogue can only establish
+the known Overture aggregate, never historical upstream publisher notices.
+The manifest's `attributionPrecision` and the operator status `attribution`
+diagnostic distinguish these legacy records from captured fields and identify
+when a fresh pull/ingest/publication is needed.
+
+The web layer selects the current locale's actual placed label receipts and
+uses the shared rendered-feature tracker. Unloaded, offscreen, collision-hidden,
+filtered and below-zoom features produce no ambient credit. A matched basemap
+feature can carry ambient clickable label/GERS metadata after its duplicate
+ambient label is suppressed; that metadata is credited only while the matched
+basemap feature is rendered. The basemap retains its own geometry attribution.
+
+Existing format 1 generations keep the previous MVT attribute order, encoder
+and byte budget for their lease-addressable URLs. The storage migration adds
+nullable receipt columns without rewriting these tiles. Format 2 separately
+accounts for each distinct MVT metadata string and per-feature overhead within
+the unchanged 256-feature/128-KiB limits. Planet source signatures include the
+ambient format, and pre-format candidates must be discarded and rebuilt.
+Upgrade the API and web reader before publishing format 2. Capacity preflights
+allow 8 KiB per ambient input row for receipts and lineage; Overture ingest adds
+the captured catalogue's raw row bytes plus WAL headroom. These are admission
+allowances, not measured country or planet storage claims.
 
 The Germany build body is:
 
@@ -86,7 +128,7 @@ authoritative even across envelope boundaries. Source-ID keysets preserve bigint
 identity without country-sized arrays or geographic seam deduplication.
 
 The operations agent inspects free space on the actual PostGIS volume before a
-country build. Admission requires a minimum 1 GiB working allowance, or 2 KiB per
+country build. Admission requires a minimum 1 GiB working allowance, or 8 KiB per
 input source record if larger, plus a 5 GiB reserve. The reserve is checked every
 25 batches and again before activation. These are conservative admission guards,
 not measured Germany sizing or a guarantee against competing disk usage. Budget
@@ -241,9 +283,9 @@ for `R` retained published generations and one candidate, plus all other databas
 budgets above. At most eight generation slots exist, including a candidate;
 leases may prevent another build. A weekly publication cadence generally retains
 fewer versions than daily builds. The conservative publisher admission allowance
-is **2 KiB per remaining raw source row**, minimum 1 GiB, plus 20 GiB reserve,
+is **8 KiB per remaining raw source row**, minimum 1 GiB, plus 20 GiB reserve,
 checked before staging, every committed page and before activation. For example,
-200 million raw rows require about 381.5 GiB working allowance plus 20 GiB at the
+200 million raw rows require about 1525.9 GiB working allowance plus 20 GiB at the
 start; this is a guard, not an estimate of final storage or peak WAL. Other writers
 can still exhaust space after admission, in which case the candidate fails safely.
 

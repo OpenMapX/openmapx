@@ -1,3 +1,9 @@
+import {
+  type ContributingRecord,
+  type FieldContributors,
+  parseFieldContributors,
+  snapshotContributors,
+} from "@openmapx/mobility-core/contributors";
 import type { OpeningHoursSource } from "../utils/openingHoursSource";
 import type { LngLat } from "./geometry";
 import type { OpeningHoursInfo } from "./openingHoursInfo";
@@ -461,7 +467,8 @@ export const CATEGORY_DEFINITIONS: CategoryDefinition[] = [
   },
 ];
 
-export interface CategoryPlace {
+export interface CategoryPlace extends ContributingRecord {
+  fieldContributors?: FieldContributors;
   id: string;
   /** GERS id when Overture supplied or was conflated with this result. */
   gersId?: string;
@@ -521,7 +528,7 @@ export interface CategoryCardEnrichmentResponse {
   results: Array<{
     id: string;
     photo?: PlacePhoto;
-    rating?: { stars: number; count: number; source: string };
+    rating?: ContributingRecord & { stars: number; count: number; source: string };
     outcomes?: Partial<
       Record<
         "photo" | "rating",
@@ -571,6 +578,12 @@ export function categoryPlaceToPlace(place: CategoryPlace, categoryId?: string):
     brand: place.brand,
     names: place.names,
     provenance: place.provenance,
+    ...(place.contributors === undefined
+      ? {}
+      : { contributors: snapshotContributors(place.contributors) }),
+    ...(place.fieldContributors === undefined
+      ? {}
+      : { fieldContributors: parseFieldContributors(place.fieldContributors) }),
     openingHours: place.openingHours,
     openingHoursSource: place.openingHoursSource,
     countryCode: place.countryCode,
@@ -580,7 +593,8 @@ export function categoryPlaceToPlace(place: CategoryPlace, categoryId?: string):
   });
 }
 
-export interface PoiSearchResult {
+export interface PoiSearchResult extends ContributingRecord {
+  fieldContributors?: FieldContributors;
   id: string;
   /** GERS id when the result originated from (or was matched to) Overture Places. */
   gersId?: string;

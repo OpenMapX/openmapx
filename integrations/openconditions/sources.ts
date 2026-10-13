@@ -1,9 +1,12 @@
 import { isValidWgs84Bounds } from "@openmapx/core/coverage";
 import {
+  dataSourceToAttribution,
   type IntegrationContext,
   type IntegrationDataSource,
   parseMediaHostEntry,
+  snapshotContributors,
 } from "@openmapx/integration-framework";
+import type { Attribution } from "@openmapx/mobility-core/attribution";
 import type { OpenConditionsClient } from "./client.js";
 
 /** A right as OpenConditions states it: granted, denied, or not stated (null). */
@@ -291,6 +294,13 @@ export function createSourceScopes(): UpdatableSourceScopes {
   };
 }
 
+/** Copied attribution metadata only; serving rights still use the live source list. */
+export interface CapturedSourceCredits {
+  contributors(sourceId: string): readonly Attribution[] | undefined;
+  licenseName(licenseId: string): string | undefined;
+  noticeOf(sourceId: string): string | undefined;
+}
+
 /**
  * The sources the instance lists, as the providers check them: no source is
  * listed until the first list arrives, so a provider serves nothing it
@@ -300,6 +310,10 @@ export interface LiveSources {
   /** False until the first list arrives. */
   readonly ready: boolean;
   has(sourceId: string): boolean;
+  /** Captured exact metadata; callers receive an independent copy. */
+  contributors?(sourceId: string): readonly Attribution[] | undefined;
+  /** Immutable catalogue for an acquisition whose exact source arrives in the response. */
+  captureCredits?(): CapturedSourceCredits;
   /** The source's credit link: its homepage. */
   link(sourceId: string): string | undefined;
   /** The readable name a listed source gives a licence id; none before the first list. */
@@ -320,7 +334,10 @@ export interface MediaSources extends LiveSources {
 }
 
 export interface UpdatableLiveSources extends MediaSources {
-  update(list: readonly Pick<IntegrationDataSource, "sourceId" | "url" | "mediaHosts">[]): void;
+  update(
+    list: readonly (Pick<IntegrationDataSource, "sourceId" | "url" | "mediaHosts"> &
+      Partial<IntegrationDataSource>)[],
+  ): void;
   /**
    * Takes the licence names from the sources as OpenConditions describes
    * them: the accepted data sources carry the readable name in place of the id.
@@ -334,6 +351,7 @@ const FIRMS_QUALIFIERS = { viirs: "firms-viirs", modis: "firms-modis" } as const
 
 export function createLiveSources(): UpdatableLiveSources {
   let links: ReadonlyMap<string, string> | undefined;
+  let receipts = new Map<string, Attribution[]>();
   let media: ReadonlyMap<string, readonly string[]> = new Map();
   let licenseNames: ReadonlyMap<string, string> = new Map();
   let notices: ReadonlyMap<string, string> = new Map();
@@ -343,6 +361,33 @@ export function createLiveSources(): UpdatableLiveSources {
       return links !== undefined;
     },
     has: (sourceId) => links?.has(sourceId) ?? false,
+    contributors: (sourceId) => {
+      if (!links?.has(sourceId)) return undefined;
+      const captured = receipts.get(sourceId);
+      if (!captured) return undefined;
+      const notice = notices.get(sourceId);
+      return snapshotContributors(captured, notice ? [{ sourceId, name: notice }] : []);
+    },
+    captureCredits() {
+      const captured = new Map(
+        Array.from(links?.keys() ?? [], (sourceId) => [
+          sourceId,
+          snapshotContributors(
+            receipts.get(sourceId) ?? [],
+            notices.has(sourceId) ? [{ sourceId, name: notices.get(sourceId)! }] : [],
+          ),
+        ]),
+      );
+      const capturedNotices = new Map(notices);
+      const capturedLicenses = new Map(licenseNames);
+      return {
+        contributors: (sourceId) =>
+          captured.has(sourceId) ? snapshotContributors(captured.get(sourceId)!) : undefined,
+        noticeOf: (sourceId) =>
+          captured.has(sourceId) ? capturedNotices.get(sourceId) : undefined,
+        licenseName: (licenseId) => capturedLicenses.get(licenseId),
+      };
+    },
     link: (sourceId) => links?.get(sourceId),
     licenseName: (licenseId) => licenseNames.get(licenseId),
     mediaHosts: (sourceId) => media.get(sourceId) ?? [],
@@ -352,6 +397,18 @@ export function createLiveSources(): UpdatableLiveSources {
       (firms.get(instrument) ?? []).filter((sourceId) => links?.has(sourceId) ?? false),
     update(list) {
       links = new Map(list.map((ds) => [ds.sourceId, ds.url]));
+      receipts = new Map(
+        list.flatMap((ds) =>
+          typeof ds.name === "string" && typeof ds.license === "string"
+            ? [
+                [
+                  ds.sourceId,
+                  snapshotContributors([dataSourceToAttribution(ds as IntegrationDataSource)]),
+                ] as const,
+              ]
+            : [],
+        ),
+      );
       media = new Map(list.flatMap((ds) => (ds.mediaHosts ? [[ds.sourceId, ds.mediaHosts]] : [])));
     },
     updateDescribed(list) {

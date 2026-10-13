@@ -107,3 +107,28 @@ it("stops hiding the basemap label once nothing is selected", () => {
   expect(hideHook.mock.calls.at(-1)?.[0]).toBeNull();
   view.unmount();
 });
+
+it("keeps native geometry and visible-name channels separate with the merged name owner", () => {
+  const coordinate = { sourceId: "coordinate", name: "Coordinate supplier" };
+  const name = { sourceId: "name", name: "Merged name supplier" };
+  const hidden = { sourceId: "hidden", name: "Discarded name supplier" };
+  const selected = createPlace({
+    primaryScheme: "osm",
+    ids: { osm: "node/8" },
+    name: "Selected",
+    address: "",
+    coordinates: [8, 50],
+    fieldContributors: { coordinates: [coordinate], name: [hidden] },
+  });
+  merged.place = {
+    ...selected,
+    name: "Merged",
+    fieldContributors: { name: [name], coordinates: [] },
+  };
+  usePlaceStore.setState({ selectedPlace: selected });
+  const view = render(<SelectedPlaceMarker />);
+  const args = (usePinMarker as unknown as ReturnType<typeof vi.fn>).mock.calls.at(-1);
+  expect(args?.[5]).toEqual([coordinate]);
+  expect(args?.[6]).toEqual([coordinate, name]);
+  view.unmount();
+});

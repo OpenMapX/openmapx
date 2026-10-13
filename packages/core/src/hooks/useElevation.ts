@@ -1,3 +1,7 @@
+import {
+  contributorsForRecordFields,
+  snapshotContributors,
+} from "@openmapx/mobility-core/contributors";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { apiClient } from "../api/client";
@@ -15,10 +19,21 @@ export function useElevation({ route, enabled = true }: UseElevationParams) {
   const isDriving = route?.mode === "driving";
   const hasInlineElevation = !isDriving && !!route?.elevation && route.elevation.length > 0;
 
+  const profileInputContributors = useMemo(
+    () => (route ? contributorsForRecordFields(route, ["geometry", "distance"]) : []),
+    [route],
+  );
+
   // For walking/cycling: compute profile from inline data (no fetch needed)
   const inlineProfile = useMemo<ElevationProfile | null>(() => {
     if (!route || !hasInlineElevation || !route.elevation) return null;
-    return buildElevationProfile(route.geometry, route.elevation, route.elevationInterval ?? 30);
+    return buildElevationProfile(route.geometry, route.elevation, route.elevationInterval ?? 30, {
+      contributors: contributorsForRecordFields(route, [
+        "geometry",
+        "elevation",
+        ...(route.elevationInterval === undefined ? [] : ["elevationInterval"]),
+      ]),
+    });
   }, [route, hasInlineElevation]);
 
   // For driving: fetch elevation from API
@@ -28,20 +43,29 @@ export function useElevation({ route, enabled = true }: UseElevationParams) {
     isError,
   } = useQuery({
     queryKey: [
-      "elevation",
-      // Use first, last, and middle coords + total distance as a stable key
-      route?.geometry[0],
-      route?.geometry[Math.floor((route?.geometry.length ?? 0) / 2)],
-      route?.geometry[(route?.geometry.length ?? 1) - 1],
+      "elevation-v2-contributors",
+      // The computed profile owns this full shape and this historical geometry
+      // receipt. Sparse coordinate keys could reuse a different route's profile.
+      route?.geometry,
       route?.distance,
+      profileInputContributors,
     ],
     queryFn: async () => {
       if (!route) throw new Error("No route");
+      const geometry = route.geometry.map(([lng, lat]) => [lng, lat] as [number, number]);
       const data = await apiClient.post<ElevationApiResponse>(API_ENDPOINTS.elevation, {
-        coordinates: route.geometry,
+        coordinates: geometry,
         routeDistance: route.distance,
       });
-      return buildElevationProfileFromApi(route.geometry, data.points);
+      return buildElevationProfileFromApi(geometry, data.points, {
+        contributors: snapshotContributors(
+          profileInputContributors,
+          contributorsForRecordFields(data, ["points"]),
+        ),
+        ...(data.contributorCoverage || data.contributors === undefined
+          ? { contributorCoverage: "partial" as const }
+          : {}),
+      });
     },
     enabled: enabled && isDriving && route !== null && route.geometry.length >= 2,
     staleTime: 300_000,

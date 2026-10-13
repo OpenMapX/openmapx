@@ -1,3 +1,4 @@
+import type { ContributingRecord } from "@openmapx/mobility-core/contributors";
 import type { LngLat } from "./geometry";
 
 export interface WeatherOptions {
@@ -43,7 +44,7 @@ export interface DailyForecastPoint {
   sunset?: string;
 }
 
-export interface WeatherResponse {
+export interface WeatherResponse extends ContributingRecord {
   location: LngLat;
   current: CurrentWeather;
   hourly?: HourlyForecastPoint[];

@@ -1,6 +1,6 @@
 import type { IntegrationContext } from "@openmapx/core";
 import { describe, expect, it, vi } from "vitest";
-import { createRoutingOrchestrator } from "../orchestrator";
+import { captureRoutingResult, createRoutingOrchestrator } from "../orchestrator";
 import type { DirectionsResult, MatchResult, RoutingProvider, TravelMode } from "../types.js";
 
 function makeProvider(
@@ -194,4 +194,38 @@ describe("routing orchestrator requireTimeAware filter", () => {
     expect(orch.getOptimizeProvider("walking")?.integrationId).toBe("routing-osrm");
     expect(orch.getOptimizeProvider("walking", { requireTimeAware: true })).toBeNull();
   });
+});
+
+it("captures only named routing suppliers at the orchestration boundary", () => {
+  const supplier = { sourceId: "known", name: "Known" };
+  const base = {
+    distance: 1,
+    duration: 1,
+    geometry: [
+      [0, 0],
+      [1, 1],
+    ] as [number, number][],
+    mode: "driving" as const,
+    legs: [],
+    steps: [],
+  };
+  const served = {
+    integrationId: "provider",
+    provider: makeProvider(["driving"]),
+    contributors: [supplier],
+  };
+  const result = captureRoutingResult(
+    {
+      waypoints: [],
+      activeRouteIndex: 0,
+      routes: [
+        base,
+        { ...base, sourceIds: ["known"] },
+        { ...base, sourceIds: ["unknown"] },
+        { ...base, contributors: [] },
+      ],
+    },
+    served,
+  );
+  expect(result.routes.map((route) => route.contributors)).toEqual([[], [supplier], [], []]);
 });

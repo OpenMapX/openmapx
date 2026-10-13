@@ -16,9 +16,11 @@ import type {
 } from "@openmapx/core";
 import {
   AD_HOC_CATEGORY_ID,
+  brandForPlaceLogo,
   categoryPlaceToPlace,
   formatMeasurementDistance,
   isAreaTooLarge,
+  isDisplayablePhoto,
   makeSyntheticStopPlace,
   PANEL,
   proxyImageUrl,
@@ -35,6 +37,10 @@ import {
   useTransitStops,
 } from "@openmapx/core";
 import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
+import {
+  contributorsForRecordFields,
+  snapshotContributors,
+} from "@openmapx/mobility-core/contributors";
 import type { TransitStop, TransportMode } from "@openmapx/mobility-core/transit";
 import type * as maplibregl from "maplibre-gl";
 import { useLocale, useTranslations } from "next-intl";
@@ -47,8 +53,6 @@ import { ResultItemName, ResultList, ResultListItem } from "@/components/ui/Resu
 import { ResultNotice } from "@/components/ui/ResultNotice";
 import { usePlaceEnrichment } from "@/hooks/usePlaceEnrichment";
 import { useMap } from "@/integration-api/map/MapContext";
-import { useAttributionFromHooks } from "@/integration-api/overlay/useAttributionFromHooks";
-import { attributionsForSources } from "@/lib/attributionForProviders";
 import { openingHoursTone } from "@/lib/openingHoursTone";
 import { useExploreReachResults } from "@/lib/useExploreReachResults";
 import { useOpeningHoursText } from "@/lib/useOpeningHoursText";
@@ -59,6 +63,45 @@ import { cachedSummary, useCardEnrichment } from "./useCardEnrichment";
 
 type CardSummary = CategoryCardEnrichmentResponse["results"][number];
 const SLOW_SEARCH_NOTICE_MS = 8_000;
+
+export function categoryRatingSourceName(
+  rating: NonNullable<CardSummary["rating"]>,
+  registry: { findDataSource(id: string): { name: string } | undefined },
+) {
+  if (rating.contributors !== undefined)
+    return (
+      rating.contributors.find((receipt) => receipt.sourceId === rating.source)?.name ??
+      rating.source
+    );
+  return registry.findDataSource(rating.source)?.name ?? rating.source;
+}
+
+/** Matches the card's exact branches and the capped attribute selector. Photos own their separate strip. */
+export function categoryCardContributors(
+  place: CategoryPlace,
+  summary: CardSummary | undefined,
+  distanceReference: DistanceReference | null,
+) {
+  const fields = [
+    ...(place.name ? ["name"] : []),
+    ...(place.category ? ["category"] : []),
+    ...(place.address ? ["address"] : []),
+    ...(resultDistanceMetres(distanceReference, place.coordinates) !== null ? ["coordinates"] : []),
+    ...selectResultAttributes(place.osmTags).map(
+      (attribute) =>
+        `osmTags.${attribute.kind.startsWith("wheelchair_") ? "wheelchair" : attribute.kind}`,
+    ),
+    ...(place.openingHoursInfo?.status
+      ? ["openingHours", "openingHoursInfo"]
+      : place.isOpen !== undefined
+        ? ["isOpen"]
+        : []),
+  ];
+  return snapshotContributors(
+    contributorsForRecordFields(place, fields),
+    summary?.rating?.contributors ?? [],
+  );
+}
 
 const TRANSIT_MODE_ICONS: Partial<Record<TransportMode, typeof TrainIcon>> = {
   rail: TrainIcon,
@@ -143,7 +186,7 @@ function CategoryPlaceCard({
   onHover: (id: string) => void;
   onHoverEnd: () => void;
   /** QID -> Commons logo filename, resolved once for the whole result list. */
-  brandLogos: Map<string, string | undefined>;
+  brandLogos: Map<string, import("@openmapx/core").BrandDetail | undefined>;
   distanceReference: DistanceReference | null;
 }) {
   const tp = useTranslations("place");
@@ -159,7 +202,7 @@ function CategoryPlaceCard({
     ? place.category.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
     : undefined;
   const brandIdentity = placeBrandIdentity(place);
-  const photo = summary?.photo;
+  const photo = summary?.photo && isDisplayablePhoto(summary.photo) ? summary.photo : undefined;
   const photoUrl = photo?.thumbnailUrl ?? photo?.url;
   const [failedPhotoUrl, setFailedPhotoUrl] = useState<string | null>(null);
   const showPhoto = Boolean(photoUrl && failedPhotoUrl !== photoUrl);
@@ -200,12 +243,12 @@ function CategoryPlaceCard({
         {brandIdentity ? (
           <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
             <BrandLogo
-              brand={{
-                qid: brandIdentity.qid,
-                name: place.brand?.name ?? place.name,
-                logoFile: brandLogos.get(brandIdentity.qid),
-                kind: [brandIdentity.kind],
-              }}
+              brand={brandForPlaceLogo(
+                place,
+                brandLogos.get(brandIdentity.qid),
+                brandIdentity.qid,
+                brandIdentity.kind,
+              )}
               size={20}
             />
             {/* minWidth: 0 lets the name shrink/wrap inside the row instead of
@@ -256,8 +299,7 @@ function CategoryPlaceCard({
             sx={{ color: "text.secondary", display: "block", mb: 0.25 }}
           >
             ★ {new Intl.NumberFormat(locale, { maximumFractionDigits: 1 }).format(rating.stars)} ·{" "}
-            {rating.count} {tp("ratedReviews")} ·{" "}
-            {registry.findDataSource(rating.source)?.name ?? rating.source}
+            {rating.count} {tp("ratedReviews")} · {categoryRatingSourceName(rating, registry)}
           </Typography>
         )}
         {(distanceMetres !== null || attributes.length > 0) && (
@@ -374,7 +416,6 @@ export function CategoryResultsContent() {
   const { selectWithEnrichment } = usePlaceEnrichment();
   const { flyTo, mapRef, mapReady, zoomIn, zoomOut } = useMap();
   const expandOnBackgroundTap = useExpandOnBackgroundTap();
-  const registry = useIntegrationRegistry();
 
   const {
     filtered,
@@ -393,7 +434,22 @@ export function CategoryResultsContent() {
   } = useExploreReachResults();
   const transitStopsQuery = useTransitStops(isTransitCategory ? searchBbox : null);
   const { data: transitStops } = transitStopsQuery;
-  const transitAttributions = useAttributionFromHooks(transitStopsQuery);
+  const transitAttributions = useMemo(
+    () =>
+      snapshotContributors(
+        ...(transitStops ?? []).map((stop) =>
+          contributorsForRecordFields(stop, [
+            ...(stop.name ? ["name"] : []),
+            // The card shows the first icon for each mode. Preserve index-level
+            // overrides, including [] on a child of the modes container.
+            ...stop.modes.flatMap((mode, index) =>
+              stop.modes.indexOf(mode) === index ? [`modes.${index}`] : [],
+            ),
+          ]),
+        ),
+      ),
+    [transitStops],
+  );
   const transitLoading = isTransitCategory && transitStopsQuery.isLoading;
   const loading = isTransitCategory ? transitLoading : isLoading;
   const waitingForResponse = isTransitCategory ? transitStopsQuery.isFetching : isLoading;
@@ -443,15 +499,18 @@ export function CategoryResultsContent() {
     isTransitCategory,
     scrollRef,
   });
-  const poiAttributions = attributionsForSources(
-    registry,
-    results?.flatMap((place) => [
-      ...(place.provenance?.map((source) => source.sourceId) ?? []),
-      ...(cachedSummary(cardSummaries, place, locale)?.rating?.source
-        ? [cachedSummary(cardSummaries, place, locale)?.rating?.source]
-        : []),
-    ]) ?? [],
-  );
+  const poiAttributions =
+    !isTransitCategory && !isLoading && !isError
+      ? snapshotContributors(
+          ...(results ?? []).map((place) =>
+            categoryCardContributors(
+              place,
+              cachedSummary(cardSummaries, place, locale),
+              distanceReference ?? null,
+            ),
+          ),
+        )
+      : [];
   // Resolved once here (not per row — see useBrandLogos) so hook count stays
   // fixed no matter how many rows carry a brand identity.
   const brandQids = useMemo(() => distinctBrandQids(results ?? []), [results]);

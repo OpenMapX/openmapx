@@ -1,7 +1,38 @@
 import { USER_AGENT } from "@openmapx/core";
 import { envString } from "@openmapx/core/server-env";
+import type { Attribution } from "@openmapx/mobility-core/attribution";
+import {
+  encodeRasterContributors,
+  RASTER_CONTRIBUTORS_HEADER,
+  readRasterResponseBytes,
+} from "@openmapx/mobility-core/raster-contributors";
 import type { FastifyPluginAsync } from "fastify";
 import { declareRouteAuth } from "../utils/route-auth.js";
+
+const OSM_ATTRIBUTION: Attribution = {
+  sourceId: "openstreetmap",
+  name: "© OpenStreetMap contributors",
+  url: "https://www.openstreetmap.org/copyright",
+  spdxLicense: "ODbL-1.0",
+  licenseUrl: "https://opendatacommons.org/licenses/odbl/",
+};
+const CYCLOSM_ATTRIBUTIONS: Attribution[] = [
+  {
+    sourceId: "cyclosm",
+    name: "CyclOSM",
+    url: "https://www.cyclosm.org/",
+    publisher: { name: "OpenStreetMap France", url: "https://openstreetmap.fr/" },
+  },
+  OSM_ATTRIBUTION,
+];
+const THUNDERFOREST_ATTRIBUTIONS: Attribution[] = [
+  {
+    sourceId: "thunderforest",
+    name: "Maps © Thunderforest",
+    url: "https://www.thunderforest.com/maps/opencyclemap/",
+  },
+  OSM_ATTRIBUTION,
+];
 
 const CYCLOSM_SUBDOMAINS = ["a", "b", "c"] as const;
 let cyclOSMSubdomainIndex = 0;
@@ -55,6 +86,10 @@ export const tilesRoute: FastifyPluginAsync = async (fastify) => {
       }
       const [z, x, y] = coords;
 
+      // Capture complete notices before either asynchronous acquisition. The
+      // chosen header travels with these successful bytes through HTTP caches.
+      const primaryReceipt = encodeRasterContributors(THUNDERFOREST_ATTRIBUTIONS);
+      const fallbackReceipt = encodeRasterContributors(CYCLOSM_ATTRIBUTIONS);
       const thunderforestKey = process.env.THUNDERFOREST_API_KEY;
       if (thunderforestKey) {
         const tfSub = nextThunderforestSubdomain();
@@ -70,10 +105,17 @@ export const tilesRoute: FastifyPluginAsync = async (fastify) => {
             throw new Error(`Thunderforest returned ${tfResponse.status}`);
           }
 
-          const tfBuffer = Buffer.from(await tfResponse.arrayBuffer());
+          const tfBuffer = Buffer.from(await readRasterResponseBytes(tfResponse));
           reply.header("Cache-Control", "public, max-age=604800, s-maxage=604800");
           reply.header("Cross-Origin-Resource-Policy", "cross-origin");
           reply.header("X-Tile-Source", "thunderforest");
+          reply.header(RASTER_CONTRIBUTORS_HEADER, primaryReceipt);
+          reply.header(
+            "Access-Control-Expose-Headers",
+            [reply.getHeader("Access-Control-Expose-Headers"), RASTER_CONTRIBUTORS_HEADER]
+              .filter(Boolean)
+              .join(", "),
+          );
           reply.type("image/png");
           return reply.send(tfBuffer);
         } catch (error) {
@@ -103,10 +145,17 @@ export const tilesRoute: FastifyPluginAsync = async (fastify) => {
           return reply.status(response.status).send({ message: "Upstream tile fetch failed" });
         }
 
-        const buffer = Buffer.from(await response.arrayBuffer());
+        const buffer = Buffer.from(await readRasterResponseBytes(response));
         reply.header("Cache-Control", "public, max-age=604800, s-maxage=604800");
         reply.header("Cross-Origin-Resource-Policy", "cross-origin");
         reply.header("X-Tile-Source", "cyclosm");
+        reply.header(RASTER_CONTRIBUTORS_HEADER, fallbackReceipt);
+        reply.header(
+          "Access-Control-Expose-Headers",
+          [reply.getHeader("Access-Control-Expose-Headers"), RASTER_CONTRIBUTORS_HEADER]
+            .filter(Boolean)
+            .join(", "),
+        );
         reply.type("image/png");
         return reply.send(buffer);
       } catch (error) {

@@ -1,5 +1,6 @@
 import { assertSupportedOvertureContributors, type OvertureSourceItem } from "@openmapx/core";
 import {
+  AMBIENT_FORMAT_VERSION,
   AMBIENT_LIMITS,
   AMBIENT_POLICY_VERSION,
   type AmbientBuildProgress,
@@ -8,6 +9,8 @@ import {
   type AmbientOvertureRow,
   type AmbientPlace,
   type AmbientRegion,
+  ambientHasLegacyAttribution,
+  ambientOvertureIdentityEvidence,
   ambientPlaceFromOsm,
   ambientPlaceFromOverture,
   mergeAmbientPlaces,
@@ -34,7 +37,7 @@ interface OsmState {
   place_count: string;
 }
 type OvertureRow = AmbientOvertureRow & { sources: OvertureSourceItem[] | null; release: string };
-const OVERTURE_COLUMNS = `o.gers_id,o.name,ST_X(o.geom) AS longitude,ST_Y(o.geom) AS latitude,o.basic_category,o.taxonomy_primary,o.taxonomy_hierarchy,o.taxonomy_alternates,o.names,o.confidence,o.operating_status,o.sources,o.release`;
+const OVERTURE_COLUMNS = `o.gers_id,o.name,ST_X(o.geom) AS longitude,ST_Y(o.geom) AS latitude,o.basic_category,o.taxonomy_primary,o.taxonomy_hierarchy,o.taxonomy_alternates,o.names,o.confidence,o.operating_status,o.sources,to_jsonb(o)->'sources_catalogue' AS sources_catalogue,o.release`;
 function eligibleOverture(row: OvertureRow): AmbientPlace | null {
   const place = ambientPlaceFromOverture(row);
   if (place)
@@ -55,7 +58,8 @@ export async function buildGermanyPlaces(
     throw new Error("Germany coverage requires the complete europe/germany OSM search snapshot");
   const generation = await prepareAmbientGeneration(tx);
   const manifest: AmbientManifest = {
-    version: 1,
+    version: AMBIENT_FORMAT_VERSION,
+    attributionPrecision: "captured-fields",
     policyVersion: AMBIENT_POLICY_VERSION,
     generation,
     publishedAt: new Date().toISOString(),
@@ -132,6 +136,7 @@ export async function buildGermanyPlaces(
     inputRows: number,
   ) => {
     manifest.placeCount += places.length;
+    if (ambientHasLegacyAttribution(places)) manifest.attributionPrecision = "legacy-aggregate";
     if (manifest.placeCount > AMBIENT_LIMITS.countryPlaces)
       throw new Error("Germany output exceeds 20000000 places");
     await insertAmbientFeatures(tx, generation, places);
@@ -153,6 +158,7 @@ export async function buildGermanyPlaces(
       return p && inside(p) ? [p] : [];
     });
     const links = new Map<string, string>();
+    const identityEvidence = new Map<string, ReturnType<typeof ambientOvertureIdentityEvidence>>();
     let overture: AmbientPlace[] = [];
     if (manifest.sources.overture && osm.length) {
       const eligibleIds = new Set(osm.map((p) => p.id));
@@ -171,13 +177,18 @@ export async function buildGermanyPlaces(
         ],
       );
       overture = linked.flatMap((row) => {
+        identityEvidence.set(row.gers_id, ambientOvertureIdentityEvidence(row));
         links.set(`osm:${row.osm_type}/${row.osm_id}`, row.gers_id);
         const p = eligibleOverture(row);
         return p ? [p] : [];
       });
     }
     manifest.sources.osm.count += osm.length;
-    await insert(mergeAmbientPlaces(osm, overture, links).filter(inside), "osm", rows.length);
+    await insert(
+      mergeAmbientPlaces(osm, overture, links, new Set(), identityEvidence).filter(inside),
+      "osm",
+      rows.length,
+    );
     const last = rows[rows.length - 1];
     osmType = last.osm_type;
     osmId = last.osm_id;

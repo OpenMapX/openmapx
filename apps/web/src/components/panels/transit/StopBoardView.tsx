@@ -8,11 +8,11 @@ import ToggleButton from "@mui/material/ToggleButton";
 import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
 import Typography from "@mui/material/Typography";
 import { useArrivals, useDepartures, useStopAlerts } from "@openmapx/core";
+import { contributorsForRecords } from "@openmapx/mobility-core/contributors";
 import type { Departure, MergedDeparture } from "@openmapx/mobility-core/transit";
 import { useTranslations } from "next-intl";
 import { useMemo, useState } from "react";
 import { AttributionStrip } from "@/components/ui/AttributionStrip";
-import { useAttributionFromHooks } from "@/integration-api/overlay/useAttributionFromHooks";
 import { useNow } from "@/lib/useNow";
 import { AlertsBanner } from "./AlertsBanner";
 import { DepartureRow } from "./DepartureRow";
@@ -53,7 +53,6 @@ export function StopBoardView({
   const { data: arrivals, isLoading: arrivalsLoading } = arrivalsQuery;
   const alertsQuery = useStopAlerts(stopId);
   const { data: alerts } = alertsQuery;
-  const mergedAttributions = useAttributionFromHooks(departuresQuery, arrivalsQuery, alertsQuery);
 
   const alertRouteIds = useMemo(
     () =>
@@ -70,6 +69,7 @@ export function StopBoardView({
   const items = tab === "departures" ? departures : arrivals;
   const isLoading = tab === "departures" ? departuresLoading : arrivalsLoading;
   const hasArrivals = Boolean(arrivals?.length);
+  const mergedAttributions = contributorsForRecords([...(items ?? []), ...(alerts ?? [])]);
 
   return (
     <Box

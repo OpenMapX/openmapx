@@ -5,8 +5,6 @@ import {
   roadConditionFeatureToEvent,
   useOverlayExclusion,
 } from "@openmapx/core";
-import type { IntegrationRegistry } from "@openmapx/integration-framework";
-import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import type { GeoJSONSource, MapGeoJSONFeature } from "maplibre-gl";
 import * as maplibregl from "maplibre-gl";
 import { useLocale, useTranslations } from "next-intl";
@@ -108,7 +106,6 @@ export function buildSources(
   features: RawFeature[],
   locale = "en",
   atMs: number = Date.now(),
-  registry?: IntegrationRegistry,
 ): RoadConditionDisplaySources {
   const events = features
     .map(roadConditionFeatureToEvent)
@@ -121,7 +118,7 @@ export function buildSources(
     data: {
       type: "FeatureCollection",
       features: buildRoadConditionFeatures(groups, locale, atMs, (events) =>
-        roadConditionAttributions(events, registry),
+        roadConditionAttributions(events),
       ),
     } as GeoJsonData,
     eventsByDisplayId,
@@ -131,9 +128,6 @@ export function buildSources(
 export function RoadConditionsLayer() {
   const { mapRef, mapReady, styleVersion } = useMap();
   const { apiUrl } = useEnv();
-  const registry = useIntegrationRegistry();
-  const registryRef = useRef(registry);
-  registryRef.current = registry;
   // Declared in this integration's manifest, the same gate the layer selector
   // applies: below it we skip fetching and keep the layers hidden, so a
   // country-sized viewport can't pull thousands of incidents.
@@ -248,7 +242,6 @@ export function RoadConditionsLayer() {
         Array.isArray(fc.features) ? fc.features : [],
         localeRef.current,
         Date.now(),
-        registryRef.current,
       );
       eventsByDisplayIdRef.current = eventsByDisplayId;
       viewNeedsRefreshRef.current = false;

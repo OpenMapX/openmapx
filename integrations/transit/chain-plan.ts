@@ -13,8 +13,14 @@ import {
   worstSupport,
 } from "@openmapx/core";
 import type { TripPlanRequest } from "@openmapx/integration-framework";
+import {
+  contributorsForField,
+  contributorsForRecords,
+  snapshotContributors,
+} from "@openmapx/mobility-core/contributors";
 import type { MobilityResult } from "@openmapx/mobility-core/result";
 import type { TripItinerary, TripPlan } from "@openmapx/mobility-core/transit";
+import { captureTransitContributors } from "@openmapx/mobility-core/transit-contributors";
 import { composeBackwardTransitSchedule } from "./backward-chain-schedule.js";
 
 export interface PlanTransitChainArgs {
@@ -96,7 +102,7 @@ export async function planTransitChain(args: PlanTransitChainArgs): Promise<Chai
     };
 
     const result = await args.planTrip(request);
-    const options = result.data?.itineraries ?? [];
+    const options = captureTransitContributors(result.data?.itineraries ?? [], result.attributions);
     const itineraries = pinArrival
       ? options.filter((option) => {
           const start = Date.parse(option.startTime);
@@ -129,6 +135,22 @@ export async function planTransitChain(args: PlanTransitChainArgs): Promise<Chai
       : Math.max(0, Math.round((startMs - instantMs) / 1000));
 
     const segment: ChainedTripSegment = {
+      contributors: snapshotContributors(chosen.contributors ?? []),
+      fieldContributors: {
+        itinerary: snapshotContributors(chosen.contributors ?? []),
+        boardingWaitSeconds: contributorsForField(chosen, "startTime"),
+        delaySeconds: (() => {
+          const arrival = [...chosen.legs]
+            .reverse()
+            .find((leg) => leg.scheduledEndTime !== undefined);
+          return arrival
+            ? snapshotContributors(
+                contributorsForField(arrival, "endTime"),
+                contributorsForField(arrival, "scheduledEndTime"),
+              )
+            : [];
+        })(),
+      },
       fromIndex: segmentIndex,
       toIndex: segmentIndex + 1,
       itinerary: chosen,
@@ -187,6 +209,25 @@ export async function planTransitChain(args: PlanTransitChainArgs): Promise<Chai
 
   const solved = segments.filter((segment): segment is ChainedTripSegment => segment !== undefined);
 
+  // Waiting depends on both the selected departure and the prior selected arrival.
+  // Alternatives are retained separately and never certify the selected chain.
+  for (let index = 0; index < solved.length; index += 1) {
+    const segment = solved[index];
+    const previous = solved[index - 1];
+    segment.fieldContributors = {
+      ...segment.fieldContributors,
+      boardingWaitSeconds: snapshotContributors(
+        contributorsForField(segment.itinerary, "startTime"),
+        previous ? contributorsForField(previous.itinerary, "endTime") : [],
+      ),
+    };
+    segment.contributors = snapshotContributors(
+      segment.itinerary.contributors ?? [],
+      segment.fieldContributors.boardingWaitSeconds,
+      segment.fieldContributors.delaySeconds ?? [],
+    );
+  }
+
   // Guard the composed chain rather than trusting the provider: an itinerary
   // that starts before the previous segment lands is a real missed connection,
   // whatever departure time it was asked for.
@@ -203,6 +244,15 @@ export async function planTransitChain(args: PlanTransitChainArgs): Promise<Chai
   }
 
   return {
+    contributors: contributorsForRecords(solved),
+    fieldContributors: {
+      schedule: snapshotContributors(
+        ...solved.flatMap((segment) => [
+          contributorsForField(segment.itinerary, "startTime"),
+          contributorsForField(segment.itinerary, "endTime"),
+        ]),
+      ),
+    },
     segments: solved,
     schedule,
     fidelity: fidelityFor(level),

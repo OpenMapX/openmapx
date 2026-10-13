@@ -32,6 +32,7 @@ export function flowToFeatureCollection(segments: RoadFlowSegment[]): RoadFlowFe
         los: s.los,
         confidence: s.confidence,
         direction: s.direction,
+        ...(s.fieldContributors !== undefined && { fieldContributors: s.fieldContributors }),
         ...(s.speedRatio !== undefined && { speedRatio: s.speedRatio }),
         ...(s.currentSpeedKph !== undefined && { currentSpeedKph: s.currentSpeedKph }),
         ...(s.freeFlowSpeedKph !== undefined && { freeFlowSpeedKph: s.freeFlowSpeedKph }),

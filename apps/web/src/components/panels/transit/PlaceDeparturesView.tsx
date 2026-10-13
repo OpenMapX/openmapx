@@ -13,11 +13,11 @@ import {
   useLinkedTransitArrivals,
   useLinkedTransitDepartures,
 } from "@openmapx/core";
+import { contributorsForRecords } from "@openmapx/mobility-core/contributors";
 import type { MergedDeparture, TransportMode } from "@openmapx/mobility-core/transit";
 import { useTranslations } from "next-intl";
 import { useMemo, useState } from "react";
 import { AttributionStrip } from "@/components/ui/AttributionStrip";
-import { useAttributionFromHooks } from "@/integration-api/overlay/useAttributionFromHooks";
 import { useNow } from "@/lib/useNow";
 import { DepartureRow } from "./DepartureRow";
 import { TransitQueryNotice } from "./TransitDataStatus";
@@ -60,7 +60,6 @@ export function PlaceDeparturesView({
 
   const alertsQuery = useLinkedTransitAlerts(place);
   const { data: alerts } = alertsQuery;
-  const mergedAttributions = useAttributionFromHooks(departuresQuery, arrivalsQuery, alertsQuery);
 
   const alertRouteIds = useMemo(
     () =>
@@ -78,6 +77,15 @@ export function PlaceDeparturesView({
   const isLoading = tab === "departures" ? depsLoading : arrivalsLoading;
   const filtered = modeFilter ? items?.filter((d) => d.route.mode === modeFilter) : items;
   const hasArrivals = arrivals && arrivals.length > 0;
+  const displayedAlertIds = new Set((filtered ?? []).map((row) => row.route.id));
+  const mergedAttributions = contributorsForRecords([
+    ...(filtered ?? []),
+    ...(alerts ?? []).filter(
+      (alert) =>
+        (alert.severity === "severe" || alert.severity === "critical") &&
+        alert.affectedRouteIds.some((id) => displayedAlertIds.has(id)),
+    ),
+  ]);
 
   return (
     <Box

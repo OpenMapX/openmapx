@@ -11,6 +11,11 @@
       "purpose": "Metadaten für das Wikidata-Hauptbild (P18-Aussage) abrufen",
       "dataSent": "Bilddateiname (aus Wikidata-P18-Aussage)",
       "dataReceived": "Vorschaubild-URL, Künstler, Lizenz, Aufnahmedatum, Koordinaten"
+    },
+    "wikipedia": {
+      "purpose": "Wikipedia-Auszug zum verknüpften Wikidata-Eintrag anzeigen",
+      "dataSent": "Artikeltitel aus dem gewählten Wikidata-Sitelink, Sprachcode",
+      "dataReceived": "Zusammenfassender Artikelauszug"
     }
   }
 }

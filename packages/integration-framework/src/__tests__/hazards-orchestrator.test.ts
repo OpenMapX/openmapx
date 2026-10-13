@@ -178,3 +178,102 @@ describe("hazards orchestrator", () => {
     expect(getNaturalHazards.mock.calls[0][1]).toEqual({ types: ["volcano"], lang: "de-AT" });
   });
 });
+
+describe("hazard receipts", () => {
+  test("duplicates retain the winning record receipt without crediting the discarded supplier", async () => {
+    const a = { sourceId: "a", name: "Captured A" };
+    const b = { sourceId: "b", name: "Captured B" };
+    const hazards = orchestratorOver([
+      provider({
+        id: "a",
+        getAlerts: async () => ({ alerts: [{ ...alert("same", ["a"]), attributions: [a] }] }),
+      }),
+      provider({
+        id: "b",
+        getAlerts: async () => ({ alerts: [{ ...alert("same", ["b"]), attributions: [b] }] }),
+      }),
+    ]);
+    const result = await hazards.alerts([0, 0, 1, 1]);
+    expect(result.alerts).toHaveLength(1);
+    expect(result.alerts[0]?.contributors).toEqual([a]);
+    a.name = "Current metadata";
+    expect(result.alerts[0]?.contributors?.[0]?.name).toBe("Captured A");
+  });
+
+  test("mixed density cells keep their own receipts and legacy cells never inherit collection suppliers", async () => {
+    const a = { sourceId: "a", name: "A" };
+    const b = { sourceId: "b", name: "B" };
+    const cells = [
+      {
+        point: [0, 0] as [number, number],
+        count: 1,
+        frpSumMW: 1,
+        frpMaxMW: 1,
+        sources: ["a"],
+        contributors: [a],
+      },
+      {
+        point: [1, 1] as [number, number],
+        count: 1,
+        frpSumMW: 2,
+        frpMaxMW: 2,
+        sources: ["b"],
+        contributors: [b],
+      },
+      { point: [2, 2] as [number, number], count: 1, frpSumMW: 3, frpMaxMW: 3 },
+    ];
+    const hazards = orchestratorOver([
+      provider({ getFireDensity: async () => ({ cells, sources: ["a", "b", "offscreen"] }) }),
+    ]);
+    const result = await hazards.fireDensity([0, 0, 3, 3], {
+      since: "2026-10-09",
+      instrument: "viirs",
+      cellDeg: 1,
+    });
+    expect(result.cells.map((cell) => cell.contributors)).toEqual([[a], [b], []]);
+    expect(result.cells.map((cell) => cell.sources)).toEqual([["a"], ["b"], []]);
+  });
+});
+
+test("filters exact native density suppliers per cell without dropping A-only cells for a globally named B", async () => {
+  const a = { sourceId: "parent-a", name: "Captured A" };
+  const b = { sourceId: "parent-b", name: "Captured B" };
+  const hazards = orchestratorOver(
+    [
+      provider({
+        getFireDensity: async () => ({
+          sources: ["child-a", "child-b"],
+          cells: [
+            {
+              point: [0, 0],
+              count: 1,
+              frpSumMW: 1,
+              frpMaxMW: 1,
+              sources: ["parent-a"],
+              contributors: [a],
+              nativeSources: ["child-a"],
+            },
+            {
+              point: [1, 1],
+              count: 2,
+              frpSumMW: 3,
+              frpMaxMW: 2,
+              sources: ["parent-a", "parent-b"],
+              contributors: [a, b],
+              nativeSources: ["child-a", "child-b"],
+            },
+          ],
+        }),
+      }),
+    ],
+    ["child-b"],
+  );
+  const answer = await hazards.fireDensity([0, 0, 2, 2], {
+    since: "2026-10-09",
+    instrument: "viirs",
+    cellDeg: 1,
+  });
+  expect(answer.cells).toHaveLength(1);
+  expect(answer.cells[0]?.contributors).toEqual([a]);
+  expect(answer.sources).toEqual(["child-a"]);
+});

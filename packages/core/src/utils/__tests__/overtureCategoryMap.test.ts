@@ -2,10 +2,22 @@ import { describe, expect, it } from "vitest";
 import {
   OVERTURE_COMMERCIAL_CATEGORIES,
   openMapXCategoryToOvertureConcepts,
+  overtureTaxonomyCategoryEvidence,
   overtureTaxonomyToOpenMapX,
 } from "../overtureCategoryMap";
 
 describe("Overture category interoperability bridge", () => {
+  it("projects the retained requested category without changing global category selection", () => {
+    const taxonomy = { basicCategory: "cafe", primary: "cafe", alternates: ["restaurant"] };
+    expect(overtureTaxonomyToOpenMapX(taxonomy)).toBe("restaurants");
+    expect(overtureTaxonomyCategoryEvidence(taxonomy, "cafes")).toEqual({
+      category: "cafes",
+      propertyPointers: ["/basic_category", "/taxonomy/primary"],
+    });
+    expect(overtureTaxonomyCategoryEvidence({ alternates: ["restaurant"] }, "cafes")).toEqual({
+      propertyPointers: [],
+    });
+  });
   it("only exposes categories with explicit cross-provider semantics", () => {
     expect(OVERTURE_COMMERCIAL_CATEGORIES).toContain("restaurants");
     expect(OVERTURE_COMMERCIAL_CATEGORIES).toContain("cafes");

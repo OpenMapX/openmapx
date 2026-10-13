@@ -30,7 +30,8 @@ describe("Germany publication disk admission", () => {
     expect(() => assertAmbientDiskCapacity(6 * gib, 1)).not.toThrow();
     expect(() => assertAmbientDiskCapacity(6 * gib - 1, 1)).toThrow(/disk/i);
     expect(() => assertAmbientDiskCapacity(7 * gib, 2_000_000)).toThrow(/disk/i);
-    expect(() => assertAmbientDiskCapacity(5 * gib + 2_000_000 * 2048, 2_000_000)).not.toThrow();
+    expect(() => assertAmbientDiskCapacity(5 * gib + 2_000_000 * 2048, 2_000_000)).toThrow(/disk/i);
+    expect(() => assertAmbientDiskCapacity(5 * gib + 2_000_000 * 8192, 2_000_000)).not.toThrow();
   });
   it("stops a running build when its safety reserve is depleted", () => {
     expect(() => assertAmbientDiskCapacity(5 * gib)).not.toThrow();

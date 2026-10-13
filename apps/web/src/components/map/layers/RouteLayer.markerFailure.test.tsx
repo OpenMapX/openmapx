@@ -30,16 +30,25 @@ vi.mock("@/integration-api/map/useDrawnDirectionsRoutes", () => ({
     navigating: false,
   }),
 }));
-vi.mock("@/integration-api/overlay/useMapAttributions", () => ({ useMapAttributions: vi.fn() }));
+vi.mock("@/integration-api/overlay/useMapAttributions", async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  useMapAttributions: vi.fn(),
+}));
 vi.mock("@/lib/routeAttributions", () => ({ routeAttributions: () => [] }));
-vi.mock("@openmapx/integration-framework/react", () => ({ useIntegrationRegistry: () => ({}) }));
+vi.mock("@openmapx/integration-framework/react", () => {
+  const registry = {};
+  return { useIntegrationRegistry: () => registry };
+});
 vi.mock("next-intl", () => ({
   useLocale: () => "en",
   useTranslations: () => (_key: string, values?: Record<string, string>) => values?.duration ?? "",
 }));
-vi.mock("maplibre-gl", () => {
-  throw new Error("marker module unavailable");
-});
+vi.mock("maplibre-gl", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("maplibre-gl")>()),
+  get Marker() {
+    throw new Error("marker class unavailable");
+  },
+}));
 vi.mock("@openmapx/core", async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   useDataSources: () => ({ data: { sources: [] } }),
@@ -51,7 +60,7 @@ import { RouteLayer } from "./RouteLayer";
 afterEach(cleanup);
 
 describe("RouteLayer marker loading", () => {
-  it("reports a missing Marker module and retries on a later map move", async () => {
+  it("reports an unavailable Marker class and retries on a later map move", async () => {
     const error = vi.spyOn(console, "error").mockImplementation(() => {});
     try {
       render(<RouteLayer />);

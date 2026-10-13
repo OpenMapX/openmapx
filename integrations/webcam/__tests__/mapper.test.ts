@@ -463,3 +463,22 @@ describe("webcam strings", () => {
     expect(leafKeys(de).sort()).toEqual(leafKeys(en).sort());
   });
 });
+
+it("captures complete canonical receipts before mapping results and details", () => {
+  const receipt = {
+    sourceId: "exact-feed",
+    name: "Publisher",
+    url: "https://example.com",
+    spdxLicense: "CC-BY-4.0",
+    attributionText: "Required upstream notice",
+    publisher: { name: "Original publisher", url: "https://publisher.example" },
+  };
+  const record = camera({ attributions: [receipt] });
+  const result = mapCameraToResult(record);
+  const detail = mapCameraToDetail(record);
+  receipt.attributionText = "changed later";
+  expect(result.contributors).toEqual([
+    { ...receipt, attributionText: "Required upstream notice" },
+  ]);
+  expect(detail.contributors).toEqual(result.contributors);
+});

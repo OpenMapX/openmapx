@@ -484,3 +484,25 @@ describe("dedupVehicles", () => {
     expect(result[0].id).toBe("gbfs/dott-berlin/2850b11e-abc");
   });
 });
+
+it("does not credit a captured duplicate vehicle that supplies no retained fields", () => {
+  const first = makeVehicle({
+    id: "gbfs/system/one",
+    coordinates: [13, 52],
+    systemId: "system",
+    nativeId: "one",
+    sources: ["gbfs/system"],
+    contributors: [{ sourceId: "gbfs", name: "GBFS" }],
+  });
+  const duplicate = {
+    ...structuredClone(first),
+    id: "transitous/system/one",
+    sources: ["transitous"],
+    contributors: [{ sourceId: "transitous", name: "Transitous" }],
+    servingOrigin: "transitous" as const,
+  };
+  const kept = dedupVehicles([first, duplicate]);
+  expect(kept).toHaveLength(1);
+  expect(kept[0].contributors).toEqual([{ sourceId: "gbfs", name: "GBFS" }]);
+  expect(kept[0].sources).toEqual(["gbfs/system"]);
+});

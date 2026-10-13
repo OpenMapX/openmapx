@@ -10,10 +10,17 @@
     "operatorInstructions": null
   },
   "domains": ["poi-search"],
-  "backend": { "routes": true },
+  "backend": {
+    "routes": true
+  },
   "quality": "built-in",
   "category": "Geocoding",
-  "requires": [{ "service": "postgis", "optional": true }],
+  "requires": [
+    {
+      "service": "postgis",
+      "optional": true
+    }
+  ],
   "dataSources": [
     {
       "sourceId": "name-suggestion-index",
@@ -39,6 +46,20 @@
       "providerCountry": "US",
       "providerPrivacyUrl": "https://foundation.wikimedia.org/wiki/Policy:Privacy_policy",
       "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    },
+    {
+      "sourceId": "wikidata",
+      "name": "Wikidata",
+      "url": "https://www.wikidata.org/",
+      "license": "CC0 1.0",
+      "licenseUrl": "https://www.wikidata.org/wiki/Wikidata:Licensing",
+      "commercialUse": "yes",
+      "providerCountry": "US",
+      "providerPrivacyUrl": "https://foundation.wikimedia.org/wiki/Policy:Privacy_policy",
+      "endUserExposure": "build-time",
       "personalData": false,
       "cookies": false,
       "dpaAvailable": false

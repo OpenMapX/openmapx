@@ -184,7 +184,7 @@ export function createHazardsProvider(
         q.limit,
       );
       const pixels = records.flatMap((record) =>
-        listed(record) ? (readingToFirePixel(record, q.instrument) ?? []) : [],
+        listed(record) ? (readingToFirePixel(record, q.instrument, sources) ?? []) : [],
       );
       return partArea ? { pixels, partial: "area" } : { pixels };
     },
@@ -194,7 +194,7 @@ export function createHazardsProvider(
       if (feeds.length === 0) return { cells: [], sources: [] };
       const answers = await Promise.all(
         gridStrips(bbox, q.cellDeg).map((strip) =>
-          client.get<{ cells?: unknown; sources?: unknown }>(
+          client.get<{ cells?: unknown; sources?: unknown; cell_contributors?: unknown }>(
             "/observations/grid",
             {
               property: "fire.frp",
@@ -212,7 +212,7 @@ export function createHazardsProvider(
       const byCell = new Map<string, FireDensityCell>();
       const named = new Set<string>();
       for (const answer of answers) {
-        for (const cell of gridCellsOf(answer.cells)) {
+        for (const cell of gridCellsOf(answer.cells, answer.cell_contributors)) {
           const key = cell.point.join(",");
           const seen = byCell.get(key);
           if (!seen || cell.count > seen.count) byCell.set(key, cell);

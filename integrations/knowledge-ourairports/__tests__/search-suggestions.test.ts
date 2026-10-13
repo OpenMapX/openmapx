@@ -42,6 +42,37 @@ describe("OurAirports search suggestion adapter", () => {
       searchMatch: { kind: "authoritative_code", value: "FRA", namespace: "iata" },
       importance: 0.9,
     });
+    expect(result.suggestions[0]?.contributors).toEqual(result.attributions);
     expect(result.attributions[0]).toMatchObject({ sourceId: "ourairports" });
   });
+});
+
+it("snapshots the supplier before asynchronous dataset search", async () => {
+  const pending = Promise.withResolvers<AirportSearchMatch[]>();
+  const credit = {
+    sourceId: "ourairports",
+    name: "Original",
+    publisher: { name: "Original publisher" },
+  };
+  const ctx = createMockIntegrationContext();
+  ctx.attributionIndex = {
+    getById: () => credit,
+    list: () => [credit],
+  } as typeof ctx.attributionIndex;
+  const resultPromise = createOurAirportsSuggestionProvider(
+    ctx,
+    () => pending.promise,
+  ).searchSuggestions(
+    { query: "FRA", lang: "en", limit: 8 },
+    { signal: new AbortController().signal, deadlineAt: Number.POSITIVE_INFINITY },
+  );
+  credit.name = "Changed";
+  credit.publisher.name = "Changed publisher";
+  pending.resolve([{ record: airport, kind: "name", matchedValue: "Frankfurt" }]);
+  const result = await resultPromise;
+  expect(result.suggestions[0].contributors?.[0]).toMatchObject({
+    name: "Original",
+    publisher: { name: "Original publisher" },
+  });
+  expect(result.attributions).toEqual(result.suggestions[0].contributors);
 });

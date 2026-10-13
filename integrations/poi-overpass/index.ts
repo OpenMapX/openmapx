@@ -6,10 +6,15 @@ import {
   searchByFilter,
   searchByOsmTags,
   searchByText,
+  setOverpassContributorResolver,
   setOverpassUrl,
 } from "@openmapx/core";
-import type { IntegrationContext } from "@openmapx/integration-framework";
+import {
+  type IntegrationContext,
+  resolveIntegrationContributors,
+} from "@openmapx/integration-framework";
 import type { PoiSearchOutcome, PoiSearchProvider } from "@openmapx/integration-poi-search/types";
+import { OPENSTREETMAP_ATTRIBUTION } from "@openmapx/mobility-core/attribution";
 
 const PRESET_SENTINEL = "__preset__";
 
@@ -60,6 +65,18 @@ export function setup(ctx: IntegrationContext): void {
   const resolved = ctx.getRequiredService("overpass");
   ctx.onActivate(() => {
     if (resolved?.url) setOverpassUrl(resolved.url);
+    setOverpassContributorResolver((url) => {
+      const host = new URL(url).hostname;
+      const sourceId =
+        host === "overpass-api.de"
+          ? "overpass"
+          : host === "overpass.kumi.systems"
+            ? "overpass-kumi"
+            : undefined;
+      return sourceId
+        ? resolveIntegrationContributors(ctx, [sourceId])
+        : [OPENSTREETMAP_ATTRIBUTION];
+    });
   });
   ctx.registerPoiSearchProvider(overpassProvider);
 }

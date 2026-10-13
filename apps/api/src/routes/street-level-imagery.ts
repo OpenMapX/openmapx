@@ -1,6 +1,11 @@
 import type { StreetLevelCapabilities } from "@openmapx/core";
 import { envString } from "@openmapx/core/server-env";
-import type { StreetLevelProvider } from "@openmapx/integration-framework";
+import {
+  dataSourceToAttribution,
+  type IntegrationDataSource,
+  type StreetLevelProvider,
+} from "@openmapx/integration-framework";
+import { parseContributors, snapshotContributors } from "@openmapx/mobility-core/contributors";
 import type { FastifyInstance } from "fastify";
 import { getAllIntegrations, getIntegrationProviders } from "../integration-host.js";
 import { declareRouteAuth } from "../utils/route-auth.js";
@@ -36,6 +41,34 @@ export function orderProviders<T extends { id: string }>(
   return ordered;
 }
 
+/** Capture exact source-layer receipts while the serving integration is acquired. */
+export function captureCoverageContributors(
+  capabilities: StreetLevelCapabilities,
+  dataSources: readonly IntegrationDataSource[],
+): StreetLevelCapabilities {
+  if (capabilities.coverage.kind !== "mvt") return capabilities;
+  const coverage = capabilities.coverage;
+  const sourceLayers = new Set(
+    Object.values(coverage.layers).filter((id): id is string => typeof id === "string"),
+  );
+  const layerContributors = Object.fromEntries(
+    [...sourceLayers].map((layer) => {
+      const native = parseContributors(coverage.layerContributors?.[layer]);
+      const exactIds = new Set(coverage.layerSourceIds?.[layer] ?? []);
+      return [
+        layer,
+        snapshotContributors(
+          native ??
+            dataSources
+              .filter((source) => exactIds.has(source.sourceId))
+              .map(dataSourceToAttribution),
+        ),
+      ];
+    }),
+  );
+  return { ...capabilities, coverage: { ...coverage, layerContributors } };
+}
+
 /**
  * Capabilities of every street-level-imagery provider registered by an integration.
  *
@@ -55,7 +88,7 @@ function collectCapabilities(): StreetLevelCapabilities[] {
 
     const dataSources = integration.manifest.dataSources ?? [];
     for (const provider of providers) {
-      const capabilities = provider.capabilities();
+      const capabilities = captureCoverageContributors(provider.capabilities(), dataSources);
       // Prefer the dataSource describing this provider; fall back to the first
       // for single-source integrations. A provider that sets its own
       // privacyUrl (e.g. a per-instance one) keeps it.

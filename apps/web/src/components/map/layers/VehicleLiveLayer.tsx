@@ -1,9 +1,15 @@
 "use client";
 
 import { routeColor, usePlaceStore, useRouteLive, useTransitRoute } from "@openmapx/core";
+import {
+  contributorsForField,
+  serializeContributors,
+  snapshotContributors,
+} from "@openmapx/mobility-core/contributors";
 import { useEffect } from "react";
 import { addLayerInSlot, unregisterLayerSlot } from "@/integration-api/map/layerStack";
 import { useMap } from "@/integration-api/map/MapContext";
+import { useRenderedMapAttributions } from "@/integration-api/overlay/useRenderedMapAttributions";
 import { PRIMARY_BLUE_HEX } from "@/integration-api/runtime/theme";
 
 const SOURCE_ID = "vehicle-live-source";
@@ -14,6 +20,8 @@ export function VehicleLiveLayer() {
   const activeRouteId = usePlaceStore((s) => s.activeRouteId);
   const { data: liveData } = useRouteLive(activeRouteId);
   const { data: route } = useTransitRoute(activeRouteId);
+
+  useRenderedMapAttributions("transit-vehicle-live", [LAYER_ID], Boolean(activeRouteId));
 
   useEffect(() => {
     void styleVersion;
@@ -38,6 +46,12 @@ export function VehicleLiveLayer() {
       features: liveData.vehicles.map((v) => ({
         type: "Feature" as const,
         properties: {
+          _mapAttributions: serializeContributors(
+            snapshotContributors(
+              v.contributors ?? [],
+              route ? contributorsForField(route, route.color ? "color" : "mode") : [],
+            ),
+          ),
           id: v.id,
           label: v.label ?? "",
         },

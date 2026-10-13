@@ -1,9 +1,14 @@
-import type { IntegrationContext } from "@openmapx/integration-framework";
+import {
+  type IntegrationContext,
+  resolveIntegrationContributors,
+  withRoutingContributors,
+} from "@openmapx/integration-framework";
 import {
   setValhallaApiKey,
   setValhallaBidirectionalAlternates,
   setValhallaUrl,
   valhallaService,
+  valhallaSourceIds,
 } from "./provider.js";
 
 export function setup(ctx: IntegrationContext): void {
@@ -21,5 +26,9 @@ export function setup(ctx: IntegrationContext): void {
     setValhallaBidirectionalAlternates(ctx.config["bidirectional-alternates"] !== false);
   });
 
-  ctx.registerRoutingProvider(valhallaService);
+  ctx.registerRoutingProvider(
+    withRoutingContributors(valhallaService, () =>
+      resolveIntegrationContributors(ctx, valhallaSourceIds()),
+    ),
+  );
 }

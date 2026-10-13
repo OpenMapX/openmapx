@@ -147,10 +147,15 @@ describe("RoadConditionsLayer rendered attribution", () => {
   it("credits no configured feed until its incident is rendered, and drops offscreen credits", async () => {
     respondWith(
       eventsToFeatureCollection([
-        situation({ id: "visible", source: "working" }),
+        situation({
+          id: "visible",
+          source: "working",
+          contributors: [{ sourceId: "working", name: "working" }],
+        }),
         situation({
           id: "outside",
           source: "offscreen",
+          contributors: [{ sourceId: "offscreen", name: "offscreen" }],
           geometry: { type: "Point", coordinates: [6, 53] },
         }),
       ]).features,

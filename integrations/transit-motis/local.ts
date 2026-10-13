@@ -1,3 +1,10 @@
+import {
+  annotateLegsWithAttribution,
+  wrapMotisWithFeedAttribution as wrapLocalWithFeedAttribution,
+} from "./contributors.js";
+
+export { annotateLegsWithAttribution, extractFeedTags } from "./contributors.js";
+
 import { readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { stops } from "@motis-project/motis-client";
@@ -7,12 +14,13 @@ import type {
   IntegrationContext,
   TripPlanRequest,
 } from "@openmapx/integration-framework";
-import type { Attribution } from "@openmapx/mobility-core/attribution";
+import { captureTransitContributors } from "@openmapx/integration-framework";
+import { snapshotContributors } from "@openmapx/mobility-core/contributors";
 import { freshnessNow } from "@openmapx/mobility-core/freshness";
 import type { MotisInstance } from "@openmapx/mobility-core/motis-client";
 import { getMotisVehicleRadar } from "@openmapx/mobility-core/motis-radar";
 import { withAttribution } from "@openmapx/mobility-core/result";
-import type { TripItinerary, TripLeg, TripPlan } from "@openmapx/mobility-core/transit";
+import type { TripPlan } from "@openmapx/mobility-core/transit";
 import { DEFAULT_TRANSIT_ISOCHRONE_MAX_SAMPLES } from "@openmapx/mobility-core/transit-isochrone";
 import type {
   TransitReachabilityCapabilities,
@@ -23,6 +31,7 @@ import { attributionLocal, attributionTransitous } from "./attributions.js";
 import type { TransitMotisInstances } from "./instances.js";
 import { MAX_ONE_TO_MANY_BATCH, sampleMotisTravelTimeField } from "./isochrone.js";
 import {
+  captureDurationOnlyReachabilitySeeds,
   checkMotisReachabilityDestinations,
   getMotisReachabilitySeeds,
   MotisReachabilityError,
@@ -30,7 +39,6 @@ import {
   resolveMotisReachabilityCapabilities,
 } from "./reachability.js";
 import { getRentalFormFactors, primeRentalFormFactors } from "./rentals-capability.js";
-import { decodeMotisLineReference, decodeMotisRoutePatternId } from "./route-pattern-id.js";
 
 const LOCAL_REACHABILITY_TTL_MS = 15_000;
 
@@ -73,159 +81,15 @@ function activeMotisCapabilities(): ActiveMotisCapabilities | null {
   }
 }
 
-function wrapTransitous<T>(data: T) {
-  return withAttribution(data, attributionTransitous(), freshnessNow());
+function wrapTransitous<T>(data: T, receipts = attributionTransitous()) {
+  return withAttribution(captureTransitContributors(data, receipts), receipts, freshnessNow());
 }
 function wrapTransitousRT<T>(data: T) {
-  return withAttribution(data, attributionTransitous(), freshnessNow({ hasRealtimeData: true }));
-}
-
-interface MaybeStopShape {
-  id?: unknown;
-  stopId?: unknown;
-  tripId?: unknown;
-  routeId?: unknown;
-  route?: unknown;
-  legs?: unknown;
-  itineraries?: unknown;
-  stops?: unknown;
-  from?: unknown;
-  to?: unknown;
-  intermediateStops?: unknown;
-  seeds?: unknown;
-  stop?: unknown;
-}
-
-/**
- * Strip the MOTIS instance prefix (`ms:` or `mo:`) from an id and find the
- * longest matching feed tag in `feedTagsByLength` where the remainder either
- * equals the tag or starts with `<tag>_`.
- *
- * MOTIS feed tags can themselves contain underscores (e.g.
- * `au-nsw_Transport-for-New-South-Wales-...`), so we cannot just split on the
- * first underscore — we must match against known tags, longest first.
- */
-function feedTagFromId(id: string | undefined, feedTagsByLength: string[]): string | undefined {
-  if (!id) return undefined;
-  if (feedTagsByLength.length === 0) return undefined;
-  const rest = id.replace(/^(ms:|mo:|mr:)/, "");
-  for (const tag of feedTagsByLength) {
-    if (rest === tag) return tag;
-    if (rest.startsWith(`${tag}_`)) return tag;
-  }
-  return undefined;
-}
-
-/**
- * Walk an arbitrary MOTIS-derived response shape and collect every feed tag
- * embedded in stop/trip ids it carries. Deduplicated, insertion-ordered.
- *
- * `feedTagsByLength` should be the AttributionIndex's MOTIS feed-tag set
- * sorted longest-first so prefix matching is unambiguous. If empty, returns
- * an empty array (the caller will fall back to ATTRIBUTION_LOCAL).
- *
- * Supports: TransitStop, Departure, VehicleJourney, TripPlan, TripItinerary,
- * TripLeg, VehicleJourneyStop, VehiclePosition, and plain arrays of the above.
- * Anything it does not understand contributes zero tags.
- */
-export function extractFeedTags(data: unknown, feedTagsByLength: string[]): string[] {
-  const tags = new Set<string>();
-  const visit = (node: unknown): void => {
-    if (node === null || node === undefined) return;
-    if (Array.isArray(node)) {
-      for (const item of node) visit(item);
-      return;
-    }
-    if (typeof node !== "object") return;
-    const obj = node as MaybeStopShape & Record<string, unknown>;
-    const candidateIds = [obj.id, obj.stopId, obj.tripId, obj.routeId];
-    for (const candidate of candidateIds) {
-      if (typeof candidate !== "string") continue;
-      const pattern = decodeMotisRoutePatternId(candidate);
-      if (pattern) {
-        for (const routeId of pattern.r) {
-          const tag = feedTagFromId(routeId, feedTagsByLength);
-          if (tag) tags.add(tag);
-        }
-        continue;
-      }
-      const line = decodeMotisLineReference(candidate);
-      if (line) {
-        const tag = feedTagFromId(line.r, feedTagsByLength);
-        if (tag) tags.add(tag);
-        continue;
-      }
-      const tag = feedTagFromId(candidate, feedTagsByLength);
-      if (tag) tags.add(tag);
-    }
-    if (Array.isArray(obj.legs)) visit(obj.legs);
-    if (Array.isArray(obj.itineraries)) visit(obj.itineraries);
-    if (Array.isArray(obj.stops)) visit(obj.stops);
-    if (obj.route) visit(obj.route);
-    if (obj.from) visit(obj.from);
-    if (obj.to) visit(obj.to);
-    if (Array.isArray(obj.intermediateStops)) visit(obj.intermediateStops);
-    if (Array.isArray(obj.seeds)) visit(obj.seeds);
-    if (obj.stop) visit(obj.stop);
-  };
-  visit(data);
-  return Array.from(tags);
-}
-
-/**
- * Walk each itinerary leg and populate `leg.attributions` based on the feed
- * tags embedded in the leg's stop/trip ids. Leaves legs with no recognisable
- * feed tags unchanged (the trip-level envelope still credits the union).
- *
- * When `index` is missing or returns no feed tags, all legs pass through
- * untouched so single-feed planners and offline tests are behaviour-preserving.
- */
-export function annotateLegsWithAttribution(
-  itineraries: TripItinerary[],
-  index: AttributionIndexHandle | undefined,
-): TripItinerary[] {
-  if (!index) return itineraries;
-  const tagsByLength = index.listMotisFeedTags().sort((a, b) => b.length - a.length);
-  if (tagsByLength.length === 0) return itineraries;
-  return itineraries.map((itin) => ({
-    ...itin,
-    legs: itin.legs.map((leg) => {
-      const legTags = extractFeedTags(leg, tagsByLength);
-      if (legTags.length === 0) return leg;
-      const attributions: Attribution[] = [];
-      for (const tag of legTags) {
-        const attr = index.getById(tag);
-        if (attr) attributions.push(attr);
-      }
-      if (attributions.length === 0) return leg;
-      const next: TripLeg = { ...leg, attributions };
-      return next;
-    }),
-  }));
-}
-
-/**
- * Wrap a MOTIS-derived value with attributions resolved against the host's
- * AttributionIndex. Falls back to `ATTRIBUTION_LOCAL` when the index is
- * absent or when no feed tag in the value matches an indexed entry.
- */
-function wrapLocalWithFeedAttribution<T>(
-  data: T,
-  index: AttributionIndexHandle | undefined,
-  isRealtime = false,
-) {
-  if (!index) {
-    return withAttribution(data, attributionLocal(), freshnessNow({ hasRealtimeData: isRealtime }));
-  }
-  const tagsByLength = index.listMotisFeedTags().sort((a, b) => b.length - a.length);
-  const tags = extractFeedTags(data, tagsByLength);
-  const matched: Attribution[] = [];
-  for (const tag of tags) {
-    const attr = index.getById(tag);
-    if (attr) matched.push(attr);
-  }
-  const attributions = matched.length > 0 ? matched : attributionLocal();
-  return withAttribution(data, attributions, freshnessNow({ hasRealtimeData: isRealtime }));
+  return withAttribution(
+    captureTransitContributors(data, attributionTransitous()),
+    attributionTransitous(),
+    freshnessNow({ hasRealtimeData: true }),
+  );
 }
 
 function withPrefix(id: string, prefix: "ms:" | "mo:"): string {
@@ -338,7 +202,7 @@ export function setupLocal(ctx: IntegrationContext, instances: TransitMotisInsta
 
   // Capture the host's AttributionIndex (when present). All MOTIS-derived
   // responses resolve feed-level attribution by looking up extracted feed
-  // tags against it; without an index they fall back to ATTRIBUTION_LOCAL.
+  // tags against it; without an index the feed supplier remains unknown.
   const attributionIndex = ctx.attributionIndex;
   const exactReachabilityEnabled = ctx.config.exactReachabilityEnabled === true;
   const exportableIsochronesEnabled = ctx.config.exportableIsochronesEnabled === true;
@@ -517,14 +381,18 @@ export function setupLocal(ctx: IntegrationContext, instances: TransitMotisInsta
     },
     async getLegGeometry(tripId, fromStopId, toStopId) {
       if (!(await isMotisReachableCached())) throw new Error("local MOTIS unavailable");
-      return wrapLocal(
-        await motis.getLegGeometry(
-          motisLocalInstance,
-          withPrefix(tripId, "ms:"),
-          fromStopId ? withPrefix(fromStopId, "ms:") : undefined,
-          toStopId ? withPrefix(toStopId, "ms:") : undefined,
-        ),
+      const localTripId = withPrefix(tripId, "ms:");
+      const geometry = await motis.getLegGeometry(
+        motisLocalInstance,
+        localTripId,
+        fromStopId ? withPrefix(fromStopId, "ms:") : undefined,
+        toStopId ? withPrefix(toStopId, "ms:") : undefined,
       );
+      if (!geometry) return wrapLocal(null);
+      // The geometry endpoint omits IDs; its typed trip request certifies the
+      // selected service shape, rather than every loaded timetable feed.
+      const serving = wrapLocal({ tripId: localTripId });
+      return wrapLocal({ ...geometry, contributors: serving.attributions });
     },
     async getArrivals(id, min) {
       const localId = withPrefix(id, "ms:");
@@ -637,19 +505,27 @@ export function setupLocal(ctx: IntegrationContext, instances: TransitMotisInsta
         }
       }
       requireHostedFallback();
-      const seeds = await getMotisReachabilitySeeds(transitousInstance, request, signal);
+      const receipts = snapshotContributors(attributionTransitous());
+      const seeds = captureDurationOnlyReachabilitySeeds(
+        await getMotisReachabilitySeeds(transitousInstance, request, signal),
+        receipts,
+      );
       const capabilities = resolveMotisReachabilityCapabilities({
         source: "transitous",
         runtimeHealthy: true,
         operatorEnabled: false,
       });
-      return wrapTransitous({
-        queryTime: request.queryTime,
-        source: "transitous" as const,
-        capabilities,
-        seeds,
-        thinning: { originalSeedCount: seeds.length, seedCount: seeds.length, gridMetres: 0 },
-      });
+      return wrapTransitous(
+        {
+          queryTime: request.queryTime,
+          source: "transitous" as const,
+          lineageComplete: false,
+          capabilities,
+          seeds,
+          thinning: { originalSeedCount: seeds.length, seedCount: seeds.length, gridMetres: 0 },
+        },
+        receipts,
+      );
     },
     async checkReachabilityDestinations(request, signal) {
       if (!(await isMotisReachableCached())) {

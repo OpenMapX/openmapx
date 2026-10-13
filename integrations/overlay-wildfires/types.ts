@@ -1,3 +1,4 @@
+import type { Attribution } from "@openmapx/mobility-core/attribution";
 /** The layer a viewport or world wildfire response feeds; its feature ids carry it as a prefix. */
 export type WildfireProvider = "nifc" | "effis" | "noaa-hms";
 
@@ -10,6 +11,8 @@ export interface FireFeature {
   id: string;
   geometry: { type: "Point"; coordinates: [number, number] };
   properties: {
+    sources?: readonly string[];
+    contributors?: readonly Attribution[];
     latitude: number;
     longitude: number;
     /** Brightness temperature in kelvin, when the detection carries one. */
@@ -38,6 +41,9 @@ export interface FireDensityFeature {
   type: "Feature";
   geometry: { type: "Point"; coordinates: [number, number] };
   properties: {
+    sources?: readonly string[];
+    contributors?: readonly Attribution[];
+    lineageComplete?: boolean;
     count: number;
     /** Summed and largest fire radiative power in MW. */
     frpSum: number;

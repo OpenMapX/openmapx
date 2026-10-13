@@ -1,17 +1,20 @@
 "use client";
 
 import { useNavigationStore } from "@openmapx/core";
-import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import type * as maplibregl from "maplibre-gl";
 import { useEffect, useMemo } from "react";
 import { useMap } from "@/integration-api/map/MapContext";
 import { getMapClickOwner } from "@/integration-api/map/mapClickOwnership";
 import type { MapLayerGroup, SlottedLayer } from "@/integration-api/map/mapLayerGroup";
 import { useMapLayerGroup } from "@/integration-api/map/useMapLayerGroup";
-import { useMapAttributions } from "@/integration-api/overlay/useMapAttributions";
-import { routeAttributions } from "@/lib/routeAttributions";
+import { useRenderedMapAttributions } from "@/integration-api/overlay/useRenderedMapAttributions";
 import { ROUTE_COLORS, ROUTE_WIDTHS } from "@/lib/routeStyle";
 import { buildNavRouteLine, navRouteProgressFraction } from "./navRouteSplit";
+import {
+  routeGeometryFeatures,
+  routeSegmentLayerId,
+  routeSegmentProgress,
+} from "./routeGeometryFeatures";
 import type { DynamicLineState } from "./useMapDynamicLineState";
 import { useMapDynamicLineState } from "./useMapDynamicLineState";
 
@@ -35,39 +38,37 @@ export function NavigationRouteLayer() {
   const activeRouteIndex = useNavigationStore((s) => s.activeRouteIndex);
   const fasterRoute = useNavigationStore((s) => s.fasterRoute);
   const progress = useNavigationStore((s) => s.progress);
-  const routeProvider = useNavigationStore((s) => s.routeProvider);
-
-  // Credit the routing engine on the map's attribution control while navigating,
-  // so the credit shows during turn-by-turn (the directions panel is gone).
-  const registry = useIntegrationRegistry();
-  const navRouteAttributions = useMemo(
-    () => (status === "idle" ? [] : routeAttributions(registry, routeProvider, route)),
-    [registry, routeProvider, route, status],
-  );
-  useMapAttributions("nav-route", navRouteAttributions);
-
   // Cache the turf line + total length per route so the per-fix update below
   // doesn't re-walk the whole geometry every time the user moves.
   const navLine = useMemo(() => (route ? buildNavRouteLine(route.geometry) : null), [route]);
 
-  // One feature for the whole route, published once per route — never per
-  // fix. The traveled/remaining boundary is now purely a paint concern (see
-  // `dynamicState` below), so this memo must not depend on `progress`:
-  // depending on it would put the `setData` upload straight back on the hot
-  // path this rewrite exists to take it off of.
-  const activeFeatures = useMemo(() => {
-    if (status === "idle" || !route || route.geometry.length < 2) return EMPTY_FC;
-    return {
+  // Upload captured geometry once per route; progress changes only paint.
+  const activeFeatures = useMemo(
+    () => ({
       type: "FeatureCollection" as const,
-      features: [
-        {
-          type: "Feature" as const,
-          properties: {},
-          geometry: { type: "LineString" as const, coordinates: route.geometry },
-        },
-      ],
-    };
-  }, [status, route]);
+      features: status === "idle" || !route ? [] : routeGeometryFeatures(route, {}),
+    }),
+    [status, route],
+  );
+  const gradientGroups = useMemo(
+    () =>
+      activeFeatures.features.map((_, index) =>
+        [TRAVELED, NAV_ROUTE_REMAINING_LAYER_ID, REMAINING_CASING].map((id) =>
+          routeSegmentLayerId(id, index),
+        ),
+      ),
+    [activeFeatures],
+  );
+  useRenderedMapAttributions(
+    "nav-route",
+    [...gradientGroups.flat(), ALT, PROPOSED],
+    status !== "idle",
+    {
+      // Every group draws exactly one captured span. Its traveled/remaining
+      // alpha union covers the span, including before/after its progress interval.
+      complementaryGradientGroups: gradientGroups,
+    },
+  );
 
   // Where along the line (as a `line-progress` fraction, not a naive
   // geodesic ratio — see navRouteSplit.ts) the traveled/remaining boundary
@@ -84,61 +85,35 @@ export function NavigationRouteLayer() {
   // always uses a flat 256px texture with linear filtering, which would
   // quantize and blur the traveled/remaining boundary into a visible ramp
   // instead of the hard edge the driver sees today.
-  const dynamicState = useMemo<DynamicLineState>(
-    () => ({
-      paint: {
-        [TRAVELED]: {
-          "line-gradient": [
-            "step",
-            ["line-progress"],
-            ROUTE_COLORS.traveled,
-            progressFraction,
-            TRANSPARENT,
-          ],
-        },
-        [NAV_ROUTE_REMAINING_LAYER_ID]: {
-          "line-gradient": [
-            "step",
-            ["line-progress"],
-            TRANSPARENT,
-            progressFraction,
-            ROUTE_COLORS.active,
-          ],
-        },
-        [REMAINING_CASING]: {
-          "line-gradient": [
-            "step",
-            ["line-progress"],
-            TRANSPARENT,
-            progressFraction,
-            ROUTE_COLORS.casing,
-          ],
-        },
-      },
-    }),
-    [progressFraction],
-  );
+  const dynamicState = useMemo<DynamicLineState>(() => {
+    const paint: NonNullable<DynamicLineState["paint"]> = {};
+    activeFeatures.features.forEach((feature, index) => {
+      const localProgress = routeSegmentProgress(
+        feature.properties,
+        navLine?.mercatorCumulative ?? [],
+        navLine?.mercatorTotal ?? 0,
+        progressFraction,
+      );
+      for (const [id, before, after] of [
+        [TRAVELED, ROUTE_COLORS.traveled, TRANSPARENT],
+        [NAV_ROUTE_REMAINING_LAYER_ID, TRANSPARENT, ROUTE_COLORS.active],
+        [REMAINING_CASING, TRANSPARENT, ROUTE_COLORS.casing],
+      ])
+        paint[routeSegmentLayerId(id, index)] = {
+          "line-gradient": ["step", ["line-progress"], before, localProgress, after],
+        };
+    });
+    return { paint };
+  }, [activeFeatures, navLine, progressFraction]);
 
   const altFeatures = useMemo(() => {
     if (status === "idle") return EMPTY_FC;
-    const alts = routes
-      .map((r, i) => ({ r, i }))
-      .filter(({ r, i }) => i !== activeRouteIndex && r.geometry.length >= 2)
-      .map(({ r, i }) => ({
-        type: "Feature" as const,
-        properties: { routeIndex: i, kind: "alt" },
-        geometry: { type: "LineString" as const, coordinates: r.geometry },
-      }));
-    const proposed =
-      fasterRoute && fasterRoute.route.geometry.length >= 2
-        ? [
-            {
-              type: "Feature" as const,
-              properties: { kind: "proposed" },
-              geometry: { type: "LineString" as const, coordinates: fasterRoute.route.geometry },
-            },
-          ]
-        : [];
+    const alts = routes.flatMap((r, i) =>
+      i === activeRouteIndex ? [] : routeGeometryFeatures(r, { routeIndex: i, kind: "alt" }),
+    );
+    const proposed = fasterRoute
+      ? routeGeometryFeatures(fasterRoute.route, { kind: "proposed" })
+      : [];
     return { type: "FeatureCollection" as const, features: [...alts, ...proposed] };
   }, [status, routes, activeRouteIndex, fasterRoute]);
 
@@ -183,43 +158,50 @@ export function NavigationRouteLayer() {
           slot: "route-alt",
           order: 4,
         },
-        {
-          // No `kind` filter: the source now holds one feature covering the
-          // whole route. Which portion this casing actually shows is a
-          // `line-gradient` paint concern, applied dynamically below — see
-          // `dynamicState`.
-          id: REMAINING_CASING,
-          type: "line",
-          source: SOURCE,
-          layout: { "line-cap": "round", "line-join": "round" },
-          // `line-color` is the fallback shown for the one tick before the
-          // gradient in `dynamicState` lands.
-          paint: { "line-color": ROUTE_COLORS.casing, "line-width": ROUTE_WIDTHS.nav.casing },
-          slot: "route-active",
-          order: 2,
-        },
-        {
-          id: TRAVELED,
-          type: "line",
-          source: SOURCE,
-          layout: { "line-cap": "round", "line-join": "round" },
-          paint: {
-            "line-color": ROUTE_COLORS.traveled,
-            "line-width": ROUTE_WIDTHS.nav.traveled,
-            "line-opacity": 0.7,
-          },
-          slot: "route-active",
-          order: 3,
-        },
-        {
-          id: NAV_ROUTE_REMAINING_LAYER_ID,
-          type: "line",
-          source: SOURCE,
-          layout: { "line-cap": "round", "line-join": "round" },
-          paint: { "line-color": ROUTE_COLORS.active, "line-width": NAV_ROUTE_REMAINING_WIDTH },
-          slot: "route-active",
-          order: 4,
-        },
+        ...activeFeatures.features.flatMap(
+          (_, index) =>
+            [
+              {
+                id: routeSegmentLayerId(REMAINING_CASING, index),
+                type: "line",
+                source: SOURCE,
+                filter: ["==", ["get", "geometryPart"], index],
+                layout: { "line-cap": "round", "line-join": "round" },
+                // `line-color` is the fallback shown for the one tick before the
+                // gradient in `dynamicState` lands.
+                paint: { "line-color": ROUTE_COLORS.casing, "line-width": ROUTE_WIDTHS.nav.casing },
+                slot: "route-active",
+                order: 2,
+              },
+              {
+                id: routeSegmentLayerId(TRAVELED, index),
+                type: "line",
+                source: SOURCE,
+                filter: ["==", ["get", "geometryPart"], index],
+                layout: { "line-cap": "round", "line-join": "round" },
+                paint: {
+                  "line-color": ROUTE_COLORS.traveled,
+                  "line-width": ROUTE_WIDTHS.nav.traveled,
+                  "line-opacity": 0.7,
+                },
+                slot: "route-active",
+                order: 3,
+              },
+              {
+                id: routeSegmentLayerId(NAV_ROUTE_REMAINING_LAYER_ID, index),
+                type: "line",
+                source: SOURCE,
+                filter: ["==", ["get", "geometryPart"], index],
+                layout: { "line-cap": "round", "line-join": "round" },
+                paint: {
+                  "line-color": ROUTE_COLORS.active,
+                  "line-width": NAV_ROUTE_REMAINING_WIDTH,
+                },
+                slot: "route-active",
+                order: 4,
+              },
+            ] satisfies SlottedLayer[],
+        ),
       ] satisfies SlottedLayer[],
     }),
     [activeFeatures, altFeatures],

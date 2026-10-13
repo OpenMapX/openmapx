@@ -10,7 +10,12 @@
     "wikimedia-commons-logos": {
       "purpose": "Resolve a brand's logo image for display in search suggestions and place details",
       "dataSent": "The Wikimedia Commons filename referenced by the brand's catalog entry, requested through the image proxy so the browser never contacts Commons directly",
-      "dataReceived": "The logo image file"
+      "dataReceived": "Logo image URL, file page, creator, licence and required credit notices"
+    },
+    "wikidata": {
+      "purpose": "Selected brand labels, descriptions, websites and logo filename hints from the Wikidata artifact distributed with NSI",
+      "dataSent": "Nothing per request; the downloaded artifact is compiled at build time and read locally",
+      "dataReceived": "Wikidata label, description, official website and Commons filename values selected by the catalogue generator"
     }
   }
 }

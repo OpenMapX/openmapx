@@ -1,11 +1,13 @@
 import {
   FetchJsonHttpError,
+  fetchCommonsMetadata,
   fetchWithRedirects,
+  isDisplayablePhoto,
   type PlacePhoto,
   parseId,
   parseRetryAfterMs,
 } from "@openmapx/core";
-import type { LoadedIntegration } from "@openmapx/integration-framework";
+import type { IntegrationContext, LoadedIntegration } from "@openmapx/integration-framework";
 import {
   lookupByNameAndCoords,
   lookupByOsmRef,
@@ -14,6 +16,49 @@ import type { PhotoProvider, PhotoQuery } from "./types.js";
 
 // Providers in this list are ordered last (street-level imagery — shown after editorial photos)
 const DEPRIORITIZED_PROVIDER_IDS = new Set(["mapillary", "panoramax"]);
+
+const OSM_IMAGES_PROVIDER_ID = "osm-images";
+interface ImageTagOptions {
+  strict?: boolean;
+  signal?: AbortSignal;
+  onError?: (error: unknown) => void;
+  onPhotos?: (photos: PlacePhoto[]) => void;
+  commons?: {
+    getJson: NonNullable<NonNullable<Parameters<typeof fetchCommonsMetadata>[1]>["getJson"]>;
+    allowed: () => Promise<boolean>;
+  };
+}
+
+/** Bound before registration: new Commons requests use only host HTTP/policy. */
+export function createOsmImagePhotoProvider(
+  ctx: Pick<IntegrationContext, "http" | "getDisallowedSourceIds">,
+): PhotoProvider {
+  const resolve = async (
+    tags: Record<string, string>,
+    options?: ImageTagOptions,
+  ): Promise<PlacePhoto[]> => {
+    if (options?.signal?.aborted) {
+      if (options.strict) options.signal.throwIfAborted();
+      return [];
+    }
+    const disallowed = (await ctx.getDisallowedSourceIds?.()) ?? new Set<string>();
+    if (disallowed.has("osm") || disallowed.has("openstreetmap")) return [];
+    return extractImageTagPhotos(tags, {
+      ...options,
+      commons: {
+        getJson: (url, httpOptions) => ctx.http.get(url, httpOptions),
+        allowed: async () => !disallowed.has("wikimedia-commons") && !disallowed.has("wikimedia"),
+      },
+    });
+  };
+  return {
+    id: OSM_IMAGES_PROVIDER_ID,
+    name: "OSM image references",
+    search: (query) =>
+      query.osmTags ? resolve(query.osmTags, { signal: query.signal }) : Promise.resolve([]),
+    searchByTags: (tags, _limit, options) => resolve(tags, options),
+  };
+}
 
 /**
  * Collect photo providers from integrations registered under the "photos" domain.
@@ -56,9 +101,15 @@ export async function searchPhotos(
 
   // OSM image tags first (highest priority), then provider results
   const all: PlacePhoto[] = [];
-  if (query.osmTags) all.push(...(await extractImageTagPhotos(query.osmTags)));
-  for (const result of results) {
-    if (result.status === "fulfilled") all.push(...result.value);
+  const imageResult =
+    results[providers.findIndex((provider) => provider.id === OSM_IMAGES_PROVIDER_ID)];
+  if (imageResult?.status === "fulfilled") all.push(...imageResult.value);
+  else if (!providers.some((provider) => provider.id === OSM_IMAGES_PROVIDER_ID) && query.osmTags)
+    all.push(...(await extractImageTagPhotos(query.osmTags, { signal: query.signal })));
+  for (let index = 0; index < results.length; index++) {
+    const result = results[index];
+    if (providers[index].id !== OSM_IMAGES_PROVIDER_ID && result.status === "fulfilled")
+      all.push(...result.value);
   }
 
   return deduplicatePhotos(all, totalLimit);
@@ -72,19 +123,17 @@ export async function searchPhotos(
 export async function searchHeroPhotos(
   osmTags: Record<string, string>,
   providers: PhotoProvider[],
-  options?: {
-    strict?: boolean;
-    signal?: AbortSignal;
-    onError?: (error: unknown) => void;
-    onPhotos?: (photos: PlacePhoto[]) => void;
-  },
+  options?: ImageTagOptions,
 ): Promise<PlacePhoto[]> {
   // Start independent OSM tag and provider work together. Incremental photos
   // let a bounded card request keep a completed source if another stalls.
-  const imageTask = extractImageTagPhotos(osmTags, options);
+  const contextual = providers.find((provider) => provider.id === OSM_IMAGES_PROVIDER_ID);
+  const imageTask = contextual?.searchByTags
+    ? contextual.searchByTags(osmTags, undefined, options)
+    : extractImageTagPhotos(osmTags, options);
   const tagPromises: Promise<PlacePhoto[]>[] = [];
   for (const p of providers) {
-    if (p.searchByTags)
+    if (p.id !== OSM_IMAGES_PROVIDER_ID && p.searchByTags)
       tagPromises.push(
         p.searchByTags(osmTags, undefined, options).then(
           (photos) => {
@@ -116,12 +165,7 @@ export async function searchHeroPhotos(
  */
 async function extractImageTagPhotos(
   tags: Record<string, string>,
-  options?: {
-    strict?: boolean;
-    signal?: AbortSignal;
-    onError?: (error: unknown) => void;
-    onPhotos?: (photos: PlacePhoto[]) => void;
-  },
+  options?: ImageTagOptions,
 ): Promise<PlacePhoto[]> {
   const photos: PlacePhoto[] = [];
   const seen = new Set<string>();
@@ -140,15 +184,7 @@ async function extractImageTagPhotos(
       resolveImageValue(raw, options).then(
         (urls) => {
           if (urls?.length) {
-            const isGooglePhotos =
-              raw.includes("photos.app.goo.gl") || raw.includes("photos.google.com/share");
-            options?.onPhotos?.(
-              urls.map((url) => ({
-                url,
-                source: isGooglePhotos ? "google-photos" : "osm",
-                pageUrl: isGooglePhotos ? raw : undefined,
-              })),
-            );
+            options?.onPhotos?.(urls.filter(isDisplayablePhoto));
           }
           return urls;
         },
@@ -166,17 +202,10 @@ async function extractImageTagPhotos(
       continue;
     }
     if (!result.value) continue;
-    const rawValue = imageValues[i];
-    const isGooglePhotos =
-      rawValue.includes("photos.app.goo.gl") || rawValue.includes("photos.google.com/share");
-    for (const url of result.value) {
-      if (seen.has(url)) continue;
-      seen.add(url);
-      photos.push({
-        url,
-        source: isGooglePhotos ? "google-photos" : "osm",
-        pageUrl: isGooglePhotos ? rawValue : undefined,
-      });
+    for (const photo of result.value) {
+      if (!isDisplayablePhoto(photo) || seen.has(photo.url)) continue;
+      seen.add(photo.url);
+      photos.push(photo);
     }
   }
 
@@ -189,14 +218,19 @@ async function extractImageTagPhotos(
  */
 async function resolveImageValue(
   value: string,
-  options?: { strict?: boolean; signal?: AbortSignal },
-): Promise<string[] | null> {
+  options?: ImageTagOptions,
+): Promise<PlacePhoto[] | null> {
   // Wikimedia Commons filename: "File:Example.jpg"
   if (value.startsWith("File:")) {
     const filename = value.slice(5);
-    return [
-      `https://commons.wikimedia.org/wiki/Special:FilePath/${encodeURIComponent(filename)}?width=1200`,
-    ];
+    if (!options?.commons || !(await options.commons.allowed())) return null;
+    const metadata = await fetchCommonsMetadata([filename], {
+      strict: options.strict,
+      signal: options.signal,
+      getJson: options.commons.getJson,
+    });
+    const photo = metadata.get(filename.replace(/_/g, " "));
+    return photo ? [photo] : null;
   }
 
   // Not a URL
@@ -208,10 +242,30 @@ async function resolveImageValue(
   // We only use the og:image which is intended for link-preview embedding.
   if (isGooglePhotosShareUrl(value)) {
     const preview = await resolveGooglePhotosPreview(value, options);
-    return preview ? [preview] : null;
+    return preview ? [{ url: preview, source: "google-photos", pageUrl: value }] : null;
   }
 
-  return [value];
+  const url = new URL(value);
+  const filePath =
+    url.hostname === "commons.wikimedia.org"
+      ? url.pathname.match(/^\/wiki\/Special:FilePath\/(.+)$/)
+      : null;
+  const uploaded = ["upload.wikimedia.org", "thumb.wikimedia.org"].includes(url.hostname)
+    ? url.pathname.match(/^\/wikipedia\/commons\/(?:thumb\/)?[a-f0-9]\/[a-f0-9]{2}\/([^/]+)/)
+    : null;
+  const file = filePath?.[1] ?? uploaded?.[1];
+  if (file) {
+    const filename = decodeURIComponent(file).replace(/_/g, " ");
+    if (!options?.commons || !(await options.commons.allowed())) return null;
+    const metadata = await fetchCommonsMetadata([filename], {
+      strict: options.strict,
+      signal: options.signal,
+      getJson: options.commons.getJson,
+    });
+    const photo = metadata.get(filename);
+    return photo ? [photo] : null;
+  }
+  return [{ url: value, source: "osm" }];
 }
 
 // Browser-like headers to avoid Google blocking server-side fetches
@@ -396,6 +450,7 @@ export function deduplicatePhotos(photos: PlacePhoto[], limit = 20): PlacePhoto[
   const seen = new Set<string>();
   const unique: PlacePhoto[] = [];
   for (const p of photos) {
+    if (!isDisplayablePhoto(p)) continue;
     const key = dedupKey(p.url);
     if (seen.has(key)) continue;
     seen.add(key);

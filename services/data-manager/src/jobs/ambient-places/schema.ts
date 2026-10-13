@@ -23,6 +23,9 @@ CREATE TABLE IF NOT EXISTS ambient_places.features (
   tenant BOOLEAN NOT NULL, sources TEXT NOT NULL, geom BYTEA NOT NULL,
   PRIMARY KEY(generation,id)
 );
+ALTER TABLE ambient_places.features ADD COLUMN IF NOT EXISTS contributors JSONB;
+ALTER TABLE ambient_places.features ADD COLUMN IF NOT EXISTS field_contributors JSONB;
+ALTER TABLE ambient_places.features ADD COLUMN IF NOT EXISTS source_lineage JSONB;
 -- EWKB keeps this internal store out of Martin's automatic geometry-table discovery.
 CREATE INDEX IF NOT EXISTS ambient_features_generation_geom ON ambient_places.features USING GIST(generation,ST_GeomFromEWKB(geom));
 DROP INDEX IF EXISTS ambient_places.ambient_features_geom;
@@ -38,6 +41,9 @@ CREATE TABLE IF NOT EXISTS ambient_places.planet_features (
   LIKE ambient_places.features INCLUDING DEFAULTS INCLUDING CONSTRAINTS,
   PRIMARY KEY(generation,id)
 ) PARTITION BY LIST(generation);
+ALTER TABLE ambient_places.planet_features ADD COLUMN IF NOT EXISTS contributors JSONB;
+ALTER TABLE ambient_places.planet_features ADD COLUMN IF NOT EXISTS field_contributors JSONB;
+ALTER TABLE ambient_places.planet_features ADD COLUMN IF NOT EXISTS source_lineage JSONB;
 CREATE INDEX IF NOT EXISTS ambient_planet_geom ON ambient_places.planet_features USING GIST(ST_GeomFromEWKB(geom));
 CREATE INDEX IF NOT EXISTS ambient_planet_gers ON ambient_places.planet_features(generation,gers_id) WHERE gers_id IS NOT NULL;
 CREATE TABLE IF NOT EXISTS ambient_places.planet_builds (

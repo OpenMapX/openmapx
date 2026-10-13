@@ -1,5 +1,6 @@
 import { type BBox, fetchJson } from "@openmapx/core";
 import {
+  captureTransitContributors,
   createManifestAttribution,
   type IntegrationContext,
   type RealtimeProvider,
@@ -485,17 +486,21 @@ export function setup(ctx: IntegrationContext): void {
     async getVehiclePositions(bbox: BBox) {
       const data = await getEnturVehicles(bbox);
       return withAttribution(
-        data,
+        captureTransitContributors(data, attributionFor("entur-live-vehicles")),
         attributionFor("entur-live-vehicles"),
         freshnessNow({ hasRealtimeData: true }),
       );
     },
     async getAlertsForBbox(bbox: BBox) {
       const snapshot = await getEnturAlerts(bbox);
-      return withAttribution(snapshot.data, attributionFor("entur-live-situations"), {
-        ...freshnessNow({ hasRealtimeData: true }),
-        fetchedAt: snapshot.fetchedAt,
-      });
+      return withAttribution(
+        captureTransitContributors(snapshot.data, attributionFor("entur-live-situations")),
+        attributionFor("entur-live-situations"),
+        {
+          ...freshnessNow({ hasRealtimeData: true }),
+          fetchedAt: snapshot.fetchedAt,
+        },
+      );
     },
   };
 

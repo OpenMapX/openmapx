@@ -3,6 +3,11 @@ import type {
   RideProvider,
   RideQuoteRequest,
 } from "@openmapx/integration-framework";
+import {
+  captureResultContributors,
+  contributorsForRecords,
+  snapshotContributors,
+} from "@openmapx/mobility-core/contributors";
 import type { ResolvedRideProvider, RideProviderListing, RideQuoteResult } from "./types.js";
 
 const DEFAULT_QUOTE_TTL_SECONDS = 60;
@@ -186,21 +191,26 @@ export function createRideOrchestrator(ctx: IntegrationContext) {
       eligible.map(async (e) => {
         const getQuotesFn = e.provider.getQuotes;
         if (!e.provider.capabilities.quote || !getQuotesFn) {
-          return { providerId: e.provider.id, quotes: [], attributions: e.provider.attribution };
+          return { providerId: e.provider.id, quotes: [], attributions: [] };
         }
+        const uniformSupplier = snapshotContributors(
+          e.provider.attribution.filter((receipt) => receipt.sourceId === e.provider.meta.sourceId),
+        );
         const result = await call(e.provider, "getQuotes", () => getQuotesFn(request));
         if (!result) {
-          return { providerId: e.provider.id, quotes: [], attributions: e.provider.attribution };
+          return { providerId: e.provider.id, quotes: [], attributions: [] };
         }
         // The orchestrator owns quote lifetime so a provider cannot leave a
         // stale price on screen by returning a distant expiry.
         const ttl = (e.provider.quoteTtlSeconds ?? DEFAULT_QUOTE_TTL_SECONDS) * 1000;
         const expiresAt = new Date(now + ttl).toISOString();
-        return {
-          providerId: e.provider.id,
-          quotes: result.data.map((q) => ({ ...q, expiresAt })),
-          attributions: result.attributions.length ? result.attributions : e.provider.attribution,
-        };
+        const envelope = result.attributions.length ? result.attributions : uniformSupplier;
+        const quotes = result.data.map((quote) => ({
+          ...quote,
+          expiresAt,
+          contributors: captureResultContributors(quote, envelope),
+        }));
+        return { providerId: e.provider.id, quotes, attributions: contributorsForRecords(quotes) };
       }),
     );
   }

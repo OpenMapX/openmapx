@@ -48,7 +48,8 @@ import IconButton from "@mui/material/IconButton";
 import Link from "@mui/material/Link";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
-import { safeHref } from "@openmapx/core";
+import { type Place, safeHref } from "@openmapx/core";
+import { contributorsForRecordFields } from "@openmapx/mobility-core/contributors";
 import { useTranslations } from "next-intl";
 import type { ReactElement, ReactNode } from "react";
 import {
@@ -60,6 +61,7 @@ import {
   SiVimeo,
   SiVk,
 } from "react-icons/si";
+import { AttributionStrip } from "@/components/ui/AttributionStrip";
 import { BRAND } from "@/integration-api/runtime/theme";
 import { humanizeOsmTagValue } from "@/lib/humanizeOsmTagValue";
 
@@ -339,13 +341,17 @@ function isMultilingualKey(key: string): boolean {
 }
 
 interface MultilingualEntry {
+  keys: string[];
   label: string;
   defaultValue?: string;
   translations: Array<{ lang: string; flag: string; value: string }>;
 }
 
 function collectMultilingualEntries(tags: Record<string, string>): MultilingualEntry[] {
-  const groups = new Map<string, { defaultValue?: string; translations: Map<string, string> }>();
+  const groups = new Map<
+    string,
+    { keys: string[]; defaultValue?: string; translations: Map<string, string> }
+  >();
 
   for (const [key, value] of Object.entries(tags)) {
     let baseKey: string | null = null;
@@ -383,9 +389,10 @@ function collectMultilingualEntries(tags: Record<string, string>): MultilingualE
 
     let group = groups.get(baseKey);
     if (!group) {
-      group = { translations: new Map() };
+      group = { keys: [], translations: new Map() };
       groups.set(baseKey, group);
     }
+    group.keys.push(key);
     if (lang) group.translations.set(lang, value);
     else group.defaultValue = value;
   }
@@ -396,7 +403,12 @@ function collectMultilingualEntries(tags: Record<string, string>): MultilingualE
     const translations = Array.from(group.translations.entries())
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([l, v]) => ({ lang: l, flag: langFlag(l), value: v }));
-    entries.push({ label: formatKey(baseKey), defaultValue: group.defaultValue, translations });
+    entries.push({
+      keys: group.keys,
+      label: formatKey(baseKey),
+      defaultValue: group.defaultValue,
+      translations,
+    });
   }
   return entries;
 }
@@ -539,6 +551,7 @@ interface Props {
   osmTags: Record<string, string>;
   section?: "all" | "practical" | "remaining";
   representedEmail?: string;
+  place?: Pick<Place, "contributors" | "fieldContributors">;
 }
 
 const PRACTICAL_GRID_KEYS = new Set([
@@ -554,7 +567,7 @@ const PRACTICAL_GRID_KEYS = new Set([
   "changing_table",
 ]);
 
-export function PlaceTagDetails({ osmTags, section = "all", representedEmail }: Props) {
+export function PlaceTagDetails({ osmTags, section = "all", representedEmail, place }: Props) {
   const t = useTranslations("place");
 
   const tag = (k: string) => osmTags[k];
@@ -602,6 +615,7 @@ export function PlaceTagDetails({ osmTags, section = "all", representedEmail }: 
   const multilingualEntries = collectMultilingualEntries(osmTags);
 
   const socialLinks = SOCIAL_PLATFORMS.filter((p) => osmTags[p.tagKey]).map((p) => ({
+    tagKey: p.tagKey,
     label: p.label,
     icon: p.icon,
     url: p.toUrl(osmTags[p.tagKey]),
@@ -1140,6 +1154,56 @@ export function PlaceTagDetails({ osmTags, section = "all", representedEmail }: 
     return null;
   }
 
+  const displayedKeys = new Set<string>();
+  for (const item of visibleGridItems) {
+    const props = item.props as { value?: string; showNo?: boolean };
+    if (item.type === BoolItem && props.value === "no" && !props.showNo) continue;
+    const key = item.key;
+    if (key === "mfg") {
+      if (manufacturer) displayedKeys.add("manufacturer");
+      if (model) displayedKeys.add("model");
+    } else if (key === "toilets") {
+      if (toilets === "yes") displayedKeys.add("toilets");
+      if (toiletsWheelchair) displayedKeys.add("toilets:wheelchair");
+    } else if (key) displayedKeys.add(key);
+  }
+  const linkedKey = (prefix: string) => {
+    const wp = osmTags[`${prefix}:wikipedia`];
+    if (wp && wp.indexOf(":") > 0) displayedKeys.add(`${prefix}:wikipedia`);
+    else if (osmTags[`${prefix}:wikidata`]) displayedKeys.add(`${prefix}:wikidata`);
+  };
+  if (section !== "practical") {
+    if (operator) {
+      displayedKeys.add("operator");
+      linkedKey("operator");
+    }
+    if ((brand || network) && !(brand && brand === operator)) {
+      if (brand) displayedKeys.add("brand");
+      if (network && (!brand || network !== brand)) displayedKeys.add("network");
+      linkedKey("brand");
+    }
+    if (religion) displayedKeys.add("religion");
+    if (denomination) displayedKeys.add("denomination");
+    for (const entry of multilingualEntries) for (const key of entry.keys) displayedKeys.add(key);
+  }
+  if (section !== "remaining") {
+    if (visibleEmail) displayedKeys.add(tag("email") !== undefined ? "email" : "contact:email");
+    if (wheelchair) displayedKeys.add("wheelchair");
+    if (access) displayedKeys.add("access");
+    if (fee || charge) {
+      if (fee) displayedKeys.add("fee");
+      if (charge && fee !== "no") displayedKeys.add("charge");
+    }
+    if (cuisine) displayedKeys.add("cuisine");
+    for (const link of socialLinks) displayedKeys.add(link.tagKey);
+  }
+  const attributions = place
+    ? contributorsForRecordFields(
+        place,
+        Array.from(displayedKeys, (key) => `osmTags.${key}`),
+      )
+    : [];
+
   return (
     <>
       <Divider sx={{ mx: section === "practical" ? 0 : 2, my: 1 }} />
@@ -1401,6 +1465,7 @@ export function PlaceTagDetails({ osmTags, section = "all", representedEmail }: 
           </Box>
         )}
       </Box>
+      <AttributionStrip attributions={attributions} variant="plain" />
     </>
   );
 }

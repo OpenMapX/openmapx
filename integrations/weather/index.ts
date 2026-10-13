@@ -24,7 +24,7 @@ export function setup(ctx: IntegrationContext): void {
       units: (scalarQueries(req.query).units as "metric" | "imperial") ?? "metric",
     };
 
-    const key = `weather:current:${roundCoord2(lat)},${roundCoord2(lng)}:${options.units}`;
+    const key = `weather:current:contributors-v2:${roundCoord2(lat)},${roundCoord2(lng)}:${options.units}`;
 
     try {
       const result = await ctx.cache.withCache(key, 300, async () => {

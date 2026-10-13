@@ -1,5 +1,16 @@
 import { createHash } from "node:crypto";
 import type { BBox } from "@openmapx/core";
+import { captureTransitContributors } from "@openmapx/integration-framework";
+import type { Attribution } from "@openmapx/mobility-core/attribution";
+import {
+  type ContributingRecord,
+  contributorsForField,
+  contributorsForFields,
+  contributorsForRecords,
+  type FieldContributors,
+  parseFieldContributors,
+  snapshotContributors,
+} from "@openmapx/mobility-core/contributors";
 import type {
   Departure,
   FareProduct,
@@ -84,6 +95,7 @@ import {
   type SwissStopDatasets,
   type SwissTrafficPoint,
   searchSwissServicePoints,
+  setSwissDatasetContributors,
 } from "./datasets.js";
 
 const SWITZERLAND_BBOX: BBox = [5.96, 45.82, 10.49, 47.81];
@@ -602,6 +614,15 @@ function mapOjpServiceInfo(
 ): TransitServiceInfo | undefined {
   if (!service) return undefined;
   return {
+    contributors: snapshotContributors(
+      swissContributors("ojp"),
+      contributorsForFields(operatorMetadata?.fieldContributors, [
+        "abbreviation",
+        "description",
+        "organisationNumber",
+        "participantRef",
+      ]),
+    ),
     attributes: service.attributeDetails.map((attribute) => ({
       accessFacility: attribute.accessFacility,
       code: attribute.code,
@@ -652,17 +673,23 @@ function mapOjpServiceInfo(
 
 function serviceRemarks(service: OjpService | undefined): Departure["remarks"] {
   if (!service?.attributes.length) return undefined;
-  return service.attributes.map((text) => ({ text, type: "info" as const }));
+  return service.attributes.map((text) => ({
+    contributors: swissContributors("ojp"),
+    text,
+    type: "info" as const,
+  }));
 }
 
 function legGeometry(leg: OjpTripLeg): TripLeg["geometry"] {
   if (leg.projectionCoordinates.length >= 2) {
     return {
+      contributors: swissContributors("ojp", "ojp-geometry-osm"),
       type: "LineString",
       coordinates: leg.projectionCoordinates,
     };
   }
   return {
+    contributors: swissContributors("ojp"),
     type: "LineString",
     coordinates: [
       [leg.start.lng, leg.start.lat],
@@ -787,7 +814,19 @@ function buildStopCodes(identity: {
 }
 
 function mergeTransitRoute(existing: TransitRoute | undefined, next: TransitRoute): TransitRoute {
+  const retainedExisting =
+    existing &&
+    ((!next.shortName && existing.shortName) ||
+      (!next.longName && existing.longName) ||
+      (!next.operatorName && existing.operatorName) ||
+      (!next.color && existing.color) ||
+      (!next.textColor && existing.textColor) ||
+      (!next.geometry && existing.geometry));
   return {
+    contributors: snapshotContributors(
+      next.contributors ?? [],
+      retainedExisting ? (existing.contributors ?? []) : [],
+    ),
     id: next.id,
     shortName: next.shortName || existing?.shortName || next.id,
     longName: next.longName || existing?.longName || next.shortName || next.id,
@@ -914,6 +953,7 @@ function buildTransitStopFromServicePoint(
     servicePointSloid: servicePoint.servicePointSloid,
   });
   return {
+    contributors: swissContributors("master-data"),
     id: providerId(rawRef),
     ...(ids.primaryScheme ? { primaryScheme: ids.primaryScheme } : {}),
     ...(ids.ids ? { ids: ids.ids } : {}),
@@ -940,6 +980,7 @@ function buildTransitStopFromTrafficPoint(
     stopPointSloid: trafficPoint.sloid,
   });
   return {
+    contributors: swissContributors("master-data"),
     id: providerId(trafficPoint.sloid),
     ...(ids.primaryScheme ? { primaryScheme: ids.primaryScheme } : {}),
     ...(ids.ids ? { ids: ids.ids } : {}),
@@ -966,6 +1007,33 @@ function mapOjpPlaceToStop(place: OjpPlace, datasets: SwissStopDatasets): Transi
     stopPointSloid: stopPoint?.sloid,
   });
   return {
+    fieldContributors: {
+      id: swissContributors("ojp"),
+      ids: swissContributors("ojp", ...(servicePoint || stopPoint ? ["master-data"] : [])),
+      codes: swissContributors(servicePoint || stopPoint ? "master-data" : "ojp"),
+      name: swissContributors(
+        place.name
+          ? "ojp"
+          : stopPoint?.designationOfficial || servicePoint?.name
+            ? "master-data"
+            : "ojp",
+      ),
+      lat: swissContributors(place.lat ? "ojp" : stopPoint || servicePoint ? "master-data" : "ojp"),
+      lng: swissContributors(place.lng ? "ojp" : stopPoint || servicePoint ? "master-data" : "ojp"),
+      modes: swissContributors(
+        "ojp",
+        ...(servicePoint?.meansOfTransport?.some(
+          (mode) => !place.modes.map(mapSwissMode).includes(mapSwissMode(mode)),
+        )
+          ? ["master-data"]
+          : []),
+      ),
+      parentStationId: swissContributors(
+        ...(place.placeType === "stop_point" && servicePoint ? ["master-data"] : []),
+      ),
+      platformCode: swissContributors("ojp"),
+    },
+    contributors: swissContributors("ojp", ...(servicePoint || stopPoint ? ["master-data"] : [])),
     id: providerId(rawRef),
     ...(ids.primaryScheme ? { primaryScheme: ids.primaryScheme } : {}),
     ...(ids.ids ? { ids: ids.ids } : {}),
@@ -1097,6 +1165,17 @@ function buildRouteFromService(
   const routeId = routeIdFromService(service);
   if (!routeId) return null;
   return {
+    contributors: snapshotContributors(
+      swissContributors("ojp"),
+      contributorsForFields(
+        operatorMetadata?.fieldContributors,
+        operatorMetadata?.description
+          ? ["description"]
+          : operatorMetadata?.abbreviation
+            ? ["abbreviation"]
+            : [],
+      ),
+    ),
     id: routeId,
     longName: service?.destinationText || shortName,
     mode,
@@ -1134,7 +1213,12 @@ function buildDepartureFromStopEvent(
     service.operatingDayRef && service.journeyRef
       ? providerId(`${service.operatingDayRef}|${service.journeyRef}`)
       : providerId(service.journeyRef || `${route.id}:${scheduledAt}`);
-  return {
+  const departure: Departure = {
+    contributors: snapshotContributors(
+      swissContributors("ojp"),
+      route.contributors ?? [],
+      serviceInfo?.contributors ?? [],
+    ),
     delaySeconds: computeDelaySeconds(scheduledAt, expectedAt),
     expectedAt,
     formation: mapOjpFormation(service.datedTrainNumberRefs),
@@ -1145,6 +1229,7 @@ function buildDepartureFromStopEvent(
     platform: call.estimatedQuay || call.plannedQuay,
     remarks: serviceRemarks(service),
     route: {
+      contributors: swissContributors("ojp"),
       id: route.id,
       longName: route.longName,
       mode: route.mode,
@@ -1153,6 +1238,18 @@ function buildDepartureFromStopEvent(
     scheduledAt,
     serviceInfo,
     tripId,
+  };
+  return {
+    ...departure,
+    fieldContributors: {
+      ...Object.fromEntries(
+        Object.keys(departure)
+          .filter((field) => field !== "contributors")
+          .map((field) => [field, swissContributors("ojp")]),
+      ),
+      route: snapshotContributors(departure.route.contributors ?? []),
+      serviceInfo: snapshotContributors(serviceInfo?.contributors ?? []),
+    },
   };
 }
 
@@ -1209,6 +1306,7 @@ async function resolveSwissOccupancyForecast(
     stopName?: string;
   } = {},
 ): Promise<{
+  contributors: readonly Attribution[];
   occupancy: OccupancyLevel;
   occupancyClasses?: TransitServiceInfo["occupancyClasses"];
   occupancyRaw: string;
@@ -1304,6 +1402,7 @@ async function resolveSwissOccupancyForecast(
   if (!occupancy) return null;
 
   return {
+    contributors: snapshotContributors(dataset.contributors ?? []),
     occupancy,
     occupancyClasses: classes,
     occupancyRaw:
@@ -1316,9 +1415,23 @@ async function resolveSwissOccupancyForecast(
   };
 }
 
+/** Snapshot retained field owners before adding an independently acquired value. */
+function retainedFieldContributors(
+  record: ContributingRecord & { fieldContributors?: FieldContributors },
+): Record<string, readonly Attribution[]> {
+  if (record.fieldContributors !== undefined)
+    return { ...parseFieldContributors(record.fieldContributors) };
+  return Object.fromEntries(
+    Object.keys(record)
+      .filter((field) => field !== "contributors" && field !== "fieldContributors")
+      .map((field) => [field, contributorsForField(record, field)]),
+  );
+}
+
 function applySwissOccupancyForecastToServiceInfo(
   serviceInfo: TransitServiceInfo | undefined,
   forecast: {
+    contributors: readonly Attribution[];
     occupancy: OccupancyLevel;
     occupancyClasses?: TransitServiceInfo["occupancyClasses"];
     occupancyRaw: string;
@@ -1327,13 +1440,63 @@ function applySwissOccupancyForecastToServiceInfo(
   } | null,
 ): TransitServiceInfo | undefined {
   if (!serviceInfo || !forecast) return serviceInfo;
+  const candidate = {
+    occupancy: forecast.occupancy,
+    occupancyClasses: forecast.occupancyClasses,
+    occupancyRaw: forecast.occupancyRaw,
+    occupancySource: forecast.source,
+    occupancyUpdatedAt: forecast.occupancyUpdatedAt,
+  };
+  const retained = Object.entries(candidate).filter(
+    ([field, value]) => value != null && serviceInfo[field as keyof TransitServiceInfo] == null,
+  );
+  if (!retained.length) return serviceInfo;
+  const receipts = snapshotContributors(forecast.contributors);
   return {
     ...serviceInfo,
-    occupancy: serviceInfo.occupancy ?? forecast.occupancy,
-    occupancyClasses: serviceInfo.occupancyClasses ?? forecast.occupancyClasses,
-    occupancyRaw: serviceInfo.occupancyRaw ?? forecast.occupancyRaw,
-    occupancySource: serviceInfo.occupancySource ?? forecast.source,
-    occupancyUpdatedAt: serviceInfo.occupancyUpdatedAt ?? forecast.occupancyUpdatedAt,
+    ...Object.fromEntries(retained),
+    contributors: snapshotContributors(serviceInfo.contributors ?? [], receipts),
+    fieldContributors: {
+      ...retainedFieldContributors(serviceInfo),
+      ...Object.fromEntries(retained.map(([field]) => [field, snapshotContributors(receipts)])),
+    },
+  };
+}
+
+function nestedFieldContributors(
+  record: ContributingRecord & { fieldContributors?: FieldContributors },
+  field: string,
+): Record<string, readonly Attribution[]> {
+  return {
+    [field]: snapshotContributors(record.contributors ?? []),
+    ...Object.fromEntries(
+      Object.entries(retainedFieldContributors(record)).map(([key, receipts]) => [
+        `${field}.${key}`,
+        snapshotContributors(receipts),
+      ]),
+    ),
+  };
+}
+
+function applySwissOccupancyForecast<T extends Departure | TripLeg>(
+  record: T,
+  forecast: NonNullable<Awaited<ReturnType<typeof resolveSwissOccupancyForecast>>>,
+): T {
+  const serviceInfo = applySwissOccupancyForecastToServiceInfo(record.serviceInfo, forecast);
+  const changedOccupancy = record.occupancy == null;
+  if (!changedOccupancy && serviceInfo === record.serviceInfo) return record;
+  return {
+    ...record,
+    contributors: snapshotContributors(record.contributors ?? [], forecast.contributors),
+    occupancy: record.occupancy ?? forecast.occupancy,
+    serviceInfo,
+    fieldContributors: {
+      ...retainedFieldContributors(record),
+      ...(changedOccupancy ? { occupancy: snapshotContributors(forecast.contributors) } : {}),
+      ...(serviceInfo && serviceInfo !== record.serviceInfo
+        ? nestedFieldContributors(serviceInfo, "serviceInfo")
+        : {}),
+    },
   };
 }
 
@@ -1378,6 +1541,7 @@ function computeTripDurationSeconds(result: OjpTripResult): number {
 function mapOjpFareProduct(product: OjpFareProduct): FareProduct | null {
   if (product.amount == null || !product.currency) return null;
   return {
+    contributors: swissContributors("ojp-fare"),
     amount: product.amount,
     authorityName: product.authorityName,
     authorityRef: product.authorityRef,
@@ -1432,6 +1596,7 @@ function mapOjpFareBundle(
   const transferProducts = results.flatMap((result) => result.products);
   return {
     fare: {
+      contributors: swissContributors("ojp-fare"),
       results,
       source: "ojpfare",
       transfers: [
@@ -1496,6 +1661,31 @@ function mapOjpTripLeg(
       : undefined;
   const routeId = routeIdFromService(leg.service);
   return {
+    fieldContributors: {
+      mode: swissContributors("ojp"),
+      route: swissContributors("ojp"),
+      from: swissContributors("ojp"),
+      to: swissContributors("ojp"),
+      geometry: swissContributors(
+        "ojp",
+        ...(leg.projectionCoordinates.length >= 2 ? ["ojp-geometry-osm"] : []),
+      ),
+      serviceInfo: serviceInfo?.contributors ?? [],
+      ...(fareAssignment
+        ? {
+            fareTransferIndex: swissContributors("ojp-fare"),
+            effectiveFareLegIndex: swissContributors("ojp-fare"),
+          }
+        : {}),
+    },
+    contributors: snapshotContributors(
+      swissContributors(
+        "ojp",
+        ...(leg.projectionCoordinates.length >= 2 ? ["ojp-geometry-osm"] : []),
+      ),
+      serviceInfo?.contributors ?? [],
+      fareAssignment ? swissContributors("ojp-fare") : [],
+    ),
     _intermediateStopCount: leg.intermediateCalls.length,
     alightNameSuffix: leg.alightCall?.nameSuffix,
     boardNameSuffix: leg.boardCall?.nameSuffix,
@@ -1592,6 +1782,10 @@ function mapTripResponseToPlan(
       ),
     );
     return {
+      contributors: snapshotContributors(
+        contributorsForRecords(legs),
+        fareBundle?.fare.contributors ?? [],
+      ),
       distanceMeters: trip.distanceMeters,
       duration: computeTripDurationSeconds(trip),
       endTime: trip.endTime || legs.at(-1)?.endTime || new Date().toISOString(),
@@ -1613,6 +1807,7 @@ function mapTripResponseToPlan(
       name: itineraries[0]?.legs[0]?.from.name || "Origin",
     },
     itineraries,
+    contributors: contributorsForRecords(itineraries),
     provider: PROVIDER,
     to: {
       lat: params.to.lat,
@@ -1635,21 +1830,22 @@ async function enrichSwissTripPlanOccupancy(plan: TripPlan | null): Promise<Trip
             stopName: leg.from.name,
           });
           if (!forecast) return leg;
-          return {
-            ...leg,
-            occupancy: leg.occupancy ?? forecast.occupancy,
-            serviceInfo: applySwissOccupancyForecastToServiceInfo(leg.serviceInfo, forecast),
-          };
+          return applySwissOccupancyForecast(leg, forecast);
         }),
       );
       return {
         ...itinerary,
+        contributors: snapshotContributors(
+          contributorsForRecords(legs),
+          itinerary.fare?.contributors ?? [],
+        ),
         legs,
       };
     }),
   );
   return {
     ...plan,
+    contributors: contributorsForRecords(itineraries),
     itineraries,
   };
 }
@@ -1760,6 +1956,10 @@ function mapJourneyStopFromCall(
   const scheduledDeparture = call.departureTimetabled;
   const expectedDeparture = call.departureEstimated;
   return {
+    contributors: swissContributors(
+      "ojp",
+      ...(findServicePoint(call.stopPointRef ?? "", datasets).servicePoint ? ["master-data"] : []),
+    ),
     delaySeconds:
       computeDelaySeconds(scheduledDeparture, expectedDeparture) ??
       computeDelaySeconds(scheduledArrival, expectedArrival),
@@ -1785,6 +1985,10 @@ function mapRouteStopFromCall(
   const { didok, servicePoint, servicePointSloid, stopPoint } = findServicePoint(rawRef, datasets);
   const ids = buildStopIds(rawRef, { didok, servicePointSloid });
   return {
+    contributors: swissContributors(
+      "ojp",
+      ...(findServicePoint(call.stopPointRef ?? "", datasets).servicePoint ? ["master-data"] : []),
+    ),
     id: providerId(rawRef),
     ...(ids.primaryScheme ? { primaryScheme: ids.primaryScheme } : {}),
     ...(ids.ids ? { ids: ids.ids } : {}),
@@ -2280,6 +2484,7 @@ function mapGtfsAlert(
     }))
     .filter((period) => Boolean(period.start));
   return {
+    contributors: swissContributors("gtfs-sa", ...(rawStopRefs.length ? ["master-data"] : [])),
     activePeriods,
     affectedRouteIds: rawRouteRefs.map((routeId) => providerId(`gtfs-route:${routeId}`)),
     affectedStopIds: mapAffectedSwissStopIds(rawStopRefs, datasets),
@@ -2320,6 +2525,7 @@ function mapSiriSituation(situation: SiriSituation, datasets: SwissStopDatasets)
   });
   const title = pickSiriText(situation.summaries) || descriptions[0] || "Service alert";
   return {
+    contributors: swissContributors("siri-sx", ...(rawStopRefs.length ? ["master-data"] : [])),
     activePeriods: activePeriods.length
       ? activePeriods
       : [{ start: situation.creationTime || new Date().toISOString() }],
@@ -2359,6 +2565,7 @@ function dedupeSwissMappedAlerts(alerts: SwissMappedAlert[]): SwissMappedAlert[]
     }
     merged.set(alert.id, {
       ...existing,
+      contributors: snapshotContributors(existing.contributors ?? [], alert.contributors ?? []),
       activePeriods: [...existing.activePeriods, ...alert.activePeriods],
       affectedRouteIds: uniqueStrings([...existing.affectedRouteIds, ...alert.affectedRouteIds]),
       affectedStopIds: uniqueStrings([...existing.affectedStopIds, ...alert.affectedStopIds]),
@@ -2564,20 +2771,43 @@ function applyGtfsTripUpdateOverlay(
   }
 
   if (!bestMatch) return departure;
+  const applied =
+    (!departure.canceled && bestMatch.canceled) ||
+    (departure.delaySeconds == null && bestMatch.delaySeconds != null) ||
+    (!departure.expectedAt && Boolean(bestMatch.expectedAt)) ||
+    (departure.serviceInfo && !departure.serviceInfo.canceled && bestMatch.canceled);
+  if (!applied) return departure;
+  const realtime = swissContributors("gtfs-rt");
+  const fieldContributors = retainedFieldContributors(departure);
+  if (!departure.canceled && bestMatch.canceled) fieldContributors.canceled = realtime;
+  if (departure.delaySeconds == null && bestMatch.delaySeconds != null)
+    fieldContributors.delaySeconds = realtime;
+  if (!departure.expectedAt && bestMatch.expectedAt) fieldContributors.expectedAt = realtime;
+  const serviceInfo =
+    departure.serviceInfo && !departure.serviceInfo.canceled && bestMatch.canceled
+      ? {
+          ...departure.serviceInfo,
+          canceled: true,
+          contributors: snapshotContributors(departure.serviceInfo.contributors ?? [], realtime),
+          fieldContributors: {
+            ...retainedFieldContributors(departure.serviceInfo),
+            canceled: realtime,
+          },
+        }
+      : departure.serviceInfo;
+  if (serviceInfo && serviceInfo !== departure.serviceInfo)
+    Object.assign(fieldContributors, nestedFieldContributors(serviceInfo, "serviceInfo"));
   return {
     ...departure,
+    contributors: snapshotContributors(departure.contributors ?? [], realtime),
+    fieldContributors,
     canceled: departure.canceled || bestMatch.canceled,
     delaySeconds:
       departure.delaySeconds == null && bestMatch.delaySeconds != null
         ? bestMatch.delaySeconds
         : departure.delaySeconds,
     expectedAt: departure.expectedAt || bestMatch.expectedAt,
-    serviceInfo: departure.serviceInfo
-      ? {
-          ...departure.serviceInfo,
-          canceled: departure.serviceInfo.canceled || bestMatch.canceled,
-        }
-      : departure.serviceInfo,
+    serviceInfo,
   };
 }
 
@@ -2699,6 +2929,7 @@ function mapSwissFormationDetails(
     return undefined;
   }
   return {
+    contributors: swissContributors("formation", "master-data"),
     lastUpdate: journey.lastUpdate,
     ...(lengthMeters > 0 ? { lengthMeters } : {}),
     operatorCode: evu,
@@ -2713,7 +2944,21 @@ function mapSwissFormationDetails(
   };
 }
 
-export function setOpenTransportDataChConfig(config: SwissTransitConfig): void {
+let contributorReceipts: Readonly<Record<string, readonly Attribution[]>> = {};
+function swissContributors(...sourceIds: string[]): Attribution[] {
+  return snapshotContributors(
+    ...sourceIds.map((id) => contributorReceipts[`opentransportdata-ch-${id}`] ?? []),
+  );
+}
+
+export function setOpenTransportDataChConfig(
+  config: SwissTransitConfig,
+  receipts: Readonly<Record<string, readonly Attribution[]>> = {},
+): void {
+  contributorReceipts = Object.fromEntries(
+    Object.entries(receipts).map(([id, value]) => [id, snapshotContributors(value)]),
+  );
+  setSwissDatasetContributors(contributorReceipts);
   observedRoutes.clear();
   setSwissTransitConfig(config);
 }
@@ -2813,14 +3058,7 @@ export async function getDepartures(stopId: string, minutes: number): Promise<De
         stopName: stopEvent.thisCall?.name,
       });
       if (occupancyForecast) {
-        departure = {
-          ...departure,
-          occupancy: departure.occupancy ?? occupancyForecast.occupancy,
-          serviceInfo: applySwissOccupancyForecastToServiceInfo(
-            departure.serviceInfo,
-            occupancyForecast,
-          ),
-        };
+        departure = applySwissOccupancyForecast(departure, occupancyForecast);
       }
     }
     if (new Date(departure.scheduledAt).getTime() > cutoff) continue;
@@ -2861,14 +3099,7 @@ export async function getArrivals(stopId: string, minutes: number): Promise<Depa
         stopName: stopEvent.thisCall?.name,
       });
       if (occupancyForecast) {
-        arrival = {
-          ...arrival,
-          occupancy: arrival.occupancy ?? occupancyForecast.occupancy,
-          serviceInfo: applySwissOccupancyForecastToServiceInfo(
-            arrival.serviceInfo,
-            occupancyForecast,
-          ),
-        };
+        arrival = applySwissOccupancyForecast(arrival, occupancyForecast);
       }
     }
     if (new Date(arrival.scheduledAt).getTime() > cutoff) continue;
@@ -3084,6 +3315,7 @@ export async function getLegGeometry(
   );
   if (!coordinates.length) return null;
   return {
+    contributors: swissContributors("ojp", "ojp-geometry-osm"),
     coordinates,
     type: "LineString",
   };
@@ -3161,6 +3393,12 @@ export async function getVehicleJourney(
       occupancyForecast,
     );
     return {
+      contributors: snapshotContributors(
+        swissContributors("ojp"),
+        resolvedServiceInfo?.contributors ?? [],
+        contributorsForRecords(calls.map((call) => mapJourneyStopFromCall(call, datasets))),
+        formationDetails?.contributors ?? [],
+      ),
       formation: mapOjpFormation(tripInfo.service?.datedTrainNumberRefs),
       ...(formationDetails ? { formationDetails } : {}),
       id: candidate,
@@ -3259,50 +3497,54 @@ export async function getStopInfrastructure(
     ? childStops.filter((childStop) => childStop.parentStopId === parentStopSummary.id)
     : [];
 
-  return {
-    accessibility: buildAccessibility(
-      stopPointRecord,
-      platforms,
-      relations,
-      contactPoints,
-      toilets,
-    ),
-    amenities: buildAmenities(stopPointRecord, contactPoints, toilets, parking),
-    canonicalStop: parentStopSummary,
-    childStops,
-    displayName: requestedStop.name,
-    facts: buildStopInfrastructureFacts(
-      servicePoint,
-      stopPointRecord,
-      contactPoints,
-      referencePoints,
-    ),
-    fareZones: [],
-    focusLevel: requestedStop.level,
-    parking,
-    ...(stopPoint ? { parentStop: parentStopSummary } : {}),
-    platforms,
-    provider: PROVIDER,
-    requestedStop,
-    siblingStops,
-    sourceId: servicePoint.servicePointSloid,
-    stationIntelligence: deriveStationIntelligence({
+  return captureTransitContributors(
+    {
+      contributors: swissContributors("master-data"),
+      accessibility: buildAccessibility(
+        stopPointRecord,
+        platforms,
+        relations,
+        contactPoints,
+        toilets,
+      ),
+      amenities: buildAmenities(stopPointRecord, contactPoints, toilets, parking),
+      canonicalStop: parentStopSummary,
       childStops,
-      parentStop: parentStopSummary,
+      displayName: requestedStop.name,
+      facts: buildStopInfrastructureFacts(
+        servicePoint,
+        stopPointRecord,
+        contactPoints,
+        referencePoints,
+      ),
+      fareZones: [],
+      focusLevel: requestedStop.level,
       parking,
+      ...(stopPoint ? { parentStop: parentStopSummary } : {}),
       platforms,
+      provider: PROVIDER,
+      requestedStop,
       siblingStops,
-    }),
-    stopId,
-    topographicPlace:
-      servicePoint.localityName || servicePoint.municipalityName
-        ? {
-            id: `ch-locality:${servicePoint.localityName || servicePoint.municipalityName}`,
-            name: servicePoint.localityName || servicePoint.municipalityName || "",
-            placeType: "locality",
-          }
-        : undefined,
-  };
+      sourceId: servicePoint.servicePointSloid,
+      stationIntelligence: deriveStationIntelligence({
+        childStops,
+        parentStop: parentStopSummary,
+        parking,
+        platforms,
+        siblingStops,
+      }),
+      stopId,
+      topographicPlace:
+        servicePoint.localityName || servicePoint.municipalityName
+          ? {
+              id: `ch-locality:${servicePoint.localityName || servicePoint.municipalityName}`,
+              name: servicePoint.localityName || servicePoint.municipalityName || "",
+              placeType: "locality",
+            }
+          : undefined,
+    },
+    swissContributors("master-data"),
+  );
 }
 
 export async function getAlerts(bbox: BBox): Promise<ServiceAlert[]> {

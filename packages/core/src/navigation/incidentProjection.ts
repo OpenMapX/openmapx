@@ -1,3 +1,7 @@
+import {
+  type ContributingRecord,
+  snapshotContributors,
+} from "@openmapx/mobility-core/contributors";
 import type { LngLat } from "../types/geometry";
 import type {
   LocalizedText,
@@ -17,7 +21,7 @@ import {
 } from "./routeMatcher";
 
 /** A road-condition event projected onto the active route as an approach alert. */
-export interface IncidentAlert extends RoadAlert {
+export interface IncidentAlert extends RoadAlert, ContributingRecord {
   type: "traffic_incident";
   /** Registry kind and type of the situation. */
   kind: string;
@@ -427,6 +431,9 @@ export function projectEventsToRoute(
     const delay = delaySecondsOf(event, now);
     out.push({
       id: event.id,
+      ...(event.contributors === undefined
+        ? {}
+        : { contributors: snapshotContributors(event.contributors) }),
       type: "traffic_incident",
       coord: candidate.coord,
       alongMeters: candidate.alongMeters,

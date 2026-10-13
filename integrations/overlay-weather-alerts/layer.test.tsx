@@ -1,4 +1,6 @@
+import type { MapGeoJSONFeature } from "maplibre-gl";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { useMapAttributionStore } from "@/integration-api/overlay/mapAttributionStore";
 import { act, createFakeMap, type FakeMap, render, waitFor } from "@/test";
 import { useWeatherAlertStore } from "./store";
 
@@ -57,6 +59,7 @@ beforeEach(() => {
   fake = createFakeMap({ styleLoaded: true });
   mapContext.mapRef.current = fake.map;
   now = T;
+  useMapAttributionStore.setState({ byLayer: {} });
   vi.spyOn(Date, "now").mockImplementation(() => now);
   answer = () => new Response(JSON.stringify(ALERTS), { status: 200 });
   vi.stubGlobal(
@@ -136,4 +139,93 @@ describe("WeatherAlertLayer freshness", () => {
     await waitFor(() => expect(useWeatherAlertStore.getState().unavailable).toBe(true));
     expect(drawn() ?? []).toEqual([]);
   });
+});
+
+it("captures per-feature receipts before last-good retention and keeps them through a failed refresh", async () => {
+  const a = { sourceId: "a", name: "Captured A" };
+  answer = () =>
+    new Response(
+      JSON.stringify({
+        ...ALERTS,
+        sources: ["a", "offscreen"],
+        features: [
+          {
+            ...feature("a", null),
+            properties: { ...feature("a", null).properties, contributors: [a], sources: ["a"] },
+          },
+        ],
+      }),
+    );
+  render(<WeatherAlertLayer />);
+  await waitFor(() => expect(drawn()).toEqual(["a"]));
+  const data = fake.state.sources.get(SOURCE_ID)?.data as {
+    features: { properties: Record<string, unknown> }[];
+  };
+  expect(JSON.parse(String(data.features[0]?.properties._mapAttributions))).toEqual([a]);
+  now += 60_000;
+  answer = () => new Response("{}", { status: 503 });
+  becomeVisible();
+  await waitFor(() => expect(useWeatherAlertStore.getState().unavailable).toBe(true));
+  expect(
+    (fake.state.sources.get(SOURCE_ID)?.data as typeof data).features[0]?.properties
+      ._mapAttributions,
+  ).toBe(data.features[0]?.properties._mapAttributions);
+});
+
+it("credits only rendered unexpired severity-filtered alerts during panning, worker lag and no idle", async () => {
+  const supplied = (id: string, expires: string | null, severity = "Severe") => ({
+    ...feature(id, expires),
+    properties: {
+      ...feature(id, expires).properties,
+      severity,
+      sources: [id],
+      contributors: [{ sourceId: id, name: `Publisher ${id}` }],
+    },
+  });
+  answer = () =>
+    new Response(
+      JSON.stringify({
+        type: "FeatureCollection",
+        sources: ["a", "b", "offscreen"],
+        features: [
+          supplied("a", new Date(T + 60_000).toISOString()),
+          supplied("b", null),
+          supplied("offscreen", null, "Minor"),
+        ],
+      }),
+    );
+  render(<WeatherAlertLayer />);
+  await waitFor(() => expect(drawn()).toEqual(["a", "b", "offscreen"]));
+  const data = fake.state.sources.get(SOURCE_ID)?.data as GeoJSON.FeatureCollection;
+  const hits = (ids: string[]) => {
+    fake.state.renderedFeatures.set(
+      "openmapx-weather-alerts-points",
+      data.features
+        .filter((f) => ids.includes(String(f.properties?.id)))
+        .map(
+          (f) =>
+            ({
+              ...f,
+              layer: { id: "openmapx-weather-alerts-points", type: "circle" },
+            }) as MapGeoJSONFeature,
+        ),
+    );
+    fake.emit("render");
+  };
+  const credits = () => Object.values(useMapAttributionStore.getState().byLayer).flat().sort();
+  act(() => hits(["a", "b"]));
+  await waitFor(() => expect(credits()).toEqual(["Publisher a", "Publisher b"]));
+  fake.state.styleLoaded = false; // A pending unrelated source never reaches idle.
+  act(() => hits(["a"]));
+  await waitFor(() => expect(credits()).toEqual(["Publisher a"]));
+  now = T + 61_000;
+  answer = () => new Response("{}", { status: 503 });
+  becomeVisible();
+  await waitFor(() => expect(drawn()).toEqual(["b", "offscreen"]));
+  // The old worker snapshot still paints A until source processing catches up.
+  expect(credits()).toEqual(["Publisher a"]);
+  act(() => hits(["b"]));
+  await waitFor(() => expect(credits()).toEqual(["Publisher b"]));
+  act(() => hits([]));
+  await waitFor(() => expect(credits()).toEqual([]));
 });

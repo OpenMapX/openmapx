@@ -1,3 +1,8 @@
+import type { Attribution } from "@openmapx/mobility-core/attribution";
+import {
+  captureFieldContributors,
+  contributorsForRecords,
+} from "@openmapx/mobility-core/contributors";
 import type { PoiSearchResult } from "../types/category";
 import { parsePhones, websiteDomain } from "./geo-server";
 import { type ConflationPoint, type ConflationThresholds, conflate } from "./poiConflation";
@@ -25,7 +30,7 @@ function fuseOsmOverturePair(osmR: PoiSearchResult, overtR: PoiSearchResult): Po
   if (overtR.osmTags?.brand) overtureBrandTags.brand = overtR.osmTags.brand;
   if (overtR.osmTags?.["brand:wikidata"])
     overtureBrandTags["brand:wikidata"] = overtR.osmTags["brand:wikidata"];
-  return {
+  const result: PoiSearchResult = {
     ...osmR,
     gersId: overtR.gersId ?? overtR.id,
     name: osmR.name ?? overtR.name,
@@ -44,6 +49,43 @@ function fuseOsmOverturePair(osmR: PoiSearchResult, overtR: PoiSearchResult): Po
     category: osmR.category ?? overtR.category,
     osmTags: { ...osmR.osmTags, ...overtureBrandTags },
   };
+  const fields: Record<string, Attribution[]> = {};
+  const capture = (field: string, owner: PoiSearchResult, sourceField = field) => {
+    Object.assign(fields, captureFieldContributors(owner, sourceField, field));
+  };
+  for (const [field, value] of Object.entries(osmR)) {
+    if (value !== undefined && !["contributors", "fieldContributors", "provenance"].includes(field))
+      capture(field, osmR);
+  }
+  capture("gersId", overtR, overtR.gersId === undefined ? "id" : "gersId");
+  for (const field of [
+    "name",
+    "openingHours",
+    "openingHoursSource",
+    "countryCode",
+    "phone",
+    "email",
+    "website",
+    "socials",
+    "address",
+    "brand",
+    "names",
+    "category",
+  ] as const) {
+    if (result[field] !== undefined)
+      capture(field, osmR[field] === null || osmR[field] === undefined ? overtR : osmR);
+  }
+  for (const key of Object.keys(result.osmTags ?? {})) {
+    capture(`osmTags.${key}`, key in overtureBrandTags ? overtR : osmR);
+  }
+  fields.osmTags = contributorsForRecords(
+    Object.keys(result.osmTags ?? {}).map((key) => ({ contributors: fields[`osmTags.${key}`] })),
+  );
+  result.fieldContributors = fields;
+  result.contributors = contributorsForRecords(
+    Object.values(fields).map((contributors) => ({ contributors })),
+  );
+  return result;
 }
 
 function mergeProvenance(

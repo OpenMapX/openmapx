@@ -1,3 +1,4 @@
+import type { ContributingRecord } from "@openmapx/mobility-core/contributors";
 /** Unified types for all Overpass API interactions. */
 
 export interface OverpassNode {
@@ -33,7 +34,7 @@ export interface OverpassMember {
 export type OverpassElement = OverpassNode | OverpassWay | OverpassRelation;
 
 /** Generic Overpass response with optional `remark` for error diagnostics. */
-export interface OverpassResponse {
+export interface OverpassResponse extends ContributingRecord {
   elements: OverpassElement[];
   remark?: string;
 }

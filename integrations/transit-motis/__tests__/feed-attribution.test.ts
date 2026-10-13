@@ -115,7 +115,7 @@ describe("transit-motis feed attribution", () => {
     expect(wrapped.freshness.hasRealtimeData).toBe(true);
   });
 
-  it("falls back to ATTRIBUTION_LOCAL when the feed tag is not in the index", () => {
+  it("keeps unknown feed references explicitly unattributed", () => {
     const stop: TransitStop = {
       id: "ms:unknown_feed_X_some-stop",
       name: "Mystery Stop",
@@ -125,11 +125,11 @@ describe("transit-motis feed attribution", () => {
       provider: "ms",
     };
     const wrapped = __testing.wrapLocal(stop, fakeIndex);
-    expect(wrapped.attributions).toEqual(__testing.attributionLocal());
-    expect(wrapped.attributions[0].sourceId).toBe("motis");
+    expect(wrapped.attributions).toEqual([]);
+    expect(wrapped.data.contributors).toEqual([]);
   });
 
-  it("falls back to ATTRIBUTION_LOCAL when no index is supplied", () => {
+  it("does not invent a feed supplier without an index", () => {
     const stop: TransitStop = {
       id: "ms:de_DELFI_de:08111:6118:0:3",
       name: "Stuttgart Hbf",
@@ -139,7 +139,8 @@ describe("transit-motis feed attribution", () => {
       provider: "ms",
     };
     const wrapped = __testing.wrapLocal(stop, undefined);
-    expect(wrapped.attributions).toEqual(__testing.attributionLocal());
+    expect(wrapped.attributions).toEqual([]);
+    expect(wrapped.data.contributors).toEqual([]);
   });
 
   it("extractFeedTags walks nested trip-plan shapes (legs with from/to stop ids)", () => {

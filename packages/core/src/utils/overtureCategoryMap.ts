@@ -50,16 +50,46 @@ export function openMapXCategoryToOvertureConcepts(category: string): string[] {
  * Specific taxonomy leaves never need to be enumerated here.
  */
 export function overtureTaxonomyToOpenMapX(taxonomy: OvertureTaxonomyValues): string | undefined {
-  const values = new Set(
-    [
-      taxonomy.basicCategory,
-      taxonomy.primary,
-      ...(taxonomy.hierarchy ?? []),
-      ...(taxonomy.alternates ?? []),
-    ].filter((value): value is string => Boolean(value)),
-  );
-  for (const [category, concepts] of Object.entries(categoryConcepts)) {
-    if (concepts.some((concept) => values.has(concept))) return category;
+  return overtureTaxonomyCategoryEvidence(taxonomy).category;
+}
+
+/** Pair the existing selected concept with the concrete properties supplying it.
+ * Unmatched/absent taxonomy fields cannot supply the resulting category, and
+ * indexed pointers preserve the upstream's most-specific array provenance.
+ * With a retained category, project its concept rather than the global winner;
+ * an unproven host-only criterion has no upstream property evidence. */
+export function overtureTaxonomyCategoryEvidence(
+  taxonomy: OvertureTaxonomyValues,
+  retainedCategory?: string,
+): {
+  category?: string;
+  propertyPointers: string[];
+} {
+  const values = [
+    { value: taxonomy.basicCategory, pointer: "/basic_category" },
+    { value: taxonomy.primary, pointer: "/taxonomy/primary" },
+    ...(taxonomy.hierarchy ?? []).map((value, index) => ({
+      value,
+      pointer: `/taxonomy/hierarchy/${index}`,
+    })),
+    ...(taxonomy.alternates ?? []).map((value, index) => ({
+      value,
+      pointer: `/taxonomy/alternates/${index}`,
+    })),
+  ];
+  const categories =
+    retainedCategory === undefined
+      ? Object.entries(categoryConcepts)
+      : [[retainedCategory, categoryConcepts[retainedCategory] ?? []] as const];
+  for (const [category, concepts] of categories) {
+    const concept = concepts.find((concept) => values.some((item) => item.value === concept));
+    if (concept)
+      return {
+        category,
+        propertyPointers: values
+          .filter((item) => item.value === concept)
+          .map((item) => item.pointer),
+      };
   }
-  return undefined;
+  return { propertyPointers: [] };
 }

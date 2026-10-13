@@ -1,3 +1,4 @@
+import type { Attribution } from "@openmapx/mobility-core/attribution";
 /**
  * Registry for regional car-sharing operator clients.
  * The car-sharing provider queries all registered clients whose regions overlap the bbox.
@@ -13,12 +14,17 @@ export function createRegionalCarSharingRegistry(options: {
   clients: readonly RegionalCarSharingClient[];
   cache: CacheClient;
   log: Logger;
+  resolveContributors?: (sourceIds: readonly string[]) => Attribution[];
 }): (bbox: BoundingBox) => Promise<SharedMobilityStation[]> {
   return async (bbox) => {
     const matching = options.clients.filter((client) => clientMatchesBbox(client, bbox));
     if (matching.length === 0) return [];
     const results = await Promise.allSettled(
-      matching.map((client) => client.search(bbox, options.cache)),
+      matching.map((client) =>
+        options.resolveContributors
+          ? client.search(bbox, options.cache, options.resolveContributors([client.id]))
+          : client.search(bbox, options.cache),
+      ),
     );
     const stations: SharedMobilityStation[] = [];
     for (let index = 0; index < results.length; index++) {

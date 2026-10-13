@@ -6,7 +6,10 @@
 import type { BoundingBox, DataSourceMeta } from "@openmapx/core";
 import { CATEGORY_FILTERS } from "@openmapx/core";
 import type { IntegrationDataSource } from "@openmapx/integration-framework";
-import { createSharedMobilityProvider } from "@openmapx/integration-framework/shared-mobility-provider";
+import {
+  createSharedMobilityContributorResolver,
+  createSharedMobilityProvider,
+} from "@openmapx/integration-framework/shared-mobility-provider";
 import type { VehicleFormFactor } from "@openmapx/mobility-core/shared-mobility";
 import type { SharedMobilityRuntime } from "@openmapx/mobility-core/shared-mobility-runtime";
 import type { searchCityBikes } from "./citybikes-client.js";
@@ -47,16 +50,22 @@ export interface BikeSharingProviderOptions {
 }
 
 export function createBikeSharingProvider(options: BikeSharingProviderOptions) {
+  const resolveContributors = createSharedMobilityContributorResolver(options.dataSources);
   const loadBikeInventory = (bbox: BoundingBox) =>
     options.runtime.orchestrate(bbox, {
       category: "bike",
+      resolveContributors,
       motisFormFactors: ["bicycle", "cargo_bicycle"],
       adapters: [
         {
           id: "nextbike",
           kind: "fallback",
           fetch: async (bounds) => ({
-            stations: await options.searchNextbike(bounds, options.runtime.cache),
+            stations: await options.searchNextbike(
+              bounds,
+              options.runtime.cache,
+              resolveContributors(["nextbike"]),
+            ),
             vehicles: [],
           }),
         },
@@ -64,14 +73,21 @@ export function createBikeSharingProvider(options: BikeSharingProviderOptions) {
           id: "citybikes",
           kind: "fallback",
           fetch: async (bounds) => ({
-            stations: await options.searchCityBikes(bounds, options.runtime.cache),
+            stations: await options.searchCityBikes(
+              bounds,
+              options.runtime.cache,
+              resolveContributors(["citybikes"]),
+            ),
             vehicles: [],
           }),
         },
         {
           id: "donkey",
           kind: "fallback",
-          fetch: async (bounds) => ({ stations: await options.searchDonkey(bounds), vehicles: [] }),
+          fetch: async (bounds) => ({
+            stations: await options.searchDonkey(bounds, resolveContributors(["donkey"])),
+            vehicles: [],
+          }),
         },
         {
           id: "direct-gbfs",

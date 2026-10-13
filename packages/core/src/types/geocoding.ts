@@ -1,3 +1,4 @@
+import type { ContributingRecord, FieldContributors } from "@openmapx/mobility-core/contributors";
 import type { TransitStop } from "@openmapx/mobility-core/transit";
 import type { BrandPresence, BrandSummary } from "./brand";
 import type { LngLat } from "./geometry";
@@ -5,7 +6,8 @@ import type { Ids } from "./identified";
 import type { SearchIntent } from "./search";
 import type { SearchSuggestionMatch } from "./searchSuggestion";
 
-export interface SearchResult {
+export interface SearchResult extends ContributingRecord {
+  fieldContributors?: FieldContributors;
   id: string;
   label: string;
   /** Primary place name without address or administrative context, when available. */
@@ -34,14 +36,16 @@ export interface SearchResult {
   sourceIds?: string[];
 }
 
-export interface ReverseGeocodingResult {
+export interface ReverseGeocodingResult extends ContributingRecord {
+  sourceIds?: string[];
   address: string;
   city: string;
   /** Integration ID of the geocoder that produced this result (see `SearchResult.provider`). */
   provider?: string;
 }
 
-export interface AutocompleteResult {
+export interface AutocompleteResult extends ContributingRecord {
+  fieldContributors?: FieldContributors;
   id: string;
   label: string;
   sublabel?: string;

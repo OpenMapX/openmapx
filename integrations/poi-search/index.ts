@@ -2,19 +2,24 @@ import { createHash } from "node:crypto";
 import { getBrandByQid, suggestBrands, warmBrandIndex } from "@openmapx/brands";
 import {
   type BrandKind,
+  type BrandSummary,
   bboxCacheKey,
   fetchCommonsMetadata,
+  isDisplayablePhoto,
   normalizeFilter,
   OverpassRateLimitError,
   OverpassTimeoutError,
   OverpassUnavailableError,
+  type PlacePhoto,
   validateOverpassFilter,
 } from "@openmapx/core";
 import { currentOpeningHoursInfo } from "@openmapx/core/server";
 import {
+  contributorsForField,
   type IntegrationContext,
   type RouteHandler,
   scalarQueries,
+  snapshotContributors,
 } from "@openmapx/integration-framework";
 import { getChipTranslations, suggestPresets } from "@openmapx/presets";
 import { createPoiSearchOrchestrator, type PoiSearchResponse } from "./orchestrator.js";
@@ -57,6 +62,15 @@ async function withCurrentHours(result: PoiSearchResponse): Promise<PoiSearchRes
 
 export function setup(ctx: IntegrationContext): void {
   const orchestrator = createPoiSearchOrchestrator(ctx);
+  const captureBrand = <T extends BrandSummary>(brand: T): T => ({
+    ...brand,
+    contributors: snapshotContributors(brand.contributors ?? []),
+    fieldContributors: Object.fromEntries(
+      Object.keys(brand)
+        .filter((field) => !["contributors", "fieldContributors"].includes(field))
+        .map((field) => [field, contributorsForField(brand, field)]),
+    ),
+  });
 
   // Build the brand index off the request path so the first search does not pay
   // the artifact parse. Failure is non-fatal: the routes below surface it.
@@ -268,9 +282,9 @@ export function setup(ctx: IntegrationContext): void {
     // Unknown roles are ignored like an unknown country, so the filter only narrows.
     const brandKind = BRAND_KINDS.find((known) => known === kind);
 
-    const cacheKey = `brand-suggest:${cc ?? "-"}:${brandKind ?? "-"}:${limitN}:${q.trim().toLowerCase()}`;
+    const cacheKey = `brand-suggest:v3:${cc ?? "-"}:${brandKind ?? "-"}:${limitN}:${q.trim().toLowerCase()}`;
     const result = await ctx.cache.withCache(cacheKey, 3600, async () => ({
-      matches: suggestBrands(q, cc, limitN, brandKind),
+      matches: suggestBrands(q, cc, limitN, brandKind).map((brand) => captureBrand(brand)),
     }));
 
     reply.header("Cache-Control", "public, max-age=3600");
@@ -292,15 +306,10 @@ export function setup(ctx: IntegrationContext): void {
     }
 
     reply.header("Cache-Control", "public, max-age=86400");
-    reply.send(entry);
+    reply.send(captureBrand(entry));
   });
 
-  // Per-logo Commons attribution (author + licence) for the brand header
-  // card, which shows the one logo it displays at 36px per design §10 —
-  // tiny map/list icons carry the blanket NSI/Commons registry credit
-  // instead. Separate from `/brand/:qid` (which is a cheap catalog lookup)
-  // because this makes an outbound Commons API call and should stay
-  // opt-in/lazy from the client, not bundled into every brand-detail fetch.
+  // Every rendered logo needs this exact file's receipt, including map/list icons.
   ctx.registerRoute("GET", "/brand/:qid/logo-attribution", async (req, reply) => {
     const { qid } = req.params as { qid?: string };
 
@@ -315,20 +324,38 @@ export function setup(ctx: IntegrationContext): void {
       return;
     }
 
-    const cacheKey = `brand-logo-attribution:${qid}`;
-    const result = await ctx.cache.withCache(cacheKey, 86400, async () => {
-      const metadata = await fetchCommonsMetadata([entry.logoFile as string]);
-      const photo = [...metadata.values()][0];
-      return {
-        author: photo?.author,
-        authorUrl: photo?.authorUrl,
-        license: photo?.license,
-        licenseUrl: photo?.licenseUrl,
-      };
-    });
-
-    reply.header("Cache-Control", "public, max-age=86400");
-    reply.send(result);
+    const disallowed = await ctx.getDisallowedSourceIds?.();
+    if (disallowed?.has("wikimedia-commons-logos") || disallowed?.has("wikimedia-commons")) {
+      reply.header("Cache-Control", "no-store");
+      reply.status(503).send({ error: "Logo source disabled" });
+      return;
+    }
+    const cacheKey = `brand-logo-file:v3:${qid}:${entry.logoFile}`;
+    try {
+      const result = await ctx.cache.withCache(
+        cacheKey,
+        86400,
+        async (signal) => {
+          const metadata = await fetchCommonsMetadata([entry.logoFile as string], {
+            strict: true,
+            signal,
+            getJson: (url, options) => ctx.http.get(url, options),
+          });
+          const photo = metadata.get((entry.logoFile as string).replace(/_/g, " "));
+          if (!photo || !isDisplayablePhoto(photo))
+            throw new Error("Commons logo metadata unavailable");
+          return { ...photo, logoFile: entry.logoFile };
+        },
+        undefined,
+        (value) => isDisplayablePhoto(value),
+      );
+      if (!isDisplayablePhoto(result as PlacePhoto)) throw new Error("Incomplete cached logo");
+      reply.header("Cache-Control", "public, max-age=86400");
+      reply.send(result);
+    } catch {
+      reply.header("Cache-Control", "no-store");
+      reply.status(503).send({ error: "Logo metadata unavailable" });
+    }
   });
 
   ctx.registerRoute("GET", "/chip-translations", async (req, reply) => {

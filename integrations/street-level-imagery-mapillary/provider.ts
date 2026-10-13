@@ -116,6 +116,7 @@ export function createMapillaryProvider(options: {
           minzoom: 6,
           maxzoom: 14,
           layers: { sequences: "sequence", pictures: "image" },
+          layerSourceIds: { sequence: ["mapillary"], image: ["mapillary"] },
           props: {
             id: "id",
             isPano: "is_pano",

@@ -9,6 +9,7 @@ import type { BoundingBox, CategoryPlace, Place } from "@openmapx/core";
 import {
   categoryPlaceToPlace,
   createPlace,
+  isDisplayablePhoto,
   PANEL,
   proxyImageUrl,
   useCategorySearch,
@@ -18,10 +19,17 @@ import {
   useSearchStore,
   useSidebarStore,
 } from "@openmapx/core";
+import {
+  contributorsForField,
+  contributorsForRecordFields,
+  contributorsForRecords,
+} from "@openmapx/mobility-core/contributors";
 import { useLocale, useTranslations } from "next-intl";
 import type { ReactNode } from "react";
+import { AttributionStrip } from "@/components/ui/AttributionStrip";
 import { BRAND } from "@/integration-api/runtime/theme";
 import { useInView } from "@/lib/useInView";
+import { PhotoAttribution } from "./PhotoAttribution";
 import { CityCard, CityCardRow } from "./PlaceCityCards";
 
 interface Props {
@@ -70,7 +78,8 @@ export function hotelSearchBox(place: Place): BoundingBox {
 /** Best-effort photo URL from an OSM POI's image tags. */
 function osmPhotoUrl(tags?: Record<string, string>): string | undefined {
   const raw = tags?.image;
-  if (raw && /^https?:\/\//.test(raw)) return proxyImageUrl(raw);
+  if (raw && /^https?:\/\//.test(raw) && isDisplayablePhoto({ url: raw, source: "osm" }))
+    return proxyImageUrl(raw);
   return undefined;
 }
 
@@ -131,18 +140,32 @@ function Hotels({ place }: { place: Place }) {
   };
 
   return (
-    <CityCardRow title={t("hotels")} action={{ label: t("viewMoreHotels"), onClick: viewMore }}>
-      {hotels.map((hotel) => (
-        <CityCard
-          key={hotel.id}
-          name={hotel.name}
-          subtitle={t(LODGING_TYPE_KEYS[hotel.category ?? ""] ?? "hotel")}
-          imageUrl={osmPhotoUrl(hotel.osmTags)}
-          placeholder={<HotelIcon sx={{ fontSize: 32 }} />}
-          onClick={() => openHotel(hotel)}
-        />
-      ))}
-    </CityCardRow>
+    <>
+      <CityCardRow title={t("hotels")} action={{ label: t("viewMoreHotels"), onClick: viewMore }}>
+        {hotels.map((hotel) => (
+          <CityCard
+            key={hotel.id}
+            name={hotel.name}
+            subtitle={t(LODGING_TYPE_KEYS[hotel.category ?? ""] ?? "hotel")}
+            imageUrl={osmPhotoUrl(hotel.osmTags)}
+            placeholder={<HotelIcon sx={{ fontSize: 32 }} />}
+            onClick={() => openHotel(hotel)}
+          />
+        ))}
+      </CityCardRow>
+      <AttributionStrip
+        attributions={contributorsForRecords(
+          hotels.map((hotel) => ({
+            contributors: contributorsForRecordFields(hotel, [
+              "name",
+              ...(hotel.category ? ["category"] : []),
+              ...(osmPhotoUrl(hotel.osmTags) ? ["osmTags.image"] : []),
+            ]),
+          })),
+        )}
+        variant="plain"
+      />
+    </>
   );
 }
 
@@ -156,28 +179,63 @@ function Neighborhoods({ place }: { place: Place }) {
   if (neighborhoods.length === 0) return null;
 
   return (
-    <CityCardRow title={t("neighborhoods")}>
-      {neighborhoods.map((n) => (
-        <CityCard
-          key={n.id}
-          name={n.name}
-          subtitle={n.description}
-          imageUrl={n.photoUrl ? proxyImageUrl(n.photoUrl) : undefined}
-          placeholder={<ApartmentIcon sx={{ fontSize: 32 }} />}
-          onClick={() =>
-            setSelectedPlace(
-              createPlace({
-                primaryScheme: "osm",
-                ids: { osm: n.id },
-                name: n.name,
-                address: n.name,
-                coordinates: n.coordinates,
-              }),
-            )
-          }
-        />
-      ))}
-    </CityCardRow>
+    <>
+      <CityCardRow title={t("neighborhoods")}>
+        {neighborhoods.map((n) => (
+          <CityCard
+            key={n.id}
+            name={n.name}
+            subtitle={n.description}
+            imageUrl={
+              n.photo && isDisplayablePhoto(n.photo)
+                ? proxyImageUrl(n.photo.thumbnailUrl ?? n.photo.url)
+                : n.photoUrl && isDisplayablePhoto({ url: n.photoUrl, source: "osm" })
+                  ? proxyImageUrl(n.photoUrl)
+                  : undefined
+            }
+            imageAttribution={
+              n.photo && isDisplayablePhoto(n.photo) ? (
+                <PhotoAttribution photo={n.photo} color="currentColor" />
+              ) : undefined
+            }
+            placeholder={<ApartmentIcon sx={{ fontSize: 32 }} />}
+            onClick={() =>
+              setSelectedPlace(
+                createPlace({
+                  primaryScheme: "osm",
+                  ids: { osm: n.id },
+                  name: n.name,
+                  address: n.name,
+                  coordinates: n.coordinates,
+                  contributors: contributorsForRecordFields(n, ["id", "name", "coordinates"]),
+                  fieldContributors: {
+                    name: contributorsForField(n, "name"),
+                    coordinates: contributorsForField(n, "coordinates"),
+                    address: contributorsForField(n, "name"),
+                    "ids.osm": contributorsForField(n, "id"),
+                  },
+                }),
+              )
+            }
+          />
+        ))}
+      </CityCardRow>
+      <AttributionStrip
+        attributions={contributorsForRecords(
+          neighborhoods.map((n) => ({
+            contributors: contributorsForRecordFields(n, [
+              "name",
+              ...(n.description ? ["description"] : []),
+              ...((n.photo && isDisplayablePhoto(n.photo)) ||
+              (n.photoUrl && isDisplayablePhoto({ url: n.photoUrl, source: "osm" }))
+                ? ["photoUrl"]
+                : []),
+            ]),
+          })),
+        )}
+        variant="plain"
+      />
+    </>
   );
 }
 

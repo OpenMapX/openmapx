@@ -65,6 +65,7 @@ vi.mock("@openmapx/core", async (importOriginal) => ({
 
 import type { NavProgress, Route } from "@openmapx/core";
 import { useNavigationStore } from "@openmapx/core";
+import { useMapAttributionStore } from "@/integration-api/overlay/mapAttributionStore";
 import { ROUTE_WIDTHS } from "@/lib/routeStyle";
 import { RouteTrafficLayer } from "./RouteTrafficLayer";
 import { activeSpanFilter, buildCurrentSpanFeatures } from "./routeFlowBands";
@@ -304,4 +305,49 @@ describe("RouteTrafficLayer", () => {
     expectStyleSwapIsLossless(fake);
     expect(fake.state.filters.get("route-traffic-active")).toEqual(expectedFilter);
   });
+});
+
+it("credits only rendered band receipts and removes passed/offscreen suppliers", () => {
+  vi.useFakeTimers();
+  try {
+    const visible = { sourceId: "visible-band", name: "Visible band" };
+    const offscreen = { sourceId: "offscreen-band", name: "Offscreen band" };
+    render(<RouteTrafficLayer />);
+    const feature = (receipt: typeof visible): GeoJSON.Feature => ({
+      type: "Feature",
+      geometry: {
+        type: "LineString",
+        coordinates: [
+          [8, 50],
+          [8, 50.01],
+        ],
+      },
+      properties: { _mapAttributions: JSON.stringify([receipt]) },
+    });
+    fake.setRenderedFeatures("route-traffic-active", [feature(visible)] as never);
+    fake.setRenderedFeatures("route-traffic-alt", [feature(offscreen)] as never);
+    act(() => {
+      fake.emit("render");
+      vi.advanceTimersByTime(250);
+    });
+    expect(Object.values(useMapAttributionStore.getState().byLayer).flat().join(" ")).toContain(
+      "Visible band",
+    );
+    fake.setRenderedFeatures("route-traffic-active", []);
+    act(() => {
+      fake.emit("render");
+      vi.advanceTimersByTime(250);
+    });
+    const html = Object.values(useMapAttributionStore.getState().byLayer).flat().join(" ");
+    expect(html).not.toContain("Visible band");
+    expect(html).toContain("Offscreen band");
+    fake.setRenderedFeatures("route-traffic-alt", []);
+    act(() => {
+      fake.emit("render");
+      vi.advanceTimersByTime(250);
+    });
+    expect(Object.values(useMapAttributionStore.getState().byLayer).flat()).toEqual([]);
+  } finally {
+    vi.useRealTimers();
+  }
 });

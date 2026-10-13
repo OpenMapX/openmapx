@@ -1,4 +1,9 @@
-import type { CacheClient, Logger } from "@openmapx/integration-framework";
+import {
+  type CacheClient,
+  type ContributingRecord,
+  type Logger,
+  snapshotContributors,
+} from "@openmapx/integration-framework";
 import type { NoaaStation, NoaaStationType } from "./types.js";
 
 const MDAPI_BASE = "https://api.tidesandcurrents.noaa.gov/mdapi/prod/webapi/stations.json";
@@ -71,9 +76,23 @@ export async function loadStations(
   cache: CacheClient,
   log: Logger,
   types: NoaaStationType[] = DEFAULT_TYPES,
+  contributors?: Readonly<NonNullable<ContributingRecord["contributors"]>>,
 ): Promise<NoaaStation[]> {
-  const cached = await cache.get<NoaaStation[]>(STATIONS_CACHE_KEY);
-  if (cached?.length) return cached;
+  // Receipt-aware callers cannot retrofit today's metadata onto the legacy
+  // seven-day raw catalog. Keep legacy callers compatible, invalidate only that
+  // old namespace, and never key current catalogs by mutable notice text.
+  const cacheKey =
+    contributors === undefined ? STATIONS_CACHE_KEY : `${STATIONS_CACHE_KEY}:contributors-v1`;
+  const clone = (station: NoaaStation): NoaaStation => ({
+    ...station,
+    types: [...station.types],
+    ...(station.contributors === undefined
+      ? {}
+      : { contributors: snapshotContributors(station.contributors) }),
+  });
+  const captured = contributors === undefined ? undefined : snapshotContributors(contributors);
+  const cached = await cache.get<NoaaStation[]>(cacheKey);
+  if (cached?.length) return cached.map(clone);
 
   const responses = await Promise.all(types.map((t) => fetchOneType(t, log)));
   const byId = new Map<string, NoaaStation>();
@@ -91,6 +110,7 @@ export async function loadStations(
         }
       } else {
         byId.set(s.id, {
+          ...(captured === undefined ? {} : { contributors: snapshotContributors(captured) }),
           id: s.id,
           name: s.name,
           lat: s.lat,
@@ -105,9 +125,9 @@ export async function loadStations(
   }
 
   const stations = Array.from(byId.values());
-  await cache.set(STATIONS_CACHE_KEY, stations, STATIONS_CACHE_TTL);
+  await cache.set(cacheKey, stations.map(clone), STATIONS_CACHE_TTL);
   log.info(`noaa-coops: cached ${stations.length} stations across ${types.length} type(s)`);
-  return stations;
+  return stations.map(clone);
 }
 
 export interface NearestStation {

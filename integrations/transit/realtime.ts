@@ -5,6 +5,11 @@ import type {
   TripUpdate,
 } from "@openmapx/integration-framework";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
+import {
+  captureResultContributors,
+  contributorsForRecords,
+  snapshotContributors,
+} from "@openmapx/mobility-core/contributors";
 import type { Freshness } from "@openmapx/mobility-core/freshness";
 import type { MobilityResult } from "@openmapx/mobility-core/result";
 import type { Departure } from "@openmapx/mobility-core/transit";
@@ -62,23 +67,43 @@ function isAlreadyRealtime(dep: Departure): boolean {
   return Boolean(dep.expectedAt) || dep.delaySeconds !== undefined || Boolean(dep.canceled);
 }
 
-function applyDelta(dep: Departure, delta: TripUpdate): boolean {
+function applyDelta(dep: Departure, delta: TripUpdate, receipts?: readonly Attribution[]): boolean {
   let changed = false;
+  const fields: string[] = [];
+
   if (delta.expectedAt && delta.expectedAt !== dep.expectedAt) {
     dep.expectedAt = delta.expectedAt;
+    fields.push("expectedAt");
     changed = true;
   }
   if (delta.delaySeconds !== undefined && delta.delaySeconds !== dep.delaySeconds) {
     dep.delaySeconds = delta.delaySeconds;
+    fields.push("delaySeconds");
     changed = true;
   }
   if (delta.canceled && !dep.canceled) {
     dep.canceled = true;
+    fields.push("canceled");
     changed = true;
   }
   if (delta.platform && delta.platform !== dep.platform) {
     dep.platform = delta.platform;
+    fields.push("platform");
     changed = true;
+  }
+  if (changed && receipts !== undefined) {
+    const baseline =
+      dep.fieldContributors ??
+      Object.fromEntries(
+        Object.keys(dep)
+          .filter((field) => field !== "contributors" && field !== "fieldContributors")
+          .map((field) => [field, snapshotContributors(dep.contributors ?? [])]),
+      );
+
+    dep.fieldContributors = {
+      ...baseline,
+      ...Object.fromEntries(fields.map((field) => [field, snapshotContributors(receipts)])),
+    };
   }
   if (changed && dep.provenance) {
     dep.provenance = {
@@ -108,8 +133,7 @@ export interface EnrichDeps {
 
 /**
  * Enrich a `MobilityResult<Departure[]>` with realtime deltas. Returns a new
- * result whose `data` shares array references with `base.data` but with
- * mutated entries — callers that need immutability should clone first.
+ * result with cloned departure records, preserving cached baseline snapshots.
  *
  * The attributions/freshness on the returned result include realtime
  * provider entries iff any delta was applied. When no providers match or
@@ -141,7 +165,11 @@ export async function enrichDeparturesWithRealtime(
       alreadyComplete,
     );
   }
-  const targets = base.data.filter((d) => d.tripId && !isAlreadyRealtime(d));
+  const data = base.data.map((departure) => ({
+    ...departure,
+    contributors: captureResultContributors(departure, base.attributions),
+  }));
+  const targets = data.filter((d) => d.tripId && !isAlreadyRealtime(d));
   if (targets.length === 0) return base;
 
   const byTrip = new Map<string, Departure[]>();
@@ -151,7 +179,6 @@ export async function enrichDeparturesWithRealtime(
     byTrip.set(departure.tripId, group);
   }
 
-  const newAttributions: Attribution[] = [];
   const newFreshness: Freshness[] = [];
   let anyApplied = false;
   let partial = false;
@@ -177,14 +204,26 @@ export async function enrichDeparturesWithRealtime(
       const delta = outcome.value.data[id];
       if (!delta) continue;
       let applied = false;
-      for (const departure of byTrip.get(id) ?? [])
-        applied = applyDelta(departure, delta) || applied;
+      for (const departure of byTrip.get(id) ?? []) {
+        if (
+          !applyDelta(
+            departure,
+            delta,
+            captureResultContributors(delta, outcome.value.attributions),
+          )
+        )
+          continue;
+        departure.contributors = snapshotContributors(
+          departure.contributors ?? [],
+          captureResultContributors(delta, outcome.value.attributions),
+        );
+        applied = true;
+      }
       if (!applied) continue;
       anyApplied = true;
       remaining.delete(id);
     }
-    if (ids.some((id) => outcome.value.data[id])) {
-      newAttributions.push(...outcome.value.attributions);
+    if (ids.some((id) => !remaining.has(id))) {
       newFreshness.push(outcome.value.freshness);
     }
   }
@@ -209,11 +248,22 @@ export async function enrichDeparturesWithRealtime(
         if (!outcome.value.data) continue;
         let applied = false;
         for (const departure of byTrip.get(tripId) ?? []) {
-          applied = applyDelta(departure, outcome.value.data) || applied;
+          if (
+            !applyDelta(
+              departure,
+              outcome.value.data,
+              captureResultContributors(outcome.value.data, outcome.value.attributions),
+            )
+          )
+            continue;
+          departure.contributors = snapshotContributors(
+            departure.contributors ?? [],
+            captureResultContributors(outcome.value.data, outcome.value.attributions),
+          );
+          applied = true;
         }
         if (!applied) continue;
         anyApplied = true;
-        newAttributions.push(...outcome.value.attributions);
         newFreshness.push(outcome.value.freshness);
         break;
       }
@@ -229,10 +279,20 @@ export async function enrichDeparturesWithRealtime(
     }
   }
 
-  if (!anyApplied)
-    return partial ? { ...base, freshness: { ...base.freshness, isPartial: true } } : base;
+  if (!anyApplied) {
+    const inspected = targets.some(
+      (departure) => departure.provenance?.realtimeCompleteness === "unknown",
+    );
+    return partial || inspected
+      ? {
+          ...base,
+          ...(inspected ? { data } : {}),
+          freshness: { ...base.freshness, ...(partial ? { isPartial: true } : {}) },
+        }
+      : base;
+  }
 
-  const dedupedAttribs = dedupAttributions(deps.ctx, base.attributions, ...newAttributions);
+  const dedupedAttribs = contributorsForRecords(data);
   const freshness: Freshness = {
     ...mergeFreshness(
       base.freshness,
@@ -242,24 +302,7 @@ export async function enrichDeparturesWithRealtime(
     ...(partial ? { isPartial: true } : {}),
   };
 
-  return { data: base.data, attributions: dedupedAttribs, freshness };
-}
-
-function dedupAttributions(
-  ctx: IntegrationContext,
-  base: Attribution[],
-  ...extras: Attribution[]
-): Attribution[] {
-  const all = [...base, ...extras];
-  if (ctx.attributionIndex) return ctx.attributionIndex.dedupAndOrder(all);
-  const seen = new Set<string>();
-  const out: Attribution[] = [];
-  for (const a of all) {
-    if (seen.has(a.sourceId)) continue;
-    seen.add(a.sourceId);
-    out.push(a);
-  }
-  return out;
+  return { data, attributions: dedupedAttribs, freshness };
 }
 
 export const __testing = {

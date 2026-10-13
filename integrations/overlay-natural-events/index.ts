@@ -3,7 +3,9 @@ import {
   createHazardsOrchestrator,
   type IntegrationContext,
   scalarQueries,
+  snapshotContributors,
 } from "@openmapx/integration-framework";
+import type { Attribution } from "@openmapx/mobility-core/attribution";
 import type { NaturalHazard, NaturalHazardType } from "@openmapx/mobility-core/hazards";
 
 const WORLD: BBox = [-180, -90, 180, 90];
@@ -57,6 +59,7 @@ export interface NaturalEventFeature {
     /** The feed id of the hazard's first source. */
     source: string;
     sources: string[];
+    contributors?: readonly Attribution[];
   };
 }
 
@@ -103,6 +106,9 @@ export function hazardToFeature(hazard: NaturalHazard): NaturalEventFeature | nu
       sourceUrl: hazard.detailUrl ?? null,
       source: hazard.sources[0] ?? "",
       sources: hazard.sources,
+      ...(hazard.contributors === undefined
+        ? {}
+        : { contributors: snapshotContributors(hazard.contributors) }),
     },
   };
 }
@@ -178,7 +184,7 @@ export function setup(ctx: IntegrationContext): void {
     // One entry per status, window and language: categories and the open day limit are
     // applied to the cached read. Namespaced by the response shape: an entry cached in an
     // older shape must not be served against the new one.
-    const key = `natural-events:v3:${status}:${windowDays ?? "current"}:${lang}`;
+    const key = `natural-events:v4:${status}:${windowDays ?? "current"}:${lang}`;
 
     try {
       const fc = await ctx.cache.withCache(key, CACHE_TTL_S, async () => {

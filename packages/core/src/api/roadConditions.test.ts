@@ -280,8 +280,8 @@ describe("roadConditionFeatureToEvent", () => {
       updatedAt: "2026-10-01T10:00:00Z",
       fetchedAt: "2026-10-01T10:01:00Z",
       expiresAt: "2026-10-01T10:11:00Z",
-      // Attribution falls back to the source id when the provider gives no name.
-      attribution: { provider: "de-autobahn" },
+      // Missing recorded attribution stays unknown; a source ID is not a publisher receipt.
+      attribution: { provider: "" },
     });
   });
 

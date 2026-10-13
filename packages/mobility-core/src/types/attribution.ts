@@ -33,3 +33,12 @@ export interface DataSourceAttribution {
   license?: string;
   licenseUrl?: string;
 }
+
+/** Standard receipt for a proven OpenStreetMap dataset, independent of transport host. */
+export const OPENSTREETMAP_ATTRIBUTION: Readonly<Attribution> = Object.freeze({
+  sourceId: "openstreetmap",
+  name: "© OpenStreetMap contributors",
+  url: "https://www.openstreetmap.org/copyright",
+  spdxLicense: "ODbL-1.0",
+  licenseUrl: "https://opendatacommons.org/licenses/odbl/",
+});

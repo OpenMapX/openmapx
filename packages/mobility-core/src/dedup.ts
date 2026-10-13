@@ -1,3 +1,4 @@
+import { contributionState, retainContributions } from "./contribution-merge.js";
 /**
  * Coordinate-based deduplication for shared mobility results.
  * Two stations within ~11m are considered duplicates (primary check).
@@ -55,8 +56,34 @@ function pricingDetailKey(p: PricingDetail): string {
   return [p.name, p.currency, p.flatRate ?? "", p.perKmRate ?? "", p.perHourRate ?? ""].join("|");
 }
 
+const MERGED_STATION_FIELDS = [
+  "vehicleTypes",
+  "vehicleTypeIds",
+  "systemId",
+  "nativeId",
+  "operator",
+  "branding",
+  "emptySlots",
+  "capacity",
+  "isActive",
+  "accessMethod",
+  "transitInfo",
+  "locationHint",
+  "stationType",
+  "vehicleClassNames",
+  "address",
+  "operatorNotes",
+  "website",
+  "rentalApps",
+  "stationArea",
+  "vehicleTypeDetails",
+  "pricingSummary",
+  "pricingDetails",
+  "rentalUris",
+] as const;
+
 function mergeStation(existing: SharedMobilityStation, incoming: SharedMobilityStation): void {
-  existing.sources = mergeUnique(existing.sources, incoming.sources) ?? existing.sources;
+  const before = contributionState(existing, MERGED_STATION_FIELDS);
   existing.vehicleTypes =
     mergeUnique(existing.vehicleTypes, incoming.vehicleTypes) ?? existing.vehicleTypes;
   existing.vehicleTypeIds =
@@ -140,6 +167,12 @@ function mergeStation(existing: SharedMobilityStation, incoming: SharedMobilityS
   };
   if (mergedRentalUris.web || mergedRentalUris.android || mergedRentalUris.ios) {
     existing.rentalUris = mergedRentalUris;
+  }
+  if (contributionState(existing, MERGED_STATION_FIELDS) !== before)
+    retainContributions(existing, incoming);
+  else if (existing.contributors === undefined && incoming.contributors === undefined) {
+    // Preserve the historical footprint for legacy callers without claiming a captured display receipt.
+    existing.sources = mergeUnique(existing.sources, incoming.sources) ?? existing.sources;
   }
 }
 
@@ -266,16 +299,14 @@ export function dedupVehicles(vehicles: SharedMobilityVehicle[]): SharedMobility
     const identity = canonicalVehicleIdentity(v);
     const directMatch = directById.get(identity);
     if (directMatch) {
-      for (const src of v.sources) {
-        if (!directMatch.sources.includes(src)) directMatch.sources.push(src);
-      }
+      if (directMatch.contributors === undefined && v.contributors === undefined)
+        directMatch.sources = mergeUnique(directMatch.sources, v.sources) ?? directMatch.sources;
       continue;
     }
     const aggMatch = keptAggById.get(identity);
     if (aggMatch) {
-      for (const src of v.sources) {
-        if (!aggMatch.sources.includes(src)) aggMatch.sources.push(src);
-      }
+      if (aggMatch.contributors === undefined && v.contributors === undefined)
+        aggMatch.sources = mergeUnique(aggMatch.sources, v.sources) ?? aggMatch.sources;
     } else {
       result.push(v);
       keptAggById.set(identity, v);

@@ -296,6 +296,30 @@ describe("DirectionsPanelContent", () => {
     ]);
   });
 
+  it("credits displayed waypoint suggestions and removes the credit when selected", async () => {
+    seedOriginDestination();
+    const supplier = { sourceId: "waypoint", name: "Waypoint supplier" };
+    useAutocompleteMock.mockReturnValue({
+      data: [
+        {
+          id: "x",
+          label: "Leipzig",
+          type: "poi",
+          coordinates: [12.37, 51.34],
+          contributors: [supplier],
+        },
+      ],
+    });
+    renderPanel();
+    fireEvent.click(screen.getByText("directions.addStop"));
+    const input = screen.getByPlaceholderText(/directions.addStop 1/);
+    fireEvent.focus(input);
+    fireEvent.change(input, { target: { value: "Leipzig" } });
+    expect(await screen.findByText("Waypoint supplier")).toBeVisible();
+    fireEvent.click(screen.getByText("Leipzig"));
+    await waitFor(() => expect(screen.queryByText("Waypoint supplier")).not.toBeInTheDocument());
+  });
+
   it("remove stop: goes back to two waypoints and re-plans with the remaining pair", () => {
     seedOriginDestination();
     act(() => {
@@ -1087,4 +1111,97 @@ describe("EV and chained transit recovery", () => {
     screen.getByText("directions.chainNoConnection");
     expect(screen.queryByRole("button", { name: "common.retry" })).toBeNull();
   });
+});
+
+it("credits scheduled cards and selected details rather than retained ordinary results", () => {
+  seedOriginDestination();
+  act(() => useDirectionsStore.getState().setWaypointSchedule(1, { dwellSeconds: 1800 }));
+  const route = (name: string) => ({
+    mode: "driving",
+    duration: 600,
+    distance: 5000,
+    legs: [],
+    steps: [],
+    geometry: [
+      [13.3, 52.5],
+      [11.5, 48.1],
+    ],
+    contributors: [{ sourceId: name, name }],
+  });
+  useDirectionsMock.mockReturnValue({
+    data: { routes: [route("Retained ordinary source")] },
+    isLoading: false,
+    isError: false,
+  });
+  useScheduledDirectionsMock.mockReturnValue({
+    data: {
+      routes: [route("Scheduled first source"), route("Scheduled alternate source")],
+      schedule: {
+        stops: [],
+        legs: [],
+        departure: "2026-09-01T09:00:00Z",
+        arrival: "2026-09-01T10:00:00Z",
+        totalTravelSeconds: 600,
+        totalDwellSeconds: 1800,
+        totalWaitSeconds: 0,
+        multiDay: false,
+        violations: [],
+      },
+      fidelity: "exact",
+      warnings: [],
+    },
+    isLoading: false,
+    isError: false,
+  });
+  renderPanel();
+  expect(screen.getByText("Scheduled first source")).toBeTruthy();
+  expect(screen.getByText("Scheduled alternate source")).toBeTruthy();
+  expect(screen.queryByText("Retained ordinary source")).toBeNull();
+  fireEvent.click(screen.getAllByText("common.details")[1]);
+  expect(screen.getByText("Scheduled alternate source")).toBeTruthy();
+  expect(screen.queryByText("Scheduled first source")).toBeNull();
+  expect(screen.queryByText("Retained ordinary source")).toBeNull();
+});
+
+it("projects multi-stop leg metrics from indexed fields without reviving canonical empty children", () => {
+  seedOriginDestination();
+  act(() => {
+    useDirectionsStore.getState().addWaypoint(0);
+    useDirectionsStore.getState().setWaypoint(1, [12, 50], "Via");
+  });
+  const visible = { sourceId: "metrics", name: "Visible leg metrics" };
+  const hidden = { sourceId: "hidden", name: "Hidden leg container" };
+  useDirectionsMock.mockReturnValue({
+    data: {
+      routes: [
+        {
+          mode: "driving",
+          duration: 600,
+          distance: 5000,
+          geometry: [
+            [13.3, 52.5],
+            [12, 50],
+            [11.5, 48.1],
+          ],
+          steps: [],
+          contributors: [],
+          fieldContributors: {
+            legs: [hidden],
+            "legs.0.duration": [visible],
+            "legs.0.distance": [],
+            "legs.1.duration": [hidden],
+          },
+          legs: [
+            { duration: 300, distance: 2500, geometry: [], steps: [] },
+            { duration: 300, distance: 2500, geometry: [], steps: [], contributors: [] },
+          ],
+        },
+      ],
+    },
+    isLoading: false,
+    isError: false,
+  });
+  renderPanel();
+  expect(screen.getByText("Visible leg metrics")).toBeTruthy();
+  expect(screen.queryByText("Hidden leg container")).toBeNull();
 });

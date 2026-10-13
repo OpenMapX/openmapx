@@ -167,6 +167,8 @@ COPY --from=prod-deps /app/packages/cli/node_modules ./packages/cli/node_modules
 
 COPY --from=builder /app/services/data-manager/dist ./services/data-manager/dist
 COPY services/data-manager/package.json ./services/data-manager/
+# Producer acquisition captures this trusted metadata in each release contract.
+COPY integrations/poi-overture/manifest.json ./integrations/poi-overture/manifest.json
 
 # tsx resolves tsconfig paths + .js -> .ts at runtime for the workspace
 # packages that ship TypeScript source.

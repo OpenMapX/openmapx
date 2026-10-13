@@ -171,6 +171,7 @@ describe("buildSharedMobilityMapContext", () => {
     expect(buildEnturGeofencingMapContext).toHaveBeenCalledWith(bbox, {
       systemIds: ["entur-only"],
       vehicleTypeIds: undefined,
+      resolveContributors: undefined,
     });
     expect(
       context?.geojson.features.some((feature) => feature.properties?.maximumSpeedKph === 10),
@@ -207,10 +208,55 @@ describe("buildSharedMobilityMapContext", () => {
     expect(buildEnturGeofencingMapContext).toHaveBeenCalledWith(bbox, {
       systemIds: ["provider-native"],
       vehicleTypeIds: undefined,
+      resolveContributors: undefined,
     });
     expect(context?.geojson.features.map((feature) => feature.properties?.contextKind)).toEqual([
       "station_area",
       "restriction_zone",
     ]);
   });
+});
+
+it("captures separate MOTIS geometry and Entur branch contributors before deduplication", async () => {
+  const data = snapshot();
+  data.completeness.zones = false;
+  data.zones[0].sourceId = "zone-feed";
+  data.providers[0].sourceId = "network-feed";
+  fetchMotisRentals.mockResolvedValue(data);
+  buildEnturGeofencingMapContext.mockResolvedValue({
+    geojson: {
+      type: "FeatureCollection",
+      features: [
+        {
+          type: "Feature",
+          geometry: area,
+          properties: {
+            contextId: "entur-context",
+            _mapAttributions: JSON.stringify([
+              { sourceId: "entur-mobility", name: "entur-mobility" },
+            ]),
+          },
+        },
+      ],
+    },
+  });
+  const context = await buildSharedMobilityMapContext(
+    bbox,
+    new Set(["bicycle"]),
+    runtime,
+    {},
+    (ids) => ids.map((id) => ({ sourceId: id, name: id })),
+  );
+  const zone = context?.geojson.features.find((f) => f.properties?.contextId === "zone-high");
+  const entur = context?.geojson.features.find((f) => f.properties?.contextId === "entur-context");
+  expect(
+    JSON.parse(String(zone?.properties?._mapAttributions)).map(
+      (a: { sourceId: string }) => a.sourceId,
+    ),
+  ).toEqual(["zone-feed", "network-feed"]);
+  expect(
+    JSON.parse(String(entur?.properties?._mapAttributions)).map(
+      (a: { sourceId: string }) => a.sourceId,
+    ),
+  ).toEqual(["entur-mobility"]);
 });

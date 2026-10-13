@@ -156,3 +156,75 @@ describe("groundRouteFingerprint", () => {
     expect(groundRouteFingerprint(jittered)).toBe(groundRouteFingerprint(route()));
   });
 });
+
+it("retains copied canonical geometry spans through the installed-navigation package", () => {
+  const a = { sourceId: "same", name: "Supplier", attributionText: "A required" };
+  const r = route({
+    contributors: [a],
+    fieldContributors: { geometry: [a], duration: [] },
+    geometryContributors: [
+      { startIndex: 0, endIndex: 1, contributors: [a] },
+      { startIndex: 1, endIndex: 2, contributors: [] },
+    ],
+  });
+  const result = buildGroundNavigationPackage(input({ route: r, alternatives: [r] }));
+  expect(result.ok).toBe(true);
+  if (!result.ok) return;
+  const serialized = JSON.parse(JSON.stringify(result.startPackage));
+  expect(serialized.route.geometryContributors).toEqual(r.geometryContributors);
+  expect(serialized.alternatives[0].fieldContributors).toEqual(r.fieldContributors);
+  a.attributionText = "Later notice";
+  expect(
+    (result.startPackage.route.geometryContributors as Route["geometryContributors"])?.[0]
+      .contributors?.[0].attributionText,
+  ).toBe("A required");
+});
+
+it("detaches child receipts and field ownership for primary and alternative native routes", () => {
+  const receipt = { sourceId: "child", name: "Child", publisher: { name: "Acquired publisher" } };
+  const step = {
+    instruction: "Continue",
+    distance: 10,
+    duration: 2,
+    coordinates: route().geometry,
+    contributors: [receipt],
+    fieldContributors: { instruction: [receipt], coordinates: [] },
+    verbalPre: "Continue ahead",
+    maneuver: { type: "continue", modifier: "straight" },
+    lanes: [{ indications: ["straight"], valid: true }],
+  };
+  const r = route({
+    steps: [step],
+    legs: [
+      {
+        distance: 10,
+        duration: 2,
+        geometry: route().geometry,
+        contributors: [],
+        fieldContributors: { steps: [receipt], geometry: [] },
+        steps: [step],
+      },
+    ],
+  });
+  const expected = JSON.parse(JSON.stringify(r));
+  const built = buildGroundNavigationPackage(input({ route: r, alternatives: [r] }));
+  expect(built.ok).toBe(true);
+  if (!built.ok) return;
+  receipt.publisher.name = "Later publisher";
+  step.contributors.push({ sourceId: "later", name: "Later", publisher: { name: "Later" } });
+  step.fieldContributors.coordinates.push(receipt as never);
+  for (const held of [built.startPackage.route, ...built.startPackage.alternatives]) {
+    expect(held.steps).toEqual(expected.steps);
+    expect(held.legs).toEqual(expected.legs);
+  }
+});
+
+it("rejects malformed child contributor metadata before creating a native package", () => {
+  const r = route({
+    steps: [{ instruction: "Continue", contributors: { sourceId: "bad" } }] as never,
+  });
+  expect(buildGroundNavigationPackage(input({ route: r }))).toEqual({
+    ok: false,
+    code: "invalid-package",
+  });
+});

@@ -1,4 +1,5 @@
 import type { Attribution } from "@openmapx/mobility-core/attribution";
+import { snapshotContributors } from "@openmapx/mobility-core/contributors";
 import { type Freshness, freshnessNow } from "@openmapx/mobility-core/freshness";
 import type { MobilityResult } from "@openmapx/mobility-core/result";
 
@@ -17,18 +18,8 @@ export function mergeAttributions(
   index: AttributionOrderer | undefined,
   ...lists: Attribution[][]
 ): Attribution[] {
-  if (index) return index.dedupAndOrder(lists.flat());
-
-  const seen = new Set<string>();
-  const merged: Attribution[] = [];
-  for (const list of lists) {
-    for (const attribution of list) {
-      if (seen.has(attribution.sourceId)) continue;
-      seen.add(attribution.sourceId);
-      merged.push(attribution);
-    }
-  }
-  return merged;
+  void index;
+  return snapshotContributors(...lists);
 }
 
 export function mergeFreshness(...values: Freshness[]): Freshness {

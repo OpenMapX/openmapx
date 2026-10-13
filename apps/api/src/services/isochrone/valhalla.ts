@@ -1,4 +1,5 @@
 import type { Attribution } from "@openmapx/mobility-core/attribution";
+import { contributorsForRecords, snapshotContributors } from "@openmapx/mobility-core/contributors";
 import { valhallaBaseUrl, valhallaEndpoint } from "../../utils/valhalla-endpoint.js";
 import type {
   IsochroneContour,
@@ -76,9 +77,9 @@ export const valhallaIsochroneProvider: IsochroneProvider = {
     mode: IsochroneTravelMode,
     contourMinutes: number[],
   ): Promise<IsochroneResult> {
-    const attributions = valhallaIsochroneAttributions(valhallaBaseUrl());
+    const attributions = snapshotContributors(valhallaIsochroneAttributions(valhallaBaseUrl()));
     if (contourMinutes.length === 0) {
-      return { origin, mode, contours: [], attributions };
+      return { origin, mode, contours: [], attributions: [], contributors: [] };
     }
 
     if (contourMinutes.length > 4) {
@@ -118,12 +119,20 @@ export const valhallaIsochroneProvider: IsochroneProvider = {
       const contours: IsochroneContour[] = data.features
         .filter((f) => f.properties.metric === "time")
         .map((f) => ({
+          contributors: snapshotContributors(attributions),
           time: f.properties.contour,
           geometry: f.geometry,
         }))
         .sort((a, b) => a.time - b.time);
 
-      return { origin, mode, contours, attributions };
+      const contributors = contributorsForRecords(contours);
+      return {
+        origin,
+        mode,
+        contours,
+        attributions: snapshotContributors(contributors),
+        contributors,
+      };
     } finally {
       clearTimeout(timeout);
     }

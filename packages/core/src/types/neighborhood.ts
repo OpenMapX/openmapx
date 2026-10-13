@@ -1,11 +1,15 @@
+import type { ContributingRecord, FieldContributors } from "@openmapx/mobility-core/contributors";
 import type { LngLat } from "./geometry";
+import type { PlacePhoto } from "./place";
 
 /**
  * A neighbourhood / suburb / quarter within a city, surfaced in the city place
  * panel. Built from OSM `place=suburb|neighbourhood|quarter|borough` and
  * optionally enriched with a Wikipedia thumbnail + extract.
  */
-export interface NeighborhoodCard {
+export interface NeighborhoodCard extends ContributingRecord {
+  fieldContributors?: FieldContributors;
+  photo?: PlacePhoto;
   /** Stable id — the OSM ref (`node/123`, `relation/456`) when available. */
   id: string;
   name: string;

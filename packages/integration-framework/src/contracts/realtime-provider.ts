@@ -1,5 +1,6 @@
 import type { BBox } from "@openmapx/core";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
+import type { ContributingRecord } from "@openmapx/mobility-core/contributors";
 import type { MobilityResult } from "@openmapx/mobility-core/result";
 import type { LiveTransitVehicle, ServiceAlert } from "@openmapx/mobility-core/transit";
 import type { HealthCheckResult } from "../context.js";
@@ -23,7 +24,7 @@ export interface RealtimeCapabilities {
  * trip) return `null` so the orchestrator can move on to the next provider
  * without a thrown error path.
  */
-export interface TripUpdate {
+export interface TripUpdate extends ContributingRecord {
   /** Trip id echoed back (with the caller's prefix) so the consumer can correlate. */
   tripId: string;
   /** Realtime expected departure (or arrival) time, ISO 8601. */

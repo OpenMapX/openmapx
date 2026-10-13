@@ -1,17 +1,19 @@
 "use client";
 
 import { escapeHtml, sanitizeUrl, useOverlayExclusion } from "@openmapx/core";
+import { captureHazardFeatures } from "@openmapx/integration-framework";
 import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import type { MapLayerMouseEvent } from "maplibre-gl";
 import * as maplibregl from "maplibre-gl";
 import { useLocale, useTranslations } from "next-intl";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { INTERACTIVE_LAYER_IDS } from "@/integration-api/map/interactiveLayers";
 import { addLayerInSlot, unregisterLayerSlot } from "@/integration-api/map/layerStack";
 import { useMap } from "@/integration-api/map/MapContext";
 import { getMapClickOwner } from "@/integration-api/map/mapClickOwnership";
 import { useGeoJsonSourceDataBridge } from "@/integration-api/map/useGeoJsonSourceDataBridge";
-import { useSourceAttributions } from "@/integration-api/overlay/useIntegrationAttribution";
+import { useContributorResolver } from "@/integration-api/overlay/useContributorResolver";
+import { useRenderedMapAttributions } from "@/integration-api/overlay/useRenderedMapAttributions";
 import { useEnv } from "@/integration-api/runtime/EnvProvider";
 import { useWeatherAlertStore } from "./store";
 
@@ -28,7 +30,6 @@ const REFRESH_INTERVAL_MS = 120_000;
  * remaining 240 s.
  */
 export const ALERT_DISPLAY_MAX_AGE_MS = 240_000;
-const NO_SOURCES: readonly string[] = [];
 
 /** The route's answer: the alerts as GeoJSON, and the feed ids behind them. */
 type AlertCollection = GeoJSON.FeatureCollection & { sources?: unknown };
@@ -208,8 +209,8 @@ export function WeatherAlertLayer() {
   const setLastUpdated = useWeatherAlertStore((s) => s.setLastUpdated);
   const setUnavailable = useWeatherAlertStore((s) => s.setUnavailable);
 
-  const [sourceIds, setSourceIds] = useState<readonly string[]>(NO_SOURCES);
-  useSourceAttributions("weather-alerts", layerVisible ? sourceIds : NO_SOURCES);
+  const resolveContributors = useContributorResolver();
+  useRenderedMapAttributions("weather-alerts", ALL_LAYER_IDS, layerVisible);
   useOverlayExclusion("weather-alerts", layerVisible);
 
   const popupRef = useRef<maplibregl.Popup | null>(null);
@@ -249,7 +250,6 @@ export function WeatherAlertLayer() {
     lastLoadRef.current = null;
     popupRef.current?.remove();
     draw(NO_ALERTS);
-    setSourceIds(NO_SOURCES);
   }, [draw]);
 
   const fetchAlerts = useCallback(async () => {
@@ -270,16 +270,15 @@ export function WeatherAlertLayer() {
       }
       const data = (await res.json()) as AlertCollection;
       if (!request.isCurrent()) return;
-      lastLoadRef.current = { at: Date.now(), data };
+      const captured = captureHazardFeatures(data, resolveContributors, (feature) =>
+        Array.isArray(feature.properties?.sources) ? feature.properties.sources : [],
+      );
+      lastLoadRef.current = { at: Date.now(), data: captured };
       if (clearTimerRef.current) clearTimeout(clearTimerRef.current);
       clearTimerRef.current = setTimeout(expireStale, ALERT_DISPLAY_MAX_AGE_MS + 1);
       setUnavailable(false);
       setLastUpdated(Date.now());
-      draw(data);
-      const ids: string[] = Array.isArray(data.sources) ? data.sources.map(String) : [];
-      setSourceIds((prev) =>
-        prev.length === ids.length && prev.every((id, i) => id === ids[i]) ? prev : ids,
-      );
+      draw(captured);
     } catch {
       // A network failure is a failed refresh; an aborted request is not.
       if (request.isCurrent()) {
@@ -295,6 +294,7 @@ export function WeatherAlertLayer() {
     env.apiUrl,
     expireStale,
     locale,
+    resolveContributors,
     mapRef,
     setLoading,
     setLastUpdated,

@@ -28,6 +28,50 @@ function makeFakeDb(row: unknown | null) {
 }
 
 describe("overture place resolver", () => {
+  it("pairs localized and fallback brand names with their own captured property receipts", async () => {
+    const db = makeFakeDb({
+      ...FIXTURE_ROW,
+      brand: {
+        names: { primary: "English Brand", common: { de: "Deutsche Marke" } },
+        wikidata: "Q37158",
+      },
+      sources: [
+        { property: "/brand/names/primary", dataset: "meta" },
+        { property: "/brand/names/common/de", dataset: "Microsoft" },
+        { property: "/brand/wikidata", dataset: "Foursquare" },
+      ],
+      sources_catalogue: [
+        { sourceId: "overture", name: "Overture" },
+        { sourceId: "meta-places", name: "English" },
+        { sourceId: "microsoft-places", name: "German" },
+        { sourceId: "foursquare", name: "Brand identity" },
+      ],
+    });
+    const { setup } = await import("../index.js");
+    const { getPlaceResolver } = await import("@openmapx/place-ids");
+    setup(createMockIntegrationContext({ db }));
+    const resolver = getPlaceResolver("overture")!;
+    const de = await resolver(GERS_ID, { lang: "de-DE" });
+    expect(de?.brand?.name).toBe("Deutsche Marke");
+    expect(de?.fieldContributors?.["brand.name"].map((r) => r.sourceId)).toEqual([
+      "overture",
+      "microsoft-places",
+    ]);
+    expect(de?.fieldContributors?.["brand.wikidata"].map((r) => r.sourceId)).toEqual([
+      "overture",
+      "foursquare",
+    ]);
+    expect(de?.fieldContributors?.["osmTags.brand"].map((r) => r.sourceId)).toEqual([
+      "overture",
+      "microsoft-places",
+    ]);
+    const fallback = await resolver(GERS_ID, { lang: "fr" });
+    expect(fallback?.brand?.name).toBe("English Brand");
+    expect(fallback?.fieldContributors?.["brand.name"].map((r) => r.sourceId)).toEqual([
+      "overture",
+      "meta-places",
+    ]);
+  });
   beforeEach(() => {
     vi.resetModules();
   });

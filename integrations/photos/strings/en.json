@@ -11,6 +11,11 @@
       "purpose": "Link-preview images for places whose OpenStreetMap image tag points to a Google Photos share link",
       "dataSent": "The Google Photos share URL taken from the place's OpenStreetMap image tag (no user or account data)",
       "dataReceived": "The Open Graph preview image URL advertised by the share page for embedding"
+    },
+    "wikimedia-commons": {
+      "purpose": "Resolve Commons image references from OSM tags with the specific file’s creator, licence and credit notices",
+      "dataSent": "Wikimedia Commons filename from the image tag",
+      "dataReceived": "Image URL, file page, creator, licence and required credit notices"
     }
   }
 }

@@ -1,3 +1,12 @@
+import {
+  contributorsForField,
+  contributorsForRecords,
+  snapshotContributors,
+} from "@openmapx/mobility-core/contributors";
+import {
+  captureGeometryContributors,
+  type GeometryContributorSpan,
+} from "@openmapx/mobility-core/geometry-contributors";
 import type { Route, RouteLeg, RouteStep } from "./types.js";
 
 /** Coordinates within this many degrees of each other are the same point. */
@@ -17,6 +26,7 @@ function samePoint(a: [number, number], b: [number, number]): boolean {
 export function concatenateRoutes(routes: Route[]): Route {
   if (routes.length === 1) return routes[0];
 
+  const geometryContributors: GeometryContributorSpan[] = [];
   const geometry: [number, number][] = [];
   const legs: RouteLeg[] = [];
   const steps: RouteStep[] = [];
@@ -47,6 +57,16 @@ export function concatenateRoutes(routes: Route[]): Route {
     const hasJoin = geometry.length > 0 && route.geometry.length > 0;
     const sharedEndpoint = hasJoin && samePoint(geometry[geometry.length - 1], route.geometry[0]);
     const shape = sharedEndpoint ? route.geometry.slice(1) : route.geometry;
+    const offset = geometry.length - (sharedEndpoint ? 1 : 0);
+    if (hasJoin && !sharedEndpoint)
+      geometryContributors.push({ startIndex: offset - 1, endIndex: offset, contributors: [] });
+    geometryContributors.push(
+      ...captureGeometryContributors(route).map((span) => ({
+        ...span,
+        startIndex: span.startIndex + offset,
+        endIndex: span.endIndex + offset,
+      })),
+    );
     geometry.push(...shape);
     legs.push(...route.legs);
     steps.push(...route.steps);
@@ -61,7 +81,65 @@ export function concatenateRoutes(routes: Route[]): Route {
     if (everyHasElevation) elevation.push(...(route.elevation as number[]));
   }
 
+  const retainedFields = new Set([
+    "geometry",
+    "distance",
+    "duration",
+    "legs",
+    "steps",
+    "mode",
+    ...(routes[0].summary ? ["summary"] : []),
+    ...(everyHasBaseline ? ["baselineDuration"] : []),
+    ...(everyHasSpeedLimits ? ["segmentSpeedLimits"] : []),
+    ...(hasTolls === undefined ? [] : ["hasTolls"]),
+    ...(everyHasElevation && interval !== undefined ? ["elevation", "elevationInterval"] : []),
+  ]);
+  const fieldContributors = Object.fromEntries(
+    [...retainedFields].map((field) => {
+      const root = field.split(".")[0];
+      const suppliers = ["summary", "mode", "elevationInterval"].includes(root)
+        ? [routes[0]]
+        : root === "hasTolls" && hasTolls === true
+          ? routes.filter((route) => route.hasTolls === true)
+          : routes;
+      return [
+        field,
+        snapshotContributors(...suppliers.map((route) => contributorsForField(route, field))),
+      ];
+    }),
+  );
+  // Array indices are local to each input. Preserve child trees at their new
+  // output positions instead of unioning unrelated legs/steps with equal indices.
+  for (const root of ["legs", "steps"] as const) {
+    let offset = 0;
+    for (const route of routes) {
+      route[root].forEach((child, index) => {
+        const prefix = `${root}.${index}`;
+        const target = `${root}.${offset + index}`;
+        fieldContributors[target] =
+          child.contributors !== undefined || child.fieldContributors !== undefined
+            ? child.fieldContributors === undefined
+              ? snapshotContributors(child.contributors ?? [])
+              : []
+            : contributorsForField(route, prefix);
+        for (const [field, receipts] of Object.entries(
+          child.contributors === undefined && child.fieldContributors === undefined
+            ? (route.fieldContributors ?? {})
+            : {},
+        )) {
+          if (field.startsWith(`${prefix}.`))
+            fieldContributors[target + field.slice(prefix.length)] = snapshotContributors(receipts);
+        }
+        for (const [field, receipts] of Object.entries(child.fieldContributors ?? {}))
+          fieldContributors[`${target}.${field}`] = snapshotContributors(receipts);
+      });
+      offset += route[root].length;
+    }
+  }
   return {
+    geometryContributors,
+    contributors: contributorsForRecords(routes),
+    fieldContributors,
     distance,
     duration,
     ...(everyHasBaseline ? { baselineDuration: baseline } : {}),

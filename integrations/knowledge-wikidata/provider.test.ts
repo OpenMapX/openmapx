@@ -138,7 +138,7 @@ describe("Wikidata knowledge provider", () => {
       pending.get("summary")?.reject(new Error("summary unavailable"));
       const result = await lookup;
       expect(result?.wikipediaExtract).toBeUndefined();
-      expect(result?.photos?.[0]?.url).toContain("Special:FilePath");
+      expect(result?.photos).toBeUndefined();
       expect(result?.facts).toEqual([
         { label: "Founded", value: "1889" },
         { label: "Height", value: "330 m" },
@@ -179,7 +179,7 @@ describe("Wikidata knowledge provider", () => {
     ]);
   });
 
-  it("falls back to a Special:FilePath image when Commons metadata is missing", async () => {
+  it("defers the image when Commons metadata is missing", async () => {
     routes = {
       "props=claims": entityBody(),
       "/page/summary/": { extract: "x" },
@@ -189,13 +189,7 @@ describe("Wikidata knowledge provider", () => {
 
     const result = await wikidataSource.lookup({ wikidata: "Q243" });
 
-    expect(result?.photos?.[0]).toEqual({
-      url: "https://commons.wikimedia.org/wiki/Special:FilePath/Tour_Eiffel_Wikimedia_Commons.jpg?width=800",
-      source: "wikimedia",
-      // Metadata fetch failed, so author/license are unknown, but the filename
-      // is known — link to the Commons file page instead.
-      pageUrl: "https://commons.wikimedia.org/wiki/File:Tour_Eiffel_Wikimedia_Commons.jpg",
-    });
+    expect(result?.photos).toBeUndefined();
   });
 
   it("requests the entity with the caller's language", async () => {

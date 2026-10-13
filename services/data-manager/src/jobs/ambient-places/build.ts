@@ -3,12 +3,15 @@ export { discardPlanetPlaces, resumePlanetPlaces } from "./planet-build.js";
 import { randomUUID } from "node:crypto";
 import { assertSupportedOvertureContributors, type OvertureSourceItem } from "@openmapx/core";
 import {
+  AMBIENT_FORMAT_VERSION,
   AMBIENT_LIMITS,
   AMBIENT_POLICY_VERSION,
   type AmbientManifest,
   type AmbientOsmRow,
   type AmbientOvertureRow,
   type AmbientRegion,
+  ambientHasLegacyAttribution,
+  ambientOvertureIdentityEvidence,
   ambientPlaceFromOsm,
   ambientPlaceFromOverture,
   mergeAmbientPlaces,
@@ -87,6 +90,10 @@ export async function buildAmbientPlaces(
       let overtureSource: AmbientManifest["sources"]["overture"] = null;
       let overture: NonNullable<ReturnType<typeof ambientPlaceFromOverture>>[] = [];
       const links = new Map<string, string>();
+      const identityEvidence = new Map<
+        string,
+        ReturnType<typeof ambientOvertureIdentityEvidence>
+      >();
       if (await tableExists(tx, "overture_places.places")) {
         if (!(await tableExists(tx, "overture_places.conflation_state")))
           throw new Error("Overture conflation state is missing");
@@ -114,7 +121,7 @@ export async function buildAmbientPlaces(
           const rows = await tx.unsafe<
             (AmbientOvertureRow & { sources: OvertureSourceItem[] | null })[]
           >(
-            `SELECT gers_id,name,ST_X(geom) AS longitude,ST_Y(geom) AS latitude,basic_category,taxonomy_primary,taxonomy_hierarchy,taxonomy_alternates,names,confidence,operating_status,sources FROM overture_places.places WHERE geom && ST_MakeEnvelope($1,$2,$3,$4,4326) ORDER BY gers_id LIMIT ${AMBIENT_LIMITS.places + 1}`,
+            `SELECT gers_id,name,ST_X(geom) AS longitude,ST_Y(geom) AS latitude,basic_category,taxonomy_primary,taxonomy_hierarchy,taxonomy_alternates,names,confidence,operating_status,sources,to_jsonb(places)->'sources_catalogue' AS sources_catalogue,release FROM overture_places.places WHERE geom && ST_MakeEnvelope($1,$2,$3,$4,4326) ORDER BY gers_id LIMIT ${AMBIENT_LIMITS.places + 1}`,
             params,
           );
           if (rows.length > AMBIENT_LIMITS.places)
@@ -122,6 +129,7 @@ export async function buildAmbientPlaces(
               "Regional Overture input exceeds 100000 places; choose a smaller region",
             );
           overture = rows.flatMap((row) => {
+            identityEvidence.set(row.gers_id, ambientOvertureIdentityEvidence(row));
             const p = ambientPlaceFromOverture(row);
             if (p)
               assertSupportedOvertureContributors(
@@ -136,6 +144,36 @@ export async function buildAmbientPlaces(
           if (linkRows.length > AMBIENT_LIMITS.places)
             throw new Error("Regional conflation input exceeds 100000 links");
           for (const row of linkRows) links.set(row.id, row.gers_id);
+          // An inside OSM point can retain a GERS alias whose Overture geometry
+          // is outside this envelope. Capture identity evidence independently;
+          // its excluded name/category/localized fields must not enter display.
+          const missingIdentities = [
+            ...new Set(
+              linkRows
+                .filter((row) => !identityEvidence.has(row.gers_id))
+                .map((row) => row.gers_id),
+            ),
+          ];
+          if (missingIdentities.length) {
+            const identities = await tx.unsafe<
+              (Pick<AmbientOvertureRow, "sources" | "sources_catalogue"> & {
+                gers_id: string;
+                release: string;
+              })[]
+            >(
+              `SELECT gers_id,sources,to_jsonb(places)->'sources_catalogue' AS sources_catalogue,release FROM overture_places.places WHERE gers_id=ANY($1::TEXT[]) ORDER BY gers_id`,
+              [missingIdentities],
+            );
+            if (
+              identities.length !== missingIdentities.length ||
+              identities.some((row) => row.release !== state.release)
+            )
+              throw new Error(
+                "Regional accepted GERS identity does not match published Overture places",
+              );
+            for (const row of identities)
+              identityEvidence.set(row.gers_id, ambientOvertureIdentityEvidence(row));
+          }
           // A linked OSM point can straddle the bbox boundary. Its policy and
           // authoritative fields must still win over the regional Overture point.
           const counterparts = await tx.unsafe<AmbientOsmRow[]>(
@@ -180,15 +218,18 @@ export async function buildAmbientPlaces(
           .filter((row) => !validOsm.has(`osm:${row.osm_type}/${row.osm_id}`))
           .map((row) => `osm:${row.osm_type}/${row.osm_id}`),
       );
-      const places = mergeAmbientPlaces(osm, overture, links, excludedOsm).filter((p) =>
-        inside(p.coordinates),
+      const places = mergeAmbientPlaces(osm, overture, links, excludedOsm, identityEvidence).filter(
+        (p) => inside(p.coordinates),
       );
       if (places.length === 0) throw new Error("Refusing to publish an empty ambient generation");
       if (places.length > AMBIENT_LIMITS.places)
         throw new Error("Combined regional output exceeds 100000 places");
       const generation = await prepareAmbientGeneration(tx);
       const manifest: AmbientManifest = {
-        version: 1,
+        version: AMBIENT_FORMAT_VERSION,
+        attributionPrecision: ambientHasLegacyAttribution(places)
+          ? "legacy-aggregate"
+          : "captured-fields",
         policyVersion: AMBIENT_POLICY_VERSION,
         generation,
         publishedAt: new Date().toISOString(),

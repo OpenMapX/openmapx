@@ -60,6 +60,11 @@ import {
 } from "@openmapx/core";
 import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
+import {
+  contributorsForNestedRecordFields,
+  contributorsForRecords,
+  snapshotContributors,
+} from "@openmapx/mobility-core/contributors";
 import { useQueryClient } from "@tanstack/react-query";
 import { useLocale, useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -88,10 +93,8 @@ import { useExpandOnBackgroundTap, useMobileSheet } from "@/components/panels/sh
 import { AutocompleteDropdown } from "@/components/search/AutocompleteDropdown";
 import { AttributionStrip } from "@/components/ui/AttributionStrip";
 import { useMapOptional } from "@/integration-api/map/MapContext";
-import { useAttributionFromHooks } from "@/integration-api/overlay/useAttributionFromHooks";
 import { BRAND } from "@/integration-api/runtime/theme";
 import { useDateTimeFormat } from "@/integration-api/runtime/useDateTimeFormat";
-import { attributionsForProviders } from "@/lib/attributionForProviders";
 import {
   buildEvDirectionsRequest,
   GARAGE_VEHICLE_PREFIX,
@@ -101,6 +104,7 @@ import { shareCurrentUrl } from "@/lib/deepLink";
 import { buildScheduleRequest } from "@/lib/directions/scheduleRequest";
 import { useForegroundLocation } from "@/lib/mobile/useForegroundLocation";
 import { routeAttributions } from "@/lib/routeAttributions";
+import { servedAttributions } from "@/lib/servedAttributions";
 import { useRouteImpacts } from "./useRouteImpacts";
 
 const GROUND_FALLBACK_MODES = ["walking", "cycling", "driving", "motorcycle"] as const;
@@ -449,7 +453,7 @@ export function DirectionsPanelContent() {
   });
   const { data, isLoading, isError } = directionsQuery;
 
-  const routesForImpact = scheduledData?.routes ?? data?.routes ?? [];
+  const routesForImpact = (scheduleRequest ? scheduledData?.routes : data?.routes) ?? [];
   const fastestRouteIndex = useMemo(() => {
     if (routesForImpact.length === 0) return -1;
     return routesForImpact.reduce(
@@ -681,7 +685,7 @@ export function DirectionsPanelContent() {
     isLoading: transitLoading,
     isError: transitError,
   } = transitPlanQuery;
-  const transitPlanAttributions = useAttributionFromHooks(transitPlanQuery);
+  const transitPlanAttributions = contributorsForRecords(transitItineraries);
 
   useEffect(() => {
     if (transitPlanData?.itineraries) {
@@ -735,27 +739,42 @@ export function DirectionsPanelContent() {
       : null;
   const { data: wsSuggestions } = useAutocomplete(debouncedActiveQuery, locale, suggestionBias);
   const showSuggestions = focusedField !== null && (wsSuggestions?.length ?? 0) > 0;
+  const waypointAttributions = showSuggestions
+    ? servedAttributions(registry, wsSuggestions ?? [])
+    : [];
 
+  const displayedGroundResult = scheduleRequest ? scheduledData : data;
   const detailsRoute =
-    detailsRouteIndex !== null ? (data?.routes[detailsRouteIndex] ?? null) : null;
-
+    detailsRouteIndex !== null ? (displayedGroundResult?.routes[detailsRouteIndex] ?? null) : null;
   const routingAttributions = useMemo<Attribution[]>(() => {
-    // Credit the routing engine that actually served the route. `data.provider`
-    // is the integration id stamped on every successful response (see
-    // integrations/routing/index.ts). Only when it is somehow absent AND the
-    // deployment has a single healthy routing provider — i.e. the served engine
-    // is unambiguous — do we fall back to it; with several healthy engines we
-    // credit none rather than guess the wrong one (OSM stays credited by the
-    // always-on base-map control regardless).
-    if (data?.provider) {
-      return routeAttributions(registry, data.provider, data.routes[activeRouteIndex]);
-    }
-    const healthy = registry.getByDomain("routing").filter((r) => {
-      const cap = caps[r.id];
-      return cap ? cap.available && cap.healthy : false;
-    });
-    return healthy.length === 1 ? attributionsForProviders(registry, [healthy[0].id]) : [];
-  }, [registry, caps, data?.provider, data?.routes, activeRouteIndex]);
+    const routes = displayedGroundResult?.routes ?? [];
+    const displayed = !scheduleRequest && waypoints.length > 2 ? routes.slice(0, 1) : routes;
+    return snapshotContributors(
+      ...displayed.map((route) =>
+        snapshotContributors(
+          routeAttributions(registry, displayedGroundResult?.provider, route, [
+            "distance",
+            "duration",
+            "mode",
+            ...(route.summary ? ["summary"] : []),
+            ...(route.usesLocalAccessRoad ? ["usesLocalAccessRoad"] : []),
+            ...((route.mode === "walking" || route.mode === "cycling") && route.elevation?.length
+              ? ["geometry", "elevation"]
+              : []),
+          ]),
+          ...(!scheduleRequest && waypoints.length > 2 && route.legs.length > 1
+            ? route.legs.map((leg, index) =>
+                contributorsForNestedRecordFields(
+                  route,
+                  [{ field: `legs.${index}`, record: leg }],
+                  ["duration", "distance"],
+                ),
+              )
+            : []),
+        ),
+      ),
+    );
+  }, [registry, displayedGroundResult, scheduleRequest, waypoints.length]);
 
   const getCachedTime = (m: TravelMode): string | undefined => {
     if (!allWaypointsFilled) return undefined;
@@ -948,7 +967,9 @@ export function DirectionsPanelContent() {
         originLabel={originLabel}
         destinationLabel={destinationLabel}
         provider={transitPlanData?.provider}
-        attributions={transitPlanAttributions}
+        attributions={snapshotContributors(
+          transitItineraries[transitDetailsIndex]?.contributors ?? [],
+        )}
         originTimeZone={originTimeZone}
         destinationTimeZone={destinationTimeZone}
         onBack={() => setTransitDetailsIndex(null)}
@@ -960,6 +981,7 @@ export function DirectionsPanelContent() {
     return (
       <DetailsView
         route={detailsRoute}
+        attributions={routeAttributions(registry, displayedGroundResult?.provider, detailsRoute)}
         originLabel={originLabel}
         destinationLabel={destinationLabel}
         waypointLabels={waypoints.map((wp) => wp.label)}
@@ -1735,6 +1757,11 @@ export function DirectionsPanelContent() {
               suggestions={wsSuggestions ?? []}
               onSelect={handleSuggestionSelect}
             />
+            {waypointAttributions.length > 0 && (
+              <Box sx={{ px: 2, py: 0.75 }}>
+                <AttributionStrip attributions={waypointAttributions} variant="plain" />
+              </Box>
+            )}
           </Box>
         )}
       </Box>

@@ -1,3 +1,4 @@
+import type { ContributingRecord, FieldContributors } from "@openmapx/mobility-core/contributors";
 import type { LngLat } from "./geometry";
 
 export interface ElevationPoint {
@@ -18,12 +19,16 @@ export interface ElevationStats {
   maxGrade: number;
 }
 
-export interface ElevationProfile {
+export interface ElevationProfile extends ContributingRecord {
+  /** The acquisition provider is known but exact DEM lineage is not supplied. */
+  contributorCoverage?: "partial";
   points: ElevationPoint[];
   stats: ElevationStats;
 }
 
-export interface ElevationApiResponse {
+export interface ElevationApiResponse extends ContributingRecord {
+  fieldContributors?: FieldContributors;
+  contributorCoverage?: "partial";
   points: Array<{ distance: number; elevation: number }>;
   interval: number;
 }

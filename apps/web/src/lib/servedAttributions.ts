@@ -1,43 +1,52 @@
 import { dataSourceToAttribution } from "@openmapx/integration-framework";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
+import {
+  type ContributingRecord,
+  contributorsForRecords,
+  parseContributors,
+  snapshotContributors,
+} from "@openmapx/mobility-core/contributors";
 import type { ProviderMetaResolver } from "@/lib/attributionForProviders";
 
 /** What a response says about who served one item. */
-export interface ServedBy {
+export interface ServedBy extends ContributingRecord {
   provider?: string | null;
   contributingProviders?: readonly string[];
   /** Manifest sourceIds of the backend(s) that answered, when reported. */
   sourceIds?: readonly string[];
 }
 
-/**
- * Credits for items served by integrations that may front several backends
- * (routing-valhalla: self-hosted vs Stadia Maps; geocoding-photon: self-hosted
- * vs Komoot). Each provider's declared sources are narrowed to the reported
- * `sourceIds`; a provider none of whose sources was reported (e.g. a
- * conflated suggestion's other contributor) keeps all of its declared sources.
- * Resolution stays within each provider's own manifest, since other
- * integrations may reuse a sourceId. Deduped by sourceId, first seen wins.
+/** Captured receipts take precedence; legacy resolution uses named identities.
+ * A legacy single-source provider can establish its one uniform supplier when
+ * no source IDs were reported. Missing multi-backend evidence never expands.
  */
 export function servedAttributions(
   registry: ProviderMetaResolver,
   served: Iterable<ServedBy | null | undefined>,
 ): Attribution[] {
-  const seen = new Set<string>();
-  const out: Attribution[] = [];
-  for (const item of served) {
-    if (!item) continue;
-    const providers = new Set([item.provider, ...(item.contributingProviders ?? [])]);
-    for (const provider of providers) {
-      if (!provider) continue;
-      const declared = registry.get(provider)?.dataSources ?? [];
-      const reported = declared.filter((ds) => item.sourceIds?.includes(ds.sourceId));
-      for (const ds of reported.length > 0 ? reported : declared) {
-        if (seen.has(ds.sourceId)) continue;
-        seen.add(ds.sourceId);
-        out.push(dataSourceToAttribution(ds));
+  return contributorsForRecords(
+    (function* () {
+      for (const item of served) {
+        if (!item) continue;
+        const captured = parseContributors(item.contributors);
+        if (captured !== undefined) {
+          yield { contributors: captured };
+          continue;
+        }
+        const receipts: Attribution[] = [];
+        for (const provider of new Set([item.provider, ...(item.contributingProviders ?? [])])) {
+          if (!provider) continue;
+          const declared = registry.get(provider)?.dataSources ?? [];
+          const proven =
+            item.sourceIds === undefined
+              ? declared.length === 1
+                ? declared
+                : []
+              : declared.filter((source) => item.sourceIds?.includes(source.sourceId));
+          receipts.push(...proven.map(dataSourceToAttribution));
+        }
+        yield { contributors: snapshotContributors(receipts) };
       }
-    }
-  }
-  return out;
+    })(),
+  );
 }

@@ -1,12 +1,13 @@
 import { readFileSync, statSync } from "node:fs";
 import { basename, join } from "node:path";
 import { assertSupportedOvertureContributors } from "@openmapx/core/utils/overtureSource";
+import type { captureOvertureCatalogue } from "./attribution-capture.js";
 import type { RegionBbox } from "./pull.js";
 
 export const OVERTURE_STAC_URL = "https://stac.overturemaps.org/catalog.json";
 export const OVERTURE_THEME = "places";
 export const OVERTURE_TYPE = "place";
-export const OVERTURE_PULL_CONTRACT_VERSION = 1;
+export const OVERTURE_PULL_CONTRACT_VERSION = 2;
 
 export const OVERTURE_PLACE_COLUMNS = [
   "id",
@@ -72,7 +73,7 @@ export interface OverturePullValidation {
 }
 
 export interface OverturePullContract extends OvertureStacReleaseContract {
-  contractVersion: typeof OVERTURE_PULL_CONTRACT_VERSION;
+  contractVersion: 1 | typeof OVERTURE_PULL_CONTRACT_VERSION;
   sourceCatalog: typeof OVERTURE_STAC_URL;
   theme: typeof OVERTURE_THEME;
   type: typeof OVERTURE_TYPE;
@@ -83,6 +84,7 @@ export interface OverturePullContract extends OvertureStacReleaseContract {
   parquetSizeBytes: number;
   rowCount: number;
   contributors: string[];
+  sourcesCatalogue?: ReturnType<typeof captureOvertureCatalogue>;
 }
 
 export function assertValidOvertureRelease(release: string): void {
@@ -368,6 +370,7 @@ export function buildOverturePullContract(
   parquetPath: string,
   validation: OverturePullValidation,
   publishedParquetFile: string = basename(parquetPath),
+  sourcesCatalogue: ReturnType<typeof captureOvertureCatalogue>,
 ): OverturePullContract {
   if (!Number.isSafeInteger(validation.rowCount) || validation.rowCount <= 0) {
     throw new Error("Overture regional snapshot contains no rows");
@@ -392,6 +395,7 @@ export function buildOverturePullContract(
     parquetSizeBytes,
     rowCount: validation.rowCount,
     contributors,
+    sourcesCatalogue: structuredClone(sourcesCatalogue),
   };
 }
 
@@ -443,7 +447,12 @@ function assertPullContract(
     [...contract.contributors].sort().join("\0") === contract.contributors.join("\0") &&
     new Set(contract.contributors).size === contract.contributors.length;
   if (
-    contract.contractVersion !== OVERTURE_PULL_CONTRACT_VERSION ||
+    ![1, OVERTURE_PULL_CONTRACT_VERSION].includes(contract.contractVersion) ||
+    (contract.contractVersion === 2 &&
+      (!Array.isArray(contract.sourcesCatalogue) ||
+        !contract.sourcesCatalogue.every(
+          (r) => typeof r.sourceId === "string" && typeof r.name === "string",
+        ))) ||
     contract.sourceCatalog !== OVERTURE_STAC_URL ||
     contract.release !== release ||
     contract.theme !== OVERTURE_THEME ||
@@ -468,7 +477,12 @@ function assertPullContract(
   if (statSync(parquetPath).size !== contract.parquetSizeBytes) {
     throw new Error("Overture parquet file size does not match its pull contract");
   }
-  return contract;
+  // Version 1 never certified acquisition-time notices; do not accept a later
+  // metadata addition as historical producer evidence.
+  return {
+    ...contract,
+    sourcesCatalogue: contract.contractVersion === 2 ? contract.sourcesCatalogue : undefined,
+  };
 }
 
 export function readOverturePullContract(

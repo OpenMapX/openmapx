@@ -91,6 +91,7 @@ describe("getVehiclePositions", () => {
 
     expect(result.data).toEqual([
       {
+        contributors: [],
         id: "db-ris-maps:j-live",
         provider: "db-ris-maps",
         sourceId: "db-ris-maps",

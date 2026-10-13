@@ -71,6 +71,7 @@ describe("getVehiclePositions", () => {
 
     expect(result.data).toEqual([
       {
+        contributors: result.attributions,
         id: "entur-live-vehicles:RUT:Vehicle:123",
         provider: "entur-live-vehicles",
         sourceId: "entur-live-vehicles",
@@ -147,6 +148,7 @@ describe("getAlertsForBbox", () => {
 
     expect(result?.data).toEqual([
       {
+        contributors: result?.attributions,
         id: "entur:RUT:Situation:9",
         providers: ["entur"],
         severity: "severe",

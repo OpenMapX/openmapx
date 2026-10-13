@@ -124,3 +124,60 @@ describe("attributionToHtml", () => {
     expect(attributionToHtml({ sourceId: "anon", name: "Anonymous feed" })).toBe("Anonymous feed");
   });
 });
+
+it("renders a Commons artist's ampersand and licence correctly through the actual map-credit HTML path", async () => {
+  const { parseCommonsPage } = await import("@openmapx/core");
+  const photo = parseCommonsPage({
+    title: "File:Artist.jpg",
+    imageinfo: [
+      {
+        url: "https://upload.wikimedia.org/wikipedia/commons/a/ab/Artist.jpg",
+        mime: "image/jpeg",
+        extmetadata: {
+          Artist: { value: "One &amp; Co" },
+          LicenseShortName: { value: "CC BY 4.0" },
+          LicenseUrl: { value: "https://creativecommons.org/licenses/by/4.0/" },
+        },
+      },
+    ],
+  });
+  const receipt = photo?.contributors?.[0];
+  if (!receipt) throw new Error("complete file should have a receipt");
+  const container = document.createElement("div");
+  container.innerHTML = attributionToHtml(receipt);
+  expect(container.textContent).toContain("One & Co");
+  expect(container.textContent).not.toContain("&amp;");
+  expect(
+    container.querySelector('a[href="https://creativecommons.org/licenses/by/4.0/"]')?.textContent,
+  ).toBe("CC BY 4.0");
+});
+
+it("renders decoded creator and permission query parameters in generic map credits", async () => {
+  const { parseCommonsPage } = await import("@openmapx/core");
+  const photo = parseCommonsPage({
+    title: "File:Links.jpg",
+    imageinfo: [
+      {
+        url: "https://upload.wikimedia.org/wikipedia/commons/a/ab/Links.jpg",
+        mime: "image/jpeg",
+        extmetadata: {
+          Artist: { value: '<a href="https://creator.example/?id=7&amp;view=full">Creator</a>' },
+          Permission: {
+            value: '<a href="https://permission.example/?id=7&amp;view=full">permission record</a>',
+          },
+          LicenseShortName: { value: "CC BY 4.0" },
+          LicenseUrl: { value: "https://creativecommons.org/licenses/by/4.0/" },
+        },
+      },
+    ],
+  });
+  const receipt = photo?.contributors?.[0];
+  if (!receipt) throw new Error("complete file receipt missing");
+  const dom = document.createElement("div");
+  dom.innerHTML = attributionToHtml(receipt);
+  const links = [...dom.querySelectorAll("a")].filter(
+    (link) => link.textContent === "Creator" || link.textContent === "permission record",
+  );
+  expect(links).toHaveLength(2);
+  expect(links.every((link) => new URL(link.href).searchParams.get("view") === "full")).toBe(true);
+});

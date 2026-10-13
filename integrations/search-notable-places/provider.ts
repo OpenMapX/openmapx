@@ -9,6 +9,7 @@ import {
 } from "@openmapx/core";
 import type { IntegrationContext, SearchSuggestionProvider } from "@openmapx/integration-framework";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
+import { snapshotContributors } from "@openmapx/mobility-core/contributors";
 
 interface IndexStateRow {
   epoch: string;
@@ -177,6 +178,7 @@ function mapRow(row: SearchRow, normalizedQuery: string, near = false): SearchSu
     fame,
     provider: "search-notable-places",
     contributingProviders: ["search-notable-places"],
+    contributors: snapshotContributors([WIKIDATA_ATTRIBUTION]),
   };
 }
 
@@ -216,7 +218,7 @@ export function createNotablePlacesSuggestionProvider(
       if (state?.status !== "ready") return empty;
       const proximity = query.proximity;
       const key = [
-        "notable-places",
+        "notable-places-v2-contributors",
         state.epoch,
         normalized,
         query.lang,

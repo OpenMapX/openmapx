@@ -183,8 +183,18 @@ describe("loadAllTideStations", () => {
 
     const byNetwork = (n: MergedTideStation["network"]) => out.filter((s) => s.network === n);
 
+    const expectedIds = {
+      ioc: "ioc-sealevel",
+      emodnet: "emodnet-physics",
+      "ca-iwls": "dfo-iwls",
+      pegel: "wsv-pegelonline",
+      kartverket: "kartverket-sehavniva",
+      noaa: "noaa-co-ops",
+    };
+    for (const station of out)
+      expect(station.contributors?.map((a) => a.sourceId)).toEqual([expectedIds[station.network]]);
     // IOC: only the active, valid-coord station, with alpha-2 country.
-    expect(byNetwork("ioc")).toEqual([
+    expect(byNetwork("ioc")).toMatchObject([
       {
         network: "ioc",
         id: "abc",

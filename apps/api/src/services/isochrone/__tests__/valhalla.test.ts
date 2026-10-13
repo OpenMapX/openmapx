@@ -341,3 +341,17 @@ describe("valhallaIsochroneProvider", () => {
     });
   });
 });
+
+it("captures contour receipts and returns no credits for empty geometry", async () => {
+  const { valhallaIsochroneProvider } = await import("../valhalla.js");
+  mockFetch.mockResolvedValue(mockOk(makeIsochroneResponse([makePolygonFeature(5)])));
+  const result = await valhallaIsochroneProvider.isochrone(origin, "driving", [5]);
+  expect(result.contours[0].contributors).toEqual(result.attributions);
+  expect(result.contributors).toEqual(result.attributions);
+  expect(result.contours[0].contributors).not.toBe(result.attributions);
+  mockFetch.mockResolvedValue(mockOk(makeIsochroneResponse([makePolygonFeature(5, "distance")])));
+  const empty = await valhallaIsochroneProvider.isochrone(origin, "driving", [5]);
+  expect(empty.contours).toEqual([]);
+  expect(empty.contributors).toEqual([]);
+  expect(empty.attributions).toEqual([]);
+});

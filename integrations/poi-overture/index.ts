@@ -1,11 +1,15 @@
 import type { BoundingBox, OvertureSourceItem } from "@openmapx/core";
 import {
+  captureOvertureFieldContributors,
   createPlace,
   normalizeOvertureProvenance,
   OVERTURE_COMMERCIAL_CATEGORIES,
   openMapXCategoryToOvertureConcepts,
   overtureTaxonomyToOpenMapX,
+  selectOvertureName,
 } from "@openmapx/core";
+import { AMBIENT_LEGACY_OVERTURE_ATTRIBUTION } from "@openmapx/core/ambient-places";
+import { overtureTaxonomyCategoryEvidence } from "@openmapx/core/utils/overtureCategoryMap";
 import type { DatabaseClient, IntegrationContext } from "@openmapx/integration-framework";
 import type {
   CategoryId,
@@ -13,6 +17,12 @@ import type {
   PoiSearchProvider,
   PoiSearchResult,
 } from "@openmapx/integration-poi-search/types";
+import type { Attribution } from "@openmapx/mobility-core/attribution";
+import {
+  contributorsForRecords,
+  parseContributors,
+  snapshotContributors,
+} from "@openmapx/mobility-core/contributors";
 import { registerPlaceResolver } from "@openmapx/place-ids";
 
 interface OvertureRow {
@@ -33,6 +43,7 @@ interface OvertureRow {
   phones: string[] | null;
   brand: OvertureBrand | null;
   sources: OvertureSourceItem[] | null;
+  sources_catalogue?: Attribution[] | null;
   release: string;
 }
 
@@ -73,20 +84,8 @@ export function localizedOvertureName(
   fallback: string,
   lang?: string,
 ): { name: string; variants?: Record<string, string> } {
-  const common = names?.common ?? undefined;
-  let localized: string | undefined;
-  if (lang && common) {
-    const requested = lang.toLowerCase();
-    const base = requested.split("-")[0];
-    localized =
-      Object.entries(common).find(([tag]) => tag.toLowerCase() === requested)?.[1] ??
-      Object.entries(common).find(([tag]) => tag.toLowerCase() === base)?.[1] ??
-      Object.entries(common).find(([tag]) => tag.toLowerCase().split("-")[0] === base)?.[1];
-  }
-  return {
-    name: localized?.trim() || names?.primary?.trim() || fallback,
-    variants: common && Object.keys(common).length > 0 ? common : undefined,
-  };
+  const { name, variants } = selectOvertureName(names, fallback, lang);
+  return { name, variants };
 }
 
 export function normalizeOvertureAddress(addresses: OvertureAddress[] | null): {
@@ -114,9 +113,12 @@ export function normalizeOvertureAddress(addresses: OvertureAddress[] | null): {
 
 function normalizeBrand(brand: OvertureBrand | null, lang?: string) {
   if (!brand) return undefined;
-  const name = localizedOvertureName(brand.names ?? null, "", lang).name;
-  if (!name) return undefined;
-  return { name, wikidata: brand.wikidata ?? undefined };
+  const selected = selectOvertureName(brand.names ?? null, "", lang);
+  if (!selected.name) return undefined;
+  return {
+    brand: { name: selected.name, wikidata: brand.wikidata ?? undefined },
+    namePointer: `/brand${selected.property}`,
+  };
 }
 
 function overtureRowToPoiSearchResult(
@@ -124,9 +126,10 @@ function overtureRowToPoiSearchResult(
   requestedCategory?: CategoryId,
   lang?: string,
 ): PoiSearchResult {
-  const localized = localizedOvertureName(row.names, row.name || row.gers_id, lang);
+  const localized = selectOvertureName(row.names, row.name || row.gers_id, lang);
   const address = normalizeOvertureAddress(row.addresses);
-  const brand = normalizeBrand(row.brand, lang);
+  const brandSelection = normalizeBrand(row.brand, lang);
+  const brand = brandSelection?.brand;
   const osmTags: Record<string, string> = {};
   if (brand?.name) osmTags.brand = brand.name;
   if (brand?.wikidata) osmTags["brand:wikidata"] = brand.wikidata;
@@ -140,7 +143,7 @@ function overtureRowToPoiSearchResult(
       alternates: row.taxonomy_alternates,
     });
 
-  return {
+  const result: PoiSearchResult = {
     id: row.canonical_id ?? `overture:${row.gers_id}`,
     gersId: row.gers_id,
     name: localized.name,
@@ -156,6 +159,96 @@ function overtureRowToPoiSearchResult(
     provenance: normalizeOvertureProvenance(row.sources, row.release),
     osmTags: Object.keys(osmTags).length > 0 ? osmTags : undefined,
   };
+  return captureRowContributors(result, row, localized.property, brandSelection?.namePointer);
+}
+
+function captureRowContributors<T extends PoiSearchResult | ReturnType<typeof createPlace>>(
+  record: T,
+  row: OvertureRow,
+  namePointer: string,
+  brandNamePointer?: string,
+): T {
+  const catalogue = parseContributors(row.sources_catalogue) ?? [
+    AMBIENT_LEGACY_OVERTURE_ATTRIBUTION,
+  ];
+  const pointers: Record<string, string[]> = { coordinates: ["/geometry"], name: [namePointer] };
+  const firstIndex = (values: string[] | null) =>
+    values?.findIndex((value) => value.trim().length > 0) ?? -1;
+  for (const [field, values] of [
+    ["phone", row.phones],
+    ["email", row.emails],
+    ["website", row.websites],
+  ] as const) {
+    const index = firstIndex(values);
+    if (index >= 0)
+      pointers[field] = [
+        `/${field === "phone" ? "phones" : field === "email" ? "emails" : "websites"}/${index}`,
+      ];
+  }
+  if (record.address) {
+    const value = row.addresses?.[0];
+    pointers.address = [];
+    if (value?.freeform?.trim()) pointers.address.push("/addresses/0/freeform");
+    const line = [value?.postcode?.trim(), value?.locality?.trim()].filter(Boolean).join(" ");
+    if (line && !value?.freeform?.toLocaleLowerCase().includes(line.toLocaleLowerCase())) {
+      if (value?.postcode) pointers.address.push("/addresses/0/postcode");
+      if (value?.locality) pointers.address.push("/addresses/0/locality");
+    }
+  }
+  if (record.countryCode) pointers.countryCode = ["/addresses/0/country"];
+  if ("city" in record && record.city) pointers.city = ["/addresses/0/locality"];
+  if (record.socials?.length)
+    pointers.socials = record.socials.map((_, index) => `/socials/${index}`);
+  if (record.names) {
+    pointers.names = [];
+    for (const key of Object.keys(record.names)) {
+      const pointer = `/names/common/${key.replace(/~/g, "~0").replace(/\//g, "~1")}`;
+      pointers[`names.${key}`] = [pointer];
+      pointers.names.push(pointer);
+    }
+  }
+  if (record.brand) {
+    pointers["brand.name"] = brandNamePointer ? [brandNamePointer] : [];
+    pointers.brand = [...pointers["brand.name"]];
+    if (record.brand.wikidata) {
+      pointers.brand.push("/brand/wikidata");
+      pointers["brand.wikidata"] = ["/brand/wikidata"];
+    }
+  }
+  if (record.category)
+    pointers.category = overtureTaxonomyCategoryEvidence(
+      {
+        basicCategory: row.basic_category,
+        primary: row.taxonomy_primary,
+        hierarchy: row.taxonomy_hierarchy,
+        alternates: row.taxonomy_alternates,
+      },
+      record.category,
+    ).propertyPointers;
+  for (const key of Object.keys(record.osmTags ?? {})) {
+    pointers[`osmTags.${key}`] =
+      key === "brand"
+        ? brandNamePointer
+          ? [brandNamePointer]
+          : []
+        : key === "brand:wikidata"
+          ? ["/brand/wikidata"]
+          : (pointers[key] ?? []);
+  }
+  const captured = captureOvertureFieldContributors(record, row.sources, catalogue, pointers);
+  const overture = snapshotContributors(
+    catalogue.filter((receipt) => receipt.sourceId === "overture"),
+  );
+  captured.fieldContributors.gersId = overture;
+  if ("ids" in record) {
+    captured.fieldContributors["ids.overture"] = overture;
+    // A conflation link supplies an OSM identity, not OpenStreetMap field data.
+    if (record.ids?.osm) captured.fieldContributors["ids.osm"] = overture;
+  }
+  captured.contributors = contributorsForRecords(
+    Object.values(captured.fieldContributors).map((contributors) => ({ contributors })),
+  );
+  return captured;
 }
 
 /**
@@ -193,6 +286,7 @@ async function queryOverturePlaces(
       phones,
       brand,
       sources,
+      to_jsonb(places)->'sources_catalogue' AS sources_catalogue,
       release
     FROM overture_places.places
     WHERE geom && ST_MakeEnvelope($1, $2, $3, $4, 4326)
@@ -242,6 +336,7 @@ async function fetchOverturePlaceByGers(
        phones,
        brand,
        sources,
+       to_jsonb(places)->'sources_catalogue' AS sources_catalogue,
        release
      FROM overture_places.places
      WHERE gers_id = $1
@@ -252,9 +347,10 @@ async function fetchOverturePlaceByGers(
 }
 
 function overtureRowToPlace(row: OvertureRow, lang?: string) {
-  const localized = localizedOvertureName(row.names, row.name || row.gers_id, lang);
+  const localized = selectOvertureName(row.names, row.name || row.gers_id, lang);
   const address = normalizeOvertureAddress(row.addresses);
-  const brand = normalizeBrand(row.brand, lang);
+  const brandSelection = normalizeBrand(row.brand, lang);
+  const brand = brandSelection?.brand;
   const osmTags: Record<string, string> = {};
   if (brand?.name) osmTags.brand = brand.name;
   if (brand?.wikidata) osmTags["brand:wikidata"] = brand.wikidata;
@@ -269,7 +365,7 @@ function overtureRowToPlace(row: OvertureRow, lang?: string) {
   });
 
   const osmId = row.canonical_id?.match(/^osm:((?:node|way|relation)\/\d+)$/)?.[1];
-  return createPlace({
+  const place = createPlace({
     primaryScheme: osmId ? "osm" : "overture",
     ids: { overture: row.gers_id, ...(osmId ? { osm: osmId } : {}) },
     name: localized.name,
@@ -287,6 +383,7 @@ function overtureRowToPlace(row: OvertureRow, lang?: string) {
     provenance: normalizeOvertureProvenance(row.sources, row.release),
     osmTags: Object.keys(osmTags).length > 0 ? osmTags : undefined,
   });
+  return captureRowContributors(place, row, localized.property, brandSelection?.namePointer);
 }
 
 let boundDb: DatabaseClient | undefined;

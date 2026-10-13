@@ -4,20 +4,32 @@ import { useTheme } from "@mui/material/styles";
 import type { LngLat } from "@openmapx/core";
 import { useDataSources, useDirectionsStore } from "@openmapx/core";
 import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
+import type { Attribution } from "@openmapx/mobility-core/attribution";
+import {
+  contributorsForRecordFields,
+  contributorsForRecords,
+  legacyAttributionsToContributors,
+  parseContributors,
+  parseFieldContributors,
+  serializeContributors,
+  withFeatureContributors,
+} from "@openmapx/mobility-core/contributors";
 import type * as maplibregl from "maplibre-gl";
 import type { MapMouseEvent } from "maplibre-gl";
 import { useLocale, useTranslations } from "next-intl";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { useMap } from "@/integration-api/map/MapContext";
 import { getMapClickOwner } from "@/integration-api/map/mapClickOwnership";
 import type { MapLayerGroup, SlottedLayer } from "@/integration-api/map/mapLayerGroup";
 import { useDrawnDirectionsRoutes } from "@/integration-api/map/useDrawnDirectionsRoutes";
 import { useMapLayerGroup } from "@/integration-api/map/useMapLayerGroup";
-import { useMapAttributions } from "@/integration-api/overlay/useMapAttributions";
+import { markerMapContributors } from "@/integration-api/overlay/markerMapContribution";
+import { useRenderedMapAttributions } from "@/integration-api/overlay/useRenderedMapAttributions";
 import { getMapObstructionInsets, subscribeMapObstructions } from "@/lib/mapObstructions";
 import { EV_CHARGING_SOURCE_ID, openChargerPlace } from "@/lib/openChargerPlace";
 import { routeAttributions } from "@/lib/routeAttributions";
 import { ROUTE_ALT_OPACITY, ROUTE_COLORS, ROUTE_WIDTHS } from "@/lib/routeStyle";
+import { routeGeometryFeatures } from "./routeGeometryFeatures";
 import { routePillAnchors } from "./routePillAnchors";
 
 const SOURCE_ID = "route-source";
@@ -77,15 +89,25 @@ export function RouteLayer() {
     [dataSourcesData],
   );
 
-  // Credit the routing engine that served the drawn route, on the map's
-  // attribution control — so the credit persists when the directions panel is
-  // closed (the panel shows the same credit while open).
   const registry = useIntegrationRegistry();
-  const routeCredits = useMemo(
-    () => (navigating ? [] : routeAttributions(registry, provider, routes[activeRouteIndex])),
-    [registry, provider, routes, activeRouteIndex, navigating],
+  const pillReceipts = useRef(new Map<HTMLElement, readonly Attribution[]>());
+  useRenderedMapAttributions(
+    "route",
+    [LAYER_ALT_CASING, LAYER_ALT_LINE, LAYER_ACTIVE_CASING, LAYER_ACTIVE_LINE],
+    !navigating,
+    {
+      resolveCustomContributors: () => {
+        const container = mapRef.current?.getContainer();
+        return container
+          ? contributorsForRecords(
+              [...pillReceipts.current].map(([element, contributors]) => ({
+                contributors: markerMapContributors(container, element, contributors),
+              })),
+            )
+          : [];
+      },
+    },
   );
-  useMapAttributions("route", routeCredits);
 
   const hasWaypoints = waypoints.some((waypoint) => waypoint.coords !== null);
   const routeFeatures = useMemo(() => {
@@ -98,11 +120,12 @@ export function RouteLayer() {
     ) {
       return EMPTY_FC;
     }
-    const features = routes.map((route, i) => ({
-      type: "Feature" as const,
-      properties: { type: i === activeRouteIndex ? "active" : "alt", routeIndex: i },
-      geometry: { type: "LineString" as const, coordinates: route.geometry },
-    }));
+    const features = routes.flatMap((route, i) =>
+      routeGeometryFeatures(route, {
+        type: i === activeRouteIndex ? "active" : "alt",
+        routeIndex: i,
+      }),
+    );
     // The active route draws last so it sits over its alternates within the layer.
     features.sort((a) => (a.properties.type === "active" ? 1 : -1));
     return { type: "FeatureCollection" as const, features };
@@ -202,6 +225,7 @@ export function RouteLayer() {
 
     let cancelled = false;
     const markers = new Map<number, maplibregl.Marker>();
+    const elements = new Map<number, HTMLElement>();
     const refresh = (Marker: typeof maplibregl.Marker) => {
       if (cancelled) return;
       const container = map.getContainer();
@@ -222,6 +246,9 @@ export function RouteLayer() {
       const shown = new Set(anchors.map((anchor) => anchor.routeIndex));
       for (const [index, marker] of markers) {
         if (shown.has(index)) continue;
+        const element = elements.get(index);
+        if (element) pillReceipts.current.delete(element);
+        elements.delete(index);
         marker.remove();
         markers.delete(index);
       }
@@ -260,6 +287,11 @@ export function RouteLayer() {
             setActiveRouteIndex(routeIndex);
           });
         }
+        elements.set(routeIndex, element);
+        pillReceipts.current.set(
+          element,
+          routeAttributions(registry, provider, pill.route, ["duration"]),
+        );
         markers.set(
           routeIndex,
           new Marker({ element, anchor: "center" }).setLngLat(coordinate).addTo(map),
@@ -301,6 +333,7 @@ export function RouteLayer() {
       unsubscribeObstructions();
       for (const marker of markers.values()) marker.remove();
       markers.clear();
+      pillReceipts.current.clear();
     };
   }, [
     routes,
@@ -315,6 +348,8 @@ export function RouteLayer() {
     t,
     theme,
     setActiveRouteIndex,
+    registry,
+    provider,
   ]);
 
   // Delegated listeners live on the map, not the style, so they do not need a
@@ -384,19 +419,44 @@ export function RouteLayer() {
   const evStopsData = useMemo(
     () => ({
       type: "FeatureCollection" as const,
-      features: evStops.map((stop) => ({
-        type: "Feature" as const,
-        geometry: { type: "Point" as const, coordinates: stop.station.coordinates },
-        properties: {
-          id: stop.station.id,
-          name: stop.station.name,
-          availState: !stop.availability
-            ? "unknown"
-            : stop.availability.available > 0
-              ? "available"
-              : "busy",
-        },
-      })),
+      features: evStops.map((stop) =>
+        withFeatureContributors(
+          {
+            type: "Feature" as const,
+            geometry: { type: "Point" as const, coordinates: stop.station.coordinates },
+            properties: {
+              id: stop.station.id,
+              name: stop.station.name,
+              _stationContributors: serializeContributors(
+                stop.station.contributors ??
+                  stop.contributors ??
+                  legacyAttributionsToContributors(stop.attributions),
+              ),
+              _stationFieldContributors: JSON.stringify(
+                stop.station.fieldContributors ??
+                  (stop.fieldContributors !== undefined
+                    ? {
+                        id: contributorsForRecordFields(stop, ["station.id"]),
+                        name: contributorsForRecordFields(stop, ["station.name"]),
+                        coordinates: contributorsForRecordFields(stop, ["station.coordinates"]),
+                      }
+                    : undefined),
+              ),
+              availState: !stop.availability
+                ? "unknown"
+                : stop.availability.available > 0
+                  ? "available"
+                  : "busy",
+            },
+          },
+          stop.fieldContributors !== undefined
+            ? contributorsForRecordFields(stop, [
+                "station.coordinates",
+                ...(stop.availability ? ["availability"] : []),
+              ])
+            : (stop.contributors ?? legacyAttributionsToContributors(stop.attributions)),
+        ),
+      ),
     }),
     [evStops],
   );
@@ -431,6 +491,7 @@ export function RouteLayer() {
     };
   }, [evStops.length, evStopsData, isEvMode]);
   useMapLayerGroup(evGroup);
+  useRenderedMapAttributions("route-ev-stops", [EV_STOPS_LAYER_ID], isEvMode && !navigating);
 
   // Charge-stop pins open the same floating place card as a charger clicked in
   // the data-source layer.
@@ -442,10 +503,24 @@ export function RouteLayer() {
       if (!map.getLayer(EV_STOPS_LAYER_ID)) return;
       const features = map.queryRenderedFeatures(e.point, { layers: [EV_STOPS_LAYER_ID] });
       if (!features.length) return;
-      const props = features[0].properties as { id: string; name: string };
+      const props = features[0].properties as {
+        id: string;
+        name: string;
+        _stationContributors?: string;
+        _stationFieldContributors?: string;
+      };
       const coordinates = (features[0].geometry as { coordinates: number[] }).coordinates as LngLat;
       openChargerPlace(
-        { id: props.id, name: props.name, coordinates },
+        {
+          id: props.id,
+          name: props.name,
+          coordinates,
+          contributors: parseContributors(props._stationContributors) ?? [],
+          fieldContributors:
+            props._stationFieldContributors === undefined
+              ? undefined
+              : (parseFieldContributors(props._stationFieldContributors) ?? {}),
+        },
         {
           placeCategory: evSourceMeta?.placeCategory,
           placeCategoryRaw: evSourceMeta?.placeCategoryRaw,

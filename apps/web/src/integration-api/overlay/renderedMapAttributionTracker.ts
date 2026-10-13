@@ -1,7 +1,10 @@
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import { parseContributors, snapshotContributors } from "@openmapx/mobility-core/contributors";
 import type { MapGeoJSONFeature, Map as MapLibreMap } from "maplibre-gl";
-import { rasterMapContributes } from "./rasterMapContribution";
+import {
+  rasterMapContributors,
+  updateRasterAcquisitionContributors,
+} from "./rasterMapContribution";
 import { hasVisibleFeatureChannel, isAttributionLayerVisible } from "./renderedFeatureVisibility";
 import { createRenderedPaintEvidence } from "./renderedPaintEvidence";
 import { attributionToHtml } from "./useMapAttributions";
@@ -15,6 +18,8 @@ export interface RenderedMapAttributionOptions {
    */
   complementaryGradientGroups?: readonly (readonly string[])[];
   layerContributors?: Readonly<Record<string, readonly Attribution[]>>;
+  /** Trusted host proof for painted DOM/custom-GPU content outside feature queries. Never supplied by remote data. */
+  resolveCustomContributors?: () => readonly Attribution[];
   resolveFeatureContributors?: (feature: MapGeoJSONFeature) => readonly Attribution[] | undefined;
 }
 
@@ -54,6 +59,7 @@ class RenderedMapAttributionTracker {
       this.map.on("render", this.schedule);
       this.map.on("idle", this.schedule);
     }
+    this.captureRaster(subscription);
     this.subscriptions.set(owner, subscription);
     this.schedule();
     return () => {
@@ -71,8 +77,16 @@ class RenderedMapAttributionTracker {
 
   update(owner: string, subscription: Subscription): void {
     if (!this.subscriptions.has(owner)) return;
+    this.captureRaster(subscription);
     this.subscriptions.set(owner, subscription);
     this.schedule();
+  }
+
+  private captureRaster(subscription: Subscription): void {
+    if (subscription.kind !== "raster") return;
+    for (const descriptor of subscription.descriptors) {
+      updateRasterAcquisitionContributors(this.map, descriptor.sourceId, descriptor.contributors);
+    }
   }
 
   private schedule = () => {
@@ -106,14 +120,28 @@ class RenderedMapAttributionTracker {
       const html = new Set<string>();
       if (subscription.kind === "raster") {
         for (const descriptor of subscription.descriptors) {
-          if (!rasterMapContributes(this.map, descriptor.layerId, descriptor.sourceId)) continue;
-          for (const receipt of snapshotContributors(descriptor.contributors)) {
+          updateRasterAcquisitionContributors(
+            this.map,
+            descriptor.sourceId,
+            descriptor.contributors,
+          );
+          for (const receipt of rasterMapContributors(
+            this.map,
+            descriptor.layerId,
+            descriptor.sourceId,
+          )) {
             const entry = attributionToHtml(receipt);
             if (entry) html.add(entry);
           }
         }
         subscription.publish([...html].sort());
         continue;
+      }
+      for (const receipt of snapshotContributors(
+        subscription.resolveCustomContributors?.() ?? [],
+      )) {
+        const entry = attributionToHtml(receipt);
+        if (entry) html.add(entry);
       }
       const live = layersByOwner.get(owner);
       if (!live) continue;

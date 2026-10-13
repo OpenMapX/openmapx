@@ -267,3 +267,21 @@ describe("pickIntegrationForSources", () => {
     expect(picked?.id).toBe("ev-charging");
   });
 });
+
+describe("attribution entity handling", () => {
+  it("keeps escaped credit text idempotent without turning encoded markup into tags", () => {
+    const html =
+      '<a href="https://example.org/?one=1&amp;two=2">One &amp; Co</a> / &lt;script&gt;literal&lt;/script&gt;';
+    const once = sanitizeAttributionHtml(html);
+    expect(once).toContain("One &amp; Co");
+    expect(once).toContain("&lt;script&gt;literal&lt;/script&gt;");
+    expect(once).not.toContain("<script>");
+    expect(sanitizeAttributionHtml(once)).toBe(once);
+  });
+  it.each(["javascript&#58;alert(1)", "java&#x73;cript:alert(1)", "data&#58;text/html,evil"])(
+    "does not allow entity-encoded unsafe link %s",
+    (href) => {
+      expect(sanitizeAttributionHtml(`<a href="${href}">credit</a>`)).toBe("credit");
+    },
+  );
+});

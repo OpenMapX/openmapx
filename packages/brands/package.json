@@ -18,7 +18,8 @@
     "generate": "node --experimental-strip-types src/generate.ts"
   },
   "dependencies": {
-    "@openmapx/core": "workspace:^"
+    "@openmapx/core": "workspace:^",
+    "@openmapx/mobility-core": "workspace:^"
   },
   "devDependencies": {
     "@types/node": "^26.6.5",

@@ -5,10 +5,33 @@ import { strToU8, zipSync } from "fflate";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { extractZipEntryText, loadSwissOccupancyForecastDataset } from "../datasets.js";
 
+const archiveBarrier = vi.hoisted(() => ({
+  hold: false,
+  reached: undefined as undefined | (() => void),
+  release: undefined as undefined | Promise<void>,
+}));
+vi.mock("node:fs/promises", async (load) => {
+  const original = await load<typeof import("node:fs/promises")>();
+  return {
+    ...original,
+    readFile: async (...args: Parameters<typeof original.readFile>) => {
+      const bytes = await original.readFile(...args);
+      if (archiveBarrier.hold && String(args[0]).includes("swiss-occupancy")) {
+        archiveBarrier.hold = false;
+        archiveBarrier.reached?.();
+        await archiveBarrier.release;
+      }
+      return bytes;
+    },
+  };
+});
+
 const temporaryDirectories: string[] = [];
 
 afterEach(async () => {
+  vi.restoreAllMocks();
   vi.unstubAllGlobals();
+  archiveBarrier.hold = false;
   await Promise.all(
     temporaryDirectories.splice(0).map((directory) => rm(directory, { recursive: true })),
   );
@@ -46,5 +69,58 @@ describe("Swiss occupancy forecast archive inputs", () => {
     await expect(extractZipEntryText(zipPath, entryName)).resolves.toBe(
       '{"operatorRef":"123","trains":[]}',
     );
+  });
+});
+
+it("keeps the acquired archive bytes and notice together through a concurrent refresh", async () => {
+  vi.resetModules();
+  const archive = (version: string) =>
+    zipSync(
+      Object.fromEntries(
+        ["11", "22", "33"].map((operator) => [
+          `2025-02-03/operator-${operator}.json`,
+          strToU8(JSON.stringify({ dataSource: version, trains: [] })),
+        ]),
+      ),
+    );
+  let downloadedArchive = archive("A");
+  const refreshedArchive = archive("B");
+  vi.stubGlobal("fetch", async () => new Response(downloadedArchive));
+  let now = 1_000;
+  vi.spyOn(Date, "now").mockImplementation(() => now);
+  const datasets = await import("../datasets.js");
+  const sourceId = "opentransportdata-ch-occupancy-forecast";
+  const a = { sourceId, name: "Archive A", notes: "Notice A" };
+  datasets.setSwissDatasetContributors({ [sourceId]: [a] });
+  expect(await datasets.loadSwissOccupancyForecastDataset("2025-02-03", "11")).toMatchObject({
+    dataSource: "A",
+    contributors: [a],
+  });
+  const reached = new Promise<void>((resolve) => {
+    archiveBarrier.reached = resolve;
+  });
+  let release!: () => void;
+  archiveBarrier.release = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  archiveBarrier.hold = true;
+  const retainedReader = datasets.loadSwissOccupancyForecastDataset("2025-02-03", "22");
+  await reached;
+  try {
+    now += 6 * 60 * 60 * 1000 + 1;
+    downloadedArchive = refreshedArchive;
+    const b = { sourceId, name: "Archive B", notes: "Notice B" };
+    datasets.setSwissDatasetContributors({ [sourceId]: [b] });
+    expect(await datasets.loadSwissOccupancyForecastDataset("2025-02-03", "33")).toMatchObject({
+      dataSource: "B",
+      contributors: [b],
+    });
+  } finally {
+    release();
+  }
+  expect(await retainedReader).toMatchObject({ dataSource: "A", contributors: [a] });
+  expect(await datasets.loadSwissOccupancyForecastDataset("2025-02-03", "22")).toMatchObject({
+    dataSource: "A",
+    contributors: [a],
   });
 });

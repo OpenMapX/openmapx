@@ -23,12 +23,12 @@ import {
   useLinkedTransitFacilities,
   useLinkedTransitRoutes,
 } from "@openmapx/core";
+import { contributorsForRecords } from "@openmapx/mobility-core/contributors";
 import type { MergedDeparture, MergedRoute, TransportMode } from "@openmapx/mobility-core/transit";
 import { useTranslations } from "next-intl";
 import type { KeyboardEvent } from "react";
 import { useMemo } from "react";
 import { AttributionStrip } from "@/components/ui/AttributionStrip";
-import { useAttributionFromHooks } from "@/integration-api/overlay/useAttributionFromHooks";
 import { BRAND } from "@/integration-api/runtime/theme";
 import { useNow } from "@/lib/useNow";
 import { AlertsBanner } from "./AlertsBanner";
@@ -89,12 +89,13 @@ export function PlaceTransitSection({
   const { data: departures, isLoading: depsLoading } = departuresQuery;
   const facilitiesQuery = useLinkedTransitFacilities(place);
   const { data: facilities } = facilitiesQuery;
-  const mergedAttributions = useAttributionFromHooks(
-    routesQuery,
-    alertsQuery,
-    departuresQuery,
-    facilitiesQuery,
-  );
+  // Hidden route counts are displayed data; the timetable preview shows only five rows.
+  const mergedAttributions = contributorsForRecords([
+    ...(routes ?? []),
+    ...(alerts ?? []),
+    ...(departures ?? []).slice(0, 5),
+    ...(facilities ?? []),
+  ]);
 
   const alertRouteIds = useMemo(
     () =>

@@ -1,4 +1,10 @@
-import type { IntegrationContext } from "@openmapx/integration-framework";
+import {
+  type CapturedContributorCatalogue,
+  captureIntegrationContributorCatalogue,
+  type IntegrationContext,
+  resolveCapturedContributors,
+} from "@openmapx/integration-framework";
+import { type ContributingRecord, withContributors } from "@openmapx/mobility-core/contributors";
 import type { GeocodingProvider } from "./types.js";
 
 type ProviderName =
@@ -81,11 +87,20 @@ function parseProviderList(): ProviderName[] {
  * cross-request races a shared "last provider" field would suffer. Only fills
  * the tag when absent so a pre-tagging provider wins.
  */
-function tagProvider<T extends { provider?: string }>(results: T[], integrationId: string): T[] {
-  for (const r of results) {
-    if (r && r.provider === undefined) r.provider = integrationId;
-  }
-  return results;
+function tagProvider<T extends ContributingRecord & { provider?: string; sourceIds?: string[] }>(
+  catalogue: CapturedContributorCatalogue,
+  results: T[],
+  integrationId: string,
+): T[] {
+  return results.map((record) => {
+    const provider = record.provider ?? integrationId;
+    const declared = catalogue.declaredByIntegration.get(provider) ?? [];
+    const tagged = { ...record, provider };
+    if (record.contributors === undefined && declared.length === 0 && !catalogue.hasRuntime)
+      return tagged;
+    const contributors = resolveCapturedContributors(catalogue, provider, record, true);
+    return withContributors(tagged, contributors);
+  });
 }
 
 let cached: GeocodingProvider | null = null;
@@ -125,20 +140,22 @@ export function getGeocodingProvider(ctx: IntegrationContext): GeocodingProvider
       ...single.provider,
       async geocode(query, lang, proximity) {
         return tagProvider(
+          captureIntegrationContributorCatalogue(ctx, "geocoding"),
           await single.provider.geocode(query, lang, proximity),
           single.integrationId,
         );
       },
       async autocomplete(query, lang, bias) {
         return tagProvider(
+          captureIntegrationContributorCatalogue(ctx, "geocoding"),
           await single.provider.autocomplete(query, lang, bias),
           single.integrationId,
         );
       },
       async reverseGeocode(lat, lng, lang) {
+        const catalogue = captureIntegrationContributorCatalogue(ctx, "geocoding");
         const result = await single.provider.reverseGeocode(lat, lng, lang);
-        if (result && result.provider === undefined) result.provider = single.integrationId;
-        return result;
+        return result ? tagProvider(catalogue, [result], single.integrationId)[0] : null;
       },
     };
     return cached;
@@ -148,8 +165,9 @@ export function getGeocodingProvider(ctx: IntegrationContext): GeocodingProvider
     async geocode(query, lang, proximity) {
       for (let i = 0; i < chain.length; i++) {
         try {
+          const catalogue = captureIntegrationContributorCatalogue(ctx, "geocoding");
           const results = await chain[i].provider.geocode(query, lang, proximity);
-          if (results.length > 0) return tagProvider(results, chain[i].integrationId);
+          if (results.length > 0) return tagProvider(catalogue, results, chain[i].integrationId);
         } catch (err) {
           if (i === chain.length - 1) throw err;
         }
@@ -159,8 +177,9 @@ export function getGeocodingProvider(ctx: IntegrationContext): GeocodingProvider
     async autocomplete(query, lang, bias) {
       for (let i = 0; i < chain.length; i++) {
         try {
+          const catalogue = captureIntegrationContributorCatalogue(ctx, "geocoding");
           const results = await chain[i].provider.autocomplete(query, lang, bias);
-          if (results.length > 0) return tagProvider(results, chain[i].integrationId);
+          if (results.length > 0) return tagProvider(catalogue, results, chain[i].integrationId);
         } catch (err) {
           if (i === chain.length - 1) throw err;
         }
@@ -170,10 +189,10 @@ export function getGeocodingProvider(ctx: IntegrationContext): GeocodingProvider
     async reverseGeocode(lat, lng, lang) {
       for (let i = 0; i < chain.length; i++) {
         try {
+          const catalogue = captureIntegrationContributorCatalogue(ctx, "geocoding");
           const result = await chain[i].provider.reverseGeocode(lat, lng, lang);
           if (result) {
-            if (result.provider === undefined) result.provider = chain[i].integrationId;
-            return result;
+            return tagProvider(catalogue, [result], chain[i].integrationId)[0];
           }
         } catch (err) {
           if (i === chain.length - 1) throw err;

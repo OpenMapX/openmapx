@@ -7,6 +7,7 @@ import {
   dataSourceLayerCredits,
   mergeAttributions,
   type ProviderMetaResolver,
+  runtimeAttributionToAttribution,
 } from "./attributionForProviders";
 
 function ds(partial: Partial<IntegrationDataSource> & { sourceId: string }): IntegrationDataSource {
@@ -80,9 +81,9 @@ describe("attributionsForSources", () => {
 });
 
 describe("mergeAttributions", () => {
-  it("retains first-seen order and content while deduplicating source ids", () => {
+  it("retains first-seen order while deduplicating identical credits", () => {
     const first = { sourceId: "osm", name: "OpenStreetMap" };
-    const duplicate = { sourceId: "osm", name: "Wrong later label" };
+    const duplicate = { ...first };
     const second = { sourceId: "ourairports", name: "OurAirports" };
 
     expect(mergeAttributions([first], [duplicate, second])).toEqual([first, second]);
@@ -117,7 +118,6 @@ describe("dataSourceLayerCredits", () => {
         name: "MTS-K via Tankerkönig",
         url: "https://creativecommons.tankerkoenig.de/",
         spdxLicense: "CC-BY-4.0",
-        licenseUrl: undefined,
       },
     ]);
     expect(warn).not.toHaveBeenCalled();
@@ -141,13 +141,15 @@ describe("dataSourceLayerCredits", () => {
       sourceLabel: "ev-charging",
       dataSources: [ds({ sourceId: "ocm", name: "Open Charge Map" }), ds({ sourceId: "osm" })],
       envelope: [{ sourceId: "ocm", name: "Open Charge Map" }],
-      results: [{ attributions: [{ text: "Ville de Paris", url: "https://paris.fr" }] }],
+      results: [
+        { source: "ocm", attributions: [{ text: "Ville de Paris", url: "https://paris.fr" }] },
+      ],
       isFetching: false,
     });
     expect(credits.map((c) => c.name)).toEqual(["Open Charge Map", "Ville de Paris"]);
   });
 
-  it("emits nothing while the first response is in flight", () => {
+  it("keeps retained per-record credits while a refresh is in flight", () => {
     expect(
       dataSourceLayerCredits({
         sourceLabel: "fuel",
@@ -156,6 +158,88 @@ describe("dataSourceLayerCredits", () => {
         results: [{ attributions: [mtsk] }],
         isFetching: true,
       }),
+    ).toEqual([
+      {
+        sourceId: "MTS-K via Tankerkönig",
+        name: mtsk.text,
+        url: mtsk.url,
+        spdxLicense: mtsk.license,
+      },
+    ]);
+  });
+});
+
+describe("exact data-source record credits", () => {
+  const a = { sourceId: "a", name: "A", attributionText: "Captured notice" };
+  const b = { sourceId: "b", name: "B" };
+  const input = {
+    sourceLabel: "mixed",
+    dataSources: [ds({ sourceId: "a" }), ds({ sourceId: "b" })],
+    envelope: [a, b],
+    isFetching: false,
+  };
+  it("clears when client filters remove every record", () => {
+    expect(dataSourceLayerCredits({ ...input, results: [] })).toEqual([]);
+  });
+  it("uses immutable canonical receipts during a failed refresh", () => {
+    expect(
+      dataSourceLayerCredits({
+        ...input,
+        envelope: [],
+        isFetching: true,
+        results: [{ contributors: [a] }],
+      }),
+    ).toEqual([a]);
+  });
+  it("does not expand unknown mixed records to all declared provider sources", () => {
+    expect(dataSourceLayerCredits({ ...input, results: [{ source: "unknown" }] })).toEqual([]);
+  });
+  it("narrows legacy source IDs to their captured envelope and treats explicit empty receipts as authoritative", () => {
+    expect(dataSourceLayerCredits({ ...input, results: [{ source: "a" }] })).toEqual([a]);
+    expect(
+      dataSourceLayerCredits({ ...input, results: [{ source: "a", contributors: [] }] }),
     ).toEqual([]);
   });
+});
+
+it("preserves an explicit source ID at the legacy runtime attribution boundary", () => {
+  expect(
+    runtimeAttributionToAttribution({
+      sourceId: "stable-feed",
+      text: "Publisher notice",
+      url: "https://publisher.example",
+    }).sourceId,
+  ).toBe("stable-feed");
+});
+
+it("keeps every distinct notice for exact legacy source IDs and excludes unrelated sources", () => {
+  const first = { sourceId: "feed", name: "Feed", attributionText: "Required notice A" };
+  const second = { sourceId: "feed", name: "Feed", attributionText: "Required notice B" };
+  const input = {
+    sourceLabel: "mixed",
+    dataSources: [],
+    envelope: [first, { sourceId: "other", name: "Other" }, second],
+    isFetching: false,
+  };
+  expect(dataSourceLayerCredits({ ...input, results: [{ source: "feed" }] })).toEqual([
+    first,
+    second,
+  ]);
+  expect(
+    dataSourceLayerCredits({ ...input, results: [{ source: "feed", contributors: [] }] }),
+  ).toEqual([]);
+});
+
+it("preserves distinct mandatory notices from one source and copies publisher metadata", () => {
+  const first = {
+    sourceId: "one",
+    name: "One",
+    attributionText: "Required first",
+    publisher: { name: "Publisher" },
+  };
+  const second = { ...first, attributionText: "Required second" };
+  const merged = mergeAttributions([first], [second]);
+  expect(merged).toEqual([first, second]);
+  first.publisher.name = "Changed";
+  expect(merged[0].publisher?.name).toBe("Publisher");
 });

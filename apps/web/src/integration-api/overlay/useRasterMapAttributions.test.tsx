@@ -1,7 +1,8 @@
-import type { Map as MapLibreMap } from "maplibre-gl";
+import type { Map as MapLibreMap, RasterTileSource, SourceSpecification } from "maplibre-gl";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, createFakeMap, type FakeMap, renderHook } from "@/test";
 import { useMapAttributionStore } from "./mapAttributionStore";
+import { addAttributedRasterSource } from "./rasterMapContribution";
 import {
   type RasterAttributionDescriptor,
   useRasterMapAttributions,
@@ -84,6 +85,317 @@ beforeEach(() => {
 afterEach(() => vi.useRealTimers());
 
 describe("effective raster contribution", () => {
+  it.each(
+    [false, true].flatMap((replaceTexture) =>
+      (["success", "absent", "abort", "fail", "failed-upload"] as const).map((outcome) => ({
+        replaceTexture,
+        outcome,
+      })),
+    ),
+  )(
+    "binds overlapping $outcome completions to actual bytes (replace texture: $replaceTexture)",
+    async ({ replaceTexture, outcome }) => {
+      type Tile = Parameters<RasterTileSource["loadTile"]>[0];
+      const completions: Array<
+        (mode?: "success" | "absent" | "abort" | "fail" | "failed-upload") => void
+      > = [];
+      const originalAdd = fake.map.addSource.bind(fake.map);
+      fake.map.addSource = (id, specification) => {
+        originalAdd(id, specification);
+        const source = fake.map.getSource<RasterTileSource>(id);
+        if (!source) throw new Error("missing source");
+        source.loadTile = (tile) =>
+          new Promise<void>((resolve, reject) => {
+            const texture = { bytes: "" };
+            const requestNumber = completions.length;
+            completions.push((mode = "success") => {
+              if (mode === "absent") {
+                resolve();
+                return;
+              }
+              if (mode === "abort") {
+                tile.state = "unloaded";
+                resolve();
+                return;
+              }
+              if (mode === "fail") {
+                tile.state = "errored";
+                reject(new Error("failed request"));
+                return;
+              }
+              // MapLibre assigns even a reused GPU texture before updating it, and
+              // writes loaded only after the content upload succeeds.
+              tile.texture = replaceTexture ? texture : tile.texture;
+              if (mode === "failed-upload") {
+                tile.state = "errored";
+                reject(new Error("failed upload"));
+                return;
+              }
+              tile.texture.bytes = String(requestNumber);
+              tile.state = "loaded";
+              resolve();
+            });
+          });
+        return fake.map;
+      };
+      fake.map.removeSource("supplier");
+      addAttributedRasterSource(
+        fake.map,
+        "supplier",
+        { type: "raster", tiles: ["https://tiles.test/{z}/{x}/{y}"] },
+        descriptors[0].contributors,
+      );
+      const source = fake.map.getSource<RasterTileSource>("supplier");
+      if (!source) throw new Error("missing source");
+      const tile = { ...loaded(), texture: { bytes: "" }, state: "loading" };
+      tile.hasData = () => ["loaded", "reloading", "expired"].includes(tile.state);
+      retained.set("active", tile);
+      visible = ["active"];
+      const hook = renderHook(
+        ({ descriptors: current }) => useRasterMapAttributions("weather", current, true),
+        { initialProps: { descriptors } },
+      );
+      const first = source.loadTile(tile as Tile);
+      hook.rerender({
+        descriptors: [
+          {
+            ...descriptors[0],
+            contributors: [{ sourceId: "supplier", name: "replacement-notice" }],
+          },
+        ],
+      });
+      const second = source.loadTile(tile as Tile);
+      completions[1]();
+      await second;
+      flush();
+      expect(tile.texture.bytes).toBe("1");
+      expect(html()).toContain("replacement-notice");
+      completions[0](outcome);
+      if (outcome === "fail" || outcome === "failed-upload") await expect(first).rejects.toThrow();
+      else await first;
+      if (outcome !== "success") {
+        // The engine can later re-enter a renderable reload state without any
+        // content acquisition. Its retained bytes must keep the successful newer
+        // receipt, or no receipt when failed upload replaced the texture.
+        tile.state = "reloading";
+        flush();
+        if (replaceTexture && outcome === "failed-upload") expect(html()).toBe("");
+        else {
+          expect(tile.texture.bytes).toBe("1");
+          expect(html()).toContain("replacement-notice");
+          expect(html()).not.toContain("successful-supplier");
+        }
+        return;
+      }
+      flush();
+      expect(tile.texture.bytes).toBe("0");
+      expect(html()).toContain("successful-supplier");
+      expect(html()).not.toContain("replacement-notice");
+      // An empty response returns without touching loaded/texture; success of
+      // the Promise itself must not restamp the retained old bytes.
+      const absent = source.loadTile(tile as Tile);
+      completions[2]("absent");
+      await absent;
+      flush();
+      expect(html()).toContain("successful-supplier");
+      expect(html()).not.toContain("replacement-notice");
+      const aborted = source.loadTile(tile as Tile);
+      completions[3]("abort");
+      await aborted;
+      flush();
+      expect(html()).toBe("");
+      // A later real reload owns its own receipt; a still later failed load
+      // changes engine state but must not pretend that new bytes were acquired.
+      const successful = source.loadTile(tile as Tile);
+      completions[4]();
+      await successful;
+      const failing = source.loadTile(tile as Tile);
+      completions[5]("fail");
+      await expect(failing).rejects.toThrow("failed request");
+      tile.state = "reloading";
+      flush();
+      expect(html()).toContain("replacement-notice");
+      const upload = source.loadTile(tile as Tile);
+      completions[6]("failed-upload");
+      await expect(upload).rejects.toThrow("failed upload");
+      flush();
+      expect(html()).toBe("");
+    },
+  );
+
+  it("captures public loadTile before pending work, commits new content and preserves failures on the same texture", async () => {
+    let complete: (() => void) | undefined;
+    let reject: ((reason: Error) => void) | undefined;
+    const originalAdd = fake.map.addSource.bind(fake.map);
+    fake.map.addSource = (id: string, specification: SourceSpecification) => {
+      originalAdd(id, specification);
+      const source = fake.map.getSource<RasterTileSource>(id);
+      if (!source) throw new Error("missing source");
+      source.loadTile = (tile) =>
+        new Promise<void>((resolve, fail) => {
+          complete = () => {
+            const pooledTexture = tile.texture;
+            tile.texture = pooledTexture;
+            tile.state = "loaded";
+            resolve();
+          };
+          reject = fail;
+        });
+      return fake.map;
+    };
+    fake.map.removeSource("supplier");
+    addAttributedRasterSource(
+      fake.map,
+      "supplier",
+      { type: "raster", tiles: ["https://tiles.test/{z}/{x}/{y}"] },
+      descriptors[0].contributors,
+    );
+    const source = fake.map.getSource<RasterTileSource>("supplier");
+    if (!source) throw new Error("missing source");
+    const tile = { ...loaded(), state: "loading" };
+    tile.hasData = () => tile.state === "loaded" || tile.state === "reloading";
+    retained.set("active", tile);
+    visible = ["active"];
+    const hook = renderHook(
+      ({ descriptors: current }) => useRasterMapAttributions("weather", current, true),
+      { initialProps: { descriptors } },
+    );
+    const load = () => source.loadTile(tile as Parameters<RasterTileSource["loadTile"]>[0]);
+    const first = load();
+    hook.rerender({
+      descriptors: [
+        { ...descriptors[0], contributors: [{ sourceId: "supplier", name: "replacement-notice" }] },
+      ],
+    });
+    flush();
+    expect(html()).toBe("");
+    complete?.();
+    await first;
+    flush();
+    expect(html()).toContain("successful-supplier");
+    expect(html()).not.toContain("replacement-notice");
+    tile.state = "reloading";
+    const failing = load();
+    reject?.(new Error("late failure"));
+    await expect(failing).rejects.toThrow("late failure");
+    flush();
+    expect(html()).toContain("successful-supplier");
+    const replacement = load();
+    complete?.();
+    await replacement;
+    flush();
+    expect(html()).toContain("replacement-notice");
+    expect(html()).not.toContain("successful-supplier");
+  });
+  it("preserves captured retained receipts across a temporarily unavailable engine adapter", () => {
+    retained.set("active", loaded());
+    visible = ["active"];
+    const hook = renderHook(
+      ({ descriptors: current }) => useRasterMapAttributions("weather", current, true),
+      { initialProps: { descriptors } },
+    );
+    flush();
+    const style = fake.map.style;
+    Object.defineProperty(fake.map, "style", { configurable: true, value: undefined });
+    const warning = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      hook.rerender({
+        descriptors: [
+          {
+            ...descriptors[0],
+            contributors: [{ sourceId: "supplier", name: "replacement-notice" }],
+          },
+        ],
+      });
+      flush();
+      expect(html()).toBe("");
+      Object.defineProperty(fake.map, "style", { configurable: true, value: style });
+      flush();
+      expect(html()).toContain("successful-supplier");
+      expect(html()).not.toContain("replacement-notice");
+    } finally {
+      warning.mockRestore();
+    }
+  });
+  it("starts a new receipt generation for a reused source ID", () => {
+    retained.set("old", loaded());
+    visible = ["old"];
+    const hook = renderHook(
+      ({ descriptors: current }) => useRasterMapAttributions("weather", current, true),
+      { initialProps: { descriptors } },
+    );
+    flush();
+    fake.map.removeLayer("active");
+    fake.map.removeSource("supplier");
+    mountLayers();
+    retained.clear();
+    retained.set("pending", { hasData: () => false, fadeOpacity: 1 });
+    visible = ["pending"];
+    hook.rerender({
+      descriptors: [
+        { ...descriptors[0], contributors: [{ sourceId: "supplier", name: "replacement-notice" }] },
+      ],
+    });
+    flush();
+    expect(html()).toBe("");
+    retained.set("pending", loaded());
+    flush();
+    expect(html()).toContain("replacement-notice");
+    expect(html()).not.toContain("successful-supplier");
+  });
+  it("retains the acquisition receipt across metadata refresh, pending success and failed reload", () => {
+    const tile = { hasData: () => false, fadeOpacity: 1, texture: undefined as object | undefined };
+    retained.set("active", tile);
+    visible = ["active"];
+    const hook = renderHook(
+      ({ descriptors: current }) => useRasterMapAttributions("weather", current, true),
+      { initialProps: { descriptors } },
+    );
+    flush();
+    hook.rerender({
+      descriptors: [
+        { ...descriptors[0], contributors: [{ sourceId: "supplier", name: "replacement-notice" }] },
+      ],
+    });
+    tile.hasData = () => true;
+    tile.texture = {};
+    flush();
+    expect(html()).toContain("successful-supplier");
+    expect(html()).not.toContain("replacement-notice");
+    fake.emit("error", { sourceId: "supplier" });
+    flush();
+    expect(html()).toContain("successful-supplier");
+    retained.set("new", loaded());
+    visible.push("new");
+    flush();
+    expect(html()).toContain("replacement-notice");
+    expect(html()).toContain("successful-supplier");
+  });
+  it("keeps a fading parent's own receipt while a new child acquires current metadata", () => {
+    retained.set("parent", loaded());
+    visible = ["parent"];
+    const hook = renderHook(
+      ({ descriptors: current }) => useRasterMapAttributions("weather", current, true),
+      { initialProps: { descriptors } },
+    );
+    flush();
+    hook.rerender({
+      descriptors: [
+        { ...descriptors[0], contributors: [{ sourceId: "supplier", name: "replacement-notice" }] },
+      ],
+    });
+    retained.set("child", { ...loaded(), fadeOpacity: 0, fadingParentID: { key: "parent" } });
+    visible = ["child"];
+    flush();
+    expect(html()).toContain("successful-supplier");
+    expect(html()).not.toContain("replacement-notice");
+    const child = retained.get("child");
+    if (child) child.fadeOpacity = 0.5;
+    flush();
+    expect(html()).toContain("successful-supplier");
+    expect(html()).toContain("replacement-notice");
+  });
+
   it("credits successful retained visible content even while other tiles are pending or errored", () => {
     renderHook(() => useRasterMapAttributions("weather", descriptors, true));
     retained.set("cached", loaded());
@@ -173,7 +485,9 @@ describe("effective raster contribution", () => {
     retained.set("no-texture", loaded());
     flush();
     expect(html()).toContain("successful-supplier");
-    fake.state.layers.get("active")!.source = "other";
+    const layer = fake.state.layers.get("active");
+    if (!layer) throw new Error("missing layer");
+    layer.source = "other";
     flush();
     expect(html()).toBe("");
   });
@@ -215,11 +529,13 @@ describe("effective raster contribution", () => {
   it("uses evaluated layer visibility for conditional hidden rasters", () => {
     retained.set("active", loaded());
     visible = ["active"];
-    fake.state.layers.get("active")!.isHidden = () => true;
+    const layer = fake.state.layers.get("active");
+    if (!layer) throw new Error("missing layer");
+    layer.isHidden = () => true;
     renderHook(() => useRasterMapAttributions("weather", descriptors, true));
     flush();
     expect(html()).toBe("");
-    fake.state.layers.get("active")!.isHidden = () => false;
+    layer.isHidden = () => false;
     flush();
     expect(html()).toContain("successful-supplier");
   });

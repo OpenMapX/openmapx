@@ -54,11 +54,17 @@ import {
   useTides,
   useUpdateLabel,
 } from "@openmapx/core";
+import {
+  contributorsForField,
+  contributorsForRecords,
+  snapshotContributors,
+} from "@openmapx/mobility-core/contributors";
 import type { MergedDeparture, MergedRoute, TransportMode } from "@openmapx/mobility-core/transit";
 import { useLocale, useTranslations } from "next-intl";
 import type { ReactNode } from "react";
 import { useState } from "react";
 import { AuthDialog } from "@/components/auth/AuthDialog";
+import { AttributionStrip } from "@/components/ui/AttributionStrip";
 import { BRAND } from "@/integration-api/runtime/theme";
 import { resolveListIcon } from "@/lib/listIcon";
 import { openingHoursTone } from "@/lib/openingHoursTone";
@@ -448,6 +454,25 @@ export function PlaceOverviewTab({
         )
         .slice(0, 2)
     : [];
+
+  const displayedFields = [
+    "coordinates",
+    ...(["address", "phone", "website", "email", "wikipediaUrl", "airport"] as const).filter(
+      (field) => (field === "address" ? Boolean(place.address?.trim()) : Boolean(place[field])),
+    ),
+    ...(hours && !(isLoading && !place.openingHours)
+      ? ["openingHoursInfo", ...(place.openingHours ? ["openingHours"] : [])]
+      : []),
+    ...(isCity && (place.wikipediaExtract || place.description)
+      ? [place.wikipediaExtract ? "wikipediaExtract" : "description"]
+      : descriptionRow
+        ? ["description"]
+        : []),
+  ];
+  const overviewAttributions = snapshotContributors(
+    ...displayedFields.map((field) => contributorsForField(place, field)),
+    contributorsForRecords(overviewFacts),
+  );
 
   const conditionRows = (
     <>
@@ -868,6 +893,7 @@ export function PlaceOverviewTab({
 
           {promotePracticalDetails && place.osmTags && (
             <PlaceTagDetails
+              place={place}
               osmTags={place.osmTags}
               section="practical"
               representedEmail={place.email}
@@ -1082,9 +1108,15 @@ export function PlaceOverviewTab({
           reference is passed: every editable value comes from a live server
           read, never from this merged/enriched place record. */}
       <OsmContributionEntry osmId={place.ids?.osm} />
+      {overviewAttributions.length > 0 && (
+        <Box sx={{ px: 2, py: 1 }}>
+          <AttributionStrip attributions={overviewAttributions} variant="plain" />
+        </Box>
+      )}
       {/* Structured OSM tag details (access, indoor, multilingual descriptions, etc.) */}
       {place.osmTags && Object.keys(place.osmTags).length > 0 && (
         <PlaceTagDetails
+          place={place}
           osmTags={place.osmTags}
           section={promotePracticalDetails ? "remaining" : "all"}
           representedEmail={place.email}

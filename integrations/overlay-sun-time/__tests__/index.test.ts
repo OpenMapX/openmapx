@@ -1,6 +1,7 @@
 import type { RouteHandler } from "@openmapx/integration-framework";
 import { describe, expect, it, vi } from "vitest";
 import { setup } from "../index";
+import manifest from "../manifest.json";
 
 interface MockReply {
   statusCode: number;
@@ -47,9 +48,10 @@ function mockReply(): MockReply {
 // enforces the contract is the dispatcher-level test in
 // apps/api/src/integration-host.test.ts, which runs the real,
 // unmocked dispatcher over real HTTP.
-function register(): RouteHandler {
+function register(sources = manifest.dataSources): RouteHandler {
   let handler: RouteHandler | undefined;
   const ctx = {
+    manifest: { dataSources: sources },
     registerRoute: (_method: string, _path: string, h: RouteHandler) => {
       handler = h;
     },
@@ -110,4 +112,19 @@ describe("overlay-sun-time /timezones", () => {
     expect(second.statusCode).toBe(304);
     expect(second.body).toBeUndefined();
   });
+});
+
+it("captures boundary receipt before serialized response retention", async () => {
+  const sources = structuredClone(manifest.dataSources);
+  const first = sources[0];
+  if (!first) throw new Error("Missing fixture source");
+  first.attribution = "Original timezone required notice";
+  const handler = register(sources);
+  first.attribution = "Changed metadata";
+  const reply = mockReply();
+  await handler(baseReq(), reply);
+  const collection = JSON.parse(reply.body as string) as GeoJSON.FeatureCollection;
+  expect(JSON.parse(collection.features[0]?.properties?._mapAttributions)[0].attributionText).toBe(
+    "Original timezone required notice",
+  );
 });

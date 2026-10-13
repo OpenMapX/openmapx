@@ -9,6 +9,11 @@ import {
   useTransitIsochrone,
   useTransitReachability,
 } from "@openmapx/core";
+import {
+  captureResultContributors,
+  parseContributors,
+  withFeatureContributors,
+} from "@openmapx/mobility-core/contributors";
 import type { MapMouseEvent } from "maplibre-gl";
 import { useEffect, useMemo, useRef } from "react";
 import { INTERACTIVE_LAYER_IDS } from "@/integration-api/map/interactiveLayers";
@@ -16,7 +21,7 @@ import { addLayerInSlot, unregisterLayerSlot } from "@/integration-api/map/layer
 import { useMap } from "@/integration-api/map/MapContext";
 import { claimMapClick } from "@/integration-api/map/mapClickOwnership";
 import { useGeoJsonSourceDataBridge } from "@/integration-api/map/useGeoJsonSourceDataBridge";
-import { useMapAttributions } from "@/integration-api/overlay/useMapAttributions";
+import { useRenderedMapAttributions } from "@/integration-api/overlay/useRenderedMapAttributions";
 import { resolveTravelTimeBackend, type TravelTimeMode, useTravelTimeStore } from "./store";
 import { TransitFieldLayer } from "./transit-field-layer";
 
@@ -57,6 +62,7 @@ function computeOpacity(index: number, total: number): number {
 
 export function TravelTimeLayer() {
   const { mapRef, mapReady, styleVersion } = useMap();
+  const currentMap = mapRef.current;
   const isActive = useTravelTimeStore((s) => s.isActive);
   const origin = useTravelTimeStore((s) => s.origin);
   const mode = useTravelTimeStore((s) => s.mode);
@@ -99,10 +105,7 @@ export function TravelTimeLayer() {
       walkProfileId: TRANSIT_WALK_PROFILE.id,
     };
   }, [isTransit, origin, queryTime, selectedMinutes]);
-  const { data: transitSurface, attributions: transitAttributions } = useTransitReachability(
-    transitRequest,
-    isActive && isTransit,
-  );
+  const { data: transitSurface } = useTransitReachability(transitRequest, isActive && isTransit);
 
   const showPolygons = isTransit && transitSurfaceKind === "polygons";
 
@@ -110,7 +113,7 @@ export function TravelTimeLayer() {
   // can freeze an area. Only the live viewport moves here; the frozen bbox that
   // actually drives sampling changes solely on an explicit request.
   useEffect(() => {
-    const map = mapRef.current;
+    const map = currentMap;
     if (!map || !mapReady || !isActive || !showPolygons) return;
     const setViewport = useTravelTimeStore.getState().setTransitPolygonViewport;
     const publishBounds = () => {
@@ -122,7 +125,7 @@ export function TravelTimeLayer() {
     return () => {
       map.off("moveend", publishBounds);
     };
-  }, [isActive, mapReady, mapRef, showPolygons]);
+  }, [isActive, mapReady, currentMap, showPolygons]);
   const isochroneRequest = useMemo<TransitIsochroneRequest | null>(() => {
     if (!origin || !queryTime || !showPolygons || !transitPolygonBbox) return null;
     if (selectedMinutes.length === 0) return null;
@@ -141,14 +144,19 @@ export function TravelTimeLayer() {
     isochroneRequest,
     isActive && showPolygons,
   );
-  useMapAttributions(
-    "travel-time:street-isochrone",
-    isActive && !isTransit ? (isochroneData?.attributions ?? []) : [],
+  useRenderedMapAttributions(
+    "travel-time:polygons",
+    [FILL_LAYER, OUTLINE_LAYER],
+    isActive && (!isTransit || showPolygons),
   );
-  useMapAttributions(
-    "travel-time:transit-reachability",
-    isActive && isTransit ? transitAttributions : [],
+  useRenderedMapAttributions(
+    "travel-time:stops",
+    [REACH_LAYER],
+    isActive && isTransit && (showTransitStops || transitFieldUnsupported !== null),
   );
+  useRenderedMapAttributions("travel-time:estimated", [], isActive && isTransit && !showPolygons, {
+    resolveCustomContributors: () => transitFieldLayerRef.current?.renderedContributors() ?? [],
+  });
 
   // Register interactive layers
   useEffect(() => {
@@ -162,7 +170,7 @@ export function TravelTimeLayer() {
   // Set up sources and layers
   useEffect(() => {
     void styleVersion;
-    const map = mapRef.current;
+    const map = currentMap;
     if (!map || !mapReady || !isActive) return;
 
     const setup = () => {
@@ -282,13 +290,13 @@ export function TravelTimeLayer() {
       if (map.getSource(REACH_SOURCE)) map.removeSource(REACH_SOURCE);
       if (map.getSource(ORIGIN_SOURCE)) map.removeSource(ORIGIN_SOURCE);
     };
-  }, [mapRef, mapReady, styleVersion, isActive]);
+  }, [currentMap, mapReady, styleVersion, isActive]);
 
   // Own WebGL resources for the lifetime of this style/active transit layer.
   // Data and threshold changes below update only the instance buffer.
   useEffect(() => {
     void styleVersion;
-    const map = mapRef.current;
+    const map = currentMap;
     if (!map || !mapReady || !isActive || !isTransit) return;
     const setUnsupported = useTravelTimeStore.getState().setTransitFieldUnsupported;
     setUnsupported(null);
@@ -311,20 +319,28 @@ export function TravelTimeLayer() {
       if (map.getStyle() && map.getLayer(TRANSIT_FIELD_LAYER)) map.removeLayer(TRANSIT_FIELD_LAYER);
       unregisterLayerSlot(TRANSIT_FIELD_LAYER);
     };
-  }, [isActive, isTransit, mapReady, mapRef, styleVersion]);
+  }, [isActive, isTransit, mapReady, currentMap, styleVersion]);
 
   // The surface is an estimated continuous field rendered from MOTIS
   // one-to-all seeds. The origin seed adds direct walking reach.
   useEffect(() => {
     void styleVersion;
+    void currentMap;
     // Blank the estimated field while polygons are shown so the two never stack
     // and imply an agreement they do not have.
     const seeds =
       origin && !showPolygons
-        ? [{ lng: origin[0], lat: origin[1], arrivalSeconds: 0 }, ...(transitSurface?.seeds ?? [])]
+        ? [
+            { lng: origin[0], lat: origin[1], arrivalSeconds: 0, contributors: [] },
+            ...(transitSurface?.seeds ?? []),
+          ]
         : [];
-    transitFieldLayerRef.current?.setData(seeds, showPolygons ? [] : selectedMinutes);
-  }, [origin, selectedMinutes, showPolygons, styleVersion, transitSurface]);
+    transitFieldLayerRef.current?.setData(
+      seeds,
+      showPolygons ? [] : selectedMinutes,
+      transitSurface?.contributors ?? [],
+    );
+  }, [currentMap, origin, selectedMinutes, showPolygons, styleVersion, transitSurface]);
 
   // Update isochrone polygons
   useEffect(() => {
@@ -358,15 +374,20 @@ export function TravelTimeLayer() {
     // Render outermost first (lowest z), innermost last (highest z)
     const features: GeoJSON.Feature[] = [...isochroneData.contours]
       .sort((a, b) => b.time - a.time)
-      .map((contour, i) => ({
-        type: "Feature",
-        geometry: contour.geometry,
-        properties: {
-          color,
-          opacity: computeOpacity(i, total),
-          time: contour.time,
-        },
-      }));
+      .map((contour, i) =>
+        withFeatureContributors(
+          {
+            type: "Feature",
+            geometry: contour.geometry,
+            properties: {
+              color,
+              opacity: computeOpacity(i, total),
+              time: contour.time,
+            },
+          },
+          contour.contributors,
+        ),
+      );
 
     publishGeoJson([{ sourceId: SOURCE_ID, data: { type: "FeatureCollection", features } }]);
   }, [
@@ -406,11 +427,19 @@ export function TravelTimeLayer() {
       if (band === -1) continue; // beyond the largest selected budget
       // Nearest band (index 0) most opaque.
       const opacity = bands <= 1 ? 0.8 : 0.85 - (band / (bands - 1)) * 0.5;
-      features.push({
-        type: "Feature",
-        geometry: { type: "Point", coordinates: [seed.lng, seed.lat] },
-        properties: { color, opacity, reachMinutes: r, name: seed.stop?.name ?? "" },
-      });
+      features.push(
+        withFeatureContributors(
+          {
+            type: "Feature",
+            geometry: { type: "Point", coordinates: [seed.lng, seed.lat] },
+            properties: { color, opacity, reachMinutes: r, name: seed.stop?.name ?? "" },
+          },
+          captureResultContributors(
+            { contributors: parseContributors((seed as { contributors?: unknown }).contributors) },
+            transitSurface.contributors,
+          ),
+        ),
+      );
     }
     publishGeoJson([{ sourceId: REACH_SOURCE, data: { type: "FeatureCollection", features } }]);
   }, [
@@ -459,7 +488,7 @@ export function TravelTimeLayer() {
   // the origin is the searched place and a global click would hijack marker clicks.
   useEffect(() => {
     void styleVersion;
-    const map = mapRef.current;
+    const map = currentMap;
     if (!map || !mapReady || !isActive || anchored) return;
 
     const onClick = (e: MapMouseEvent) => {
@@ -472,12 +501,12 @@ export function TravelTimeLayer() {
     return () => {
       map.off("click", onClick);
     };
-  }, [mapRef, mapReady, styleVersion, isActive, anchored]);
+  }, [currentMap, mapReady, styleVersion, isActive, anchored]);
 
   // Origin marker drag
   useEffect(() => {
     void styleVersion;
-    const map = mapRef.current;
+    const map = currentMap;
     if (!map || !mapReady || !isActive) return;
 
     const onMouseDown = (e: MapMouseEvent) => {
@@ -521,11 +550,11 @@ export function TravelTimeLayer() {
         draggingRef.current = false;
       }
     };
-  }, [mapRef, mapReady, styleVersion, isActive, anchored]);
+  }, [currentMap, mapReady, styleVersion, isActive, anchored]);
 
   // Cursor management — crosshair only when click-to-place is available (not anchored).
   useEffect(() => {
-    const map = mapRef.current;
+    const map = currentMap;
     if (!map) return;
 
     if (isActive && !anchored) {
@@ -537,7 +566,7 @@ export function TravelTimeLayer() {
     return () => {
       map.getCanvas().style.cursor = "";
     };
-  }, [mapRef, isActive, anchored]);
+  }, [currentMap, isActive, anchored]);
 
   // Keyboard: Escape to deactivate
   useEffect(() => {

@@ -126,6 +126,10 @@ export function useViewportWildfireSource<T = WildfireFeatureCollection>({
   const resetSourceStatus = useWildfireStore((state) => state.resetSourceStatus);
   const endpointRef = useRef(endpoint);
   endpointRef.current = endpoint;
+  const publishRef = useRef(publish);
+  publishRef.current = publish;
+  const clearRef = useRef(clear);
+  clearRef.current = clear;
   const readRef = useRef(read);
   readRef.current = read;
   const controllerRef = useRef<AbortController | null>(null);
@@ -144,9 +148,9 @@ export function useViewportWildfireSource<T = WildfireFeatureCollection>({
 
   const clearRenderedData = useCallback(() => {
     if (clearedRef.current) return;
-    clear();
+    clearRef.current();
     clearedRef.current = true;
-  }, [clear]);
+  }, []);
 
   const gateSource = useCallback(() => {
     abortRequest();
@@ -192,7 +196,7 @@ export function useViewportWildfireSource<T = WildfireFeatureCollection>({
           : (readEnvelope(sourceId, response) as ViewportReading<T> | null);
         if (!reading) throw new Error("Invalid wildfire FeatureCollection");
 
-        publish(reading.data);
+        publishRef.current(reading.data);
         clearedRef.current = false;
         setSourceStatus(sourceId, {
           loading: false,
@@ -210,7 +214,7 @@ export function useViewportWildfireSource<T = WildfireFeatureCollection>({
         if (generationRef.current === generation) controllerRef.current = null;
       }
     },
-    [abortRequest, active, gateSource, mapRef, minZoom, publish, setSourceStatus, sourceId],
+    [abortRequest, active, gateSource, mapRef, minZoom, setSourceStatus, sourceId],
   );
 
   // A changed query is a new URL for the same view: the dedupe lets it through, and the newest

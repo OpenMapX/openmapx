@@ -4,7 +4,9 @@ import { useOverlayExclusion } from "@openmapx/core";
 import { addLayerInSlot } from "@/integration-api/map/layerStack";
 import { useMap } from "@/integration-api/map/MapContext";
 import { useStyleSyncedLayer } from "@/integration-api/map/useStyleSyncedLayer";
-import { useIntegrationAttribution } from "@/integration-api/overlay/useIntegrationAttribution";
+import { addAttributedRasterSource } from "@/integration-api/overlay/rasterMapContribution";
+import { useContributorResolver } from "@/integration-api/overlay/useContributorResolver";
+import { useRasterMapAttributions } from "@/integration-api/overlay/useRasterMapAttributions";
 import { useEnv } from "@/integration-api/runtime/EnvProvider";
 import { MountainShelterLayer } from "./shelter-layer";
 import { useHikingStore } from "./store";
@@ -17,7 +19,18 @@ export function HikingTrailsLayer() {
   const { mapRef, mapReady, styleVersion } = map;
   const env = useEnv();
   const layerVisible = useHikingStore((s) => s.layerVisible);
-  useIntegrationAttribution("overlay-hiking", layerVisible);
+  const resolve = useContributorResolver();
+  useRasterMapAttributions(
+    "hiking",
+    [
+      {
+        sourceId: RASTER_SOURCE_ID,
+        layerId: RASTER_LAYER_ID,
+        contributors: resolve({ sourceIds: ["waymarked-trails"] }),
+      },
+    ],
+    layerVisible,
+  );
   useOverlayExclusion("hiking", layerVisible);
 
   useStyleSyncedLayer({
@@ -26,12 +39,17 @@ export function HikingTrailsLayer() {
     sourceId: RASTER_SOURCE_ID,
     layerId: RASTER_LAYER_ID,
     addSource: (m) => {
-      m.addSource(RASTER_SOURCE_ID, {
-        type: "raster",
-        tiles: [`${env.apiUrl}/api/integrations/overlay-hiking/tiles/{z}/{x}/{y}.png`],
-        tileSize: 256,
-        maxzoom: 18,
-      });
+      addAttributedRasterSource(
+        m,
+        RASTER_SOURCE_ID,
+        {
+          type: "raster",
+          tiles: [`${env.apiUrl}/api/integrations/overlay-hiking/tiles/{z}/{x}/{y}.png`],
+          tileSize: 256,
+          maxzoom: 18,
+        },
+        resolve({ sourceIds: ["waymarked-trails"] }),
+      );
     },
     addLayer: (m) => {
       addLayerInSlot(

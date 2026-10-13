@@ -1,19 +1,29 @@
 import { applyDeutschlandticketFilter } from "@openmapx/core";
 import type { IntegrationContext, TransitProvider } from "@openmapx/integration-framework";
+import { captureTransitContributors } from "@openmapx/integration-framework";
+import { snapshotContributors } from "@openmapx/mobility-core/contributors";
 import { freshnessNow } from "@openmapx/mobility-core/freshness";
 import type { MotisInstance } from "@openmapx/mobility-core/motis-client";
 import { getMotisVehicleRadar } from "@openmapx/mobility-core/motis-radar";
 import { withAttribution } from "@openmapx/mobility-core/result";
 import * as motis from "./adapter.js";
 import { attributionTransitous } from "./attributions.js";
-import { getMotisReachabilitySeeds, resolveMotisReachabilityCapabilities } from "./reachability.js";
+import {
+  captureDurationOnlyReachabilitySeeds,
+  getMotisReachabilitySeeds,
+  resolveMotisReachabilityCapabilities,
+} from "./reachability.js";
 import { getRentalFormFactors, primeRentalFormFactors } from "./rentals-capability.js";
 
-function wrapTransitous<T>(data: T) {
-  return withAttribution(data, attributionTransitous(), freshnessNow());
+function wrapTransitous<T>(data: T, receipts = attributionTransitous()) {
+  return withAttribution(captureTransitContributors(data, receipts), receipts, freshnessNow());
 }
 function wrapTransitousRT<T>(data: T) {
-  return withAttribution(data, attributionTransitous(), freshnessNow({ hasRealtimeData: true }));
+  return withAttribution(
+    captureTransitContributors(data, attributionTransitous()),
+    attributionTransitous(),
+    freshnessNow({ hasRealtimeData: true }),
+  );
 }
 
 function withPrefix(id: string, prefix: "mo:"): string {
@@ -77,14 +87,22 @@ function primaryOperations(transitousInstance: MotisInstance): Partial<TransitPr
       return hostedReachability();
     },
     async getReachabilitySurface(request, signal) {
-      const seeds = await getMotisReachabilitySeeds(transitousInstance, request, signal);
-      return wrapTransitous({
-        queryTime: request.queryTime,
-        source: "transitous" as const,
-        capabilities: hostedReachability(),
-        seeds,
-        thinning: { originalSeedCount: seeds.length, seedCount: seeds.length, gridMetres: 0 },
-      });
+      const receipts = snapshotContributors(attributionTransitous());
+      const seeds = captureDurationOnlyReachabilitySeeds(
+        await getMotisReachabilitySeeds(transitousInstance, request, signal),
+        receipts,
+      );
+      return wrapTransitous(
+        {
+          queryTime: request.queryTime,
+          source: "transitous" as const,
+          lineageComplete: false,
+          capabilities: hostedReachability(),
+          seeds,
+          thinning: { originalSeedCount: seeds.length, seedCount: seeds.length, gridMetres: 0 },
+        },
+        receipts,
+      );
     },
   };
 }

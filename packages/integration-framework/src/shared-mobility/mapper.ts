@@ -1,3 +1,4 @@
+import { snapshotContributors } from "@openmapx/mobility-core/contributors";
 /**
  * Maps shared mobility stations and vehicles to DataSource types.
  *
@@ -198,6 +199,10 @@ export function mapStationToResult(station: SharedMobilityStation): DataSourceRe
     name: station.name,
     coordinates: station.coordinates,
     source: station.sources[0],
+    sources: [...station.sources],
+    ...(station.contributors === undefined
+      ? {}
+      : { contributors: snapshotContributors(station.contributors) }),
     variant,
     status: variant,
     summary: t("summary.available", { count: station.availableVehicles }),
@@ -435,7 +440,10 @@ export function mapStationToDetail(station: SharedMobilityStation): DataSourceDe
 
   return {
     id: `${STATION_ID_PREFIX}${station.id}`,
-    sources: station.sources,
+    sources: [...station.sources],
+    ...(station.contributors === undefined
+      ? {}
+      : { contributors: snapshotContributors(station.contributors) }),
     name: station.name,
     coordinates: station.coordinates,
     identity: stationIdentity(station),
@@ -516,6 +524,10 @@ export function mapVehicleToResult(vehicle: SharedMobilityVehicle): DataSourceRe
     name: vehicle.operator ? `${vehicle.operator} ${formLabel}` : formLabel,
     coordinates: vehicle.coordinates,
     source: vehicle.sources[0],
+    sources: [...vehicle.sources],
+    ...(vehicle.contributors === undefined
+      ? {}
+      : { contributors: snapshotContributors(vehicle.contributors) }),
     variant,
     status: variant,
     summary: vehicleSummary(vehicle),
@@ -613,7 +625,10 @@ export function mapVehicleToDetail(vehicle: SharedMobilityVehicle): DataSourceDe
   const formLabel = formFactorLabelFallback(vehicle.formFactor);
   return {
     id: `${VEHICLE_ID_PREFIX}${vehicle.id}`,
-    sources: vehicle.sources,
+    sources: [...vehicle.sources],
+    ...(vehicle.contributors === undefined
+      ? {}
+      : { contributors: snapshotContributors(vehicle.contributors) }),
     identity: vehicleIdentity(vehicle),
     name: vehicle.operator ? `${vehicle.operator} ${formLabel}` : formLabel,
     coordinates: vehicle.coordinates,

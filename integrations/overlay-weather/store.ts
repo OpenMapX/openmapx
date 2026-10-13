@@ -6,6 +6,7 @@ import type {
   WindSpeedUnit,
 } from "@openmapx/core";
 import { createOverlayStore } from "@openmapx/core";
+import { type ContributingRecord, snapshotContributors } from "@openmapx/integration-framework";
 
 /** Every sub-layer the overlay can render; all but radar need an OpenWeatherMap key. */
 export const WEATHER_SUB_LAYERS: { key: WeatherSubLayer; needsOwm: boolean }[] = [
@@ -46,6 +47,8 @@ export const useWeatherStore = createOverlayStore({
 
     currentWeather: null as CurrentWeather | null,
     locationName: "",
+    currentWeatherContributors: [] as NonNullable<ContributingRecord["contributors"]>,
+    locationNameContributors: [] as NonNullable<ContributingRecord["contributors"]>,
 
     temperatureUnit: "celsius" as TemperatureUnit,
     windSpeedUnit: "kmh" as WindSpeedUnit,
@@ -61,8 +64,18 @@ export const useWeatherStore = createOverlayStore({
     setRadarFrameIndex: (index: number) => set({ radarFrameIndex: index }),
     setRadarMeta: (host: string, past: RadarFrame[], nowcast: RadarFrame[]) =>
       set({ radarHost: host, radarPastFrames: past, radarNowcastFrames: nowcast }),
-    setCurrentWeather: (weather: CurrentWeather | null) => set({ currentWeather: weather }),
-    setLocationName: (name: string) => set({ locationName: name }),
+    setCurrentWeather: (
+      weather: CurrentWeather | null,
+      contributors: NonNullable<ContributingRecord["contributors"]> = [],
+    ) =>
+      set({
+        currentWeather: weather,
+        currentWeatherContributors: snapshotContributors(contributors),
+      }),
+    setLocationName: (
+      name: string,
+      contributors: NonNullable<ContributingRecord["contributors"]> = [],
+    ) => set({ locationName: name, locationNameContributors: snapshotContributors(contributors) }),
     setTemperatureUnit: (unit: TemperatureUnit) => set({ temperatureUnit: unit }),
     setWindSpeedUnit: (unit: WindSpeedUnit) => set({ windSpeedUnit: unit }),
     setLoading: (loading: boolean) => set({ loading }),
@@ -73,6 +86,8 @@ export const useWeatherStore = createOverlayStore({
     radarPlaying: false,
     radarFrameIndex: 0,
     currentWeather: null,
+    currentWeatherContributors: [],
+    locationNameContributors: [],
     locationName: "",
   }),
 });

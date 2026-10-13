@@ -6,19 +6,15 @@ import { useTheme } from "@mui/material/styles";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import useMediaQuery from "@mui/material/useMediaQuery";
-import {
-  buildSourceAttribution,
-  useCurrentWeather,
-  useDebouncedCallback,
-  weatherCodeToInfo,
-} from "@openmapx/core";
-import { dataSourceToAttribution } from "@openmapx/integration-framework";
-import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
-import type { Attribution } from "@openmapx/mobility-core/attribution";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCurrentWeather, useDebouncedCallback, weatherCodeToInfo } from "@openmapx/core";
+import { useCallback, useEffect, useState } from "react";
 import { WeatherIcon } from "@/integration-api/components/WeatherIcon";
 import { useMap } from "@/integration-api/map/MapContext";
-import { useMapAttributions } from "@/integration-api/overlay/useMapAttributions";
+import { useContributorResolver } from "@/integration-api/overlay/useContributorResolver";
+import {
+  attributionToHtml,
+  useMapAttributions,
+} from "@/integration-api/overlay/useMapAttributions";
 import { windDirectionLabel } from "./weatherUtils";
 
 export function WeatherWidget() {
@@ -55,31 +51,16 @@ export function WeatherWidget() {
     !isMobile && center && zoom >= 8 ? center.lng : null,
   );
 
-  const registry = useIntegrationRegistry();
-
-  // Resolve the integration manifest data source that produced this reading so
-  // the CC-BY publisher (Open-Meteo / Bright Sky / MET Norway) can be credited.
-  const source = data?.source;
-  const weatherMeta = source
-    ? registry
-        .getByDomain("weather")
-        .find((m) => m.dataSources?.some((ds) => ds.sourceId === source))
-    : undefined;
-  const attrText = weatherMeta?.dataSources
-    ? buildSourceAttribution(weatherMeta.dataSources, source ? [source] : []).replace(
-        /<[^>]*>/g,
-        "",
-      )
-    : source;
-
-  // Surface the (attribution-required) weather credit on the on-map attribution
-  // strip while a reading is shown, so it is visible without hovering the widget.
+  const resolve = useContributorResolver();
   const widgetVisible = !isMobile && !!data && zoom >= 8;
-  const weatherAttributions = useMemo<Attribution[]>(() => {
-    if (!widgetVisible || !source) return [];
-    const ds = weatherMeta?.dataSources?.find((d) => d.sourceId === source);
-    return ds ? [dataSourceToAttribution(ds)] : [];
-  }, [widgetVisible, source, weatherMeta]);
+  const weatherAttributions =
+    widgetVisible && data
+      ? resolve({ contributors: data.contributors, sourceIds: [data.source] })
+      : [];
+  const attrText = weatherAttributions
+    .map(attributionToHtml)
+    .join(" · ")
+    .replace(/<[^>]*>/g, "");
   useMapAttributions("weather", weatherAttributions);
 
   if (isMobile || !data || zoom < 8) return null;

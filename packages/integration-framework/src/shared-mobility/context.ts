@@ -3,6 +3,8 @@ import type {
   DataSourceMapContext,
   DataSourceMapContextSelection,
 } from "@openmapx/core";
+import type { Attribution } from "@openmapx/mobility-core/attribution";
+import { parseContributors, withFeatureContributors } from "@openmapx/mobility-core/contributors";
 import {
   applicableMobilityRules,
   classifyMobilityRules,
@@ -14,6 +16,13 @@ import type {
   VehicleFormFactor,
 } from "@openmapx/mobility-core/shared-mobility";
 import type { SharedMobilityRuntime } from "@openmapx/mobility-core/shared-mobility-runtime";
+
+function captureFeature(
+  feature: DataSourceMapContext["geojson"]["features"][number],
+  contributors: readonly Attribution[] | undefined,
+) {
+  return contributors === undefined ? feature : withFeatureContributors(feature, contributors);
+}
 
 function selected(value: string, values: ReadonlySet<string>): boolean {
   return values.size === 0 || values.has(value);
@@ -32,6 +41,7 @@ function buildMotisFeatures(
   snapshot: MotisRentalSnapshot,
   bbox: BoundingBox,
   options: DataSourceMapContextSelection,
+  resolveContributors?: (sourceIds: readonly string[]) => Attribution[],
 ): DataSourceMapContext["geojson"]["features"] {
   const selectedProviders = new Set(options.providerIds ?? []);
   const selectedGroups = new Set(options.providerGroupIds ?? []);
@@ -57,24 +67,34 @@ function buildMotisFeatures(
     if (!classification) continue;
     const geometry = normalizeAndClipMobilityGeometry(zone.area, bbox);
     if (!geometry) continue;
-    features.push({
-      type: "Feature",
-      geometry,
-      properties: {
-        contextKind: "restriction_zone",
-        contextId: zone.id,
-        providerId: zone.providerId,
-        providerName: provider.name,
-        providerGroupId: zone.providerGroupId,
-        providerGroupName: groupById.get(zone.providerGroupId)?.name ?? null,
-        zoneName: zone.name ?? null,
-        zoneClass: classification.zoneClass,
-        z: zone.z,
-        formFactors: provider.formFactors,
-        vehicleTypeIds: [...new Set(rules.flatMap((rule) => rule.vehicleTypeIds))].sort(),
-        ...ruleProperties(rules),
-      },
-    });
+    features.push(
+      captureFeature(
+        {
+          type: "Feature",
+          geometry,
+          properties: {
+            contextKind: "restriction_zone",
+            contextId: zone.id,
+            providerId: zone.providerId,
+            providerName: provider.name,
+            providerGroupId: zone.providerGroupId,
+            providerGroupName: groupById.get(zone.providerGroupId)?.name ?? null,
+            zoneName: zone.name ?? null,
+            zoneClass: classification.zoneClass,
+            z: zone.z,
+            formFactors: provider.formFactors,
+            vehicleTypeIds: [...new Set(rules.flatMap((rule) => rule.vehicleTypeIds))].sort(),
+            ...ruleProperties(rules),
+          },
+        },
+        zone.contributors ??
+          resolveContributors?.([
+            zone.sourceId,
+            provider.sourceId,
+            ...(zone.servingOrigin === "transitous" ? ["transitous"] : []),
+          ]),
+      ),
+    );
   }
 
   for (const station of snapshot.stations) {
@@ -96,28 +116,34 @@ function buildMotisFeatures(
     const geometry = normalizeAndClipMobilityGeometry(station.stationArea, bbox);
     if (!geometry) continue;
     const provider = station.providerId ? providerById.get(station.providerId) : undefined;
-    features.push({
-      type: "Feature",
-      geometry,
-      properties: {
-        contextKind: "station_area",
-        contextId: `station-area:${station.id}`,
-        stationId: `s:${station.id}`,
-        stationName: station.name,
-        providerId: station.providerId ?? null,
-        providerName: station.providerName ?? provider?.name ?? null,
-        providerGroupId: station.providerGroupId ?? null,
-        providerGroupName: station.providerGroupName ?? null,
-        zoneClass: "station_area",
-        z: 0,
-        formFactors: station.vehicleTypes,
-        vehicleTypeIds: station.vehicleTypeIds ?? [],
-        rideStartAllowed: station.isRenting ?? null,
-        rideEndAllowed: station.isReturning ?? null,
-        rideThroughAllowed: true,
-        stationParking: true,
-      },
-    });
+    features.push(
+      captureFeature(
+        {
+          type: "Feature",
+          geometry,
+          properties: {
+            contextKind: "station_area",
+            contextId: `station-area:${station.id}`,
+            stationId: `s:${station.id}`,
+            stationName: station.name,
+            providerId: station.providerId ?? null,
+            providerName: station.providerName ?? provider?.name ?? null,
+            providerGroupId: station.providerGroupId ?? null,
+            providerGroupName: station.providerGroupName ?? null,
+            zoneClass: "station_area",
+            z: 0,
+            formFactors: station.vehicleTypes,
+            vehicleTypeIds: station.vehicleTypeIds ?? [],
+            rideStartAllowed: station.isRenting ?? null,
+            rideEndAllowed: station.isReturning ?? null,
+            rideThroughAllowed: true,
+            stationParking: true,
+          },
+        },
+        station.contributors ??
+          resolveContributors?.([...station.sources, ...(provider ? [provider.sourceId] : [])]),
+      ),
+    );
   }
 
   return features.sort((left, right) => {
@@ -133,6 +159,7 @@ export async function buildSharedMobilityMapContext(
   categoryFormFactors: ReadonlySet<VehicleFormFactor>,
   runtime: SharedMobilityRuntime,
   options: DataSourceMapContextSelection = {},
+  resolveContributors?: (sourceIds: readonly string[]) => Attribution[],
 ): Promise<DataSourceMapContext | null> {
   const formFactors = (options.formFactors ?? [...categoryFormFactors]).filter((factor) =>
     categoryFormFactors.has(factor as VehicleFormFactor),
@@ -140,9 +167,10 @@ export async function buildSharedMobilityMapContext(
   const snapshot = await runtime.fetchMotisRentals(
     [bbox.west, bbox.south, bbox.east, bbox.north],
     formFactors,
+    resolveContributors,
   );
   const effectiveOptions = { ...options, formFactors };
-  const motisFeatures = buildMotisFeatures(snapshot, bbox, effectiveOptions);
+  const motisFeatures = buildMotisFeatures(snapshot, bbox, effectiveOptions, resolveContributors);
   const nativeSystemIdByProviderId = new Map(
     snapshot.providers.map((provider) => [provider.id, provider.nativeId]),
   );
@@ -165,10 +193,15 @@ export async function buildSharedMobilityMapContext(
     ? await runtime.buildEnturGeofencingMapContext(bbox, {
         systemIds: options.systemIds?.length ? uncoveredSystemIds : undefined,
         vehicleTypeIds: options.vehicleTypeIds,
+        resolveContributors,
       })
     : null;
   const byIdentity = new Map<string, DataSourceMapContext["geojson"]["features"][number]>();
-  for (const feature of [...motisFeatures, ...(entur?.geojson.features ?? [])]) {
+  // The Entur request owns this geometry; do not infer it from a MOTIS receipt.
+  const enturFeatures = (entur?.geojson.features ?? []).map((feature) =>
+    captureFeature(feature, parseContributors(feature.properties?._mapAttributions)),
+  );
+  for (const feature of [...motisFeatures, ...enturFeatures]) {
     const properties = feature.properties ?? {};
     const identity = String(
       properties.contextId ??

@@ -112,7 +112,15 @@ export function withContributors<T extends object>(
   record: T,
   receipts: readonly Attribution[],
 ): T & { contributors: Attribution[] } {
-  return { ...record, contributors: snapshotContributors(receipts) };
+  const fields =
+    "fieldContributors" in record && record.fieldContributors !== undefined
+      ? (parseFieldContributors(record.fieldContributors) ?? {})
+      : undefined;
+  return {
+    ...record,
+    ...(fields === undefined ? {} : { fieldContributors: fields }),
+    contributors: snapshotContributors(receipts),
+  };
 }
 
 export function narrowContributors(
@@ -121,6 +129,22 @@ export function narrowContributors(
 ): Attribution[] {
   const ids = new Set(sourceIds);
   return snapshotContributors(receipts.filter((receipt) => ids.has(receipt.sourceId)));
+}
+
+/** Capture an item's exact receipt at a trusted result-envelope boundary.
+ * A uniform envelope can establish one known supplier for legacy untagged rows;
+ * a mixed envelope cannot establish which of its suppliers produced a row.
+ */
+export function captureResultContributors(
+  record: ContributingRecord & { sourceIds?: Iterable<string> },
+  envelope: readonly Attribution[],
+): Attribution[] {
+  const captured = parseContributors(record.contributors);
+  if (captured !== undefined) return snapshotContributors(captured);
+  if (record.sourceIds !== undefined) return narrowContributors(envelope, record.sourceIds);
+  return new Set(envelope.map((receipt) => receipt.sourceId)).size === 1
+    ? snapshotContributors(envelope)
+    : [];
 }
 
 export function serializeContributors(receipts: readonly Attribution[]): string {
@@ -180,4 +204,103 @@ export function contributorsForFields(
       for (const field of displayedFields) yield { contributors: fields?.[field] };
     })(),
   );
+}
+
+/** Project one displayed field; explicit container keys certify all of their children.
+ * A field map's missing key stays unknown rather than borrowing a blended record.
+ */
+export function contributorsForField(
+  record: ContributingRecord & { fieldContributors?: FieldContributors },
+  field: string,
+): Attribution[] {
+  if (record.fieldContributors === undefined)
+    return snapshotContributors(record.contributors ?? []);
+  let key = field;
+  while (key) {
+    const receipts = record.fieldContributors[key];
+    if (receipts !== undefined) return snapshotContributors(receipts);
+    const dot = key.lastIndexOf(".");
+    if (dot < 0) break;
+    key = key.slice(0, dot);
+  }
+  return [];
+}
+
+/** Project only fields that contribute to the displayed row, geometry or marker. */
+export function contributorsForRecordFields(
+  record: ContributingRecord & { fieldContributors?: FieldContributors },
+  displayedFields: Iterable<string>,
+): Attribution[] {
+  return contributorsForRecords(
+    (function* () {
+      for (const field of displayedFields)
+        yield { contributors: contributorsForField(record, field) };
+    })(),
+  );
+}
+
+/** Project displayed descendant fields using the nearest canonical record.
+ * Untagged children inherit indexed parent paths; a child's [] or partial map
+ * stops that inheritance, while a deeper native child may supply its own data.
+ */
+export function contributorsForNestedRecordFields(
+  root: ContributingRecord & { fieldContributors?: FieldContributors },
+  descendants: readonly {
+    field: string;
+    record: ContributingRecord & { fieldContributors?: FieldContributors };
+  }[],
+  displayedFields: readonly string[],
+): Attribution[] {
+  let owner = root;
+  let prefix = "";
+  for (const { field, record } of descendants) {
+    prefix = prefix ? `${prefix}.${field}` : field;
+    if (record.contributors !== undefined || record.fieldContributors !== undefined) {
+      owner = record;
+      prefix = "";
+    }
+  }
+  return contributorsForRecordFields(
+    owner,
+    displayedFields.map((field) => (prefix ? `${prefix}.${field}` : field)),
+  );
+}
+
+/** Copy one winner's complete field receipt tree, including explicit empty children. */
+export function captureFieldContributors(
+  record: ContributingRecord & { fieldContributors?: FieldContributors },
+  field: string,
+  targetField = field,
+): Record<string, Attribution[]> {
+  const captured: Record<string, Attribution[]> = {
+    [targetField]: contributorsForField(record, field),
+  };
+  for (const [key, receipts] of Object.entries(record.fieldContributors ?? {})) {
+    if (key.startsWith(`${field}.`))
+      captured[targetField + key.slice(field.length)] = snapshotContributors(receipts);
+  }
+  return captured;
+}
+
+/** Minimal trusted static metadata shared by manifests and producer acquisitions. */
+export interface SourceCreditMetadata {
+  sourceId: string;
+  name: string;
+  url: string;
+  license: string;
+  licenseUrl?: string;
+  attribution?: string;
+  notes?: string;
+}
+
+export function dataSourceToAttribution<T extends SourceCreditMetadata>(ds: T): Attribution {
+  return {
+    sourceId: ds.sourceId,
+    name: ds.name,
+    url: ds.url,
+    spdxLicense: ds.license || undefined,
+    licenseUrl: ds.licenseUrl,
+    attributionText: ds.attribution,
+    notes: ds.notes,
+  };
 }

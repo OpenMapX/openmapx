@@ -1,3 +1,4 @@
+import type { ContributingRecord } from "../contributors.js";
 import type { BBox } from "./geometry.js";
 // Extensionless because this is the one runtime import in this directory and the
 // web app resolves with `moduleResolution: "bundler"`, which does not map a `.js`
@@ -32,7 +33,8 @@ export interface TransitIsochroneSampling {
   clippedToBbox: boolean;
 }
 
-export interface TransitIsochroneResult {
+export interface TransitIsochroneResult extends ContributingRecord {
+  lineageComplete?: boolean;
   queryTime: string;
   source: TransitReachabilitySource;
   method: typeof TRANSIT_ISOCHRONE_METHOD;

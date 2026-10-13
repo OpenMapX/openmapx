@@ -1,16 +1,16 @@
 "use client";
 
 import { API_ENDPOINTS, apiClient, routeColor } from "@openmapx/core";
-import type { Attribution } from "@openmapx/mobility-core/attribution";
+import { serializeContributors } from "@openmapx/mobility-core/contributors";
 import type { MobilityEnvelope } from "@openmapx/mobility-core/result";
 import type { TransitRoute } from "@openmapx/mobility-core/transit";
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { addLayerInSlot } from "@/integration-api/map/layerStack";
 import { findVectorLineReference, setLayerVisibility } from "@/integration-api/map/layerStyleUtils";
 import { useMap } from "@/integration-api/map/MapContext";
 import { useGeoJsonSourceDataBridge } from "@/integration-api/map/useGeoJsonSourceDataBridge";
 import { useTransitItineraryOnMap } from "@/integration-api/map/useTransitItineraryOnMap";
-import { useMapAttributions } from "@/integration-api/overlay/useMapAttributions";
+import { useRenderedMapAttributions } from "@/integration-api/overlay/useRenderedMapAttributions";
 import { PRIMARY_BLUE_HEX } from "@/integration-api/runtime/theme";
 import { useTransitStore } from "./store";
 
@@ -57,13 +57,7 @@ export function TransitLayer() {
     visible: showTransit,
   });
 
-  // Runtime publisher credit carried by the MOTIS routes envelope. The manifest
-  // declares no static dataSources (the operated network comes from whatever
-  // feeds back the local/cloud MOTIS instance), so the only correct credit is
-  // the per-response `envelope.attributions`. Register it on the on-map strip
-  // while the operated routes are drawn.
-  const [routeAttributions, setRouteAttributions] = useState<Attribution[]>([]);
-  useMapAttributions("overlay-transit:routes", showTransit ? routeAttributions : []);
+  useRenderedMapAttributions("overlay-transit:routes", [MOTIS_LINE_ID], showTransit);
 
   useEffect(() => {
     void styleVersion;
@@ -162,7 +156,6 @@ export function TransitLayer() {
 
     const clearData = () => {
       resetGeoJson([{ sourceId: MOTIS_SOURCE_ID, data: EMPTY_FC }]);
-      setRouteAttributions([]);
     };
 
     const fetchNetwork = async () => {
@@ -188,19 +181,10 @@ export function TransitLayer() {
         );
         // Ignore stale responses (user kept panning) and post-unmount results.
         if (disposed || !request.isCurrent()) return;
-        const features: GeoJSON.Feature[] = (env.data ?? [])
-          .filter((r) => r.geometry)
-          .map((r) => ({
-            type: "Feature",
-            properties: { color: routeColor(r, "#34A853"), routeId: r.id },
-            geometry: r.geometry as GeoJSON.Geometry,
-          }));
+        const features = networkRouteFeatures(env.data ?? []);
         publishGeoJson([
           { sourceId: MOTIS_SOURCE_ID, data: { type: "FeatureCollection", features } },
         ]);
-        // Credit the feed publishers for the geometry now on screen; clear when
-        // nothing was drawn so the strip doesn't credit feeds with no visible data.
-        setRouteAttributions(features.length > 0 ? (env.attributions ?? []) : []);
       } catch {
         // Soft-fail: leave the basemap transit lines in place.
       }
@@ -265,4 +249,25 @@ export function TransitLayer() {
   }, [mapReady, mapRef, styleVersion, receded]);
 
   return null;
+}
+
+/** Only drawable routes become map records; envelope peers are never their suppliers. */
+export function networkRouteFeatures(routes: readonly TransitRoute[]): GeoJSON.Feature[] {
+  return routes
+    .filter(
+      (route) =>
+        route.geometry &&
+        (route.geometry.type === "LineString"
+          ? route.geometry.coordinates.length >= 2
+          : route.geometry.coordinates.some((line) => line.length >= 2)),
+    )
+    .map((route) => ({
+      type: "Feature",
+      properties: {
+        color: routeColor(route, "#34A853"),
+        routeId: route.id,
+        _mapAttributions: serializeContributors(route.contributors ?? []),
+      },
+      geometry: route.geometry as GeoJSON.Geometry,
+    }));
 }

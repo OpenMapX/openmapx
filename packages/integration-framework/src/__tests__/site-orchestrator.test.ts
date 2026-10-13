@@ -169,3 +169,27 @@ describe("site orchestrator", () => {
     ]);
   });
 });
+
+test("preserves distinct required notices from one source while sanitizing captured credit URLs", () => {
+  const first = {
+    sourceId: "same",
+    name: "Publisher",
+    attributionText: "First required notice",
+    url: "javascript:alert(1)",
+  };
+  const second = {
+    sourceId: "same",
+    name: "Publisher",
+    attributionText: "Second required notice",
+    publisher: { name: "Network", url: "data:text/html,x" },
+  };
+  expect(siteAttributions([{ attributions: [first, first, second] }])).toEqual([
+    { sourceId: "same", name: "Publisher", attributionText: "First required notice" },
+    {
+      sourceId: "same",
+      name: "Publisher",
+      attributionText: "Second required notice",
+      publisher: { name: "Network" },
+    },
+  ]);
+});

@@ -1,9 +1,11 @@
+import { createHash } from "node:crypto";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { BrandKind } from "@openmapx/core";
 import { BRAND_QID_KEYS } from "@openmapx/core/utils/brandFilter";
+import { dataSourceToAttribution } from "@openmapx/mobility-core/contributors";
 import { normalize } from "./normalize.ts";
 import type { BrandArtifact, BrandEntry } from "./types.ts";
 
@@ -97,12 +99,38 @@ function commonsFilename(logoUrl: string): string | undefined {
   return tail ? decodeURIComponent(tail) : undefined;
 }
 
-export function buildArtifact(): BrandArtifact {
-  const nsi = readJson<{ nsi: Record<string, { items: NsiItem[] }> }>("dist/json/nsi.min.json").nsi;
-  const wikidata = readJson<{ wikidata: Record<string, WikidataRecord> }>(
-    "dist/wikidata/wikidata.min.json",
-  ).wikidata;
-  const nsiVersion = readJson<{ version: string }>("package.json").version;
+export interface BrandArtifactInputs {
+  nsi: Record<string, { items: NsiItem[] }>;
+  wikidata: Record<string, WikidataRecord>;
+  version: string;
+}
+
+export function buildArtifact(inputs?: BrandArtifactInputs): BrandArtifact {
+  const nsiRaw = inputs
+    ? JSON.stringify({ nsi: inputs.nsi })
+    : readFileSync(join(nsiRoot, "dist/json/nsi.min.json"), "utf8");
+  const wikidataRaw = inputs
+    ? JSON.stringify({ wikidata: inputs.wikidata })
+    : readFileSync(join(nsiRoot, "dist/wikidata/wikidata.min.json"), "utf8");
+  const nsi = inputs?.nsi ?? (JSON.parse(nsiRaw) as { nsi: BrandArtifactInputs["nsi"] }).nsi;
+  const wikidata =
+    inputs?.wikidata ??
+    (JSON.parse(wikidataRaw) as { wikidata: BrandArtifactInputs["wikidata"] }).wikidata;
+  const nsiVersion = inputs?.version ?? readJson<{ version: string }>("package.json").version;
+  const manifest = JSON.parse(
+    readFileSync(
+      join(
+        dirname(fileURLToPath(import.meta.url)),
+        "../../../integrations/poi-search/manifest.json",
+      ),
+      "utf8",
+    ),
+  ) as { dataSources: Parameters<typeof dataSourceToAttribution>[0][] };
+  const sourceCredits = ["name-suggestion-index", "wikidata"].map((id) => {
+    const source = manifest.dataSources.find((source) => source.sourceId === id);
+    if (!source) throw new Error(`Missing catalogue dataset metadata: ${id}`);
+    return dataSourceToAttribution(source);
+  });
 
   interface Accumulator {
     names: Set<string>;
@@ -155,7 +183,7 @@ export function buildArtifact(): BrandArtifact {
     }
   }
 
-  const brands: BrandEntry[] = [];
+  const brands: BrandArtifact["brands"] = [];
   for (const [qid, entry] of acc) {
     const wd = wikidata[qid];
     // Facebook and Twitter logo URLs are dropped here and nowhere else: they
@@ -179,13 +207,25 @@ export function buildArtifact(): BrandArtifact {
     const website = wd?.officialWebsites?.[0];
     if (website) brand.website = website;
 
-    brands.push(brand);
+    const origins: Record<string, string[]> = Object.fromEntries(
+      Object.keys(brand).map((field) => [field, ["name-suggestion-index"]]),
+    );
+    if (wd?.label !== undefined) origins.name = ["name-suggestion-index", "wikidata"];
+    for (const field of ["description", "website", "logoFile"]) {
+      if (field in brand) origins[field] = ["name-suggestion-index", "wikidata"];
+    }
+    brands.push({ ...brand, origins });
   }
 
   brands.sort((a, b) => a.qid.localeCompare(b.qid));
 
   return {
-    v: 1,
+    v: 2,
+    inputHashes: {
+      nsi: createHash("sha256").update(nsiRaw).digest("hex"),
+      wikidata: createHash("sha256").update(wikidataRaw).digest("hex"),
+    },
+    sourceCredits,
     source: nsiVersion,
     license: "BSD-3-Clause (Name Suggestion Index contributors)",
     brands,

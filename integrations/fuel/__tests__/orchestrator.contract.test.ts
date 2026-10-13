@@ -278,12 +278,12 @@ describe("fuel orchestrator", () => {
     expect((await source.getDetail("a:1")).data).toBeNull();
   });
 
-  test("results and a cold detail carry the brand's logo", async () => {
+  test("results and a cold detail defer the uncredited Commons brand logo", async () => {
     const aral = station({ id: "a:1", name: "Aral Berlin", brand: "Aral", country: "DE" });
     const source = createFuelDataSource(ctxWith([provider("a", [aral])]));
 
     const detail = (await source.getDetail("a:1")).data;
-    expect(detail?.branding?.logoUrl).toMatch(/^https:\/\/commons\.wikimedia\.org\//);
+    expect(detail?.branding?.logoUrl).toBeUndefined();
     expect(detail?.branding?.name).toBe("Aral AG");
 
     const [result] = (await source.search(BBOX)).data;

@@ -1,3 +1,5 @@
+import { snapshotContributors } from "./contributors.js";
+import type { Attribution } from "./types/attribution.js";
 /**
  * Shared GBFS data fetching logic used by bike, scooter, and car providers.
  * Handles catalog lookup, system probing, and station/vehicle extraction.
@@ -55,7 +57,7 @@ const EXCLUDED_GBFS_PREFIXES = [
   "bird-", // Shut down in Europe (2024)
 ];
 // Redis cache key prefix and TTL for per-system station/vehicle data
-const SYSTEM_CACHE_PREFIX = "cache:gbfs:system:";
+const SYSTEM_CACHE_PREFIX = "cache:gbfs:system:contributors-v1:";
 const SYSTEM_CACHE_TTL = TTL.sharedMobility.stations; // 120s
 const ENTUR_CLIENT_NAME = "openmapx-server";
 const SWISS_SHARED_MOBILITY_SYSTEM_ID = "sharedmobility.ch";
@@ -77,6 +79,7 @@ export interface GbfsProviderDependencies {
   catalog: GbfsCatalogClient;
   nominatim: NominatimClient;
   transport: MobilityHttpTransport;
+  resolveContributors?: (sourceIds: readonly string[]) => Attribution[];
 }
 
 /** Detect GBFS station names that are internal IDs rather than human-readable. */
@@ -209,6 +212,7 @@ export async function fetchGbfsData(
           unknownFormFactor,
           systemData,
           cache,
+          dependencies.resolveContributors,
         ),
         SYSTEM_FETCH_TIMEOUT_MS,
         { stations: [], vehicles: [] },
@@ -237,7 +241,7 @@ export async function fetchGbfsData(
 export async function fetchSwissSharedMobilityData(
   bbox: BoundingBox,
   targetFormFactors: Set<VehicleFormFactor>,
-  dependencies: Pick<GbfsProviderDependencies, "cache" | "transport">,
+  dependencies: Pick<GbfsProviderDependencies, "cache" | "transport" | "resolveContributors">,
   unknownFormFactor: VehicleFormFactor = "bicycle",
 ): Promise<{ stations: SharedMobilityStation[]; vehicles: SharedMobilityVehicle[] }> {
   const result = await fetchSystemData(
@@ -250,6 +254,7 @@ export async function fetchSwissSharedMobilityData(
     unknownFormFactor,
     undefined,
     dependencies.cache,
+    dependencies.resolveContributors,
   );
   return result ?? { stations: [], vehicles: [] };
 }
@@ -257,7 +262,7 @@ export async function fetchSwissSharedMobilityData(
 export async function fetchSwissSharedMobilityDataForBbox(
   bbox: BoundingBox,
   targetFormFactors: Set<VehicleFormFactor>,
-  dependencies: Pick<GbfsProviderDependencies, "cache" | "transport">,
+  dependencies: Pick<GbfsProviderDependencies, "cache" | "transport" | "resolveContributors">,
   unknownFormFactor: VehicleFormFactor = "bicycle",
 ): Promise<{ stations: SharedMobilityStation[]; vehicles: SharedMobilityVehicle[] }> {
   if (!bboxOverlapsSwitzerland(bbox)) {
@@ -276,6 +281,7 @@ async function fetchSystemData(
   unknownFormFactor: VehicleFormFactor,
   prefetchedSystemData: GbfsSystemData | undefined,
   cache: CacheClient,
+  resolveContributors?: (sourceIds: readonly string[]) => Attribution[],
 ): Promise<{ stations: SharedMobilityStation[]; vehicles: SharedMobilityVehicle[] } | null> {
   // Check Redis cache (persists across requests with different bboxes)
   const cacheKey = `${SYSTEM_CACHE_PREFIX}${systemId}:${[...targetFormFactors].sort().join(",")}:${unknownFormFactor}`;
@@ -455,6 +461,9 @@ async function fetchSystemData(
       vehicleTypeIds: vtIds.filter((vtId) => targetFormFactors.has(getFormFactor(vtId))),
       isActive: true,
       sources: [source],
+      ...(resolveContributors
+        ? { contributors: snapshotContributors(resolveContributors(["gbfs"])) }
+        : {}),
       website: stInfo.rentalUris?.web,
       rentalUris: stInfo.rentalUris,
       vehicleTypeDetails: vtDetails.length > 0 ? vtDetails : undefined,
@@ -492,6 +501,9 @@ async function fetchSystemData(
       isDisabled: v.isDisabled,
       operator,
       sources: [source],
+      ...(resolveContributors
+        ? { contributors: snapshotContributors(resolveContributors(["gbfs"])) }
+        : {}),
     });
   }
 

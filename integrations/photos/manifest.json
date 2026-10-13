@@ -11,7 +11,9 @@
   },
   "domains": ["photos"],
   "dependencies": ["geocoding"],
-  "backend": { "routes": true },
+  "backend": {
+    "routes": true
+  },
   "healthCheck": [
     {
       "name": "OpenStreetMap",
@@ -50,6 +52,20 @@
       "commercialUse": "no",
       "providerCountry": "US",
       "providerPrivacyUrl": "https://policies.google.com/privacy",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    },
+    {
+      "sourceId": "wikimedia-commons",
+      "name": "Wikimedia Commons",
+      "url": "https://commons.wikimedia.org/",
+      "license": "Per-file (CC BY-SA, CC BY, or Public Domain)",
+      "licenseUrl": "https://commons.wikimedia.org/wiki/Commons:Licensing",
+      "commercialUse": "yes",
+      "providerCountry": "US",
+      "providerPrivacyUrl": "https://foundation.wikimedia.org/wiki/Policy:Privacy_policy",
       "endUserExposure": "server-only",
       "personalData": false,
       "cookies": false,

@@ -153,6 +153,11 @@
       "purpose": "Cooperative peer-to-peer car sharing in Flanders, Belgium (Dégage)",
       "dataSent": "No user data (full fleet fetched once and filtered to the viewport server-side)",
       "dataReceived": "Vehicle locations, fuel type and transmission"
+    },
+    "transitous": {
+      "purpose": "Car-sharing stations, vehicles and operating areas via the Transitous fallback rental API",
+      "dataSent": "Bounding-box coordinates (min and max latitude/longitude corners)",
+      "dataReceived": "Free-floating vehicle positions, station locations, vehicle types, operator names"
     }
   }
 }

@@ -323,7 +323,7 @@ describe("mapFuelStationToDetail", () => {
     const detail = mapFuelStationToDetail(makeStation({ brand: "Aral", country: "DE" }));
     expect(detail.identity).toEqual({ brand: "Aral", operator: "Aral" });
     expect(detail.operator).toEqual({ name: "Aral" });
-    expect(detail.branding?.logoUrl).toBeTruthy();
+    expect(detail.branding?.logoUrl).toBeUndefined();
   });
 });
 
@@ -351,4 +351,23 @@ describe("fuel strings", () => {
     );
     expect(resolve({ $t: "product.service", values: { service: "served" } })).toBe("Served");
   });
+});
+
+it("captures complete canonical receipts before mapping results and details", () => {
+  const receipt = {
+    sourceId: "exact-feed",
+    name: "Publisher",
+    url: "https://example.com",
+    spdxLicense: "CC-BY-4.0",
+    attributionText: "Required upstream notice",
+    publisher: { name: "Original publisher", url: "https://publisher.example" },
+  };
+  const record = makeStation({ attributions: [receipt] });
+  const result = mapFuelStationToResult(record);
+  const detail = mapFuelStationToDetail(record);
+  receipt.attributionText = "changed later";
+  expect(result.contributors).toEqual([
+    { ...receipt, attributionText: "Required upstream notice" },
+  ]);
+  expect(detail.contributors).toEqual(result.contributors);
 });

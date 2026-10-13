@@ -67,13 +67,17 @@ export interface HazardsProvider {
     bbox: BBox,
     q: HazardsQuery & { since: string; instrument: FireInstrument; limit: number },
   ): Promise<{ pixels: FirePixel[]; partial?: DataSourcePartialReason }>;
-  /** Fire detections since the ISO instant, aggregated into `cellDeg` cells. */
+  /**
+   * Fire detections since the ISO instant, aggregated into `cellDeg` cells.
+   * Each cell carries its own captured contributors/canonical sources, and
+   * nativeSources for source-policy filtering. Whole-grid sources are diagnostics.
+   */
   getFireDensity(
     bbox: BBox,
     q: HazardsQuery & { since: string; instrument: FireInstrument; cellDeg: number },
   ): Promise<{
     cells: FireDensityCell[];
-    /** The ids of the sources the cells were built from. */
+    /** Native source IDs for diagnostics; never evidence for an individual cell. */
     sources: string[];
     partial?: DataSourcePartialReason;
   }>;

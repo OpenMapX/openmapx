@@ -145,7 +145,14 @@ export async function ingestOverture(opts: IngestOvertureOptions): Promise<void>
     schema,
     stage: "PostGIS staging ingest",
     workingBytes: (activeSchemaBytes) =>
-      estimateOvertureIngestBytes(statSync(parquetPath).size, activeSchemaBytes),
+      estimateOvertureIngestBytes(
+        statSync(parquetPath).size,
+        activeSchemaBytes,
+        pullContract.sourcesCatalogue === undefined
+          ? 0
+          : Buffer.byteLength(JSON.stringify(pullContract.sourcesCatalogue)) *
+              pullContract.rowCount,
+      ),
   });
 
   const databaseUrl =
@@ -162,7 +169,7 @@ export async function ingestOverture(opts: IngestOvertureOptions): Promise<void>
     `  (gers_id, name, names, basic_category, taxonomy_primary, taxonomy_hierarchy,`,
     `   taxonomy_alternates, geom, h3_r8,`,
     `   addresses, country_code, websites, socials, emails, phones, brand,`,
-    `   confidence, operating_status, sources, release)`,
+    `   confidence, operating_status, sources, sources_catalogue, release)`,
     `SELECT`,
     `  id AS gers_id,`,
     `  COALESCE(names.primary, '') AS name,`,
@@ -188,6 +195,7 @@ export async function ingestOverture(opts: IngestOvertureOptions): Promise<void>
     `  confidence,`,
     `  operating_status,`,
     `  to_json(sources) AS sources,`,
+    `  ${pullContract.sourcesCatalogue === undefined ? "NULL" : duckDbSqlLiteral(JSON.stringify(pullContract.sourcesCatalogue))}::JSON AS sources_catalogue,`,
     `  ${duckDbSqlLiteral(release)}::TEXT AS release`,
     `FROM read_parquet(${duckDbSqlLiteral(parquetPath)});`,
   ].join("\n");

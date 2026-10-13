@@ -9,8 +9,10 @@ import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import { useVehicleJourney } from "@openmapx/core";
 import { sliceJourneyToLeg } from "@openmapx/core/navigation";
+import { contributorsForRecords } from "@openmapx/mobility-core/contributors";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
+import { AttributionStrip } from "@/components/ui/AttributionStrip";
 import { useDateTimeFormat } from "@/integration-api/runtime/useDateTimeFormat";
 
 interface TransitLegStopsProps {
@@ -64,6 +66,7 @@ export function TransitLegStops({ tripId, stopCount, fromStopId, toStopId }: Tra
         >
           {label}
         </Typography>
+        <AttributionStrip attributions={contributorsForRecords(legStops)} variant="inline" />
       </Box>
     );
   }
@@ -89,6 +92,7 @@ export function TransitLegStops({ tripId, stopCount, fromStopId, toStopId }: Tra
         )}
         <Typography variant="caption">{label}</Typography>
       </Box>
+      <AttributionStrip attributions={contributorsForRecords(legStops)} variant="inline" />
       <Collapse in={expanded}>
         <Box sx={{ mt: 0.25, mb: 0.25 }}>
           {intermediateStops.map((stop, i) => {

@@ -15,7 +15,10 @@ import { addLayerInSlot, unregisterLayerSlot } from "@/integration-api/map/layer
 import { useMap } from "@/integration-api/map/MapContext";
 import { getMapClickOwner } from "@/integration-api/map/mapClickOwnership";
 import { useGeoJsonSourceDataBridge } from "@/integration-api/map/useGeoJsonSourceDataBridge";
-import { useIntegrationAttribution } from "@/integration-api/overlay/useIntegrationAttribution";
+import { addAttributedRasterSource } from "@/integration-api/overlay/rasterMapContribution";
+import { useContributorResolver } from "@/integration-api/overlay/useContributorResolver";
+import { useRasterMapAttributions } from "@/integration-api/overlay/useRasterMapAttributions";
+import { useRenderedMapAttributions } from "@/integration-api/overlay/useRenderedMapAttributions";
 import { useEnv } from "@/integration-api/runtime/EnvProvider";
 import { type HarborFeatureCollection, useNauticalStore } from "./store";
 
@@ -250,7 +253,43 @@ export function NauticalLayer() {
   const env = useEnv();
 
   const layerVisible = useNauticalStore((s) => s.panelOpen && s.layerVisible);
-  useIntegrationAttribution("overlay-nautical", layerVisible);
+  const resolve = useContributorResolver();
+  useRasterMapAttributions(
+    "nautical",
+    [
+      {
+        sourceId: SEAMARK_SOURCE,
+        layerId: SEAMARK_LAYER,
+        contributors: resolve({ sourceIds: ["openseamap", "openstreetmap"] }),
+      },
+      {
+        sourceId: DEPTH_RELIEF_SOURCE,
+        layerId: DEPTH_RELIEF_LAYER,
+        contributors: resolve({ sourceIds: ["gebco"] }),
+      },
+      {
+        sourceId: DEPTH_CONTOUR_SOURCE,
+        layerId: DEPTH_CONTOUR_LAYER,
+        contributors: resolve({ sourceIds: ["openseamap"] }),
+      },
+      {
+        sourceId: NOAA_SOURCE,
+        layerId: NOAA_LAYER,
+        contributors: resolve({ sourceIds: ["noaa-ncds"] }),
+      },
+      {
+        sourceId: KARTVERKET_SOURCE,
+        layerId: KARTVERKET_LAYER,
+        contributors: resolve({ sourceIds: ["kartverket-sjokart"] }),
+      },
+    ],
+    layerVisible,
+  );
+  useRenderedMapAttributions(
+    "nautical",
+    [HARBOR_ICON_LAYER, HARBOR_LABEL_LAYER, STATION_CIRCLE_LAYER, STATION_LABEL_LAYER],
+    layerVisible,
+  );
   const showSeamarks = useNauticalStore((s) => s.showSeamarks);
   const showDepth = useNauticalStore((s) => s.showDepth);
   const showNoaaCharts = useNauticalStore((s) => s.showNoaaCharts);
@@ -365,13 +404,18 @@ export function NauticalLayer() {
       // ---- Depth shaded relief (lowest layer) ----
       if (layerVisible && showDepth) {
         if (!map.getSource(DEPTH_RELIEF_SOURCE)) {
-          map.addSource(DEPTH_RELIEF_SOURCE, {
-            type: "raster",
-            tiles: [makeDepthReliefTileUrl(env.apiUrl)],
-            tileSize: 256,
-            minzoom: 0,
-            maxzoom: 8,
-          });
+          addAttributedRasterSource(
+            map,
+            DEPTH_RELIEF_SOURCE,
+            {
+              type: "raster",
+              tiles: [makeDepthReliefTileUrl(env.apiUrl)],
+              tileSize: 256,
+              minzoom: 0,
+              maxzoom: 8,
+            },
+            resolve({ sourceIds: ["gebco"] }),
+          );
         }
         if (!map.getLayer(DEPTH_RELIEF_LAYER)) {
           addLayerInSlot(
@@ -396,12 +440,17 @@ export function NauticalLayer() {
       // ---- Depth contour lines (zoom 7+) ----
       if (layerVisible && showDepth) {
         if (!map.getSource(DEPTH_CONTOUR_SOURCE)) {
-          map.addSource(DEPTH_CONTOUR_SOURCE, {
-            type: "raster",
-            tiles: [makeDepthContourTileUrl(env.apiUrl)],
-            tileSize: 256,
-            minzoom: 6,
-          });
+          addAttributedRasterSource(
+            map,
+            DEPTH_CONTOUR_SOURCE,
+            {
+              type: "raster",
+              tiles: [makeDepthContourTileUrl(env.apiUrl)],
+              tileSize: 256,
+              minzoom: 6,
+            },
+            resolve({ sourceIds: ["openseamap"] }),
+          );
         }
         if (!map.getLayer(DEPTH_CONTOUR_LAYER)) {
           addLayerInSlot(
@@ -429,13 +478,18 @@ export function NauticalLayer() {
       const wantNoaa = layerVisible && showNoaaCharts && bboxIntersectsUsWaters(map);
       if (wantNoaa) {
         if (!map.getSource(NOAA_SOURCE)) {
-          map.addSource(NOAA_SOURCE, {
-            type: "raster",
-            tiles: [makeNoaaTileUrl(env.apiUrl)],
-            tileSize: 256,
-            minzoom: 3,
-            maxzoom: 18,
-          });
+          addAttributedRasterSource(
+            map,
+            NOAA_SOURCE,
+            {
+              type: "raster",
+              tiles: [makeNoaaTileUrl(env.apiUrl)],
+              tileSize: 256,
+              minzoom: 3,
+              maxzoom: 18,
+            },
+            resolve({ sourceIds: ["noaa-ncds"] }),
+          );
         }
         if (!map.getLayer(NOAA_LAYER)) {
           addLayerInSlot(
@@ -459,13 +513,18 @@ export function NauticalLayer() {
       const wantKartverket = layerVisible && showNoaaCharts && bboxIntersectsNorwayWaters(map);
       if (wantKartverket) {
         if (!map.getSource(KARTVERKET_SOURCE)) {
-          map.addSource(KARTVERKET_SOURCE, {
-            type: "raster",
-            tiles: [makeKartverketTileUrl(env.apiUrl)],
-            tileSize: 256,
-            minzoom: 3,
-            maxzoom: 18,
-          });
+          addAttributedRasterSource(
+            map,
+            KARTVERKET_SOURCE,
+            {
+              type: "raster",
+              tiles: [makeKartverketTileUrl(env.apiUrl)],
+              tileSize: 256,
+              minzoom: 3,
+              maxzoom: 18,
+            },
+            resolve({ sourceIds: ["kartverket-sjokart"] }),
+          );
         }
         if (!map.getLayer(KARTVERKET_LAYER)) {
           addLayerInSlot(
@@ -489,12 +548,17 @@ export function NauticalLayer() {
       // ---- Seamarks (always on top of bathymetry/chart raster) ----
       if (layerVisible && showSeamarks) {
         if (!map.getSource(SEAMARK_SOURCE)) {
-          map.addSource(SEAMARK_SOURCE, {
-            type: "raster",
-            tiles: [makeSeamarkTileUrl(env.apiUrl)],
-            tileSize: 256,
-            maxzoom: 18,
-          });
+          addAttributedRasterSource(
+            map,
+            SEAMARK_SOURCE,
+            {
+              type: "raster",
+              tiles: [makeSeamarkTileUrl(env.apiUrl)],
+              tileSize: 256,
+              maxzoom: 18,
+            },
+            resolve({ sourceIds: ["openseamap", "openstreetmap"] }),
+          );
         }
         if (!map.getLayer(SEAMARK_LAYER)) {
           addLayerInSlot(

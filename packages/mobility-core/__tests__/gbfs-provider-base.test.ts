@@ -289,3 +289,56 @@ describe("fetchSwissSharedMobilityDataForBbox", () => {
     expect(fetchGbfsSystem).not.toHaveBeenCalled();
   });
 });
+
+it("captures explicit GBFS owner receipts before parsed-system caching and preserves them across bbox/metadata changes", async () => {
+  const values = new Map<string, unknown>();
+  const shared: CacheClient = {
+    ...cache,
+    get: async <T>(key: string) => (values.get(key) as T) ?? null,
+    set: async (key, value) => {
+      values.set(key, structuredClone(value));
+    },
+  };
+  const entry = {
+    systemId: "native-network",
+    name: "Bikes",
+    countryCode: "DE",
+    location: "Germany",
+    url: "https://example.com",
+    autoDiscoveryUrl: "https://example.com/gbfs",
+  };
+  vi.mocked(catalog.loadCatalog).mockResolvedValue([entry]);
+  vi.spyOn(catalog, "probeSystem").mockResolvedValue({
+    bbox: { west: 10, south: 50, east: 11, north: 51 },
+    vehicleTypes: new Set(["bicycle"]),
+    systemData: {
+      systemInfo: { systemId: "native-network", name: "Bikes", timezone: "Europe/Berlin" },
+      stations: [],
+      stationStatuses: new Map(),
+      vehicles: [{ bikeId: "one", lat: 50.5, lon: 10.5, isReserved: false, isDisabled: false }],
+      vehicleTypes: new Map(),
+      pricingPlans: new Map(),
+    },
+  });
+  const receipt = { sourceId: "gbfs", name: "GBFS", attributionText: "Original GBFS notice" };
+  const options = { ...dependencies(), cache: shared, resolveContributors: () => [receipt] };
+  const first = await fetchGbfsData(
+    { west: 10, south: 50, east: 11, north: 51 },
+    new Set(["bicycle"]),
+    options,
+  );
+  expect(first.vehicles[0].sources).toEqual(["gbfs/native-network"]);
+  expect(first.vehicles[0].contributors).toEqual([receipt]);
+  expect([...values.values()]).toContainEqual(
+    expect.objectContaining({ vehicles: [expect.objectContaining({ contributors: [receipt] })] }),
+  );
+  const second = await fetchGbfsData(
+    { west: 10.2, south: 50.2, east: 10.8, north: 50.8 },
+    new Set(["bicycle"]),
+    {
+      ...options,
+      resolveContributors: () => [{ ...receipt, attributionText: "New registry notice" }],
+    },
+  );
+  expect(second.vehicles[0].contributors).toEqual([receipt]);
+});

@@ -7,6 +7,8 @@ import { useMemo } from "react";
 import { useMapAttributions } from "./useMapAttributions";
 
 /**
+ * @deprecated Toggle state is not contribution evidence. New map renderers use
+ * useRenderedMapAttributions/useRasterMapAttributions with captured receipts.
  * Register an integration's manifest data sources via `useMapAttributions`
  * while `active` is true.
  *
@@ -27,6 +29,8 @@ export function useIntegrationAttribution(integrationId: string, active: boolean
 }
 
 /**
+ * @deprecated Domain membership is not contribution evidence. Resolve exact
+ * item/field identities at acquisition and register the rendered snapshot.
  * Aggregate every enabled integration's manifest data sources for a given
  * domain. Use this for orchestrator-style overlays that render data sourced
  * from multiple sibling integrations (e.g. the live-transit overlay surfaces
@@ -54,7 +58,10 @@ export function useIntegrationDomainAttribution(domain: string, active: boolean)
   useMapAttributions(`domain:${domain}`, attributions);
 }
 
-/** Register the exact manifest sources named by a runtime evidence envelope. */
+/** Register the exact manifest sources named by a runtime evidence envelope.
+ * @deprecated Capture source metadata before acquisition; resolving the current
+ * registry at render time cannot preserve old cache or tile receipt generations.
+ */
 export function useSourceAttributions(layerKey: string, sourceIds: readonly string[]): void {
   const registry = useIntegrationRegistry();
   const attributions = useMemo<Attribution[]>(() => {

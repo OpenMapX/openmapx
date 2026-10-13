@@ -6,11 +6,17 @@ import type { Attribution } from "@openmapx/mobility-core/attribution";
 import { useEffect, useMemo } from "react";
 import { useMap } from "@/integration-api/map/MapContext";
 import { subscribeStyleLoaded } from "@/integration-api/map/styleLoadedSync";
-import { useMapAttributions } from "@/integration-api/overlay/useMapAttributions";
+import { useRenderedMapAttributions } from "@/integration-api/overlay/useRenderedMapAttributions";
 import { useEnv } from "@/integration-api/runtime/EnvProvider";
 import { useOfflinePackageActive } from "@/lib/offlineAreas";
 import { contourDemTileUrl, generatedContourUrl } from "./generatedContours";
-import { syncTerrainStyle, type TerrainRelief } from "./terrainStyle";
+import {
+  syncTerrainStyle,
+  TERRAIN_CONTOUR_LAYERS,
+  type TerrainRelief,
+  terrainContourContributors,
+  terrainDemContributors,
+} from "./terrainStyle";
 
 /**
  * Elevation on the vector basemap: soft mountain shading on the default street
@@ -46,7 +52,11 @@ export function TerrainBaseLayer() {
         : [],
     [enabled, env.terrainAttributionName, env.terrainAttributionUrl],
   );
-  useMapAttributions("terrain-elevation", attributions);
+  useRenderedMapAttributions("terrain-elevation", TERRAIN_CONTOUR_LAYERS, enabled, {
+    resolveCustomContributors: () => (mapRef.current ? terrainDemContributors(mapRef.current) : []),
+    resolveFeatureContributors: () =>
+      mapRef.current ? terrainContourContributors(mapRef.current) : [],
+  });
 
   useEffect(() => {
     void styleVersion;
@@ -64,6 +74,7 @@ export function TerrainBaseLayer() {
           demEncoding: env.terrainDemEncoding,
           generatedContourUrl: contourUrl,
           dark,
+          contributors: attributions,
         }),
       );
     };
@@ -98,6 +109,7 @@ export function TerrainBaseLayer() {
     env.terrainContourMode,
     env.terrainContourTilejsonUrl,
     dark,
+    attributions,
   ]);
 
   return null;

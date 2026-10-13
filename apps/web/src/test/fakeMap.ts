@@ -467,6 +467,9 @@ export function createFakeMap(options: CreateFakeMapOptions = {}): FakeMap {
       startMove(eventData, false, padding);
     },
     isMoving: () => state.moving,
+    // Scheduling a browser paint does not synchronously deliver a render event.
+    // Tests deliver the actual paint with emit("render") when appropriate.
+    triggerRepaint: () => api.map,
     getContainer: () => container,
     getBounds: () => {
       const bounds = options.bounds ?? { west: -180, south: -90, east: 180, north: 90 };

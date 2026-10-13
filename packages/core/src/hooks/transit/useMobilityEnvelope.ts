@@ -1,6 +1,7 @@
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import type { Freshness } from "@openmapx/mobility-core/freshness";
 import type { MobilityEnvelope } from "@openmapx/mobility-core/result";
+import { captureTransitContributors } from "@openmapx/mobility-core/transit-contributors";
 import type { UseQueryResult } from "@tanstack/react-query";
 
 /**
@@ -19,6 +20,17 @@ export interface MobilityEnvelopeQueryResult<T>
   freshness: Freshness | undefined;
 }
 
+// React Query envelopes are immutable snapshots. Memoising by envelope keeps
+// retained/paged records stable without recapturing current provider metadata.
+const capturedTransitData = new WeakMap<object, unknown>();
+function captureEnvelopeData<T>(envelope: MobilityEnvelope<T> | undefined): T | undefined {
+  if (!envelope) return undefined;
+  if (capturedTransitData.has(envelope)) return capturedTransitData.get(envelope) as T;
+  const data = captureTransitContributors(envelope.data, envelope.attributions ?? []);
+  capturedTransitData.set(envelope, data);
+  return data;
+}
+
 /**
  * Wrap a react-query result whose payload is a `MobilityEnvelope<T>` so the
  * hook surface mirrors the pre-flip shape (`{ data, isLoading, ... }`) while
@@ -29,7 +41,7 @@ export function wrapMobilityEnvelope<T>(
 ): MobilityEnvelopeQueryResult<T> {
   return {
     ...query,
-    data: query.data?.data,
+    data: captureEnvelopeData(query.data),
     attributions: query.data?.attributions ?? [],
     freshness: query.data?.freshness,
   };

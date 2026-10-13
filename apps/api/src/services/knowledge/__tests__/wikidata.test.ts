@@ -92,7 +92,9 @@ describe("wikidataSource", () => {
       url: "https://commons.wikimedia.org/wiki/Special:FilePath/Berlin.jpg?width=800",
       author: "Author",
       license: "CC BY-SA 4.0",
-      source: "wikimedia",
+      source: "wikimedia-commons",
+      licenseUrl: "https://creativecommons.org/licenses/by-sa/4.0/",
+      pageUrl: "https://commons.wikimedia.org/wiki/File:Berlin.jpg",
     };
     const metadataMap = new Map([["Berlin.jpg", richPhoto]]);
     mockFetchCommonsMetadata.mockResolvedValueOnce(metadataMap);
@@ -118,7 +120,7 @@ describe("wikidataSource", () => {
     expect(result?.photos).toEqual([richPhoto]);
   });
 
-  it("falls back to constructed URL if fetchCommonsMetadata returns no match", async () => {
+  it("defers the photo if fetchCommonsMetadata returns no match", async () => {
     mockFetchCommonsMetadata.mockResolvedValueOnce(new Map());
 
     const entity = makeEntity({
@@ -138,15 +140,7 @@ describe("wikidataSource", () => {
 
     const { wikidataSource } = await loadModule();
     const result = await wikidataSource.lookup({ wikidata: "Q64" }, "en");
-    expect(result?.photos).toHaveLength(1);
-    expect(result?.photos?.[0].url).toContain("Special:FilePath/Some_Image.jpg");
-    // Metadata fetch failed, so author/license are unknown — but the filename
-    // is known, so we still link to the Commons file page.
-    expect(result?.photos?.[0].pageUrl).toBe(
-      "https://commons.wikimedia.org/wiki/File:Some_Image.jpg",
-    );
-    expect(result?.photos?.[0].author).toBeUndefined();
-    expect(result?.photos?.[0].license).toBeUndefined();
+    expect(result?.photos).toBeUndefined();
   });
 
   it("formats time: '+1870-01-01T00:00:00Z' → '1870'", async () => {

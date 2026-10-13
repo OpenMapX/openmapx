@@ -2,7 +2,8 @@ import type { MapLayerMouseEvent } from "maplibre-gl";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { INTERACTIVE_LAYER_IDS } from "@/integration-api/map/interactiveLayers";
 import { registerMapOverlayInteraction } from "@/integration-api/map/mapInteractionArbiter";
-import { createFakeMap, type FakeMap, render } from "@/test";
+import { useMapAttributionStore } from "@/integration-api/overlay/mapAttributionStore";
+import { act, createFakeMap, type FakeMap, render } from "@/test";
 import { useTrafficFlowStore } from "../store";
 
 let fake: FakeMap;
@@ -23,7 +24,7 @@ vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntl());
 
 // `t(key)` under the mock above returns "trafficFlow.<key>" — assertions below
 // check for those stable keys rather than the real translated copy.
-const popupState = vi.hoisted(() => ({ html: "" }));
+const popupState = vi.hoisted(() => ({ html: "", closed: [] as Array<() => void> }));
 vi.mock("maplibre-gl", () => ({
   Popup: class FakePopup {
     setLngLat() {
@@ -31,6 +32,10 @@ vi.mock("maplibre-gl", () => ({
     }
     setHTML(html: string) {
       popupState.html = html;
+      return this;
+    }
+    on(event: string, callback: () => void) {
+      if (event === "close") popupState.closed.push(callback);
       return this;
     }
     addTo() {
@@ -86,6 +91,8 @@ beforeEach(() => {
   fake = createFakeMap();
   useTrafficFlowStore.setState({ panelOpen: false, layerVisible: false });
   popupState.html = "";
+  popupState.closed = [];
+  useMapAttributionStore.setState({ byLayer: {} });
   INTERACTIVE_LAYER_IDS.delete(COLOR);
   INTERACTIVE_LAYER_IDS.delete(INCIDENT);
 });
@@ -223,4 +230,71 @@ describe("TrafficFlowLayer", () => {
 
     unmount();
   });
+});
+
+it("keeps visible field credits separate from popup-only credits", () => {
+  vi.useFakeTimers();
+  try {
+    useTrafficFlowStore.setState({ panelOpen: true, layerVisible: true });
+    render(<TrafficFlowLayer />);
+    const credit = (sourceId: string) => ({ sourceId, name: sourceId });
+    const feature = {
+      type: "Feature" as const,
+      geometry: {
+        type: "LineString" as const,
+        coordinates: [
+          [5, 52],
+          [5.01, 52],
+        ],
+      },
+      properties: {
+        speed_ratio: 0.5,
+        current_kph: 20,
+        free_flow_kph: 40,
+        los: "queuing",
+        confidence: "measured",
+        field_contributors: JSON.stringify({
+          geometry: [credit("geometry")],
+          ratio: [credit("ratio-a")],
+          speed: [credit("ratio-a")],
+          freeFlow: [credit("geometry")],
+          los: [credit("popup-los-b")],
+          confidence: [credit("ratio-a")],
+        }),
+      },
+    };
+    fake.setRenderedFeatures(COLOR, [feature] as never);
+    fake.setRenderedFeatures(CASING, [feature] as never);
+    const html = () => Object.values(useMapAttributionStore.getState().byLayer).flat().join(" ");
+    act(() => {
+      fake.emit("render");
+      vi.advanceTimersByTime(250);
+    });
+    expect(html()).toContain("ratio-a");
+    expect(html()).not.toContain("popup-los-b");
+    act(() => fake.emit("click", { point: { x: 10, y: 10 }, lngLat: { lng: 5, lat: 52 } }));
+    expect(html()).toContain("popup-los-b");
+    act(() =>
+      popupState.closed.forEach((close) => {
+        close();
+      }),
+    );
+    expect(html()).not.toContain("popup-los-b");
+    expect(html()).toContain("ratio-a");
+    fake.setRenderedFeatures(COLOR, []);
+    act(() => {
+      fake.emit("render");
+      vi.advanceTimersByTime(250);
+    });
+    expect(html()).not.toContain("ratio-a");
+    expect(html()).toContain("geometry");
+    fake.setRenderedFeatures(CASING, []);
+    act(() => {
+      fake.emit("render");
+      vi.advanceTimersByTime(250);
+    });
+    expect(html()).toBe("");
+  } finally {
+    vi.useRealTimers();
+  }
 });

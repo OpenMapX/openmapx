@@ -8,7 +8,9 @@ import {
   gapFillBranding,
   isSafeHttpUrl,
   type OsmIdentity,
+  withBrandingContributors,
 } from "@openmapx/core";
+import { siteAttributions } from "@openmapx/integration-framework";
 import {
   type I18nToken,
   money,
@@ -171,7 +173,8 @@ export function mapParkingSiteToResult(site: ParkingSite): DataSourceResult {
     ...fallbackNameOf(site),
     coordinates: site.coordinates,
     source: site.sources[0] ?? "unknown",
-    sources: site.sources,
+    sources: [...site.sources],
+    contributors: siteAttributions([site]),
     variant: variantOf(site),
     status: isClosed(site) ? "non-operational" : undefined,
     summary: summaryOf(site),
@@ -182,7 +185,7 @@ export function mapParkingSiteToResult(site: ParkingSite): DataSourceResult {
   if (attributions) result.attributions = attributions;
   const branding = siteBranding(site);
   if (branding) result.branding = branding;
-  return result;
+  return withBrandingContributors(result);
 }
 
 function formatTimestamp(value: string | undefined): string | undefined {
@@ -405,7 +408,8 @@ export function mapParkingSiteToDetail(site: ParkingSite): DataSourceDetail {
 
   const detail: DataSourceDetail = {
     id: site.id,
-    sources: site.sources,
+    sources: [...site.sources],
+    contributors: siteAttributions([site]),
     name: site.name,
     ...fallbackNameOf(site),
     coordinates: site.coordinates,
@@ -425,5 +429,5 @@ export function mapParkingSiteToDetail(site: ParkingSite): DataSourceDetail {
   if (attributions) detail.attributions = attributions;
   const branding = siteBranding(site);
   if (branding) detail.branding = branding;
-  return detail;
+  return withBrandingContributors(detail);
 }

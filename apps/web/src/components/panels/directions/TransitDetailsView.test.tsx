@@ -255,3 +255,18 @@ describe("TransitDetailsView per-leg attribution", () => {
     expect(markup).not.toContain('data-testid="attribution-strip-inline"');
   });
 });
+
+it("keeps selected itinerary A independent of a later mixed-page envelope", () => {
+  const itinerary = { ...makeItinerary([[ATTR_DELFI]]), contributors: [ATTR_DELFI] };
+  const markup = renderToStaticMarkup(
+    <TransitDetailsView
+      itinerary={itinerary}
+      originLabel="A"
+      destinationLabel="B"
+      attributions={[ATTR_DELFI, ATTR_SBB]}
+      onBack={() => {}}
+    />,
+  );
+  expect(markup).toContain("de_DELFI");
+  expect(markup).not.toContain("ch_SBB");
+});

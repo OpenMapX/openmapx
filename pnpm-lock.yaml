@@ -2260,6 +2260,9 @@ importers:
       '@openmapx/core':
         specifier: workspace:^
         version: link:../core
+      '@openmapx/mobility-core':
+        specifier: workspace:^
+        version: link:../mobility-core
     devDependencies:
       '@types/node':
         specifier: ^26.6.5

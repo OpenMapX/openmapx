@@ -7,6 +7,7 @@ import { useRoadConditionsStore } from "../store";
 import { effect, situation, text } from "./fixtures";
 
 let fake: FakeMap;
+let mockStyleVersion = 0;
 
 const closure = { kind: "closure", type: "closure", severity: { label: "critical" as const } };
 const works = { kind: "roadworks", type: "works", severity: { label: "moderate" as const } };
@@ -40,7 +41,7 @@ const MAP_REF = {
   },
 };
 vi.mock("@/integration-api/map/MapContext", () => ({
-  useMap: () => ({ mapRef: MAP_REF, mapReady: true, styleVersion: 0 }),
+  useMap: () => ({ mapRef: MAP_REF, mapReady: true, styleVersion: mockStyleVersion }),
 }));
 // A value distinct from any plausible hardcoded zoom threshold (e.g. 10), so a
 // passing `maxzoom` assertion actually proves the layer reads this hook rather
@@ -134,6 +135,7 @@ function sourceFeatures(geometryType: GeoJSON.Geometry["type"]): GeoJSON.Feature
 }
 
 beforeEach(() => {
+  mockStyleVersion = 0;
   // Below the mocked minZoom (7) by default, so tests that don't care about
   // the zoom gate still see a fetch happen.
   fake = createFakeMap({ styleLoaded: true, zoom: 5 });
@@ -147,6 +149,32 @@ beforeEach(() => {
 });
 
 describe("RouteConditionsLayer", () => {
+  it.each([
+    {
+      contributors: [
+        { sourceId: "old", name: "Captured publisher", attributionText: "Old required notice" },
+      ],
+    },
+    { contributors: [] },
+  ])(
+    "preserves cached canonical receipts during style republishing: $contributors",
+    async ({ contributors }) => {
+      fetchMock.mockResolvedValue([{ ...events[0]!, contributors }]);
+      const view = render(<RouteConditionsLayer />);
+      await waitFor(() => expect(sourceFeatures("LineString")).toHaveLength(1));
+      expect(JSON.parse(sourceFeatures("LineString")[0]!.properties!._mapAttributions)).toEqual(
+        contributors,
+      );
+      mockStyleVersion++;
+      view.rerender(<RouteConditionsLayer />);
+      await waitFor(() => expect(sourceFeatures("LineString")).toHaveLength(1));
+      expect(JSON.parse(sourceFeatures("LineString")[0]!.properties!._mapAttributions)).toEqual(
+        contributors,
+      );
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      view.unmount();
+    },
+  );
   it("credits a visible route line when its marker is offscreen, only in the route zoom band", async () => {
     fetchMock.mockResolvedValue([
       {

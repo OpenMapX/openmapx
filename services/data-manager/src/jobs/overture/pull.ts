@@ -2,6 +2,7 @@ import { mkdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import { execa } from "execa";
 import { resolveOsmPolyUrl } from "../download-osm.js";
+import { captureOvertureCatalogue } from "./attribution-capture.js";
 import { assertOvertureDiskCapacity, estimateOverturePullBytes, freeBytesAt } from "./capacity.js";
 import { runDuckDb } from "./duckdb.js";
 import {
@@ -131,6 +132,7 @@ function requireTextStdout(stdout: unknown, label: string): string {
 }
 
 export async function pullOverture(opts: PullOvertureOptions): Promise<string> {
+  const sourcesCatalogue = captureOvertureCatalogue(new Date().toISOString());
   const release = opts.release ?? (await discoverLatestOvertureRelease(opts.fetchImpl ?? fetch));
   assertValidOvertureRelease(release);
   opts.onProgress?.(`Resolving ${opts.region} boundary from Geofabrik...`);
@@ -245,6 +247,7 @@ export async function pullOverture(opts: PullOvertureOptions): Promise<string> {
         contributors: contributorRows.map((row) => row.dataset),
       },
       basename(outPath),
+      sourcesCatalogue,
     );
 
     writeFileSync(partialContractPath, `${JSON.stringify(contract, null, 2)}\n`, {

@@ -10,7 +10,7 @@ describe("useDepartures", () => {
   it("fetches departures for a stop and forwards the minutes window", async () => {
     const envelope = {
       data: [{ tripId: "t1", line: "U6" }],
-      attributions: [{ name: "MOTIS" }],
+      attributions: [{ sourceId: "motis", name: "MOTIS" }],
       freshness: undefined,
     };
     const spy = vi.spyOn(apiClient, "get").mockResolvedValue(envelope as never);
@@ -20,7 +20,9 @@ describe("useDepartures", () => {
     });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(result.current.data).toEqual(envelope.data);
+    expect(result.current.data).toEqual(
+      envelope.data.map((row) => ({ ...row, contributors: envelope.attributions })),
+    );
     expect(result.current.attributions).toEqual(envelope.attributions);
     expect(spy).toHaveBeenCalledWith("/api/integrations/transit/stops/ms%3Astop%201/departures", {
       minutes: "30",

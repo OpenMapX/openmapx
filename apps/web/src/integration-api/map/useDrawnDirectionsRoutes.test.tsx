@@ -1,4 +1,4 @@
-import type { Waypoint } from "@openmapx/core";
+import type { DirectionsResult, Waypoint } from "@openmapx/core";
 import { useDirectionsStore, useSettingsStore } from "@openmapx/core";
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -9,8 +9,10 @@ import { createQueryWrapper } from "@/test";
 // forwards — the only way to isolate the transit/flying/EV/navigating gate
 // from the "waypoints aren't filled yet" case, which produces the same empty
 // `routes` output for an unrelated reason.
-const useDirectionsMock = vi.fn(() => ({ data: undefined }));
-const useScheduledDirectionsMock = vi.fn(() => ({ data: undefined }));
+const useDirectionsMock = vi.fn(() => ({ data: undefined as DirectionsResult | undefined }));
+const useScheduledDirectionsMock = vi.fn(() => ({
+  data: undefined as DirectionsResult | undefined,
+}));
 vi.mock("@openmapx/core", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@openmapx/core")>();
   return {
@@ -177,4 +179,40 @@ describe("useDrawnDirectionsRoutes scheduled trips", () => {
       expect.objectContaining({ departAt: "2026-09-01T09:30" }),
     );
   });
+});
+
+it("keeps cached ordinary routes hidden while the scheduled route is pending", () => {
+  const ordinary: DirectionsResult = {
+    routes: [
+      {
+        mode: "driving",
+        distance: 10,
+        duration: 10,
+        geometry: [
+          [0, 0],
+          [1, 1],
+        ],
+        legs: [],
+        steps: [],
+        contributors: [{ sourceId: "ordinary", name: "Ordinary" }],
+      },
+    ],
+    waypoints: [
+      [0, 0],
+      [1, 1],
+    ],
+    activeRouteIndex: 0,
+    provider: "ordinary",
+  };
+  useDirectionsMock.mockReturnValue({ data: ordinary });
+  useScheduledDirectionsMock.mockReturnValue({ data: undefined });
+  act(() => useDirectionsStore.setState({ mode: "driving", waypoints: CONSTRAINED_WAYPOINTS }));
+  const { result, unmount } = renderHook(() => useDrawnDirectionsRoutes(), {
+    wrapper: createQueryWrapper(),
+  });
+  expect(result.current.routes).toEqual([]);
+  expect(result.current.provider).toBeUndefined();
+  unmount();
+  useDirectionsMock.mockReturnValue({ data: undefined });
+  act(() => useDirectionsStore.getState().close());
 });

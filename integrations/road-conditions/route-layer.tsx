@@ -6,7 +6,6 @@ import {
   type RoadConditionEvent,
   useNavigationStore,
 } from "@openmapx/core";
-import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import type { MapGeoJSONFeature } from "maplibre-gl";
 import * as maplibregl from "maplibre-gl";
 import { useLocale, useTranslations } from "next-intl";
@@ -83,7 +82,6 @@ export function RouteConditionsLayer() {
   const { mapRef, mapReady, styleVersion } = useMap();
   const minZoom = useOverlayMinZoom(OVERLAY_ID);
   const layerVisible = useOverlayLayerVisible(OVERLAY_ID);
-  const registry = useIntegrationRegistry();
   useRenderedMapAttributions("road-conditions-route", CREDIT_LAYERS, layerVisible);
   const drawn = useDrawnDirectionsRoutes();
   const navRoute = useNavigationStore((s) => s.route);
@@ -345,11 +343,11 @@ export function RouteConditionsLayer() {
     const data: GeoJsonSourceData = {
       type: "FeatureCollection",
       features: buildRoadConditionFeatures(displayGroups, locale, Date.now(), (events) =>
-        roadConditionAttributions(events, registry),
+        roadConditionAttributions(events),
       ),
     };
     publishGeoJson([{ sourceId: SOURCE, data }]);
-  }, [displayGroups, layerVisible, locale, publishGeoJson, styleVersion, registry]);
+  }, [displayGroups, layerVisible, locale, publishGeoJson, styleVersion]);
 
   // Route markers and route lines resolve through the same grouped popup as
   // the area overlay. This keeps a line click and a marker click equivalent,

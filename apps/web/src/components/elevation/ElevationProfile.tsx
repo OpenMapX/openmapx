@@ -9,9 +9,11 @@ import Divider from "@mui/material/Divider";
 import Typography from "@mui/material/Typography";
 import type { Route } from "@openmapx/core";
 import { useElevation } from "@openmapx/core";
+import { snapshotContributors } from "@openmapx/mobility-core/contributors";
 import dynamic from "next/dynamic";
 import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
+import { AttributionStrip } from "@/components/ui/AttributionStrip";
 import { BRAND } from "@/integration-api/runtime/theme";
 import { useElevationHover } from "./ElevationHoverContext";
 import { ElevationStats } from "./ElevationStats";
@@ -92,6 +94,14 @@ export function ElevationProfile({ route, units }: ElevationProfileProps) {
           <ExpandMoreIcon sx={{ fontSize: 18, color: "text.secondary" }} />
         )}
       </Box>
+      {hasData && (
+        <Box sx={{ px: 2, pb: 1 }}>
+          <AttributionStrip
+            attributions={snapshotContributors(profile.contributors ?? [])}
+            variant="plain"
+          />
+        </Box>
+      )}
       {expanded && hasData && (
         <Box sx={{ px: 1, pb: 1 }}>
           <Box sx={{ px: 1, pb: 0.75 }}>

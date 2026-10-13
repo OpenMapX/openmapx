@@ -434,3 +434,106 @@ describe("reply correlation", () => {
     ).toBe(false);
   });
 });
+
+describe("ground route child receipt validation", () => {
+  const receipt = () => ({ sourceId: "child", name: "Child", publisher: { name: "Acquired" } });
+  function attributedPackage() {
+    const credit = receipt();
+    const step = {
+      instruction: "Continue",
+      contributors: [credit],
+      fieldContributors: { instruction: [credit], geometry: [] },
+      verbalPre: "Keep going",
+      lanes: [{ valid: true }],
+      exit: 4,
+    };
+    const childRoute = {
+      ...route(),
+      steps: [step],
+      legs: [
+        {
+          distance: 10,
+          duration: 2,
+          geometry: [line(0), line(1)],
+          contributors: [],
+          fieldContributors: { steps: [credit], geometry: [] },
+          steps: [structuredClone(step)],
+          engineLegId: "leg-1",
+        },
+      ],
+    };
+    return {
+      credit,
+      step,
+      value: { ...groundPackage(), route: childRoute, alternatives: [structuredClone(childRoute)] },
+    };
+  }
+
+  it("copies recognized child receipt trees at the actual wire schema boundary", () => {
+    const { credit, step, value } = attributedPackage();
+    const expected = JSON.parse(JSON.stringify(value));
+    const parsed = webToNativeSchema.parse(message({ payload: { startPackage: value } }));
+    credit.publisher.name = "Replacement";
+    step.contributors.length = 0;
+    step.fieldContributors.geometry.push(receipt() as never);
+    for (const route of [value.route, ...value.alternatives]) {
+      for (const child of [route.steps[0]!, route.legs[0]!, route.legs[0]!.steps[0]!]) {
+        for (const credit of child.contributors) credit.publisher.name = "Mutated child";
+        for (const credits of Object.values(child.fieldContributors)) {
+          for (const credit of credits) credit.publisher.name = "Mutated child field";
+        }
+      }
+    }
+    expect((parsed.payload as { startPackage: unknown }).startPackage).toEqual(expected);
+    const wire = parse(message({ payload: { startPackage: expected } }));
+    expect(wire.ok).toBe(true);
+    if (wire.ok)
+      expect((wire.message.payload as { startPackage: unknown }).startPackage).toEqual(expected);
+  });
+
+  it.each(["step", "leg", "legStep", "alternativeStep", "alternativeLeg", "alternativeLegStep"])(
+    "rejects malformed receipts at %s",
+    (target) => {
+      const { value } = attributedPackage();
+      const route = target.startsWith("alternative") ? value.alternatives[0]! : value.route;
+      const key = target.replace("alternative", "").toLowerCase();
+      const child =
+        key === "leg"
+          ? route.legs[0]!
+          : key === "legstep"
+            ? route.legs[0]!.steps[0]!
+            : route.steps[0]!;
+      (child as Record<string, unknown>).contributors = { sourceId: "invalid" };
+      expect(errorCodeOf(parse(message({ payload: { startPackage: value } })))).toBe(
+        "invalid-message",
+      );
+    },
+  );
+
+  it.each(["step", "leg", "legStep"])("rejects malformed field receipts at %s", (target) => {
+    const { value } = attributedPackage();
+    const child =
+      target === "leg"
+        ? value.route.legs[0]!
+        : target === "legStep"
+          ? value.route.legs[0]!.steps[0]!
+          : value.route.steps[0]!;
+    (child as Record<string, unknown>).fieldContributors = {
+      instruction: [{ sourceId: "missing-name" }],
+    };
+    expect(errorCodeOf(parse(message({ payload: { startPackage: value } })))).toBe(
+      "invalid-message",
+    );
+  });
+
+  it("keeps aggregate child-step limits after validating receipt trees", () => {
+    const { value } = attributedPackage();
+    value.route.legs[0]!.steps = Array.from({ length: MAX_TOTAL_STEPS + 1 }, () => ({
+      ...value.route.steps[0]!,
+      contributors: [],
+    }));
+    expect(errorCodeOf(parse(message({ payload: { startPackage: value } })))).toBe(
+      "too-many-steps",
+    );
+  });
+});
