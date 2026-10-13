@@ -29,6 +29,7 @@ import {
   resolveLayerSelectorPreview,
 } from "@openmapx/integration-framework/installer";
 import { sharedStrings } from "@openmapx/integration-framework/strings";
+import { parseLicensing } from "@openmapx/mobility-core/licensing";
 import {
   beginPlaceResolverStaging,
   commitPlaceResolverStaging,
@@ -304,8 +305,7 @@ function collectManifestDataSources(
         sourceId: row.sourceId,
         name: row.name,
         url: typeof row.url === "string" ? row.url : undefined,
-        license: typeof row.license === "string" ? row.license : undefined,
-        licenseUrl: typeof row.licenseUrl === "string" ? row.licenseUrl : undefined,
+        licensing: parseLicensing(row.licensing),
         attribution: typeof row.attribution === "string" ? row.attribution : undefined,
         commercialUse:
           typeof row.commercialUse === "string"

@@ -2,7 +2,11 @@
   "schemaVersion": "2.0",
   "instanceId": "oc-eu-1",
   "collectedAt": "2026-10-06T10:00:00.000Z",
-  "graph": { "generation": "graph-7", "status": "ready", "regions": ["europe"] },
+  "graph": {
+    "generation": "graph-7",
+    "status": "ready",
+    "regions": ["europe"]
+  },
   "feeds": [
     {
       "id": "de-bnetza-charging",

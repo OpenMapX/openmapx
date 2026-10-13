@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "@mui/material/Link";
-import { type PlacePhoto, safeHref } from "@openmapx/core";
+import { buildLicensingHtml, type PlacePhoto, safeHref } from "@openmapx/core";
 import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
+import { AttributionText } from "@/components/ui/AttributionText";
 
 interface Props {
   photo: PlacePhoto;
@@ -60,22 +61,10 @@ export function PhotoAttribution({ photo, color = "#fff" }: Props) {
       ) : (
         sourceName
       )}
-      {photo.license && (
+      {photo.licensing && (
         <>
-          {" / "}
-          {photo.licenseUrl ? (
-            <Link
-              onClick={(event) => event.stopPropagation()}
-              href={safeHref(photo.licenseUrl)}
-              target="_blank"
-              rel="noopener noreferrer"
-              sx={linkSx}
-            >
-              {photo.license}
-            </Link>
-          ) : (
-            photo.license
-          )}
+          {" "}
+          / <AttributionText html={buildLicensingHtml(photo.licensing)} />
         </>
       )}
       {photo.attributionText && (

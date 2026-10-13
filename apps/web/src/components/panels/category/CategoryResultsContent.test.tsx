@@ -14,6 +14,7 @@ import {
   usePlaceStore,
   useSettingsStore,
 } from "@openmapx/core";
+import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 import { useEffect } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SearchInAreaChip } from "@/components/map/SearchInAreaChip";
@@ -1391,9 +1392,11 @@ describe("visible category card enrichment", () => {
       url: "https://upload.wikimedia.org/wikipedia/commons/a/ab/Dom.jpg",
       source: "wikimedia",
       author: "Draupnir3",
-      licenseUrl: "https://creativecommons.org/licenses/by-sa/3.0/",
       authorUrl: "https://commons.wikimedia.org/wiki/User:Draupnir3",
-      license: "CC BY-SA 3.0",
+      licensing: licensingFromDeclaration(
+        "CC BY-SA 3.0",
+        "https://creativecommons.org/licenses/by-sa/3.0/",
+      ),
       pageUrl: "https://commons.wikimedia.org/wiki/File:Dom.jpg",
     };
     const post = vi.spyOn(apiClient, "post").mockResolvedValue({

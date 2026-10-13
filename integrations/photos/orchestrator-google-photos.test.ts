@@ -1,3 +1,4 @@
+import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   createOsmImagePhotoProvider,
@@ -50,8 +51,10 @@ describe("resolveGooglePhotosLink trust boundaries", () => {
       url: "https://upload.wikimedia.org/provider.jpg",
       source: "wikimedia",
       author: "Creator",
-      license: "CC BY 4.0",
-      licenseUrl: "https://creativecommons.org/licenses/by/4.0/",
+      licensing: licensingFromDeclaration(
+        "CC BY 4.0",
+        "https://creativecommons.org/licenses/by/4.0/",
+      ),
       pageUrl: "https://commons.wikimedia.org/wiki/File:Provider.jpg",
     };
     const seen: string[] = [];

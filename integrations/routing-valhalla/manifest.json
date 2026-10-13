@@ -77,8 +77,6 @@
       "sourceId": "valhalla",
       "name": "Valhalla",
       "url": "https://github.com/valhalla/valhalla",
-      "license": "MIT (Valhalla routing engine); ODbL-1.0 (OSM data)",
-      "licenseUrl": "https://github.com/valhalla/valhalla/blob/master/COPYING",
       "attribution": "Routing: <a href=\"https://github.com/valhalla/valhalla\">Valhalla</a>, © <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap contributors</a>",
       "notes": "Self-hosted or other operator-configured Valhalla endpoint. Requests stay with the instance operator's chosen host. The core elevation API also sends route geometry coordinates and sampling parameters to its independently configured Valhalla height endpoint. Height responses do not identify the underlying DEM; routing-engine MIT and OSM notices do not establish DEM ownership.",
       "commercialUse": "yes",
@@ -87,14 +85,39 @@
       "endUserExposure": "server-only",
       "personalData": false,
       "cookies": false,
-      "dpaAvailable": false
+      "dpaAvailable": false,
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "software",
+            "subject": "Valhalla engine",
+            "license": {
+              "kind": "spdx",
+              "expression": "MIT"
+            }
+          },
+          {
+            "scope": "data",
+            "subject": "OpenStreetMap routing data",
+            "license": {
+              "kind": "spdx",
+              "expression": "ODbL-1.0"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "MIT (Valhalla routing engine); ODbL-1.0 (OSM data)",
+            "url": "https://github.com/valhalla/valhalla/blob/master/COPYING"
+          }
+        ]
+      }
     },
     {
       "sourceId": "stadia-maps",
       "name": "Stadia Maps",
       "url": "https://stadiamaps.com/",
-      "license": "MIT (Valhalla routing engine); Stadia Maps",
-      "licenseUrl": "https://stadiamaps.com/terms-of-service/",
       "attribution": "Routing © <a href=\"https://stadiamaps.com/\">Stadia Maps</a>, © <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap contributors</a>",
       "notes": "Hosted Valhalla, used only when no self-hosted or other endpoint is configured. Free tier requires an API key and is limited to non-commercial / evaluation use; commercial use needs a paid Stadia plan. The core elevation API may also request height samples for route geometry from Stadia Maps. Elevation attribution links to https://stadiamaps.com/attribution/ for original elevation data sources; height responses do not identify the selected underlying DEM.",
       "commercialUse": "conditional",
@@ -104,7 +127,45 @@
       "personalData": false,
       "cookies": false,
       "dpaAvailable": true,
-      "dpaUrl": "https://stadiamaps.com/legal/data-processing-addendum/"
+      "dpaUrl": "https://stadiamaps.com/legal/data-processing-addendum/",
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "software",
+            "subject": "Valhalla engine",
+            "license": {
+              "kind": "spdx",
+              "expression": "MIT"
+            }
+          },
+          {
+            "scope": "service",
+            "subject": "Stadia Maps API",
+            "license": {
+              "kind": "custom",
+              "namespace": "publisher:stadia-maps",
+              "id": "LicenseRef-Service-Terms",
+              "name": "Stadia Maps API terms",
+              "url": "https://stadiamaps.com/terms-of-service/"
+            }
+          },
+          {
+            "scope": "data",
+            "subject": "OpenStreetMap routing data",
+            "license": {
+              "kind": "spdx",
+              "expression": "ODbL-1.0"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "MIT (Valhalla routing engine); Stadia Maps",
+            "url": "https://stadiamaps.com/terms-of-service/"
+          }
+        ]
+      }
     }
   ],
   "requires": [

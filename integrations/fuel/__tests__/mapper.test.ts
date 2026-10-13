@@ -358,7 +358,12 @@ it("captures complete canonical receipts before mapping results and details", ()
     sourceId: "exact-feed",
     name: "Publisher",
     url: "https://example.com",
-    spdxLicense: "CC-BY-4.0",
+    licensing: {
+      version: 1,
+      bindings: [
+        { scope: "data", subject: "Data", license: { kind: "spdx", expression: "CC-BY-4.0" } },
+      ],
+    } as const,
     attributionText: "Required upstream notice",
     publisher: { name: "Original publisher", url: "https://publisher.example" },
   };

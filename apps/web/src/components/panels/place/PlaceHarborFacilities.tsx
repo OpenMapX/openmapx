@@ -236,8 +236,7 @@ export function PlaceHarborFacilities({ harbourId, lat, lng, name, category }: P
           <SectionAttribution
             name={attributionSource.name}
             url={attributionSource.url}
-            license={attributionSource.license}
-            licenseUrl={attributionSource.licenseUrl}
+            licensing={attributionSource.licensing}
             attribution={attributionSource.attribution}
           />
         )}

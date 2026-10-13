@@ -1,3 +1,4 @@
+import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 import type { FastifyInstance } from "fastify";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { createAdminTestApp, installAdminRouteMocks } from "./admin-test-helpers.js";
@@ -110,7 +111,7 @@ const MOCK_INTEGRATION = {
     description: "Geocoding via MapTiler",
     version: "1.0.0",
     author: "OpenMapX",
-    license: "AGPL-3.0",
+    licensing: licensingFromDeclaration("AGPL-3.0", undefined),
     documentation: null,
     domains: ["geocoding"],
     quality: "stable",

@@ -133,12 +133,7 @@ function toFeature(
           sourceId: source.sourceId,
           name: source.name,
           ...(source.url ? { url: source.url } : {}),
-          ...(source.license
-            ? {
-                spdxLicense: source.license.name,
-                ...(source.license.url ? { licenseUrl: source.license.url } : {}),
-              }
-            : {}),
+          ...(source.licensing ? { licensing: source.licensing } : {}),
           ...(source.attribution ? { attributionText: source.attribution } : {}),
         })),
       ),

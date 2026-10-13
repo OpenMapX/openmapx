@@ -21,7 +21,21 @@
         "attribution": {
           "provider": "NASA FIRMS (LANCE / ESDIS)",
           "license": "CC0-1.0",
-          "licenseUrl": "https://www.earthdata.nasa.gov/engage/open-data-services-software-policies/data-use-guidance"
+          "licenseUrl": "https://www.earthdata.nasa.gov/engage/open-data-services-software-policies/data-use-guidance",
+          "licensing": {
+            "version": 1,
+            "bindings": [
+              {
+                "scope": "data",
+                "subject": "NASA FIRMS (LANCE / ESDIS)",
+                "license": {
+                  "kind": "spdx",
+                  "expression": "CC0-1.0",
+                  "url": "https://www.earthdata.nasa.gov/engage/open-data-services-software-policies/data-use-guidance"
+                }
+              }
+            ]
+          }
         },
         "privacy": {
           "class": "authoritative"
@@ -87,7 +101,21 @@
         "attribution": {
           "provider": "NASA FIRMS (LANCE / ESDIS)",
           "license": "CC0-1.0",
-          "licenseUrl": "https://www.earthdata.nasa.gov/engage/open-data-services-software-policies/data-use-guidance"
+          "licenseUrl": "https://www.earthdata.nasa.gov/engage/open-data-services-software-policies/data-use-guidance",
+          "licensing": {
+            "version": 1,
+            "bindings": [
+              {
+                "scope": "data",
+                "subject": "NASA FIRMS (LANCE / ESDIS)",
+                "license": {
+                  "kind": "spdx",
+                  "expression": "CC0-1.0",
+                  "url": "https://www.earthdata.nasa.gov/engage/open-data-services-software-policies/data-use-guidance"
+                }
+              }
+            ]
+          }
         },
         "privacy": {
           "class": "authoritative"
@@ -153,7 +181,21 @@
         "attribution": {
           "provider": "NASA FIRMS (LANCE / ESDIS)",
           "license": "CC0-1.0",
-          "licenseUrl": "https://www.earthdata.nasa.gov/engage/open-data-services-software-policies/data-use-guidance"
+          "licenseUrl": "https://www.earthdata.nasa.gov/engage/open-data-services-software-policies/data-use-guidance",
+          "licensing": {
+            "version": 1,
+            "bindings": [
+              {
+                "scope": "data",
+                "subject": "NASA FIRMS (LANCE / ESDIS)",
+                "license": {
+                  "kind": "spdx",
+                  "expression": "CC0-1.0",
+                  "url": "https://www.earthdata.nasa.gov/engage/open-data-services-software-policies/data-use-guidance"
+                }
+              }
+            ]
+          }
         },
         "privacy": {
           "class": "authoritative"
@@ -219,7 +261,21 @@
         "attribution": {
           "provider": "NASA FIRMS (LANCE / ESDIS)",
           "license": "CC0-1.0",
-          "licenseUrl": "https://www.earthdata.nasa.gov/engage/open-data-services-software-policies/data-use-guidance"
+          "licenseUrl": "https://www.earthdata.nasa.gov/engage/open-data-services-software-policies/data-use-guidance",
+          "licensing": {
+            "version": 1,
+            "bindings": [
+              {
+                "scope": "data",
+                "subject": "NASA FIRMS (LANCE / ESDIS)",
+                "license": {
+                  "kind": "spdx",
+                  "expression": "CC0-1.0",
+                  "url": "https://www.earthdata.nasa.gov/engage/open-data-services-software-policies/data-use-guidance"
+                }
+              }
+            ]
+          }
         },
         "privacy": {
           "class": "authoritative"
@@ -285,7 +341,21 @@
         "attribution": {
           "provider": "NASA FIRMS (LANCE / ESDIS)",
           "license": "CC0-1.0",
-          "licenseUrl": "https://www.earthdata.nasa.gov/engage/open-data-services-software-policies/data-use-guidance"
+          "licenseUrl": "https://www.earthdata.nasa.gov/engage/open-data-services-software-policies/data-use-guidance",
+          "licensing": {
+            "version": 1,
+            "bindings": [
+              {
+                "scope": "data",
+                "subject": "NASA FIRMS (LANCE / ESDIS)",
+                "license": {
+                  "kind": "spdx",
+                  "expression": "CC0-1.0",
+                  "url": "https://www.earthdata.nasa.gov/engage/open-data-services-software-policies/data-use-guidance"
+                }
+              }
+            ]
+          }
         },
         "privacy": {
           "class": "authoritative"
@@ -351,7 +421,21 @@
         "attribution": {
           "provider": "NASA FIRMS (LANCE / ESDIS)",
           "license": "CC0-1.0",
-          "licenseUrl": "https://www.earthdata.nasa.gov/engage/open-data-services-software-policies/data-use-guidance"
+          "licenseUrl": "https://www.earthdata.nasa.gov/engage/open-data-services-software-policies/data-use-guidance",
+          "licensing": {
+            "version": 1,
+            "bindings": [
+              {
+                "scope": "data",
+                "subject": "NASA FIRMS (LANCE / ESDIS)",
+                "license": {
+                  "kind": "spdx",
+                  "expression": "CC0-1.0",
+                  "url": "https://www.earthdata.nasa.gov/engage/open-data-services-software-policies/data-use-guidance"
+                }
+              }
+            ]
+          }
         },
         "privacy": {
           "class": "authoritative"
@@ -417,7 +501,21 @@
         "attribution": {
           "provider": "NASA FIRMS (LANCE / ESDIS)",
           "license": "CC0-1.0",
-          "licenseUrl": "https://www.earthdata.nasa.gov/engage/open-data-services-software-policies/data-use-guidance"
+          "licenseUrl": "https://www.earthdata.nasa.gov/engage/open-data-services-software-policies/data-use-guidance",
+          "licensing": {
+            "version": 1,
+            "bindings": [
+              {
+                "scope": "data",
+                "subject": "NASA FIRMS (LANCE / ESDIS)",
+                "license": {
+                  "kind": "spdx",
+                  "expression": "CC0-1.0",
+                  "url": "https://www.earthdata.nasa.gov/engage/open-data-services-software-policies/data-use-guidance"
+                }
+              }
+            ]
+          }
         },
         "privacy": {
           "class": "authoritative"
@@ -483,7 +581,21 @@
         "attribution": {
           "provider": "NASA FIRMS (LANCE / ESDIS)",
           "license": "CC0-1.0",
-          "licenseUrl": "https://www.earthdata.nasa.gov/engage/open-data-services-software-policies/data-use-guidance"
+          "licenseUrl": "https://www.earthdata.nasa.gov/engage/open-data-services-software-policies/data-use-guidance",
+          "licensing": {
+            "version": 1,
+            "bindings": [
+              {
+                "scope": "data",
+                "subject": "NASA FIRMS (LANCE / ESDIS)",
+                "license": {
+                  "kind": "spdx",
+                  "expression": "CC0-1.0",
+                  "url": "https://www.earthdata.nasa.gov/engage/open-data-services-software-policies/data-use-guidance"
+                }
+              }
+            ]
+          }
         },
         "privacy": {
           "class": "authoritative"
@@ -549,7 +661,21 @@
         "attribution": {
           "provider": "NASA FIRMS (LANCE / ESDIS)",
           "license": "CC0-1.0",
-          "licenseUrl": "https://www.earthdata.nasa.gov/engage/open-data-services-software-policies/data-use-guidance"
+          "licenseUrl": "https://www.earthdata.nasa.gov/engage/open-data-services-software-policies/data-use-guidance",
+          "licensing": {
+            "version": 1,
+            "bindings": [
+              {
+                "scope": "data",
+                "subject": "NASA FIRMS (LANCE / ESDIS)",
+                "license": {
+                  "kind": "spdx",
+                  "expression": "CC0-1.0",
+                  "url": "https://www.earthdata.nasa.gov/engage/open-data-services-software-policies/data-use-guidance"
+                }
+              }
+            ]
+          }
         },
         "privacy": {
           "class": "authoritative"
@@ -615,7 +741,21 @@
         "attribution": {
           "provider": "NASA FIRMS (LANCE / ESDIS)",
           "license": "CC0-1.0",
-          "licenseUrl": "https://www.earthdata.nasa.gov/engage/open-data-services-software-policies/data-use-guidance"
+          "licenseUrl": "https://www.earthdata.nasa.gov/engage/open-data-services-software-policies/data-use-guidance",
+          "licensing": {
+            "version": 1,
+            "bindings": [
+              {
+                "scope": "data",
+                "subject": "NASA FIRMS (LANCE / ESDIS)",
+                "license": {
+                  "kind": "spdx",
+                  "expression": "CC0-1.0",
+                  "url": "https://www.earthdata.nasa.gov/engage/open-data-services-software-policies/data-use-guidance"
+                }
+              }
+            ]
+          }
         },
         "privacy": {
           "class": "authoritative"

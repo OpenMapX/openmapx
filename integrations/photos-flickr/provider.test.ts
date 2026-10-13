@@ -1,3 +1,4 @@
+import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { flickrPhotoProvider, setFlickrApiKey } from "./provider.js";
 
@@ -50,15 +51,19 @@ describe("Flickr photo provider", () => {
 
     const photos = await flickrPhotoProvider.search(QUERY);
 
-    expect(photos).toEqual([
+    expect(photos).toMatchObject([
       {
         url: "https://live.staticflickr.com/65535/53000000001_abc123_b.jpg",
         thumbnailUrl: "https://live.staticflickr.com/65535/53000000001_abc123_q.jpg",
         source: "flickr",
         author: "Jane Photographer",
         authorUrl: "https://www.flickr.com/photos/12345@N00",
-        license: "CC-BY-2.0",
-        licenseUrl: "https://creativecommons.org/licenses/by/2.0",
+        licensing: licensingFromDeclaration(
+          "CC-BY-2.0",
+          "https://creativecommons.org/licenses/by/2.0",
+          "Flickr photo",
+          "imagery",
+        ),
         pageUrl: "https://www.flickr.com/photos/12345@N00/53000000001",
         capturedAt: new Date("2023-04-15T14:30:00").toISOString(),
       },
@@ -123,8 +128,11 @@ describe("Flickr photo provider", () => {
 
     const [photo] = await flickrPhotoProvider.search(QUERY);
 
-    expect(photo.license).toBe("License 99");
-    expect(photo.licenseUrl).toBeUndefined();
+    expect(photo.licensing?.bindings[0].license).toMatchObject({
+      kind: "unknown",
+      raw: "License 99",
+    });
+    expect(photo.licensing?.bindings[0].license.url).toBeUndefined();
   });
 
   it("falls back to the owner nsid when no display name is present", async () => {

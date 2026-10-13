@@ -1,3 +1,4 @@
+import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("../../integration-host.js", () => ({ getIntegrationsByDomain: () => [] }));
@@ -31,7 +32,7 @@ describe("installed transit catalog", () => {
       expect.objectContaining({
         id: "catalog:de:vbb",
         source: "transitous",
-        license: "CC-BY-4.0",
+        licensing: licensingFromDeclaration("CC-BY-4.0", undefined),
       }),
     ]);
     expect(fetchMock).toHaveBeenCalledTimes(1);

@@ -1,4 +1,5 @@
 import { useCategorySearchStore } from "@openmapx/core";
+import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
@@ -96,8 +97,7 @@ describe("BrandHeaderCard", () => {
       data: {
         author: "Some Author",
         authorUrl: "javascript:alert(1)",
-        license: "CC BY-SA 4.0",
-        licenseUrl: "javascript:alert(2)",
+        licensing: licensingFromDeclaration("CC BY-SA 4.0", "javascript:alert(2)"),
       },
     });
 
@@ -147,15 +147,17 @@ describe("BrandHeaderCard", () => {
         pageUrl: "https://commons.wikimedia.org/wiki/File:Aldi_Nord_Logo.svg",
         author: "Jane Doe",
         authorUrl: "https://commons.wikimedia.org/wiki/User:JaneDoe",
-        license: "CC BY-SA 4.0",
-        licenseUrl: "https://creativecommons.org/licenses/by-sa/4.0/",
+        licensing: licensingFromDeclaration(
+          "CC BY-SA 4.0",
+          "https://creativecommons.org/licenses/by-sa/4.0/",
+        ),
       },
     });
 
     renderCard();
 
     expect(screen.getByText("Jane Doe")).toBeInTheDocument();
-    expect(screen.getByText("CC BY-SA 4.0")).toBeInTheDocument();
+    expect(screen.getByText("CC-BY-SA-4.0")).toBeInTheDocument();
   });
 
   it("degrades silently when the attribution fetch has nothing to show", () => {

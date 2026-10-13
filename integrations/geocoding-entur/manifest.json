@@ -58,8 +58,6 @@
       "sourceId": "entur-geocoder",
       "name": "Entur Geocoder API",
       "url": "https://developer.entur.org/pages-geocoder-intro/",
-      "license": "NLOD-2.0",
-      "licenseUrl": "https://data.norge.no/nlod/en/2.0",
       "attribution": "Data made available by Entur",
       "commercialUse": "yes",
       "providerCountry": "NO",
@@ -67,7 +65,27 @@
       "endUserExposure": "server-only",
       "personalData": false,
       "cookies": false,
-      "dpaAvailable": false
+      "dpaAvailable": false,
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "data",
+            "subject": "Entur Geocoder API material",
+            "license": {
+              "kind": "spdx",
+              "expression": "NLOD-2.0",
+              "url": "https://data.norge.no/nlod/en/2.0"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "NLOD-2.0",
+            "url": "https://data.norge.no/nlod/en/2.0"
+          }
+        ]
+      }
     }
   ]
 }

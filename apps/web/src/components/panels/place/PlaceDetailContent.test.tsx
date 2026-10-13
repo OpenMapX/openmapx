@@ -1,4 +1,5 @@
 import { createPlace, type Place, usePlaceStore } from "@openmapx/core";
+import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 import type { MergedDeparture } from "@openmapx/mobility-core/transit";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
@@ -443,8 +444,10 @@ describe("PlaceDetailContent brand header", () => {
         url: "https://upload.wikimedia.org/wikipedia/commons/a/ab/Logo.svg",
         source: "wikimedia-commons",
         author: "Logo creator",
-        license: "CC BY 4.0",
-        licenseUrl: "https://creativecommons.org/licenses/by/4.0/",
+        licensing: licensingFromDeclaration(
+          "CC BY 4.0",
+          "https://creativecommons.org/licenses/by/4.0/",
+        ),
         pageUrl: "https://commons.wikimedia.org/wiki/File:Logo.svg",
       },
     });
@@ -468,8 +471,10 @@ describe("PlaceDetailContent brand header", () => {
         url: "https://upload.wikimedia.org/wikipedia/commons/a/ab/Logo.svg",
         source: "wikimedia-commons",
         author: "Logo creator",
-        license: "CC BY 4.0",
-        licenseUrl: "https://creativecommons.org/licenses/by/4.0/",
+        licensing: licensingFromDeclaration(
+          "CC BY 4.0",
+          "https://creativecommons.org/licenses/by/4.0/",
+        ),
         pageUrl: "https://commons.wikimedia.org/wiki/File:Logo.svg",
       },
     });

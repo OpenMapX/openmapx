@@ -1,7 +1,8 @@
-import { snapshotContributors } from "@openmapx/mobility-core/contributors";
+import { licensingFromDeclaration, licensingLinks } from "@openmapx/mobility-core/licensing";
 import type { PlacePhoto } from "../types/place";
-import { buildRuntimeAttributionHtml, parseAttributionHtml } from "./attribution";
+import { parseAttributionHtml } from "./attribution";
 import { fetchJson } from "./fetchJson";
+import { withPhotoContributors } from "./photo-contributors";
 import { USER_AGENT } from "./userAgent";
 
 const HEADERS = {
@@ -80,8 +81,7 @@ export function parseCommonsPage(page: CommonsPage): PlacePhoto | undefined {
     source: "wikimedia-commons",
     author,
     authorUrl,
-    license,
-    licenseUrl,
+    licensing: licensingFromDeclaration(license, licenseUrl, "Commons file", "imagery"),
     pageUrl: filename
       ? `https://commons.wikimedia.org/wiki/File:${encodeURIComponent(filename.replace(/ /g, "_"))}`
       : undefined,
@@ -107,40 +107,7 @@ export function parseCommonsPage(page: CommonsPage): PlacePhoto | undefined {
     ext?.AttributionRequired?.value?.trim() ?? "",
   );
   if (!isDisplayablePhoto(photo)) return undefined;
-  photo.contributors = snapshotContributors([
-    {
-      sourceId: "wikimedia-commons",
-      name: "Wikimedia Commons",
-      url: photo.pageUrl,
-      spdxLicense: photo.license,
-      licenseUrl: photo.licenseUrl,
-      publisher: photo.author ? { name: photo.author, url: photo.authorUrl } : undefined,
-      attributionText: [
-        photo.author && !photo.attributionOverride
-          ? buildRuntimeAttributionHtml({
-              text: photo.author,
-              url: photo.authorUrl ?? photo.pageUrl ?? "",
-            })
-          : undefined,
-        buildRuntimeAttributionHtml({
-          text: "Wikimedia Commons",
-          url: photo.pageUrl ?? "",
-          license: photo.license,
-          licenseUrl: photo.licenseUrl,
-        }),
-        photo.attributionText
-          ? buildRuntimeAttributionHtml({ text: photo.attributionText, url: "" })
-          : undefined,
-        ...(photo.attributionLinks ?? []).map((link) =>
-          buildRuntimeAttributionHtml({ text: link.label, url: link.url }),
-        ),
-      ]
-        .filter(Boolean)
-        .join(" / "),
-      retrievedAt: new Date().toISOString(),
-    },
-  ]);
-  return photo;
+  return withPhotoContributors(photo, "Wikimedia Commons");
 }
 
 /** Reject known Commons file icons from responses cached before MIME filtering. */
@@ -166,7 +133,9 @@ export function isDisplayablePhoto(photo: PlacePhoto): boolean {
       (["upload.wikimedia.org", "thumb.wikimedia.org"].includes(image.hostname) &&
         image.pathname.startsWith("/wikipedia/commons/"));
     if (commons) {
-      if (!photo.license?.trim() || !photo.pageUrl) return false;
+      const grant = photo.licensing?.bindings[0]?.license;
+      if (!grant || !photo.pageUrl || (grant.kind === "unknown" && !grant.raw?.trim()))
+        return false;
       const page = new URL(photo.pageUrl);
       if (
         page.protocol !== "https:" ||
@@ -174,16 +143,22 @@ export function isDisplayablePhoto(photo: PlacePhoto): boolean {
         !page.pathname.startsWith("/wiki/File:")
       )
         return false;
-      const publicDomain = /^(?:public domain|CC0(?: 1\.0)?|PDM(?: 1\.0)?)$/i.test(
-        photo.license.trim(),
-      );
+      const publicDomain =
+        grant.kind === "public-domain" ||
+        grant.kind === "status" ||
+        (grant.kind === "spdx" && grant.expression === "CC0-1.0");
       if (
         (!publicDomain || photo.attributionRequired) &&
         !photo.attributionOverride?.trim() &&
         (!photo.author?.trim() || /^(?:unknown(?: author)?|anonymous)$/i.test(photo.author.trim()))
       )
         return false;
-      if (!publicDomain && (!photo.licenseUrl || !/^https?:\/\//i.test(photo.licenseUrl)))
+      if (
+        !publicDomain &&
+        !licensingLinks(photo.licensing!).some(
+          (part) => part.url || part.licenses?.some((atom) => atom.url),
+        )
+      )
         return false;
       if (
         photo.contributors !== undefined &&

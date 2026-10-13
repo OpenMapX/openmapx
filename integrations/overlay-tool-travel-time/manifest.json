@@ -78,8 +78,6 @@
       "sourceId": "valhalla",
       "name": "Valhalla-compatible street isochrones (Stadia fallback)",
       "url": "https://stadiamaps.com/",
-      "license": "MIT (Valhalla routing engine); Stadia Maps",
-      "licenseUrl": "https://stadiamaps.com/terms-of-service/",
       "attribution": "Routing © <a href=\"https://stadiamaps.com/\">Stadia Maps</a>, © <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap contributors</a>",
       "notes": "Endpoint resolution prefers the registered self-hosted Valhalla service, then VALHALLA_URL, and finally Stadia Maps. The Stadia fallback requires VALHALLA_API_KEY and its free tier is limited to non-commercial / evaluation use. This source is used only for street modes; transit reachability uses response-attributed MOTIS/Transitous data.",
       "commercialUse": "conditional",
@@ -89,7 +87,45 @@
       "personalData": false,
       "cookies": false,
       "dpaAvailable": true,
-      "dpaUrl": "https://stadiamaps.com/legal/data-processing-addendum/"
+      "dpaUrl": "https://stadiamaps.com/legal/data-processing-addendum/",
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "software",
+            "subject": "Valhalla engine",
+            "license": {
+              "kind": "spdx",
+              "expression": "MIT"
+            }
+          },
+          {
+            "scope": "service",
+            "subject": "Stadia Maps API",
+            "license": {
+              "kind": "custom",
+              "namespace": "publisher:valhalla",
+              "id": "LicenseRef-Service-Terms",
+              "name": "Stadia Maps API terms",
+              "url": "https://stadiamaps.com/terms-of-service/"
+            }
+          },
+          {
+            "scope": "data",
+            "subject": "OpenStreetMap routing data",
+            "license": {
+              "kind": "spdx",
+              "expression": "ODbL-1.0"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "MIT (Valhalla routing engine); Stadia Maps",
+            "url": "https://stadiamaps.com/terms-of-service/"
+          }
+        ]
+      }
     }
   ],
   "requires": [

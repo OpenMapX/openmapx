@@ -1,6 +1,11 @@
+import {
+  DISPLAY_LICENSE_SCOPES,
+  type Licensing,
+  licensingLinks,
+} from "@openmapx/mobility-core/licensing";
 import escapeHtml from "escape-html";
 import { type DefaultTreeAdapterTypes, parseFragment } from "parse5";
-import type { DataSourceAttribution } from "../types/dataSource";
+import type { Attribution } from "../types/dataSource";
 import type { IntegrationDataSource } from "../types/integrationMeta";
 
 function safeExternalUrl(value: string | undefined, baseUrl?: string): string | undefined {
@@ -136,38 +141,56 @@ export function sanitizeAttributionHtml(html: string): string {
 export function buildAttributionHtml(ds: {
   name: string;
   url: string;
-  license: string;
-  licenseUrl?: string;
+  licensing?: Licensing;
   attribution?: string;
 }): string {
-  if (ds.attribution) return sanitizeAttributionHtml(ds.attribution);
   return buildRuntimeAttributionHtml({
-    text: ds.name,
+    sourceId: "",
+    name: ds.name,
     url: ds.url,
-    license: ds.license || undefined,
-    licenseUrl: ds.licenseUrl,
+    licensing: ds.licensing,
+    attributionText: ds.attribution,
   });
 }
 
-/**
- * Build safe HTML attribution for per-item attribution received at runtime.
- */
-export function buildRuntimeAttributionHtml(attribution: DataSourceAttribution): string {
+/** Render all applicable subjects and grants using the shared licence registry. */
+export function buildLicensingHtml(
+  licensing: Licensing,
+  options: { includeSoftware?: boolean; fullNames?: boolean } = {},
+): string {
+  const parts = licensingLinks(licensing, {
+    fullNames: options.fullNames,
+    scopes: options.includeSoftware ? undefined : DISPLAY_LICENSE_SCOPES,
+  });
+  const link = (label: string, url?: string) => {
+    const safe = safeExternalUrl(url);
+    return safe
+      ? `<a href="${escapeHtml(safe)}" target="_blank" rel="noopener noreferrer">${escapeHtml(label)}</a>`
+      : escapeHtml(label);
+  };
+  return parts
+    .map((part) => {
+      const label = link(part.label, part.url);
+      const atoms =
+        part.licenses && part.licenses.length > 1
+          ? ` [${part.licenses.map((atom) => link(atom.label, atom.url)).join(", ")}]`
+          : "";
+      return `${parts.length > 1 ? `${escapeHtml(part.subject)}: ` : ""}${label}${atoms}${part.notice ? ` — ${escapeHtml(part.notice)}` : ""}${part.conditions?.length ? ` — ${part.conditions.map(escapeHtml).join("; ")}` : ""}`;
+    })
+    .join("; ");
+}
+
+/** Safe HTML for the same captured receipt used by every runtime surface. */
+export function buildRuntimeAttributionHtml(attribution: Attribution): string {
   const url = safeExternalUrl(attribution.url);
-  const name = escapeHtml(attribution.text);
-  const nameLink = url
-    ? `<a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">${name}</a>`
-    : name;
-
-  if (!attribution.license) return nameLink;
-
-  const licenseUrl = safeExternalUrl(attribution.licenseUrl);
-  const license = escapeHtml(attribution.license);
-  const licenseLink = licenseUrl
-    ? `<a href="${escapeHtml(licenseUrl)}" target="_blank" rel="noopener noreferrer">${license}</a>`
-    : license;
-
-  return `${nameLink} (${licenseLink})`;
+  const copyright = attribution.name.startsWith("© ");
+  const name = escapeHtml(copyright ? attribution.name.slice(2) : attribution.name);
+  const nameLink = `${copyright ? "© " : ""}${url ? `<a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">${name}</a>` : name}`;
+  const credit = attribution.attributionText
+    ? sanitizeAttributionHtml(attribution.attributionText)
+    : nameLink;
+  const licensing = attribution.licensing ? buildLicensingHtml(attribution.licensing) : "";
+  return licensing ? `${credit} (${licensing})` : credit;
 }
 
 /**

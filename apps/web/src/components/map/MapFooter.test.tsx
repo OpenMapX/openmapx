@@ -1,3 +1,4 @@
+import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 // @vitest-environment jsdom
 
 import { dataSourceToAttribution } from "@openmapx/integration-framework";
@@ -46,8 +47,11 @@ describe("MapFooter", () => {
               sourceId: "openaq",
               name: "OpenAQ",
               url: "https://api.openaq.org/",
-              license: "CC BY 4.0",
-              licenseUrl: "https://docs.openaq.org/resources/licenses",
+              licensing: licensingFromDeclaration(
+                "CC BY 4.0",
+                "https://docs.openaq.org/resources/licenses",
+                "OpenAQ",
+              ),
               providerCountry: "US",
               providerPrivacyUrl: "https://openaq.org/privacy/",
             }),
@@ -58,7 +62,7 @@ describe("MapFooter", () => {
     render(<MapFooter />);
     const credits = screen.getByTestId("map-attributions");
     expect(credits.textContent).toContain("OpenAQ");
-    expect(credits.textContent).toContain("CC BY 4.0");
+    expect(credits.textContent).toContain("CC-BY-4.0");
     expect(
       credits.querySelector('a[href="https://docs.openaq.org/resources/licenses"]'),
     ).not.toBeNull();

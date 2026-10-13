@@ -1,21 +1,17 @@
-import type { Attribution, DataSourceAttribution } from "./types/attribution.js";
+import { isSafeAttributionUrl, parseLicensing } from "@openmapx/mobility-core/licensing";
+import type { Attribution } from "./types/attribution.js";
 
 /** A captured receipt for the fields/identity this record actually supplies. */
 export interface ContributingRecord {
-  /** Present, including [], is authoritative. Undefined denotes a legacy record. */
+  /** Present, including [], is authoritative. Undefined denotes unavailable captured provenance. */
   contributors?: readonly Attribution[];
 }
 
 export type FieldContributors = Readonly<Record<string, readonly Attribution[]>>;
 
-const STRING_FIELDS = [
-  "url",
-  "spdxLicense",
-  "licenseUrl",
-  "attributionText",
-  "retrievedAt",
-  "notes",
-] as const;
+const STRING_FIELDS = ["url", "attributionText", "retrievedAt", "notes"] as const;
+
+const creditUrl = (value: string) => (isSafeAttributionUrl(value) ? value : undefined);
 
 /** Validate and copy a portable receipt. Do not carry unrelated provider fields. */
 export function parseContributors(value: unknown): Attribution[] | undefined {
@@ -38,11 +34,22 @@ export function parseContributors(value: unknown): Attribution[] | undefined {
       !raw.name
     )
       return undefined;
+    // Unsupported display aliases must not masquerade as a canonical receipt.
+    if (["spdxLicense", "licenseUrl", "license", "text"].some((field) => Object.hasOwn(raw, field)))
+      return undefined;
     const receipt: Attribution = { sourceId: raw.sourceId, name: raw.name };
     for (const field of STRING_FIELDS) {
       if (raw[field] === undefined) continue;
       if (typeof raw[field] !== "string") return undefined;
-      receipt[field] = raw[field];
+      if (field === "url") {
+        const url = creditUrl(raw[field]);
+        if (url) receipt.url = url;
+      } else receipt[field] = raw[field];
+    }
+    if (raw.licensing !== undefined) {
+      const licensing = parseLicensing(raw.licensing);
+      if (!licensing) return undefined;
+      receipt.licensing = licensing;
     }
     if (raw.publisher !== undefined) {
       if (
@@ -54,12 +61,19 @@ export function parseContributors(value: unknown): Attribution[] | undefined {
         return undefined;
       receipt.publisher = {
         name: raw.publisher.name,
-        ...(raw.publisher.url === undefined ? {} : { url: raw.publisher.url }),
+        ...(raw.publisher.url !== undefined && creditUrl(raw.publisher.url)
+          ? { url: raw.publisher.url }
+          : {}),
       };
     }
     receipts.push(receipt);
   }
   return receipts;
+}
+
+/** Preserve absence separately from a present invalid capture; invalid never authorizes a fallback. */
+export function readCapturedContributors(value: unknown): Attribution[] | undefined {
+  return value === undefined ? undefined : (parseContributors(value) ?? []);
 }
 
 /** Distinct required wording from the same source must not disappear in a union. */
@@ -68,8 +82,7 @@ export function contributorKey(receipt: Attribution): string {
     receipt.sourceId,
     receipt.name,
     receipt.url,
-    receipt.spdxLicense,
-    receipt.licenseUrl,
+    receipt.licensing,
     receipt.attributionText,
     receipt.publisher?.name,
     receipt.publisher?.url,
@@ -132,14 +145,14 @@ export function narrowContributors(
 }
 
 /** Capture an item's exact receipt at a trusted result-envelope boundary.
- * A uniform envelope can establish one known supplier for legacy untagged rows;
+ * A uniform envelope can establish one known supplier for untagged rows with a known uniform supplier;
  * a mixed envelope cannot establish which of its suppliers produced a row.
  */
 export function captureResultContributors(
   record: ContributingRecord & { sourceIds?: Iterable<string> },
   envelope: readonly Attribution[],
 ): Attribution[] {
-  const captured = parseContributors(record.contributors);
+  const captured = readCapturedContributors(record.contributors);
   if (captured !== undefined) return snapshotContributors(captured);
   if (record.sourceIds !== undefined) return narrowContributors(envelope, record.sourceIds);
   return new Set(envelope.map((receipt) => receipt.sourceId)).size === 1
@@ -161,21 +174,6 @@ export function withFeatureContributors<T extends { properties?: Record<string, 
   };
 }
 
-/** Explicit compatibility boundary for the older per-record text/url format. */
-export function legacyAttributionsToContributors(
-  receipts: readonly DataSourceAttribution[],
-): Attribution[] {
-  return snapshotContributors(
-    receipts.map((receipt) => ({
-      sourceId: receipt.sourceId ?? (receipt.text || receipt.url),
-      name: receipt.text,
-      url: receipt.url,
-      spdxLicense: receipt.license,
-      licenseUrl: receipt.licenseUrl,
-    })),
-  );
-}
-
 /** Capture valid field receipts from a JSON/GeoJSON/MVT metadata map. */
 export function parseFieldContributors(value: unknown): FieldContributors | undefined {
   if (typeof value === "string") {
@@ -186,12 +184,23 @@ export function parseFieldContributors(value: unknown): FieldContributors | unde
     }
   }
   if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
-  return Object.fromEntries(
-    Object.entries(value).flatMap(([field, raw]) => {
-      const receipts = parseContributors(raw);
-      return receipts === undefined ? [] : [[field, snapshotContributors(receipts)]];
-    }),
-  );
+  const fields: Record<string, Attribution[]> = {};
+  for (const [field, raw] of Object.entries(value)) {
+    const receipts = parseContributors(raw);
+    if (receipts === undefined) return undefined;
+    Object.defineProperty(fields, field, {
+      value: snapshotContributors(receipts),
+      enumerable: true,
+      configurable: true,
+      writable: true,
+    });
+  }
+  return fields;
+}
+
+/** A present malformed field map blocks parent receipt inheritance. */
+export function readCapturedFieldContributors(value: unknown): FieldContributors | undefined {
+  return value === undefined ? undefined : (parseFieldContributors(value) ?? {});
 }
 
 /** Credits the selected display fields, without unioning hidden enrichment. */
@@ -287,19 +296,19 @@ export interface SourceCreditMetadata {
   sourceId: string;
   name: string;
   url: string;
-  license: string;
-  licenseUrl?: string;
+  licensing: unknown;
   attribution?: string;
   notes?: string;
 }
 
 export function dataSourceToAttribution<T extends SourceCreditMetadata>(ds: T): Attribution {
+  const licensing = parseLicensing(ds.licensing);
+  if (!licensing) throw new Error(`Invalid licensing for source ${ds.sourceId}`);
   return {
     sourceId: ds.sourceId,
     name: ds.name,
     url: ds.url,
-    spdxLicense: ds.license || undefined,
-    licenseUrl: ds.licenseUrl,
+    licensing,
     attributionText: ds.attribution,
     notes: ds.notes,
   };

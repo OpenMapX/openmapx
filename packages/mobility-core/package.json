@@ -85,10 +85,6 @@
       "types": "./src/json-transport.ts",
       "default": "./src/json-transport.ts"
     },
-    "./license": {
-      "types": "./src/license.ts",
-      "default": "./src/license.ts"
-    },
     "./mercator": {
       "types": "./src/mercator.ts",
       "default": "./src/mercator.ts"
@@ -188,6 +184,10 @@
     "./geometry-contributors": {
       "types": "./src/geometry-contributors.ts",
       "default": "./src/geometry-contributors.ts"
+    },
+    "./licensing": {
+      "types": "./src/licensing.ts",
+      "default": "./src/licensing.ts"
     }
   },
   "dependencies": {
@@ -195,6 +195,10 @@
     "@motis-project/motis-client": "^2.11.3",
     "@openmapx/mobility-formats": "workspace:^",
     "@openmapx/transitous-core": "workspace:^",
+    "spdx-expression-parse": "5.0.0",
     "spdx-license-list": "^6.12.0"
+  },
+  "devDependencies": {
+    "@types/spdx-expression-parse": "4.0.0"
   }
 }

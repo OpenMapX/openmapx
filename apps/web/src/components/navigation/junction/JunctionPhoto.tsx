@@ -10,6 +10,7 @@ import type {
   StreetLevelImage,
 } from "@openmapx/core";
 import { projectRoutePath } from "@openmapx/core";
+import { formatLicensing } from "@openmapx/mobility-core/licensing";
 import { useLocale, useTranslations } from "next-intl";
 import { useMemo, useState } from "react";
 
@@ -107,7 +108,7 @@ export function JunctionPhoto({
       <Typography variant="caption" noWrap sx={{ color: "text.secondary" }}>
         {t("junctionPhotoCaption", {
           author: image.author ?? image.providerId,
-          license: image.license ?? "",
+          license: image.licensing ? formatLicensing(image.licensing) : "",
           date,
         })}
       </Typography>

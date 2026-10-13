@@ -8,7 +8,7 @@ import {
   contributorsForFields,
   contributorsForRecords,
   type FieldContributors,
-  parseFieldContributors,
+  readCapturedFieldContributors,
   snapshotContributors,
 } from "@openmapx/mobility-core/contributors";
 import type {
@@ -1420,7 +1420,7 @@ function retainedFieldContributors(
   record: ContributingRecord & { fieldContributors?: FieldContributors },
 ): Record<string, readonly Attribution[]> {
   if (record.fieldContributors !== undefined)
-    return { ...parseFieldContributors(record.fieldContributors) };
+    return { ...readCapturedFieldContributors(record.fieldContributors) };
   return Object.fromEntries(
     Object.keys(record)
       .filter((field) => field !== "contributors" && field !== "fieldContributors")

@@ -47,7 +47,6 @@ export async function setup(
     onSources: (list) => sources.update(list),
     onDescribed: (list) => {
       scopes.update(list);
-      sources.updateLicenses(list);
       sources.updateDescribed(list);
     },
   });

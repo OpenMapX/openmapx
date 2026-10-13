@@ -1,7 +1,7 @@
 import {
   type ContributingRecord,
   type FieldContributors,
-  parseFieldContributors,
+  readCapturedFieldContributors,
   snapshotContributors,
 } from "@openmapx/mobility-core/contributors";
 import type { OpeningHoursSource } from "../utils/openingHoursSource";
@@ -583,7 +583,7 @@ export function categoryPlaceToPlace(place: CategoryPlace, categoryId?: string):
       : { contributors: snapshotContributors(place.contributors) }),
     ...(place.fieldContributors === undefined
       ? {}
-      : { fieldContributors: parseFieldContributors(place.fieldContributors) }),
+      : { fieldContributors: readCapturedFieldContributors(place.fieldContributors) }),
     openingHours: place.openingHours,
     openingHoursSource: place.openingHoursSource,
     countryCode: place.countryCode,

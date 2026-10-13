@@ -20,7 +20,7 @@ import type {
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import {
   contributorsForRecords,
-  parseContributors,
+  readCapturedContributors,
   snapshotContributors,
 } from "@openmapx/mobility-core/contributors";
 import { registerPlaceResolver } from "@openmapx/place-ids";
@@ -168,7 +168,7 @@ function captureRowContributors<T extends PoiSearchResult | ReturnType<typeof cr
   namePointer: string,
   brandNamePointer?: string,
 ): T {
-  const catalogue = parseContributors(row.sources_catalogue) ?? [
+  const catalogue = readCapturedContributors(row.sources_catalogue) ?? [
     AMBIENT_LEGACY_OVERTURE_ATTRIBUTION,
   ];
   const pointers: Record<string, string[]> = { coordinates: ["/geometry"], name: [namePointer] };

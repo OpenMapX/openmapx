@@ -106,7 +106,12 @@ describe("check-legal-tables for a static integration", () => {
     sourceId,
     name: sourceId,
     url: "https://source.example",
-    license: "CC0-1.0",
+    licensing: {
+      version: 1,
+      bindings: [
+        { scope: "data", subject: "Data", license: { kind: "spdx", expression: "CC0-1.0" } },
+      ],
+    } as const,
     providerCountry: "NL",
     providerPrivacyUrl: "https://source.example/privacy",
     endUserExposure: "server-only",

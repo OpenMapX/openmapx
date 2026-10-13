@@ -43,8 +43,6 @@
       "sourceId": "nominatim",
       "name": "Nominatim (OpenStreetMap)",
       "url": "https://nominatim.openstreetmap.org/",
-      "license": "ODbL-1.0",
-      "licenseUrl": "https://www.openstreetmap.org/copyright",
       "attribution": "© <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap contributors</a>",
       "commercialUse": "yes",
       "providerCountry": "UK",
@@ -52,7 +50,27 @@
       "endUserExposure": "server-only",
       "personalData": false,
       "cookies": false,
-      "dpaAvailable": false
+      "dpaAvailable": false,
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "data",
+            "subject": "Nominatim (OpenStreetMap) material",
+            "license": {
+              "kind": "spdx",
+              "expression": "ODbL-1.0",
+              "url": "https://www.openstreetmap.org/copyright"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "ODbL-1.0",
+            "url": "https://www.openstreetmap.org/copyright"
+          }
+        ]
+      }
     }
   ],
   "requires": [

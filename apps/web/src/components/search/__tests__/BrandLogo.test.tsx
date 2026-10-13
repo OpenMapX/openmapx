@@ -1,3 +1,4 @@
+import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -14,8 +15,11 @@ const credited = {
   url: "https://upload.wikimedia.org/wikipedia/commons/a/ab/Aldi_logo.svg",
   source: "wikimedia-commons",
   author: "Logo artist",
-  license: "CC BY 4.0",
-  licenseUrl: "https://creativecommons.org/licenses/by/4.0/",
+  licensing: licensingFromDeclaration(
+    "CC BY 4.0",
+    "https://creativecommons.org/licenses/by/4.0/",
+    "Data",
+  ),
   pageUrl: "https://commons.wikimedia.org/wiki/File:Aldi_logo.svg",
   contributors: [
     {
@@ -41,9 +45,9 @@ describe("BrandLogo", () => {
       <BrandLogo brand={{ qid: "Q1", name: "Aldi", kind: ["brand"], logoFile: "Aldi logo.svg" }} />,
     );
     expect(screen.getByText("Logo artist", { exact: false })).toBeVisible();
-    expect(screen.getByRole("link", { name: "CC BY 4.0" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "CC-BY-4.0" })).toHaveAttribute(
       "href",
-      credited.licenseUrl,
+      credited.licensing?.bindings[0].license.url,
     );
     expect(screen.getByRole("link", { name: "Wikimedia Commons" })).toHaveAttribute(
       "href",

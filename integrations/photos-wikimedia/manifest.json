@@ -34,8 +34,6 @@
       "sourceId": "wikimedia",
       "name": "Wikimedia Commons",
       "url": "https://commons.wikimedia.org/",
-      "license": "Per-file (CC BY-SA, CC BY, or Public Domain)",
-      "licenseUrl": "https://commons.wikimedia.org/wiki/Commons:Licensing",
       "attribution": "Photos via <a href=\"https://commons.wikimedia.org/\">Wikimedia Commons</a> — each image credited to its author under its own licence",
       "commercialUse": "yes",
       "providerCountry": "US",
@@ -44,7 +42,27 @@
       "personalData": false,
       "cookies": false,
       "dpaAvailable": false,
-      "capabilities": ["geo-search", "tag-lookup"]
+      "capabilities": ["geo-search", "tag-lookup"],
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "imagery",
+            "subject": "Each returned image/file and actual creator",
+            "license": {
+              "kind": "per-item",
+              "raw": "Per-file (CC BY-SA, CC BY, or Public Domain)",
+              "url": "https://commons.wikimedia.org/wiki/Commons:Licensing"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "Per-file (CC BY-SA, CC BY, or Public Domain)",
+            "url": "https://commons.wikimedia.org/wiki/Commons:Licensing"
+          }
+        ]
+      }
     }
   ]
 }

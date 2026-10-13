@@ -1,10 +1,10 @@
-import type { DataSourceAttribution } from "@openmapx/mobility-core/attribution";
+import type { Attribution } from "@openmapx/mobility-core/attribution";
 import type { ContributingRecord, FieldContributors } from "@openmapx/mobility-core/contributors";
 import type { OsmFilter } from "../utils/overpass.service";
 import type { LngLat } from "./geometry";
 import type { I18nToken, Translatable } from "./i18nToken";
 
-export type { DataSourceAttribution } from "@openmapx/mobility-core/attribution";
+export type { Attribution } from "@openmapx/mobility-core/attribution";
 
 export interface DataSourceBranding extends ContributingRecord {
   fieldContributors?: FieldContributors;
@@ -103,7 +103,7 @@ export interface DataSourceResult extends ContributingRecord {
   /** All contributing source ids when a result merges records from multiple providers. */
   sources?: string[];
   /** Per-result attribution used by map/source attribution controls when a provider varies by item. */
-  attributions?: DataSourceAttribution[];
+  attributions?: Attribution[];
   /**
    * Distinguishes fixed installations from free-floating items so the place
    * resolver can decide whether to snap to an OSM POI (via `osmFilters`) or
@@ -290,7 +290,7 @@ export interface DataSourceDetail extends ContributingRecord {
   /** The place's own website (http(s) only), when it is not already the operator's link. */
   website?: string;
   /** Per-record attribution that cannot be expressed statically in the integration manifest. */
-  attributions?: DataSourceAttribution[];
+  attributions?: Attribution[];
   branding?: DataSourceBranding;
   usageInfo?: { type: Translatable; cost?: Translatable; membershipRequired?: boolean };
   /** OSM-format opening hours string (e.g., "Mo-Fr 06:00-20:00; Sa-Su 08:00-20:00"). */

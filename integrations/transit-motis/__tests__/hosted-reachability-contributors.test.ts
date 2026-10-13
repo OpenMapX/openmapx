@@ -1,4 +1,5 @@
 import type { IntegrationContext, TransitProvider } from "@openmapx/integration-framework";
+import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 import type { MotisInstance } from "@openmapx/mobility-core/motis-client";
 import { beforeEach, expect, it, vi } from "vitest";
 
@@ -29,7 +30,7 @@ const supplier = {
   sourceId: "transitous",
   name: "Original Transitous",
   url: "https://transitous.org",
-  license: "Mixed feeds",
+  licensing: licensingFromDeclaration("Mixed feeds", undefined),
   notes: "Original data notice",
 };
 

@@ -14,6 +14,7 @@ import type {
   StationViewportQuery,
 } from "@openmapx/integration-framework";
 import { mapSettledWithConcurrency } from "@openmapx/integration-framework";
+import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 import {
   loadOpenAQCached,
   OPENAQ_METADATA_TTL,
@@ -224,8 +225,8 @@ function evidenceFromSeries(
         name: `OpenAQ via ${location.provider.name}`,
         url: license?.attribution.url ?? null,
         owner: location.owner.name,
-        license: license
-          ? { name: license.name, url: options.licenseUrls?.get(license.id) ?? null }
+        licensing: license
+          ? licensingFromDeclaration(license.name, options.licenseUrls?.get(license.id))
           : null,
         methodologyUrl: "https://docs.openaq.org/resources/measurements",
         attribution: license?.attribution.name ?? location.owner.name,

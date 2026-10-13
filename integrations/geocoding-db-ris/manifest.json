@@ -71,15 +71,39 @@
       "sourceId": "db-ris-stations",
       "name": "Deutsche Bahn RIS Stations",
       "url": "https://developers.deutschebahn.com/db-api-marketplace/apis/",
-      "license": "Proprietary (bilateral license)",
-      "licenseUrl": "https://developers.deutschebahn.com/db-api-marketplace/apis/nutzungsbedingungen",
       "commercialUse": "conditional",
       "providerCountry": "DE",
       "providerPrivacyUrl": "https://developers.deutschebahn.com/db-api-marketplace/apis/privacypolicy",
       "endUserExposure": "server-only",
       "personalData": false,
       "cookies": false,
-      "dpaAvailable": false
+      "dpaAvailable": false,
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "data",
+            "subject": "Deutsche Bahn RIS Stations material",
+            "license": {
+              "kind": "unknown"
+            }
+          },
+          {
+            "scope": "service",
+            "subject": "Deutsche Bahn RIS Stations access/account contract",
+            "license": {
+              "kind": "unknown",
+              "url": "https://developers.deutschebahn.com/db-api-marketplace/apis/nutzungsbedingungen"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "Proprietary (bilateral license)",
+            "url": "https://developers.deutschebahn.com/db-api-marketplace/apis/nutzungsbedingungen"
+          }
+        ]
+      }
     }
   ]
 }

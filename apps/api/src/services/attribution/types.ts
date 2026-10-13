@@ -45,8 +45,7 @@ export type ManifestDataSource = Pick<IntegrationDataSource, "sourceId" | "name"
     Pick<
       IntegrationDataSource,
       | "url"
-      | "license"
-      | "licenseUrl"
+      | "licensing"
       | "attribution"
       | "commercialUse"
       | "providerCountry"

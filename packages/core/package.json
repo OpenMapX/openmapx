@@ -145,6 +145,10 @@
     "./ambient-places-server": {
       "types": "./src/server/ambient-places.ts",
       "default": "./src/server/ambient-places.ts"
+    },
+    "./attribution": {
+      "types": "./src/utils/attribution.ts",
+      "default": "./src/utils/attribution.ts"
     }
   },
   "scripts": {

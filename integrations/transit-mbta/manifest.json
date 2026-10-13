@@ -52,15 +52,39 @@
       "sourceId": "mbta",
       "name": "MBTA",
       "url": "https://api-v3.mbta.com/",
-      "license": "Proprietary (MassDOT Developers License)",
-      "licenseUrl": "https://www.mbta.com/developers/v3-api",
       "commercialUse": "yes",
       "providerCountry": "US",
       "providerPrivacyUrl": "https://www.mbta.com/policies/privacy-policy",
       "endUserExposure": "server-only",
       "personalData": false,
       "cookies": false,
-      "dpaAvailable": false
+      "dpaAvailable": false,
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "data",
+            "subject": "MBTA material",
+            "license": {
+              "kind": "unknown"
+            }
+          },
+          {
+            "scope": "service",
+            "subject": "MBTA access/account contract",
+            "license": {
+              "kind": "unknown",
+              "url": "https://www.mbta.com/developers/v3-api"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "Proprietary (MassDOT Developers License)",
+            "url": "https://www.mbta.com/developers/v3-api"
+          }
+        ]
+      }
     }
   ],
   "dependencies": ["transit"]

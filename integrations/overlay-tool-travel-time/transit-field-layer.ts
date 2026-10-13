@@ -2,7 +2,7 @@ import type { TransitReachabilitySeed } from "@openmapx/core";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import {
   captureResultContributors,
-  parseContributors,
+  readCapturedContributors,
   serializeContributors,
   snapshotContributors,
   withContributors,
@@ -353,7 +353,8 @@ export class TransitFieldLayer implements CustomLayerInterface {
         captureResultContributors(
           {
             contributors:
-              parseContributors(seed.contributors) ?? parseContributors(seed.stop?.contributors),
+              readCapturedContributors(seed.contributors) ??
+              readCapturedContributors(seed.stop?.contributors),
           },
           contributors,
         ),

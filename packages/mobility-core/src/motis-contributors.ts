@@ -1,7 +1,7 @@
 import {
   type ContributingRecord,
   contributorsForRecords,
-  parseFieldContributors,
+  readCapturedFieldContributors,
   snapshotContributors,
 } from "./contributors.js";
 import { decodeMotisLineReference, decodeMotisRoutePatternId } from "./motis-route-pattern-id.js";
@@ -161,7 +161,7 @@ export function wrapMotisWithFeedAttribution<T>(
     const original = node as Record<string, unknown>;
     const result = { ...original };
     if (original.fieldContributors !== undefined)
-      result.fieldContributors = parseFieldContributors(original.fieldContributors) ?? {};
+      result.fieldContributors = readCapturedFieldContributors(original.fieldContributors) ?? {};
     for (const key of [
       "legs",
       "itineraries",

@@ -127,8 +127,16 @@ minimal one for our route-only knowledge provider:
       "sourceId": "sunrise-sunset",
       "name": "Sunrise-Sunset.org",
       "url": "https://sunrise-sunset.org/",
-      "license": "Proprietary (free with attribution)",
-      "licenseUrl": "https://sunrise-sunset.org/terms",
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "service",
+            "subject": "Sunrise-Sunset.org API",
+            "license": { "kind": "unknown", "url": "https://sunrise-sunset.org/terms" }
+          }
+        ]
+      },
       "commercialUse": "unknown",
       "providerCountry": "Unknown",
       "providerPrivacyUrl": "https://sunrise-sunset.org/privacy",
@@ -668,3 +676,7 @@ traveled/remaining/casing layer group and converts global Mercator progress into
 that span's local gradient interval. GPS updates change paint only; they never
 upload the route again. Only these complementary groups certify full alpha
 coverage; a standalone partial gradient is not proof of visible geometry.
+
+Use the [shared licence metadata contract](./licensing.md) for every declared
+source and captured receipt. Separate engine, data and service subjects, retain
+original conditions, and derive display labels through the shared formatter.

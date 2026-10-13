@@ -8,10 +8,10 @@ import type { Attribution } from "@openmapx/mobility-core/attribution";
 import {
   contributorsForRecordFields,
   contributorsForRecords,
-  legacyAttributionsToContributors,
-  parseContributors,
-  parseFieldContributors,
+  readCapturedContributors,
+  readCapturedFieldContributors,
   serializeContributors,
+  snapshotContributors,
   withFeatureContributors,
 } from "@openmapx/mobility-core/contributors";
 import type * as maplibregl from "maplibre-gl";
@@ -430,7 +430,7 @@ export function RouteLayer() {
               _stationContributors: serializeContributors(
                 stop.station.contributors ??
                   stop.contributors ??
-                  legacyAttributionsToContributors(stop.attributions),
+                  snapshotContributors(stop.attributions),
               ),
               _stationFieldContributors: JSON.stringify(
                 stop.station.fieldContributors ??
@@ -454,7 +454,7 @@ export function RouteLayer() {
                 "station.coordinates",
                 ...(stop.availability ? ["availability"] : []),
               ])
-            : (stop.contributors ?? legacyAttributionsToContributors(stop.attributions)),
+            : (stop.contributors ?? snapshotContributors(stop.attributions)),
         ),
       ),
     }),
@@ -515,11 +515,11 @@ export function RouteLayer() {
           id: props.id,
           name: props.name,
           coordinates,
-          contributors: parseContributors(props._stationContributors) ?? [],
+          contributors: readCapturedContributors(props._stationContributors) ?? [],
           fieldContributors:
             props._stationFieldContributors === undefined
               ? undefined
-              : (parseFieldContributors(props._stationFieldContributors) ?? {}),
+              : (readCapturedFieldContributors(props._stationFieldContributors) ?? {}),
         },
         {
           placeCategory: evSourceMeta?.placeCategory,

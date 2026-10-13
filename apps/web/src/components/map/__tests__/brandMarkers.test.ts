@@ -1,5 +1,6 @@
 import type { CategoryPlace } from "@openmapx/core";
 import { apiClient } from "@openmapx/core";
+import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 import type { Map as MaplibreMap } from "maplibre-gl";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
@@ -187,8 +188,10 @@ describe("loadBrandMarkerImage", () => {
             url: "https://upload.wikimedia.org/wikipedia/commons/a/ab/Aldi_logo.svg",
             source: "wikimedia-commons",
             author: "Logo creator",
-            license: "CC BY 4.0",
-            licenseUrl: "https://creativecommons.org/licenses/by/4.0/",
+            licensing: licensingFromDeclaration(
+              "CC BY 4.0",
+              "https://creativecommons.org/licenses/by/4.0/",
+            ),
             pageUrl: "https://commons.wikimedia.org/wiki/File:Aldi_logo.svg",
             contributors: [{ sourceId: "wikimedia-commons", name: "Wikimedia Commons" }],
           }
@@ -222,8 +225,10 @@ describe("loadBrandMarkerImage", () => {
             url: "https://upload.wikimedia.org/wikipedia/commons/a/ab/Aldi_logo.svg",
             source: "wikimedia-commons",
             author: "Logo creator",
-            license: "CC BY 4.0",
-            licenseUrl: "https://creativecommons.org/licenses/by/4.0/",
+            licensing: licensingFromDeclaration(
+              "CC BY 4.0",
+              "https://creativecommons.org/licenses/by/4.0/",
+            ),
             pageUrl: "https://commons.wikimedia.org/wiki/File:Aldi_logo.svg",
             contributors: [{ sourceId: "wikimedia-commons", name: "Wikimedia Commons" }],
           }
@@ -251,8 +256,10 @@ describe("loadBrandMarkerImage", () => {
             url: "https://upload.wikimedia.org/wikipedia/commons/a/ab/Aldi_logo.svg",
             source: "wikimedia-commons",
             author: "Logo creator",
-            license: "CC BY 4.0",
-            licenseUrl: "https://creativecommons.org/licenses/by/4.0/",
+            licensing: licensingFromDeclaration(
+              "CC BY 4.0",
+              "https://creativecommons.org/licenses/by/4.0/",
+            ),
             pageUrl: "https://commons.wikimedia.org/wiki/File:Aldi_logo.svg",
             contributors: [{ sourceId: "wikimedia-commons", name: "Wikimedia Commons" }],
           }

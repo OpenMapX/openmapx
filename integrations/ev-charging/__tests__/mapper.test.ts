@@ -240,7 +240,16 @@ describe("mapChargingSiteToResult", () => {
             sourceId: "de-bw-mobidata-charging",
             name: "MobiData BW",
             url: "https://mobidata-bw.de",
-            spdxLicense: "DL-DE-BY-2.0",
+            licensing: {
+              version: 1,
+              bindings: [
+                {
+                  scope: "data",
+                  subject: "Data",
+                  license: { kind: "spdx", expression: "DL-DE-BY-2.0" },
+                },
+              ],
+            } as const,
           },
         ],
       }),
@@ -252,7 +261,21 @@ describe("mapChargingSiteToResult", () => {
       mapChargingSiteToResult(makeSite({ operator: { name: "EWE Go" }, country: "FR" })).branding,
     ).toBeUndefined();
     expect(result.attributions).toEqual([
-      { text: "MobiData BW", url: "https://mobidata-bw.de", license: "DL-DE-BY-2.0" },
+      {
+        sourceId: "de-bw-mobidata-charging",
+        name: "MobiData BW",
+        url: "https://mobidata-bw.de",
+        licensing: {
+          version: 1,
+          bindings: [
+            {
+              scope: "data",
+              subject: "Data",
+              license: { kind: "spdx", expression: "DL-DE-BY-2.0" },
+            },
+          ],
+        } as const,
+      },
     ]);
   });
 });
@@ -827,7 +850,12 @@ it("captures complete canonical receipts before mapping results and details", ()
     sourceId: "exact-feed",
     name: "Publisher",
     url: "https://example.com",
-    spdxLicense: "CC-BY-4.0",
+    licensing: {
+      version: 1,
+      bindings: [
+        { scope: "data", subject: "Data", license: { kind: "spdx", expression: "CC-BY-4.0" } },
+      ],
+    } as const,
     attributionText: "Required upstream notice",
     publisher: { name: "Original publisher", url: "https://publisher.example" },
   };

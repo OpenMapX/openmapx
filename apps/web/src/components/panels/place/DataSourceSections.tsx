@@ -17,9 +17,9 @@ import Divider from "@mui/material/Divider";
 import Link from "@mui/material/Link";
 import Typography from "@mui/material/Typography";
 import {
+  type Attribution,
   buildRuntimeAttributionHtml,
   buildSourceAttribution,
-  type DataSourceAttribution,
   type DataSourceDetail,
   type DataSourceDetailSection,
   pickIntegrationForSources,
@@ -27,6 +27,7 @@ import {
 } from "@openmapx/core";
 import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import type { Translatable } from "@openmapx/integration-framework/strings";
+import { contributorKey } from "@openmapx/mobility-core/contributors";
 import { useTranslations } from "next-intl";
 import { Fragment, type ReactNode } from "react";
 import { AttributionText } from "@/components/ui/AttributionText";
@@ -197,14 +198,7 @@ function AttributionFooter({ detail }: { detail: DataSourceDetail }) {
         {detailAttributions.map((attribution, index) => (
           <Fragment key={detailAttributionKey(attribution)}>
             {(html || index > 0) && " · "}
-            <AttributionText
-              html={buildRuntimeAttributionHtml({
-                text: attribution.text,
-                url: attribution.url,
-                license: attribution.license,
-                licenseUrl: attribution.licenseUrl,
-              })}
-            />
+            <AttributionText html={buildRuntimeAttributionHtml(attribution)} />
           </Fragment>
         ))}
       </Typography>
@@ -212,10 +206,8 @@ function AttributionFooter({ detail }: { detail: DataSourceDetail }) {
   );
 }
 
-function detailAttributionKey(attribution: DataSourceAttribution): string {
-  return [attribution.text, attribution.url, attribution.license, attribution.licenseUrl]
-    .filter(Boolean)
-    .join("|");
+function detailAttributionKey(attribution: Attribution): string {
+  return contributorKey(attribution);
 }
 
 export function pickRentalActionUrl(

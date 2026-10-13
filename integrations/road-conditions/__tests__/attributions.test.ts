@@ -14,8 +14,20 @@ const registry = new IntegrationRegistry([
       name: `Publisher ${sourceId}`,
       attribution: `Required credit ${sourceId}`,
       url: `https://${sourceId}.example`,
-      license: "CC-BY-4.0",
-      licenseUrl: "https://creativecommons.org/licenses/by/4.0/",
+      licensing: {
+        version: 1,
+        bindings: [
+          {
+            scope: "data",
+            subject: "Data",
+            license: {
+              kind: "spdx",
+              expression: "CC-BY-4.0",
+              url: "https://creativecommons.org/licenses/by/4.0/",
+            },
+          },
+        ],
+      } as const,
       providerCountry: "DE",
       providerPrivacyUrl: "https://example.com/privacy",
     })),
@@ -39,8 +51,20 @@ describe("road incident contributor credits", () => {
         sourceId: "parent",
         name: "Publisher parent",
         url: "https://parent.example",
-        spdxLicense: "CC-BY-4.0",
-        licenseUrl: "https://creativecommons.org/licenses/by/4.0/",
+        licensing: {
+          version: 1,
+          bindings: [
+            {
+              scope: "data",
+              subject: "Data",
+              license: {
+                kind: "spdx",
+                expression: "CC-BY-4.0",
+                url: "https://creativecommons.org/licenses/by/4.0/",
+              },
+            },
+          ],
+        } as const,
         attributionText: "Required credit parent",
       },
       { sourceId: "parent", name: "Required extra notice" },
@@ -54,7 +78,20 @@ describe("road incident contributor credits", () => {
           source: "federated",
           attribution: {
             provider: "Remote publisher",
-            license: "CC-BY-4.0",
+            licensing: {
+              version: 1,
+              bindings: [
+                {
+                  scope: "data",
+                  subject: "Data",
+                  license: {
+                    kind: "spdx",
+                    expression: "CC-BY-4.0",
+                    url: "https://remote.example/license",
+                  },
+                },
+              ],
+            },
             url: "https://remote.example/license",
           },
         }),
@@ -63,8 +100,21 @@ describe("road incident contributor credits", () => {
       {
         sourceId: "federated",
         name: "Remote publisher",
-        spdxLicense: "CC-BY-4.0",
-        licenseUrl: "https://remote.example/license",
+        url: "https://remote.example/license",
+        licensing: {
+          version: 1,
+          bindings: [
+            {
+              scope: "data",
+              subject: "Data",
+              license: {
+                kind: "spdx",
+                expression: "CC-BY-4.0",
+                url: "https://remote.example/license",
+              },
+            },
+          ],
+        } as const,
       },
     ]);
   });

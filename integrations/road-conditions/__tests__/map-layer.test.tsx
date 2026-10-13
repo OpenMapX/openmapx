@@ -79,7 +79,12 @@ const creditRegistry = new IntegrationRegistry([
       sourceId,
       name: sourceId,
       url: `https://${sourceId}.example`,
-      license: "CC0-1.0",
+      licensing: {
+        version: 1,
+        bindings: [
+          { scope: "data", subject: "Data", license: { kind: "spdx", expression: "CC0-1.0" } },
+        ],
+      } as const,
       providerCountry: "DE",
       providerPrivacyUrl: "https://example.com/privacy",
     })),

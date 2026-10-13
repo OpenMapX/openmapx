@@ -1,3 +1,4 @@
+import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { wikipediaSource } from "./provider.js";
 
@@ -139,7 +140,7 @@ describe("Wikipedia knowledge provider", () => {
     expect(result?.photos?.[0]).toMatchObject({
       source: "wikimedia-commons",
       author: "Benh LIEU SONG",
-      license: "CC BY-SA 3.0",
+      licensing: licensingFromDeclaration("CC BY-SA 3.0", undefined, "Commons file", "imagery"),
     });
     const titlesUrl = mockFetch.mock.calls
       .map((c) => String(c[0]))

@@ -1,14 +1,14 @@
 import type { RoadConditionEvent } from "@openmapx/core";
-import { parseContributors, snapshotContributors } from "@openmapx/integration-framework";
+import { readCapturedContributors, snapshotContributors } from "@openmapx/integration-framework";
 
 export type RoadConditionCredit = ReturnType<typeof snapshotContributors>[number];
 
-/** Bounded compatibility for old records: only their own recorded credit, never a catalogue. */
+/** Capture an event's explicit source credit, without expanding to its catalogue. */
 export function recordedRoadConditionAttributions(
   event: RoadConditionEvent,
 ): RoadConditionCredit[] {
   const sourceId = event.attribution.sourceId ?? event.source;
-  const { provider, license, url, notice } = event.attribution;
+  const { provider, licensing, url, notice } = event.attribution;
   if (!sourceId) return [];
   return snapshotContributors(
     provider
@@ -16,8 +16,8 @@ export function recordedRoadConditionAttributions(
           {
             sourceId,
             name: provider,
-            ...(license ? { spdxLicense: license } : {}),
-            ...(url ? (license ? { licenseUrl: url } : { url }) : {}),
+            ...(licensing ? { licensing } : {}),
+            ...(url ? { url } : {}),
           },
         ]
       : [],
@@ -31,7 +31,8 @@ export function roadConditionAttributions(
 ): RoadConditionCredit[] {
   return snapshotContributors(
     ...events.map(
-      (event) => parseContributors(event.contributors) ?? recordedRoadConditionAttributions(event),
+      (event) =>
+        readCapturedContributors(event.contributors) ?? recordedRoadConditionAttributions(event),
     ),
   );
 }

@@ -39,15 +39,46 @@
       "sourceId": "db-vendo",
       "name": "Deutsche Bahn (db-vendo-client)",
       "url": "https://www.bahn.de/",
-      "license": "ISC (client software); no open license for data",
-      "licenseUrl": "https://github.com/public-transport/db-vendo-client",
       "commercialUse": "unknown",
       "providerCountry": "DE",
       "providerPrivacyUrl": "-",
       "endUserExposure": "server-only",
       "personalData": false,
       "cookies": false,
-      "dpaAvailable": false
+      "dpaAvailable": false,
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "software",
+            "subject": "db-vendo-client",
+            "license": {
+              "kind": "spdx",
+              "expression": "ISC"
+            }
+          },
+          {
+            "scope": "data",
+            "subject": "DB timetable/live responses",
+            "license": {
+              "kind": "unknown"
+            }
+          },
+          {
+            "scope": "service",
+            "subject": "Selected DB endpoint",
+            "license": {
+              "kind": "unknown"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "ISC (client software); no open license for data",
+            "url": "https://github.com/public-transport/db-vendo-client"
+          }
+        ]
+      }
     }
   ],
   "dependencies": ["transit"]

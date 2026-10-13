@@ -22,7 +22,10 @@
   "configSchema": {
     "type": "object",
     "properties": {
-      "enabled": { "type": "boolean", "default": true }
+      "enabled": {
+        "type": "boolean",
+        "default": true
+      }
     }
   },
   "quality": "built-in",
@@ -39,8 +42,6 @@
       "sourceId": "ioc-sealevel",
       "name": "IOC Sea Level Station Monitoring Facility",
       "url": "https://www.ioc-sealevelmonitoring.org/",
-      "license": "UNESCO-IOC public data",
-      "licenseUrl": "https://www.unesco.org/en/open-access",
       "attribution": "Water-level data from the <a href=\"https://www.ioc-sealevelmonitoring.org/\">IOC Sea Level Station Monitoring Facility</a>",
       "commercialUse": "yes",
       "providerCountry": "FR",
@@ -48,7 +49,36 @@
       "endUserExposure": "server-only",
       "personalData": false,
       "cookies": false,
-      "dpaAvailable": false
+      "dpaAvailable": false,
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "data",
+            "subject": "Each IOC originator measurement set",
+            "license": {
+              "kind": "unknown"
+            }
+          },
+          {
+            "scope": "service",
+            "subject": "IOC distribution policy",
+            "license": {
+              "kind": "custom",
+              "namespace": "publisher:ioc-sealevel",
+              "id": "LicenseRef-Service-Terms",
+              "name": "IOC distribution policy terms",
+              "url": "https://www.ioc-sealevelmonitoring.org/disclaimer.php"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "UNESCO-IOC public data",
+            "url": "https://www.unesco.org/en/open-access"
+          }
+        ]
+      }
     }
   ]
 }

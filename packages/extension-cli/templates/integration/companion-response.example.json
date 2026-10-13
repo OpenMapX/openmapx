@@ -10,12 +10,38 @@
         {
           "sourceId": "__ID__-observations",
           "name": "Example observations",
-          "attributionText": "Required dataset notice"
+          "attributionText": "Required dataset notice",
+          "licensing": {
+            "version": 1,
+            "bindings": [
+              {
+                "scope": "data",
+                "subject": "Example observations",
+                "license": {
+                  "kind": "spdx",
+                  "expression": "CC-BY-4.0"
+                }
+              }
+            ]
+          }
         },
         {
           "sourceId": "__ID__-observations",
           "name": "Example observations",
-          "attributionText": "Required redistribution notice"
+          "attributionText": "Required redistribution notice",
+          "licensing": {
+            "version": 1,
+            "bindings": [
+              {
+                "scope": "data",
+                "subject": "Example observations",
+                "license": {
+                  "kind": "spdx",
+                  "expression": "CC-BY-4.0"
+                }
+              }
+            ]
+          }
         }
       ],
       "fieldContributors": {
@@ -23,24 +49,76 @@
           {
             "sourceId": "__ID__-observations",
             "name": "Example observations",
-            "attributionText": "Required dataset notice"
+            "attributionText": "Required dataset notice",
+            "licensing": {
+              "version": 1,
+              "bindings": [
+                {
+                  "scope": "data",
+                  "subject": "Example observations",
+                  "license": {
+                    "kind": "spdx",
+                    "expression": "CC-BY-4.0"
+                  }
+                }
+              ]
+            }
           },
           {
             "sourceId": "__ID__-observations",
             "name": "Example observations",
-            "attributionText": "Required redistribution notice"
+            "attributionText": "Required redistribution notice",
+            "licensing": {
+              "version": 1,
+              "bindings": [
+                {
+                  "scope": "data",
+                  "subject": "Example observations",
+                  "license": {
+                    "kind": "spdx",
+                    "expression": "CC-BY-4.0"
+                  }
+                }
+              ]
+            }
           }
         ],
         "details": [
           {
             "sourceId": "__ID__-observations",
             "name": "Example observations",
-            "attributionText": "Required dataset notice"
+            "attributionText": "Required dataset notice",
+            "licensing": {
+              "version": 1,
+              "bindings": [
+                {
+                  "scope": "data",
+                  "subject": "Example observations",
+                  "license": {
+                    "kind": "spdx",
+                    "expression": "CC-BY-4.0"
+                  }
+                }
+              ]
+            }
           },
           {
             "sourceId": "__ID__-observations",
             "name": "Example observations",
-            "attributionText": "Required redistribution notice"
+            "attributionText": "Required redistribution notice",
+            "licensing": {
+              "version": 1,
+              "bindings": [
+                {
+                  "scope": "data",
+                  "subject": "Example observations",
+                  "license": {
+                    "kind": "spdx",
+                    "expression": "CC-BY-4.0"
+                  }
+                }
+              ]
+            }
           }
         ],
         "details.website": []

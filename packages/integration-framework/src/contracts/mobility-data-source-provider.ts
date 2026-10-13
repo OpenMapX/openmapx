@@ -12,7 +12,7 @@ import type { Attribution } from "@openmapx/mobility-core/attribution";
 import type { MobilityResult } from "@openmapx/mobility-core/result";
 
 export type {
-  DataSourceAttribution,
+  Attribution,
   DataSourceBranding,
   DataSourceDetail,
   DataSourceDetailSection,

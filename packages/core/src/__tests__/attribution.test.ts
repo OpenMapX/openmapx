@@ -1,3 +1,4 @@
+import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 import { describe, expect, it } from "vitest";
 import {
   buildAttributionHtml,
@@ -37,8 +38,11 @@ describe("buildSourceAttribution", () => {
       sourceId: "tankerkoenig",
       name: "Tankerkoenig",
       url: "https://tankerkoenig.de",
-      license: "CC BY 4.0",
-      licenseUrl: "https://creativecommons.org/licenses/by/4.0/",
+      licensing: licensingFromDeclaration(
+        "CC BY 4.0",
+        "https://creativecommons.org/licenses/by/4.0/",
+        "Tankerkoenig",
+      ),
       providerCountry: "DE",
       providerPrivacyUrl: "https://example.com",
     },
@@ -46,8 +50,11 @@ describe("buildSourceAttribution", () => {
       sourceId: "osm",
       name: "OpenStreetMap",
       url: "https://www.openstreetmap.org",
-      license: "ODbL",
-      licenseUrl: "https://opendatacommons.org/licenses/odbl/",
+      licensing: licensingFromDeclaration(
+        "ODbL",
+        "https://opendatacommons.org/licenses/odbl/",
+        "OpenStreetMap",
+      ),
       providerCountry: "UK",
       providerPrivacyUrl: "https://example.com",
     },
@@ -78,24 +85,34 @@ describe("buildSourceAttribution", () => {
         sourceId: "custom",
         name: "Custom",
         url: "https://example.com",
-        license: "MIT",
+        licensing: {
+          version: 1,
+          bindings: [
+            { scope: "data", subject: "Data", license: { kind: "spdx", expression: "MIT" } },
+          ],
+        } as const,
         attribution: "Custom <b>attribution</b>",
         providerCountry: "US",
         providerPrivacyUrl: "https://example.com",
       },
     ];
     const html = buildSourceAttribution(ds, ["custom"]);
-    expect(html).toBe("Custom attribution");
+    expect(html).toContain("Custom attribution");
+    expect(html).toContain("MIT");
   });
 });
 
 describe("buildRuntimeAttributionHtml", () => {
   it("escapes runtime attribution text and rejects non-http URLs", () => {
     const html = buildRuntimeAttributionHtml({
-      text: "<Provider>",
+      sourceId: "<Provider>",
+      name: "<Provider>",
       url: "javascript:alert(1)",
-      license: "CC BY <4.0>",
-      licenseUrl: "https://creativecommons.org/licenses/by/4.0/",
+      licensing: licensingFromDeclaration(
+        "CC BY <4.0>",
+        "https://creativecommons.org/licenses/by/4.0/",
+        "<Provider>",
+      ),
     });
 
     expect(html).toContain("&lt;Provider&gt;");
@@ -191,8 +208,11 @@ describe("buildAttributionHtml", () => {
     const html = buildAttributionHtml({
       name: "<Provider>",
       url: "ftp://example.com",
-      license: "CC BY <4.0>",
-      licenseUrl: "https://creativecommons.org/licenses/by/4.0/",
+      licensing: licensingFromDeclaration(
+        "CC BY <4.0>",
+        "https://creativecommons.org/licenses/by/4.0/",
+        "<Provider>",
+      ),
     });
 
     expect(html).toContain("&lt;Provider&gt;");
@@ -206,7 +226,11 @@ describe("buildAttributionHtml", () => {
     const html = buildAttributionHtml({
       name: "CityBikes",
       url: "https://citybik.es/",
-      license: "Proprietary (custom terms, attribution required)",
+      licensing: licensingFromDeclaration(
+        "Proprietary (custom terms, attribution required)",
+        undefined,
+        "CityBikes",
+      ),
     });
 
     expect(html).toBe(
@@ -215,10 +239,21 @@ describe("buildAttributionHtml", () => {
   });
 
   it("omits the © prefix on the generated default path (rights-free sources are common)", () => {
-    expect(buildAttributionHtml({ name: "USGS", url: "https://usgs.gov/", license: "" })).toBe(
-      '<a href="https://usgs.gov/" target="_blank" rel="noopener noreferrer">USGS</a>',
-    );
-    expect(buildRuntimeAttributionHtml({ text: "NOAA", url: "", license: "" })).toBe("NOAA");
+    expect(
+      buildAttributionHtml({
+        name: "USGS",
+        url: "https://usgs.gov/",
+        licensing: { version: 1, bindings: [] },
+      }),
+    ).toBe('<a href="https://usgs.gov/" target="_blank" rel="noopener noreferrer">USGS</a>');
+    expect(
+      buildRuntimeAttributionHtml({
+        sourceId: "NOAA",
+        name: "NOAA",
+        url: "",
+        licensing: { version: 1, bindings: [] },
+      }),
+    ).toBe("NOAA");
   });
 
   it("dedups identical attribution strings across dataSources via buildIntegrationAttribution", () => {
@@ -227,7 +262,12 @@ describe("buildAttributionHtml", () => {
         sourceId: "a",
         name: "A",
         url: "https://example.com",
-        license: "MIT",
+        licensing: {
+          version: 1,
+          bindings: [
+            { scope: "data", subject: "Data", license: { kind: "spdx", expression: "MIT" } },
+          ],
+        } as const,
         attribution: '© <a href="https://osm.org/copyright">OSM</a>',
         providerCountry: "US",
         providerPrivacyUrl: "https://example.com",
@@ -236,7 +276,12 @@ describe("buildAttributionHtml", () => {
         sourceId: "b",
         name: "B",
         url: "https://example.com",
-        license: "MIT",
+        licensing: {
+          version: 1,
+          bindings: [
+            { scope: "data", subject: "Data", license: { kind: "spdx", expression: "MIT" } },
+          ],
+        } as const,
         attribution: '© <a href="https://osm.org/copyright">OSM</a>',
         providerCountry: "US",
         providerPrivacyUrl: "https://example.com",
@@ -252,7 +297,7 @@ describe("pickIntegrationForSources", () => {
     sourceId: "osm",
     name: "OpenStreetMap",
     url: "https://www.openstreetmap.org",
-    license: "ODbL",
+    licensing: licensingFromDeclaration("ODbL", undefined, "OpenStreetMap"),
     providerCountry: "UK",
     providerPrivacyUrl: "https://example.com",
   };

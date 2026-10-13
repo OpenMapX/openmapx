@@ -1,5 +1,8 @@
 import type { Attribution } from "@openmapx/mobility-core/attribution";
-import { parseContributors, snapshotContributors } from "@openmapx/mobility-core/contributors";
+import {
+  readCapturedContributors,
+  snapshotContributors,
+} from "@openmapx/mobility-core/contributors";
 import type { MapGeoJSONFeature, Map as MapLibreMap } from "maplibre-gl";
 import {
   rasterMapContributors,
@@ -168,7 +171,7 @@ class RenderedMapAttributionTracker {
           continue;
         const receipts =
           subscription.resolveFeatureContributors?.(feature) ??
-          parseContributors(feature.properties?._mapAttributions) ??
+          readCapturedContributors(feature.properties?._mapAttributions) ??
           subscription.layerContributors?.[feature.layer.id] ??
           [];
         for (const receipt of snapshotContributors(receipts)) {

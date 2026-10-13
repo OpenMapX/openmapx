@@ -3,7 +3,7 @@
 import { escapeHtml, useDebouncedCallback, useOverlayExclusion } from "@openmapx/core";
 import {
   type ContributingRecord,
-  parseContributors,
+  readCapturedContributors,
   withFeatureContributors,
 } from "@openmapx/integration-framework";
 import type { MapLayerMouseEvent } from "maplibre-gl";
@@ -405,7 +405,7 @@ export function EnvironmentLayer() {
           <div style="font-size:12px;margin-bottom:4px">${sensorsHtml}</div>
           ${lastUp ? `<div style="font-size:11px;color:#999;margin-bottom:4px">${lastUp}</div>` : ""}
           <div style="font-size:10px;color:#aaa;border-top:1px solid #eee;padding-top:4px">
-            ${(parseContributors(p._mapAttributions) ?? []).map(attributionToHtml).join(" · ")}
+            ${(readCapturedContributors(p._mapAttributions) ?? []).map(attributionToHtml).join(" · ")}
           </div>
         </div>`;
 

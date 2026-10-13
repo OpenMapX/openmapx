@@ -27,7 +27,8 @@
   },
   "dependencies": {
     "@turf/boolean-point-in-polygon": "^7.4.0",
-    "zod": "^4.6.5"
+    "zod": "^4.6.5",
+    "@openmapx/mobility-core": "workspace:*"
   },
   "devDependencies": {
     "@types/geojson": "^7946.0.16",

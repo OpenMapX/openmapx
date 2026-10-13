@@ -4,7 +4,8 @@ import {
   contributorsForRecords,
   type FieldContributors,
   parseContributors,
-  parseFieldContributors,
+  readCapturedContributors,
+  readCapturedFieldContributors,
   snapshotContributors,
 } from "@openmapx/mobility-core/contributors";
 import type { CategoryPlace } from "./types/category";
@@ -20,8 +21,20 @@ export const AMBIENT_LEGACY_OVERTURE_ATTRIBUTION: Readonly<Attribution> = Object
   sourceId: "overture",
   name: "Overture Maps",
   url: "https://overturemaps.org",
-  spdxLicense: "CDLA-Permissive-2.0",
-  licenseUrl: "https://cdla.dev/permissive-2-0/",
+  licensing: {
+    version: 1,
+    bindings: [
+      {
+        scope: "data",
+        subject: "Data",
+        license: {
+          kind: "spdx",
+          expression: "CDLA-Permissive-2.0",
+          url: "https://cdla.dev/permissive-2-0/",
+        },
+      },
+    ],
+  } as const,
 });
 export const AMBIENT_MAX_AGE_MS = 90 * 86400_000;
 export const AMBIENT_LIMITS = {
@@ -596,8 +609,8 @@ export function ambientPlaceFromTile(
           : "osm",
     ...(Number(properties.format_version) === AMBIENT_FORMAT_VERSION
       ? {
-          contributors: parseContributors(properties._mapAttributions) ?? [],
-          fieldContributors: parseFieldContributors(properties.field_contributors),
+          contributors: readCapturedContributors(properties._mapAttributions) ?? [],
+          fieldContributors: readCapturedFieldContributors(properties.field_contributors),
           sourceLineage: parseAmbientSourceLineage(properties.source_lineage),
         }
       : {}),

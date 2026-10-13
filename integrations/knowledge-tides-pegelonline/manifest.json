@@ -22,7 +22,10 @@
   "configSchema": {
     "type": "object",
     "properties": {
-      "enabled": { "type": "boolean", "default": true }
+      "enabled": {
+        "type": "boolean",
+        "default": true
+      }
     }
   },
   "quality": "built-in",
@@ -39,8 +42,6 @@
       "sourceId": "wsv-pegelonline",
       "name": "WSV Pegelonline",
       "url": "https://www.pegelonline.wsv.de/",
-      "license": "DL-DE-ZERO-2.0",
-      "licenseUrl": "https://www.govdata.de/dl-de/zero-2-0",
       "attribution": "Water-level observations from <a href=\"https://www.pegelonline.wsv.de/\">WSV Pegelonline</a>",
       "commercialUse": "yes",
       "providerCountry": "DE",
@@ -48,7 +49,27 @@
       "endUserExposure": "server-only",
       "personalData": false,
       "cookies": false,
-      "dpaAvailable": false
+      "dpaAvailable": false,
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "data",
+            "subject": "WSV Pegelonline material",
+            "license": {
+              "kind": "spdx",
+              "expression": "DL-DE-ZERO-2.0",
+              "url": "https://www.govdata.de/dl-de/zero-2-0"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "DL-DE-ZERO-2.0",
+            "url": "https://www.govdata.de/dl-de/zero-2-0"
+          }
+        ]
+      }
     }
   ]
 }

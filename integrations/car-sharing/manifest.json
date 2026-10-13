@@ -101,81 +101,184 @@
       "name": "Cambio CarSharing",
       "url": "https://www.cambio-carsharing.de/",
       "apiHosts": ["cwapi.cambio-carsharing.com"],
-      "license": "DL-DE-ZERO-2.0",
-      "licenseUrl": "https://www.govdata.de/dl-de/zero-2-0",
       "commercialUse": "yes",
       "providerCountry": "DE",
       "providerPrivacyUrl": "https://www.cambio-carsharing.de/en/privacy-policy/privacy-policy-for-the-cambio-website",
       "endUserExposure": "server-only",
       "personalData": false,
       "cookies": false,
-      "dpaAvailable": false
+      "dpaAvailable": false,
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "data",
+            "subject": "Cambio CarSharing material",
+            "license": {
+              "kind": "spdx",
+              "expression": "DL-DE-ZERO-2.0",
+              "url": "https://www.govdata.de/dl-de/zero-2-0"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "DL-DE-ZERO-2.0",
+            "url": "https://www.govdata.de/dl-de/zero-2-0"
+          }
+        ]
+      }
     },
     {
       "sourceId": "de-stadtteilauto",
       "name": "Stadt Münster Open Data",
       "url": "https://opendata.stadt-muenster.de/",
       "apiHosts": ["www.muenster01.de"],
-      "license": "DL-DE-BY-2.0",
-      "licenseUrl": "https://opendata.stadt-muenster.de/dataset/stadtteilauto-m%C3%BCnster-carsharing-stationen-und-fahrzeuge",
       "commercialUse": "yes",
       "providerCountry": "DE",
       "providerPrivacyUrl": "https://www.stadt-muenster.de/datenschutz",
       "endUserExposure": "server-only",
       "personalData": false,
       "cookies": false,
-      "dpaAvailable": false
+      "dpaAvailable": false,
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "data",
+            "subject": "Stadt Münster Open Data material",
+            "license": {
+              "kind": "spdx",
+              "expression": "DL-DE-BY-2.0",
+              "url": "https://opendata.stadt-muenster.de/dataset/stadtteilauto-m%C3%BCnster-carsharing-stationen-und-fahrzeuge"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "DL-DE-BY-2.0",
+            "url": "https://opendata.stadt-muenster.de/dataset/stadtteilauto-m%C3%BCnster-carsharing-stationen-und-fahrzeuge"
+          }
+        ]
+      }
     },
     {
       "sourceId": "de-nw-bielefeld",
       "name": "Stadt Bielefeld Open Data",
       "url": "https://open-data.bielefeld.de/",
       "apiHosts": ["www.bielefeld01.de"],
-      "license": "CC-BY-4.0",
-      "licenseUrl": "https://open-data.bielefeld.de/page/nutzungsbedingungen",
       "commercialUse": "yes",
       "providerCountry": "DE",
       "providerPrivacyUrl": "https://www.bielefeld.de/datenschutzerklaerung",
       "endUserExposure": "server-only",
       "personalData": false,
       "cookies": false,
-      "dpaAvailable": false
+      "dpaAvailable": false,
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "data",
+            "subject": "Stadt Bielefeld Open Data material",
+            "license": {
+              "kind": "spdx",
+              "expression": "CC-BY-4.0",
+              "url": "https://open-data.bielefeld.de/page/nutzungsbedingungen"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "CC-BY-4.0",
+            "url": "https://open-data.bielefeld.de/page/nutzungsbedingungen"
+          }
+        ]
+      }
     },
     {
       "sourceId": "de-nw-wuppertal",
       "name": "Stadt Wuppertal Open Data",
       "url": "https://offenedaten-wuppertal.de/",
       "apiHosts": ["daten.wuppertal.de"],
-      "license": "CC-BY-4.0",
-      "licenseUrl": "https://offenedaten-wuppertal.de/page/nutzungsbedingungen-kontakt-lizenzen",
       "commercialUse": "yes",
       "providerCountry": "DE",
       "providerPrivacyUrl": "https://www.wuppertal.de/service/datenschutz_dsgvo.php",
       "endUserExposure": "server-only",
       "personalData": false,
       "cookies": false,
-      "dpaAvailable": false
+      "dpaAvailable": false,
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "data",
+            "subject": "Stadt Wuppertal Open Data material",
+            "license": {
+              "kind": "spdx",
+              "expression": "CC-BY-4.0",
+              "url": "https://offenedaten-wuppertal.de/page/nutzungsbedingungen-kontakt-lizenzen"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "CC-BY-4.0",
+            "url": "https://offenedaten-wuppertal.de/page/nutzungsbedingungen-kontakt-lizenzen"
+          }
+        ]
+      }
     },
     {
       "sourceId": "gbfs",
       "name": "GBFS Catalog (MobilityData)",
       "url": "https://github.com/MobilityData/gbfs",
-      "license": "CC-BY-3.0 (spec); per-operator data licenses",
-      "licenseUrl": "https://github.com/MobilityData/gbfs/blob/master/LICENSE",
       "commercialUse": "yes",
       "providerCountry": "CA",
       "providerPrivacyUrl": "https://mobilitydata.org/privacy-policy/",
       "endUserExposure": "server-only",
       "personalData": false,
       "cookies": false,
-      "dpaAvailable": false
+      "dpaAvailable": false,
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "software",
+            "subject": "GBFS specification/documentation",
+            "license": {
+              "kind": "spdx",
+              "expression": "CC-BY-3.0"
+            }
+          },
+          {
+            "scope": "data",
+            "subject": "Operator feed data",
+            "license": {
+              "kind": "per-item",
+              "raw": "Determined by each contributing item or operator"
+            }
+          },
+          {
+            "scope": "service",
+            "subject": "Each operator endpoint/brand terms",
+            "license": {
+              "kind": "per-item",
+              "raw": "Determined by each contributing item or operator"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "CC-BY-3.0 (spec); per-operator data licenses",
+            "url": "https://github.com/MobilityData/gbfs/blob/master/LICENSE"
+          }
+        ]
+      }
     },
     {
       "sourceId": "entur-mobility",
       "name": "Entur Mobility v2",
       "url": "https://developer.entur.org/pages-mobility-docs-mobility-v2/",
-      "license": "NLOD-2.0",
-      "licenseUrl": "https://data.norge.no/nlod/en/2.0",
       "attribution": "Data made available by Entur",
       "commercialUse": "yes",
       "providerCountry": "NO",
@@ -183,59 +286,149 @@
       "endUserExposure": "server-only",
       "personalData": false,
       "cookies": false,
-      "dpaAvailable": false
+      "dpaAvailable": false,
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "data",
+            "subject": "Entur Mobility v2 material",
+            "license": {
+              "kind": "spdx",
+              "expression": "NLOD-2.0",
+              "url": "https://data.norge.no/nlod/en/2.0"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "NLOD-2.0",
+            "url": "https://data.norge.no/nlod/en/2.0"
+          }
+        ]
+      }
     },
     {
       "sourceId": "ca-communauto",
       "name": "Communauto",
       "url": "https://www.communauto.com/",
       "apiHosts": ["restapifrontoffice.reservauto.net"],
-      "license": "© Communauto — no open-data license",
-      "licenseUrl": "https://www.communauto.com/",
       "commercialUse": "conditional",
       "providerCountry": "CA",
       "providerPrivacyUrl": "https://www.communauto.com/en/privacy-policy/",
       "endUserExposure": "server-only",
       "personalData": false,
       "cookies": false,
-      "dpaAvailable": false
+      "dpaAvailable": false,
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "data",
+            "subject": "Communauto material",
+            "license": {
+              "kind": "unknown"
+            }
+          },
+          {
+            "scope": "service",
+            "subject": "Communauto access/account contract",
+            "license": {
+              "kind": "unknown",
+              "url": "https://www.communauto.com/"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "© Communauto — no open-data license",
+            "url": "https://www.communauto.com/"
+          }
+        ]
+      }
     },
     {
       "sourceId": "be-coopstroom",
       "name": "CoopStroom",
       "url": "https://www.coopstroom.be",
       "apiHosts": ["app.coopstroom.be"],
-      "license": "Unspecified — see provider terms",
-      "licenseUrl": "https://www.coopstroom.be",
       "commercialUse": "unknown",
       "providerCountry": "BE",
       "providerPrivacyUrl": "https://www.coopstroom.be",
       "endUserExposure": "server-only",
       "personalData": false,
       "cookies": false,
-      "dpaAvailable": false
+      "dpaAvailable": false,
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "data",
+            "subject": "CoopStroom material",
+            "license": {
+              "kind": "unknown"
+            }
+          },
+          {
+            "scope": "service",
+            "subject": "CoopStroom access/account contract",
+            "license": {
+              "kind": "unknown",
+              "url": "https://www.coopstroom.be"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "Unspecified — see provider terms",
+            "url": "https://www.coopstroom.be"
+          }
+        ]
+      }
     },
     {
       "sourceId": "be-degage",
       "name": "Dégage",
       "url": "https://www.degage.be",
       "apiHosts": ["degapp.be"],
-      "license": "Unspecified — see provider terms",
-      "licenseUrl": "https://www.degage.be",
       "commercialUse": "unknown",
       "providerCountry": "BE",
       "providerPrivacyUrl": "https://www.degage.be/privacy",
       "endUserExposure": "server-only",
       "personalData": false,
       "cookies": false,
-      "dpaAvailable": false
+      "dpaAvailable": false,
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "data",
+            "subject": "Dégage material",
+            "license": {
+              "kind": "unknown"
+            }
+          },
+          {
+            "scope": "service",
+            "subject": "Dégage access/account contract",
+            "license": {
+              "kind": "unknown",
+              "url": "https://www.degage.be"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "Unspecified — see provider terms",
+            "url": "https://www.degage.be"
+          }
+        ]
+      }
     },
     {
       "sourceId": "transitous",
       "name": "Transitous",
       "url": "https://api.transitous.org/",
-      "license": "Mixed (per upstream GTFS/GBFS feed; mostly open data)",
-      "licenseUrl": "https://transitous.org/sources/",
       "commercialUse": "conditional",
       "attribution": "Public transport data via <a href=\"https://transitous.org/\">Transitous</a> (see <a href=\"https://transitous.org/sources/\">data sources</a>)",
       "notes": "The Transitous public API (api.transitous.org) is 'not intended for commercial or for-profit purposes' — commercial use is decided case-by-case on request, and open-source clients must publish their source and visibly link transitous.org/sources/ for attribution (see transitous.org/api/). Upstream MOTIS is MIT licensed; that software license is separate from OpenMapX integration code, Transitous tooling, and the per-source timetable data licenses (mostly CC-BY / CC-BY-SA / open-government licences).",
@@ -244,7 +437,34 @@
       "endUserExposure": "server-only",
       "personalData": false,
       "cookies": false,
-      "dpaAvailable": false
+      "dpaAvailable": false,
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "data",
+            "subject": "Each actual contributing feed/operator/source",
+            "license": {
+              "kind": "per-item",
+              "raw": "Determined by each contributing item or operator"
+            }
+          },
+          {
+            "scope": "service",
+            "subject": "Transitous endpoint policy",
+            "license": {
+              "kind": "unknown",
+              "url": "https://transitous.org/sources/"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "Mixed (per upstream GTFS/GBFS feed; mostly open data)",
+            "url": "https://transitous.org/sources/"
+          }
+        ]
+      }
     }
   ]
 }

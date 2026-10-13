@@ -3,6 +3,7 @@ import {
   dataSourceToAttribution,
   type IntegrationDataSource,
 } from "@openmapx/integration-framework";
+import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 import { describe, expect, it } from "vitest";
 import { attributionToHtml } from "./useMapAttributions";
 
@@ -25,8 +26,10 @@ const MANIFEST_SOURCES: IntegrationDataSource[] = [
     sourceId: "openaq",
     name: "OpenAQ",
     url: "https://api.openaq.org/",
-    license: "CC BY 4.0 (varies per source)",
-    licenseUrl: "https://docs.openaq.org/resources/licenses",
+    licensing: licensingFromDeclaration(
+      "CC BY 4.0 (varies per source)",
+      "https://docs.openaq.org/resources/licenses",
+    ),
     ...COMPLIANCE_FIELDS,
   },
   {
@@ -34,7 +37,7 @@ const MANIFEST_SOURCES: IntegrationDataSource[] = [
     sourceId: "gdacs",
     name: "GDACS",
     url: "https://www.gdacs.org/",
-    license: "Proprietary (disclaimer-based)",
+    licensing: licensingFromDeclaration("Proprietary (disclaimer-based)", undefined),
     ...COMPLIANCE_FIELDS,
   },
   {
@@ -42,8 +45,7 @@ const MANIFEST_SOURCES: IntegrationDataSource[] = [
     sourceId: "osm",
     name: "OpenStreetMap",
     url: "https://www.openstreetmap.org",
-    license: "ODbL 1.0",
-    licenseUrl: "https://opendatacommons.org/licenses/odbl/",
+    licensing: licensingFromDeclaration("ODbL 1.0", "https://opendatacommons.org/licenses/odbl/"),
     attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
     ...COMPLIANCE_FIELDS,
   },
@@ -52,7 +54,7 @@ const MANIFEST_SOURCES: IntegrationDataSource[] = [
     sourceId: "noaa-co-ops",
     name: 'NOAA Tides & Currents ("CO-OPS")',
     url: "https://tidesandcurrents.noaa.gov/",
-    license: "U.S. Public Domain",
+    licensing: licensingFromDeclaration("U.S. Public Domain", undefined),
     ...COMPLIANCE_FIELDS,
   },
 ];
@@ -76,22 +78,15 @@ describe("attributionToHtml", () => {
     expect(strip.join(" · ")).toBe(buildIntegrationAttribution(MANIFEST_SOURCES));
   });
 
-  it("leaves a hand-authored copyright notice unsuffixed, © outside the anchor", () => {
-    // The base-map credits (lib/map.ts, page.tsx) carry their own complete
-    // wording; appending "(ODbL-1.0)" would rewrite an established notice, and
-    // moving the © inside the anchor would break dedup against the
-    // "© <a>Publisher</a>" form manifests author.
-    expect(
-      attributionToHtml({
-        sourceId: "openstreetmap",
-        name: "© OpenStreetMap contributors",
-        url: "https://www.openstreetmap.org/copyright",
-        spdxLicense: "ODbL-1.0",
-        licenseUrl: "https://opendatacommons.org/licenses/odbl/",
-      }),
-    ).toBe(
-      '© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap contributors</a>',
-    );
+  it("preserves copyright wording outside the anchor and renders its declared grant", () => {
+    const html = attributionToHtml({
+      sourceId: "openstreetmap",
+      name: "© OpenStreetMap contributors",
+      url: "https://www.openstreetmap.org/copyright",
+      licensing: licensingFromDeclaration("ODbL-1.0"),
+    });
+    expect(html).toContain('© <a href="https://www.openstreetmap.org/copyright"');
+    expect(html).toContain("ODbL-1.0");
   });
 
   it("dedups against the manifest form of the same credit", () => {
@@ -99,11 +94,12 @@ describe("attributionToHtml", () => {
       sourceId: "openstreetmap",
       name: "© OpenStreetMap contributors",
       url: "https://www.openstreetmap.org/copyright",
+      licensing: licensingFromDeclaration("ODbL-1.0"),
     });
     const fromManifest = buildAttributionHtml({
       name: "OpenStreetMap",
       url: "https://www.openstreetmap.org",
-      license: "ODbL 1.0",
+      licensing: licensingFromDeclaration("ODbL-1.0", undefined),
       attribution:
         '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>',
     });
@@ -149,7 +145,7 @@ it("renders a Commons artist's ampersand and licence correctly through the actua
   expect(container.textContent).not.toContain("&amp;");
   expect(
     container.querySelector('a[href="https://creativecommons.org/licenses/by/4.0/"]')?.textContent,
-  ).toBe("CC BY 4.0");
+  ).toBe("CC-BY-4.0");
 });
 
 it("renders decoded creator and permission query parameters in generic map credits", async () => {

@@ -1,5 +1,7 @@
+import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 import { describe, expect, it, vi } from "vitest";
 import type { PlacePhoto } from "../types/place";
+import { buildRuntimeAttributionHtml } from "./attribution";
 import { fetchCommonsMetadata, isDisplayablePhoto, parseCommonsPage } from "./commons-metadata";
 
 describe("fetchCommonsMetadata strict lookup", () => {
@@ -79,8 +81,11 @@ describe("isDisplayablePhoto for legacy Commons entries", () => {
       isDisplayablePhoto({
         ...photo,
         author: "Artist",
-        license: "CC BY 4.0",
-        licenseUrl: "https://creativecommons.org/licenses/by/4.0/",
+        licensing: licensingFromDeclaration(
+          "CC BY 4.0",
+          "https://creativecommons.org/licenses/by/4.0/",
+          "Data",
+        ),
       } as PlacePhoto),
     ).toBe(visible);
   });
@@ -197,13 +202,18 @@ describe("Commons per-file receipt completeness", () => {
       expect.objectContaining({
         sourceId: "wikimedia-commons",
         name: "Wikimedia Commons",
-        spdxLicense: "CC BY-SA 4.0",
+        licensing: licensingFromDeclaration(
+          "CC BY-SA 4.0",
+          "https://creativecommons.org/licenses/by-sa/4.0/",
+          "Commons file",
+          "imagery",
+        ),
         publisher: { name: "Creator", url: "https://commons.wikimedia.org/wiki/User:Creator" },
         attributionText: expect.stringContaining("Required credit"),
         url: expect.stringContaining("File:Photo.jpg"),
       }),
     ]);
-    expect(photo?.contributors?.[0].attributionText).toContain(
+    expect(buildRuntimeAttributionHtml(photo!.contributors![0]!)).toContain(
       'href="https://creativecommons.org/licenses/by-sa/4.0/"',
     );
     expect(photo?.contributors?.[0].attributionText).toContain(
@@ -214,14 +224,29 @@ describe("Commons per-file receipt completeness", () => {
       url: "https://example.org/credit",
     });
   });
-  it.each(["Artist", "LicenseShortName", "LicenseUrl"])(
-    "defers a licensed file missing %s",
-    (field) => {
-      const copy = structuredClone(page);
-      delete (copy.imageinfo[0].extmetadata as Record<string, unknown>)[field];
-      expect(parseCommonsPage(copy)).toBeUndefined();
-    },
-  );
+  it.each(["Artist"])("defers a licensed file missing %s", (field) => {
+    const copy = structuredClone(page);
+    delete (copy.imageinfo[0].extmetadata as Record<string, unknown>)[field];
+    expect(parseCommonsPage(copy)).toBeUndefined();
+  });
+  it("defers a URL-only declaration unless it identifies an exact known file grant", () => {
+    const copy = structuredClone(page);
+    delete (copy.imageinfo[0].extmetadata as Record<string, unknown>).LicenseShortName;
+    expect(parseCommonsPage(copy)?.licensing?.bindings[0].license).toMatchObject({
+      kind: "spdx",
+      expression: "CC-BY-SA-4.0",
+    });
+    copy.imageinfo[0].extmetadata.LicenseUrl.value = "https://example.test/unrecognized-licence";
+    expect(parseCommonsPage(copy)).toBeUndefined();
+  });
+  it("derives the canonical licence link when the exact supplied ID has no redundant URL", () => {
+    const copy = structuredClone(page);
+    delete (copy.imageinfo[0].extmetadata as Record<string, unknown>).LicenseUrl;
+    expect(parseCommonsPage(copy)?.licensing?.bindings[0].license).toMatchObject({
+      kind: "spdx",
+      expression: "CC-BY-SA-4.0",
+    });
+  });
   it("rejects metadata-less cached Commons bytes regardless of the old source label", () => {
     expect(isDisplayablePhoto({ url: page.imageinfo[0].url, source: "wikipedia" })).toBe(false);
   });
@@ -235,7 +260,7 @@ describe("Commons per-file receipt completeness", () => {
     copy.imageinfo[0].extmetadata.LicenseShortName.value = "Public domain";
     delete (copy.imageinfo[0].extmetadata as Record<string, unknown>).Artist;
     delete (copy.imageinfo[0].extmetadata as Record<string, unknown>).LicenseUrl;
-    expect(parseCommonsPage(copy)?.license).toBe("Public domain");
+    expect(parseCommonsPage(copy)?.licensing?.bindings[0].license.kind).toBe("public-domain");
   });
 });
 

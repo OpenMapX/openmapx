@@ -2,7 +2,7 @@ import {
   type ContributingRecord,
   type FieldContributors,
   parseContributors,
-  parseFieldContributors,
+  readCapturedFieldContributors,
   snapshotContributors,
 } from "@openmapx/mobility-core/contributors";
 import { parseGeometryContributors } from "@openmapx/mobility-core/geometry-contributors";
@@ -69,7 +69,7 @@ function copyReceipts(record: ContributingRecord & { fieldContributors?: FieldCo
       : { contributors: snapshotContributors(record.contributors) }),
     ...(record.fieldContributors === undefined
       ? {}
-      : { fieldContributors: parseFieldContributors(record.fieldContributors) }),
+      : { fieldContributors: readCapturedFieldContributors(record.fieldContributors) }),
   };
 }
 

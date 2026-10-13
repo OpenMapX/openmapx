@@ -113,7 +113,12 @@ it("persists actual Entur enrichment receipts through factory search and repeate
         sourceId: "entur-mobility",
         name: "Entur",
         url: "https://entur.example",
-        license: "CC0-1.0",
+        licensing: {
+          version: 1,
+          bindings: [
+            { scope: "data", subject: "Data", license: { kind: "spdx", expression: "CC0-1.0" } },
+          ],
+        } as const,
         attribution: "Required Entur notice",
         providerCountry: "NO",
         providerPrivacyUrl: "https://entur.example/privacy",

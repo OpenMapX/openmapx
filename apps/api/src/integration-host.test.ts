@@ -1,3 +1,4 @@
+import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 /**
  * Characterization tests for integration-host.ts — loader, route dispatch, and
  * reload/shutdown. These tests pin observable behavior so plan-012 refactors
@@ -119,7 +120,7 @@ describe("initIntegrations — loader", () => {
         id: "shared-identity",
         name: "Trusted built-in",
         version: "1.0.0",
-        license: "MIT",
+        licensing: licensingFromDeclaration("MIT", undefined),
         domains: ["knowledge"],
         quality: "built-in",
       });
@@ -127,7 +128,7 @@ describe("initIntegrations — loader", () => {
         id: "shared-identity",
         name: "Untrusted community",
         version: "1.0.0",
-        license: "MIT",
+        licensing: licensingFromDeclaration("MIT", undefined),
         domains: ["knowledge"],
         quality: "community",
         dependencies: ["missing-community-dependency"],
@@ -159,7 +160,7 @@ describe("initIntegrations — loader", () => {
       id: "shared-secret-identity",
       name: "Trusted built-in",
       version: "1.0.0",
-      license: "MIT",
+      licensing: licensingFromDeclaration("MIT", undefined),
       domains: ["knowledge"],
       quality: "built-in",
     });
@@ -167,7 +168,7 @@ describe("initIntegrations — loader", () => {
       id: "shared-secret-identity",
       name: "Untrusted community",
       version: "1.0.0",
-      license: "MIT",
+      licensing: licensingFromDeclaration("MIT", undefined),
       domains: ["knowledge"],
       quality: "community",
       configSchema: {
@@ -205,7 +206,7 @@ describe("initIntegrations — loader", () => {
       id: "duplicate-community",
       name: "First community",
       version: "1.0.0",
-      license: "MIT",
+      licensing: licensingFromDeclaration("MIT", undefined),
       domains: ["knowledge"],
       quality: "community",
     });
@@ -213,7 +214,7 @@ describe("initIntegrations — loader", () => {
       id: "duplicate-community",
       name: "Second community",
       version: "1.0.0",
-      license: "MIT",
+      licensing: licensingFromDeclaration("MIT", undefined),
       domains: ["knowledge"],
       quality: "community",
     });
@@ -247,7 +248,7 @@ describe("initIntegrations — loader", () => {
       id: "reload-identity",
       name: "Trusted built-in",
       version: "1.0.0",
-      license: "MIT",
+      licensing: licensingFromDeclaration("MIT", undefined),
       domains: ["knowledge"],
       quality: "built-in",
     });
@@ -267,7 +268,7 @@ describe("initIntegrations — loader", () => {
         id: "reload-identity",
         name: "Untrusted community",
         version: "1.0.0",
-        license: "MIT",
+        licensing: licensingFromDeclaration("MIT", undefined),
         domains: ["knowledge"],
         quality: "community",
       });
@@ -291,7 +292,7 @@ describe("initIntegrations — loader", () => {
         id: "air-quality-probe",
         version: "1.0.0",
         author: "Test",
-        license: "MIT",
+        licensing: licensingFromDeclaration("MIT", undefined),
         domains: ["air-quality"],
         quality: "built-in",
         dataSources: [
@@ -299,7 +300,7 @@ describe("initIntegrations — loader", () => {
             sourceId: "official-aq",
             name: "Official AQ",
             url: "https://example.test/data",
-            license: "Test",
+            licensing: licensingFromDeclaration("Test", undefined, "Official AQ"),
             providerCountry: "US",
             providerPrivacyUrl: "https://example.test/privacy",
           },
@@ -343,7 +344,7 @@ describe("initIntegrations — loader", () => {
         id: "parking-site-probe",
         version: "1.0.0",
         author: "Test",
-        license: "MIT",
+        licensing: licensingFromDeclaration("MIT", undefined),
         domains: ["data-source"],
         quality: "built-in",
       }),
@@ -380,7 +381,7 @@ describe("initIntegrations — loader", () => {
         id: "charging-site-probe",
         version: "1.0.0",
         author: "Test",
-        license: "MIT",
+        licensing: licensingFromDeclaration("MIT", undefined),
         domains: ["data-source"],
         quality: "built-in",
       }),
@@ -417,7 +418,7 @@ describe("initIntegrations — loader", () => {
         id: "camera-probe",
         version: "1.0.0",
         author: "Test",
-        license: "MIT",
+        licensing: licensingFromDeclaration("MIT", undefined),
         domains: ["data-source"],
         quality: "built-in",
       }),
@@ -454,7 +455,7 @@ describe("initIntegrations — loader", () => {
         id: "hazards-probe",
         version: "1.0.0",
         author: "Test",
-        license: "MIT",
+        licensing: licensingFromDeclaration("MIT", undefined),
         domains: ["data-source"],
         quality: "built-in",
       }),

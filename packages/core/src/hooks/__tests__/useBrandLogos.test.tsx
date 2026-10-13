@@ -1,3 +1,4 @@
+import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 import { renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { apiClient } from "../../api/client";
@@ -60,8 +61,10 @@ it("keeps a complete cached logo and its captured credit during a failed refresh
     url: "https://upload.wikimedia.org/wikipedia/commons/a/ab/Logo.svg",
     source: "wikimedia-commons",
     author: "Cached artist",
-    license: "CC BY 4.0",
-    licenseUrl: "https://creativecommons.org/licenses/by/4.0/",
+    licensing: licensingFromDeclaration(
+      "CC BY 4.0",
+      "https://creativecommons.org/licenses/by/4.0/",
+    ),
     pageUrl: "https://commons.wikimedia.org/wiki/File:Logo.svg",
     contributors: [{ sourceId: "wikimedia-commons", name: "Cached file receipt" }],
   };

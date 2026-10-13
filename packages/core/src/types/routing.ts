@@ -1,6 +1,6 @@
 import type { ContributingRecord, FieldContributors } from "@openmapx/mobility-core/contributors";
 import type { GeometryContributorSpan } from "@openmapx/mobility-core/geometry-contributors";
-import type { DataSourceAttribution } from "./dataSource";
+import type { Attribution } from "./dataSource";
 import type { ConnectorStandard, EvVehicleSpec } from "./ev";
 import type { LngLat } from "./geometry";
 import type { RoadConditionRoutingEvidence } from "./roadConditions";
@@ -475,7 +475,7 @@ export interface EvChargeStop extends ContributingRecord {
   tariffPrice?: TariffPrice;
   /** Modelled cost of this charging session. */
   estimatedCost?: { amount: number; currency: string };
-  attributions: DataSourceAttribution[];
+  attributions: Attribution[];
 }
 
 /**

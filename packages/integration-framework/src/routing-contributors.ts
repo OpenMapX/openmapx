@@ -4,7 +4,7 @@ import {
   type ContributingRecord,
   captureResultContributors,
   type FieldContributors,
-  parseFieldContributors,
+  readCapturedFieldContributors,
   snapshotContributors,
 } from "@openmapx/mobility-core/contributors";
 import type { RoutingProvider } from "./contracts/routing-provider";
@@ -17,7 +17,7 @@ function captureRecord<
     contributors: captureResultContributors(record, envelope),
     ...(record.fieldContributors === undefined
       ? {}
-      : { fieldContributors: parseFieldContributors(record.fieldContributors) }),
+      : { fieldContributors: readCapturedFieldContributors(record.fieldContributors) }),
   };
 }
 

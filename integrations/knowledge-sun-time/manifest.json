@@ -30,15 +30,39 @@
       "sourceId": "sunrise-sunset",
       "name": "Sunrise-Sunset.org",
       "url": "https://sunrise-sunset.org/",
-      "license": "Proprietary (free with attribution)",
-      "licenseUrl": "https://sunrise-sunset.org/terms",
       "commercialUse": "unknown",
       "providerCountry": "Unknown",
       "providerPrivacyUrl": "https://sunrise-sunset.org/privacy",
       "endUserExposure": "server-only",
       "personalData": false,
       "cookies": false,
-      "dpaAvailable": false
+      "dpaAvailable": false,
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "data",
+            "subject": "Sunrise-Sunset.org material",
+            "license": {
+              "kind": "unknown"
+            }
+          },
+          {
+            "scope": "service",
+            "subject": "Sunrise-Sunset.org access/account contract",
+            "license": {
+              "kind": "unknown",
+              "url": "https://sunrise-sunset.org/terms"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "Proprietary (free with attribution)",
+            "url": "https://sunrise-sunset.org/terms"
+          }
+        ]
+      }
     }
   ]
 }

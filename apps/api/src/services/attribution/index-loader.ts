@@ -1,5 +1,6 @@
 import { existsSync, readFileSync, statSync } from "node:fs";
 import type { Logger } from "@openmapx/integration-framework";
+import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 import type { ManifestDataSource, MotisLicenseEntry, ResolvedAttribution } from "./types.js";
 
 export interface LoadResult {
@@ -26,8 +27,11 @@ function resolveMotisEntry(entry: MotisLicenseEntry): ResolvedAttribution {
     sourceId: tag,
     name: entry.human_name ?? tag,
     url: entry.publisher?.url ?? entry.source,
-    spdxLicense: entry.spdx_license_identifier,
-    licenseUrl: entry.license_url,
+    licensing: licensingFromDeclaration(
+      entry.spdx_license_identifier,
+      entry.license_url,
+      entry.human_name ?? tag,
+    ),
     attributionText: entry.attribution_text,
     publisher,
     source: "motis-license",
@@ -41,8 +45,7 @@ function resolveManifestEntry(ds: ManifestDataSource): ResolvedAttribution {
     sourceId: ds.sourceId,
     name: ds.name,
     url: ds.url,
-    spdxLicense: undefined,
-    licenseUrl: ds.licenseUrl,
+    licensing: ds.licensing,
     attributionText: ds.attribution,
     source: "integration-manifest",
     raw: ds,

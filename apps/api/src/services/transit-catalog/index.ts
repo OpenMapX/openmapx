@@ -1,6 +1,7 @@
 import { normalizeProducerUrl } from "@integrations/transit-mobility-database";
 import { envString } from "@openmapx/core/server-env";
 import type { GtfsCatalogProvider } from "@openmapx/integration-framework";
+import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 import { getIntegrationsByDomain } from "../../integration-host.js";
 import type { TransitCatalogFeed } from "./types.js";
 
@@ -33,8 +34,10 @@ async function installedCatalog(): Promise<TransitCatalogFeed[]> {
         source: "transitous" as const,
         countryCode: source.region.split(/[.-]/)[0]?.toLowerCase() ?? source.region,
         url: source.originUrl,
-        ...(typeof spdx === "string" ? { license: spdx } : {}),
-        ...(typeof licenseUrl === "string" ? { licenseUrl } : {}),
+        licensing: licensingFromDeclaration(
+          typeof spdx === "string" ? spdx : undefined,
+          typeof licenseUrl === "string" ? licenseUrl : undefined,
+        ),
       },
     ];
   });

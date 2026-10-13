@@ -38,15 +38,33 @@
       "sourceId": "noaa-co-ops",
       "name": "NOAA Tides & Currents (CO-OPS)",
       "url": "https://tidesandcurrents.noaa.gov/",
-      "license": "U.S. Public Domain",
-      "licenseUrl": "https://tidesandcurrents.noaa.gov/disclaimers.html",
       "commercialUse": "yes",
       "providerCountry": "US",
       "providerPrivacyUrl": "https://tidesandcurrents.noaa.gov/privacy.html",
       "endUserExposure": "server-only",
       "personalData": false,
       "cookies": false,
-      "dpaAvailable": false
+      "dpaAvailable": false,
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "data",
+            "subject": "NOAA Tides & Currents (CO-OPS) material",
+            "license": {
+              "kind": "public-domain",
+              "name": "U.S. Public Domain",
+              "url": "https://tidesandcurrents.noaa.gov/disclaimers.html"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "U.S. Public Domain",
+            "url": "https://tidesandcurrents.noaa.gov/disclaimers.html"
+          }
+        ]
+      }
     }
   ]
 }

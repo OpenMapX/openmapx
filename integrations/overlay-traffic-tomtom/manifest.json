@@ -69,8 +69,6 @@
       "sourceId": "tomtom",
       "name": "TomTom",
       "url": "https://developer.tomtom.com/",
-      "license": "Proprietary",
-      "licenseUrl": "https://developer.tomtom.com/terms-and-conditions",
       "attribution": "© <a href=\"https://www.tomtom.com/\">TomTom</a>",
       "commercialUse": "yes",
       "providerCountry": "NL",
@@ -79,7 +77,33 @@
       "personalData": false,
       "cookies": false,
       "dpaAvailable": true,
-      "dpaUrl": "https://www.tomtom.com/legal/en_gb/third-party-product-terms/data-processing-schedule/"
+      "dpaUrl": "https://www.tomtom.com/legal/en_gb/third-party-product-terms/data-processing-schedule/",
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "data",
+            "subject": "TomTom material",
+            "license": {
+              "kind": "unknown"
+            }
+          },
+          {
+            "scope": "service",
+            "subject": "TomTom access/account contract",
+            "license": {
+              "kind": "unknown",
+              "url": "https://developer.tomtom.com/terms-and-conditions"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "Proprietary",
+            "url": "https://developer.tomtom.com/terms-and-conditions"
+          }
+        ]
+      }
     }
   ]
 }

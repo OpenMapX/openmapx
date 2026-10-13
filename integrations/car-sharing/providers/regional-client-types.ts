@@ -1,6 +1,7 @@
 import type { BoundingBox, LngLat } from "@openmapx/core";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import type { CacheClient } from "@openmapx/mobility-core/cache";
+import type { Licensing } from "@openmapx/mobility-core/licensing";
 import type { SharedMobilityStation } from "@openmapx/mobility-core/shared-mobility";
 
 /**
@@ -18,8 +19,7 @@ export interface RegionalCarSharingClient {
   readonly attribution: {
     label: string;
     url: string;
-    license?: string;
-    licenseUrl?: string;
+    licensing?: Licensing;
   };
   /** Search for stations within the bounding box. */
   search(

@@ -1,3 +1,4 @@
+import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 /**
  * Bielefeld car-sharing open data client.
  * WFS/CSV with Cambio stations including booking URLs, capacity, and descriptions.
@@ -72,8 +73,7 @@ export const deNwBielefeldClient = createStaticCarSharingClient({
   attribution: {
     label: "Stadt Bielefeld",
     url: "https://open-data.bielefeld.de",
-    license: "ODbL",
-    licenseUrl: "https://opendatacommons.org/licenses/odbl/",
+    licensing: licensingFromDeclaration("ODbL", "https://opendatacommons.org/licenses/odbl/"),
   },
   parse,
 });

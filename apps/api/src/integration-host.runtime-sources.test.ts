@@ -112,7 +112,12 @@ const source = (sourceId: string, extra: Partial<IntegrationDataSource> = {}) =>
     sourceId,
     name: sourceId.toUpperCase(),
     url: "https://source.example",
-    license: "CC0-1.0",
+    licensing: {
+      version: 1,
+      bindings: [
+        { scope: "data", subject: "Data", license: { kind: "spdx", expression: "CC0-1.0" } },
+      ],
+    } as const,
     providerCountry: "NL",
     providerPrivacyUrl: "https://source.example/privacy",
     endUserExposure: "server-only",
@@ -213,7 +218,12 @@ describe("ctx.setDataSources", () => {
     const warn = vi.spyOn(app.log, "warn");
     probe.__runtimeCtx?.setDataSources([
       source("nl-ndw-events"),
-      source("xx-no-licence-events", { license: "" }),
+      source("xx-no-licence-events", {
+        licensing: {
+          version: 1,
+          bindings: [{ scope: "data", subject: "", license: { kind: "unknown" } }],
+        },
+      }),
       source("xx-foreign-domain-events", { domain: "weather" }),
       source("nl-ndw-events", { name: "Duplicate" }),
     ]);
@@ -279,7 +289,7 @@ describe("ctx.setDataSources", () => {
     probe.__runtimeCtx?.setDataSources([source("nl-ndw-events")]);
     expect(probe.__runtimeCtx).toBeDefined();
     expect(() =>
-      probe.__runtimeCtx!.setDataSources({ sources: [] } as unknown as IntegrationDataSource[]),
+      probe.__runtimeCtx?.setDataSources({ sources: [] } as unknown as IntegrationDataSource[]),
     ).toThrow("Integration runtime-probe: setDataSources expects an array");
     expect(await servedSources("runtime-probe")).toEqual(["nl-ndw-events"]);
   });

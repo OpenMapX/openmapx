@@ -24,7 +24,7 @@ export {
   toPoiSearchOutcome,
 } from "./category";
 export type {
-  DataSourceAttribution,
+  Attribution,
   DataSourceBranding,
   DataSourceDetail,
   DataSourceDetailSection,

@@ -1,12 +1,11 @@
 import { resolveBrandByName } from "@openmapx/brands";
 import {
-  type DataSourceAttribution,
+  type Attribution,
   type DataSourceBranding,
   type DataSourceDetail,
   type DataSourceDetailSection,
   type DataSourceResult,
   gapFillBranding,
-  isSafeHttpUrl,
   type OsmIdentity,
   validObservedAt,
   withBrandingContributors,
@@ -19,6 +18,7 @@ import {
   type Translatable,
   token,
 } from "@openmapx/integration-framework/strings";
+import { snapshotContributors } from "@openmapx/mobility-core/contributors";
 import type { FuelProduct, FuelStation } from "@openmapx/mobility-core/fuel";
 import strings from "./strings/en.json" with { type: "json" };
 
@@ -183,14 +183,9 @@ function stationBranding(station: FuelStation): DataSourceBranding | undefined {
  * each result and detail carries the credits of the sources it was built from.
  * Their links come from upstream data, so only http(s) ones are kept.
  */
-function stationCredits(station: FuelStation): DataSourceAttribution[] | undefined {
+function stationCredits(station: FuelStation): Attribution[] | undefined {
   if (station.attributions.length === 0) return undefined;
-  return station.attributions.map((a) => ({
-    text: a.name,
-    url: isSafeHttpUrl(a.url) ? a.url : "",
-    ...(a.spdxLicense ? { license: a.spdxLicense } : {}),
-    ...(isSafeHttpUrl(a.licenseUrl) ? { licenseUrl: a.licenseUrl } : {}),
-  }));
+  return snapshotContributors(station.attributions);
 }
 
 /** A station's title when its sources name it nothing, not even by its brand. */

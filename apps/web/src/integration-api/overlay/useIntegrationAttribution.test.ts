@@ -1,3 +1,4 @@
+import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 import { cleanup, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useMapAttributionStore } from "./mapAttributionStore";
@@ -13,7 +14,7 @@ vi.mock("@openmapx/integration-framework/react", () => {
       sourceId: "firms",
       name: "NASA FIRMS",
       url: "https://firms.modaps.eosdis.nasa.gov/",
-      license: "U.S. Public Domain",
+      licensing: licensingFromDeclaration("U.S. Public Domain", undefined, "NASA FIRMS"),
       providerCountry: "US",
       providerPrivacyUrl: "https://www.nasa.gov/privacy/",
     },
@@ -21,7 +22,11 @@ vi.mock("@openmapx/integration-framework/react", () => {
       sourceId: "noaa-hms",
       name: "NOAA Hazard Mapping System Smoke Detection",
       url: "https://www.ospo.noaa.gov/products/land/hms.html",
-      license: "U.S. Public Domain",
+      licensing: licensingFromDeclaration(
+        "U.S. Public Domain",
+        undefined,
+        "NOAA Hazard Mapping System Smoke Detection",
+      ),
       attribution: "NOAA / NESDIS HMS Smoke Detection",
       providerCountry: "US",
       providerPrivacyUrl: "https://www.noaa.gov/privacy/",
@@ -37,7 +42,12 @@ vi.mock("@openmapx/integration-framework/react", () => {
         sourceId: "nl-ndw-events",
         name: "NDW",
         url: "https://www.ndw.nu",
-        license: "CC0-1.0",
+        licensing: {
+          version: 1,
+          bindings: [
+            { scope: "data", subject: "Data", license: { kind: "spdx", expression: "CC0-1.0" } },
+          ],
+        } as const,
         providerCountry: "NL",
         providerPrivacyUrl: "https://www.ndw.nu/privacy",
       },
@@ -46,7 +56,12 @@ vi.mock("@openmapx/integration-framework/react", () => {
         domain: "fuel-stations",
         name: "OpenStreetMap",
         url: "https://www.openstreetmap.org",
-        license: "ODbL-1.0",
+        licensing: {
+          version: 1,
+          bindings: [
+            { scope: "data", subject: "Data", license: { kind: "spdx", expression: "ODbL-1.0" } },
+          ],
+        } as const,
         providerCountry: "GB",
         providerPrivacyUrl: "https://osmfoundation.org/wiki/Privacy_Policy",
       },

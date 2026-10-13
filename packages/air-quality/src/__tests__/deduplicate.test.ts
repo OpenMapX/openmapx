@@ -6,7 +6,7 @@ const source = (sourceId: string) => ({
   name: sourceId,
   url: null,
   owner: null,
-  license: null,
+  licensing: null,
   methodologyUrl: null,
   attribution: null,
 });

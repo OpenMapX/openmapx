@@ -30,10 +30,12 @@ import TableRow from "@mui/material/TableRow";
 import Tabs from "@mui/material/Tabs";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
-import { safeHref } from "@openmapx/core";
+import { buildLicensingHtml, safeHref } from "@openmapx/core";
 import type { CredentialSetup } from "@openmapx/integration-framework";
+import type { Licensing } from "@openmapx/mobility-core/licensing";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
+import { AttributionText } from "@/components/ui/AttributionText";
 import { useEnv } from "@/integration-api/runtime/EnvProvider";
 import { invalidateIntegrationRuntime } from "@/lib/integrationRuntimeQuery";
 import { AdminTablePagination } from "../shared/AdminTablePagination";
@@ -90,8 +92,7 @@ interface IntegrationDetailData {
     dataSources?: Array<{
       name: string;
       url: string;
-      license: string;
-      licenseUrl?: string;
+      licensing: Licensing;
       attribution?: string;
       commercialUse?: string;
       providerCountry: string;
@@ -992,17 +993,9 @@ function DataSourcesTab({ data }: { data: IntegrationDetailData }) {
                   </Stack>
                 </Link>
               </Stack>
-              <MetaRow label="License" labelWidth={110} value={ds.license} />
-              {ds.licenseUrl && (
-                <Link
-                  href={safeHref(ds.licenseUrl)}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  variant="body2"
-                >
-                  License details
-                </Link>
-              )}
+              <AttributionText
+                html={buildLicensingHtml(ds.licensing, { includeSoftware: true, fullNames: true })}
+              />
               {ds.commercialUse && (
                 <MetaRow label="Commercial use" labelWidth={110} value={ds.commercialUse} />
               )}

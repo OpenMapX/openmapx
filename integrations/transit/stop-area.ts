@@ -483,8 +483,20 @@ export const OSM_ATTRIBUTION: Attribution = {
   sourceId: "openstreetmap",
   name: "OpenStreetMap contributors",
   url: "https://www.openstreetmap.org/copyright",
-  spdxLicense: "ODbL-1.0",
-  licenseUrl: "https://opendatacommons.org/licenses/odbl/1-0/",
+  licensing: {
+    version: 1,
+    bindings: [
+      {
+        scope: "data",
+        subject: "Data",
+        license: {
+          kind: "spdx",
+          expression: "ODbL-1.0",
+          url: "https://opendatacommons.org/licenses/odbl/1-0/",
+        },
+      },
+    ],
+  } as const,
   attributionText: "© OpenStreetMap contributors",
 };
 

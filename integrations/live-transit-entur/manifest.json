@@ -62,8 +62,6 @@
       "sourceId": "entur-live-vehicles",
       "name": "Entur Vehicle Positions v2",
       "url": "https://developer.entur.org/pages-real-time-vehicle/",
-      "license": "NLOD-2.0",
-      "licenseUrl": "https://data.norge.no/nlod/en/2.0",
       "attribution": "Data made available by Entur",
       "commercialUse": "yes",
       "providerCountry": "NO",
@@ -71,14 +69,32 @@
       "endUserExposure": "server-only",
       "personalData": false,
       "cookies": false,
-      "dpaAvailable": false
+      "dpaAvailable": false,
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "data",
+            "subject": "Entur Vehicle Positions v2 material",
+            "license": {
+              "kind": "spdx",
+              "expression": "NLOD-2.0",
+              "url": "https://data.norge.no/nlod/en/2.0"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "NLOD-2.0",
+            "url": "https://data.norge.no/nlod/en/2.0"
+          }
+        ]
+      }
     },
     {
       "sourceId": "entur-live-situations",
       "name": "Entur Journey Planner Situations",
       "url": "https://developer.entur.org/pages-journeyplanner-journeyplanner/",
-      "license": "NLOD-2.0",
-      "licenseUrl": "https://data.norge.no/nlod/en/2.0",
       "attribution": "Data made available by Entur",
       "commercialUse": "yes",
       "providerCountry": "NO",
@@ -86,7 +102,27 @@
       "endUserExposure": "server-only",
       "personalData": false,
       "cookies": false,
-      "dpaAvailable": false
+      "dpaAvailable": false,
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "data",
+            "subject": "Entur Journey Planner Situations material",
+            "license": {
+              "kind": "spdx",
+              "expression": "NLOD-2.0",
+              "url": "https://data.norge.no/nlod/en/2.0"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "NLOD-2.0",
+            "url": "https://data.norge.no/nlod/en/2.0"
+          }
+        ]
+      }
     }
   ]
 }

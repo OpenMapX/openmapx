@@ -1,4 +1,5 @@
 import type { AuthorityObservation, CoverageRegion, StreamEvidence } from "@openmapx/core/coverage";
+import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 import { describe, expect, it, vi } from "vitest";
 
 vi.hoisted(() => {
@@ -86,7 +87,7 @@ describe("CoverageService", () => {
           sourceId: "test-source",
           name: "Test",
           url: "https://example.test",
-          license: "Recorded",
+          licensing: licensingFromDeclaration("Recorded", undefined, "Test"),
           providerCountry: "DE",
           providerPrivacyUrl: "https://example.test/privacy",
           commercialUse: "yes",
@@ -574,7 +575,12 @@ describe("coverage of the OpenConditions place domains", () => {
     domain,
     name: sourceId,
     url: `https://${sourceId}.example`,
-    license: "CC-BY-4.0",
+    licensing: {
+      version: 1,
+      bindings: [
+        { scope: "data", subject: "Data", license: { kind: "spdx", expression: "CC-BY-4.0" } },
+      ],
+    } as const,
     providerCountry: "DE",
     providerPrivacyUrl: "https://example.test/privacy",
     commercialUse: "yes" as const,

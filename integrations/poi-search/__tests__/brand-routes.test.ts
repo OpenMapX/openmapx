@@ -1,6 +1,7 @@
 import { getBrandByQid, suggestBrands } from "@openmapx/brands";
 import { brandToFilter, validateOverpassFilter } from "@openmapx/core";
 import type { IntegrationContext } from "@openmapx/integration-framework";
+import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 import { describe, expect, it, vi } from "vitest";
 import { setup } from "../index";
 import manifest from "../manifest.json";
@@ -260,7 +261,7 @@ describe("GET /brand/:qid/logo-attribution per-file receipt", () => {
       logoFile: entry.logoFile,
       source: "wikimedia-commons",
       author: "Logo creator",
-      license: "CC BY 4.0",
+      licensing: licensingFromDeclaration("CC BY 4.0", undefined, "Commons file", "imagery"),
       attributionText: "Mandatory logo notice",
       contributors: [
         expect.objectContaining({

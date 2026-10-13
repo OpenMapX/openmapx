@@ -59,7 +59,7 @@ const EVERY_SOURCE: LiveSources = {
   ready: true,
   has: () => true,
   link: () => undefined,
-  licenseName: () => undefined,
+
   noticeOf: () => undefined,
   firmsSources: () => [],
 };
@@ -249,8 +249,16 @@ describe("charging-sites-openconditions", () => {
     ]);
     expect(all.attributions[2]).toMatchObject({
       sourceId: MOBIDATA,
-      spdxLicense: "CC-BY-4.0",
-      licenseUrl: expect.any(String),
+      licensing: {
+        version: 1,
+        bindings: [
+          {
+            scope: "data",
+            subject: "EnBW",
+            license: { kind: "spdx", expression: "CC-BY-4.0", url: expect.any(String) },
+          },
+        ],
+      } as const,
       publisher: { name: "EnBW" },
     });
 
@@ -271,11 +279,11 @@ describe("charging-sites-openconditions", () => {
 
   test("lifecycle closes or plans the site and its EVSEs", () => {
     const closed = body();
-    recordOf(closed)["lifecycle"] = "temporarily_closed";
+    recordOf(closed).lifecycle = "temporarily_closed";
     expect(mapped(closed)).toMatchObject({ closed: true, planned: false });
-    recordOf(closed)["lifecycle"] = "decommissioned";
+    recordOf(closed).lifecycle = "decommissioned";
     expect(mapped(closed)).toMatchObject({ closed: true });
-    recordOf(closed)["lifecycle"] = "planned";
+    recordOf(closed).lifecycle = "planned";
     expect(mapped(closed)).toMatchObject({ closed: false, planned: true });
   });
 
@@ -287,13 +295,13 @@ describe("charging-sites-openconditions", () => {
 
   test("a feature that is not a charging site is not a site", () => {
     const answer = body();
-    recordOf(answer)["kind"] = "fuel_station";
+    recordOf(answer).kind = "fuel_station";
     expect(mapped(answer)).toBeNull();
   });
 
   test("coverage.partial is passed through as area", async () => {
     const answer = body();
-    answer["coverage"] = { partial: true, sources: [{ id: OSM, complete: false }] };
+    answer.coverage = { partial: true, sources: [{ id: OSM, complete: false }] };
     expect((await providerWith(listing(answer)).provider.searchSites(BBOX)).partial).toBe("area");
   });
 
@@ -302,7 +310,7 @@ describe("charging-sites-openconditions", () => {
       ready: false,
       has: () => false,
       link: () => undefined,
-      licenseName: () => undefined,
+
       noticeOf: () => undefined,
       firmsSources: () => [],
     });
@@ -318,12 +326,12 @@ describe("charging-sites-openconditions", () => {
       answer.records = Array.from({ length: 9000 }, (_, i) => {
         const copy = clone(site);
         const recordId = `KA-${i}`;
-        (copy["provenance"] as Rec)["recordId"] = recordId;
-        (copy["provenance"] as Rec)["derivedFrom"] = {
+        (copy.provenance as Rec).recordId = recordId;
+        (copy.provenance as Rec).derivedFrom = {
           records: [{ class: "feature", id: `oc:feature:${MOBIDATA}:${recordId}` }],
         };
-        (copy["provenance"] as Rec)["mergedSources"] = [];
-        copy["id"] = `oc:feature:test.local:${i}`;
+        (copy.provenance as Rec).mergedSources = [];
+        copy.id = `oc:feature:test.local:${i}`;
         return copy;
       });
       answer.latest = {};
@@ -372,7 +380,7 @@ describe("charging-sites-openconditions", () => {
     expect(opened).toMatchObject({ id: SITE_ID, sources: [MOBIDATA, OSM] });
     const reread = http.calls.at(-1)!;
     expect(reread.url).toBe(`${BASE_URL}/features`);
-    const [w, s, e, n] = String(reread.options?.params?.["bbox"]).split(",").map(Number) as [
+    const [w, s, e, n] = String(reread.options?.params?.bbox).split(",").map(Number) as [
       number,
       number,
       number,

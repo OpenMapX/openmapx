@@ -59,8 +59,6 @@
       "sourceId": "openweathermap",
       "name": "OpenWeather",
       "url": "https://openweathermap.org/",
-      "license": "ODbL-1.0",
-      "licenseUrl": "https://openweathermap.org/full-price",
       "attribution": "© <a href=\"https://openweathermap.org/\">OpenWeather</a>",
       "commercialUse": "yes",
       "providerCountry": "UK",
@@ -68,7 +66,27 @@
       "endUserExposure": "server-only",
       "personalData": false,
       "cookies": false,
-      "dpaAvailable": false
+      "dpaAvailable": false,
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "data",
+            "subject": "OpenWeather material",
+            "license": {
+              "kind": "spdx",
+              "expression": "ODbL-1.0",
+              "url": "https://openweathermap.org/full-price"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "ODbL-1.0",
+            "url": "https://openweathermap.org/full-price"
+          }
+        ]
+      }
     }
   ]
 }

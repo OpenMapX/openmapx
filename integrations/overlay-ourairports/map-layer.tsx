@@ -9,7 +9,10 @@ import {
 } from "@openmapx/core";
 import { dataSourceToAttribution } from "@openmapx/integration-framework";
 import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
-import { parseContributors, withFeatureContributors } from "@openmapx/mobility-core/contributors";
+import {
+  readCapturedContributors,
+  withFeatureContributors,
+} from "@openmapx/mobility-core/contributors";
 import type { MapLayerMouseEvent } from "maplibre-gl";
 import { useCallback, useEffect, useRef } from "react";
 import { INTERACTIVE_LAYER_IDS } from "@/integration-api/map/interactiveLayers";
@@ -146,8 +149,8 @@ export function AirportsOverlay() {
         features: (data.features as GeoJSON.Feature[]).map((feature) =>
           withFeatureContributors(
             feature,
-            parseContributors(feature.properties?.contributors) ??
-              parseContributors(feature.properties?._mapAttributions) ??
+            readCapturedContributors(feature.properties?.contributors) ??
+              readCapturedContributors(feature.properties?._mapAttributions) ??
               contributors,
           ),
         ),

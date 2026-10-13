@@ -35,7 +35,7 @@ const OSM_MEMBER = "oc:feature:osm-fuel:node/669891011";
 const clone = <T>(value: T): T => structuredClone(value);
 
 function readingsOf(body: Rec): Rec[] {
-  return (body["latest"] as Record<string, Rec[]>)[STATION_ID]!;
+  return (body.latest as Record<string, Rec[]>)[STATION_ID]!;
 }
 
 type Responder = (req: FakeHttpRequest) => unknown;
@@ -52,7 +52,7 @@ const EVERY_SOURCE: LiveSources = {
   ready: true,
   has: () => true,
   link: () => undefined,
-  licenseName: () => undefined,
+
   noticeOf: () => undefined,
   firmsSources: () => [],
 };
@@ -72,10 +72,10 @@ const listing =
 /** The fixture's station under ids of its own, at `at`: members `oc:feature:tk:<local>` and `oc:feature:osm:<local>`. */
 function stationRecord(local: string, at: [number, number]): Rec {
   const record = clone((featuresResponse as unknown as { records: Rec[] }).records[0]!);
-  record["id"] = `oc:feature:t:${local}`;
-  (record["location"] as { geometry: Rec }).geometry = { type: "Point", coordinates: at };
-  const provenance = record["provenance"] as Rec;
-  provenance["derivedFrom"] = {
+  record.id = `oc:feature:t:${local}`;
+  (record.location as { geometry: Rec }).geometry = { type: "Point", coordinates: at };
+  const provenance = record.provenance as Rec;
+  provenance.derivedFrom = {
     records: [
       { class: "feature", id: `oc:feature:tk:${local}` },
       { class: "feature", id: `oc:feature:osm:${local}` },
@@ -83,7 +83,7 @@ function stationRecord(local: string, at: [number, number]): Rec {
     method: "canonical_view",
     version: "1",
   };
-  (provenance["mergedSources"] as Rec[])[0]!["recordId"] = `oc:feature:osm:${local}`;
+  (provenance.mergedSources as Rec[])[0]!.recordId = `oc:feature:osm:${local}`;
   return record;
 }
 
@@ -103,9 +103,9 @@ describe("fuel-stations-openconditions", () => {
   test("maps a canonical OC station into products with their own price times", async () => {
     const body = clone(featuresResponse) as unknown as Rec;
     const e10 = readingsOf(body).find(
-      (r) => r["property"] === "fuel.price" && r["componentKey"] === "e10",
+      (r) => r.property === "fuel.price" && r.componentKey === "e10",
     )!;
-    e10["phenomenonTime"] = { instant: "2026-10-04T01:12:00.000Z" };
+    e10.phenomenonTime = { instant: "2026-10-04T01:12:00.000Z" };
     const { http, provider } = providerWith(listing(body));
 
     const { stations, partial } = await provider.searchStations(BBOX);
@@ -171,14 +171,40 @@ describe("fuel-stations-openconditions", () => {
       {
         sourceId: "de-tankerkoenig-fuel",
         name: "Tankerkönig (MTS-K), CC BY 4.0 – https://creativecommons.tankerkoenig.de",
-        spdxLicense: "CC-BY-4.0",
-        licenseUrl: "https://creativecommons.org/licenses/by/4.0/",
+        attributionText: "Tankerkönig (MTS-K), CC BY 4.0 – https://creativecommons.tankerkoenig.de",
+        licensing: {
+          version: 1,
+          bindings: [
+            {
+              scope: "data",
+              subject: "Tankerkönig (MTS-K), CC BY 4.0 – https://creativecommons.tankerkoenig.de",
+              license: {
+                kind: "spdx",
+                expression: "CC-BY-4.0",
+                url: "https://creativecommons.org/licenses/by/4.0/",
+              },
+            },
+          ],
+        } as const,
       },
       {
         sourceId: "osm-fuel",
         name: "© OpenStreetMap contributors",
-        spdxLicense: "ODbL-1.0",
-        licenseUrl: "https://opendatacommons.org/licenses/odbl/1-0/",
+        attributionText: "© OpenStreetMap contributors",
+        licensing: {
+          version: 1,
+          bindings: [
+            {
+              scope: "data",
+              subject: "© OpenStreetMap contributors",
+              license: {
+                kind: "spdx",
+                expression: "ODbL-1.0",
+                url: "https://opendatacommons.org/licenses/odbl/1-0/",
+              },
+            },
+          ],
+        } as const,
       },
     ]);
     // OSM alone says LPG is sold here: available, with no price.
@@ -243,12 +269,10 @@ describe("fuel-stations-openconditions", () => {
     const body = clone(featuresResponse) as unknown as Rec;
     const latest = readingsOf(body);
     for (const reading of latest) {
-      if (reading["source"] === "@fused") reading["source"] = "@fused-public";
+      if (reading.source === "@fused") reading.source = "@fused-public";
     }
-    const diesel = latest.find(
-      (r) => r["property"] === "fuel.price" && r["componentKey"] === "diesel",
-    )!;
-    diesel["contributors"] = ["de-tankerkoenig-fuel", "osm-fuel"];
+    const diesel = latest.find((r) => r.property === "fuel.price" && r.componentKey === "diesel")!;
+    diesel.contributors = ["de-tankerkoenig-fuel", "osm-fuel"];
     const { provider } = providerWith(listing(body));
 
     const [station] = (await provider.searchStations(BBOX)).stations;
@@ -278,10 +302,10 @@ describe("fuel-stations-openconditions", () => {
     const body = clone(featuresResponse) as unknown as Rec;
     const latest = readingsOf(body);
     const lpg = latest.find(
-      (r) => r["property"] === "fuel.product_available" && r["componentKey"] === "osm-fuel/lpg",
+      (r) => r.property === "fuel.product_available" && r.componentKey === "osm-fuel/lpg",
     )!;
-    lpg["result"] = { type: "boolean", value: false };
-    const sp98 = latest.findIndex((r) => r["componentKey"] === "osm-fuel/sp98");
+    lpg.result = { type: "boolean", value: false };
+    const sp98 = latest.findIndex((r) => r.componentKey === "osm-fuel/sp98");
     latest.splice(sp98, 1);
     const { provider } = providerWith(listing(body));
 
@@ -293,7 +317,7 @@ describe("fuel-stations-openconditions", () => {
 
   test("coverage.partial is passed through as a partial area", async () => {
     const body = clone(featuresResponse) as unknown as Rec;
-    body["coverage"] = {
+    body.coverage = {
       partial: true,
       sources: [
         { id: "de-tankerkoenig-fuel", complete: false, reason: "deadline" },
@@ -304,7 +328,7 @@ describe("fuel-stations-openconditions", () => {
     expect((await provider.searchStations(BBOX)).partial).toBe("area");
 
     const without = clone(featuresResponse) as unknown as Rec;
-    delete without["coverage"];
+    delete without.coverage;
     const plain = providerWith(listing(without)).provider;
     expect((await plain.searchStations(BBOX)).partial).toBeUndefined();
   });
@@ -312,7 +336,7 @@ describe("fuel-stations-openconditions", () => {
   test("an area wider than a source's on-demand cells is partial", async () => {
     // OpenConditions fetches no cell of a source whose read spans more than its cap.
     const body = clone(featuresResponse) as unknown as Rec;
-    body["coverage"] = {
+    body.coverage = {
       partial: true,
       sources: [{ id: "de-tankerkoenig-fuel", complete: false, reason: "too_many_cells" }],
     };
@@ -320,7 +344,7 @@ describe("fuel-stations-openconditions", () => {
 
     // A source reported incomplete makes the answer partial even without the summary flag.
     const unflagged = clone(featuresResponse) as unknown as Rec;
-    unflagged["coverage"] = {
+    unflagged.coverage = {
       sources: [{ id: "osm-fuel", complete: false, reason: "too_many_cells" }],
     };
     expect((await providerWith(listing(unflagged)).provider.searchStations(BBOX)).partial).toBe(
@@ -361,7 +385,7 @@ describe("fuel-stations-openconditions", () => {
     ];
     const dense = Array.from({ length: 400 }, (_, i) => {
       const record = stationRecord(`d${i}`, [13.4, 52.5]);
-      record["components"] = grades.flatMap((grade) =>
+      record.components = grades.flatMap((grade) =>
         ["", "osm-fuel/"].map((prefix) => ({
           key: `${prefix}${grade}`,
           kind: "fuel_product",
@@ -380,7 +404,7 @@ describe("fuel-stations-openconditions", () => {
     });
     const latest = Object.fromEntries(
       dense.map((record) => [
-        record["id"],
+        record.id,
         grades.flatMap((grade) =>
           ["de-tankerkoenig-fuel", "osm-fuel"].flatMap((source) => [
             {
@@ -423,7 +447,7 @@ describe("fuel-stations-openconditions", () => {
       next,
     });
     const cursorOf = (req: FakeHttpRequest) =>
-      (req.options?.params as Rec | undefined)?.["cursor"] as string | undefined;
+      (req.options?.params as Rec | undefined)?.cursor as string | undefined;
     const { http, provider } = providerWith((req) => {
       const cursor = cursorOf(req);
       const n = cursor === undefined ? 1 : Number(cursor.slice(1));
@@ -445,12 +469,12 @@ describe("fuel-stations-openconditions", () => {
 
   test("the 2000-station cap counts stations kept, with a bound on the records read", async () => {
     const cursorOf = (req: FakeHttpRequest) =>
-      (req.options?.params as Rec | undefined)?.["cursor"] as string | undefined;
+      (req.options?.params as Rec | undefined)?.cursor as string | undefined;
     // Every other record is no fuel station, so a page keeps 200 stations.
     const page = (n: number, mappable: boolean) => ({
       records: Array.from({ length: 400 }, (_, i) => {
         const record = stationRecord(`p${n}-${i}`, [13.4, 52.5]);
-        if (!mappable || i % 2 === 1) record["kind"] = "parking_site";
+        if (!mappable || i % 2 === 1) record.kind = "parking_site";
         return record;
       }),
       latest: {},
@@ -483,7 +507,7 @@ describe("fuel-stations-openconditions", () => {
       next: `c${n + 1}`,
     });
     const cursorOf = (req: FakeHttpRequest) =>
-      (req.options?.params as Rec | undefined)?.["cursor"] as string | undefined;
+      (req.options?.params as Rec | undefined)?.cursor as string | undefined;
     const { provider } = providerWith((req) => {
       const cursor = cursorOf(req);
       if (cursor === "c2") throw new Error("The operation was aborted due to timeout");
@@ -508,12 +532,12 @@ describe("fuel-stations-openconditions", () => {
 
     // A new member links in: the cluster, and so its canonical id, is a new one.
     answer = fresh();
-    const record = (answer["records"] as Rec[])[0]!;
+    const record = (answer.records as Rec[])[0]!;
     const canonical =
       "oc:feature:test.local:0000000000000000000000000000000000000000000000000000000000000000";
-    record["id"] = canonical;
-    answer["latest"] = { [canonical]: readingsOf(fresh()) };
-    const provenance = record["provenance"] as { derivedFrom: { records: Rec[] } };
+    record.id = canonical;
+    answer.latest = { [canonical]: readingsOf(fresh()) };
+    const provenance = record.provenance as { derivedFrom: { records: Rec[] } };
     provenance.derivedFrom.records.push({ class: "feature", id: "oc:feature:osm-fuel:way/9" });
 
     const opened = await provider.getStation(searched!.id);
@@ -569,7 +593,7 @@ describe("fuel-stations-openconditions", () => {
       canonical: 1,
       expand: "components,latest",
     });
-    const [w, s, e, n] = String(params["bbox"]).split(",").map(Number) as [
+    const [w, s, e, n] = String(params.bbox).split(",").map(Number) as [
       number,
       number,
       number,
@@ -648,7 +672,7 @@ describe("fuel-stations-openconditions", () => {
     expect(await provider.getStation("oc:feature:t:east")).toMatchObject({
       coordinates: [179.9995, -16.5],
     });
-    const [w, s, e, n] = String((http.calls[0]!.options?.params as Rec)["bbox"])
+    const [w, s, e, n] = String((http.calls[0]!.options?.params as Rec).bbox)
       .split(",")
       .map(Number) as [number, number, number, number];
     expect(e).toBe(180);
@@ -691,7 +715,7 @@ describe("fuel-stations-openconditions", () => {
 
   test("a feature that is not a fuel station is not a station", async () => {
     const body = clone(featureResponse) as unknown as { record: Rec };
-    body.record["kind"] = "parking_facility";
+    body.record.kind = "parking_facility";
     const { provider } = providerWith(() => ({ status: 200, headers: {}, body }));
 
     expect(await provider.getStation(STATION_ID)).toBeNull();
@@ -839,7 +863,7 @@ describe("recordToFuelStation", () => {
 
   test("a station with neither a name nor a brand has an empty name", () => {
     const record = canonical([fuelProduct("diesel")]);
-    record["name"] = [];
+    record.name = [];
     expect(recordToFuelStation(record, [])!.name).toBe("");
   });
 });

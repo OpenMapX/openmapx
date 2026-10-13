@@ -60,8 +60,6 @@
       "credentialOwner": "instance-operator",
       "reviewedAt": "2026-08-30",
       "apiHosts": ["api.openaq.org"],
-      "license": "Varies by contributing source",
-      "licenseUrl": "https://docs.openaq.org/resources/licenses",
       "attribution": "OpenAQ and the contributing data owner",
       "notes": "Each location carries its own source license and attribution; callers must retain both.",
       "commercialUse": "conditional",
@@ -70,7 +68,34 @@
       "endUserExposure": "server-only",
       "personalData": false,
       "cookies": false,
-      "dpaAvailable": false
+      "dpaAvailable": false,
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "data",
+            "subject": "Each actual contributing feed/operator/source",
+            "license": {
+              "kind": "per-item",
+              "raw": "Determined by each contributing item or operator"
+            }
+          },
+          {
+            "scope": "service",
+            "subject": "OpenAQ endpoint policy",
+            "license": {
+              "kind": "unknown",
+              "url": "https://docs.openaq.org/resources/licenses"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "Varies by contributing source",
+            "url": "https://docs.openaq.org/resources/licenses"
+          }
+        ]
+      }
     }
   ]
 }

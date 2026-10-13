@@ -1,4 +1,4 @@
-import { parseContributors, snapshotContributors } from "./contributors";
+import { readCapturedContributors, snapshotContributors } from "./contributors";
 import type { Attribution } from "./types/attribution.js";
 
 /** ASCII-safe canonical receipt; HTTP caches store this with its body. */
@@ -15,7 +15,7 @@ export function encodeRasterContributors(receipts: readonly Attribution[]): stri
 export function decodeRasterContributors(header: string | null): Attribution[] {
   if (!header || header.length > MAX_RASTER_RECEIPT_BYTES) return [];
   try {
-    return snapshotContributors(parseContributors(decodeURIComponent(header)) ?? []);
+    return snapshotContributors(readCapturedContributors(decodeURIComponent(header)) ?? []);
   } catch {
     return [];
   }

@@ -11,7 +11,12 @@
     "operatorInstructions": null
   },
   "domains": ["live-transit"],
-  "requires": [{ "service": "motis", "optional": true }],
+  "requires": [
+    {
+      "service": "motis",
+      "optional": true
+    }
+  ],
   "backend": {
     "routes": false
   },
@@ -56,8 +61,6 @@
       "sourceId": "transitous",
       "name": "Transitous",
       "url": "https://api.transitous.org/",
-      "license": "Mixed (per upstream GTFS/GBFS feed; mostly open data)",
-      "licenseUrl": "https://transitous.org/sources/",
       "commercialUse": "conditional",
       "attribution": "Public transport data via <a href=\"https://transitous.org/\">Transitous</a> (see <a href=\"https://transitous.org/sources/\">data sources</a>)",
       "notes": "The Transitous public API (api.transitous.org) is 'not intended for commercial or for-profit purposes' — commercial use is decided case-by-case on request, and open-source clients must publish their source and visibly link transitous.org/sources/ for attribution (see transitous.org/api/). Upstream MOTIS is MIT licensed; that software license is separate from OpenMapX integration code, Transitous tooling, and the per-source timetable data licenses (mostly CC-BY / CC-BY-SA / open-government licences).",
@@ -66,20 +69,71 @@
       "endUserExposure": "server-only",
       "personalData": false,
       "cookies": false,
-      "dpaAvailable": false
+      "dpaAvailable": false,
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "data",
+            "subject": "Each actual contributing feed/operator/source",
+            "license": {
+              "kind": "per-item",
+              "raw": "Determined by each contributing item or operator"
+            }
+          },
+          {
+            "scope": "service",
+            "subject": "Transitous endpoint policy",
+            "license": {
+              "kind": "unknown",
+              "url": "https://transitous.org/sources/"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "Mixed (per upstream GTFS/GBFS feed; mostly open data)",
+            "url": "https://transitous.org/sources/"
+          }
+        ]
+      }
     },
     {
       "sourceId": "motis-rt",
       "name": "MOTIS",
       "url": "https://motis-project.de/",
-      "license": "Mixed (depends on upstream GTFS-RT feed)",
       "commercialUse": "conditional",
       "providerCountry": "—",
       "providerPrivacyUrl": "https://motis-project.de/",
       "endUserExposure": "server-only",
       "personalData": false,
       "cookies": false,
-      "dpaAvailable": false
+      "dpaAvailable": false,
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "data",
+            "subject": "Each actual contributing feed/operator/source",
+            "license": {
+              "kind": "per-item",
+              "raw": "Determined by each contributing item or operator"
+            }
+          },
+          {
+            "scope": "service",
+            "subject": "MOTIS endpoint policy",
+            "license": {
+              "kind": "unknown"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "Mixed (depends on upstream GTFS-RT feed)"
+          }
+        ]
+      }
     }
   ]
 }

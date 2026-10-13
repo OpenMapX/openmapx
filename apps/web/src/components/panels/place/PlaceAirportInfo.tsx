@@ -209,8 +209,7 @@ export function PlaceAirportInfo({ airport }: Props) {
           <SectionAttribution
             name={attributionSource.name}
             url={attributionSource.url}
-            license={attributionSource.license}
-            licenseUrl={attributionSource.licenseUrl}
+            licensing={attributionSource.licensing}
             attribution={attributionSource.attribution}
           />
         </Box>

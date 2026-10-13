@@ -155,7 +155,7 @@ describe("runEvPlan", () => {
     expect(result.stops.length).toBeGreaterThanOrEqual(1);
     expect(result.stops[0].station.id).toBe(SITE_ID);
     expect(result.stops[0].attributions).toEqual([
-      { sourceId: "ocm-charging", text: "Open Charge Map", url: "" },
+      { sourceId: "ocm-charging", name: "Open Charge Map" },
     ]);
     expect(result.stops[0].availability).toEqual({
       available: 1,
@@ -573,8 +573,20 @@ describe("runEvPlan", () => {
           sourceId: "nl-ndw-charging",
           name: "NDW",
           url: "javascript:alert(1)",
-          spdxLicense: "CC0-1.0",
-          licenseUrl: "https://creativecommons.org/publicdomain/zero/1.0/",
+          licensing: {
+            version: 1,
+            bindings: [
+              {
+                scope: "data",
+                subject: "Data",
+                license: {
+                  kind: "spdx",
+                  expression: "CC0-1.0",
+                  url: "https://creativecommons.org/publicdomain/zero/1.0/",
+                },
+              },
+            ],
+          } as const,
         },
       ],
     });
@@ -594,10 +606,21 @@ describe("runEvPlan", () => {
     expect(result.stops[0]?.attributions).toEqual([
       {
         sourceId: "nl-ndw-charging",
-        text: "NDW",
-        url: "",
-        license: "CC0-1.0",
-        licenseUrl: "https://creativecommons.org/publicdomain/zero/1.0/",
+        name: "NDW",
+        licensing: {
+          version: 1,
+          bindings: [
+            {
+              scope: "data",
+              subject: "Data",
+              license: {
+                kind: "spdx",
+                expression: "CC0-1.0",
+                url: "https://creativecommons.org/publicdomain/zero/1.0/",
+              },
+            },
+          ],
+        } as const,
       },
     ]);
   });

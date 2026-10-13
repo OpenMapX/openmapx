@@ -7,9 +7,12 @@ import TableContainer from "@mui/material/TableContainer";
 import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
 import Typography from "@mui/material/Typography";
+import { buildLicensingHtml } from "@openmapx/core/attribution";
 import { legalConfig, sectionSlug } from "@openmapx/core/legal";
 import type { Disclosure, PublicLegalConfig } from "@openmapx/core/server-api";
+import type { Licensing } from "@openmapx/mobility-core/licensing";
 import { TransitFeedAttribution } from "@/components/legal/TransitFeedAttribution";
+import { AttributionText } from "@/components/ui/AttributionText";
 import { generateAttributionSectionsFromManifests } from "../generateLegalSections";
 import { termsIds, termsTitles } from "./sections";
 
@@ -48,7 +51,7 @@ export default function TermsContentDe({
           mb: 4,
         }}
       >
-        Zuletzt aktualisiert: 5. September 2026
+        Zuletzt aktualisiert: 14. Oktober 2026
       </Typography>
       <Section title={T.scope}>
         <Typography>
@@ -734,8 +737,7 @@ function Section({
 interface AttributionRow {
   source: string;
   desc: string;
-  license: string;
-  licenseUrl?: string;
+  licensing: Licensing;
   url?: string;
   notes?: string;
 }
@@ -780,13 +782,12 @@ function AttributionTable({ heading, rows }: { heading: string; rows: Attributio
                   )}
                 </TableCell>
                 <TableCell>
-                  {row.licenseUrl ? (
-                    <Link href={row.licenseUrl} target="_blank" rel="noopener noreferrer">
-                      {row.license}
-                    </Link>
-                  ) : (
-                    row.license
-                  )}
+                  <AttributionText
+                    html={buildLicensingHtml(row.licensing, {
+                      includeSoftware: true,
+                      fullNames: true,
+                    })}
+                  />
                 </TableCell>
               </TableRow>
             ))}

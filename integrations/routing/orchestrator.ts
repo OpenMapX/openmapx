@@ -3,7 +3,7 @@ import {
   captureResultContributors,
   dataSourceToAttribution,
   type IntegrationContext,
-  parseFieldContributors,
+  readCapturedFieldContributors,
   snapshotContributors,
 } from "@openmapx/integration-framework";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
@@ -154,7 +154,7 @@ export function captureRoutingResult(
       ),
       ...(route.fieldContributors === undefined
         ? {}
-        : { fieldContributors: parseFieldContributors(route.fieldContributors) }),
+        : { fieldContributors: readCapturedFieldContributors(route.fieldContributors) }),
     })),
   };
 }

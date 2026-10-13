@@ -1,3 +1,4 @@
+import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 /**
  * Maps RIS::Stations API responses to OpenMapX types.
  * Pure functions — no I/O.
@@ -112,7 +113,7 @@ export function stopPlaceToPlace(stop: RisStopPlace, lang?: string): Place {
 
 export interface StationDetail {
   source: string;
-  attribution: { text: string; url: string; license: string; licenseUrl: string };
+  attribution: import("@openmapx/mobility-core/attribution").Attribution;
   sections: StationDetailSection[];
 }
 
@@ -186,10 +187,14 @@ export function buildStationDetail(
   return {
     source: "db-station",
     attribution: {
-      text: "Deutsche Bahn",
+      sourceId: "Deutsche Bahn",
+      name: "Deutsche Bahn",
       url: "https://developers.deutschebahn.com",
-      license: "DB API Terms",
-      licenseUrl: "https://developers.deutschebahn.com",
+      licensing: licensingFromDeclaration(
+        "DB API Terms",
+        "https://developers.deutschebahn.com",
+        "Deutsche Bahn",
+      ),
     },
     sections,
   };

@@ -1,3 +1,4 @@
+import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 import { render, screen } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
 import { describe, expect, it, vi } from "vitest";
@@ -22,8 +23,7 @@ function photo(name: string, license: string) {
     url: `https://upload.wikimedia.org/wikipedia/commons/a/ab/${name}.jpg`,
     source: "wikimedia-commons",
     author: `${name} artist`,
-    license,
-    licenseUrl: "https://creativecommons.org/licenses/by/4.0/",
+    licensing: licensingFromDeclaration(license),
     pageUrl: `https://commons.wikimedia.org/wiki/File:${name}.jpg`,
     contributors: [{ sourceId: "wikimedia-commons", name: "Captured Commons" }],
   };
@@ -42,6 +42,6 @@ describe("gallery file credits", () => {
   it("credits every rendered thumbnail's own licence, including an unselected file", () => {
     photos.items = [photo("One", "CC BY 4.0"), photo("Two", "CC BY-SA 4.0")];
     open();
-    expect(screen.getAllByRole("link", { name: "CC BY-SA 4.0" }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("link", { name: "CC-BY-SA-4.0" }).length).toBeGreaterThan(0);
   });
 });

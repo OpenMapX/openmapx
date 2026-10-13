@@ -103,3 +103,28 @@ it("captures matrix cell receipts before acquisition and preserves explicit empt
   expect(rows?.[0][1]?.contributors).toEqual([]);
   expect(rows?.[0][2]).toBeNull();
 });
+
+it("keeps a malformed field map authoritative instead of inheriting a record grant", async () => {
+  const receipt = { sourceId: "provider", name: "Provider" };
+  const provider = withRoutingContributors(
+    {
+      id: "p",
+      supportedModes: ["driving"],
+      getRoute: async () =>
+        result([
+          {
+            ...route,
+            contributors: [receipt],
+            fieldContributors: {
+              geometry: [{ ...receipt, licensing: { version: 2, bindings: [] } }],
+            } as unknown as Route["fieldContributors"],
+          },
+        ]),
+    },
+    () => [receipt],
+  );
+  const captured = (await provider.getRoute([], "driving")).routes[0];
+  expect(captured.fieldContributors).toEqual({});
+  const { contributorsForField } = await import("@openmapx/mobility-core/contributors");
+  expect(contributorsForField(captured, "geometry")).toEqual([]);
+});

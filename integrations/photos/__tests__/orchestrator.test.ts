@@ -1,4 +1,5 @@
 import type { LoadedIntegration } from "@openmapx/core";
+import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   createOsmImagePhotoProvider,
@@ -77,8 +78,10 @@ describe("searchHeroPhotos", () => {
       url: "https://upload.wikimedia.org/a.jpg",
       source: "wikimedia",
       author: "Artist",
-      license: "CC BY 4.0",
-      licenseUrl: "https://creativecommons.org/licenses/by/4.0/",
+      licensing: licensingFromDeclaration(
+        "CC BY 4.0",
+        "https://creativecommons.org/licenses/by/4.0/",
+      ),
       pageUrl: "https://commons.wikimedia.org/wiki/File:A.jpg",
     };
     const error = Object.assign(new Error("throttled"), { status: 429, retryAfterMs: 7000 });
@@ -157,7 +160,7 @@ describe("searchHeroPhotos", () => {
     expect(photos[1]).toMatchObject({
       source: "wikimedia-commons",
       author: "Creator",
-      license: "CC BY 4.0",
+      licensing: licensingFromDeclaration("CC BY 4.0", undefined, "Commons file", "imagery"),
       contributors: [expect.objectContaining({ sourceId: "wikimedia-commons" })],
     });
   });

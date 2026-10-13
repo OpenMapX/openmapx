@@ -1,3 +1,4 @@
+import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { emptyResponse, streamedJsonResponse } from "../../../test/streamed-response.js";
 
@@ -35,9 +36,11 @@ function makePhoto(url: string) {
   return {
     url,
     author: "Author",
-    license: "CC BY-SA 4.0",
+    licensing: licensingFromDeclaration(
+      "CC BY-SA 4.0",
+      "https://creativecommons.org/licenses/by-sa/4.0/",
+    ),
     source: "wikimedia-commons",
-    licenseUrl: "https://creativecommons.org/licenses/by-sa/4.0/",
     pageUrl: "https://commons.wikimedia.org/wiki/File:Photo.jpg",
   };
 }

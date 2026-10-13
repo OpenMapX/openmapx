@@ -16,7 +16,7 @@ import type { DatabaseClient, IntegrationContext } from "@openmapx/integration-f
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import {
   contributorsForRecords,
-  parseContributors,
+  readCapturedContributors,
   snapshotContributors,
 } from "@openmapx/mobility-core/contributors";
 
@@ -217,7 +217,7 @@ async function fetchOverturePlaceByGers(
 }
 
 function overtureRowToKnowledgeResult(row: OvertureDetailRow): KnowledgeResult | null {
-  const catalogue = parseContributors(row.sources_catalogue) ?? [
+  const catalogue = readCapturedContributors(row.sources_catalogue) ?? [
     AMBIENT_LEGACY_OVERTURE_ATTRIBUTION,
   ];
   // A successful match always credits Overture as a source via its GERS id,

@@ -207,8 +207,20 @@ describe("parking orchestrator", () => {
           sourceId: "src-c",
           name: "MobiData BW",
           url: "https://mobidata-bw.de",
-          spdxLicense: "DL-DE-BY-2.0",
-          licenseUrl: "https://www.govdata.de/dl-de/by-2-0",
+          licensing: {
+            version: 1,
+            bindings: [
+              {
+                scope: "data",
+                subject: "Data",
+                license: {
+                  kind: "spdx",
+                  expression: "DL-DE-BY-2.0",
+                  url: "https://www.govdata.de/dl-de/by-2-0",
+                },
+              },
+            ],
+          } as const,
         },
       ],
     });
@@ -224,20 +236,47 @@ describe("parking orchestrator", () => {
     expect(result.attributions.map((a) => a.sourceId)).toEqual(["src-a", "src-c"]);
     expect(result.data[2].attributions).toEqual([
       {
-        text: "MobiData BW",
+        sourceId: "src-c",
+        name: "MobiData BW",
         url: "https://mobidata-bw.de",
-        license: "DL-DE-BY-2.0",
-        licenseUrl: "https://www.govdata.de/dl-de/by-2-0",
+        licensing: {
+          version: 1,
+          bindings: [
+            {
+              scope: "data",
+              subject: "Data",
+              license: {
+                kind: "spdx",
+                expression: "DL-DE-BY-2.0",
+                url: "https://www.govdata.de/dl-de/by-2-0",
+              },
+            },
+          ],
+        } as const,
       },
     ]);
   });
 
   test("an upstream publisher's credit under its feed reaches the search's attributions", async () => {
-    const feed = { sourceId: "src-c", name: "MobiData BW (NVBW)", spdxLicense: "DL-DE-BY-2.0" };
+    const feed = {
+      sourceId: "src-c",
+      name: "MobiData BW (NVBW)",
+      licensing: {
+        version: 1,
+        bindings: [
+          { scope: "data", subject: "Data", license: { kind: "spdx", expression: "DL-DE-BY-2.0" } },
+        ],
+      } as const,
+    };
     const upstream = {
       sourceId: "src-c",
       name: "MobiData BW (NVBW) – Stadt Karlsruhe",
-      spdxLicense: "CC-BY-4.0",
+      licensing: {
+        version: 1,
+        bindings: [
+          { scope: "data", subject: "Data", license: { kind: "spdx", expression: "CC-BY-4.0" } },
+        ],
+      } as const,
       publisher: { name: "Stadt Karlsruhe" },
     };
     const source = createParkingDataSource(

@@ -13,7 +13,9 @@ import TableContainer from "@mui/material/TableContainer";
 import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
 import Typography from "@mui/material/Typography";
-import { safeHref } from "@openmapx/core";
+import { buildLicensingHtml, safeHref } from "@openmapx/core";
+import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
+import { AttributionText } from "@/components/ui/AttributionText";
 
 interface FeedAttribution {
   country_code?: string;
@@ -134,17 +136,15 @@ export function TransitFeedAttribution({ feeds, labels }: TransitFeedAttribution
                         )}
                       </TableCell>
                       <TableCell>
-                        {feed.license_url ? (
-                          <Link
-                            href={safeHref(feed.license_url)}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                          >
-                            {feed.spdx_license_identifier ?? "Unknown"}
-                          </Link>
-                        ) : (
-                          (feed.spdx_license_identifier ?? "Unknown")
-                        )}
+                        <AttributionText
+                          html={buildLicensingHtml(
+                            licensingFromDeclaration(
+                              feed.spdx_license_identifier,
+                              feed.license_url,
+                            ),
+                            { fullNames: true },
+                          )}
+                        />
                       </TableCell>
                       <TableCell>
                         <Typography

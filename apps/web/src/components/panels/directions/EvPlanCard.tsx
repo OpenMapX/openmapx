@@ -19,7 +19,6 @@ import {
 import { useLocale, useTranslations } from "next-intl";
 import { AttributionStrip } from "@/components/ui/AttributionStrip";
 import { BRAND } from "@/integration-api/runtime/theme";
-import { runtimeAttributionToAttribution } from "@/lib/attributionForProviders";
 import { EV_CHARGING_SOURCE_ID, openChargerPlace } from "@/lib/openChargerPlace";
 
 export function EvPlanCard({
@@ -230,9 +229,7 @@ function EvPlanStopRow({
     : null;
   const attributions =
     stop.fieldContributors === undefined
-      ? snapshotContributors(
-          stop.contributors ?? stop.attributions.map(runtimeAttributionToAttribution),
-        )
+      ? snapshotContributors(stop.contributors ?? stop.attributions)
       : contributorsForRecordFields(stop, [
           "station.name",
           "connector",

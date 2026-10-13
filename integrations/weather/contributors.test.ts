@@ -1,4 +1,5 @@
 import { createMockIntegrationContext } from "@openmapx/integration-framework/testing";
+import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 import { expect, it } from "vitest";
 import { createWeatherOrchestrator } from "./orchestrator";
 
@@ -13,7 +14,14 @@ it("captures the actual successful weather response before the caller caches it"
         enabled: true,
         manifest: {
           domains: ["weather"],
-          dataSources: [{ sourceId: "a", name: "Failed A", url: "https://a.test", license: "CC0" }],
+          dataSources: [
+            {
+              sourceId: "a",
+              name: "Failed A",
+              url: "https://a.test",
+              licensing: licensingFromDeclaration("CC0", undefined),
+            },
+          ],
         },
         providers: new Map([
           [
@@ -29,7 +37,14 @@ it("captures the actual successful weather response before the caller caches it"
             ],
           ],
         ]),
-        dataSources: [{ sourceId: "a", name: "Failed A", url: "https://a.test", license: "CC0" }],
+        dataSources: [
+          {
+            sourceId: "a",
+            name: "Failed A",
+            url: "https://a.test",
+            licensing: licensingFromDeclaration("CC0", undefined),
+          },
+        ],
       },
       {
         id: "weather-b",
@@ -38,14 +53,24 @@ it("captures the actual successful weather response before the caller caches it"
         manifest: {
           domains: ["weather"],
           dataSources: [
-            { sourceId: "winner", name: "Actual B", url: "https://b.test", license: "CC0" },
+            {
+              sourceId: "winner",
+              name: "Actual B",
+              url: "https://b.test",
+              licensing: licensingFromDeclaration("CC0", undefined),
+            },
           ],
         },
         providers: new Map([
           ["weather", [{ id: "winner", priority: 2, getCurrentWeather: async () => result }]],
         ]),
         dataSources: [
-          { sourceId: "winner", name: "Actual B", url: "https://b.test", license: "CC0" },
+          {
+            sourceId: "winner",
+            name: "Actual B",
+            url: "https://b.test",
+            licensing: licensingFromDeclaration("CC0", undefined),
+          },
         ],
       },
     ] as never;
@@ -62,14 +87,14 @@ it.each(["declared", "runtime"] as const)(
       sourceId: "winner",
       name: "Captured",
       url: "https://old.test",
-      license: "CC0",
+      licensing: licensingFromDeclaration("CC0", undefined),
       attribution: "Old required notice",
     };
     const receipt = {
       sourceId: "winner",
       name: "Captured",
       url: "https://old.test",
-      spdxLicense: "CC0",
+      licensing: licensingFromDeclaration("CC0", undefined, "Captured"),
       attributionText: "Old required notice",
       publisher: { name: "Original publisher" },
     };
@@ -121,7 +146,7 @@ it("captures a fallback's metadata when its own acquisition starts and preserves
     sourceId: "winner",
     name: "Winner",
     url: "https://winner.test",
-    license: "CC0",
+    licensing: licensingFromDeclaration("CC0", undefined),
     attribution: "Before first attempt",
   };
   const ctx = createMockIntegrationContext();
@@ -175,7 +200,7 @@ it("isolates old weather caches and keeps the acquired receipt on retained respo
     sourceId: "winner",
     name: "Captured",
     url: "https://old.test",
-    license: "CC0",
+    licensing: licensingFromDeclaration("CC0", undefined),
     attribution: "Original notice",
   };
   const entries = new Map<string, unknown>([

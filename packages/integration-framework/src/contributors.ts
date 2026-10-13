@@ -1,7 +1,7 @@
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import {
   contributorsForRecords,
-  parseContributors,
+  readCapturedContributors,
   snapshotContributors,
 } from "@openmapx/mobility-core/contributors";
 
@@ -18,10 +18,11 @@ export {
   contributorsForRecordFields,
   contributorsForRecords,
   type FieldContributors,
-  legacyAttributionsToContributors,
   narrowContributors,
   parseContributors,
   parseFieldContributors,
+  readCapturedContributors,
+  readCapturedFieldContributors,
   serializeContributors,
   snapshotContributors,
   withContributors,
@@ -38,7 +39,7 @@ export function resolveSourceContributors(
   );
 }
 
-/** A portable captured receipt or explicitly identified legacy contribution. */
+/** A portable captured receipt or explicitly identified acquisition source. */
 export interface ContributorEvidence {
   contributors?: unknown;
   sourceIds?: Iterable<string>;
@@ -49,7 +50,7 @@ export function resolveContributors(
   evidence: ContributorEvidence,
   resolve: (sourceId: string) => Attribution | undefined,
 ): Attribution[] {
-  const captured = parseContributors(evidence.contributors);
+  const captured = readCapturedContributors(evidence.contributors);
   return captured === undefined
     ? resolveSourceContributors(evidence.sourceIds ?? [], resolve)
     : snapshotContributors(captured);
@@ -103,7 +104,7 @@ export function resolveCapturedContributors(
   evidence: ContributorEvidence,
   uniformDeclaredSupplier = false,
 ): Attribution[] {
-  const captured = parseContributors(evidence.contributors);
+  const captured = readCapturedContributors(evidence.contributors);
   if (captured !== undefined) return snapshotContributors(captured);
   const declared = catalogue.declaredByIntegration.get(integrationId) ?? [];
   const sourceIds =

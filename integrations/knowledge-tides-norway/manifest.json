@@ -22,7 +22,10 @@
   "configSchema": {
     "type": "object",
     "properties": {
-      "enabled": { "type": "boolean", "default": true }
+      "enabled": {
+        "type": "boolean",
+        "default": true
+      }
     }
   },
   "quality": "built-in",
@@ -39,8 +42,6 @@
       "sourceId": "kartverket-sehavniva",
       "name": "Kartverket Sehavnivå",
       "url": "https://www.kartverket.no/til-sjos/se-havniva",
-      "license": "NLOD-2.0",
-      "licenseUrl": "https://data.norge.no/nlod/en/2.0",
       "attribution": "Tide data from <a href=\"https://www.kartverket.no/til-sjos/se-havniva\">Kartverket</a> (NLOD 2.0)",
       "commercialUse": "yes",
       "providerCountry": "NO",
@@ -48,7 +49,27 @@
       "endUserExposure": "server-only",
       "personalData": false,
       "cookies": false,
-      "dpaAvailable": false
+      "dpaAvailable": false,
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "data",
+            "subject": "Kartverket Sehavnivå material",
+            "license": {
+              "kind": "spdx",
+              "expression": "NLOD-2.0",
+              "url": "https://data.norge.no/nlod/en/2.0"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "NLOD-2.0",
+            "url": "https://data.norge.no/nlod/en/2.0"
+          }
+        ]
+      }
     }
   ]
 }

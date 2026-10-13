@@ -68,7 +68,7 @@ export type {
   KnowledgeResult,
 } from "./knowledge-provider.js";
 export type {
-  DataSourceAttribution,
+  Attribution,
   DataSourceBranding,
   DataSourceDetail,
   DataSourceDetailSection,

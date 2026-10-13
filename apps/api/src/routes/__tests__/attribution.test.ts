@@ -23,8 +23,20 @@ const MANIFEST_FIXTURE: ManifestDataSource[] = [
     sourceId: "openchargemap",
     name: "Open Charge Map",
     url: "https://openchargemap.org/",
-    license: "CC-BY-SA-4.0",
-    licenseUrl: "https://openchargemap.org/site/about",
+    licensing: {
+      version: 1,
+      bindings: [
+        {
+          scope: "data",
+          subject: "Data",
+          license: {
+            kind: "spdx",
+            expression: "CC-BY-SA-4.0",
+            url: "https://openchargemap.org/site/about",
+          },
+        },
+      ],
+    } as const,
     providerCountry: "gb",
     providerPrivacyUrl: "https://openchargemap.org/site/privacy",
   },

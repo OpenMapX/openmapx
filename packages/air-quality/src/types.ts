@@ -1,3 +1,4 @@
+import type { Licensing } from "@openmapx/mobility-core/licensing";
 export type AirQualityStandardId =
   | "us-epa-2024"
   | "eu-eea-current"
@@ -159,7 +160,7 @@ export interface AirQualitySourceRef {
   name: string;
   url: string | null;
   owner: string | null;
-  license: { name: string; url: string | null } | null;
+  licensing: Licensing | null;
   methodologyUrl: string | null;
   attribution: string | null;
 }

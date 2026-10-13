@@ -1,3 +1,4 @@
+import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { emptyResponse, streamedJsonResponse } from "../../../test/streamed-response.js";
 
@@ -101,9 +102,11 @@ describe("wikipediaSource", () => {
     const richPhoto = {
       url: "https://upload.wikimedia.org/wikipedia/commons/thumb/a/ab/Berlin.jpg/800px-Berlin.jpg",
       author: "Author",
-      license: "CC BY-SA 4.0",
+      licensing: licensingFromDeclaration(
+        "CC BY-SA 4.0",
+        "https://creativecommons.org/licenses/by-sa/4.0/",
+      ),
       source: "wikimedia-commons",
-      licenseUrl: "https://creativecommons.org/licenses/by-sa/4.0/",
       pageUrl: "https://commons.wikimedia.org/wiki/File:Berlin.jpg",
     };
     mockFetchCommonsMetadata.mockResolvedValueOnce(new Map([["Berlin.jpg", richPhoto]]));

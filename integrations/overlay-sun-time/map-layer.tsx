@@ -3,7 +3,10 @@
 import { subsolarPoint, twilightBands, tzOffsetLabel, tzOffsetMinutes } from "@openmapx/core";
 import { dataSourceToAttribution } from "@openmapx/integration-framework";
 import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
-import { parseContributors, withFeatureContributors } from "@openmapx/mobility-core/contributors";
+import {
+  readCapturedContributors,
+  withFeatureContributors,
+} from "@openmapx/mobility-core/contributors";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { addLayerInSlot, unregisterLayerSlot } from "@/integration-api/map/layerStack";
 import type { GeoJsonSourceDataEntry } from "@/integration-api/map/layerStyleUtils";
@@ -144,8 +147,8 @@ export default function SunTimeLayer() {
             features: data.features.map((feature) =>
               withFeatureContributors(
                 feature,
-                parseContributors(feature.properties?.contributors) ??
-                  parseContributors(feature.properties?._mapAttributions) ??
+                readCapturedContributors(feature.properties?.contributors) ??
+                  readCapturedContributors(feature.properties?._mapAttributions) ??
                   contributors,
               ),
             ),

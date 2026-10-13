@@ -151,10 +151,10 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         ).find((p) => p.gers_id)!;
         expect(first.gers_id).toBe("dense-00001");
         expect(JSON.parse(String(first.source_lineage)).sources[0].record_id).toBe(
-          "x".repeat(10000) + "1",
+          `${"x".repeat(10000)}1`,
         );
         expect(JSON.parse(String(first.field_contributors)).name[1].notes).toBe(
-          "n".repeat(8000) + "1",
+          `${"n".repeat(8000)}1`,
         );
         expect(await readAmbientTile(pg.sql, distinct.generation, tile.z, tile.x, tile.y)).toEqual(
           pathological,
@@ -299,7 +299,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         });
 
         await rollbackAmbientPlaces(pg.sql);
-        expect((await readAmbientManifest(pg.sql))!.generation).toBe(a.generation);
+        expect((await readAmbientManifest(pg.sql))?.generation).toBe(a.generation);
         await rollbackAmbientPlaces(pg.sql);
         await setAmbientEnabled(pg.sql, false);
         expect((await readAmbientManifest(pg.sql))!.enabled).toBe(false);
@@ -311,7 +311,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         await expect(buildAmbientPlaces(pg.sql, region)).rejects.toThrow(
           /fixture insertion failure/,
         );
-        expect((await readAmbientManifest(pg.sql))!.generation).toBe(b.generation);
+        expect((await readAmbientManifest(pg.sql))?.generation).toBe(b.generation);
         const [survivors] = await pg.sql.unsafe<{ count: number }[]>(
           `SELECT count(*)::INT AS count FROM ambient_places.generations`,
         );
@@ -323,11 +323,11 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           `UPDATE overture_places.places SET sources='[{"dataset":"unknown-fixture"}]' WHERE gers_id='gers-b'`,
         );
         await expect(buildAmbientPlaces(pg.sql, region)).rejects.toThrow(/unsupported|unknown/i);
-        expect((await readAmbientManifest(pg.sql))!.generation).toBe(b.generation);
+        expect((await readAmbientManifest(pg.sql))?.generation).toBe(b.generation);
         await pg.sql.unsafe(`UPDATE overture_places.places SET sources=NULL`);
         await pg.sql.unsafe(`UPDATE overture_places.conflation_state SET status='running'`);
         await expect(buildAmbientPlaces(pg.sql, region)).rejects.toThrow(/conflation/i);
-        expect((await readAmbientManifest(pg.sql))!.generation).toBe(b.generation);
+        expect((await readAmbientManifest(pg.sql))?.generation).toBe(b.generation);
         await pg.sql.unsafe(
           `UPDATE overture_places.conflation_state SET status='completed'; UPDATE osm_search.index_state SET published_at=now()-interval '91 days'`,
         );
@@ -339,7 +339,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           `UPDATE overture_places.places SET operating_status='permanently_closed'`,
         );
         await expect(buildAmbientPlaces(pg.sql, region)).rejects.toThrow(/empty/i);
-        expect((await readAmbientManifest(pg.sql))!.generation).toBe(b.generation);
+        expect((await readAmbientManifest(pg.sql))?.generation).toBe(b.generation);
         process.stdout.write(
           JSON.stringify({
             initialBuildMs,
@@ -424,8 +424,20 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                 sourceId: "overture",
                 name: "Overture Maps",
                 url: "https://overturemaps.org",
-                spdxLicense: "CDLA-Permissive-2.0",
-                licenseUrl: "https://cdla.dev/permissive-2-0/",
+                licensing: {
+                  version: 1,
+                  bindings: [
+                    {
+                      scope: "data",
+                      subject: "Data",
+                      license: {
+                        kind: "spdx",
+                        expression: "CDLA-Permissive-2.0",
+                        url: "https://cdla.dev/permissive-2-0/",
+                      },
+                    },
+                  ],
+                } as const,
               },
             ],
           );

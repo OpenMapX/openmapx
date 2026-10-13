@@ -1,5 +1,5 @@
 import type { RoadFlowSegment } from "@openmapx/integration-framework";
-import { parseFieldContributors } from "@openmapx/mobility-core/contributors";
+import { readCapturedFieldContributors } from "@openmapx/mobility-core/contributors";
 
 type Rec = Record<string, unknown>;
 
@@ -67,7 +67,7 @@ function featureToRoadFlowSegment(feature: Rec, providerId: string): RoadFlowSeg
     id,
     ...(p["field_contributors"] === undefined
       ? {}
-      : { fieldContributors: parseFieldContributors(p["field_contributors"]) }),
+      : { fieldContributors: readCapturedFieldContributors(p["field_contributors"]) }),
     geometry: geometry as unknown as RoadFlowSegment["geometry"],
     ...(num(p["current_kph"]) !== undefined ? { currentSpeedKph: num(p["current_kph"]) } : {}),
     ...(num(p["free_flow_kph"]) !== undefined ? { freeFlowSpeedKph: num(p["free_flow_kph"]) } : {}),

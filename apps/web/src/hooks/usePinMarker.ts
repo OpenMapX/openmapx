@@ -2,7 +2,10 @@
 
 import type { LngLat } from "@openmapx/core";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
-import { parseContributors, serializeContributors } from "@openmapx/mobility-core/contributors";
+import {
+  readCapturedContributors,
+  serializeContributors,
+} from "@openmapx/mobility-core/contributors";
 import type * as maplibregl from "maplibre-gl";
 import { useEffect, useRef, useState } from "react";
 import { useMap } from "@/integration-api/map/MapContext";
@@ -193,8 +196,8 @@ export function usePinMarker(
       return;
     }
 
-    const captured = parseContributors(receiptKey) ?? [];
-    const capturedLabel = parseContributors(labelReceiptKey) ?? [];
+    const captured = readCapturedContributors(receiptKey) ?? [];
+    const capturedLabel = readCapturedContributors(labelReceiptKey) ?? [];
     const publishMarkerEvidence = (root: HTMLElement) => {
       const element = separateChannels ? geometryRef.current : root;
       const labelElement = separateChannels && showLabel ? labelRef.current : null;

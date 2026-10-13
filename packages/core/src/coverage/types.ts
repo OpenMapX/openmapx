@@ -1,3 +1,4 @@
+import type { Licensing } from "@openmapx/mobility-core/licensing";
 /** The eight operational domains shown by the coverage report. */
 export type CoverageDomain =
   | "addresses"
@@ -227,8 +228,7 @@ export interface RightsEvidence {
   name?: string;
   commercialUse: CoveragePermission;
   redistribution: RedistributionPermissions;
-  license?: string;
-  licenseUrl?: string;
+  licensing?: Licensing;
   termsUrl?: string;
   attribution?: string;
   usageConditions: string[];

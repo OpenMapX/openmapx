@@ -7,6 +7,7 @@ import {
 } from "@openmapx/core";
 import type { LoadedIntegration, RoutingProvider } from "@openmapx/integration-framework";
 import { createMockIntegrationContext } from "@openmapx/integration-framework/testing";
+import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 import Fastify from "fastify";
 import { expect, it, vi } from "vitest";
 import {
@@ -24,8 +25,16 @@ it("preserves composed geometry receipts and native empty spans through schedule
     sourceId: "shared-feed",
     name: "Supplier",
     url: "https://supplier.test/data",
-    spdxLicense: "CC-BY-4.0",
-    licenseUrl: "https://supplier.test/license",
+    licensing: {
+      version: 1,
+      bindings: [
+        {
+          scope: "data",
+          subject: "Data",
+          license: { kind: "spdx", expression: "CC-BY-4.0", url: "https://supplier.test/license" },
+        },
+      ],
+    } as const,
     attributionText: "First acquisition required notice",
     publisher: { name: "Publisher", url: "https://publisher.test" },
   };
@@ -76,7 +85,7 @@ it("preserves composed geometry receipts and native empty spans through schedule
           sourceId: "catalogue-only",
           name: "Unused catalogue",
           url: "https://unused.test",
-          license: "CC0",
+          licensing: licensingFromDeclaration("CC0", undefined, "Unused catalogue"),
           providerCountry: "DE",
           providerPrivacyUrl: "https://unused.test/privacy",
         },

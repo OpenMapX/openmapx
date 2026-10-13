@@ -40,7 +40,9 @@ const baseResult: EvDirectionsResult = {
       availability: { available: 3, total: 6, updatedAt: "2026-07-21T10:00:00Z" },
       tariffPrice: { amount: 0.55, currency: "EUR", unit: "kWh" },
       estimatedCost: { amount: 12.5, currency: "EUR" },
-      attributions: [{ text: "OpenChargeMap", url: "https://openchargemap.org" }],
+      attributions: [
+        { sourceId: "OpenChargeMap", name: "OpenChargeMap", url: "https://openchargemap.org" },
+      ],
     },
   ],
   totals: { driveSeconds: 12_000, chargeSeconds: 1500, energyKwh: 55 },

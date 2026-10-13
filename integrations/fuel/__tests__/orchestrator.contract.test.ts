@@ -315,11 +315,25 @@ describe("fuel orchestrator", () => {
   });
 
   test("an upstream publisher's credit under its feed reaches the search's attributions", async () => {
-    const feed = { sourceId: "src-c", name: "MobiData BW", spdxLicense: "DL-DE-BY-2.0" };
+    const feed = {
+      sourceId: "src-c",
+      name: "MobiData BW",
+      licensing: {
+        version: 1,
+        bindings: [
+          { scope: "data", subject: "Data", license: { kind: "spdx", expression: "DL-DE-BY-2.0" } },
+        ],
+      } as const,
+    };
     const upstream = {
       sourceId: "src-c",
       name: "MobiData BW – Stadtwerke Karlsruhe",
-      spdxLicense: "CC-BY-4.0",
+      licensing: {
+        version: 1,
+        bindings: [
+          { scope: "data", subject: "Data", license: { kind: "spdx", expression: "CC-BY-4.0" } },
+        ],
+      } as const,
       publisher: { name: "Stadtwerke Karlsruhe" },
     };
     const source = createFuelDataSource(
@@ -344,8 +358,20 @@ describe("fuel orchestrator", () => {
           sourceId: "de-mtsk",
           name: "MTS-K via Tankerkönig",
           url: "https://creativecommons.tankerkoenig.de/",
-          spdxLicense: "CC-BY-4.0",
-          licenseUrl: "https://creativecommons.org/licenses/by/4.0/",
+          licensing: {
+            version: 1,
+            bindings: [
+              {
+                scope: "data",
+                subject: "Data",
+                license: {
+                  kind: "spdx",
+                  expression: "CC-BY-4.0",
+                  url: "https://creativecommons.org/licenses/by/4.0/",
+                },
+              },
+            ],
+          } as const,
         },
         { sourceId: "osm", name: "OpenStreetMap contributors" },
       ],
@@ -353,12 +379,25 @@ describe("fuel orchestrator", () => {
     const source = createFuelDataSource(ctxWith([provider("a", [credited])]));
     const expected = [
       {
-        text: "MTS-K via Tankerkönig",
+        sourceId: "de-mtsk",
+        name: "MTS-K via Tankerkönig",
         url: "https://creativecommons.tankerkoenig.de/",
-        license: "CC-BY-4.0",
-        licenseUrl: "https://creativecommons.org/licenses/by/4.0/",
+        licensing: {
+          version: 1,
+          bindings: [
+            {
+              scope: "data",
+              subject: "Data",
+              license: {
+                kind: "spdx",
+                expression: "CC-BY-4.0",
+                url: "https://creativecommons.org/licenses/by/4.0/",
+              },
+            },
+          ],
+        } as const,
       },
-      { text: "OpenStreetMap contributors", url: "" },
+      { sourceId: "osm", name: "OpenStreetMap contributors" },
     ];
 
     const [result] = (await source.search(BBOX)).data;

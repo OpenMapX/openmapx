@@ -78,7 +78,12 @@ function manifestSource(sourceId: string, name: string, url: string): Integratio
     sourceId,
     name,
     url,
-    license: "CC0-1.0",
+    licensing: {
+      version: 1,
+      bindings: [
+        { scope: "data", subject: "Data", license: { kind: "spdx", expression: "CC0-1.0" } },
+      ],
+    } as const,
     providerCountry: "DE",
     providerPrivacyUrl: `${url}/privacy`,
   };

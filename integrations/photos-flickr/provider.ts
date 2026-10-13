@@ -1,5 +1,6 @@
-import { fetchJson, type PlacePhoto } from "@openmapx/core";
+import { fetchJson, type PlacePhoto, withPhotoContributors } from "@openmapx/core";
 import type { PhotoProvider, PhotoQuery } from "@openmapx/integration-photos/types";
+import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 
 /**
  * Flickr license IDs that allow commercial use:
@@ -103,17 +104,24 @@ export const flickrPhotoProvider: PhotoProvider = {
         ? new Date(photo.datetaken.replace(" ", "T")).toISOString()
         : undefined;
 
-      return {
-        url: imageUrl,
-        thumbnailUrl: thumbUrl,
-        source: "flickr",
-        author,
-        authorUrl: `https://www.flickr.com/photos/${photo.owner}`,
-        license,
-        licenseUrl: LICENSE_URLS[photo.license],
-        pageUrl: `https://www.flickr.com/photos/${photo.owner}/${photo.id}`,
-        capturedAt,
-      };
+      return withPhotoContributors(
+        {
+          url: imageUrl,
+          thumbnailUrl: thumbUrl,
+          source: "flickr",
+          author,
+          authorUrl: `https://www.flickr.com/photos/${photo.owner}`,
+          licensing: licensingFromDeclaration(
+            license,
+            LICENSE_URLS[photo.license],
+            "Flickr photo",
+            "imagery",
+          ),
+          pageUrl: `https://www.flickr.com/photos/${photo.owner}/${photo.id}`,
+          capturedAt,
+        },
+        "Flickr",
+      );
     });
   },
 };

@@ -1,5 +1,4 @@
 import { createHash } from "node:crypto";
-
 import type {
   AirQualitySourceRef,
   Pollutant,
@@ -16,6 +15,8 @@ import type {
   ProviderCallContext,
   UpstreamCacheTtl,
 } from "@openmapx/integration-framework";
+import { parseLicensing } from "@openmapx/mobility-core/licensing";
+import sourceManifest from "./manifest.json";
 
 import {
   type OpenMeteoAirQualityResponse,
@@ -42,10 +43,7 @@ const source: AirQualitySourceRef = {
   name: "Open-Meteo Air Quality API / CAMS",
   url: "https://open-meteo.com/en/docs/air-quality-api",
   owner: "Open-Meteo and Copernicus Atmosphere Monitoring Service",
-  license: {
-    name: "CC-BY-4.0; Open-Meteo plan terms apply",
-    url: "https://open-meteo.com/en/terms",
-  },
+  licensing: parseLicensing(sourceManifest.dataSources[0].licensing)!,
   methodologyUrl: "https://open-meteo.com/en/docs/air-quality-api",
   attribution: "Open-Meteo; CAMS ENSEMBLE data providers",
 };

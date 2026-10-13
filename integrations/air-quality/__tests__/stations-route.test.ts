@@ -1,5 +1,6 @@
 import type { AirQualityProvider, IntegrationContext } from "@openmapx/integration-framework";
 import { createMockIntegrationContext } from "@openmapx/integration-framework/testing";
+import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { createOpaqueCursorCodec } from "../../../apps/api/src/services/opaque-cursor.js";
@@ -90,8 +91,7 @@ describe("canonical station route", () => {
         sourceId: "fixture-source",
         name: "Fixture source",
         url: "https://example.test/data",
-        spdxLicense: "CC BY 4.0",
-        licenseUrl: "https://creativecommons.org/licenses/by/4.0/",
+        licensing: licensingFromDeclaration("CC-BY-4.0"),
         attributionText: "Fixture authority",
       },
     ]);

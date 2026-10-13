@@ -1,5 +1,6 @@
 import { projectEventsToRoute, roadConditionFeatureToEvent } from "@openmapx/core";
 import type { IntegrationContext } from "@openmapx/integration-framework";
+import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 import { describe, expect, it } from "vitest";
 import { roadConditionAttributions } from "../attributions";
 import { buildRoadConditionDisplayGroups, buildRoadConditionFeatures } from "../display";
@@ -30,7 +31,7 @@ function acquisition(native?: (typeof receipt)[], declared = false) {
     name: receipt.name,
     url: receipt.url,
     attribution: receipt.attributionText,
-    license: "CC-BY-4.0",
+    licensing: licensingFromDeclaration("CC-BY-4.0", undefined),
   };
   const event = situation({
     source: "child",

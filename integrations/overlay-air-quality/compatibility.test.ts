@@ -1,4 +1,5 @@
 import type { ProviderEvidence } from "@openmapx/air-quality";
+import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 import { describe, expect, it } from "vitest";
 import { projectLegacyStations } from "./compatibility.js";
 
@@ -60,7 +61,7 @@ function evidence(): ProviderEvidence {
         name: "OpenAQ via AirNow",
         url: "https://openaq.org/",
         owner: "Unknown Governmental Organization",
-        license: { name: "US Public Domain", url: null },
+        licensing: licensingFromDeclaration("US Public Domain", null ?? undefined),
         methodologyUrl: "https://docs.openaq.org/resources/measurements",
         attribution: "Unknown Governmental Organization",
       },
@@ -80,11 +81,11 @@ describe("OpenAQ legacy projection", () => {
         pm25: 9.75,
         lastUpdated: "2026-08-30T11:00:00Z",
         attribution: { name: "Unknown Governmental Organization", url: "https://openaq.org/" },
-        license: "US Public Domain",
+        licensing: licensingFromDeclaration("US Public Domain", undefined),
       },
     ]);
     expect(Object.keys(projectLegacyStations([evidence()])[0]).sort()).toEqual(
-      ["aqi", "attribution", "id", "lastUpdated", "lat", "license", "lng", "name", "pm25"].sort(),
+      ["aqi", "attribution", "id", "lastUpdated", "lat", "licensing", "lng", "name", "pm25"].sort(),
     );
   });
 

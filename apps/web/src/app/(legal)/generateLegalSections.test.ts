@@ -9,7 +9,12 @@ const source = (sourceId: string, name: string, domain?: string) => ({
   sourceId,
   name,
   url: "https://example.test",
-  license: "CC0-1.0",
+  licensing: {
+    version: 1,
+    bindings: [
+      { scope: "data", subject: "Data", license: { kind: "spdx", expression: "CC0-1.0" } },
+    ],
+  } as const,
   providerCountry: "NL",
   providerPrivacyUrl: "https://example.test/privacy",
   ...(domain ? { domain } : {}),

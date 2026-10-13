@@ -34,15 +34,48 @@
       "sourceId": "panoramax",
       "name": "Panoramax",
       "url": "https://panoramax.xyz/",
-      "license": "etalab-2.0 (IGN); CC-BY-SA-4.0 (OSM France)",
-      "licenseUrl": "https://docs.panoramax.fr/",
       "commercialUse": "yes",
       "providerCountry": "FR",
       "providerPrivacyUrl": "https://www.ign.fr/institut/donnees-caractere-personnel",
       "endUserExposure": "server-only",
       "personalData": false,
       "cookies": false,
-      "dpaAvailable": false
+      "dpaAvailable": false,
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "imagery",
+            "subject": "Confirmed IGN-instance images",
+            "license": {
+              "kind": "spdx",
+              "expression": "etalab-2.0"
+            }
+          },
+          {
+            "scope": "imagery",
+            "subject": "Confirmed OSM-France-instance images",
+            "license": {
+              "kind": "spdx",
+              "expression": "CC-BY-SA-4.0"
+            }
+          },
+          {
+            "scope": "imagery",
+            "subject": "Other/missing-licence instance images",
+            "license": {
+              "kind": "per-item",
+              "raw": "Determined by each contributing item or operator"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "etalab-2.0 (IGN); CC-BY-SA-4.0 (OSM France)",
+            "url": "https://docs.panoramax.fr/"
+          }
+        ]
+      }
     }
   ]
 }

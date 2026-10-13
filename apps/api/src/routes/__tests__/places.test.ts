@@ -1,27 +1,30 @@
+import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 import * as placeIds from "@openmapx/place-ids";
 import Fastify, { type FastifyInstance } from "fastify";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 /** Complete controlled Commons fixture; licensing tests elsewhere keep unknown files unknown. */
 function licensedPhoto<
-  T extends { url: string; source: string; author?: string; license?: string; pageUrl?: string },
+  T extends {
+    url: string;
+    source: string;
+    author?: string;
+    licensing?: import("@openmapx/mobility-core/licensing").Licensing;
+    pageUrl?: string;
+  },
 >(photo: T) {
   const image = new URL(photo.url);
   const filename =
     image.pathname.match(/\/[a-f0-9]\/[a-f0-9]{2}\/([^/]+)/)?.[1] ??
     image.pathname.split("/").at(-1) ??
     "Photo.jpg";
-  const license = photo.license ?? "CC BY 4.0";
   return {
     ...photo,
     source: "wikimedia-commons",
     author: photo.author ?? "Controlled fixture creator",
-    license,
-    licenseUrl: license.includes("BY-SA 3")
-      ? "https://creativecommons.org/licenses/by-sa/3.0/"
-      : license.includes("BY-SA")
-        ? "https://creativecommons.org/licenses/by-sa/4.0/"
-        : "https://creativecommons.org/licenses/by/4.0/",
+    licensing:
+      photo.licensing ??
+      licensingFromDeclaration("CC-BY-4.0", undefined, "Commons file", "imagery"),
     pageUrl: photo.pageUrl ?? `https://commons.wikimedia.org/wiki/File:${filename}`,
   };
 }
@@ -325,7 +328,7 @@ describe("POST /places/card-enrichment", () => {
         "https://upload.wikimedia.org/wikipedia/commons/thumb/a/ab/Around_Aachener_Dom.JPG/800px.jpg",
       source: "wikimedia",
       author: "Draupnir3",
-      license: "CC BY-SA 3.0",
+      licensing: licensingFromDeclaration("CC BY-SA 3.0", undefined),
       pageUrl: "https://commons.wikimedia.org/wiki/File:Around_Aachener_Dom.JPG",
     });
     mockSearchHeroPhotos.mockResolvedValueOnce([photo]);
@@ -366,7 +369,7 @@ describe("POST /places/card-enrichment", () => {
           url: "https://weathercam.digitraffic.fi/C0150301.jpg",
           source: "wikimedia",
           author: "Fintraffic",
-          license: "CC BY 4.0",
+          licensing: licensingFromDeclaration("CC BY 4.0", undefined),
         },
       ]);
 
@@ -419,7 +422,7 @@ describe("POST /places/card-enrichment", () => {
       url: "https://upload.wikimedia.org/wikipedia/commons/a/ab/Dom-P18.jpg",
       source: "wikidata",
       author: "Commons contributor",
-      license: "CC BY-SA 4.0",
+      licensing: licensingFromDeclaration("CC BY-SA 4.0", undefined),
       pageUrl: "https://commons.wikimedia.org/wiki/File:Dom-P18.jpg",
     });
     mockSearchHeroPhotos.mockResolvedValueOnce([]);
@@ -882,7 +885,7 @@ describe("GET /places/:id", () => {
       url: "https://thumb.wikimedia.org/wikipedia/commons/thumb/b/be/Aachen.jpg/800px-Aachen.jpg",
       source: "wikimedia",
       author: "CEphoto, Uwe Aranas",
-      license: "CC BY-SA 3.0",
+      licensing: licensingFromDeclaration("CC BY-SA 3.0", undefined),
     });
     mockWithCache.mockResolvedValueOnce({
       ...MOCK_PLACE,

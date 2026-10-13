@@ -5,6 +5,7 @@ import {
 } from "@openmapx/integration-framework";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import { freshnessNow } from "@openmapx/mobility-core/freshness";
+import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 import { withAttribution } from "@openmapx/mobility-core/result";
 import { getAdapter } from "./adapters.js";
 import { fetchRegistryEntries, setCache, setGithubToken } from "./fetcher.js";
@@ -31,7 +32,11 @@ function buildAttributionFor(
       sourceId: `dyn:${entryId}`,
       name: entryAttribution.name,
       url: entryAttribution.homepage,
-      spdxLicense: entryAttribution.license,
+      licensing: licensingFromDeclaration(
+        entryAttribution.license,
+        undefined,
+        entryAttribution.name,
+      ),
     },
   ];
 }
@@ -59,11 +64,7 @@ export async function setup(ctx: IntegrationContext): Promise<void> {
     // TransitStop.provider carries downstream.
     const attributionKey = entry.prefix.replace(/:$/, "");
     const attributionRow = entry.attribution
-      ? {
-          label: entry.attribution.name,
-          url: entry.attribution.homepage,
-          license: entry.attribution.license,
-        }
+      ? buildAttributionFor(entry.id, entry.attribution)[0]
       : null;
 
     const entryAttribution = entry.attribution

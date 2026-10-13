@@ -1,10 +1,9 @@
 import {
+  type Attribution,
   bboxAroundPoint,
-  type DataSourceAttribution,
   type DirectionsResult,
   type EvPlanWarning,
   type EvVehicleSpec,
-  isSafeHttpUrl,
   matchesAnyOperator,
   normalizeOperator,
   type Route,
@@ -120,14 +119,8 @@ function chargingSites(ctx: IntegrationContext): ChargingSites {
  * A stop's credits as the charger place card shows them. Their links come
  * from upstream data, so only http(s) ones are kept.
  */
-function stopCredits(site: ChargingSite): DataSourceAttribution[] {
-  return site.attributions.map((a) => ({
-    sourceId: a.sourceId,
-    text: a.name,
-    url: isSafeHttpUrl(a.url) ? a.url : "",
-    ...(a.spdxLicense ? { license: a.spdxLicense } : {}),
-    ...(isSafeHttpUrl(a.licenseUrl) ? { licenseUrl: a.licenseUrl } : {}),
-  }));
+function stopCredits(site: ChargingSite): Attribution[] {
+  return snapshotContributors(site.attributions);
 }
 
 /** Match routeEnergyKwh's actual branch; route.distance is not read by that model. */

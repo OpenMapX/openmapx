@@ -119,37 +119,92 @@
       "sourceId": "gbfs",
       "name": "GBFS Catalog (MobilityData)",
       "url": "https://github.com/MobilityData/gbfs",
-      "license": "CC-BY-3.0 (spec); per-operator data licenses",
-      "licenseUrl": "https://github.com/MobilityData/gbfs/blob/master/LICENSE",
       "commercialUse": "yes",
       "providerCountry": "CA",
       "providerPrivacyUrl": "https://mobilitydata.org/privacy-policy/",
       "endUserExposure": "server-only",
       "personalData": false,
       "cookies": false,
-      "dpaAvailable": false
+      "dpaAvailable": false,
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "software",
+            "subject": "GBFS specification/documentation",
+            "license": {
+              "kind": "spdx",
+              "expression": "CC-BY-3.0"
+            }
+          },
+          {
+            "scope": "data",
+            "subject": "Operator feed data",
+            "license": {
+              "kind": "per-item",
+              "raw": "Determined by each contributing item or operator"
+            }
+          },
+          {
+            "scope": "service",
+            "subject": "Each operator endpoint/brand terms",
+            "license": {
+              "kind": "per-item",
+              "raw": "Determined by each contributing item or operator"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "CC-BY-3.0 (spec); per-operator data licenses",
+            "url": "https://github.com/MobilityData/gbfs/blob/master/LICENSE"
+          }
+        ]
+      }
     },
     {
       "sourceId": "felyx",
       "name": "Felyx",
       "url": "https://felyx.com/",
       "apiHosts": ["felyx.frontend.fleetbird.eu"],
-      "license": "Proprietary (undocumented API)",
-      "licenseUrl": "https://www.felyx.com/cdn/files/0e66dc4940cea8d358599e7d2c6b9113b3c443aa.pdf",
       "commercialUse": "unknown",
       "providerCountry": "NL",
       "providerPrivacyUrl": "https://cooltra.com/en/privacy-policy/",
       "endUserExposure": "server-only",
       "personalData": false,
       "cookies": false,
-      "dpaAvailable": false
+      "dpaAvailable": false,
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "data",
+            "subject": "Felyx material",
+            "license": {
+              "kind": "unknown"
+            }
+          },
+          {
+            "scope": "service",
+            "subject": "Felyx access/account contract",
+            "license": {
+              "kind": "unknown",
+              "url": "https://www.felyx.com/cdn/files/0e66dc4940cea8d358599e7d2c6b9113b3c443aa.pdf"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "Proprietary (undocumented API)",
+            "url": "https://www.felyx.com/cdn/files/0e66dc4940cea8d358599e7d2c6b9113b3c443aa.pdf"
+          }
+        ]
+      }
     },
     {
       "sourceId": "entur-mobility",
       "name": "Entur Mobility v2",
       "url": "https://developer.entur.org/pages-mobility-docs-mobility-v2/",
-      "license": "NLOD-2.0",
-      "licenseUrl": "https://data.norge.no/nlod/en/2.0",
       "attribution": "Data made available by Entur",
       "commercialUse": "yes",
       "providerCountry": "NO",
@@ -157,14 +212,32 @@
       "endUserExposure": "server-only",
       "personalData": false,
       "cookies": false,
-      "dpaAvailable": false
+      "dpaAvailable": false,
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "data",
+            "subject": "Entur Mobility v2 material",
+            "license": {
+              "kind": "spdx",
+              "expression": "NLOD-2.0",
+              "url": "https://data.norge.no/nlod/en/2.0"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "NLOD-2.0",
+            "url": "https://data.norge.no/nlod/en/2.0"
+          }
+        ]
+      }
     },
     {
       "sourceId": "transitous",
       "name": "Transitous",
       "url": "https://api.transitous.org/",
-      "license": "Mixed (per upstream GTFS/GBFS feed; mostly open data)",
-      "licenseUrl": "https://transitous.org/sources/",
       "commercialUse": "conditional",
       "attribution": "Public transport data via <a href=\"https://transitous.org/\">Transitous</a> (see <a href=\"https://transitous.org/sources/\">data sources</a>)",
       "notes": "The Transitous public API (api.transitous.org) is 'not intended for commercial or for-profit purposes' — commercial use is decided case-by-case on request, and open-source clients must publish their source and visibly link transitous.org/sources/ for attribution (see transitous.org/api/). Upstream MOTIS is MIT licensed; that software license is separate from OpenMapX integration code, Transitous tooling, and the per-source timetable data licenses (mostly CC-BY / CC-BY-SA / open-government licences).",
@@ -173,21 +246,73 @@
       "endUserExposure": "server-only",
       "personalData": false,
       "cookies": false,
-      "dpaAvailable": false
+      "dpaAvailable": false,
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "data",
+            "subject": "Each actual contributing feed/operator/source",
+            "license": {
+              "kind": "per-item",
+              "raw": "Determined by each contributing item or operator"
+            }
+          },
+          {
+            "scope": "service",
+            "subject": "Transitous endpoint policy",
+            "license": {
+              "kind": "unknown",
+              "url": "https://transitous.org/sources/"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "Mixed (per upstream GTFS/GBFS feed; mostly open data)",
+            "url": "https://transitous.org/sources/"
+          }
+        ]
+      }
     },
     {
       "sourceId": "de-nw-mobidrom-scooter",
       "name": "NRW.Mobidrom E-Scooter Sharing",
       "url": "https://www.mobilitaetsdaten.nrw/dataset/e-scooter-sharing-nrw",
-      "license": "Per-operator licenses (Voi, Lime) republished by NRW.Mobidrom GmbH",
-      "licenseUrl": "https://www.mobilitaetsdaten.nrw/dataset/e-scooter-sharing-nrw",
       "commercialUse": "unknown",
       "providerCountry": "DE",
       "providerPrivacyUrl": "https://www.mobilitaetsdaten.nrw/datenschutz",
       "endUserExposure": "server-only",
       "personalData": false,
       "cookies": false,
-      "dpaAvailable": false
+      "dpaAvailable": false,
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "data",
+            "subject": "Each actual contributing feed/operator/source",
+            "license": {
+              "kind": "per-item",
+              "raw": "Determined by each contributing item or operator"
+            }
+          },
+          {
+            "scope": "service",
+            "subject": "NRW.Mobidrom E-Scooter Sharing endpoint policy",
+            "license": {
+              "kind": "unknown",
+              "url": "https://www.mobilitaetsdaten.nrw/dataset/e-scooter-sharing-nrw"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "Per-operator licenses (Voi, Lime) republished by NRW.Mobidrom GmbH",
+            "url": "https://www.mobilitaetsdaten.nrw/dataset/e-scooter-sharing-nrw"
+          }
+        ]
+      }
     }
   ]
 }

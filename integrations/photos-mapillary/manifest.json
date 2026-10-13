@@ -53,15 +53,39 @@
       "sourceId": "mapillary",
       "name": "Mapillary",
       "url": "https://www.mapillary.com/",
-      "license": "CC-BY-SA-4.0 (imagery); Proprietary (API)",
-      "licenseUrl": "https://www.mapillary.com/terms",
       "commercialUse": "conditional",
       "providerCountry": "IE",
       "providerPrivacyUrl": "https://www.mapillary.com/privacy",
       "endUserExposure": "server-only",
       "personalData": false,
       "cookies": false,
-      "dpaAvailable": false
+      "dpaAvailable": false,
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "imagery",
+            "subject": "Mapillary contributed image",
+            "license": {
+              "kind": "spdx",
+              "expression": "CC-BY-SA-4.0"
+            }
+          },
+          {
+            "scope": "service",
+            "subject": "Mapillary API/proxy/branding agreement",
+            "license": {
+              "kind": "unknown"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "CC-BY-SA-4.0 (imagery); Proprietary (API)",
+            "url": "https://www.mapillary.com/terms"
+          }
+        ]
+      }
     }
   ]
 }

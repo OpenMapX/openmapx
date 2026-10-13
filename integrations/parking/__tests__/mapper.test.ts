@@ -141,7 +141,16 @@ describe("mapParkingSiteToResult", () => {
             sourceId: "de-bw-mobidata-parking",
             name: "MobiData BW",
             url: "https://mobidata-bw.de",
-            spdxLicense: "DL-DE-BY-2.0",
+            licensing: {
+              version: 1,
+              bindings: [
+                {
+                  scope: "data",
+                  subject: "Data",
+                  license: { kind: "spdx", expression: "DL-DE-BY-2.0" },
+                },
+              ],
+            } as const,
           },
         ],
       }),
@@ -150,7 +159,21 @@ describe("mapParkingSiteToResult", () => {
     expect(result.operator).toBe("APCOA");
     expect(result.branding?.logoUrl).toBeUndefined();
     expect(result.attributions).toEqual([
-      { text: "MobiData BW", url: "https://mobidata-bw.de", license: "DL-DE-BY-2.0" },
+      {
+        sourceId: "de-bw-mobidata-parking",
+        name: "MobiData BW",
+        url: "https://mobidata-bw.de",
+        licensing: {
+          version: 1,
+          bindings: [
+            {
+              scope: "data",
+              subject: "Data",
+              license: { kind: "spdx", expression: "DL-DE-BY-2.0" },
+            },
+          ],
+        } as const,
+      },
     ]);
     expect(result.fallbackName).toEqual({ $t: "siteFallbackName" });
     expect(mapParkingSiteToResult(makeSite())).not.toHaveProperty("fallbackName");
@@ -489,7 +512,12 @@ it("captures complete canonical receipts before mapping results and details", ()
     sourceId: "exact-feed",
     name: "Publisher",
     url: "https://example.com",
-    spdxLicense: "CC-BY-4.0",
+    licensing: {
+      version: 1,
+      bindings: [
+        { scope: "data", subject: "Data", license: { kind: "spdx", expression: "CC-BY-4.0" } },
+      ],
+    } as const,
     attributionText: "Required upstream notice",
     publisher: { name: "Original publisher", url: "https://publisher.example" },
   };

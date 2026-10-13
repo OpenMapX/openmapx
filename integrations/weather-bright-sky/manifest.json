@@ -39,8 +39,6 @@
       "sourceId": "bright-sky",
       "name": "Bright Sky (DWD data)",
       "url": "https://brightsky.dev/",
-      "license": "MIT (software); CC-BY-4.0 (DWD data)",
-      "licenseUrl": "https://brightsky.dev/",
       "attribution": "<a href=\"https://www.dwd.de/\">DWD</a> via <a href=\"https://brightsky.dev/\">Bright Sky</a>",
       "commercialUse": "yes",
       "providerCountry": "DE",
@@ -48,7 +46,45 @@
       "endUserExposure": "server-only",
       "personalData": false,
       "cookies": false,
-      "dpaAvailable": false
+      "dpaAvailable": false,
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "software",
+            "subject": "Bright Sky software",
+            "license": {
+              "kind": "spdx",
+              "expression": "MIT"
+            }
+          },
+          {
+            "scope": "data",
+            "subject": "DWD data",
+            "license": {
+              "kind": "spdx",
+              "expression": "CC-BY-4.0"
+            }
+          },
+          {
+            "scope": "service",
+            "subject": "Bright Sky access/passed-through DWD policy",
+            "license": {
+              "kind": "custom",
+              "namespace": "publisher:bright-sky",
+              "id": "LicenseRef-Service-Terms",
+              "name": "Bright Sky access/passed-through DWD policy terms",
+              "url": "https://brightsky.dev/"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "MIT (software); CC-BY-4.0 (DWD data)",
+            "url": "https://brightsky.dev/"
+          }
+        ]
+      }
     }
   ]
 }

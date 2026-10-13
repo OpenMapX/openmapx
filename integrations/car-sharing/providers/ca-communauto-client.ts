@@ -1,5 +1,6 @@
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import { snapshotContributors } from "@openmapx/mobility-core/contributors";
+import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 /**
  * Communauto car-sharing client (Canada).
  *
@@ -206,8 +207,10 @@ export const caCommunautoClient: RegionalCarSharingClient = {
   attribution: {
     label: "Communauto",
     url: "https://www.communauto.com",
-    license: "© Communauto (no open-data license)",
-    licenseUrl: "https://www.communauto.com/",
+    licensing: licensingFromDeclaration(
+      "© Communauto (no open-data license)",
+      "https://www.communauto.com/",
+    ),
   },
   search: searchCaCommunauto,
 };

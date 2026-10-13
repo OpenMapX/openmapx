@@ -7,7 +7,12 @@ const source = {
   sourceId: "nl-ndw-events",
   name: "NDW",
   url: "https://www.ndw.nu",
-  license: "CC0-1.0",
+  licensing: {
+    version: 1,
+    bindings: [
+      { scope: "data", subject: "Data", license: { kind: "spdx", expression: "CC0-1.0" } },
+    ],
+  } as const,
   providerCountry: "NL",
   providerPrivacyUrl: "https://www.ndw.nu/privacy",
   domain: "road-conditions",
@@ -55,8 +60,11 @@ describe("validateDataSource", () => {
   });
 
   it("rejects an empty required field with the manifest-load message", () => {
-    const result = validateDataSource({ ...source, license: "" }, domains);
-    expect(result.errors).toContain("dataSources[].license is required");
+    const result = validateDataSource(
+      { ...source, licensing: { version: 1, bindings: [] } },
+      domains,
+    );
+    expect(result.errors.some((error) => error.includes("licensing"))).toBe(true);
   });
 
   it("rejects a domain outside the manifest domains", () => {

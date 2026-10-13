@@ -23,8 +23,8 @@ import type { Attribution } from "@openmapx/mobility-core/attribution";
 import {
   contributorsForField,
   contributorsForRecordFields,
-  parseContributors,
-  parseFieldContributors,
+  readCapturedContributors,
+  readCapturedFieldContributors,
   serializeContributors,
   snapshotContributors,
 } from "@openmapx/mobility-core/contributors";
@@ -350,7 +350,7 @@ export function CategoryResultMarkers() {
     true,
     {
       resolveFeatureContributors: (feature) =>
-        parseContributors(
+        readCapturedContributors(
           feature.properties?.[
             feature.layer.id === LABEL_LAYER_ID || feature.layer.id === TRANSIT_LABEL_LAYER_ID
               ? "_mapLabelAttributions"
@@ -829,8 +829,10 @@ export function CategoryResultMarkers() {
         provider: props.provider,
         platformCode: props.platformCode || undefined,
         parentStationId: props.parentStationId || undefined,
-        contributors: parseContributors(features[0].properties?._recordContributors) ?? [],
-        fieldContributors: parseFieldContributors(features[0].properties?._fieldContributors),
+        contributors: readCapturedContributors(features[0].properties?._recordContributors) ?? [],
+        fieldContributors: readCapturedFieldContributors(
+          features[0].properties?._fieldContributors,
+        ),
       };
       flyTo([stop.lng, stop.lat], 16);
       selectWithEnrichment(makeSyntheticStopPlace(stop), () => resolveStopAsPlace(stop));

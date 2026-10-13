@@ -1,4 +1,5 @@
 import type { Attribution } from "@openmapx/mobility-core/attribution";
+import type { Licensing } from "@openmapx/mobility-core/licensing";
 import type { LngLat } from "./geometry";
 
 /** A provider-qualified reference to one street-level image. */
@@ -40,8 +41,7 @@ export interface StreetLevelImage {
     tiles?: StreetLevelTiledAsset;
   };
   author?: string;
-  license?: string;
-  licenseUrl?: string;
+  licensing?: Licensing;
   pageUrl?: string;
 }
 

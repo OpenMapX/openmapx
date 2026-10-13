@@ -1,5 +1,5 @@
 import type { OfflineMapPackageManifest } from "@openmapx/core";
-import { escapeHtml, sanitizeUrl } from "@openmapx/core";
+import { buildRuntimeAttributionHtml } from "@openmapx/core";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import { OPENSTREETMAP_ATTRIBUTION } from "@openmapx/mobility-core/attribution";
 import type { ClientEnv } from "@/integration-api/runtime/env";
@@ -24,8 +24,21 @@ export const OPENMAPTILES_ATTRIBUTION: Attribution = {
   sourceId: "openmaptiles",
   name: "© OpenMapTiles",
   url: "https://openmaptiles.org/",
-  spdxLicense: "BSD-3-Clause",
-  licenseUrl: "https://github.com/openmaptiles/openmaptiles/blob/master/LICENSE.md",
+  licensing: {
+    version: 1,
+    bindings: [
+      {
+        scope: "style",
+        subject: "OpenMapTiles schema and map design",
+        license: { kind: "spdx", expression: "CC-BY-4.0" },
+      },
+      {
+        scope: "software",
+        subject: "OpenMapTiles code",
+        license: { kind: "spdx", expression: "BSD-3-Clause" },
+      },
+    ],
+  },
 };
 
 export const OPENFREEMAP_ATTRIBUTION: Attribution = {
@@ -46,13 +59,7 @@ export const MAPTILER_ATTRIBUTION: Attribution = {
  * dedup collapses identical credits regardless of which path emitted them.
  */
 function creditHtml(attr: Attribution): string {
-  const hasCopyright = attr.name.startsWith("© ");
-  const label = escapeHtml(hasCopyright ? attr.name.slice(2) : attr.name);
-  const safeUrl = attr.url ? sanitizeUrl(attr.url) : undefined;
-  const anchor = safeUrl
-    ? `<a href="${safeUrl}" target="_blank" rel="noopener noreferrer">${label}</a>`
-    : label;
-  return hasCopyright ? `© ${anchor}` : anchor;
+  return buildRuntimeAttributionHtml(attr);
 }
 
 function apiRoute(env: ClientEnv, path: string): string {

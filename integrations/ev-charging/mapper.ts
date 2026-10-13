@@ -1,6 +1,6 @@
 import { resolveBrandByName } from "@openmapx/brands";
 import {
-  type DataSourceAttribution,
+  type Attribution,
   type DataSourceBranding,
   type DataSourceDetail,
   type DataSourceDetailSection,
@@ -20,6 +20,7 @@ import {
   type Translatable,
   token,
 } from "@openmapx/integration-framework/strings";
+import { snapshotContributors } from "@openmapx/mobility-core/contributors";
 import {
   availabilityOf,
   type ChargingConnector,
@@ -191,14 +192,9 @@ function siteBranding(site: ChargingSite): DataSourceBranding | undefined {
  * each result and detail carries the credits of the sources it was built from.
  * Their links come from upstream data, so only http(s) ones are kept.
  */
-function siteCredits(site: ChargingSite): DataSourceAttribution[] | undefined {
+function siteCredits(site: ChargingSite): Attribution[] | undefined {
   if (site.attributions.length === 0) return undefined;
-  return site.attributions.map((a) => ({
-    text: a.name,
-    url: isSafeHttpUrl(a.url) ? a.url : "",
-    ...(a.spdxLicense ? { license: a.spdxLicense } : {}),
-    ...(isSafeHttpUrl(a.licenseUrl) ? { licenseUrl: a.licenseUrl } : {}),
-  }));
+  return snapshotContributors(site.attributions);
 }
 
 /** A site's title when its sources name it nothing. */

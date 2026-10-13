@@ -4,6 +4,7 @@ export { isCityOrSmaller } from "./administrativePlace";
 export {
   buildAttributionHtml,
   buildIntegrationAttribution,
+  buildLicensingHtml,
   buildRuntimeAttributionHtml,
   buildSourceAttribution,
   combineAttributions,
@@ -230,6 +231,7 @@ export {
   parseDMSCoordinateInput,
 } from "./parseCoordinates";
 export { formatPaymentMethodLabel, formatPaymentMethods } from "./paymentMethods";
+export { withPhotoContributors } from "./photo-contributors";
 export {
   computePlusCode,
   decodePlusCode,

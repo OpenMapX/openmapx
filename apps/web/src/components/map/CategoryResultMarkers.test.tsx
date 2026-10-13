@@ -5,6 +5,7 @@ import {
   usePlaceStore,
   useSidebarStore,
 } from "@openmapx/core";
+import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 import { act, render, waitFor } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import { usePinMarker } from "@/hooks/usePinMarker";
@@ -158,8 +159,10 @@ it("keeps brand-enriched data on unrelated events and fences old image completio
       url: "https://upload.wikimedia.org/wikipedia/commons/a/ab/Logo.svg",
       source: "wikimedia-commons",
       author: "Logo creator",
-      license: "CC BY 4.0",
-      licenseUrl: "https://creativecommons.org/licenses/by/4.0/",
+      licensing: licensingFromDeclaration(
+        "CC BY 4.0",
+        "https://creativecommons.org/licenses/by/4.0/",
+      ),
       pageUrl: "https://commons.wikimedia.org/wiki/File:Logo.svg",
       contributors: [
         {

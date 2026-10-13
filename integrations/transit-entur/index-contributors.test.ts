@@ -1,4 +1,5 @@
 import { createMockIntegrationContext } from "@openmapx/integration-framework/testing";
+import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 import { expect, it, vi } from "vitest";
 
 vi.mock("./provider.js", () => ({
@@ -23,7 +24,7 @@ it("captures exact API receipts without mistaking an NSR entity id for its suppl
         sourceId,
         name: sourceId,
         url: "https://entur.no",
-        license: "NLOD",
+        licensing: licensingFromDeclaration("NLOD", undefined, sourceId),
         providerCountry: "NO",
         providerPrivacyUrl: "https://entur.no",
       })),

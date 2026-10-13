@@ -1,4 +1,7 @@
-import { parseContributors, parseFieldContributors } from "@openmapx/mobility-core/contributors";
+import {
+  readCapturedContributors,
+  readCapturedFieldContributors,
+} from "@openmapx/mobility-core/contributors";
 import { parseGeometryContributors } from "@openmapx/mobility-core/geometry-contributors";
 import type { LngLat } from "../types/geometry";
 import type { Route, TravelMode } from "../types/routing";
@@ -85,9 +88,9 @@ function projectRoute(route: Route): Record<string, unknown> {
     if (source[key] !== undefined) projected[key] = source[key];
   }
   if (route.contributors !== undefined)
-    projected.contributors = parseContributors(route.contributors) ?? [];
+    projected.contributors = readCapturedContributors(route.contributors) ?? [];
   if (route.fieldContributors !== undefined)
-    projected.fieldContributors = parseFieldContributors(route.fieldContributors) ?? {};
+    projected.fieldContributors = readCapturedFieldContributors(route.fieldContributors) ?? {};
   if (route.geometryContributors !== undefined)
     projected.geometryContributors =
       parseGeometryContributors(route.geometryContributors, route.geometry.length) ?? [];

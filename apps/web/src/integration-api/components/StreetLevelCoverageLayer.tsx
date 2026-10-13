@@ -3,7 +3,10 @@
 import type { StreetLevelCapabilities } from "@openmapx/core";
 import { useOverlayExclusion, useStreetLevelStore } from "@openmapx/core";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
-import { parseContributors, snapshotContributors } from "@openmapx/mobility-core/contributors";
+import {
+  readCapturedContributors,
+  snapshotContributors,
+} from "@openmapx/mobility-core/contributors";
 import type {
   FilterSpecification,
   MapLayerMouseEvent,
@@ -91,8 +94,8 @@ export function StreetLevelCoverageLayer() {
     resolveFeatureContributors: (feature) => {
       const map = currentMap;
       const native =
-        parseContributors(feature.properties?._mapAttributions) ??
-        parseContributors(feature.properties?.contributors);
+        readCapturedContributors(feature.properties?._mapAttributions) ??
+        readCapturedContributors(feature.properties?.contributors);
       if (native !== undefined) return native;
       return map
         ? (snapshots.current.get(map)?.get(feature.source ?? feature.layer.source)?.layers[

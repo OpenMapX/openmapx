@@ -71,14 +71,46 @@ describe("cycling tile content receipts", () => {
     expect(fallback.rawPayload).toEqual(Buffer.from([2]));
     expect(receipts(primary.headers["x-openmapx-contributors"])).toEqual([
       expect.objectContaining({ sourceId: "thunderforest", name: "Maps © Thunderforest" }),
-      expect.objectContaining({ sourceId: "openstreetmap", spdxLicense: "ODbL-1.0" }),
+      expect.objectContaining({
+        sourceId: "openstreetmap",
+        licensing: {
+          version: 1,
+          bindings: [
+            {
+              scope: "data",
+              subject: "Data",
+              license: {
+                kind: "spdx",
+                expression: "ODbL-1.0",
+                url: "https://opendatacommons.org/licenses/odbl/",
+              },
+            },
+          ],
+        } as const,
+      }),
     ]);
     expect(receipts(fallback.headers["x-openmapx-contributors"])).toEqual([
       expect.objectContaining({
         sourceId: "cyclosm",
         publisher: { name: "OpenStreetMap France", url: "https://openstreetmap.fr/" },
       }),
-      expect.objectContaining({ sourceId: "openstreetmap", spdxLicense: "ODbL-1.0" }),
+      expect.objectContaining({
+        sourceId: "openstreetmap",
+        licensing: {
+          version: 1,
+          bindings: [
+            {
+              scope: "data",
+              subject: "Data",
+              license: {
+                kind: "spdx",
+                expression: "ODbL-1.0",
+                url: "https://opendatacommons.org/licenses/odbl/",
+              },
+            },
+          ],
+        } as const,
+      }),
     ]);
     expect(primary.headers["cache-control"]).toContain("max-age=604800");
     expect(primary.headers["access-control-expose-headers"]).toContain("X-OpenMapX-Contributors");

@@ -242,8 +242,7 @@ they surface are described on the
     domain?: string;                  // one of `domains`; defaults to the first
     name: string;
     url: string;
-    license: string;
-    licenseUrl?: string;
+    licensing: Licensing;
     attribution?: string;
     providerCountry: string;          // ISO country code
     providerPrivacyUrl: string;
@@ -276,18 +275,11 @@ that every listed source supplied a result. Runtime integrations supply metadata
 with `setDataSources` (see [Runtime data sources](#runtime-data-sources));
 per-record receipts also retain exact runtime-feed and required notice metadata.
 
-Use the [official SPDX short identifier](https://spdx.org/licenses/) for an
-authored `license` label when the exact licence is registered, including its
-version and jurisdiction: `CC-BY-4.0`, `CC0-1.0`, `ODbL-1.0`, `NLOD-2.0`,
-`DL-DE-BY-2.0` or `DL-DE-ZERO-2.0`. Composite descriptions use the same
-identifiers for their components while retaining software/data roles and API or
-plan conditions; those descriptions are not necessarily SPDX expressions.
-For custom terms, reuse an established `LicenseRef-...` only when it identifies
-the same terms. Keep unknown or per-file licences explicit, and do not guess a
-version or replace public-domain status with CC0. Preserve publisher-supplied
-attribution statements and raw upstream licence metadata; their original
-wording is separate from the authored label. Runtime sources follow the same
-convention for labels the integration defines itself.
+Use the shared [licence metadata contract](./licensing.md): scoped subjects,
+registered SPDX expressions, captured custom definitions and explicit unknown
+or per-item states. The host derives labels and links; data sources do not
+provide scalar display labels. Preserve publisher notices and actual account
+conditions separately from data grants.
 
 An integration in several domains whose sources serve different ones sets
 `domain` on each source that does not belong to its first domain. The source is
@@ -311,8 +303,7 @@ interface Attribution {
   sourceId: string;
   name: string;
   url?: string;
-  spdxLicense?: string;
-  licenseUrl?: string;
+  licensing?: Licensing;
   attributionText?: string;
   publisher?: { name: string; url?: string };
   retrievedAt?: string;
@@ -321,8 +312,7 @@ interface Attribution {
 ```
 
 A record carries `contributors?: readonly Attribution[]`. A supplied array,
-including `[]`, is authoritative. Only `undefined` means a legacy record without
-a captured receipt. `parseContributors(unknown)` accepts a validated array or
+including `[]`, is authoritative. Only `undefined` means unavailable captured provenance. `parseContributors(unknown)` accepts a validated array or
 its JSON encoding and returns a copied snapshot; malformed input returns
 `undefined`, while `"[]"` returns `[]`. Unknown provenance stays unknown. A
 missing exact source/feed identity must never expand to every source in an

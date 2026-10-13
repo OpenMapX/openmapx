@@ -1,7 +1,7 @@
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import {
   captureResultContributors,
-  parseContributors,
+  readCapturedContributors,
   snapshotContributors,
   withContributors,
   withFeatureContributors,
@@ -17,10 +17,10 @@ export function captureReachabilityContributors<
   T extends object,
   E extends ResponseReceipt & { data: T },
 >(envelope: E) {
-  const native = parseContributors((envelope.data as ResponseReceipt).contributors);
+  const native = readCapturedContributors((envelope.data as ResponseReceipt).contributors);
   const receipts =
     native ??
-    parseContributors(envelope.contributors) ??
+    readCapturedContributors(envelope.contributors) ??
     snapshotContributors(envelope.attributions ?? []);
   const seeds = (envelope.data as { seeds?: unknown }).seeds;
   const data = Array.isArray(seeds)
@@ -28,7 +28,9 @@ export function captureReachabilityContributors<
         ...envelope.data,
         seeds: seeds.map((seed: Record<string, unknown>) => {
           const stop = seed.stop as { contributors?: unknown } | undefined;
-          const own = parseContributors(seed.contributors) ?? parseContributors(stop?.contributors);
+          const own =
+            readCapturedContributors(seed.contributors) ??
+            readCapturedContributors(stop?.contributors);
           return withContributors(seed, own ?? captureResultContributors({}, receipts));
         }),
       } as T)
@@ -42,8 +44,8 @@ export function captureIsochroneContributors<
 >(envelope: E) {
   const captured = captureReachabilityContributors(envelope);
   const native =
-    parseContributors((envelope.data as ResponseReceipt).contributors) ??
-    parseContributors(envelope.contributors);
+    readCapturedContributors((envelope.data as ResponseReceipt).contributors) ??
+    readCapturedContributors(envelope.contributors);
   return {
     ...captured,
     data: {
@@ -52,8 +54,8 @@ export function captureIsochroneContributors<
         ...envelope.data.featureCollection,
         features: envelope.data.featureCollection.features.map((feature) => {
           const own =
-            parseContributors(feature.properties?.contributors) ??
-            parseContributors(feature.properties?._mapAttributions);
+            readCapturedContributors(feature.properties?.contributors) ??
+            readCapturedContributors(feature.properties?._mapAttributions);
           const receipts =
             own ?? native ?? captureResultContributors({}, captured.data.contributors);
           return withFeatureContributors(feature, receipts);

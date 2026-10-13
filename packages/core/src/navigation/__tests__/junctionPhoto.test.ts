@@ -1,3 +1,4 @@
+import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 import { describe, expect, it } from "vitest";
 import type { LngLat } from "../../types/geometry";
 import type { JunctionDecisionPoint } from "../../types/junction";
@@ -29,7 +30,7 @@ function toImage(raw: FixtureImage): StreetLevelImage {
     fovDeg: 70,
     assets: {},
     author: raw.properties?.["geovisio:producer"] as string | undefined,
-    license: "CC BY-SA 4.0",
+    licensing: licensingFromDeclaration("CC BY-SA 4.0", undefined, "Data"),
   };
 }
 

@@ -33,7 +33,7 @@ import {
   contributorsForFields,
   contributorsForRecords,
   narrowContributors,
-  parseContributors,
+  readCapturedContributors,
   snapshotContributors,
 } from "@openmapx/mobility-core/contributors";
 import {
@@ -387,8 +387,9 @@ async function cardRating(input: CardInput): Promise<CardResult["rating"] | null
           count: ratedCount,
           source: aggregate.source,
           contributors: snapshotContributors(
-            parseContributors("contributors" in aggregate ? aggregate.contributors : undefined) ??
-              narrowContributors(catalogue, [aggregate.source]),
+            readCapturedContributors(
+              "contributors" in aggregate ? aggregate.contributors : undefined,
+            ) ?? narrowContributors(catalogue, [aggregate.source]),
           ),
         },
       };

@@ -60,8 +60,6 @@
       "sourceId": "jsdelivr",
       "name": "JSDelivr CDN",
       "url": "https://cdn.jsdelivr.net/",
-      "license": "MIT",
-      "licenseUrl": "https://www.jsdelivr.com/terms/terms-of-use",
       "commercialUse": "yes",
       "providerCountry": "UK",
       "providerPrivacyUrl": "https://www.jsdelivr.com/terms/privacy-policy",
@@ -69,14 +67,49 @@
       "personalData": false,
       "cookies": false,
       "dpaAvailable": true,
-      "dpaUrl": "https://www.jsdelivr.com/documents/data-processing-agreement.pdf"
+      "dpaUrl": "https://www.jsdelivr.com/documents/data-processing-agreement.pdf",
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "software",
+            "subject": "Unspecified software component",
+            "license": {
+              "kind": "spdx",
+              "expression": "MIT"
+            }
+          },
+          {
+            "scope": "service",
+            "subject": "jsDelivr CDN",
+            "license": {
+              "kind": "custom",
+              "namespace": "publisher:jsdelivr",
+              "id": "LicenseRef-Service-Terms",
+              "name": "jsDelivr CDN terms",
+              "url": "https://www.jsdelivr.com/terms/terms-of-use"
+            }
+          },
+          {
+            "scope": "data",
+            "subject": "Fetched registry/operator content",
+            "license": {
+              "kind": "unknown"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "MIT",
+            "url": "https://www.jsdelivr.com/terms/terms-of-use"
+          }
+        ]
+      }
     },
     {
       "sourceId": "github",
       "name": "GitHub API",
       "url": "https://api.github.com/",
-      "license": "Proprietary (GitHub ToS)",
-      "licenseUrl": "https://docs.github.com/en/site-policy/github-terms/github-terms-of-service",
       "commercialUse": "yes",
       "providerCountry": "US",
       "providerPrivacyUrl": "https://docs.github.com/site-policy/privacy-policies/github-privacy-statement",
@@ -84,14 +117,41 @@
       "personalData": false,
       "cookies": false,
       "dpaAvailable": true,
-      "dpaUrl": "https://github.com/customer-terms/github-data-protection-agreement"
+      "dpaUrl": "https://github.com/customer-terms/github-data-protection-agreement",
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "service",
+            "subject": "GitHub API retrieval",
+            "license": {
+              "kind": "custom",
+              "namespace": "publisher:github",
+              "id": "LicenseRef-Service-Terms",
+              "name": "GitHub API retrieval terms",
+              "url": "https://docs.github.com/en/site-policy/github-terms/github-terms-of-service"
+            }
+          },
+          {
+            "scope": "data",
+            "subject": "Repository/registry/operator content",
+            "license": {
+              "kind": "unknown"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "Proprietary (GitHub ToS)",
+            "url": "https://docs.github.com/en/site-policy/github-terms/github-terms-of-service"
+          }
+        ]
+      }
     },
     {
       "sourceId": "regional-operators",
       "name": "Regional public-transport operator APIs (transport-apis registry)",
       "url": "https://github.com/public-transport/transport-apis",
-      "license": "Various (per regional operator)",
-      "licenseUrl": "https://github.com/public-transport/transport-apis",
       "commercialUse": "unknown",
       "providerCountry": "Various",
       "providerPrivacyUrl": "https://github.com/public-transport/transport-apis",
@@ -99,7 +159,34 @@
       "personalData": false,
       "cookies": false,
       "dpaAvailable": false,
-      "notes": "Auto-discovered from the public-transport/transport-apis registry (~85 regional operators across many countries). Queried server-side only when no hand-crafted provider covers the requested area; this is a category of recipients, not a single controller — see the linked registry for the operator list, each governed by its own terms."
+      "notes": "Auto-discovered from the public-transport/transport-apis registry (~85 regional operators across many countries). Queried server-side only when no hand-crafted provider covers the requested area; this is a category of recipients, not a single controller — see the linked registry for the operator list, each governed by its own terms.",
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "data",
+            "subject": "Each actual contributing feed/operator/source",
+            "license": {
+              "kind": "per-item",
+              "raw": "Determined by each contributing item or operator"
+            }
+          },
+          {
+            "scope": "service",
+            "subject": "Regional public-transport operator APIs (transport-apis registry) endpoint policy",
+            "license": {
+              "kind": "unknown",
+              "url": "https://github.com/public-transport/transport-apis"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "Various (per regional operator)",
+            "url": "https://github.com/public-transport/transport-apis"
+          }
+        ]
+      }
     }
   ],
   "dependencies": ["transit"]

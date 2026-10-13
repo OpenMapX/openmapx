@@ -8,7 +8,10 @@ function ds(sourceId: string, name: string): IntegrationDataSource {
     sourceId,
     name,
     url: `https://example.com/${sourceId}`,
-    license: "MIT",
+    licensing: {
+      version: 1,
+      bindings: [{ scope: "data", subject: "Data", license: { kind: "spdx", expression: "MIT" } }],
+    } as const,
     providerCountry: "XX",
     providerPrivacyUrl: "-",
   };

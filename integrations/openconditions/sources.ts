@@ -7,6 +7,7 @@ import {
   snapshotContributors,
 } from "@openmapx/integration-framework";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
+import { type Licensing, parseLicensing } from "@openmapx/mobility-core/licensing";
 import type { OpenConditionsClient } from "./client.js";
 
 /** A right as OpenConditions states it: granted, denied, or not stated (null). */
@@ -32,8 +33,7 @@ export interface OcSource {
   /** The licence id: SPDX where SPDX lists it, else `LicenseRef-<name>`, or `NOASSERTION`. */
   license: string;
   /** The licence's readable name, which the legal pages and credits show. */
-  licenseName?: string;
-  licenseUrl?: string;
+  licensing: Licensing;
   attribution: string;
   homepage: string;
   privacyUrl: string;
@@ -113,7 +113,8 @@ function providerCountryOf(source: OcSource): string {
  */
 export function toDataSource(source: OcSource): IntegrationDataSource | undefined {
   const domain = DOMAINS[source.domain];
-  if (domain === undefined) return undefined;
+  const licensing = parseLicensing(source.licensing);
+  if (domain === undefined || licensing === undefined) return undefined;
   const usageConditions = usageConditionsOf(source);
   // A malformed field, or an entry the image proxy would refuse, costs the
   // source those stills, not its listing: the data-source rules refuse a
@@ -128,12 +129,7 @@ export function toDataSource(source: OcSource): IntegrationDataSource | undefine
     domain,
     name: source.name,
     url: source.homepage,
-    // People read this field; nothing in OpenMapX decides by the licence id.
-    license:
-      typeof source.licenseName === "string" && source.licenseName.trim() !== ""
-        ? source.licenseName
-        : source.license,
-    ...(source.licenseUrl ? { licenseUrl: source.licenseUrl } : {}),
+    licensing,
     attribution: source.attribution,
     ...(source.terms?.url ? { termsUrl: source.terms.url } : {}),
     ...(source.terms?.reviewedAt ? { reviewedAt: source.terms.reviewedAt } : {}),
@@ -186,25 +182,25 @@ export interface OcSourceList {
  * token: an instance that holds no token answers a bearer read in public.
  */
 function dataSourcesOf(answer: unknown): ReadList {
-  const sources = isRecord(answer) ? answer["sources"] : undefined;
-  const scope = isRecord(answer) ? answer["scope"] : undefined;
+  const sources = isRecord(answer) ? answer.sources : undefined;
+  const scope = isRecord(answer) ? answer.scope : undefined;
   if (!Array.isArray(sources) || (scope !== "public" && scope !== "operator")) {
     throw new Error("Malformed /sources answer");
   }
   const operator = scope === "operator";
   const out: ReadList = { list: [], invalid: [], unmapped: [], withheld: [], described: [] };
   for (const source of sources) {
-    const id = isRecord(source) && typeof source["id"] === "string" ? source["id"] : "(no id)";
+    const id = isRecord(source) && typeof source.id === "string" ? source.id : "(no id)";
     if (
       !isRecord(source) ||
       id === "(no id)" ||
-      !isRecord(source["rights"]) ||
-      typeof source["restricted"] !== "boolean"
+      !isRecord(source.rights) ||
+      typeof source.restricted !== "boolean"
     ) {
       out.invalid.push(id);
       continue;
     }
-    if (source["restricted"] && !operator) {
+    if (source.restricted && !operator) {
       out.withheld.push(id);
       continue;
     }
@@ -297,7 +293,6 @@ export function createSourceScopes(): UpdatableSourceScopes {
 /** Copied attribution metadata only; serving rights still use the live source list. */
 export interface CapturedSourceCredits {
   contributors(sourceId: string): readonly Attribution[] | undefined;
-  licenseName(licenseId: string): string | undefined;
   noticeOf(sourceId: string): string | undefined;
 }
 
@@ -317,7 +312,6 @@ export interface LiveSources {
   /** The source's credit link: its homepage. */
   link(sourceId: string): string | undefined;
   /** The readable name a listed source gives a licence id; none before the first list. */
-  licenseName(licenseId: string): string | undefined;
   /** The notice the source's publisher requires to accompany any display of its data. */
   noticeOf(sourceId: string): string | undefined;
   /**
@@ -342,7 +336,6 @@ export interface UpdatableLiveSources extends MediaSources {
    * Takes the licence names from the sources as OpenConditions describes
    * them: the accepted data sources carry the readable name in place of the id.
    */
-  updateLicenses(list: readonly Pick<OcSource, "license" | "licenseName">[]): void;
   /** Takes the formats, qualifiers and notices from the sources as OpenConditions describes them. */
   updateDescribed(list: readonly Pick<OcSource, "id" | "format" | "qualifier" | "notice">[]): void;
 }
@@ -353,7 +346,6 @@ export function createLiveSources(): UpdatableLiveSources {
   let links: ReadonlyMap<string, string> | undefined;
   let receipts = new Map<string, Attribution[]>();
   let media: ReadonlyMap<string, readonly string[]> = new Map();
-  let licenseNames: ReadonlyMap<string, string> = new Map();
   let notices: ReadonlyMap<string, string> = new Map();
   let firms: ReadonlyMap<"viirs" | "modis", readonly string[]> = new Map();
   return {
@@ -379,17 +371,14 @@ export function createLiveSources(): UpdatableLiveSources {
         ]),
       );
       const capturedNotices = new Map(notices);
-      const capturedLicenses = new Map(licenseNames);
       return {
         contributors: (sourceId) =>
           captured.has(sourceId) ? snapshotContributors(captured.get(sourceId)!) : undefined,
         noticeOf: (sourceId) =>
           captured.has(sourceId) ? capturedNotices.get(sourceId) : undefined,
-        licenseName: (licenseId) => capturedLicenses.get(licenseId),
       };
     },
     link: (sourceId) => links?.get(sourceId),
-    licenseName: (licenseId) => licenseNames.get(licenseId),
     mediaHosts: (sourceId) => media.get(sourceId) ?? [],
     noticeOf: (sourceId) => (links?.has(sourceId) ? notices.get(sourceId) : undefined),
     // Only feeds the host accepted count, so a dropped feed's pixels are never read.
@@ -399,7 +388,7 @@ export function createLiveSources(): UpdatableLiveSources {
       links = new Map(list.map((ds) => [ds.sourceId, ds.url]));
       receipts = new Map(
         list.flatMap((ds) =>
-          typeof ds.name === "string" && typeof ds.license === "string"
+          typeof ds.name === "string" && parseLicensing(ds.licensing) !== undefined
             ? [
                 [
                   ds.sourceId,
@@ -428,17 +417,6 @@ export function createLiveSources(): UpdatableLiveSources {
               )
               .map((source) => source.id),
           ],
-        ),
-      );
-    },
-    updateLicenses(list) {
-      licenseNames = new Map(
-        list.flatMap(({ license, licenseName }) =>
-          typeof license === "string" &&
-          typeof licenseName === "string" &&
-          licenseName.trim() !== ""
-            ? [[license, licenseName] as const]
-            : [],
         ),
       );
     },

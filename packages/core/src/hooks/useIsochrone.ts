@@ -1,4 +1,4 @@
-import { parseContributors, withContributors } from "@openmapx/mobility-core/contributors";
+import { readCapturedContributors, withContributors } from "@openmapx/mobility-core/contributors";
 import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "../api/client";
 import { API_ENDPOINTS } from "../api/endpoints";
@@ -32,7 +32,7 @@ export function useIsochrone({ origin, mode, contourMinutes, enabled = true }: U
         )
         .then((result) => {
           const contributors =
-            parseContributors((result as { contributors?: unknown }).contributors) ??
+            readCapturedContributors((result as { contributors?: unknown }).contributors) ??
             result.attributions ??
             [];
           return withContributors(
@@ -41,7 +41,7 @@ export function useIsochrone({ origin, mode, contourMinutes, enabled = true }: U
               contours: result.contours.map((contour) =>
                 withContributors(
                   contour,
-                  parseContributors((contour as { contributors?: unknown }).contributors) ??
+                  readCapturedContributors((contour as { contributors?: unknown }).contributors) ??
                     contributors,
                 ),
               ),

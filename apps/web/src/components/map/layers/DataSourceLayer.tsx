@@ -27,7 +27,7 @@ import type { Attribution } from "@openmapx/mobility-core/attribution";
 import {
   contributorsForField,
   contributorsForRecordFields,
-  parseContributors,
+  readCapturedContributors,
   serializeContributors,
   snapshotContributors,
   withContributors,
@@ -408,7 +408,7 @@ export function DataSourceLayer() {
                 withFeatureContributors(
                   feature,
                   feature.contributors ??
-                    parseContributors(feature.properties?._mapAttributions) ??
+                    readCapturedContributors(feature.properties?._mapAttributions) ??
                     [],
                 ),
               ),
@@ -442,7 +442,7 @@ export function DataSourceLayer() {
         if (feature.layer.id === labelsLayerId(activeSource)) {
           const summaryZoom = Math.max(11, (activeMeta?.minZoom ?? 0) + 2) + 2;
           return (
-            parseContributors(
+            readCapturedContributors(
               properties[
                 (mapRef.current?.getZoom() ?? 0) >= summaryZoom
                   ? "_mapSummaryLabelAttributions"
@@ -453,14 +453,14 @@ export function DataSourceLayer() {
         }
         if (feature.layer.id === brandLogosLayerId(activeSource))
           return properties.brandImageId
-            ? (parseContributors(properties._mapBrandAttributions) ?? [])
+            ? (readCapturedContributors(properties._mapBrandAttributions) ?? [])
             : [];
         if (feature.layer.id === brandHalosLayerId(activeSource))
           return properties.brandImageId
-            ? (parseContributors(properties._mapHaloAttributions) ?? [])
+            ? (readCapturedContributors(properties._mapHaloAttributions) ?? [])
             : [];
         if (feature.layer.id === markersLayerId(activeSource))
-          return parseContributors(properties._mapMarkerAttributions) ?? [];
+          return readCapturedContributors(properties._mapMarkerAttributions) ?? [];
         // Shared-mobility context geometry carries its own producer receipts.
         return undefined;
       },
@@ -606,8 +606,9 @@ export function DataSourceLayer() {
                         brandImageId: dataSourceBrandImageId(feature.properties.logoUrl),
                         _mapBrandAttributions: serializeContributors(
                           snapshotContributors(
-                            parseContributors(feature.properties._mapLogoSelectionAttributions) ??
-                              [],
+                            readCapturedContributors(
+                              feature.properties._mapLogoSelectionAttributions,
+                            ) ?? [],
                             loadedBrandAssets.get(map)?.get(feature.properties.logoUrl) ?? [],
                           ),
                         ),
@@ -628,7 +629,7 @@ export function DataSourceLayer() {
         // This URL's first retained owner initiated the acquisition. Other rows
         // keep their selector receipts; they do not retroactively supply its bytes.
         const acquisitionReceipts = snapshotContributors(
-          parseContributors(
+          readCapturedContributors(
             geojson.features.find((feature) => feature.properties.logoUrl === url)?.properties
               ._mapLogoFileAttributions,
           ) ?? [],

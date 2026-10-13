@@ -1,3 +1,4 @@
+import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 import { fireEvent, render } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
@@ -42,7 +43,7 @@ const flatImage: StreetLevelImage = {
   fovDeg: 70,
   assets: {},
   author: "motocultrice",
-  license: "CC BY-SA 4.0",
+  licensing: licensingFromDeclaration("CC BY-SA 4.0", undefined),
 };
 
 /** The centre-line samples the overlay drew, as `[x, y]` pairs. */
@@ -68,7 +69,7 @@ describe("JunctionPhoto", () => {
     expect(html).toContain('alt=""');
     expect(html).toContain("blob:photo-1");
     expect(html).toContain("data-photo-path");
-    expect(html).toContain("© motocultrice · CC BY-SA 4.0 · Sep 2019");
+    expect(html).toContain("© motocultrice · CC-BY-SA-4.0 · Sep 2019");
     expect(html).not.toContain("<a ");
     // A straight road ahead projects up the middle of the frame, near points low.
     const points = pathPoints(html);
@@ -187,6 +188,6 @@ describe("JunctionPhoto", () => {
         geometry={geometry}
       />,
     );
-    expect(html).toContain("© panoramax · CC BY-SA 4.0 · Sep 2019");
+    expect(html).toContain("© panoramax · CC-BY-SA-4.0 · Sep 2019");
   });
 });

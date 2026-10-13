@@ -6,6 +6,7 @@ import {
   type FakeHttpRequest,
   fakeHttpClient,
 } from "@openmapx/integration-framework/testing";
+import { formatLicensing, licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { createOpenConditionsClient } from "../client.js";
 import { setup } from "../index.js";
@@ -44,7 +45,6 @@ function ocSource(overrides: Partial<OcSource> = {}): OcSource {
     accessMode: "on_demand",
     restricted: true,
     license: "CC-BY-4.0",
-    licenseUrl: "https://creativecommons.org/licenses/by/4.0/",
     attribution: "Tankerkönig (MTS-K), CC BY 4.0",
     homepage: "https://creativecommons.tankerkoenig.de",
     privacyUrl: "https://onboarding.tankerkoenig.de/datenschutz",
@@ -57,6 +57,10 @@ function ocSource(overrides: Partial<OcSource> = {}): OcSource {
       retention: true,
       shareAlike: false,
     },
+    licensing: licensingFromDeclaration(
+      "CC-BY-4.0",
+      "https://creativecommons.org/licenses/by/4.0/",
+    ),
     ...overrides,
   };
 }
@@ -72,7 +76,6 @@ const NDW = ocSource({
   accessMode: "bulk",
   restricted: false,
   license: "CC0-1.0",
-  licenseUrl: "https://creativecommons.org/publicdomain/zero/1.0/",
   attribution: "NDW",
   homepage: "https://www.ndw.nu",
   privacyUrl: "https://www.ndw.nu/privacy",
@@ -84,6 +87,10 @@ const NDW = ocSource({
     retention: true,
     shareAlike: false,
   },
+  licensing: licensingFromDeclaration(
+    "CC0-1.0",
+    "https://creativecommons.org/publicdomain/zero/1.0/",
+  ),
 });
 delete (NDW as { terms?: unknown }).terms;
 
@@ -96,6 +103,7 @@ const OSM = ocSource({
   license: "ODbL-1.0",
   homepage: "https://www.openstreetmap.org/copyright",
   privacyUrl: "https://osmfoundation.org/wiki/Privacy_Policy",
+  licensing: licensingFromDeclaration("ODbL-1.0", undefined),
 });
 delete (OSM as { country?: unknown }).country;
 delete (OSM as { terms?: unknown }).terms;
@@ -118,8 +126,7 @@ describe("toDataSource", () => {
       domain: "fuel-stations",
       name: "Tankerkönig (MTS-K)",
       url: "https://creativecommons.tankerkoenig.de",
-      license: "CC-BY-4.0",
-      licenseUrl: "https://creativecommons.org/licenses/by/4.0/",
+      licensing: ocSource().licensing,
       attribution: "Tankerkönig (MTS-K), CC BY 4.0",
       termsUrl: "https://creativecommons.tankerkoenig.de/",
       reviewedAt: "2026-10-03",
@@ -151,16 +158,26 @@ describe("toDataSource", () => {
     expect(toDataSource(eu)!.providerCountry).toBe("EU");
   });
 
-  test("shows the licence's readable name where OpenConditions gives one, else its id", () => {
-    const tfl = toDataSource(
-      ocSource({
-        license: "LicenseRef-TfL-Transport-Data-Service",
-        licenseName: "TfL Transport Data Service licence (OGL v2.0 with TfL amendments)",
-      }),
-    )!;
-    expect(tfl.license).toBe("TfL Transport Data Service licence (OGL v2.0 with TfL amendments)");
+  test("shows a captured custom definition without a mutable name lookup", () => {
+    const licensing = {
+      version: 1 as const,
+      bindings: [
+        {
+          scope: "data" as const,
+          subject: "TfL data",
+          license: {
+            kind: "custom" as const,
+            namespace: "openconditions:licences",
+            id: TFL_LICENSE,
+            name: TFL_LICENSE_NAME,
+          },
+        },
+      ],
+    };
+    const tfl = toDataSource(ocSource({ license: TFL_LICENSE, licensing }))!;
+    expect(formatLicensing(tfl.licensing)).toBe(TFL_LICENSE_NAME);
     expect(validateDataSource(tfl, manifest.domains).valid).toBe(true);
-    expect(toDataSource(ocSource())!.license).toBe("CC-BY-4.0");
+    expect(formatLicensing(toDataSource(ocSource())!.licensing!)).toBe("CC-BY-4.0");
   });
 
   test("share-alike makes a granted redistribution conditional; a terms note is a usage condition", () => {
@@ -177,6 +194,7 @@ describe("toDataSource", () => {
           retention: true,
           shareAlike: true,
         },
+        licensing: licensingFromDeclaration("ODbL-1.0", undefined),
       }),
     )!;
     expect(osm.redistribution).toEqual({ sourceData: "conditional", derivedData: "conditional" });
@@ -206,7 +224,7 @@ describe("toDataSource", () => {
   });
 
   test("maps the /sources entries OpenConditions serves, terms note and share-alike included", () => {
-    const answer = sourcesAnswer as OcSourceList;
+    const answer = sourcesAnswer as unknown as OcSourceList;
     expect(answer.scope).toBe("operator");
     const byId = new Map(answer.sources.map((s) => [s.id, toDataSource(s)!]));
     const tankerkoenig = byId.get("de-tankerkoenig-fuel")!;
@@ -584,23 +602,27 @@ describe("createLiveSources", () => {
     expect(live.link("de-tankerkoenig-fuel")).toBeUndefined();
   });
 
-  test("names a licence by the id a listed source carries; none before the first list", () => {
+  test("captures self-contained licence definitions independently of later source lists", () => {
+    const licensing = {
+      version: 1 as const,
+      bindings: [
+        {
+          scope: "data" as const,
+          subject: "TfL data",
+          license: {
+            kind: "custom" as const,
+            namespace: "openconditions:licences",
+            id: TFL_LICENSE,
+            name: TFL_LICENSE_NAME,
+          },
+        },
+      ],
+    };
     const live = createLiveSources();
-    expect(live.licenseName(TFL_LICENSE)).toBeUndefined();
-
-    live.updateLicenses([
-      ocSource({ id: "gb-tfl-cameras", license: TFL_LICENSE, licenseName: TFL_LICENSE_NAME }),
-      ocSource({ licenseName: " " }),
-      NDW,
-    ]);
-    expect(live.licenseName(TFL_LICENSE)).toBe(TFL_LICENSE_NAME);
-    // A source without a readable name gives its id none.
-    expect(live.licenseName("CC-BY-4.0")).toBeUndefined();
-    expect(live.licenseName("CC0-1.0")).toBeUndefined();
-
-    // Each list replaces the last.
-    live.updateLicenses([NDW]);
-    expect(live.licenseName(TFL_LICENSE)).toBeUndefined();
+    live.update([toDataSource(ocSource({ licensing }))!]);
+    const captured = live.captureCredits!();
+    live.update([]);
+    expect(captured.contributors("de-tankerkoenig-fuel")?.[0].licensing).toEqual(licensing);
   });
 });
 
@@ -717,20 +739,34 @@ describe("setup", () => {
     );
   });
 
-  test("a record credit shows a LicenseRef- licence by the name the live list gives it", async () => {
+  test("a record retains its captured licence independently of the current source list", async () => {
     const LICENSE = "LicenseRef-Tankerkoenig-Terms";
     const NAME = "Tankerkönig terms of use";
     const answer = structuredClone(featuresResponse) as unknown as {
       records: { provenance: { attribution: Record<string, unknown> } }[];
     };
     const attribution = answer.records[0]!.provenance.attribution;
-    attribution["license"] = LICENSE;
     const http = fakeHttpClient((req) => {
       if (req.url === `${BASE_URL}/sources`) {
-        return listOf(NDW, ocSource({ license: LICENSE, licenseName: NAME }), {
-          ...OSM,
-          licenseName: "Open Data Commons Open Database License v1.0",
-        });
+        return listOf(
+          NDW,
+          ocSource({
+            license: LICENSE,
+            licensing: {
+              version: 1,
+              bindings: [
+                {
+                  scope: "data",
+                  subject: "Data",
+                  license: { kind: "custom", namespace: "test:terms", id: LICENSE, name: NAME },
+                },
+              ],
+            },
+          }),
+          {
+            ...OSM,
+          },
+        );
       }
       if (req.url === `${BASE_URL}/features`) return answer;
       return undefined;
@@ -746,12 +782,11 @@ describe("setup", () => {
     const [station] = (await provider!.searchStations(BBOX)).stations;
 
     expect(station!.attributions.find((a) => a.sourceId === "de-tankerkoenig-fuel")).toMatchObject({
-      spdxLicense: NAME,
-      licenseUrl: attribution["licenseUrl"],
+      licensing: attribution.licensing,
     });
     // An SPDX id stays as it is, whatever name the list gives it.
-    expect(station!.attributions.find((a) => a.sourceId === "osm-fuel")!.spdxLicense).toBe(
-      "ODbL-1.0",
-    );
+    expect(
+      formatLicensing(station!.attributions.find((a) => a.sourceId === "osm-fuel")!.licensing!),
+    ).toBe("ODbL-1.0");
   });
 });

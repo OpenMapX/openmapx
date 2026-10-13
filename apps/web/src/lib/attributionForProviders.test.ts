@@ -1,4 +1,5 @@
 import type { IntegrationDataSource } from "@openmapx/integration-framework";
+import { formatLicensing, licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 import { describe, expect, it, vi } from "vitest";
 import {
   attributionsForProviders,
@@ -7,14 +8,18 @@ import {
   dataSourceLayerCredits,
   mergeAttributions,
   type ProviderMetaResolver,
-  runtimeAttributionToAttribution,
 } from "./attributionForProviders";
 
 function ds(partial: Partial<IntegrationDataSource> & { sourceId: string }): IntegrationDataSource {
   return {
     name: partial.sourceId,
     url: `https://example.com/${partial.sourceId}`,
-    license: "ODbL-1.0",
+    licensing: {
+      version: 1,
+      bindings: [
+        { scope: "data", subject: "Data", license: { kind: "spdx", expression: "ODbL-1.0" } },
+      ],
+    } as const,
     providerCountry: "XX",
     providerPrivacyUrl: "-",
     ...partial,
@@ -27,14 +32,32 @@ function resolver(map: Record<string, IntegrationDataSource[]>): ProviderMetaRes
 
 describe("attributionsForProviders", () => {
   const registry = resolver({
-    "geocoding-maptiler": [ds({ sourceId: "maptiler", name: "MapTiler", license: "Proprietary" })],
+    "geocoding-maptiler": [
+      ds({
+        sourceId: "maptiler",
+        name: "MapTiler",
+        licensing: licensingFromDeclaration("Proprietary", undefined),
+      }),
+    ],
     "geocoding-nominatim": [
-      ds({ sourceId: "nominatim", name: "Nominatim (OpenStreetMap)", license: "ODbL 1.0" }),
+      ds({
+        sourceId: "nominatim",
+        name: "Nominatim (OpenStreetMap)",
+        licensing: licensingFromDeclaration("ODbL 1.0", undefined),
+      }),
     ],
     "geocoding-photon": [
       // Shares the OSM credit with Nominatim — used to assert dedup.
-      ds({ sourceId: "nominatim", name: "Nominatim (OpenStreetMap)", license: "ODbL 1.0" }),
-      ds({ sourceId: "photon", name: "Photon (Komoot)", license: "BSD-3-Clause" }),
+      ds({
+        sourceId: "nominatim",
+        name: "Nominatim (OpenStreetMap)",
+        licensing: licensingFromDeclaration("ODbL 1.0", undefined),
+      }),
+      ds({
+        sourceId: "photon",
+        name: "Photon (Komoot)",
+        licensing: licensingFromDeclaration("BSD-3-Clause", undefined),
+      }),
     ],
   });
 
@@ -42,7 +65,7 @@ describe("attributionsForProviders", () => {
     const attrs = attributionsForProviders(registry, ["geocoding-maptiler"]);
     expect(attrs.map((a) => a.sourceId)).toEqual(["maptiler"]);
     expect(attrs[0].name).toBe("MapTiler");
-    expect(attrs[0].spdxLicense).toBe("Proprietary");
+    expect(formatLicensing(attrs[0].licensing!)).toBe("Proprietary");
   });
 
   it("dedupes shared sourceIds across multiple served providers (first seen wins)", () => {
@@ -65,7 +88,11 @@ describe("attributionsForProviders", () => {
 
 describe("attributionsForSources", () => {
   const bySource: Record<string, IntegrationDataSource> = {
-    mangrove: ds({ sourceId: "mangrove", name: "Mangrove.reviews", license: "CC-BY-4.0" }),
+    mangrove: ds({
+      sourceId: "mangrove",
+      name: "Mangrove.reviews",
+      licensing: licensingFromDeclaration("CC-BY-4.0", undefined),
+    }),
   };
   const registry: DataSourceResolver = { findDataSource: (id) => bySource[id] };
 
@@ -96,9 +123,15 @@ describe("mergeAttributions", () => {
 
 describe("dataSourceLayerCredits", () => {
   const mtsk = {
-    text: "MTS-K via Tankerkönig",
+    sourceId: "MTS-K via Tankerkönig",
+    name: "MTS-K via Tankerkönig",
     url: "https://creativecommons.tankerkoenig.de/",
-    license: "CC-BY-4.0",
+    licensing: {
+      version: 1,
+      bindings: [
+        { scope: "data", subject: "Data", license: { kind: "spdx", expression: "CC-BY-4.0" } },
+      ],
+    } as const,
   };
 
   it("credits per-record attributions of a source whose manifest declares none, without a warning", () => {
@@ -117,7 +150,12 @@ describe("dataSourceLayerCredits", () => {
         sourceId: "MTS-K via Tankerkönig",
         name: "MTS-K via Tankerkönig",
         url: "https://creativecommons.tankerkoenig.de/",
-        spdxLicense: "CC-BY-4.0",
+        licensing: {
+          version: 1,
+          bindings: [
+            { scope: "data", subject: "Data", license: { kind: "spdx", expression: "CC-BY-4.0" } },
+          ],
+        } as const,
       },
     ]);
     expect(warn).not.toHaveBeenCalled();
@@ -142,7 +180,12 @@ describe("dataSourceLayerCredits", () => {
       dataSources: [ds({ sourceId: "ocm", name: "Open Charge Map" }), ds({ sourceId: "osm" })],
       envelope: [{ sourceId: "ocm", name: "Open Charge Map" }],
       results: [
-        { source: "ocm", attributions: [{ text: "Ville de Paris", url: "https://paris.fr" }] },
+        {
+          source: "ocm",
+          attributions: [
+            { sourceId: "Ville de Paris", name: "Ville de Paris", url: "https://paris.fr" },
+          ],
+        },
       ],
       isFetching: false,
     });
@@ -158,14 +201,7 @@ describe("dataSourceLayerCredits", () => {
         results: [{ attributions: [mtsk] }],
         isFetching: true,
       }),
-    ).toEqual([
-      {
-        sourceId: "MTS-K via Tankerkönig",
-        name: mtsk.text,
-        url: mtsk.url,
-        spdxLicense: mtsk.license,
-      },
-    ]);
+    ).toEqual([mtsk]);
   });
 });
 
@@ -200,16 +236,6 @@ describe("exact data-source record credits", () => {
       dataSourceLayerCredits({ ...input, results: [{ source: "a", contributors: [] }] }),
     ).toEqual([]);
   });
-});
-
-it("preserves an explicit source ID at the legacy runtime attribution boundary", () => {
-  expect(
-    runtimeAttributionToAttribution({
-      sourceId: "stable-feed",
-      text: "Publisher notice",
-      url: "https://publisher.example",
-    }).sourceId,
-  ).toBe("stable-feed");
 });
 
 it("keeps every distinct notice for exact legacy source IDs and excludes unrelated sources", () => {

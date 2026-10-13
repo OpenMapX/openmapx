@@ -1,6 +1,7 @@
 import { feedIdSchema } from "@openmapx/core/feed-id";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import { dataSourceToAttribution } from "@openmapx/mobility-core/contributors";
+import { parseLicensing } from "@openmapx/mobility-core/licensing";
 import z from "zod/v4";
 import { parseMediaHostEntry } from "./media-hosts";
 
@@ -66,8 +67,14 @@ export const dataSourceSchema = z.object({
   mediaHosts: z.array(mediaHostSchema).optional(),
 
   // License & Attribution
-  license: z.string(),
-  licenseUrl: z.string().optional(),
+  licensing: z.unknown().transform((value, ctx) => {
+    const licensing = parseLicensing(value);
+    if (!licensing || licensing.bindings.length === 0) {
+      ctx.addIssue({ code: "custom", message: "Invalid structured licensing" });
+      return z.NEVER;
+    }
+    return licensing;
+  }),
   attribution: z.string().optional(),
   /** Free-form per-source notes (e.g. "via Transitous feed proxy"). */
   notes: z.string().optional(),
@@ -491,7 +498,6 @@ function dataSourceRuleErrors(ds: IntegrationDataSource, domains: readonly strin
   if (!ds.sourceId) errors.push("dataSources[].sourceId is required");
   if (!ds.name) errors.push("dataSources[].name is required");
   if (!ds.url) errors.push("dataSources[].url is required");
-  if (!ds.license) errors.push("dataSources[].license is required");
   if (!ds.providerCountry) errors.push("dataSources[].providerCountry is required");
   if (!ds.providerPrivacyUrl) errors.push("dataSources[].providerPrivacyUrl is required");
   if (ds.domain !== undefined && !domains.includes(ds.domain)) {

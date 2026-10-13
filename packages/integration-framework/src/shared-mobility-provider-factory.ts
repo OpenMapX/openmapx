@@ -8,7 +8,7 @@ import type {
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import {
   contributorsForRecords,
-  parseContributors,
+  readCapturedContributors,
   snapshotContributors,
   withContributors,
 } from "@openmapx/mobility-core/contributors";
@@ -166,7 +166,7 @@ export function createSharedMobilityProvider(
         context,
         snapshotContributors(
           ...(context?.geojson.features ?? []).map(
-            (feature) => parseContributors(feature.properties?._mapAttributions) ?? [],
+            (feature) => readCapturedContributors(feature.properties?._mapAttributions) ?? [],
           ),
         ),
       );

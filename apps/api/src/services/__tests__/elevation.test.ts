@@ -246,7 +246,11 @@ it.each(["https://api.stadiamaps.com", "http://valhalla.internal:8002"])(
     expect(result?.contributorCoverage).toBe("partial");
     expect(
       result?.contributors?.some(
-        (item) => item.sourceId === "openstreetmap" || item.spdxLicense === "MIT",
+        (item) =>
+          item.sourceId === "openstreetmap" ||
+          item.licensing?.bindings.some(
+            (b) => b.license.kind === "spdx" && b.license.expression === "MIT",
+          ),
       ),
     ).toBe(false);
   },

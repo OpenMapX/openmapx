@@ -1,6 +1,8 @@
 import type { PlacePhoto } from "@openmapx/core";
+import { withPhotoContributors } from "@openmapx/core";
 import type { PhotoProvider, PhotoQuery } from "@openmapx/integration-framework";
 import { createBboxPhotoProvider } from "@openmapx/integration-photos/bbox-provider";
+import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 
 interface MapillaryImageResponse {
   data: Array<{
@@ -58,18 +60,25 @@ const baseProvider = createBboxPhotoProvider<MapillaryImageResponse>({
     return sorted.map(({ img }): PlacePhoto => {
       const author = img.creator?.username;
       const [imgLng, imgLat] = img.geometry.coordinates;
-      return {
-        url: img.thumb_1024_url ?? `https://scontent.mapillary.com/${img.id}/thumb-1024.jpg`,
-        thumbnailUrl: img.thumb_256_url,
-        source: "mapillary",
-        author,
-        authorUrl: author ? `https://www.mapillary.com/app/user/${author}` : undefined,
-        license: "CC BY-SA 4.0",
-        licenseUrl: "https://creativecommons.org/licenses/by-sa/4.0",
-        pageUrl: `https://www.mapillary.com/app/?pKey=${img.id}`,
-        capturedAt: img.captured_at ? new Date(img.captured_at).toISOString() : undefined,
-        coordinates: [imgLng, imgLat],
-      };
+      return withPhotoContributors(
+        {
+          url: img.thumb_1024_url ?? `https://scontent.mapillary.com/${img.id}/thumb-1024.jpg`,
+          thumbnailUrl: img.thumb_256_url,
+          source: "mapillary",
+          author,
+          authorUrl: author ? `https://www.mapillary.com/app/user/${author}` : undefined,
+          licensing: licensingFromDeclaration(
+            "CC-BY-SA-4.0",
+            undefined,
+            "Mapillary image",
+            "imagery",
+          ),
+          pageUrl: `https://www.mapillary.com/app/?pKey=${img.id}`,
+          capturedAt: img.captured_at ? new Date(img.captured_at).toISOString() : undefined,
+          coordinates: [imgLng, imgLat],
+        },
+        "Mapillary",
+      );
     });
   },
 });

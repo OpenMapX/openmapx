@@ -21,7 +21,16 @@ const a: Attribution = {
   url: "https://a.example",
   publisher: { name: "Publisher", url: "https://publisher.example" },
 };
-const b: Attribution = { sourceId: "b", name: "B", spdxLicense: "CC-BY-4.0" };
+const b: Attribution = {
+  sourceId: "b",
+  name: "B",
+  licensing: {
+    version: 1,
+    bindings: [
+      { scope: "data", subject: "Data", license: { kind: "spdx", expression: "CC-BY-4.0" } },
+    ],
+  } as const,
+};
 
 describe("canonical contributor snapshots", () => {
   it("copies metadata so cached records do not follow later input mutation", () => {
@@ -90,6 +99,8 @@ describe("canonical contributor snapshots", () => {
 describe("field contributor snapshots", () => {
   it("parses portable field maps without inventing invalid field receipts", () => {
     const map = { geometry: [a], ratio: [a, b], los: [], speed: "invalid" };
+    expect(parseFieldContributors(JSON.stringify(map))).toBeUndefined();
+    delete (map as Partial<typeof map>).speed;
     expect(parseFieldContributors(JSON.stringify(map))).toEqual({
       geometry: [a],
       ratio: [a, b],
@@ -167,7 +178,12 @@ it("converts only trusted static credit metadata without carrying provider contr
     sourceId: "a",
     name: "A",
     url: "https://example.test",
-    license: "CC0-1.0",
+    licensing: {
+      version: 1,
+      bindings: [
+        { scope: "data", subject: "Data", license: { kind: "spdx", expression: "CC0-1.0" } },
+      ],
+    } as const,
     attribution: "Original notice",
     providerCountry: "DE",
     endUserExposure: "server-only",
@@ -178,7 +194,12 @@ it("converts only trusted static credit metadata without carrying provider contr
     sourceId: "a",
     name: "A",
     url: "https://example.test",
-    spdxLicense: "CC0-1.0",
+    licensing: {
+      version: 1,
+      bindings: [
+        { scope: "data", subject: "Data", license: { kind: "spdx", expression: "CC0-1.0" } },
+      ],
+    } as const,
     attributionText: "Original notice",
   });
   raw.attribution = "Changed";

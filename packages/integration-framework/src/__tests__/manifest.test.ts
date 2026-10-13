@@ -1,3 +1,4 @@
+import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 import { describe, expect, it } from "vitest";
 import { dataSourceSchema } from "../manifest.js";
 
@@ -5,7 +6,7 @@ const source = {
   sourceId: "de-test-cameras",
   name: "x",
   url: "https://x",
-  license: "L",
+  licensing: licensingFromDeclaration("L", undefined, "x"),
   providerCountry: "DE",
   providerPrivacyUrl: "https://x/p",
 };

@@ -121,79 +121,206 @@
       "sourceId": "citybikes",
       "name": "CityBikes",
       "url": "https://citybik.es/",
-      "license": "Proprietary (custom terms, attribution required)",
-      "licenseUrl": "https://docs.citybik.es/api/tos",
       "commercialUse": "unknown",
       "providerCountry": "ES",
       "providerPrivacyUrl": "-",
       "endUserExposure": "server-only",
       "personalData": false,
       "cookies": false,
-      "dpaAvailable": false
+      "dpaAvailable": false,
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "data",
+            "subject": "CityBikes material",
+            "license": {
+              "kind": "unknown"
+            }
+          },
+          {
+            "scope": "service",
+            "subject": "CityBikes access/account contract",
+            "license": {
+              "kind": "unknown",
+              "url": "https://docs.citybik.es/api/tos"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "Proprietary (custom terms, attribution required)",
+            "url": "https://docs.citybik.es/api/tos"
+          }
+        ]
+      }
     },
     {
       "sourceId": "donkey",
       "name": "Donkey Republic",
       "url": "https://www.donkey.bike/",
-      "license": "Proprietary",
-      "licenseUrl": "https://www.donkey.bike/terms-and-conditions/",
       "commercialUse": "unknown",
       "providerCountry": "DK",
       "providerPrivacyUrl": "https://www.donkey.bike/privacy-policy",
       "endUserExposure": "server-only",
       "personalData": false,
       "cookies": false,
-      "dpaAvailable": false
+      "dpaAvailable": false,
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "data",
+            "subject": "Donkey Republic material",
+            "license": {
+              "kind": "unknown"
+            }
+          },
+          {
+            "scope": "service",
+            "subject": "Donkey Republic access/account contract",
+            "license": {
+              "kind": "unknown",
+              "url": "https://www.donkey.bike/terms-and-conditions/"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "Proprietary",
+            "url": "https://www.donkey.bike/terms-and-conditions/"
+          }
+        ]
+      }
     },
     {
       "sourceId": "nextbike",
       "name": "Nextbike",
       "url": "https://www.nextbike.com/",
       "apiHosts": ["maps.nextbike.net"],
-      "license": "Proprietary",
-      "licenseUrl": "https://github.com/nextbike/api-doc",
       "commercialUse": "unknown",
       "providerCountry": "DE",
       "providerPrivacyUrl": "https://www.nextbike.de/en/privacy/",
       "endUserExposure": "server-only",
       "personalData": false,
       "cookies": false,
-      "dpaAvailable": false
+      "dpaAvailable": false,
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "data",
+            "subject": "Nextbike material",
+            "license": {
+              "kind": "unknown"
+            }
+          },
+          {
+            "scope": "service",
+            "subject": "Nextbike access/account contract",
+            "license": {
+              "kind": "unknown",
+              "url": "https://github.com/nextbike/api-doc"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "Proprietary",
+            "url": "https://github.com/nextbike/api-doc"
+          }
+        ]
+      }
     },
     {
       "sourceId": "db-bike",
       "name": "Deutsche Bahn GBFS",
       "url": "https://developers.deutschebahn.com/",
-      "license": "Proprietary (bilateral license per API product)",
-      "licenseUrl": "https://developers.deutschebahn.com/db-api-marketplace/apis/nutzungsbedingungen",
       "commercialUse": "conditional",
       "providerCountry": "DE",
       "providerPrivacyUrl": "https://developers.deutschebahn.com/db-api-marketplace/apis/privacypolicy",
       "endUserExposure": "server-only",
       "personalData": false,
       "cookies": false,
-      "dpaAvailable": false
+      "dpaAvailable": false,
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "data",
+            "subject": "Deutsche Bahn GBFS material",
+            "license": {
+              "kind": "unknown"
+            }
+          },
+          {
+            "scope": "service",
+            "subject": "Deutsche Bahn GBFS access/account contract",
+            "license": {
+              "kind": "unknown",
+              "url": "https://developers.deutschebahn.com/db-api-marketplace/apis/nutzungsbedingungen"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "Proprietary (bilateral license per API product)",
+            "url": "https://developers.deutschebahn.com/db-api-marketplace/apis/nutzungsbedingungen"
+          }
+        ]
+      }
     },
     {
       "sourceId": "gbfs",
       "name": "GBFS Catalog (MobilityData)",
       "url": "https://github.com/MobilityData/gbfs",
-      "license": "CC-BY-3.0 (spec); per-operator data licenses",
-      "licenseUrl": "https://github.com/MobilityData/gbfs/blob/master/LICENSE",
       "commercialUse": "yes",
       "providerCountry": "CA",
       "providerPrivacyUrl": "https://mobilitydata.org/privacy-policy/",
       "endUserExposure": "server-only",
       "personalData": false,
       "cookies": false,
-      "dpaAvailable": false
+      "dpaAvailable": false,
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "software",
+            "subject": "GBFS specification/documentation",
+            "license": {
+              "kind": "spdx",
+              "expression": "CC-BY-3.0"
+            }
+          },
+          {
+            "scope": "data",
+            "subject": "Operator feed data",
+            "license": {
+              "kind": "per-item",
+              "raw": "Determined by each contributing item or operator"
+            }
+          },
+          {
+            "scope": "service",
+            "subject": "Each operator endpoint/brand terms",
+            "license": {
+              "kind": "per-item",
+              "raw": "Determined by each contributing item or operator"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "CC-BY-3.0 (spec); per-operator data licenses",
+            "url": "https://github.com/MobilityData/gbfs/blob/master/LICENSE"
+          }
+        ]
+      }
     },
     {
       "sourceId": "entur-mobility",
       "name": "Entur Mobility v2",
       "url": "https://developer.entur.org/pages-mobility-docs-mobility-v2/",
-      "license": "NLOD-2.0",
-      "licenseUrl": "https://data.norge.no/nlod/en/2.0",
       "attribution": "Data made available by Entur",
       "commercialUse": "yes",
       "providerCountry": "NO",
@@ -201,14 +328,32 @@
       "endUserExposure": "server-only",
       "personalData": false,
       "cookies": false,
-      "dpaAvailable": false
+      "dpaAvailable": false,
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "data",
+            "subject": "Entur Mobility v2 material",
+            "license": {
+              "kind": "spdx",
+              "expression": "NLOD-2.0",
+              "url": "https://data.norge.no/nlod/en/2.0"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "NLOD-2.0",
+            "url": "https://data.norge.no/nlod/en/2.0"
+          }
+        ]
+      }
     },
     {
       "sourceId": "transitous",
       "name": "Transitous",
       "url": "https://api.transitous.org/",
-      "license": "Mixed (per upstream GTFS/GBFS feed; mostly open data)",
-      "licenseUrl": "https://transitous.org/sources/",
       "commercialUse": "conditional",
       "attribution": "Public transport data via <a href=\"https://transitous.org/\">Transitous</a> (see <a href=\"https://transitous.org/sources/\">data sources</a>)",
       "notes": "The Transitous public API (api.transitous.org) is 'not intended for commercial or for-profit purposes' — commercial use is decided case-by-case on request, and open-source clients must publish their source and visibly link transitous.org/sources/ for attribution (see transitous.org/api/). Upstream MOTIS is MIT licensed; that software license is separate from OpenMapX integration code, Transitous tooling, and the per-source timetable data licenses (mostly CC-BY / CC-BY-SA / open-government licences).",
@@ -217,7 +362,34 @@
       "endUserExposure": "server-only",
       "personalData": false,
       "cookies": false,
-      "dpaAvailable": false
+      "dpaAvailable": false,
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "data",
+            "subject": "Each actual contributing feed/operator/source",
+            "license": {
+              "kind": "per-item",
+              "raw": "Determined by each contributing item or operator"
+            }
+          },
+          {
+            "scope": "service",
+            "subject": "Transitous endpoint policy",
+            "license": {
+              "kind": "unknown",
+              "url": "https://transitous.org/sources/"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "Mixed (per upstream GTFS/GBFS feed; mostly open data)",
+            "url": "https://transitous.org/sources/"
+          }
+        ]
+      }
     }
   ]
 }

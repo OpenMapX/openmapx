@@ -150,22 +150,38 @@
       "sourceId": "openseamap",
       "name": "OpenSeaMap",
       "url": "https://www.openseamap.org/",
-      "license": "CC-BY-SA-2.0",
-      "licenseUrl": "https://creativecommons.org/licenses/by-sa/2.0/",
       "commercialUse": "yes",
       "providerCountry": "DE",
       "providerPrivacyUrl": "https://www.openseamap.org/index.php?id=imprint",
       "endUserExposure": "proxied",
       "personalData": false,
       "cookies": false,
-      "dpaAvailable": false
+      "dpaAvailable": false,
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "data",
+            "subject": "OpenSeaMap material",
+            "license": {
+              "kind": "spdx",
+              "expression": "CC-BY-SA-2.0",
+              "url": "https://creativecommons.org/licenses/by-sa/2.0/"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "CC-BY-SA-2.0",
+            "url": "https://creativecommons.org/licenses/by-sa/2.0/"
+          }
+        ]
+      }
     },
     {
       "sourceId": "openstreetmap",
       "name": "OpenStreetMap",
       "url": "https://www.openstreetmap.org/",
-      "license": "ODbL-1.0",
-      "licenseUrl": "https://www.openstreetmap.org/copyright",
       "attribution": "© <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap contributors</a>",
       "commercialUse": "yes",
       "providerCountry": "UK",
@@ -173,14 +189,32 @@
       "endUserExposure": "server-only",
       "personalData": false,
       "cookies": false,
-      "dpaAvailable": false
+      "dpaAvailable": false,
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "data",
+            "subject": "OpenStreetMap material",
+            "license": {
+              "kind": "spdx",
+              "expression": "ODbL-1.0",
+              "url": "https://www.openstreetmap.org/copyright"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "ODbL-1.0",
+            "url": "https://www.openstreetmap.org/copyright"
+          }
+        ]
+      }
     },
     {
       "sourceId": "gebco",
       "name": "GEBCO",
       "url": "https://www.gebco.net/",
-      "license": "Public domain",
-      "licenseUrl": "https://www.gebco.net/data-products/gridded-bathymetry-data",
       "attribution": "Imagery reproduced from the GEBCO Grid, <a href=\"https://www.gebco.net/\">GEBCO Compilation Group (2024)</a>",
       "commercialUse": "yes",
       "providerCountry": "UK",
@@ -188,14 +222,43 @@
       "endUserExposure": "proxied",
       "personalData": false,
       "cookies": false,
-      "dpaAvailable": false
+      "dpaAvailable": false,
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "data",
+            "subject": "GEBCO material",
+            "license": {
+              "kind": "public-domain",
+              "name": "Public domain",
+              "url": "https://www.gebco.net/data-products/gridded-bathymetry-data"
+            }
+          },
+          {
+            "scope": "service",
+            "subject": "GEBCO Grid/WMS use terms",
+            "license": {
+              "kind": "custom",
+              "namespace": "publisher:gebco",
+              "id": "LicenseRef-Service-Terms",
+              "name": "GEBCO Grid/WMS use terms terms",
+              "url": "https://www.gebco.net/data-products/gridded-bathymetry/terms-of-use"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "Public domain",
+            "url": "https://www.gebco.net/data-products/gridded-bathymetry-data"
+          }
+        ]
+      }
     },
     {
       "sourceId": "noaa-ncds",
       "name": "NOAA Maritime Chart Service",
       "url": "https://nauticalcharts.noaa.gov/",
-      "license": "U.S. Public Domain",
-      "licenseUrl": "https://www.nauticalcharts.noaa.gov/data/data-licensing.html",
       "attribution": "<a href=\"https://nauticalcharts.noaa.gov/\">NOAA Office of Coast Survey</a>",
       "commercialUse": "yes",
       "providerCountry": "US",
@@ -203,29 +266,65 @@
       "endUserExposure": "proxied",
       "personalData": false,
       "cookies": false,
-      "dpaAvailable": false
+      "dpaAvailable": false,
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "data",
+            "subject": "NOAA Maritime Chart Service material",
+            "license": {
+              "kind": "public-domain",
+              "name": "U.S. Public Domain",
+              "url": "https://www.nauticalcharts.noaa.gov/data/data-licensing.html"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "U.S. Public Domain",
+            "url": "https://www.nauticalcharts.noaa.gov/data/data-licensing.html"
+          }
+        ]
+      }
     },
     {
       "sourceId": "noaa-co-ops",
       "name": "NOAA Tides & Currents (CO-OPS)",
       "url": "https://tidesandcurrents.noaa.gov/",
-      "license": "U.S. Public Domain",
-      "licenseUrl": "https://tidesandcurrents.noaa.gov/disclaimers.html",
       "commercialUse": "yes",
       "providerCountry": "US",
       "providerPrivacyUrl": "https://tidesandcurrents.noaa.gov/privacy.html",
       "endUserExposure": "server-only",
       "personalData": false,
       "cookies": false,
-      "dpaAvailable": false
+      "dpaAvailable": false,
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "data",
+            "subject": "NOAA Tides & Currents (CO-OPS) material",
+            "license": {
+              "kind": "public-domain",
+              "name": "U.S. Public Domain",
+              "url": "https://tidesandcurrents.noaa.gov/disclaimers.html"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "U.S. Public Domain",
+            "url": "https://tidesandcurrents.noaa.gov/disclaimers.html"
+          }
+        ]
+      }
     },
     {
       "sourceId": "kartverket-sjokart",
       "name": "Kartverket Sjøkart",
       "url": "https://www.kartverket.no/til-sjos/sjokart",
       "apiHosts": ["wms.geonorge.no"],
-      "license": "NLOD-2.0",
-      "licenseUrl": "https://data.norge.no/nlod/en/2.0",
       "attribution": "Nautical charts © <a href=\"https://www.kartverket.no/\">Kartverket</a> (NLOD 2.0)",
       "commercialUse": "yes",
       "providerCountry": "NO",
@@ -233,78 +332,197 @@
       "endUserExposure": "proxied",
       "personalData": false,
       "cookies": false,
-      "dpaAvailable": false
+      "dpaAvailable": false,
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "data",
+            "subject": "Kartverket Sjøkart material",
+            "license": {
+              "kind": "spdx",
+              "expression": "NLOD-2.0",
+              "url": "https://data.norge.no/nlod/en/2.0"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "NLOD-2.0",
+            "url": "https://data.norge.no/nlod/en/2.0"
+          }
+        ]
+      }
     },
     {
       "sourceId": "dfo-iwls",
       "name": "Fisheries and Oceans Canada — CHS/IWLS",
       "url": "https://www.dfo-mpo.gc.ca/science/data-donnees/iwls-snhe-eng.html",
-      "license": "OGL-Canada-2.0",
-      "licenseUrl": "https://open.canada.ca/en/open-government-licence-canada",
       "commercialUse": "yes",
       "providerCountry": "CA",
       "providerPrivacyUrl": "https://www.canada.ca/en/transparency/privacy.html",
       "endUserExposure": "server-only",
       "personalData": false,
       "cookies": false,
-      "dpaAvailable": false
+      "dpaAvailable": false,
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "data",
+            "subject": "Fisheries and Oceans Canada — CHS/IWLS material",
+            "license": {
+              "kind": "spdx",
+              "expression": "OGL-Canada-2.0",
+              "url": "https://open.canada.ca/en/open-government-licence-canada"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "OGL-Canada-2.0",
+            "url": "https://open.canada.ca/en/open-government-licence-canada"
+          }
+        ]
+      }
     },
     {
       "sourceId": "kartverket-sehavniva",
       "name": "Kartverket Sehavnivå",
       "url": "https://www.kartverket.no/til-sjos/se-havniva",
-      "license": "NLOD-2.0",
-      "licenseUrl": "https://data.norge.no/nlod/en/2.0",
       "commercialUse": "yes",
       "providerCountry": "NO",
       "providerPrivacyUrl": "https://www.kartverket.no/om-kartverket/personvern",
       "endUserExposure": "server-only",
       "personalData": false,
       "cookies": false,
-      "dpaAvailable": false
+      "dpaAvailable": false,
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "data",
+            "subject": "Kartverket Sehavnivå material",
+            "license": {
+              "kind": "spdx",
+              "expression": "NLOD-2.0",
+              "url": "https://data.norge.no/nlod/en/2.0"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "NLOD-2.0",
+            "url": "https://data.norge.no/nlod/en/2.0"
+          }
+        ]
+      }
     },
     {
       "sourceId": "wsv-pegelonline",
       "name": "WSV Pegelonline",
       "url": "https://www.pegelonline.wsv.de/",
-      "license": "DL-DE-ZERO-2.0",
-      "licenseUrl": "https://www.govdata.de/dl-de/zero-2-0",
       "commercialUse": "yes",
       "providerCountry": "DE",
       "providerPrivacyUrl": "https://www.pegelonline.wsv.de/gast/datenschutzhinweise",
       "endUserExposure": "server-only",
       "personalData": false,
       "cookies": false,
-      "dpaAvailable": false
+      "dpaAvailable": false,
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "data",
+            "subject": "WSV Pegelonline material",
+            "license": {
+              "kind": "spdx",
+              "expression": "DL-DE-ZERO-2.0",
+              "url": "https://www.govdata.de/dl-de/zero-2-0"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "DL-DE-ZERO-2.0",
+            "url": "https://www.govdata.de/dl-de/zero-2-0"
+          }
+        ]
+      }
     },
     {
       "sourceId": "ioc-sealevel",
       "name": "IOC Sea Level Station Monitoring Facility",
       "url": "https://www.ioc-sealevelmonitoring.org/",
-      "license": "UNESCO-IOC public data",
-      "licenseUrl": "https://www.unesco.org/en/open-access",
       "commercialUse": "yes",
       "providerCountry": "FR",
       "providerPrivacyUrl": "https://www.unesco.org/en/legal-affairs/privacy-policy",
       "endUserExposure": "server-only",
       "personalData": false,
       "cookies": false,
-      "dpaAvailable": false
+      "dpaAvailable": false,
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "data",
+            "subject": "Each IOC originator measurement set",
+            "license": {
+              "kind": "unknown"
+            }
+          },
+          {
+            "scope": "service",
+            "subject": "IOC distribution policy",
+            "license": {
+              "kind": "custom",
+              "namespace": "publisher:ioc-sealevel",
+              "id": "LicenseRef-Service-Terms",
+              "name": "IOC distribution policy terms",
+              "url": "https://www.ioc-sealevelmonitoring.org/disclaimer.php"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "UNESCO-IOC public data",
+            "url": "https://www.unesco.org/en/open-access"
+          }
+        ]
+      }
     },
     {
       "sourceId": "emodnet-physics",
       "name": "EMODnet Physics",
       "url": "https://emodnet.ec.europa.eu/en/physics",
       "apiHosts": ["prod-geoserver.emodnet-physics.eu"],
-      "license": "CC-BY-4.0",
-      "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
       "commercialUse": "yes",
       "providerCountry": "BE",
       "providerPrivacyUrl": "https://emodnet.ec.europa.eu/en/privacy-statement",
       "endUserExposure": "server-only",
       "personalData": false,
       "cookies": false,
-      "dpaAvailable": false
+      "dpaAvailable": false,
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "data",
+            "subject": "EMODnet Physics material",
+            "license": {
+              "kind": "spdx",
+              "expression": "CC-BY-4.0",
+              "url": "https://creativecommons.org/licenses/by/4.0/"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "CC-BY-4.0",
+            "url": "https://creativecommons.org/licenses/by/4.0/"
+          }
+        ]
+      }
     }
   ]
 }

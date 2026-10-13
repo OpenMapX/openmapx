@@ -9,7 +9,7 @@ import ListItem from "@mui/material/ListItem";
 import ListItemText from "@mui/material/ListItemText";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
-import { safeHref } from "@openmapx/core";
+import { buildLicensingHtml, safeHref } from "@openmapx/core";
 import type {
   CoverageSourceDetail,
   CoverageSourceRow,
@@ -17,6 +17,7 @@ import type {
 } from "@openmapx/core/coverage";
 import { useTranslations } from "next-intl";
 import { useEffect, useRef } from "react";
+import { AttributionText } from "@/components/ui/AttributionText";
 import { type CoverageRequestError, useCoverageSource } from "@/lib/admin/coverageHooks";
 import { CompactAlert } from "../shared/CompactAlert";
 import { CoverageStatus, formatCoverageDate } from "./CoverageStatus";
@@ -322,7 +323,14 @@ function SourceEvidenceBody({
               label={t("rights.derivedData")}
               value={t(`permission.${right.redistribution.derivedData}`)}
             />
-            {right.license && <Detail label={t("rights.license")} value={right.license} />}
+            {right.licensing && (
+              <AttributionText
+                html={buildLicensingHtml(right.licensing, {
+                  includeSoftware: true,
+                  fullNames: true,
+                })}
+              />
+            )}
             {right.attribution && (
               <Detail label={t("rights.attribution")} value={right.attribution} />
             )}
@@ -343,11 +351,6 @@ function SourceEvidenceBody({
               value={right.evidenceOrigin ?? t("common.unknown")}
             />
             <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap" }}>
-              {right.licenseUrl && (
-                <Link href={safeHref(right.licenseUrl)} target="_blank" rel="noreferrer">
-                  {t("rights.license")}
-                </Link>
-              )}
               {right.termsUrl && (
                 <Link href={safeHref(right.termsUrl)} target="_blank" rel="noreferrer">
                   {t("rights.terms")}

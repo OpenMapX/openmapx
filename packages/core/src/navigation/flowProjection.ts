@@ -1,4 +1,4 @@
-import { parseFieldContributors } from "@openmapx/mobility-core/contributors";
+import { readCapturedFieldContributors } from "@openmapx/mobility-core/contributors";
 import type { LngLat } from "../types/geometry";
 import type { RoadFlowSegment, RouteFlowSpan } from "../types/roadConditions";
 import { haversineDistance } from "../utils/coordinates";
@@ -156,7 +156,7 @@ function segmentSpans(
       los: segment.los,
       ...(segment.fieldContributors === undefined
         ? {}
-        : { fieldContributors: parseFieldContributors(segment.fieldContributors) }),
+        : { fieldContributors: readCapturedFieldContributors(segment.fieldContributors) }),
       confidence: segment.confidence,
       rank,
       ...(segment.speedRatio !== undefined && { speedRatio: segment.speedRatio }),

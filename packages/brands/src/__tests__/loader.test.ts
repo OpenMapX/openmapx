@@ -1,3 +1,4 @@
+import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 describe("loadBrandIndex", () => {
@@ -9,7 +10,13 @@ describe("loadBrandIndex", () => {
   it("throws for an artifact whose version is not 2", async () => {
     vi.resetModules();
     vi.doMock("node:fs", () => ({
-      readFileSync: () => JSON.stringify({ v: 3, source: "test", license: "test", brands: [] }),
+      readFileSync: () =>
+        JSON.stringify({
+          v: 3,
+          source: "test",
+          licensing: licensingFromDeclaration("test", undefined),
+          brands: [],
+        }),
     }));
 
     const { loadBrandIndex } = await import("../loader");

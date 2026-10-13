@@ -1,3 +1,4 @@
+import type { Licensing } from "@openmapx/mobility-core/licensing";
 import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "../api/client";
 
@@ -13,7 +14,7 @@ export interface SunTimesResponse {
   astronomicalTwilightBegin: string;
   astronomicalTwilightEnd: string;
   timezone: string;
-  attribution: { name: string; url: string; license?: string; licenseUrl?: string };
+  attribution: { name: string; url: string; licensing?: Licensing };
 }
 
 export function useSunTimes(lat: number | null, lng: number | null, enabled = true) {

@@ -36,8 +36,20 @@ const WIKIDATA_ATTRIBUTION: Attribution = {
   sourceId: "wikidata",
   name: "Wikidata",
   url: "https://www.wikidata.org/",
-  spdxLicense: "CC0-1.0",
-  licenseUrl: "https://www.wikidata.org/wiki/Wikidata:Licensing",
+  licensing: {
+    version: 1,
+    bindings: [
+      {
+        scope: "data",
+        subject: "Data",
+        license: {
+          kind: "spdx",
+          expression: "CC0-1.0",
+          url: "https://www.wikidata.org/wiki/Wikidata:Licensing",
+        },
+      },
+    ],
+  } as const,
   attributionText: "Wikidata",
 };
 

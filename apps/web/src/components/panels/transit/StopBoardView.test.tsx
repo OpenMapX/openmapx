@@ -32,7 +32,17 @@ const alerts = [
 ];
 
 const sharedAttributions = [
-  { sourceId: "entur", name: "Entur", url: "https://entur.no", spdxLicense: "CC-BY-4.0" },
+  {
+    sourceId: "entur",
+    name: "Entur",
+    url: "https://entur.no",
+    licensing: {
+      version: 1,
+      bindings: [
+        { scope: "data", subject: "Data", license: { kind: "spdx", expression: "CC-BY-4.0" } },
+      ],
+    } as const,
+  },
 ];
 
 vi.mock("next-intl", () => ({

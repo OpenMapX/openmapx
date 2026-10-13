@@ -1,7 +1,7 @@
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import {
   contributorsForFields,
-  parseFieldContributors,
+  readCapturedFieldContributors,
 } from "@openmapx/mobility-core/contributors";
 import { OSM_ATTRIBUTION } from "@/lib/map";
 
@@ -16,9 +16,9 @@ export function flowFeatureContributors(
   properties: Record<string, unknown>,
   presentation: FlowPresentation,
 ): Attribution[] {
-  const captured = parseFieldContributors(properties.field_contributors);
-  // Old OC tiles still have proven OSM geometry. They cannot establish exact
-  // measurement ownership; collection source lists are rights dependencies.
+  const captured = readCapturedFieldContributors(properties.field_contributors);
+  // Road-segment geometry comes from OSM. Missing measurement receipts never
+  // establish ownership; collection source lists are rights dependencies.
   const fields = { geometry: [OSM_ATTRIBUTION], ...captured };
   const displayed = ["geometry"];
   if (presentation === "color") {

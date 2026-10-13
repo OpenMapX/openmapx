@@ -13,14 +13,13 @@ strings. The scaffold's empty `dataSources` list is not a declaration that all
 external inputs are credit-free.
 
 Capture canonical `contributors` before upstream acquisition and keep them with
-the cached record. `sourceId` and `name` are required; `url`, `spdxLicense`,
-`licenseUrl`, `attributionText`, `retrievedAt`, `notes`, and
+the cached record. `sourceId` and `name` are required; `url`, `attributionText`, `retrievedAt`, `notes`, and
 `publisher: { name, url? }` are optional. Preserve all mandatory wording: two
 notices from the same source remain distinct. Parent credit identity needs an
 explicit producer relationship, not an ID-prefix guess.
 
 A supplied `contributors: []` is authoritative and stops fallback. Omitted
-contributors mean unavailable legacy provenance; never turn an unknown mixed
+contributors mean unavailable captured provenance; never turn an unknown mixed
 row into credits for the whole catalogue. Derive envelope credits from retained
 rows and fields after filtering and merging, and preserve old receipts during
 refresh/outage. Selected display lineage does not replace a broader rights/audit
@@ -48,3 +47,11 @@ See the OpenMapX developer guides: Integration system, Writing an integration,
 and Building an external extension. Test malformed and explicit empty payloads,
 field/container child ownership, retained caches, exact row pruning and safe
 rendering through your reviewed adapter before publishing.
+
+Licence metadata uses `licensing: { version: 1, bindings: [...] }`. Each binding
+has a scope and subject, with a registered SPDX expression or a self-contained
+custom definition (`LicenseRef-...`, namespace, name and URL). Use your extension
+namespace; preserve conditions and notices. Engine/software, data/imagery/style
+and API/service terms are separate subjects. Unknown and per-item licences stay
+explicit. See docs/docs/developer/licensing.md. Never send flat `spdxLicense`,
+`license` or `licenseUrl` display fields or guess a grant from a composite label.

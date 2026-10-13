@@ -119,8 +119,7 @@ export function PlaceTidesContent({ data }: { data: TidesResponse }) {
           <SectionAttribution
             name={attributionSource.name}
             url={attributionSource.url}
-            license={attributionSource.license}
-            licenseUrl={attributionSource.licenseUrl}
+            licensing={attributionSource.licensing}
             attribution={attributionSource.attribution}
           />
           <Typography variant="caption" sx={{ color: "text.secondary", display: "block" }}>

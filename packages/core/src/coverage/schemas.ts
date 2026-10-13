@@ -1,38 +1,15 @@
+import { isSafeAttributionUrl, parseLicensing } from "@openmapx/mobility-core/licensing";
 import z from "zod/v4";
 import type { CoverageDomain, CoverageReasonCode, StreamEvidence } from "./types";
 
 const boundedString = (max = 512) => z.string().min(1).max(max);
 const nullableDate = z.iso.datetime().nullable();
 const date = z.iso.datetime();
-const credentialParameterNames = new Set([
-  "access_token",
-  "api_key",
-  "apikey",
-  "client_secret",
-  "credential",
-  "key",
-  "password",
-  "secret",
-  "sig",
-  "signature",
-  "token",
-]);
 const safeHttpUrl = z
   .string()
   .url()
-  .max(2_000)
-  .refine((value) => {
-    try {
-      const url = new URL(value);
-      if (url.protocol !== "http:" && url.protocol !== "https:") return false;
-      if (url.username || url.password) return false;
-      return ![...url.searchParams.keys()].some((key) =>
-        credentialParameterNames.has(key.toLocaleLowerCase()),
-      );
-    } catch {
-      return false;
-    }
-  }, "must be a credential-free HTTP(S) URL");
+  .max(2_048)
+  .refine(isSafeAttributionUrl, "must be a credential-free HTTP(S) URL");
 
 export const coverageDomainSchema = z.enum([
   "addresses",
@@ -234,8 +211,17 @@ export const rightsEvidenceSchema = z
         derivedData: coveragePermissionSchema,
       })
       .strict(),
-    license: z.string().max(512).optional(),
-    licenseUrl: safeHttpUrl.optional(),
+    licensing: z
+      .unknown()
+      .transform((value, ctx) => {
+        const licensing = parseLicensing(value);
+        if (!licensing) {
+          ctx.addIssue({ code: "custom", message: "Invalid licensing" });
+          return z.NEVER;
+        }
+        return licensing;
+      })
+      .optional(),
     termsUrl: safeHttpUrl.optional(),
     attribution: z.string().max(1_000).optional(),
     usageConditions: z.array(z.string().min(1).max(1_000)).max(32),

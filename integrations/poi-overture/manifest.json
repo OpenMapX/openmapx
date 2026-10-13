@@ -10,128 +10,318 @@
   },
   "domains": ["poi-search"],
   "dependencies": ["poi-search"],
-  "requires": [{ "service": "postgis", "optional": false }],
+  "requires": [
+    {
+      "service": "postgis",
+      "optional": false
+    }
+  ],
   "backend": {
     "routes": false
   },
   "configSchema": {
     "type": "object",
     "properties": {
-      "enabled": { "type": "boolean", "default": false }
+      "enabled": {
+        "type": "boolean",
+        "default": false
+      }
     }
   },
-  "healthCheck": { "type": "custom" },
+  "healthCheck": {
+    "type": "custom"
+  },
   "dataSources": [
     {
       "sourceId": "overture",
       "name": "Overture Maps",
       "url": "https://overturemaps.org",
-      "license": "CDLA-Permissive-2.0",
-      "licenseUrl": "https://cdla.dev/permissive-2-0/",
       "commercialUse": "yes",
       "providerCountry": "US",
       "providerPrivacyUrl": "https://overturemaps.org/privacy/",
-      "endUserExposure": "server-only"
+      "endUserExposure": "server-only",
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "data",
+            "subject": "Overture Maps material",
+            "license": {
+              "kind": "spdx",
+              "expression": "CDLA-Permissive-2.0",
+              "url": "https://cdla.dev/permissive-2-0/"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "CDLA-Permissive-2.0",
+            "url": "https://cdla.dev/permissive-2-0/"
+          }
+        ]
+      }
     },
     {
       "sourceId": "foursquare",
       "name": "Foursquare",
       "url": "https://foursquare.com",
-      "license": "Apache-2.0",
-      "licenseUrl": "https://www.apache.org/licenses/LICENSE-2.0",
       "attribution": "Data from Foursquare. Copyright 2024 Foursquare Labs, Inc. All rights reserved. Available under Apache 2.0. Foursquare data was transformed to the Overture schema. Changed: 2026-03-18.",
       "commercialUse": "yes",
       "providerCountry": "US",
       "providerPrivacyUrl": "https://foursquare.com/legal/privacy-center/",
-      "endUserExposure": "server-only"
+      "endUserExposure": "server-only",
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "data",
+            "subject": "Foursquare material",
+            "license": {
+              "kind": "spdx",
+              "expression": "Apache-2.0",
+              "url": "https://www.apache.org/licenses/LICENSE-2.0"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "Apache-2.0",
+            "url": "https://www.apache.org/licenses/LICENSE-2.0"
+          }
+        ]
+      }
     },
     {
       "sourceId": "meta-places",
       "name": "Meta Places",
       "url": "https://www.meta.com/",
-      "license": "CDLA-Permissive-2.0",
-      "licenseUrl": "https://cdla.dev/permissive-2-0/",
       "commercialUse": "yes",
       "providerCountry": "US",
       "providerPrivacyUrl": "https://www.facebook.com/privacy/policy/",
-      "endUserExposure": "server-only"
+      "endUserExposure": "server-only",
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "data",
+            "subject": "Meta Places material",
+            "license": {
+              "kind": "spdx",
+              "expression": "CDLA-Permissive-2.0",
+              "url": "https://cdla.dev/permissive-2-0/"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "CDLA-Permissive-2.0",
+            "url": "https://cdla.dev/permissive-2-0/"
+          }
+        ]
+      }
     },
     {
       "sourceId": "microsoft-places",
       "name": "Microsoft Places",
       "url": "https://www.microsoft.com/maps",
-      "license": "CDLA-Permissive-2.0",
-      "licenseUrl": "https://cdla.dev/permissive-2-0/",
       "commercialUse": "yes",
       "providerCountry": "US",
       "providerPrivacyUrl": "https://privacy.microsoft.com/privacystatement",
-      "endUserExposure": "server-only"
+      "endUserExposure": "server-only",
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "data",
+            "subject": "Microsoft Places material",
+            "license": {
+              "kind": "spdx",
+              "expression": "CDLA-Permissive-2.0",
+              "url": "https://cdla.dev/permissive-2-0/"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "CDLA-Permissive-2.0",
+            "url": "https://cdla.dev/permissive-2-0/"
+          }
+        ]
+      }
     },
     {
       "sourceId": "pinmeto",
       "name": "PinMeTo",
       "url": "https://www.pinmeto.com/",
-      "license": "CDLA-Permissive-2.0",
-      "licenseUrl": "https://cdla.dev/permissive-2-0/",
       "commercialUse": "yes",
       "providerCountry": "SE",
       "providerPrivacyUrl": "https://www.pinmeto.com/privacy-policy",
-      "endUserExposure": "server-only"
+      "endUserExposure": "server-only",
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "data",
+            "subject": "PinMeTo material",
+            "license": {
+              "kind": "spdx",
+              "expression": "CDLA-Permissive-2.0",
+              "url": "https://cdla.dev/permissive-2-0/"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "CDLA-Permissive-2.0",
+            "url": "https://cdla.dev/permissive-2-0/"
+          }
+        ]
+      }
     },
     {
       "sourceId": "krick",
       "name": "Krick",
       "url": "https://www.krick.com/",
-      "license": "CDLA-Permissive-2.0",
-      "licenseUrl": "https://cdla.dev/permissive-2-0/",
       "commercialUse": "yes",
       "providerCountry": "DE",
       "providerPrivacyUrl": "https://www.krick.com/datenschutz/",
-      "endUserExposure": "server-only"
+      "endUserExposure": "server-only",
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "data",
+            "subject": "Krick material",
+            "license": {
+              "kind": "spdx",
+              "expression": "CDLA-Permissive-2.0",
+              "url": "https://cdla.dev/permissive-2-0/"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "CDLA-Permissive-2.0",
+            "url": "https://cdla.dev/permissive-2-0/"
+          }
+        ]
+      }
     },
     {
       "sourceId": "renderseo",
       "name": "RenderSEO",
       "url": "https://www.renderseo.com/",
-      "license": "CDLA-Permissive-2.0",
-      "licenseUrl": "https://cdla.dev/permissive-2-0/",
       "commercialUse": "yes",
       "providerCountry": "US",
       "providerPrivacyUrl": "https://www.renderseo.com/privacy-policy/",
-      "endUserExposure": "server-only"
+      "endUserExposure": "server-only",
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "data",
+            "subject": "RenderSEO material",
+            "license": {
+              "kind": "spdx",
+              "expression": "CDLA-Permissive-2.0",
+              "url": "https://cdla.dev/permissive-2-0/"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "CDLA-Permissive-2.0",
+            "url": "https://cdla.dev/permissive-2-0/"
+          }
+        ]
+      }
     },
     {
       "sourceId": "dac",
       "name": "DAC",
       "url": "https://www.dacgroup.com/",
-      "license": "CDLA-Permissive-2.0",
-      "licenseUrl": "https://cdla.dev/permissive-2-0/",
       "commercialUse": "yes",
       "providerCountry": "CA",
       "providerPrivacyUrl": "https://www.dacgroup.com/privacy-policy/",
-      "endUserExposure": "server-only"
+      "endUserExposure": "server-only",
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "data",
+            "subject": "DAC material",
+            "license": {
+              "kind": "spdx",
+              "expression": "CDLA-Permissive-2.0",
+              "url": "https://cdla.dev/permissive-2-0/"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "CDLA-Permissive-2.0",
+            "url": "https://cdla.dev/permissive-2-0/"
+          }
+        ]
+      }
     },
     {
       "sourceId": "brightquery",
       "name": "BrightQuery",
       "url": "https://brightquery.com/",
-      "license": "CDLA-Permissive-2.0",
-      "licenseUrl": "https://cdla.dev/permissive-2-0/",
       "commercialUse": "yes",
       "providerCountry": "US",
       "providerPrivacyUrl": "https://brightquery.com/privacy/",
-      "endUserExposure": "server-only"
+      "endUserExposure": "server-only",
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "data",
+            "subject": "BrightQuery material",
+            "license": {
+              "kind": "spdx",
+              "expression": "CDLA-Permissive-2.0",
+              "url": "https://cdla.dev/permissive-2-0/"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "CDLA-Permissive-2.0",
+            "url": "https://cdla.dev/permissive-2-0/"
+          }
+        ]
+      }
     },
     {
       "sourceId": "alltheplaces",
       "name": "AllThePlaces",
       "url": "https://www.alltheplaces.xyz/",
-      "license": "CC0-1.0",
-      "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
       "commercialUse": "yes",
       "providerCountry": "US",
       "providerPrivacyUrl": "https://www.alltheplaces.xyz/",
-      "endUserExposure": "server-only"
+      "endUserExposure": "server-only",
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "data",
+            "subject": "AllThePlaces material",
+            "license": {
+              "kind": "spdx",
+              "expression": "CC0-1.0",
+              "url": "https://creativecommons.org/publicdomain/zero/1.0/"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "CC0-1.0",
+            "url": "https://creativecommons.org/publicdomain/zero/1.0/"
+          }
+        ]
+      }
     }
   ]
 }

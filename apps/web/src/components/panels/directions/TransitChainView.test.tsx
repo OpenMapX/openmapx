@@ -1,4 +1,5 @@
 import type { ChainedTripPlan } from "@openmapx/core";
+import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 import { describe, expect, it, vi } from "vitest";
 import { render, screen, userEvent } from "@/test";
 
@@ -201,8 +202,18 @@ describe("backward partial transit chains", () => {
 });
 
 it("credits selected chain segments and derived schedule without unused alternatives", () => {
-  const a = { sourceId: "feed-a", name: "A", url: "https://a.test", spdxLicense: "CC0" };
-  const b = { sourceId: "feed-b", name: "B", url: "https://b.test", spdxLicense: "CC0" };
+  const a = {
+    sourceId: "feed-a",
+    name: "A",
+    url: "https://a.test",
+    licensing: licensingFromDeclaration("CC0", undefined, "A"),
+  };
+  const b = {
+    sourceId: "feed-b",
+    name: "B",
+    url: "https://b.test",
+    licensing: licensingFromDeclaration("CC0", undefined, "B"),
+  };
   render(
     <TransitChainView
       plan={{

@@ -18,7 +18,12 @@ const credit = (name: string) => ({
   sourceId: name,
   name,
   url: `https://${name}.example`,
-  spdxLicense: "CC0-1.0",
+  licensing: {
+    version: 1,
+    bindings: [
+      { scope: "data", subject: "Data", license: { kind: "spdx", expression: "CC0-1.0" } },
+    ],
+  } as const,
 });
 function feature(names: string[]): MapGeoJSONFeature {
   return {

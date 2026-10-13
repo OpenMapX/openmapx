@@ -9,7 +9,12 @@ describe("withAttribution", () => {
       sourceId: "delfi-de",
       name: "DELFI",
       url: "https://www.delfi.de",
-      spdxLicense: "CC-BY-4.0",
+      licensing: {
+        version: 1,
+        bindings: [
+          { scope: "data", subject: "Data", license: { kind: "spdx", expression: "CC-BY-4.0" } },
+        ],
+      } as const,
     },
   ];
   const freshness: Freshness = {
@@ -33,7 +38,10 @@ describe("withAttribution", () => {
     expect(first.sourceId).toBe("delfi-de");
     expect(first.name).toBe("DELFI");
     expect(first.url).toBe("https://www.delfi.de");
-    expect(first.spdxLicense).toBe("CC-BY-4.0");
+    expect(first.licensing?.bindings[0].license).toMatchObject({
+      kind: "spdx",
+      expression: "CC-BY-4.0",
+    });
   });
 
   it("preserves freshness.fetchedAt verbatim", () => {

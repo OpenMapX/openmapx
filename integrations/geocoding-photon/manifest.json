@@ -40,8 +40,6 @@
       "sourceId": "photon",
       "name": "Photon",
       "url": "https://github.com/komoot/photon",
-      "license": "Apache-2.0 (software); ODbL-1.0 (OSM data)",
-      "licenseUrl": "https://github.com/komoot/photon/blob/master/LICENSE",
       "attribution": "© <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap contributors</a>",
       "notes": "Self-hosted or other operator-configured Photon endpoint. Requests stay with the instance operator's chosen host.",
       "commercialUse": "yes",
@@ -50,14 +48,39 @@
       "endUserExposure": "server-only",
       "personalData": false,
       "cookies": false,
-      "dpaAvailable": false
+      "dpaAvailable": false,
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "software",
+            "subject": "Photon engine",
+            "license": {
+              "kind": "spdx",
+              "expression": "Apache-2.0"
+            }
+          },
+          {
+            "scope": "data",
+            "subject": "OSM geocoding material",
+            "license": {
+              "kind": "spdx",
+              "expression": "ODbL-1.0"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "Apache-2.0 (software); ODbL-1.0 (OSM data)",
+            "url": "https://github.com/komoot/photon/blob/master/LICENSE"
+          }
+        ]
+      }
     },
     {
       "sourceId": "komoot",
       "name": "Photon (Komoot)",
       "url": "https://photon.komoot.io/",
-      "license": "Apache-2.0 (software); ODbL-1.0 (OSM data)",
-      "licenseUrl": "https://github.com/komoot/photon/blob/master/LICENSE",
       "attribution": "© <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap contributors</a>",
       "commercialUse": "yes",
       "providerCountry": "DE",
@@ -66,7 +89,34 @@
       "personalData": false,
       "cookies": false,
       "dpaAvailable": false,
-      "notes": "Komoot's public Photon instance, used only when no self-hosted or other endpoint is configured."
+      "notes": "Komoot's public Photon instance, used only when no self-hosted or other endpoint is configured.",
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "software",
+            "subject": "Photon engine",
+            "license": {
+              "kind": "spdx",
+              "expression": "Apache-2.0"
+            }
+          },
+          {
+            "scope": "data",
+            "subject": "OSM geocoding material",
+            "license": {
+              "kind": "spdx",
+              "expression": "ODbL-1.0"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "Apache-2.0 (software); ODbL-1.0 (OSM data)",
+            "url": "https://github.com/komoot/photon/blob/master/LICENSE"
+          }
+        ]
+      }
     }
   ],
   "requires": [

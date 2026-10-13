@@ -6,15 +6,14 @@ import PlaceIcon from "@mui/icons-material/Place";
 import Box from "@mui/material/Box";
 import Divider from "@mui/material/Divider";
 import IconButton from "@mui/material/IconButton";
-import Link from "@mui/material/Link";
 import Typography from "@mui/material/Typography";
 import {
+  buildLicensingHtml,
   createPlace,
   type LngLat,
   PANEL,
   type StreetLevelCapabilities,
   type StreetLevelImage,
-  safeHref,
   usePlaceStore,
   useReverseGeocoding,
   useSearchStore,
@@ -22,6 +21,7 @@ import {
 } from "@openmapx/core";
 import { useLocale, useTranslations } from "next-intl";
 import { useEffect, useRef, useState } from "react";
+import { AttributionText } from "@/components/ui/AttributionText";
 import { useMap } from "@/integration-api/map/MapContext";
 
 /** Capture month and year in the active locale, or null when unknown. */
@@ -186,16 +186,7 @@ export function StreetLevelInfoCard({
         <Typography sx={{ fontSize: 12, color: "rgba(255,255,255,0.65)" }}>
           {captureDate ?? ""}
         </Typography>
-        {image.license && (
-          <Link
-            href={safeHref(image.licenseUrl ?? provider.licenseUrl)}
-            target="_blank"
-            rel="noopener noreferrer"
-            sx={{ fontSize: 12, color: "rgba(255,255,255,0.65)" }}
-          >
-            {image.license}
-          </Link>
-        )}
+        {image.licensing && <AttributionText html={buildLicensingHtml(image.licensing)} />}
       </Box>
     </Box>
   );

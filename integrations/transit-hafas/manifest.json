@@ -34,15 +34,46 @@
       "sourceId": "hafas",
       "name": "HAFAS REST APIs (transport.rest)",
       "url": "https://v6.db.transport.rest/",
-      "license": "ISC (software); no open license for data (unofficial HAFAS scraping)",
-      "licenseUrl": "https://github.com/public-transport/hafas-rest-api",
       "commercialUse": "unknown",
       "providerCountry": "DE",
       "providerPrivacyUrl": "-",
       "endUserExposure": "server-only",
       "personalData": false,
       "cookies": false,
-      "dpaAvailable": false
+      "dpaAvailable": false,
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "software",
+            "subject": "HAFAS REST client",
+            "license": {
+              "kind": "spdx",
+              "expression": "ISC"
+            }
+          },
+          {
+            "scope": "data",
+            "subject": "Operator timetable data",
+            "license": {
+              "kind": "unknown"
+            }
+          },
+          {
+            "scope": "service",
+            "subject": "Selected transport.rest/operator endpoint",
+            "license": {
+              "kind": "unknown"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "ISC (software); no open license for data (unofficial HAFAS scraping)",
+            "url": "https://github.com/public-transport/hafas-rest-api"
+          }
+        ]
+      }
     }
   ],
   "dependencies": ["transit"]

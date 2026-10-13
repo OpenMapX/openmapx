@@ -2,7 +2,10 @@
 
 import { escapeHtml, useDebouncedCallback, useOverlayExclusion } from "@openmapx/core";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
-import { parseContributors, withFeatureContributors } from "@openmapx/mobility-core/contributors";
+import {
+  readCapturedContributors,
+  withFeatureContributors,
+} from "@openmapx/mobility-core/contributors";
 import type { MapLayerMouseEvent, MapMouseEvent } from "maplibre-gl";
 import * as maplibregl from "maplibre-gl";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -189,7 +192,7 @@ export function WinterSportsLayer() {
                 ref: piste.ref,
               },
             },
-            parseContributors(piste.contributors) ?? [],
+            readCapturedContributors(piste.contributors) ?? [],
           ),
         );
       }
@@ -210,7 +213,7 @@ export function WinterSportsLayer() {
                 duration: lift.duration,
               },
             },
-            parseContributors(lift.contributors) ?? [],
+            readCapturedContributors(lift.contributors) ?? [],
           ),
         );
       }
@@ -227,7 +230,7 @@ export function WinterSportsLayer() {
                 name: area.name,
               },
             },
-            parseContributors(area.contributors) ?? [],
+            readCapturedContributors(area.contributors) ?? [],
           ),
         );
       }
@@ -473,7 +476,7 @@ export function WinterSportsLayer() {
       const html = kind === "lift" ? liftPopupHtml(props) : pistePopupHtml(props);
 
       popupRef.current?.remove();
-      setPopupCredits(parseContributors(f.properties?._mapAttributions) ?? []);
+      setPopupCredits(readCapturedContributors(f.properties?._mapAttributions) ?? []);
       popupRef.current = new maplibregl.Popup({
         closeButton: true,
         maxWidth: "300px",

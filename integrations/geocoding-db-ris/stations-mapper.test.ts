@@ -105,7 +105,7 @@ describe("buildStationDetail", () => {
       [{ name: "Lockers", category: "storage" }],
     );
     expect(detail.source).toBe("db-station");
-    expect(detail.attribution.text).toBe("Deutsche Bahn");
+    expect(detail.attribution.name).toBe("Deutsche Bahn");
     expect(detail.sections).toHaveLength(3);
     expect(detail.sections[0]?.type).toBe("table");
     expect(detail.sections[2]?.items).toEqual(["Lockers (storage)"]);

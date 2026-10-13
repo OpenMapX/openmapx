@@ -1,4 +1,5 @@
 import { type PlacePhoto, parseCommonsPage } from "@openmapx/core";
+import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { NextIntlClientProvider } from "next-intl";
@@ -55,9 +56,9 @@ describe("PlacePhotoHero", () => {
     const { container } = renderHero([photo]);
     expect(container.textContent).toContain("One & Co");
     expect(container.textContent).not.toContain("&amp;");
-    expect(screen.getByRole("link", { name: "CC BY 4.0" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "CC-BY-4.0" })).toHaveAttribute(
       "href",
-      photo.licenseUrl,
+      photo.licensing?.bindings[0].license.url,
     );
   });
   it("defers incomplete Commons bytes even when labeled as Wikipedia", () => {
@@ -75,8 +76,11 @@ describe("PlacePhotoHero", () => {
       url: "https://upload.wikimedia.org/wikipedia/commons/a/ab/Photo.jpg",
       source: "wikimedia-commons",
       author: "Captured artist",
-      license: "CC BY 4.0",
-      licenseUrl: "https://creativecommons.org/licenses/by/4.0/",
+      licensing: licensingFromDeclaration(
+        "CC BY 4.0",
+        "https://creativecommons.org/licenses/by/4.0/",
+        "Data",
+      ),
       pageUrl: "https://commons.wikimedia.org/wiki/File:Photo.jpg",
       attributionText: "Mandatory notice",
       attributionLinks: [{ label: "Required credit link", url: "https://example.org/credit" }],

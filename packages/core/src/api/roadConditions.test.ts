@@ -1,3 +1,4 @@
+import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { apiClient } from "./client";
 import {
@@ -121,7 +122,7 @@ describe("fetchRoadConditions", () => {
             origin: "feed",
             attribution: {
               provider: "NDW",
-              license: "CC0-1.0",
+              licensing: licensingFromDeclaration("CC0-1.0", undefined),
               sourceId: "ndw-parent",
               notice: "Required publisher notice",
             },
@@ -166,7 +167,7 @@ describe("fetchRoadConditions", () => {
         origin: "feed",
         attribution: {
           provider: "NDW",
-          license: "CC0-1.0",
+          licensing: licensingFromDeclaration("CC0-1.0", undefined),
           sourceId: "ndw-parent",
           notice: "Required publisher notice",
         },

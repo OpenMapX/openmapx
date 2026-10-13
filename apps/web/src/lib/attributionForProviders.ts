@@ -1,8 +1,6 @@
 import {
-  type DataSourceAttribution,
   dataSourceToAttribution,
   type IntegrationDataSource,
-  legacyAttributionsToContributors,
   narrowContributors,
   parseContributors,
   snapshotContributors,
@@ -14,28 +12,11 @@ export function mergeAttributions(...groups: readonly (readonly Attribution[])[]
   return snapshotContributors(...groups);
 }
 
-/**
- * Map a provider's per-record runtime attribution ({@link DataSourceAttribution}
- * — e.g. France IRVE's per-station Licence-Ouverte publisher credit, an EV
- * charge stop's upstream OCM data provider) onto the shared {@link Attribution}
- * shape consumed by `<AttributionStrip>`. Shared by `DataSourceLayer` (map
- * strip) and `EvPlanCard` (per-stop credit) so the mapping lives in one place.
- */
-export function runtimeAttributionToAttribution(attr: DataSourceAttribution): Attribution {
-  return {
-    sourceId: attr.sourceId ?? (attr.text || attr.url),
-    name: attr.text,
-    url: attr.url,
-    spdxLicense: attr.license,
-    licenseUrl: attr.licenseUrl,
-  };
-}
-
 export interface DataSourceRecordCredits {
   source?: string;
   sources?: readonly string[];
   contributors?: readonly Attribution[];
-  attributions?: DataSourceAttribution[];
+  attributions?: Attribution[];
 }
 
 /** Capture an exact legacy record at the response boundary. Unknown IDs never expand. */
@@ -55,7 +36,7 @@ export function dataSourceRecordContributors(
   return snapshotContributors(
     matched,
     declared.map(dataSourceToAttribution),
-    legacyAttributionsToContributors(record.attributions ?? []),
+    snapshotContributors(record.attributions ?? []),
   );
 }
 

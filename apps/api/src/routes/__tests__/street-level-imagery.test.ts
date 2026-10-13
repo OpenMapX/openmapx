@@ -1,3 +1,4 @@
+import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 import { describe, expect, it, vi } from "vitest";
 
 // Stub out integration-host so importing ../street-level-imagery doesn't transitively
@@ -61,7 +62,7 @@ const source = (id: string): IntegrationDataSource => ({
   sourceId: id,
   name: id,
   url: `https://${id}.test`,
-  license: "CC0",
+  licensing: licensingFromDeclaration("CC0", undefined, id),
   providerCountry: "DE",
   providerPrivacyUrl: `https://${id}.test/privacy`,
   attribution: `Required ${id} notice`,

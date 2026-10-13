@@ -31,8 +31,6 @@
       "sourceId": "opentransportdata-ch-siri-sx",
       "name": "Open data platform mobility Switzerland – SIRI Situation Exchange",
       "url": "https://opentransportdata.swiss/en/cookbook/event-cookbook/siri-sx/",
-      "license": "LicenseRef-opentransportdata-swiss-ToU",
-      "licenseUrl": "https://opentransportdata.swiss/en/terms-of-use/",
       "attribution": "Source: opentransportdata.swiss",
       "commercialUse": "conditional",
       "providerCountry": "CH",
@@ -40,7 +38,29 @@
       "endUserExposure": "server-only",
       "personalData": false,
       "cookies": false,
-      "dpaAvailable": false
+      "dpaAvailable": false,
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "data",
+            "subject": "Open data platform mobility Switzerland – SIRI Situation Exchange supplied material",
+            "license": {
+              "kind": "custom",
+              "namespace": "publisher:opentransportdata-ch-siri-sx",
+              "id": "LicenseRef-opentransportdata-swiss-ToU",
+              "name": "opentransportdata.swiss General Terms and Conditions of Use",
+              "url": "https://opentransportdata.swiss/en/terms-of-use/"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "LicenseRef-opentransportdata-swiss-ToU",
+            "url": "https://opentransportdata.swiss/en/terms-of-use/"
+          }
+        ]
+      }
     }
   ]
 }

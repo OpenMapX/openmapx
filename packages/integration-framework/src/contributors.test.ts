@@ -31,9 +31,9 @@ describe("exact contributor resolution", () => {
     ]);
     expect(resolveContributors({ contributors: [], sourceIds: ["a"] }, resolver)).toEqual([]);
   });
-  it("uses only explicit legacy identities when a receipt is missing or malformed", () => {
+  it("uses explicit acquisition source identities only when the receipt is absent", () => {
     expect(resolveContributors({ sourceIds: ["a", "missing"] }, resolver)).toEqual([a]);
-    expect(resolveContributors({ contributors: "bad", sourceIds: ["a"] }, resolver)).toEqual([a]);
+    expect(resolveContributors({ contributors: "bad", sourceIds: ["a"] }, resolver)).toEqual([]);
     expect(resolveContributors({}, resolver)).toEqual([]);
   });
 });
@@ -184,4 +184,19 @@ describe("portable companion contributor contract", () => {
       resolveCapturedContributors(catalogue, "adapter", { contributors: [], sourceIds: ["feed"] }),
     ).toEqual([]);
   });
+});
+
+it("does not borrow source catalogue metadata when a captured receipt is malformed", () => {
+  const receipt = { sourceId: "feed", name: "Known supplier" };
+  const catalogue = {
+    declaredByIntegration: new Map([["provider", [receipt]]]),
+    runtimeById: new Map(),
+    hasRuntime: false,
+  };
+  const evidence = {
+    contributors: [{ ...receipt, licensing: { version: 2, bindings: [] } }],
+    sourceIds: ["feed"],
+  };
+  expect(resolveCapturedContributors(catalogue, "provider", evidence, true)).toEqual([]);
+  expect(resolveContributors(evidence, () => receipt)).toEqual([]);
 });

@@ -1,4 +1,5 @@
 import type { RoadConditionEffect, RoadConditionEvent } from "@openmapx/core";
+import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 
 /** One effect binding every vehicle, fully read; `fields` replaces or adds keys. */
 export const effect = (
@@ -36,7 +37,7 @@ export const situation = (overrides: Partial<RoadConditionEvent> = {}): RoadCond
   validity: { status: "active" },
   effects: [],
   origin: "feed",
-  attribution: { provider: "NDW", license: "CC0-1.0" },
+  attribution: { provider: "NDW", licensing: licensingFromDeclaration("CC0-1.0") },
   fetchedAt: "2026-09-11T12:00:00Z",
   ...overrides,
 });

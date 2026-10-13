@@ -50,11 +50,11 @@ function liveSources(list: OcSource[] = ocSources()): UpdatableLiveSources {
   const live = createLiveSources();
   live.update(list.flatMap((s) => toDataSource(s) ?? []));
   live.updateDescribed(list);
-  live.updateLicenses(list);
+
   return live;
 }
 
-const situationIds = (answer: { records: Rec[] }) => answer.records.map((r) => String(r["id"]));
+const situationIds = (answer: { records: Rec[] }) => answer.records.map((r) => String(r.id));
 
 type Responder = (path: string, params: Record<string, unknown>) => unknown;
 
@@ -75,8 +75,8 @@ const callParams = (calls: FakeHttpRequest[], i = 0) =>
 
 /** A keyset-paged answer of `records`, as the API serves a collection. */
 function paged(records: Rec[], params: Record<string, unknown>) {
-  const limit = Number(params["limit"]);
-  const start = params["cursor"] ? Number(params["cursor"]) : 0;
+  const limit = Number(params.limit);
+  const start = params.cursor ? Number(params.cursor) : 0;
   const page = records.slice(start, start + limit);
   const end = start + page.length;
   return { records: page, next: end < records.length ? String(end) : null };
@@ -118,7 +118,16 @@ describe("alerts", () => {
       expect.objectContaining({
         sourceId: METEOALARM,
         name: "EUMETNET - MeteoAlarm",
-        spdxLicense: expect.stringMatching(/MeteoAlarm/),
+        licensing: expect.objectContaining({
+          bindings: [
+            expect.objectContaining({
+              license: expect.objectContaining({
+                kind: "custom",
+                name: expect.stringMatching(/MeteoAlarm/),
+              }),
+            }),
+          ],
+        }),
       }),
     ]);
     expect(juneau).toMatchObject({ severity: "Minor", notices: [] });
@@ -186,7 +195,7 @@ describe("alerts", () => {
 
   test("a record of another origin passes without being a listed feed; a feed record of an unlisted source does not", async () => {
     const template = (alertsAnswer.records as unknown as Rec[])[0]!;
-    const provenance = template["provenance"] as Rec;
+    const provenance = template.provenance as Rec;
     const crowd = {
       ...template,
       id: "crowd-1",
@@ -244,9 +253,9 @@ describe("natural hazards", () => {
   test("a polygon hazard is drawn at the vertex mean of its outer rings", async () => {
     const fire = byId(await hazards(), "us-nifc-fires:DB5448A6-FCAC-4041-A817-6F8198161DBA");
     const record = (naturalAnswer.records as unknown as Rec[]).find((r) =>
-      String(r["id"]).endsWith("DB5448A6-FCAC-4041-A817-6F8198161DBA"),
+      String(r.id).endsWith("DB5448A6-FCAC-4041-A817-6F8198161DBA"),
     )!;
-    const geometry = (record["location"] as { geometry: GeoJSON.MultiPolygon }).geometry;
+    const geometry = (record.location as { geometry: GeoJSON.MultiPolygon }).geometry;
     const vertices = geometry.coordinates.flatMap((polygon) => polygon[0]!.slice(0, -1));
     const mean = [
       vertices.reduce((sum, p) => sum + p[0]!, 0) / vertices.length,
@@ -361,8 +370,8 @@ describe("natural hazards", () => {
 
   test("names come in the requested language", async () => {
     const answer = clone(naturalAnswer) as unknown as { records: Rec[] };
-    const quake = answer.records.find((r) => String(r["id"]).endsWith("us6000u0xi"))!;
-    (quake["details"] as Rec)["name"] = [
+    const quake = answer.records.find((r) => String(r.id).endsWith("us6000u0xi"))!;
+    (quake.details as Rec).name = [
       { lang: "en", text: "Norsup" },
       { lang: "fr", text: "Norsup (fr)" },
     ];
@@ -387,9 +396,9 @@ describe("fire detections", () => {
   /** The `/observations/latest` answer, narrowed by the requested `source` and paged. */
   const serve: Responder = (path, params) => {
     if (path !== "/observations/latest") return undefined;
-    const wanted = new Set(String(params["source"]).split(","));
+    const wanted = new Set(String(params.source).split(","));
     const records = (fire.records as unknown as Rec[]).filter((r) =>
-      wanted.has(String((r["provenance"] as Rec)["sourceId"])),
+      wanted.has(String((r.provenance as Rec).sourceId)),
     );
     return paged(records, params);
   };
@@ -507,7 +516,7 @@ describe("fire detections", () => {
     const result = await provider.getFireDensity(BBOX, { since, instrument: "viirs", cellDeg: 1 });
 
     const strips = calls.map((call) =>
-      String((call.options?.params as Record<string, unknown>)["bbox"])
+      String((call.options?.params as Record<string, unknown>).bbox)
         .split(",")
         .map(Number),
     );
@@ -705,7 +714,7 @@ describe("captured hazard contributor receipts", () => {
       { sourceId: "canonical-parent", name: "Captured publisher" },
       { sourceId: "canonical-parent", name: "Captured notice" },
     ];
-    record["contributors"] = captured;
+    record.contributors = captured;
     const { provider } = providerWith(() => ({ records: [record], next: null }));
     const alert = (await provider.getAlerts(BBOX)).alerts[0]!;
     expect(alert).toMatchObject({ contributors: captured });
@@ -713,7 +722,7 @@ describe("captured hazard contributor receipts", () => {
     expect((alert as { contributors?: { name: string }[] }).contributors?.[0]?.name).toBe(
       "Captured publisher",
     );
-    record["contributors"] = [];
+    record.contributors = [];
     expect((await provider.getAlerts(BBOX)).alerts[0]).toMatchObject({ contributors: [] });
   });
 });
@@ -726,7 +735,9 @@ test("copies exact live metadata and required notices when a legacy hazard is ac
   expect(receipt?.some((a) => a.name === NOTICE)).toBe(true);
   expect(
     receipt?.some(
-      (a) => a.sourceId === METEOALARM && a.licenseUrl?.includes("terms-and-conditions"),
+      (a) =>
+        a.sourceId === METEOALARM &&
+        a.licensing?.bindings.some((b) => b.license.url?.includes("terms-and-conditions")),
     ),
   ).toBe(true);
   const updated = ocSources().map((source) => ({

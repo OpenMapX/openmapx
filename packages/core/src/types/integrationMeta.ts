@@ -1,3 +1,4 @@
+import type { Licensing } from "@openmapx/mobility-core/licensing";
 /**
  * Minimal shapes for the integration metadata that core utilities and hooks
  * consume. These are structural duplicates of the canonical types defined in
@@ -11,10 +12,9 @@ export interface IntegrationDataSource {
   sourceId: string;
   name: string;
   url: string;
-  license: string;
+  licensing: Licensing;
   providerCountry: string;
   providerPrivacyUrl: string;
-  licenseUrl?: string;
   attribution?: string;
   commercialUse?: "yes" | "no" | "conditional" | "unknown";
   endUserExposure?: "direct" | "mixed" | "proxied" | "server-only" | "build-time";

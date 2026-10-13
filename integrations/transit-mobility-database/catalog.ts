@@ -1,3 +1,4 @@
+import { type Licensing, licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 import type { MdbFeed } from "./types.js";
 
 /**
@@ -10,11 +11,9 @@ export interface MdbCatalogFeed {
   source: "mobilitydb";
   countryCode: string;
   url: string;
-  license?: string;
+  licensing: Licensing;
   /** Stable `mdb-XXXX` foreign key. */
   mdbId: string;
-  /** Producer's published license URL when MDB knows it. */
-  licenseUrl?: string;
   /** Daily-mirrored snapshot URL on files.mobilitydatabase.org. Rotates per snapshot — never persist. */
   latestDatasetUrl?: string;
   latestDatasetHash?: string;
@@ -23,25 +22,6 @@ export interface MdbCatalogFeed {
   isOfficial?: boolean;
   /** "gtfs" | "gtfs_rt" | "gbfs" */
   dataType: string;
-}
-
-/**
- * Best-effort SPDX guess from a license URL. The MDB schema only exposes
- * `license_url`; we want a short label for callers to display and persist.
- * Returns undefined when the URL doesn't match a pattern we recognise.
- */
-function inferSpdxFromLicenseUrl(licenseUrl: string | undefined): string | undefined {
-  if (!licenseUrl) return undefined;
-  const url = licenseUrl.toLowerCase();
-  if (url.includes("creativecommons.org/publicdomain/zero")) return "CC0-1.0";
-  if (url.includes("creativecommons.org/licenses/by-sa/4.0")) return "CC-BY-SA-4.0";
-  if (url.includes("creativecommons.org/licenses/by/4.0")) return "CC-BY-4.0";
-  if (url.includes("creativecommons.org/licenses/by/3.0")) return "CC-BY-3.0";
-  if (url.includes("creativecommons.org/licenses/by-sa/3.0")) return "CC-BY-SA-3.0";
-  if (url.includes("opendatacommons.org/licenses/odbl")) return "ODbL-1.0";
-  if (url.includes("opendatacommons.org/licenses/by")) return "ODC-By-1.0";
-  if (url.includes("apache.org/licenses/license-2.0")) return "Apache-2.0";
-  return undefined;
 }
 
 function primaryLocation(feed: MdbFeed): {
@@ -103,9 +83,8 @@ export function toMdbCatalogFeed(feed: MdbFeed): MdbCatalogFeed | null {
     source: "mobilitydb",
     countryCode,
     url,
-    license: inferSpdxFromLicenseUrl(licenseUrl),
+    licensing: licensingFromDeclaration(undefined, licenseUrl, feedName(feed)),
     mdbId: feed.id,
-    licenseUrl,
     latestDatasetUrl: feed.latest_dataset?.hosted_url,
     latestDatasetHash: feed.latest_dataset?.hash,
     latestDatasetDownloadedAt: feed.latest_dataset?.downloaded_at,

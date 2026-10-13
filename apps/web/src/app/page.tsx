@@ -74,14 +74,25 @@ const SATELLITE_ATTRIBUTIONS: Attribution[] = [
     sourceId: "maptiler",
     name: "© MapTiler",
     url: "https://www.maptiler.com/copyright/",
-    licenseUrl: "https://www.maptiler.com/copyright/",
   },
   {
     sourceId: "openstreetmap",
     name: "© OpenStreetMap contributors",
     url: "https://www.openstreetmap.org/copyright",
-    spdxLicense: "ODbL-1.0",
-    licenseUrl: "https://opendatacommons.org/licenses/odbl/",
+    licensing: {
+      version: 1,
+      bindings: [
+        {
+          scope: "data",
+          subject: "Data",
+          license: {
+            kind: "spdx",
+            expression: "ODbL-1.0",
+            url: "https://opendatacommons.org/licenses/odbl/",
+          },
+        },
+      ],
+    } as const,
   },
 ];
 

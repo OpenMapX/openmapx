@@ -60,7 +60,16 @@ export function valhallaIsochroneAttributions(baseUrl: string): Attribution[] {
         sourceId: "valhalla",
         name: "Valhalla",
         url: "https://github.com/valhalla/valhalla",
-        spdxLicense: "MIT",
+        licensing: {
+          version: 1,
+          bindings: [
+            {
+              scope: "software",
+              subject: "Valhalla engine",
+              license: { kind: "spdx", expression: "MIT" },
+            },
+          ],
+        } as const,
       };
   return [routing, OSM_ATTRIBUTION];
 }

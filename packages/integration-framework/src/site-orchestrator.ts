@@ -138,11 +138,10 @@ export function createSiteOrchestrator<
 
 /** A credit whose links come from upstream data, keeping only http(s) ones. */
 function safeAttribution(attribution: Attribution): Attribution {
-  const { url, licenseUrl, publisher, ...rest } = attribution;
+  const { url, publisher, ...rest } = attribution;
   return {
     ...rest,
     ...(isSafeHttpUrl(url) ? { url } : {}),
-    ...(isSafeHttpUrl(licenseUrl) ? { licenseUrl } : {}),
     ...(publisher
       ? {
           publisher: {

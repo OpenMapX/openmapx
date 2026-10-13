@@ -1,5 +1,6 @@
 import type { PlacePhoto } from "@openmapx/core";
 import type { IntegrationContext } from "@openmapx/integration-framework";
+import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 import { describe, expect, it, vi } from "vitest";
 import { setup } from "./index.js";
 
@@ -9,8 +10,10 @@ describe("photo search route", () => {
       url: "https://thumb.wikimedia.org/wikipedia/commons/thumb/b/be/Aachen.jpg/800px-Aachen.jpg",
       source: "wikimedia",
       author: "CEphoto, Uwe Aranas",
-      license: "CC BY-SA 3.0",
-      licenseUrl: "https://creativecommons.org/licenses/by-sa/3.0/",
+      licensing: licensingFromDeclaration(
+        "CC BY-SA 3.0",
+        "https://creativecommons.org/licenses/by-sa/3.0/",
+      ),
       pageUrl: "https://commons.wikimedia.org/wiki/File:Aachen.jpg",
     };
     let handler: ((req: unknown, reply: unknown) => Promise<void>) | undefined;

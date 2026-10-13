@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import type { IntegrationContext, ProviderCallContext } from "@openmapx/integration-framework";
 import { createMockIntegrationContext } from "@openmapx/integration-framework/testing";
+import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 import { describe, expect, it, vi } from "vitest";
 import type { OpenAQClient } from "./openaq-client.js";
 import { buildOpenAQEvidence, createOpenAQProvider } from "./provider.js";
@@ -40,7 +41,7 @@ describe("OpenAQ provider normalization", () => {
     expect(evidence?.sources[0]).toMatchObject({
       sourceId: "openaq",
       owner: "Unknown Governmental Organization",
-      license: { name: "US Public Domain", url: null },
+      licensing: licensingFromDeclaration("US Public Domain", null ?? undefined),
     });
     expect(evidence?.qualityStatus).toBe("preliminary");
   });

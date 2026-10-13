@@ -2,7 +2,7 @@ import {
   type ContributingRecord,
   captureResultContributors,
   contributorsForRecords,
-  parseFieldContributors,
+  readCapturedFieldContributors,
   snapshotContributors,
 } from "./contributors";
 import type { Attribution } from "./types/attribution.js";
@@ -57,7 +57,7 @@ export function captureTransitContributors<T>(data: T, envelope: readonly Attrib
   const original = data as Record<string, unknown> & ContributingRecord;
   const result = { ...original };
   if (original.fieldContributors !== undefined)
-    result.fieldContributors = parseFieldContributors(original.fieldContributors) ?? {};
+    result.fieldContributors = readCapturedFieldContributors(original.fieldContributors) ?? {};
   for (const key of TRANSIT_CHILDREN) {
     if (original[key] !== undefined)
       result[key] = captureTransitContributors(original[key], envelope);

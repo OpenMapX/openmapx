@@ -148,14 +148,12 @@ describe("site orchestrator", () => {
       sourceId: "s",
       name: "A",
       url: "javascript:alert(1)",
-      licenseUrl: "data:text/html,x",
       publisher: { name: "P", url: "javascript:alert(2)" },
     };
     const safe = {
       sourceId: "t",
       name: "B",
       url: "https://example.org",
-      licenseUrl: "http://example.org/licence",
       publisher: { name: "Q", url: "https://example.org/q" },
     };
 

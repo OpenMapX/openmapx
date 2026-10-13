@@ -1,5 +1,6 @@
 import type { FuelStation } from "@openmapx/integration-framework";
-import { licenseUrlForSpdx } from "@openmapx/mobility-core/license";
+import { snapshotContributors } from "@openmapx/mobility-core/contributors";
+import { parseLicensing } from "@openmapx/mobility-core/licensing";
 
 /**
  * What every OpenConditions feature domain reads the same way: a canonical
@@ -59,7 +60,7 @@ export function list(value: unknown): Rec[] {
 /** The first text of a multilingual `[{ lang, text }]` value. */
 export function firstText(value: unknown): string | undefined {
   return list(value)
-    .map((t) => str(t["text"]))
+    .map((t) => str(t.text))
     .find(Boolean);
 }
 
@@ -74,7 +75,7 @@ export interface RecordSource {
 }
 
 export function sourcesOf(record: Rec): RecordSource[] {
-  const provenance = rec(record["provenance"]);
+  const provenance = rec(record.provenance);
   const out: RecordSource[] = [];
   const add = (id: unknown, attribution: unknown, upstream: unknown) => {
     const sourceId = str(id);
@@ -83,19 +84,19 @@ export function sourcesOf(record: Rec): RecordSource[] {
     if (held) held.upstream.push(...list(upstream));
     else out.push({ id: sourceId, attribution: rec(attribution), upstream: list(upstream) });
   };
-  add(provenance["sourceId"], provenance["attribution"], provenance["upstream"]);
-  for (const merged of list(provenance["mergedSources"])) {
-    add(merged["source"], merged["attribution"], merged["upstream"]);
+  add(provenance.sourceId, provenance.attribution, provenance.upstream);
+  for (const merged of list(provenance.mergedSources)) {
+    add(merged.source, merged.attribution, merged.upstream);
   }
   return out;
 }
 
 /** The ids of the records a canonical feature was built from: its members and merged records. */
 export function memberIdsOf(record: Rec): string[] {
-  const provenance = rec(record["provenance"]);
+  const provenance = rec(record.provenance);
   const ids = [
-    ...list(rec(provenance["derivedFrom"])["records"]).map((r) => r["id"]),
-    ...list(provenance["mergedSources"]).map((m) => m["recordId"]),
+    ...list(rec(provenance.derivedFrom).records).map((r) => r.id),
+    ...list(provenance.mergedSources).map((m) => m.recordId),
   ];
   return [...new Set(ids.filter((id): id is string => typeof id === "string"))];
 }
@@ -112,9 +113,9 @@ export function memberIdsOf(record: Rec): string[] {
  * two forms is actually a member, the record id as is first.
  */
 export function itemIdOf(record: Rec): string | undefined {
-  const provenance = rec(record["provenance"]);
-  const sourceId = str(provenance["sourceId"]);
-  const recordId = str(provenance["recordId"]);
+  const provenance = rec(record.provenance);
+  const sourceId = str(provenance.sourceId);
+  const recordId = str(provenance.recordId);
   if (sourceId && recordId) {
     const members = memberIdsOf(record);
     const forms = [recordId, recordId.replace(/[^A-Za-z0-9._:-]/g, "_")];
@@ -123,7 +124,7 @@ export function itemIdOf(record: Rec): string | undefined {
       .find((id) => members.includes(id));
     if (survivor !== undefined) return survivor;
   }
-  return str(record["id"]);
+  return str(record.id);
 }
 
 /** The sources behind a reading: its own, or every contributor of a fused one. */
@@ -143,7 +144,7 @@ export function crowdReported(reading: LatestReading | undefined): boolean {
 
 export function instantOf(time: unknown): string | undefined {
   const t = rec(time);
-  return str(t["instant"]) ?? str(t["end"]) ?? str(t["start"]);
+  return str(t.instant) ?? str(t.end) ?? str(t.start);
 }
 
 /** When a reading was observed, in epoch milliseconds; -Infinity when it does not say. */
@@ -190,42 +191,24 @@ export interface CreditSources {
   /** A source's link by source id. */
   link(sourceId: string): string | undefined;
   /** A licence's readable name by licence id, where a listed source gives one. */
-  licenseName(licenseId: string): string | undefined;
 }
 
 /** No live data sources: no links, and every licence shown by its id. */
 export const NO_SOURCES: CreditSources = {
   link: () => undefined,
-  licenseName: () => undefined,
 };
-
-/**
- * A licence as a credit shows it. A `LicenseRef-` id is OpenConditions' own
- * and means nothing to a reader, so it shows by the name the live list gives
- * it, and stays as it is where no listed source names it. Any other id is
- * SPDX's, which readers know and which fits a credit chip: it stays as it is.
- */
-export function licenseText(
-  licenseId: string,
-  sources: Pick<CreditSources, "licenseName">,
-): string {
-  return licenseId.startsWith("LicenseRef-")
-    ? (sources.licenseName(licenseId) ?? licenseId)
-    : licenseId;
-}
 
 /** A source's credit; without a link of its own it takes the source's link from `sources`. */
 export function credit(source: RecordSource, sources: CreditSources): Attribution {
   const a = source.attribution;
-  const url = str(a["url"]) ?? sources.link(source.id);
-  const license = str(a["license"]);
-  const licenseUrl = str(a["licenseUrl"]);
+  const url = str(a.url) ?? sources.link(source.id);
+  const licensing = parseLicensing(a.licensing);
   return {
     sourceId: source.id,
-    name: str(a["provider"]) ?? source.id,
+    name: str(a.provider) ?? source.id,
     ...(url ? { url } : {}),
-    ...(license ? { spdxLicense: licenseText(license, sources) } : {}),
-    ...(licenseUrl ? { licenseUrl } : {}),
+    ...(licensing ? { licensing } : {}),
+    ...(str(a.provider) ? { attributionText: str(a.provider) } : {}),
   };
 }
 
@@ -244,43 +227,40 @@ export function upstreamCredits(
   for (const source of kept) {
     const feed = credit(source, sources);
     for (const u of source.upstream) {
-      const publisher = str(u["publisher"]);
+      const publisher = str(u.publisher);
       if (!publisher) continue;
-      const license = str(u["license"]);
+      const licensing = parseLicensing(u.licensing);
       const name = `${feed.name} – ${publisher}`;
-      if (out.some((a) => a.sourceId === source.id && a.name === name)) continue;
-      const licenseUrl = license ? licenseUrlForSpdx(license) : undefined;
       out.push({
         sourceId: source.id,
         name,
         ...(feed.url ? { url: feed.url } : {}),
-        ...(license ? { spdxLicense: licenseText(license, sources) } : {}),
-        ...(licenseUrl ? { licenseUrl } : {}),
+        ...(licensing ? { licensing } : {}),
         publisher: { name: publisher },
+        ...(str(u.attribution) ? { attributionText: str(u.attribution) } : {}),
       });
     }
   }
-  return out;
+  return snapshotContributors(out);
 }
 
 export function addressOf(location: Rec): string | undefined {
-  const address = rec(location["address"]);
-  const street = [str(address["street"]), str(address["houseNumber"])].filter(Boolean).join(" ");
-  const place = [str(address["postalCode"]), str(address["city"])].filter(Boolean).join(" ");
+  const address = rec(location.address);
+  const street = [str(address.street), str(address.houseNumber)].filter(Boolean).join(" ");
+  const place = [str(address.postalCode), str(address.city)].filter(Boolean).join(" ");
   const line = [street, place].filter(Boolean).join(", ");
   return line.length > 0 ? line : undefined;
 }
 
 export function countryOf(location: Rec): string | undefined {
-  const country =
-    str(rec(location["address"])["country"]) ?? str(rec(location["admin"])["country"]);
+  const country = str(rec(location.address).country) ?? str(rec(location.admin).country);
   return country && /^[a-z]{2}$/i.test(country) ? country.toUpperCase() : undefined;
 }
 
 export function pointOf(location: Rec): [number, number] | undefined {
-  const geometry = rec(location["geometry"]);
-  const coordinates = geometry["coordinates"];
-  if (geometry["type"] !== "Point" || !Array.isArray(coordinates)) return undefined;
+  const geometry = rec(location.geometry);
+  const coordinates = geometry.coordinates;
+  if (geometry.type !== "Point" || !Array.isArray(coordinates)) return undefined;
   const [lon, lat] = coordinates;
   return typeof lon === "number" && typeof lat === "number" ? [lon, lat] : undefined;
 }

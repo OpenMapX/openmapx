@@ -64,7 +64,21 @@
           },
           "license": "CC-BY-4.0",
           "provider": "Tankerkönig (MTS-K), CC BY 4.0 – https://creativecommons.tankerkoenig.de",
-          "licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+          "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+          "licensing": {
+            "version": 1,
+            "bindings": [
+              {
+                "scope": "data",
+                "subject": "Tankerkönig (MTS-K), CC BY 4.0 – https://creativecommons.tankerkoenig.de",
+                "license": {
+                  "kind": "spdx",
+                  "expression": "CC-BY-4.0",
+                  "url": "https://creativecommons.org/licenses/by/4.0/"
+                }
+              }
+            ]
+          }
         },
         "sourceFormat": "tankerkoenig",
         "mergedSources": [
@@ -84,7 +98,21 @@
               },
               "license": "ODbL-1.0",
               "provider": "© OpenStreetMap contributors",
-              "licenseUrl": "https://opendatacommons.org/licenses/odbl/1-0/"
+              "licenseUrl": "https://opendatacommons.org/licenses/odbl/1-0/",
+              "licensing": {
+                "version": 1,
+                "bindings": [
+                  {
+                    "scope": "data",
+                    "subject": "© OpenStreetMap contributors",
+                    "license": {
+                      "kind": "spdx",
+                      "expression": "ODbL-1.0",
+                      "url": "https://opendatacommons.org/licenses/odbl/1-0/"
+                    }
+                  }
+                ]
+              }
             },
             "link": "same_asset"
           }

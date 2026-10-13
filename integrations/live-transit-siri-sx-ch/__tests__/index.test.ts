@@ -22,7 +22,16 @@ function createCtx(config: Record<string, unknown> = {}): CtxHandle {
           sourceId: "opentransportdata-ch-siri-sx",
           name: "Open Transport Data CH SIRI-SX",
           url: "https://opentransportdata.swiss/",
-          license: "CC-BY-4.0",
+          licensing: {
+            version: 1,
+            bindings: [
+              {
+                scope: "data",
+                subject: "Data",
+                license: { kind: "spdx", expression: "CC-BY-4.0" },
+              },
+            ],
+          } as const,
           providerCountry: "CH",
           providerPrivacyUrl: "https://opentransportdata.swiss/",
         },

@@ -67,8 +67,7 @@ export function PlaceMarineWeatherContent({ data }: { data: MarineWeatherRespons
         <SectionAttribution
           name={attributionSource.name}
           url={attributionSource.url}
-          license={attributionSource.license}
-          licenseUrl={attributionSource.licenseUrl}
+          licensing={attributionSource.licensing}
           attribution={attributionSource.attribution}
         />
       )}

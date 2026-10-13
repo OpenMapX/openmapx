@@ -1,5 +1,5 @@
 import {
-  type DataSourceAttribution,
+  type Attribution,
   type DataSourceDetail,
   type DataSourceDetailSection,
   type DataSourceResult,
@@ -14,6 +14,7 @@ import {
   token,
 } from "@openmapx/integration-framework/strings";
 import type { Camera, CameraView } from "@openmapx/mobility-core/camera";
+import { snapshotContributors } from "@openmapx/mobility-core/contributors";
 
 type Row = [I18nToken, Translatable];
 
@@ -67,14 +68,9 @@ function fallbackNameOf(camera: Camera): { fallbackName?: I18nToken } {
  * declares no sources of its own, so every credit comes from the providers.
  * Their links come from upstream data, so only http(s) ones are kept.
  */
-function cameraCredits(camera: Camera): DataSourceAttribution[] | undefined {
+function cameraCredits(camera: Camera): Attribution[] | undefined {
   if (camera.attributions.length === 0) return undefined;
-  return camera.attributions.map((a) => ({
-    text: a.name,
-    url: isSafeHttpUrl(a.url) ? a.url : "",
-    ...(a.spdxLicense ? { license: a.spdxLicense } : {}),
-    ...(isSafeHttpUrl(a.licenseUrl) ? { licenseUrl: a.licenseUrl } : {}),
-  }));
+  return snapshotContributors(camera.attributions);
 }
 
 /**

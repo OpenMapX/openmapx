@@ -1,3 +1,5 @@
+import { parseContributors } from "@openmapx/mobility-core/contributors";
+import { parseLicensing } from "@openmapx/mobility-core/licensing";
 import { z } from "zod";
 
 export const airQualityStandardIdSchema = z.enum([
@@ -111,7 +113,15 @@ export const airQualitySourceRefSchema = z
     name: boundedString,
     url: z.url().nullable(),
     owner: z.string().max(512).nullable(),
-    license: z.object({ name: boundedString, url: z.url().nullable() }).strict().nullable(),
+    licensing: z.unknown().transform((value, ctx) => {
+      if (value === null) return null;
+      const licensing = parseLicensing(value);
+      if (!licensing) {
+        ctx.addIssue({ code: "custom", message: "Invalid licensing" });
+        return z.NEVER;
+      }
+      return licensing;
+    }),
     methodologyUrl: z.url().nullable(),
     attribution: z.string().max(1_024).nullable(),
   })
@@ -351,21 +361,16 @@ export const airQualityStationFeatureSchema = z
       .strict(),
     properties: z
       .object({
-        // The API package stays independent of mobility-core; this is the portable receipt shape.
         contributors: z
-          .array(
-            z.object({
-              sourceId: z.string().min(1),
-              name: z.string().min(1),
-              url: z.string().optional(),
-              spdxLicense: z.string().optional(),
-              licenseUrl: z.string().optional(),
-              attributionText: z.string().optional(),
-              retrievedAt: z.string().optional(),
-              notes: z.string().optional(),
-              publisher: z.object({ name: z.string(), url: z.string().optional() }).optional(),
-            }),
-          )
+          .unknown()
+          .transform((value, ctx) => {
+            const receipts = parseContributors(value);
+            if (!receipts) {
+              ctx.addIssue({ code: "custom", message: "Invalid contributors" });
+              return z.NEVER;
+            }
+            return receipts;
+          })
           .optional(),
         stationId: stationIdSchema,
         name: z.string().max(512).nullable(),

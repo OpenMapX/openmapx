@@ -49,8 +49,20 @@ function camera(over: Partial<Camera> = {}): Camera {
         sourceId: "fi-digitraffic-cameras",
         name: "Fintraffic / digitraffic.fi",
         url: "https://www.digitraffic.fi/",
-        spdxLicense: "CC-BY-4.0",
-        licenseUrl: "https://creativecommons.org/licenses/by/4.0/",
+        licensing: {
+          version: 1,
+          bindings: [
+            {
+              scope: "data",
+              subject: "Data",
+              license: {
+                kind: "spdx",
+                expression: "CC-BY-4.0",
+                url: "https://creativecommons.org/licenses/by/4.0/",
+              },
+            },
+          ],
+        } as const,
       },
     ],
     ...over,
@@ -99,10 +111,23 @@ describe("mapCameraToResult", () => {
     expect(result.status).toBe("operational");
     expect(result.attributions).toEqual([
       {
-        text: "Fintraffic / digitraffic.fi",
+        sourceId: "fi-digitraffic-cameras",
+        name: "Fintraffic / digitraffic.fi",
         url: "https://www.digitraffic.fi/",
-        license: "CC-BY-4.0",
-        licenseUrl: "https://creativecommons.org/licenses/by/4.0/",
+        licensing: {
+          version: 1,
+          bindings: [
+            {
+              scope: "data",
+              subject: "Data",
+              license: {
+                kind: "spdx",
+                expression: "CC-BY-4.0",
+                url: "https://creativecommons.org/licenses/by/4.0/",
+              },
+            },
+          ],
+        } as const,
       },
     ]);
   });
@@ -318,7 +343,7 @@ describe("mapCameraToDetail", () => {
     expect(detail.id).toBe("oc:feature:fi-digitraffic-cameras:C01502");
     expect(detail.sources).toEqual(["fi-digitraffic-cameras"]);
     expect(detail.website).toBe("https://www.digitraffic.fi/kelikamerat/C01502");
-    expect(detail.attributions?.[0]?.text).toBe("Fintraffic / digitraffic.fi");
+    expect(detail.attributions?.[0]?.name).toBe("Fintraffic / digitraffic.fi");
   });
 
   it("drops a link that is not http(s)", () => {
@@ -469,7 +494,12 @@ it("captures complete canonical receipts before mapping results and details", ()
     sourceId: "exact-feed",
     name: "Publisher",
     url: "https://example.com",
-    spdxLicense: "CC-BY-4.0",
+    licensing: {
+      version: 1,
+      bindings: [
+        { scope: "data", subject: "Data", license: { kind: "spdx", expression: "CC-BY-4.0" } },
+      ],
+    } as const,
     attributionText: "Required upstream notice",
     publisher: { name: "Original publisher", url: "https://publisher.example" },
   };

@@ -6,6 +6,7 @@ import {
   type StreetLevelSearchQuery,
 } from "@openmapx/core";
 import type { StreetLevelCapabilities, StreetLevelProvider } from "@openmapx/integration-framework";
+import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 
 /**
  * A phone's main camera is 24–28 mm equivalent, 65–74° across, so a phone
@@ -86,11 +87,6 @@ interface StacFeatureCollection {
   features?: StacItem[];
 }
 
-/** SPDX "CC-BY-SA-4.0" reads as "CC BY-SA 4.0" in the UI. */
-function displayLicense(spdx: string): string {
-  return spdx.replace(/^CC-/, "CC ").replace(/-(\d)/, " $1");
-}
-
 /** The Feature top-level `providers[]` entry with the producer role, else the producer string. */
 function authorOf(item: StacItem): string | undefined {
   const producer = item.providers?.find((provider) => (provider.roles ?? []).includes("producer"));
@@ -139,7 +135,7 @@ function fieldOfView(
 export function stacItemToImage(item: StacItem, providerId: string): StreetLevelImage {
   const properties = item.properties ?? {};
   const orientation = properties["pers:interior_orientation"];
-  const spdx = properties.license ?? "CC-BY-SA-4.0";
+  const spdx = properties.license;
   const author = authorOf(item);
   const [sensorWidth, sensorHeight] = orientation?.sensor_array_dimensions ?? [];
   const aspectRatio =
@@ -164,8 +160,12 @@ export function stacItemToImage(item: StacItem, providerId: string): StreetLevel
       hd: item.assets?.hd?.href,
     },
     ...(author ? { author } : {}),
-    license: displayLicense(spdx),
-    licenseUrl: item.links?.find((l) => l.rel === "license")?.href,
+    licensing: licensingFromDeclaration(
+      spdx,
+      item.links?.find((l) => l.rel === "license")?.href,
+      "Panoramax image",
+      "imagery",
+    ),
     pageUrl: `https://panoramax.xyz/#focus=pic&pic=${item.id}`,
   };
 }

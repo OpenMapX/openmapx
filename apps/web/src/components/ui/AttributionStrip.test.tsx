@@ -1,3 +1,4 @@
+import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 // @vitest-environment jsdom
 
 import type { Attribution } from "@openmapx/mobility-core/attribution";
@@ -18,12 +19,22 @@ const delfi: Attribution = {
   sourceId: "delfi-de",
   name: "DELFI",
   url: "https://www.delfi.de/",
-  spdxLicense: "CC-BY-4.0",
+  licensing: {
+    version: 1,
+    bindings: [
+      { scope: "data", subject: "Data", license: { kind: "spdx", expression: "CC-BY-4.0" } },
+    ],
+  } as const,
 };
 const tfl: Attribution = {
   sourceId: "tfl",
   name: "Transport for London",
-  spdxLicense: "OGL-UK-3.0",
+  licensing: {
+    version: 1,
+    bindings: [
+      { scope: "data", subject: "Data", license: { kind: "spdx", expression: "OGL-UK-3.0" } },
+    ],
+  } as const,
 };
 
 describe("AttributionStrip", () => {
@@ -138,7 +149,11 @@ describe("AttributionStrip", () => {
     const transitous: Attribution = {
       sourceId: "transitous",
       name: "Transitous",
-      spdxLicense: "Mixed (per upstream GTFS/GBFS feed; mostly open data)",
+      licensing: licensingFromDeclaration(
+        "Mixed (per upstream GTFS/GBFS feed; mostly open data)",
+        undefined,
+        "Transitous",
+      ),
       attributionText: "Public transport data via Transitous",
     };
     const { container } = render(
@@ -155,10 +170,16 @@ describe("AttributionStrip", () => {
   it("keeps a short license label on the chip", () => {
     const markup = renderToStaticMarkup(
       <AttributionStrip
-        attributions={[{ sourceId: "entur", name: "Entur", spdxLicense: "NLOD 2.0" }]}
+        attributions={[
+          {
+            sourceId: "entur",
+            name: "Entur",
+            licensing: licensingFromDeclaration("NLOD 2.0", undefined, "Entur"),
+          },
+        ]}
       />,
     );
-    expect(markup).toContain("Entur · NLOD 2.0");
+    expect(markup).toContain("Entur · NLOD-2.0");
   });
 
   it("collapses to maxVisible with a toggle that expands and collapses", () => {

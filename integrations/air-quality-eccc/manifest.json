@@ -42,8 +42,6 @@
       "credentialOwner": "none",
       "reviewedAt": "2026-08-30",
       "apiHosts": ["api.weather.gc.ca", "open.canada.ca"],
-      "license": "OGL-Canada-2.0",
-      "licenseUrl": "https://open.canada.ca/en/open-government-licence-canada",
       "attribution": "Environment and Climate Change Canada",
       "commercialUse": "yes",
       "notes": "Official named-community values. GeoMet does not expose a point-to-community coverage association or conventional-versus-AQHI+ method flag, so OpenMapX keeps the standard unclaimed and the nearest community non-covering.",
@@ -52,7 +50,29 @@
       "endUserExposure": "server-only",
       "personalData": false,
       "cookies": false,
-      "dpaAvailable": false
+      "dpaAvailable": false,
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "data",
+            "subject": "ECCC GeoMet AQHI observations and forecasts material",
+            "license": {
+              "kind": "custom",
+              "namespace": "publisher:eccc-aqhi-geomet",
+              "id": "LicenseRef-ECCC-Data-Servers-End-use",
+              "name": "Environment and Climate Change Canada Data Servers End-use Licence",
+              "url": "https://eccc-msc.github.io/open-data/licence/readme_en/"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "OGL-Canada-2.0",
+            "url": "https://open.canada.ca/en/open-government-licence-canada"
+          }
+        ]
+      }
     }
   ]
 }

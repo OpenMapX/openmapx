@@ -1,3 +1,4 @@
+import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
@@ -119,7 +120,7 @@ describe("JunctionViewPanel photo integration", () => {
     fovDeg: 70,
     assets: {},
     author: "motocultrice",
-    license: "CC BY-SA 4.0",
+    licensing: licensingFromDeclaration("CC BY-SA 4.0", undefined),
   } as never;
 
   it("shows the photo when the store marks it ready, the schematic otherwise", () => {

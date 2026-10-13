@@ -1,4 +1,5 @@
 import type { IntegrationContext } from "@openmapx/integration-framework";
+import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 import { describe, expect, it, vi } from "vitest";
 import { getGeocodingProvider, setConfiguredProviderList } from "../orchestrator.js";
 import type { GeocodingProvider, SearchResult } from "../types.js";
@@ -81,7 +82,7 @@ it("captures only selected backend credits before cache and does not mutate prov
     sourceId: "selected",
     name: "Captured selected",
     url: "https://selected.example",
-    license: "CC0-1.0",
+    licensing: licensingFromDeclaration("CC0-1.0", undefined),
   };
   const sources = [selected, { ...selected, sourceId: "inactive", name: "Missing key backend" }];
   const ctx = {
@@ -118,7 +119,7 @@ it("captures geocoder metadata before the selected backend request resolves", as
     sourceId: "selected",
     name: "Original acquired notice",
     url: "https://example.test",
-    license: "CC0-1.0",
+    licensing: licensingFromDeclaration("CC0-1.0", undefined),
   };
   const selected = {
     ...provider([]),

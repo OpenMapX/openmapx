@@ -1,4 +1,5 @@
 import type { ContributingRecord, FieldContributors } from "@openmapx/mobility-core/contributors";
+import type { Licensing } from "@openmapx/mobility-core/licensing";
 import type { OpeningHoursSource } from "../utils/openingHoursSource";
 import type { AddressEvidence, DirectOsmReference } from "./address";
 import type { DataSourceDetail } from "./dataSource";
@@ -12,8 +13,7 @@ export interface PlacePhoto extends ContributingRecord {
   source: string;
   author?: string;
   authorUrl?: string;
-  license?: string;
-  licenseUrl?: string;
+  licensing?: Licensing;
   pageUrl?: string;
   /** File-specific credit/copyright/restriction notices from the metadata acquisition. */
   attributionText?: string;

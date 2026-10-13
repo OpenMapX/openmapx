@@ -1,5 +1,6 @@
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import { snapshotContributors } from "@openmapx/mobility-core/contributors";
+import type { Licensing } from "@openmapx/mobility-core/licensing";
 /**
  * Factory for creating RegionalCarSharingClient from static data URLs.
  * Handles fetch, caching, and bbox filtering. Caller provides the parser.
@@ -26,8 +27,7 @@ export interface StaticCarSharingConfig {
   attribution: {
     label: string;
     url: string;
-    license?: string;
-    licenseUrl?: string;
+    licensing?: Licensing;
   };
   /** Parse raw response body into stations. Only stations with valid coordinates should be returned. */
   parse(body: string): SharedMobilityStation[];

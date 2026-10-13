@@ -1,4 +1,5 @@
 import type { TemporalCapabilities, TripPlanRequest } from "@openmapx/integration-framework";
+import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 import type { MobilityResult } from "@openmapx/mobility-core/result";
 import type { TripItinerary, TripPlan } from "@openmapx/mobility-core/transit";
 import { describe, expect, it, vi } from "vitest";
@@ -538,9 +539,24 @@ describe("backward actual transit times", () => {
 
 describe("chain contributor receipts", () => {
   it("credits chosen timing suppliers while keeping unused alternatives independent", async () => {
-    const a = { sourceId: "feed-a", name: "A", url: "https://a.test", spdxLicense: "CC0" };
-    const b = { sourceId: "feed-b", name: "B", url: "https://b.test", spdxLicense: "CC0" };
-    const c = { sourceId: "feed-c", name: "C", url: "https://c.test", spdxLicense: "CC0" };
+    const a = {
+      sourceId: "feed-a",
+      name: "A",
+      url: "https://a.test",
+      licensing: licensingFromDeclaration("CC0", undefined, "A"),
+    };
+    const b = {
+      sourceId: "feed-b",
+      name: "B",
+      url: "https://b.test",
+      licensing: licensingFromDeclaration("CC0", undefined, "B"),
+    };
+    const c = {
+      sourceId: "feed-c",
+      name: "C",
+      url: "https://c.test",
+      licensing: licensingFromDeclaration("CC0", undefined, "C"),
+    };
     const selectedA = itinerary("2026-09-01T09:10:00Z", "2026-09-01T09:30:00Z", {
       contributors: [a],
     });

@@ -81,8 +81,7 @@ export function PlaceSunTimes({ lat, lng, enabled = true }: Props) {
         <SectionAttribution
           name={data.attribution.name}
           url={data.attribution.url}
-          license={data.attribution.license}
-          licenseUrl={data.attribution.licenseUrl}
+          licensing={data.attribution.licensing}
         />
       )}
     </Box>

@@ -131,12 +131,14 @@ your service may emit this JSON without depending on an OpenMapX runtime SDK:
 Use stable source IDs declared in source/privacy metadata and localized
 disclosures; fill in the actual publisher, rights and required wording. `[]`
 explicitly means this record/field has no externally owed credit; omit the field
-only for a legacy record with unavailable provenance. Never send `[]` merely
+only when captured provenance is unavailable. Never send `[]` merely
 because exact provenance has not yet been implemented. Missing identities stay
 unknown rather than borrowing every configured feed. Preserve each distinct
 mandatory notice, including notices attached to an explicit canonical parent
 source. `publisher` is optional `{ "name": "...", "url": "..." }`; homepage,
-SPDX license, license URL, retrieval time and notes are also optional strings.
+retrieval time and notes are optional strings. `licensing` uses the validated
+[shared licence metadata contract](./licensing.md), including captured custom
+definitions in your extension namespace. Flat display-label fields are unsupported.
 
 Capture metadata before upstream acquisition and retain it in service caches,
 validation, copies, DTOs and responses. Each row/cell/feature owns its actual

@@ -1,4 +1,5 @@
 import { parseContributors } from "@openmapx/mobility-core/contributors";
+import { parseLicensing } from "@openmapx/mobility-core/licensing";
 import type { BBox } from "../types/geometry";
 import type {
   LocalizedText,
@@ -170,7 +171,9 @@ export function roadConditionFeatureToEvent(
       : {}),
     attribution: {
       provider: str(attribution?.provider) ?? "",
-      ...(str(attribution?.license) ? { license: str(attribution?.license) } : {}),
+      ...(parseLicensing(attribution?.licensing)
+        ? { licensing: parseLicensing(attribution?.licensing) }
+        : {}),
       ...(str(attribution?.url) ? { url: str(attribution?.url) } : {}),
       ...(str(attribution?.sourceId) ? { sourceId: str(attribution?.sourceId) } : {}),
       ...(str(attribution?.notice) ? { notice: str(attribution?.notice) } : {}),

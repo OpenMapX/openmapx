@@ -64,7 +64,11 @@ describe("AttributionIndex", () => {
     const sbb = idx.getForMotisFile("ch_SBB.gtfs.zip");
     expect(sbb).toBeDefined();
     expect(sbb?.sourceId).toBe("ch_SBB");
-    expect(sbb?.spdxLicense).toBe("OPEN-DATA-CH");
+    expect(sbb?.licensing?.bindings[0].license).toEqual({
+      kind: "unknown",
+      raw: "OPEN-DATA-CH",
+      url: "https://opentransportdata.swiss/license",
+    });
 
     idx.close();
   });
@@ -75,8 +79,20 @@ describe("AttributionIndex", () => {
         sourceId: "de_DELFI",
         name: "DELFI (curated)",
         url: "https://delfi.example/",
-        license: "CC0-1.0",
-        licenseUrl: "https://creativecommons.org/publicdomain/zero/1.0/",
+        licensing: {
+          version: 1,
+          bindings: [
+            {
+              scope: "data",
+              subject: "Data",
+              license: {
+                kind: "spdx",
+                expression: "CC0-1.0",
+                url: "https://creativecommons.org/publicdomain/zero/1.0/",
+              },
+            },
+          ],
+        } as const,
         attribution: "DELFI e.V. — curated",
         providerCountry: "de",
         providerPrivacyUrl: "https://delfi.example/privacy",
@@ -85,7 +101,12 @@ describe("AttributionIndex", () => {
         sourceId: "extra-source",
         name: "Manifest-only",
         url: "https://manifest-only.example/",
-        license: "MIT",
+        licensing: {
+          version: 1,
+          bindings: [
+            { scope: "data", subject: "Data", license: { kind: "spdx", expression: "MIT" } },
+          ],
+        } as const,
         providerCountry: "us",
         providerPrivacyUrl: "https://manifest-only.example/privacy",
       },
@@ -118,14 +139,24 @@ describe("AttributionIndex", () => {
       {
         sourceId: "alpha-manifest",
         name: "Alpha",
-        license: "MIT",
+        licensing: {
+          version: 1,
+          bindings: [
+            { scope: "data", subject: "Data", license: { kind: "spdx", expression: "MIT" } },
+          ],
+        } as const,
         providerCountry: "us",
         providerPrivacyUrl: "https://alpha.example/privacy",
       },
       {
         sourceId: "beta-manifest",
         name: "Beta",
-        license: "MIT",
+        licensing: {
+          version: 1,
+          bindings: [
+            { scope: "data", subject: "Data", license: { kind: "spdx", expression: "MIT" } },
+          ],
+        } as const,
         providerCountry: "us",
         providerPrivacyUrl: "https://beta.example/privacy",
       },
@@ -201,7 +232,12 @@ describe("AttributionIndex", () => {
       {
         sourceId: "manifest-1",
         name: "Manifest 1",
-        license: "MIT",
+        licensing: {
+          version: 1,
+          bindings: [
+            { scope: "data", subject: "Data", license: { kind: "spdx", expression: "MIT" } },
+          ],
+        } as const,
         providerCountry: "us",
         providerPrivacyUrl: "https://m1.example/privacy",
       },

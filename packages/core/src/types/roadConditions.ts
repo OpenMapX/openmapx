@@ -1,4 +1,5 @@
 import type { ContributingRecord, FieldContributors } from "@openmapx/mobility-core/contributors";
+import type { Licensing } from "@openmapx/mobility-core/licensing";
 import type { Geometry, LineString } from "geojson";
 import type { RoadConditionEffect, VehicleApplicability } from "../utils/roadConditionEffects";
 
@@ -14,7 +15,7 @@ export type RoadConditionSeverityLabel = "minor" | "moderate" | "major" | "criti
 export interface RoadConditionAttribution {
   /** Human-readable provider/feed name (e.g. "NDW", "TomTom"). */
   provider: string;
-  license?: string;
+  licensing?: Licensing;
   url?: string;
   /** Credit identity when the record's source is a catalogue child of this feed. */
   sourceId?: string;

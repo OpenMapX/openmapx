@@ -3,6 +3,7 @@ import {
   type FakeHttpRequest,
   fakeHttpClient,
 } from "@openmapx/integration-framework/testing";
+import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 import { describe, expect, test } from "vitest";
 import { createCameraProvider } from "../cameras/provider.js";
 import { createChargingSiteProvider } from "../charging/provider.js";
@@ -37,7 +38,7 @@ const EVERY_SOURCE: LiveSources = {
   ready: true,
   has: () => true,
   link: () => undefined,
-  licenseName: () => undefined,
+
   noticeOf: () => undefined,
   firmsSources: () => [],
 };
@@ -565,6 +566,7 @@ describe("site coverage evidence from OpenConditions", () => {
                   retention: true,
                   shareAlike: false,
                 },
+                licensing: licensingFromDeclaration("CC-BY-4.0", undefined),
               },
             ],
           }

@@ -147,23 +147,8 @@ export interface RideBooking {
   updatedAt: string;
 }
 
-/**
- * Attribution as it arrives over the wire. Structurally matches
- * mobility-core's `Attribution` field-for-field — kept inline here so
- * `@openmapx/core` never imports `@openmapx/mobility-core`, the same rule
- * `EvChargeStop.availability` follows in `routing.ts`.
- */
-export interface RideAttribution {
-  sourceId: string;
-  name: string;
-  url?: string;
-  spdxLicense?: string;
-  licenseUrl?: string;
-  attributionText?: string;
-  publisher?: { name: string; url?: string };
-  retrievedAt?: string;
-  notes?: string;
-}
+/** The shared captured receipt used across mobility responses. */
+export type RideAttribution = import("@openmapx/mobility-core/attribution").Attribution;
 
 /** Serialisable provider descriptor returned by `GET /providers`. */
 export interface RideProviderInfo {

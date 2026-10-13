@@ -483,7 +483,19 @@ describe("GET /events filters", () => {
     const res = await h.get({ bbox: BBOX });
     const { geometry, ...properties } = {
       ...served,
-      contributors: [{ sourceId: "s", name: "NDW", spdxLicense: "CC0-1.0" }],
+      contributors: [
+        {
+          sourceId: "s",
+          name: "NDW",
+          licensing: {
+            version: 1,
+            declarations: [{ text: "CC0-1.0" }],
+            bindings: [
+              { scope: "data", subject: "Data", license: { kind: "spdx", expression: "CC0-1.0" } },
+            ],
+          } as const,
+        },
+      ],
     };
     expect(res.body).toEqual({
       type: "FeatureCollection",

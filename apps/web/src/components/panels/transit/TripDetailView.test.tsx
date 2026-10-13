@@ -1,3 +1,4 @@
+import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import { TripDetailView } from "./TripDetailView";
@@ -64,7 +65,7 @@ vi.mock("@openmapx/core", () => ({
           sourceId: "otdch",
           name: "OpenTransportData Switzerland",
           url: "https://opentransportdata.swiss",
-          spdxLicense: "Terms",
+          licensing: licensingFromDeclaration("Terms", undefined, "OpenTransportData Switzerland"),
         },
       ],
       data: {
@@ -119,7 +120,7 @@ vi.mock("@/integration-api/overlay/useAttributionFromHooks", () => ({
       sourceId: "otdch",
       name: "OpenTransportData Switzerland",
       url: "https://opentransportdata.swiss",
-      spdxLicense: "Terms",
+      licensing: licensingFromDeclaration("Terms", undefined, "OpenTransportData Switzerland"),
     },
   ],
 }));

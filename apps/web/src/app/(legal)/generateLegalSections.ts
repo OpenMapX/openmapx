@@ -1,6 +1,7 @@
 import deCatalog from "@openmapx/i18n/locales/de.json";
 import enCatalog from "@openmapx/i18n/locales/en.json";
 import type { IntegrationDataSource, LoadedIntegrationMeta } from "@openmapx/integration-framework";
+import type { Licensing } from "@openmapx/mobility-core/licensing";
 
 export interface PrivacyServiceRow {
   service: string;
@@ -14,8 +15,7 @@ export interface PrivacyServiceRow {
 export interface AttributionRow {
   source: string;
   desc: string;
-  license: string;
-  licenseUrl?: string;
+  licensing: Licensing;
   url: string;
   attributionHtml?: string;
   commercialUse?: string;
@@ -215,8 +215,7 @@ export function generateAttributionSectionsFromManifests(
       grouped.get(key)?.rows.push({
         source: ds.name,
         desc,
-        license: ds.license,
-        licenseUrl: ds.licenseUrl,
+        licensing: ds.licensing,
         url: ds.url,
         attributionHtml: ds.attribution,
         commercialUse: ds.commercialUse,

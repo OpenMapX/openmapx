@@ -3,6 +3,11 @@ import {
   localizedTextFor,
   type RoadConditionEvent,
 } from "@openmapx/core";
+import {
+  DISPLAY_LICENSE_SCOPES,
+  formatLicensing,
+  parseLicensing,
+} from "@openmapx/mobility-core/licensing";
 import type { MapGeoJSONFeature } from "maplibre-gl";
 import {
   buildStackedPopupCardItems,
@@ -201,7 +206,8 @@ function attributionString(raw: unknown): string {
   if (raw && typeof raw === "object") {
     const value = raw as Record<string, unknown>;
     const provider = typeof value.provider === "string" ? value.provider : "";
-    const license = typeof value.license === "string" ? value.license : "";
+    const licensing = parseLicensing(value.licensing);
+    const license = licensing ? formatLicensing(licensing, { scopes: DISPLAY_LICENSE_SCOPES }) : "";
     return provider && license ? `${provider} · ${license}` : provider || license;
   }
   return "";
@@ -268,7 +274,10 @@ function popupProperties(
     _event: event,
   };
   properties.source = event.source;
-  if (event.attribution.license) properties.license = event.attribution.license;
+  if (event.attribution.licensing)
+    properties.license = formatLicensing(event.attribution.licensing, {
+      scopes: DISPLAY_LICENSE_SCOPES,
+    });
   if (event.updatedAt) properties.updatedAt = event.updatedAt;
   if (event.fetchedAt) properties.checkedAt = event.fetchedAt;
   if (event.expiresAt) properties.expiresAt = event.expiresAt;

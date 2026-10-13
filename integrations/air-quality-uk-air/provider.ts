@@ -6,7 +6,9 @@ import type {
   PointAirQualityQuery,
   ProviderCallContext,
 } from "@openmapx/integration-framework";
+import { parseLicensing } from "@openmapx/mobility-core/licensing";
 import { getXmlChild, getXmlChildren, parseXmlDocument, xmlText } from "@openmapx/mobility-formats";
+import sourceManifest from "./manifest.json";
 
 const ENDPOINT = "https://uk-air.defra.gov.uk/assets/rss/current_site_levels.xml";
 const SOURCE_ID = "uk-air-current-site-levels";
@@ -22,10 +24,7 @@ const source: AirQualitySourceRef = {
   name: "UK-AIR current site pollution levels",
   url: ENDPOINT,
   owner: "UK Department for Environment, Food & Rural Affairs",
-  license: {
-    name: "OGL-UK-3.0",
-    url: "https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/",
-  },
+  licensing: parseLicensing(sourceManifest.dataSources[0].licensing)!,
   methodologyUrl: "https://uk-air.defra.gov.uk/air-pollution/daqi",
   attribution: "Department for Environment, Food & Rural Affairs (Defra), UK-AIR",
 };

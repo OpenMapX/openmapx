@@ -54,11 +54,31 @@ describe("scaffold integration", () => {
       {
         sourceId: "observations-observations",
         name: "Example observations",
+        licensing: {
+          version: 1,
+          bindings: [
+            {
+              scope: "data",
+              subject: "Example observations",
+              license: { kind: "spdx", expression: "CC-BY-4.0" },
+            },
+          ],
+        },
         attributionText: "Required dataset notice",
       },
       {
         sourceId: "observations-observations",
         name: "Example observations",
+        licensing: {
+          version: 1,
+          bindings: [
+            {
+              scope: "data",
+              subject: "Example observations",
+              license: { kind: "spdx", expression: "CC-BY-4.0" },
+            },
+          ],
+        },
         attributionText: "Required redistribution notice",
       },
     ]);

@@ -1,4 +1,5 @@
 import type { IntegrationContext, RealtimeProvider } from "@openmapx/integration-framework";
+import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@motis-project/motis-client", () => ({
@@ -23,7 +24,7 @@ function createCtx(config: Record<string, unknown> = { endpoint: "http://motis:8
           sourceId: "transitous",
           name: "Transitous",
           url: "https://api.transitous.org/",
-          license: "Mixed",
+          licensing: licensingFromDeclaration("Mixed", undefined, "Transitous"),
           providerCountry: "DE",
           providerPrivacyUrl: "https://transitous.org/privacy/",
         },
@@ -31,7 +32,12 @@ function createCtx(config: Record<string, unknown> = { endpoint: "http://motis:8
           sourceId: "motis-rt",
           name: "MOTIS GTFS-RT Pass-through",
           url: "https://motis-project.de/",
-          license: "MIT",
+          licensing: {
+            version: 1,
+            bindings: [
+              { scope: "data", subject: "Data", license: { kind: "spdx", expression: "MIT" } },
+            ],
+          } as const,
           providerCountry: "DE",
           providerPrivacyUrl: "https://motis-project.de/",
         },

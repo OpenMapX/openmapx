@@ -52,7 +52,23 @@ describe("notable-places suggestion provider", () => {
     ]);
     expect(result.suggestions[0]?.contributors).toEqual(result.attributions);
     expect(result.attributions).toEqual([
-      expect.objectContaining({ sourceId: "wikidata", spdxLicense: "CC0-1.0" }),
+      expect.objectContaining({
+        sourceId: "wikidata",
+        licensing: {
+          version: 1,
+          bindings: [
+            {
+              scope: "data",
+              subject: "Data",
+              license: {
+                kind: "spdx",
+                expression: "CC0-1.0",
+                url: "https://www.wikidata.org/wiki/Wikidata:Licensing",
+              },
+            },
+          ],
+        } as const,
+      }),
     ]);
   });
 

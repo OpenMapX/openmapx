@@ -44,8 +44,9 @@ describe("navigation audio contract", () => {
     const native = fakeNative();
     const audio = createNavigationAudio(native);
     await audio.speak({
+      sourceId: "Turn left",
       cueId: "c",
-      text: "Turn left",
+      name: "Turn left",
       locale: "en",
       url: "https://evil.example",
     } as never);

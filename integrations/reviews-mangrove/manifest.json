@@ -34,8 +34,6 @@
       "sourceId": "mangrove",
       "name": "Mangrove.reviews",
       "url": "https://mangrove.reviews/",
-      "license": "CC-BY-4.0",
-      "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
       "commercialUse": "yes",
       "providerCountry": "CH",
       "providerPrivacyUrl": "https://mangrove.reviews/terms",
@@ -43,7 +41,27 @@
       "personalData": false,
       "cookies": false,
       "dpaAvailable": false,
-      "capabilities": ["read", "aggregate", "write", "image-upload"]
+      "capabilities": ["read", "aggregate", "write", "image-upload"],
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "data",
+            "subject": "Mangrove.reviews material",
+            "license": {
+              "kind": "spdx",
+              "expression": "CC-BY-4.0",
+              "url": "https://creativecommons.org/licenses/by/4.0/"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "CC-BY-4.0",
+            "url": "https://creativecommons.org/licenses/by/4.0/"
+          }
+        ]
+      }
     }
   ]
 }

@@ -1,3 +1,5 @@
+import type { Licensing } from "../licensing.js";
+
 /**
  * Attribution metadata for a single data source that contributed to a result.
  * Designed as the canonical attribution shape across transit, shared-mobility,
@@ -11,10 +13,8 @@ export interface Attribution {
   name: string;
   /** Canonical homepage / data portal. */
   url?: string;
-  /** SPDX identifier where known. */
-  spdxLicense?: string;
-  /** Stable link to the license text. */
-  licenseUrl?: string;
+  /** Captured licence bindings for the actual data, imagery, style or service. */
+  licensing?: Licensing;
   /** Verbatim attribution text required by some licenses (render unmodified). */
   attributionText?: string;
   /** Upstream publisher. */
@@ -25,20 +25,19 @@ export interface Attribution {
   notes?: string;
 }
 
-export interface DataSourceAttribution {
-  /** Canonical identity when supplied by newer adapters; absent in legacy data. */
-  sourceId?: string;
-  text: string;
-  url: string;
-  license?: string;
-  licenseUrl?: string;
-}
-
 /** Standard receipt for a proven OpenStreetMap dataset, independent of transport host. */
-export const OPENSTREETMAP_ATTRIBUTION: Readonly<Attribution> = Object.freeze({
+export const OPENSTREETMAP_ATTRIBUTION: Readonly<Attribution> = Object.freeze<Attribution>({
   sourceId: "openstreetmap",
   name: "© OpenStreetMap contributors",
   url: "https://www.openstreetmap.org/copyright",
-  spdxLicense: "ODbL-1.0",
-  licenseUrl: "https://opendatacommons.org/licenses/odbl/",
+  licensing: {
+    version: 1,
+    bindings: [
+      {
+        scope: "data",
+        subject: "OpenStreetMap",
+        license: { kind: "spdx", expression: "ODbL-1.0" },
+      },
+    ],
+  },
 });

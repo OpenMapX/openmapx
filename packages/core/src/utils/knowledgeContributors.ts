@@ -4,7 +4,7 @@ import {
   contributorsForField,
   contributorsForFields,
   contributorsForRecords,
-  parseContributors,
+  readCapturedContributors,
   snapshotContributors,
 } from "@openmapx/mobility-core/contributors";
 import type { KnowledgeResult } from "../domains/knowledge";
@@ -125,7 +125,7 @@ export function captureKnowledgeResult(
   const facts = result.facts?.map((fact) => ({
     ...fact,
     contributors: snapshotContributors(
-      parseContributors(fact.contributors) ??
+      readCapturedContributors(fact.contributors) ??
         (result.fieldContributors !== undefined || result.contributors !== undefined
           ? contributorsForField(result, "facts")
           : uniform),

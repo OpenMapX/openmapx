@@ -1,5 +1,6 @@
 import type { Route } from "@openmapx/core";
 import { useNavigationStore, useSettingsStore } from "@openmapx/core";
+import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -501,7 +502,7 @@ const PHOTO_IMAGE = {
   fovDeg: 70,
   assets: { sd: "https://panoramax.example/sd.jpg" },
   author: "motocultrice",
-  license: "CC BY-SA 4.0",
+  licensing: licensingFromDeclaration("CC BY-SA 4.0", undefined),
 };
 
 describe("useNavJunctions photo window", () => {

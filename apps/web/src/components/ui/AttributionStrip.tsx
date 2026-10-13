@@ -4,9 +4,10 @@ import Box from "@mui/material/Box";
 import Link from "@mui/material/Link";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
-import { safeHref, sanitizeAttributionHtml } from "@openmapx/core";
+import { buildRuntimeAttributionHtml, safeHref } from "@openmapx/core";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import { contributorKey } from "@openmapx/mobility-core/contributors";
+import { DISPLAY_LICENSE_SCOPES, formatLicensing } from "@openmapx/mobility-core/licensing";
 import { useTranslations } from "next-intl";
 import { type JSX, useState } from "react";
 
@@ -56,7 +57,9 @@ function chipHref(attr: Attribution): { href: string; external: boolean } {
 const MAX_CHIP_LICENSE_LENGTH = 24;
 
 function license(attr: Attribution): string | undefined {
-  return attr.spdxLicense?.trim() || undefined;
+  return attr.licensing
+    ? formatLicensing(attr.licensing, { scopes: DISPLAY_LICENSE_SCOPES }) || undefined
+    : undefined;
 }
 
 function chipLicense(attr: Attribution): string | undefined {
@@ -160,26 +163,13 @@ export function AttributionStrip({
       {visibleItems.map((attr, idx) => {
         const labelText = displayLabel(attr);
         const link = chipHref(attr);
-        const credit = attr.attributionText ? (
+        const tooltip = (
           <Box
             component="span"
             sx={{ "& a": { color: "inherit" } }}
-            // biome-ignore lint/security/noDangerouslySetInnerHtml: the shared allowlist sanitizer keeps only safe attribution links and text
-            dangerouslySetInnerHTML={{ __html: sanitizeAttributionHtml(attr.attributionText) }}
+            // biome-ignore lint/security/noDangerouslySetInnerHtml: shared attribution sanitizer escapes captured metadata
+            dangerouslySetInnerHTML={{ __html: buildRuntimeAttributionHtml(attr) }}
           />
-        ) : (
-          (attr.publisher?.name ?? attr.url ?? attr.name)
-        );
-        const tooltipLicense = chipLicense(attr) ? undefined : license(attr);
-        const tooltip = tooltipLicense ? (
-          <>
-            {credit}
-            <Box component="span" sx={{ display: "block", mt: 0.5 }}>
-              {tooltipLicense}
-            </Box>
-          </>
-        ) : (
-          credit
         );
         // Every box from the strip down to the chip is capped at the strip's
         // width, so a chip too long for the panel ends in an ellipsis instead
