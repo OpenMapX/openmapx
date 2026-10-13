@@ -158,6 +158,17 @@ function addressEvidenceOf(f: MaptilerFeature, reverse = false): AddressEvidence
   };
 }
 
+/** A geographic country hint selects the template without changing raw tag evidence. */
+function formatOwnAddress(f: MaptilerFeature, evidence: AddressEvidence): string {
+  return formatAddress({
+    ...evidence.components,
+    country_code:
+      evidence.components.country_code ??
+      f.properties?.country_code ??
+      f.context?.find((context) => context.id.startsWith("country."))?.country_code,
+  });
+}
+
 /** OSM `importance=*`: how far a place's significance reaches. */
 const IMPORTANCE_TAG_FAME: Record<string, number> = {
   international: 0.85,
@@ -280,7 +291,7 @@ export const maptilerGeocodingService: GeocodingProviderImpl = {
         ...identityOf(f),
         addressEvidence,
         ...(addressEvidence.method === "osm-tags"
-          ? { address: formatAddress(addressEvidence.components) }
+          ? { address: formatOwnAddress(f, addressEvidence) }
           : {}),
         label: f.place_name,
         name: f.text,
@@ -336,7 +347,7 @@ export const maptilerGeocodingService: GeocodingProviderImpl = {
         ...identityOf(f),
         addressEvidence,
         ...(addressEvidence.method === "osm-tags"
-          ? { address: formatAddress(addressEvidence.components) }
+          ? { address: formatOwnAddress(f, addressEvidence) }
           : {}),
         label: f.text,
         sublabel: f.place_name,

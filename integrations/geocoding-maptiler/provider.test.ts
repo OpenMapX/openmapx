@@ -20,6 +20,30 @@ afterEach(() => {
 });
 
 describe("MapTiler geocoding provider", () => {
+  it("uses the feature's country hint to format explicit tags without changing their evidence", async () => {
+    mockFetch.mockResolvedValueOnce(
+      mockOk({
+        features: [
+          {
+            id: "poi.123",
+            text: "Shop",
+            place_name: "Shop, 1 Main St, USA",
+            place_type: ["poi"],
+            relevance: 1,
+            geometry: { coordinates: [-122, 37] },
+            properties: {
+              ref: "osm:w1",
+              country_code: "US",
+              feature_tags: { "addr:street": "Main St", "addr:housenumber": "1" },
+            },
+          },
+        ],
+      }),
+    );
+    const [result] = await maptilerGeocodingService.autocomplete("Shop");
+    expect(result.address).toContain("1 Main St");
+    expect(result.addressEvidence?.components).toEqual({ road: "Main St", house_number: "1" });
+  });
   it("maps geocode features with maptiler: ids, place-type and rawCategory", async () => {
     mockFetch.mockResolvedValueOnce(
       mockOk({
