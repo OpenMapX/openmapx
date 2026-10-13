@@ -439,3 +439,40 @@ file.
 - **[Configuration](./configuration.md)** — `.env`, secrets, and the admin
   panel.
 - **[Upgrading](./upgrading.md)** — pulling new images and re-rendering safely.
+
+## PostgreSQL workload diagnostics
+
+API and data-manager connections carry the bounded static application names
+`openmapx-api` and `openmapx-data-manager`. Inspect them in `pg_stat_activity`
+without exposing connection URLs. Application names label clients;
+`pg_stat_statements` aggregates statements by database, user and query identity,
+not by application name. Attribute jobs with isolated replay windows or spans.
+
+`POSTGIS_DIAGNOSTICS=false` and `POSTGIS_TRACK_IO_TIMING=false` are independent
+container defaults. With both disabled the wrapper adds no diagnostic arguments.
+On an initialized database, diagnostics opt-in resolves the effective
+`shared_preload_libraries` with PostgreSQL's own configuration reader, preserves
+its entries and adds `pg_stat_statements` once. Unresolvable or unusual quoted
+preload syntax fails closed with a bounded message. Initialize the database with
+diagnostics disabled first. Planning tracking stays off; I/O timing requires its
+own opt-in and a separate overhead measurement.
+
+Production activation remains deferred. Before enabling either flag, verify a
+backup and restore, accept the wrapper's graceful shutdown and the ops-agent stop
+deadlines together, rehearse on disposable staging, and approve a restart window.
+Set the chosen flags through the usual service configuration authority, render
+and recreate the service in that window. A restart alone does not apply changed
+container environment. A database operator then installs the extension with
+`CREATE EXTENSION IF NOT EXISTS pg_stat_statements`. Verify the settings,
+extension availability, health and an actual query before returning traffic.
+
+Collect existing counters without resetting production statistics. Use
+`pg_stat_statements(false)` and select only counters and identifiers; do not expose
+query text or grant public statistics access. Measure I/O timing overhead against
+the same disposable workload before enabling it. Rollback restores the previous
+flag values through the same authority and uses another scheduled safe restart;
+it preserves prior preload entries and saved evidence. No automatic activation,
+production statistics reset or shutdown acceptance is implied by these options.
+
+The [disposable replay protocol](../developer/self-hosting-replay.md) describes
+source-level comparisons and their acceptance limits.
