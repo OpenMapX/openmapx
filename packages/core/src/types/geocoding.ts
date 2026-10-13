@@ -1,5 +1,6 @@
 import type { ContributingRecord, FieldContributors } from "@openmapx/mobility-core/contributors";
 import type { TransitStop } from "@openmapx/mobility-core/transit";
+import type { AddressEvidence, DirectOsmReference } from "./address";
 import type { BrandPresence, BrandSummary } from "./brand";
 import type { LngLat } from "./geometry";
 import type { Ids } from "./identified";
@@ -7,6 +8,11 @@ import type { SearchIntent } from "./search";
 import type { SearchSuggestionMatch } from "./searchSuggestion";
 
 export interface SearchResult extends ContributingRecord {
+  /** Address matching addressEvidence, separate from the search display label. */
+  address?: string;
+  ids?: Ids;
+  addressEvidence?: AddressEvidence;
+  directOsmReference?: DirectOsmReference;
   fieldContributors?: FieldContributors;
   id: string;
   label: string;
@@ -37,6 +43,7 @@ export interface SearchResult extends ContributingRecord {
 }
 
 export interface ReverseGeocodingResult extends ContributingRecord {
+  addressEvidence?: AddressEvidence;
   sourceIds?: string[];
   address: string;
   city: string;
@@ -45,6 +52,10 @@ export interface ReverseGeocodingResult extends ContributingRecord {
 }
 
 export interface AutocompleteResult extends ContributingRecord {
+  /** Address matching addressEvidence, separate from the search display label. */
+  address?: string;
+  addressEvidence?: AddressEvidence;
+  directOsmReference?: DirectOsmReference;
   fieldContributors?: FieldContributors;
   id: string;
   label: string;

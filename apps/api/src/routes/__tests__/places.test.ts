@@ -1022,6 +1022,41 @@ describe("GET /places/:id", () => {
     ]);
   });
 
+  it("serializes evidence for the address winner through knowledge enrichment", async () => {
+    const own = {
+      source: "overpass",
+      method: "osm-tags",
+      recordId: "osm:node/12345",
+      components: { road: "Main St", house_number: "1" },
+    };
+    const other = {
+      source: "overture",
+      method: "provider-address",
+      recordId: "overture:1",
+      components: { full: "Other St 2" },
+    };
+    mockGetPlaceKnowledge.mockResolvedValue({
+      address: "Other St 2",
+      addressEvidence: other,
+      contributors: [{ sourceId: "overture", name: "Overture" }],
+    });
+    mockLookupByOsmRef.mockResolvedValue({
+      ...MOCK_PLACE,
+      address: "Main St 1",
+      addressEvidence: own,
+    });
+    const first = await app.inject({ method: "GET", url: "/places/osm%3Anode%2F12345" });
+    expect(first.json().address).toBe("Main St 1");
+    expect(first.json().addressEvidence).toEqual(own);
+    mockLookupByOsmRef.mockResolvedValue({ ...MOCK_PLACE, address: "", addressEvidence: own });
+    const second = await app.inject({ method: "GET", url: "/places/osm%3Anode%2F12345" });
+    expect(second.json().address).toBe("Other St 2");
+    expect(second.json().addressEvidence).toEqual(other);
+    expect(second.json().fieldContributors.addressEvidence).toEqual([
+      { sourceId: "overture", name: "Overture" },
+    ]);
+  });
+
   it("folds safe OSM Tripadvisor contact tags into external ids", async () => {
     mockLookupByOsmRef.mockResolvedValue({
       ...MOCK_PLACE,

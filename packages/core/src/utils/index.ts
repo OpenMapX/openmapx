@@ -1,4 +1,5 @@
 export { dataSourceToAttribution } from "@openmapx/mobility-core/contributors";
+export { addressComponentsFromOsmTags, sanitizeAddressComponents } from "./addressEvidence";
 export { isCityOrSmaller } from "./administrativePlace";
 export {
   buildAttributionHtml,

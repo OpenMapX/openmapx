@@ -1,3 +1,4 @@
+import { formatAddress } from "@openmapx/integration-geocoding/format-address";
 import type {
   GeocodingBias,
   GeocodingProvider as GeocodingProviderImpl,
@@ -9,12 +10,19 @@ import type {
  */
 
 import type {
+  AddressEvidence,
   AutocompleteResult,
   LngLat,
+  PlaceAddressComponents,
   ReverseGeocodingResult,
   SearchResult,
 } from "@openmapx/core";
-import { fetchJson, resolvePoiIconPath } from "@openmapx/core";
+import {
+  addressComponentsFromOsmTags,
+  fetchJson,
+  resolvePoiIconPath,
+  sanitizeAddressComponents,
+} from "@openmapx/core";
 
 const BASE_URL = "https://api.maptiler.com/geocoding";
 
@@ -55,8 +63,10 @@ interface MaptilerFeature {
   relevance: number;
   geometry: { coordinates: [number, number] };
   address?: string;
-  context?: Array<{ id: string; text: string; place_designation?: string }>;
+  context?: Array<{ id: string; text: string; place_designation?: string; country_code?: string }>;
   properties?: {
+    ref?: unknown;
+    country_code?: string;
     categories?: string[];
     /** Settlement rank of an area ("city", "town", "hamlet"), when MapTiler knows it. */
     place_designation?: string;
@@ -64,6 +74,87 @@ interface MaptilerFeature {
     wikidata?: string;
     /** A selection of the place's OSM tags. */
     feature_tags?: Record<string, unknown>;
+  };
+}
+
+/** Only a root feature reference identifies this result; context refers to its hierarchy. */
+function osmReferenceOf(f: MaptilerFeature): string | undefined {
+  const ref = f.properties?.ref;
+  if (typeof ref !== "string") return undefined;
+  const match = /^osm:([nwr])([1-9]\d*)$/.exec(ref);
+  if (!match || match[0] !== ref) return undefined;
+  const type = { n: "node", w: "way", r: "relation" }[match[1]];
+  return `${type}/${match[2]}`;
+}
+
+function identityOf(f: MaptilerFeature) {
+  const osm = osmReferenceOf(f);
+  const wikidata = f.properties?.wikidata;
+  const ids = {
+    ...(osm ? { osm } : {}),
+    ...(wikidata && /^Q\d+$/.test(wikidata) ? { wikidata } : {}),
+  };
+  return {
+    ...(Object.keys(ids).length ? { ids } : {}),
+    ...(osm
+      ? {
+          directOsmReference: {
+            source: "geocoding-maptiler" as const,
+            recordId: `maptiler:${f.id}`,
+            osmRef: osm,
+          },
+        }
+      : {}),
+  };
+}
+
+function addressEvidenceOf(f: MaptilerFeature, reverse = false): AddressEvidence {
+  const own = addressComponentsFromOsmTags(f.properties?.feature_tags ?? {});
+  const osm = osmReferenceOf(f);
+  if (!reverse && osm && (own.road || own.place || own.house || own.full)) {
+    return {
+      components: own,
+      source: "geocoding-maptiler",
+      method: "osm-tags",
+      recordId: `osm:${osm}`,
+    };
+  }
+  const context: PlaceAddressComponents = {};
+  for (const c of f.context ?? []) {
+    const type = c.id.split(".")[0];
+    const key = {
+      municipality: "municipality",
+      region: "state",
+      state: "state",
+      county: "county",
+      country: "country",
+      postal_code: "postcode",
+    }[type] as keyof PlaceAddressComponents | undefined;
+    if (key) context[key] ??= c.text;
+    if (
+      ["place", "locality", "county"].includes(type) &&
+      ["city", "town", "village"].includes(c.place_designation ?? "")
+    ) {
+      context[c.place_designation as "city" | "town" | "village"] ??= c.text;
+    }
+    if (type === "country" && c.country_code) context.country_code ??= c.country_code;
+  }
+  const components = {
+    ...sanitizeAddressComponents({
+      ...context,
+      country_code: f.properties?.country_code ?? context.country_code,
+    }),
+    ...own,
+  };
+  return {
+    components,
+    source: "geocoding-maptiler",
+    method: reverse
+      ? "reverse"
+      : Object.keys(components).length
+        ? "provider-address"
+        : "provider-label",
+    recordId: `maptiler:${f.id}`,
   };
 }
 
@@ -183,8 +274,14 @@ export const maptilerGeocodingService: GeocodingProviderImpl = {
     const data = await fetchMaptiler(query, params, lang);
     return data.features.map((f) => {
       const localities = localitiesOf(f);
+      const addressEvidence = addressEvidenceOf(f);
       return {
         id: `maptiler:${f.id}`,
+        ...identityOf(f),
+        addressEvidence,
+        ...(addressEvidence.method === "osm-tags"
+          ? { address: formatAddress(addressEvidence.components) }
+          : {}),
         label: f.place_name,
         name: f.text,
         ...(f.matching_text ? { aliases: [f.matching_text] } : {}),
@@ -211,7 +308,11 @@ export const maptilerGeocodingService: GeocodingProviderImpl = {
       ctx.find((c) => c.id.startsWith("municipality") || c.id.startsWith("place"))?.text ?? "";
     const region =
       ctx.find((c) => c.id.startsWith("region") || c.id.startsWith("state"))?.text ?? "";
-    return { address: feature.place_name, city: [cityName, region].filter(Boolean).join(", ") };
+    return {
+      address: feature.place_name,
+      city: [cityName, region].filter(Boolean).join(", "),
+      addressEvidence: addressEvidenceOf(feature, true),
+    };
   },
 
   async autocomplete(
@@ -228,18 +329,21 @@ export const maptilerGeocodingService: GeocodingProviderImpl = {
     const data = await fetchMaptiler(query, params, lang);
     return data.features.map((f) => {
       const category = f.properties?.categories?.[0];
-      const wikidata = f.properties?.wikidata;
       const fame = fameOf(f);
+      const addressEvidence = addressEvidenceOf(f);
       return {
         id: `maptiler:${f.id}`,
+        ...identityOf(f),
+        addressEvidence,
+        ...(addressEvidence.method === "osm-tags"
+          ? { address: formatAddress(addressEvidence.components) }
+          : {}),
         label: f.text,
         sublabel: f.place_name,
         coordinates: f.geometry.coordinates,
         type: mapType(f.place_type),
         iconPath: category ? resolvePoiIconPath(category) : undefined,
         rawCategory: rawCategoryOf(f),
-        // The Wikidata item joins this row to the notable-places row for the same place.
-        ...(wikidata && /^Q\d+$/.test(wikidata) ? { ids: { wikidata } } : {}),
         ...(fame !== undefined ? { fame } : {}),
       };
     });

@@ -177,6 +177,8 @@ function searchSelectionContributors(
     Object.entries({
       name: nameField,
       address: addressField,
+      addressEvidence: "addressEvidence",
+      directOsmReference: "directOsmReference",
       coordinates: "coordinates",
       category: "type",
       rawCategory: "rawCategory",
@@ -1067,9 +1069,12 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
         if (first.type !== "region") flyTo(first.coordinates, 15);
         const firstPlace = createPlace({
           ...idsFromPrimaryOrCoords(first.id, first.coordinates),
-          ...searchSelectionContributors(first),
+          ids: { ...first.ids, ...idsFromPrimaryOrCoords(first.id, first.coordinates).ids },
+          ...searchSelectionContributors(first, "label", first.address ? "address" : "label"),
           name: address ?? first.label,
-          address: first.label,
+          address: first.address ?? first.label,
+          addressEvidence: first.addressEvidence,
+          directOsmReference: first.directOsmReference,
           coordinates: first.coordinates,
           category: first.type,
           rawCategory: first.rawCategory,
@@ -1190,9 +1195,15 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
       const suggestionPlace = createPlace({
         ...idsFromPrimaryOrCoords(result.id, coords),
         ids: { ...result.ids, ...idsFromPrimaryOrCoords(result.id, coords).ids },
-        ...searchSelectionContributors(result, "label", result.sublabel ? "sublabel" : "label"),
+        ...searchSelectionContributors(
+          result,
+          "label",
+          result.address ? "address" : result.sublabel ? "sublabel" : "label",
+        ),
         name: result.label,
-        address: result.sublabel ?? result.label,
+        address: result.address ?? result.sublabel ?? result.label,
+        addressEvidence: result.addressEvidence,
+        directOsmReference: result.directOsmReference,
         coordinates: coords,
         category: result.type,
         rawCategory: result.rawCategory,

@@ -40,6 +40,10 @@ export function mergeKnowledgeResults(results: readonly KnowledgeResult[]): Know
       if (!value || (Array.isArray(value) && value.length === 0) || merged[field]) continue;
       Object.assign(merged, { [field]: value });
       Object.assign(fields, captureFieldContributors(result, field));
+      if (field === "address" && result.addressEvidence) {
+        merged.addressEvidence = result.addressEvidence;
+        Object.assign(fields, captureFieldContributors(result, "addressEvidence"));
+      }
       if (field === "wikipediaExtract")
         merged.wikipediaExtractSource = result.wikipediaExtractSource;
     }
@@ -105,6 +109,14 @@ export function captureKnowledgeResult(
           ? captureFieldContributors(result, field)
           : { [field]: receipt(field) },
       );
+      if (field === "address" && result.addressEvidence) {
+        Object.assign(
+          fields,
+          result.fieldContributors !== undefined || result.contributors !== undefined
+            ? captureFieldContributors(result, "addressEvidence")
+            : { addressEvidence: receipt("addressEvidence") },
+        );
+      }
     }
   }
   for (const key of Object.keys(result.externalIds ?? {})) {

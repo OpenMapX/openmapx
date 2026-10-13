@@ -1,8 +1,37 @@
 import { describe, expect, it } from "vitest";
+import type { AddressEvidence } from "../../types/address";
 import { captureKnowledgeResult, mergeKnowledgeResults } from "../knowledgeContributors";
 
 const a = { sourceId: "a", name: "First", attributionText: "Original notice" };
 const b = { sourceId: "b", name: "Second" };
+const addressEvidence: AddressEvidence = {
+  source: "a",
+  method: "provider-address",
+  components: { full: "Main St 1" },
+};
+
+it("carries address evidence atomically through capture and merge", () => {
+  const captured = captureKnowledgeResult({ address: "Main St 1", addressEvidence }, [a]);
+  expect(captured.addressEvidence).toEqual(addressEvidence);
+  expect(captured.fieldContributors?.addressEvidence).toEqual([a]);
+  const result = mergeKnowledgeResults([
+    captured,
+    {
+      address: "Other St 2",
+      addressEvidence: { ...addressEvidence, source: "b", components: { full: "Other St 2" } },
+      contributors: [b],
+    },
+  ]);
+  expect(result.address).toBe("Main St 1");
+  expect(result.addressEvidence).toEqual(addressEvidence);
+  expect(result.fieldContributors?.addressEvidence).toEqual([a]);
+  const legacy = mergeKnowledgeResults([
+    { address: "Main St 1", contributors: [a] },
+    { address: "Other St 2", addressEvidence, contributors: [b] },
+  ]);
+  expect(legacy.addressEvidence).toBeUndefined();
+  expect(legacy.fieldContributors?.addressEvidence).toBeUndefined();
+});
 
 describe("knowledge field ownership", () => {
   it("keeps winning fields and added identifiers while excluding discarded source fields", () => {

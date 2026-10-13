@@ -659,6 +659,7 @@ async function enrichPlace(place: Place, lang: string | undefined): Promise<Plac
     website: knowledgeWebsite,
     socials: knowledgeSocials,
     address: knowledgeAddress,
+    addressEvidence: knowledgeAddressEvidence,
     city: knowledgeCity,
     countryCode: knowledgeCountryCode,
     provenance: knowledgeProvenance,
@@ -683,6 +684,15 @@ async function enrichPlace(place: Place, lang: string | undefined): Promise<Plac
     website: pickMoreSpecificWebsite(enriched.website, knowledgeWebsite),
     socials: enriched.socials ?? knowledgeSocials,
     address: enriched.address || knowledgeAddress || "",
+    addressEvidence: enriched.address
+      ? enriched.addressEvidence
+      : knowledgeAddress
+        ? (knowledgeAddressEvidence ?? {
+            source: contributorsForField(knowledgeResult, "address")[0]?.sourceId ?? "knowledge",
+            method: "provider-label",
+            components: {},
+          })
+        : undefined,
     city: enriched.city ?? knowledgeCity,
     countryCode: enriched.countryCode ?? knowledgeCountryCode,
     provenance: mergePlaceProvenance(enriched.provenance, knowledgeProvenance),
@@ -723,6 +733,7 @@ function captureEnrichedPlaceContributors(
     "website",
     "socials",
     "address",
+    "addressEvidence",
     "city",
     "countryCode",
   ]);
@@ -738,6 +749,7 @@ function captureEnrichedPlaceContributors(
       | "website"
       | "socials"
       | "address"
+      | "addressEvidence"
       | "city"
       | "countryCode";
     if (!result[key]) continue;
@@ -745,10 +757,22 @@ function captureEnrichedPlaceContributors(
       key === "website"
         ? pickMoreSpecificWebsite(base.website, knowledge.website) === base.website &&
           base.website !== undefined
-        : key === "address"
+        : key === "address" || key === "addressEvidence"
           ? Boolean(base.address)
           : base[key] !== undefined && base[key] !== null;
-    Object.assign(fields, captureFieldContributors(baseWins ? base : knowledge, key));
+    if (key === "addressEvidence") {
+      for (const existing of Object.keys(fields)) {
+        if (existing === key || existing.startsWith(`${key}.`)) delete fields[existing];
+      }
+    }
+    Object.assign(
+      fields,
+      captureFieldContributors(
+        baseWins ? base : knowledge,
+        key === "addressEvidence" ? "address" : key,
+        key,
+      ),
+    );
   }
   for (const [scheme, value] of Object.entries(result.ids)) {
     const key = `ids.${scheme}`;

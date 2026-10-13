@@ -2851,3 +2851,40 @@ it("keeps captured source fields when an autocomplete row becomes a selected pla
   name.name = "Changed catalogue";
   expect(selected?.fieldContributors?.name?.[0].name).toBe("Name supplier");
 });
+
+it("retains direct object and address evidence when a MapTiler row is selected", async () => {
+  const evidence = {
+    source: "overpass",
+    method: "osm-tags",
+    recordId: "osm:way/1",
+    components: { road: "Grunerstraße", house_number: "20" },
+  };
+  const reference = { source: "geocoding-maptiler", recordId: "maptiler:poi.1", osmRef: "way/1" };
+  useAutocompleteMock.mockReturnValue({
+    data: [
+      {
+        id: "maptiler:poi.1",
+        label: "Cafe Aurora",
+        sublabel: "Cafe Aurora, Alexanderstraße 25",
+        address: "Grunerstraße 20",
+        addressEvidence: evidence,
+        directOsmReference: reference,
+        ids: { osm: "way/1", wikidata: "Q1" },
+        type: "poi",
+        coordinates: [8, 50],
+      },
+    ],
+    isFetching: false,
+  });
+  renderBar();
+  const input = screen.getByLabelText("search.ariaLabel");
+  fireEvent.focus(input);
+  fireEvent.change(input, { target: { value: "Cafe Aurora" } });
+  fireEvent.click(await screen.findByRole("option", { name: /Cafe Aurora/ }));
+  const selected = usePlaceStore.getState().selectedPlace;
+  expect(selected?.id).toBe("maptiler:poi.1");
+  expect(selected?.ids).toEqual({ maptiler: "poi.1", osm: "way/1", wikidata: "Q1" });
+  expect(selected?.address).toBe("Grunerstraße 20");
+  expect(selected?.addressEvidence).toEqual(evidence);
+  expect(selected?.directOsmReference).toEqual(reference);
+});

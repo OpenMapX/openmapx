@@ -43,6 +43,26 @@ it("titles a detail its sources name nothing by its translated fallback name", (
   usePlaceStore.getState().setSelectedPlace(null);
 });
 
+it("preserves provider address components and distinguishes locality-only details", () => {
+  response.detail = {
+    ...response.detail,
+    address: { line1: "Rose Cottage", town: "Town", country: "GB" },
+  };
+  const view = render(<DataSourceDetailBridge />);
+  expect(usePlaceStore.getState().selectedPlace?.addressEvidence).toEqual({
+    source: "parking",
+    method: "provider-address",
+    recordId: "parking:P",
+    components: { full: "Rose Cottage", city: "Town", country: "GB" },
+  });
+  response.detail = { ...response.detail, address: { town: "Town" } };
+  view.rerender(<DataSourceDetailBridge />);
+  expect(usePlaceStore.getState().selectedPlace?.addressEvidence?.components.full).toBeUndefined();
+  view.unmount();
+  useDataSourceStore.getState().clearSelection();
+  usePlaceStore.getState().setSelectedPlace(null);
+});
+
 it("shows a site's own website, or else its operator's, as the place's website", () => {
   const websiteOf = (detail: Record<string, unknown>) => {
     usePlaceStore.getState().setSelectedPlace(null);
