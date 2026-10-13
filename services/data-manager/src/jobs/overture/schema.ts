@@ -115,8 +115,6 @@ export function buildSchemaDDL(schema: string, options: BuildOvertureSchemaOptio
       PRIMARY KEY (osm_type, osm_id)
     );
 
-    CREATE INDEX idx_link_gers ON "${schema}".poi_conflation_link (gers_id);
-
     CREATE TABLE "${schema}".poi_conflation_candidate (
       osm_type          TEXT NOT NULL,
       osm_id            BIGINT NOT NULL,
