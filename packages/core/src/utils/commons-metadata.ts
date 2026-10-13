@@ -1,6 +1,6 @@
 import { snapshotContributors } from "@openmapx/mobility-core/contributors";
 import type { PlacePhoto } from "../types/place";
-import { buildRuntimeAttributionHtml, decodeAttributionEntities } from "./attribution";
+import { buildRuntimeAttributionHtml, parseAttributionHtml } from "./attribution";
 import { fetchJson } from "./fetchJson";
 import { USER_AGENT } from "./userAgent";
 
@@ -326,35 +326,22 @@ export async function fetchCommonsMetadata(
   return result;
 }
 
-/** Strip HTML tags and Commons hidden author markers. */
+/** Author markers and their links are omitted together, including nested spans. */
+function parseCommonsHtml(html: string) {
+  return parseAttributionHtml(html, {
+    linkBaseUrl: "https://commons.wikimedia.org",
+    omitHiddenSpans: true,
+  });
+}
+
 function stripHtml(html: string): string {
-  return decodeAttributionEntities(
-    html
-      .replace(
-        /<span\b[^>]*\bstyle\s*=\s*(["'])[^"']*\bdisplay\s*:\s*none\s*(?:;[^"']*)?\1[^>]*>[\s\S]*?<\/span\s*>/gi,
-        "",
-      )
-      .replace(/<[^>]*>/g, ""),
-  ).trim();
+  return parseCommonsHtml(html).text;
 }
 
 function extractLinks(html: string): { label: string; url: string }[] {
-  return [...html.matchAll(/<a\b[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi)].flatMap(
-    (match) => {
-      const decoded = decodeAttributionEntities(match[1]);
-      try {
-        const url = new URL(decoded, "https://commons.wikimedia.org");
-        return /^(?:http|https):$/.test(url.protocol)
-          ? [{ label: stripHtml(match[2]), url: url.href }]
-          : [];
-      } catch {
-        return [];
-      }
-    },
-  );
+  return parseCommonsHtml(html).links;
 }
 
-/** Author and notice links share entity decoding and safe protocol validation. */
 function extractHref(html: string): string | undefined {
   return extractLinks(html)[0]?.url;
 }

@@ -1,3 +1,4 @@
+import { sanitizeAttributionHtml } from "@openmapx/core";
 import { beforeEach, expect, it, vi } from "vitest";
 import { useMapAttributionStore } from "@/integration-api/overlay/mapAttributionStore";
 import { createFakeMap, type FakeMap, render, screen } from "@/test";
@@ -45,6 +46,35 @@ import { WeatherWidget } from "./WeatherWidget";
 beforeEach(() => {
   fake = createFakeMap();
   useMapAttributionStore.setState({ byLayer: {} });
+  response = {
+    ...response,
+    contributors: [
+      {
+        sourceId: "actual",
+        name: "Captured actual supplier",
+        url: "https://actual.test",
+        attributionText: "Captured required notice",
+      },
+    ],
+  };
+});
+it("reconstructed contributor HTML produces only safe DOM tags and attributes", () => {
+  const element = document.createElement("div");
+  element.innerHTML = sanitizeAttributionHtml(
+    '<svg onload="bad()"><a href="java&#x73;cript:bad()">unsafe</a></svg><a href="https://actual.test/?name=&quot; onmouseover=&quot;bad()" onclick="bad()"><code>&lt;img src=x onerror=bad()&gt;</code></a>',
+  );
+  expect(element.querySelector("script, svg, img, [onclick], [onload], [onmouseover]")).toBeNull();
+  expect(element.querySelector("a")?.getAttribute("href")).toBe(
+    'https://actual.test/?name=" onmouseover="bad()',
+  );
+  expect(element.querySelector("a")?.getAttribute("rel")).toBe("noopener noreferrer");
+  expect(element.textContent).toBe("unsafe<img src=x onerror=bad()>");
+});
+it("widget tooltip shows the complete decoded notice with quoted greater-than attributes", () => {
+  response.contributors[0].attributionText =
+    '<a title="A > B" href="https://actual.test">A &amp; B &copy; data</a> (CC BY 4.0)';
+  render(<WeatherWidget />);
+  expect(screen.getByLabelText("A & B © data (CC BY 4.0)")).toBeVisible();
 });
 it("place weather credits captured receipts even when the live registry cannot identify the legacy source", () => {
   render(<PlaceWeather lat={51} lng={6} />);

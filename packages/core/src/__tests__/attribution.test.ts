@@ -106,6 +106,34 @@ describe("buildRuntimeAttributionHtml", () => {
 });
 
 describe("sanitizeAttributionHtml", () => {
+  it("retains incomplete markup as escaped text instead of losing a required notice", () => {
+    expect(sanitizeAttributionHtml('Notice <a href="https://example.org"')).toBe(
+      "Notice &lt;a href=&quot;https://example.org&quot;",
+    );
+    expect(sanitizeAttributionHtml('Notice <a title="A > B" href="https://example.org"')).toBe(
+      "Notice &lt;a title=&quot;A &gt; B&quot; href=&quot;https://example.org&quot;",
+    );
+  });
+
+  it("preserves a quoted greater-than in the URL without leaking attribute text", () => {
+    expect(
+      sanitizeAttributionHtml(
+        '<a href="https://example.org/?q=>&amp;owner=&quot;A&quot;" title="notice">A &copy; B</a>',
+      ),
+    ).toBe(
+      '<a href="https://example.org/?q=&gt;&amp;owner=&quot;A&quot;" target="_blank" rel="noopener noreferrer">A © B</a>',
+    );
+  });
+
+  it("cannot create executable markup from nested tags or entity-encoded protocol names", () => {
+    expect(
+      sanitizeAttributionHtml(
+        '<a href="java&#x73;cript:alert(1)"><code onclick="bad()">&lt;img src=x onerror=bad()&gt;</code></a>',
+      ),
+    ).toBe("<code>&lt;img src=x onerror=bad()&gt;</code>");
+    expect(sanitizeAttributionHtml("<scr<script>ipt>notice")).toBe("ipt&gt;notice");
+  });
+
   it("escapes special characters in plain text", () => {
     expect(sanitizeAttributionHtml("A & B's data")).toBe("A &amp; B&#39;s data");
   });

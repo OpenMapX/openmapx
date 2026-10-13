@@ -371,7 +371,7 @@ export async function resolveGooglePhotosLink(shareUrl: string): Promise<string[
     if (ogMatch) {
       let imgUrl = ogMatch[1].replace(/&amp;/g, "&");
       if (!isGooglePhotosImageUrl(imgUrl)) return [];
-      if (imgUrl.includes("googleusercontent.com") && !imgUrl.includes("=w")) {
+      if (!imgUrl.includes("=w")) {
         imgUrl += "=w1200";
       }
       return isGooglePhotosImageUrl(imgUrl) ? [imgUrl] : [];

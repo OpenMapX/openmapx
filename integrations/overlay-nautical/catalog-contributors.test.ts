@@ -23,7 +23,8 @@ it("keeps the real shared NOAA catalog receipt through normalization on a differ
     },
   };
   const fetcher = vi.fn(async (input: string | URL | Request) =>
-    String(input).includes("tidesandcurrents.noaa.gov")
+    new URL(input instanceof Request ? input.url : input).hostname ===
+    "api.tidesandcurrents.noaa.gov"
       ? new Response(
           JSON.stringify({
             stations: [{ id: "8443970", name: "Boston", lat: 42.35, lng: -71.05 }],
@@ -64,7 +65,11 @@ it("keeps the real shared NOAA catalog receipt through normalization on a differ
   try {
     expect(await request("-72")).toContain("ORIGINAL NOTICE");
     expect(
-      fetcher.mock.calls.filter(([url]) => String(url).includes("tidesandcurrents.noaa.gov")),
+      fetcher.mock.calls.filter(
+        ([url]) =>
+          new URL(url instanceof Request ? url.url : url).hostname ===
+          "api.tidesandcurrents.noaa.gov",
+      ),
     ).toHaveLength(3);
     metadata.attribution = "REPLACEMENT NOTICE";
     fetcher.mockClear();
@@ -72,7 +77,11 @@ it("keeps the real shared NOAA catalog receipt through normalization on a differ
     expect(second).toContain("ORIGINAL NOTICE");
     expect(second).not.toContain("REPLACEMENT NOTICE");
     expect(
-      fetcher.mock.calls.filter(([url]) => String(url).includes("tidesandcurrents.noaa.gov")),
+      fetcher.mock.calls.filter(
+        ([url]) =>
+          new URL(url instanceof Request ? url.url : url).hostname ===
+          "api.tidesandcurrents.noaa.gov",
+      ),
     ).toHaveLength(0);
   } finally {
     metadata.attribution = original;

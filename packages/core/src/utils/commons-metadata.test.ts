@@ -87,6 +87,51 @@ describe("isDisplayablePhoto for legacy Commons entries", () => {
 });
 
 describe("parseCommonsPage author attribution", () => {
+  it("ignores nested hidden author content and retains quote-aware visible links", () => {
+    const photo = parseCommonsPage({
+      title: "File:Visible.jpg",
+      imageinfo: [
+        {
+          url: "https://upload.wikimedia.org/wikipedia/commons/visible.jpg",
+          mime: "image/jpeg",
+          extmetadata: {
+            LicenseShortName: { value: "Public domain" },
+            Artist: {
+              value:
+                '<span style="display: none;"><span>Unknown</span><a href="https://hidden.example">Hidden</a></span><a title="A > B" href = "/wiki/User:Visible">Visible &copy; Co</a>',
+            },
+          },
+        },
+      ],
+    });
+    expect(photo?.author).toBe("Visible © Co");
+    expect(photo?.authorUrl).toBe("https://commons.wikimedia.org/wiki/User:Visible");
+    expect(photo?.attributionLinks).toEqual([]);
+  });
+
+  it("retains safe unquoted notice URLs but rejects entity-encoded executable links", () => {
+    const photo = parseCommonsPage({
+      title: "File:Notice.jpg",
+      imageinfo: [
+        {
+          url: "https://upload.wikimedia.org/wikipedia/commons/notice.jpg",
+          mime: "image/jpeg",
+          extmetadata: {
+            LicenseShortName: { value: "Public domain" },
+            Permission: {
+              value:
+                '<a href=//permission.example/record>Permission &copy; owner</a> <a href="java&#x73;cript:bad()">unsafe link</a>',
+            },
+          },
+        },
+      ],
+    });
+    expect(photo?.attributionText).toBe("Permission © owner unsafe link");
+    expect(photo?.attributionLinks).toEqual([
+      { label: "Permission © owner", url: "https://permission.example/record" },
+    ]);
+  });
+
   it("preserves visible artist spans and links", () => {
     const photo = parseCommonsPage({
       title: "File:Photo.jpg",

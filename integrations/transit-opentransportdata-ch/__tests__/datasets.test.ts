@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, rename, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { strToU8, zipSync } from "fflate";
@@ -9,11 +9,47 @@ const archiveBarrier = vi.hoisted(() => ({
   hold: false,
   reached: undefined as undefined | (() => void),
   release: undefined as undefined | Promise<void>,
+  replace: undefined as undefined | (() => Promise<void>),
+  closeError: false,
 }));
 vi.mock("node:fs/promises", async (load) => {
   const original = await load<typeof import("node:fs/promises")>();
   return {
     ...original,
+    stat: async (...args: Parameters<typeof original.stat>) => {
+      const stats = await original.stat(...args);
+      const replace = archiveBarrier.replace;
+      archiveBarrier.replace = undefined;
+      await replace?.();
+      return stats;
+    },
+    open: async (...args: Parameters<typeof original.open>) => {
+      const file = await original.open(...args);
+      const close = file.close.bind(file);
+      vi.spyOn(file, "close").mockImplementation(async () => {
+        await close();
+        if (archiveBarrier.closeError) throw new Error("File close failed");
+      });
+      const stat = file.stat.bind(file);
+      vi.spyOn(file, "stat").mockImplementation(async () => {
+        const stats = await stat();
+        const replace = archiveBarrier.replace;
+        archiveBarrier.replace = undefined;
+        await replace?.();
+        return stats;
+      });
+      const read = file.readFile.bind(file);
+      vi.spyOn(file, "readFile").mockImplementation(async () => {
+        const bytes = await read();
+        if (archiveBarrier.hold && String(args[0]).includes("swiss-occupancy")) {
+          archiveBarrier.hold = false;
+          archiveBarrier.reached?.();
+          await archiveBarrier.release;
+        }
+        return bytes;
+      });
+      return file;
+    },
     readFile: async (...args: Parameters<typeof original.readFile>) => {
       const bytes = await original.readFile(...args);
       if (archiveBarrier.hold && String(args[0]).includes("swiss-occupancy")) {
@@ -32,6 +68,8 @@ afterEach(async () => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
   archiveBarrier.hold = false;
+  archiveBarrier.replace = undefined;
+  archiveBarrier.closeError = false;
   await Promise.all(
     temporaryDirectories.splice(0).map((directory) => rm(directory, { recursive: true })),
   );
@@ -70,6 +108,37 @@ describe("Swiss occupancy forecast archive inputs", () => {
       '{"operatorRef":"123","trains":[]}',
     );
   });
+
+  it("extracts the inspected archive generation when its path is replaced during inspection", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "openmapx-swiss-occupancy-"));
+    temporaryDirectories.push(directory);
+    const zipPath = join(directory, "fixture.zip");
+    const replacementPath = join(directory, "replacement.zip");
+    const entryName = "2025-02-03/operator-123.json";
+    await writeFile(zipPath, zipSync({ [entryName]: strToU8("original archive") }));
+    await writeFile(replacementPath, zipSync({ [entryName]: strToU8("replacement archive") }));
+    archiveBarrier.replace = () => rename(replacementPath, zipPath);
+    await expect(extractZipEntryText(zipPath, entryName)).resolves.toBe("original archive");
+    await expect(extractZipEntryText(zipPath, entryName)).resolves.toBe("replacement archive");
+  });
+
+  it.each([false, true])(
+    "preserves archive extraction fallback despite a close failure (invalid archive: %s)",
+    async (invalid) => {
+      const directory = await mkdtemp(join(tmpdir(), "openmapx-swiss-occupancy-"));
+      temporaryDirectories.push(directory);
+      const zipPath = join(directory, "fixture.zip");
+      const entryName = "2025-02-03/operator-123.json";
+      await writeFile(
+        zipPath,
+        invalid ? "invalid archive" : zipSync({ [entryName]: strToU8("original archive") }),
+      );
+      archiveBarrier.closeError = true;
+      await expect(extractZipEntryText(zipPath, entryName)).resolves.toBe(
+        invalid ? null : "original archive",
+      );
+    },
+  );
 });
 
 it("keeps the acquired archive bytes and notice together through a concurrent refresh", async () => {

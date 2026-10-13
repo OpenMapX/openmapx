@@ -6,6 +6,17 @@ import {
 } from "../overtureSource";
 
 describe("Overture source provenance", () => {
+  it.each(["constructor", "Constructor", "con-structor"])(
+    "rejects inherited object members as contributor datasets: %s",
+    (dataset) => {
+      expect(() => overtureDatasetSourceId(dataset)).toThrow(/Unsupported Overture/);
+      expect(() => assertSupportedOvertureContributors(["Meta", dataset])).toThrow(
+        /unsupported contributor dataset/,
+      );
+      expect(() => normalizeOvertureProvenance([{ dataset }])).toThrow(/Unsupported Overture/);
+    },
+  );
+
   it("maps current dataset names to attribution ids", () => {
     expect(overtureDatasetSourceId("Foursquare")).toBe("foursquare");
     expect(overtureDatasetSourceId("meta")).toBe("meta-places");

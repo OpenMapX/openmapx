@@ -136,6 +136,8 @@ describe("resolveGooglePhotosLink trust boundaries", () => {
   });
   it.each([
     "https://evil.attacker.test/image.jpg",
+    "https://lh3.googleusercontent.com.evil.attacker.test/image.jpg",
+    "https://evil.attacker.test/image.jpg?next=lh3.googleusercontent.com",
     "http://lh3.googleusercontent.com/image.jpg",
     "https://lh2.googleusercontent.com/image.jpg",
     "javascript:alert(1)",

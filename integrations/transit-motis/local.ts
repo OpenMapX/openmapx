@@ -5,7 +5,7 @@ import {
 
 export { annotateLegsWithAttribution, extractFeedTags } from "./contributors.js";
 
-import { readFileSync, statSync } from "node:fs";
+import { closeSync, fstatSync, openSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { stops } from "@motis-project/motis-client";
 import { applyDeutschlandticketFilter } from "@openmapx/core";
@@ -55,19 +55,21 @@ let cachedCapabilitiesKey = "";
 
 /**
  * The data-manager promotes datasets from a separate process, so the snapshot
- * must be re-read after promotion; a stat-keyed cache keeps the per-call cost
- * to one stat while guaranteeing a fresh epoch as soon as the file changes.
+ * must be re-read after promotion. Inspect and read the same open file so an
+ * atomic path replacement cannot pair one generation's stat with another's data.
  */
 function activeMotisCapabilities(): ActiveMotisCapabilities | null {
   const configuredPath = process.env.MOTIS_CAPABILITY_SNAPSHOT_PATH;
   const dataDir = process.env.MOTIS_DATA_DIR;
   if (!configuredPath && !dataDir) return null;
   const path = configuredPath ?? join(dataDir as string, "mobility-capabilities.json");
+  let descriptor: number | undefined;
   try {
-    const stats = statSync(path);
-    const key = `${path}\u0000${stats.mtimeMs}\u0000${stats.size}`;
+    descriptor = openSync(path, "r");
+    const stats = fstatSync(descriptor);
+    const key = `${path}\u0000${stats.dev}\u0000${stats.ino}\u0000${stats.mtimeMs}\u0000${stats.ctimeMs}\u0000${stats.size}`;
     if (key === cachedCapabilitiesKey) return cachedCapabilities;
-    const parsed = JSON.parse(readFileSync(path, "utf8")) as ActiveMotisCapabilities & {
+    const parsed = JSON.parse(readFileSync(descriptor, "utf8")) as ActiveMotisCapabilities & {
       schemaVersion?: unknown;
     };
     cachedCapabilities =
@@ -78,6 +80,14 @@ function activeMotisCapabilities(): ActiveMotisCapabilities | null {
     cachedCapabilities = null;
     cachedCapabilitiesKey = "";
     return null;
+  } finally {
+    if (descriptor !== undefined) {
+      try {
+        closeSync(descriptor);
+      } catch {
+        // Preserve the best-effort snapshot lookup's result during cleanup.
+      }
+    }
   }
 }
 

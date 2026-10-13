@@ -7,6 +7,7 @@ export {
   buildSourceAttribution,
   combineAttributions,
   extractSourcePrefix,
+  parseAttributionHtml,
   pickIntegrationForSources,
   sanitizeAttributionHtml,
 } from "./attribution";

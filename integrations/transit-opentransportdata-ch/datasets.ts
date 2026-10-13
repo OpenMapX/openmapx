@@ -1,5 +1,5 @@
 import { createWriteStream } from "node:fs";
-import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
+import { mkdtemp, open, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pipeline } from "node:stream/promises";
@@ -350,10 +350,14 @@ export async function extractZipEntryText(
   zipPath: string,
   entryName: string,
 ): Promise<string | null> {
+  let archive: Awaited<ReturnType<typeof open>> | undefined;
   try {
-    const { size } = await stat(zipPath);
+    // Bind the size limit and bytes to one generation even if refresh removes
+    // or replaces the archive path while an existing reader is using it.
+    archive = await open(zipPath, "r");
+    const { size } = await archive.stat();
     if (size > MAX_OCCUPANCY_ZIP_BYTES) return null;
-    const files = unzipSync(new Uint8Array(await readFile(zipPath)), {
+    const files = unzipSync(new Uint8Array(await archive.readFile()), {
       filter: (file) => file.name === entryName && file.originalSize <= MAX_OCCUPANCY_ENTRY_BYTES,
     });
     const entry = files[entryName];
@@ -361,6 +365,9 @@ export async function extractZipEntryText(
     return strFromU8(entry).replace(/^\uFEFF/, "") || null;
   } catch {
     return null;
+  } finally {
+    // Archive lookup is best-effort; cleanup must not replace its result.
+    await archive?.close().catch(() => {});
   }
 }
 

@@ -241,7 +241,7 @@ it.each(["https://api.stadiamaps.com", "http://valhalla.internal:8002"])(
     resolve(mockOk(makeHeightResponse(sampleRangeHeight)));
     const result = await pending;
     expect(result?.contributors?.map((item) => item.sourceId)).toEqual(
-      baseUrl.includes("stadiamaps.com") ? ["stadia-maps"] : [],
+      new URL(baseUrl).hostname === "api.stadiamaps.com" ? ["stadia-maps"] : [],
     );
     expect(result?.contributorCoverage).toBe("partial");
     expect(

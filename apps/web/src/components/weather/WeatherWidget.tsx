@@ -6,7 +6,12 @@ import { useTheme } from "@mui/material/styles";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import useMediaQuery from "@mui/material/useMediaQuery";
-import { useCurrentWeather, useDebouncedCallback, weatherCodeToInfo } from "@openmapx/core";
+import {
+  parseAttributionHtml,
+  useCurrentWeather,
+  useDebouncedCallback,
+  weatherCodeToInfo,
+} from "@openmapx/core";
 import { useCallback, useEffect, useState } from "react";
 import { WeatherIcon } from "@/integration-api/components/WeatherIcon";
 import { useMap } from "@/integration-api/map/MapContext";
@@ -57,10 +62,9 @@ export function WeatherWidget() {
     widgetVisible && data
       ? resolve({ contributors: data.contributors, sourceIds: [data.source] })
       : [];
-  const attrText = weatherAttributions
-    .map(attributionToHtml)
-    .join(" · ")
-    .replace(/<[^>]*>/g, "");
+  const attrText = parseAttributionHtml(
+    weatherAttributions.map(attributionToHtml).join(" · "),
+  ).text;
   useMapAttributions("weather", weatherAttributions);
 
   if (isMobile || !data || zoom < 8) return null;

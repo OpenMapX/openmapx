@@ -42,7 +42,9 @@ export interface OvertureSourceItem {
 /** Maps a current upstream dataset name to its manifest source id. */
 export function overtureDatasetSourceId(dataset: string): string {
   const normalized = normalizeDatasetName(dataset) as OverturePlaceDataset;
-  const sourceId = OVERTURE_PLACE_DATASET_SOURCE_IDS[normalized];
+  const sourceId = Object.hasOwn(OVERTURE_PLACE_DATASET_SOURCE_IDS, normalized)
+    ? OVERTURE_PLACE_DATASET_SOURCE_IDS[normalized]
+    : undefined;
   if (!sourceId) {
     throw new Error(
       `Unsupported Overture Places contributor "${dataset}". ` +
