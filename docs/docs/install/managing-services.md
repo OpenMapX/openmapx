@@ -266,6 +266,20 @@ pnpm openmapx services capabilities
 pnpm openmapx services capabilities --unrecognised
 ```
 
+MOTIS dataset promotion must remain disabled while upgrading until both
+`ops-agent` and `data-manager` support confirmed primary and staging stops.
+Updating only the agent is insufficient: older data-managers suppress stop
+failures. A new data-manager connected to an older agent rejects stop results
+without a confirmed `stopped` or `absent` state and preserves the live and
+candidate data. After both services are updated, a staging-stop failure requests
+a restart of the old primary only when this attempt stopped it and the old data
+targets are unchanged. Acknowledging that restart does not establish service
+health. Recovery uses a fresh client deadline of 125 seconds, independent of job
+cancellation. If the agent continues reporting pending termination, promotion
+returns with recovery completion unknown and leaves both data aliases unchanged;
+the agent retains ownership of its operation. Keep promotion disabled if stop
+confirmation or recovery fails.
+
 ### Lifecycle operation deadlines
 
 Lifecycle operations run through the ops-agent with a finite budget for the

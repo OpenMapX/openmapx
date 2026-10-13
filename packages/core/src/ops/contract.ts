@@ -607,6 +607,10 @@ export async function authorizeOpsResources(
 }
 
 const changed = z.strictObject({ changed: z.boolean() });
+const confirmedMotisStop = z.strictObject({
+  changed: z.boolean(),
+  state: z.enum(["stopped", "absent"]),
+});
 const completed = z.strictObject({ completed: z.literal(true) });
 const inspection = z.strictObject({ state: z.enum(["ready", "not_ready", "unknown"]) });
 const serviceRuntimeState = z.enum([
@@ -931,9 +935,9 @@ export const OPS_RESULT_SCHEMAS = {
   "data.searchIndexBuild": data,
   "data.notablePlacesBuild": data,
   "motis.staging.restart": changed,
-  "motis.staging.stop": changed,
+  "motis.staging.stop": confirmedMotisStop,
   "motis.primary.restart": changed,
-  "motis.primary.stop": changed,
+  "motis.primary.stop": confirmedMotisStop,
   "motis.primary.promote": z.strictObject({ activeRunId: stableIdSchema }),
   "feedProxy.validateAndReload": z.strictObject({
     candidateId: stableIdSchema,
