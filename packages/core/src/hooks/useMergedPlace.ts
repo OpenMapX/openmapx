@@ -12,6 +12,14 @@ import { useDataSourceStore } from "../stores/dataSourceStore";
 import type { DataSourceDetail } from "../types/dataSource";
 import type { ReverseGeocodingResult } from "../types/geocoding";
 import type { Place } from "../types/place";
+import {
+  directPlaceDetailsId,
+  hasUsablePlaceAddress,
+  haveConflictingOsmIds,
+  isLocalityOnlyAddress,
+  isMovingDataSourcePlace,
+  selectPlaceAddress,
+} from "../utils/addressEvidence";
 import { matchingOpeningHours } from "../utils/openingHoursClient";
 import { useDataSourceMatch } from "./useDataSourceMatch";
 import { useOpeningHoursClock } from "./useOpeningHoursClock";
@@ -32,12 +40,14 @@ function prettifyCategory(raw: string): string {
  * Priority rules (per field):
  *  1. Identity fields (id, name, category, rawCategory, dataSourceDetail):
  *     selectedPlace always wins — these define what the user clicked.
- *  2. OSM-sourced fields (address, city, phone, website, openingHours, osmTags,
+ *  2. Address selection retains explicit object tags and data-source ownership;
+ *     unknown legacy candidates keep the existing resolver-first precedence.
+ *  3. OSM-sourced fields (city, phone, website, openingHours, osmTags,
  *     description, wikipediaUrl, photos, facts, reviewLinks, rating, reviewCount):
  *     Nominatim/Overpass details win when available, selectedPlace fills gaps.
- *  3. Reverse geocoding fills address/city only when both OSM lookup and
+ *  4. Reverse geocoding fills address/city only when both OSM lookup and
  *     selectedPlace have nothing.
- *  4. dataSourceDetail: from selectedPlace if present, otherwise from
+ *  5. dataSourceDetail: from selectedPlace if present, otherwise from
  *     useDataSourceMatch.
  */
 function mergePlaceFields(
@@ -62,6 +72,7 @@ function mergePlaceFields(
         id: selected.id,
         primaryScheme: selected.primaryScheme,
         ids: { ...(nom.ids ?? {}), ...selected.ids },
+        directOsmReference: selected.directOsmReference,
         name: isDataSourcePlace ? selected.name || nom.name : nom.name || selected.name,
         category: isDataSourcePlace
           ? prettifyCategory(selected.category ?? "") || nom.category
@@ -90,6 +101,7 @@ function mergePlaceFields(
       transfer(field, nom ?? selected);
   }
   for (const field of ["id", "primaryScheme"] as const) transfer(field, selected);
+  transfer("directOsmReference", selected);
   transfer(
     "name",
     nom && (isDataSourcePlace ? !selected.name : Boolean(nom.name)) ? nom : selected,
@@ -110,25 +122,40 @@ function mergePlaceFields(
     // for a nearby OSM node. Use data-source values first, fall back to
     // OSM only to fill genuine gaps.
     if (isDataSourcePlace) {
-      base.address = selected.address || nom.address;
-      base.city = selected.city || nom.city;
       base.phone = selected.phone || nom.phone;
       base.website = selected.website || nom.website;
       base.openingHours = selected.openingHours || nom.openingHours;
     } else {
-      base.address = nom.address || selected.address;
-      base.city = nom.city || selected.city;
       base.phone = nom.phone || selected.phone;
       base.website = nom.website || selected.website;
       base.openingHours = nom.openingHours || selected.openingHours;
     }
-    for (const field of ["address", "city", "phone", "website", "openingHours"] as const) {
+    const addressOwner = selectPlaceAddress(selected, nom, isDataSourcePlace);
+    base.address = addressOwner.address;
+    base.addressEvidence = addressOwner.addressEvidence;
+    transfer("address", addressOwner);
+    transfer("addressEvidence", addressOwner, "address");
+    const cityOwner =
+      haveConflictingOsmIds(selected, nom) || (addressOwner === selected && selected.city)
+        ? selected
+        : isDataSourcePlace
+          ? selected.city
+            ? selected
+            : nom
+          : nom.city
+            ? nom
+            : selected;
+    base.city = cityOwner.city;
+    transfer("city", cityOwner);
+    for (const field of ["phone", "website", "openingHours"] as const) {
       transfer(field, (isDataSourcePlace ? selected[field] : !nom[field]) ? selected : nom);
     }
   } else {
     if (!base.address && reverseGeo?.address) {
       base.address = reverseGeo.address;
+      base.addressEvidence = reverseGeo.addressEvidence;
       transfer("address", reverseGeo);
+      transfer("addressEvidence", reverseGeo, "address");
     }
     if (!base.city && reverseGeo?.city) {
       base.city = reverseGeo.city.split(",")[0].trim();
@@ -136,9 +163,24 @@ function mergePlaceFields(
     }
   }
 
-  if (!base.address && reverseGeo?.address) {
+  // Moving preview titles and known locality-only strings leave an address gap.
+  if (
+    isDataSourcePlace &&
+    isMovingDataSourcePlace(selected) &&
+    base.address === selected.name &&
+    !hasUsablePlaceAddress(base)
+  ) {
+    base.address = "";
+    base.addressEvidence = undefined;
+  }
+  if (
+    (!base.address || (isDataSourcePlace && isLocalityOnlyAddress(base))) &&
+    reverseGeo?.address
+  ) {
     base.address = reverseGeo.address;
+    base.addressEvidence = reverseGeo.addressEvidence;
     transfer("address", reverseGeo);
+    transfer("addressEvidence", reverseGeo, "address");
   }
   if (!base.city && reverseGeo?.city) {
     base.city = reverseGeo.city.split(",")[0].trim();
@@ -209,7 +251,9 @@ export function useMergedPlace(selectedPlace: Place | null): {
   // resolver) — reverse-geocoding covers them. For everything else,
   // /api/places/:id dispatches to the registered scheme resolver, which
   // reads any osmFilters from the provider's manifest itself.
-  const placeDetailsId = isCoordinatePlace ? null : (selectedPlace?.id ?? null);
+  const placeDetailsId = selectedPlace
+    ? directPlaceDetailsId(selectedPlace, isDataSourcePlace)
+    : null;
 
   const { data: nominatimDetails, isLoading: nominatimLoading } = usePlaceDetails(
     placeDetailsId,
@@ -221,7 +265,20 @@ export function useMergedPlace(selectedPlace: Place | null): {
     Boolean(selectedPlace?.address),
   );
 
-  const needsReverseGeo = isCoordinatePlace || isDataSourcePlace;
+  const isVehicle = selectedPlace ? isMovingDataSourcePlace(selectedPlace) : false;
+  const addressForReverse = selectedPlace
+    ? selectPlaceAddress(selectedPlace, nominatimDetails, isDataSourcePlace)
+    : null;
+  const conflictingOsmIds = haveConflictingOsmIds(selectedPlace, nominatimDetails);
+  const cityForReverse =
+    selectedPlace?.city || (!conflictingOsmIds ? nominatimDetails?.city : undefined);
+  const needsReverseGeo =
+    isCoordinatePlace ||
+    (isDataSourcePlace &&
+      (isVehicle ||
+        !addressForReverse ||
+        !hasUsablePlaceAddress(addressForReverse, { allowReverse: true }) ||
+        !cityForReverse?.trim()));
   const { data: reverseGeo } = useReverseGeocoding(
     needsReverseGeo ? (selectedPlace?.coordinates ?? null) : null,
   );

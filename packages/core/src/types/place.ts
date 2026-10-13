@@ -1,5 +1,6 @@
 import type { ContributingRecord, FieldContributors } from "@openmapx/mobility-core/contributors";
 import type { OpeningHoursSource } from "../utils/openingHoursSource";
+import type { AddressEvidence, DirectOsmReference } from "./address";
 import type { DataSourceDetail } from "./dataSource";
 import type { AreaGeometry, BBox, LngLat } from "./geometry";
 import type { Identified, Ids } from "./identified";
@@ -126,6 +127,8 @@ export interface Place extends Identified, ContributingRecord {
   fieldContributors?: FieldContributors;
   name: string;
   address: string;
+  addressEvidence?: AddressEvidence;
+  directOsmReference?: DirectOsmReference;
   city?: string;
   /** ISO 3166-1 alpha-2 country code (e.g. "de", "us"). */
   countryCode?: string;

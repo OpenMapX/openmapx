@@ -64,7 +64,7 @@ export function createDataSourceResolver(provider: MobilityDataSourceProvider): 
     // Skip the reverse-geocode fallback when the caller already has an
     // address — data-source items supply their own, and the client merge
     // keeps those over any OSM-derived address anyway. Avoids a Nominatim
-    // + possible Overpass call on every cold fetch. Vehicles are the
+    // call on every cold fetch. Vehicles are the
     // exception: their preview `address` is the marker label ("Dott
     // E-Scooter"), not a real street address, so always pull one.
     if (!place?.address && (isVehicle || !hasAddress)) {
@@ -74,7 +74,9 @@ export function createDataSourceResolver(provider: MobilityDataSourceProvider): 
           place = {
             ...place,
             address: addrOnly.address,
+            addressEvidence: addrOnly.addressEvidence,
             city: addrOnly.city ?? place.city,
+            countryCode: addrOnly.countryCode,
           };
         } else {
           place = createPlace({
@@ -82,7 +84,9 @@ export function createDataSourceResolver(provider: MobilityDataSourceProvider): 
             ids: { [scheme]: value },
             name: "",
             address: addrOnly.address,
+            addressEvidence: addrOnly.addressEvidence,
             city: addrOnly.city,
+            countryCode: addrOnly.countryCode,
             coordinates: [lng, lat],
           });
         }

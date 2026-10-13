@@ -65,6 +65,12 @@ describe("Nominatim geocoding provider", () => {
     expect(results).toEqual([
       {
         id: "osm:node/240095639",
+        addressEvidence: {
+          components: {},
+          source: "geocoding-nominatim",
+          method: "provider-address",
+          recordId: "osm:node/240095639",
+        },
         label: "Köln Hauptbahnhof, Köln, Germany",
         coordinates: [6.9582814, 50.9430759],
         type: "region",
@@ -73,6 +79,12 @@ describe("Nominatim geocoding provider", () => {
       },
       {
         id: "osm:way/12345",
+        addressEvidence: {
+          components: {},
+          source: "geocoding-nominatim",
+          method: "provider-address",
+          recordId: "osm:way/12345",
+        },
         label: "Domkloster, Köln, Germany",
         coordinates: [6.95, 50.94],
         type: "street",
@@ -81,6 +93,12 @@ describe("Nominatim geocoding provider", () => {
       },
       {
         id: "osm:relation/62578",
+        addressEvidence: {
+          components: {},
+          source: "geocoding-nominatim",
+          method: "provider-address",
+          recordId: "osm:relation/62578",
+        },
         label: "Köln, Germany",
         coordinates: [6.96, 50.93],
         type: "region",
@@ -90,6 +108,101 @@ describe("Nominatim geocoding provider", () => {
     ]);
     expect(String(mockFetch.mock.calls[0]?.[0])).toContain("/search");
     expect(String(mockFetch.mock.calls[0]?.[0])).toContain("format=jsonv2");
+  });
+
+  it("preserves only known structured address strings as provider evidence", async () => {
+    mockFetch.mockImplementation(async () =>
+      mockOk([
+        {
+          place_id: 1,
+          osm_type: "way",
+          osm_id: 123,
+          lat: "52.5",
+          lon: "13.4",
+          display_name: "Cafe 99, Wrong road 88",
+          name: "Cafe 99",
+          category: "amenity",
+          type: "cafe",
+          importance: 0.5,
+          address: {
+            house_number: " 20a ",
+            road: " Main road ",
+            house: "Building",
+            place: "Square",
+            full: "Main road 20a",
+            city: "Berlin",
+            town: "Town",
+            village: "Village",
+            municipality: "Municipality",
+            county: "County",
+            state: "State",
+            postcode: "10179",
+            country: "Germany",
+            country_code: "de",
+            unknown: "Discard",
+            amenity: "Cafe 99",
+          },
+        },
+      ]),
+    );
+    for (const result of [
+      ...(await nominatimService.geocode("Cafe")),
+      ...(await nominatimService.autocomplete("Cafe")),
+    ]) {
+      expect(result.addressEvidence).toEqual({
+        components: {
+          house_number: "20a",
+          road: "Main road",
+          house: "Building",
+          place: "Square",
+          full: "Main road 20a",
+          city: "Berlin",
+          town: "Town",
+          village: "Village",
+          municipality: "Municipality",
+          county: "County",
+          state: "State",
+          postcode: "10179",
+          country: "Germany",
+          country_code: "de",
+        },
+        source: "geocoding-nominatim",
+        method: "provider-address",
+        recordId: "osm:way/123",
+      });
+    }
+  });
+
+  it("does not infer house numbers from labels or retain malformed structured components", async () => {
+    mockFetch.mockResolvedValueOnce(
+      mockOk([
+        {
+          place_id: 1,
+          osm_type: "way",
+          osm_id: 123,
+          lat: "52.5",
+          lon: "13.4",
+          display_name: "Cafe, Main road 88, Berlin",
+          category: "amenity",
+          type: "cafe",
+          importance: 0.5,
+          address: {
+            road: "Main road",
+            house_number: 88,
+            city: " ",
+            postcode: null,
+            country_code: "de",
+          },
+        },
+      ]),
+    );
+    const [result] = await nominatimService.geocode("Cafe");
+    expect(result.addressEvidence).toEqual({
+      components: { road: "Main road", country_code: "de" },
+      source: "geocoding-nominatim",
+      method: "provider-address",
+      recordId: "osm:way/123",
+    });
   });
 
   it("classifies amenity/shop/tourism/leisure as poi", async () => {
@@ -220,6 +333,8 @@ describe("Nominatim geocoding provider", () => {
   it("builds a reverse-geocode address from the matched feature", async () => {
     mockFetch.mockResolvedValueOnce(
       mockOk({
+        osm_type: "node",
+        osm_id: 123,
         display_name: "1, Bahnhofsvorplatz, Köln, North Rhine-Westphalia, Germany",
         address: {
           house_number: "1",
@@ -239,7 +354,40 @@ describe("Nominatim geocoding provider", () => {
     expect(result?.address).toContain("Bahnhofsvorplatz");
     expect(result?.address).toContain("Köln");
     expect(result?.city).toBe("Köln, North Rhine-Westphalia");
+    expect(result?.addressEvidence).toEqual({
+      components: {
+        house_number: "1",
+        road: "Bahnhofsvorplatz",
+        city: "Köln",
+        state: "North Rhine-Westphalia",
+        postcode: "50667",
+        country: "Germany",
+        country_code: "de",
+      },
+      source: "geocoding-nominatim",
+      method: "reverse",
+      recordId: "osm:node/123",
+    });
     expect(String(mockFetch.mock.calls[0]?.[0])).toContain("/reverse");
+  });
+
+  it("formats available full addresses without borrowing numbers from the reverse label", async () => {
+    mockFetch.mockResolvedValueOnce(
+      mockOk({
+        osm_type: "way",
+        osm_id: 123,
+        display_name: "Cafe, Wrong road 88",
+        address: { full: "Address without a number" },
+      }),
+    );
+    const result = await nominatimService.reverseGeocode(52.5, 13.4);
+    expect(result?.address).toBe("Address without a number");
+    expect(result?.addressEvidence).toEqual({
+      components: { full: "Address without a number" },
+      source: "geocoding-nominatim",
+      method: "reverse",
+      recordId: "osm:way/123",
+    });
   });
 
   it("returns null reverse-geocode when the response carries an error", async () => {

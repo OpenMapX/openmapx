@@ -10,20 +10,9 @@
  */
 
 import formatter from "@fragaria/address-formatter";
+import { type PlaceAddressComponents, sanitizeAddressComponents } from "@openmapx/core";
 
-export interface AddressComponents {
-  house_number?: string;
-  road?: string;
-  city?: string;
-  town?: string;
-  village?: string;
-  municipality?: string;
-  county?: string;
-  state?: string;
-  postcode?: string;
-  country?: string;
-  country_code?: string;
-}
+export interface AddressComponents extends PlaceAddressComponents {}
 
 interface AddressFormatter {
   format(components: Record<string, string>, options: Record<string, unknown>): string[];
@@ -35,6 +24,7 @@ interface AddressFormatter {
 // recognize; unrecognized keys get dumped into the `attention` placeholder
 // which prefixes the output.
 const FORMATTER_KEYS = [
+  "house",
   "road",
   "house_number",
   "postcode",
@@ -44,20 +34,24 @@ const FORMATTER_KEYS = [
   "country_code",
 ] as const;
 
-function runFormatter(
-  components: AddressComponents,
-  options: { appendCountry: boolean },
-): string[] {
+function runFormatter(input: AddressComponents, options: { appendCountry: boolean }): string[] {
+  const components = sanitizeAddressComponents(input);
   // Collapse Nominatim's city fallbacks (town/village/municipality) into `city`
   // so the template's {{{city}}} slot renders for rural addresses too.
   const city = components.city ?? components.town ?? components.village ?? components.municipality;
 
-  const source: Record<string, string | undefined> = { ...components, city };
+  // Place-based addresses use the same country-specific number ordering as roads.
+  // Keep the evidence's `place` intact; only adapt the formatter input.
+  const source: Record<string, string | undefined> = {
+    ...components,
+    city,
+    road: components.road || components.place,
+  };
 
   const clean: Record<string, string> = {};
   for (const key of FORMATTER_KEYS) {
     const v = source[key];
-    if (typeof v === "string" && v.length > 0) clean[key] = v;
+    if (typeof v === "string" && v.trim().length > 0) clean[key] = v.trim();
   }
 
   return (formatter as unknown as AddressFormatter)
@@ -74,6 +68,11 @@ export function formatAddress(
   components: AddressComponents,
   options: { appendCountry?: boolean } = {},
 ): string {
+  const road = components.road?.trim();
+  const place = components.place?.trim();
+  const house = components.house?.trim();
+  const full = components.full?.trim();
+  if (full && !road && !place && !house) return full;
   return runFormatter(components, { appendCountry: options.appendCountry ?? true }).join(", ");
 }
 

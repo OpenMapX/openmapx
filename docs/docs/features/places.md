@@ -46,6 +46,15 @@ Below the header, a row of round **action buttons** is always present:
 Overview is a stack of detail rows, each self-hiding when it has nothing to show:
 
 - **Address** — the formatted street address, with a one-tap copy button.
+
+  OpenMapX preserves available address parts and their origin when selecting
+  between sources. Explicit address tags on the selected OSM object take
+  precedence over inferred context; a nearby house number is never borrowed to
+  complete a street-only address. Named premises and full-text addresses can be
+  valid without a house number. When MapTiler supplies a direct OSM reference,
+  place details use that object rather than a name-and-proximity match. Missing
+  or conflicting data can still leave an address partial.
+
 - **Plus Code** — an [Open Location Code](https://plus.codes/) for the exact
   point, shortened against the nearest city and linking out to plus.codes.
 - **Opening hours** — parsed from OpenStreetMap's `opening_hours`, shown as an

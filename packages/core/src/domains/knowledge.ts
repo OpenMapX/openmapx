@@ -1,4 +1,5 @@
 import type { ContributingRecord, FieldContributors } from "@openmapx/mobility-core/contributors";
+import type { AddressEvidence } from "../types/address";
 import type { LngLat } from "../types/geometry";
 import type { Ids } from "../types/identified";
 import type { AirportInfo, PlaceFact, PlacePhoto, PlaceProvenance } from "../types/place";
@@ -30,6 +31,7 @@ export interface KnowledgeResult extends ContributingRecord {
   socials?: string[];
   /** Formatted street address supplied by a source. */
   address?: string;
+  addressEvidence?: AddressEvidence;
   city?: string;
   countryCode?: string;
   provenance?: PlaceProvenance[];

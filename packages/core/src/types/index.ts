@@ -1,3 +1,4 @@
+export type { AddressEvidence, DirectOsmReference, PlaceAddressComponents } from "./address";
 export type {
   BrandDetail,
   BrandKind,

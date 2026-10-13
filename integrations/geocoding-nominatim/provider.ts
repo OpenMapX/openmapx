@@ -14,9 +14,11 @@ import {
   type AutocompleteResult,
   fetchJson,
   type LngLat,
+  type PlaceAddressComponents,
   type ReverseGeocodingResult,
   resolvePoiIconPath,
   type SearchResult,
+  sanitizeAddressComponents,
 } from "@openmapx/core";
 
 // Populated by setup(ctx); see setNominatimUrl.
@@ -43,11 +45,7 @@ interface NominatimResult {
   addresstype?: string;
   /** Wikipedia-based for places with an article, else derived from the place's rank. */
   importance: number;
-  address?: {
-    road?: string;
-    house_number?: string;
-    country_code?: string;
-  };
+  address?: PlaceAddressComponents;
 }
 
 function mapType(cls: string, type: string): SearchResult["type"] {
@@ -58,10 +56,12 @@ function mapType(cls: string, type: string): SearchResult["type"] {
 }
 
 interface NominatimReverseResult {
+  osm_type?: string;
+  osm_id?: number;
   display_name: string;
   name?: string;
   error?: string;
-  address?: {
+  address?: PlaceAddressComponents & {
     road?: string;
     house_number?: string;
     neighbourhood?: string;
@@ -155,6 +155,12 @@ export const nominatimService: GeocodingProviderImpl = {
     const data = await fetchNominatim(params, lang);
     return data.map((r) => ({
       id: makeId(r),
+      addressEvidence: {
+        components: sanitizeAddressComponents(r.address),
+        source: "geocoding-nominatim",
+        method: "provider-address",
+        recordId: makeId(r),
+      },
       label: r.display_name,
       coordinates: [Number.parseFloat(r.lon), Number.parseFloat(r.lat)],
       type: mapType(r.category, r.type),
@@ -182,22 +188,22 @@ export const nominatimService: GeocodingProviderImpl = {
     if (data === null) return null;
     if (data.error) return null;
 
-    const a = data.address ?? {};
-    const cityName = a.city ?? a.town ?? a.village ?? "";
-    const address = formatAddress({
-      house_number: a.house_number,
-      road: a.road,
-      city: a.city,
-      town: a.town,
-      village: a.village,
-      county: a.county,
-      state: a.state,
-      postcode: a.postcode,
-      country: a.country,
-      country_code: a.country_code,
-    });
+    const a = sanitizeAddressComponents(data.address);
+    const cityName = a.city ?? a.town ?? a.village ?? a.municipality ?? "";
+    const address = formatAddress(a);
     const city = [cityName, a.state ?? a.county ?? ""].filter(Boolean).join(", ");
-    return { address, city };
+    return {
+      address,
+      city,
+      addressEvidence: {
+        components: a,
+        source: "geocoding-nominatim",
+        method: "reverse",
+        ...(data.osm_type && data.osm_id
+          ? { recordId: `osm:${data.osm_type}/${data.osm_id}` }
+          : {}),
+      },
+    };
   },
 
   async autocomplete(
@@ -218,6 +224,12 @@ export const nominatimService: GeocodingProviderImpl = {
         r.display_name.split(",")[0].trim();
       return {
         id: makeId(r),
+        addressEvidence: {
+          components: sanitizeAddressComponents(r.address),
+          source: "geocoding-nominatim",
+          method: "provider-address",
+          recordId: makeId(r),
+        },
         label: short,
         sublabel: r.display_name,
         coordinates: [Number.parseFloat(r.lon), Number.parseFloat(r.lat)],

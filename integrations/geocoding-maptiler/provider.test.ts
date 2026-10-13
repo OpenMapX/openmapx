@@ -20,6 +20,30 @@ afterEach(() => {
 });
 
 describe("MapTiler geocoding provider", () => {
+  it("uses the feature's country hint to format explicit tags without changing their evidence", async () => {
+    mockFetch.mockResolvedValueOnce(
+      mockOk({
+        features: [
+          {
+            id: "poi.123",
+            text: "Shop",
+            place_name: "Shop, 1 Main St, USA",
+            place_type: ["poi"],
+            relevance: 1,
+            geometry: { coordinates: [-122, 37] },
+            properties: {
+              ref: "osm:w1",
+              country_code: "US",
+              feature_tags: { "addr:street": "Main St", "addr:housenumber": "1" },
+            },
+          },
+        ],
+      }),
+    );
+    const [result] = await maptilerGeocodingService.autocomplete("Shop");
+    expect(result.address).toContain("1 Main St");
+    expect(result.addressEvidence?.components).toEqual({ road: "Main St", house_number: "1" });
+  });
   it("maps geocode features with maptiler: ids, place-type and rawCategory", async () => {
     mockFetch.mockResolvedValueOnce(
       mockOk({
@@ -66,6 +90,12 @@ describe("MapTiler geocoding provider", () => {
     expect(results).toEqual([
       {
         id: "maptiler:poi.123",
+        addressEvidence: {
+          components: {},
+          source: "geocoding-maptiler",
+          method: "provider-label",
+          recordId: "maptiler:poi.123",
+        },
         label: "Köln Hauptbahnhof, Köln, Germany",
         name: "Köln Hauptbahnhof",
         coordinates: [6.9582814, 50.9430759],
@@ -75,6 +105,12 @@ describe("MapTiler geocoding provider", () => {
       },
       {
         id: "maptiler:address.456",
+        addressEvidence: {
+          components: {},
+          source: "geocoding-maptiler",
+          method: "provider-label",
+          recordId: "maptiler:address.456",
+        },
         label: "Bahnhofsvorplatz 1, Köln, Germany",
         name: "Bahnhofsvorplatz 1",
         coordinates: [6.96, 50.94],
@@ -84,6 +120,12 @@ describe("MapTiler geocoding provider", () => {
       },
       {
         id: "maptiler:street.789",
+        addressEvidence: {
+          components: {},
+          source: "geocoding-maptiler",
+          method: "provider-label",
+          recordId: "maptiler:street.789",
+        },
         label: "Domkloster, Köln, Germany",
         name: "Domkloster",
         coordinates: [6.95, 50.94],
@@ -93,6 +135,12 @@ describe("MapTiler geocoding provider", () => {
       },
       {
         id: "maptiler:place.10",
+        addressEvidence: {
+          components: {},
+          source: "geocoding-maptiler",
+          method: "provider-label",
+          recordId: "maptiler:place.10",
+        },
         label: "Köln, Germany",
         name: "Köln",
         coordinates: [6.95, 50.93],
@@ -105,6 +153,246 @@ describe("MapTiler geocoding provider", () => {
     expect(url).toContain("/geocoding/K%C3%B6ln%20Hbf.json");
     expect(url).toContain("key=test-key");
     expect(url).toContain("types=");
+  });
+
+  it.each([
+    ["osm:n123", "node/123"],
+    ["osm:w456", "way/456"],
+    ["osm:r9007199254740993", "relation/9007199254740993"],
+  ])("preserves the root reference %s without rounding its ID", async (ref, osmRef) => {
+    const feature = {
+      id: "poi.123",
+      text: "Cafe",
+      place_name: "Cafe, Berlin",
+      place_type: ["poi"],
+      relevance: 1,
+      geometry: { coordinates: [13.4, 52.5] },
+      properties: { ref, wikidata: "Q123" },
+      context: [{ id: "municipality.1", text: "Berlin", ref: "osm:r999" }],
+    };
+    mockFetch.mockImplementation(async () => mockOk({ features: [feature] }));
+    for (const result of [
+      ...(await maptilerGeocodingService.geocode("Cafe")),
+      ...(await maptilerGeocodingService.autocomplete("Cafe")),
+    ]) {
+      expect(result.ids).toEqual({ osm: osmRef, wikidata: "Q123" });
+      expect(result.directOsmReference).toEqual({
+        source: "geocoding-maptiler",
+        recordId: "maptiler:poi.123",
+        osmRef,
+      });
+    }
+  });
+
+  it.each([
+    undefined,
+    null,
+    123,
+    "osm:w0",
+    "osm:w012",
+    "osm:w-1",
+    "osm:w1.2",
+    "osm:w1e3",
+    "osm:w12junk",
+    "osm:w12\n",
+    " osm:w12",
+    "osm:W12",
+    "way/12",
+    "osm:x12",
+  ])("rejects malformed root reference %s and ignores context references", async (ref) => {
+    mockFetch.mockImplementation(async () =>
+      mockOk({
+        features: [
+          {
+            id: "poi.123",
+            text: "Cafe",
+            place_name: "Cafe",
+            place_type: ["poi"],
+            relevance: 1,
+            geometry: { coordinates: [13.4, 52.5] },
+            properties: { ref },
+            context: [{ id: "municipality.1", text: "Berlin", ref: "osm:r999" }],
+          },
+        ],
+      }),
+    );
+    for (const result of [
+      ...(await maptilerGeocodingService.geocode("Cafe")),
+      ...(await maptilerGeocodingService.autocomplete("Cafe")),
+    ]) {
+      expect(result.ids?.osm).toBeUndefined();
+      expect(result.directOsmReference).toBeUndefined();
+    }
+  });
+
+  it("preserves available address tags and context without parsing label numbers", async () => {
+    mockFetch.mockImplementation(async () =>
+      mockOk({
+        features: [
+          {
+            id: "poi.123",
+            text: "Cafe 99",
+            place_name: "Cafe 99, Wrong road 88, 99999 Berlin",
+            place_type: ["poi"],
+            relevance: 1,
+            geometry: { coordinates: [13.4, 52.5] },
+            properties: {
+              country_code: "de",
+              feature_tags: {
+                "addr:street": "  Main road  ",
+                "addr:housenumber": " 20a ",
+                "addr:place": "Square",
+                "addr:full": "Main road 20a",
+                "addr:postcode": "10179",
+                "addr:city": "Berlin",
+                "addr:state": 4,
+                "addr:country": "",
+                name: "Cafe 99",
+              },
+            },
+            context: [
+              { id: "municipality.1", text: "Berlin" },
+              { id: "region.1", text: "Berlin state" },
+              { id: "country.1", text: "Germany", country_code: "de" },
+            ],
+          },
+        ],
+      }),
+    );
+    const components = {
+      house_number: "20a",
+      road: "Main road",
+      place: "Square",
+      full: "Main road 20a",
+      postcode: "10179",
+      city: "Berlin",
+      municipality: "Berlin",
+      state: "Berlin state",
+      country: "Germany",
+      country_code: "de",
+    };
+    for (const result of [
+      ...(await maptilerGeocodingService.geocode("Cafe")),
+      ...(await maptilerGeocodingService.autocomplete("Cafe")),
+    ]) {
+      expect(result.addressEvidence).toEqual({
+        components,
+        source: "geocoding-maptiler",
+        method: "provider-address",
+        recordId: "maptiler:poi.123",
+      });
+    }
+    expect((await maptilerGeocodingService.reverseGeocode(52.5, 13.4))?.addressEvidence).toEqual({
+      components,
+      source: "geocoding-maptiler",
+      method: "reverse",
+      recordId: "maptiler:poi.123",
+    });
+  });
+
+  it("identifies explicit root address tags as OSM evidence only with a valid root reference", async () => {
+    mockFetch.mockImplementation(async () =>
+      mockOk({
+        features: [
+          {
+            id: "poi.123",
+            text: "Cafe",
+            place_name: "Cafe, Wrong road 88, Berlin",
+            place_type: ["poi"],
+            relevance: 1,
+            geometry: { coordinates: [13.4, 52.5] },
+            properties: {
+              ref: "osm:w123",
+              feature_tags: { "addr:street": "Main road", "addr:housenumber": "20a" },
+            },
+            context: [{ id: "municipality.1", text: "Berlin" }],
+          },
+        ],
+      }),
+    );
+    for (const result of [
+      ...(await maptilerGeocodingService.geocode("Cafe")),
+      ...(await maptilerGeocodingService.autocomplete("Cafe")),
+    ]) {
+      expect(result.addressEvidence).toEqual({
+        components: { road: "Main road", house_number: "20a" },
+        source: "geocoding-maptiler",
+        method: "osm-tags",
+        recordId: "osm:way/123",
+      });
+      expect(result.address).toBe("Main road 20a");
+    }
+  });
+
+  it.each([
+    [{ "addr:country": "DE" }, { country_code: "de" }],
+    [
+      { "addr:city": "Berlin", "addr:postcode": "10179" },
+      { city: "Berlin", postcode: "10179" },
+    ],
+  ])(
+    "retains the display address fallback when root tags contain only locality context %j",
+    async (tags, components) => {
+      mockFetch.mockImplementation(async () =>
+        mockOk({
+          features: [
+            {
+              id: "poi.123",
+              text: "Cafe",
+              place_name: "Cafe, Main road 20, Berlin",
+              place_type: ["poi"],
+              relevance: 1,
+              geometry: { coordinates: [13.4, 52.5] },
+              properties: { ref: "osm:w123", feature_tags: tags },
+            },
+          ],
+        }),
+      );
+      const [forward] = await maptilerGeocodingService.geocode("Cafe");
+      const [autocomplete] = await maptilerGeocodingService.autocomplete("Cafe");
+      for (const result of [forward, autocomplete]) {
+        expect(result.address).toBeUndefined();
+        expect(result.addressEvidence).toEqual({
+          components,
+          source: "geocoding-maptiler",
+          method: "provider-address",
+          recordId: "maptiler:poi.123",
+        });
+        expect(result.directOsmReference).toEqual({
+          source: "geocoding-maptiler",
+          recordId: "maptiler:poi.123",
+          osmRef: "way/123",
+        });
+        expect(result.ids?.osm).toBe("way/123");
+      }
+      // These original labels remain the selection address if exact details are unavailable.
+      expect(forward.label).toBe("Cafe, Main road 20, Berlin");
+      expect(autocomplete.sublabel).toBe("Cafe, Main road 20, Berlin");
+    },
+  );
+
+  it("marks a display label as label-only evidence without inventing components", async () => {
+    mockFetch.mockResolvedValueOnce(
+      mockOk({
+        features: [
+          {
+            id: "poi.123",
+            text: "Cafe 99",
+            place_name: "Cafe 99, Main road 88, 10179 Berlin",
+            place_type: ["poi"],
+            relevance: 1,
+            geometry: { coordinates: [13.4, 52.5] },
+          },
+        ],
+      }),
+    );
+    const [result] = await maptilerGeocodingService.autocomplete("Cafe");
+    expect(result.addressEvidence).toEqual({
+      components: {},
+      source: "geocoding-maptiler",
+      method: "provider-label",
+      recordId: "maptiler:poi.123",
+    });
   });
 
   it("maps neighbourhood place-type to street", async () => {
@@ -260,6 +548,12 @@ describe("MapTiler geocoding provider", () => {
     expect(result).toEqual({
       address: "Bahnhofsvorplatz 1, Köln, North Rhine-Westphalia, Germany",
       city: "Köln, North Rhine-Westphalia",
+      addressEvidence: {
+        components: { municipality: "Köln", state: "North Rhine-Westphalia", country: "Germany" },
+        source: "geocoding-maptiler",
+        method: "reverse",
+        recordId: "maptiler:address.1",
+      },
     });
     // reverse uses lng,lat in the path, not the search query form.
     expect(String(mockFetch.mock.calls[0]?.[0])).toContain("/geocoding/6.96,50.94.json");
