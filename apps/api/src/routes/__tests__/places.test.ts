@@ -1,4 +1,4 @@
-import { registerPlaceResolver } from "@openmapx/place-ids";
+import * as placeIds from "@openmapx/place-ids";
 import Fastify, { type FastifyInstance } from "fastify";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
@@ -127,13 +127,13 @@ beforeAll(async () => {
   // running server these register themselves from each integration's
   // setup() during initIntegrations; the test boots the route in
   // isolation, so we wire them directly here.
-  registerPlaceResolver("osm", async (value, ctx) => {
+  placeIds.registerPlaceResolver("osm", async (value, ctx) => {
     const match = value.match(/^(node|way|relation)\/(\d+)/);
     if (!match) return null;
     const [, osmType, osmId] = match;
     return mockLookupByOsmRef(osmType, osmId, `osm:${value}`, ctx.lang);
   });
-  registerPlaceResolver("eva", async (value, ctx) => {
+  placeIds.registerPlaceResolver("eva", async (value, ctx) => {
     if (!/^\d+$/.test(value)) return null;
     return mockLookupDbStation(value, ctx.lang);
   });
@@ -1173,7 +1173,7 @@ describe("GET /places/:id", () => {
       address: "Some Street 1, Berlin",
       coordinates: [13.37, 52.52] as [number, number],
     });
-    registerPlaceResolver("fuel", fuelResolver);
+    placeIds.registerPlaceResolver("fuel", fuelResolver);
     mockGetPlaceKnowledge.mockResolvedValue({ externalIds: {} });
     mockBuildReviewLinks.mockReturnValue([]);
 
@@ -1200,7 +1200,7 @@ describe("GET /places/:id", () => {
       address: "Some Street 1, Berlin",
       coordinates: [13.37, 52.52] as [number, number],
     });
-    registerPlaceResolver("fuel", fuelResolver);
+    placeIds.registerPlaceResolver("fuel", fuelResolver);
     mockGetPlaceKnowledge.mockResolvedValue({ externalIds: {} });
     mockBuildReviewLinks.mockReturnValue([]);
 
@@ -1282,6 +1282,32 @@ describe("GET /places/:id", () => {
     expect(JSON.stringify(warn.mock.calls)).not.toContain("fixture-private-share-id");
 
     mockIsEnabledIntegrationScheme.mockReturnValue(false);
+  });
+
+  it("never substitutes a nearby place for an OSM reference whose resolver is unavailable", async () => {
+    const resolver = vi.spyOn(placeIds, "getPlaceResolver").mockReturnValue(undefined);
+    mockIsEnabledIntegrationScheme.mockReturnValue(false);
+    mockLookupByNameAndCoords.mockResolvedValue(MOCK_PLACE);
+    mockLookupByCoords.mockResolvedValue(MOCK_PLACE);
+    mockGetPlaceKnowledge.mockResolvedValue({ externalIds: {} });
+    mockBuildReviewLinks.mockReturnValue([]);
+
+    try {
+      const res = await app.inject({
+        method: "GET",
+        url: `/places/${encodeURIComponent("osm:way/1204762785")}?${qs({
+          lat: "52.52",
+          lng: "13.37",
+          name: "EDEKA",
+        })}`,
+      });
+
+      expect(res.statusCode).toBe(404);
+      expect(mockLookupByNameAndCoords).not.toHaveBeenCalled();
+      expect(mockLookupByCoords).not.toHaveBeenCalled();
+    } finally {
+      resolver.mockRestore();
+    }
   });
 
   it("coord-falls-back for a config-disabled integration scheme with lat/lng/name", async () => {

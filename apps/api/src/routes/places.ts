@@ -966,9 +966,10 @@ export const placesRoute: FastifyPluginAsync = async (fastify) => {
             // street-level imagery drops) that aren't backed by any integration,
             // dangerous for an integration whose `setup()` failed and
             // never got to register its resolver. The manifest registry
-            // tells us which is which: any scheme matching an installed
-            // integration id is strict; everything else is freeform.
-            if (isEnabledIntegrationScheme(parsedId.scheme)) {
+            // tells us which is which: enabled integration schemes are strict.
+            // OSM references also remain exact when their owning integration
+            // is unavailable; coordinates cannot establish another object's identity.
+            if (parsedId.scheme === "osm" || isEnabledIntegrationScheme(parsedId.scheme)) {
               fastify.log.warn(
                 { scheme: parsedId.scheme },
                 "places: integration scheme has no resolver; refusing coord-fallback",

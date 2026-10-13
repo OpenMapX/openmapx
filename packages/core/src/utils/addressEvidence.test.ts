@@ -125,6 +125,34 @@ describe("address selection", () => {
   });
 });
 
+it("reuses complete reverse evidence only for request suppression, not address precedence", () => {
+  const reverse: Place = {
+    ...selected,
+    address: "Other Street 5",
+    addressEvidence: {
+      source: "geocoding-nominatim",
+      method: "reverse",
+      components: { road: "Other Street", house_number: "5" },
+    },
+  };
+  expect(hasUsablePlaceAddress(reverse)).toBe(false);
+  expect(hasUsablePlaceAddress(reverse, { allowReverse: true })).toBe(true);
+  expect(selectPlaceAddress(reverse, selected, true)).toBe(selected);
+  expect(
+    hasUsablePlaceAddress(
+      {
+        ...reverse,
+        addressEvidence: {
+          source: "geocoding-nominatim",
+          method: "reverse",
+          components: { road: "Other Street" },
+        },
+      },
+      { allowReverse: true },
+    ),
+  ).toBe(false);
+});
+
 describe("direct OSM details identity", () => {
   const place = {
     ...selected,

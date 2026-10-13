@@ -50,12 +50,19 @@ export function addressComponentsFromOsmTags(
 /** A locality or marker label does not establish a premises address. */
 export function hasUsablePlaceAddress(
   place: Pick<Place, "address" | "name" | "addressEvidence">,
+  options: { allowReverse?: boolean } = {},
 ): boolean {
   if (!place.address?.trim()) return false;
   const evidence = place.addressEvidence;
   // Keep existing provider-owned address behavior for persisted legacy Places.
   if (!evidence) return place.address !== place.name;
-  if (evidence.method === "provider-label" || evidence.method === "reverse") return false;
+  // Complete cached reverse results can suppress an equivalent request, but
+  // contextual evidence must not gain provider-owned merge precedence.
+  if (
+    evidence.method === "provider-label" ||
+    (evidence.method === "reverse" && !options.allowReverse)
+  )
+    return false;
   const c = sanitizeAddressComponents(evidence.components);
   return Boolean(c.full || c.house || (c.house_number && (c.road || c.place)));
 }

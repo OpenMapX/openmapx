@@ -277,7 +277,7 @@ export function useMergedPlace(selectedPlace: Place | null): {
     (isDataSourcePlace &&
       (isVehicle ||
         !addressForReverse ||
-        !hasUsablePlaceAddress(addressForReverse) ||
+        !hasUsablePlaceAddress(addressForReverse, { allowReverse: true }) ||
         !cityForReverse?.trim()));
   const { data: reverseGeo } = useReverseGeocoding(
     needsReverseGeo ? (selectedPlace?.coordinates ?? null) : null,

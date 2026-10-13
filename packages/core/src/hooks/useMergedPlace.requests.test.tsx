@@ -102,6 +102,43 @@ it("still reverse-geocodes coordinate selections once", async () => {
   client.clear();
 });
 
+it("reuses a complete cached reverse address for a fixed data-source place", () => {
+  const incomplete: Place = {
+    ...selected,
+    address: "",
+    city: undefined,
+    addressEvidence: undefined,
+  };
+  const client = createTestQueryClient();
+  const request = buildPlaceDetailsRequest({
+    id: incomplete.id,
+    coordinates: incomplete.coordinates,
+    name: incomplete.name,
+    hasAddress: false,
+  });
+  client.setQueryData(["place", request.identity], {
+    ...selected,
+    addressEvidence: {
+      source: "geocoding-nominatim",
+      method: "reverse",
+      recordId: "osm:way/42",
+      components: { road: "Main St", house_number: "1", city: "Town" },
+    },
+  });
+  const get = vi.spyOn(apiClient, "get").mockResolvedValue(null as never);
+  const view = renderHook(() => useMergedPlace(incomplete), {
+    wrapper: createQueryWrapper(client),
+  });
+  try {
+    expect(get).not.toHaveBeenCalled();
+    expect(view.result.current.place?.address).toBe("Main St 1");
+    expect(view.result.current.place?.addressEvidence?.method).toBe("reverse");
+  } finally {
+    view.unmount();
+    client.clear();
+  }
+});
+
 it("does not snap elsewhere when the directly referenced OSM object is unavailable", async () => {
   useDataSourceStore.getState().clearSelection();
   const get = vi.spyOn(apiClient, "get").mockRejectedValue(new Error("No exact OSM object"));
