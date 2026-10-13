@@ -1,5 +1,6 @@
 "use client";
 
+import { parseAttributionHtml } from "@openmapx/core/attribution";
 import { useMemo } from "react";
 import { create } from "zustand";
 
@@ -13,8 +14,8 @@ import { create } from "zustand";
  * the single place the footer reads them from.
  *
  * Entries are pre-rendered, sanitized HTML strings (see `useMapAttributions`),
- * which keeps the substring dedup below working the way MapLibre's control did:
- * identical credits contributed by different layers collapse into one.
+ * Identical notices contributed by different layers collapse into one while
+ * preserving every publisher and licence link.
  */
 type MapAttributionState = {
   byLayer: Record<string, string[]>;
@@ -44,23 +45,34 @@ export const useMapAttributionStore = create<MapAttributionState>((set) => ({
 }));
 
 /**
- * MapLibre's AttributionControl dedup, reimplemented: drop any credit that is
- * contained in another one, keeping the longest form. Exact duplicates keep
- * their first occurrence. This is what lets a base style and an overlay both
- * credit OpenStreetMap without the strip saying it twice.
+ * Keep MapLibre's containment rule and also compare parsed notices: a linked
+ * basemap notice can cover an overlay's plain copy of the same wording. Only
+ * discard that copy if the retained notice preserves every link, including
+ * its label and target. Equal link sets keep the first occurrence; distinct or
+ * complementary licence/publisher links remain separate.
  */
 export function dedupeAttributionHtml(items: string[]): string[] {
-  return items.filter(
-    (html, i) =>
-      html.length > 0 &&
-      !items.some(
-        (other, j) =>
-          j !== i &&
-          other.includes(html) &&
-          // Between two equal strings, the earlier index wins.
-          (other.length > html.length || j < i),
-      ),
-  );
+  const notices = items.map((html) => ({ html, ...parseAttributionHtml(html) }));
+  type Notice = (typeof notices)[number];
+  const coversLinks = (candidate: Notice, original: Notice) =>
+    original.links.every((link) =>
+      candidate.links.some((other) => other.label === link.label && other.url === link.url),
+    );
+  return notices
+    .filter(
+      (notice, i) =>
+        notice.html.length > 0 &&
+        !notices.some((other, j) => {
+          if (j === i) return false;
+          if (notice.text === other.text) {
+            return coversLinks(other, notice) && (!coversLinks(notice, other) || j < i);
+          }
+          return (
+            other.html.includes(notice.html) && (other.html.length > notice.html.length || j < i)
+          );
+        }),
+    )
+    .map(({ html }) => html);
 }
 
 // Base-map credits lead the strip — the imagery/map data the whole view rests
