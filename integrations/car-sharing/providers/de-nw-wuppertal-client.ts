@@ -91,7 +91,7 @@ export const deNwWuppertalClient = createStaticCarSharingClient({
   attribution: {
     label: "Stadt Wuppertal",
     url: "https://www.offenedaten-wuppertal.de",
-    license: "CC BY 4.0",
+    license: "CC-BY-4.0",
     licenseUrl: "https://creativecommons.org/licenses/by/4.0/",
   },
   parse,

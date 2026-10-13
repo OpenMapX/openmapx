@@ -44,7 +44,7 @@
       "sourceId": "osrm",
       "name": "OSRM",
       "url": "https://project-osrm.org/",
-      "license": "BSD 2-Clause (software); custom demo server policy",
+      "license": "BSD-2-Clause (software); custom demo server policy",
       "licenseUrl": "https://github.com/Project-OSRM/osrm-backend/wiki/Api-usage-policy",
       "attribution": "<a href=\"https://project-osrm.org/\">OSRM</a>, © <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap contributors</a>",
       "commercialUse": "conditional",

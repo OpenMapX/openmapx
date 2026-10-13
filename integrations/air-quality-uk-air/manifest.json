@@ -42,7 +42,7 @@
       "credentialOwner": "none",
       "reviewedAt": "2026-08-30",
       "apiHosts": ["uk-air.defra.gov.uk", "www.nationalarchives.gov.uk"],
-      "license": "Open Government Licence v3.0",
+      "license": "OGL-UK-3.0",
       "licenseUrl": "https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/",
       "attribution": "Department for Environment, Food & Rural Affairs (Defra), UK-AIR",
       "commercialUse": "yes",

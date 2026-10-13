@@ -42,7 +42,7 @@
       "credentialOwner": "none",
       "reviewedAt": "2026-08-30",
       "apiHosts": ["air-quality-api.open-meteo.com"],
-      "license": "CC BY 4.0 (free tier: non-commercial only)",
+      "license": "CC-BY-4.0 (free tier: non-commercial only)",
       "licenseUrl": "https://open-meteo.com/en/terms",
       "attribution": "Open-Meteo and CAMS ENSEMBLE data providers",
       "commercialUse": "no",

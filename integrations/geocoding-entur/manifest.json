@@ -58,7 +58,7 @@
       "sourceId": "entur-geocoder",
       "name": "Entur Geocoder API",
       "url": "https://developer.entur.org/pages-geocoder-intro/",
-      "license": "NLOD 2.0",
+      "license": "NLOD-2.0",
       "licenseUrl": "https://data.norge.no/nlod/en/2.0",
       "attribution": "Data made available by Entur",
       "commercialUse": "yes",

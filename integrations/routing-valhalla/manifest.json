@@ -77,7 +77,7 @@
       "sourceId": "valhalla",
       "name": "Valhalla",
       "url": "https://github.com/valhalla/valhalla",
-      "license": "MIT (Valhalla routing engine); ODbL (OSM data)",
+      "license": "MIT (Valhalla routing engine); ODbL-1.0 (OSM data)",
       "licenseUrl": "https://github.com/valhalla/valhalla/blob/master/COPYING",
       "attribution": "Routing: <a href=\"https://github.com/valhalla/valhalla\">Valhalla</a>, © <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap contributors</a>",
       "notes": "Self-hosted or other operator-configured Valhalla endpoint. Requests stay with the instance operator's chosen host. The core elevation API also sends route geometry coordinates and sampling parameters to its independently configured Valhalla height endpoint. Height responses do not identify the underlying DEM; routing-engine MIT and OSM notices do not establish DEM ownership.",

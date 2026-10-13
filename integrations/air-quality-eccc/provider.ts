@@ -32,7 +32,7 @@ const source: AirQualitySourceRef = {
   url: "https://api.weather.gc.ca/collections/aqhi-observations-realtime",
   owner: "Environment and Climate Change Canada",
   license: {
-    name: "Open Government Licence – Canada",
+    name: "OGL-Canada-2.0",
     url: "https://open.canada.ca/en/open-government-licence-canada",
   },
   methodologyUrl: "https://eccc-msc.github.io/open-data/msc-data/aqhi/readme_aqhi_en/",

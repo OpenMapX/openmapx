@@ -43,7 +43,7 @@
       "sourceId": "nominatim",
       "name": "Nominatim (OpenStreetMap)",
       "url": "https://nominatim.openstreetmap.org/",
-      "license": "ODbL 1.0",
+      "license": "ODbL-1.0",
       "licenseUrl": "https://www.openstreetmap.org/copyright",
       "attribution": "© <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap contributors</a>",
       "commercialUse": "yes",

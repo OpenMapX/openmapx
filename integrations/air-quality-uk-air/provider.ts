@@ -23,7 +23,7 @@ const source: AirQualitySourceRef = {
   url: ENDPOINT,
   owner: "UK Department for Environment, Food & Rural Affairs",
   license: {
-    name: "Open Government Licence v3.0",
+    name: "OGL-UK-3.0",
     url: "https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/",
   },
   methodologyUrl: "https://uk-air.defra.gov.uk/air-pollution/daqi",

@@ -45,7 +45,7 @@
       "sourceId": "otp",
       "name": "OpenTripPlanner (self-hosted)",
       "url": "http://localhost:8090/",
-      "license": "LGPL v3+",
+      "license": "LGPL-3.0-or-later",
       "licenseUrl": "https://github.com/opentripplanner/OpenTripPlanner/blob/dev-2.x/LICENSE",
       "commercialUse": "yes",
       "providerCountry": "US",

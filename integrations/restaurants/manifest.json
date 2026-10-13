@@ -29,7 +29,7 @@
       "sourceId": "openstreetmap",
       "name": "OpenStreetMap",
       "url": "https://www.openstreetmap.org/",
-      "license": "ODbL",
+      "license": "ODbL-1.0",
       "licenseUrl": "https://opendatacommons.org/licenses/odbl/",
       "commercialUse": "yes",
       "attribution": "© <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap contributors</a>",

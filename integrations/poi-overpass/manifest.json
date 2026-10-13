@@ -37,7 +37,7 @@
       "sourceId": "overpass",
       "name": "OpenStreetMap (Overpass)",
       "url": "https://overpass-api.de/",
-      "license": "ODbL 1.0",
+      "license": "ODbL-1.0",
       "licenseUrl": "https://www.openstreetmap.org/copyright",
       "attribution": "© <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap contributors</a>",
       "commercialUse": "yes",

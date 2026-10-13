@@ -43,7 +43,7 @@ const source: AirQualitySourceRef = {
   url: "https://open-meteo.com/en/docs/air-quality-api",
   owner: "Open-Meteo and Copernicus Atmosphere Monitoring Service",
   license: {
-    name: "CC BY 4.0; Open-Meteo plan terms apply",
+    name: "CC-BY-4.0; Open-Meteo plan terms apply",
     url: "https://open-meteo.com/en/terms",
   },
   methodologyUrl: "https://open-meteo.com/en/docs/air-quality-api",

@@ -57,7 +57,7 @@ describe("Flickr photo provider", () => {
         source: "flickr",
         author: "Jane Photographer",
         authorUrl: "https://www.flickr.com/photos/12345@N00",
-        license: "CC BY 2.0",
+        license: "CC-BY-2.0",
         licenseUrl: "https://creativecommons.org/licenses/by/2.0",
         pageUrl: "https://www.flickr.com/photos/12345@N00/53000000001",
         capturedAt: new Date("2023-04-15T14:30:00").toISOString(),

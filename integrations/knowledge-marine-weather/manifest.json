@@ -39,7 +39,7 @@
       "sourceId": "open-meteo-marine",
       "name": "Open-Meteo Marine",
       "url": "https://open-meteo.com/en/docs/marine-weather-api",
-      "license": "CC BY 4.0 (free tier: non-commercial only)",
+      "license": "CC-BY-4.0 (free tier: non-commercial only)",
       "licenseUrl": "https://open-meteo.com/en/terms",
       "attribution": "Wave data from <a href=\"https://open-meteo.com/\">Open-Meteo</a> (ECMWF WAM, DWD)",
       "commercialUse": "no",

@@ -39,7 +39,7 @@
       "sourceId": "wsv-pegelonline",
       "name": "WSV Pegelonline",
       "url": "https://www.pegelonline.wsv.de/",
-      "license": "Datenlizenz Deutschland — Zero — Version 2.0",
+      "license": "DL-DE-ZERO-2.0",
       "licenseUrl": "https://www.govdata.de/dl-de/zero-2-0",
       "attribution": "Water-level observations from <a href=\"https://www.pegelonline.wsv.de/\">WSV Pegelonline</a>",
       "commercialUse": "yes",

@@ -95,7 +95,7 @@
       "sourceId": "openweathermap",
       "name": "OpenWeather",
       "url": "https://openweathermap.org/",
-      "license": "ODbL",
+      "license": "ODbL-1.0",
       "licenseUrl": "https://openweathermap.org/full-price",
       "attribution": "© <a href=\"https://openweathermap.org/\">OpenWeather</a>",
       "commercialUse": "yes",

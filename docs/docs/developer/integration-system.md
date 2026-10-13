@@ -276,6 +276,19 @@ that every listed source supplied a result. Runtime integrations supply metadata
 with `setDataSources` (see [Runtime data sources](#runtime-data-sources));
 per-record receipts also retain exact runtime-feed and required notice metadata.
 
+Use the [official SPDX short identifier](https://spdx.org/licenses/) for an
+authored `license` label when the exact licence is registered, including its
+version and jurisdiction: `CC-BY-4.0`, `CC0-1.0`, `ODbL-1.0`, `NLOD-2.0`,
+`DL-DE-BY-2.0` or `DL-DE-ZERO-2.0`. Composite descriptions use the same
+identifiers for their components while retaining software/data roles and API or
+plan conditions; those descriptions are not necessarily SPDX expressions.
+For custom terms, reuse an established `LicenseRef-...` only when it identifies
+the same terms. Keep unknown or per-file licences explicit, and do not guess a
+version or replace public-domain status with CC0. Preserve publisher-supplied
+attribution statements and raw upstream licence metadata; their original
+wording is separate from the authored label. Runtime sources follow the same
+convention for labels the integration defines itself.
+
 An integration in several domains whose sources serve different ones sets
 `domain` on each source that does not belong to its first domain. The source is
 then listed under that domain's section of the legal pages. A map overlay

@@ -31,7 +31,7 @@
       "sourceId": "open-meteo",
       "name": "Open-Meteo",
       "url": "https://open-meteo.com/",
-      "license": "CC BY 4.0 (free tier: non-commercial only)",
+      "license": "CC-BY-4.0 (free tier: non-commercial only)",
       "licenseUrl": "https://open-meteo.com/en/terms",
       "commercialUse": "no",
       "notes": "Open-Meteo's free tier is licensed for non-commercial use only; commercial use requires a paid Open-Meteo API plan.",

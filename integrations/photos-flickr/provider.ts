@@ -9,13 +9,13 @@ import type { PhotoProvider, PhotoQuery } from "@openmapx/integration-photos/typ
 const COMMERCIAL_LICENSES = "4,5,6,7,8,9,10";
 
 const LICENSE_NAMES: Record<string, string> = {
-  "4": "CC BY 2.0",
-  "5": "CC BY-SA 2.0",
-  "6": "CC BY-ND 2.0",
+  "4": "CC-BY-2.0",
+  "5": "CC-BY-SA-2.0",
+  "6": "CC-BY-ND-2.0",
   "7": "No known copyright restrictions",
   "8": "United States Government Work",
-  "9": "CC0 1.0",
-  "10": "Public Domain",
+  "9": "CC0-1.0",
+  "10": "CC-PDM-1.0",
 };
 
 const LICENSE_URLS: Record<string, string> = {

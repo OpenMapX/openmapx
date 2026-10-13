@@ -42,7 +42,7 @@
       "credentialOwner": "none",
       "reviewedAt": "2026-08-30",
       "apiHosts": ["api.weather.gc.ca", "open.canada.ca"],
-      "license": "Open Government Licence – Canada",
+      "license": "OGL-Canada-2.0",
       "licenseUrl": "https://open.canada.ca/en/open-government-licence-canada",
       "attribution": "Environment and Climate Change Canada",
       "commercialUse": "yes",
