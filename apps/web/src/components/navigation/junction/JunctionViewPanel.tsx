@@ -13,7 +13,7 @@ import {
 import { useTranslations } from "next-intl";
 import type { JunctionPhotoState } from "@/lib/navigation/junctionStore";
 import { GantryStrip } from "./GantryStrip";
-import { JunctionPhoto } from "./JunctionPhoto";
+import { JunctionPhoto, JunctionPhotoAttribution } from "./JunctionPhoto";
 import { JunctionSchematicView } from "./JunctionSchematic";
 
 interface Props {
@@ -63,8 +63,8 @@ function engineModel(point: JunctionDecisionPoint): GantryModel | null {
 /**
  * The junction card: gantry strip on top, photo preview or schematic below.
  * `role="img"` with a lane summary and the toward places — the SVG and photo
- * inside are hidden from assistive tech, and the panel is not live, so an
- * approach never chatters. Nothing here is a touch target while navigating.
+ * inside are hidden from assistive tech, and the graphic is not live, so an
+ * approach never chatters. Captured image credits sit beside the graphic.
  */
 export function JunctionViewPanel({ point, gantry, photo, geometry }: Props) {
   const t = useTranslations("navigation");
@@ -78,10 +78,15 @@ export function JunctionViewPanel({ point, gantry, photo, geometry }: Props) {
   ]
     .filter(Boolean)
     .join(", ");
+  const displayedPhoto =
+    photo?.status === "ready" && photo.image && photo.objectUrl && geometry
+      ? { image: photo.image, objectUrl: photo.objectUrl, geometry }
+      : null;
+  const photoKey = displayedPhoto
+    ? JSON.stringify([displayedPhoto.image.providerId, displayedPhoto.image.id])
+    : undefined;
   return (
     <Box
-      role="img"
-      aria-label={label}
       sx={{
         bgcolor: "background.paper",
         borderRadius: 3,
@@ -93,18 +98,22 @@ export function JunctionViewPanel({ point, gantry, photo, geometry }: Props) {
       }}
       data-testid="junction-view-panel"
     >
-      {model.panels.length > 0 && <GantryStrip model={model} />}
-      {photo?.status === "ready" && photo.image && photo.objectUrl && geometry ? (
-        <JunctionPhoto
-          image={photo.image}
-          objectUrl={photo.objectUrl}
-          point={point}
-          geometry={geometry}
-          exitLanes={{ laneCount: model.laneCount, activeLanes: model.activeLanes }}
-        />
-      ) : (
-        <SchematicBody model={model} point={point} />
-      )}
+      <Box role="img" aria-label={label} sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
+        {model.panels.length > 0 && <GantryStrip model={model} />}
+        {displayedPhoto ? (
+          <JunctionPhoto
+            key={photoKey}
+            image={displayedPhoto.image}
+            objectUrl={displayedPhoto.objectUrl}
+            point={point}
+            geometry={displayedPhoto.geometry}
+            exitLanes={{ laneCount: model.laneCount, activeLanes: model.activeLanes }}
+          />
+        ) : (
+          <SchematicBody model={model} point={point} />
+        )}
+      </Box>
+      {displayedPhoto && <JunctionPhotoAttribution key={photoKey} image={displayedPhoto.image} />}
     </Box>
   );
 }

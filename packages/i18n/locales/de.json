@@ -235,7 +235,7 @@
     "toward": "Richtung {places}",
     "junctionViewLabel": "Kreuzungsansicht",
     "junctionLaneSummary": "Spur {lane} von {total} nutzen",
-    "junctionPhotoCaption": "© {author} · {license} · {date}"
+    "junctionPhotoDate": "Aufgenommen {date}"
   },
   "common": {
     "close": "Schließen",

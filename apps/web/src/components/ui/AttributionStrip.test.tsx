@@ -337,3 +337,61 @@ it("retains mandatory branding in the details dialog even if the dialog covers t
     screen.getByRole("dialog").querySelector('a[href="https://www.mapillary.com/"]'),
   ).not.toBeNull();
 });
+
+it("keeps optional provenance in details while required image notices stay adjacent and wrap", () => {
+  const notice =
+    "The complete supplied image notice must remain readable even in a narrow navigation panel";
+  const required: Attribution = {
+    sourceId: "image-service",
+    name: "Image service",
+    publisher: { name: "Captured photographer", url: "https://image.test/author" },
+    url: "https://image.test/page",
+    licensing: {
+      version: 1,
+      bindings: [
+        {
+          scope: "imagery",
+          subject: "Captured photo",
+          license: { kind: "spdx", expression: "CC-BY-SA-4.0" },
+          notice,
+          conditions: ["Keep the supplied embedded notice"],
+          attribution: {
+            placement: "visible",
+            surfaces: ["image"],
+            basis: "provider-terms",
+            reviewedAt: "2026-10-14",
+            evidenceUrls: ["https://image.test/terms"],
+            reason: "Required image notice and logo",
+            logo: "mapillary",
+          },
+        },
+      ],
+    },
+  };
+  const { container } = render(
+    <AttributionStrip
+      attributions={[delfi, required]}
+      variant="plain"
+      surface="image"
+      provenanceDisplay="details"
+      maxVisible={0}
+    />,
+  );
+  expect(container.textContent).toContain(notice);
+  expect(container.querySelector('[data-source-id="delfi-de"]')).toBeNull();
+  expect(screen.queryByText(/more/)).toBeNull();
+  expect(screen.getAllByRole("button")).toHaveLength(1);
+  expect(container.querySelector('img[alt="Mapillary"]')).not.toBeNull();
+  const visible = container.querySelector('[data-source-id="image-service"]');
+  expect(visible).toHaveStyle({ whiteSpace: "normal", overflowWrap: "anywhere" });
+  expect(visible).not.toHaveStyle({ textOverflow: "ellipsis" });
+  fireEvent.click(screen.getByRole("button", { name: "attributions" }));
+  const dialog = screen.getByRole("dialog");
+  expect(dialog.textContent).toContain("DELFI");
+  expect(dialog.textContent).toContain("Captured photographer");
+  expect(dialog.textContent).toContain("CC-BY-SA-4.0");
+  expect(dialog.textContent).toContain(notice);
+  expect(dialog.textContent).toContain("Keep the supplied embedded notice");
+  expect(dialog.querySelector('a[href="https://image.test/page"]')).not.toBeNull();
+  expect(dialog.querySelector('img[alt="Mapillary"]')).not.toBeNull();
+});

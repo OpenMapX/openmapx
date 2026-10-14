@@ -51,6 +51,8 @@ export interface AttributionStripProps {
    * attribution lists (e.g. a transit hub served by many feeds) compact.
    */
   maxVisible?: number;
+  /** Keep optional provenance in the one-action dialog; required notices remain visible. */
+  provenanceDisplay?: "chips" | "details";
   /** The actual context of the contributed data; image policies remain image-bound. */
   surface?: AttributionSurface;
   /** Contextual contrast, for example white credits on an image. */
@@ -113,6 +115,7 @@ export function AttributionStrip({
   label,
   navigable = true,
   maxVisible,
+  provenanceDisplay = "chips",
   surface = "content",
   color,
 }: AttributionStripProps): JSX.Element | null {
@@ -127,9 +130,14 @@ export function AttributionStrip({
   const presentations = items.map((attr) => buildAttributionPresentation(attr, surface));
   const group = projectAttributionPresentations(presentations);
   const eligible = items.filter((_, index) => !presentations[index]?.visibleHtml);
-  const collapsible = typeof maxVisible === "number" && eligible.length > maxVisible;
+  const collapsible =
+    provenanceDisplay === "chips" && typeof maxVisible === "number" && eligible.length > maxVisible;
   const selected = new Set(
-    collapsible && !expanded ? eligible.slice(0, Math.max(0, maxVisible)) : eligible,
+    provenanceDisplay === "details"
+      ? []
+      : collapsible && !expanded
+        ? eligible.slice(0, Math.max(0, maxVisible))
+        : eligible,
   );
   const visibleItems = items.filter(
     (attr, index) => presentations[index]?.visibleHtml || selected.has(attr),

@@ -5,8 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 
 vi.mock("next-intl", () => ({
   useTranslations: () => (key: string, values?: Record<string, unknown>) => {
-    if (key === "junctionPhotoCaption")
-      return `© ${String(values?.author)} · ${String(values?.license)} · ${String(values?.date)}`;
+    if (key === "junctionPhotoDate") return `Captured ${String(values?.date)}`;
     return key;
   },
   useLocale: () => "en",
@@ -56,7 +55,7 @@ function pathPoints(html: string): [number, number][] {
 }
 
 describe("JunctionPhoto", () => {
-  it("renders a hidden image, the projected route path, and a licence caption", () => {
+  it("renders a hidden image, the projected route path, and a separate capture date", () => {
     const html = renderToStaticMarkup(
       <JunctionPhoto
         image={flatImage}
@@ -69,7 +68,8 @@ describe("JunctionPhoto", () => {
     expect(html).toContain('alt=""');
     expect(html).toContain("blob:photo-1");
     expect(html).toContain("data-photo-path");
-    expect(html).toContain("© motocultrice · CC-BY-SA-4.0 · Sep 2019");
+    expect(html).toContain("Captured Sep 2019");
+    expect(html).not.toContain("motocultrice");
     expect(html).not.toContain("<a ");
     // A straight road ahead projects up the middle of the frame, near points low.
     const points = pathPoints(html);
@@ -179,15 +179,17 @@ describe("JunctionPhoto", () => {
     expect(offsets[1]).toBeCloseTo(-(285 / 90) * 100 + 400, 1);
   });
 
-  it("credits the provider when the image carries no author", () => {
+  it("does not manufacture credit from legacy fields when captured receipts are empty", () => {
     const html = renderToStaticMarkup(
       <JunctionPhoto
-        image={{ ...flatImage, author: undefined }}
+        image={{ ...flatImage, contributors: [] }}
         objectUrl="blob:photo-1"
         point={point}
         geometry={geometry}
       />,
     );
-    expect(html).toContain("© panoramax · CC-BY-SA-4.0 · Sep 2019");
+    expect(html).toContain("Captured Sep 2019");
+    expect(html).not.toContain("©");
+    expect(html).not.toContain("CC-BY-SA");
   });
 });

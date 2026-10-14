@@ -164,7 +164,14 @@ distinct notices, every unambiguous publisher/licence link, and required brandin
 Publisher-name prefixes are not duplicate credits. Required logos also remain
 visible in the details dialog when it covers their original map/image strip.
 Use the host's `AttributionStrip` for content and its rendered/raster registration
-helpers for maps. `maxVisible` limits optional provenance chips only. A hover
+helpers for maps. `maxVisible` limits optional provenance chips only. For compact
+image surfaces such as the navigation junction card, `provenanceDisplay="details"`
+keeps optional provenance in the common dialog while required image notices and
+logos remain adjacent and wrap. Keep attribution controls outside the
+noninteractive `role="img"` graphic and key both the photo and its credit strip
+by provider and image identity so a new image resets measured framing and open
+details. Capture date is separate from the authoritative image receipts, including
+an explicitly empty list. A hover
 hint or global `/licenses` page is not a replacement for the current, one-action
 full attribution dialog. Do not implement source-name checks in view components.
 

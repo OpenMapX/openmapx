@@ -10,9 +10,9 @@ import type {
   StreetLevelImage,
 } from "@openmapx/core";
 import { projectRoutePath } from "@openmapx/core";
-import { formatLicensing } from "@openmapx/mobility-core/licensing";
 import { useLocale, useTranslations } from "next-intl";
 import { useMemo, useState } from "react";
+import { AttributionStrip } from "@/components/ui/AttributionStrip";
 
 const PHOTO_HEIGHT = 180;
 /** Frame shape used until the photo reports or reveals its own. */
@@ -24,9 +24,8 @@ const FADE_GRADIENT_ID = "junction-path-fade";
 
 /**
  * The photo preview: the image with the route ahead projected onto it, and a
- * plain-text caption with author, licence and capture month. No links while
- * navigating; everything decorative is `aria-hidden` (the wrapping panel is
- * the accessible surface).
+ * separate capture month. Everything decorative is `aria-hidden`; the panel
+ * owns the accessible graphic and renders captured credits beside it.
  */
 export function JunctionPhoto({
   image,
@@ -105,14 +104,24 @@ export function JunctionPhoto({
           )}
         </Box>
       )}
-      <Typography variant="caption" noWrap sx={{ color: "text.secondary" }}>
-        {t("junctionPhotoCaption", {
-          author: image.author ?? image.providerId,
-          license: image.licensing ? formatLicensing(image.licensing) : "",
-          date,
-        })}
-      </Typography>
+      {date && (
+        <Typography variant="caption" sx={{ color: "text.secondary" }}>
+          {t("junctionPhotoDate", { date })}
+        </Typography>
+      )}
     </Box>
+  );
+}
+
+/** Captured image receipts only; empty receipts never borrow legacy provider fields. */
+export function JunctionPhotoAttribution({ image }: { image: StreetLevelImage }) {
+  return (
+    <AttributionStrip
+      attributions={[...(image.contributors ?? [])]}
+      variant="plain"
+      surface="image"
+      provenanceDisplay="details"
+    />
   );
 }
 

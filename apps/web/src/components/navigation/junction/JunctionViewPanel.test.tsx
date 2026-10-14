@@ -1,4 +1,6 @@
+import type { StreetLevelImage } from "@openmapx/core";
 import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
@@ -8,8 +10,7 @@ vi.mock("next-intl", () => ({
       return `Use lane ${String(values?.lane)} of ${String(values?.total)}`;
     if (key === "junctionViewLabel") return "Junction view";
     if (key === "toward") return `toward ${String(values?.places)}`;
-    if (key === "junctionPhotoCaption")
-      return `© ${String(values?.author)} · ${String(values?.license)} · ${String(values?.date)}`;
+    if (key === "junctionPhotoDate") return `Captured ${String(values?.date)}`;
     return key;
   },
   useLocale: () => "en",
@@ -150,4 +151,168 @@ describe("JunctionViewPanel photo integration", () => {
     );
     expect(html).not.toContain("<a ");
   });
+});
+
+const capturedImage: StreetLevelImage = {
+  id: "captured-A",
+  providerId: "panoramax",
+  lngLat: [6.679, 51.1786],
+  heading: 283,
+  isPano: false,
+  fovDeg: 70,
+  assets: {},
+  capturedAt: "2019-09-10",
+  contributors: [
+    {
+      sourceId: "image-source",
+      name: "Photo A",
+      url: "https://image.test/a",
+      publisher: { name: "Photographer A", url: "https://image.test/author-a" },
+      licensing: {
+        version: 1,
+        bindings: [
+          {
+            scope: "imagery",
+            subject: "Image A",
+            license: { kind: "spdx", expression: "CC-BY-SA-4.0" },
+            notice: "Complete required image notice A that must wrap in a narrow navigation panel",
+            conditions: ["Preserve the embedded notice"],
+            attribution: {
+              placement: "visible",
+              surfaces: ["image"],
+              basis: "provider-terms",
+              reviewedAt: "2026-10-14",
+              evidenceUrls: ["https://image.test/terms"],
+              reason: "Image-bound branding",
+              logo: "mapillary",
+            },
+          },
+        ],
+      },
+    },
+  ],
+};
+const replacementImage: StreetLevelImage = {
+  ...capturedImage,
+  id: "captured-B",
+  aspectRatio: 16 / 9,
+  contributors: [
+    { sourceId: "image-source", name: "Photo B", attributionText: "Required image notice B" },
+  ],
+};
+function photoPanel(image = capturedImage, objectUrl = "blob:captured") {
+  return (
+    <JunctionViewPanel
+      point={a57Point}
+      gantry={threePanels}
+      photo={{ status: "ready", image, objectUrl }}
+      geometry={a57Route.geometry}
+    />
+  );
+}
+
+it("keeps required captured image credits outside the graphic with full one-action details", async () => {
+  const { container } = render(photoPanel());
+  const graphic = screen.getByRole("img", { name: "Use lane 5 of 5, toward Neuss-Zentrum" });
+  expect(graphic.querySelector("button,a")).toBeNull();
+  const credits = screen.getByRole("contentinfo");
+  expect(graphic.contains(credits)).toBe(false);
+  expect(credits.textContent).toContain("Complete required image notice A");
+  expect(credits.querySelector('img[alt="Mapillary"]')).not.toBeNull();
+  expect(credits.querySelector("[data-source-id]")).toHaveStyle({
+    whiteSpace: "normal",
+    overflowWrap: "anywhere",
+  });
+  expect(container.textContent).toContain("Captured Sep 2019");
+  const trigger = within(credits).getByRole("button", { name: "attributions" });
+  trigger.focus();
+  fireEvent.click(trigger);
+  const dialog = screen.getByRole("dialog");
+  expect(dialog.contains(document.activeElement)).toBe(true);
+  expect(dialog.textContent).toContain("Photographer A");
+  expect(dialog.textContent).toContain("CC-BY-SA-4.0");
+  expect(dialog.textContent).toContain("Preserve the embedded notice");
+  expect(dialog.querySelector('a[href="https://image.test/a"]')).not.toBeNull();
+  expect(dialog.querySelector('img[alt="Mapillary"]')).not.toBeNull();
+  const shortcuts = vi.fn();
+  window.addEventListener("keydown", shortcuts);
+  try {
+    fireEvent.keyDown(dialog, { key: "ArrowRight" });
+    expect(shortcuts).not.toHaveBeenCalled();
+    fireEvent.keyDown(dialog, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    await waitFor(() => expect(trigger).toHaveFocus());
+  } finally {
+    window.removeEventListener("keydown", shortcuts);
+  }
+});
+
+it.each(["image", "provider"])(
+  "resets measured aspect and attribution dialog when the %s identity changes",
+  (identity) => {
+    const { container, rerender } = render(photoPanel());
+    const img = container.querySelector('[data-testid="junction-photo"] img') as HTMLImageElement;
+    Object.defineProperties(img, { naturalWidth: { value: 2000 }, naturalHeight: { value: 1000 } });
+    fireEvent.load(img);
+    expect(container.querySelector("[data-photo-path]")?.getAttribute("viewBox")).toBe(
+      "0 0 100 50",
+    );
+    fireEvent.click(screen.getByRole("button", { name: "attributions" }));
+    const next =
+      identity === "image"
+        ? replacementImage
+        : { ...replacementImage, id: capturedImage.id, providerId: "another" };
+    rerender(photoPanel(next));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(container.textContent).not.toContain("Complete required image notice A");
+    expect(container.textContent).toContain("Required image notice B");
+    expect(container.querySelector("[data-photo-path]")?.getAttribute("viewBox")).toBe(
+      "0 0 100 56.25",
+    );
+    fireEvent.click(screen.getByRole("button", { name: "attributions" }));
+    expect(screen.getByRole("dialog").textContent).toContain("Photo B");
+    expect(screen.getByRole("dialog").textContent).not.toContain("Photographer A");
+  },
+);
+
+it.each(["loading", "missing-url", "missing-geometry"])(
+  "removes image credits and open details when the displayed photo becomes %s",
+  (state) => {
+    const { container, rerender } = render(photoPanel());
+    fireEvent.click(screen.getByRole("button", { name: "attributions" }));
+    rerender(
+      <JunctionViewPanel
+        point={a57Point}
+        gantry={threePanels}
+        photo={
+          state === "loading"
+            ? { status: "loading" }
+            : {
+                status: "ready",
+                image: capturedImage,
+                objectUrl: state === "missing-url" ? undefined : "blob:captured",
+              }
+        }
+        geometry={state === "missing-geometry" ? undefined : a57Route.geometry}
+      />,
+    );
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(screen.queryByRole("contentinfo")).toBeNull();
+    expect(container.querySelector('[data-testid="junction-schematic"]')).not.toBeNull();
+    expect(container.textContent).not.toContain("Complete required image notice A");
+  },
+);
+
+it("treats an empty captured receipt list as authoritative despite legacy image fields", () => {
+  const { container } = render(
+    photoPanel({
+      ...capturedImage,
+      contributors: [],
+      author: "Invented legacy author",
+      licensing: licensingFromDeclaration("CC-BY-SA-4.0"),
+    }),
+  );
+  expect(screen.queryByRole("contentinfo")).toBeNull();
+  expect(container.textContent).not.toContain("Invented legacy author");
+  expect(container.textContent).toContain("Captured Sep 2019");
 });
