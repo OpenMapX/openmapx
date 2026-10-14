@@ -4,16 +4,16 @@ import CssBaseline from "@mui/material/CssBaseline";
 import { createTheme, ThemeProvider } from "@mui/material/styles";
 import {
   configureStorage,
-  DEFAULT_QUERY_GC_TIME_MS,
   useDirectionsStore,
   useNavigationStore,
   useSettingsStore,
 } from "@openmapx/core";
 import { registerBuiltinIdSchemeViews } from "@openmapx/place-ids";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClientProvider } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { ImpersonationBanner } from "../components/admin/ImpersonationBanner";
 import { SavedPlacesMirror } from "../components/pwa/SavedPlacesMirror";
+import { createAppQueryClient } from "../lib/appQueryClient";
 import { MobileRuntimeProvider } from "../lib/mobile/MobileRuntimeProvider";
 import {
   PERSONAL_TIMELINE_CACHE_BUSTER,
@@ -109,20 +109,7 @@ const theme = createTheme({
 });
 
 export function Providers({ children }: { children: React.ReactNode }) {
-  const [queryClient] = useState(
-    () =>
-      new QueryClient({
-        defaultOptions: {
-          queries: {
-            staleTime: 60_000,
-            retry: 1,
-            // IndexedDB persistence separately preserves opted-in offline map
-            // data. In-memory inactive queries should not accumulate all day.
-            gcTime: DEFAULT_QUERY_GC_TIME_MS,
-          },
-        },
-      }),
-  );
+  const [queryClient] = useState(() => createAppQueryClient());
 
   // Persister is created lazily client-side so SSR doesn't touch storage. Backed
   // by IndexedDB (not localStorage) so the persisted cache has real headroom.
