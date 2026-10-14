@@ -30,11 +30,11 @@ function listParam(raw: string | undefined): string[] {
  * or out-of-domain input rather than silently substituting a wrong value.
  *
  * NOTE: this is a byte-identical copy of `parseBbox` in OpenConditions'
- * `services/ingest/src/publish-routes.ts` — there is no shared package either
+ * `services/ingest/src/api/query.ts` — there is no shared package either
  * side imports from, so any future change here must be mirrored there too.
  */
 export function parseBbox(raw: string | undefined): BBox | null {
-  if (!raw) return null;
+  if (typeof raw !== "string" || !raw) return null;
   const segments = raw.split(",");
   // Reject blank segments explicitly — `Number("")` is `0` (finite), so
   // "1,,3,4" would otherwise silently parse to [1, 0, 3, 4] instead of

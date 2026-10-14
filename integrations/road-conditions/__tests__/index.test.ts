@@ -190,6 +190,10 @@ describe("parseBbox", () => {
     expect(parseBbox(undefined)).toBeNull();
   });
 
+  it("returns null for a repeated parameter, which the query parser hands over as an array", () => {
+    expect(parseBbox(["-1,51,1,52", "0,0,1,1"] as unknown as string)).toBeNull();
+  });
+
   it("rejects a blank segment instead of silently substituting 0", () => {
     expect(parseBbox("1,,3,4")).toBeNull();
   });
