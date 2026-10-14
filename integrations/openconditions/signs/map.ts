@@ -5,10 +5,10 @@ import type {
 } from "@openmapx/integration-framework";
 import {
   allowedReadings,
-  CROWD_CREDIT,
   type CreditSources,
   countryOf,
   credit,
+  crowdCredits,
   crowdReported,
   firstText,
   itemIdOf,
@@ -119,7 +119,7 @@ export function recordToMessageSign(
     attributions: [
       ...kept.map((s) => credit(s, sources)),
       ...upstreamCredits(kept, sources),
-      ...(crowdReported(reading) ? [CROWD_CREDIT] : []),
+      ...crowdCredits(crowdReported(reading), sources),
     ],
   };
 }

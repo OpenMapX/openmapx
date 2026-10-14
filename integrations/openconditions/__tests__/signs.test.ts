@@ -35,6 +35,7 @@ const EVERY_SOURCE: LiveSources = {
   ready: true,
   has: () => true,
   link: () => undefined,
+  crowd: () => undefined,
   noticeOf: () => undefined,
   firmsSources: () => [],
 };
