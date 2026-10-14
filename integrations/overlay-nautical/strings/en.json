@@ -48,7 +48,7 @@
       "dataReceived": "Station catalog (uuid, name, coordinates) and per-station water-level measurements."
     },
     "ioc-sealevel": {
-      "purpose": "Provide observed sea-level data from the global IOC tide-gauge monitoring network.",
+      "purpose": "Provide observed sea-level data from the global IOC tide-gauge monitoring network. Published data and products are available for non-commercial use; commercial use requires permission from the relevant data originators. Permission for this operator is unverified.",
       "dataSent": "A station code and a time period in days for observations. No personal data.",
       "dataReceived": "Station catalog (code, location, coordinates) and per-station sea-level observations."
     },

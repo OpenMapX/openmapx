@@ -48,7 +48,7 @@
       "dataReceived": "Stationskatalog (UUID, Name, Koordinaten) sowie je Station gemessene Wasserstände."
     },
     "ioc-sealevel": {
-      "purpose": "Gemessene Meeresspiegeldaten aus dem globalen IOC-Pegelmessnetz bereitstellen.",
+      "purpose": "Gemessene Meeresspiegeldaten aus dem globalen IOC-Pegelmessnetz bereitstellen. Veröffentlichte Daten und Produkte sind für die nichtkommerzielle Nutzung verfügbar; kommerzielle Nutzung erfordert die Genehmigung der jeweiligen Datenurheber. Eine Genehmigung für diesen Betreiber ist nicht verifiziert.",
       "dataSent": "Ein Stationscode und ein Zeitraum in Tagen für die Messwerte. Keine personenbezogenen Daten.",
       "dataReceived": "Stationskatalog (Code, Standort, Koordinaten) sowie je Station gemessene Meeresspiegelwerte."
     },

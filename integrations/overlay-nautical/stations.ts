@@ -10,7 +10,9 @@
  *  - **Kartverket** Sehavnivå (Norway) — predictions + observations
  *  - **WSV Pegelonline** (Germany) — coastal/estuarine observations
  *
- * All networks: free, no API key, commercial use permitted (verified 2026-05-18).
+ * No API key is required. IOC data/products are offered for non-commercial use;
+ * commercial use requires permission from the relevant data originators,
+ * unverified for this operator. Other networks retain their own terms.
  *
  * Dedup priority when stations overlap within ~500m, highest first:
  *   NOAA > Canada (IWLS) > Norway (Kartverket) > Pegelonline > EMODnet > IOC

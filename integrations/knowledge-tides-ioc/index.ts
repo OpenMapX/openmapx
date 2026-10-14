@@ -24,8 +24,9 @@ import {
  * from the past 24 h of observations. Forecast event sections self-hide
  * because the derived events all lie in the past.
  *
- * Units: m by default; converted to feet for parity with NOAA. Free +
- * commercial use under UNESCO-IOC public-data policy.
+ * Units: m by default; converted to feet for parity with NOAA. The IOC policy
+ * covers non-commercial use; commercial use requires the relevant data
+ * originators' permission, which is not verified for this operator.
  *
  * The place-resolver + `/tides` route shell (nearest-station lookup, per-day
  * `nearest:` cache, `{ notFound: true }` sentinel, `Cache-Control`) lives in

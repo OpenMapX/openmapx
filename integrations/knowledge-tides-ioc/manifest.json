@@ -43,7 +43,7 @@
       "name": "IOC Sea Level Station Monitoring Facility",
       "url": "https://www.ioc-sealevelmonitoring.org/",
       "attribution": "Water-level data from the <a href=\"https://www.ioc-sealevelmonitoring.org/\">IOC Sea Level Station Monitoring Facility</a>",
-      "commercialUse": "yes",
+      "commercialUse": "conditional",
       "providerCountry": "FR",
       "providerPrivacyUrl": "https://www.unesco.org/en/legal-affairs/privacy-policy",
       "endUserExposure": "server-only",
@@ -66,7 +66,10 @@
               "reviewedAt": "2026-10-14",
               "evidenceUrls": ["https://www.ioc-sealevelmonitoring.org/disclaimer.php"],
               "reason": "Exact originator permission and non-commercial scope remain unresolved; visible credit does not grant usage"
-            }
+            },
+            "conditions": [
+              "Published IOC data and products are available for non-commercial use; commercial use requires permission from the relevant data originators. Originator permissions for this operator are unverified."
+            ]
           },
           {
             "scope": "service",
@@ -85,7 +88,10 @@
               "reviewedAt": "2026-10-14",
               "evidenceUrls": ["https://www.ioc-sealevelmonitoring.org/disclaimer.php"],
               "reason": "Exact originator permission and non-commercial scope remain unresolved; visible credit does not grant usage"
-            }
+            },
+            "conditions": [
+              "Published IOC data and products are available for non-commercial use; commercial use requires permission from the relevant data originators. Originator permissions for this operator are unverified."
+            ]
           }
         ],
         "declarations": [
@@ -94,7 +100,11 @@
             "url": "https://www.unesco.org/en/open-access"
           }
         ]
-      }
+      },
+      "notes": "Published IOC data and products are available for non-commercial use; commercial use requires permission from the relevant data originators. Originator permissions for this operator are unverified.",
+      "usageConditions": [
+        "Published IOC data and products are available for non-commercial use; commercial use requires permission from the relevant data originators. Originator permissions for this operator are unverified."
+      ]
     }
   ]
 }

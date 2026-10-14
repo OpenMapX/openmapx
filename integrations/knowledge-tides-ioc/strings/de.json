@@ -3,7 +3,7 @@
   "description": "Echtzeit-Wasserstands-Messungen von ~700 Stationen weltweit, betrieben von der IOC Sea Level Station Monitoring Facility (UNESCO).",
   "dataSources": {
     "ioc-sealevel": {
-      "purpose": "Beobachteter Wasserstand + 24-Std-Kurve für globale Orte in der Nähe einer IOC-Station.",
+      "purpose": "Beobachteter Wasserstand + 24-Std-Kurve für globale Orte in der Nähe einer IOC-Station. Veröffentlichte Daten und Produkte sind für die nichtkommerzielle Nutzung verfügbar; kommerzielle Nutzung erfordert die Genehmigung der jeweiligen Datenurheber. Eine Genehmigung für diesen Betreiber ist nicht verifiziert.",
       "dataSent": "Breiten-/Längengrad (gerundet) oder Stations-Code.",
       "dataReceived": "Letzter beobachteter Wasserstand, 24-Std-Kurve, abgeleitete Hoch-/Niedrigwasser-Ereignisse."
     }

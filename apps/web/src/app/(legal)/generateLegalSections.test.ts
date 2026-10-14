@@ -1,5 +1,11 @@
 import type { LoadedIntegrationMeta } from "@openmapx/integration-framework";
 import { describe, expect, it } from "vitest";
+import iocManifest from "../../../../../integrations/knowledge-tides-ioc/manifest.json";
+import iocDe from "../../../../../integrations/knowledge-tides-ioc/strings/de.json";
+import iocEn from "../../../../../integrations/knowledge-tides-ioc/strings/en.json";
+import nauticalManifest from "../../../../../integrations/overlay-nautical/manifest.json";
+import nauticalDe from "../../../../../integrations/overlay-nautical/strings/de.json";
+import nauticalEn from "../../../../../integrations/overlay-nautical/strings/en.json";
 import {
   generateAttributionSectionsFromManifests,
   generatePrivacySectionsFromManifests,
@@ -85,4 +91,44 @@ describe("legal sections of a source that names its domain", () => {
       ["Tankstellen", ["OpenStreetMap"]],
     ]);
   });
+});
+
+describe("IOC source terms in the generated legal disclosures", () => {
+  const integrations = [
+    { ...iocManifest, strings: { en: iocEn, de: iocDe } },
+    { ...nauticalManifest, strings: { en: nauticalEn, de: nauticalDe } },
+  ].map((manifest) => ({ ...manifest, name: manifest.id, enabled: true }) as LoadedIntegrationMeta);
+
+  it.each(integrations)(
+    "$id discloses conditional commercial permission with the originator scope",
+    (integration) => {
+      const row = generateAttributionSectionsFromManifests([integration], "en")
+        .flatMap((section) => section.rows)
+        .find((entry) => entry.url === "https://www.ioc-sealevelmonitoring.org/");
+      expect(row?.commercialUse).toBe("conditional");
+      expect(row?.notes).toMatch(/non-commercial/i);
+      expect(row?.notes).toMatch(/commercial.*permission.*originator/i);
+      expect(row?.notes).toMatch(/unverified/i);
+      expect(
+        row?.licensing.bindings.every((binding) => binding.attribution?.basis === "unresolved"),
+      ).toBe(true);
+      const source = integration.dataSources?.find((entry) => entry.sourceId === "ioc-sealevel");
+      expect(source?.usageConditions?.join(" ")).toMatch(/commercial.*permission.*originator/i);
+    },
+  );
+
+  it.each(integrations)(
+    "$id localizes the non-commercial and permission scope for its exact source",
+    (integration) => {
+      for (const locale of ["en", "de"]) {
+        const row = generatePrivacySectionsFromManifests([integration], locale)
+          .flatMap((section) => section.rows)
+          .find((entry) => entry.service === "IOC Sea Level Station Monitoring Facility");
+        expect(row?.purpose).toMatch(locale === "en" ? /non-commercial/i : /nichtkommerziell/i);
+        expect(row?.purpose).toMatch(
+          locale === "en" ? /permission.*originator/i : /Genehmigung.*Datenurheber/i,
+        );
+      }
+    },
+  );
 });
