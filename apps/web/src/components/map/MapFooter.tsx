@@ -77,7 +77,9 @@ export function MapFooter() {
         setMerged(false);
         return;
       }
-      const sameLine = Math.abs(l.top - c.top) < 1;
+      // Flex rows align their bottom edges. The credits button (or wrapped
+      // text inside either bar) can give same-row bars different heights.
+      const sameLine = Math.abs(l.bottom - c.bottom) < 1;
       setMerged(!sameLine || c.left - l.right < MERGE_GAP);
     };
     measure();

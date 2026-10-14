@@ -4,7 +4,7 @@ import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 
 import { buildAttributionPresentation } from "@openmapx/core/attribution";
 import { dataSourceToAttribution } from "@openmapx/integration-framework";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useMapAttributionStore } from "@/integration-api/overlay/mapAttributionStore";
 import { getMapObstructionInsets } from "@/lib/mapObstructions";
@@ -162,4 +162,123 @@ it("offers layer management for unusually tall required credits without clipping
   expect(opened).toHaveBeenCalledTimes(1);
   window.removeEventListener("openmapx:open-layer-selector", opened);
   vi.restoreAllMocks();
+});
+
+describe("footer background joining", () => {
+  it.each([
+    {
+      name: "different-height bars on a roomy desktop row",
+      legal: [0, 783, 192, 17],
+      credits: [791, 772, 489, 28],
+      joined: false,
+    },
+    {
+      name: "a legal bar taller than the credits on the same row",
+      legal: [0, 766, 192, 34],
+      credits: [791, 772, 489, 28],
+      joined: false,
+    },
+    {
+      name: "a fractional-pixel bottom alignment on the same row",
+      legal: [0, 783.5, 192, 17],
+      credits: [791, 772, 489, 28],
+      joined: false,
+    },
+    {
+      name: "bars with just enough space between them",
+      legal: [0, 783, 192, 17],
+      credits: [208, 772, 489, 28],
+      joined: false,
+    },
+    {
+      name: "bars that are close together",
+      legal: [0, 783, 192, 17],
+      credits: [207, 772, 489, 28],
+      joined: true,
+    },
+    {
+      name: "credits wrapped below the legal links",
+      legal: [0, 755, 192, 17],
+      credits: [0, 772, 390, 28],
+      joined: true,
+    },
+  ])("paints the expected background for $name", ({ legal, credits, joined }) => {
+    // jsdom has no layout. These rectangles reproduce actual bottom-aligned
+    // flex rows, including the taller Map credits button measured in a browser.
+    const actual = HTMLElement.prototype.getBoundingClientRect;
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
+      this: HTMLElement,
+    ) {
+      if (this.dataset.testid === "map-attributions")
+        return new DOMRect(credits[0], credits[1], credits[2], credits[3]);
+      if (this.parentElement?.tagName === "FOOTER")
+        return new DOMRect(legal[0], legal[1], legal[2], legal[3]);
+      return actual.call(this);
+    });
+    try {
+      useMapAttributionStore.setState({
+        byLayer: {
+          base: [buildAttributionPresentation({ sourceId: "osm", name: "OpenStreetMap" }, "map")],
+        },
+      });
+      const { container } = render(<MapFooter />);
+      const footer = container.querySelector("footer") as HTMLElement;
+      const transparent = "rgba(0, 0, 0, 0)";
+      expect(getComputedStyle(footer).backgroundColor === transparent).toBe(!joined);
+      expect(
+        getComputedStyle(footer.firstElementChild as HTMLElement).backgroundColor === transparent,
+      ).toBe(joined);
+      expect(
+        getComputedStyle(screen.getByTestId("map-attributions")).backgroundColor === transparent,
+      ).toBe(joined);
+    } finally {
+      vi.restoreAllMocks();
+    }
+  });
+
+  it("joins and separates the bars again as available space changes", () => {
+    let creditsLeft = 791;
+    const actual = HTMLElement.prototype.getBoundingClientRect;
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
+      this: HTMLElement,
+    ) {
+      if (this.dataset.testid === "map-attributions") return new DOMRect(creditsLeft, 772, 489, 28);
+      if (this.parentElement?.tagName === "FOOTER") return new DOMRect(0, 783, 192, 17);
+      return actual.call(this);
+    });
+    const callbacks: ResizeObserverCallback[] = [];
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        constructor(callback: ResizeObserverCallback) {
+          callbacks.push(callback);
+        }
+        observe() {}
+        disconnect() {}
+      },
+    );
+    try {
+      useMapAttributionStore.setState({
+        byLayer: {
+          base: [buildAttributionPresentation({ sourceId: "osm", name: "OpenStreetMap" }, "map")],
+        },
+      });
+      const { container } = render(<MapFooter />);
+      const footer = container.querySelector("footer") as HTMLElement;
+      expect(getComputedStyle(footer).backgroundColor).toBe("rgba(0, 0, 0, 0)");
+      act(() => {
+        creditsLeft = 207;
+        for (const callback of callbacks) callback([], {} as ResizeObserver);
+      });
+      expect(getComputedStyle(footer).backgroundColor).not.toBe("rgba(0, 0, 0, 0)");
+      act(() => {
+        creditsLeft = 791;
+        for (const callback of callbacks) callback([], {} as ResizeObserver);
+      });
+      expect(getComputedStyle(footer).backgroundColor).toBe("rgba(0, 0, 0, 0)");
+    } finally {
+      vi.restoreAllMocks();
+      vi.unstubAllGlobals();
+    }
+  });
 });
