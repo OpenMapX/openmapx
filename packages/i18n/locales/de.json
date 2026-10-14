@@ -733,7 +733,8 @@
       "freeFlowSpeed": "Geschwindigkeit bei freier Fahrt",
       "ratio": "Von freier Fahrt",
       "los": "Verkehr"
-    }
+    },
+    "unavailable": "Verkehrsflussdaten sind nicht verfügbar"
   },
   "earthquakes": {
     "earthquakes": "Erdbeben",

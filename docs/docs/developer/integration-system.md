@@ -574,9 +574,11 @@ Do not replace it with process-local maps or counters in production. Redis
 failure must deny a new quota-consuming refresh, although eligible stale data
 may still be returned with its original evidence time.
 
-Use `http.getResponse()` when status or allowlisted rate-limit headers matter,
-and `http.getBytes()` for binary payloads. Both require a byte ceiling and media
-type allowlist; redirects can be rejected. Non-success bodies are bounded too.
+Use `http.getResponse()` or `http.postResponse()` when status or allowlisted
+rate-limit headers matter, and `http.getBytes()` for binary payloads. Unlike
+`get()` and `post()`, these return a non-success status instead of throwing.
+They require a byte ceiling and media type allowlist; redirects can be rejected.
+Non-success bodies are bounded too.
 Integration-local raw `fetch` is not an escape hatch for provider work.
 
 Route queries arrive exactly as Fastify parsed them: each value is a string, an

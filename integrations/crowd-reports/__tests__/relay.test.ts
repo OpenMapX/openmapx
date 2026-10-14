@@ -1,4 +1,5 @@
-import { describe, expect, it, vi } from "vitest";
+import { fakeHttpClient } from "@openmapx/integration-framework/testing";
+import { describe, expect, it } from "vitest";
 import {
   contributionsBaseUrl,
   isRecordClass,
@@ -8,13 +9,6 @@ import {
   relayContribution,
   SUBCLAIM_ACTIONS,
 } from "../relay.js";
-
-function fakeResponse(status: number, body: unknown) {
-  return {
-    status,
-    text: async () => (typeof body === "string" ? body : JSON.stringify(body)),
-  } as Response;
-}
 
 describe("contributionsBaseUrl", () => {
   it("defaults to the contributions-api's own port 4200 when the env var is unset", () => {
@@ -35,47 +29,54 @@ describe("contributionsBaseUrl", () => {
 });
 
 describe("relayContribution", () => {
-  it("forwards to the configured base URL and passes body + status through", async () => {
-    const fetchImpl = vi.fn(async () => fakeResponse(201, { id: "abc" }));
-    const result = await relayContribution("POST", "/contrib/reports", {
+  it("posts through the host client with a bounded JSON-only, no-redirect policy", async () => {
+    const http = fakeHttpClient(() => ({ status: 201, headers: {}, body: { id: "abc" } }));
+    const result = await relayContribution(http, "POST", "/contrib/reports", {
       body: { alg: "ES256", signature: "sig" },
       base: "https://contrib.example.org",
-      fetchImpl,
     });
 
-    expect(fetchImpl).toHaveBeenCalledTimes(1);
-    const [url, init] = fetchImpl.mock.calls[0];
-    expect(url).toBe("https://contrib.example.org/contrib/reports");
-    expect(init?.method).toBe("POST");
-    expect(init?.body).toBe(JSON.stringify({ alg: "ES256", signature: "sig" }));
+    expect(http.calls).toHaveLength(1);
+    const [call] = http.calls;
+    expect(call?.method).toBe("postResponse");
+    expect(call?.url).toBe("https://contrib.example.org/contrib/reports");
+    expect(call?.body).toEqual({ alg: "ES256", signature: "sig" });
+    expect(call?.options).toMatchObject({
+      timeoutMs: 10_000,
+      maxBytes: 256 * 1024,
+      contentTypes: ["application/json"],
+      redirect: "error",
+    });
     expect(result).toEqual({ status: 201, body: { id: "abc" } });
   });
 
   it("propagates a non-2xx upstream status and its JSON body", async () => {
-    const fetchImpl = vi.fn(async () => fakeResponse(409, { error: "duplicate" }));
-    const result = await relayContribution("POST", "/contrib/reports", {
+    const http = fakeHttpClient(() => ({ status: 409, headers: {}, body: { error: "duplicate" } }));
+    const result = await relayContribution(http, "POST", "/contrib/reports", {
       base: "https://contrib.example.org",
-      fetchImpl,
     });
     expect(result).toEqual({ status: 409, body: { error: "duplicate" } });
   });
 
-  it("wraps a non-JSON upstream body as { raw }", async () => {
-    const fetchImpl = vi.fn(async () => fakeResponse(200, "not-json"));
-    const result = await relayContribution("GET", "/contrib/issuer-keys", {
-      base: "https://contrib.example.org",
-      fetchImpl,
+  it("rejects when the host client refuses the upstream answer", async () => {
+    const http = fakeHttpClient(() => {
+      throw new Error("integration HTTP response has unexpected content type");
     });
-    expect(result).toEqual({ status: 200, body: { raw: "not-json" } });
+    await expect(
+      relayContribution(http, "GET", "/contrib/issuer-keys", {
+        base: "https://contrib.example.org",
+      }),
+    ).rejects.toThrow(/content type/);
   });
 
-  it("sends no body for a GET", async () => {
-    const fetchImpl = vi.fn(async () => fakeResponse(200, {}));
-    await relayContribution("GET", "/contrib/issuer-keys", {
+  it("uses a body-less GET for reads", async () => {
+    const http = fakeHttpClient(() => ({ keys: [] }));
+    const result = await relayContribution(http, "GET", "/contrib/issuer-keys", {
       base: "https://contrib.example.org",
-      fetchImpl,
     });
-    expect(fetchImpl.mock.calls[0][1]?.body).toBeUndefined();
+    expect(http.calls[0]?.method).toBe("getResponse");
+    expect(http.calls[0]?.body).toBeUndefined();
+    expect(result).toEqual({ status: 200, body: { keys: [] } });
   });
 });
 

@@ -19,6 +19,7 @@ export function TrafficFlowLegend() {
   const ts = useTranslations("trafficStatus.overlay");
   const panelOpen = useTrafficFlowStore((s) => s.panelOpen);
   const layerVisible = useTrafficFlowStore((s) => s.layerVisible);
+  const unavailable = useTrafficFlowStore((s) => s.unavailable);
   const setLayerVisible = useOverlayVisibilitySetter("traffic-flow");
 
   return (
@@ -31,6 +32,12 @@ export function TrafficFlowLegend() {
       toggleAriaLabel={t("toggleOverlay")}
       paperSx={{ maxWidth: { xs: "90vw", sm: 340 }, minWidth: 240 }}
     >
+      {/* Roads without color from missing tiles are not free-flowing traffic. */}
+      {unavailable && layerVisible ? (
+        <Typography role="status" sx={{ fontSize: 11, color: "error.main", mb: 0.75 }}>
+          {t("unavailable")}
+        </Typography>
+      ) : null}
       <Box sx={{ mb: 1 }}>
         <Box sx={{ display: "flex", borderRadius: "4px", overflow: "hidden", height: 10 }}>
           {BANDS.map((band) => (
