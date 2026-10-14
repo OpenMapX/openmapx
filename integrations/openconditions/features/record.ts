@@ -32,18 +32,12 @@ export interface LatestReading {
 
 const FUSED = new Set(["@fused", "@fused-public"]);
 
-/** The contributor id OpenConditions gives its own crowd reports. */
-export const CROWD = "crowd";
-
 /**
- * The credit of the OpenConditions instance's community reports. They are no
- * feed, so `/sources` never lists them; they are public in every scope.
+ * The contributor id OpenConditions gives its own crowd reports. They are no
+ * feed: `/sources` states their credit beside the feeds, and they are public
+ * in every scope.
  */
-export const CROWD_CREDIT: Attribution = {
-  sourceId: CROWD,
-  name: "OpenConditions community reports",
-  url: "https://openconditions.org",
-};
+export const CROWD = "crowd";
 
 export function rec(value: unknown): Rec {
   return value !== null && typeof value === "object" && !Array.isArray(value) ? (value as Rec) : {};
@@ -177,26 +171,36 @@ export function newestReading(
  * The readings that may be shown when `excluded` sources are taken out. A
  * fused reading is one value OpenConditions computed from all its
  * contributors; the excluded source's share cannot be taken out of it, so the
- * whole reading goes, even when an allowed contributor agreed with it.
+ * whole reading goes, even when an allowed contributor agreed with it. The
+ * crowd is excluded as a feed is: while `/sources` states no crowd credit,
+ * no reading the crowd contributed to is shown.
  */
 export function allowedReadings(
   latest: readonly LatestReading[],
   excluded: (sourceId: string) => boolean,
 ): LatestReading[] {
-  return latest.filter((r) => !readingFeeds(r).some(excluded));
+  return latest.filter((r) => !readingSources(r).some(excluded));
 }
 
 /** What a credit reads from the live data sources. */
 export interface CreditSources {
   /** A source's link by source id. */
   link(sourceId: string): string | undefined;
-  /** A licence's readable name by licence id, where a listed source gives one. */
+  /** The crowd's credit, as `/sources` states it. */
+  crowd(): Attribution | undefined;
 }
 
-/** No live data sources: no links, and every licence shown by its id. */
+/** No live data sources: no links and no crowd credit. */
 export const NO_SOURCES: CreditSources = {
   link: () => undefined,
+  crowd: () => undefined,
 };
+
+/** The crowd's credit when its reports contributed, as `sources` states it. */
+export function crowdCredits(contributed: boolean, sources: CreditSources): Attribution[] {
+  const credit = contributed ? sources.crowd() : undefined;
+  return credit ? [credit] : [];
+}
 
 /** A source's credit; without a link of its own it takes the source's link from `sources`. */
 export function credit(source: RecordSource, sources: CreditSources): Attribution {

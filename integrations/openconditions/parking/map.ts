@@ -11,10 +11,10 @@ import type {
 import {
   addressOf,
   allowedReadings,
-  CROWD_CREDIT,
   type CreditSources,
   countryOf,
   credit,
+  crowdCredits,
   crowdReported,
   firstText,
   instantOf,
@@ -319,7 +319,7 @@ export function recordToParkingSite(
     attributions: [
       ...kept.map((s) => credit(s, sources)),
       ...upstreamCredits(kept, sources),
-      ...(crowd ? [CROWD_CREDIT] : []),
+      ...crowdCredits(crowd, sources),
     ],
   };
 }

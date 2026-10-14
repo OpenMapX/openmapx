@@ -469,9 +469,11 @@ scope, which never serves a restricted feed's records, the integration lists
 only the unrestricted feeds as data sources; in the `operator` scope it lists
 every feed. The scope is OpenConditions' own: a token set in OpenMapX but not
 held by the instance still reads in public scope and credits no restricted
-feed. In a fused fuel reading, the contributor `crowd` (the instance's own
-community reports) is credited as such; any other contributor not on the list
-drops the reading.
+feed. The instance's own community reports are no feed: the answer states
+their credit beside the feeds as `crowd` (name, licence and an optional link),
+and a fuel, parking, charging or camera reading they contributed to credits
+them with it. While the answer states no crowd credit, such a reading is left
+out, as is any reading with a contributor that is not on the list.
 The providers serve only the sources the host accepted (see above).
 
 Its `domain:<domain>` strings describe what each domain's sources receive in

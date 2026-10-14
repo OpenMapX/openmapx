@@ -30,6 +30,8 @@ export interface FuelStation {
   name: string;
   /** Plain brand name as the source publishes it. */
   brand?: string;
+  /** The brand's Wikidata item (`Q<digits>`), when the source names it. */
+  brandWikidata?: string;
   /** ISO 3166-1 alpha-2 code of the station's country, when known. */
   country?: string;
   coordinates: [number, number];
