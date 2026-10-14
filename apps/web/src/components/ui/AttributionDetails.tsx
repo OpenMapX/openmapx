@@ -9,7 +9,7 @@ import DialogTitle from "@mui/material/DialogTitle";
 import Link from "@mui/material/Link";
 import type { AttributionLogo } from "@openmapx/mobility-core/licensing";
 import { useTranslations } from "next-intl";
-import { useId, useState } from "react";
+import { useId, useRef, useState } from "react";
 import { AttributionLogos } from "./AttributionNotices";
 import { AttributionText } from "./AttributionText";
 
@@ -26,6 +26,7 @@ export function AttributionDetails({
   const t = useTranslations("footer");
   const tc = useTranslations("common");
   const [open, setOpen] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement>(null);
   const titleId = useId();
   if (html.length === 0) return null;
   const title = label ?? t("attributions");
@@ -34,9 +35,13 @@ export function AttributionDetails({
       <Link
         component="button"
         type="button"
+        ref={triggerRef}
         onClick={(event) => {
           event.stopPropagation();
           event.preventDefault();
+          // The modal hides its siblings before its focus trap mounts. Release
+          // focus first so Chromium can hide it from assistive technology.
+          event.currentTarget.blur();
           setOpen(true);
         }}
         aria-label={title}
@@ -61,6 +66,14 @@ export function AttributionDetails({
         aria-labelledby={titleId}
         fullWidth
         maxWidth="sm"
+        disableRestoreFocus
+        slotProps={{
+          transition: {
+            // MUI removes background hiding before calling the child's exit
+            // callback. Restore here, once the trigger is accessible again.
+            onExited: () => triggerRef.current?.focus(),
+          },
+        }}
         onClick={(event) => event.stopPropagation()}
         onKeyDown={(event) => event.stopPropagation()}
       >

@@ -3,8 +3,6 @@ import { join } from "node:path";
 import { createInterface } from "node:readline/promises";
 import type { Command } from "commander";
 import { execa } from "execa";
-import { parseEntry } from "../../../../integrations/transit-dynamic-registry/fetcher";
-import { registryEndpointRejection } from "../../../../integrations/transit-dynamic-registry/validate-endpoint";
 import { log } from "../lib/output";
 import { repoPaths } from "../lib/paths";
 
@@ -293,11 +291,17 @@ async function fetchCatalogFiles(
   return files;
 }
 
-function summarizeCatalog(files: Array<{ path: string; value: unknown }>): {
+async function summarizeCatalog(files: Array<{ path: string; value: unknown }>): Promise<{
   entryCount: number;
   protocolCounts: Map<string, number>;
   rejectedIds: string[];
-} {
+}> {
+  // Only the pin command needs integration implementations. The fixed operator
+  // CLI also serves backups/builds in an image containing packages alone.
+  const [{ parseEntry }, { registryEndpointRejection }] = await Promise.all([
+    import("../../../../integrations/transit-dynamic-registry/fetcher"),
+    import("../../../../integrations/transit-dynamic-registry/validate-endpoint"),
+  ]);
   let entryCount = 0;
   const protocolCounts = new Map<string, number>();
   const rejectedIds: string[] = [];
@@ -331,7 +335,7 @@ export async function resolveTransportApisCandidate(
       ? `https://cdn.jsdelivr.net/gh/${TRANSPORT_APIS_REPO}@${commit}`
       : `https://raw.githubusercontent.com/${TRANSPORT_APIS_REPO}/${commit}`;
   const files = await fetchCatalogFiles(listing.paths, fileBase, fetchImpl);
-  const summary = summarizeCatalog(files);
+  const summary = await summarizeCatalog(files);
   if (summary.entryCount < 1)
     throw new Error("transport-apis candidate contains no parsed entries");
   return {

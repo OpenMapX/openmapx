@@ -266,6 +266,39 @@ it("keeps gallery navigation shortcuts from reaching the window while attributio
   }
 });
 
+it("moves focus before hiding the background and restores it after the dialog exits", async () => {
+  render(<AttributionStrip attributions={[delfi]} />);
+  const trigger = screen.getByRole("button", { name: "attributions" });
+  trigger.focus();
+  const hiddenFocusedElements: string[] = [];
+  const setAttribute = Element.prototype.setAttribute;
+  const spy = vi.spyOn(Element.prototype, "setAttribute").mockImplementation(function (
+    this: Element,
+    ...args: unknown[]
+  ) {
+    const [name, value] = args;
+    if (
+      name === "aria-hidden" &&
+      value === "true" &&
+      document.activeElement !== document.body &&
+      this.contains(document.activeElement)
+    ) {
+      hiddenFocusedElements.push(this.tagName);
+    }
+    Reflect.apply(setAttribute, this, args);
+  });
+  try {
+    fireEvent.click(trigger);
+    expect(hiddenFocusedElements).toEqual([]);
+    expect(screen.getByRole("dialog").contains(document.activeElement)).toBe(true);
+    fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    await waitFor(() => expect(trigger).toHaveFocus());
+  } finally {
+    spy.mockRestore();
+  }
+});
+
 it("retains mandatory branding in the details dialog even if the dialog covers the image or map footer", () => {
   render(
     <AttributionStrip

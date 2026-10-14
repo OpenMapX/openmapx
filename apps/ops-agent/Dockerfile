@@ -55,6 +55,9 @@ RUN chown -R node:node /app /home/node
 USER node:node
 
 WORKDIR /app/apps/ops-agent
+# The fixed CLI must boot without the host's integration source tree. Catch
+# eager imports of optional command implementations in the actual runtime image.
+RUN /app/packages/cli/node_modules/.bin/tsx --tsconfig /app/packages/cli/tsconfig.json /app/packages/cli/src/index.ts --help > /dev/null
 EXPOSE 4300
 HEALTHCHECK --interval=15s --timeout=3s --retries=5 CMD ["curl", "-fsS", "http://127.0.0.1:4300/health"]
 # A command's helper that outlives it is reparented to PID 1. tini reaps it:
