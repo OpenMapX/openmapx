@@ -1,5 +1,6 @@
 "use client";
 
+import AnnouncementIcon from "@mui/icons-material/Announcement";
 import BusinessIcon from "@mui/icons-material/Business";
 import DirectionsCarIcon from "@mui/icons-material/DirectionsCar";
 import ElectricScooterIcon from "@mui/icons-material/ElectricScooter";
@@ -73,6 +74,8 @@ const SOURCE_HEADERS: Record<string, { icon: ReactNode; titleKey: string }> = {
   "db-station": { icon: <TrainIcon sx={{ fontSize: 20 }} />, titleKey: "dbStation" },
   // Webcam: camera details carry OpenConditions feed ids, so the header is matched by provider.
   webcam: { icon: <VideocamIcon sx={{ fontSize: 20 }} />, titleKey: "webcams" },
+  // Message signs: matched by provider for the same reason.
+  "message-signs": { icon: <AnnouncementIcon sx={{ fontSize: 20 }} />, titleKey: "messageSigns" },
 };
 
 export function resolveSourceHeader(

@@ -648,6 +648,11 @@ function buildIntegrationContext(args: {
       existing.push(provider);
       providers.set("cameras", existing);
     },
+    registerMessageSignProvider(provider) {
+      const existing = providers.get("message-signs") ?? [];
+      existing.push(provider);
+      providers.set("message-signs", existing);
+    },
     registerHazardsProvider(provider) {
       const existing = providers.get("hazards") ?? [];
       existing.push(provider);

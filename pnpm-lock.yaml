@@ -1214,6 +1214,24 @@ importers:
         specifier: workspace:^
         version: link:../../packages/mobility-core
 
+  integrations/message-signs:
+    dependencies:
+      '@openmapx/core':
+        specifier: workspace:^
+        version: link:../../packages/core
+      '@openmapx/integration-data-source':
+        specifier: workspace:^
+        version: link:../data-source
+      '@openmapx/integration-framework':
+        specifier: workspace:^
+        version: link:../../packages/integration-framework
+      '@openmapx/mobility-core':
+        specifier: workspace:^
+        version: link:../../packages/mobility-core
+      '@openmapx/place-ids':
+        specifier: workspace:^
+        version: link:../../packages/place-ids
+
   integrations/openconditions:
     dependencies:
       '@openmapx/core':

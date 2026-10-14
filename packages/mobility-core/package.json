@@ -21,6 +21,10 @@
       "types": "./src/types/camera.ts",
       "default": "./src/types/camera.ts"
     },
+    "./message-sign": {
+      "types": "./src/types/message-sign.ts",
+      "default": "./src/types/message-sign.ts"
+    },
     "./hazards": {
       "types": "./src/types/hazards.ts",
       "default": "./src/types/hazards.ts"

@@ -68,6 +68,13 @@ export type {
   KnowledgeResult,
 } from "./knowledge-provider.js";
 export type {
+  MessageSign,
+  MessageSignProvider,
+  MessageSignQuery,
+  MessageSignStatus,
+  MessageSignType,
+} from "./message-sign-provider.js";
+export type {
   Attribution,
   DataSourceBranding,
   DataSourceDetail,
