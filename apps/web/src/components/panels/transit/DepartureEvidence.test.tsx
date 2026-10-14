@@ -45,9 +45,6 @@ vi.mock("@openmapx/core", () => ({
   useArrivals: () => ({ data: [], isLoading: false }),
   useStopAlerts: () => ({ data: [] }),
 }));
-vi.mock("@/integration-api/overlay/useAttributionFromHooks", () => ({
-  useAttributionFromHooks: () => [],
-}));
 vi.mock("@/components/ui/AttributionStrip", () => ({ AttributionStrip: () => null }));
 const departure: Departure = {
   tripId: "ms:trip-a",

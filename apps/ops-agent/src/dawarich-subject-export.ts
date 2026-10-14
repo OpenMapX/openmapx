@@ -35,7 +35,7 @@ export interface DawarichSubjectExportRouteOptions {
   runCollector?: (request: DawarichSubjectRequestV1, signal: AbortSignal) => Promise<Readable>;
 }
 
-export class DawarichSubjectExportRouteError extends Error {
+class DawarichSubjectExportRouteError extends Error {
   constructor(readonly code: DawarichErrorCode) {
     super(code);
   }
