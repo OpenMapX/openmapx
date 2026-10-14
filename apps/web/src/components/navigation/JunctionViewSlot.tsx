@@ -7,6 +7,7 @@ import {
   useNavigationStore,
   useSettingsStore,
 } from "@openmapx/core";
+import type { Ref } from "react";
 import { useMapAttributions } from "@/integration-api/overlay/useMapAttributions";
 import { OSM_ATTRIBUTION } from "@/lib/map";
 import { useNavJunctionStore } from "@/lib/navigation/junctionStore";
@@ -23,7 +24,13 @@ const NO_CREDIT: typeof OSM_CREDIT = [];
  * way tags is on screen, the map attribution carries the OSM credit
  * explicitly rather than relying on the basemap's string.
  */
-export function JunctionViewSlot() {
+export function JunctionViewSlot({
+  availableHeight,
+  panelRef,
+}: {
+  availableHeight?: number | null;
+  panelRef?: Ref<HTMLDivElement>;
+} = {}) {
   const status = useNavigationStore((s) => s.status);
   const mode = useNavigationStore((s) => s.mode);
   const stepCount = useNavigationStore((s) => s.route?.steps.length ?? 0);
@@ -72,6 +79,8 @@ export function JunctionViewSlot() {
       gantry={gantry}
       photo={photoVisible ? photo : undefined}
       geometry={geometry}
+      availableHeight={availableHeight}
+      panelRef={panelRef}
     />
   );
 }

@@ -159,3 +159,8 @@ export function useMobilePanelClearance(viewportHeight: number): number {
     ? Math.min(height, viewportHeight * DEFAULT_FOLLOW_CAP_FRACTION)
     : height;
 }
+
+/** Full measured panel occupancy; preview content must not use the capped follow distance. */
+export function useMobilePanelOccupiedHeight(): number {
+  return useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
+}

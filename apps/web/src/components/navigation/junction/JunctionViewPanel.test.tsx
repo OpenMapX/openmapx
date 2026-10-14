@@ -1,8 +1,9 @@
 import type { StreetLevelImage } from "@openmapx/core";
 import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
+import { installMeasuredLayout } from "@/test/measuredLayout";
 
 vi.mock("next-intl", () => ({
   useTranslations: () => (key: string, values?: Record<string, unknown>) => {
@@ -315,4 +316,110 @@ it("treats an empty captured receipt list as authoritative despite legacy image 
   expect(screen.queryByRole("contentinfo")).toBeNull();
   expect(container.textContent).not.toContain("Invented legacy author");
   expect(container.textContent).toContain("Captured Sep 2019");
+});
+
+it("shows the schematic until the full photo fits its measured budget and restores it without a stale dialog", () => {
+  let candidateHeight = 500;
+  const layout = installMeasuredLayout(
+    (el) =>
+      new DOMRect(
+        0,
+        0,
+        358,
+        el.dataset.testid === "junction-photo-measurement" ? candidateHeight : 250,
+      ),
+  );
+  try {
+    const panel = (height: number | null, image = capturedImage) => (
+      <JunctionViewPanel
+        point={a57Point}
+        gantry={threePanels}
+        photo={{ status: "ready", image, objectUrl: "blob:captured" }}
+        geometry={a57Route.geometry}
+        availableHeight={height}
+      />
+    );
+    const { container, rerender } = render(panel(null));
+    const measurement = container.querySelector('[data-testid="junction-photo-measurement"]');
+    expect(measurement).toHaveAttribute("inert");
+    expect(measurement).toHaveAttribute("aria-hidden", "true");
+    expect(measurement).toHaveStyle({
+      visibility: "hidden",
+      position: "absolute",
+      pointerEvents: "none",
+    });
+    expect(screen.queryByRole("contentinfo")).toBeNull();
+    rerender(panel(500));
+    expect(screen.getByRole("contentinfo").textContent).toContain(
+      "Complete required image notice A",
+    );
+    fireEvent.click(screen.getByRole("button", { name: "attributions" }));
+    expect(screen.getByRole("dialog")).not.toBeNull();
+    rerender(panel(499));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(screen.queryByRole("contentinfo")).toBeNull();
+    expect(container.querySelector('[data-testid="junction-schematic"]')).not.toBeNull();
+    act(() => {
+      layout.resize();
+      layout.resize();
+    });
+    expect(screen.queryByRole("contentinfo")).toBeNull();
+    rerender(panel(501));
+    expect(screen.getByRole("contentinfo")).not.toBeNull();
+    expect(screen.queryByRole("dialog")).toBeNull();
+    act(() => {
+      candidateHeight = 600;
+      layout.resize();
+    });
+    expect(screen.queryByRole("contentinfo")).toBeNull();
+    act(() => {
+      candidateHeight = 350;
+      layout.resize();
+    });
+    expect(screen.getByRole("contentinfo")).not.toBeNull();
+    rerender(panel(400, { ...replacementImage, contributors: [] }));
+    expect(screen.queryByRole("contentinfo")).toBeNull();
+    const visibleGraphic = screen.getByRole("img", {
+      name: "Use lane 5 of 5, toward Neuss-Zentrum",
+    });
+    expect(visibleGraphic.querySelector('[data-testid="junction-photo"]')).not.toBeNull();
+    expect(visibleGraphic.querySelector('[data-testid="junction-schematic"]')).toBeNull();
+  } finally {
+    layout.restore();
+  }
+});
+
+it("keeps an initially schematic-only card safe after the host budget becomes available", () => {
+  const { container } = render(
+    <JunctionViewPanel point={a57Point} gantry={threePanels} availableHeight={500} />,
+  );
+  expect(container.querySelector('[data-testid="junction-schematic"]')).not.toBeNull();
+  expect(container.querySelector('[data-testid="junction-photo-measurement"]')).toBeNull();
+  expect(screen.queryByRole("contentinfo")).toBeNull();
+});
+
+it("keeps each measured and visible route ribbon bound to its own gradient", () => {
+  const layout = installMeasuredLayout(() => new DOMRect(0, 0, 358, 400));
+  try {
+    const { container } = render(
+      <JunctionViewPanel
+        point={a57Point}
+        gantry={threePanels}
+        photo={{ status: "ready", image: capturedImage, objectUrl: "blob:captured" }}
+        geometry={a57Route.geometry}
+        availableHeight={500}
+      />,
+    );
+    const gradients = [...container.querySelectorAll("linearGradient")];
+    expect(gradients).toHaveLength(2);
+    expect(new Set(gradients.map((gradient) => gradient.id)).size).toBe(2);
+    for (const gradient of gradients) {
+      expect(gradient.closest("svg")?.querySelector("polygon")).toHaveAttribute(
+        "fill",
+        `url(#${gradient.id})`,
+      );
+    }
+  } finally {
+    layout.restore();
+  }
 });

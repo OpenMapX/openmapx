@@ -11,7 +11,7 @@ import type {
 } from "@openmapx/core";
 import { projectRoutePath } from "@openmapx/core";
 import { useLocale, useTranslations } from "next-intl";
-import { useMemo, useState } from "react";
+import { useId, useMemo, useState } from "react";
 import { AttributionStrip } from "@/components/ui/AttributionStrip";
 
 const PHOTO_HEIGHT = 180;
@@ -19,8 +19,6 @@ const PHOTO_HEIGHT = 180;
 const DEFAULT_ASPECT_RATIO = 4 / 3;
 /** Equirectangular frames cover the whole sphere, always 2:1. */
 const PANO_VIEWBOX = { width: 360, height: 180 };
-/** Only one junction photo is on screen at a time, so a fixed id is safe. */
-const FADE_GRADIENT_ID = "junction-path-fade";
 
 /**
  * The photo preview: the image with the route ahead projected onto it, and a
@@ -209,6 +207,7 @@ function RoutePathOverlay({
   viewBox: { width: number; height: number };
   sx: SxProps<Theme>;
 }) {
+  const gradientId = useId();
   const toViewBox = (xPercent: number, yPercent: number): [number, number] => [
     (xPercent / 100) * viewBox.width,
     (yPercent / 100) * viewBox.height,
@@ -233,14 +232,14 @@ function RoutePathOverlay({
       sx={{ pointerEvents: "none", ...sx }}
     >
       <defs>
-        <linearGradient id={FADE_GRADIENT_ID} x1="0" y1="1" x2="0" y2="0">
+        <linearGradient id={gradientId} x1="0" y1="1" x2="0" y2="0">
           <stop offset="0" stopColor="rgba(26, 115, 232, 0.6)" />
           <stop offset="1" stopColor="rgba(26, 115, 232, 0.08)" />
         </linearGradient>
       </defs>
       <polygon
         points={ribbon}
-        fill={`url(#${FADE_GRADIENT_ID})`}
+        fill={`url(#${gradientId})`}
         stroke="rgba(255, 255, 255, 0.45)"
         strokeWidth={(0.0015 * viewBox.width).toFixed(3)}
         strokeLinejoin="round"
