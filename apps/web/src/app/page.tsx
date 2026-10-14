@@ -63,7 +63,7 @@ import { CategoryFilterBar } from "@/components/search/CategoryFilterBar";
 import { SearchBar } from "@/components/search/SearchBar";
 import { WeatherWidget } from "@/components/weather/WeatherWidget";
 import { MapProvider } from "@/integration-api/map/MapContext";
-import { MAPTILER_ATTRIBUTION } from "@/lib/map";
+import { MAPTILER_ATTRIBUTION } from "@/lib/baseMapAttributions";
 
 // Satellite supplies imagery; installed native layers own their separate receipts.
 const SATELLITE_ATTRIBUTIONS = [MAPTILER_ATTRIBUTION];
