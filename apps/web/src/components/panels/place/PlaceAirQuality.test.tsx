@@ -559,6 +559,7 @@ describe("PlaceAirQuality", () => {
     expect(within(frames).getByText("airQuality.frame.ok")).toBeVisible();
     expect(within(frames).getByText("airQuality.frame.partial")).toBeVisible();
     expect(within(frames).getByText("airQuality.frame.unavailable")).toBeVisible();
+    fireEvent.click(screen.getAllByRole("button", { name: "footer.attributions" })[0]!);
     expect(screen.getAllByText(/Fixture authority attribution/).length).toBeGreaterThan(0);
   });
 

@@ -64,7 +64,10 @@ function flush() {
   });
 }
 function html() {
-  return Object.values(useMapAttributionStore.getState().byLayer).flat().join(" ");
+  return Object.values(useMapAttributionStore.getState().byLayer)
+    .flat()
+    .map((entry) => entry.fullHtml)
+    .join(" ");
 }
 function tile(key = "active"): TestTile {
   const value: TestTile = {

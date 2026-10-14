@@ -71,6 +71,17 @@
             "license": {
               "kind": "spdx",
               "expression": "etalab-2.0"
+            },
+            "attribution": {
+              "placement": "details",
+              "surfaces": ["image"],
+              "basis": "provider-terms",
+              "reviewedAt": "2026-10-14",
+              "evidenceUrls": [
+                "https://docs.panoramax.fr/federated-catalog/",
+                "https://docs.panoramax.fr/backend/install/settings/"
+              ],
+              "reason": "Actual returned instance/file license known and eligible; unspecified defaults proprietary; No universal Panoramax logo duty found"
             }
           },
           {
@@ -79,6 +90,17 @@
             "license": {
               "kind": "spdx",
               "expression": "CC-BY-SA-4.0"
+            },
+            "attribution": {
+              "placement": "details",
+              "surfaces": ["image"],
+              "basis": "provider-terms",
+              "reviewedAt": "2026-10-14",
+              "evidenceUrls": [
+                "https://docs.panoramax.fr/federated-catalog/",
+                "https://docs.panoramax.fr/backend/install/settings/"
+              ],
+              "reason": "Actual returned instance/file license known and eligible; unspecified defaults proprietary; No universal Panoramax logo duty found"
             }
           },
           {

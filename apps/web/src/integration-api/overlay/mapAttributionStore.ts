@@ -1,6 +1,10 @@
 "use client";
 
-import { parseAttributionHtml } from "@openmapx/core/attribution";
+import {
+  type AttributionPresentation,
+  type AttributionPresentationGroup,
+  projectAttributionPresentations,
+} from "@openmapx/core/attribution";
 import { useMemo } from "react";
 import { create } from "zustand";
 
@@ -13,18 +17,18 @@ import { create } from "zustand";
  * their credits through `useMapAttributions`, keyed by layer, and this store is
  * the single place the footer reads them from.
  *
- * Entries are pre-rendered, sanitized HTML strings (see `useMapAttributions`),
+ * Entries retain separate complete/permanent notices and reviewed branding,
  * Identical notices contributed by different layers collapse into one while
  * preserving every publisher and licence link.
  */
 type MapAttributionState = {
-  byLayer: Record<string, string[]>;
-  setLayer: (layerKey: string, html: string[]) => void;
+  byLayer: Record<string, AttributionPresentation[]>;
+  setLayer: (layerKey: string, entries: AttributionPresentation[]) => void;
   clearLayer: (layerKey: string) => void;
 };
 
-function sameList(a: string[] | undefined, b: string[]): boolean {
-  return a !== undefined && a.length === b.length && a.every((item, i) => item === b[i]);
+function sameList(a: AttributionPresentation[] | undefined, b: AttributionPresentation[]): boolean {
+  return a !== undefined && JSON.stringify(a) === JSON.stringify(b);
 }
 
 export const useMapAttributionStore = create<MapAttributionState>((set) => ({
@@ -44,36 +48,10 @@ export const useMapAttributionStore = create<MapAttributionState>((set) => ({
     }),
 }));
 
-/**
- * Keep MapLibre's containment rule and also compare parsed notices: a linked
- * basemap notice can cover an overlay's plain copy of the same wording. Only
- * discard that copy if the retained notice preserves every link, including
- * its label and target. Equal link sets keep the first occurrence; distinct or
- * complementary licence/publisher links remain separate.
- */
-export function dedupeAttributionHtml(items: string[]): string[] {
-  const notices = items.map((html) => ({ html, ...parseAttributionHtml(html) }));
-  type Notice = (typeof notices)[number];
-  const coversLinks = (candidate: Notice, original: Notice) =>
-    original.links.every((link) =>
-      candidate.links.some((other) => other.label === link.label && other.url === link.url),
-    );
-  return notices
-    .filter(
-      (notice, i) =>
-        notice.html.length > 0 &&
-        !notices.some((other, j) => {
-          if (j === i) return false;
-          if (notice.text === other.text) {
-            return coversLinks(other, notice) && (!coversLinks(notice, other) || j < i);
-          }
-          return (
-            other.html.includes(notice.html) && (other.html.length > notice.html.length || j < i)
-          );
-        }),
-    )
-    .map(({ html }) => html);
-}
+export {
+  dedupeAttributionHtml,
+  projectAttributionPresentations as projectMapAttributions,
+} from "@openmapx/core/attribution";
 
 // Base-map credits lead the strip — the imagery/map data the whole view rests
 // on comes first, then per-layer credits in registration order.
@@ -82,7 +60,7 @@ const isBaseOwner = (key: string) =>
   key === BASE_LAYER_KEY || key.startsWith(`${BASE_LAYER_KEY}::`);
 
 /** Deduped credits for the current map, in display order. */
-export function useMapAttributionHtml(): string[] {
+export function useMapAttributionPresentation(): AttributionPresentationGroup {
   const byLayer = useMapAttributionStore((s) => s.byLayer);
   return useMemo(() => {
     const keys = Object.keys(byLayer).sort((a, b) => {
@@ -90,6 +68,6 @@ export function useMapAttributionHtml(): string[] {
       if (isBaseOwner(b) && !isBaseOwner(a)) return 1;
       return 0;
     });
-    return dedupeAttributionHtml(keys.flatMap((key) => byLayer[key] ?? []));
+    return projectAttributionPresentations(keys.flatMap((key) => byLayer[key] ?? []));
   }, [byLayer]);
 }

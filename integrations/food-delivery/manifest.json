@@ -56,6 +56,16 @@
               "kind": "unknown",
               "raw": "Proprietary (deep-link + server-side exact-store lookup); action identity not dataset grant.",
               "url": "https://www.uber.com/legal/en/document/?name=general-terms-of-use&country=united-states&lang=en"
+            },
+            "attribution": {
+              "placement": "visible",
+              "surfaces": ["map", "content", "image"],
+              "basis": "unresolved",
+              "reviewedAt": "2026-10-14",
+              "evidenceUrls": [
+                "https://www.uber.com/legal/en/document/?name=general-terms-of-use&country=united-states&lang=en"
+              ],
+              "reason": "Exact product/operator/file grant or placement remains unresolved; no generic licence-only collapse clearance"
             }
           }
         ],

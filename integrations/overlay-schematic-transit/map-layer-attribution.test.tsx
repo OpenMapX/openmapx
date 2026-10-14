@@ -54,7 +54,11 @@ const flush = () =>
     fake.emit("render");
     vi.advanceTimersByTime(250);
   });
-const html = () => Object.values(useMapAttributionStore.getState().byLayer).flat().join(" ");
+const html = () =>
+  Object.values(useMapAttributionStore.getState().byLayer)
+    .flat()
+    .map((entry) => entry.fullHtml)
+    .join(" ");
 beforeEach(() => {
   vi.useFakeTimers();
   fake = createFakeMap({ zoom: 18 });

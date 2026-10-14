@@ -254,6 +254,7 @@ async function buildTidesResponse(
 export function setup(ctx: IntegrationContext): void {
   createTidesIntegration<CachedStation>(ctx, {
     scheme: "ca-iwls",
+    sourceId: "dfo-iwls",
     loadStations,
     findStationById: (stations, id) => stations.find((s) => s.id === id || s.code === id),
     createPlace: (station, resolveCtx): Place => {

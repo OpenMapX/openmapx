@@ -62,7 +62,16 @@
             },
             "conditions": [
               "The free API is restricted to non-commercial use; commercial use requires an appropriate account."
-            ]
+            ],
+            "attribution": {
+              "placement": "visible",
+              "surfaces": ["content"],
+              "basis": "provider-terms",
+              "reviewedAt": "2026-10-14",
+              "evidenceUrls": ["https://open-meteo.com/en/licence"],
+              "reason": "Reviewed provider-specific attribution placement; complete notices remain available",
+              "compactText": "<a href=\"https://open-meteo.com/\">Weather data by Open-Meteo.com</a>"
+            }
           }
         ],
         "declarations": [

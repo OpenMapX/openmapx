@@ -31,6 +31,15 @@ export const OPENMAPTILES_ATTRIBUTION: Attribution = {
         scope: "style",
         subject: "OpenMapTiles schema and map design",
         license: { kind: "spdx", expression: "CC-BY-4.0" },
+        attribution: {
+          placement: "visible",
+          surfaces: ["map", "image"],
+          basis: "provider-terms",
+          reviewedAt: "2026-10-14",
+          evidenceUrls: ["https://github.com/openmaptiles/openmaptiles/blob/master/LICENSE.md"],
+          reason: "Schema-derived maps require visible linked OpenMapTiles credit",
+          compactText: '© <a href="https://openmaptiles.org/">OpenMapTiles</a>',
+        },
       },
       {
         scope: "software",
@@ -51,6 +60,36 @@ export const MAPTILER_ATTRIBUTION: Attribution = {
   sourceId: "maptiler",
   name: "© MapTiler",
   url: "https://www.maptiler.com/copyright/",
+  licensing: {
+    version: 1,
+    bindings: [
+      {
+        scope: "service",
+        subject: "MapTiler hosted map content",
+        license: {
+          kind: "custom",
+          namespace: "publisher:maptiler",
+          id: "LicenseRef-MapTiler-Map-Terms",
+          name: "MapTiler General Terms and Conditions",
+          url: "https://www.maptiler.com/terms/",
+        },
+        attribution: {
+          placement: "visible",
+          surfaces: ["map", "image"],
+          basis: "provider-terms",
+          reviewedAt: "2026-10-14",
+          evidenceUrls: [
+            "https://www.maptiler.com/terms/",
+            "https://docs.maptiler.com/guides/map-design/attribution/add-attribution/",
+          ],
+          reason:
+            "Keep hosted-map credit visible; retain official logo to cover free-account requirements",
+          compactText: '© <a href="https://www.maptiler.com/copyright/">MapTiler</a>',
+          logo: "maptiler",
+        },
+      },
+    ],
+  },
 };
 
 /**

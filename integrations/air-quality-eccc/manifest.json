@@ -63,6 +63,14 @@
               "id": "LicenseRef-ECCC-Data-Servers-End-use",
               "name": "Environment and Climate Change Canada Data Servers End-use Licence",
               "url": "https://eccc-msc.github.io/open-data/licence/readme_en/"
+            },
+            "attribution": {
+              "placement": "details",
+              "surfaces": ["map", "content", "image"],
+              "basis": "licence",
+              "reviewedAt": "2026-10-14",
+              "evidenceUrls": ["https://eccc-msc.github.io/open-data/licence/readme_en/"],
+              "reason": "no-position-rule; panel-inference"
             }
           }
         ],

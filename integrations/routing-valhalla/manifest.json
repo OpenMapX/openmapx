@@ -148,6 +148,14 @@
               "id": "LicenseRef-Service-Terms",
               "name": "Stadia Maps API terms",
               "url": "https://stadiamaps.com/terms-of-service/"
+            },
+            "attribution": {
+              "placement": "details",
+              "surfaces": ["content"],
+              "basis": "recommendation",
+              "reviewedAt": "2026-10-14",
+              "evidenceUrls": ["https://docs.stadiamaps.com/attribution/"],
+              "reason": "Hosted routing/elevation only, not Stadia map/traffic notices; Self-hosted endpoint does not require hosted operator credit; Preserve OSM and DEM supplier duties separately"
             }
           },
           {

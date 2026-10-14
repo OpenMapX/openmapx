@@ -4,6 +4,7 @@ import {
   VECTOR_TILE_MEDIA_TYPES,
 } from "@openmapx/core/server";
 import {
+  captureStreetLevelProviderContributors,
   filterImagesByHeading,
   type IntegrationContext,
   parseStreetLevelSearchQuery,
@@ -36,7 +37,11 @@ async function upstream<T>(
 
 export function setup(ctx: IntegrationContext): void {
   const token = (ctx.config.accessToken as string | undefined) ?? "";
-  const provider = createMapillaryProvider({ accessToken: token, tileUrlTemplate: TILE_PATH });
+  const provider = captureStreetLevelProviderContributors(
+    ctx,
+    createMapillaryProvider({ accessToken: token, tileUrlTemplate: TILE_PATH }),
+    "mapillary",
+  );
 
   ctx.registerStreetLevelProvider(provider);
 

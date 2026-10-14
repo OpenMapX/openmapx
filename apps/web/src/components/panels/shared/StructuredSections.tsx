@@ -18,13 +18,16 @@ import Link from "@mui/material/Link";
 import Typography from "@mui/material/Typography";
 import { type PricingPlanEntry, proxyImageUrl, safeHref } from "@openmapx/core";
 import { formatMoney } from "@openmapx/integration-framework/strings";
+import type { Attribution } from "@openmapx/mobility-core/attribution";
 import { useLocale, useTranslations } from "next-intl";
 import { type ReactNode, useEffect, useRef, useState } from "react";
+import { AttributionStrip } from "@/components/ui/AttributionStrip";
 import { HlsVideo } from "@/components/ui/HlsVideo";
 import { BRAND } from "@/integration-api/runtime/theme";
 import { useDateTimeFormat } from "@/integration-api/runtime/useDateTimeFormat";
 
 export interface StructuredSection {
+  contributors?: readonly Attribution[];
   id?: string;
   title: string;
   /** Optional subtitle rendered beneath the section header (e.g. live availability). */
@@ -448,6 +451,12 @@ function ImageSection({ section }: { section: StructuredSection }) {
       ) : (
         image
       )}
+      <AttributionStrip
+        attributions={[...(section.contributors ?? [])]}
+        surface="image"
+        variant="plain"
+        maxVisible={0}
+      />
     </Box>
   );
 }
@@ -533,6 +542,12 @@ function ExternalMediaEmbed({ section }: { section: StructuredSection }) {
           muted
           style={{ width: "100%", borderRadius: 8, display: "block" }}
         />
+        <AttributionStrip
+          attributions={[...(section.contributors ?? [])]}
+          surface="image"
+          variant="plain"
+          maxVisible={0}
+        />
       </Box>
     );
   }
@@ -551,6 +566,12 @@ function ExternalMediaEmbed({ section }: { section: StructuredSection }) {
           borderRadius: 2,
           display: "block",
         }}
+      />
+      <AttributionStrip
+        attributions={[...(section.contributors ?? [])]}
+        surface="image"
+        variant="plain"
+        maxVisible={0}
       />
     </Box>
   );

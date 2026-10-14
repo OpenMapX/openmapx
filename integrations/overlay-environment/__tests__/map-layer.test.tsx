@@ -167,7 +167,11 @@ it("credits only the rendered captured station receipt and keeps it during a fai
   expect(popupHtml).toContain("Data © custom station publisher");
   expect(popupHtml).not.toContain("openSenseMap");
   fake.setRenderedFeatures("env-circle-layer", collection.features as never);
-  const html = () => Object.values(useMapAttributionStore.getState().byLayer).flat().join(" ");
+  const html = () =>
+    Object.values(useMapAttributionStore.getState().byLayer)
+      .flat()
+      .map((entry) => entry.fullHtml)
+      .join(" ");
   act(() => {
     fake.emit("render");
     vi.advanceTimersByTime(250);

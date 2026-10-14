@@ -102,5 +102,86 @@ immutable receipt shape as other records. Community companions must return
 canonical `contributors` and `fieldContributors` for the actual items/fields;
 licensing metadata does not substitute for contribution provenance. Presentation
 must still credit only retained items and rendered geometry after filters,
-viewport and zoom rules. This contract does not itself decide whether a notice
-may move to a details panel.
+viewport and zoom rules. Placement follows the reviewed contract below.
+
+## Attribution placement
+
+The producer stores source/product requirements on
+`licensing.bindings[].attribution`, and captures them **before acquisition** with
+that record. Built-ins declare overrides in the exact manifest source binding;
+OpenConditions declares `attributionPolicy` on the exact feed (or a reviewed
+custom licence definition), then copies it into that binding before publication.
+No database column, migration, global source-ID lookup or executable extension
+callback is needed. Cached data keeps its captured terms through refresh failures
+and catalogue changes.
+
+The shared `@openmapx/mobility-core/attribution-placement` resolver supplies
+reviewed defaults for exact SPDX grants. CC BY/BY-SA 4.0, DL-DE-BY 2.0, NLOD 2.0,
+OGL 3.0 and other explicitly reviewed grants allow directly associated details.
+All atoms in `AND`/`OR` expressions must support that placement: presentation
+never selects an `OR` branch for the producer. Older/ported CC, ODbL, unknown,
+per-item and unreviewed custom terms remain visible by default. Software scope
+belongs in details and grants no rights to its sibling data. Public-domain data
+may omit named copyright credit, but separate API/service terms still apply.
+These defaults do not approve commercial use or redistribution.
+
+A provider override takes precedence **only on its listed display surfaces**:
+`map`, `content`, or `image`. Review the exact product, plan and agreement, not
+just the licence label. For example, OpenMapTiles schema, OSM's deliberately
+retained compact credit, MapTiler branding, DWD/Open-Meteo adjacency,
+OpenWeather branding, MeteoAlarm source identification and Windy courtesy links
+have source-specific treatment. Missing/private agreements stay unresolved and
+visible; visible credit cannot cure a missing usage grant.
+
+```json
+{
+  "placement": "visible",
+  "surfaces": ["map", "content"],
+  "basis": "provider-terms",
+  "reviewedAt": "2026-10-14",
+  "evidenceUrls": ["https://example.com/terms"],
+  "reason": "The provider requires its linked name beside the displayed data",
+  "compactText": "© <a href=\"https://example.com/\">Example publisher</a>"
+}
+```
+
+Every override requires dated evidence and a reason. `compactText` certifies an
+actual permissible minimum; omit it if full wording must remain visible. The
+full original notice, author/publisher, licence links, conditions, modifications,
+notes and receipt time remain in the directly accessible attribution dialog.
+`basis: "unresolved"` cannot authorize details or abbreviated wording. Optional
+`includePublisher: true` keeps the actual captured record publisher adjacent to
+the service notice (for example, a warning's national issuing service).
+`prominence: "normal"` preserves a provider's ordinary-text-size requirement.
+`logo` selects an approved local asset (`openweather`, `mapillary`, `maptiler`,
+`tdx`); arbitrary remote assets cannot be requested through this metadata. Adding
+branding requires a reviewed host asset and source policy.
+
+`buildAttributionPresentation(receipt, surface)` and
+`projectAttributionPresentations` are the common safe renderer and union for
+maps, content and images. They preserve the strictest visible requirement,
+distinct notices, every unambiguous publisher/licence link, and required branding.
+Publisher-name prefixes are not duplicate credits. Required logos also remain
+visible in the details dialog when it covers their original map/image strip.
+Use the host's `AttributionStrip` for content and its rendered/raster registration
+helpers for maps. `maxVisible` limits optional provenance chips only. A hover
+hint or global `/licenses` page is not a replacement for the current, one-action
+full attribution dialog. Do not implement source-name checks in view components.
+
+Images keep their actual creator, file page, file licence and embedded
+watermarks. Capture API/service obligations separately; a platform manifest is
+not the grant for an individual photograph. Built-in photo/imagery acquisition
+uses `capturePhotoProviderContributors` or the explicit-source
+`captureStreetLevelProviderContributors`. Camera views/sections retain their own
+contributors so an image does not borrow a neighbouring camera's branding.
+External embedded players retain their own branding and load under the existing
+consent boundary.
+
+All map surfaces retain required notices without clipping, ellipsis or a hidden
+scroll area. Eligible complete notices move into a labelled details dialog with
+keyboard/touch access and focus restoration. An arbitrarily large mandatory
+list cannot fit any finite viewport: the main footer keeps the notices readable
+and offers layer management when they exceed a quarter of usable map height.
+It does not silently hide data or required credits. Exports, recordings and
+screenshots need their own source-specific review because an interactive dialog
+is unavailable there.

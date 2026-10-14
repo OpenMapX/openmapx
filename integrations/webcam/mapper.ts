@@ -121,6 +121,7 @@ function imageSection(
   return {
     title,
     type: "image",
+    contributors: view.contributors ?? [],
     sectionIcon: "videocam",
     imageUrl,
     imageAlt: token("imageAlt.webcam", { name: camera.name || title }),
@@ -146,6 +147,7 @@ function streamSection(
     type: "embed",
     sectionIcon: "videocam",
     embedUrl: view.streamUrl,
+    contributors: view.contributors ?? [],
     embedType: view.streamType && VIDEO_STREAMS.has(view.streamType) ? "video" : "iframe",
   };
 }
@@ -220,6 +222,7 @@ export function mapCameraToDetail(camera: Camera): DataSourceDetail {
       type: "embed",
       sectionIcon: "open_in_new",
       embedUrl: camera.playerEmbedUrl,
+      contributors: camera.playerContributors ?? [],
       embedType: "iframe",
     });
   }

@@ -1,6 +1,7 @@
 import type { IntegrationContext, RouteHandler } from "@openmapx/integration-framework";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { setup } from "../index";
+import manifest from "../manifest.json";
 
 interface RouteRegistration {
   method: string;
@@ -12,6 +13,7 @@ function buildCtx(overrides: { accessToken?: string } = {}) {
   const routes: RouteRegistration[] = [];
   const registerStreetLevelProvider = vi.fn();
   const ctx = {
+    manifest: structuredClone(manifest),
     config: { accessToken: overrides.accessToken ?? "TOKEN" },
     log: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
     cache: {

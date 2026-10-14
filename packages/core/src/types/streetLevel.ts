@@ -1,4 +1,5 @@
 import type { Attribution } from "@openmapx/mobility-core/attribution";
+import type { ContributingRecord } from "@openmapx/mobility-core/contributors";
 import type { Licensing } from "@openmapx/mobility-core/licensing";
 import type { LngLat } from "./geometry";
 
@@ -16,7 +17,7 @@ export interface StreetLevelTiledAsset {
 }
 
 /** One street-level image, normalised across providers. */
-export interface StreetLevelImage {
+export interface StreetLevelImage extends ContributingRecord {
   id: string;
   providerId: string;
   lngLat: LngLat;

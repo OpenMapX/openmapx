@@ -591,7 +591,11 @@ it("credits visible timezone boundaries only below zoom8 and never the computed 
       fake.emit("render");
       vi.advanceTimersByTime(250);
     });
-  const html = () => Object.values(useMapAttributionStore.getState().byLayer).flat().join(" ");
+  const html = () =>
+    Object.values(useMapAttributionStore.getState().byLayer)
+      .flat()
+      .map((entry) => entry.fullHtml)
+      .join(" ");
   flush();
   expect(html()).toContain("OpenStreetMap contributors");
   fake.state.zoom = 8;

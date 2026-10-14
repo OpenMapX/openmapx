@@ -58,6 +58,14 @@
             "subject": "Each IOC originator measurement set",
             "license": {
               "kind": "unknown"
+            },
+            "attribution": {
+              "placement": "visible",
+              "surfaces": ["map", "content", "image"],
+              "basis": "unresolved",
+              "reviewedAt": "2026-10-14",
+              "evidenceUrls": ["https://www.ioc-sealevelmonitoring.org/disclaimer.php"],
+              "reason": "Exact originator permission and non-commercial scope remain unresolved; visible credit does not grant usage"
             }
           },
           {
@@ -69,6 +77,14 @@
               "id": "LicenseRef-Service-Terms",
               "name": "IOC distribution policy terms",
               "url": "https://www.ioc-sealevelmonitoring.org/disclaimer.php"
+            },
+            "attribution": {
+              "placement": "visible",
+              "surfaces": ["map", "content", "image"],
+              "basis": "unresolved",
+              "reviewedAt": "2026-10-14",
+              "evidenceUrls": ["https://www.ioc-sealevelmonitoring.org/disclaimer.php"],
+              "reason": "Exact originator permission and non-commercial scope remain unresolved; visible credit does not grant usage"
             }
           }
         ],

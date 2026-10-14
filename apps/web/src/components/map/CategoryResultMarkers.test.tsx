@@ -612,7 +612,11 @@ it("credits only the actually placed marker and label fields, keeping cached rec
         fake.emit("render");
         vi.advanceTimersByTime(250);
       });
-    const html = () => Object.values(useMapAttributionStore.getState().byLayer).flat().join(" ");
+    const html = () =>
+      Object.values(useMapAttributionStore.getState().byLayer)
+        .flat()
+        .map((entry) => entry.fullHtml)
+        .join(" ");
     flush();
     expect(html()).toContain("Geometry notice");
     expect(html()).not.toContain("Label notice");

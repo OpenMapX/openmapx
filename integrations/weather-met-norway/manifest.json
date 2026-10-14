@@ -53,6 +53,14 @@
               "id": "LicenseRef-Service-Terms",
               "name": "MET Norway API conditions terms",
               "url": "https://api.met.no/doc/TermsOfService"
+            },
+            "attribution": {
+              "placement": "details",
+              "surfaces": ["content"],
+              "basis": "provider-terms",
+              "reviewedAt": "2026-10-14",
+              "evidenceUrls": ["https://api.met.no/doc/TermsOfService"],
+              "reason": "Preserve creator/source/license/changes; no Yr logo or implied origin"
             }
           }
         ],

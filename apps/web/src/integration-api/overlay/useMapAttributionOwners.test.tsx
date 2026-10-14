@@ -9,7 +9,11 @@ vi.mock("@/integration-api/map/MapContext", () => ({
   useMap: () => ({ mapRef, mapReady: true, styleVersion: 0 }),
 }));
 const credit = (name: string) => ({ sourceId: name, name });
-const html = () => Object.values(useMapAttributionStore.getState().byLayer).flat().join(" ");
+const html = () =>
+  Object.values(useMapAttributionStore.getState().byLayer)
+    .flat()
+    .map((entry) => entry.fullHtml)
+    .join(" ");
 
 beforeEach(() => useMapAttributionStore.setState({ byLayer: {} }));
 

@@ -229,6 +229,14 @@
             "subject": "LiteAPI material",
             "license": {
               "kind": "unknown"
+            },
+            "attribution": {
+              "placement": "visible",
+              "surfaces": ["map", "content", "image"],
+              "basis": "unresolved",
+              "reviewedAt": "2026-10-14",
+              "evidenceUrls": ["https://www.liteapi.travel/terms/"],
+              "reason": "Exact product/operator/file grant or placement remains unresolved; no generic licence-only collapse clearance"
             }
           },
           {
@@ -237,6 +245,14 @@
             "license": {
               "kind": "unknown",
               "url": "https://www.liteapi.travel/terms/"
+            },
+            "attribution": {
+              "placement": "visible",
+              "surfaces": ["map", "content", "image"],
+              "basis": "unresolved",
+              "reviewedAt": "2026-10-14",
+              "evidenceUrls": ["https://www.liteapi.travel/terms/"],
+              "reason": "Exact product/operator/file grant or placement remains unresolved; no generic licence-only collapse clearance"
             }
           }
         ],

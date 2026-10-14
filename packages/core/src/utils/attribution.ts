@@ -1,7 +1,12 @@
+import { resolveBindingPlacement } from "@openmapx/mobility-core/attribution-placement";
 import {
+  type AttributionLogo,
+  type AttributionSurface,
   DISPLAY_LICENSE_SCOPES,
+  isSafeAttributionUrl,
   type Licensing,
   licensingLinks,
+  parseLicensing,
 } from "@openmapx/mobility-core/licensing";
 import escapeHtml from "escape-html";
 import { type DefaultTreeAdapterTypes, parseFragment } from "parse5";
@@ -12,11 +17,7 @@ function safeExternalUrl(value: string | undefined, baseUrl?: string): string | 
   if (!value) return undefined;
   try {
     const url = new URL(value, baseUrl);
-    return url.protocol === "https:" || url.protocol === "http:"
-      ? baseUrl
-        ? url.href
-        : value
-      : undefined;
+    return isSafeAttributionUrl(url.href) ? (baseUrl ? url.href : value) : undefined;
   } catch {
     return undefined;
   }
@@ -181,7 +182,10 @@ export function buildLicensingHtml(
 }
 
 /** Safe HTML for the same captured receipt used by every runtime surface. */
-export function buildRuntimeAttributionHtml(attribution: Attribution): string {
+export function buildRuntimeAttributionHtml(
+  attribution: Attribution,
+  options: { includeSoftware?: boolean } = {},
+): string {
   const url = safeExternalUrl(attribution.url);
   const copyright = attribution.name.startsWith("© ");
   const name = escapeHtml(copyright ? attribution.name.slice(2) : attribution.name);
@@ -189,8 +193,102 @@ export function buildRuntimeAttributionHtml(attribution: Attribution): string {
   const credit = attribution.attributionText
     ? sanitizeAttributionHtml(attribution.attributionText)
     : nameLink;
-  const licensing = attribution.licensing ? buildLicensingHtml(attribution.licensing) : "";
+  const licensing = attribution.licensing ? buildLicensingHtml(attribution.licensing, options) : "";
   return licensing ? `${credit} (${licensing})` : credit;
+}
+
+export interface AttributionPresentation {
+  /** Complete captured receipt, including software subjects and supplied notices. */
+  fullHtml: string;
+  /** Empty only when every applicable obligation supports direct details. */
+  visibleHtml: string;
+  /** Approved host assets, not remote URLs supplied by records or extensions. */
+  logos: AttributionLogo[];
+  prominence?: "normal";
+}
+
+/** Project one captured receipt without consulting mutable provider catalogues. */
+export function buildAttributionPresentation(
+  attribution: Attribution,
+  surface: AttributionSurface,
+): AttributionPresentation {
+  let publisherHtml = "";
+  const fullParts = [buildRuntimeAttributionHtml(attribution, { includeSoftware: true })];
+  const original = parseAttributionHtml(fullParts[0] ?? "");
+  const sourceUrl = safeExternalUrl(attribution.url);
+  const hasIdentity = original.text.includes(attribution.name);
+  const hasSourceLink =
+    !sourceUrl ||
+    original.links.some(
+      (link) =>
+        link.url === sourceUrl &&
+        (link.label.includes(attribution.name) || attribution.name.includes(link.label)),
+    );
+  if (!hasIdentity || !hasSourceLink) {
+    const identity = escapeHtml(attribution.name);
+    fullParts.push(
+      sourceUrl
+        ? `<a href="${escapeHtml(sourceUrl)}" target="_blank" rel="noopener noreferrer">${identity}</a>`
+        : identity,
+    );
+  }
+  if (attribution.publisher) {
+    const publisherUrl = safeExternalUrl(attribution.publisher.url);
+    const name = escapeHtml(attribution.publisher.name);
+    publisherHtml = publisherUrl
+      ? `<a href="${escapeHtml(publisherUrl)}" target="_blank" rel="noopener noreferrer">${name}</a>`
+      : name;
+    fullParts.push(publisherHtml);
+  }
+  if (attribution.notes) fullParts.push(escapeHtml(attribution.notes));
+  if (attribution.retrievedAt) fullParts.push(escapeHtml(attribution.retrievedAt));
+  const fullHtml = fullParts.filter(Boolean).join(" — ");
+  const licensing =
+    attribution.licensing === undefined ? undefined : parseLicensing(attribution.licensing);
+  if (!licensing || licensing.bindings.length === 0) {
+    return { fullHtml, visibleHtml: buildRuntimeAttributionHtml(attribution), logos: [] };
+  }
+  const visible = licensing.bindings
+    .map((binding) => ({ binding, decision: resolveBindingPlacement(binding, surface) }))
+    .filter(({ decision }) => decision.placement === "visible");
+  const logos = [
+    ...new Set(visible.flatMap(({ decision }) => (decision.logo ? [decision.logo] : []))),
+  ];
+  if (visible.length === 0) return { fullHtml, visibleHtml: "", logos };
+  const prominence = visible.some(({ decision }) => decision.prominence === "normal")
+    ? ("normal" as const)
+    : undefined;
+  const certified = visible.every(
+    ({ decision }) =>
+      decision.compactText !== undefined &&
+      parseAttributionHtml(sanitizeAttributionHtml(decision.compactText)).text.trim().length > 0,
+  );
+  const visibleHtml = certified
+    ? [
+        ...new Set(
+          visible.map(({ decision }) => sanitizeAttributionHtml(decision.compactText ?? "")),
+        ),
+      ].join(" | ")
+    : buildRuntimeAttributionHtml({
+        ...attribution,
+        licensing: { ...licensing, bindings: visible.map(({ binding }) => binding) },
+      });
+  // A partial compact override cannot replace another subject's unknown notice.
+  // Its independently required links/wording nevertheless still need display.
+  const publisher = visible.some(({ decision }) => decision.includePublisher) ? publisherHtml : "";
+  const supplemental = certified
+    ? []
+    : visible.flatMap(({ decision }) =>
+        decision.compactText ? [sanitizeAttributionHtml(decision.compactText)] : [],
+      );
+  return {
+    fullHtml,
+    visibleHtml: [...new Set([visibleHtml, ...supplemental, publisher])]
+      .filter(Boolean)
+      .join(" | "),
+    logos,
+    ...(prominence ? { prominence } : {}),
+  };
 }
 
 /**

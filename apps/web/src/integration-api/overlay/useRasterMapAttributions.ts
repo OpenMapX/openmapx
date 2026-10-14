@@ -1,4 +1,5 @@
 "use client";
+import type { AttributionPresentation } from "@openmapx/core/attribution";
 import { useEffect, useId } from "react";
 import { useMap } from "@/integration-api/map/MapContext";
 import { useMapAttributionStore } from "./mapAttributionStore";
@@ -23,7 +24,8 @@ export function useRasterMapAttributions(
   const subscription = {
     kind: "raster" as const,
     descriptors,
-    publish: (html: string[]) => (html.length ? setLayer(owner, html) : clearLayer(owner)),
+    publish: (html: AttributionPresentation[]) =>
+      html.length ? setLayer(owner, html) : clearLayer(owner),
   };
   // biome-ignore lint/correctness/useExhaustiveDependencies: descriptor snapshots update in the effect below
   useEffect(() => {

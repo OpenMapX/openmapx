@@ -188,6 +188,10 @@
     "./licensing": {
       "types": "./src/licensing.ts",
       "default": "./src/licensing.ts"
+    },
+    "./attribution-placement": {
+      "types": "./src/attribution-placement.ts",
+      "default": "./src/attribution-placement.ts"
     }
   },
   "dependencies": {

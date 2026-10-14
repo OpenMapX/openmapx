@@ -63,6 +63,37 @@
           }
         ]
       }
+    },
+    {
+      "sourceId": "timezone-boundary-builder",
+      "name": "Timezone Boundary Builder",
+      "url": "https://github.com/evansiroky/timezone-boundary-builder",
+      "owner": "Timezone Boundary Builder contributors",
+      "termsUrl": "https://github.com/evansiroky/timezone-boundary-builder/blob/master/DATA_LICENSE",
+      "providerCountry": "Unknown",
+      "providerPrivacyUrl": "https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement",
+      "endUserExposure": "build-time",
+      "credentialOwner": "none",
+      "dataUseClass": "share-alike",
+      "commercialUse": "yes",
+      "reviewedAt": "2026-10-14",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false,
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "data",
+            "subject": "Bundled timezone boundary data used by geo-tz",
+            "license": {
+              "kind": "spdx",
+              "expression": "ODbL-1.0"
+            },
+            "notice": "Timezone Boundary Builder; derived from OpenStreetMap data"
+          }
+        ]
+      }
     }
   ]
 }

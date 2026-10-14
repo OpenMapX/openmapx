@@ -265,7 +265,11 @@ it("keeps visible field credits separate from popup-only credits", () => {
     };
     fake.setRenderedFeatures(COLOR, [feature] as never);
     fake.setRenderedFeatures(CASING, [feature] as never);
-    const html = () => Object.values(useMapAttributionStore.getState().byLayer).flat().join(" ");
+    const html = () =>
+      Object.values(useMapAttributionStore.getState().byLayer)
+        .flat()
+        .map((entry) => entry.fullHtml)
+        .join(" ");
     act(() => {
       fake.emit("render");
       vi.advanceTimersByTime(250);

@@ -110,7 +110,16 @@ your service may emit this JSON without depending on an OpenMapX runtime SDK:
     {
       "sourceId": "conditions-observations",
       "name": "Observation publisher",
-      "spdxLicense": "CC-BY-4.0",
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "data",
+            "subject": "Station readings",
+            "license": { "kind": "spdx", "expression": "CC-BY-4.0" }
+          }
+        ]
+      },
       "attributionText": "Required dataset notice"
     }
   ],
@@ -120,7 +129,16 @@ your service may emit this JSON without depending on an OpenMapX runtime SDK:
       {
         "sourceId": "conditions-observations",
         "name": "Observation publisher",
-        "spdxLicense": "CC-BY-4.0",
+        "licensing": {
+          "version": 1,
+          "bindings": [
+            {
+              "scope": "data",
+              "subject": "Station readings",
+              "license": { "kind": "spdx", "expression": "CC-BY-4.0" }
+            }
+          ]
+        },
         "attributionText": "Required dataset notice"
       }
     ]
@@ -457,3 +475,5 @@ through the matching `<KEY>_FILE` environment variable. See
 - **[Integration system](./integration-system.md)** — the manifest schema, the
   built-in `IntegrationContext` surface, community restrictions, and the
   loader-to-host lifecycle in depth.
+
+Attribution placement follows the [shared placement contract](./licensing.md#attribution-placement). Capture reviewed binding policies with actual records; declarative metadata cannot authorize code or usage rights. Unknown agreements remain visible, and source/product overrides require dated evidence. Image authors, frame branding and per-view credits stay adjacent.

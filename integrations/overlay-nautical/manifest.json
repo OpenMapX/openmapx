@@ -215,7 +215,7 @@
       "sourceId": "gebco",
       "name": "GEBCO",
       "url": "https://www.gebco.net/",
-      "attribution": "Imagery reproduced from the GEBCO Grid, <a href=\"https://www.gebco.net/\">GEBCO Compilation Group (2024)</a>",
+      "attribution": "Imagery reproduced from the GEBCO Grid, <a href=\"https://www.gebco.net/\">GEBCO Compilation Group</a>",
       "commercialUse": "yes",
       "providerCountry": "UK",
       "providerPrivacyUrl": "https://www.gebco.net/privacy-policy",
@@ -242,8 +242,19 @@
               "kind": "custom",
               "namespace": "publisher:gebco",
               "id": "LicenseRef-Service-Terms",
-              "name": "GEBCO Grid/WMS use terms terms",
+              "name": "GEBCO Grid/WMS use terms",
               "url": "https://www.gebco.net/data-products/gridded-bathymetry/terms-of-use"
+            },
+            "attribution": {
+              "placement": "visible",
+              "surfaces": ["map", "content", "image"],
+              "basis": "unresolved",
+              "reviewedAt": "2026-10-14",
+              "evidenceUrls": [
+                "https://www.gebco.net/data-products/gridded-bathymetry/terms-of-use",
+                "https://www.gebco.net/data-products/gebco-web-services/web-map-service"
+              ],
+              "reason": "Retain source acknowledgement visibly. The WMS serves GEBCO_LATEST; its grid edition is not captured with tiles, so no fixed year is asserted. Dataset edition-specific citation remains unresolved."
             }
           }
         ],
@@ -469,6 +480,14 @@
             "subject": "Each IOC originator measurement set",
             "license": {
               "kind": "unknown"
+            },
+            "attribution": {
+              "placement": "visible",
+              "surfaces": ["map", "content", "image"],
+              "basis": "unresolved",
+              "reviewedAt": "2026-10-14",
+              "evidenceUrls": ["https://www.ioc-sealevelmonitoring.org/disclaimer.php"],
+              "reason": "Exact originator permission and non-commercial scope remain unresolved; visible credit does not grant usage"
             }
           },
           {
@@ -480,6 +499,14 @@
               "id": "LicenseRef-Service-Terms",
               "name": "IOC distribution policy terms",
               "url": "https://www.ioc-sealevelmonitoring.org/disclaimer.php"
+            },
+            "attribution": {
+              "placement": "visible",
+              "surfaces": ["map", "content", "image"],
+              "basis": "unresolved",
+              "reviewedAt": "2026-10-14",
+              "evidenceUrls": ["https://www.ioc-sealevelmonitoring.org/disclaimer.php"],
+              "reason": "Exact originator permission and non-commercial scope remain unresolved; visible credit does not grant usage"
             }
           }
         ],

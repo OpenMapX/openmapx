@@ -53,13 +53,12 @@ function profile(count: number): Profile {
 it("credits the profile's captured input receipt when compact stats or expanded chart are visible", async () => {
   state.profile = profile(2);
   render(<ElevationProfile route={route} units="metric" />);
-  expect(screen.getByText("Captured height")).toBeInTheDocument();
-  fireEvent.mouseOver(screen.getByText("Captured height"));
+  expect(screen.getByText("Captured mandatory notice")).toBeInTheDocument();
   await waitFor(() => expect(screen.getByText("Captured mandatory notice")).toBeInTheDocument());
   expect(screen.queryByText("Unused route height")).toBeNull();
   fireEvent.click(screen.getByText("title"));
   expect(screen.getByText("Chart")).toBeInTheDocument();
-  expect(screen.getByText("Captured height")).toBeInTheDocument();
+  expect(screen.getByText("Captured mandatory notice")).toBeInTheDocument();
 });
 it("has no receipt for an undisplayed single-point profile", () => {
   state.profile = profile(1);

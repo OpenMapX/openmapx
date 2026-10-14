@@ -325,7 +325,9 @@ it("publishes the navigation route snapshot once while progress only updates pai
 
 it("credits only actual line hits through progress, empty viewport and unrelated loading", () => {
   vi.useFakeTimers();
-  useMapAttributionStore.setState({ byLayer: { base: ["Base map credit"] } });
+  useMapAttributionStore.setState({
+    byLayer: { base: [{ fullHtml: "Base map credit", visibleHtml: "Base map credit", logos: [] }] },
+  });
   const originalReceipts = route.contributors;
   route.contributors = [
     ...originalReceipts,
@@ -367,7 +369,11 @@ it("credits only actual line hits through progress, empty viewport and unrelated
       fake.emit("render");
       vi.advanceTimersByTime(250);
     });
-  const html = () => Object.values(useMapAttributionStore.getState().byLayer).flat().join(" ");
+  const html = () =>
+    Object.values(useMapAttributionStore.getState().byLayer)
+      .flat()
+      .map((entry) => entry.fullHtml)
+      .join(" ");
   flush();
   expect(html()).toContain("captured notice");
   expect(html()).toContain("second required notice");

@@ -30,7 +30,7 @@ import type { Translatable } from "@openmapx/integration-framework/strings";
 import { contributorKey } from "@openmapx/mobility-core/contributors";
 import { useTranslations } from "next-intl";
 import { Fragment, type ReactNode } from "react";
-import { AttributionText } from "@/components/ui/AttributionText";
+import { AttributionStrip } from "@/components/ui/AttributionStrip";
 import { BRAND } from "@/integration-api/runtime/theme";
 import { BrandMark } from "../shared/BrandMark";
 import { type StructuredSection, StructuredSections } from "../shared/StructuredSections";
@@ -147,6 +147,7 @@ function translateStructuredSection(
   // `I18nToken | string` slots.
   return {
     id: undefined,
+    contributors: section.contributors,
     title: translatedTitle,
     caption: translatedCaption,
     captionTimestamp: section.captionTimestamp,
@@ -170,44 +171,18 @@ function translateStructuredSection(
 }
 
 function AttributionFooter({ detail }: { detail: DataSourceDetail }) {
-  const registry = useIntegrationRegistry();
-
-  // Resolve the producing integration. The host stamps `providerId`, which is
-  // authoritative; fall back to the source-coverage heuristic only for details
-  // that predate the stamp or come from outside the data-source orchestrator.
-  // The heuristic ties when integrations share a generic sourceId like "osm"
-  // (parking, ev-charging, etc.), so it must not override a known providerId.
-  const meta =
-    (detail.providerId ? registry.get(detail.providerId) : undefined) ??
-    pickIntegrationForSources(registry.getByDomain("data-source"), detail.sources);
-  const html = meta?.dataSources ? buildSourceAttribution(meta.dataSources, detail.sources) : "";
-  const detailAttributions = detail.attributions ?? [];
-
-  if (!html && detailAttributions.length === 0) return null;
-
+  const captured = detail.contributors ?? detail.attributions ?? [];
+  if (captured.length === 0) return null;
   return (
     <Box sx={{ px: 2, py: 1.25 }}>
-      <Typography
-        variant="caption"
-        component="div"
-        sx={{
-          color: "text.secondary",
-        }}
-      >
-        {html && <AttributionText html={html} />}
-        {detailAttributions.map((attribution, index) => (
-          <Fragment key={detailAttributionKey(attribution)}>
-            {(html || index > 0) && " · "}
-            <AttributionText html={buildRuntimeAttributionHtml(attribution)} />
-          </Fragment>
-        ))}
-      </Typography>
+      <AttributionStrip
+        attributions={[...captured]}
+        variant="plain"
+        surface="content"
+        maxVisible={3}
+      />
     </Box>
   );
-}
-
-function detailAttributionKey(attribution: Attribution): string {
-  return contributorKey(attribution);
 }
 
 export function pickRentalActionUrl(

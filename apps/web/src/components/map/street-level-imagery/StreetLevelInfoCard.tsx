@@ -21,6 +21,7 @@ import {
 } from "@openmapx/core";
 import { useLocale, useTranslations } from "next-intl";
 import { useEffect, useRef, useState } from "react";
+import { AttributionStrip } from "@/components/ui/AttributionStrip";
 import { AttributionText } from "@/components/ui/AttributionText";
 import { useMap } from "@/integration-api/map/MapContext";
 
@@ -70,8 +71,6 @@ export function StreetLevelInfoCard({
 
   const { data: reverseGeo } = useReverseGeocoding(debouncedLngLat);
   const captureDate = formatCaptureDate(image.capturedAt, locale);
-
-  if (!reverseGeo && !captureDate) return null;
 
   const showOnMap = () => {
     if (debouncedLngLat && reverseGeo) {
@@ -174,6 +173,13 @@ export function StreetLevelInfoCard({
         <Typography sx={{ fontSize: 13 }}>{provider.name}</Typography>
       </Box>
 
+      <AttributionStrip
+        attributions={[...(image.contributors ?? [])]}
+        surface="image"
+        variant="plain"
+        maxVisible={0}
+        color="#fff"
+      />
       {image.author && (
         <Typography sx={{ fontSize: 12, color: "rgba(255,255,255,0.65)", mt: 0.5 }}>
           {image.author}
@@ -186,7 +192,14 @@ export function StreetLevelInfoCard({
         <Typography sx={{ fontSize: 12, color: "rgba(255,255,255,0.65)" }}>
           {captureDate ?? ""}
         </Typography>
-        {image.licensing && <AttributionText html={buildLicensingHtml(image.licensing)} />}
+        {image.licensing && (
+          <AttributionText
+            html={buildLicensingHtml({
+              ...image.licensing,
+              bindings: image.licensing.bindings.filter((binding) => binding.scope !== "service"),
+            })}
+          />
+        )}
       </Box>
     </Box>
   );

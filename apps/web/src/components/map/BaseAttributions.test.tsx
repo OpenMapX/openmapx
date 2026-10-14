@@ -20,7 +20,9 @@ vi.mock("@/integration-api/runtime/EnvProvider", () => ({
 }));
 
 function registeredAttributions(): string[] {
-  return Object.values(useMapAttributionStore.getState().byLayer).flat();
+  return Object.values(useMapAttributionStore.getState().byLayer)
+    .flat()
+    .map((entry) => entry.fullHtml);
 }
 
 const creditsOsm = () => registeredAttributions().some((a) => a.includes("OpenStreetMap"));

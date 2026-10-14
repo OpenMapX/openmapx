@@ -113,6 +113,14 @@
             "subject": "Yango material",
             "license": {
               "kind": "unknown"
+            },
+            "attribution": {
+              "placement": "visible",
+              "surfaces": ["map", "content", "image"],
+              "basis": "unresolved",
+              "reviewedAt": "2026-10-14",
+              "evidenceUrls": ["https://yango.com/en_int/legal/"],
+              "reason": "Exact product/operator/file grant or placement remains unresolved; no generic licence-only collapse clearance"
             }
           },
           {
@@ -121,6 +129,14 @@
             "license": {
               "kind": "unknown",
               "url": "https://yango.com/en_int/legal/"
+            },
+            "attribution": {
+              "placement": "visible",
+              "surfaces": ["map", "content", "image"],
+              "basis": "unresolved",
+              "reviewedAt": "2026-10-14",
+              "evidenceUrls": ["https://yango.com/en_int/legal/"],
+              "reason": "Exact product/operator/file grant or placement remains unresolved; no generic licence-only collapse clearance"
             }
           }
         ],
@@ -151,6 +167,14 @@
             "subject": "Karhoo material",
             "license": {
               "kind": "unknown"
+            },
+            "attribution": {
+              "placement": "visible",
+              "surfaces": ["map", "content", "image"],
+              "basis": "unresolved",
+              "reviewedAt": "2026-10-14",
+              "evidenceUrls": ["https://www.karhoo.com/terms-and-conditions/"],
+              "reason": "Exact product/operator/file grant or placement remains unresolved; no generic licence-only collapse clearance"
             }
           },
           {
@@ -159,6 +183,14 @@
             "license": {
               "kind": "unknown",
               "url": "https://www.karhoo.com/terms-and-conditions/"
+            },
+            "attribution": {
+              "placement": "visible",
+              "surfaces": ["map", "content", "image"],
+              "basis": "unresolved",
+              "reviewedAt": "2026-10-14",
+              "evidenceUrls": ["https://www.karhoo.com/terms-and-conditions/"],
+              "reason": "Exact product/operator/file grant or placement remains unresolved; no generic licence-only collapse clearance"
             }
           }
         ],

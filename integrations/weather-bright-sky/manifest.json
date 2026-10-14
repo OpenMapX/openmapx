@@ -64,6 +64,18 @@
             "license": {
               "kind": "spdx",
               "expression": "CC-BY-4.0"
+            },
+            "attribution": {
+              "placement": "visible",
+              "surfaces": ["map", "content"],
+              "basis": "recommendation",
+              "reviewedAt": "2026-10-14",
+              "evidenceUrls": [
+                "https://www.wettergefahren.de/vorlagen_quellenangabe.html",
+                "https://brightsky.dev/"
+              ],
+              "reason": "DWD asks for source credit directly beside its data; ordinary format conversion does not establish extensive modification",
+              "compactText": "<a href=\"https://www.dwd.de/\">DWD</a> via <a href=\"https://brightsky.dev/\">Bright Sky</a>"
             }
           },
           {
@@ -75,6 +87,18 @@
               "id": "LicenseRef-Service-Terms",
               "name": "Bright Sky access/passed-through DWD policy terms",
               "url": "https://brightsky.dev/"
+            },
+            "attribution": {
+              "placement": "visible",
+              "surfaces": ["map", "content"],
+              "basis": "recommendation",
+              "reviewedAt": "2026-10-14",
+              "evidenceUrls": [
+                "https://www.wettergefahren.de/vorlagen_quellenangabe.html",
+                "https://brightsky.dev/"
+              ],
+              "reason": "DWD asks for source credit directly beside its data; ordinary format conversion does not establish extensive modification",
+              "compactText": "<a href=\"https://www.dwd.de/\">DWD</a> via <a href=\"https://brightsky.dev/\">Bright Sky</a>"
             }
           }
         ],

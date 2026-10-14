@@ -212,7 +212,11 @@ it("credits only rendered unexpired severity-filtered alerts during panning, wor
     );
     fake.emit("render");
   };
-  const credits = () => Object.values(useMapAttributionStore.getState().byLayer).flat().sort();
+  const credits = () =>
+    Object.values(useMapAttributionStore.getState().byLayer)
+      .flat()
+      .map((entry) => entry.fullHtml)
+      .sort();
   act(() => hits(["a", "b"]));
   await waitFor(() => expect(credits()).toEqual(["Publisher a", "Publisher b"]));
   fake.state.styleLoaded = false; // A pending unrelated source never reaches idle.

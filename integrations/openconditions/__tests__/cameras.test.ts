@@ -125,6 +125,7 @@ describe("cameras-openconditions", () => {
       "osm-cameras/0",
     ]);
     expect(camera.views[0]).toEqual({
+      contributors: expect.arrayContaining([expect.objectContaining({ sourceId: DIGITRAFFIC })]),
       key: "C0150301",
       name: "Inkooseen",
       imageUrl: "https://weathercam.digitraffic.fi/C0150301.jpg",
@@ -424,6 +425,7 @@ describe("cameras-openconditions", () => {
     ) as unknown as Rec[];
     const view = mapped(answer)!.views[1]!;
     expect(view).toEqual({
+      contributors: expect.arrayContaining([expect.objectContaining({ sourceId: DIGITRAFFIC })]),
       key: "C0150302",
       name: "Hankoon",
       imageRedistribution: "allowed",
@@ -572,4 +574,25 @@ describe("data-flow disclosures", () => {
     expect(stringsEn.description).toMatch(/camera/i);
     expect(stringsDe.description).toMatch(/kamera/i);
   });
+});
+
+test("view receipt ownership follows the member and contributing readings, with explicit empty capture authoritative", () => {
+  const answer = body();
+  const camera = mapped(answer)!;
+  expect(camera.views[0]?.contributors?.map((a) => a.sourceId)).toEqual([DIGITRAFFIC]);
+  expect(camera.views[3]?.contributors?.map((a) => a.sourceId)).toContain(OSM);
+  const components = recordOf(answer).components as Rec[];
+  components[0]!.contributors = [];
+  expect(mapped(answer)!.views[0]?.contributors).toEqual([]);
+});
+
+test("keeps captured human identity separate from linked prescribed copyright wording", () => {
+  const answer = body();
+  const provenance = recordOf(answer).provenance as Rec;
+  const attribution = provenance.attribution as Rec;
+  attribution.name = "Camera dataset";
+  attribution.provider = '<a href="https://publisher.test/">Required publisher credit</a>';
+  const camera = mapped(answer)!;
+  expect(camera.attributions[0]?.name).toBe("Camera dataset");
+  expect(camera.attributions[0]?.attributionText).toContain("Required publisher credit");
 });

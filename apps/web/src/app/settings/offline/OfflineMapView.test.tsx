@@ -14,7 +14,7 @@ vi.mock("@mui/material/styles", async (importOriginal) => ({
 }));
 
 vi.mock("@/lib/map", () => ({
-  baseMapCreditsHtml: () => [],
+  baseMapVectorCredits: () => [],
   loadOpenMapXStyle: vi.fn().mockResolvedValue({
     version: 8,
     sources: { openmaptiles: { type: "vector", tiles: [] } },

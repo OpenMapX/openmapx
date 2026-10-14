@@ -4,12 +4,23 @@ import Box from "@mui/material/Box";
 import Link from "@mui/material/Link";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
-import { buildRuntimeAttributionHtml, safeHref } from "@openmapx/core";
+import {
+  buildAttributionPresentation,
+  buildRuntimeAttributionHtml,
+  projectAttributionPresentations,
+  safeHref,
+} from "@openmapx/core";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import { contributorKey } from "@openmapx/mobility-core/contributors";
-import { DISPLAY_LICENSE_SCOPES, formatLicensing } from "@openmapx/mobility-core/licensing";
+import {
+  type AttributionSurface,
+  DISPLAY_LICENSE_SCOPES,
+  formatLicensing,
+} from "@openmapx/mobility-core/licensing";
 import { useTranslations } from "next-intl";
 import { type JSX, useState } from "react";
+import { AttributionDetails } from "./AttributionDetails";
+import { AttributionNotices } from "./AttributionNotices";
 
 /**
  * Visual variant for the AttributionStrip.
@@ -34,11 +45,16 @@ export interface AttributionStripProps {
    */
   navigable?: boolean;
   /**
-   * When set and the deduped list exceeds it, only this many chips render by
+   * Limits eligible optional provenance chips; mandatory notices always render.
+   * When the eligible list exceeds it, only this many optional chips render by
    * default, followed by a "+N more" toggle that reveals the rest. Keeps long
    * attribution lists (e.g. a transit hub served by many feeds) compact.
    */
   maxVisible?: number;
+  /** The actual context of the contributed data; image policies remain image-bound. */
+  surface?: AttributionSurface;
+  /** Contextual contrast, for example white credits on an image. */
+  color?: string;
 }
 
 /** The external credit URL when safe to follow, or the in-app licenses anchor. */
@@ -87,22 +103,9 @@ function dedupeForDisplay(attributions: Attribution[]): Attribution[] {
 }
 
 /**
- * AttributionStrip — the compact chip presentation for data-source attribution,
- * used by the over-the-wire, multi-source paths (transit, directions, geocoding
- * search, reviews). Consumes `MobilityResult.attributions[]` and renders one
- * chip per source (name plus, where present, SPDX license), with the full
- * builder-produced credit in the hover tooltip.
- *
- * This is the ONE deliberate divergence from the shared inline renderer: chips
- * are compact and intentionally `©`-less — a dense list of feeds should not
- * repeat `©` per chip, and the copyright obligation is discharged by the inline
- * captions (`SectionAttribution`/`AttributionText`), the overlay legends, the
- * `/terms` tables, and the map credit. Every non-chip surface renders through
- * `buildAttributionHtml` via `AttributionText`; do not re-add `©` here or fork a
- * second inline renderer.
- *
- * Returns `null` when there are no attributions to render so callers can render
- * unconditionally.
+ * Canonical content/image credits. Mandatory notices and approved branding are
+ * always adjacent; maxVisible limits only optional provenance chips. Complete
+ * current wording, authors, grants and links are one keyboard/touch action away.
  */
 export function AttributionStrip({
   attributions,
@@ -110,6 +113,8 @@ export function AttributionStrip({
   label,
   navigable = true,
   maxVisible,
+  surface = "content",
+  color,
 }: AttributionStripProps): JSX.Element | null {
   const tc = useTranslations("common");
   const [expanded, setExpanded] = useState(false);
@@ -119,8 +124,16 @@ export function AttributionStrip({
 
   const isPanelHeader = variant === "panel-header";
   const isPlain = variant === "plain";
-  const collapsible = typeof maxVisible === "number" && items.length > maxVisible;
-  const visibleItems = collapsible && !expanded ? items.slice(0, maxVisible) : items;
+  const presentations = items.map((attr) => buildAttributionPresentation(attr, surface));
+  const group = projectAttributionPresentations(presentations);
+  const eligible = items.filter((_, index) => !presentations[index]?.visibleHtml);
+  const collapsible = typeof maxVisible === "number" && eligible.length > maxVisible;
+  const selected = new Set(
+    collapsible && !expanded ? eligible.slice(0, Math.max(0, maxVisible)) : eligible,
+  );
+  const visibleItems = items.filter(
+    (attr, index) => presentations[index]?.visibleHtml || selected.has(attr),
+  );
   const hiddenCount = items.length - visibleItems.length;
 
   const containerSx = {
@@ -151,7 +164,7 @@ export function AttributionStrip({
         <Typography
           variant="caption"
           sx={{
-            color: "text.secondary",
+            color: color ?? "text.secondary",
             fontSize,
             fontWeight: 500,
             mr: 0.5,
@@ -161,6 +174,8 @@ export function AttributionStrip({
         </Typography>
       )}
       {visibleItems.map((attr, idx) => {
+        const presentation = presentations[items.indexOf(attr)]!;
+        const mandatory = Boolean(presentation.visibleHtml);
         const labelText = displayLabel(attr);
         const link = chipHref(attr);
         const tooltip = (
@@ -179,7 +194,7 @@ export function AttributionStrip({
           display: isPlain ? "inline" : "block",
           fontSize,
           lineHeight: 1.4,
-          color: "text.secondary",
+          color: color ?? "text.secondary",
           ...(!isPlain && {
             backgroundColor: "action.hover",
             px: 0.75,
@@ -187,36 +202,52 @@ export function AttributionStrip({
             borderRadius: 0.75,
           }),
           maxWidth: "100%",
-          whiteSpace: isPlain ? ("normal" as const) : ("nowrap" as const),
-          overflowWrap: isPlain ? ("anywhere" as const) : undefined,
-          ...(!isPlain && { overflow: "hidden", textOverflow: "ellipsis" }),
+          whiteSpace: isPlain || mandatory ? ("normal" as const) : ("nowrap" as const),
+          overflowWrap: isPlain || mandatory ? ("anywhere" as const) : undefined,
+          ...(!isPlain && !mandatory && { overflow: "hidden", textOverflow: "ellipsis" }),
         };
         const chipContent = (
           <Box component="span" sx={chipSx} data-source-id={attr.sourceId}>
-            {labelText}
+            {mandatory ? (
+              <AttributionNotices
+                notices={[
+                  {
+                    html: presentation.visibleHtml,
+                    logos: presentation.logos,
+                    prominence: presentation.prominence,
+                  },
+                ]}
+              />
+            ) : (
+              labelText
+            )}
           </Box>
         );
-        const node = navigable ? (
-          <Link
-            key={contributorKey(attr)}
-            href={link.href}
-            target={link.external ? "_blank" : undefined}
-            rel={link.external ? "noopener noreferrer" : undefined}
-            underline="hover"
-            sx={{
-              color: "inherit",
-              textDecoration: "none",
-              overflowWrap: isPlain ? "anywhere" : undefined,
-              ...fitSx,
-            }}
-          >
-            {chipContent}
-          </Link>
-        ) : (
-          <Box key={contributorKey(attr)} component="span" sx={fitSx}>
-            {chipContent}
-          </Box>
-        );
+        const node =
+          navigable &&
+          (!mandatory ||
+            (!presentation.visibleHtml.includes("<a ") && presentation.logos.length === 0)) ? (
+            <Link
+              key={contributorKey(attr)}
+              onClick={(event) => event.stopPropagation()}
+              href={link.href}
+              target={link.external ? "_blank" : undefined}
+              rel={link.external ? "noopener noreferrer" : undefined}
+              underline="hover"
+              sx={{
+                color: "inherit",
+                textDecoration: "none",
+                overflowWrap: isPlain ? "anywhere" : undefined,
+                ...fitSx,
+              }}
+            >
+              {chipContent}
+            </Link>
+          ) : (
+            <Box key={contributorKey(attr)} component="span" sx={fitSx}>
+              {chipContent}
+            </Box>
+          );
         return (
           <Box
             key={contributorKey(attr)}
@@ -244,7 +275,10 @@ export function AttributionStrip({
         <Typography
           component="button"
           type="button"
-          onClick={() => setExpanded((v) => !v)}
+          onClick={(event) => {
+            event.stopPropagation();
+            setExpanded((v) => !v);
+          }}
           sx={{
             border: 0,
             background: "none",
@@ -254,13 +288,17 @@ export function AttributionStrip({
             fontSize,
             lineHeight: 1.4,
             fontWeight: 500,
-            color: "text.secondary",
+            color: color ?? "text.secondary",
             "&:hover": { textDecoration: "underline" },
           }}
         >
           {expanded ? tc("showLess") : tc("showMore", { count: hiddenCount })}
         </Typography>
       )}
+      <AttributionDetails
+        html={group.fullHtml}
+        logos={group.visible.flatMap((notice) => notice.logos)}
+      />
     </Box>
   );
 }

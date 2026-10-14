@@ -9,7 +9,7 @@ vi.mock("@/integration-api/runtime/EnvProvider", () => {
 });
 
 vi.mock("@/lib/map", () => ({
-  baseMapCreditsHtml: () => [],
+  baseMapVectorCredits: () => [],
   loadMaptilerStyle: vi.fn().mockResolvedValue({}),
   loadOpenMapXStyle: vi.fn().mockResolvedValue({}),
 }));

@@ -100,7 +100,11 @@ it("credits response suppliers with their texture commits, never HEAD or a newes
       fake.emit("render");
       vi.advanceTimersByTime(250);
     });
-  const html = () => Object.values(useMapAttributionStore.getState().byLayer).flat().join(" ");
+  const html = () =>
+    Object.values(useMapAttributionStore.getState().byLayer)
+      .flat()
+      .map((entry) => entry.fullHtml)
+      .join(" ");
   const source = fake.map.getSource<RasterTileSource>("openmapx-cyclosm-source");
   if (!source) throw new Error("missing source");
   const drain = async () => {

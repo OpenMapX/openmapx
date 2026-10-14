@@ -11,6 +11,8 @@ import {
   serializeContributors,
   snapshotContributors,
 } from "@openmapx/integration-framework";
+import { OPENSTREETMAP_ATTRIBUTION } from "@openmapx/mobility-core/attribution";
+import type { ContributingRecord } from "@openmapx/mobility-core/contributors";
 import {
   findNearestStation,
   loadStations as loadNoaaStations,
@@ -131,7 +133,7 @@ interface HarborCollection {
   features: HarborFeature[];
 }
 
-interface HarborDetail {
+interface HarborDetail extends ContributingRecord {
   harbor: HarborFeature["properties"];
   facilities: Array<{
     osmId: string;
@@ -621,7 +623,8 @@ export function setup(ctx: IntegrationContext): void {
       return;
     }
 
-    const cacheKey = `harbor:${id}`;
+    const nearbyCredits = stationContributors("noaa");
+    const cacheKey = `harbor:contributors-v1:${id}`;
     const cached = await ctx.cache.get<HarborDetail>(cacheKey);
     if (cached) {
       reply.header("Cache-Control", "public, max-age=3600");
@@ -647,6 +650,7 @@ export function setup(ctx: IntegrationContext): void {
             id: hit.station.id,
             name: hit.station.name,
             distanceKm: Number(hit.distanceKm.toFixed(2)),
+            contributors: snapshotContributors(hit.station.contributors ?? nearbyCredits),
           };
         } catch {
           return undefined;
@@ -668,6 +672,10 @@ export function setup(ctx: IntegrationContext): void {
       },
       facilities,
       nearestTideStation,
+      contributors: snapshotContributors(
+        facilities.length ? [OPENSTREETMAP_ATTRIBUTION] : [],
+        nearestTideStation?.contributors ?? [],
+      ),
     };
 
     await ctx.cache.set(cacheKey, detail, HARBOR_DETAIL_CACHE_TTL);

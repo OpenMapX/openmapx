@@ -256,6 +256,17 @@
             "license": {
               "kind": "per-item",
               "raw": "Determined by each contributing item or operator"
+            },
+            "attribution": {
+              "placement": "visible",
+              "surfaces": ["map", "content", "image"],
+              "basis": "unresolved",
+              "reviewedAt": "2026-10-14",
+              "evidenceUrls": [
+                "https://github.com/MobilityData/gbfs/blob/master/gbfs.md",
+                "https://github.com/MobilityData/gbfs/blob/master/data-licenses.md"
+              ],
+              "reason": "Exact product/operator/file grant or placement remains unresolved; no generic licence-only collapse clearance"
             }
           },
           {
@@ -264,6 +275,17 @@
             "license": {
               "kind": "per-item",
               "raw": "Determined by each contributing item or operator"
+            },
+            "attribution": {
+              "placement": "visible",
+              "surfaces": ["map", "content", "image"],
+              "basis": "unresolved",
+              "reviewedAt": "2026-10-14",
+              "evidenceUrls": [
+                "https://github.com/MobilityData/gbfs/blob/master/gbfs.md",
+                "https://github.com/MobilityData/gbfs/blob/master/data-licenses.md"
+              ],
+              "reason": "Exact product/operator/file grant or placement remains unresolved; no generic licence-only collapse clearance"
             }
           }
         ],
@@ -328,6 +350,18 @@
             "subject": "Communauto material",
             "license": {
               "kind": "unknown"
+            },
+            "attribution": {
+              "placement": "visible",
+              "surfaces": ["map", "content", "image"],
+              "basis": "unresolved",
+              "reviewedAt": "2026-10-14",
+              "evidenceUrls": [
+                "https://www.communauto.com/",
+                "https://www.coopstroom.be",
+                "https://www.degage.be"
+              ],
+              "reason": "Exact product/operator/file grant or placement remains unresolved; no generic licence-only collapse clearance"
             }
           },
           {
@@ -336,6 +370,18 @@
             "license": {
               "kind": "unknown",
               "url": "https://www.communauto.com/"
+            },
+            "attribution": {
+              "placement": "visible",
+              "surfaces": ["map", "content", "image"],
+              "basis": "unresolved",
+              "reviewedAt": "2026-10-14",
+              "evidenceUrls": [
+                "https://www.communauto.com/",
+                "https://www.coopstroom.be",
+                "https://www.degage.be"
+              ],
+              "reason": "Exact product/operator/file grant or placement remains unresolved; no generic licence-only collapse clearance"
             }
           }
         ],
@@ -367,6 +413,18 @@
             "subject": "CoopStroom material",
             "license": {
               "kind": "unknown"
+            },
+            "attribution": {
+              "placement": "visible",
+              "surfaces": ["map", "content", "image"],
+              "basis": "unresolved",
+              "reviewedAt": "2026-10-14",
+              "evidenceUrls": [
+                "https://www.communauto.com/",
+                "https://www.coopstroom.be",
+                "https://www.degage.be"
+              ],
+              "reason": "Exact product/operator/file grant or placement remains unresolved; no generic licence-only collapse clearance"
             }
           },
           {
@@ -375,6 +433,18 @@
             "license": {
               "kind": "unknown",
               "url": "https://www.coopstroom.be"
+            },
+            "attribution": {
+              "placement": "visible",
+              "surfaces": ["map", "content", "image"],
+              "basis": "unresolved",
+              "reviewedAt": "2026-10-14",
+              "evidenceUrls": [
+                "https://www.communauto.com/",
+                "https://www.coopstroom.be",
+                "https://www.degage.be"
+              ],
+              "reason": "Exact product/operator/file grant or placement remains unresolved; no generic licence-only collapse clearance"
             }
           }
         ],
@@ -406,6 +476,18 @@
             "subject": "Dégage material",
             "license": {
               "kind": "unknown"
+            },
+            "attribution": {
+              "placement": "visible",
+              "surfaces": ["map", "content", "image"],
+              "basis": "unresolved",
+              "reviewedAt": "2026-10-14",
+              "evidenceUrls": [
+                "https://www.communauto.com/",
+                "https://www.coopstroom.be",
+                "https://www.degage.be"
+              ],
+              "reason": "Exact product/operator/file grant or placement remains unresolved; no generic licence-only collapse clearance"
             }
           },
           {
@@ -414,6 +496,18 @@
             "license": {
               "kind": "unknown",
               "url": "https://www.degage.be"
+            },
+            "attribution": {
+              "placement": "visible",
+              "surfaces": ["map", "content", "image"],
+              "basis": "unresolved",
+              "reviewedAt": "2026-10-14",
+              "evidenceUrls": [
+                "https://www.communauto.com/",
+                "https://www.coopstroom.be",
+                "https://www.degage.be"
+              ],
+              "reason": "Exact product/operator/file grant or placement remains unresolved; no generic licence-only collapse clearance"
             }
           }
         ],
@@ -455,6 +549,15 @@
             "license": {
               "kind": "unknown",
               "url": "https://transitous.org/sources/"
+            },
+            "attribution": {
+              "placement": "visible",
+              "surfaces": ["map", "content"],
+              "basis": "recommendation",
+              "reviewedAt": "2026-10-14",
+              "evidenceUrls": ["https://transitous.org/api/"],
+              "reason": "Visible source link expressly required; persistent interpretation conservative; Preserve each contributing feed license; Commercial use prohibited by public API policy",
+              "compactText": "<a href=\"https://transitous.org/sources/\">Transitous sources</a>"
             }
           }
         ],

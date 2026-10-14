@@ -2,6 +2,12 @@ import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+
+vi.mock("next-intl", async (original) => ({
+  ...(await original<Record<string, unknown>>()),
+  useTranslations: () => (key: string) => key,
+}));
+
 import en from "../../../../../../packages/i18n/locales/en.json";
 import { BrandLogo } from "../BrandLogo";
 

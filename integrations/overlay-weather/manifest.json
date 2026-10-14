@@ -104,6 +104,15 @@
             "license": {
               "kind": "unknown",
               "url": "https://www.rainviewer.com/terms.html"
+            },
+            "attribution": {
+              "placement": "visible",
+              "surfaces": ["map"],
+              "basis": "recommendation",
+              "reviewedAt": "2026-10-14",
+              "evidenceUrls": ["https://www.rainviewer.com/api.html"],
+              "reason": "FAQ says visible mandatory credit; same page terms softer request wording",
+              "compactText": "<a href=\"https://www.rainviewer.com/\">RainViewer</a>"
             }
           }
         ],
@@ -136,7 +145,17 @@
             "license": {
               "kind": "spdx",
               "expression": "ODbL-1.0",
-              "url": "https://openweathermap.org/full-price"
+              "url": "https://opendatacommons.org/licenses/odbl/1-0/"
+            },
+            "attribution": {
+              "placement": "visible",
+              "surfaces": ["content", "map"],
+              "basis": "provider-terms",
+              "reviewedAt": "2026-10-14",
+              "evidenceUrls": ["https://docs.openweather.co.uk/faq"],
+              "reason": "Standard Free-Professional plan; accepted enterprise contract unreviewed",
+              "compactText": "Weather data provided by <a href=\"https://openweathermap.org/\">OpenWeather</a> (<a href=\"https://opendatacommons.org/licenses/odbl/1-0/\">ODbL-1.0</a>)",
+              "logo": "openweather"
             }
           }
         ],

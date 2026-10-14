@@ -198,9 +198,12 @@ describe("RouteConditionsLayer", () => {
       fake.emit("idle");
     });
     await waitFor(() =>
-      expect(Object.values(useMapAttributionStore.getState().byLayer).flat().join(" ")).toContain(
-        "Route publisher",
-      ),
+      expect(
+        Object.values(useMapAttributionStore.getState().byLayer)
+          .flat()
+          .map((entry) => entry.fullHtml)
+          .join(" "),
+      ).toContain("Route publisher"),
     );
     fake.state.zoom = 7;
     act(() => {
@@ -208,7 +211,11 @@ describe("RouteConditionsLayer", () => {
       fake.emit("render");
     });
     await waitFor(() =>
-      expect(Object.values(useMapAttributionStore.getState().byLayer).flat()).toEqual([]),
+      expect(
+        Object.values(useMapAttributionStore.getState().byLayer)
+          .flat()
+          .map((entry) => entry.fullHtml),
+      ).toEqual([]),
     );
     view.unmount();
   });

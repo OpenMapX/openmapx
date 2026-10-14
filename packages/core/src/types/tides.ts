@@ -1,3 +1,4 @@
+import type { ContributingRecord } from "@openmapx/mobility-core/contributors";
 export interface TideEvent {
   /** Station-local wall time or ISO-8601 with an explicit UTC offset. */
   time: string;
@@ -38,7 +39,7 @@ export interface TideResponseStation {
   timezoneCorrHours?: number;
 }
 
-export interface TidesPayload {
+export interface TidesPayload extends ContributingRecord {
   station: TideResponseStation;
   events: TideEvent[];
   curve: TideCurvePoint[];

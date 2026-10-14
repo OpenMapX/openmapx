@@ -84,6 +84,15 @@
             "license": {
               "kind": "unknown",
               "url": "https://transitous.org/sources/"
+            },
+            "attribution": {
+              "placement": "visible",
+              "surfaces": ["map", "content"],
+              "basis": "recommendation",
+              "reviewedAt": "2026-10-14",
+              "evidenceUrls": ["https://transitous.org/api/"],
+              "reason": "Visible source link expressly required; persistent interpretation conservative; Preserve each contributing feed license; Commercial use prohibited by public API policy",
+              "compactText": "<a href=\"https://transitous.org/sources/\">Transitous sources</a>"
             }
           }
         ],

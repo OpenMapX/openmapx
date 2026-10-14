@@ -78,11 +78,15 @@ it("widget tooltip shows the complete decoded notice with quoted greater-than at
 });
 it("place weather credits captured receipts even when the live registry cannot identify the legacy source", () => {
   render(<PlaceWeather lat={51} lng={6} />);
-  expect(screen.getByRole("link", { name: "Captured actual supplier" })).toBeVisible();
+  expect(screen.getByRole("link", { name: "Captured required notice" })).toBeVisible();
 });
 it("desktop widget map credit uses the displayed response snapshot and honors authoritative empty receipts", () => {
   const { rerender } = render(<WeatherWidget />);
-  const html = () => Object.values(useMapAttributionStore.getState().byLayer).flat().join(" ");
+  const html = () =>
+    Object.values(useMapAttributionStore.getState().byLayer)
+      .flat()
+      .map((entry) => entry.fullHtml)
+      .join(" ");
   expect(html()).toContain("Captured required notice");
   response = { ...response, contributors: [] };
   rerender(<WeatherWidget />);

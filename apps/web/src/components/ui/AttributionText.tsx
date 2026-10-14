@@ -21,13 +21,16 @@ export interface AttributionTextProps {
  * whose links inherit the surrounding text colour. Every non-chip attribution
  * surface — place-panel captions, the data-source footer, overlay legends —
  * renders through this, so the `©`/format live only in the core builder and the
- * link styling is defined once. The pill chips in `AttributionStrip` are the
- * deliberate exception: compact and `©`-less by design.
+ * link styling is defined once. Placement-aware `AttributionStrip` uses this same renderer for required notices
+ * and keeps complete notices in its directly accessible details dialog.
  */
 export function AttributionText({ html, sx }: AttributionTextProps) {
   return (
     <Box
       component="span"
+      onClick={(event) => {
+        if ((event.target as Element).closest("a")) event.stopPropagation();
+      }}
       sx={[
         {
           "& a": {

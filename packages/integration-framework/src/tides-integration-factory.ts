@@ -3,6 +3,7 @@ import { haversineKm } from "@openmapx/core";
 import type { PlaceResolverContext } from "@openmapx/place-ids";
 import { registerPlaceResolver } from "@openmapx/place-ids";
 import type { IntegrationContext } from "./context";
+import { resolveIntegrationContributors, withContributors } from "./contributors";
 import { scalarQuery } from "./query";
 
 export type {
@@ -30,6 +31,8 @@ export interface TideStationBase {
 export interface TidesIntegrationConfig<S extends TideStationBase> {
   /** Place-id scheme this integration owns (e.g. "ioc", "pegel"). */
   readonly scheme: string;
+  /** Exact dataset used by this adapter, distinct from its place-id scheme. */
+  readonly sourceId: string;
 
   /** Load (and cache) the station catalog. Fully provider-specific. */
   loadStations(ctx: IntegrationContext): Promise<S[]>;
@@ -124,6 +127,7 @@ export function createTidesIntegration<S extends TideStationBase>(
   });
 
   ctx.registerRoute("GET", "/tides", async (req, reply) => {
+    const captured = resolveIntegrationContributors(ctx, [config.sourceId]);
     const stationParam = scalarQuery(req.query, "station");
     let resolvedStation: S | null = null;
     let distanceKm = 0;
@@ -148,7 +152,7 @@ export function createTidesIntegration<S extends TideStationBase>(
       // client, so a cached response that spans midnight UTC would land
       // yesterday's events under today's label until the TTL expires.
       const dayKey = new Date().toISOString().slice(0, 10);
-      const cacheKey = `nearest:${round4(lat)},${round4(lng)}:${dayKey}`;
+      const cacheKey = `nearest:contributors-v1:${round4(lat)},${round4(lng)}:${dayKey}`;
       const cached = await ctx.cache.get<TidesPayload | { notFound: true }>(cacheKey);
       if (cached) {
         if ("notFound" in (cached as object)) {
@@ -179,9 +183,9 @@ export function createTidesIntegration<S extends TideStationBase>(
         reply.status(204).send(null);
         return;
       }
-      await ctx.cache.set(cacheKey, result, config.nearestCacheTtl);
+      await ctx.cache.set(cacheKey, withContributors(result, captured), config.nearestCacheTtl);
       reply.header("Cache-Control", `public, max-age=${config.cacheControlMaxAge}`);
-      reply.send(result);
+      reply.send(withContributors(result, captured));
       return;
     }
 
@@ -191,6 +195,6 @@ export function createTidesIntegration<S extends TideStationBase>(
       return;
     }
     reply.header("Cache-Control", `public, max-age=${config.cacheControlMaxAge}`);
-    reply.send(result);
+    reply.send(withContributors(result, captured));
   });
 }

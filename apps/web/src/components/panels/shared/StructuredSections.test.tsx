@@ -536,3 +536,92 @@ describe("StructuredSections refreshing stills", () => {
     expect(img()).toBeNull();
   });
 });
+
+it("keeps image-specific branding adjacent to its own image even in a mixed detail", () => {
+  render(
+    <StructuredSections
+      sections={[
+        {
+          title: "Windy view",
+          type: "image",
+          imageUrl: "https://image.test/frame.jpg",
+          contributors: [
+            {
+              sourceId: "windy",
+              name: "Windy",
+              licensing: {
+                version: 1,
+                bindings: [
+                  {
+                    scope: "service",
+                    subject: "API",
+                    license: { kind: "unknown" },
+                    attribution: {
+                      placement: "visible",
+                      surfaces: ["image"],
+                      basis: "provider-terms",
+                      reviewedAt: "2026-10-14",
+                      evidenceUrls: ["https://api.windy.com/terms"],
+                      reason: "Adjacent continuous courtesy",
+                      compactText:
+                        'Webcams provided by <a href="https://windy.com/">windy.com</a> — <a href="https://windy.com/webcams/add">add a webcam</a>',
+                      prominence: "normal",
+                    },
+                  },
+                ],
+              },
+            },
+          ],
+        },
+      ]}
+    />,
+  );
+  expect(screen.getByRole("link", { name: "add a webcam" })).toBeVisible();
+});
+
+it.each(["video", "iframe"] as const)(
+  "keeps image-surface service credit beside a consented %s",
+  (embedType) => {
+    render(
+      <StructuredSections
+        sections={[
+          {
+            title: "Camera player",
+            type: "embed",
+            collapsed: false,
+            embedType,
+            embedUrl: "https://player.test/embed",
+            contributors: [
+              {
+                sourceId: "camera-service",
+                name: "Provider",
+                licensing: {
+                  version: 1,
+                  bindings: [
+                    {
+                      scope: "service",
+                      subject: "API",
+                      license: { kind: "unknown" },
+                      attribution: {
+                        placement: "visible",
+                        surfaces: ["image"],
+                        basis: "provider-terms",
+                        reviewedAt: "2026-10-14",
+                        evidenceUrls: ["https://player.test/terms"],
+                        reason: "Adjacent provider",
+                        compactText: "Required player service credit",
+                      },
+                    },
+                  ],
+                },
+              },
+            ],
+          },
+        ]}
+      />,
+    );
+    expect(screen.queryByText("Required player service credit")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Load media" }));
+    expect(screen.getByText("Required player service credit")).toBeVisible();
+  },
+);

@@ -375,7 +375,10 @@
     "privacy": "Privacy",
     "terms": "Terms",
     "licenses": "Licenses",
-    "credits": "Map credits"
+    "credits": "Map credits",
+    "attributions": "Attribution",
+    "manyRequiredCredits": "These sources require visible credit. Disable an overlay to make more room for the map.",
+    "manageOverlays": "Manage overlays"
   },
   "layers": {
     "layers": "Layers",

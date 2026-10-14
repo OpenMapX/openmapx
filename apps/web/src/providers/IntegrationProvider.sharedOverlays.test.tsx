@@ -82,7 +82,10 @@ it("initializes both imagery providers with one toggle, retaining it through ref
 
   fireEvent.click(toggle);
   expect(useStreetLevelStore.getState().panelOpen).toBe(true);
-  const credits = () => Object.values(useMapAttributionStore.getState().byLayer).flat();
+  const credits = () =>
+    Object.values(useMapAttributionStore.getState().byLayer)
+      .flat()
+      .map((entry) => entry.fullHtml);
   await waitFor(() => {
     expect(credits()).toHaveLength(0);
   });

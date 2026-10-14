@@ -75,6 +75,18 @@
             "license": {
               "kind": "unknown",
               "url": "https://www.transit.land/terms"
+            },
+            "attribution": {
+              "placement": "visible",
+              "surfaces": ["map", "content"],
+              "basis": "recommendation",
+              "reviewedAt": "2026-10-14",
+              "evidenceUrls": [
+                "https://www.transit.land/terms",
+                "https://www.interline.io/legal/terms/"
+              ],
+              "reason": "Reviewed provider-specific attribution placement; complete notices remain available",
+              "compactText": "<a href=\"https://www.transit.land/terms\">Transitland</a>"
             }
           }
         ],

@@ -6,6 +6,11 @@
       "purpose": "Sonnenauf-, Sonnenuntergangs- und Dämmerungszeiten für Ortsdetails",
       "dataSent": "Koordinaten (Breitengrad, Längengrad auf 4 Dezimalstellen gerundet), Datum, Zeitzonen-ID (automatisch aus Koordinaten ermittelt)",
       "dataReceived": "Sonnenaufgang, Sonnenuntergang, Sonnenhöchststand, Tageslänge, bürgerliche/nautische/astronomische Dämmerungszeiten"
+    },
+    "timezone-boundary-builder": {
+      "purpose": "Zeitzonenbestimmung anhand lokal enthaltener Grenzdaten",
+      "dataSent": "Keine; die Bestimmung erfolgt lokal auf dem Server",
+      "dataReceived": "Zeitzonengrenzen, die beim Bau mit geo-tz verteilt werden"
     }
   }
 }

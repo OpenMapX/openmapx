@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { dedupeAttributionHtml } from "./mapAttributionStore";
+import { dedupeAttributionHtml, projectMapAttributions } from "./mapAttributionStore";
 
 describe("dedupeAttributionHtml", () => {
   it("collapses a credit contributed by several layers", () => {
@@ -7,8 +7,8 @@ describe("dedupeAttributionHtml", () => {
     expect(dedupeAttributionHtml([osm, "© MapTiler", osm])).toEqual([osm, "© MapTiler"]);
   });
 
-  it("keeps the longest form when one credit contains another", () => {
-    expect(dedupeAttributionHtml(["© OSM", "Map data © OSM contributors"])).toEqual([
+  it("keeps longer wording around a complete credited publisher fragment", () => {
+    expect(dedupeAttributionHtml(["© OSM contributors", "Map data © OSM contributors"])).toEqual([
       "Map data © OSM contributors",
     ]);
   });
@@ -47,4 +47,33 @@ describe("dedupeAttributionHtml", () => {
     expect(dedupeAttributionHtml(["© OSM", "© OSM "])).toEqual(["© OSM"]);
     expect(dedupeAttributionHtml(["© OSM ", "© OSM"])).toEqual(["© OSM "]);
   });
+});
+
+it("unions permanent and complete credits independently so an eligible copy cannot hide a required copy", () => {
+  const fullHtml = '<a href="https://provider.test/">Provider</a>';
+  const details = { fullHtml, visibleHtml: "", logos: [] };
+  const required = { fullHtml, visibleHtml: fullHtml, logos: [] };
+  expect(projectMapAttributions([details, required])).toMatchObject({
+    fullHtml: [fullHtml],
+    visible: [{ html: fullHtml }],
+  });
+  expect(projectMapAttributions([required, details])).toMatchObject({
+    fullHtml: [fullHtml],
+    visible: [{ html: fullHtml }],
+  });
+});
+
+it("merges a compact publisher link into a fuller visible notice without losing either licence link", () => {
+  const publisher =
+    '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>';
+  const full =
+    '© OpenStreetMap contributors (<a href="https://opendatacommons.org/licenses/odbl/1-0/">ODbL-1.0</a>)';
+  const result = projectMapAttributions([
+    { fullHtml: full, visibleHtml: publisher, logos: [] },
+    { fullHtml: full, visibleHtml: full, logos: [] },
+  ]);
+  expect(result.visible).toHaveLength(1);
+  expect(result.visible[0].html).toContain('href="https://www.openstreetmap.org/copyright"');
+  expect(result.visible[0].html).toContain('href="https://opendatacommons.org/licenses/odbl/1-0/"');
+  expect(result.visible[0].html.match(/OpenStreetMap contributors/g)).toHaveLength(1);
 });

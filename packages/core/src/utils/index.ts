@@ -2,7 +2,9 @@ export { dataSourceToAttribution } from "@openmapx/mobility-core/contributors";
 export { addressComponentsFromOsmTags, sanitizeAddressComponents } from "./addressEvidence";
 export { isCityOrSmaller } from "./administrativePlace";
 export {
+  type AttributionPresentation,
   buildAttributionHtml,
+  buildAttributionPresentation,
   buildIntegrationAttribution,
   buildLicensingHtml,
   buildRuntimeAttributionHtml,
@@ -13,6 +15,12 @@ export {
   pickIntegrationForSources,
   sanitizeAttributionHtml,
 } from "./attribution";
+export {
+  type AttributionPresentationGroup,
+  dedupeAttributionHtml,
+  projectAttributionPresentations,
+  type VisibleAttribution,
+} from "./attribution-presentation";
 export { bboxAroundPoint, bboxCacheKey, geoJsonBBox } from "./bbox";
 export {
   BRAND_QID_KEYS,

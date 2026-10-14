@@ -126,10 +126,15 @@ function EvidenceSources({ evidence }: { evidence: AirQualityEvidence }) {
               </Typography>
             )}
             <SectionAttribution
-              name={source.name}
-              url={sourceUrl}
-              licensing={source.licensing ?? undefined}
-              attribution={source.attribution ?? undefined}
+              attributions={[
+                {
+                  sourceId: source.sourceId,
+                  name: source.name,
+                  url: sourceUrl,
+                  licensing: source.licensing ?? undefined,
+                  attributionText: source.attribution ?? undefined,
+                },
+              ]}
             />
             {methodologyUrl && (
               <Link

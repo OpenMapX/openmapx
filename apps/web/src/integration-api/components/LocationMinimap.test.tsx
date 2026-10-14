@@ -35,7 +35,7 @@ vi.mock("@/integration-api/runtime/EnvProvider", () => ({
 }));
 
 vi.mock("@/lib/map", () => ({
-  baseMapCreditsHtml: () => [],
+  baseMapVectorCredits: () => [],
   loadMaptilerStyle: testState.loadMaptilerStyle,
   loadOpenMapXStyle: testState.loadOpenMapXStyle,
 }));

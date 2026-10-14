@@ -55,3 +55,5 @@ namespace; preserve conditions and notices. Engine/software, data/imagery/style
 and API/service terms are separate subjects. Unknown and per-item licences stay
 explicit. See docs/docs/developer/licensing.md. Never send flat `spdxLicense`,
 `license` or `licenseUrl` display fields or guess a grant from a composite label.
+
+Capture optional reviewed `licensing.bindings[].attribution` policies with each receipt. Required fields are placement (`visible` or `details`), exact surfaces (`map`, `content`, `image`), basis, reviewedAt, evidenceUrls and reason. Only certify compactText when exact terms allow abbreviation; unresolved terms stay fully visible. `includePublisher: true` preserves the actual issuing publisher. Approved logo identifiers select local host assets; no remote asset URLs or executable callbacks. The host uses reviewed SPDX defaults plus these source/product overrides, not a mutable source catalogue. Every mandatory notice remains adjacent, and complete current notices are directly accessible by keyboard/touch. Installed artifacts cannot grant themselves execution or data permissions through placement metadata.

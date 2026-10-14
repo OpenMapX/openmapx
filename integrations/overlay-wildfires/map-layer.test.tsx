@@ -188,7 +188,11 @@ describe("WildfireLayer hotspot composition", () => {
     );
     await waitFor(() => {
       // Loaded data with no rendered query hits owes no credits.
-      expect(Object.values(useMapAttributionStore.getState().byLayer).flat()).toEqual([]);
+      expect(
+        Object.values(useMapAttributionStore.getState().byLayer)
+          .flat()
+          .map((entry) => entry.fullHtml),
+      ).toEqual([]);
     });
   });
 

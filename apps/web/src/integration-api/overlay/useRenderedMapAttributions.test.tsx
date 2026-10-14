@@ -39,7 +39,10 @@ function flush() {
   });
 }
 function html() {
-  return Object.values(useMapAttributionStore.getState().byLayer).flat().join(" ");
+  return Object.values(useMapAttributionStore.getState().byLayer)
+    .flat()
+    .map((entry) => entry.fullHtml)
+    .join(" ");
 }
 
 beforeEach(() => {
@@ -75,7 +78,11 @@ describe("rendered map attribution lifecycle", () => {
     expect(html()).toContain("marker");
     expect(html()).toContain("line-a");
     expect(html()).toContain("line-b");
-    expect(Object.values(useMapAttributionStore.getState().byLayer).flat()).toHaveLength(3);
+    expect(
+      Object.values(useMapAttributionStore.getState().byLayer)
+        .flat()
+        .map((entry) => entry.fullHtml),
+    ).toHaveLength(3);
   });
 
   it("updates during continuous navigation movement without requiring idle", () => {
@@ -149,7 +156,11 @@ describe("rendered map attribution lifecycle", () => {
   });
 
   it("keeps independent owners and base credits intact on hide and unmount", () => {
-    useMapAttributionStore.getState().setLayer("base", ["Base map credit"]);
+    useMapAttributionStore
+      .getState()
+      .setLayer("base", [
+        { fullHtml: "Base map credit", visibleHtml: "Base map credit", logos: [] },
+      ]);
     fake.setRenderedFeatures(LAYERS[0]!, [feature(["shared"])]);
     const area = renderHook(({ visible }) => useRenderedMapAttributions("area", LAYERS, visible), {
       initialProps: { visible: true },
@@ -473,6 +484,7 @@ describe("evaluated channels and captured receipts", () => {
     expect(
       Object.entries(byLayer)
         .find(([key]) => key.startsWith("rendered:first::"))?.[1]
+        .map((entry) => entry.fullHtml)
         .join(" ") ?? "",
     ).not.toContain("other-credit");
     first.rerender({ active: false });

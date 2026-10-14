@@ -6,6 +6,10 @@ import {
   matchesMediaHost,
 } from "@openmapx/integration-framework";
 import {
+  readCapturedContributors,
+  snapshotContributors,
+} from "@openmapx/mobility-core/contributors";
+import {
   allowedReadings,
   CROWD_CREDIT,
   countryOf,
@@ -199,8 +203,22 @@ export function recordToCamera(
         : undefined;
     const direction = directionOf(viewDetails.direction);
     const road = roadOf(viewDetails.road);
+    const native = readCapturedContributors(
+      component.contributors ?? rec(component.provenance).contributors,
+    );
+    const selectedSources = kept.filter(
+      (source) => source.id === owner || contributors.includes(source.id),
+    );
+    const viewCredits =
+      native ??
+      snapshotContributors(
+        selectedSources.map((source) => credit(source, sources)),
+        upstreamCredits(selectedSources, sources),
+        crowdReported(reading) ? [CROWD_CREDIT] : [],
+      );
     views.push({
       key,
+      contributors: viewCredits,
       ...(name ? { name } : {}),
       ...(bearing !== undefined ? { bearing } : {}),
       ...(direction ? { direction } : {}),
@@ -236,7 +254,20 @@ export function recordToCamera(
       ? { operator: { name: operatorName, ...(operatorSite ? { website: operatorSite } : {}) } }
       : {}),
     ...(detailUrl ? { detailUrl } : {}),
-    ...(playerEmbedUrl ? { playerEmbedUrl } : {}),
+    ...(playerEmbedUrl
+      ? {
+          playerEmbedUrl,
+          playerContributors: snapshotContributors(
+            kept
+              .filter((source) => source.id === survivor.id)
+              .map((source) => credit(source, sources)),
+            upstreamCredits(
+              kept.filter((source) => source.id === survivor.id),
+              sources,
+            ),
+          ),
+        }
+      : {}),
     views,
     sources: kept.map((s) => s.id),
     attributions: [

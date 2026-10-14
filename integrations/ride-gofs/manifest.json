@@ -132,6 +132,17 @@
             "subject": "Registre des taxis de Montréal material",
             "license": {
               "kind": "unknown"
+            },
+            "attribution": {
+              "placement": "visible",
+              "surfaces": ["map", "content", "image"],
+              "basis": "unresolved",
+              "reviewedAt": "2026-10-14",
+              "evidenceUrls": [
+                "https://www.registretaximontreal.ca/documentation-technique/",
+                "https://www.registretaximontreal.ca/wp-content/uploads/2025/11/the-taxi-exchange-point-operator-guide.pdf"
+              ],
+              "reason": "Exact product/operator/file grant or placement remains unresolved; no generic licence-only collapse clearance"
             }
           },
           {
@@ -140,6 +151,17 @@
             "license": {
               "kind": "unknown",
               "url": "https://www.registretaximontreal.ca/documentation-technique/"
+            },
+            "attribution": {
+              "placement": "visible",
+              "surfaces": ["map", "content", "image"],
+              "basis": "unresolved",
+              "reviewedAt": "2026-10-14",
+              "evidenceUrls": [
+                "https://www.registretaximontreal.ca/documentation-technique/",
+                "https://www.registretaximontreal.ca/wp-content/uploads/2025/11/the-taxi-exchange-point-operator-guide.pdf"
+              ],
+              "reason": "Exact product/operator/file grant or placement remains unresolved; no generic licence-only collapse clearance"
             }
           }
         ],
@@ -171,6 +193,14 @@
             "license": {
               "kind": "per-item",
               "raw": "Determined by each contributing item or operator"
+            },
+            "attribution": {
+              "placement": "visible",
+              "surfaces": ["map", "content", "image"],
+              "basis": "unresolved",
+              "reviewedAt": "2026-10-14",
+              "evidenceUrls": ["https://github.com/MobilityData/GOFS/blob/main/reference.md"],
+              "reason": "Exact product/operator/file grant or placement remains unresolved; no generic licence-only collapse clearance"
             }
           },
           {
@@ -179,6 +209,14 @@
             "license": {
               "kind": "unknown",
               "url": "https://gofs.org/"
+            },
+            "attribution": {
+              "placement": "visible",
+              "surfaces": ["map", "content", "image"],
+              "basis": "unresolved",
+              "reviewedAt": "2026-10-14",
+              "evidenceUrls": ["https://github.com/MobilityData/GOFS/blob/main/reference.md"],
+              "reason": "Exact product/operator/file grant or placement remains unresolved; no generic licence-only collapse clearance"
             }
           }
         ],
@@ -210,6 +248,14 @@
             "license": {
               "kind": "per-item",
               "raw": "Determined by each contributing item or operator"
+            },
+            "attribution": {
+              "placement": "visible",
+              "surfaces": ["map", "content", "image"],
+              "basis": "unresolved",
+              "reviewedAt": "2026-10-14",
+              "evidenceUrls": ["https://github.com/MobilityData/GOFS/blob/main/reference.md"],
+              "reason": "Exact product/operator/file grant or placement remains unresolved; no generic licence-only collapse clearance"
             }
           },
           {
@@ -218,6 +264,14 @@
             "license": {
               "kind": "unknown",
               "url": "https://gofs.org/"
+            },
+            "attribution": {
+              "placement": "visible",
+              "surfaces": ["map", "content", "image"],
+              "basis": "unresolved",
+              "reviewedAt": "2026-10-14",
+              "evidenceUrls": ["https://github.com/MobilityData/GOFS/blob/main/reference.md"],
+              "reason": "Exact product/operator/file grant or placement remains unresolved; no generic licence-only collapse clearance"
             }
           }
         ],
@@ -249,6 +303,14 @@
             "license": {
               "kind": "per-item",
               "raw": "Determined by each contributing item or operator"
+            },
+            "attribution": {
+              "placement": "visible",
+              "surfaces": ["map", "content", "image"],
+              "basis": "unresolved",
+              "reviewedAt": "2026-10-14",
+              "evidenceUrls": ["https://github.com/MobilityData/GOFS/blob/main/reference.md"],
+              "reason": "Exact product/operator/file grant or placement remains unresolved; no generic licence-only collapse clearance"
             }
           },
           {
@@ -257,6 +319,14 @@
             "license": {
               "kind": "unknown",
               "url": "https://gofs.org/"
+            },
+            "attribution": {
+              "placement": "visible",
+              "surfaces": ["map", "content", "image"],
+              "basis": "unresolved",
+              "reviewedAt": "2026-10-14",
+              "evidenceUrls": ["https://github.com/MobilityData/GOFS/blob/main/reference.md"],
+              "reason": "Exact product/operator/file grant or placement remains unresolved; no generic licence-only collapse clearance"
             }
           }
         ],
@@ -335,6 +405,17 @@
             "license": {
               "kind": "per-item",
               "raw": "Determined by each contributing item or operator"
+            },
+            "attribution": {
+              "placement": "visible",
+              "surfaces": ["map", "content", "image"],
+              "basis": "unresolved",
+              "reviewedAt": "2026-10-14",
+              "evidenceUrls": [
+                "https://github.com/MobilityData/GOFS",
+                "https://github.com/MobilityData/GOFS/blob/main/reference.md"
+              ],
+              "reason": "Exact product/operator/file grant or placement remains unresolved; no generic licence-only collapse clearance"
             }
           }
         ],

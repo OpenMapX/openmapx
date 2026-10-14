@@ -2,7 +2,7 @@ import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 // @vitest-environment jsdom
 
 import type { Attribution } from "@openmapx/mobility-core/attribution";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import { AttributionStrip } from "./AttributionStrip";
@@ -159,7 +159,9 @@ describe("AttributionStrip", () => {
     const { container } = render(
       <AttributionStrip attributions={[transitous]} variant="panel-header" label="Data sources" />,
     );
-    expect(container.querySelector("[data-source-id]")?.textContent).toBe("Transitous");
+    expect(container.querySelector("[data-source-id]")?.textContent).toContain(
+      "Public transport data via Transitous",
+    );
 
     fireEvent.mouseOver(container.querySelector("[data-idx]") as HTMLElement);
     const tooltip = await screen.findByRole("tooltip");
@@ -184,10 +186,10 @@ describe("AttributionStrip", () => {
 
   it("collapses to maxVisible with a toggle that expands and collapses", () => {
     const items: Attribution[] = [
-      { sourceId: "a", name: "Alpha" },
-      { sourceId: "b", name: "Bravo" },
-      { sourceId: "c", name: "Charlie" },
-      { sourceId: "d", name: "Delta" },
+      { sourceId: "a", name: "Alpha", licensing: licensingFromDeclaration("CC0-1.0") },
+      { sourceId: "b", name: "Bravo", licensing: licensingFromDeclaration("CC0-1.0") },
+      { sourceId: "c", name: "Charlie", licensing: licensingFromDeclaration("CC0-1.0") },
+      { sourceId: "d", name: "Delta", licensing: licensingFromDeclaration("CC0-1.0") },
     ];
     const { container } = render(<AttributionStrip attributions={items} maxVisible={2} />);
     expect(container.querySelectorAll("[data-source-id]").length).toBe(2);
@@ -204,7 +206,101 @@ describe("AttributionStrip", () => {
 
   it("renders no toggle when item count is within maxVisible", () => {
     const { container } = render(<AttributionStrip attributions={[delfi, tfl]} maxVisible={3} />);
-    expect(container.querySelector("button")).toBeNull();
+    expect(screen.getByRole("button", { name: "attributions" })).not.toBeNull();
     expect(container.querySelectorAll("[data-source-id]").length).toBe(2);
   });
+});
+
+it("never puts required notices behind maxVisible or a hover-only tooltip", () => {
+  const items = [
+    { sourceId: "eligible", name: "Eligible", licensing: licensingFromDeclaration("CC-BY-4.0") },
+    { sourceId: "a", name: "A", attributionText: "Exact required notice A" },
+    { sourceId: "b", name: "B", attributionText: "Exact required notice B" },
+  ];
+  const { container } = render(<AttributionStrip attributions={items} maxVisible={1} />);
+  expect(container.textContent).toContain("Exact required notice A");
+  expect(container.textContent).toContain("Exact required notice B");
+  expect(container.querySelectorAll("[data-source-id]")).toHaveLength(3);
+});
+
+it("makes every full licence, notice and software subject reachable in one touch action", () => {
+  const { container } = render(<AttributionStrip attributions={[delfi]} />);
+  fireEvent.click(screen.getByRole("button", { name: "attributions" }));
+  expect(screen.getByRole("dialog").textContent).toContain("CC-BY-4.0");
+  expect(
+    screen.getByRole("dialog").querySelector('a[href="https://www.delfi.de/"]'),
+  ).not.toBeNull();
+  expect(container.querySelector("[data-source-id]")).not.toBeNull();
+});
+
+it("opens details without triggering an enclosing image/map action", () => {
+  const parent = vi.fn();
+  render(
+    // biome-ignore lint/a11y/noStaticElementInteractions: Simulates an enclosing image click listener, not a product control.
+    <div role="presentation" onClick={parent}>
+      <AttributionStrip
+        attributions={[
+          { sourceId: "cc", name: "Author", licensing: licensingFromDeclaration("CC-BY-4.0") },
+        ]}
+        maxVisible={0}
+      />
+    </div>,
+  );
+  fireEvent.click(screen.getByRole("button", { name: "attributions" }));
+  expect(parent).not.toHaveBeenCalled();
+  expect(screen.getByRole("dialog")).toBeInTheDocument();
+});
+
+it("keeps gallery navigation shortcuts from reaching the window while attribution details has focus", async () => {
+  const shortcuts = vi.fn();
+  window.addEventListener("keydown", shortcuts);
+  try {
+    render(<AttributionStrip attributions={[delfi]} />);
+    fireEvent.click(screen.getByRole("button", { name: "attributions" }));
+    fireEvent.keyDown(screen.getByRole("dialog"), { key: "ArrowRight" });
+    expect(shortcuts).not.toHaveBeenCalled();
+    fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  } finally {
+    window.removeEventListener("keydown", shortcuts);
+  }
+});
+
+it("retains mandatory branding in the details dialog even if the dialog covers the image or map footer", () => {
+  render(
+    <AttributionStrip
+      attributions={[
+        {
+          sourceId: "mapillary",
+          name: "Mapillary",
+          licensing: {
+            version: 1,
+            bindings: [
+              {
+                scope: "service",
+                subject: "API",
+                license: { kind: "unknown" },
+                attribution: {
+                  placement: "visible",
+                  surfaces: ["image"],
+                  basis: "provider-terms",
+                  reviewedAt: "2026-10-14",
+                  evidenceUrls: ["https://www.mapillary.com/terms"],
+                  reason: "Linked visible logo",
+                  logo: "mapillary",
+                  compactText: "Mapillary",
+                },
+              },
+            ],
+          },
+        },
+      ]}
+      surface="image"
+    />,
+  );
+  fireEvent.click(screen.getByRole("button", { name: "attributions" }));
+  expect(screen.getByRole("dialog").querySelector('img[alt="Mapillary"]')).not.toBeNull();
+  expect(
+    screen.getByRole("dialog").querySelector('a[href="https://www.mapillary.com/"]'),
+  ).not.toBeNull();
 });

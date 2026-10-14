@@ -8,7 +8,7 @@ import { useEffect, useRef } from "react";
 import { MapCredits } from "@/components/map/MapCredits";
 import { createGeoJsonSourceDataBridge } from "@/integration-api/map/layerStyleUtils";
 import { useEnv } from "@/integration-api/runtime/EnvProvider";
-import { baseMapCreditsHtml, loadMaptilerStyle, loadOpenMapXStyle } from "@/lib/map";
+import { baseMapVectorCredits, loadMaptilerStyle, loadOpenMapXStyle } from "@/lib/map";
 import { loadMapLibreRuntime } from "@/lib/maplibreRuntime";
 import type { OfflinePackageBbox } from "@/lib/offlineAreas";
 
@@ -227,7 +227,7 @@ export function AreaPickerMap({ initialCenter, initialZoom, onChange, fitBbox, b
           },
         }}
       />
-      <MapCredits html={baseMapCreditsHtml(env)} />
+      <MapCredits attributions={baseMapVectorCredits(env)} />
     </Box>
   );
 }

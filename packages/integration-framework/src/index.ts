@@ -314,6 +314,10 @@ export {
   validateDataSource,
   validateManifest,
 } from "./manifest";
+export {
+  capturePhotoProviderContributors,
+  captureStreetLevelProviderContributors,
+} from "./media-attribution";
 export { matchesMediaHost, parseMediaHostEntry } from "./media-hosts";
 export { PLATFORM_VERSION, satisfiesPlatformVersion } from "./platform";
 export {

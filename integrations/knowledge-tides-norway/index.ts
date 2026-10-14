@@ -176,6 +176,7 @@ async function buildTidesResponse(
 export function setup(ctx: IntegrationContext): void {
   createTidesIntegration<CachedStation>(ctx, {
     scheme: "kartverket",
+    sourceId: "kartverket-sehavniva",
     loadStations,
     findStationById: (stations, id) => stations.find((s) => s.code === id),
     createPlace: (station): Place =>

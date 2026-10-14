@@ -13,9 +13,6 @@ vi.mock("next-intl", () => ({
     (key: string, values?: Record<string, unknown>): string =>
       values ? `${key}:${Object.values(values).join(",")}` : key,
 }));
-vi.mock("./useDataSourceAttribution", () => ({
-  useDataSourceAttribution: () => undefined,
-}));
 
 import { PlaceTidesContent } from "./PlaceTides";
 

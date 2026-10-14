@@ -11,12 +11,33 @@ export type LicenseDescriptor =
   | { kind: "per-item"; raw?: string; url?: string }
   | { kind: "public-domain"; name: string; url?: string }
   | { kind: "status"; id: "CC-PDM-1.0"; url?: string };
+export const ATTRIBUTION_SURFACES = ["map", "content", "image"] as const;
+export type AttributionSurface = (typeof ATTRIBUTION_SURFACES)[number];
+export const ATTRIBUTION_LOGOS = ["openweather", "mapillary", "maptiler", "tdx"] as const;
+export type AttributionLogo = (typeof ATTRIBUTION_LOGOS)[number];
+/** Reviewed display policy, never a grant of data or API permissions. */
+export interface AttributionPolicy {
+  placement: "visible" | "details";
+  surfaces: readonly AttributionSurface[];
+  basis: "licence" | "provider-terms" | "recommendation" | "unresolved";
+  reviewedAt: string;
+  evidenceUrls: readonly string[];
+  reason: string;
+  /** Explicitly reviewed minimal visible wording; the complete notice is retained. */
+  compactText?: string;
+  /** Reviewed local branding asset, never a URL supplied by an extension. */
+  logo?: AttributionLogo;
+  prominence?: "normal";
+  /** Preserve the actual record publisher beside the visible service credit. */
+  includePublisher?: true;
+}
 export interface LicenseBinding {
   scope: LicenseScope;
   subject: string;
   license: LicenseDescriptor;
   notice?: string;
   conditions?: readonly string[];
+  attribution?: AttributionPolicy;
 }
 export interface Licensing {
   version: 1;
@@ -135,6 +156,64 @@ export function isSafeAttributionUrl(value: unknown): value is string {
 const safeUrl = (value: unknown): value is string | undefined =>
   value === undefined || isSafeAttributionUrl(value);
 
+export function parseAttributionPolicy(raw: unknown): AttributionPolicy | undefined {
+  if (
+    !record(raw) ||
+    !keys(raw, [
+      "placement",
+      "surfaces",
+      "basis",
+      "reviewedAt",
+      "evidenceUrls",
+      "reason",
+      "compactText",
+      "logo",
+      "prominence",
+      "includePublisher",
+    ]) ||
+    !["visible", "details"].includes(String(raw.placement)) ||
+    !["licence", "provider-terms", "recommendation", "unresolved"].includes(String(raw.basis)) ||
+    (raw.placement === "details" && raw.basis === "unresolved") ||
+    (raw.basis === "unresolved" && raw.compactText !== undefined) ||
+    !Array.isArray(raw.surfaces) ||
+    raw.surfaces.length === 0 ||
+    raw.surfaces.length > 3 ||
+    new Set(raw.surfaces).size !== raw.surfaces.length ||
+    !raw.surfaces.every((surface) => ATTRIBUTION_SURFACES.includes(surface)) ||
+    !text(raw.reviewedAt) ||
+    !/^\d{4}-\d{2}-\d{2}$/.test(raw.reviewedAt) ||
+    !Number.isFinite(Date.parse(raw.reviewedAt)) ||
+    new Date(raw.reviewedAt).toISOString().slice(0, 10) !== raw.reviewedAt ||
+    !Array.isArray(raw.evidenceUrls) ||
+    raw.evidenceUrls.length === 0 ||
+    raw.evidenceUrls.length > 8 ||
+    !raw.evidenceUrls.every(isSafeAttributionUrl) ||
+    !text(raw.reason, 2_000) ||
+    !optionalText(raw.compactText, 2_000) ||
+    (raw.logo !== undefined && !ATTRIBUTION_LOGOS.includes(raw.logo as AttributionLogo)) ||
+    (raw.prominence !== undefined && raw.prominence !== "normal") ||
+    (raw.includePublisher !== undefined && raw.includePublisher !== true) ||
+    (raw.placement !== "visible" &&
+      (raw.compactText !== undefined ||
+        raw.logo !== undefined ||
+        raw.prominence !== undefined ||
+        raw.includePublisher !== undefined))
+  )
+    return undefined;
+  return {
+    placement: raw.placement as AttributionPolicy["placement"],
+    surfaces: [...raw.surfaces] as AttributionSurface[],
+    basis: raw.basis as AttributionPolicy["basis"],
+    reviewedAt: raw.reviewedAt,
+    evidenceUrls: [...raw.evidenceUrls] as string[],
+    reason: raw.reason,
+    ...(raw.compactText === undefined ? {} : { compactText: raw.compactText }),
+    ...(raw.logo === undefined ? {} : { logo: raw.logo as AttributionLogo }),
+    ...(raw.prominence === undefined ? {} : { prominence: "normal" as const }),
+    ...(raw.includePublisher === undefined ? {} : { includePublisher: true as const }),
+  };
+}
+
 function parseDescriptor(raw: unknown): LicenseDescriptor | undefined {
   if (!record(raw) || !safeUrl(raw.url)) return undefined;
   const url = raw.url === undefined ? {} : { url: raw.url };
@@ -215,7 +294,7 @@ export function parseLicensing(raw: unknown): Licensing | undefined {
   for (const binding of raw.bindings) {
     if (
       !record(binding) ||
-      !keys(binding, ["scope", "subject", "license", "notice", "conditions"]) ||
+      !keys(binding, ["scope", "subject", "license", "notice", "conditions", "attribution"]) ||
       !LICENSE_SCOPES.includes(binding.scope as LicenseScope) ||
       !text(binding.subject) ||
       !optionalText(binding.notice, 16_000)
@@ -223,6 +302,9 @@ export function parseLicensing(raw: unknown): Licensing | undefined {
       return undefined;
     const license = parseDescriptor(binding.license);
     if (!license) return undefined;
+    const attribution =
+      binding.attribution === undefined ? undefined : parseAttributionPolicy(binding.attribution);
+    if (binding.attribution !== undefined && !attribution) return undefined;
     const conditions = binding.conditions;
     if (
       conditions !== undefined &&
@@ -236,6 +318,7 @@ export function parseLicensing(raw: unknown): Licensing | undefined {
       subject: binding.subject,
       license,
       ...(binding.notice === undefined ? {} : { notice: binding.notice }),
+      ...(attribution === undefined ? {} : { attribution }),
       ...(conditions === undefined ? {} : { conditions: [...conditions] as string[] }),
     });
   }

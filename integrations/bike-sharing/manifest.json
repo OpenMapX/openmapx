@@ -144,6 +144,15 @@
             "license": {
               "kind": "unknown",
               "url": "https://docs.citybik.es/api/tos"
+            },
+            "attribution": {
+              "placement": "visible",
+              "surfaces": ["map", "content"],
+              "basis": "recommendation",
+              "reviewedAt": "2026-10-14",
+              "evidenceUrls": ["https://docs.citybik.es/api/tos"],
+              "reason": "Reviewed provider-specific attribution placement; complete notices remain available",
+              "compactText": "<a href=\"https://citybik.es/\">CityBikes</a>"
             }
           }
         ],
@@ -174,6 +183,14 @@
             "subject": "Donkey Republic material",
             "license": {
               "kind": "unknown"
+            },
+            "attribution": {
+              "placement": "visible",
+              "surfaces": ["map", "content", "image"],
+              "basis": "unresolved",
+              "reviewedAt": "2026-10-14",
+              "evidenceUrls": ["https://www.donkey.bike/terms-and-conditions"],
+              "reason": "Exact product/operator/file grant or placement remains unresolved; no generic licence-only collapse clearance"
             }
           },
           {
@@ -182,6 +199,14 @@
             "license": {
               "kind": "unknown",
               "url": "https://www.donkey.bike/terms-and-conditions/"
+            },
+            "attribution": {
+              "placement": "visible",
+              "surfaces": ["map", "content", "image"],
+              "basis": "unresolved",
+              "reviewedAt": "2026-10-14",
+              "evidenceUrls": ["https://www.donkey.bike/terms-and-conditions"],
+              "reason": "Exact product/operator/file grant or placement remains unresolved; no generic licence-only collapse clearance"
             }
           }
         ],
@@ -213,6 +238,14 @@
             "subject": "Nextbike material",
             "license": {
               "kind": "unknown"
+            },
+            "attribution": {
+              "placement": "visible",
+              "surfaces": ["map", "content", "image"],
+              "basis": "unresolved",
+              "reviewedAt": "2026-10-14",
+              "evidenceUrls": ["https://github.com/nextbike/api-doc"],
+              "reason": "Exact product/operator/file grant or placement remains unresolved; no generic licence-only collapse clearance"
             }
           },
           {
@@ -221,6 +254,14 @@
             "license": {
               "kind": "unknown",
               "url": "https://github.com/nextbike/api-doc"
+            },
+            "attribution": {
+              "placement": "visible",
+              "surfaces": ["map", "content", "image"],
+              "basis": "unresolved",
+              "reviewedAt": "2026-10-14",
+              "evidenceUrls": ["https://github.com/nextbike/api-doc"],
+              "reason": "Exact product/operator/file grant or placement remains unresolved; no generic licence-only collapse clearance"
             }
           }
         ],
@@ -251,6 +292,16 @@
             "subject": "Deutsche Bahn GBFS material",
             "license": {
               "kind": "unknown"
+            },
+            "attribution": {
+              "placement": "visible",
+              "surfaces": ["map", "content", "image"],
+              "basis": "unresolved",
+              "reviewedAt": "2026-10-14",
+              "evidenceUrls": [
+                "https://developers.deutschebahn.com/db-api-marketplace/apis/nutzungsbedingungen"
+              ],
+              "reason": "Exact product/operator/file grant or placement remains unresolved; no generic licence-only collapse clearance"
             }
           },
           {
@@ -259,6 +310,16 @@
             "license": {
               "kind": "unknown",
               "url": "https://developers.deutschebahn.com/db-api-marketplace/apis/nutzungsbedingungen"
+            },
+            "attribution": {
+              "placement": "visible",
+              "surfaces": ["map", "content", "image"],
+              "basis": "unresolved",
+              "reviewedAt": "2026-10-14",
+              "evidenceUrls": [
+                "https://developers.deutschebahn.com/db-api-marketplace/apis/nutzungsbedingungen"
+              ],
+              "reason": "Exact product/operator/file grant or placement remains unresolved; no generic licence-only collapse clearance"
             }
           }
         ],
@@ -298,6 +359,17 @@
             "license": {
               "kind": "per-item",
               "raw": "Determined by each contributing item or operator"
+            },
+            "attribution": {
+              "placement": "visible",
+              "surfaces": ["map", "content", "image"],
+              "basis": "unresolved",
+              "reviewedAt": "2026-10-14",
+              "evidenceUrls": [
+                "https://github.com/MobilityData/gbfs/blob/master/gbfs.md",
+                "https://github.com/MobilityData/gbfs/blob/master/data-licenses.md"
+              ],
+              "reason": "Exact product/operator/file grant or placement remains unresolved; no generic licence-only collapse clearance"
             }
           },
           {
@@ -306,6 +378,17 @@
             "license": {
               "kind": "per-item",
               "raw": "Determined by each contributing item or operator"
+            },
+            "attribution": {
+              "placement": "visible",
+              "surfaces": ["map", "content", "image"],
+              "basis": "unresolved",
+              "reviewedAt": "2026-10-14",
+              "evidenceUrls": [
+                "https://github.com/MobilityData/gbfs/blob/master/gbfs.md",
+                "https://github.com/MobilityData/gbfs/blob/master/data-licenses.md"
+              ],
+              "reason": "Exact product/operator/file grant or placement remains unresolved; no generic licence-only collapse clearance"
             }
           }
         ],
@@ -380,6 +463,15 @@
             "license": {
               "kind": "unknown",
               "url": "https://transitous.org/sources/"
+            },
+            "attribution": {
+              "placement": "visible",
+              "surfaces": ["map", "content"],
+              "basis": "recommendation",
+              "reviewedAt": "2026-10-14",
+              "evidenceUrls": ["https://transitous.org/api/"],
+              "reason": "Visible source link expressly required; persistent interpretation conservative; Preserve each contributing feed license; Commercial use prohibited by public API policy",
+              "compactText": "<a href=\"https://transitous.org/sources/\">Transitous sources</a>"
             }
           }
         ],

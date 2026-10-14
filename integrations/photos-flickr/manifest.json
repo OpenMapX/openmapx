@@ -73,6 +73,15 @@
               "id": "LicenseRef-Service-Terms",
               "name": "Flickr API usage terms",
               "url": "https://www.flickr.com/help/terms/api"
+            },
+            "attribution": {
+              "placement": "visible",
+              "surfaces": ["image", "content"],
+              "basis": "recommendation",
+              "reviewedAt": "2026-10-14",
+              "evidenceUrls": ["https://www.flickr.com/help/terms/api"],
+              "reason": "Prominent notice explicit; persistent relevant-surface placement conservative; Logo needs specific written permission; Individual creator and license details separately required",
+              "compactText": "This product uses the Flickr API but is not endorsed or certified by SmugMug, Inc."
             }
           },
           {

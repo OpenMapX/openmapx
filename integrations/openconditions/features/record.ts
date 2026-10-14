@@ -205,9 +205,17 @@ export function credit(source: RecordSource, sources: CreditSources): Attributio
   const licensing = parseLicensing(a.licensing);
   return {
     sourceId: source.id,
-    name: str(a.provider) ?? source.id,
+    name: str(a.name) ?? str(a.provider) ?? source.id,
     ...(url ? { url } : {}),
     ...(licensing ? { licensing } : {}),
+    ...(str(rec(a.publisher).name)
+      ? {
+          publisher: {
+            name: str(rec(a.publisher).name)!,
+            ...(str(rec(a.publisher).url) ? { url: str(rec(a.publisher).url) } : {}),
+          },
+        }
+      : {}),
     ...(str(a.provider) ? { attributionText: str(a.provider) } : {}),
   };
 }

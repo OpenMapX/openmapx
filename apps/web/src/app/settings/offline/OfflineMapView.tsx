@@ -6,7 +6,7 @@ import type * as maplibregl from "maplibre-gl";
 import { useEffect, useRef } from "react";
 import { MapCredits } from "@/components/map/MapCredits";
 import { useEnv } from "@/integration-api/runtime/EnvProvider";
-import { baseMapCreditsHtml, loadOpenMapXStyle } from "@/lib/map";
+import { baseMapVectorCredits, loadOpenMapXStyle } from "@/lib/map";
 import { loadMapLibreRuntime } from "@/lib/maplibreRuntime";
 import {
   configureDefaultOfflinePackageResolver,
@@ -162,7 +162,7 @@ export function OfflineMapView({ packages, fitTo, height = 360 }: Props) {
     >
       <Box ref={containerRef} sx={{ position: "absolute", inset: 0 }} />
       {packages.length === 0 ? null : (
-        <MapCredits html={baseMapCreditsHtml({ ...env, tilesUrl: "offline-package" })} />
+        <MapCredits attributions={baseMapVectorCredits({ ...env, tilesUrl: "offline-package" })} />
       )}
     </Box>
   );

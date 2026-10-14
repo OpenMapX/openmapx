@@ -1,3 +1,7 @@
+import {
+  type AttributionPresentation,
+  buildAttributionPresentation,
+} from "@openmapx/core/attribution";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import {
   readCapturedContributors,
@@ -10,7 +14,6 @@ import {
 } from "./rasterMapContribution";
 import { hasVisibleFeatureChannel, isAttributionLayerVisible } from "./renderedFeatureVisibility";
 import { createRenderedPaintEvidence } from "./renderedPaintEvidence";
-import { attributionToHtml } from "./useMapAttributions";
 
 export interface RenderedMapAttributionOptions {
   /**
@@ -29,7 +32,7 @@ export interface RenderedMapAttributionOptions {
 interface GeometrySubscription extends RenderedMapAttributionOptions {
   kind: "geometry";
   layerIds: readonly string[];
-  publish: (html: string[]) => void;
+  publish: (entries: AttributionPresentation[]) => void;
 }
 
 export interface RasterAttributionDescriptor {
@@ -41,7 +44,7 @@ export interface RasterAttributionDescriptor {
 interface RasterSubscription {
   kind: "raster";
   descriptors: readonly RasterAttributionDescriptor[];
-  publish: (html: string[]) => void;
+  publish: (entries: AttributionPresentation[]) => void;
 }
 
 type Subscription = GeometrySubscription | RasterSubscription;
@@ -120,7 +123,7 @@ class RenderedMapAttributionTracker {
       : [];
     const paintEvidence = createRenderedPaintEvidence(this.map);
     for (const [owner, subscription] of this.subscriptions) {
-      const html = new Set<string>();
+      const entries = new Map<string, AttributionPresentation>();
       if (subscription.kind === "raster") {
         for (const descriptor of subscription.descriptors) {
           updateRasterAcquisitionContributors(
@@ -133,18 +136,20 @@ class RenderedMapAttributionTracker {
             descriptor.layerId,
             descriptor.sourceId,
           )) {
-            const entry = attributionToHtml(receipt);
-            if (entry) html.add(entry);
+            const entry = buildAttributionPresentation(receipt, "map");
+            if (entry.fullHtml) entries.set(JSON.stringify(entry), entry);
           }
         }
-        subscription.publish([...html].sort());
+        subscription.publish(
+          [...entries.values()].sort((a, b) => a.fullHtml.localeCompare(b.fullHtml)),
+        );
         continue;
       }
       for (const receipt of snapshotContributors(
         subscription.resolveCustomContributors?.() ?? [],
       )) {
-        const entry = attributionToHtml(receipt);
-        if (entry) html.add(entry);
+        const entry = buildAttributionPresentation(receipt, "map");
+        if (entry.fullHtml) entries.set(JSON.stringify(entry), entry);
       }
       const live = layersByOwner.get(owner);
       if (!live) continue;
@@ -175,11 +180,13 @@ class RenderedMapAttributionTracker {
           subscription.layerContributors?.[feature.layer.id] ??
           [];
         for (const receipt of snapshotContributors(receipts)) {
-          const entry = attributionToHtml(receipt);
-          if (entry) html.add(entry);
+          const entry = buildAttributionPresentation(receipt, "map");
+          if (entry.fullHtml) entries.set(JSON.stringify(entry), entry);
         }
       }
-      subscription.publish([...html].sort());
+      subscription.publish(
+        [...entries.values()].sort((a, b) => a.fullHtml.localeCompare(b.fullHtml)),
+      );
     }
   };
 }

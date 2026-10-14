@@ -6,7 +6,7 @@ import type { StyleSpecification } from "maplibre-gl";
 import { useEffect, useRef } from "react";
 import { MapCredits } from "@/components/map/MapCredits";
 import { useEnv } from "@/integration-api/runtime/EnvProvider";
-import { baseMapCreditsHtml, loadMaptilerStyle, loadOpenMapXStyle } from "@/lib/map";
+import { baseMapVectorCredits, loadMaptilerStyle, loadOpenMapXStyle } from "@/lib/map";
 import { loadMapLibreRuntime } from "@/lib/maplibreRuntime";
 
 interface LocationMinimapProps {
@@ -114,7 +114,7 @@ export function LocationMinimap({ lng, lat, zoom = 16, onClick, sx }: LocationMi
       sx={[{ position: "relative" }, ...(Array.isArray(sx) ? sx : [sx])] as SxProps<Theme>}
     >
       <Box ref={containerRef} sx={{ position: "absolute", inset: 0 }} />
-      <MapCredits compact html={baseMapCreditsHtml(env)} />
+      <MapCredits attributions={baseMapVectorCredits(env)} />
     </Box>
   );
 }

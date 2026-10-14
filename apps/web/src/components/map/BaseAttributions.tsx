@@ -16,7 +16,7 @@ import { useOfflinePackageActive } from "@/lib/offlineAreas";
  * raster overlay) without us having to track who-shows-what.
  *
  * The credit constants are defined once in `@/lib/map` and shared with
- * `baseMapCreditsHtml` (the offline / mini maps), so the metadata can't
+ * `baseMapVectorCredits` (the offline / mini maps), so the metadata can't
  * drift between the two rendering paths.
  *
  * Renders no UI; the hook is the entire side-effect.

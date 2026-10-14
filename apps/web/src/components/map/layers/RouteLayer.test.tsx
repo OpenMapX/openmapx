@@ -144,7 +144,9 @@ it("publishes each alternate route's captured suppliers into its geometry", () =
 
 it("credits a rendered alternate independently of the active route and retains owner isolation", () => {
   vi.useFakeTimers();
-  useMapAttributionStore.setState({ byLayer: { base: ["Base map credit"] } });
+  useMapAttributionStore.setState({
+    byLayer: { base: [{ fullHtml: "Base map credit", visibleHtml: "Base map credit", logos: [] }] },
+  });
   const first = render(<RouteLayer />);
   const second = render(<RouteLayer />);
   const data = fake.state.sources.get("route-source")?.data as {
@@ -161,7 +163,11 @@ it("credits a rendered alternate independently of the active route and retains o
       fake.emit("render");
       vi.advanceTimersByTime(250);
     });
-  const html = () => Object.values(useMapAttributionStore.getState().byLayer).flat().join(" ");
+  const html = () =>
+    Object.values(useMapAttributionStore.getState().byLayer)
+      .flat()
+      .map((entry) => entry.fullHtml)
+      .join(" ");
   flush();
   expect(html()).toContain("B notice");
   expect(html()).not.toContain("A notice");
@@ -278,7 +284,10 @@ it("credits only queried chunks of a composed route, independently of total-dura
       fake.emit("render");
       vi.advanceTimersByTime(250);
     });
-    const html = Object.values(useMapAttributionStore.getState().byLayer).flat().join(" ");
+    const html = Object.values(useMapAttributionStore.getState().byLayer)
+      .flat()
+      .map((entry) => entry.fullHtml)
+      .join(" ");
     for (const notice of expected) expect(html).toContain(notice);
     for (const notice of absent) expect(html).not.toContain(notice);
   }

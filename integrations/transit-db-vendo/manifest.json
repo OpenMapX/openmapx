@@ -62,6 +62,18 @@
             "subject": "DB timetable/live responses",
             "license": {
               "kind": "unknown"
+            },
+            "attribution": {
+              "placement": "visible",
+              "surfaces": ["map", "content", "image"],
+              "basis": "unresolved",
+              "reviewedAt": "2026-10-14",
+              "evidenceUrls": [
+                "https://github.com/public-transport/db-vendo-client",
+                "https://github.com/public-transport/hafas-rest-api",
+                "https://github.com/public-transport/transport-apis"
+              ],
+              "reason": "Exact product/operator/file grant or placement remains unresolved; no generic licence-only collapse clearance"
             }
           },
           {
@@ -69,6 +81,18 @@
             "subject": "Selected DB endpoint",
             "license": {
               "kind": "unknown"
+            },
+            "attribution": {
+              "placement": "visible",
+              "surfaces": ["map", "content", "image"],
+              "basis": "unresolved",
+              "reviewedAt": "2026-10-14",
+              "evidenceUrls": [
+                "https://github.com/public-transport/db-vendo-client",
+                "https://github.com/public-transport/hafas-rest-api",
+                "https://github.com/public-transport/transport-apis"
+              ],
+              "reason": "Exact product/operator/file grant or placement remains unresolved; no generic licence-only collapse clearance"
             }
           }
         ],

@@ -140,7 +140,7 @@ export interface PricingPlanEntry {
   free?: boolean;
 }
 
-export interface DataSourceDetailSection {
+export interface DataSourceDetailSection extends ContributingRecord {
   title: I18nToken;
   /** Optional subtitle rendered beneath the section header (e.g. live availability). */
   caption?: Translatable;

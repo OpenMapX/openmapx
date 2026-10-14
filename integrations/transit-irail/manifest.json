@@ -58,6 +58,18 @@
             "license": {
               "kind": "unknown",
               "raw": "CC0"
+            },
+            "attribution": {
+              "placement": "visible",
+              "surfaces": ["map", "content", "image"],
+              "basis": "unresolved",
+              "reviewedAt": "2026-10-14",
+              "evidenceUrls": [
+                "https://docs.irail.be/",
+                "https://github.com/iRail/stations/blob/master/README.md",
+                "https://github.com/irail/irail"
+              ],
+              "reason": "Exact product/operator/file grant or placement remains unresolved; no generic licence-only collapse clearance"
             }
           },
           {
@@ -65,6 +77,18 @@
             "subject": "NMBS timetable/liveboards/connections",
             "license": {
               "kind": "unknown"
+            },
+            "attribution": {
+              "placement": "visible",
+              "surfaces": ["map", "content", "image"],
+              "basis": "unresolved",
+              "reviewedAt": "2026-10-14",
+              "evidenceUrls": [
+                "https://docs.irail.be/",
+                "https://github.com/iRail/stations/blob/master/README.md",
+                "https://github.com/irail/irail"
+              ],
+              "reason": "Exact product/operator/file grant or placement remains unresolved; no generic licence-only collapse clearance"
             }
           },
           {
@@ -72,6 +96,18 @@
             "subject": "iRail timetable endpoint",
             "license": {
               "kind": "unknown"
+            },
+            "attribution": {
+              "placement": "visible",
+              "surfaces": ["map", "content", "image"],
+              "basis": "unresolved",
+              "reviewedAt": "2026-10-14",
+              "evidenceUrls": [
+                "https://docs.irail.be/",
+                "https://github.com/iRail/stations/blob/master/README.md",
+                "https://github.com/irail/irail"
+              ],
+              "reason": "Exact product/operator/file grant or placement remains unresolved; no generic licence-only collapse clearance"
             }
           }
         ],

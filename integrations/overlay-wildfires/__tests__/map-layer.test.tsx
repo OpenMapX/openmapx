@@ -499,7 +499,7 @@ function credits() {
     ...new Set(
       Object.entries(useMapAttributionStore.getState().byLayer)
         .filter(([key]) => key.startsWith("rendered:wildfires-"))
-        .flatMap(([, html]) => html),
+        .flatMap(([, entries]) => entries.map((entry) => entry.fullHtml)),
     ),
   ].sort();
 }

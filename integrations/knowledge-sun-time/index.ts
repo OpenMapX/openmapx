@@ -1,5 +1,11 @@
 import { fetchJson } from "@openmapx/core";
-import { type IntegrationContext, scalarQueries } from "@openmapx/integration-framework";
+import {
+  type IntegrationContext,
+  resolveIntegrationContributors,
+  scalarQueries,
+  snapshotContributors,
+} from "@openmapx/integration-framework";
+import { OPENSTREETMAP_ATTRIBUTION } from "@openmapx/mobility-core/attribution";
 import { find as findTimezone } from "geo-tz";
 
 const API_BASE = "https://api.sunrise-sunset.org/json";
@@ -58,9 +64,13 @@ export function setup(ctx: IntegrationContext): void {
       return;
     }
 
+    const captured = resolveIntegrationContributors(ctx, [
+      "sunrise-sunset",
+      "timezone-boundary-builder",
+    ]);
     const dateParam = date ?? "today";
     const tzid = findTimezone(latNum, lngNum)[0] ?? "UTC";
-    const cacheKey = `sun-times:${round4(latNum)},${round4(lngNum)}:${dateParam}`;
+    const cacheKey = `sun-times:contributors-v1:${round4(latNum)},${round4(lngNum)}:${dateParam}`;
 
     const cached = await ctx.cache.get<unknown>(cacheKey);
     if (cached) {
@@ -104,10 +114,7 @@ export function setup(ctx: IntegrationContext): void {
         astronomicalTwilightBegin: r.astronomical_twilight_begin,
         astronomicalTwilightEnd: r.astronomical_twilight_end,
         timezone: tzid,
-        attribution: {
-          name: "Sunrise-Sunset.org",
-          url: "https://sunrise-sunset.org/",
-        },
+        contributors: snapshotContributors(captured, [OPENSTREETMAP_ATTRIBUTION]),
       };
 
       await ctx.cache.set(cacheKey, result, CACHE_TTL);

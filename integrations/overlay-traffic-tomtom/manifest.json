@@ -86,6 +86,18 @@
             "subject": "TomTom material",
             "license": {
               "kind": "unknown"
+            },
+            "attribution": {
+              "placement": "visible",
+              "surfaces": ["map", "content", "image"],
+              "basis": "unresolved",
+              "reviewedAt": "2026-10-14",
+              "evidenceUrls": [
+                "https://docs.tomtom.com/legal/terms-and-conditions",
+                "https://docs.tomtom.com/_astro/LegalTabs.CZQaVJ02.js",
+                "https://docs.tomtom.com/map-display-api/documentation/tomtom-maps/v2/copyrights/copyrights"
+              ],
+              "reason": "Exact product/operator/file grant or placement remains unresolved; no generic licence-only collapse clearance"
             }
           },
           {
@@ -94,6 +106,18 @@
             "license": {
               "kind": "unknown",
               "url": "https://developer.tomtom.com/terms-and-conditions"
+            },
+            "attribution": {
+              "placement": "visible",
+              "surfaces": ["map", "content", "image"],
+              "basis": "unresolved",
+              "reviewedAt": "2026-10-14",
+              "evidenceUrls": [
+                "https://docs.tomtom.com/legal/terms-and-conditions",
+                "https://docs.tomtom.com/_astro/LegalTabs.CZQaVJ02.js",
+                "https://docs.tomtom.com/map-display-api/documentation/tomtom-maps/v2/copyrights/copyrights"
+              ],
+              "reason": "Exact product/operator/file grant or placement remains unresolved; no generic licence-only collapse clearance"
             }
           }
         ],

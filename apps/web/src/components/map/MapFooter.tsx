@@ -6,12 +6,15 @@ import { useNavigationStore, useSidebarStore } from "@openmapx/core";
 import NextLink from "next/link";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useMapAttributionHtml } from "@/integration-api/overlay/mapAttributionStore";
+import { LAYER_SELECTOR_OPEN_EVENT } from "@/components/command-palette/constants";
+import { AttributionDetails } from "@/components/ui/AttributionDetails";
+import { AttributionNotices } from "@/components/ui/AttributionNotices";
+import { useMapAttributionPresentation } from "@/integration-api/overlay/mapAttributionStore";
 import { isPanelShiftActive, PANEL_WIDTH } from "@/lib/layout";
 import { coversFooterCenter, publishMapFooterCenterCovered } from "@/lib/mapFooterCenter";
 import { useMeasuredMapObstruction } from "@/lib/mapObstructions";
 import { useMobilePanelClearance, useWindowHeight } from "@/lib/mobilePanelHeight";
-import { CREDITS_SEPARATOR, CREDITS_SX } from "./MapCredits";
+import { CREDITS_SX } from "./MapCredits";
 
 // Below this much free space between the two groups they stop reading as two
 // separate bars, so they're painted as one instead.
@@ -38,9 +41,10 @@ export function MapFooter() {
   const collapsed = useSidebarStore((s) => s.collapsed);
   const navigating = useNavigationStore((s) => s.status !== "idle");
   const shifted = isPanelShiftActive({ sidebarOpen, sidebarCollapsed: collapsed, navigating });
-  const followHeight = useMobilePanelClearance(useWindowHeight());
-  const credits = useMapAttributionHtml();
-  const creditsHtml = credits.join(CREDITS_SEPARATOR);
+  const windowHeight = useWindowHeight();
+  const followHeight = useMobilePanelClearance(windowHeight);
+  const credits = useMapAttributionPresentation();
+  const creditsHtml = JSON.stringify(credits);
 
   const containerRef = useRef<HTMLElement>(null);
   const [footerEl, setFooterEl] = useState<HTMLElement | null>(null);
@@ -51,6 +55,8 @@ export function MapFooter() {
   useMeasuredMapObstruction("map-footer", "bottom", footerEl);
   const linksRef = useRef<HTMLDivElement>(null);
   const creditsRef = useRef<HTMLDivElement>(null);
+  const mandatoryRef = useRef<HTMLSpanElement>(null);
+  const [tall, setTall] = useState(false);
   const [merged, setMerged] = useState(false);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: credit changes resize the strip and (re)mount the element the observer watches
@@ -60,6 +66,8 @@ export function MapFooter() {
     if (!container || !links) return;
     const measure = () => {
       const creditsEl = creditsRef.current;
+      const height = mandatoryRef.current?.getBoundingClientRect().height ?? 0;
+      setTall(height > Math.max(1, windowHeight - followHeight) * 0.25);
       const l = links.getBoundingClientRect();
       const c = creditsEl?.getBoundingClientRect();
       publishMapFooterCenterCovered(
@@ -81,7 +89,7 @@ export function MapFooter() {
       observer?.disconnect();
       publishMapFooterCenterCovered(false);
     };
-  }, [creditsHtml]);
+  }, [creditsHtml, windowHeight, followHeight]);
 
   // Typography/colors come from the shared credits style so the footer and the
   // embedded maps' `<MapCredits>` can't drift apart. In merged mode the
@@ -139,16 +147,35 @@ export function MapFooter() {
           {t("licenses")}
         </Link>
       </Box>
-      {credits.length > 0 && (
+      {credits.fullHtml.length > 0 && (
         <Box
           ref={creditsRef}
           data-testid="map-attributions"
-          sx={{ ...barSx, marginLeft: "auto", textAlign: "right" }}
-          // Entries are sanitized in `useMapAttributions` (anchors only, safe
-          // hrefs) before they reach the registry.
-          // biome-ignore lint/security/noDangerouslySetInnerHtml: credits carry license-required publisher links
-          dangerouslySetInnerHTML={{ __html: creditsHtml }}
-        />
+          sx={{ ...barSx, marginLeft: "auto", textAlign: "right", overflowWrap: "anywhere" }}
+        >
+          <Box component="span" ref={mandatoryRef} data-testid="mandatory-map-attributions">
+            <AttributionNotices notices={credits.visible} />
+          </Box>
+          {credits.visible.length > 0 && " | "}
+          <AttributionDetails
+            html={credits.fullHtml}
+            label={t("credits")}
+            logos={credits.visible.flatMap((notice) => notice.logos)}
+          />
+          {tall && (
+            <Box sx={{ mt: 0.5 }}>
+              {t("manyRequiredCredits")}{" "}
+              <Link
+                component="button"
+                type="button"
+                onClick={() => window.dispatchEvent(new Event(LAYER_SELECTOR_OPEN_EVENT))}
+                sx={{ font: "inherit", color: "inherit", cursor: "pointer" }}
+              >
+                {t("manageOverlays")}
+              </Link>
+            </Box>
+          )}
+        </Box>
       )}
     </Box>
   );

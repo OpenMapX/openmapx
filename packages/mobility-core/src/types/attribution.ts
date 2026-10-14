@@ -37,6 +37,17 @@ export const OPENSTREETMAP_ATTRIBUTION: Readonly<Attribution> = Object.freeze<At
         scope: "data",
         subject: "OpenStreetMap",
         license: { kind: "spdx", expression: "ODbL-1.0" },
+        attribution: {
+          placement: "visible",
+          surfaces: ["map", "content", "image"],
+          basis: "recommendation",
+          reviewedAt: "2026-10-14",
+          evidenceUrls: ["https://osmfoundation.org/wiki/Licence/Attribution_Guidelines"],
+          reason:
+            "Keep linked OSM credit permanently visible; copyright page supplies origin and ODbL information",
+          compactText:
+            '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>',
+        },
       },
     ],
   },

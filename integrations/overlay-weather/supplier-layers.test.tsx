@@ -91,7 +91,10 @@ function flush() {
   });
 }
 function html() {
-  return Object.values(useMapAttributionStore.getState().byLayer).flat().join(" ");
+  return Object.values(useMapAttributionStore.getState().byLayer)
+    .flat()
+    .map((entry) => entry.fullHtml)
+    .join(" ");
 }
 beforeEach(() => {
   vi.useFakeTimers();

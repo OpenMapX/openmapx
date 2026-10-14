@@ -375,7 +375,10 @@
     "privacy": "Datenschutz",
     "terms": "Nutzungsbedingungen",
     "licenses": "Lizenzen",
-    "credits": "Kartendaten"
+    "credits": "Kartendaten",
+    "attributions": "Quellenangaben",
+    "manyRequiredCredits": "Diese Quellen benötigen sichtbare Hinweise. Deaktiviere eine Ebene, um mehr Platz für die Karte zu schaffen.",
+    "manageOverlays": "Ebenen verwalten"
   },
   "layers": {
     "layers": "Ebenen",

@@ -143,6 +143,17 @@
             "license": {
               "kind": "per-item",
               "raw": "Determined by each contributing item or operator"
+            },
+            "attribution": {
+              "placement": "visible",
+              "surfaces": ["map", "content", "image"],
+              "basis": "unresolved",
+              "reviewedAt": "2026-10-14",
+              "evidenceUrls": [
+                "https://github.com/MobilityData/gbfs/blob/master/gbfs.md",
+                "https://github.com/MobilityData/gbfs/blob/master/data-licenses.md"
+              ],
+              "reason": "Exact product/operator/file grant or placement remains unresolved; no generic licence-only collapse clearance"
             }
           },
           {
@@ -151,6 +162,17 @@
             "license": {
               "kind": "per-item",
               "raw": "Determined by each contributing item or operator"
+            },
+            "attribution": {
+              "placement": "visible",
+              "surfaces": ["map", "content", "image"],
+              "basis": "unresolved",
+              "reviewedAt": "2026-10-14",
+              "evidenceUrls": [
+                "https://github.com/MobilityData/gbfs/blob/master/gbfs.md",
+                "https://github.com/MobilityData/gbfs/blob/master/data-licenses.md"
+              ],
+              "reason": "Exact product/operator/file grant or placement remains unresolved; no generic licence-only collapse clearance"
             }
           }
         ],
@@ -182,6 +204,16 @@
             "subject": "Felyx material",
             "license": {
               "kind": "unknown"
+            },
+            "attribution": {
+              "placement": "visible",
+              "surfaces": ["map", "content", "image"],
+              "basis": "unresolved",
+              "reviewedAt": "2026-10-14",
+              "evidenceUrls": [
+                "https://www.felyx.com/cdn/files/0e66dc4940cea8d358599e7d2c6b9113b3c443aa.pdf"
+              ],
+              "reason": "Exact product/operator/file grant or placement remains unresolved; no generic licence-only collapse clearance"
             }
           },
           {
@@ -190,6 +222,16 @@
             "license": {
               "kind": "unknown",
               "url": "https://www.felyx.com/cdn/files/0e66dc4940cea8d358599e7d2c6b9113b3c443aa.pdf"
+            },
+            "attribution": {
+              "placement": "visible",
+              "surfaces": ["map", "content", "image"],
+              "basis": "unresolved",
+              "reviewedAt": "2026-10-14",
+              "evidenceUrls": [
+                "https://www.felyx.com/cdn/files/0e66dc4940cea8d358599e7d2c6b9113b3c443aa.pdf"
+              ],
+              "reason": "Exact product/operator/file grant or placement remains unresolved; no generic licence-only collapse clearance"
             }
           }
         ],
@@ -264,6 +306,15 @@
             "license": {
               "kind": "unknown",
               "url": "https://transitous.org/sources/"
+            },
+            "attribution": {
+              "placement": "visible",
+              "surfaces": ["map", "content"],
+              "basis": "recommendation",
+              "reviewedAt": "2026-10-14",
+              "evidenceUrls": ["https://transitous.org/api/"],
+              "reason": "Visible source link expressly required; persistent interpretation conservative; Preserve each contributing feed license; Commercial use prohibited by public API policy",
+              "compactText": "<a href=\"https://transitous.org/sources/\">Transitous sources</a>"
             }
           }
         ],
@@ -295,6 +346,18 @@
             "license": {
               "kind": "per-item",
               "raw": "Determined by each contributing item or operator"
+            },
+            "attribution": {
+              "placement": "visible",
+              "surfaces": ["map", "content", "image"],
+              "basis": "unresolved",
+              "reviewedAt": "2026-10-14",
+              "evidenceUrls": [
+                "https://www.mobilitaetsdaten.nrw/dataset/e-scooter-sharing-nrw",
+                "https://www.mobilitaetsdaten.nrw/api/ckan/de/dataset/voi-dortmund",
+                "https://www.mobilitaetsdaten.nrw/api/ckan/de/dataset/offer-lime-essen"
+              ],
+              "reason": "Exact product/operator/file grant or placement remains unresolved; no generic licence-only collapse clearance"
             }
           },
           {
@@ -303,6 +366,18 @@
             "license": {
               "kind": "unknown",
               "url": "https://www.mobilitaetsdaten.nrw/dataset/e-scooter-sharing-nrw"
+            },
+            "attribution": {
+              "placement": "visible",
+              "surfaces": ["map", "content", "image"],
+              "basis": "unresolved",
+              "reviewedAt": "2026-10-14",
+              "evidenceUrls": [
+                "https://www.mobilitaetsdaten.nrw/dataset/e-scooter-sharing-nrw",
+                "https://www.mobilitaetsdaten.nrw/api/ckan/de/dataset/voi-dortmund",
+                "https://www.mobilitaetsdaten.nrw/api/ckan/de/dataset/offer-lime-essen"
+              ],
+              "reason": "Exact product/operator/file grant or placement remains unresolved; no generic licence-only collapse clearance"
             }
           }
         ],

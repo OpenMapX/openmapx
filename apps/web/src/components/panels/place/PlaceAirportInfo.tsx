@@ -17,29 +17,25 @@ import type {
   AirportType,
 } from "@openmapx/core";
 import { safeHref } from "@openmapx/core";
+import type { Attribution } from "@openmapx/mobility-core/attribution";
 import { useTranslations } from "next-intl";
 import { SectionAttribution } from "@/components/ui/SectionAttribution";
 import { BRAND } from "@/integration-api/runtime/theme";
 import { SectionLabel } from "../shared/SectionLabel";
-import { useDataSourceAttribution } from "./useDataSourceAttribution";
 
 const FT_TO_M = 0.3048;
 
 interface Props {
   airport: AirportInfo;
+  attributions: readonly Attribution[];
 }
 
-export function PlaceAirportInfo({ airport }: Props) {
+export function PlaceAirportInfo({ airport, attributions }: Props) {
   const t = useTranslations("airport");
   const hasRunways = (airport.runways?.length ?? 0) > 0;
   const hasFrequencies = (airport.frequencies?.length ?? 0) > 0;
   const hasNavaids = (airport.navaids?.length ?? 0) > 0;
   const ourAirportsUrl = `https://ourairports.com/airports/${encodeURIComponent(airport.ident)}/`;
-
-  // Source attribution is pulled from the integration manifest rather than
-  // hardcoded so a name/license/URL update in `manifest.json` flows through
-  // every airport panel automatically.
-  const attributionSource = useDataSourceAttribution("knowledge-ourairports", "ourairports");
 
   return (
     <Box>
@@ -204,16 +200,9 @@ export function PlaceAirportInfo({ airport }: Props) {
         <Typography variant="caption">{t("informationalDisclaimer")}</Typography>
       </Box>
       {/* Attribution — rendered via the shared builder (SectionAttribution). */}
-      {attributionSource && (
-        <Box sx={{ px: 2, pt: 0, pb: 1 }}>
-          <SectionAttribution
-            name={attributionSource.name}
-            url={attributionSource.url}
-            licensing={attributionSource.licensing}
-            attribution={attributionSource.attribution}
-          />
-        </Box>
-      )}
+      <Box sx={{ px: 2, py: 1 }}>
+        <SectionAttribution attributions={attributions} />
+      </Box>
     </Box>
   );
 }

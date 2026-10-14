@@ -16,7 +16,6 @@ import { useTranslations } from "next-intl";
 import { SectionAttribution } from "@/components/ui/SectionAttribution";
 import { useDateTimeFormat } from "@/integration-api/runtime/useDateTimeFormat";
 import { SectionLabel } from "../shared/SectionLabel";
-import { useDataSourceAttribution } from "./useDataSourceAttribution";
 
 /**
  * Presentation-only tide content. Mounted inside an `ExpandableDetailRow`
@@ -31,10 +30,6 @@ export function PlaceTidesContent({ data }: { data: TidesResponse }) {
   // terms and crediting NOAA for their data is wrong. `useTides` stamps the
   // winning provider onto the response so the panel can pull the matching
   // manifest entry here.
-  const attributionSource = useDataSourceAttribution(
-    data.provider.integrationId,
-    data.provider.sourceId,
-  );
 
   const now = Date.now();
   const enriched = data.events.map((e) => ({ ...e, parsed: parseLocalTime(e.time) }));
@@ -114,19 +109,10 @@ export function PlaceTidesContent({ data }: { data: TidesResponse }) {
         <Typography variant="caption">{t("informationalDisclaimer")}</Typography>
       </Box>
       {/* Attribution — rendered via the shared builder (SectionAttribution). */}
-      {attributionSource && (
-        <>
-          <SectionAttribution
-            name={attributionSource.name}
-            url={attributionSource.url}
-            licensing={attributionSource.licensing}
-            attribution={attributionSource.attribution}
-          />
-          <Typography variant="caption" sx={{ color: "text.secondary", display: "block" }}>
-            {t("datumNote")}
-          </Typography>
-        </>
-      )}
+      <SectionAttribution attributions={data.contributors ?? []} />
+      <Typography variant="caption" sx={{ color: "text.secondary", display: "block" }}>
+        {t("datumNote")}
+      </Typography>
     </Box>
   );
 }

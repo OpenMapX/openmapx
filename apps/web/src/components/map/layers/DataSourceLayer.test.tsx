@@ -362,7 +362,11 @@ it("credits only rendered markers and context polygons and retains captured visi
       fake.emit("render");
       vi.advanceTimersByTime(250);
     });
-  const html = () => Object.values(useMapAttributionStore.getState().byLayer).flat().join(" ");
+  const html = () =>
+    Object.values(useMapAttributionStore.getState().byLayer)
+      .flat()
+      .map((entry) => entry.fullHtml)
+      .join(" ");
   flush();
   expect(html()).toContain("Original notice");
   expect(html()).toContain("Record B");
@@ -474,7 +478,11 @@ it("adds captured file receipts only after the actual logo image loads and only 
       fake.emit("render");
       vi.advanceTimersByTime(250);
     });
-  const html = () => Object.values(useMapAttributionStore.getState().byLayer).flat().join(" ");
+  const html = () =>
+    Object.values(useMapAttributionStore.getState().byLayer)
+      .flat()
+      .map((entry) => entry.fullHtml)
+      .join(" ");
   try {
     let data = fake.state.sources.get("ds-sample")?.data as GeoJSON.FeatureCollection;
     fake.setRenderedFeatures("ds-sample-markers", data.features as never);
@@ -582,7 +590,11 @@ it("credits the actual name label and adds summary ownership only after its zoom
         fake.emit("render");
         vi.advanceTimersByTime(250);
       });
-    const html = () => Object.values(useMapAttributionStore.getState().byLayer).flat().join(" ");
+    const html = () =>
+      Object.values(useMapAttributionStore.getState().byLayer)
+        .flat()
+        .map((entry) => entry.fullHtml)
+        .join(" ");
     setLabel("Name");
     flush();
     expect(html()).toContain("Painted name");

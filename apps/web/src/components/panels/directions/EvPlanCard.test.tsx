@@ -250,6 +250,6 @@ it("projects actual visible stop fields and captured totals independently", () =
     />,
     { wrapper: createQueryWrapper() },
   );
-  expect(screen.getAllByText("Visible model").length).toBe(2);
+  expect(screen.getAllByText("Visible notice").length).toBe(2);
   expect(screen.queryByText("Hidden model")).toBeNull();
 });

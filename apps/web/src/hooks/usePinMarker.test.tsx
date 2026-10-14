@@ -196,7 +196,11 @@ it("credits the actual DOM pin after async creation without querying features, t
     await act(async () => {
       vi.advanceTimersByTime(300);
     });
-    const html = () => Object.values(useMapAttributionStore.getState().byLayer).flat().join(" ");
+    const html = () =>
+      Object.values(useMapAttributionStore.getState().byLayer)
+        .flat()
+        .map((entry) => entry.fullHtml)
+        .join(" ");
     expect(html()).toContain("DOM pin supplier");
     rect = new DOMRect(401, 100, 20, 32);
     await act(async () => {
@@ -260,7 +264,11 @@ it("publishes native pin geometry and only the measured visible text channel thr
     await act(async () => {
       vi.advanceTimersByTime(300);
     });
-    const html = () => Object.values(useMapAttributionStore.getState().byLayer).flat().join(" ");
+    const html = () =>
+      Object.values(useMapAttributionStore.getState().byLayer)
+        .flat()
+        .map((entry) => entry.fullHtml)
+        .join(" ");
     expect(html()).toContain("Coordinate supplier");
     expect(html()).not.toContain("Name supplier");
     textRect = new DOMRect(120, 100, 100, 16);

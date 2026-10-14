@@ -1,3 +1,4 @@
+import type { ContributingRecord } from "../contributors.js";
 import type { Attribution } from "./attribution.js";
 
 /** What a camera looks at; the OpenConditions `camera` feature types. */
@@ -7,7 +8,7 @@ export type CameraType = "traffic" | "landscape" | "city" | "weather" | "beach" 
 export type CameraStatus = "online" | "offline" | "stale" | "unknown";
 
 /** One direction or preset of a camera, with its current still and/or stream. */
-export interface CameraView {
+export interface CameraView extends ContributingRecord {
   /** Unique within the camera; a single-view camera uses "0". */
   key: string;
   name?: string;
@@ -49,6 +50,8 @@ export interface Camera {
   detailUrl?: string;
   /** A third-party player page; it loads in the browser only after consent. */
   playerEmbedUrl?: string;
+  /** Exact supplier of the camera-level player, independent of other merged views. */
+  playerContributors?: readonly Attribution[];
   views: CameraView[];
   sources: string[];
   attributions: Attribution[];

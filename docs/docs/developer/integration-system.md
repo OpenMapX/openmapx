@@ -972,3 +972,7 @@ The host treats the two install locations differently, and the
 
 Installing and managing community integrations is an administrator task; see
 [Community extensions](../administration/community-extensions.md).
+
+### Reviewed placement of current credits
+
+Use the [shared attribution placement contract](./licensing.md#attribution-placement). Producer-captured per-binding source/product policies override reviewed exact licence defaults. The host renders permanent notices and one-action full details uniformly on map, content and image surfaces; do not infer placement from source names or hide mandatory notices using `maxVisible`. Preserve actual authors, publishers and API branding with each record/view.

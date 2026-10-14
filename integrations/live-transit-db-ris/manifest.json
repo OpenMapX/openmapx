@@ -93,6 +93,16 @@
             "subject": "Deutsche Bahn RIS Maps material",
             "license": {
               "kind": "unknown"
+            },
+            "attribution": {
+              "placement": "visible",
+              "surfaces": ["map", "content", "image"],
+              "basis": "unresolved",
+              "reviewedAt": "2026-10-14",
+              "evidenceUrls": [
+                "https://developers.deutschebahn.com/db-api-marketplace/apis/nutzungsbedingungen"
+              ],
+              "reason": "Exact product/operator/file grant or placement remains unresolved; no generic licence-only collapse clearance"
             }
           },
           {
@@ -101,6 +111,16 @@
             "license": {
               "kind": "unknown",
               "url": "https://developers.deutschebahn.com/db-api-marketplace/apis/nutzungsbedingungen"
+            },
+            "attribution": {
+              "placement": "visible",
+              "surfaces": ["map", "content", "image"],
+              "basis": "unresolved",
+              "reviewedAt": "2026-10-14",
+              "evidenceUrls": [
+                "https://developers.deutschebahn.com/db-api-marketplace/apis/nutzungsbedingungen"
+              ],
+              "reason": "Exact product/operator/file grant or placement remains unresolved; no generic licence-only collapse clearance"
             }
           }
         ],

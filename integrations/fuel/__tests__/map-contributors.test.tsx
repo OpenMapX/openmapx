@@ -65,7 +65,10 @@ it("credits actual fuel marker channels without hidden NSI/catalogue branding", 
       fake.emit("render");
       vi.advanceTimersByTime(250);
     });
-    const html = Object.values(useMapAttributionStore.getState().byLayer).flat().join(" ");
+    const html = Object.values(useMapAttributionStore.getState().byLayer)
+      .flat()
+      .map((entry) => entry.fullHtml)
+      .join(" ");
     expect(html).toContain("Actual fuel feed");
     expect(html).not.toContain("Name Suggestion Index");
     expect(html).not.toContain("Wikidata");

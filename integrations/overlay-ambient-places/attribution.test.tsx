@@ -31,7 +31,11 @@ afterEach(() => {
   useAmbientPlacesStore.setState({ manifest: null, panelOpen: false, layerVisible: true });
   useMapAttributionStore.setState({ byLayer: {} });
 });
-const credits = () => Object.values(useMapAttributionStore.getState().byLayer).flat().join(" ");
+const credits = () =>
+  Object.values(useMapAttributionStore.getState().byLayer)
+    .flat()
+    .map((entry) => entry.fullHtml)
+    .join(" ");
 const now = new Date().toISOString();
 const publication = {
   version: 2 as const,

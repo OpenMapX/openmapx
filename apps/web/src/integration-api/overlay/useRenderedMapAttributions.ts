@@ -1,5 +1,6 @@
 "use client";
 
+import type { AttributionPresentation } from "@openmapx/core/attribution";
 import { useEffect, useId } from "react";
 import { useMap } from "@/integration-api/map/MapContext";
 import { useMapAttributionStore } from "./mapAttributionStore";
@@ -31,7 +32,8 @@ export function useRenderedMapAttributions(
     kind: "geometry" as const,
     ...options,
     layerIds,
-    publish: (html: string[]) => (html.length ? setLayer(owner, html) : clearLayer(owner)),
+    publish: (html: AttributionPresentation[]) =>
+      html.length ? setLayer(owner, html) : clearLayer(owner),
   };
 
   // The registration lifetime follows the map/owner, while changing receipt

@@ -96,17 +96,20 @@ describe("useIntegrationDomainAttribution", () => {
     expect(
       Object.entries(byLayer)
         .find(([key]) => key.startsWith("domain:road-conditions::"))?.[1]
-        ?.join(" "),
+        ?.map((entry) => entry.fullHtml)
+        .join(" "),
     ).toContain("NDW");
     expect(
       Object.entries(byLayer)
         .find(([key]) => key.startsWith("domain:road-conditions::"))?.[1]
-        ?.join(" "),
+        ?.map((entry) => entry.fullHtml)
+        .join(" "),
     ).not.toContain("OpenStreetMap");
     expect(
       Object.entries(byLayer)
         .find(([key]) => key.startsWith("domain:fuel-stations::"))?.[1]
-        ?.join(" "),
+        ?.map((entry) => entry.fullHtml)
+        .join(" "),
     ).toContain("OpenStreetMap");
   });
 });

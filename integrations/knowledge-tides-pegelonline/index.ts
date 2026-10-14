@@ -175,6 +175,7 @@ async function buildTidesResponse(
 export function setup(ctx: IntegrationContext): void {
   createTidesIntegration<CachedStation>(ctx, {
     scheme: "pegel",
+    sourceId: "wsv-pegelonline",
     loadStations,
     findStationById: (stations, id) => stations.find((s) => s.uuid === id),
     createPlace: (station): Place =>

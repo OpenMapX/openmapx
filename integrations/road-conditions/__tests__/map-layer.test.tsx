@@ -171,7 +171,12 @@ describe("RoadConditionsLayer rendered attribution", () => {
       </IntegrationRegistryContext.Provider>,
     );
     await waitFor(() => expect(sourceFeatures("Point")).toHaveLength(2));
-    expect(Object.values(useMapAttributionStore.getState().byLayer).flat().join(" ")).toBe("");
+    expect(
+      Object.values(useMapAttributionStore.getState().byLayer)
+        .flat()
+        .map((entry) => entry.fullHtml)
+        .join(" "),
+    ).toBe("");
 
     const visible = sourceFeatures("Point").find((f) => f.properties?._id === "visible")!;
     fake.setRenderedFeatures(MARKER_LAYER, [
@@ -191,7 +196,10 @@ describe("RoadConditionsLayer rendered attribution", () => {
       fake.emit("idle");
     });
     await waitFor(() => {
-      const html = Object.values(useMapAttributionStore.getState().byLayer).flat().join(" ");
+      const html = Object.values(useMapAttributionStore.getState().byLayer)
+        .flat()
+        .map((entry) => entry.fullHtml)
+        .join(" ");
       expect(html).toContain("working");
       expect(html).not.toContain("offscreen");
       expect(html).not.toContain("missing-key");
@@ -207,9 +215,12 @@ describe("RoadConditionsLayer rendered attribution", () => {
       fake.emit("render");
     });
     await waitFor(() =>
-      expect(Object.values(useMapAttributionStore.getState().byLayer).flat().join(" ")).toContain(
-        "working",
-      ),
+      expect(
+        Object.values(useMapAttributionStore.getState().byLayer)
+          .flat()
+          .map((entry) => entry.fullHtml)
+          .join(" "),
+      ).toContain("working"),
     );
 
     fake.setRenderedFeatures(MARKER_LAYER, []);
@@ -218,7 +229,11 @@ describe("RoadConditionsLayer rendered attribution", () => {
       fake.emit("render");
     });
     await waitFor(() =>
-      expect(Object.values(useMapAttributionStore.getState().byLayer).flat()).toEqual([]),
+      expect(
+        Object.values(useMapAttributionStore.getState().byLayer)
+          .flat()
+          .map((entry) => entry.fullHtml),
+      ).toEqual([]),
     );
     view.unmount();
   });

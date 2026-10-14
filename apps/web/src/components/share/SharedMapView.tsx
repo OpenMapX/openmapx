@@ -7,7 +7,7 @@ import { useEffect, useRef } from "react";
 import { MapCredits } from "@/components/map/MapCredits";
 import { createGeoJsonSourceDataBridge } from "@/integration-api/map/layerStyleUtils";
 import { useEnv } from "@/integration-api/runtime/EnvProvider";
-import { baseMapCreditsHtml, loadMaptilerStyle, loadOpenMapXStyle } from "@/lib/map";
+import { baseMapVectorCredits, loadMaptilerStyle, loadOpenMapXStyle } from "@/lib/map";
 import { loadMapLibreRuntime } from "@/lib/maplibreRuntime";
 import { ROUTE_COLORS, ROUTE_WIDTHS } from "@/lib/routeStyle";
 
@@ -204,7 +204,7 @@ export function SharedMapView({ points, routeGeometry }: Props) {
   return (
     <Box sx={{ position: "relative", width: "100%", height: "100%" }}>
       <Box ref={containerRef} sx={{ position: "absolute", inset: 0 }} />
-      <MapCredits html={baseMapCreditsHtml(env)} />
+      <MapCredits attributions={baseMapVectorCredits(env)} />
     </Box>
   );
 }

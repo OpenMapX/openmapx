@@ -78,6 +78,17 @@
             "license": {
               "kind": "per-item",
               "raw": "Determined by each contributing item or operator"
+            },
+            "attribution": {
+              "placement": "visible",
+              "surfaces": ["map", "content", "image"],
+              "basis": "unresolved",
+              "reviewedAt": "2026-10-14",
+              "evidenceUrls": [
+                "https://docs.openaq.org/about/terms",
+                "https://docs.openaq.org/resources/licenses"
+              ],
+              "reason": "Exact product/operator/file grant or placement remains unresolved; no generic licence-only collapse clearance"
             }
           },
           {
@@ -86,6 +97,14 @@
             "license": {
               "kind": "unknown",
               "url": "https://docs.openaq.org/resources/licenses"
+            },
+            "attribution": {
+              "placement": "details",
+              "surfaces": ["content", "map"],
+              "basis": "provider-terms",
+              "reviewedAt": "2026-10-14",
+              "evidenceUrls": ["https://docs.openaq.org/about/terms"],
+              "reason": "OpenAQ provider identity only; original source binding unresolved until its terms reviewed"
             }
           }
         ],

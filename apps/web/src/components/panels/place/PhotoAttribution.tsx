@@ -2,7 +2,7 @@
 
 import Link from "@mui/material/Link";
 import { buildLicensingHtml, type PlacePhoto, safeHref } from "@openmapx/core";
-import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
+import { AttributionStrip } from "@/components/ui/AttributionStrip";
 import { AttributionText } from "@/components/ui/AttributionText";
 
 interface Props {
@@ -11,16 +11,18 @@ interface Props {
 }
 
 export function PhotoAttribution({ photo, color = "#fff" }: Props) {
-  const registry = useIntegrationRegistry();
-
-  const ds = photo.contributors === undefined ? registry.findDataSource(photo.source) : undefined;
   const captured =
     photo.contributors?.find((receipt) => receipt.sourceId === photo.source) ??
     photo.contributors?.[0];
 
-  const sourceName = captured?.name ?? ds?.name ?? photo.source;
-  const sourceUrl = photo.pageUrl ?? captured?.url ?? ds?.url;
+  const sourceName = captured?.name ?? photo.source;
+  const sourceUrl = photo.pageUrl ?? captured?.url;
 
+  const fileBindings =
+    photo.licensing?.bindings.filter((binding) => binding.scope !== "service") ?? [];
+  const services = (photo.contributors ?? []).filter((receipt) =>
+    receipt.licensing?.bindings.some((binding) => binding.scope === "service"),
+  );
   const linkSx = {
     color,
     textDecoration: "underline",
@@ -61,10 +63,13 @@ export function PhotoAttribution({ photo, color = "#fff" }: Props) {
       ) : (
         sourceName
       )}
-      {photo.licensing && (
+      {photo.licensing && fileBindings.length > 0 && (
         <>
           {" "}
-          / <AttributionText html={buildLicensingHtml(photo.licensing)} />
+          /{" "}
+          <AttributionText
+            html={buildLicensingHtml({ ...photo.licensing, bindings: fileBindings })}
+          />
         </>
       )}
       {photo.attributionText && (
@@ -87,6 +92,13 @@ export function PhotoAttribution({ photo, color = "#fff" }: Props) {
           </Link>
         </span>
       ))}
+      <AttributionStrip
+        attributions={services}
+        variant="plain"
+        surface="image"
+        maxVisible={0}
+        color={color}
+      />
     </>
   );
 }

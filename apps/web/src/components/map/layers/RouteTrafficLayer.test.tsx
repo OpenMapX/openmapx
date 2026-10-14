@@ -330,15 +330,21 @@ it("credits only rendered band receipts and removes passed/offscreen suppliers",
       fake.emit("render");
       vi.advanceTimersByTime(250);
     });
-    expect(Object.values(useMapAttributionStore.getState().byLayer).flat().join(" ")).toContain(
-      "Visible band",
-    );
+    expect(
+      Object.values(useMapAttributionStore.getState().byLayer)
+        .flat()
+        .map((entry) => entry.fullHtml)
+        .join(" "),
+    ).toContain("Visible band");
     fake.setRenderedFeatures("route-traffic-active", []);
     act(() => {
       fake.emit("render");
       vi.advanceTimersByTime(250);
     });
-    const html = Object.values(useMapAttributionStore.getState().byLayer).flat().join(" ");
+    const html = Object.values(useMapAttributionStore.getState().byLayer)
+      .flat()
+      .map((entry) => entry.fullHtml)
+      .join(" ");
     expect(html).not.toContain("Visible band");
     expect(html).toContain("Offscreen band");
     fake.setRenderedFeatures("route-traffic-alt", []);
@@ -346,7 +352,11 @@ it("credits only rendered band receipts and removes passed/offscreen suppliers",
       fake.emit("render");
       vi.advanceTimersByTime(250);
     });
-    expect(Object.values(useMapAttributionStore.getState().byLayer).flat()).toEqual([]);
+    expect(
+      Object.values(useMapAttributionStore.getState().byLayer)
+        .flat()
+        .map((entry) => entry.fullHtml),
+    ).toEqual([]);
   } finally {
     vi.useRealTimers();
   }

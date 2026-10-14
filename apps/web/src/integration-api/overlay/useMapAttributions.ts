@@ -1,6 +1,6 @@
 "use client";
 
-import { buildRuntimeAttributionHtml } from "@openmapx/core";
+import { buildAttributionPresentation, buildRuntimeAttributionHtml } from "@openmapx/core";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import { contributorKey } from "@openmapx/mobility-core/contributors";
 import { useEffect, useId } from "react";
@@ -47,12 +47,18 @@ export function useMapAttributions(layerKey: string, attributions: Attribution[]
   // identical contents across renders don't re-register. Covers every field
   // `attributionToHtml` reads — including the license, which the strip now
   // renders — so a metadata change re-runs the effect.
-  const memoKey = JSON.stringify(attributions.map(contributorKey));
+  const memoKey = JSON.stringify(
+    attributions.map((attr) => [contributorKey(attr), attr.retrievedAt]),
+  );
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: memoKey captures attributions
   useEffect(() => {
     if (attributions.length === 0) clearLayer(owner);
-    else setLayer(owner, attributions.map(attributionToHtml));
+    else
+      setLayer(
+        owner,
+        attributions.map((attr) => buildAttributionPresentation(attr, "map")),
+      );
     return () => clearLayer(owner);
   }, [owner, memoKey, setLayer, clearLayer]);
 }

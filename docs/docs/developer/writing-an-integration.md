@@ -680,3 +680,7 @@ coverage; a standalone partial gradient is not proof of visible geometry.
 Use the [shared licence metadata contract](./licensing.md) for every declared
 source and captured receipt. Separate engine, data and service subjects, retain
 original conditions, and derive display labels through the shared formatter.
+
+### Reviewed placement of current credits
+
+Use the [shared attribution placement contract](./licensing.md#attribution-placement). Producer-captured per-binding source/product policies override reviewed exact licence defaults. The host renders permanent notices and one-action full details uniformly on map, content and image surfaces; do not infer placement from source names or hide mandatory notices using `maxVisible`. Preserve actual authors, publishers and API branding with each record/view.

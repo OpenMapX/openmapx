@@ -56,6 +56,7 @@ import {
 } from "@openmapx/core";
 import {
   contributorsForField,
+  contributorsForRecordFields,
   contributorsForRecords,
   snapshotContributors,
 } from "@openmapx/mobility-core/contributors";
@@ -1134,7 +1135,12 @@ export function PlaceOverviewTab({
         <DataSourceSections detail={place.dataSourceDetail} domain={place.primaryScheme} />
       )}
       {/* Airport detail (runways, frequencies, navaids) — only present on aerodrome/heliport */}
-      {place.airport && <PlaceAirportInfo airport={place.airport} />}
+      {place.airport && (
+        <PlaceAirportInfo
+          airport={place.airport}
+          attributions={contributorsForRecordFields(place, ["airport"])}
+        />
+      )}
       {/* Harbor detail — facilities, OSM link. Surfaces for OpenSeaMap harbour click-throughs. */}
       {place.primaryScheme === "openseamap-harbour" && (
         <PlaceHarborFacilities

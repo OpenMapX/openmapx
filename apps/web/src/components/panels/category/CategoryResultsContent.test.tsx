@@ -1927,7 +1927,7 @@ it("credits displayed transit fields with full notices, native empty rows and ne
   renderPanel(vi.fn());
   await screen.findByText("Displayed station");
   expect(screen.getByText("Empty station")).toBeInTheDocument();
-  expect(screen.getByText("Name supplier")).toBeInTheDocument();
-  expect(screen.getByText("Mode supplier")).toBeInTheDocument();
-  expect(screen.queryByText("Hidden supplier")).toBeNull();
+  expect(screen.getByText("Name supplier required notice")).toBeInTheDocument();
+  expect(screen.getByText("Mode supplier required notice")).toBeInTheDocument();
+  expect(screen.queryByText(/Hidden supplier/)).toBeNull();
 });
