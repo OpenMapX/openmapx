@@ -102,7 +102,7 @@ export function parseCommonsPage(page: CommonsPage): PlacePhoto | undefined {
   photo.attributionLinks = [photo.attributionOverride ? undefined : artistHtml, ...notices]
     .filter((value): value is string => Boolean(value))
     .flatMap(extractLinks)
-    .filter((link) => link.url !== authorUrl);
+    .filter((link) => !(photo.author && !photo.attributionOverride && link.url === authorUrl));
   photo.attributionRequired = /^(?:true|1|yes)$/i.test(
     ext?.AttributionRequired?.value?.trim() ?? "",
   );

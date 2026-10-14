@@ -385,3 +385,44 @@ it("does not acquire metadata for an already aborted non-strict lookup", async (
     vi.unstubAllGlobals();
   }
 });
+
+// The custom notice replaces the separate author display, so its creator link must survive.
+it.each([false, true])("keeps one visible creator link with custom attribution=%s", (custom) => {
+  const photo = parseCommonsPage({
+    title: "File:CustomCreator.jpg",
+    imageinfo: [
+      {
+        url: "https://upload.wikimedia.org/wikipedia/commons/a/ab/CustomCreator.jpg",
+        mime: "image/jpeg",
+        extmetadata: {
+          Artist: { value: '<a href="https://creator.example/profile">Creator</a>' },
+          ...(custom
+            ? {
+                Attribution: {
+                  value:
+                    'Required credit: <a href="https://creator.example/profile">Creator profile</a>',
+                },
+              }
+            : {}),
+          Permission: {
+            value: 'Permission: <a href="https://permission.example/record">permission record</a>',
+          },
+          LicenseShortName: { value: "CC BY 4.0" },
+          LicenseUrl: { value: "https://creativecommons.org/licenses/by/4.0/" },
+        },
+      },
+    ],
+  });
+  if (!photo) throw new Error("complete file should parse");
+  expect(photo.attributionLinks).toEqual([
+    ...(custom ? [{ label: "Creator profile", url: "https://creator.example/profile" }] : []),
+    { label: "permission record", url: "https://permission.example/record" },
+  ]);
+  expect(photo.contributors?.[0].publisher).toEqual({
+    name: "Creator",
+    url: "https://creator.example/profile",
+  });
+  expect(photo.contributors?.[0].attributionText).toContain(
+    'href="https://creator.example/profile"',
+  );
+});

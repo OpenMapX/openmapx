@@ -1,17 +1,20 @@
 import type { PlacePhoto } from "@openmapx/core";
-import { withPhotoContributors } from "@openmapx/core";
+import {
+  type PanoramaxCreatorMetadata,
+  panoramaxAuthor,
+  withPhotoContributors,
+} from "@openmapx/core";
 import type { PhotoProvider } from "@openmapx/integration-framework";
 import { createBboxPhotoProvider } from "@openmapx/integration-photos/bbox-provider";
 import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 
-interface PanoramaxFeature {
+interface PanoramaxFeature extends PanoramaxCreatorMetadata {
   id?: string;
   geometry?: { type: "Point"; coordinates: [number, number] };
   properties?: {
     datetime?: string;
     license?: string;
-    providers?: Array<{ name?: string }>;
-    "geovisio:producer"?: { name?: string };
+    "geovisio:producer"?: string;
   };
   links?: Array<{ rel?: string; href?: string }>;
   assets?: {
@@ -53,9 +56,7 @@ export const panoramaxPhotoProvider: PhotoProvider =
             feature.assets?.thumb?.href ??
             "";
           const thumbUrl = feature.assets?.thumb?.href;
-          const author =
-            feature.properties?.providers?.[0]?.name ??
-            feature.properties?.["geovisio:producer"]?.name;
+          const author = panoramaxAuthor(feature);
           const capturedAt = feature.properties?.datetime;
           const licensing = licensingFromDeclaration(
             feature.properties?.license,

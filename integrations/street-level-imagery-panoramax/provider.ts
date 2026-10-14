@@ -1,6 +1,8 @@
 import {
   fetchJson,
   type LngLat,
+  type PanoramaxCreatorMetadata,
+  panoramaxAuthor,
   type StreetLevelImage,
   type StreetLevelLink,
   type StreetLevelSearchQuery,
@@ -58,12 +60,10 @@ interface StacLink {
   geometry?: StacGeometry;
 }
 
-export interface StacItem {
+export interface StacItem extends PanoramaxCreatorMetadata {
   id: string;
   geometry?: StacGeometry;
   collection?: string;
-  /** Provider entries live at the Feature top level in the live STAC API. */
-  providers?: Array<{ name?: string; roles?: string[] }>;
   properties?: {
     datetime?: string;
     license?: string;
@@ -85,12 +85,6 @@ export interface StacItem {
 
 interface StacFeatureCollection {
   features?: StacItem[];
-}
-
-/** The Feature top-level `providers[]` entry with the producer role, else the producer string. */
-function authorOf(item: StacItem): string | undefined {
-  const producer = item.providers?.find((provider) => (provider.roles ?? []).includes("producer"));
-  return producer?.name ?? item.properties?.["geovisio:producer"];
 }
 
 /** An EXIF number, written plainly ("25", "2.8") or as a rational ("4695/1000"); 0 means unknown. */
@@ -136,7 +130,7 @@ export function stacItemToImage(item: StacItem, providerId: string): StreetLevel
   const properties = item.properties ?? {};
   const orientation = properties["pers:interior_orientation"];
   const spdx = properties.license;
-  const author = authorOf(item);
+  const author = panoramaxAuthor(item);
   const [sensorWidth, sensorHeight] = orientation?.sensor_array_dimensions ?? [];
   const aspectRatio =
     sensorWidth && sensorHeight && sensorWidth > 0 && sensorHeight > 0

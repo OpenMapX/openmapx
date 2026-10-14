@@ -234,6 +234,7 @@ export {
   overturePropertyContributors,
   selectOvertureName,
 } from "./overtureSource";
+export { type PanoramaxCreatorMetadata, panoramaxAuthor } from "./panoramax-metadata";
 export {
   parseCoordinateInput,
   parseDMSCoordinateInput,

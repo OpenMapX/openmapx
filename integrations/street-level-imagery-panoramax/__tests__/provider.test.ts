@@ -195,12 +195,42 @@ describe("stacLinksToStreetLevelLinks", () => {
 });
 
 describe("author mapping", () => {
+  it.each([
+    {
+      name: "blank producer name",
+      producerName: "  ",
+      fallback: " Fallback creator ",
+      author: "Fallback creator",
+    },
+    { name: "blank creator evidence", producerName: "  ", fallback: " ", author: undefined },
+    {
+      name: "missing creator evidence",
+      producerName: undefined,
+      fallback: undefined,
+      author: undefined,
+    },
+  ])("normalizes $name", ({ producerName, fallback, author }) => {
+    const image = stacItemToImage(
+      {
+        ...ITEM,
+        providers: [
+          { name: "Hosting instance", roles: ["host"] },
+          { name: producerName, roles: ["producer"] },
+        ],
+        properties: { ...ITEM.properties, "geovisio:producer": fallback },
+      },
+      "panoramax",
+    );
+    expect(image.author).toBe(author);
+  });
+
   it("reads the author from the Feature top-level providers with the producer role", () => {
     const image = stacItemToImage(
       {
         ...ITEM,
         providers: [
-          { id: "p1", name: "motocultrice", roles: ["producer"] },
+          { name: "Hosting instance", roles: ["host"] },
+          { name: "motocultrice", roles: ["producer"] },
           { name: "raymond", roles: ["producer"] },
         ],
       },
