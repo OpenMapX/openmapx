@@ -733,7 +733,8 @@
       "freeFlowSpeed": "Free-flow speed",
       "ratio": "Of free flow",
       "los": "Traffic"
-    }
+    },
+    "unavailable": "Traffic flow data is unavailable"
   },
   "earthquakes": {
     "earthquakes": "Earthquakes",

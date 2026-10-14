@@ -126,7 +126,10 @@ current to free-flow speed in your own [OpenConditions](../developer/building-an
 road-conditions feeds (NDW, Fintraffic, Trafikverket, NYC DOT, and others),
 with line opacity marking whether each reading is measured, estimated, or typical.
 It needs no API key, and because it and the TomTom **Traffic** overlay both color
-flow, turning one on turns the other off. The live-transit overlay picks
+flow, turning one on turns the other off. Its tiles come from OpenConditions
+through the Martin tile server; without either, or while its tiles fail to
+load, **Traffic flow** stays in the layer list and its legend says the data is
+unavailable. The live-transit overlay picks
 one vehicle-position provider per visible region. The **Road conditions** overlay
 plots traffic incidents, roadworks, hazards, and closures. It features an
 interactive, filterable legend allowing users to filter by incident

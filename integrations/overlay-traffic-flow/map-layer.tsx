@@ -25,8 +25,17 @@ import { TRAFFIC_FLOW_OPACITY_EXPRESSION } from "./visual-style";
 const SRC = "omx-traffic-flow-src";
 const CASING = "omx-traffic-flow-casing";
 const COLOR = "omx-traffic-flow-color";
-const SOURCE_LAYER = "segment_flow";
+/** Martin's function-source id; the tile layer inside carries the same name. */
+const MARTIN_SOURCE = "segment_flow";
+const SOURCE_LAYER = MARTIN_SOURCE;
 const LAYER_MIN_ZOOM = 6;
+
+/** Whether Martin's `/catalog` answer lists the flow source among its tile sources. */
+function catalogServesFlow(catalog: unknown): boolean {
+  if (typeof catalog !== "object" || catalog === null) return false;
+  const tiles = (catalog as { tiles?: unknown }).tiles;
+  return typeof tiles === "object" && tiles !== null && Object.hasOwn(tiles, MARTIN_SOURCE);
+}
 
 /**
  * Relative-speed (`speed_ratio` = current ÷ free-flow) → TomTom-style color
@@ -166,7 +175,7 @@ export function TrafficFlowLayer() {
       // /martin/catalog). No `.pbf` suffix: the PWA service worker
       // CacheFirst-caches /\.pbf$/ URLs for 30 days, which would freeze this
       // "live" layer.
-      tiles: [`${martinBase}/segment_flow/{z}/{x}/{y}`],
+      tiles: [`${martinBase}/${MARTIN_SOURCE}/{z}/{x}/{y}`],
       minzoom: 5,
       maxzoom: 16,
     });
@@ -233,6 +242,37 @@ export function TrafficFlowLayer() {
     },
     deps: [mapReady, styleVersion, mapRef, showFlow, martinBase],
   });
+
+  // The tiles come from an OpenConditions function behind Martin, so without
+  // either the overlay would draw nothing while still being offered. MapLibre
+  // reports failed tiles as `error` events but drops a 404 silently, and a
+  // missing source is exactly a 404, so Martin's catalog is asked as well. Map
+  // listeners outlive a style swap; the re-added source keeps the same id.
+  const setUnavailable = useTrafficFlowStore((s) => s.setUnavailable);
+  useEffect(() => {
+    if (!glMap || !mapReady || !showFlow) return;
+    setUnavailable(false);
+    const controller = new AbortController();
+    void fetch(`${martinBase}/catalog`, { cache: "no-store", signal: controller.signal })
+      .then(async (res) => res.ok && catalogServesFlow(await res.json()))
+      .catch(() => false)
+      .then((served) => {
+        if (!served && !controller.signal.aborted) setUnavailable(true);
+      });
+    const onError = (event: maplibregl.ErrorEvent & { sourceId?: string }) => {
+      if (event.sourceId === SRC) setUnavailable(true);
+    };
+    const onSourceData = (event: maplibregl.MapSourceDataEvent) => {
+      if (event.sourceId === SRC && event.tile) setUnavailable(false);
+    };
+    glMap.on("error", onError);
+    glMap.on("sourcedata", onSourceData);
+    return () => {
+      controller.abort();
+      glMap.off("error", onError);
+      glMap.off("sourcedata", onSourceData);
+    };
+  }, [glMap, mapReady, showFlow, martinBase, setUnavailable]);
 
   // Keep the latest translator in a ref so the imperative click handler
   // (bound once per effect) always uses the current locale.
