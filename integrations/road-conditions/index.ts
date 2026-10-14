@@ -3,7 +3,7 @@ import { type IntegrationContext, scalarQueries } from "@openmapx/integration-fr
 import { eventsToFeatureCollection } from "./eventsToGeojson.js";
 import { flowSpansForRoutes, parseRouteFlowBody } from "./flowAlongRoute.js";
 import { flowToFeatureCollection } from "./flowToGeojson.js";
-import { aggregateRoadConditions, aggregateRoadFlow } from "./orchestrator.js";
+import { aggregateRoadConditions, aggregateRoadFlow, collectProviders } from "./orchestrator.js";
 import { isSeverityLabel } from "./severity.js";
 
 /**
@@ -90,6 +90,15 @@ export function setup(ctx: IntegrationContext): void {
     const types = listParam(query.types);
     const minSeverity = isSeverityLabel(query.minSeverity) ? query.minSeverity : undefined;
     const horizonDays = parseHorizonDays(query.horizonDays);
+
+    // No configured source is not "no incidents": an empty 200 would let the
+    // map legend and navigation's closure baseline read the road as clear.
+    // Providers that exist but do not cover this bbox do mean an empty answer.
+    if (collectProviders(ctx).length === 0) {
+      reply.header("Cache-Control", "no-cache");
+      reply.status(503).send({ error: "no road-conditions source is configured" });
+      return;
+    }
 
     // Namespaced by the contract version: a cache entry written in an older
     // shape must not be served against the new one.

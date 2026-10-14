@@ -140,6 +140,10 @@ linear events (such as segment closures) render as line segments directly on the
 Where a feed provides measured speed, an incident popup also estimates the delay
 in minutes; otherwise it preserves the source's declared level of service rather
 than inventing a speed.
+Without a road-conditions source, such as an OpenConditions instance at
+`OPENCONDITIONS_URL`, **Road conditions** stays in the layer list and its legend
+says traffic incidents are unavailable instead of showing a clear road.
+Navigation then reports live incidents as not current.
 These overlays complement the dedicated [public transit](./public-transit.md) and
 [directions](./directions.md) features rather than replacing them.
 
