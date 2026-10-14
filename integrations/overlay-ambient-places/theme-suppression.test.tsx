@@ -28,7 +28,6 @@ import {
   AMBIENT_SOURCE,
   AmbientPlacesLayer,
 } from "./map-layer";
-import { useAmbientPlacesStore } from "./store";
 
 afterEach(() => {
   cleanup();
@@ -67,7 +66,6 @@ describe("ambient suppression with the real group hook", () => {
       "fetch",
       vi.fn(async () => ({ ok: true, json: async () => ({ manifest }) })),
     );
-    useAmbientPlacesStore.setState({ panelOpen: true, layerVisible: true, manifest: null });
     usePlaceStore.setState({ selectedPlace: categoryPlaceToPlace(place) });
     const view = render(
       <ThemeProvider theme={createTheme({ palette: { mode: "light" } })}>

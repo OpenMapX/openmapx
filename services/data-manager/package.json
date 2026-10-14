@@ -8,7 +8,9 @@
     "dev": "node --env-file=.env --watch --import tsx/esm src/index.ts",
     "build": "tsc -p tsconfig.build.json",
     "start": "node --import tsx/esm dist/supervisor.js",
-    "check-types": "tsc --noEmit"
+    "check-types": "tsc --noEmit",
+    "bench:live-writer": "tsx scripts/bench-live-writer.ts",
+    "bench:overture-h3": "tsx scripts/bench-overture-h3.ts"
   },
   "dependencies": {
     "@mapbox/glyph-pbf-composite": "0.0.3",

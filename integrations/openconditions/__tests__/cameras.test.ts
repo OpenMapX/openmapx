@@ -70,7 +70,7 @@ const EVERY_SOURCE: MediaSources = {
   ready: true,
   has: () => true,
   link: () => undefined,
-
+  crowd: () => undefined,
   noticeOf: () => undefined,
   firmsSources: () => [],
   mediaHosts: (id) => HOSTS[id] ?? [],
@@ -491,7 +491,7 @@ describe("cameras-openconditions", () => {
       ready: false,
       has: () => false,
       link: () => undefined,
-
+      crowd: () => undefined,
       noticeOf: () => undefined,
       firmsSources: () => [],
       mediaHosts: () => [],

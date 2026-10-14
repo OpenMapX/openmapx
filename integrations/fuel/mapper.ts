@@ -1,4 +1,4 @@
-import { resolveBrandByName } from "@openmapx/brands";
+import { getBrandByQid, resolveBrandByName } from "@openmapx/brands";
 import {
   type Attribution,
   type DataSourceBranding,
@@ -165,16 +165,19 @@ function openVariant(station: FuelStation): string {
 }
 
 /**
- * The brand's catalogued logo, gap-filled from a plain-name match. Feeds
- * publish a brand name and no Wikidata identity, so the match is exact and
- * scoped to fuel stations in the station's country; an ambiguous name gives
- * no logo rather than a wrong one.
+ * The brand's catalogued logo, gap-filled from the brand's Wikidata item when
+ * the source names one (OpenStreetMap's `brand:wikidata`). Otherwise the
+ * plain-name match is exact and scoped to fuel stations in the station's
+ * country; an ambiguous name gives no logo rather than a wrong one.
  */
 function stationBranding(station: FuelStation): DataSourceBranding | undefined {
   const brand = station.brand;
-  if (!brand) return undefined;
-  const entry = resolveBrandByName(brand, { tagSet: "amenity=fuel", country: station.country });
-  return gapFillBranding(undefined, undefined, () => entry);
+  const entry =
+    (station.brandWikidata ? getBrandByQid(station.brandWikidata) : undefined) ??
+    (brand
+      ? resolveBrandByName(brand, { tagSet: "amenity=fuel", country: station.country })
+      : undefined);
+  return entry ? gapFillBranding(undefined, undefined, () => entry) : undefined;
 }
 
 /**

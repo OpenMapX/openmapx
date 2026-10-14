@@ -426,8 +426,7 @@
     "nautical": "Nautical",
     "sunTime": "Daylight & time zones",
     "schematicTransit": "Schematic transit map",
-    "closeMorePanel": "Close more panel placeholder",
-    "ambientPlaces": "Nearby places"
+    "closeMorePanel": "Close more panel placeholder"
   },
   "schematicTransit": {
     "title": "Schematic transit map",
@@ -734,7 +733,8 @@
       "freeFlowSpeed": "Free-flow speed",
       "ratio": "Of free flow",
       "los": "Traffic"
-    }
+    },
+    "unavailable": "Traffic flow data is unavailable"
   },
   "earthquakes": {
     "earthquakes": "Earthquakes",
@@ -1781,6 +1781,10 @@
     "cameraWeather": "Weather",
     "cameraBeach": "Beach",
     "cameraOther": "Other",
+    "filterSignStatus": "Status",
+    "signShowing": "Showing a message",
+    "signBlank": "Blank",
+    "signOutOfOrder": "Out of order",
     "rowType": "Type",
     "rowEvCharging": "EV Charging",
     "rowFeatures": "Features",
@@ -1810,6 +1814,7 @@
     "durationHours": "{count, plural, one {# hour} other {# hours}}",
     "durationDays": "{count, plural, one {# day} other {# days}}",
     "webcams": "Webcams",
+    "messageSigns": "Message sign",
     "contextLegend": "Rental areas",
     "contextNoRide": "No riding",
     "contextNoParking": "No parking",
@@ -2198,6 +2203,7 @@
       "parkingSites": "Parking",
       "chargingSites": "EV Charging",
       "cameras": "Cameras",
+      "messageSigns": "Message Signs",
       "transitDataCatalogs": "Transit Data Catalogs",
       "flights": "Flights",
       "hotels": "Hotels",
@@ -2226,6 +2232,7 @@
       "parkingSites": "Parking",
       "chargingSites": "EV Charging",
       "cameras": "Cameras",
+      "messageSigns": "Message Signs",
       "transitDataCatalogs": "Transit Data Catalogs",
       "flights": "Flights",
       "hotels": "Hotels",
@@ -4390,15 +4397,5 @@
     "delay": "+{delay}",
     "coverageExplanation": "Current traffic is included in this travel time.",
     "estimateExplanation": "The extra time is estimated by comparing this route with and without current traffic speeds. Actual delays can vary."
-  },
-  "ambientPlaces": {
-    "title": "Nearby places",
-    "toggle": "Show nearby places",
-    "unavailable": "No regional snapshot is available",
-    "snapshot": "Snapshot {date}",
-    "combined": "OSM + Overture",
-    "osmOnly": "OSM only",
-    "disabled": "This regional snapshot is disabled or out of date",
-    "error": "Refresh unavailable; using the last available snapshot"
   }
 }

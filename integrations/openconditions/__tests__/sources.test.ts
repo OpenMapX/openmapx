@@ -20,6 +20,7 @@ import {
 } from "../sources.js";
 import stringsDe from "../strings/de.json" with { type: "json" };
 import stringsEn from "../strings/en.json" with { type: "json" };
+import { CROWD_CREDIT } from "./fixtures/crowd.js";
 import featuresResponse from "./fixtures/features-fuel.json" with { type: "json" };
 import sourcesAnswer from "./fixtures/sources.json" with { type: "json" };
 
@@ -396,6 +397,41 @@ describe("startSourceSync", () => {
     expect(http.calls.every((c: FakeHttpRequest) => c.url === `${BASE_URL}/sources`)).toBe(true);
   });
 
+  test("hands on the crowd credit /sources states beside the feeds, and its absence", async () => {
+    const crowd = {
+      id: "crowd",
+      name: CROWD_CREDIT.name,
+      license: "ODbL-1.0",
+      licensing: CROWD_CREDIT.licensing,
+      url: CROWD_CREDIT.url,
+      rights: {},
+    };
+    let answer: unknown = { ...listOf(NDW), crowd };
+    const http = fakeHttpClient((req) => (req.url === `${BASE_URL}/sources` ? answer : undefined));
+    const ctx = createMockIntegrationContext({ id: "openconditions", http });
+    const credits: unknown[] = [];
+    const sync = startSourceSync(ctx, createOpenConditionsClient(OPERATOR, http)!, {
+      intervalMs: 1000,
+      onCrowd: (credit) => credits.push(credit),
+    });
+    await sync.first;
+    expect(credits).toEqual([CROWD_CREDIT]);
+    // The crowd is no feed: it is not supplied to the host as a data source.
+    expect(ctx.registered.dataSourceLists[0]!.map((d) => d.sourceId)).toEqual(["nl-ndw-events"]);
+
+    // A link that is no web URL is left out; a credit without a licence is none.
+    answer = { ...listOf(NDW), crowd: { ...crowd, url: "javascript:alert(1)" } };
+    await vi.advanceTimersByTimeAsync(1000);
+    const { url: _url, ...unlinked } = CROWD_CREDIT;
+    expect(credits[1]).toEqual(unlinked);
+    answer = { ...listOf(NDW), crowd: { ...crowd, licensing: undefined } };
+    await vi.advanceTimersByTimeAsync(1000);
+    answer = listOf(NDW);
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(credits.slice(2)).toEqual([undefined, undefined]);
+    sync.stop();
+  });
+
   test("in the public scope it lists only the sources that scope serves", async () => {
     const publicHttp = fakeHttpClient(() => publicListOf(NDW, ocSource()));
     const publicCtx = createMockIntegrationContext({ id: "openconditions", http: publicHttp });
@@ -600,6 +636,21 @@ describe("createLiveSources", () => {
     live.update([toDataSource(NDW)!]);
     expect(live.has("de-tankerkoenig-fuel")).toBe(false);
     expect(live.link("de-tankerkoenig-fuel")).toBeUndefined();
+  });
+
+  test("lists the crowd only while the list states its credit", () => {
+    const live = createLiveSources();
+    live.updateCrowd(CROWD_CREDIT);
+    expect(live.has("crowd")).toBe(false);
+
+    live.update([toDataSource(NDW)!]);
+    expect(live.has("crowd")).toBe(true);
+    expect(live.crowd()).toEqual(CROWD_CREDIT);
+    expect(live.crowd()).not.toBe(live.crowd());
+
+    live.updateCrowd(undefined);
+    expect(live.has("crowd")).toBe(false);
+    expect(live.crowd()).toBeUndefined();
   });
 
   test("captures self-contained licence definitions independently of later source lists", () => {

@@ -2,10 +2,10 @@ import type { FuelProduct, FuelStation } from "@openmapx/integration-framework";
 import {
   addressOf,
   allowedReadings,
-  CROWD_CREDIT,
   type CreditSources,
   countryOf,
   credit,
+  crowdCredits,
   crowdReported,
   firstText,
   instantOf,
@@ -24,6 +24,7 @@ import {
 } from "../features/record.js";
 
 const UNITS = new Set(["L", "kg", "m3"]);
+const WIKIDATA_ITEM = /^Q[1-9][0-9]*$/;
 
 function priceOf(reading: LatestReading | undefined): FuelProduct["price"] | undefined {
   const result = rec(reading?.result);
@@ -129,6 +130,7 @@ export function recordToFuelStation(
   const details = rec(record["details"]);
   const name = firstText(record["name"]);
   const brand = str(details["brand"]);
+  const brandWikidata = str(details["brandWikidata"]);
   const country = countryOf(location);
   const address = addressOf(location);
   const openingHours = str(rec(record["openingHours"])["osm"]);
@@ -136,6 +138,7 @@ export function recordToFuelStation(
     id,
     name: name ?? brand ?? "",
     ...(brand ? { brand } : {}),
+    ...(brandWikidata && WIKIDATA_ITEM.test(brandWikidata) ? { brandWikidata } : {}),
     ...(country ? { country } : {}),
     coordinates,
     ...(address ? { address } : {}),
@@ -143,6 +146,6 @@ export function recordToFuelStation(
     products,
     productsComplete: details["productsComplete"] === true,
     sources: kept.map((s) => s.id),
-    attributions: [...kept.map((s) => credit(s, sources)), ...(crowd ? [CROWD_CREDIT] : [])],
+    attributions: [...kept.map((s) => credit(s, sources)), ...crowdCredits(crowd, sources)],
   };
 }

@@ -1,5 +1,5 @@
 import type { MapLayerMouseEvent } from "maplibre-gl";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { INTERACTIVE_LAYER_IDS } from "@/integration-api/map/interactiveLayers";
 import { registerMapOverlayInteraction } from "@/integration-api/map/mapInteractionArbiter";
 import { useMapAttributionStore } from "@/integration-api/overlay/mapAttributionStore";
@@ -87,9 +87,29 @@ const COLOR_EXPR = [
   ],
 ];
 
+/** A Martin `/catalog` answer that serves the flow source. */
+const SERVING_CATALOG = { tiles: { segment_flow: { content_type: "application/x-protobuf" } } };
+
+/** Stubs `fetch`; a throwing `response` stands for a network failure, which rejects. */
+function stubCatalog(response: () => Response) {
+  const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => response());
+  vi.stubGlobal("fetch", fetchMock);
+  return fetchMock;
+}
+
+const flushCatalog = () =>
+  act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
 beforeEach(() => {
   fake = createFakeMap();
-  useTrafficFlowStore.setState({ panelOpen: false, layerVisible: false });
+  stubCatalog(() => Response.json(SERVING_CATALOG));
+  useTrafficFlowStore.setState({ panelOpen: false, layerVisible: false, unavailable: false });
   popupState.html = "";
   popupState.closed = [];
   useMapAttributionStore.setState({ byLayer: {} });
@@ -301,4 +321,84 @@ it("keeps visible field credits separate from popup-only credits", () => {
   } finally {
     vi.useRealTimers();
   }
+});
+
+describe("TrafficFlowLayer tile availability", () => {
+  const unavailable = () => useTrafficFlowStore.getState().unavailable;
+
+  it("asks Martin's catalog, uncached, and stays available when it serves the flow source", async () => {
+    const fetchMock = stubCatalog(() => Response.json(SERVING_CATALOG));
+    useTrafficFlowStore.setState({ panelOpen: true, layerVisible: true, unavailable: true });
+    render(<TrafficFlowLayer />);
+    await flushCatalog();
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0]?.[0]).toBe("https://api.test/martin/catalog");
+    expect(fetchMock.mock.calls[0]?.[1]?.cache).toBe("no-store");
+    expect(unavailable()).toBe(false);
+  });
+
+  it.each([
+    ["a catalog without the flow source", () => Response.json({ tiles: { other: {} } })],
+    ["a missing Martin route", () => new Response("404 page not found", { status: 404 })],
+    [
+      "an unreachable Martin",
+      () => {
+        throw new TypeError("Failed to fetch");
+      },
+    ],
+  ])("marks the overlay unavailable for %s", async (_, response) => {
+    stubCatalog(response);
+    useTrafficFlowStore.setState({ panelOpen: true, layerVisible: true });
+    render(<TrafficFlowLayer />);
+    await flushCatalog();
+
+    expect(unavailable()).toBe(true);
+  });
+
+  it("marks a failed tile of its own source unavailable and ignores other sources' errors", async () => {
+    useTrafficFlowStore.setState({ panelOpen: true, layerVisible: true });
+    render(<TrafficFlowLayer />);
+    await flushCatalog();
+
+    act(() => fake.emit("error", { error: new Error("tile 500"), sourceId: "basemap" }));
+    act(() => fake.emit("error", { error: new Error("style") }));
+    expect(unavailable()).toBe(false);
+
+    act(() => fake.emit("error", { error: new Error("tile 500"), sourceId: SRC, tile: {} }));
+    expect(unavailable()).toBe(true);
+  });
+
+  it("clears the state once a tile of its own source loads", async () => {
+    useTrafficFlowStore.setState({ panelOpen: true, layerVisible: true });
+    render(<TrafficFlowLayer />);
+    await flushCatalog();
+    act(() => fake.emit("error", { error: new Error("tile 502"), sourceId: SRC, tile: {} }));
+
+    act(() => fake.emit("sourcedata", { sourceId: SRC, dataType: "source" }));
+    act(() => fake.emit("sourcedata", { sourceId: "basemap", dataType: "source", tile: {} }));
+    expect(unavailable()).toBe(true);
+
+    act(() => fake.emit("sourcedata", { sourceId: SRC, dataType: "source", tile: {} }));
+    expect(unavailable()).toBe(false);
+  });
+
+  it("neither probes nor listens while hidden, and stops listening on unmount", async () => {
+    const fetchMock = stubCatalog(() => Response.json({ tiles: {} }));
+    const hidden = render(<TrafficFlowLayer />);
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(fake.state.handlers.get("error")?.size ?? 0).toBe(0);
+    hidden.unmount();
+
+    useTrafficFlowStore.setState({ panelOpen: true, layerVisible: true });
+    const { unmount } = render(<TrafficFlowLayer />);
+    expect(fake.state.handlers.get("error")?.size).toBe(1);
+    expect(fake.state.handlers.get("sourcedata")?.size).toBe(1);
+    unmount();
+    await flushCatalog();
+
+    expect(fake.state.handlers.get("error")?.size ?? 0).toBe(0);
+    expect(fake.state.handlers.get("sourcedata")?.size ?? 0).toBe(0);
+    expect(unavailable()).toBe(false);
+  });
 });

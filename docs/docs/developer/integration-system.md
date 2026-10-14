@@ -461,7 +461,8 @@ instance lists at `GET /sources`. The integration reads that list during
 OpenConditions `roads` feeds are credited under `road-conditions`, `fuel` feeds
 under `fuel-stations`, `parking` feeds under `parking-sites`, `charging` feeds
 under `charging-sites`, `cameras` feeds under `cameras`, and `hazards` feeds
-under `hazards`. Feeds of other OpenConditions domains are left out.
+under `hazards`; the roads domain's message-sign feeds are credited under
+`road-conditions` too. Feeds of other OpenConditions domains are left out.
 OpenConditions lists restricted feeds too, since the list is metadata, not
 records. Each `/sources` answer names the `scope` it was served in, and an
 answer without one is malformed (the last good list stays). In the `public`
@@ -469,9 +470,11 @@ scope, which never serves a restricted feed's records, the integration lists
 only the unrestricted feeds as data sources; in the `operator` scope it lists
 every feed. The scope is OpenConditions' own: a token set in OpenMapX but not
 held by the instance still reads in public scope and credits no restricted
-feed. In a fused fuel reading, the contributor `crowd` (the instance's own
-community reports) is credited as such; any other contributor not on the list
-drops the reading.
+feed. The instance's own community reports are no feed: the answer states
+their credit beside the feeds as `crowd` (name, licence and an optional link),
+and a fuel, parking, charging or camera reading they contributed to credits
+them with it. While the answer states no crowd credit, such a reading is left
+out, as is any reading with a contributor that is not on the list.
 The providers serve only the sources the host accepted (see above).
 
 Its `domain:<domain>` strings describe what each domain's sources receive in
@@ -574,9 +577,11 @@ Do not replace it with process-local maps or counters in production. Redis
 failure must deny a new quota-consuming refresh, although eligible stale data
 may still be returned with its original evidence time.
 
-Use `http.getResponse()` when status or allowlisted rate-limit headers matter,
-and `http.getBytes()` for binary payloads. Both require a byte ceiling and media
-type allowlist; redirects can be rejected. Non-success bodies are bounded too.
+Use `http.getResponse()` or `http.postResponse()` when status or allowlisted
+rate-limit headers matter, and `http.getBytes()` for binary payloads. Unlike
+`get()` and `post()`, these return a non-success status instead of throwing.
+They require a byte ceiling and media type allowlist; redirects can be rejected.
+Non-success bodies are bounded too.
 Integration-local raw `fetch` is not an escape hatch for provider work.
 
 Route queries arrive exactly as Fastify parsed them: each value is a string, an
@@ -612,6 +617,7 @@ interface IntegrationContext {
   registerParkingSiteProvider(p: ParkingSiteProvider): void; // → "parking-sites"
   registerChargingSiteProvider(p: ChargingSiteProvider): void; // → "charging-sites"
   registerCameraProvider(p: CameraProvider): void; // → "cameras"
+  registerMessageSignProvider(p: MessageSignProvider): void; // → "message-signs"
   registerHazardsProvider(p: HazardsProvider): void; // → "hazards"
 
   registerRoute(method, path, handler, options?): void; // options.rateLimitTier
@@ -688,6 +694,7 @@ attribution and freshness flow through every call unmodified.
 | `parking-sites`   | `ParkingSiteProvider`        | Parking facilities with live occupancy, merged by the `parking` data source.                                                                         |
 | `fuel-stations`   | `FuelStationProvider`        | Fuel stations with per-grade prices, merged by the `fuel` data source.                                                                               |
 | `cameras`         | `CameraProvider`             | Traffic and scenic cameras with their views, current stills and streams, merged by the `webcam` data source.                                         |
+| `message-signs`   | `MessageSignProvider`        | Dynamic message signs and the pages each shows, merged by the `message-signs` data source.                                                           |
 | `hazards`         | `HazardsProvider`            | Weather alerts, natural hazards, fire detections and their density grid, read by the four hazard overlays through `createHazardsOrchestrator`.       |
 
 A few patterns recur across the contracts and are worth calling out:
@@ -715,9 +722,16 @@ integration, are separate developer pages.
 ## Map overlays
 
 A trusted built-in integration that draws on the map (`domains` includes
-`map-overlay`, with a `layerSelector` entry so users can toggle it) ships a
-`map-layer.tsx`. Its
+`map-overlay`) ships a `map-layer.tsx`. Its
 legend is the one part it can declare instead of writing.
+
+`map-overlay` is the internal rendering classification for such integrations; it
+does not by itself create a user control. A **user-selectable overlay** also
+declares `frontend.layerSelector` and `frontend.overlay`, which register overlay
+state and its `ov=` URL token. An integration that declares only
+`frontend.mapLayer` is **ambient map content**: the host mounts it while it is
+enabled, it owns its own lifecycle and credits, and it has no selector, legend,
+overlay store or URL state. `overlay-ambient-places` is the built-in example.
 
 ### Declarative legends (no shipped legend code)
 

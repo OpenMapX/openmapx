@@ -53,19 +53,23 @@ additional destinations that are not labeled on the map. See the
 [comparison baseline](../developer/map-comparison-baseline.md) for fixed German
 examples and how to assess cartography changes.
 
-When an operator publishes a regional place snapshot, **Nearby places** adds
+When an operator publishes a regional place snapshot, the map automatically adds
 ranked named OSM and Overture destinations during ordinary browsing, without a
-category search. Essential destinations start at zoom 13; everyday businesses
+category search or a switch in Layers. Essential destinations start at zoom 13; everyday businesses
 appear later, and indoor/non-ground tenants wait until zoom 18. Label collisions
 still limit what is visible. These ranks express usefulness and source importance,
 not ratings, popularity, or a promise that a business is currently open.
 
-The overlay avoids repeating a confidently matched owned-basemap label or an
-already selected/category-result marker. Tapping a matched label opens the same
-canonical place identity as search. The legend identifies the published region,
-snapshot date and whether coverage is OSM-only or combined. Outside that region,
-or before publication, normal map browsing continues with the basemap. You can
-toggle **Nearby places** in Layers. See [Overture Places](./overture-places.md)
+These places are ordinary map content, not an overlay you turn on: there is no
+Layers entry, legend or loading message, and links that still carry the old
+`ov=ambient-places` token keep working but no longer write it. The map avoids
+repeating a confidently matched owned-basemap label or an already
+selected/category-result marker. Tapping a matched label opens the same
+canonical place identity as search, and the credits strip names the sources of
+the labels actually drawn. Outside the published region, before publication, or
+when the operator disables the snapshot or it is older than 90 days, normal map
+browsing continues with the basemap alone. An operator can still turn the
+integration off in administration. See [Overture Places](./overture-places.md)
 for source policies and operator setup.
 
 ## How overlays work
@@ -122,7 +126,10 @@ current to free-flow speed in your own [OpenConditions](../developer/building-an
 road-conditions feeds (NDW, Fintraffic, Trafikverket, NYC DOT, and others),
 with line opacity marking whether each reading is measured, estimated, or typical.
 It needs no API key, and because it and the TomTom **Traffic** overlay both color
-flow, turning one on turns the other off. The live-transit overlay picks
+flow, turning one on turns the other off. Its tiles come from OpenConditions
+through the Martin tile server; without either, or while its tiles fail to
+load, **Traffic flow** stays in the layer list and its legend says the data is
+unavailable. The live-transit overlay picks
 one vehicle-position provider per visible region. The **Road conditions** overlay
 plots traffic incidents, roadworks, hazards, and closures. It features an
 interactive, filterable legend allowing users to filter by incident
@@ -136,6 +143,10 @@ linear events (such as segment closures) render as line segments directly on the
 Where a feed provides measured speed, an incident popup also estimates the delay
 in minutes; otherwise it preserves the source's declared level of service rather
 than inventing a speed.
+Without a road-conditions source, such as an OpenConditions instance at
+`OPENCONDITIONS_URL`, **Road conditions** stays in the layer list and its legend
+says traffic incidents are unavailable instead of showing a clear road.
+Navigation then reports live incidents as not current.
 These overlays complement the dedicated [public transit](./public-transit.md) and
 [directions](./directions.md) features rather than replacing them.
 

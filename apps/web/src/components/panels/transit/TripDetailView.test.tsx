@@ -114,17 +114,6 @@ vi.mock("@/components/ui/AttributionStrip", () => ({
   ),
 }));
 
-vi.mock("@/integration-api/overlay/useAttributionFromHooks", () => ({
-  useAttributionFromHooks: () => [
-    {
-      sourceId: "otdch",
-      name: "OpenTransportData Switzerland",
-      url: "https://opentransportdata.swiss",
-      licensing: licensingFromDeclaration("Terms", undefined, "OpenTransportData Switzerland"),
-    },
-  ],
-}));
-
 vi.mock("@/integration-api/runtime/theme", () => ({
   BRAND: "#008080",
 }));

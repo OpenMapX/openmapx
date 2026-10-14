@@ -29,6 +29,7 @@ import type { GeocodingProvider } from "../contracts/geocoding-provider.js";
 import type { GtfsCatalogProvider } from "../contracts/gtfs-catalog-provider.js";
 import type { HazardsProvider } from "../contracts/hazards-provider.js";
 import type { KnowledgeProvider } from "../contracts/knowledge-provider.js";
+import type { MessageSignProvider } from "../contracts/message-sign-provider.js";
 import type { MobilityDataSourceProvider } from "../contracts/mobility-data-source-provider.js";
 import type { ParkingSiteProvider } from "../contracts/parking-site-provider.js";
 import type { PhotoProvider } from "../contracts/photo-provider.js";
@@ -94,7 +95,7 @@ export function fakeMobilityHttpTransport(
  */
 
 export interface FakeHttpRequest {
-  method: "get" | "post" | "getResponse" | "getBytes";
+  method: "get" | "post" | "getResponse" | "postResponse" | "getBytes";
   url: string;
   body?: unknown;
   options?: HttpClientOptions | ResponseOptions;
@@ -109,6 +110,20 @@ export type FakeHttpResponder = ((req: FakeHttpRequest) => unknown) | Record<str
 export interface FakeHttpClient extends HttpClient {
   /** Every request seen, in order — assert against this. */
   readonly calls: FakeHttpRequest[];
+}
+
+/** A canned `{ status, headers, body }` passes through; any other value is a 200 body. */
+function asHttpResponse<T>(value: unknown): HttpResponse<T> {
+  if (
+    value &&
+    typeof value === "object" &&
+    "status" in value &&
+    "headers" in value &&
+    "body" in value
+  ) {
+    return value as HttpResponse<T>;
+  }
+  return { status: 200, headers: {}, body: value as T };
 }
 
 /**
@@ -142,17 +157,16 @@ export function fakeHttpClient(responder: FakeHttpResponder = {}): FakeHttpClien
     getResponse<T = unknown>(url: string, options: ResponseOptions): Promise<HttpResponse<T>> {
       const req: FakeHttpRequest = { method: "getResponse", url, options };
       calls.push(req);
-      const value = resolve(req);
-      if (
-        value &&
-        typeof value === "object" &&
-        "status" in value &&
-        "headers" in value &&
-        "body" in value
-      ) {
-        return Promise.resolve(value as HttpResponse<T>);
-      }
-      return Promise.resolve({ status: 200, headers: {}, body: value as T });
+      return Promise.resolve(asHttpResponse<T>(resolve(req)));
+    },
+    postResponse<T = unknown>(
+      url: string,
+      body: unknown,
+      options: ResponseOptions,
+    ): Promise<HttpResponse<T>> {
+      const req: FakeHttpRequest = { method: "postResponse", url, body, options };
+      calls.push(req);
+      return Promise.resolve(asHttpResponse<T>(resolve(req)));
     },
     getBytes(url: string, options: ResponseOptions): Promise<BinaryHttpResponse> {
       const req: FakeHttpRequest = { method: "getBytes", url, options };
@@ -215,6 +229,7 @@ export interface CapturedRegistrations {
   parkingSites: ParkingSiteProvider[];
   chargingSites: ChargingSiteProvider[];
   cameras: CameraProvider[];
+  messageSigns: MessageSignProvider[];
   hazards: HazardsProvider[];
   photo: PhotoProvider[];
   streetLevel: StreetLevelProvider[];
@@ -269,6 +284,7 @@ export function createMockIntegrationContext(
     parkingSites: [],
     chargingSites: [],
     cameras: [],
+    messageSigns: [],
     hazards: [],
     photo: [],
     streetLevel: [],
@@ -337,6 +353,9 @@ export function createMockIntegrationContext(
     },
     registerCameraProvider: (p) => {
       registered.cameras.push(p);
+    },
+    registerMessageSignProvider: (p) => {
+      registered.messageSigns.push(p);
     },
     registerHazardsProvider: (p) => {
       registered.hazards.push(p);

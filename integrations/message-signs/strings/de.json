@@ -1,0 +1,41 @@
+{
+  "name": "Anzeigetafeln",
+  "description": "Wechselverkehrszeichen und Anzeigetafeln an Straßen mit den Meldungen, die sie anzeigen",
+  "fallbackName": "Anzeigetafel",
+  "summary": {
+    "message": "Zeigt: {message}",
+    "blank": "Ohne Anzeige",
+    "fault": "Außer Betrieb",
+    "unknown": "Keine aktuelle Meldung bekannt"
+  },
+  "section": {
+    "message": "Meldung",
+    "page": "Seite {n} von {count}"
+  },
+  "caption": {
+    "shown": "Angezeigt seit",
+    "updated": "Aktualisiert"
+  },
+  "state": {
+    "blank": "Die Tafel zeigt nichts an.",
+    "fault": "Die Tafel ist außer Betrieb.",
+    "unknown": "Für diese Tafel ist keine aktuelle Meldung bekannt."
+  },
+  "row": {
+    "line": "Zeile {n}",
+    "road": "Straße",
+    "facing": "Für Verkehr in Richtung",
+    "location": "Standort",
+    "provider": "Anbieter"
+  },
+  "compass": {
+    "N": "Norden",
+    "NE": "Nordosten",
+    "E": "Osten",
+    "SE": "Südosten",
+    "S": "Süden",
+    "SW": "Südwesten",
+    "W": "Westen",
+    "NW": "Nordwesten"
+  }
+}

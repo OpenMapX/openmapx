@@ -4,7 +4,6 @@ import { afterEach, expect, it, vi } from "vitest";
 import { useMapAttributionStore } from "@/integration-api/overlay/mapAttributionStore";
 import { createFakeMap } from "@/test";
 import { AMBIENT_LABEL_LAYER, AmbientPlacesLayer } from "./map-layer";
-import { useAmbientPlacesStore } from "./store";
 
 const fake = createFakeMap({ zoom: 16, styleLoaded: true });
 const mapRef = { current: fake.map };
@@ -28,7 +27,6 @@ afterEach(() => {
   fake.state.sources.clear();
   fake.state.handlers.clear();
   fake.state.zoom = 16;
-  useAmbientPlacesStore.setState({ manifest: null, panelOpen: false, layerVisible: true });
   useMapAttributionStore.setState({ byLayer: {} });
 });
 const credits = () =>
@@ -88,7 +86,6 @@ function start() {
     "fetch",
     vi.fn(async () => ({ ok: true, json: async () => ({ manifest: publication }) })),
   );
-  useAmbientPlacesStore.setState({ manifest: publication, panelOpen: true, layerVisible: true });
   return render(<AmbientPlacesLayer />);
 }
 it("credits the actual placed locale, and removes credits for unrendered and hidden content", async () => {
@@ -129,9 +126,44 @@ it("credits the actual placed locale, and removes credits for unrendered and hid
     fake.emit("idle");
   });
   await waitFor(() => expect(credits()).toContain("Captured German name"));
-  act(() => useAmbientPlacesStore.setState({ layerVisible: false }));
-  await waitFor(() => expect(credits()).toBe(""));
   view.unmount();
+  await waitFor(() => expect(credits()).toBe(""));
+});
+it("removes the credits of rendered places when a refreshed publication is disabled", async () => {
+  // Capture the one-minute discovery timer; testing-library's own polling needs real timers.
+  const refreshTicks: (() => void)[] = [];
+  const realSetInterval = globalThis.setInterval;
+  const interval = vi.spyOn(globalThis, "setInterval").mockImplementation(((
+    handler: () => void,
+    delay?: number,
+  ) => {
+    if (delay !== 60_000) return realSetInterval(handler, delay);
+    refreshTicks.push(handler);
+    return 0 as unknown as ReturnType<typeof setInterval>;
+  }) as typeof setInterval);
+  try {
+    let next: unknown = publication;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({ ok: true, json: async () => ({ manifest: next }) })),
+    );
+    render(<AmbientPlacesLayer />);
+    await waitFor(() => expect(fake.map.getLayer(AMBIENT_LABEL_LAYER)).toBeTruthy());
+    act(() => {
+      fake.setRenderedFeatures(AMBIENT_LABEL_LAYER, [feature()]);
+      fake.emit("render");
+    });
+    await waitFor(() => expect(credits()).toContain("Captured German name"));
+
+    next = { ...publication, enabled: false };
+    await act(async () => {
+      refreshTicks.at(-1)?.();
+    });
+    await waitFor(() => expect(fake.map.getLayer(AMBIENT_LABEL_LAYER)).toBeUndefined());
+    expect(credits()).toBe("");
+  } finally {
+    interval.mockRestore();
+  }
 });
 it("credits a suppressed duplicate only through the actual rendered matched basemap feature", async () => {
   fake.map.addLayer({

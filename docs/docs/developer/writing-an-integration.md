@@ -268,7 +268,9 @@ This walkthrough builds a trusted built-in route-only provider, so its `frontend
 flags are all `false`. A built-in map integration can ship a `map-layer.tsx`
 (and optionally `legend.tsx` / `panel.tsx`), set the matching
 `frontend.mapLayer` / `legend` / `panel` flag, add `domains: ["map-overlay"]`
-and a `layerSelector` entry so users can toggle it. A simple
+and a `layerSelector` plus `overlay` entry when users should toggle it; a
+layer that is ordinary map content (like published nearby places) declares only
+`mapLayer` and manages its own lifecycle. A simple
 legend can be declared as `frontend.overlay.legend` in the manifest rather than
 written, and the layer registers the credits that appear in the map credits
 strip while it is drawn.

@@ -15,16 +15,23 @@
  * before interpolation (see `index.ts`).
  */
 
+import type { HttpClient, ResponseOptions } from "@openmapx/integration-framework";
+
 /** OpenConditions' contributions-api listens on 4200 by default. */
 const DEFAULT_CONTRIBUTIONS_URL = "http://localhost:4200";
+
+/**
+ * Ceiling for a contributions-api answer. Issuer keys and errors are tiny, but a
+ * vote echoes the whole voted record, whose geometry can come from an official
+ * feed rather than the browser's point report.
+ */
+const RELAY_MAX_BYTES = 256 * 1024;
 
 /** Upstream response, passed through verbatim (status + parsed JSON body). */
 export interface RelayResult {
   status: number;
   body: unknown;
 }
-
-export type FetchImpl = typeof fetch;
 
 /**
  * Resolve the contributions-api base URL from the environment, trimming a
@@ -39,46 +46,34 @@ export function contributionsBaseUrl(env: NodeJS.ProcessEnv = process.env): stri
 export interface RelayOptions {
   body?: unknown;
   base?: string;
-  fetchImpl?: FetchImpl;
   timeoutMs?: number;
 }
 
 /**
  * Forward one request to the contributions-api and return its status + JSON body
  * unchanged. `path` must be an absolute path beginning with `/contrib/…`.
- * Non-JSON upstream bodies are wrapped as `{ raw }` so a handler never throws on
- * an unexpected content type.
+ * A redirect, a non-JSON answer or an oversized body rejects, which the routes
+ * report as an unavailable contributions service.
  */
 export async function relayContribution(
+  http: HttpClient,
   method: "GET" | "POST",
   path: string,
   opts: RelayOptions = {},
 ): Promise<RelayResult> {
-  const base = opts.base ?? contributionsBaseUrl();
-  const fetchImpl = opts.fetchImpl ?? globalThis.fetch;
-  const url = `${base}${path}`;
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), opts.timeoutMs ?? 10_000);
-  try {
-    const res = await fetchImpl(url, {
-      method,
-      headers: { "Content-Type": "application/json", Accept: "application/json" },
-      body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
-      signal: controller.signal,
-    });
-    const text = await res.text();
-    let parsed: unknown = null;
-    if (text) {
-      try {
-        parsed = JSON.parse(text);
-      } catch {
-        parsed = { raw: text };
-      }
-    }
-    return { status: res.status, body: parsed };
-  } finally {
-    clearTimeout(timer);
-  }
+  const url = `${opts.base ?? contributionsBaseUrl()}${path}`;
+  const options: ResponseOptions = {
+    headers: { Accept: "application/json" },
+    timeoutMs: opts.timeoutMs ?? 10_000,
+    maxBytes: RELAY_MAX_BYTES,
+    contentTypes: ["application/json"],
+    redirect: "error",
+  };
+  const res =
+    method === "GET"
+      ? await http.getResponse(url, options)
+      : await http.postResponse(url, opts.body, options);
+  return { status: res.status, body: res.body };
 }
 
 /** Sub-claim actions the vote route forwards; anything else is rejected. */

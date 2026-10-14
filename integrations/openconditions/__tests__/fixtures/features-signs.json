@@ -1,0 +1,295 @@
+{
+  "records": [
+    {
+      "id": "oc:feature:us-ny-511-signs:nySigns:Sample:_S-101",
+      "class": "feature",
+      "kind": "vms",
+      "type": "matrix",
+      "domain": "roads",
+      "temporality": "static",
+      "lifecycle": "operational",
+      "name": [
+        {
+          "lang": "en",
+          "text": "I-87 NB VMS AT EXIT 6"
+        }
+      ],
+      "description": [
+        {
+          "lang": "en",
+          "text": "I-87 N at MP 6.1"
+        }
+      ],
+      "operator": {
+        "role": "operator",
+        "name": [
+          {
+            "lang": "en",
+            "text": "NY Signs - Sample Region"
+          }
+        ]
+      },
+      "location": {
+        "geometry": {
+          "type": "Point",
+          "coordinates": [-73.79, 42.78]
+        },
+        "extent": "point",
+        "geometryOrigin": "source",
+        "fuzziness": "exact",
+        "roads": [
+          {
+            "name": [
+              {
+                "lang": "und",
+                "text": "I-87"
+              }
+            ]
+          }
+        ],
+        "direction": {
+          "value": "unknown",
+          "basis": "compass",
+          "compass": "N"
+        }
+      },
+      "provenance": {
+        "origin": "feed",
+        "sourceId": "us-ny-511-signs",
+        "sourceFormat": "cars-signs",
+        "accessMode": "bulk",
+        "recordId": "nySigns:Sample:_S-101",
+        "instanceId": "test.local",
+        "attribution": {
+          "license": "LicenseRef-511NY-DAA",
+          "provider": "511NY / New York State DOT",
+          "licenseUrl": "https://511ny.org/help/24"
+        },
+        "privacy": {
+          "class": "authoritative"
+        }
+      },
+      "freshness": {
+        "fetchedAt": "2026-10-14T00:00:00.000Z"
+      },
+      "externalIds": [
+        {
+          "scheme": "provider",
+          "id": "nySigns:Sample:_S-101",
+          "authority": "us-ny-511-signs"
+        }
+      ],
+      "components": [
+        {
+          "key": "0",
+          "kind": "sign_face",
+          "details": {
+            "v": 1,
+            "kind": "sign_face",
+            "vmsIndex": 0,
+            "direction": {
+              "value": "unknown",
+              "basis": "compass",
+              "compass": "N"
+            },
+            "textRows": 3,
+            "charsPerRow": 16
+          }
+        }
+      ],
+      "details": {
+        "v": 1,
+        "kind": "vms"
+      },
+      "revision": 1,
+      "recordedAt": "2026-10-14T00:00:00.000Z"
+    },
+    {
+      "id": "oc:feature:us-ny-511-signs:nySigns:Sample:_S-102",
+      "class": "feature",
+      "kind": "vms",
+      "type": "matrix",
+      "domain": "roads",
+      "temporality": "static",
+      "lifecycle": "operational",
+      "name": [
+        {
+          "lang": "en",
+          "text": "I-90 WB VMS AT EXIT 24"
+        }
+      ],
+      "description": [
+        {
+          "lang": "en",
+          "text": "I-90 W at MP 2.4"
+        }
+      ],
+      "operator": {
+        "role": "operator",
+        "name": [
+          {
+            "lang": "en",
+            "text": "NY Signs - Sample Region"
+          }
+        ]
+      },
+      "location": {
+        "geometry": {
+          "type": "Point",
+          "coordinates": [-73.83, 42.7]
+        },
+        "extent": "point",
+        "geometryOrigin": "source",
+        "fuzziness": "exact",
+        "roads": [
+          {
+            "name": [
+              {
+                "lang": "und",
+                "text": "I-90"
+              }
+            ]
+          }
+        ],
+        "direction": {
+          "value": "unknown",
+          "basis": "compass",
+          "compass": "W"
+        }
+      },
+      "provenance": {
+        "origin": "feed",
+        "sourceId": "us-ny-511-signs",
+        "sourceFormat": "cars-signs",
+        "accessMode": "bulk",
+        "recordId": "nySigns:Sample:_S-102",
+        "instanceId": "test.local",
+        "attribution": {
+          "license": "LicenseRef-511NY-DAA",
+          "provider": "511NY / New York State DOT",
+          "licenseUrl": "https://511ny.org/help/24"
+        },
+        "privacy": {
+          "class": "authoritative"
+        }
+      },
+      "freshness": {
+        "fetchedAt": "2026-10-14T00:00:00.000Z"
+      },
+      "externalIds": [
+        {
+          "scheme": "provider",
+          "id": "nySigns:Sample:_S-102",
+          "authority": "us-ny-511-signs"
+        }
+      ],
+      "components": [
+        {
+          "key": "0",
+          "kind": "sign_face",
+          "details": {
+            "v": 1,
+            "kind": "sign_face",
+            "vmsIndex": 0,
+            "direction": {
+              "value": "unknown",
+              "basis": "compass",
+              "compass": "W"
+            },
+            "textRows": 3,
+            "charsPerRow": 16
+          }
+        }
+      ],
+      "details": {
+        "v": 1,
+        "kind": "vms"
+      },
+      "revision": 1,
+      "recordedAt": "2026-10-14T00:00:00.000Z"
+    }
+  ],
+  "latest": {
+    "oc:feature:us-ny-511-signs:nySigns:Sample:_S-101": [
+      {
+        "property": "vms.display",
+        "componentKey": "0",
+        "result": {
+          "v": 1,
+          "type": "structured",
+          "schema": "vms_display",
+          "value": {
+            "v": 1,
+            "workingStatus": "in_service",
+            "messages": [
+              {
+                "index": 0,
+                "text": [
+                  {
+                    "page": 1,
+                    "lines": [
+                      [
+                        {
+                          "lang": "en",
+                          "text": "CRASH AHEAD"
+                        }
+                      ],
+                      [
+                        {
+                          "lang": "en",
+                          "text": "EXIT 7"
+                        }
+                      ]
+                    ]
+                  },
+                  {
+                    "page": 2,
+                    "lines": [
+                      [
+                        {
+                          "lang": "en",
+                          "text": "RIGHT LANE"
+                        }
+                      ],
+                      [
+                        {
+                          "lang": "en",
+                          "text": "CLOSED"
+                        }
+                      ]
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        "phenomenonTime": {
+          "instant": "2026-10-13T23:02:17Z"
+        },
+        "source": "us-ny-511-signs"
+      }
+    ],
+    "oc:feature:us-ny-511-signs:nySigns:Sample:_S-102": [
+      {
+        "property": "vms.display",
+        "componentKey": "0",
+        "result": {
+          "v": 1,
+          "type": "structured",
+          "schema": "vms_display",
+          "value": {
+            "v": 1,
+            "workingStatus": "blank",
+            "messages": []
+          }
+        },
+        "phenomenonTime": {
+          "instant": "2026-10-13T22:40:00Z"
+        },
+        "source": "us-ny-511-signs"
+      }
+    ]
+  },
+  "next": null
+}

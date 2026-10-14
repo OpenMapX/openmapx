@@ -50,3 +50,20 @@ it("shows a compact speed scale while confidence details remain optional", () =>
   fireEvent.click(screen.getByRole("button", { name: "trafficStatus.about" }));
   expect(screen.getByTestId("traffic-flow-confidence-typical")).toBeDefined();
 });
+
+it("says the flow data is unavailable instead of drawing an empty scale as clear roads", () => {
+  useTrafficFlowStore.setState({ panelOpen: true, layerVisible: true, unavailable: true });
+  render(<TrafficFlowLegend />);
+  expect(screen.getByText("trafficFlow.unavailable")).toHaveAttribute("role", "status");
+});
+
+it("shows no unavailable line while the tiles load or the layer is hidden", () => {
+  useTrafficFlowStore.setState({ panelOpen: true, layerVisible: true, unavailable: false });
+  const view = render(<TrafficFlowLegend />);
+  expect(screen.queryByText("trafficFlow.unavailable")).toBeNull();
+  view.unmount();
+
+  useTrafficFlowStore.setState({ panelOpen: true, layerVisible: false, unavailable: true });
+  render(<TrafficFlowLegend />);
+  expect(screen.queryByText("trafficFlow.unavailable")).toBeNull();
+});

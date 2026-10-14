@@ -445,6 +445,43 @@ describe("initIntegrations — loader", () => {
     }
   });
 
+  it("stores message-sign providers under the message-signs key", async () => {
+    const parent = mkdtempSync(join(tmpdir(), "omx-sign-provider-"));
+    const directory = join(parent, "sign-probe");
+    mkdirSync(directory, { recursive: true });
+    writeFileSync(
+      join(directory, "manifest.json"),
+      JSON.stringify({
+        id: "sign-probe",
+        version: "1.0.0",
+        author: "Test",
+        licensing: licensingFromDeclaration("MIT", undefined),
+        domains: ["data-source"],
+        quality: "built-in",
+      }),
+    );
+    writeFileSync(
+      join(directory, "index.js"),
+      [
+        "export function setup(ctx) {",
+        "  ctx.registerMessageSignProvider({",
+        "    id: 'probe', coverage: { all: true },",
+        "    searchSigns: async () => ({ signs: [] }), getSign: async () => null,",
+        "  });",
+        "}",
+      ].join("\n"),
+    );
+    const app = makeApp();
+    try {
+      await initIntegrations(app, [{ directory: parent, isBuiltIn: true }]);
+      expect(getIntegrationProviders<{ id: string }>("sign-probe", "message-signs")).toMatchObject([
+        { id: "probe" },
+      ]);
+    } finally {
+      rmSync(parent, { recursive: true, force: true });
+    }
+  });
+
   it("stores hazards providers under the hazards key", async () => {
     const parent = mkdtempSync(join(tmpdir(), "omx-hazards-provider-"));
     const directory = join(parent, "hazards-probe");

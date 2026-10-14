@@ -29,15 +29,17 @@ function handlerFor(routes: Map<string, Handler>, path: string): Handler {
 /**
  * Drives the `/events` route with a stub host: records the cache key each call
  * derives and the query options the aggregation would run under. Defaults to
- * no providers registered and a pass-through cache; both can be overridden to
- * exercise partial-provider-failure and total-aggregation-failure paths.
+ * one provider with nothing to report and a pass-through cache; both can be
+ * overridden to exercise no-source, partial-provider-failure and
+ * total-aggregation-failure paths.
  */
 function eventsHarness(opts?: {
   providers?: RoadConditionsProvider[];
   withCache?: <T>(key: string, ttl: number, fn: () => Promise<T>) => Promise<T>;
 }) {
   const cacheKeys: string[] = [];
-  const integrations = (opts?.providers ?? []).map((p) => ({
+  const providers = opts?.providers ?? [eventsProvider("road-conditions-empty", async () => [])];
+  const integrations = providers.map((p) => ({
     id: p.id,
     providers: new Map<string, RoadConditionsProvider[]>([["road-conditions", [p]]]),
   }));
@@ -271,6 +273,35 @@ describe("GET /events failure semantics", () => {
     expect(res.status).toBe(200);
     expect(res.headers["Cache-Control"]).toBe("public, max-age=60, s-maxage=60");
     expect(res.body).toEqual({ type: "FeatureCollection", features: [] });
+  });
+
+  it("responds 503 with no-cache when no provider is configured: no source is not no incidents", async () => {
+    const h = eventsHarness({ providers: [] });
+    const res = await h.get({ bbox: BBOX });
+    expect(res.status).toBe(503);
+    expect(res.headers["Cache-Control"]).toBe("no-cache");
+    expect(res.body).toEqual({ error: "no road-conditions source is configured" });
+    expect(h.cacheKeys).toEqual([]);
+  });
+
+  it("responds 200 with an empty collection when the configured providers do not cover the bbox", async () => {
+    let asked = false;
+    const h = eventsHarness({
+      providers: [
+        {
+          ...eventsProvider("road-conditions-elsewhere", async () => {
+            asked = true;
+            return [event({ id: "elsewhere:1" })];
+          }),
+          coverage: { bbox: [5, 47, 15, 55] },
+        },
+      ],
+    });
+    const res = await h.get({ bbox: "-74.1,40.6,-73.9,40.8" });
+    expect(res.status).toBe(200);
+    expect(res.headers["Cache-Control"]).toBe("public, max-age=60, s-maxage=60");
+    expect(res.body).toEqual({ type: "FeatureCollection", features: [] });
+    expect(asked).toBe(false);
   });
 
   it("responds 200 with the surviving providers' events when only some providers fail", async () => {

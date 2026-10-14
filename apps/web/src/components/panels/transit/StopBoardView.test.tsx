@@ -79,10 +79,6 @@ vi.mock("@/components/ui/AttributionStrip", () => ({
   ),
 }));
 
-vi.mock("@/integration-api/overlay/useAttributionFromHooks", () => ({
-  useAttributionFromHooks: () => sharedAttributions,
-}));
-
 vi.mock("./DepartureRow", () => ({
   DepartureRow: ({
     departure,

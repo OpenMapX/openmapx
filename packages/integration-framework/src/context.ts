@@ -6,6 +6,7 @@ import type { GeocodingProvider } from "./contracts/geocoding-provider.js";
 import type { GtfsCatalogProvider } from "./contracts/gtfs-catalog-provider.js";
 import type { HazardsProvider } from "./contracts/hazards-provider.js";
 import type { KnowledgeProvider } from "./contracts/knowledge-provider.js";
+import type { MessageSignProvider } from "./contracts/message-sign-provider.js";
 import type { MobilityDataSourceProvider } from "./contracts/mobility-data-source-provider.js";
 import type { ParkingSiteProvider } from "./contracts/parking-site-provider.js";
 import type { PhotoProvider } from "./contracts/photo-provider.js";
@@ -67,6 +68,12 @@ export interface HttpClient {
   get<T = unknown>(url: string, options?: HttpClientOptions): Promise<T>;
   post<T = unknown>(url: string, body?: unknown, options?: HttpClientOptions): Promise<T>;
   getResponse<T = unknown>(url: string, options: ResponseOptions): Promise<HttpResponse<T>>;
+  /** POST a JSON body and return any status with its bounded JSON body; `post` throws on non-2xx. */
+  postResponse<T = unknown>(
+    url: string,
+    body: unknown,
+    options: ResponseOptions,
+  ): Promise<HttpResponse<T>>;
   getBytes(url: string, options: ResponseOptions): Promise<BinaryHttpResponse>;
 }
 
@@ -523,6 +530,12 @@ export interface IntegrationContext {
    * registered providers.
    */
   registerCameraProvider(provider: CameraProvider): void;
+  /**
+   * Typed registrar for message-sign providers (dynamic message signs and
+   * what each shows). Stored under the `message-signs` key; the
+   * `message-signs` orchestrator merges all registered providers.
+   */
+  registerMessageSignProvider(provider: MessageSignProvider): void;
   /**
    * Typed registrar for hazards providers (alerts, natural hazards, fire
    * detections). Stored under the `hazards` key; the hazards orchestrator

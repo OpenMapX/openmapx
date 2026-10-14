@@ -50,6 +50,7 @@ export const DOMAIN_TO_SECTION_KEY: Record<string, string> = {
   "parking-sites": "parkingSites",
   "charging-sites": "chargingSites",
   cameras: "cameras",
+  "message-signs": "messageSigns",
   hazards: "hazards",
   "gtfs-catalog": "transitDataCatalogs",
   "flight-search": "flights",
