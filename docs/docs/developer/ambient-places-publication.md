@@ -13,6 +13,19 @@ inventing lexical terms. Coverage, policy and collision limits remain distinct.
 Global publication requires a complete format 2 planet snapshot; it is explicit
 operator work. No AllThePlaces ingestion or geocoder rewrite is introduced.
 
+## Client behavior
+
+The web client treats a usable publication as ordinary map content. The built-in
+integration declares a map layer, but no layer-selector entry, legend or overlay
+state; its map host mounts it whenever integration metadata enables it. One
+component-owned hook discovers the manifest every 60 seconds, validates
+versions 1 and 2, and yields a publication only when it is enabled and every
+source is within the 90-day freshness limit. Successful absent, disabled or stale
+replies clear the content. A failed refresh keeps only a still-fresh generation
+that this mounted component already discovered from the same API origin; unmount
+or an origin change cancels the request and releases handlers, identities,
+sources and credits. A late reply is ignored, and a remount rediscovers.
+
 ## Operator workflow and public contract
 
 1. Build the OSM search index for the target region using the existing data workflow. Its state

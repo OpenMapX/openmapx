@@ -715,9 +715,16 @@ integration, are separate developer pages.
 ## Map overlays
 
 A trusted built-in integration that draws on the map (`domains` includes
-`map-overlay`, with a `layerSelector` entry so users can toggle it) ships a
-`map-layer.tsx`. Its
+`map-overlay`) ships a `map-layer.tsx`. Its
 legend is the one part it can declare instead of writing.
+
+`map-overlay` is the internal rendering classification for such integrations; it
+does not by itself create a user control. A **user-selectable overlay** also
+declares `frontend.layerSelector` and `frontend.overlay`, which register overlay
+state and its `ov=` URL token. An integration that declares only
+`frontend.mapLayer` is **ambient map content**: the host mounts it while it is
+enabled, it owns its own lifecycle and credits, and it has no selector, legend,
+overlay store or URL state. `overlay-ambient-places` is the built-in example.
 
 ### Declarative legends (no shipped legend code)
 

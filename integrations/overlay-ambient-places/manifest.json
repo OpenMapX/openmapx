@@ -13,18 +13,7 @@
   "domains": ["map-overlay"],
   "frontend": {
     "mapLayer": true,
-    "legend": true,
-    "panel": false,
-    "layerSelector": {
-      "group": "map-details",
-      "labelKey": "ambientPlaces",
-      "icon": "place",
-      "quickSelector": true,
-      "preview": "preview.svg"
-    },
-    "overlay": {
-      "minZoom": 13
-    }
+    "panel": false
   },
   "backend": {
     "routes": false
