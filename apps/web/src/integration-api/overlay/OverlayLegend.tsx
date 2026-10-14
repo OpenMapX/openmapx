@@ -49,10 +49,10 @@ export interface OverlayLegendProps {
  * standalone: they are toolbars with a close button, not legends with a
  * visibility toggle.
  *
- * Legends carry no credits. An overlay's sources are credited once, in the map
- * credits strip (`<MapFooter>`), which every layer registers into via
- * `useMapAttributions` and which renders the same "Publisher (License)" HTML
- * these legends used to duplicate.
+ * The shell does not own map credits. Layers register captured receipts through
+ * the shared rendered geometry/raster/marker tracker for `<MapFooter>`. A legend
+ * that displays fetched content separately owns that content's projected receipts;
+ * opening or closing it does not control the map's attribution.
  */
 export function OverlayLegend({
   title,

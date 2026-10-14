@@ -45,9 +45,6 @@ vi.mock("@/integration-api/map/MapContext", () => ({
 vi.mock("@/integration-api/map/useDrawnDirectionsRoutes", () => ({
   useDrawnDirectionsRoutes: () => drawn,
 }));
-vi.mock("@/integration-api/overlay/useIntegrationAttribution", () => ({
-  useIntegrationDomainAttribution: vi.fn(),
-}));
 
 // A stable object, not a fresh literal per call: real `useRouteFlow` is
 // backed by `useQuery`, which keeps the same `data` reference across

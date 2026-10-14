@@ -172,8 +172,8 @@ export function MapCanvas() {
       // MapLibre's built-in AttributionControl is disabled: it collapses to a
       // ⓘ toggle on narrow viewports and lives in its own DOM subtree, so it
       // can't share a bar with the legal links. The credits are rendered by
-      // `<MapFooter>` instead, fed by the `useMapAttributions` hook (see
-      // apps/web/src/lib/useMapAttributions.ts) via the attribution registry.
+      // `<MapFooter>` instead, fed by captured rendered contributions and exact
+      // popup/custom owners through integration-api/overlay/mapAttributionStore.
       // Every style we load has its source-level `attribution` stripped (see
       // lib/map.ts), so no credit is lost by turning the control off.
       const map = new maplibregl.Map({

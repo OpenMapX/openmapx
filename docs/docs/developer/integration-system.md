@@ -173,9 +173,10 @@ layer and legend once, the layer selector exposes one toggle, and the overlay
 registry creates one entry using the first enabled participant's overlay
 metadata in registry order. Participants should declare the same overlay rules
 and selector metadata and render all contributing providers through the common
-component. Provider metadata stays available for domain attribution; sharing a
-frontend does not remove a provider's credits. Two frontend owners resolving to
-the same overlay without a matching shared-layer declaration remain an error.
+component. Each provider captures its own supplying-source receipts at acquisition;
+the shared renderer projects only the receipts for content it actually displays.
+Two frontend owners resolving to the same overlay without a matching shared-layer
+declaration remain an error.
 
 When `layerSelector.preview` is set, it names an SVG file relative to the
 integration root, such as `preview.svg` or `assets/layer-preview.svg`. The host
@@ -289,9 +290,10 @@ integration sets it on every source it supplies at runtime (see below), so its
 fuel feeds are not credited on the traffic overlays.
 
 :::note[Source IDs connect manifests to results]
-A provider tags each result with the `sourceId` it came from, and the host maps
-that back to the manifest entry to render the right license. Keep `sourceId`
-values stable; renaming one orphans existing attribution.
+A provider resolves each result's exact `sourceId` against metadata captured
+before acquisition and retains the resulting receipt with the record. Rendering
+uses that receipt, never today's manifest entry. Keep `sourceId` values stable
+so new acquisitions and source/privacy disclosures identify the same supplier.
 :::
 
 ### Captured contributor contract
@@ -347,6 +349,16 @@ and derived navigation alerts carry the receipts, including native `[]`.
 Rendering and locale/style republishing use those stored receipts only. Historical
 events without them may use their recorded `attribution` as bounded compatibility;
 a source ID alone cannot reconstruct a publisher or today's required notice.
+
+Reviews and review aggregates carry their own `contributors`. The shared
+`captureReviewProviderContributors` wrapper snapshots declared metadata before
+each read, resolves the returned exact `source` (or the proven provider ID), and
+clones results before caller caches. Supplied receipts, including `[]`, remain
+authoritative; an item's content licence is not replaced by service metadata.
+Review orchestration applies this wrapper before API/UI consumers receive the
+results. Deduplication and display union only retained reviews or the displayed
+aggregate; disabled providers or catalogue changes cannot relabel cached content.
+Cache namespaces must distinguish captured results from older receipt-less data.
 
 Compute result-envelope credits from the final retained records. A discarded
 duplicate contributes nothing; an actually merged field or external identity
@@ -408,9 +420,10 @@ within one integration.
 
 The accepted list replaces `manifest.dataSources`. From then on:
 
-- `GET /api/integrations` serves it, so the legal pages and the web
-  attribution show it within one registry poll.
-- The attribution index is rebuilt from the live registry.
+- `GET /api/integrations` serves it, so legal catalogues show it within one
+  registry poll. Existing displayed/cached results keep their captured receipts.
+- The attribution index is rebuilt from the live registry for future acquisition
+  snapshots; it must not rewrite earlier record or tile receipts.
 - The data-use policy is re-evaluated. Its rules match on `commercialUse`, so
   a source the operator's policy excludes is excluded as soon as it appears.
 
@@ -785,10 +798,11 @@ import { useMarkerMapAttributions } from "@/integration-api/overlay/useMarkerMap
 `withFeatureContributors(feature, captured)` writes the immutable receipt as JSON
 in `properties._mapAttributions` for GeoJSON/MVT. Register the actual layer IDs
 with `useRenderedMapAttributions(key, layerIds, visible, options?)`. The shared
-per-map scheduler queries rendered geometry after viewport/filter/zoom/source
-and placement changes, at most four times per second. It preserves visible old
-receipts during refresh/worker lag and does not wait for unrelated sources to
-become idle. Each hook instance owns its registration, even if readable keys
+per-map scheduler refreshes after viewport/filter/zoom/source and placement
+changes on a shared 250 ms interval. Ordinary overlays use one union viewport
+query per scheduled pass; native basemap coverage can require additional queries.
+It preserves visible old receipts during refresh/worker lag and does not wait for
+unrelated sources to become idle. Each hook instance owns its registration, even if readable keys
 are reused.
 
 `options.layerContributors` is a captured per-layer lookup only for proven
@@ -837,13 +851,34 @@ concurrent completion order and texture reuse, silent expiry/reload, partial
 failure, eviction/pan, fading parents, overzoom and style reload. A source
 settled event or a successful request in the past cannot prove present pixels.
 
-`useMapAttributions` is a lower-level owner for already projected visible
-popup/custom credits, not a geometry visibility detector. Manifest-toggle
-`useIntegrationAttribution`, whole-domain `useIntegrationDomainAttribution`,
-and current-registry `useSourceAttributions` are deprecated compatibility
-exports and do not satisfy the rendering contract. A static wiring guard checks
-actual focused host calls/imports and excludes test-only mentions; behavioral
-provider/rendering tests must prove the supplied receipts and visible projection.
+Native basemap receipts bind to the installed style/layer/source generation;
+pending or failed style acquisition keeps the retained generation's receipts.
+Style-only backgrounds never establish a data supplier. The MapLibre 6.13 host
+adapter combines evaluated paint and native geometry queries with retained raster
+payload opacity, tile wraps, child/parent priority and fade state. Planar Mercator,
+offered globe and stable projection blends use their actual native tile domains.
+Globe coverage uses the engine's stencil mesh and shader-equivalent blend/pole
+projection; immutable mesh readback and private tile-query seams stay host-owned.
+Native exposed regions can require a query batch within one scheduled pass;
+the 250 ms interval is not a four-engine-calls-per-second cap. Geometry queries
+are not fragment-perfect glyph, dash or antialiasing provenance. Actual terrain
+with raster, unsupported native layer types and invalid renderer frames cannot
+certify opaque coverage and retain ordinary engine contribution evidence.
+
+A MapLibre upgrade must revalidate mesh/index layouts, stencil precedence and
+wraps, tile queries and feature state, shader blends/poles, fades, and isolated
+`COPY_READ_BUFFER` use, with real-engine horizon, antimeridian, partial/failing
+raster and retained-parent fixtures. Measure complete tracker passes as well as
+leaf queries: native polygon/mesh processing can dominate CPU cost, especially
+on globe. These private renderer contracts are unavailable to community payloads.
+
+`useMapAttributions` remains a lower-level owner for already projected visible
+popup/custom credits, not a geometry visibility detector. Capture exact suppliers
+before acquisition and project the displayed record/field receipts; do not
+register credits from toggles, whole manifests/domains or live registry lookups.
+A static wiring guard checks actual focused host calls/imports and excludes
+test-only mentions; behavioral provider/rendering tests prove the supplied
+receipts and visible projection.
 
 ### Community presentation boundary
 

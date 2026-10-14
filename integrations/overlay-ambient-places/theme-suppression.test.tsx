@@ -13,9 +13,6 @@ vi.mock("@/integration-api/map/MapContext", () => ({
 vi.mock("@/integration-api/runtime/EnvProvider", () => ({
   useEnv: () => ({ apiUrl: "http://fixture" }),
 }));
-vi.mock("@/integration-api/overlay/useIntegrationAttribution", () => ({
-  useSourceAttributions: vi.fn(),
-}));
 vi.mock("@/lib/useExploreReachResults", () => {
   const result = { filtered: [] };
   return { useExploreReachResults: () => result };

@@ -23,7 +23,6 @@ const popupState = vi.hoisted(() => ({
     lngLat: [number, number] | null;
   }>,
 }));
-const attributionState = vi.hoisted(() => ({ sources: vi.fn() }));
 const monitorHook = vi.hoisted(() => ({
   use: vi.fn(),
   actual: undefined as undefined | (() => void),
@@ -35,9 +34,6 @@ const mapContext = vi.hoisted(() => ({
 }));
 
 vi.mock("@/integration-api/map/MapContext", () => ({ useMap: () => mapContext }));
-vi.mock("@/integration-api/overlay/useIntegrationAttribution", () => ({
-  useSourceAttributions: attributionState.sources,
-}));
 vi.mock("../use-monitor-stations", async (importOriginal) => {
   const original = await importOriginal<typeof import("../use-monitor-stations")>();
   monitorHook.actual = original.useMonitorStations;
@@ -163,7 +159,6 @@ beforeEach(() => {
   mapContext.mapReady = true;
   mapContext.styleVersion = 0;
   popupState.instances.length = 0;
-  attributionState.sources.mockClear();
   monitorHook.use.mockReset();
   monitorHook.use.mockImplementation(() => undefined);
   useAirQualityStore.getState().reset();

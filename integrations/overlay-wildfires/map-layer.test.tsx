@@ -7,9 +7,6 @@ import { useWildfireStore } from "./store";
 const popupState = vi.hoisted(() => ({
   instances: [] as Array<{ removeCalls: number }>,
 }));
-const attributionState = vi.hoisted(() => ({
-  filtered: vi.fn(),
-}));
 const mapContext = vi.hoisted(() => ({ mapRef: { current: null as FakeMap["map"] | null } }));
 
 let fake: FakeMap;
@@ -24,10 +21,6 @@ vi.mock("@/integration-api/map/MapContext", () => ({
 
 vi.mock("@/integration-api/runtime/EnvProvider", () => ({
   useEnv: () => ({ apiUrl: "https://api.test" }),
-}));
-
-vi.mock("@/integration-api/overlay/useIntegrationAttribution", () => ({
-  useSourceAttributions: attributionState.filtered,
 }));
 
 vi.mock("next-intl", () => ({
@@ -147,7 +140,6 @@ beforeEach(() => {
     dayRange: 1,
     source: "viirs",
   });
-  attributionState.filtered.mockClear();
   useMapAttributionStore.setState({ byLayer: {} });
 });
 

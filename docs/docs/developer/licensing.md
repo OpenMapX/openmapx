@@ -181,6 +181,9 @@ not the grant for an individual photograph. Built-in photo/imagery acquisition
 uses `capturePhotoProviderContributors` or the explicit-source
 `captureStreetLevelProviderContributors`. Camera views/sections retain their own
 contributors so an image does not borrow a neighbouring camera's branding.
+Panoramax adapters share `panoramaxAuthor` from `@openmapx/core`; producer-role
+provider metadata precedes the string `geovisio:producer`, and absent creators
+stay unknown.
 External embedded players retain their own branding and load under the existing
 consent boundary.
 

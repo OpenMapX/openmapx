@@ -21,9 +21,6 @@ vi.mock("@/integration-api/map/MapContext", () => ({
 }));
 vi.mock("@/integration-api/overlay/useMapAttributions", () => ({ useMapAttributions: vi.fn() }));
 vi.mock("@/lib/routeAttributions", () => ({ routeAttributions: () => [] }));
-vi.mock("@/integration-api/overlay/useIntegrationAttribution", () => ({
-  useIntegrationDomainAttribution: vi.fn(),
-}));
 vi.mock("@openmapx/integration-framework/react", () => ({ useIntegrationRegistry: () => ({}) }));
 vi.mock("@/lib/navigation/useNavTrafficSignals", () => ({
   useNavTrafficSignals: () => [[8, 50] as [number, number]],

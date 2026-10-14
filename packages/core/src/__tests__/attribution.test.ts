@@ -2,9 +2,7 @@ import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 import { describe, expect, it } from "vitest";
 import {
   buildAttributionHtml,
-  buildIntegrationAttribution,
   buildRuntimeAttributionHtml,
-  buildSourceAttribution,
   extractSourcePrefix,
   pickIntegrationForSources,
   sanitizeAttributionHtml,
@@ -29,76 +27,6 @@ describe("extractSourcePrefix", () => {
 
   it("handles colon before slash", () => {
     expect(extractSourcePrefix("osm:node/456")).toBe("osm");
-  });
-});
-
-describe("buildSourceAttribution", () => {
-  const dataSources = [
-    {
-      sourceId: "tankerkoenig",
-      name: "Tankerkoenig",
-      url: "https://tankerkoenig.de",
-      licensing: licensingFromDeclaration(
-        "CC BY 4.0",
-        "https://creativecommons.org/licenses/by/4.0/",
-        "Tankerkoenig",
-      ),
-      providerCountry: "DE",
-      providerPrivacyUrl: "https://example.com",
-    },
-    {
-      sourceId: "osm",
-      name: "OpenStreetMap",
-      url: "https://www.openstreetmap.org",
-      licensing: licensingFromDeclaration(
-        "ODbL",
-        "https://opendatacommons.org/licenses/odbl/",
-        "OpenStreetMap",
-      ),
-      providerCountry: "UK",
-      providerPrivacyUrl: "https://example.com",
-    },
-  ];
-
-  it("filters to matching sourceId", () => {
-    const html = buildSourceAttribution(dataSources, ["tankerkoenig/abc"]);
-    expect(html).toContain("Tankerkoenig");
-    expect(html).not.toContain("OpenStreetMap");
-  });
-
-  it("returns multiple matching sources joined by middle dot", () => {
-    const html = buildSourceAttribution(dataSources, ["tankerkoenig/abc", "osm:node/123"]);
-    expect(html).toContain("Tankerkoenig");
-    expect(html).toContain("OpenStreetMap");
-    expect(html).toContain(" · ");
-  });
-
-  it("falls back to all sources when no match", () => {
-    const html = buildSourceAttribution(dataSources, ["unknown-source"]);
-    expect(html).toContain("Tankerkoenig");
-    expect(html).toContain("OpenStreetMap");
-  });
-
-  it("sanitizes custom attribution HTML", () => {
-    const ds = [
-      {
-        sourceId: "custom",
-        name: "Custom",
-        url: "https://example.com",
-        licensing: {
-          version: 1,
-          bindings: [
-            { scope: "data", subject: "Data", license: { kind: "spdx", expression: "MIT" } },
-          ],
-        } as const,
-        attribution: "Custom <b>attribution</b>",
-        providerCountry: "US",
-        providerPrivacyUrl: "https://example.com",
-      },
-    ];
-    const html = buildSourceAttribution(ds, ["custom"]);
-    expect(html).toContain("Custom attribution");
-    expect(html).toContain("MIT");
   });
 });
 
@@ -254,41 +182,6 @@ describe("buildAttributionHtml", () => {
         licensing: { version: 1, bindings: [] },
       }),
     ).toBe("NOAA");
-  });
-
-  it("dedups identical attribution strings across dataSources via buildIntegrationAttribution", () => {
-    const ds = [
-      {
-        sourceId: "a",
-        name: "A",
-        url: "https://example.com",
-        licensing: {
-          version: 1,
-          bindings: [
-            { scope: "data", subject: "Data", license: { kind: "spdx", expression: "MIT" } },
-          ],
-        } as const,
-        attribution: '© <a href="https://osm.org/copyright">OSM</a>',
-        providerCountry: "US",
-        providerPrivacyUrl: "https://example.com",
-      },
-      {
-        sourceId: "b",
-        name: "B",
-        url: "https://example.com",
-        licensing: {
-          version: 1,
-          bindings: [
-            { scope: "data", subject: "Data", license: { kind: "spdx", expression: "MIT" } },
-          ],
-        } as const,
-        attribution: '© <a href="https://osm.org/copyright">OSM</a>',
-        providerCountry: "US",
-        providerPrivacyUrl: "https://example.com",
-      },
-    ];
-    const html = buildIntegrationAttribution(ds);
-    expect(html).not.toContain(" · ");
   });
 });
 

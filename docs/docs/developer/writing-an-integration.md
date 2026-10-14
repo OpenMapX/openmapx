@@ -444,6 +444,18 @@ First-wins, gap-fill and replacement merges retain the ownership of the winning
 field; append receipts only when a field/identity is actually kept. A discarded
 duplicate gets no credit. Itemized facts/photos retain their own receipts, and
 Commons photos additionally retain their exact author, license and file page.
+Both Panoramax gallery and street-level adapters use the shared
+`panoramaxAuthor` helper from `@openmapx/core`: a top-level provider with the
+producer role wins, then a nonblank string `geovisio:producer`. Missing creators
+remain unknown. Wrap image acquisition with `capturePhotoProviderContributors`
+or the explicit-source `captureStreetLevelProviderContributors` so file rights
+and captured API/service obligations reach caches together.
+
+Review orchestration uses `captureReviewProviderContributors` before reading
+registered providers. The wrapper snapshots metadata before each await, resolves
+the returned exact source or provider ID, and preserves supplied receipts/`[]`
+and individual content licences. Views union only retained displayed reviews or
+the displayed aggregate; current registry membership is not attribution evidence.
 Do not replace selected display lineage with the broader rights-dependency set.
 
 ### Register map and panel credits through the host
@@ -504,12 +516,16 @@ both the old texture receipt and its opacity evidence.
 Native basemap attribution is also host-owned. Capture the selected style and
 source suppliers before asynchronous acquisition, then bind receipts to the
 installed style/layer/source generation. Style-only backgrounds cannot create a
-data-source receipt. The shared 250 ms tracker combines engine feature queries
-with evaluated paint and retained raster coverage. Its pinned MapLibre adapters
+data-source receipt. The shared 250 ms tracker retains one union query per pass
+for ordinary overlays and permits extra native exposed-region query batches. It
+combines engine geometry queries with evaluated paint and retained raster
+coverage. Its MapLibre 6.13 adapters
 handle planar Mercator, globe and stable projection blends using actual tile
 wraps, mesh clipping and retained child/parent priority; actual terrain coverage
 remains unproven. These renderer adapters and immutable mesh readback are private
-host coupling, not APIs or certificates available to community extensions.
+host coupling, not APIs or certificates available to community extensions. See
+the [native coverage and upgrade limits](./integration-system.md#crediting-an-overlays-sources)
+for unsupported frames, geometry-query accuracy and performance validation.
 
 Panels import `AttributionStrip` from
 `@/integration-api/components/AttributionStrip` and pass the receipts projected

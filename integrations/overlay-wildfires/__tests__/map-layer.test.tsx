@@ -4,7 +4,6 @@ import { useMapAttributionStore } from "@/integration-api/overlay/mapAttribution
 import { act, createFakeMap, type FakeMap, render, waitFor } from "@/test";
 import { useWildfireStore } from "../store";
 
-const attributionState = vi.hoisted(() => ({ filtered: vi.fn() }));
 const mapContext = vi.hoisted(() => ({ mapRef: { current: null as FakeMap["map"] | null } }));
 const popupState = vi.hoisted(() => ({
   instances: [] as Array<{ removeCalls: number }>,
@@ -16,10 +15,6 @@ vi.mock("@/integration-api/map/MapContext", () => ({
 
 vi.mock("@/integration-api/runtime/EnvProvider", () => ({
   useEnv: () => ({ apiUrl: "https://api.test" }),
-}));
-
-vi.mock("@/integration-api/overlay/useIntegrationAttribution", () => ({
-  useSourceAttributions: attributionState.filtered,
 }));
 
 vi.mock("next-intl", () => ({
@@ -180,7 +175,6 @@ beforeEach(() => {
   fake = createFakeMap({ zoom: 4 });
   mapContext.mapRef.current = fake.map;
   popupState.instances.length = 0;
-  attributionState.filtered.mockClear();
   useMapAttributionStore.setState({ byLayer: {} });
   useWildfireStore.setState({
     layerVisible: true,

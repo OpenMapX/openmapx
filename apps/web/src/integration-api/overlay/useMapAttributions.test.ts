@@ -1,4 +1,4 @@
-import { buildAttributionHtml, buildIntegrationAttribution } from "@openmapx/core";
+import { buildAttributionHtml } from "@openmapx/core";
 import {
   dataSourceToAttribution,
   type IntegrationDataSource,
@@ -8,12 +8,9 @@ import { describe, expect, it } from "vitest";
 import { attributionToHtml } from "./useMapAttributions";
 
 /**
- * The overlay legends render manifest data sources through
- * `buildAttributionHtml`; the bottom credits strip renders the same sources
- * through `attributionToHtml` after `dataSourceToAttribution`. The two have to
- * agree byte-for-byte — otherwise the strip states less than the legend (the
- * license used to be dropped here) and the substring dedup in
- * `dedupeAttributionHtml` cannot collapse a credit two layers both owe.
+ * Legal metadata and captured runtime receipts share the same safe HTML path.
+ * Acquisition converts only the actual supplier through `dataSourceToAttribution`;
+ * `attributionToHtml` must retain its full notice, licence and safe links.
  */
 const COMPLIANCE_FIELDS = {
   providerCountry: "US",
@@ -71,11 +68,6 @@ describe("attributionToHtml", () => {
     expect(html).toContain("OpenAQ");
     expect(html).toContain("CC BY 4.0 (varies per source)");
     expect(html).toContain('href="https://docs.openaq.org/resources/licenses"');
-  });
-
-  it("renders a whole manifest's sources as the legend's combined string does", () => {
-    const strip = MANIFEST_SOURCES.map((ds) => attributionToHtml(dataSourceToAttribution(ds)));
-    expect(strip.join(" · ")).toBe(buildIntegrationAttribution(MANIFEST_SOURCES));
   });
 
   it("preserves copyright wording outside the anchor and renders its declared grant", () => {

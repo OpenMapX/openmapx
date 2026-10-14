@@ -18,9 +18,6 @@ import Divider from "@mui/material/Divider";
 import Link from "@mui/material/Link";
 import Typography from "@mui/material/Typography";
 import {
-  type Attribution,
-  buildRuntimeAttributionHtml,
-  buildSourceAttribution,
   type DataSourceDetail,
   type DataSourceDetailSection,
   pickIntegrationForSources,
@@ -28,9 +25,8 @@ import {
 } from "@openmapx/core";
 import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import type { Translatable } from "@openmapx/integration-framework/strings";
-import { contributorKey } from "@openmapx/mobility-core/contributors";
 import { useTranslations } from "next-intl";
-import { Fragment, type ReactNode } from "react";
+import type { ReactNode } from "react";
 import { AttributionStrip } from "@/components/ui/AttributionStrip";
 import { BRAND } from "@/integration-api/runtime/theme";
 import { BrandMark } from "../shared/BrandMark";

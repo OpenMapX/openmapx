@@ -13,12 +13,13 @@ import { create } from "zustand";
  *
  * The main map runs with MapLibre's built-in AttributionControl disabled — the
  * credits are rendered by `<MapFooter>` instead, so they can share one bar with
- * the legal links (and merge with them on narrow viewports). Layers register
- * their credits through `useMapAttributions`, keyed by layer, and this store is
- * the single place the footer reads them from.
+ * the legal links (and merge with them on narrow viewports). The shared rendered
+ * tracker registers captured visible layer receipts; `useMapAttributions` owns
+ * already projected popup/custom content. Each instance has a separate owner,
+ * and this store is the single place the footer reads the resulting presentations.
  *
  * Entries retain separate complete/permanent notices and reviewed branding,
- * Identical notices contributed by different layers collapse into one while
+ * identical notices contributed by different layers collapse into one while
  * preserving every publisher and licence link.
  */
 type MapAttributionState = {

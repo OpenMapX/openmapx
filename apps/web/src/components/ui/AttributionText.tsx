@@ -6,9 +6,9 @@ import type { SxProps, Theme } from "@mui/material/styles";
 export interface AttributionTextProps {
   /**
    * Attribution HTML produced by the shared core builders — `buildAttributionHtml`,
-   * `buildRuntimeAttributionHtml`, `buildSourceAttribution`, or
-   * `buildIntegrationAttribution`. Those self-escape text, validate URLs, and
-   * sanitize any manifest override, so the string is safe to inject. Never pass
+   * `buildRuntimeAttributionHtml`, or `buildAttributionPresentation`. They
+   * self-escape text, validate URLs, and sanitize any manifest override, so the
+   * string is safe to inject. Never pass
    * unbuilt or user-supplied HTML here.
    */
   html: string;

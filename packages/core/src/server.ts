@@ -77,11 +77,7 @@ export {
   idsFromPrimary,
   idsFromPrimaryOrCoords,
 } from "./types/placeIds";
-export {
-  buildAttributionHtml,
-  buildIntegrationAttribution,
-  combineAttributions,
-} from "./utils/attribution";
+export { buildAttributionHtml } from "./utils/attribution";
 export {
   type BoundedBinaryProxy,
   type BoundedBinaryResponseOptions,

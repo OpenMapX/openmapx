@@ -292,46 +292,9 @@ export function buildAttributionPresentation(
 }
 
 /**
- * Build combined attribution HTML for all data sources of an integration.
- * Joins unique attributions with " · " separator.
- */
-export function buildIntegrationAttribution(
-  dataSources: IntegrationDataSource[] | undefined,
-): string {
-  if (!dataSources?.length) return "";
-  const seen = new Set<string>();
-  return dataSources
-    .map((ds) => buildAttributionHtml(ds))
-    .filter((html) => {
-      if (seen.has(html)) return false;
-      seen.add(html);
-      return true;
-    })
-    .join(" · ");
-}
-
-/**
- * Combine attribution HTML strings from multiple integrations, deduplicating
- * identical attribution entries across integrations.
- */
-export function combineAttributions(attributions: string[]): string {
-  const seen = new Set<string>();
-  const parts: string[] = [];
-  for (const attr of attributions) {
-    for (const part of attr.split(" · ")) {
-      const trimmed = part.trim();
-      if (trimmed && !seen.has(trimmed)) {
-        seen.add(trimmed);
-        parts.push(trimmed);
-      }
-    }
-  }
-  return parts.join(" · ");
-}
-
-/**
  * From a set of integrations, pick the one whose `dataSources` cover the
- * most of `sources` (after prefix extraction).
+ * most of `sources` (after prefix extraction), for translation metadata ownership.
+ * This heuristic does not establish contributor receipts or display attribution.
  *
  * Several integrations declare the same generic `sourceId` (e.g. "osm" is
  * shared across parking, ev-charging, fuel, webcam). A naive `find(...some)`
@@ -370,29 +333,4 @@ export function extractSourcePrefix(source: string): string {
   if (slashIdx < 0) return source.slice(0, colonIdx);
   if (colonIdx < 0) return source.slice(0, slashIdx);
   return source.slice(0, Math.min(slashIdx, colonIdx));
-}
-
-/**
- * Build attribution HTML for specific source(s) within an integration.
- * Filters dataSources entries whose `sourceId` matches one of the given
- * source strings (after prefix extraction). Falls back to full integration
- * attribution if no sourceId matches.
- */
-export function buildSourceAttribution(
-  dataSources: IntegrationDataSource[],
-  sources: string[],
-): string {
-  const prefixes = new Set(sources.map(extractSourcePrefix));
-  const matching = dataSources.filter((ds) => prefixes.has(ds.sourceId));
-  const entries = matching.length > 0 ? matching : dataSources;
-
-  const seen = new Set<string>();
-  return entries
-    .map((ds) => buildAttributionHtml(ds))
-    .filter((html) => {
-      if (seen.has(html)) return false;
-      seen.add(html);
-      return true;
-    })
-    .join(" · ");
 }
