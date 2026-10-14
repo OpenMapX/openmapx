@@ -1,0 +1,41 @@
+{
+  "name": "Message signs",
+  "description": "Dynamic message signs along the roads and the messages they show",
+  "fallbackName": "Message sign",
+  "summary": {
+    "message": "Shows: {message}",
+    "blank": "Blank",
+    "fault": "Out of order",
+    "unknown": "No current message known"
+  },
+  "section": {
+    "message": "Message",
+    "page": "Page {n} of {count}"
+  },
+  "caption": {
+    "shown": "Shown since",
+    "updated": "Updated"
+  },
+  "state": {
+    "blank": "The sign is blank.",
+    "fault": "The sign is out of order.",
+    "unknown": "No current message is known for this sign."
+  },
+  "row": {
+    "line": "Line {n}",
+    "road": "Road",
+    "facing": "Facing traffic",
+    "location": "Location",
+    "provider": "Provider"
+  },
+  "compass": {
+    "N": "Northbound",
+    "NE": "Northeastbound",
+    "E": "Eastbound",
+    "SE": "Southeastbound",
+    "S": "Southbound",
+    "SW": "Southwestbound",
+    "W": "Westbound",
+    "NW": "Northwestbound"
+  }
+}

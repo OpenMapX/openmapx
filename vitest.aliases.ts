@@ -13,6 +13,7 @@ const MOBILITY_CORE_TYPE_SUBPATHS = [
   "fuel",
   "ev-charging",
   "camera",
+  "message-sign",
   "hazards",
   "transit",
   "transit-reachability",

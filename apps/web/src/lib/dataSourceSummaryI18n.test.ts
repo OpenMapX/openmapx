@@ -66,6 +66,18 @@ describe("translateDataSourceLabel", () => {
     ]);
   });
 
+  it("translates the message-sign status filter and its options in en and de", () => {
+    const labels = ["Status", "Showing a message", "Blank", "Out of order"];
+
+    expect(labels.map((l) => translateDataSourceLabel(l, translator(en)))).toEqual(labels);
+    expect(labels.map((l) => translateDataSourceLabel(l, translator(de)))).toEqual([
+      "Zustand",
+      "Mit Meldung",
+      "Ohne Anzeige",
+      "Außer Betrieb",
+    ]);
+  });
+
   it("leaves a language-neutral label as it is", () => {
     expect(translateDataSourceLabel("CCS2", translator(de))).toBe("CCS2");
   });

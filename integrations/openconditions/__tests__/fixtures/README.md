@@ -24,3 +24,12 @@ wrapping the sealed records in the envelope the API serves. No OpenConditions se
 - `sources-hazards.json`: the `GET /sources` answer in the operator scope for the twelve hazards
   feeds of the OpenConditions catalogue (`feeds/hazards/`), produced by OpenConditions' `sourcesOf`:
   `format`, `qualifier` and, for `eu-meteoalarm-alerts`, the publisher's `notice`.
+
+The message-sign fixture is a documented sample built by hand, not recorded:
+
+- `features-signs.json`: the `GET /features?kind=vms&canonical=1&expand=components,latest` answer
+  for two signs in the shape OpenConditions' `cars-signs` parser writes (`packages/roads/src/cars-signs.ts`,
+  2026-10-14): one `vms` feature with its `sign_face` component `0` and the newest `vms.display`
+  reading of that face. The first sign shows a two-page message, the second is blank. The sign ids,
+  names, places and messages are invented; the 511NY Developer Access Agreement does not allow
+  publishing the feed's records.
