@@ -23,13 +23,14 @@ export function NavSpeedLimitSlot({ isMobile, sheetClearance, elementRef }: Prop
   const speedMps = useNavigationStore((s) => s.progress?.speedMps ?? 0);
   const units = useSettingsStore((s) => s.units);
 
-  if (currentSpeedLimit === null) return null;
-
+  // Keep the measured element stable: publishing its first ref from a GPS
+  // fix would re-render the cold chrome that owns the junction budget.
   return (
     <Box
       ref={elementRef}
       data-testid="nav-speed-limit"
       sx={{
+        display: currentSpeedLimit === null ? "none" : undefined,
         pointerEvents: "auto",
         alignSelf: "flex-start",
         pl: 2,
@@ -40,11 +41,13 @@ export function NavSpeedLimitSlot({ isMobile, sheetClearance, elementRef }: Prop
         mb: isMobile && sheetClearance > 0 ? `${sheetClearance}px` : 0,
       }}
     >
-      <SpeedLimitBadge
-        speedLimit={currentSpeedLimit}
-        units={units}
-        over={isOverSpeed(speedMps, currentSpeedLimit)}
-      />
+      {currentSpeedLimit !== null && (
+        <SpeedLimitBadge
+          speedLimit={currentSpeedLimit}
+          units={units}
+          over={isOverSpeed(speedMps, currentSpeedLimit)}
+        />
+      )}
     </Box>
   );
 }

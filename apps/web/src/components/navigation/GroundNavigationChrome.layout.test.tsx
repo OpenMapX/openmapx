@@ -48,7 +48,9 @@ it("uses the real measured shell budget to replace an overflowing junction photo
     const marker = el.dataset.testid;
     if (marker === "ground-nav-chrome") return new DOMRect(0, 0, 390, shellHeight);
     if (marker === "ground-nav-bottom") return new DOMRect(0, 10000, 390, 10);
-    if (marker === "nav-speed-limit") return new DOMRect(0, 0, 64, 64);
+    if (marker === "nav-speed-limit") {
+      return getComputedStyle(el).display === "none" ? new DOMRect() : new DOMRect(0, 0, 64, 64);
+    }
     if (marker === "ground-nav-bottom-header") return new DOMRect(0, 0, 390, 96);
     if (marker === "junction-photo-measurement") return new DOMRect(0, 0, 358, 500);
     const panel = document.querySelector('[data-testid="junction-view-panel"]');
@@ -104,6 +106,15 @@ it("uses the real measured shell budget to replace an overflowing junction photo
       shellHeight = 844;
       layout.resize();
     });
+    expect(screen.queryByRole("contentinfo")).toBeNull();
+    expect(view.container.querySelector('[data-testid="junction-schematic"]')).not.toBeNull();
+    // At this shell height, reclaiming the badge's 64 px lets the photo fit.
+    // Showing the badge again must reserve that space and hide the photo.
+    act(() => useNavigationStore.setState({ currentSpeedLimit: null }));
+    act(() => layout.resize());
+    expect(screen.getByRole("contentinfo").textContent).toContain("Full required image notice");
+    act(() => useNavigationStore.setState({ currentSpeedLimit: 80 }));
+    act(() => layout.resize());
     expect(screen.queryByRole("contentinfo")).toBeNull();
     expect(view.container.querySelector('[data-testid="junction-schematic"]')).not.toBeNull();
     act(() => {
