@@ -2,10 +2,13 @@
 
 import Box from "@mui/material/Box";
 import Link from "@mui/material/Link";
+import { useTheme } from "@mui/material/styles";
+import useMediaQuery from "@mui/material/useMediaQuery";
 import { useNavigationStore, useSidebarStore } from "@openmapx/core";
 import NextLink from "next/link";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { LAYER_SELECTOR_OPEN_EVENT } from "@/components/command-palette/constants";
 import { AttributionDetails } from "@/components/ui/AttributionDetails";
 import { AttributionNotices } from "@/components/ui/AttributionNotices";
@@ -13,8 +16,8 @@ import { useMapAttributionPresentation } from "@/integration-api/overlay/mapAttr
 import { isPanelShiftActive, PANEL_WIDTH } from "@/lib/layout";
 import { coversFooterCenter, publishMapFooterCenterCovered } from "@/lib/mapFooterCenter";
 import { useMeasuredMapObstruction } from "@/lib/mapObstructions";
-import { useMobilePanelClearance, useWindowHeight } from "@/lib/mobilePanelHeight";
 import { CREDITS_SX } from "./MapCredits";
+import { useMapFooterSurface } from "./useMapFooterSurface";
 
 // Below this much free space between the two groups they stop reading as two
 // separate bars, so they're painted as one instead.
@@ -37,12 +40,12 @@ const MERGE_GAP = 16;
  */
 export function MapFooter() {
   const t = useTranslations("footer");
+  const theme = useTheme();
+  const mobile = useMediaQuery(theme.breakpoints.down("sm"));
   const sidebarOpen = useSidebarStore((s) => s.activeSidebarId !== null);
   const collapsed = useSidebarStore((s) => s.collapsed);
   const navigating = useNavigationStore((s) => s.status !== "idle");
   const shifted = isPanelShiftActive({ sidebarOpen, sidebarCollapsed: collapsed, navigating });
-  const windowHeight = useWindowHeight();
-  const followHeight = useMobilePanelClearance(windowHeight);
   const credits = useMapAttributionPresentation();
   const creditsHtml = JSON.stringify(credits);
 
@@ -52,6 +55,12 @@ export function MapFooter() {
     containerRef.current = element;
     setFooterEl(element);
   }, []);
+  const {
+    container: portalContainer,
+    setHome,
+    docked,
+    mapBudget,
+  } = useMapFooterSurface(footerEl, mobile);
   useMeasuredMapObstruction("map-footer", "bottom", footerEl);
   const linksRef = useRef<HTMLDivElement>(null);
   const creditsRef = useRef<HTMLDivElement>(null);
@@ -67,11 +76,11 @@ export function MapFooter() {
     const measure = () => {
       const creditsEl = creditsRef.current;
       const height = mandatoryRef.current?.getBoundingClientRect().height ?? 0;
-      setTall(height > Math.max(1, windowHeight - followHeight) * 0.25);
+      setTall(height > Math.max(1, mapBudget) * 0.25);
       const l = links.getBoundingClientRect();
       const c = creditsEl?.getBoundingClientRect();
       publishMapFooterCenterCovered(
-        coversFooterCenter(container.getBoundingClientRect(), c ? [l, c] : [l]),
+        !docked && coversFooterCenter(container.getBoundingClientRect(), c ? [l, c] : [l]),
       );
       if (!c) {
         setMerged(false);
@@ -91,7 +100,7 @@ export function MapFooter() {
       observer?.disconnect();
       publishMapFooterCenterCovered(false);
     };
-  }, [creditsHtml, windowHeight, followHeight]);
+  }, [creditsHtml, mapBudget, docked]);
 
   // Typography/colors come from the shared credits style so the footer and the
   // embedded maps' `<MapCredits>` can't drift apart. In merged mode the
@@ -105,7 +114,7 @@ export function MapFooter() {
     pointerEvents: "auto",
   } as const;
 
-  return (
+  const footer = (
     <Box
       component="footer"
       ref={setFooterRef}
@@ -113,7 +122,7 @@ export function MapFooter() {
         bgcolor: merged ? background : "transparent",
         position: "absolute",
         bottom: {
-          xs: followHeight > 0 ? `${followHeight}px` : "var(--omx-safe-bottom)",
+          xs: "var(--omx-map-footer-bottom, var(--omx-safe-bottom))",
           sm: "var(--omx-safe-bottom)",
         },
         left: {
@@ -132,7 +141,18 @@ export function MapFooter() {
         // stays a draggable part of the map.
         pointerEvents: "none",
         ...creditsTypography,
-        transition: "left 0.25s ease, bottom 0.25s ease",
+        transition: "left 0.25s ease",
+        "@media (prefers-reduced-motion: reduce)": { transition: "none" },
+        '[data-map-footer-surface="sheet"] > &': {
+          position: "relative",
+          bottom: "auto",
+          left: "auto",
+          right: "auto",
+          marginLeft: "var(--omx-safe-left)",
+          marginRight: "var(--omx-safe-right)",
+          flexShrink: 0,
+          transition: "none",
+        },
       }}
     >
       <Box ref={linksRef} sx={{ ...barSx, display: "flex", flexWrap: "wrap", columnGap: "0.6em" }}>
@@ -180,5 +200,11 @@ export function MapFooter() {
         </Box>
       )}
     </Box>
+  );
+  return (
+    <>
+      <div ref={setHome} style={{ display: "contents" }} />
+      {portalContainer && createPortal(footer, portalContainer)}
+    </>
   );
 }

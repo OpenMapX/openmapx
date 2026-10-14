@@ -98,6 +98,7 @@ export function NavSwipeSheet({
     <MobileBottomSheet
       id="nav-sheet"
       zIndex={1}
+      stackLevel={1300}
       detents={detents}
       detent={expanded ? "full" : "peek"}
       onDetentChange={(next) => onExpandedChange(next === "full")}
@@ -115,9 +116,17 @@ export function NavSwipeSheet({
         </Box>
         {header}
       </Box>
-      {!expanded && <Box sx={{ height: "var(--omx-safe-bottom)" }} />}
+      {!expanded && (
+        <Box
+          sx={{ height: "var(--omx-safe-bottom)", "[data-map-footer-owned] &": { height: 0 } }}
+        />
+      )}
       <Box ref={menuRef}>{children}</Box>
-      {expanded && <Box sx={{ height: "var(--omx-safe-bottom)" }} />}
+      {expanded && (
+        <Box
+          sx={{ height: "var(--omx-safe-bottom)", "[data-map-footer-owned] &": { height: 0 } }}
+        />
+      )}
     </MobileBottomSheet>
   );
 }
