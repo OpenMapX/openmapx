@@ -217,6 +217,7 @@ export function HotspotLayer({ active, popupController }: HotspotLayerProps) {
   const dayRange = useWildfireStore((s) => s.dayRange);
   const instrument = useWildfireStore((s) => s.source);
   const showHeatmap = useWildfireStore((s) => s.showHeatmap);
+  const showLowConfidence = useWildfireStore((s) => s.showLowConfidence);
   const t = useTranslations("wildfires");
   const popupLease = useRef<WildfirePopupLease>({});
   const resolveContributors = useContributorResolver();
@@ -236,8 +237,8 @@ export function HotspotLayer({ active, popupController }: HotspotLayerProps) {
   // it, detections counted per grid cell.
   const endpoint = useCallback(
     (zoom: number) =>
-      `${apiUrl}/api/integrations/overlay-wildfires/${zoom >= HOTSPOT_POINTS_MIN_ZOOM ? "wildfires" : "wildfires/density"}?dayRange=${dayRange}&instrument=${instrument}`,
-    [apiUrl, dayRange, instrument],
+      `${apiUrl}/api/integrations/overlay-wildfires/${zoom >= HOTSPOT_POINTS_MIN_ZOOM ? "wildfires" : "wildfires/density"}?dayRange=${dayRange}&instrument=${instrument}&lowConfidence=${showLowConfidence ? 1 : 0}`,
+    [apiUrl, dayRange, instrument, showLowConfidence],
   );
 
   const read = useCallback(

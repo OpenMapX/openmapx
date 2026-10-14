@@ -160,7 +160,12 @@ beforeEach(() => {
   fake = createFakeMap({ styleLoaded: true, zoom: 8, bounds: BOUNDS });
   mapContext.mapRef.current = fake.map;
   styleVersion = 0;
-  useWildfireStore.setState({ dayRange: 1, source: "viirs", showHeatmap: false });
+  useWildfireStore.setState({
+    dayRange: 1,
+    source: "viirs",
+    showHeatmap: false,
+    showLowConfidence: false,
+  });
   useWildfireStore.getState().resetSourceStatus("firms");
 });
 
@@ -189,7 +194,7 @@ describe("HotspotLayer", () => {
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
     expect(String(fetchMock.mock.calls[0]?.[0])).toBe(
-      `https://api.test/api/integrations/overlay-wildfires/wildfires?dayRange=1&instrument=viirs&${VIEW_QUERY}&zoom=8`,
+      `https://api.test/api/integrations/overlay-wildfires/wildfires?dayRange=1&instrument=viirs&lowConfidence=0&${VIEW_QUERY}&zoom=8`,
     );
     await waitFor(() => {
       expect(fake.state.sources.get(SOURCE_ID)?.data).toEqual(published(HOTSPOT_COLLECTION));
@@ -215,7 +220,7 @@ describe("HotspotLayer", () => {
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
     expect(String(fetchMock.mock.calls[0]?.[0])).toBe(
-      `https://api.test/api/integrations/overlay-wildfires/wildfires/density?dayRange=1&instrument=viirs&${VIEW_QUERY}&zoom=4`,
+      `https://api.test/api/integrations/overlay-wildfires/wildfires/density?dayRange=1&instrument=viirs&lowConfidence=0&${VIEW_QUERY}&zoom=4`,
     );
     await waitFor(() => {
       expect(fake.state.sources.get(DENSITY_SOURCE_ID)?.data).toEqual(
@@ -239,6 +244,23 @@ describe("HotspotLayer", () => {
       expect(fake.state.sources.get(SOURCE_ID)?.data).toEqual(published(HOTSPOT_COLLECTION));
     });
     expect(fake.state.sources.get(DENSITY_SOURCE_ID)?.data).toEqual(EMPTY);
+  });
+
+  it("reloads the view with low-confidence detections when they are turned on", async () => {
+    const fetchMock = routeFetch();
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<HotspotLayer active popupController={popupController()} />);
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+
+    act(() => {
+      useWildfireStore.getState().setShowLowConfidence(true);
+    });
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    expect(String(fetchMock.mock.calls[1]?.[0])).toBe(
+      `https://api.test/api/integrations/overlay-wildfires/wildfires?dayRange=1&instrument=viirs&lowConfidence=1&${VIEW_QUERY}&zoom=8`,
+    );
   });
 
   it("registers density cells below the detections in the points slot", () => {

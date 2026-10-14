@@ -238,7 +238,9 @@ feeds of what they drew. Weather alerts are cleared from the map four minutes
 after the last successful refresh, so a failed refresh never leaves old
 warnings on screen.
 Fire hotspots load for the visible area: below zoom 7 they are drawn as a
-density grid, from zoom 7 as individual detections. MeteoAlarm's European
+density grid, from zoom 7 as individual detections. Detections the satellite
+instrument rates low confidence (VIIRS low, MODIS below 30%) are left out of
+both unless the legend's "Low confidence" switch is on. MeteoAlarm's European
 warnings are drawn with the area shapes MeteoAlarm publishes for redistributors,
 and their popup shows the publisher's notice, the issue time and the issuer.
 

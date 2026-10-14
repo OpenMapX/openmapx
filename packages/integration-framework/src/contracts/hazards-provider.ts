@@ -26,6 +26,17 @@ export interface HazardsQuery {
   lang?: string;
 }
 
+export interface FireQuery extends HazardsQuery {
+  since: string;
+  instrument: FireInstrument;
+  /**
+   * Leave out the detections their instrument rates low confidence: VIIRS's
+   * `low`, a MODIS confidence below 30%. A provider whose upstream cannot
+   * apply it may return them.
+   */
+  excludeLowConfidence?: boolean;
+}
+
 /**
  * Pluggable "hazards" capability: weather and civil-protection alerts,
  * natural hazards, and satellite fire detections. The `hazards` orchestrator
@@ -65,7 +76,7 @@ export interface HazardsProvider {
   /** Fire detections observed since the ISO instant, at most `limit`. */
   getFirePixels(
     bbox: BBox,
-    q: HazardsQuery & { since: string; instrument: FireInstrument; limit: number },
+    q: FireQuery & { limit: number },
   ): Promise<{ pixels: FirePixel[]; partial?: DataSourcePartialReason }>;
   /**
    * Fire detections since the ISO instant, aggregated into `cellDeg` cells.
@@ -74,7 +85,7 @@ export interface HazardsProvider {
    */
   getFireDensity(
     bbox: BBox,
-    q: HazardsQuery & { since: string; instrument: FireInstrument; cellDeg: number },
+    q: FireQuery & { cellDeg: number },
   ): Promise<{
     cells: FireDensityCell[];
     /** Native source IDs for diagnostics; never evidence for an individual cell. */

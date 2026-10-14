@@ -9,6 +9,7 @@ const answering = (page: Rec): OpenConditionsClient => ({
   baseUrl: "http://openconditions.test:4100",
   get: async <T>() => page as T,
   getOptional: async <T>() => page as T,
+  getUnlessRefused: async <T>() => ({ body: page as T }),
 });
 
 const partialOf = async (coverage: Rec | undefined) => {

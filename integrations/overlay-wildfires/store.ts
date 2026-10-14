@@ -46,6 +46,7 @@ export const useWildfireStore = createOverlayStore({
     showEffisBurnedAreas: true,
     showNoaaSmoke: false,
     showHeatmap: false,
+    showLowConfidence: false,
     statuses: initialStatuses(),
   },
   actions: (set) => ({
@@ -56,6 +57,7 @@ export const useWildfireStore = createOverlayStore({
     setShowEffisBurnedAreas: (showEffisBurnedAreas: boolean) => set({ showEffisBurnedAreas }),
     setShowNoaaSmoke: (showNoaaSmoke: boolean) => set({ showNoaaSmoke }),
     setShowHeatmap: (showHeatmap: boolean) => set({ showHeatmap }),
+    setShowLowConfidence: (showLowConfidence: boolean) => set({ showLowConfidence }),
     setSourceStatus: (id: WildfireSourceId, patch: Partial<WildfireSourceStatus>) =>
       set((state) => ({
         statuses: {

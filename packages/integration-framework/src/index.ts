@@ -97,6 +97,7 @@ export type {
   FireDensityCell,
   FireInstrument,
   FirePixel,
+  FireQuery,
   ForecastAirQualityQuery,
   FuelProduct,
   FuelStation,

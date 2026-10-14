@@ -19,6 +19,8 @@ const SITUATIONS_MAX = 20_000;
 const MAX_RESPONSE_BYTES = 64 * 1024 * 1024;
 /** OpenConditions refuses a grid read of a box holding more cells than this. */
 const MAX_GRID_CELLS = 50_000;
+/** How long an instance that refused `minConfidence` is read without it before it is asked again. */
+const CONFIDENCE_RETRY_MS = 3_600_000;
 
 /**
  * The bbox as west-to-east strips that each hold at most `MAX_GRID_CELLS`
@@ -45,6 +47,17 @@ export function gridStrips(bbox: BBox, cellDeg: number): BBox[] {
 
 type Page = { records?: unknown; next?: unknown };
 
+type Read = <T>(path: string, params: OpenConditionsParams) => Promise<T>;
+
+/** Whether a 400 answer is an instance's refusal of `minConfidence`, a key it does not know. */
+function refusesMinConfidence(answer: unknown): boolean {
+  const issues = rec(answer)["issues"];
+  return (
+    Array.isArray(issues) &&
+    issues.some((issue) => String(rec(issue)["message"]).includes("minConfidence"))
+  );
+}
+
 export interface HazardsProviderOptions {
   /** The clock a natural-hazard window ends at. */
   now?: () => Date;
@@ -60,7 +73,8 @@ export interface HazardsProviderOptions {
  * It fails closed on the live source list: until the first list arrives
  * every read is empty and `unavailable`; after it, a record whose source is
  * not listed is left out, and a fire read asks only for the listed FIRMS
- * feeds of its instrument. An alert without a geometry is not returned.
+ * feeds of its instrument, without low-confidence detections when asked to
+ * leave them out. An alert without a geometry is not returned.
  * A read stops at 20,000 situations (a fire read at its `limit`), and says
  * the area is only partly covered.
  */
@@ -70,25 +84,55 @@ export function createHazardsProvider(
   options: HazardsProviderOptions = {},
 ): HazardsProvider {
   const now = options.now ?? (() => new Date());
+  /** When the instance last refused `minConfidence`: one older than the parameter. */
+  let confidenceRefusedAt: number | undefined;
+
+  const read: Read = (path, params) =>
+    client.get(path, params, { maxResponseBytes: MAX_RESPONSE_BYTES });
+
+  /**
+   * A fire read that leaves out low-confidence detections when `excludeLow`
+   * asks to (`minConfidence=nominal`). An instance that refuses the
+   * parameter is read without it, so its low-confidence detections come
+   * back, and is asked again an hour later.
+   */
+  const fireRead =
+    (excludeLow: boolean | undefined): Read =>
+    async <T>(path: string, params: OpenConditionsParams) => {
+      const clock = now().getTime();
+      if (
+        excludeLow &&
+        (confidenceRefusedAt === undefined || clock - confidenceRefusedAt >= CONFIDENCE_RETRY_MS)
+      ) {
+        const answer = await client.getUnlessRefused<T>(
+          path,
+          { ...params, minConfidence: "nominal" },
+          { maxResponseBytes: MAX_RESPONSE_BYTES },
+        );
+        if ("body" in answer) return answer.body;
+        if (!refusesMinConfidence(answer.refused)) {
+          throw new Error(`OpenConditions ${path} responded 400`);
+        }
+        confidenceRefusedAt = clock;
+      }
+      return read<T>(path, params);
+    };
 
   /** Pages of `path` until `next` is null or `max` records are read. */
   async function readPages(
     path: string,
     params: OpenConditionsParams,
     max: number,
+    get: Read = read,
   ): Promise<{ records: Rec[]; partArea: boolean }> {
     const records: Rec[] = [];
     let cursor: string | null = null;
     do {
-      const page: Page = await client.get<Page>(
-        path,
-        {
-          ...params,
-          limit: Math.min(PAGE, max - records.length),
-          ...(cursor !== null ? { cursor } : {}),
-        },
-        { maxResponseBytes: MAX_RESPONSE_BYTES },
-      );
+      const page: Page = await get<Page>(path, {
+        ...params,
+        limit: Math.min(PAGE, max - records.length),
+        ...(cursor !== null ? { cursor } : {}),
+      });
       if (!Array.isArray(page.records) || (page.next !== null && typeof page.next !== "string")) {
         throw new Error(`Malformed ${path} page`);
       }
@@ -182,6 +226,7 @@ export function createHazardsProvider(
           source: feeds.join(","),
         },
         q.limit,
+        fireRead(q.excludeLowConfidence),
       );
       const pixels = records.flatMap((record) =>
         listed(record) ? (readingToFirePixel(record, q.instrument, sources) ?? []) : [],
@@ -192,9 +237,10 @@ export function createHazardsProvider(
       if (!sources.ready) return unavailable({ cells: [], sources: [] });
       const feeds = firmsFeeds(q.instrument, q.excludedSourceIds);
       if (feeds.length === 0) return { cells: [], sources: [] };
+      const get = fireRead(q.excludeLowConfidence);
       const answers = await Promise.all(
         gridStrips(bbox, q.cellDeg).map((strip) =>
-          client.get<{ cells?: unknown; sources?: unknown; cell_contributors?: unknown }>(
+          get<{ cells?: unknown; sources?: unknown; cell_contributors?: unknown }>(
             "/observations/grid",
             {
               property: "fire.frp",
@@ -203,7 +249,6 @@ export function createHazardsProvider(
               since: q.since,
               source: feeds.join(","),
             },
-            { maxResponseBytes: MAX_RESPONSE_BYTES },
           ),
         ),
       );

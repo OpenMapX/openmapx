@@ -288,14 +288,27 @@ const SMOKE_ROUTE: LayerRoute = {
   toFeature: smokeFeature,
 };
 
+/** Whether the instrument rates the detection low confidence: VIIRS's `low`, MODIS below 30%. */
+function isLowConfidence(pixel: FirePixel): boolean {
+  const { level, percent } = pixel.confidence ?? {};
+  return level === "low" || (percent !== undefined && percent < 30);
+}
+
 function parseFireQuery(
   query: Record<string, string>,
-): { dayRange: FirmsDayRange; instrument: FirmsInstrument } | string {
+): { dayRange: FirmsDayRange; instrument: FirmsInstrument; lowConfidence: boolean } | string {
   const dayRange = Number(query.dayRange ?? "1") as FirmsDayRange;
   const instrument = (query.instrument ?? "viirs") as FirmsInstrument;
+  const lowConfidence = query.lowConfidence ?? "0";
   if (!DAY_RANGES.includes(dayRange)) return "Invalid dayRange (1-3)";
   if (!INSTRUMENTS.includes(instrument)) return "Invalid instrument";
-  return { dayRange, instrument };
+  if (lowConfidence !== "0" && lowConfidence !== "1") return "Invalid lowConfidence (0 or 1)";
+  return { dayRange, instrument, lowConfidence: lowConfidence === "1" };
+}
+
+/** The part of a fire read's cache key that says whether low-confidence detections are in it. */
+function confidenceKey(lowConfidence: boolean): string {
+  return lowConfidence ? "all" : "confident";
 }
 
 export function setup(ctx: IntegrationContext): void {
@@ -320,7 +333,7 @@ export function setup(ctx: IntegrationContext): void {
   ctx.registerRoute("GET", "/wildfires", async (req, reply) => {
     const request = fireRequest(req.query);
     if (typeof request === "string") return badRequest(reply, request);
-    const { dayRange, instrument, view, since } = request;
+    const { dayRange, instrument, lowConfidence, view, since } = request;
     if (view.zoom < HOTSPOT_POINTS_MIN_ZOOM) {
       return badRequest(
         reply,
@@ -330,21 +343,25 @@ export function setup(ctx: IntegrationContext): void {
 
     // The view is quantized, so nearby views share an entry. Namespaced by the response
     // shape: an entry cached in an older shape must not be served against the new one.
-    const key = `wildfires:hotspots-v3:${instrument}:${dayRange}:${viewKey(view)}`;
+    const key = `wildfires:hotspots-v3:${instrument}:${dayRange}:${confidenceKey(lowConfidence)}:${viewKey(view)}`;
     try {
       const read = await ctx.cache.withCache<HotspotRead>(key, HOTSPOT_TTL_S, async () => {
         const { pixels, partial } = await hazards.firePixels(bboxOf(view), {
           since: since(),
           instrument,
           limit: HOTSPOT_LIMIT,
+          excludeLowConfidence: !lowConfidence,
         });
         // Nothing back from a failed read is not "no fires": caching it would hide them.
         if (partial === "unavailable" && pixels.length === 0) {
           throw new Error("every hazards provider failed");
         }
-        // The credits name the sources of the detections served, not of those left out.
+        // The credits name the sources of the detections served, not of those left out. A
+        // provider that could not leave out low-confidence detections upstream may return them.
         const served = pixels.flatMap((pixel) => {
-          const feature = pixel.instrument === instrument ? pixelToFeature(pixel) : null;
+          const kept =
+            pixel.instrument === instrument && (lowConfidence || !isLowConfidence(pixel));
+          const feature = kept ? pixelToFeature(pixel) : null;
           return feature ? [{ feature, sources: pixel.sources }] : [];
         });
         return {
@@ -370,19 +387,20 @@ export function setup(ctx: IntegrationContext): void {
   ctx.registerRoute("GET", "/wildfires/density", async (req, reply) => {
     const request = fireRequest(req.query);
     if (typeof request === "string") return badRequest(reply, request);
-    const { dayRange, instrument, view, since } = request;
+    const { dayRange, instrument, lowConfidence, view, since } = request;
     const cellDeg = densityCellDeg(Math.floor(view.zoom));
     if (cellCount(view, cellDeg) > MAX_DENSITY_CELLS) {
       return badRequest(reply, "Viewport too large for its zoom");
     }
 
-    const key = `wildfires:density-v2:${instrument}:${dayRange}:${cellDeg}:${viewKey(view)}`;
+    const key = `wildfires:density-v2:${instrument}:${dayRange}:${confidenceKey(lowConfidence)}:${cellDeg}:${viewKey(view)}`;
     try {
       const read = await ctx.cache.withCache(key, HOTSPOT_TTL_S, async () => {
         const { cells, sources, partial } = await hazards.fireDensity(bboxOf(view), {
           since: since(),
           instrument,
           cellDeg,
+          excludeLowConfidence: !lowConfidence,
         });
         if (partial === "unavailable" && cells.length === 0) {
           throw new Error("every hazards provider failed");

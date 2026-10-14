@@ -142,6 +142,7 @@ describe("GET /wildfires", () => {
       since: "2026-10-08T12:00:00.000Z",
       instrument: "viirs",
       limit: 20_000,
+      excludeLowConfidence: true,
     });
     expect(sent.status).toBe(200);
     expect(sent.headers).toMatchObject({
@@ -178,7 +179,7 @@ describe("GET /wildfires", () => {
     });
   });
 
-  it("labels MODIS confidence as a percentage and keeps a detection without optional values", async () => {
+  it("labels MODIS confidence as a percentage and keeps a detection without optional values when low confidence is asked for", async () => {
     const getFirePixels = vi.fn<HazardsProvider["getFirePixels"]>(async () => ({
       pixels: [
         pixel({
@@ -196,11 +197,13 @@ describe("GET /wildfires", () => {
       zoom: "7",
       dayRange: "3",
       instrument: "modis",
+      lowConfidence: "1",
     });
 
     expect(getFirePixels.mock.calls[0]?.[1]).toMatchObject({
       since: "2026-10-06T12:00:00.000Z",
       instrument: "modis",
+      excludeLowConfidence: false,
     });
     expect((sent.body as Body).features[0]?.properties).toMatchObject({
       confidence: "20",
@@ -279,6 +282,63 @@ describe("GET /wildfires", () => {
     expect(new Set(keys).size).toBe(1);
   });
 
+  it("leaves out low-confidence detections a provider returned unless they are asked for", async () => {
+    const getFirePixels = async () => ({
+      pixels: [
+        pixel(),
+        pixel({ id: "viirs-low", confidence: { level: "low" } }),
+        pixel({ id: "modis-29", instrument: "modis", confidence: { percent: 29 } }),
+        pixel({ id: "modis-30", instrument: "modis", confidence: { percent: 30 } }),
+        pixel({ id: "unrated", confidence: undefined }),
+      ],
+    });
+    const ids = async (query: Record<string, string>) =>
+      (
+        (await call("/wildfires", [provider({ getFirePixels })], { ...VIEW, zoom: "8", ...query }))
+          .body as Body
+      ).features.map((f) => f.id);
+
+    expect(await ids({})).toEqual(["N20:38.1234,-120.4567:2026-10-09T0930", "unrated"]);
+    expect(await ids({ instrument: "modis" })).toEqual(["modis-30"]);
+    expect(await ids({ lowConfidence: "1" })).toEqual([
+      "N20:38.1234,-120.4567:2026-10-09T0930",
+      "viirs-low",
+      "unrated",
+    ]);
+    expect(await ids({ instrument: "modis", lowConfidence: "1" })).toEqual([
+      "modis-29",
+      "modis-30",
+    ]);
+  });
+
+  it("rejects a lowConfidence other than 0 or 1", async () => {
+    for (const lowConfidence of ["true", "2", ""]) {
+      const sent = await call("/wildfires", [provider()], { ...VIEW, zoom: "8", lowConfidence });
+      expect(sent.status, lowConfidence).toBe(400);
+    }
+  });
+
+  it("caches the read with and without low-confidence detections apart", async () => {
+    const keys: string[] = [];
+    const cache = {
+      ...createMockIntegrationContext().cache,
+      withCache: async <T>(key: string, _ttl: number, fn: () => Promise<T>) => {
+        keys.push(key);
+        return fn();
+      },
+    };
+    for (const path of ["/wildfires", "/wildfires/density"]) {
+      const zoom = path === "/wildfires" ? "8" : "4";
+      await call(path, [provider()], { ...VIEW, zoom }, cache);
+      await call(path, [provider()], { ...VIEW, zoom, lowConfidence: "0" }, cache);
+      await call(path, [provider()], { ...VIEW, zoom, lowConfidence: "1" }, cache);
+    }
+    expect(keys[0]).toBe(keys[1]);
+    expect(keys[2]).not.toBe(keys[0]);
+    expect(keys[3]).toBe(keys[4]);
+    expect(keys[5]).not.toBe(keys[3]);
+  });
+
   it("answers 503 when every provider failed", async () => {
     const getFirePixels = async () => {
       throw new Error("upstream down");
@@ -307,6 +367,7 @@ describe("GET /wildfires/density", () => {
       since: "2026-10-07T12:00:00.000Z",
       instrument: "viirs",
       cellDeg: 1,
+      excludeLowConfidence: true,
     });
     expect(sent.status).toBe(200);
     expect(sent.headers["Cache-Control"]).toBe("public, max-age=300, s-maxage=300");

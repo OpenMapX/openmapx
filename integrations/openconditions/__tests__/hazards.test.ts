@@ -535,6 +535,94 @@ describe("fire detections", () => {
     expect(result.sources).toEqual([MODIS, VIIRS]);
   });
 
+  test("a read that leaves out low-confidence detections asks for nominal confidence or more", async () => {
+    const { provider, calls } = providerWith((path, params) =>
+      path === "/observations/grid" ? clone(grid) : serve(path, params),
+    );
+    await provider.getFirePixels(BBOX, {
+      since,
+      instrument: "viirs",
+      limit: 5000,
+      excludeLowConfidence: true,
+    });
+    await provider.getFireDensity([-30, -60, 60, 70], {
+      since,
+      instrument: "viirs",
+      cellDeg: 1,
+      excludeLowConfidence: true,
+    });
+    await provider.getFirePixels(BBOX, {
+      since,
+      instrument: "viirs",
+      limit: 5000,
+      excludeLowConfidence: false,
+    });
+
+    expect(calls.map((c) => callParams([c]).minConfidence)).toEqual([
+      "nominal",
+      "nominal",
+      undefined,
+    ]);
+  });
+
+  test("an instance older than minConfidence is read without it, and asked again an hour later", async () => {
+    let clock = Date.parse("2026-10-09T02:00:00.000Z");
+    const refusal = {
+      status: 400,
+      headers: {},
+      body: {
+        error: "invalid query",
+        issues: [{ path: "", message: 'Unrecognized key: "minConfidence"' }],
+      },
+    };
+    const http = fakeHttpClient((req: FakeHttpRequest) => {
+      const params = (req.options?.params ?? {}) as Record<string, unknown>;
+      return params.minConfidence !== undefined ? refusal : clone(grid);
+    });
+    const client = createOpenConditionsClient(OPERATOR, http)!;
+    const provider = createHazardsProvider(client, liveSources(), { now: () => new Date(clock) });
+    const query = { since, instrument: "viirs" as const, cellDeg: 1, excludeLowConfidence: true };
+    const box: BBox = [-30, -60, 60, 70];
+
+    expect((await provider.getFireDensity(box, query)).cells).toHaveLength(7);
+    clock += 3_599_000;
+    await provider.getFireDensity(box, query);
+    clock += 1_000;
+    await provider.getFireDensity(box, query);
+
+    expect(
+      http.calls.map((c) => [
+        c.method,
+        (c.options?.params as Record<string, unknown>).minConfidence,
+      ]),
+    ).toEqual([
+      ["getResponse", "nominal"],
+      ["get", undefined],
+      ["get", undefined],
+      ["getResponse", "nominal"],
+      ["get", undefined],
+    ]);
+  });
+
+  test("a 400 that is not about minConfidence fails the read", async () => {
+    const http = fakeHttpClient(() => ({
+      status: 400,
+      headers: {},
+      body: { error: "invalid query", issues: [{ path: "bbox", message: "too many cells" }] },
+    }));
+    const client = createOpenConditionsClient(OPERATOR, http)!;
+    const provider = createHazardsProvider(client, liveSources());
+    await expect(
+      provider.getFireDensity(BBOX, {
+        since,
+        instrument: "viirs",
+        cellDeg: 1,
+        excludeLowConfidence: true,
+      }),
+    ).rejects.toThrow("responded 400");
+    expect(http.calls.every((c) => c.method === "getResponse")).toBe(true);
+  });
+
   test("a source the answer names but the instance does not list is not named", async () => {
     const { provider } = providerWith(
       (path) => (path === "/observations/grid" ? clone(grid) : undefined),

@@ -56,6 +56,7 @@ export type {
   FireDensityCell,
   FireInstrument,
   FirePixel,
+  FireQuery,
   HazardAlert,
   HazardsProvider,
   HazardsQuery,
