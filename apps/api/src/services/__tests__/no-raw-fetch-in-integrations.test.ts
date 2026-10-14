@@ -28,6 +28,8 @@ const RAW_FETCH_ALLOWLIST: Record<string, string> = {
   "integrations/geocoding-motis/provider.ts":
     "isMotisLocalReachable() reachability probe: reads only res.status, never the body",
   "integrations/knowledge-tides-norway/index.ts": "Kartverket tide feeds are XML, not JSON",
+  "integrations/overlay-ambient-places/useAmbientPublication.ts":
+    'browser host API discovery: needs cache:"no-store" (not a FetchJsonOptions field) and its own request cancelled by unmount, API-origin change and each 60s refresh',
   "integrations/overlay-hiking/index.ts":
     "tile proxy: forwards the binary PNG tile body and status verbatim",
   "integrations/overlay-nautical/index.ts":

@@ -49,8 +49,10 @@ same-business duplicates are removed, and the response is capped at 50 places.
 
 ## Nearby places during normal browsing
 
-The built-in `overlay-ambient-places` integration can show named places without
-starting a category search. An administrator first builds the existing
+The built-in `overlay-ambient-places` integration shows named places on the map
+automatically, without starting a category search and without a Layers entry or
+legend. The integration ID keeps its historical `overlay-` prefix so existing
+operator configuration still applies. An administrator first builds the existing
 OSM search index; an Overture snapshot is optional, but a populated Overture
 source must have completed its link rebuild. In **Admin → Services → Data
 workflows → Nearby places**, choose **Planet**, **Germany** or **Custom region**. Germany
@@ -88,7 +90,9 @@ Accepted OSM↔GERS links retain the OSM primary ID across tiles, search and pla
 cards, even when the OSM record is outside the ambient candidate set.
 
 The admin card reports generation, region, counts, source epoch/release,
-publication time and build errors. Country/global progress distinguishes processed
+publication time and build errors. These facts (coverage, snapshot date and
+source epoch) are administrator information; map users see only the places and
+their credits. Country/global progress distinguishes processed
 source rows and staged places from the activated snapshot. These builds hold
 source-operation locks until publication finishes, so schedule them after source
 preparation and budget retained versions, temporary writes and transaction logs.
@@ -103,7 +107,9 @@ transaction. A failed or interrupted build retains the active generation.
 Neither requires another rebuild. A competing mutation receives `409` until
 publication finishes. Clients refresh discovery
 every minute and retain a fresh last-known generation during a temporary API
-failure. Already cached tile URLs remain valid for their seven-day cache lease;
+failure, but only while the same page keeps talking to the same API origin; a
+reload or a different API origin discovers again. A reply that reports no
+publication, a disabled one or one older than 90 days removes the places. Already cached tile URLs remain valid for their seven-day cache lease;
 disable is therefore a discovery change, not immediate revocation of cached data.
 At most eight generations are retained. Cache protection renews when an active
 generation is replaced or rolled back, even if the original publication is old;
