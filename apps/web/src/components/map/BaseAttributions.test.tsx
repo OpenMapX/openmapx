@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import type { MapGeoJSONFeature, Map as MapLibreMap, StyleSpecification } from "maplibre-gl";
+import type { MapGeoJSONFeature, StyleSpecification } from "maplibre-gl";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { useMapAttributionStore } from "@/integration-api/overlay/mapAttributionStore";
 import { installedNativeBasemap } from "@/integration-api/overlay/nativeBasemap";
