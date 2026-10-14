@@ -9,6 +9,12 @@
   "workspaces": {
     ".": {
       "entry": [
+        // Nested workspace commands and an explicitly selected Vitest config.
+        "scripts/discovery-eval/run.ts",
+        "scripts/record-search-eval.mts",
+        "scripts/self-hosting-replay-vitest.config.ts",
+        // The CI privacy-backup fixture spawns this file by path.
+        "services/ops-agent/privacy-backup/verify-output.ts",
         "scripts/discovery-eval/business-name-address/replay.ts",
         "scripts/check-dockerfile-workspace-sync.ts",
         "scripts/check-credential-keys.ts",
@@ -22,11 +28,24 @@
         "scripts/benchmark-motis-reachability.ts",
         "scripts/ev-vehicles/generate.ts"
       ],
-      "ignoreFiles": ["docs/**"]
+      "ignoreFiles": [
+        "docs/**",
+        // TypeScript resolves the .mjs validator import to this typed companion.
+        "scripts/validate-privacy-release.d.mts"
+      ]
     },
     "apps/api": {
-      "entry": ["scripts/**/*.ts"],
-      "ignoreFiles": ["src/__tests__/fixtures/**"],
+      "entry": [
+        "scripts/**/*.ts",
+        // Memory tests spawn these exact paths in heap-constrained processes.
+        "src/privacy/__tests__/fixtures/primary-db-archive-memory-child.ts",
+        "src/privacy/__tests__/fixtures/primary-stream-memory-child.ts"
+      ],
+      "ignoreFiles": [
+        "src/__tests__/fixtures/**",
+        // TypeScript resolves the .mjs fingerprint import to this typed companion.
+        "privacy-source-fingerprint.d.mts"
+      ],
       // Integration adapters are copied into the API image and discovered from
       // their manifests at runtime, so their API-only packages have no static
       // import path from this workspace.
@@ -80,6 +99,18 @@
       // manifest; it does not import that implementation from TypeScript.
       "ignoreDependencies": ["@openmapx/integration-transit-opentransportdata-ch"]
     },
+    "integrations/overlay-traffic-tomtom": {
+      // Exact workspace configuration replaces the integrations/* defaults.
+      "entry": [
+        "{index,map-layer,legend,panel,ReportDialog,ReportFab,CrowdApproachPrompt}.{ts,tsx}"
+      ],
+      "paths": {
+        "@/*": ["../../apps/web/src/*"],
+        "@integrations/*": ["../*"]
+      },
+      // ReactJSX emits react/jsx-runtime; TypeScript resolves its @types/react companion.
+      "ignoreDependencies": ["react", "@types/react"]
+    },
     "packages/brands": {
       // The package root is resolved as data with require.resolve().
       "ignoreDependencies": ["name-suggestion-index"]
@@ -105,7 +136,19 @@
       "ignoreDependencies": ["@openstreetmap/id-tagging-schema"]
     },
     "services/data-manager": {
-      "entry": ["src/jobs/overture/eval/*.ts"],
+      "entry": [
+        "src/jobs/overture/eval/*.ts",
+        // Package start and Docker invoke the emitted supervisor entrypoint.
+        "src/supervisor.ts",
+        // Production clients select source/emitted Worker URLs at runtime.
+        "src/jobs/traffic/live-writer-worker.ts",
+        "src/offline-packages/extractor-worker.ts",
+        // Documented verification CLIs and their runtime-URL fault child.
+        "scripts/verify-engine-watchdog.ts",
+        "scripts/verify-road-condition-engine.ts",
+        "scripts/verify-route-traffic-proof.ts",
+        "scripts/traffic-writer-fault.ts"
+      ],
       // The glyph utility loads this CommonJS package through its compatibility
       // loader because the dependency does not expose an ESM entry point.
       "ignoreDependencies": ["@mapbox/glyph-pbf-composite"]
