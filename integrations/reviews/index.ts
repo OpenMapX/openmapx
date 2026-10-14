@@ -1,9 +1,9 @@
 import { type IntegrationContext, scalarQueries } from "@openmapx/integration-framework";
 import {
-  cacheKeyForSubject,
   fetchAggregate,
   fetchReviews,
   getReviewProviders,
+  reviewCacheKey,
   submitReview,
   uploadReviewImage,
 } from "./orchestrator.js";
@@ -38,7 +38,7 @@ export function setup(ctx: IntegrationContext): void {
       reply.status(400).send({ error: "Invalid subject: lat, lng, name required" });
       return;
     }
-    const key = `cache:reviews:list:${cacheKeyForSubject(subject)}`;
+    const key = reviewCacheKey("list", subject);
     try {
       const reviews = await ctx.cache.withCache(key, READ_TTL_SECONDS, () => {
         const providers = getReviewProviders(ctx.getIntegrationsByDomain("reviews"));
@@ -61,7 +61,7 @@ export function setup(ctx: IntegrationContext): void {
       reply.status(400).send({ error: "Invalid subject: lat, lng, name required" });
       return;
     }
-    const key = `cache:reviews:agg:${cacheKeyForSubject(subject)}`;
+    const key = reviewCacheKey("agg", subject);
     try {
       const aggregate = await ctx.cache.withCache(key, READ_TTL_SECONDS, () => {
         const providers = getReviewProviders(ctx.getIntegrationsByDomain("reviews"));
@@ -112,10 +112,9 @@ export function setup(ctx: IntegrationContext): void {
                 ? body.invalidate.osmId.trim() || undefined
                 : undefined,
           };
-          const segment = cacheKeyForSubject(subject);
           await Promise.allSettled([
-            ctx.cache.del(`cache:reviews:list:${segment}`),
-            ctx.cache.del(`cache:reviews:agg:${segment}`),
+            ctx.cache.del(reviewCacheKey("list", subject)),
+            ctx.cache.del(reviewCacheKey("agg", subject)),
           ]);
         }
         reply.send(result);

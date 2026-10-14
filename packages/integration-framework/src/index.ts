@@ -336,6 +336,7 @@ export {
   scalarQuery,
 } from "./query";
 export { IntegrationRegistry } from "./registry";
+export { captureReviewProviderContributors } from "./review-attribution";
 export { withRoutingContributors } from "./routing-contributors";
 export {
   createSiteOrchestrator,

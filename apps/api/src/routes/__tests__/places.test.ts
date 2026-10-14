@@ -568,7 +568,10 @@ describe("POST /places/card-enrichment", () => {
       expect(mockWithCache.mock.calls).toEqual(
         expect.arrayContaining([
           expect.arrayContaining([expect.stringMatching(/^cache:card-photo:/), 3600]),
-          expect.arrayContaining([expect.stringMatching(/^cache:card-rating:v2:/), 600]),
+          expect.arrayContaining([
+            expect.stringMatching(/^cache:card-rating:v3-contributors:/),
+            600,
+          ]),
         ]),
       );
     } finally {
@@ -1687,7 +1690,7 @@ describe("published ambient GERS details without the search provider", () => {
     expect(mockLookupByNameAndCoords).not.toHaveBeenCalled();
     expect(mockLookupByCoords).not.toHaveBeenCalled();
     expect(mockHashKey).toHaveBeenCalledWith(
-      "cache:place-v2-contributors",
+      "cache:place-v3-review-contributors",
       expect.objectContaining({ ambientGeneration: "published-generation" }),
     );
   });
@@ -1707,32 +1710,62 @@ describe("published ambient GERS details without the search provider", () => {
   });
 });
 
-it("captures category rating supplier before async acquisition and retains it in the response", async () => {
-  const pending = Promise.withResolvers<unknown>();
-  const receipt = { sourceId: "rating-source", name: "Original rating supplier" };
-  ratingCatalogue.receipts = [receipt];
-  mockFetchAggregate.mockImplementationOnce(() => {
-    receipt.name = "Changed";
-    return pending.promise;
+it("uses captured aggregate receipts for card ratings without borrowing live registry metadata", async () => {
+  ratingCatalogue.receipts = [{ sourceId: "rating-source", name: "Live registry supplier" }];
+  mockFetchAggregate.mockResolvedValueOnce({
+    stars: 4,
+    count: 5,
+    ratedCount: 5,
+    source: "rating-source",
   });
-  const responsePromise = app.inject({
-    method: "POST",
-    url: "/places/card-enrichment",
-    payload: {
-      places: [
-        {
-          id: "osm:node/90909",
-          name: "Rating receipt test",
-          coordinates: [9, 50],
-          fields: ["rating"],
-        },
-      ],
-    },
+  const request = (id: number) =>
+    app.inject({
+      method: "POST",
+      url: "/places/card-enrichment",
+      payload: {
+        places: [
+          {
+            id: `osm:node/${id}`,
+            name: `Rating receipt ${id}`,
+            coordinates: [9, 50],
+            fields: ["rating"],
+          },
+        ],
+      },
+    });
+  const unknown = await request(90909);
+  expect(unknown.json().results[0].rating.contributors).toEqual([]);
+  mockFetchAggregate.mockResolvedValueOnce({
+    stars: 4,
+    count: 5,
+    ratedCount: 5,
+    source: "rating-source",
+    contributors: [{ sourceId: "rating-source", name: "Acquisition supplier" }],
   });
-  pending.resolve({ stars: 4, count: 5, ratedCount: 5, source: "rating-source" });
-  const response = await responsePromise;
-  expect(response.statusCode).toBe(200);
-  expect(response.json().results[0].rating.contributors).toEqual([
-    { sourceId: "rating-source", name: "Original rating supplier" },
+  const captured = await request(90910);
+  expect(captured.json().results[0].rating.contributors).toEqual([
+    { sourceId: "rating-source", name: "Acquisition supplier" },
   ]);
+});
+
+it("preserves review rating receipts in place fields while retaining independent place suppliers", async () => {
+  const baseReceipt = { sourceId: "base", name: "Place supplier" };
+  const ratingReceipt = { sourceId: "rating", name: "Captured rating supplier" };
+  mockLookupByOsmRef.mockResolvedValue({ ...MOCK_PLACE, contributors: [baseReceipt] });
+  mockGetPlaceKnowledge.mockResolvedValue({ externalIds: {} });
+  mockBuildReviewLinks.mockReturnValue([]);
+  mockFetchAggregate.mockResolvedValue({ stars: 4, count: 5, contributors: [ratingReceipt] });
+  const response = await app.inject(`/places/${encodeURIComponent("osm:node/90911")}`);
+  expect(response.statusCode).toBe(200);
+  const body = response.json();
+  expect(body.rating).toBe(4);
+  expect(body.fieldContributors.rating).toEqual([ratingReceipt]);
+  expect(body.fieldContributors.reviewCount).toEqual([ratingReceipt]);
+  expect(body.fieldContributors.name).toEqual([baseReceipt]);
+  expect(body.contributors).toEqual(expect.arrayContaining([baseReceipt, ratingReceipt]));
+  mockFetchAggregate.mockResolvedValue({ stars: 0, count: 0, contributors: [ratingReceipt] });
+  const absent = (await app.inject(`/places/${encodeURIComponent("osm:node/90912")}`)).json();
+  expect(absent).not.toHaveProperty("rating");
+  expect(absent.fieldContributors.rating).toEqual([]);
+  expect(absent.contributors).not.toContainEqual(ratingReceipt);
 });

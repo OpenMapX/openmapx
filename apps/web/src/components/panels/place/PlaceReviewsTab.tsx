@@ -9,15 +9,14 @@ import Button from "@mui/material/Button";
 import Divider from "@mui/material/Divider";
 import Typography from "@mui/material/Typography";
 import { type Place, type Review, safeHref, useSession } from "@openmapx/core";
-import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import { usePlaceReviews, useReviewAggregate, useUserKeypair } from "@openmapx/mangrove-react";
+import { contributorsForRecords } from "@openmapx/mobility-core/contributors";
 import { useTranslations } from "next-intl";
 import { useEffect, useMemo, useState } from "react";
 import { AuthDialog } from "@/components/auth/AuthDialog";
 import { MangroveSetupWizard } from "@/components/auth/MangroveSetupWizard";
 import { MangroveUnlockDialog } from "@/components/auth/MangroveUnlockDialog";
 import { AttributionStrip } from "@/components/ui/AttributionStrip";
-import { attributionsForSources } from "@/lib/attributionForProviders";
 import { DeleteReviewDialog } from "./reviews/DeleteReviewDialog";
 import { ReportAbuseDialog } from "./reviews/ReportAbuseDialog";
 import { ReviewAggregate } from "./reviews/ReviewAggregate";
@@ -41,7 +40,6 @@ export function PlaceReviewsTab({ place }: Props) {
   const { data: session } = useSession();
   const isSignedIn = !!session?.user?.id;
   const { keypair, publicPem, needsSetup, needsUnlock } = useUserKeypair();
-  const registry = useIntegrationRegistry();
   // `ids.osm` is only present when this place is linked to an OSM element —
   // Mangrove's metadata.osm_id is reserved for `node|way|relation/ID[/VERSION]`.
   const subject = { lat, lng, name: place.name, osmId: place.ids?.osm };
@@ -51,18 +49,19 @@ export function PlaceReviewsTab({ place }: Props) {
   });
   const reviewsQuery = usePlaceReviews<Review>(lat, lng, place.name, { osmId: place.ids?.osm });
 
-  // Credit only the review source(s) whose data is actually shown: the
-  // providers that returned reviews, plus the aggregate's provider when a
-  // rating summary is displayed. Each carries a `source` (= manifest sourceId)
-  // tagged by the reviews orchestrator. An unknown source resolves to no
-  // credit (never a domain-wide fallback), so nothing shown ⇒ nothing credited.
+  // Mirror both rendered surfaces: the list hides its data while loading,
+  // but a visible aggregate still uses rated reviews for its distribution
+  // and fallback stars. Cached receipts survive registry changes and failed refreshes.
   const reviewAttributions = useMemo(() => {
-    const ids = new Set<string>();
-    for (const r of reviewsQuery.data ?? []) if (r.source) ids.add(r.source);
     const agg = aggregateQuery.data;
-    if (agg?.source && agg.count > 0) ids.add(agg.source);
-    return attributionsForSources(registry, ids);
-  }, [registry, reviewsQuery.data, aggregateQuery.data]);
+    const aggregateVisible = !aggregateQuery.isLoading && agg && agg.count !== 0;
+    return contributorsForRecords([
+      ...(!reviewsQuery.isLoading ? (reviewsQuery.data ?? []) : []),
+      ...(aggregateVisible
+        ? [agg, ...(reviewsQuery.data?.filter((review) => review.stars !== undefined) ?? [])]
+        : []),
+    ]);
+  }, [reviewsQuery.data, reviewsQuery.isLoading, aggregateQuery.data, aggregateQuery.isLoading]);
 
   const [writeOpen, setWriteOpen] = useState(false);
   const [editReview, setEditReview] = useState<Review | null>(null);

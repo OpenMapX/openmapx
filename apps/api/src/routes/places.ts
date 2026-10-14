@@ -21,6 +21,7 @@ import {
   type PlaceIds,
   type PlacePhoto,
   parseId,
+  type ReviewAggregate,
   type ReviewProvider,
 } from "@openmapx/core";
 import { ambientPlaceToCategoryPlace } from "@openmapx/core/ambient-places";
@@ -32,8 +33,6 @@ import {
   contributorsForField,
   contributorsForFields,
   contributorsForRecords,
-  narrowContributors,
-  readCapturedContributors,
   snapshotContributors,
 } from "@openmapx/mobility-core/contributors";
 import {
@@ -49,7 +48,6 @@ import {
 import type { FastifyPluginAsync } from "fastify";
 import { sql } from "../db/index.js";
 import { getAllIntegrations, isEnabledIntegrationScheme } from "../integration-host.js";
-import { getAttributionIndex } from "../services/attribution/index.js";
 import { getPlaceKnowledge } from "../services/knowledge/index";
 import { recordCardEnrichment } from "../services/metrics/index";
 import { buildReviewLinks } from "../services/review-links";
@@ -336,13 +334,12 @@ async function cardRating(input: CardInput): Promise<CardResult["rating"] | null
     name: input.name,
     osmId: match ? `${match[1]}/${match[2]}` : undefined,
   };
-  const key = hashKey("cache:card-rating:v2", subject);
+  const key = hashKey("cache:card-rating:v3-contributors", subject);
   const { rating } = await withCardCache(key, 600, async () => {
     if (pendingCardRating.has(key)) throw new Error("Previous rating request is still settling");
     if (pendingCardRating.size >= 4) throw new Error("Rating providers are still settling");
     const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout> | undefined;
-    const catalogue = snapshotContributors(getAttributionIndex()?.list() ?? []);
     const work = fetchAggregate(subject, getReviewProviders(getAllIntegrations()), {
       signal: controller.signal,
       strict: true,
@@ -386,11 +383,7 @@ async function cardRating(input: CardInput): Promise<CardResult["rating"] | null
           stars: aggregate.stars,
           count: ratedCount,
           source: aggregate.source,
-          contributors: snapshotContributors(
-            readCapturedContributors(
-              "contributors" in aggregate ? aggregate.contributors : undefined,
-            ) ?? narrowContributors(catalogue, [aggregate.source]),
-          ),
+          contributors: contributorsForRecords([aggregate]),
         },
       };
     } finally {
@@ -615,7 +608,7 @@ async function safeAggregate(
   name: string,
   osmId: string | undefined,
   providers: ReviewProvider[],
-): Promise<{ stars: number; count: number } | null> {
+): Promise<Pick<ReviewAggregate, "stars" | "count" | "contributors"> | null> {
   if (!name) return null;
   try {
     const result = await Promise.race([
@@ -623,7 +616,11 @@ async function safeAggregate(
       new Promise<null>((resolve) => setTimeout(() => resolve(null), 1500)),
     ]);
     if (!result || result.count < 3 || result.stars <= 0) return null;
-    return { stars: result.stars, count: result.count };
+    return {
+      stars: result.stars,
+      count: result.count,
+      contributors: contributorsForRecords([result]),
+    };
   } catch {
     return null;
   }
@@ -704,7 +701,7 @@ async function enrichPlace(place: Place, lang: string | undefined): Promise<Plac
     boundary: adminBoundary?.boundary,
     boundingBox: adminBoundary?.boundingBox,
   };
-  return captureEnrichedPlaceContributors(place, knowledgeResult, result);
+  return captureEnrichedPlaceContributors(place, knowledgeResult, result, reviewStats);
 }
 
 /** Ownership mirrors the actual enrichment policies above, including tag/ID gap fills. */
@@ -712,6 +709,7 @@ function captureEnrichedPlaceContributors(
   base: Place,
   knowledge: KnowledgeResult,
   result: Place,
+  reviewStats: Pick<ReviewAggregate, "contributors"> | null,
 ): Place {
   const fields: Record<string, Attribution[]> = {};
   const metadata = new Set([
@@ -811,6 +809,10 @@ function captureEnrichedPlaceContributors(
     fields,
     Object.keys(fields).filter((key) => key.startsWith("ids.")),
   );
+  // Ratings are supplied by the review acquisition, independently of the
+  // resolved place and knowledge fields. Absence never inherits their receipts.
+  fields.rating = contributorsForRecords([reviewStats]);
+  fields.reviewCount = contributorsForRecords([reviewStats]);
   return {
     ...result,
     fieldContributors: fields,
@@ -910,7 +912,7 @@ export const placesRoute: FastifyPluginAsync = async (fastify) => {
             ? await readAmbientPlaceByGers(sql, parsed.value)
             : null;
         const cacheKey = hashKey(
-          "cache:place-v2-contributors",
+          "cache:place-v3-review-contributors",
           published
             ? { ...placeRequest.identity, ambientGeneration: published.generation }
             : placeRequest.identity,
