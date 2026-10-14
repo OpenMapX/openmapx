@@ -62,6 +62,76 @@ describe("createHttpClient", () => {
     ).rejects.toThrow(/content type/i);
   });
 
+  it("posts JSON and passes a non-2xx status through with its bounded body", async () => {
+    const fn = vi.fn((_input: RequestInfo | URL, _init?: RequestInit) =>
+      jsonResponse({ error: "token quota exhausted" }, 429, "Too Many Requests"),
+    );
+    vi.stubGlobal("fetch", fn);
+
+    const response = await createHttpClient(createNoopLogger()).postResponse<{ error: string }>(
+      "https://x.test/contrib/tokens",
+      { blindedRequest: "abc" },
+      { maxBytes: 1_024, contentTypes: ["application/json"], redirect: "error" },
+    );
+
+    expect(response).toEqual({
+      status: 429,
+      headers: {},
+      body: { error: "token quota exhausted" },
+    });
+    const init = fn.mock.calls[0]?.[1];
+    expect(init?.method).toBe("POST");
+    expect(init?.body).toBe(JSON.stringify({ blindedRequest: "abc" }));
+    expect(new Headers(init?.headers).get("content-type")).toBe("application/json");
+    expect(init?.redirect).toBe("error");
+    expect(init?.signal).toBeInstanceOf(AbortSignal);
+  });
+
+  it("refuses a POST answer outside the content-type allowlist", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        () =>
+          new Response("bad gateway", { status: 502, headers: { "Content-Type": "text/plain" } }),
+      ),
+    );
+
+    await expect(
+      createHttpClient(createNoopLogger()).postResponse(
+        "https://x.test/data",
+        {},
+        {
+          maxBytes: 1_024,
+          contentTypes: ["application/json"],
+        },
+      ),
+    ).rejects.toThrow(/content type/i);
+  });
+
+  it("rejects declared and streamed POST answers over maxBytes", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValueOnce(
+          new Response("{}", {
+            status: 400,
+            headers: { "Content-Type": "application/json", "Content-Length": "100" },
+          }),
+        )
+        .mockResolvedValueOnce(jsonResponse({ error: "x".repeat(100) }, 422)),
+    );
+    const client = createHttpClient(createNoopLogger());
+    const options = { maxBytes: 10, contentTypes: ["application/json"] } as const;
+
+    await expect(client.postResponse("https://x.test/declared", {}, options)).rejects.toThrow(
+      /too large/i,
+    );
+    await expect(client.postResponse("https://x.test/streamed", {}, options)).rejects.toThrow(
+      /too large/i,
+    );
+  });
+
   it("returns bounded binary bytes with status and allowlisted headers", async () => {
     const png = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]);
     vi.stubGlobal(

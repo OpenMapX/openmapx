@@ -64,6 +64,22 @@ export function createHttpClient(_log: Logger): HttpClient {
       throw new Error("integration HTTP response has unexpected content type");
     }
   };
+  const boundedResponse = async <T>(
+    response: Response,
+    options: ResponseOptions,
+  ): Promise<HttpResponse<T>> => {
+    assertAllowedContentType(response, options);
+    const body = await readBoundedJsonResponse<T>(response, {
+      maxBytes: options.maxBytes,
+      label: "integration HTTP response",
+      signal: options.signal,
+    });
+    return {
+      status: response.status,
+      headers: selectedHeaders(response, options.responseHeaders),
+      body,
+    };
+  };
   return {
     async get<T>(url: string, options?: HttpClientOptions): Promise<T> {
       const u = urlFor(url, options);
@@ -135,17 +151,22 @@ export function createHttpClient(_log: Logger): HttpClient {
         signal: signalFor(options),
         redirect: options.redirect,
       });
-      assertAllowedContentType(response, options);
-      const body = await readBoundedJsonResponse<T>(response, {
-        maxBytes: options.maxBytes,
-        label: "integration HTTP response",
-        signal: options.signal,
+      return boundedResponse<T>(response, options);
+    },
+
+    async postResponse<T>(
+      url: string,
+      body: unknown,
+      options: ResponseOptions,
+    ): Promise<HttpResponse<T>> {
+      const response = await fetch(urlFor(url, options).toString(), {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...options.headers },
+        body: body === undefined ? undefined : JSON.stringify(body),
+        signal: signalFor(options),
+        redirect: options.redirect,
       });
-      return {
-        status: response.status,
-        headers: selectedHeaders(response, options.responseHeaders),
-        body,
-      };
+      return boundedResponse<T>(response, options);
     },
 
     async getBytes(url: string, options: ResponseOptions): Promise<BinaryHttpResponse> {

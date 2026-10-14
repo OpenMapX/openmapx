@@ -67,6 +67,12 @@ export interface HttpClient {
   get<T = unknown>(url: string, options?: HttpClientOptions): Promise<T>;
   post<T = unknown>(url: string, body?: unknown, options?: HttpClientOptions): Promise<T>;
   getResponse<T = unknown>(url: string, options: ResponseOptions): Promise<HttpResponse<T>>;
+  /** POST a JSON body and return any status with its bounded JSON body; `post` throws on non-2xx. */
+  postResponse<T = unknown>(
+    url: string,
+    body: unknown,
+    options: ResponseOptions,
+  ): Promise<HttpResponse<T>>;
   getBytes(url: string, options: ResponseOptions): Promise<BinaryHttpResponse>;
 }
 

@@ -26,7 +26,9 @@ export function setup(ctx: IntegrationContext): void {
   // POST /reports → /contrib/reports (signed SignedReport envelope in the body).
   ctx.registerRoute("POST", "/reports", async (req, reply) => {
     try {
-      const result = await relayContribution("POST", "/contrib/reports", { body: req.body });
+      const result = await relayContribution(ctx.http, "POST", "/contrib/reports", {
+        body: req.body,
+      });
       reply.status(result.status).send(result.body);
     } catch (err) {
       ctx.log.error("crowd-reports relay POST /reports failed", err);
@@ -52,6 +54,7 @@ export function setup(ctx: IntegrationContext): void {
     const query = component === undefined ? "" : `?component=${encodeURIComponent(component)}`;
     try {
       const result = await relayContribution(
+        ctx.http,
         "POST",
         `/contrib/reports/${recordClass}/${encodeURIComponent(id)}/${action}${query}`,
         { body: req.body },
@@ -66,7 +69,9 @@ export function setup(ctx: IntegrationContext): void {
   // POST /enroll → /contrib/enroll (device-key enrollment for reporting grants).
   ctx.registerRoute("POST", "/enroll", async (req, reply) => {
     try {
-      const result = await relayContribution("POST", "/contrib/enroll", { body: req.body });
+      const result = await relayContribution(ctx.http, "POST", "/contrib/enroll", {
+        body: req.body,
+      });
       reply.status(result.status).send(result.body);
     } catch (err) {
       ctx.log.error("crowd-reports relay POST /enroll failed", err);
@@ -77,7 +82,9 @@ export function setup(ctx: IntegrationContext): void {
   // POST /tokens → /contrib/tokens (exchange an enrollment for reporting tokens).
   ctx.registerRoute("POST", "/tokens", async (req, reply) => {
     try {
-      const result = await relayContribution("POST", "/contrib/tokens", { body: req.body });
+      const result = await relayContribution(ctx.http, "POST", "/contrib/tokens", {
+        body: req.body,
+      });
       reply.status(result.status).send(result.body);
     } catch (err) {
       ctx.log.error("crowd-reports relay POST /tokens failed", err);
@@ -96,7 +103,7 @@ export function setup(ctx: IntegrationContext): void {
         reply.status(cached.status).send(cached.body);
         return;
       }
-      const result = await relayContribution("GET", "/contrib/issuer-keys");
+      const result = await relayContribution(ctx.http, "GET", "/contrib/issuer-keys");
       if (result.status >= 200 && result.status < 300) {
         await ctx.cache.set(ISSUER_KEYS_CACHE_KEY, result, ISSUER_KEYS_TTL_SECONDS);
         reply.header("Cache-Control", `public, max-age=${ISSUER_KEYS_TTL_SECONDS}`);
