@@ -218,6 +218,14 @@ describe("mapFuelStationToResult", () => {
     expect(mapFuelStationToResult(makeStation({ brand: "Zzyzx Fuel" })).branding).toBeUndefined();
   });
 
+  it("brands a station by its brand's Wikidata item before its name", () => {
+    const byItem = makeStation({ brand: "Zzyzx Fuel", brandWikidata: "Q565734" });
+    expect(mapFuelStationToResult(byItem).branding?.name).toBe("Aral AG");
+    // An item the catalog does not hold falls back to the name.
+    const unknownItem = makeStation({ brand: "Aral", country: "DE", brandWikidata: "Q1" });
+    expect(mapFuelStationToResult(unknownItem).branding?.name).toBe("Aral AG");
+  });
+
   it("drops credit links that are not http(s)", () => {
     const station = makeStation({
       attributions: [

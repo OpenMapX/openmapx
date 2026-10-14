@@ -883,4 +883,15 @@ describe("recordToFuelStation", () => {
     record.name = [];
     expect(recordToFuelStation(record, [])!.name).toBe("");
   });
+
+  test("carries the brand's Wikidata item when it names one", () => {
+    const record = canonical([fuelProduct("diesel")]);
+    record.details = { productsComplete: false, brand: "Aral", brandWikidata: "Q565734" };
+    expect(recordToFuelStation(record, [])).toMatchObject({
+      brand: "Aral",
+      brandWikidata: "Q565734",
+    });
+    record.details = { productsComplete: false, brand: "Aral", brandWikidata: "Aral" };
+    expect(recordToFuelStation(record, [])).not.toHaveProperty("brandWikidata");
+  });
 });
