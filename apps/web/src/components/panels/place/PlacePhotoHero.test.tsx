@@ -93,11 +93,13 @@ describe("PlacePhotoHero", () => {
       ],
     };
     renderHero([photo]);
-    expect(screen.getByText("Mandatory notice", { exact: false })).toBeVisible();
+    expect(screen.queryByText("Mandatory notice", { exact: false })).toBeNull();
     expect(screen.getByRole("link", { name: "Captured Commons" })).toHaveAttribute(
       "href",
       photo.pageUrl,
     );
+    fireEvent.click(screen.getByRole("button", { name: "Photo credits" }));
+    expect(screen.getByText("Mandatory notice", { exact: false })).toBeVisible();
     expect(screen.getByRole("link", { name: "Required credit link" })).toHaveAttribute(
       "href",
       "https://example.org/credit",
@@ -158,7 +160,7 @@ describe("PlacePhotoHero", () => {
   });
 });
 
-it("renders decoded creator and permission query parameters in the file caption", () => {
+it("retains decoded creator and permission links in the caption and photo details", () => {
   const photo = parseCommonsPage({
     title: "File:Links.jpg",
     imageinfo: [
@@ -183,6 +185,7 @@ it("renders decoded creator and permission query parameters in the file caption"
       screen.getByRole("link", { name: "Creator" }).getAttribute("href") ?? "",
     ).searchParams.get("view"),
   ).toBe("full");
+  fireEvent.click(screen.getByRole("button", { name: "Photo credits" }));
   expect(
     new URL(
       screen.getByRole("link", { name: "permission record" }).getAttribute("href") ?? "",
@@ -221,9 +224,10 @@ it.each([false, true])("keeps one visible creator link with custom attribution=%
   const { container } = renderHero([photo]);
   expect(container.querySelectorAll('a[href="https://creator.example/profile"]')).toHaveLength(1);
   expect(screen.getByRole("link", { name: custom ? "Creator profile" : "Creator" })).toBeVisible();
+  if (custom) expect(container.textContent).toContain("Required credit: Creator profile");
+  fireEvent.click(screen.getByRole("button", { name: "Photo credits" }));
   expect(screen.getByRole("link", { name: "permission record" })).toHaveAttribute(
     "href",
     "https://permission.example/record",
   );
-  if (custom) expect(container.textContent).toContain("Required credit: Creator profile");
 });

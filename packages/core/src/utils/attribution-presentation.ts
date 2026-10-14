@@ -7,14 +7,20 @@ function containsNoticeText(candidate: string, notice: string): boolean {
   let start = candidate.indexOf(notice);
   while (start !== -1) {
     const before = candidate.slice(0, start).trimEnd();
-    const after = candidate.slice(start + notice.length).trimStart();
+    const tail = candidate.slice(start + notice.length);
+    const after = tail.trimStart();
     if (
       (!before ||
         notice.startsWith("©") ||
         before.endsWith("©") ||
         before.endsWith("|") ||
         before.endsWith("·")) &&
-      (!after || after.startsWith("(") || after.startsWith("|") || after.startsWith("·"))
+      (!after ||
+        after.startsWith("(") ||
+        after.startsWith("|") ||
+        after.startsWith("·") ||
+        // Only the builder's spaced appendix delimiter, never a name suffix.
+        tail.startsWith(" — "))
     )
       return true;
     start = candidate.indexOf(notice, start + 1);

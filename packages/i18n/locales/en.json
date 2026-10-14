@@ -376,7 +376,7 @@
     "terms": "Terms",
     "licenses": "Licenses",
     "credits": "Map credits",
-    "attributions": "Attribution",
+    "attributions": "Credits",
     "manyRequiredCredits": "These sources require visible credit. Disable an overlay to make more room for the map.",
     "manageOverlays": "Manage overlays"
   },
@@ -2438,6 +2438,7 @@
     "moveToNearbyImage": "Move to nearby image"
   },
   "photoGallery": {
+    "credits": "Photo credits",
     "previousPhoto": "Previous photo",
     "nextPhoto": "Next photo",
     "viewOriginal": "View original",

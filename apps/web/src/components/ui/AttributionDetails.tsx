@@ -1,12 +1,13 @@
 "use client";
 
+import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
+import ButtonBase from "@mui/material/ButtonBase";
 import Dialog from "@mui/material/Dialog";
 import DialogActions from "@mui/material/DialogActions";
 import DialogContent from "@mui/material/DialogContent";
 import DialogTitle from "@mui/material/DialogTitle";
-import Link from "@mui/material/Link";
 import type { AttributionLogo } from "@openmapx/mobility-core/licensing";
 import { useTranslations } from "next-intl";
 import { useId, useRef, useState } from "react";
@@ -18,10 +19,13 @@ export function AttributionDetails({
   html,
   label,
   logos = [],
+  iconOnly = false,
 }: {
   html: readonly string[];
   label?: string;
   logos?: readonly AttributionLogo[];
+  /** Small image captions retain the same named, keyboard-accessible action. */
+  iconOnly?: boolean;
 }) {
   const t = useTranslations("footer");
   const tc = useTranslations("common");
@@ -32,8 +36,7 @@ export function AttributionDetails({
   const title = label ?? t("attributions");
   return (
     <>
-      <Link
-        component="button"
+      <ButtonBase
         type="button"
         ref={triggerRef}
         onClick={(event) => {
@@ -47,19 +50,32 @@ export function AttributionDetails({
         aria-label={title}
         aria-haspopup="dialog"
         aria-expanded={open}
+        title={iconOnly ? title : undefined}
         sx={{
           color: "inherit",
           font: "inherit",
+          fontWeight: 500,
+          lineHeight: 1.5,
           cursor: "pointer",
-          border: 0,
-          minHeight: "24px",
-          p: 0,
-          textDecoration: "underline",
+          display: "inline-flex",
+          verticalAlign: "middle",
+          gap: 0.5,
+          minHeight: 24,
+          minWidth: iconOnly ? 24 : undefined,
+          px: iconOnly ? 0.25 : 0.5,
+          py: 0.25,
+          borderRadius: 1,
           whiteSpace: "nowrap",
+          "&:hover": { bgcolor: "action.hover" },
+          "&.Mui-focusVisible": {
+            outline: "2px solid currentColor",
+            outlineOffset: 2,
+          },
         }}
       >
-        {title} ({html.length})
-      </Link>
+        <InfoOutlinedIcon sx={{ fontSize: "1.25em", flexShrink: 0 }} />
+        {!iconOnly && title}
+      </ButtonBase>
       <Dialog
         open={open}
         onClose={() => setOpen(false)}

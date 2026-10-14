@@ -115,14 +115,14 @@ export function PlacePhotoHero({
         onClick={(e) => e.stopPropagation()}
         sx={{
           position: "absolute",
-          bottom: 4,
+          bottom: 6,
           right: 6,
           bgcolor: "rgba(0,0,0,0.72)",
           borderRadius: 0.5,
           px: 0.75,
-          py: 0.25,
+          py: 0.375,
           maxWidth: "calc(100% - 12px)",
-          fontSize: 10,
+          fontSize: "0.6875rem",
           color: "#fff",
           lineHeight: 1.3,
           "& a": { fontSize: "inherit" },

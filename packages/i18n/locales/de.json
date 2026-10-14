@@ -376,7 +376,7 @@
     "terms": "Nutzungsbedingungen",
     "licenses": "Lizenzen",
     "credits": "Kartendaten",
-    "attributions": "Quellenangaben",
+    "attributions": "Quellen",
     "manyRequiredCredits": "Diese Quellen benötigen sichtbare Hinweise. Deaktiviere eine Ebene, um mehr Platz für die Karte zu schaffen.",
     "manageOverlays": "Ebenen verwalten"
   },
@@ -2438,6 +2438,7 @@
     "moveToNearbyImage": "Zu benachbartem Bild wechseln"
   },
   "photoGallery": {
+    "credits": "Bildnachweise",
     "previousPhoto": "Vorheriges Foto",
     "nextPhoto": "Nächstes Foto",
     "viewOriginal": "Original anzeigen",

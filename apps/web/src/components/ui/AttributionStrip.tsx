@@ -150,6 +150,8 @@ export function AttributionStrip({
     alignItems: "center",
     gap: isPlain ? 0.5 : 0.75,
     minWidth: 0,
+    fontSize: isPanelHeader ? "0.75rem" : "0.6875rem",
+    color: color ?? "text.secondary",
     ...(isPanelHeader
       ? {
           px: 2,

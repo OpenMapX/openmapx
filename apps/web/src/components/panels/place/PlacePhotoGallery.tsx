@@ -90,7 +90,7 @@ function PlacePhotoGalleryInner({ open, onClose, placeName, placeId, lat, lng }:
         sx={{
           position: "fixed",
           inset: 0,
-          bgcolor: "rgba(0,0,0,0.95)",
+          bgcolor: "#0b0b0b",
           display: "flex",
           flexDirection: "column",
           zIndex: 1400,
@@ -127,7 +127,7 @@ function PlacePhotoGalleryInner({ open, onClose, placeName, placeId, lat, lng }:
         </Box>
 
         {/* Main content area */}
-        <Box sx={{ display: "flex", flex: 1, overflow: "hidden" }}>
+        <Box sx={{ display: "flex", flex: 1, minHeight: 0, overflow: "hidden" }}>
           {/* Thumbnail sidebar */}
           <Box
             sx={{
@@ -161,6 +161,8 @@ function PlacePhotoGalleryInner({ open, onClose, placeName, placeId, lat, lng }:
           <Box
             sx={{
               flex: 1,
+              minWidth: 0,
+              minHeight: 0,
               display: "flex",
               flexDirection: "column",
               alignItems: "center",
@@ -169,76 +171,116 @@ function PlacePhotoGalleryInner({ open, onClose, placeName, placeId, lat, lng }:
               overflow: "hidden",
             }}
           >
-            {allPhotos.length === 0 && isLoading ? (
-              <CircularProgress size={40} sx={{ color: "#fff" }} />
-            ) : allPhotos.length === 0 ? (
-              <Typography sx={{ color: "rgba(255,255,255,0.5)" }}>{tp("noPhotos")}</Typography>
-            ) : (
-              <>
-                {selectedPhoto && (
-                  <MainImage key={selectedPhoto.url} photo={selectedPhoto} placeName={placeName} />
-                )}
+            <Box
+              sx={{
+                position: "relative",
+                flex: 1,
+                minHeight: 0,
+                width: "100%",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                overflow: "hidden",
+              }}
+            >
+              {allPhotos.length === 0 && isLoading ? (
+                <CircularProgress size={40} sx={{ color: "#fff" }} />
+              ) : allPhotos.length === 0 ? (
+                <Typography sx={{ color: "rgba(255,255,255,0.5)" }}>{tp("noPhotos")}</Typography>
+              ) : (
+                <>
+                  {selectedPhoto && (
+                    <MainImage
+                      key={selectedPhoto.url}
+                      photo={selectedPhoto}
+                      placeName={placeName}
+                    />
+                  )}
 
-                {clampedIdx > 0 && (
-                  <IconButton
-                    onClick={goPrev}
-                    sx={{
-                      position: "absolute",
-                      left: 16,
-                      top: "50%",
-                      transform: "translateY(-50%)",
-                      bgcolor: "rgba(0,0,0,0.6)",
-                      color: "#fff",
-                      "&:hover": { bgcolor: "rgba(0,0,0,0.8)" },
-                    }}
-                    aria-label={tp("previousPhoto")}
-                  >
-                    <ChevronLeftIcon fontSize="large" />
-                  </IconButton>
-                )}
-                {clampedIdx < allPhotos.length - 1 && (
-                  <IconButton
-                    onClick={goNext}
-                    sx={{
-                      position: "absolute",
-                      right: 16,
-                      top: "50%",
-                      transform: "translateY(-50%)",
-                      bgcolor: "rgba(0,0,0,0.6)",
-                      color: "#fff",
-                      "&:hover": { bgcolor: "rgba(0,0,0,0.8)" },
-                    }}
-                    aria-label={tp("nextPhoto")}
-                  >
-                    <ChevronRightIcon fontSize="large" />
-                  </IconButton>
-                )}
+                  {clampedIdx > 0 && (
+                    <IconButton
+                      onClick={goPrev}
+                      sx={{
+                        position: "absolute",
+                        left: 16,
+                        top: "50%",
+                        transform: "translateY(-50%)",
+                        bgcolor: "rgba(0,0,0,0.6)",
+                        color: "#fff",
+                        "&:hover": { bgcolor: "rgba(0,0,0,0.8)" },
+                      }}
+                      aria-label={tp("previousPhoto")}
+                    >
+                      <ChevronLeftIcon fontSize="large" />
+                    </IconButton>
+                  )}
+                  {clampedIdx < allPhotos.length - 1 && (
+                    <IconButton
+                      onClick={goNext}
+                      sx={{
+                        position: "absolute",
+                        right: 16,
+                        top: "50%",
+                        transform: "translateY(-50%)",
+                        bgcolor: "rgba(0,0,0,0.6)",
+                        color: "#fff",
+                        "&:hover": { bgcolor: "rgba(0,0,0,0.8)" },
+                      }}
+                      aria-label={tp("nextPhoto")}
+                    >
+                      <ChevronRightIcon fontSize="large" />
+                    </IconButton>
+                  )}
 
-                {minimapCoords && (
-                  <LocationMinimap
-                    lng={minimapCoords[0]}
-                    lat={minimapCoords[1]}
-                    sx={GALLERY_MINIMAP_SX}
-                    onClick={() => {
-                      onClose();
-                      setSelectedPlace(null);
-                      useSidebarStore.getState().closeSidebar();
-                      setClickedLngLat([minimapCoords[0], minimapCoords[1]]);
-                      flyTo([minimapCoords[0], minimapCoords[1]], 17);
-                    }}
+                  {minimapCoords && (
+                    <LocationMinimap
+                      lng={minimapCoords[0]}
+                      lat={minimapCoords[1]}
+                      sx={GALLERY_MINIMAP_SX}
+                      onClick={() => {
+                        onClose();
+                        setSelectedPlace(null);
+                        useSidebarStore.getState().closeSidebar();
+                        setClickedLngLat([minimapCoords[0], minimapCoords[1]]);
+                        flyTo([minimapCoords[0], minimapCoords[1]], 17);
+                      }}
+                    />
+                  )}
+                </>
+              )}
+            </Box>
+
+            {/* Mobile thumbnail strip */}
+            {allPhotos.length > 1 && (
+              <Box
+                sx={{
+                  display: { xs: "flex", md: "none" },
+                  width: "100%",
+                  flexShrink: 0,
+                  alignItems: "flex-start",
+                  overflowX: "auto",
+                  gap: 0.5,
+                  px: 1,
+                  pb: 0.5,
+                }}
+              >
+                {allPhotos.map((photo, idx) => (
+                  <MobileThumbnail
+                    key={photo.url}
+                    photo={photo}
+                    isSelected={idx === clampedIdx}
+                    onClick={() => setSelectedIdx(idx)}
                   />
-                )}
-              </>
+                ))}
+              </Box>
             )}
-
             {/* Bottom info bar */}
             {selectedPhoto && (
               <Box
                 sx={{
-                  position: "absolute",
-                  bottom: 0,
-                  left: 0,
-                  right: 0,
+                  width: "100%",
+                  flexShrink: 0,
+                  flexWrap: "wrap",
                   bgcolor: "rgba(0,0,0,0.7)",
                   px: 2,
                   py: 1.5,
@@ -249,9 +291,9 @@ function PlacePhotoGalleryInner({ open, onClose, placeName, placeId, lat, lng }:
                 }}
               >
                 <Box sx={{ minWidth: 0, flex: 1 }}>
-                  <Typography variant="body2" sx={{ color: "#fff" }}>
-                    <PhotoAttribution photo={selectedPhoto} />
-                  </Typography>
+                  <Box sx={{ color: "#fff", fontSize: "0.8125rem" }}>
+                    <PhotoAttribution key={selectedPhoto.url} photo={selectedPhoto} />
+                  </Box>
                   {selectedPhoto.capturedAt && (
                     <Typography variant="caption" sx={{ color: "rgba(255,255,255,0.6)" }}>
                       {fmt.date(selectedPhoto.capturedAt)}
@@ -274,32 +316,6 @@ function PlacePhotoGalleryInner({ open, onClose, placeName, placeId, lat, lng }:
                     </Link>
                   )}
                 </Box>
-              </Box>
-            )}
-
-            {/* Mobile thumbnail strip */}
-            {allPhotos.length > 1 && (
-              <Box
-                sx={{
-                  display: { xs: "flex", md: "none" },
-                  position: "absolute",
-                  bottom: 56,
-                  left: 0,
-                  right: 0,
-                  overflow: "auto",
-                  gap: 0.5,
-                  px: 1,
-                  pb: 0.5,
-                }}
-              >
-                {allPhotos.map((photo, idx) => (
-                  <MobileThumbnail
-                    key={photo.url}
-                    photo={photo}
-                    isSelected={idx === clampedIdx}
-                    onClick={() => setSelectedIdx(idx)}
-                  />
-                ))}
               </Box>
             )}
           </Box>
@@ -338,7 +354,7 @@ function MainImage({ photo, placeName }: { photo: PlacePhoto; placeName: string 
       onError={() => setFailed(true)}
       sx={{
         maxWidth: "100%",
-        maxHeight: "calc(100% - 80px)",
+        maxHeight: "100%",
         objectFit: "contain",
       }}
     />
@@ -409,8 +425,10 @@ function GalleryThumbnail({
         </Box>
       )}
       {imgSrc && (
-        <Box sx={{ px: 0.75, py: 0.5, fontSize: 10, color: "#fff", overflowWrap: "anywhere" }}>
-          <PhotoAttribution photo={photo} />
+        <Box
+          sx={{ px: 0.75, py: 0.5, fontSize: "0.6875rem", color: "#fff", overflowWrap: "anywhere" }}
+        >
+          <PhotoAttribution photo={photo} compact />
         </Box>
       )}
     </Box>
@@ -473,8 +491,10 @@ function MobileThumbnail({
         </Box>
       )}
       {imgSrc && (
-        <Box sx={{ px: 0.5, py: 0.25, fontSize: 9, color: "#fff", overflowWrap: "anywhere" }}>
-          <PhotoAttribution photo={photo} />
+        <Box
+          sx={{ px: 0.5, py: 0.25, fontSize: "0.6875rem", color: "#fff", overflowWrap: "anywhere" }}
+        >
+          <PhotoAttribution photo={photo} compact />
         </Box>
       )}
     </Box>
