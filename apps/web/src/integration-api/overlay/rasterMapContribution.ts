@@ -7,6 +7,7 @@ import type {
   RasterTileSource,
 } from "maplibre-gl";
 
+import type { RasterPayloadOpacity } from "./rasterPayloadOpacity";
 import { beginRasterResponseAcquisition } from "./rasterResponseProtocol";
 
 import { isAttributionLayerVisible } from "./renderedFeatureVisibility";
@@ -14,6 +15,7 @@ import { isAttributionLayerVisible } from "./renderedFeatureVisibility";
 type RasterTile = Parameters<RasterTileSource["loadTile"]>[0];
 interface TileReceipt {
   pending: Attribution[];
+  opacity?: RasterPayloadOpacity;
   texture?: object;
   dem?: object;
   contributors?: Attribution[];
@@ -67,9 +69,13 @@ export function addAttributedRasterSource(
   state.instrumented = true;
   const loadTile = source.loadTile;
   source.loadTile = function (tile) {
-    const response = receiptMode === "response" ? beginRasterResponseAcquisition(this) : undefined;
+    const response =
+      this.type === "raster" || receiptMode === "response"
+        ? beginRasterResponseAcquisition(this)
+        : undefined;
     const uniform = snapshotContributors(state.current);
-    const captured = () => (response ? response.contributors() : uniform);
+    const captured = () =>
+      receiptMode === "response" ? (response?.contributors() ?? []) : uniform;
     retainTile(state, tile);
     let assignedTexture = false;
     let assignedDem = false;
@@ -88,6 +94,7 @@ export function addAttributedRasterSource(
           state.tiles.set(tile, {
             pending: captured(),
             texture: target.texture,
+            opacity: response?.opacity() ?? "unknown",
             contributors: captured(),
           });
         }
@@ -147,7 +154,9 @@ export function updateRasterAcquisitionContributors(
 
 const diagnosed = new WeakSet<MapLibreMap>();
 
-function hasEvaluatedPaint(value: unknown): value is { get(property: "raster-opacity"): unknown } {
+function hasEvaluatedPaint(
+  value: unknown,
+): value is { get(property: "raster-opacity" | "raster-fade-duration"): unknown } {
   return !!value && typeof value === "object" && "get" in value && typeof value.get === "function";
 }
 
@@ -186,19 +195,27 @@ export function rasterMapContributors(
   const state = receiptState(map, sourceId, []);
   if (!state) return [];
   const receipts: Attribution[][] = [];
+  const noFade =
+    paint.get("raster-fade-duration") === 0 || !!map.painter?.frameRenderContext?.terrain;
   for (const coordinate of manager.getVisibleCoordinates()) {
     const tile = manager.getTile(coordinate);
     if (!tile) continue;
     const receipt = retainTile(state, tile);
     if (!tile.hasData() || !tile.texture) continue;
-    if (tile.fadeOpacity > 0 && receipt.texture === tile.texture)
+    if (
+      (noFade || tile.fadeOpacity > 0) &&
+      receipt.texture === tile.texture &&
+      receipt.opacity !== "transparent"
+    )
       receipts.push(receipt.contributors ?? []);
     // drawRaster samples both textures during a fade, including the retained
     // parent when the incoming child starts at zero opacity.
-    const parent = tile.fadingParentID && manager.getLoadedTile?.(tile.fadingParentID);
+    const parent =
+      !noFade && tile.fadingParentID ? manager.getLoadedTile?.(tile.fadingParentID) : undefined;
     if (tile.fadeOpacity < 1 && parent?.hasData() && parent.texture) {
       const parentReceipt = retainTile(state, parent);
-      if (parentReceipt.texture === parent.texture) receipts.push(parentReceipt.contributors ?? []);
+      if (parentReceipt.texture === parent.texture && parentReceipt.opacity !== "transparent")
+        receipts.push(parentReceipt.contributors ?? []);
     }
   }
   return snapshotContributors(...receipts);
@@ -215,4 +232,17 @@ export function retainedDemContributors(
   return tile.dem && receipt?.dem === tile.dem
     ? snapshotContributors(receipt.contributors ?? [])
     : [];
+}
+
+/** Only the exact committed texture content can certify opaque coverage. */
+export function retainedRasterOpacity(
+  map: MapLibreMap,
+  sourceId: string,
+  tile: RasterTile,
+): RasterPayloadOpacity {
+  const source = map.getSource(sourceId);
+  const receipt = source && sourceReceipts.get(source)?.tiles.get(tile);
+  return tile.texture && receipt?.texture === tile.texture
+    ? (receipt?.opacity ?? "unknown")
+    : "unknown";
 }

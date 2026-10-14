@@ -16,6 +16,10 @@ import type * as maplibregl from "maplibre-gl";
 import { useLocale, useTranslations } from "next-intl";
 import { useEffect, useRef, useState } from "react";
 import { useMap } from "@/integration-api/map/MapContext";
+import {
+  installedNativeBasemap,
+  type NativeBasemapCandidate,
+} from "@/integration-api/overlay/nativeBasemap";
 import { attributedRasterRequestTransform } from "@/integration-api/overlay/rasterResponseProtocol";
 import { useEnv } from "@/integration-api/runtime/EnvProvider";
 import { loadMaptilerStyle, loadOpenMapXStyle, type MapStyleVariant } from "@/lib/map";
@@ -25,6 +29,7 @@ import { useMapObstructionInsets } from "@/lib/mapObstructions";
 import { useForegroundLocation } from "@/lib/mobile/useForegroundLocation";
 import { useMobileRuntime } from "@/lib/mobile/useMobileRuntime";
 import { useMobilePanelClearance, useWindowHeight, useWindowWidth } from "@/lib/mobilePanelHeight";
+import { captureNativeBasemapRequest } from "@/lib/nativeBasemapAcquisition";
 import {
   ensureOfflinePackageRuntime,
   OFFLINE_PACKAGE_CHANGED_EVENT,
@@ -45,13 +50,17 @@ function withoutNativeBuildingExtrusions(style: Record<string, unknown>): Record
 }
 
 async function loadStyleForViewport(
-  env: ReturnType<typeof useEnv>,
+  acquisition: ReturnType<typeof captureNativeBasemapRequest>,
   variant: MapStyleVariant,
   mapStyle: string,
   maplibre: MapLibreRuntime,
-): Promise<{ offline: boolean; style: Record<string, unknown> }> {
+): Promise<NativeBasemapCandidate> {
+  const { env } = acquisition;
   if (env.styleProvider !== "openmapx") {
-    return { offline: false, style: await loadMaptilerStyle(mapStyle, env) };
+    return acquisition.bind(
+      withoutNativeBuildingExtrusions(await loadMaptilerStyle(mapStyle, env)),
+      false,
+    );
   }
 
   const [configuredStyle, resolver] = await Promise.all([
@@ -69,7 +78,7 @@ async function loadStyleForViewport(
     { apiBaseUrl: env.apiUrl },
   );
   if (selected.offline && resolver) registerOfflinePmtilesProtocol(maplibre, resolver);
-  return selected;
+  return acquisition.bind(withoutNativeBuildingExtrusions(selected.style), selected.offline);
 }
 
 export function MapCanvas() {
@@ -144,11 +153,13 @@ export function MapCanvas() {
       setZoom(initialZoom);
       // Keep the dynamically loaded module as a namespace: MapLibre 6 no longer
       // exposes a synthetic default export.
+      const request = ++styleRequestRef.current;
+      const acquisition = captureNativeBasemapRequest(env);
       const maplibreRuntime = await loadMapLibreRuntime();
       if (!isActive() || !containerRef.current) return;
       const currentStyle = currentStyleRef.current;
       const viewportStyle = await loadStyleForViewport(
-        env,
+        acquisition,
         currentStyle.variant,
         currentStyle.mapStyle,
         maplibreRuntime as MapLibreRuntime,
@@ -156,7 +167,7 @@ export function MapCanvas() {
       const maplibregl = maplibreRuntime as unknown as typeof import("maplibre-gl");
 
       if (!isActive() || !containerRef.current) return;
-      setOfflinePackageActive(viewportStyle.offline);
+      if (request !== styleRequestRef.current) return;
 
       // MapLibre's built-in AttributionControl is disabled: it collapses to a
       // ⓘ toggle on narrow viewports and lives in its own DOM subtree, so it
@@ -167,9 +178,7 @@ export function MapCanvas() {
       // lib/map.ts), so no credit is lost by turning the control off.
       const map = new maplibregl.Map({
         container: containerRef.current,
-        style: withoutNativeBuildingExtrusions(
-          viewportStyle.style,
-        ) as maplibregl.StyleSpecification,
+        style: viewportStyle.style,
         center: initialCenter,
         zoom: initialZoom,
         bearing,
@@ -182,17 +191,20 @@ export function MapCanvas() {
       const scale = new maplibregl.ScaleControl({ maxWidth: 100, unit: unitsRef.current });
       map.addControl(scale, "bottom-left");
       scaleRef.current = { map, control: scale };
+      installedNativeBasemap(map).install(viewportStyle, setOfflinePackageActive, true);
 
       const applyStyleForViewport = (reason: string) => {
         const request = ++styleRequestRef.current;
         const currentStyle = currentStyleRef.current;
-        void loadStyleForViewport(env, currentStyle.variant, currentStyle.mapStyle, maplibregl)
+        void loadStyleForViewport(
+          captureNativeBasemapRequest(env),
+          currentStyle.variant,
+          currentStyle.mapStyle,
+          maplibregl,
+        )
           .then((next) => {
             if (!isActive() || request !== styleRequestRef.current) return;
-            setOfflinePackageActive(next.offline);
-            map.setStyle(
-              withoutNativeBuildingExtrusions(next.style) as maplibregl.StyleSpecification,
-            );
+            installedNativeBasemap(map).install(next, setOfflinePackageActive);
           })
           .catch((err) => {
             if (!isActive() || request !== styleRequestRef.current) return;
@@ -396,14 +408,16 @@ export function MapCanvas() {
     initialStyleRef.current = mapStyle;
 
     const request = ++styleRequestRef.current;
+    const acquisition = captureNativeBasemapRequest(env);
     loadMapLibreRuntime()
-      .then((module) => loadStyleForViewport(env, variant, mapStyle, module as MapLibreRuntime))
+      .then((module) =>
+        loadStyleForViewport(acquisition, variant, mapStyle, module as MapLibreRuntime),
+      )
       .then((s) => {
         if (request !== styleRequestRef.current || mapRef.current !== map) return;
         // The persistent `style.load` listener registered at map creation bumps
         // styleVersion once the new style lands.
-        setOfflinePackageActive(s.offline);
-        map.setStyle(withoutNativeBuildingExtrusions(s.style) as maplibregl.StyleSpecification);
+        installedNativeBasemap(map).install(s, setOfflinePackageActive);
       })
       .catch((err) => {
         if (request !== styleRequestRef.current) return;

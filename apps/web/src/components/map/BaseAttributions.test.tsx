@@ -1,64 +1,77 @@
 // @vitest-environment jsdom
-
-import { useLayerStore } from "@openmapx/core";
-import { render } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { MapGeoJSONFeature, Map as MapLibreMap, StyleSpecification } from "maplibre-gl";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { useMapAttributionStore } from "@/integration-api/overlay/mapAttributionStore";
+import { installedNativeBasemap } from "@/integration-api/overlay/nativeBasemap";
+import { act, createFakeMap, type FakeMap, render } from "@/test";
 import { BaseAttributions } from "./BaseAttributions";
 
-/**
- * `<MapFooter>` renders whatever the attribution registry holds, so asserting
- * on the registry contents after rendering `<BaseAttributions>` is asserting on
- * what the credits strip would display.
- */
-const state = {
-  env: { styleProvider: "openmapx" as "openmapx" | "maptiler" },
-};
-
-vi.mock("@/integration-api/runtime/EnvProvider", () => ({
-  useEnv: () => state.env,
+let fake: FakeMap;
+vi.mock("@/integration-api/map/MapContext", () => ({
+  useMap: () => ({ mapRef: { current: fake.map }, mapReady: true }),
 }));
-
-function registeredAttributions(): string[] {
-  return Object.values(useMapAttributionStore.getState().byLayer)
+const html = () =>
+  Object.values(useMapAttributionStore.getState().byLayer)
     .flat()
-    .map((entry) => entry.fullHtml);
+    .map((e) => e.fullHtml)
+    .join(" ");
+const feature = {
+  type: "Feature",
+  properties: {},
+  geometry: { type: "Point", coordinates: [0, 0] },
+} as MapGeoJSONFeature;
+function flush() {
+  act(() => {
+    fake.emit("render");
+    vi.advanceTimersByTime(250);
+    fake.emit("render");
+  });
 }
-
-const creditsOsm = () => registeredAttributions().some((a) => a.includes("OpenStreetMap"));
-
 beforeEach(() => {
+  vi.useFakeTimers();
+  fake = createFakeMap();
+  fake.map.addSource("native", {
+    type: "geojson",
+    data: { type: "FeatureCollection", features: [] },
+  });
+  fake.map.addLayer({ id: "land", type: "fill", source: "native" });
+  fake.map.addLayer({
+    id: "label",
+    type: "symbol",
+    source: "native",
+    layout: { "text-field": "label" },
+  });
+  Object.defineProperty(fake.map, "style", {
+    value: { getLayer: (id: string) => fake.map.getLayer(id) },
+    configurable: true,
+  });
+  fake.map.triggerRepaint = vi.fn();
+  installedNativeBasemap(fake.map).adopt({
+    style: fake.map.getStyle() as StyleSpecification,
+    offline: false,
+    sourceContributors: { native: [{ sourceId: "osm", name: "native-data" }] },
+    styleContributors: [{ sourceId: "design", name: "native-design" }],
+  });
   useMapAttributionStore.setState({ byLayer: {} });
-  state.env.styleProvider = "openmapx";
-  useLayerStore.setState({ activeLayer: "default" });
 });
-
-describe("BaseAttributions — base OSM-credit invariant", () => {
-  it("registers an OpenStreetMap credit for the OpenMapTiles vector base", () => {
-    state.env.styleProvider = "openmapx";
-    render(<BaseAttributions />);
-    expect(creditsOsm()).toBe(true);
-  });
-
-  it("registers an OpenStreetMap credit for the MapTiler vector base", () => {
-    state.env.styleProvider = "maptiler";
-    render(<BaseAttributions />);
-    expect(creditsOsm()).toBe(true);
-  });
-
-  it("keeps vector credits when relief is selected", () => {
-    useLayerStore.setState({ activeLayer: "terrain" });
-    render(<BaseAttributions />);
-    expect(creditsOsm()).toBe(true);
-    expect(registeredAttributions().some((a) => a.includes("OpenMapTiles"))).toBe(true);
-  });
-
-  it("does NOT force an OSM credit when a non-OSM raster base (satellite) is active", () => {
-    // Guards against misattributing imagery to OSM: while a raster base owns the
-    // screen, the vector-base credits (including OSM) are dropped and the raster
-    // layer registers its own credit instead.
-    useLayerStore.setState({ activeLayer: "satellite" });
-    render(<BaseAttributions />);
-    expect(creditsOsm()).toBe(false);
-  });
+afterEach(() => vi.useRealTimers());
+it("credits rendered native labels independently of a selected satellite base", () => {
+  fake.setRenderedFeatures("label", [feature]);
+  render(<BaseAttributions />);
+  flush();
+  expect(html()).toContain("native-data");
+  expect(html()).toContain("native-design");
+});
+it("withdraws hidden, empty and out-of-zoom native content", () => {
+  fake.setRenderedFeatures("label", [feature]);
+  render(<BaseAttributions />);
+  flush();
+  expect(html()).toContain("native-data");
+  fake.map.setLayoutProperty("label", "visibility", "none");
+  flush();
+  expect(html()).toBe("");
+  fake.map.setLayoutProperty("label", "visibility", "visible");
+  fake.setRenderedFeatures("label", []);
+  flush();
+  expect(html()).toBe("");
 });

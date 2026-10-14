@@ -493,6 +493,22 @@ only when that same native load commits its texture. Browser HTTP revalidation
 retains body/header identity; a standalone 304 without cached content is an error.
 This is a trusted host transport contract, not executable community extension code.
 
+The host captures raster payload alpha alongside that same texture receipt.
+Fully transparent decoded PNGs contribute no raster supplier; unknown alpha
+cannot certify opaque coverage. JPEG opacity and bounded PNG alpha inspection
+use the acquired bytes, without another provider request. Reload failures retain
+both the old texture receipt and its opacity evidence.
+
+Native basemap attribution is also host-owned. Capture the selected style and
+source suppliers before asynchronous acquisition, then bind receipts to the
+installed style/layer/source generation. Style-only backgrounds cannot create a
+data-source receipt. The shared 250 ms tracker combines engine feature queries
+with evaluated paint and retained raster coverage. Its pinned MapLibre adapters
+handle planar Mercator, globe and stable projection blends using actual tile
+wraps, mesh clipping and retained child/parent priority; actual terrain coverage
+remains unproven. These renderer adapters and immutable mesh readback are private
+host coupling, not APIs or certificates available to community extensions.
+
 Panels import `AttributionStrip` from
 `@/integration-api/components/AttributionStrip` and pass the receipts projected
 from the displayed fields/rows, including represented secondary items and

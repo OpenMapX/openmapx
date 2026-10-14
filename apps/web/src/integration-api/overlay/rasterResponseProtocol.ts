@@ -12,11 +12,13 @@ import {
   type RequestTransformFunction,
 } from "maplibre-gl";
 
+import { inspectRasterPayloadOpacity, type RasterPayloadOpacity } from "./rasterPayloadOpacity";
+
 const SCHEME = "openmapx-raster-receipt";
 const PREFIX = `${SCHEME}://`;
 let sequence = 0;
 let registered = false;
-const pending = new Map<string, { contributors: Attribution[] }>();
+const pending = new Map<string, { contributors: Attribution[]; opacity: RasterPayloadOpacity }>();
 
 function unwrap(url: string) {
   if (!url.startsWith(PREFIX)) return undefined;
@@ -90,6 +92,8 @@ function registerProtocol() {
     const data = await readRasterResponseBytes(response);
     controller.signal.throwIfAborted();
     receipt.contributors = data.byteLength ? captured : [];
+    receipt.opacity = await inspectRasterPayloadOpacity(data);
+    controller.signal.throwIfAborted();
     return {
       data,
       cacheControl: response.headers.get("cache-control"),
@@ -106,7 +110,7 @@ function registerProtocol() {
 export function beginRasterResponseAcquisition(source: RasterTileSource) {
   registerProtocol();
   const id = String(++sequence);
-  const receipt = { contributors: [] as Attribution[] };
+  const receipt = { contributors: [] as Attribution[], opacity: "unknown" as RasterPayloadOpacity };
   pending.set(id, receipt);
   return {
     source: new Proxy(source, {
@@ -116,6 +120,7 @@ export function beginRasterResponseAcquisition(source: RasterTileSource) {
       },
     }),
     contributors: () => snapshotContributors(receipt.contributors),
+    opacity: () => receipt.opacity,
     dispose: () => {
       pending.delete(id);
     },

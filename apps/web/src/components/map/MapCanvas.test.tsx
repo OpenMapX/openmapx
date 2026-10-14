@@ -49,7 +49,8 @@ vi.mock("@/integration-api/map/MapContext", () => {
   return { __test: value, useMap: () => value };
 });
 
-vi.mock("@/lib/map", () => {
+vi.mock("@/lib/map", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/map")>();
   const style = {
     version: 8,
     sources: { openmaptiles: { type: "vector", tiles: [] } },
@@ -80,6 +81,7 @@ vi.mock("@/lib/map", () => {
     },
   };
   return {
+    ...actual,
     __test: test,
     loadMaptilerStyle: vi.fn(),
     loadOpenMapXStyle: vi.fn(() => stylePromise),
@@ -136,6 +138,14 @@ vi.mock("maplibre-gl", () => {
       workerUrlsAtConstruction.push(workerUrl);
       mapOptions.container.append(document.createElement("canvas"));
     }
+
+    getStyle = () => options[instances.indexOf(this)]?.style;
+    setStyle = vi.fn((input: unknown) => {
+      const style = input as { layers: Array<{ id: string }> };
+      options[instances.indexOf(this)].style = style;
+    });
+    getLayer = (id: string) => this.getStyle()?.layers.find((layer) => layer.id === id);
+    getSource = () => undefined;
 
     getCenter = () => {
       this.cameraReads += 1;
@@ -240,6 +250,7 @@ const maplibreTest = (
         cameraReads: number;
         emitError(error: Error, data?: Record<string, unknown>): void;
         emitStyleLoad(): void;
+        setStyle: ReturnType<typeof vi.fn>;
         jumpTo: ReturnType<typeof vi.fn>;
         on: ReturnType<typeof vi.fn>;
         removeControl: ReturnType<typeof vi.fn>;
@@ -733,4 +744,46 @@ describe("MapCanvas", () => {
 
     expect(useMapStore.getState().center).toEqual([1.5, 2.5]);
   });
+});
+
+it("keeps the installed generation during pending or rejected reloads and ignores late style completions", async () => {
+  maplibreTest.reset();
+  mapStyleTest.reset();
+  vi.stubGlobal("navigator", { ...navigator, geolocation: undefined, permissions: undefined });
+  const view = render(<MapCanvas />);
+  await waitFor(() => expect(maplibreTest.instances).toHaveLength(1));
+  const map = maplibreTest.instances[0];
+  act(() => map.emitStyleLoad());
+  const installed = maplibreTest.options[0].style;
+  const first = mapStyleTest.deferStyle();
+  act(() => window.dispatchEvent(new Event("offline")));
+  await act(async () => {
+    await Promise.resolve();
+  });
+  expect(map.setStyle).not.toHaveBeenCalled();
+  expect(maplibreTest.options[0].style).toBe(installed);
+  const second = mapStyleTest.deferStyle();
+  act(() => window.dispatchEvent(new Event("online")));
+  await act(async () => {
+    second();
+    await Promise.resolve();
+  });
+  await waitFor(() => expect(map.setStyle).toHaveBeenCalledTimes(1));
+  const latest = maplibreTest.options[0].style;
+  await act(async () => {
+    first();
+    await Promise.resolve();
+  });
+  expect(map.setStyle).toHaveBeenCalledTimes(1);
+  expect(maplibreTest.options[0].style).toBe(latest);
+  console.error = vi.fn();
+  const reset = mapStyleTest.failStyleOnce(new Error("reload failed"));
+  await act(async () => {
+    window.dispatchEvent(new Event("offline"));
+    await Promise.resolve();
+  });
+  expect(map.setStyle).toHaveBeenCalledTimes(1);
+  expect(maplibreTest.options[0].style).toBe(latest);
+  reset();
+  view.unmount();
 });

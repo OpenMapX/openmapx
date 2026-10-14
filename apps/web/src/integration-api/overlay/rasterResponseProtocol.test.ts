@@ -259,3 +259,47 @@ it("preserves native status-zero network errors and abort identity", async () =>
     acquisition.dispose();
   }
 });
+
+it("commits uniform receipt and byte opacity atomically, retaining old content on failure and replacing it on 204", async () => {
+  const { addAttributedRasterSource, retainedRasterOpacity } = await import(
+    "./rasterMapContribution"
+  );
+  const jpeg = new Uint8Array([
+    255, 216, 255, 192, 0, 11, 8, 0, 1, 0, 1, 1, 1, 17, 0, 255, 218, 0, 8, 1, 1, 0, 0, 63, 0, 1,
+    255, 217,
+  ]);
+  let response = new Response(jpeg);
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => response),
+  );
+  const native = {
+    type: "raster",
+    tiles: ["https://fixture.test/tile.jpg"],
+    async loadTile(tile: Parameters<RasterTileSource["loadTile"]>[0]) {
+      const params = await attributedRasterRequestTransform()(this.tiles[0]);
+      await protocol(params!, new AbortController());
+      tile.texture = tile.texture ?? ({} as typeof tile.texture);
+      tile.state = "loaded";
+    },
+  } as RasterTileSource;
+  const map = {
+    addSource: () => {},
+    getSource: () => native,
+  } as unknown as import("maplibre-gl").Map;
+  addAttributedRasterSource(map, "raster", { type: "raster", tiles: native.tiles }, [
+    { sourceId: "uniform", name: "uniform" },
+  ]);
+  const tile = { hasData: () => true, fadeOpacity: 1 } as Parameters<
+    RasterTileSource["loadTile"]
+  >[0];
+  expect(retainedRasterOpacity(map, "raster", tile)).toBe("unknown");
+  await native.loadTile(tile);
+  expect(retainedRasterOpacity(map, "raster", tile)).toBe("opaque");
+  response = new Response(null, { status: 404 });
+  await expect(native.loadTile(tile)).rejects.toThrow();
+  expect(retainedRasterOpacity(map, "raster", tile)).toBe("opaque");
+  response = new Response(null, { status: 204 });
+  await native.loadTile(tile);
+  expect(retainedRasterOpacity(map, "raster", tile)).toBe("transparent");
+});
