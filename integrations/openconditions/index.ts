@@ -49,6 +49,7 @@ export async function setup(
       scopes.update(list);
       sources.updateDescribed(list);
     },
+    onCrowd: (credit) => sources.updateCrowd(credit),
   });
   let waited: ReturnType<typeof setTimeout> | undefined;
   await Promise.race([

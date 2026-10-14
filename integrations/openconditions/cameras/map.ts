@@ -11,9 +11,9 @@ import {
 } from "@openmapx/mobility-core/contributors";
 import {
   allowedReadings,
-  CROWD_CREDIT,
   countryOf,
   credit,
+  crowdCredits,
   crowdReported,
   firstText,
   itemIdOf,
@@ -59,12 +59,13 @@ const STREAM_TYPES: ReadonlySet<string> = new Set<NonNullable<CameraView["stream
 
 /**
  * What the mapper asks of the live sources: each source's credit link, the
- * licence names its credits show, and each source's declared image hosts.
+ * crowd's credit, and each source's declared image hosts.
  */
-export type CameraSources = Pick<MediaSources, "link" | "mediaHosts">;
+export type CameraSources = Pick<MediaSources, "link" | "crowd" | "mediaHosts">;
 
 const NO_SOURCES: CameraSources = {
   link: () => undefined,
+  crowd: () => undefined,
   mediaHosts: () => [],
 };
 
@@ -214,7 +215,7 @@ export function recordToCamera(
       snapshotContributors(
         selectedSources.map((source) => credit(source, sources)),
         upstreamCredits(selectedSources, sources),
-        crowdReported(reading) ? [CROWD_CREDIT] : [],
+        crowdCredits(crowdReported(reading), sources),
       );
     views.push({
       key,
@@ -273,7 +274,7 @@ export function recordToCamera(
     attributions: [
       ...kept.map((s) => credit(s, sources)),
       ...upstreamCredits(kept, sources),
-      ...(crowd ? [CROWD_CREDIT] : []),
+      ...crowdCredits(crowd, sources),
     ],
   };
 }

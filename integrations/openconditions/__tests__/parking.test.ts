@@ -6,13 +6,14 @@ import {
 } from "@openmapx/integration-framework/testing";
 import { describe, expect, test } from "vitest";
 import { createOpenConditionsClient } from "../client.js";
-import { CROWD_CREDIT, type LatestReading, NO_SOURCES } from "../features/record.js";
+import { type LatestReading, NO_SOURCES } from "../features/record.js";
 import { setup } from "../index.js";
 import { recordToParkingSite } from "../parking/map.js";
 import { createParkingSiteProvider } from "../parking/provider.js";
 import { createLiveSources, type LiveSources } from "../sources.js";
 import stringsDe from "../strings/de.json" with { type: "json" };
 import stringsEn from "../strings/en.json" with { type: "json" };
+import { CROWD_CREDIT, CROWD_SOURCES } from "./fixtures/crowd.js";
 import featureResponse from "./fixtures/feature-parking.json" with { type: "json" };
 import featuresResponse from "./fixtures/features-parking.json" with { type: "json" };
 
@@ -59,7 +60,7 @@ const EVERY_SOURCE: LiveSources = {
   ready: true,
   has: () => true,
   link: () => undefined,
-
+  crowd: () => undefined,
   noticeOf: () => undefined,
   firmsSources: () => [],
 };
@@ -599,10 +600,25 @@ describe("recordToParkingSite", () => {
     expect(areas[0]).toMatchObject({ capacity: 5 });
   });
 
-  test("crowd reports are credited", () => {
+  test("crowd reports are credited as /sources states the crowd", () => {
     const answer = body();
     latestOf(answer)[0]!.contributors = [MOBIDATA, "crowd"];
-    expect(mapped(answer)!.attributions.at(-1)).toEqual(CROWD_CREDIT);
+    const site = recordToParkingSite(
+      recordOf(answer),
+      latestOf(answer),
+      offersOf(answer),
+      () => false,
+      CROWD_SOURCES,
+      FRESH,
+    )!;
+    expect(site.attributions.at(-1)).toEqual(CROWD_CREDIT);
+  });
+
+  test("a crowd reading is left out while /sources states no crowd credit", () => {
+    const answer = body();
+    latestOf(answer)[0]!.contributors = [MOBIDATA, "crowd"];
+    const site = mapped(answer, (sourceId) => sourceId === "crowd")!;
+    expect(site.attributions.map((a) => a.sourceId)).not.toContain("crowd");
   });
 });
 

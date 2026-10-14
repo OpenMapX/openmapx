@@ -9,6 +9,7 @@ import {
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import { type Licensing, parseLicensing } from "@openmapx/mobility-core/licensing";
 import type { OpenConditionsClient } from "./client.js";
+import { CROWD } from "./features/record.js";
 
 /** A right as OpenConditions states it: granted, denied, or not stated (null). */
 type Right = boolean | null;
@@ -161,6 +162,34 @@ interface ReadList {
   withheld: string[];
   /** The sources listed, as OpenConditions describes them. */
   described: OcSource[];
+  /** The crowd's credit, when the answer states a valid one. */
+  crowd?: Attribution;
+  /** Whether the answer states a crowd credit that is not a valid one. */
+  crowdInvalid: boolean;
+}
+
+const isWebUrl = (value: unknown): value is string => {
+  if (typeof value !== "string" || !URL.canParse(value)) return false;
+  const { protocol } = new URL(value);
+  return protocol === "https:" || protocol === "http:";
+};
+
+/**
+ * The credit of the instance's crowd reports, as `/sources` states it beside
+ * the feeds: `{ id: "crowd", name, licensing, url? }`. Undefined when the
+ * entry is malformed; a link that is no http(s) URL is left out.
+ */
+function crowdCreditOf(crowd: unknown): Attribution | undefined {
+  if (!isRecord(crowd) || crowd.id !== CROWD) return undefined;
+  const name = typeof crowd.name === "string" ? crowd.name.trim() : "";
+  const licensing = parseLicensing(crowd.licensing);
+  if (name === "" || licensing === undefined) return undefined;
+  return {
+    sourceId: CROWD,
+    name,
+    ...(isWebUrl(crowd.url) ? { url: crowd.url } : {}),
+    licensing,
+  };
 }
 
 /** The scope OpenConditions served a read in; the operator scope includes restricted sources. */
@@ -172,6 +201,8 @@ export interface OcSourceList {
   /** The scope the list was served in. */
   scope: OcScope;
   sources: OcSource[];
+  /** The credit of the instance's crowd reports, which are no feed. */
+  crowd?: { id: "crowd"; name: string; license: string; licensing: Licensing; url?: string };
 }
 
 /**
@@ -180,6 +211,7 @@ export interface OcSourceList {
  * a restricted source is left out: its records are never served to
  * OpenMapX. The scope is OpenConditions' own, not whether OpenMapX sent a
  * token: an instance that holds no token answers a bearer read in public.
+ * The crowd's credit is read beside the feeds.
  */
 function dataSourcesOf(answer: unknown): ReadList {
   const sources = isRecord(answer) ? answer.sources : undefined;
@@ -188,7 +220,16 @@ function dataSourcesOf(answer: unknown): ReadList {
     throw new Error("Malformed /sources answer");
   }
   const operator = scope === "operator";
-  const out: ReadList = { list: [], invalid: [], unmapped: [], withheld: [], described: [] };
+  const crowd = isRecord(answer) ? crowdCreditOf(answer.crowd) : undefined;
+  const out: ReadList = {
+    list: [],
+    invalid: [],
+    unmapped: [],
+    withheld: [],
+    described: [],
+    ...(crowd ? { crowd } : {}),
+    crowdInvalid: isRecord(answer) && answer.crowd !== undefined && crowd === undefined,
+  };
   for (const source of sources) {
     const id = isRecord(source) && typeof source.id === "string" ? source.id : "(no id)";
     if (
@@ -304,7 +345,10 @@ export interface CapturedSourceCredits {
 export interface LiveSources {
   /** False until the first list arrives. */
   readonly ready: boolean;
+  /** Whether the list holds the source; `crowd` while the list states the crowd's credit. */
   has(sourceId: string): boolean;
+  /** The crowd's credit as the list states it; none while it states none. */
+  crowd(): Attribution | undefined;
   /** Captured exact metadata; callers receive an independent copy. */
   contributors?(sourceId: string): readonly Attribution[] | undefined;
   /** Immutable catalogue for an acquisition whose exact source arrives in the response. */
@@ -338,6 +382,8 @@ export interface UpdatableLiveSources extends MediaSources {
    */
   /** Takes the formats, qualifiers and notices from the sources as OpenConditions describes them. */
   updateDescribed(list: readonly Pick<OcSource, "id" | "format" | "qualifier" | "notice">[]): void;
+  /** Takes the crowd's credit; undefined when the list states none. */
+  updateCrowd(credit: Attribution | undefined): void;
 }
 
 const FIRMS_QUALIFIERS = { viirs: "firms-viirs", modis: "firms-modis" } as const;
@@ -348,11 +394,14 @@ export function createLiveSources(): UpdatableLiveSources {
   let media: ReadonlyMap<string, readonly string[]> = new Map();
   let notices: ReadonlyMap<string, string> = new Map();
   let firms: ReadonlyMap<"viirs" | "modis", readonly string[]> = new Map();
+  let crowd: Attribution | undefined;
   return {
     get ready() {
       return links !== undefined;
     },
-    has: (sourceId) => links?.has(sourceId) ?? false,
+    has: (sourceId) =>
+      links !== undefined && (sourceId === CROWD ? crowd !== undefined : links.has(sourceId)),
+    crowd: () => (crowd ? snapshotContributors([crowd])[0] : undefined),
     contributors: (sourceId) => {
       if (!links?.has(sourceId)) return undefined;
       const captured = receipts.get(sourceId);
@@ -420,6 +469,9 @@ export function createLiveSources(): UpdatableLiveSources {
         ),
       );
     },
+    updateCrowd(credit) {
+      crowd = credit;
+    },
   };
 }
 
@@ -432,6 +484,8 @@ export interface SourceSyncOptions {
   onSources?: (list: readonly IntegrationDataSource[]) => void;
   /** Called with each list's sources in a domain OpenMapX serves, as OpenConditions describes them. */
   onDescribed?: (list: readonly OcSource[]) => void;
+  /** Called with each list's crowd credit; undefined when it states none. */
+  onCrowd?: (credit: Attribution | undefined) => void;
 }
 
 export interface SourceSync {
@@ -465,9 +519,13 @@ export function startSourceSync(
         timeoutMs: SOURCE_READ_TIMEOUT_MS,
       });
       if (stopped) return true;
-      const { list, invalid, unmapped, withheld, described } = dataSourcesOf(answer);
+      const { list, invalid, unmapped, withheld, described, crowd, crowdInvalid } =
+        dataSourcesOf(answer);
       if (invalid.length > 0) {
         ctx.log.warn(`OpenConditions /sources: skipped malformed entries ${invalid.join(", ")}`);
+      }
+      if (crowdInvalid) {
+        ctx.log.warn("OpenConditions /sources: malformed crowd credit; crowd reports not served");
       }
       if (unmapped.length > 0) {
         ctx.log.debug(
@@ -485,6 +543,7 @@ export function startSourceSync(
       const accepted = ctx.setDataSources(list);
       opts.onSources?.(accepted);
       opts.onDescribed?.(described);
+      opts.onCrowd?.(crowd);
       if (failing) {
         failing = false;
         ctx.log.info(`OpenConditions /sources recovered: ${accepted.length} sources`);

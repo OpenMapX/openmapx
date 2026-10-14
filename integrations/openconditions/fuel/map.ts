@@ -2,10 +2,10 @@ import type { FuelProduct, FuelStation } from "@openmapx/integration-framework";
 import {
   addressOf,
   allowedReadings,
-  CROWD_CREDIT,
   type CreditSources,
   countryOf,
   credit,
+  crowdCredits,
   crowdReported,
   firstText,
   instantOf,
@@ -143,6 +143,6 @@ export function recordToFuelStation(
     products,
     productsComplete: details["productsComplete"] === true,
     sources: kept.map((s) => s.id),
-    attributions: [...kept.map((s) => credit(s, sources)), ...(crowd ? [CROWD_CREDIT] : [])],
+    attributions: [...kept.map((s) => credit(s, sources)), ...crowdCredits(crowd, sources)],
   };
 }

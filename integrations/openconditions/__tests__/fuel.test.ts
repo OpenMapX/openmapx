@@ -7,11 +7,12 @@ import {
 } from "@openmapx/integration-framework/testing";
 import { describe, expect, test } from "vitest";
 import { createOpenConditionsClient } from "../client.js";
-import { CROWD_CREDIT, type LatestReading } from "../features/record.js";
+import type { LatestReading } from "../features/record.js";
 import { recordToFuelStation } from "../fuel/map.js";
 import { createFuelStationProvider } from "../fuel/provider.js";
 import { setup } from "../index.js";
 import { createLiveSources, type LiveSources } from "../sources.js";
+import { CROWD_CREDIT, CROWD_SOURCES } from "./fixtures/crowd.js";
 import featureResponse from "./fixtures/feature-fuel.json" with { type: "json" };
 import featuresResponse from "./fixtures/features-fuel.json" with { type: "json" };
 
@@ -52,7 +53,7 @@ const EVERY_SOURCE: LiveSources = {
   ready: true,
   has: () => true,
   link: () => undefined,
-
+  crowd: () => undefined,
   noticeOf: () => undefined,
   firmsSources: () => [],
 };
@@ -824,7 +825,7 @@ describe("recordToFuelStation", () => {
     expect(without.products.map((p) => p.key)).toEqual(["diesel"]);
   });
 
-  test("crowd reports in a fused reading keep it and are credited", () => {
+  test("crowd reports in a fused reading keep it and are credited as /sources states the crowd", () => {
     const fused: LatestReading = {
       ...price("diesel", 1.55, "2026-10-04T10:00:00Z", "@fused"),
       contributors: [SURVIVOR, "crowd"],
@@ -832,7 +833,8 @@ describe("recordToFuelStation", () => {
     const station = recordToFuelStation(
       canonical([fuelProduct("diesel")]),
       [fused],
-      unlisted(SURVIVOR, MEMBER),
+      unlisted(SURVIVOR, MEMBER, "crowd"),
+      CROWD_SOURCES,
     )!;
     expect(station.products[0]).toMatchObject({ price: { amount: 1.55, currency: "EUR" } });
     expect(station.attributions.map((a) => a.sourceId)).toEqual([SURVIVOR, MEMBER, "crowd"]);
@@ -842,9 +844,24 @@ describe("recordToFuelStation", () => {
     const plain = recordToFuelStation(
       canonical([fuelProduct("diesel")]),
       [price("diesel", 1.5, "2026-10-04T10:00:00Z", SURVIVOR)],
-      unlisted(SURVIVOR, MEMBER),
+      unlisted(SURVIVOR, MEMBER, "crowd"),
+      CROWD_SOURCES,
     )!;
     expect(plain.attributions.map((a) => a.sourceId)).toEqual([SURVIVOR, MEMBER]);
+  });
+
+  test("while /sources states no crowd credit a reading the crowd contributed to goes", () => {
+    const fused: LatestReading = {
+      ...price("diesel", 1.55, "2026-10-04T10:00:00Z", "@fused"),
+      contributors: [SURVIVOR, "crowd"],
+    };
+    const station = recordToFuelStation(
+      canonical([fuelProduct("diesel")]),
+      [fused],
+      unlisted(SURVIVOR, MEMBER),
+    )!;
+    expect(station.products[0]).not.toHaveProperty("price");
+    expect(station.attributions.map((a) => a.sourceId)).toEqual([SURVIVOR, MEMBER]);
   });
 
   test("any other unlisted contributor still drops the fused reading", () => {
