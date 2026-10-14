@@ -214,6 +214,8 @@ export function WeatherAlertLayer() {
   useOverlayExclusion("weather-alerts", layerVisible);
 
   const popupRef = useRef<maplibregl.Popup | null>(null);
+  /** The alert the popup shows: it closes once that alert is no longer drawn. */
+  const openAlertRef = useRef<{ id: string; severity: string } | null>(null);
   const fetchedRef = useRef(false);
   /** The last successful load and when it arrived; null once it is too old to show. */
   const lastLoadRef = useRef<{ at: number; data: AlertCollection } | null>(null);
@@ -231,6 +233,11 @@ export function WeatherAlertLayer() {
       const current = currentAlerts(data, Date.now());
       publishGeoJson([{ sourceId: SOURCE_ID, data: current }]);
       setAlertCount(current.features.length);
+      const open = openAlertRef.current;
+      if (open && !current.features.some((f) => String(f.properties?.id) === open.id)) {
+        popupRef.current?.remove();
+        openAlertRef.current = null;
+      }
     },
     [publishGeoJson, setAlertCount],
   );
@@ -429,6 +436,11 @@ export function WeatherAlertLayer() {
     if (map.getLayer(CIRCLE_LAYER_ID)) {
       map.setFilter(CIRCLE_LAYER_ID, buildPointFilter(activeSeverities));
     }
+    const open = openAlertRef.current;
+    if (open && !activeSeverities.has(open.severity)) {
+      popupRef.current?.remove();
+      openAlertRef.current = null;
+    }
   }, [mapRef, mapReady, layerVisible, activeSeverities]);
 
   useEffect(
@@ -507,6 +519,7 @@ export function WeatherAlertLayer() {
         .setLngLat(coords)
         .setHTML(html)
         .addTo(map);
+      openAlertRef.current = { id: String(p.id ?? ""), severity: String(p.severity ?? "") };
     };
 
     const onMouseMove = (e: maplibregl.MapMouseEvent) => {

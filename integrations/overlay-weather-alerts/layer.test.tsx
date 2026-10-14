@@ -16,7 +16,28 @@ vi.mock("next-intl", () => ({
   useLocale: () => "en",
   useTranslations: () => (key: string) => key,
 }));
-vi.mock("maplibre-gl", () => ({ Popup: class {} }));
+const popups = vi.hoisted(() => ({ open: 0 }));
+vi.mock("maplibre-gl", () => ({
+  Popup: class {
+    private shown = false;
+    setLngLat() {
+      return this;
+    }
+    setHTML() {
+      return this;
+    }
+    addTo() {
+      this.shown = true;
+      popups.open++;
+      return this;
+    }
+    remove() {
+      if (this.shown) popups.open--;
+      this.shown = false;
+      return this;
+    }
+  },
+}));
 
 import { ALERT_DISPLAY_MAX_AGE_MS, WeatherAlertLayer } from "./map-layer";
 
@@ -128,6 +149,54 @@ describe("WeatherAlertLayer freshness", () => {
     await waitFor(() => expect(drawn()).toEqual(["current", "open-ended"]));
     becomeVisible();
     await waitFor(() => expect(fetch).toHaveBeenCalledTimes(2));
+  });
+
+  it("closes an alert's popup once the alert expires or leaves the feed, or its severity is hidden", async () => {
+    popups.open = 0;
+    const soon = feature("soon", new Date(T + 60_000).toISOString());
+    answer = () =>
+      new Response(
+        JSON.stringify({
+          ...ALERTS,
+          features: [soon, feature("dropped", null), feature("kept", null)],
+        }),
+      );
+    render(<WeatherAlertLayer />);
+    await waitFor(() => expect(drawn()).toEqual(["soon", "dropped", "kept"]));
+    const click = (id: string) =>
+      act(() => {
+        fake.emit("click", {
+          features: [feature(id, null)],
+          lngLat: { lng: 8, lat: 50 },
+          originalEvent: new MouseEvent("click"),
+        });
+      });
+
+    // The alert expires while its popup is open.
+    click("soon");
+    expect(popups.open).toBe(1);
+    now = T + 61_000;
+    act(() => {
+      window.dispatchEvent(new Event("focus"));
+    });
+    expect(drawn()).toEqual(["dropped", "kept"]);
+    expect(popups.open).toBe(0);
+
+    // A refresh no longer carries the alert.
+    click("dropped");
+    expect(popups.open).toBe(1);
+    answer = () => new Response(JSON.stringify({ ...ALERTS, features: [feature("kept", null)] }));
+    becomeVisible();
+    await waitFor(() => expect(drawn()).toEqual(["kept"]));
+    expect(popups.open).toBe(0);
+
+    // Its severity is switched off in the legend.
+    click("kept");
+    expect(popups.open).toBe(1);
+    act(() => {
+      useWeatherAlertStore.setState({ activeSeverities: new Set(["Minor"]) });
+    });
+    expect(popups.open).toBe(0);
   });
 
   it("shows the service as unavailable when the route answers 503 from the start", async () => {
