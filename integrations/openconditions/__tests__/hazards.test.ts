@@ -1,10 +1,12 @@
 import type { BBox } from "@openmapx/core";
+import { buildAttributionPresentation } from "@openmapx/core/attribution";
 import type { HazardsProvider } from "@openmapx/integration-framework";
 import {
   createMockIntegrationContext,
   type FakeHttpRequest,
   fakeHttpClient,
 } from "@openmapx/integration-framework/testing";
+import type { Attribution } from "@openmapx/mobility-core/attribution";
 import { describe, expect, test } from "vitest";
 import { createOpenConditionsClient } from "../client.js";
 import { pointOf, textOf } from "../hazards/map.js";
@@ -139,6 +141,63 @@ describe("alerts", () => {
       limit: 5000,
     });
     expect(callParams(calls)).not.toHaveProperty("simplify");
+  });
+
+  test("an alert drawn from a location table credits the table beside its source; one without credits none", async () => {
+    const DGU =
+      "Contains information of the State Geodetic Administration of the Republic of Croatia (Državna geodetska uprava) under the Open Licence: Upravne jedinice INSPIRE, 2026-10-11, https://geoportal.dgu.hr/services/atom/au/xml; county boundaries simplified";
+    const template = (alertsAnswer.records as unknown as Rec[])[0]!;
+    const location = template.location as Rec;
+    const croatian = {
+      ...template,
+      id: "oc:situation:eu-meteoalarm-alerts:hr-1",
+      location: {
+        ...location,
+        geometryOrigin: "derived",
+        admin: { country: "HR", geocodes: [{ scheme: "nuts", code: "HR050" }] },
+        locationTable: {
+          ref: "DGU Upravne jedinice INSPIRE",
+          version: "2026-10-11",
+          attribution: DGU,
+          license: "LicenseRef-OD-HR",
+        },
+      },
+    };
+    const { provider } = providerWith(() => ({ records: [template, croatian], next: null }));
+    const [austria, croatia] = (await provider.getAlerts(BBOX)).alerts;
+
+    const credit = {
+      sourceId: METEOALARM,
+      name: "DGU Upravne jedinice INSPIRE (2026-10-11)",
+      url: "https://data.gov.hr/otvorena-dozvola",
+      licensing: {
+        version: 1,
+        bindings: [
+          {
+            scope: "data",
+            subject: "DGU Upravne jedinice INSPIRE (2026-10-11)",
+            license: {
+              kind: "custom",
+              namespace: "openconditions:licences",
+              id: "LicenseRef-OD-HR",
+              name: "Otvorena dozvola / Open Licence (Croatia)",
+              url: "https://data.gov.hr/otvorena-dozvola",
+            },
+          },
+        ],
+        declarations: [{ text: "LicenseRef-OD-HR" }],
+      },
+      attributionText: DGU,
+    };
+    expect(croatia!.contributors).toContainEqual(credit);
+    expect(croatia!.attributions).toContainEqual(credit);
+    expect(croatia!.contributors!.filter((c) => c.attributionText === DGU)).toHaveLength(1);
+    // The Open Licence's statement stays beside the drawn area, with its licence linked.
+    const shown = buildAttributionPresentation(credit as Attribution, "map").visibleHtml;
+    expect(shown).toContain("Državna geodetska uprava");
+    expect(shown).toContain('href="https://data.gov.hr/otvorena-dozvola"');
+    expect(austria!.contributors!.some((c) => c.name.startsWith("DGU"))).toBe(false);
+    expect(austria!.attributions.some((c) => c.name.startsWith("DGU"))).toBe(false);
   });
 
   test("asks for simplified geometries when the caller does", async () => {

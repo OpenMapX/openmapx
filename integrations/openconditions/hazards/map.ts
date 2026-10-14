@@ -10,6 +10,7 @@ import { parseContributors, snapshotContributors } from "@openmapx/integration-f
 import {
   credit,
   list,
+  locationTableCredits,
   type Rec,
   type RecordSource,
   rec,
@@ -65,12 +66,21 @@ const bool = (value: unknown): boolean | undefined =>
 const field = <K extends string, V>(key: K, value: V | undefined): { [P in K]?: V } =>
   (value === undefined ? {} : { [key]: value }) as { [P in K]?: V };
 
-/** Capture at acquisition; explicit producer receipts, including [], are authoritative. */
+/** The credit of the location table the record's location was drawn from, under its first source. */
+function tableCreditsOf(record: Rec) {
+  return locationTableCredits(record, str(rec(record["provenance"])["sourceId"]));
+}
+
+/**
+ * Capture at acquisition; explicit producer receipts, including [], are
+ * authoritative for the sources. The location table is credited beside them,
+ * since the record itself names it.
+ */
 function contributorsOf(record: Rec, sources: LiveSources) {
   const captured = parseContributors(
     record["contributors"] ?? rec(record["provenance"])["contributors"],
   );
-  if (captured !== undefined) return snapshotContributors(captured);
+  if (captured !== undefined) return snapshotContributors(captured, tableCreditsOf(record));
   const members = sourcesOf(record);
   return snapshotContributors(
     members.flatMap((member) => {
@@ -82,6 +92,7 @@ function contributorsOf(record: Rec, sources: LiveSources) {
       return [captured, ...(notice ? [{ sourceId: member.id, name: notice }] : [])];
     }),
     upstreamCredits(members, sources),
+    tableCreditsOf(record),
   );
 }
 
@@ -140,7 +151,7 @@ export function situationToAlert(
     ...field("senderName", textOf(cap["senderName"], lang)),
     ...field("web", str(cap["web"])),
     sources: ids,
-    attributions: credits.map((s) => credit(s, sources)),
+    attributions: [...credits.map((s) => credit(s, sources)), ...tableCreditsOf(record)],
     contributors: contributorsOf(record, sources),
     notices,
   };
@@ -290,7 +301,7 @@ export function situationToNaturalHazard(
     ...field("locality", str(admin["municipality"])),
     ...field("detailUrl", str(details["detailUrl"])),
     sources: ids,
-    attributions: credits.map((s) => credit(s, sources)),
+    attributions: [...credits.map((s) => credit(s, sources)), ...tableCreditsOf(record)],
     contributors: contributorsOf(record, sources),
   };
 }

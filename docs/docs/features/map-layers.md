@@ -243,6 +243,9 @@ instrument rates low confidence (VIIRS low, MODIS below 30%) are left out of
 both unless the legend's "Low confidence" switch is on. MeteoAlarm's European
 warnings are drawn with the area shapes MeteoAlarm publishes for redistributors,
 and their popup shows the publisher's notice, the issue time and the issuer.
+Croatian warnings are drawn with the county outlines of the Croatian State
+Geodetic Administration (DGU), whose Open Licence notice joins the map credits
+while such a warning is drawn.
 
 ### Recreation & specialty
 

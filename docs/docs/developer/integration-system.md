@@ -489,6 +489,9 @@ and a fuel, parking, charging or camera reading they contributed to credits
 them with it. While the answer states no crowd credit, such a reading is left
 out, as is any reading with a contributor that is not on the list.
 The providers serve only the sources the host accepted (see above).
+A record placed with a third-party location table (`location.locationTable`)
+also credits that table under the record's feed id; see
+[Location tables](./licensing.md#location-tables).
 
 Its `domain:<domain>` strings describe what each domain's sources receive in
 general terms, without naming a source, since the instance decides its feeds.

@@ -1,6 +1,12 @@
 import type { FuelStation } from "@openmapx/integration-framework";
 import { snapshotContributors } from "@openmapx/mobility-core/contributors";
-import { parseLicensing } from "@openmapx/mobility-core/licensing";
+import {
+  canonicalLicenseExpression,
+  type LicenseDescriptor,
+  type Licensing,
+  licensingLinks,
+  parseLicensing,
+} from "@openmapx/mobility-core/licensing";
 
 /**
  * What every OpenConditions feature domain reads the same way: a canonical
@@ -254,6 +260,67 @@ export function upstreamCredits(
     }
   }
   return snapshotContributors(out);
+}
+
+/**
+ * The OpenConditions licences a location table is published under that SPDX
+ * does not list, as OpenConditions' licence catalogue defines them.
+ */
+const LOCATION_TABLE_LICENCES: Readonly<Record<string, { name: string; url: string }>> = {
+  "LicenseRef-OD-HR": {
+    name: "Otvorena dozvola / Open Licence (Croatia)",
+    url: "https://data.gov.hr/otvorena-dozvola",
+  },
+};
+
+/**
+ * A location table's licence id as a licence: an SPDX id as itself, a
+ * licence OpenConditions defines with that definition, anything else as an
+ * unknown licence that keeps the id it was stated with.
+ */
+function locationTableLicensing(subject: string, id: string): Licensing {
+  const spdx = canonicalLicenseExpression(id);
+  const custom = LOCATION_TABLE_LICENCES[id];
+  const license: LicenseDescriptor = spdx
+    ? { kind: "spdx", expression: spdx }
+    : custom
+      ? { kind: "custom", namespace: "openconditions:licences", id, ...custom }
+      : { kind: "unknown", raw: id };
+  return {
+    version: 1,
+    bindings: [{ scope: "data", subject, license }],
+    declarations: [{ text: id }],
+  };
+}
+
+/**
+ * The credit of the location table a record was placed with, as
+ * `location.locationTable` states it: a TMC location code list, or the
+ * administrative boundaries an alert's area was drawn from. It is credited
+ * under `sourceId`, the feed whose record the location belongs to, since the
+ * table came to OpenMapX inside that feed's records and OpenMapX contacts no
+ * one for it. The table's own notice is kept verbatim and the credit links
+ * its licence. A table that states no notice is credited by no one.
+ */
+export function locationTableCredits(record: Rec, sourceId: string | undefined): Attribution[] {
+  const table = rec(rec(record.location).locationTable);
+  const ref = str(table.ref);
+  const version = str(table.version);
+  const notice = str(table.attribution);
+  if (!sourceId || !ref || !version || !notice) return [];
+  const name = `${ref} (${version})`;
+  const id = str(table.license);
+  const licensing = id ? parseLicensing(locationTableLicensing(name, id)) : undefined;
+  const url = licensing ? licensingLinks(licensing)[0]?.url : undefined;
+  return [
+    {
+      sourceId,
+      name,
+      ...(url ? { url } : {}),
+      ...(licensing ? { licensing } : {}),
+      attributionText: notice,
+    },
+  ];
 }
 
 export function addressOf(location: Rec): string | undefined {

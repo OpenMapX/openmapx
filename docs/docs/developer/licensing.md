@@ -104,6 +104,39 @@ licensing metadata does not substitute for contribution provenance. Presentation
 must still credit only retained items and rendered geometry after filters,
 viewport and zoom rules. Placement follows the reviewed contract below.
 
+## Location tables
+
+OpenConditions places some records with a third-party location reference
+table and names it on the record as `location.locationTable`: `{ ref, version,
+attribution?, license? }`. The OpenConditions integration credits a table that
+states a notice beside the record's sources (`locationTableCredits` in
+`integrations/openconditions/features/record.ts`), on road events and on every
+hazards record, native producer receipts included. The credit is one receipt
+per table edition, named `<ref> (<version>)`, with the notice kept verbatim as
+`attributionText` and the credit linking the table's licence.
+
+It is credited under the record's own feed id rather than a source of its own.
+The table reaches OpenMapX only inside that feed's records and OpenMapX contacts
+no one for it, so it adds no data flow, privacy disclosure or legal-table row;
+like an aggregator's upstream publisher, it is a distinct receipt under the
+feed it came through. Map overlays therefore show it only while a record placed
+with it is drawn.
+
+`license` is an id, not a captured definition. An SPDX id becomes that grant;
+an OpenConditions custom licence OpenMapX knows becomes OpenConditions' own
+definition (namespace `openconditions:licences`); any other id is kept as an
+`unknown` licence with the id as stated. No placement policy is captured, so the
+notice stays visible on every surface. Tables credited this way today:
+
+| Table                                                                     | Used for                                                    | Licence                                                                                               |
+| ------------------------------------------------------------------------- | ----------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| DGU _Upravne jedinice INSPIRE_ (State Geodetic Administration of Croatia) | Croatian county outlines of MeteoAlarm warnings, simplified | `LicenseRef-OD-HR`, [Otvorena dozvola / Open Licence (Croatia)](https://data.gov.hr/otvorena-dozvola) |
+| TMC location code lists, such as BASt's LCL for Germany                   | Road events placed by Alert-C code                          | As the list states, such as `CC-BY-4.0`                                                               |
+
+The Croatian Open Licence asks for the source, the date, a link to the dataset
+and a mark of changes with the data. OpenConditions writes all four into the
+notice, so OpenMapX shows it unaltered.
+
 ## Attribution placement
 
 The producer stores source/product requirements on

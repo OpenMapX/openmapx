@@ -835,6 +835,61 @@ describe("situationToRoadConditionEvent", () => {
     expect(formatLicensing(situationToRoadConditionEvent(tfl)!.attribution.licensing!)).toBe(NAME);
   });
 
+  it("credits the TMC location table a situation was placed with, once, beside its source", () => {
+    const BAST = "Location Code List 22.0 — Bundesanstalt für Straßenwesen (BASt)";
+    const base = record();
+    const placed = (over: Rec = {}) =>
+      record({
+        ...over,
+        location: {
+          ...(base.location as Rec),
+          geometryOrigin: "tmc_table",
+          locationTable: {
+            ref: "TMC 58/1",
+            version: "22.0",
+            attribution: BAST,
+            license: "CC-BY-4.0",
+          },
+        },
+      });
+    const credit = {
+      sourceId: "fi-digitraffic-events",
+      name: "TMC 58/1 (22.0)",
+      url: "https://creativecommons.org/licenses/by/4.0/legalcode",
+      licensing: {
+        version: 1,
+        bindings: [
+          {
+            scope: "data",
+            subject: "TMC 58/1 (22.0)",
+            license: { kind: "spdx", expression: "CC-BY-4.0" },
+          },
+        ],
+        declarations: [{ text: "CC-BY-4.0" }],
+      },
+      attributionText: BAST,
+    };
+
+    const event = situationToRoadConditionEvent(placed())!;
+    expect(event.contributors).toEqual([
+      expect.objectContaining({ name: "Fintraffic / Digitraffic" }),
+      credit,
+    ]);
+    // A producer's own receipts stay authoritative for the source; the table is added.
+    const native = { sourceId: "fi-digitraffic-events", name: "Fintraffic" };
+    expect(
+      situationToRoadConditionEvent(placed({ contributors: [native, credit] }))!.contributors,
+    ).toEqual([native, credit]);
+    // A table that states no notice has nothing to credit.
+    const silent = record({
+      location: {
+        ...(base.location as Rec),
+        locationTable: { ref: "TMC 6/1", version: "6.13" },
+      },
+    });
+    expect(situationToRoadConditionEvent(silent)!.contributors).toHaveLength(1);
+  });
+
   it("cannot show a situation it has no place for", () => {
     const unplaced = record({ location: { geometry: null, openlr: "CwRbWyNG9RpsCQCb/jsbtAT/" } });
     expect(situationToRoadConditionEvent(unplaced)).toBeNull();

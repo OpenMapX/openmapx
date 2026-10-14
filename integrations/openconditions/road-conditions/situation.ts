@@ -7,7 +7,7 @@ import type {
 } from "@openmapx/integration-framework";
 import { parseContributors, snapshotContributors } from "@openmapx/integration-framework";
 import { parseLicensing } from "@openmapx/mobility-core/licensing";
-import { type CreditSources, NO_SOURCES } from "../features/record.js";
+import { type CreditSources, locationTableCredits, NO_SOURCES } from "../features/record.js";
 import type { CapturedSourceCredits } from "../sources.js";
 
 type Rec = Record<string, unknown>;
@@ -94,24 +94,28 @@ export function situationToRoadConditionEvent(
   const native = parseContributors(record.contributors);
   const recordedNotice = str(attribution.notice);
   const resolved = sourceId ? sources.contributors?.(sourceId) : undefined;
-  const contributors =
-    native ??
-    snapshotContributors(
-      resolved?.length && !licensing
-        ? resolved
-        : sourceId && str(attribution.provider)
-          ? [
-              {
-                sourceId,
-                name: String(attribution.provider),
-                ...strField("url", attribution.url),
-                ...(licensing ? { licensing } : {}),
-              },
-            ]
-          : [],
-      sourceId && notice ? [{ sourceId, name: notice }] : [],
-      sourceId && recordedNotice ? [{ sourceId, name: recordedNotice }] : [],
-    );
+  // The location table a TMC-coded record was placed with is credited beside
+  // its source, native receipts included, since the record itself names it.
+  const tableCredits = locationTableCredits(record, sourceId);
+  const contributors = native
+    ? snapshotContributors(native, tableCredits)
+    : snapshotContributors(
+        resolved?.length && !licensing
+          ? resolved
+          : sourceId && str(attribution.provider)
+            ? [
+                {
+                  sourceId,
+                  name: String(attribution.provider),
+                  ...strField("url", attribution.url),
+                  ...(licensing ? { licensing } : {}),
+                },
+              ]
+            : [],
+        sourceId && notice ? [{ sourceId, name: notice }] : [],
+        sourceId && recordedNotice ? [{ sourceId, name: recordedNotice }] : [],
+        tableCredits,
+      );
   const direction = obj(location.direction);
   const roads = roadsOf(location);
   return {
