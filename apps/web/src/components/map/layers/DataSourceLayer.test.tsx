@@ -224,7 +224,7 @@ it("draws a moving result's track under its marker, credited by the track, and c
 });
 
 it("builds tracks only for results with two or more positions", async () => {
-  const { buildTrackGeoJson } = await import("./DataSourceLayer");
+  const { buildTrackGeoJson } = await import("@/integration-api/map/dataSourceFeatures");
   const base = { id: "v", name: "", source: "s", variant: "plowing", coordinates: [8, 50] };
   expect(
     buildTrackGeoJson([
@@ -438,7 +438,7 @@ it("credits only rendered markers and context polygons and retains captured visi
 });
 
 it("serializes independent label, paint and logo channels with authoritative empty fields", async () => {
-  const { buildGeoJson } = await import("./DataSourceLayer");
+  const { buildGeoJson } = await import("@/integration-api/map/dataSourceFeatures");
   const credit = (sourceId: string) => [{ sourceId, name: sourceId }];
   const place = {
     id: "channels",

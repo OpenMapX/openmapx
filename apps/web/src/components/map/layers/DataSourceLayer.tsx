@@ -2,15 +2,9 @@
 
 import Box from "@mui/material/Box";
 import { alpha } from "@mui/material/styles";
-import type {
-  DataSourceMapContextSelection,
-  DataSourceMeta,
-  DataSourceResult,
-  LngLat,
-} from "@openmapx/core";
+import type { DataSourceMapContextSelection, DataSourceResult, LngLat } from "@openmapx/core";
 import {
   applyClientSideFilters,
-  createPlace,
   PANEL,
   splitFilters,
   useDataSourceMapContext,
@@ -18,11 +12,10 @@ import {
   useDataSourceStore,
   useDataSources,
   useOpeningHoursStore,
-  usePlaceStore,
   useSidebarStore,
 } from "@openmapx/core";
 import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
-import { isI18nToken, type Translatable } from "@openmapx/integration-framework/strings";
+import { isI18nToken } from "@openmapx/integration-framework/strings";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import {
   contributorsForField,
@@ -39,6 +32,15 @@ import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useDataSourceI18nResolver } from "@/components/panels/place/useDataSourceI18nResolver";
 import { usePinMarker } from "@/hooks/usePinMarker";
+import {
+  buildGeoJson,
+  buildTrackGeoJson,
+  buildVariantColorExpression,
+  DATA_SOURCE_TRACK_LAYOUT,
+  dataSourceCirclePaint,
+  dataSourceTrackPaint,
+} from "@/integration-api/map/dataSourceFeatures";
+import { openDataSourceItem } from "@/integration-api/map/dataSourceOverlay";
 import { INTERACTIVE_LAYER_IDS } from "@/integration-api/map/interactiveLayers";
 import { addLayerInSlot, unregisterLayerSlot } from "@/integration-api/map/layerStack";
 import { createGeoJsonSourcePublisher } from "@/integration-api/map/layerStyleUtils";
@@ -113,111 +115,6 @@ const ZONE_LABEL_KEYS = {
   station_area: "contextStationArea",
 } as const satisfies Record<ContextZoneClass, string>;
 
-/**
- * Buckets a data-source result's live availability into a marker color state.
- * `unknown` covers results with no live coverage (or a reported zero-capacity
- * station), so the marker falls back to its static variant color.
- */
-export function availStateOf(result: {
-  availability?: { available: number; total: number };
-}): "available" | "busy" | "unknown" {
-  const a = result.availability;
-  if (!a || a.total === 0) return "unknown";
-  return a.available > 0 ? "available" : "busy";
-}
-
-export function buildGeoJson(
-  results: DataSourceResult[],
-  translate: (value: Translatable | undefined) => string | undefined,
-  imageId?: string,
-  markerStyle?: DataSourceMeta["markerStyle"],
-) {
-  return {
-    type: "FeatureCollection" as const,
-    features: results.map((r) => {
-      const circleFields = ["coordinates"];
-      if (r.availability) {
-        circleFields.push("availability.total");
-        if (r.availability.total > 0) circleFields.push("availability.available");
-      }
-      if (availStateOf(r) === "unknown" && Object.keys(markerStyle?.variantColors ?? {}).length)
-        circleFields.push("variant");
-      if (markerStyle?.inactiveOpacity !== 1 && r.status) circleFields.push("status");
-      const marker = contributorsForRecordFields(r, imageId ? ["coordinates"] : circleFields);
-      const summary = translate(r.summary) ?? "";
-      const nameField = r.name ? "name" : "fallbackName";
-      const labelFields = ["coordinates", nameField];
-      const logoFields = [
-        "coordinates",
-        "branding.logoUrl",
-        ...(markerStyle?.inactiveOpacity !== 1 && r.status ? ["status"] : []),
-      ];
-      return withFeatureContributors(
-        {
-          type: "Feature" as const,
-          geometry: { type: "Point" as const, coordinates: r.coordinates },
-          properties: {
-            id: r.id,
-            name: r.name || (translate(r.fallbackName) ?? ""),
-            source: r.source,
-            variant: r.variant,
-            status: r.status ?? "",
-            summary,
-            operator: r.operator ?? "",
-            kind: r.kind ?? "",
-            availState: availStateOf(r),
-            logoUrl: r.branding?.logoUrl ?? "",
-            ...(imageId ? { imageId } : {}),
-            _mapMarkerAttributions: serializeContributors(marker),
-            _mapHaloAttributions: serializeContributors(
-              contributorsForRecordFields(r, circleFields),
-            ),
-            _mapLabelAttributions: serializeContributors(
-              contributorsForRecordFields(r, labelFields),
-            ),
-            _mapSummaryLabelAttributions: serializeContributors(
-              contributorsForRecordFields(r, [...labelFields, ...(summary ? ["summary"] : [])]),
-            ),
-            _mapLogoSelectionAttributions: serializeContributors(
-              contributorsForRecordFields(r, logoFields),
-            ),
-            _mapLogoFileAttributions: serializeContributors(
-              contributorsForField(r, "branding.logoUrl"),
-            ),
-          },
-        },
-        marker,
-      );
-    }),
-  };
-}
-
-/** The tracks of the results that carry one, as lines coloured like their markers. */
-export function buildTrackGeoJson(results: DataSourceResult[]) {
-  return {
-    type: "FeatureCollection" as const,
-    features: results.flatMap((r) => {
-      if (!r.track || r.track.length < 2) return [];
-      const contributors = contributorsForRecordFields(r, ["track", "variant"]);
-      return [
-        withFeatureContributors(
-          {
-            type: "Feature" as const,
-            geometry: { type: "LineString" as const, coordinates: r.track },
-            properties: {
-              id: r.id,
-              variant: r.variant,
-              status: r.status ?? "",
-              _mapTrackAttributions: serializeContributors(contributors),
-            },
-          },
-          contributors,
-        ),
-      ];
-    }),
-  };
-}
-
 function buildMapContextSelection(results: DataSourceResult[]): DataSourceMapContextSelection {
   const systemIds = new Set<string>();
   const vehicleTypeIds = new Set<string>();
@@ -246,23 +143,6 @@ function buildMapContextSelection(results: DataSourceResult[]): DataSourceMapCon
     providerGroupIds: [...providerGroupIds].sort(),
     formFactors: [...formFactors].sort(),
   };
-}
-
-/**
- * Build a MapLibre `match` expression for circle-color using variantColors.
- */
-function buildVariantColorExpression(
-  markerStyle: DataSourceMeta["markerStyle"],
-): maplibregl.ExpressionSpecification {
-  const entries = Object.entries(markerStyle.variantColors);
-  if (entries.length === 0) return ["literal", markerStyle.defaultColor];
-
-  const expr: unknown[] = ["match", ["get", "variant"]];
-  for (const [variant, color] of entries) {
-    expr.push(variant, color);
-  }
-  expr.push(markerStyle.defaultColor);
-  return expr as maplibregl.ExpressionSpecification;
 }
 
 /**
@@ -751,25 +631,14 @@ export function DataSourceLayer() {
       if (trackGeojson.features.length > 0) {
         publish(map, tracksSid, trackGeojson);
         if (!map.getLayer(tracksLid)) {
-          // Thin and faint under the markers: where the item has just been, not a route.
-          const opacity: maplibregl.ExpressionSpecification = [
-            "case",
-            ["==", ["get", "status"], "non-operational"],
-            0.25,
-            0.55,
-          ];
           addLayerInSlot(
             map,
             {
               id: tracksLid,
               type: "line",
               source: tracksSid,
-              layout: { "line-cap": "round", "line-join": "round" },
-              paint: {
-                "line-color": buildVariantColorExpression(activeMeta.markerStyle),
-                "line-width": ["interpolate", ["linear"], ["zoom"], 8, 1.5, 14, 3],
-                "line-opacity": opacity,
-              },
+              layout: DATA_SOURCE_TRACK_LAYOUT,
+              paint: dataSourceTrackPaint(activeMeta.markerStyle),
             },
             "overlay-lines",
             17,
@@ -904,41 +773,13 @@ export function DataSourceLayer() {
       } else {
         // Circle marker mode (default, e.g. EV charging)
         if (!map.getLayer(markersLid)) {
-          const variantColorExpr = buildVariantColorExpression(activeMeta.markerStyle);
-          const colorExpr: maplibregl.ExpressionSpecification = [
-            "match",
-            ["get", "availState"],
-            "available",
-            "#2E7D32",
-            "busy",
-            "#F9A825",
-            variantColorExpr,
-          ];
-
           addLayerInSlot(
             map,
             {
               id: markersLid,
               type: "circle",
               source: sid,
-              paint: {
-                "circle-radius": 6,
-                "circle-color": colorExpr,
-                "circle-stroke-color": "#ffffff",
-                "circle-stroke-width": 1.5,
-                "circle-opacity": [
-                  "case",
-                  ["==", ["get", "status"], "non-operational"],
-                  activeMeta.markerStyle.inactiveOpacity,
-                  1,
-                ],
-                "circle-stroke-opacity": [
-                  "case",
-                  ["==", ["get", "status"], "non-operational"],
-                  activeMeta.markerStyle.inactiveOpacity,
-                  1,
-                ],
-              },
+              paint: dataSourceCirclePaint(activeMeta.markerStyle),
             },
             "overlay-points",
             15,
@@ -964,8 +805,6 @@ export function DataSourceLayer() {
     mapRef,
     mapContext,
   ]);
-
-  const { setSelectedPlace } = usePlaceStore();
 
   useEffect(() => {
     const map = mapRef.current;
@@ -1040,26 +879,7 @@ export function DataSourceLayer() {
         kind?: string;
       };
       const coords = (features[0].geometry as { coordinates: number[] }).coordinates as LngLat;
-      selectItem(currentSource, props.id);
-      // For free-floating vehicles, leave the preview address empty so
-      // `usePlaceDetails` sends `hasAddress=0` and the API resolver runs a
-      // reverse-geocode to fill in a real street address. The marker label
-      // (e.g. "Dott E-Scooter") is not an address and would otherwise win
-      // the merge in `useMergedPlace`.
-      const isVehicle = props.kind === "vehicle";
-      // Set a preview place immediately so the floating card shows without waiting for detail API
-      setSelectedPlace(
-        createPlace({
-          primaryScheme: currentSource,
-          ids: { [currentSource]: props.id },
-          name: props.name,
-          address: isVehicle ? "" : props.name,
-          coordinates: coords,
-          category: activeMeta?.placeCategory,
-          rawCategory: activeMeta?.placeCategoryRaw,
-        }),
-      );
-      useSidebarStore.getState().openDetail(PANEL.PLACE_CARD);
+      openDataSourceItem(currentSource, props, coords, activeMeta);
     };
 
     const onMouseMove = (e: MapMouseEvent) => {
@@ -1124,16 +944,7 @@ export function DataSourceLayer() {
       map.getCanvasContainer().style.cursor = "";
       setHoveredItemId(null);
     };
-  }, [
-    activeSource,
-    activeMeta,
-    mapReady,
-    styleVersion,
-    mapRef,
-    selectItem,
-    setSelectedPlace,
-    setHoveredItemId,
-  ]);
+  }, [activeSource, activeMeta, mapReady, styleVersion, mapRef, selectItem, setHoveredItemId]);
 
   // Cleanup on unmount
   useEffect(() => {

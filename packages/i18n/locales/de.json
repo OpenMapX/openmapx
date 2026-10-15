@@ -410,7 +410,7 @@
     "cycling": "Radwege",
     "winterSports": "Wintersport",
     "hiking": "Wandern",
-    "trafficIncidents": "Verkehrsstörungen",
+    "roadConditions": "Straßenverhältnisse",
     "wildfires": "Waldbrände",
     "weather": "Wetter",
     "environment": "Umwelt",
@@ -481,8 +481,16 @@
     "attribution": "Daten"
   },
   "roadConditions": {
-    "trafficIncidents": "Verkehrsstörungen",
-    "toggleOverlay": "Verkehrsstörungen umschalten",
+    "title": "Straßenverhältnisse",
+    "layersLabel": "Auf der Karte zeigen",
+    "incidentsLayer": "Störungen & Baustellen",
+    "incidentFilters": "Störungen",
+    "source": {
+      "loading": "Wird geladen …",
+      "error": "Konnte nicht geladen werden",
+      "empty": "Gerade nichts in diesem Gebiet"
+    },
+    "toggleOverlay": "Straßenverhältnisse umschalten",
     "filterByType": "Typ",
     "severity": "Schwere",
     "timeHorizon": "Zeitraum",

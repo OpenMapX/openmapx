@@ -2,13 +2,22 @@
 
 import Box from "@mui/material/Box";
 import Chip from "@mui/material/Chip";
+import Divider from "@mui/material/Divider";
+import Switch from "@mui/material/Switch";
 import ToggleButton from "@mui/material/ToggleButton";
 import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
 import Typography from "@mui/material/Typography";
 import { useOverlayVisibilitySetter } from "@openmapx/core";
 import { useTranslations } from "next-intl";
+import type { ReactNode } from "react";
+import {
+  useDataSourceColorKey,
+  useDataSourceListing,
+  useDataSourceName,
+} from "@/integration-api/map/dataSourceOverlay";
 import { OverlayLegend } from "@/integration-api/overlay/OverlayLegend";
 import { GLYPHS, glyphFor } from "./markers";
+import { ROAD_SOURCE_IDS } from "./road-sources";
 import { SEVERITY_COLORS } from "./severity";
 import { type Horizon, type MinSeverity, useRoadConditionsStore } from "./store";
 import {
@@ -59,49 +68,136 @@ function Glyph({ kind, className }: { kind: string; className?: string }) {
   );
 }
 
-export function RoadConditionsLegend() {
+function SvgIcon({ path }: { path: string }) {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
+      <path d={path} fill="currentColor" />
+    </svg>
+  );
+}
+
+const CAPTION_SX = { fontSize: 10.5, color: "text.secondary", mb: 0.4 } as const;
+
+/**
+ * One layer the overlay can draw: its icon, name and a switch, with a line
+ * below that explains the markers once they show (a colour key) or says why
+ * nothing shows. The whole row is the switch's label.
+ */
+function LayerRow({
+  icon,
+  label,
+  checked,
+  onToggle,
+  children,
+}: {
+  icon: ReactNode;
+  label: string;
+  checked: boolean;
+  onToggle: () => void;
+  children?: ReactNode;
+}) {
+  return (
+    <Box sx={{ py: 0.4 }}>
+      <Box
+        component="label"
+        sx={{ display: "flex", alignItems: "center", gap: 1, cursor: "pointer" }}
+      >
+        <Box
+          sx={{
+            display: "flex",
+            alignItems: "center",
+            color: checked ? "primary.main" : "text.secondary",
+            flexShrink: 0,
+          }}
+        >
+          {icon}
+        </Box>
+        <Typography sx={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 500, lineHeight: 1.2 }}>
+          {label}
+        </Typography>
+        <Switch size="small" checked={checked} onChange={onToggle} />
+      </Box>
+      {checked && children ? <Box sx={{ pl: 3.25, pr: 1, mt: 0.25 }}>{children}</Box> : null}
+    </Box>
+  );
+}
+
+function RowNote({ children, role }: { children: ReactNode; role?: "status" }) {
+  return (
+    <Typography
+      role={role}
+      aria-live={role ? "polite" : undefined}
+      sx={{ fontSize: 10.5, color: "text.secondary", lineHeight: 1.3 }}
+    >
+      {children}
+    </Typography>
+  );
+}
+
+/** A road data source's row: hidden when the server offers no such source. */
+function RoadSourceRow({ sourceId }: { sourceId: string }) {
   const t = useTranslations("roadConditions");
-  const panelOpen = useRoadConditionsStore((s) => s.panelOpen);
-  const layerVisible = useRoadConditionsStore((s) => s.layerVisible);
+  const listing = useDataSourceListing(sourceId);
+  const name = useDataSourceName(sourceId);
+  const colorKey = useDataSourceColorKey(sourceId);
+  const shown = useRoadConditionsStore((s) => s.shownSources.includes(sourceId));
+  const status = useRoadConditionsStore((s) => s.sourceStatus[sourceId]);
+  const toggleSource = useRoadConditionsStore((s) => s.toggleSource);
+  if (!listing) return null;
+
+  let note: ReactNode = null;
+  if (status?.state === "loading") note = <RowNote role="status">{t("source.loading")}</RowNote>;
+  else if (status?.state === "error") note = <RowNote role="status">{t("source.error")}</RowNote>;
+  else if (status?.state === "ready" && status.count === 0)
+    note = <RowNote role="status">{t("source.empty")}</RowNote>;
+  else if (colorKey.length > 0)
+    note = (
+      <Box sx={{ display: "flex", flexWrap: "wrap", columnGap: 1, rowGap: 0.25 }}>
+        {colorKey.map((entry) => (
+          <Box key={entry.id} sx={{ display: "flex", alignItems: "center", gap: 0.4 }}>
+            <Box
+              component="span"
+              sx={{
+                width: 9,
+                height: 9,
+                borderRadius: "50%",
+                bgcolor: entry.color,
+                border: "1px solid #fff",
+                boxShadow: "0 0 0 0.5px rgba(0,0,0,0.25)",
+              }}
+            />
+            <Typography sx={{ fontSize: 10.5, color: "text.secondary" }}>{entry.label}</Typography>
+          </Box>
+        ))}
+      </Box>
+    );
+
+  return (
+    <LayerRow
+      icon={<SvgIcon path={listing.markerStyle.iconPath} />}
+      label={name}
+      checked={shown}
+      onToggle={() => toggleSource(sourceId)}
+    >
+      {note}
+    </LayerRow>
+  );
+}
+
+/** The incidents' line key and filters: type, severity and time horizon. */
+function IncidentControls() {
+  const t = useTranslations("roadConditions");
   const hiddenKinds = useRoadConditionsStore((s) => s.hiddenKinds);
   const minSeverity = useRoadConditionsStore((s) => s.minSeverity);
   const horizon = useRoadConditionsStore((s) => s.horizon);
-  const setLayerVisible = useOverlayVisibilitySetter("road-conditions");
   const toggleKind = useRoadConditionsStore((s) => s.toggleKind);
   const setMinSeverity = useRoadConditionsStore((s) => s.setMinSeverity);
   const setHorizon = useRoadConditionsStore((s) => s.setHorizon);
   const resetFilters = useRoadConditionsStore((s) => s.resetFilters);
-  const viewportFetchStatus = useRoadConditionsStore((s) => s.viewportFetchStatus);
-  const routeFetchStatus = useRoadConditionsStore((s) => s.routeFetchStatus);
   const filtersActive = hiddenKinds.length > 0 || minSeverity !== "all" || horizon !== "active";
-  const fetchStatus = [viewportFetchStatus, routeFetchStatus].includes("loading")
-    ? "loading"
-    : [viewportFetchStatus, routeFetchStatus].includes("error")
-      ? "error"
-      : [viewportFetchStatus, routeFetchStatus].includes("stale")
-        ? "stale"
-        : "ready";
 
   return (
-    <OverlayLegend
-      title={t("trafficIncidents")}
-      panelOpen={panelOpen}
-      layerVisible={layerVisible}
-      loading={fetchStatus === "loading"}
-      setLayerVisible={setLayerVisible}
-      toggleAriaLabel={t("toggleOverlay")}
-      paperSx={{ maxWidth: "calc(100vw - 24px)" }}
-    >
-      {fetchStatus !== "ready" ? (
-        <Typography
-          role="status"
-          aria-live="polite"
-          sx={{ fontSize: 10.5, color: "text.secondary", mb: 0.75 }}
-        >
-          {t(`status.${fetchStatus}`)}
-        </Typography>
-      ) : null}
-
+    <>
       <Box sx={{ mb: 1 }}>
         <Typography sx={{ fontSize: 10.5, color: "text.secondary", mb: 0.4 }}>
           {t("line.label")}
@@ -247,6 +343,77 @@ export function RoadConditionsLegend() {
           />
         </Box>
       ) : null}
+    </>
+  );
+}
+
+export function RoadConditionsLegend() {
+  const t = useTranslations("roadConditions");
+  const panelOpen = useRoadConditionsStore((s) => s.panelOpen);
+  const layerVisible = useRoadConditionsStore((s) => s.layerVisible);
+  const showIncidents = useRoadConditionsStore((s) => s.showIncidents);
+  const toggleIncidents = useRoadConditionsStore((s) => s.toggleIncidents);
+  const setLayerVisible = useOverlayVisibilitySetter("road-conditions");
+  const viewportFetchStatus = useRoadConditionsStore((s) => s.viewportFetchStatus);
+  const routeFetchStatus = useRoadConditionsStore((s) => s.routeFetchStatus);
+  const sourcesLoading = useRoadConditionsStore((s) =>
+    Object.values(s.sourceStatus).some((status) => status.state === "loading"),
+  );
+  const fetchStatus = [viewportFetchStatus, routeFetchStatus].includes("loading")
+    ? "loading"
+    : [viewportFetchStatus, routeFetchStatus].includes("error")
+      ? "error"
+      : [viewportFetchStatus, routeFetchStatus].includes("stale")
+        ? "stale"
+        : "ready";
+
+  return (
+    <OverlayLegend
+      title={t("title")}
+      panelOpen={panelOpen}
+      layerVisible={layerVisible}
+      loading={(showIncidents && fetchStatus === "loading") || sourcesLoading}
+      setLayerVisible={setLayerVisible}
+      toggleAriaLabel={t("toggleOverlay")}
+      paperSx={{ maxWidth: { xs: "calc(100vw - 24px)", sm: 340 }, minWidth: 260 }}
+      headerSx={{ mb: 0.6 }}
+    >
+      <Box sx={{ opacity: layerVisible ? 1 : 0.5, transition: "opacity 120ms" }}>
+        <Typography
+          sx={{
+            fontSize: 10.5,
+            color: "text.secondary",
+            letterSpacing: 0.4,
+            textTransform: "uppercase",
+            mb: 0.3,
+          }}
+        >
+          {t("layersLabel")}
+        </Typography>
+        <LayerRow
+          icon={<SvgIcon path={GLYPHS.hazard as string} />}
+          label={t("incidentsLayer")}
+          checked={showIncidents}
+          onToggle={toggleIncidents}
+        >
+          {fetchStatus !== "ready" ? (
+            <RowNote role="status">{t(`status.${fetchStatus}`)}</RowNote>
+          ) : null}
+        </LayerRow>
+        {ROAD_SOURCE_IDS.map((id) => (
+          <RoadSourceRow key={id} sourceId={id} />
+        ))}
+
+        {showIncidents ? (
+          <>
+            <Divider sx={{ my: 1 }} />
+            <Typography sx={{ ...CAPTION_SX, fontWeight: 600, color: "text.primary" }}>
+              {t("incidentFilters")}
+            </Typography>
+            <IncidentControls />
+          </>
+        ) : null}
+      </Box>
     </OverlayLegend>
   );
 }

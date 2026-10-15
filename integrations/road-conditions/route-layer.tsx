@@ -21,11 +21,11 @@ import {
 import { useDrawnDirectionsRoutes } from "@/integration-api/map/useDrawnDirectionsRoutes";
 import { useGeoJsonSourceDataBridge } from "@/integration-api/map/useGeoJsonSourceDataBridge";
 import { useOverlayMinZoom } from "@/integration-api/overlay/overlayZoomGate";
-import { useOverlayLayerVisible } from "@/integration-api/overlay/useOverlayStoreState";
 import { useRenderedMapAttributions } from "@/integration-api/overlay/useRenderedMapAttributions";
 import { useDateTimeFormat } from "@/integration-api/runtime/useDateTimeFormat";
 import { roadConditionAttributions } from "./attributions";
 import { buildRoadConditionDisplayGroups, buildRoadConditionFeatures } from "./display";
+import { useIncidentsVisible } from "./incidents-visible";
 import { buildRoadConditionPopupHtml, type RoadConditionPopupInput } from "./popup";
 import { SEVERITY_LINE_COLOR } from "./severity";
 import { useRoadConditionsStore } from "./store";
@@ -81,7 +81,7 @@ function routeBounds(geometry: [number, number][]): [number, number, number, num
 export function RouteConditionsLayer() {
   const { mapRef, mapReady, styleVersion } = useMap();
   const minZoom = useOverlayMinZoom(OVERLAY_ID);
-  const layerVisible = useOverlayLayerVisible(OVERLAY_ID);
+  const layerVisible = useIncidentsVisible();
   useRenderedMapAttributions("road-conditions-route", CREDIT_LAYERS, layerVisible);
   const drawn = useDrawnDirectionsRoutes();
   const navRoute = useNavigationStore((s) => s.route);
