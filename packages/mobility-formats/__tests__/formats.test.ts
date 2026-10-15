@@ -6,22 +6,11 @@ import {
   buildSiriStopMonitoringRequest,
   buildSiriVehicleMonitoringRequest,
   buildXmlDocument,
-  DATEX_PUBLICATION_TYPES,
   decodeGtfsRtFeed,
   decodeGtfsRtFeedToObject,
   encodeGtfsRtFeed,
   type GbfsDiscoveryDocument,
   type GbfsV30Manifest,
-  getDatexElementId,
-  getDatexElementType,
-  getDatexModelBaseVersion,
-  getDatexPayloadPublicationType,
-  getDatexPublicationCreatorCountry,
-  getDatexPublicationCreatorNationalIdentifier,
-  getDatexPublicationLanguage,
-  getDatexPublicationTime,
-  getDatexSupplierCountry,
-  getDatexSupplierNationalIdentifier,
   getGtfsRtAlerts,
   getGtfsRtTripUpdates,
   getGtfsRtVehiclePositions,
@@ -31,16 +20,7 @@ import {
   getSiriServiceTimestamp,
   gtfsDateToIso,
   gtfsRtTimestampToIso,
-  indexDatexElementsById,
   indexNetexElementsById,
-  isDatexPublicationType,
-  listDatexElementsByName,
-  listDatexMeasuredValues,
-  listDatexMeasurementSiteRecords,
-  listDatexMultilingualValues,
-  listDatexSiteMeasurements,
-  listDatexSituationRecords,
-  listDatexSituations,
   listGbfsFeeds,
   listGbfsManifestDatasetVersions,
   listNetexFrames,
@@ -54,11 +34,9 @@ import {
   listSiriVehicleActivities,
   mapGtfsRouteTypeToMode,
   parseCsvRecords,
-  parseDatexDocument,
   parseNetexDocument,
   parseSiriDocument,
   parseXmlDocument,
-  resolveDatexRef,
   resolveGbfsFeedUrl,
   resolveGbfsVehicleStatusFeedUrl,
   resolveNetexRef,
@@ -461,193 +439,5 @@ describe("NeTEx helpers", () => {
 
   it("lists line entities across composite frames", () => {
     expect(listNetexLines(lineDocument)).toHaveLength(2);
-  });
-});
-
-describe("DATEX II helpers", () => {
-  const v3SituationDocument = `<?xml version="1.0" encoding="UTF-8"?>
-<d2LogicalModel xmlns="http://datex2.eu/schema/3/d2Payload" xmlns:com="http://datex2.eu/schema/3/common" xmlns:sit="http://datex2.eu/schema/3/situation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
-  <exchange>
-    <supplierIdentification>
-      <country>DE</country>
-      <nationalIdentifier>OPENMAPX-NODE</nationalIdentifier>
-    </supplierIdentification>
-  </exchange>
-  <payload xsi:type="sit:SituationPublication" lang="de" modelBaseVersion="3">
-    <com:publicationTime>2026-04-21T10:00:00Z</com:publicationTime>
-    <com:publicationCreator>
-      <com:country>DE</com:country>
-      <com:nationalIdentifier>OPENMAPX</com:nationalIdentifier>
-    </com:publicationCreator>
-    <sit:situation id="SIT:1">
-      <sit:overallSeverity>medium</sit:overallSeverity>
-      <sit:situationRecord xsi:type="sit:Roadworks" id="REC:1" version="2">
-        <sit:situationRecordCreationTime>2026-04-21T09:55:00Z</sit:situationRecordCreationTime>
-      </sit:situationRecord>
-    </sit:situation>
-  </payload>
-</d2LogicalModel>`;
-
-  const v2MeasuredDataDocument = `<?xml version="1.0" encoding="UTF-8"?>
-<d2LogicalModel xmlns="http://datex2.eu/schema/2/2_0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
-  <payloadPublication xsi:type="MeasuredDataPublication" lang="en">
-    <publicationTime>2026-04-21T10:15:00Z</publicationTime>
-    <publicationCreator>
-      <country>DE</country>
-      <nationalIdentifier>SENSOR-HUB</nationalIdentifier>
-    </publicationCreator>
-    <siteMeasurements id="SM:1">
-      <measurementSiteReference id="MS:1"/>
-      <measuredValue index="1">
-        <basicData xsi:type="TrafficFlow">
-          <vehicleFlow>120</vehicleFlow>
-        </basicData>
-      </measuredValue>
-    </siteMeasurements>
-  </payloadPublication>
-</d2LogicalModel>`;
-
-  const v2MeasurementSiteTableDocument = `<?xml version="1.0" encoding="UTF-8"?>
-<d2LogicalModel xmlns="http://datex2.eu/schema/2/2_0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
-  <payloadPublication xsi:type="MeasurementSiteTablePublication" lang="en">
-    <publicationTime>2026-04-21T10:20:00Z</publicationTime>
-    <publicationCreator>
-      <country>DE</country>
-      <nationalIdentifier>SENSOR-HUB</nationalIdentifier>
-    </publicationCreator>
-    <measurementSiteTable id="MST:1">
-      <measurementSiteRecord id="MS:1" version="1">
-        <measurementSiteName>Mainline Sensor</measurementSiteName>
-      </measurementSiteRecord>
-    </measurementSiteTable>
-  </payloadPublication>
-</d2LogicalModel>`;
-
-  const v2GenericParkingTableDocument = `<?xml version="1.0" encoding="UTF-8"?>
-<d2LogicalModel xmlns="http://datex2.eu/schema/2/2_0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
-  <payloadPublication xsi:type="GenericPublication" lang="en">
-    <publicationTime>2026-04-21T10:22:00Z</publicationTime>
-    <publicationCreator>
-      <country>NL</country>
-      <nationalIdentifier>NDW</nationalIdentifier>
-    </publicationCreator>
-    <genericPublicationExtension>
-      <parkingTablePublication>
-        <parkingTable id="PT:V2">
-          <parkingRecord id="PR:V2">
-            <parkingName>
-              <values>
-                <value lang="en">Truck Parking A</value>
-              </values>
-            </parkingName>
-          </parkingRecord>
-        </parkingTable>
-      </parkingTablePublication>
-    </genericPublicationExtension>
-  </payloadPublication>
-</d2LogicalModel>`;
-
-  const v3ParkingDocument = `<?xml version="1.0" encoding="UTF-8"?>
-<d2LogicalModel xmlns="http://datex2.eu/schema/3/d2Payload" xmlns:com="http://datex2.eu/schema/3/common" xmlns:park="http://datex2.eu/schema/3/parking" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
-  <payload xsi:type="park:ParkingTablePublication" lang="en" modelBaseVersion="3">
-    <com:publicationTime>2026-04-21T10:25:00Z</com:publicationTime>
-    <com:publicationCreator>
-      <com:country>DE</com:country>
-      <com:nationalIdentifier>PARKING-HUB</com:nationalIdentifier>
-    </com:publicationCreator>
-    <park:parkingTable id="PT:1">
-      <park:parkingRecord id="PR:1">
-        <park:parkingName>
-          <com:values>
-            <com:value lang="en">Central Garage</com:value>
-            <com:value lang="de">Zentrum Parkhaus</com:value>
-          </com:values>
-        </park:parkingName>
-      </park:parkingRecord>
-    </park:parkingTable>
-  </payload>
-</d2LogicalModel>`;
-
-  const v3ParkingStatusMessageContainerDocument = `<?xml version="1.0" encoding="UTF-8"?>
-<messageContainer xmlns="http://datex2.eu/schema/3/messageContainer" xmlns:park="http://datex2.eu/schema/3/parking" xmlns:com="http://datex2.eu/schema/3/common" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
-  <payload xsi:type="park:GenericPublication" lang="en" modelBaseVersion="3">
-    <com:publicationTime>2026-04-21T10:30:00Z</com:publicationTime>
-    <park:parkingRecordStatus>
-      <park:parkingRecordReference id="PR:1" />
-      <park:parkingSiteStatus>open</park:parkingSiteStatus>
-      <park:parkingStatusOriginTime>2026-04-21T10:29:00Z</park:parkingStatusOriginTime>
-    </park:parkingRecordStatus>
-  </payload>
-</messageContainer>`;
-
-  it("parses v3 situation publications and shared metadata", () => {
-    const parsed = parseDatexDocument(v3SituationDocument);
-    const index = indexDatexElementsById(parsed);
-    const situationRecord = listDatexSituationRecords(parsed)[0] as Record<string, unknown>;
-
-    expect(getDatexModelBaseVersion(parsed)).toBe("3");
-    expect(getDatexPayloadPublicationType(parsed)).toBe(DATEX_PUBLICATION_TYPES.situation);
-    expect(getDatexPublicationLanguage(parsed)).toBe("de");
-    expect(getDatexPublicationTime(parsed)).toBe("2026-04-21T10:00:00Z");
-    expect(getDatexSupplierCountry(parsed)).toBe("DE");
-    expect(getDatexSupplierNationalIdentifier(parsed)).toBe("OPENMAPX-NODE");
-    expect(getDatexPublicationCreatorCountry(parsed)).toBe("DE");
-    expect(getDatexPublicationCreatorNationalIdentifier(parsed)).toBe("OPENMAPX");
-    expect(listDatexSituations(parsed)).toHaveLength(1);
-    expect(listDatexSituationRecords(parsed)).toHaveLength(1);
-    expect(getDatexElementType(situationRecord)).toBe("Roadworks");
-    expect(listDatexElementsByName(parsed, "situationRecord")).toHaveLength(1);
-    expect(resolveDatexRef(index, "SIT:1")).toBeDefined();
-    expect(resolveDatexRef(index, "REC:1")).toBeDefined();
-  });
-
-  it("parses measured data, measurement sites, and parking publications across versions", () => {
-    const measuredValue = listDatexMeasuredValues(v2MeasuredDataDocument)[0] as Record<
-      string,
-      unknown
-    >;
-    const siteMeasurement = listDatexSiteMeasurements(v2MeasuredDataDocument)[0];
-    const measurementSiteIndex = indexDatexElementsById(v2MeasurementSiteTableDocument, [
-      "measurementSiteRecord",
-    ]);
-    const parkingRecord = listDatexElementsByName(v3ParkingDocument, "parkingRecord")[0] as Record<
-      string,
-      unknown
-    >;
-
-    expect(
-      isDatexPublicationType(v2MeasuredDataDocument, DATEX_PUBLICATION_TYPES.measuredData),
-    ).toBe(true);
-    expect(listDatexSiteMeasurements(v2MeasuredDataDocument)).toHaveLength(1);
-    expect(listDatexMeasuredValues(v2MeasuredDataDocument)).toHaveLength(1);
-    expect(getDatexElementId(siteMeasurement)).toBe("SM:1");
-    expect(getDatexElementType(measuredValue.basicData)).toBe("TrafficFlow");
-    expect(
-      isDatexPublicationType(
-        v2MeasurementSiteTableDocument,
-        DATEX_PUBLICATION_TYPES.measurementSiteTable,
-      ),
-    ).toBe(true);
-    expect(listDatexMeasurementSiteRecords(v2MeasurementSiteTableDocument)).toHaveLength(1);
-    expect(resolveDatexRef(measurementSiteIndex, "MS:1")).toBeDefined();
-    expect(
-      isDatexPublicationType(v2GenericParkingTableDocument, DATEX_PUBLICATION_TYPES.generic),
-    ).toBe(true);
-    expect(isDatexPublicationType(v3ParkingDocument, DATEX_PUBLICATION_TYPES.parkingTable)).toBe(
-      true,
-    );
-    expect(listDatexMultilingualValues(parkingRecord.parkingName)).toEqual([
-      { language: "en", value: "Central Garage" },
-      { language: "de", value: "Zentrum Parkhaus" },
-    ]);
-  });
-
-  it("reads a message-container payload's publication type and time", () => {
-    expect(getDatexPayloadPublicationType(v3ParkingStatusMessageContainerDocument)).toBe(
-      DATEX_PUBLICATION_TYPES.generic,
-    );
-    expect(getDatexPublicationTime(v3ParkingStatusMessageContainerDocument)).toBe(
-      "2026-04-21T10:30:00Z",
-    );
   });
 });

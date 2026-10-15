@@ -70,7 +70,7 @@ export function stripXmlNamespace(name: string): string {
   return separatorIndex >= 0 ? name.slice(separatorIndex + 1) : name;
 }
 
-// Transit feeds (SIRI/OJP/NetEx/DATEX/GTFS-RT) never declare custom XML
+// Transit feeds (SIRI/OJP/NetEx/GTFS-RT) never declare custom XML
 // entities. Reject any document that does: an internal-subset `<!ENTITY ...>`
 // is the "billion laughs" amplification vector, and the parser runs on live,
 // third-party feeds. Numeric/predefined entity decoding stays enabled. The
