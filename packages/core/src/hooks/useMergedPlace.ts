@@ -94,7 +94,21 @@ function mergePlaceFields(
     for (const key of Object.keys(fields)) {
       if (key === field || key.startsWith(`${field}.`)) delete fields[key];
     }
-    Object.assign(fields, captureFieldContributors(owner, sourceField, field));
+    const captured = captureFieldContributors(owner, sourceField, field);
+    // Preserve absence separately from authoritative empty. The shared capture
+    // helper copies the child tree but always synthesizes its target parent.
+    let sourceCaptured = owner.fieldContributors === undefined && owner.contributors !== undefined;
+    let path = sourceField;
+    while (owner.fieldContributors !== undefined && path) {
+      if (owner.fieldContributors[path] !== undefined) {
+        sourceCaptured = true;
+        break;
+      }
+      const dot = path.lastIndexOf(".");
+      path = dot < 0 ? "" : path.slice(0, dot);
+    }
+    if (!sourceCaptured) delete captured[field];
+    Object.assign(fields, captured);
   };
   for (const field of Object.keys(base)) {
     if (!["contributors", "fieldContributors", "ids"].includes(field))

@@ -5,7 +5,7 @@ import userEvent from "@testing-library/user-event";
 import { NextIntlClientProvider } from "next-intl";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-let providers = {
+let providers: import("@openmapx/core").RideProvidersResponse = {
   providers: [
     {
       id: "uber",
@@ -285,4 +285,27 @@ describe("RidePanel", () => {
     expect(screen.getByText("Served quote notice")).toBeInTheDocument();
     expect(screen.queryByText("Unused envelope notice")).toBeNull();
   });
+});
+
+it("credits displayed availability rules when quote acquisition returned no quotes", () => {
+  providers = {
+    ...providers,
+    providers: [
+      {
+        ...providers.providers[0],
+        capabilities: { deepLink: true, quote: true, booking: false, tracking: false },
+        availability: {
+          available: true,
+          coverageChecked: true,
+          products: [],
+          bookingRules: { bookingType: 1, priorNoticeMinutesMin: 30 },
+          contributors: [{ sourceId: "rules", name: "Availability rules supplier" }],
+        },
+      },
+    ],
+  };
+  quoteResults = [{ providerId: "uber", quotes: [], attributions: [] }];
+  renderPanel();
+  expect(screen.getByText(/30 minutes/)).toBeInTheDocument();
+  expect(screen.getByText(/Availability rules supplier/)).toBeInTheDocument();
 });

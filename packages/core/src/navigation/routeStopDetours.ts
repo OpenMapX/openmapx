@@ -1,3 +1,8 @@
+import {
+  contributorsForField,
+  type FieldContributors,
+  snapshotContributors,
+} from "@openmapx/mobility-core/contributors";
 import type { LngLat } from "../types/geometry";
 import type { DirectionsResult, Route } from "../types/routing";
 import type { RouteMatcherInput } from "./routeMatcher";
@@ -25,6 +30,7 @@ interface RouteStopDetourBase {
   id: string;
   access: { kind: "entrance" | "coordinate"; coordinates: LngLat };
   waypoints: LngLat[];
+  fieldContributors?: FieldContributors;
 }
 
 export type RouteStopDetour = RouteStopDetourBase &
@@ -129,6 +135,7 @@ export async function evaluateRouteStopDetours(
     });
   if (results.length === 0 || waypoints.length < 2) return results;
   let baseline: Route;
+  let baselineFields: FieldContributors;
   let provider: string;
   try {
     const response = await requestRoute({ waypoints, provider: input.provider, signal });
@@ -137,6 +144,10 @@ export async function evaluateRouteStopDetours(
     if (!selected || !response.provider || (input.provider && response.provider !== input.provider))
       return results;
     baseline = selected;
+    baselineFields = {
+      duration: contributorsForField(selected, "duration"),
+      distance: contributorsForField(selected, "distance"),
+    };
     provider = response.provider;
   } catch {
     checkAbort(signal);
@@ -162,6 +173,16 @@ export async function evaluateRouteStopDetours(
           ...result,
           kind: "network",
           provider,
+          fieldContributors: {
+            seconds: snapshotContributors(
+              baselineFields.duration,
+              contributorsForField(candidate, "duration"),
+            ),
+            meters: snapshotContributors(
+              baselineFields.distance,
+              contributorsForField(candidate, "distance"),
+            ),
+          },
           seconds: Math.max(0, candidate.duration - baseline.duration),
           meters: Math.max(0, candidate.distance - baseline.distance),
         };

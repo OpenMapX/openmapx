@@ -256,3 +256,31 @@ describe("validateRouteShare with per-waypoint schedules", () => {
     expect(validateRouteShare(ROUTE)).toEqual(ROUTE);
   });
 });
+
+it("retains cloned per-field acquisition receipts through snapshot and public parsing", () => {
+  const receipt = {
+    sourceId: "provider",
+    name: "Original publisher",
+    attributionText: "Original notice",
+  };
+  const fieldContributors = { name: [receipt], address: [], lat: [receipt], lng: [receipt] };
+  const snapshot = listSnapshotFrom({ name: "Trip", icon: null }, [
+    {
+      name: "Original place",
+      address: "Original address",
+      lat: 50,
+      lng: 8,
+      note: "My note",
+      placeId: "osm:node:1",
+      fieldContributors,
+    },
+  ]);
+  const parsed = parseStoredListSnapshot(JSON.parse(JSON.stringify(snapshot)));
+  expect(parsed?.places[0].fieldContributors).toEqual(fieldContributors);
+  if (!parsed) throw new Error("Snapshot rejected");
+  expect(toPublicListShare("snapshot", parsed).places[0].fieldContributors).toEqual(
+    fieldContributors,
+  );
+  receipt.attributionText = "Changed catalogue";
+  expect(snapshot.places[0].fieldContributors?.name?.[0].attributionText).toBe("Original notice");
+});

@@ -2,6 +2,10 @@ import type { Place } from "@openmapx/core";
 import { contributorsForField } from "@openmapx/mobility-core/contributors";
 import { renderHook } from "@testing-library/react";
 import { expect, it, vi } from "vitest";
+import {
+  captureSavedPlaceContributors,
+  savedPlaceContributorsForPlace,
+} from "../saved-place-contributors";
 
 const state = vi.hoisted(() => ({
   nom: null as Place | null,
@@ -124,3 +128,122 @@ it("uses captured reverse address and matched schedule ownership with neutral co
   state.reverse = null;
   state.matched = null;
 });
+
+it("preserves an unknown saved coordinate axis through the real panel merge and resave", () => {
+  state.nom = null;
+  state.reverse = null;
+  state.matched = null;
+  const latitude = { sourceId: "latitude", name: "Captured latitude supplier" };
+  const saved = { lat: [latitude] };
+  const selected: Place = {
+    id: "saved:partial",
+    primaryScheme: "saved",
+    ids: { saved: "partial" },
+    name: "Saved point",
+    address: "",
+    coordinates: [8, 50],
+    ...savedPlaceContributorsForPlace(saved),
+  };
+  const { result, unmount } = renderHook(() => useMergedPlace(selected));
+  expect(result.current.place?.fieldContributors).not.toHaveProperty("coordinates");
+  expect(result.current.place?.fieldContributors?.["coordinates.1"]).toEqual([latitude]);
+  expect(captureSavedPlaceContributors(result.current.place ?? {})).toEqual(saved);
+  unmount();
+});
+
+it("keeps canonical parent ownership and authoritative child overrides through panel merge", () => {
+  state.nom = null;
+  state.reverse = null;
+  state.matched = null;
+  const parent = { sourceId: "parent", name: "Captured point supplier" };
+  const selected: Place = {
+    id: "saved:parent",
+    primaryScheme: "saved",
+    ids: { saved: "parent" },
+    name: "Saved point",
+    address: "",
+    coordinates: [8, 50],
+    fieldContributors: { name: [], address: [], coordinates: [parent], "coordinates.0": [] },
+  };
+  const { result, unmount } = renderHook(() => useMergedPlace(selected));
+  expect(captureSavedPlaceContributors(result.current.place ?? {})).toEqual({
+    name: [],
+    address: [],
+    lat: [parent],
+    lng: [],
+  });
+  unmount();
+});
+
+it("keeps entirely unknown saved coordinate ownership absent through panel merge", () => {
+  state.nom = null;
+  state.reverse = null;
+  state.matched = null;
+  const selected: Place = {
+    id: "saved:unknown",
+    primaryScheme: "saved",
+    ids: { saved: "unknown" },
+    name: "Saved point",
+    address: "",
+    coordinates: [8, 50],
+  };
+  const { result, unmount } = renderHook(() => useMergedPlace(selected));
+  expect(result.current.place?.fieldContributors).not.toHaveProperty("coordinates");
+  const captured = captureSavedPlaceContributors(result.current.place ?? {});
+  expect(captured).not.toHaveProperty("lat");
+  expect(captured).not.toHaveProperty("lng");
+  expect(captured).toEqual({});
+  unmount();
+});
+
+it("retains nearest canonical identity ancestors and explicit empty overrides in transfer", () => {
+  state.nom = null;
+  state.reverse = null;
+  state.matched = null;
+  const identity = { sourceId: "identity", name: "Identity supplier" };
+  const selected: Place = {
+    id: "osm:node/9",
+    primaryScheme: "osm",
+    ids: { osm: "node/9", wikidata: "Q9" },
+    name: "Point",
+    address: "",
+    coordinates: [8, 50],
+    fieldContributors: { ids: [identity], "ids.wikidata": [], name: [], address: [] },
+  };
+  const { result, unmount } = renderHook(() => useMergedPlace(selected));
+  expect(result.current.place?.fieldContributors?.["ids.osm"]).toEqual([identity]);
+  expect(result.current.place?.fieldContributors?.["ids.wikidata"]).toEqual([]);
+  expect(captureSavedPlaceContributors(result.current.place ?? {})).toEqual({
+    name: [],
+    address: [],
+  });
+  unmount();
+});
+
+it.each([{ empty: false }, { empty: true }])(
+  "retains record-level captured contributors when no field map exists: %j",
+  ({ empty }) => {
+    state.nom = null;
+    state.reverse = null;
+    state.matched = null;
+    const receipt = { sourceId: "record", name: "Record supplier" };
+    const contributors = empty ? [] : [receipt];
+    const selected: Place = {
+      id: "saved:record",
+      primaryScheme: "saved",
+      ids: { saved: "record" },
+      name: "Point",
+      address: "",
+      coordinates: [8, 50],
+      contributors,
+    };
+    const { result, unmount } = renderHook(() => useMergedPlace(selected));
+    expect(captureSavedPlaceContributors(result.current.place ?? {})).toEqual({
+      name: contributors,
+      address: contributors,
+      lat: contributors,
+      lng: contributors,
+    });
+    unmount();
+  },
+);

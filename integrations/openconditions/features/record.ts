@@ -34,6 +34,13 @@ export interface LatestReading {
    */
   source: string;
   contributors?: string[];
+  /** Immutable, privacy-safe credit snapshot of this selected observation. */
+  provenance?: {
+    sourceId: string;
+    attribution: Rec;
+    upstream?: Rec[];
+    mergedSources?: Rec[];
+  };
 }
 
 const FUSED = new Set(["@fused", "@fused-public"]);
@@ -77,12 +84,17 @@ export interface RecordSource {
 export function sourcesOf(record: Rec): RecordSource[] {
   const provenance = rec(record.provenance);
   const out: RecordSource[] = [];
+  const seen = new Set<string>();
   const add = (id: unknown, attribution: unknown, upstream: unknown) => {
     const sourceId = str(id);
     if (!sourceId) return;
-    const held = out.find((s) => s.id === sourceId);
-    if (held) held.upstream.push(...list(upstream));
-    else out.push({ id: sourceId, attribution: rec(attribution), upstream: list(upstream) });
+    const captured = { id: sourceId, attribution: rec(attribution), upstream: list(upstream) };
+    // Identity selects/filter sources; it cannot collapse different acquisition notices.
+    const key = JSON.stringify(captured);
+    if (!seen.has(key)) {
+      seen.add(key);
+      out.push(structuredClone(captured));
+    }
   };
   add(provenance.sourceId, provenance.attribution, provenance.upstream);
   for (const merged of list(provenance.mergedSources)) {
@@ -135,11 +147,6 @@ export function readingSources(reading: LatestReading): string[] {
 /** The feeds behind a reading, which must be listed and not excluded; crowd reports are none. */
 export function readingFeeds(reading: LatestReading): string[] {
   return readingSources(reading).filter((id) => id !== CROWD);
-}
-
-/** Whether crowd reports contributed to a reading. */
-export function crowdReported(reading: LatestReading | undefined): boolean {
-  return reading !== undefined && readingSources(reading).includes(CROWD);
 }
 
 export function instantOf(time: unknown): string | undefined {
@@ -245,10 +252,21 @@ export const NO_SOURCES: CreditSources = {
   crowd: () => undefined,
 };
 
-/** The crowd's credit when its reports contributed, as `sources` states it. */
-export function crowdCredits(contributed: boolean, sources: CreditSources): Attribution[] {
-  const credit = contributed ? sources.crowd() : undefined;
-  return credit ? [credit] : [];
+/** Selected observation credits never borrow a feature's or the current source catalogue's terms. */
+export function readingCredits(
+  ...readings: readonly (LatestReading | null | undefined)[]
+): Attribution[] {
+  return snapshotContributors(
+    ...readings.map((reading) => {
+      const captured = sourcesOf({ provenance: reading?.provenance }).filter(
+        (source) => !FUSED.has(source.id),
+      );
+      return snapshotContributors(
+        captured.map((source) => credit(source, NO_SOURCES)),
+        upstreamCredits(captured, NO_SOURCES),
+      );
+    }),
+  );
 }
 
 /** A source's credit; without a link of its own it takes the source's link from `sources`. */

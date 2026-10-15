@@ -1,4 +1,8 @@
 import { createHash, randomBytes } from "node:crypto";
+import {
+  parseSavedPlaceContributors,
+  type SavedPlaceFieldContributors,
+} from "@openmapx/core/saved-place-contributors";
 import type { ExportPlace } from "../utils/geo-export";
 
 /** Route-schema pattern for the public token param (43-char base64url plus slack). */
@@ -206,6 +210,7 @@ export function listSnapshotFrom(
     lng: number;
     note: string | null;
     placeId: string | null;
+    fieldContributors?: SavedPlaceFieldContributors | null;
   }>,
 ): StoredListSnapshot {
   return {
@@ -218,6 +223,9 @@ export function listSnapshotFrom(
       lng: place.lng,
       note: place.note,
       placeId: place.placeId,
+      ...(place.fieldContributors == null
+        ? {}
+        : { fieldContributors: parseSavedPlaceContributors(place.fieldContributors) ?? {} }),
     })),
   };
 }
@@ -234,7 +242,13 @@ export function parseStoredListSnapshot(value: unknown): StoredListSnapshot | nu
     const place = candidate as Record<string, unknown>;
     if (typeof place.name !== "string") return null;
     if (typeof place.lat !== "number" || typeof place.lng !== "number") return null;
+    const fieldContributors =
+      place.fieldContributors === undefined
+        ? undefined
+        : parseSavedPlaceContributors(place.fieldContributors);
+    if (place.fieldContributors !== undefined && fieldContributors === undefined) return null;
     parsed.push({
+      ...(fieldContributors === undefined ? {} : { fieldContributors }),
       name: place.name,
       address: typeof place.address === "string" ? place.address : null,
       lat: place.lat,

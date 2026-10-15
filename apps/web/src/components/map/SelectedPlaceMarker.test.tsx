@@ -6,6 +6,10 @@ import {
   usePlaceStore,
   useSidebarStore,
 } from "@openmapx/core";
+import {
+  captureSavedPlaceContributors,
+  savedPlaceContributorsForPlace,
+} from "@openmapx/core/saved-place-contributors";
 import { act, render } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import { usePinMarker } from "@/hooks/usePinMarker";
@@ -130,5 +134,43 @@ it("keeps native geometry and visible-name channels separate with the merged nam
   const args = (usePinMarker as unknown as ReturnType<typeof vi.fn>).mock.calls.at(-1);
   expect(args?.[5]).toEqual([coordinate]);
   expect(args?.[6]).toEqual([coordinate, name]);
+  view.unmount();
+});
+
+it("credits known coordinate components on a partial saved selection without inventing an unknown axis", () => {
+  const latitude = { sourceId: "latitude", name: "Latitude supplier" };
+  const selected = createPlace({
+    primaryScheme: "saved",
+    ids: { saved: "partial" },
+    name: "Saved point",
+    address: "",
+    coordinates: [8, 50],
+    ...savedPlaceContributorsForPlace({ lat: [latitude], name: [] }),
+  });
+  usePlaceStore.setState({ selectedPlace: selected });
+  const view = render(<SelectedPlaceMarker />);
+  const args = (usePinMarker as unknown as ReturnType<typeof vi.fn>).mock.calls.at(-1);
+  expect(args?.[5]).toEqual([latitude]);
+  expect(args?.[6]).toEqual([latitude]);
+  expect(captureSavedPlaceContributors(selected)).toEqual({ lat: [latitude], name: [] });
+  view.unmount();
+});
+
+it("respects child axis overrides while retaining the other axis parent capture", () => {
+  const latitude = { sourceId: "latitude", name: "Parent coordinate supplier" };
+  const longitude = { sourceId: "longitude", name: "Longitude override" };
+  const selected = createPlace({
+    primaryScheme: "saved",
+    ids: { saved: "axes" },
+    name: "Saved point",
+    address: "",
+    coordinates: [8, 50],
+    fieldContributors: { coordinates: [latitude], "coordinates.0": [longitude], name: [] },
+  });
+  usePlaceStore.setState({ selectedPlace: selected });
+  const view = render(<SelectedPlaceMarker />);
+  const args = (usePinMarker as unknown as ReturnType<typeof vi.fn>).mock.calls.at(-1);
+  expect(args?.[5]).toEqual([longitude, latitude]);
+  expect(args?.[6]).toEqual([longitude, latitude]);
   view.unmount();
 });

@@ -13,7 +13,7 @@ import { createParkingSiteProvider } from "../parking/provider.js";
 import { createLiveSources, type LiveSources } from "../sources.js";
 import stringsDe from "../strings/de.json" with { type: "json" };
 import stringsEn from "../strings/en.json" with { type: "json" };
-import { CROWD_CREDIT, CROWD_SOURCES } from "./fixtures/crowd.js";
+import { CROWD_PROVENANCE, CROWD_READING_CREDIT, CROWD_SOURCES } from "./fixtures/crowd.js";
 import featureResponse from "./fixtures/feature-parking.json" with { type: "json" };
 import featuresResponse from "./fixtures/features-parking.json" with { type: "json" };
 
@@ -116,8 +116,22 @@ describe("parking-sites-openconditions", () => {
       stale: false,
     });
     expect(site.areas).toEqual([
-      { key: "car:disabled", vehicleType: "car", userGroup: "disabled", capacity: 5, stale: false },
-      { key: "car:women", vehicleType: "car", userGroup: "women", capacity: 20, stale: false },
+      {
+        key: "car:disabled",
+        contributors: [],
+        vehicleType: "car",
+        userGroup: "disabled",
+        capacity: 5,
+        stale: false,
+      },
+      {
+        key: "car:women",
+        contributors: [],
+        vehicleType: "car",
+        userGroup: "women",
+        capacity: 20,
+        stale: false,
+      },
     ]);
     expect(site.rates).toEqual([
       {
@@ -149,6 +163,7 @@ describe("parking-sites-openconditions", () => {
     expect(fresh).toMatchObject({ available: 160, stale: false });
     expect(fresh.areas[0]).toEqual({
       key: "car:disabled",
+      contributors: [],
       vehicleType: "car",
       userGroup: "disabled",
       capacity: 5,
@@ -600,9 +615,10 @@ describe("recordToParkingSite", () => {
     expect(areas[0]).toMatchObject({ capacity: 5 });
   });
 
-  test("crowd reports are credited as /sources states the crowd", () => {
+  test("crowd reports retain the expanded observation capture", () => {
     const answer = body();
     latestOf(answer)[0]!.contributors = [MOBIDATA, "crowd"];
+    latestOf(answer)[0]!.provenance = CROWD_PROVENANCE;
     const site = recordToParkingSite(
       recordOf(answer),
       latestOf(answer),
@@ -611,7 +627,7 @@ describe("recordToParkingSite", () => {
       CROWD_SOURCES,
       FRESH,
     )!;
-    expect(site.attributions.at(-1)).toEqual(CROWD_CREDIT);
+    expect(site.attributions.at(-1)).toEqual(CROWD_READING_CREDIT);
   });
 
   test("a crowd reading is left out while /sources states no crowd credit", () => {

@@ -23,8 +23,13 @@ import {
   usePlaceStore,
   useSidebarStore,
 } from "@openmapx/core";
+import {
+  savedPlaceContributors,
+  savedPlaceContributorsForPlace,
+} from "@openmapx/core/saved-place-contributors";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
+import { AttributionStrip } from "@/components/ui/AttributionStrip";
 import { useMap } from "@/integration-api/map/MapContext";
 import { BRAND } from "@/integration-api/runtime/theme";
 
@@ -53,6 +58,7 @@ export function SavedLabeledTab() {
     setSelectedPlace(
       createPlace({
         ...identity,
+        ...savedPlaceContributorsForPlace(label.fieldContributors),
         name: label.name,
         address: label.address ?? "",
         coordinates: [label.lng, label.lat],
@@ -135,6 +141,12 @@ export function SavedLabeledTab() {
               >
                 {dbLabel?.address ?? t("notSet")}
               </Typography>
+              {dbLabel?.address && (
+                <AttributionStrip
+                  attributions={savedPlaceContributors(dbLabel.fieldContributors, ["address"])}
+                  variant="inline"
+                />
+              )}
             </Box>
             {dbLabel && (
               <IconButton
@@ -184,6 +196,12 @@ export function SavedLabeledTab() {
             >
               {label.address ?? t("notSet")}
             </Typography>
+            {label.address && (
+              <AttributionStrip
+                attributions={savedPlaceContributors(label.fieldContributors, ["address"])}
+                variant="inline"
+              />
+            )}
           </Box>
           <IconButton size="small" onClick={(e) => handleMenuOpen(e, label)} sx={{ flexShrink: 0 }}>
             <MoreVertIcon fontSize="small" />

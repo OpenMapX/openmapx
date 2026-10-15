@@ -7,6 +7,7 @@ import {
   captureResultContributors,
   contributorsForRecords,
   snapshotContributors,
+  withContributors,
 } from "@openmapx/mobility-core/contributors";
 import type { ResolvedRideProvider, RideProviderListing, RideQuoteResult } from "./types.js";
 
@@ -123,10 +124,20 @@ export function createRideOrchestrator(ctx: IntegrationContext) {
 
     const resolved = await Promise.all(
       entries.map(async (e) => {
+        const captured = snapshotContributors(
+          e.provider.attribution.filter((receipt) => receipt.sourceId === e.provider.meta.sourceId),
+        );
         const result = await call(e.provider, "getAvailability", () =>
           e.provider.getAvailability(request),
         );
         if (!result?.data.available) return null;
+        const availability = withContributors(
+          result.data,
+          captureResultContributors(
+            result.data,
+            result.attributions.length ? result.attributions : captured,
+          ),
+        );
         // Ask the provider to build the handoff it would actually use, so the
         // panel can warn when the trip will not carry into the app. Cheap for
         // the pure URL builders; the feed-backed providers memoise their
@@ -141,7 +152,7 @@ export function createRideOrchestrator(ctx: IntegrationContext) {
           brandColor: e.provider.meta.brandColor,
           capabilities: e.provider.capabilities,
           permitsComparison: e.provider.permitsComparison,
-          availability: result.data,
+          availability,
           handoffCarriesCoordinates: handoff?.carriesCoordinates ?? false,
           isDefault: e.provider.id === configuredDefault,
         };

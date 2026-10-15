@@ -1,13 +1,24 @@
-import { type SavedList, useSavedPlacesStore } from "@openmapx/core";
+import {
+  type SavedList,
+  type SavedPlace,
+  usePlaceStore,
+  useSavedPlacesStore,
+} from "@openmapx/core";
 import { en } from "@openmapx/i18n";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const LEGACY_CUSTOM_LIST = "$trip";
-const state = vi.hoisted(() => ({ name: "", update: vi.fn(), remove: vi.fn() }));
+const state = vi.hoisted(() => ({
+  places: [] as SavedPlace[],
+  name: "",
+  update: vi.fn(),
+  remove: vi.fn(),
+}));
 vi.mock("@emoji-mart/react", () => ({ default: () => null }));
 vi.mock("@/integration-api/map/MapContext", () => ({ useMap: () => ({ flyTo: vi.fn() }) }));
+vi.mock("./PlaceThumbnail", () => ({ PlaceThumbnail: () => null }));
 vi.mock("./ShareListDialog", () => ({ ShareListDialog: () => null }));
 vi.mock("@openmapx/core", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@openmapx/core")>()),
@@ -16,7 +27,7 @@ vi.mock("@openmapx/core", async (importOriginal) => ({
       { id: "list-1", name: state.name, icon: null, isPrivate: true, placeCount: 0 } as SavedList,
     ],
   }),
-  useSavedListPlaces: () => ({ data: [], isLoading: false }),
+  useSavedListPlaces: () => ({ data: state.places, isLoading: false }),
   useUpdateList: () => ({ mutate: state.update }),
   useDeleteList: () => ({ mutate: state.remove }),
   useUpdatePlace: () => ({ mutate: vi.fn() }),
@@ -33,6 +44,7 @@ function renderDetail() {
 
 beforeEach(() => {
   state.name = LEGACY_CUSTOM_LIST;
+  state.places = [];
   state.update.mockClear();
   state.remove.mockClear();
   useSavedPlacesStore.getState().selectList("list-1");
@@ -60,4 +72,35 @@ describe("saved list name ownership", () => {
       ).toBeInTheDocument();
     },
   );
+});
+
+it("shows frozen row credits and reconstructs selected details with exact field snapshots", () => {
+  const receipt = { sourceId: "original", name: "Original row publisher" };
+  const geometry = { sourceId: "coordinate", name: "Coordinate publisher" };
+  state.places = [
+    {
+      id: "saved-1",
+      listId: "list-1",
+      placeId: null,
+      note: null,
+      sortOrder: 0,
+      createdAt: "2026-10-15T00:00:00Z",
+      name: "Saved name",
+      address: "Saved address",
+      lat: 50,
+      lng: 8,
+      fieldContributors: { name: [receipt], address: [], lat: [geometry], lng: [] },
+    },
+  ];
+  renderDetail();
+  expect(screen.getByText("Original row publisher")).toBeInTheDocument();
+  expect(screen.queryByText("Coordinate publisher")).not.toBeInTheDocument();
+  fireEvent.click(screen.getByText("Saved name"));
+  expect(usePlaceStore.getState().selectedPlace?.fieldContributors).toEqual({
+    name: [receipt],
+    address: [],
+    coordinates: [geometry],
+    "coordinates.1": [geometry],
+    "coordinates.0": [],
+  });
 });

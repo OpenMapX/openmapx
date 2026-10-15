@@ -453,6 +453,10 @@ export function RidePanel({ route }: { route?: RideQuoteRequest["route"] }) {
             }}
             sx={inputSx}
           />
+          <AttributionStrip
+            attributions={contributorsForRecords([selected?.availability])}
+            variant="inline"
+          />
           {bookingRules?.priorNoticeMinutesMin !== undefined && (
             <Typography variant="caption" color="text.secondary">
               {t("ridePrebookNotice", { minutes: bookingRules.priorNoticeMinutesMin })}
@@ -464,9 +468,17 @@ export function RidePanel({ route }: { route?: RideQuoteRequest["route"] }) {
       {detailProvider && (
         <>
           {!detailProvider.availability.coverageChecked && (
-            <Typography variant="caption" color="text.secondary">
-              {t("rideCoverageUnknown", { provider: detailProvider.name })}
-            </Typography>
+            <>
+              <Typography variant="caption" color="text.secondary">
+                {t("rideCoverageUnknown", { provider: detailProvider.name })}
+              </Typography>
+              {!allowsPrebook && (
+                <AttributionStrip
+                  attributions={contributorsForRecords([detailProvider.availability])}
+                  variant="inline"
+                />
+              )}
+            </>
           )}
 
           {!detailProvider.handoffCarriesCoordinates && (

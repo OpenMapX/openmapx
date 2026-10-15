@@ -14,8 +14,6 @@ import {
   type CreditSources,
   countryOf,
   credit,
-  crowdCredits,
-  crowdReported,
   firstText,
   instantOf,
   itemIdOf,
@@ -26,6 +24,7 @@ import {
   newestReading,
   pointOf,
   type Rec,
+  readingCredits,
   rec,
   sourcesOf,
   splitKey,
@@ -240,7 +239,6 @@ export function recordToParkingSite(
   );
   const readings = allowedReadings(latest, excluded);
   const site = countsOf(readings, undefined, now);
-  let crowd = site.used.some(crowdReported);
 
   const areas: ParkingArea[] = [];
   for (const component of list(record["components"])) {
@@ -259,13 +257,13 @@ export function recordToParkingSite(
       userGroup,
       ...(capacity !== undefined ? { capacity } : {}),
       ...own.counts,
+      contributors: readingCredits(...own.used),
     };
     const held = areas.findIndex((a) => a.key === area.key);
     // Two areas under one key are one area: a counted one replaces one that only says it exists.
     if (held === -1) areas.push(area);
     else if (!counted(areas[held]!) && counted(area)) areas[held] = area;
     else continue;
-    crowd ||= own.used.some(crowdReported);
   }
 
   const rates = offers
@@ -315,11 +313,12 @@ export function recordToParkingSite(
     rates,
     ...(tariffText ? { tariffText } : {}),
     ...(notes ? { notes } : {}),
-    sources: kept.map((s) => s.id),
+    sources: [...new Set(kept.map((s) => s.id))],
     attributions: [
       ...kept.map((s) => credit(s, sources)),
       ...upstreamCredits(kept, sources),
-      ...crowdCredits(crowd, sources),
+      ...readingCredits(...site.used),
+      ...areas.flatMap((area) => area.contributors ?? []),
     ],
   };
 }

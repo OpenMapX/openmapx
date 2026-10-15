@@ -27,9 +27,14 @@ import {
   useDebounce,
   useNavigationStore,
 } from "@openmapx/core";
+import {
+  contributorsForRecordFields,
+  snapshotContributors,
+} from "@openmapx/mobility-core/contributors";
 import { useTranslations } from "next-intl";
 import { useEffect, useRef, useState } from "react";
 import { BrandLogo } from "@/components/search/BrandLogo";
+import { AttributionStrip } from "@/components/ui/AttributionStrip";
 import { useMapOptional } from "@/integration-api/map/MapContext";
 import { BRAND } from "@/integration-api/runtime/theme";
 import { useRouteSearchStore } from "@/lib/navigation/routeSearchStore";
@@ -125,6 +130,19 @@ export function RouteSearchControl() {
   const { results, isLoading, addStop, cancelAddStop } = useRouteSearch(query);
   const selected = results.find((poi) => poi.place.id === selectedId) ?? null;
   const copy = selected ? routeStopCopy(selected) : null;
+  const selectedAttributions = selected
+    ? snapshotContributors(
+        contributorsForRecordFields(selected.place, [
+          "name",
+          selected.detour?.access.kind === "entrance" || selected.place.routingEntrance
+            ? "routingEntrance"
+            : "coordinates",
+        ]),
+        selected.detour?.kind === "network"
+          ? contributorsForRecordFields(selected.detour, ["seconds", "meters"])
+          : [],
+      )
+    : [];
   // A new search or route must retire any pending selection in this sheet.
   const route = useNavigationStore((s) => s.route);
   const session = useNavigationStore((s) => s.navigationStartedAtMs);
@@ -443,6 +461,11 @@ export function RouteSearchControl() {
                 : "rsDetourCoordinate",
             )}
           </Typography>
+          <AttributionStrip
+            attributions={selectedAttributions}
+            variant="plain"
+            provenanceDisplay="details"
+          />
           {addFailed && (
             <Typography role="alert" color="error" variant="body2" sx={{ mb: 1 }}>
               {t("rsAddFailed")}

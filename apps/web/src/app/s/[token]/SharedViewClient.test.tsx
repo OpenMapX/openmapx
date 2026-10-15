@@ -84,3 +84,35 @@ describe("SharedViewClient", () => {
     ).toBeInTheDocument();
   });
 });
+
+it("credits only the frozen shared row fields without a current registry fallback", () => {
+  const name = {
+    sourceId: "same",
+    name: "Original name publisher",
+    attributionText: "Original required wording",
+  };
+  const address = {
+    sourceId: "same",
+    name: "Original address publisher",
+    attributionText: "Different required wording",
+  };
+  const geometry = { sourceId: "geometry", name: "Map coordinate publisher" };
+  renderShare({
+    type: "list",
+    mode: "snapshot",
+    name: "Trip",
+    icon: null,
+    places: [
+      {
+        name: "Cafe",
+        address: "Street",
+        lat: 50,
+        lng: 8,
+        fieldContributors: { name: [name], address: [address], lat: [geometry], lng: [] },
+      },
+    ],
+  });
+  expect(screen.getByText("Original required wording")).toBeInTheDocument();
+  expect(screen.getByText("Different required wording")).toBeInTheDocument();
+  expect(screen.queryByText("Map coordinate publisher")).not.toBeInTheDocument();
+});

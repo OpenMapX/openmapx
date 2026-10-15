@@ -90,6 +90,10 @@
       "types": "./src/types/placeIds.ts",
       "default": "./src/types/placeIds.ts"
     },
+    "./saved-place-contributors": {
+      "types": "./src/saved-place-contributors.ts",
+      "default": "./src/saved-place-contributors.ts"
+    },
     "./saved-lists": {
       "types": "./src/utils/savedLists.ts",
       "default": "./src/utils/savedLists.ts"

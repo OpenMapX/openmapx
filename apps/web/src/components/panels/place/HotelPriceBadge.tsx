@@ -4,6 +4,7 @@ import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
 import type { HotelOffer } from "@openmapx/core";
 import { useLocale, useTranslations } from "next-intl";
+import { AttributionStrip } from "@/components/ui/AttributionStrip";
 
 /** "from €75 / night" reference price from a live offer. */
 export function HotelPriceBadge({ offer }: { offer: HotelOffer }) {
@@ -34,11 +35,7 @@ export function HotelPriceBadge({ offer }: { offer: HotelOffer }) {
       <Typography variant="caption" sx={{ color: "text.secondary" }}>
         {t("perNight")}
       </Typography>
-      {offer.source && (
-        <Typography variant="caption" sx={{ color: "text.secondary" }}>
-          · {t("rateSource", { source: offer.source === "liteapi" ? "LiteAPI" : offer.source })}
-        </Typography>
-      )}
+      <AttributionStrip attributions={[...(offer.contributors ?? [])]} variant="inline" />
     </Box>
   );
 }

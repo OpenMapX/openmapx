@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "../api/client";
 import { API_ENDPOINTS } from "../api/endpoints";
 import { useSession } from "../auth/useSession";
+import type { SavedPlaceFieldContributors } from "../saved-place-contributors";
 import type { LabeledPlace, SavedList, SavedPlace } from "../types/saved";
 
 /**
@@ -119,6 +120,7 @@ export function useSavePlace() {
       lat: number;
       lng: number;
       placeId?: string | null;
+      fieldContributors?: SavedPlaceFieldContributors;
       note?: string | null;
     }) => apiClient.post<SavedPlace>(`${API_ENDPOINTS.savedLists}/${listId}/places`, data),
     onSuccess: (_data, vars) => {
@@ -144,8 +146,18 @@ export function useRemovePlace() {
 export function useUpdatePlace() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, ...data }: { id: string; note?: string | null; sortOrder?: number }) =>
-      apiClient.patch<SavedPlace>(`${API_ENDPOINTS.savedPlaces}/${id}`, data),
+    mutationFn: ({
+      id,
+      ...data
+    }: {
+      id: string;
+      name?: string;
+      address?: string | null;
+      lat?: number;
+      lng?: number;
+      note?: string | null;
+      sortOrder?: number;
+    }) => apiClient.patch<SavedPlace>(`${API_ENDPOINTS.savedPlaces}/${id}`, data),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["savedListPlaces"] });
     },
@@ -166,6 +178,7 @@ export function useUpdateLabel() {
       lat: number;
       lng: number;
       placeId?: string | null;
+      fieldContributors?: SavedPlaceFieldContributors;
     }) =>
       apiClient.put<LabeledPlace>(
         `${API_ENDPOINTS.savedLabels}/${encodeURIComponent(label)}`,

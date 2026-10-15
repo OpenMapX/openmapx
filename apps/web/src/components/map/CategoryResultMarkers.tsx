@@ -123,6 +123,12 @@ export function brandImageId(qid: string): string {
  */
 const brandAssetReceipts = new WeakMap<MaplibreMap, Map<string, readonly Attribution[]>>();
 
+/** Receipts certify only the image currently installed in this map; clone before exposing them. */
+export function loadedBrandMarkerContributors(map: MaplibreMap, qid: string): Attribution[] {
+  const id = brandImageId(qid);
+  return map.hasImage(id) ? snapshotContributors(brandAssetReceipts.get(map)?.get(id) ?? []) : [];
+}
+
 export async function loadBrandMarkerImage(
   map: MaplibreMap,
   qid: string,

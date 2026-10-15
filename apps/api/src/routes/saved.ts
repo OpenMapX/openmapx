@@ -1,4 +1,9 @@
 import { isSystemSavedList } from "@openmapx/core/saved-lists";
+import {
+  parseSavedPlaceContributors,
+  SAVED_PLACE_FIELDS,
+  type SavedPlaceFieldContributors,
+} from "@openmapx/core/saved-place-contributors";
 import { and, eq, sql } from "drizzle-orm";
 import type { FastifyPluginAsync } from "fastify";
 import { db } from "../db/index";
@@ -252,6 +257,7 @@ export const savedRoute: FastifyPluginAsync = async (fastify) => {
           .orderBy(savedPlace.sortOrder);
 
         const places: ExportPlace[] = rows.map((p) => ({
+          fieldContributors: p.fieldContributors ?? undefined,
           name: p.name,
           lat: p.lat,
           lng: p.lng,
@@ -288,11 +294,12 @@ export const savedRoute: FastifyPluginAsync = async (fastify) => {
         required: ["name", "lat", "lng"],
         properties: {
           name: { type: "string", maxLength: 500 },
-          address: { type: "string", maxLength: 500 },
-          lat: { type: "number" },
-          lng: { type: "number" },
-          placeId: { type: "string", maxLength: 200 },
-          note: { type: "string", maxLength: 2000 },
+          address: { type: ["string", "null"], maxLength: 500 },
+          lat: { type: "number", minimum: -90, maximum: 90 },
+          lng: { type: "number", minimum: -180, maximum: 180 },
+          placeId: { type: ["string", "null"], maxLength: 200 },
+          fieldContributors: { type: "object", maxProperties: 4 },
+          note: { type: ["string", "null"], maxLength: 2000 },
         },
       },
     },
@@ -317,6 +324,7 @@ export const savedRoute: FastifyPluginAsync = async (fastify) => {
         lat?: number;
         lng?: number;
         placeId?: string;
+        fieldContributors?: SavedPlaceFieldContributors;
         note?: string;
       };
 
@@ -324,6 +332,12 @@ export const savedRoute: FastifyPluginAsync = async (fastify) => {
         return reply.status(400).send({ error: "name, lat, and lng are required" });
       }
 
+      const captured =
+        body.fieldContributors === undefined
+          ? undefined
+          : parseSavedPlaceContributors(body.fieldContributors);
+      if (body.fieldContributors !== undefined && captured === undefined)
+        return reply.status(400).send({ error: "Invalid fieldContributors" });
       const id = crypto.randomUUID();
       await db.insert(savedPlace).values({
         id,
@@ -333,10 +347,21 @@ export const savedRoute: FastifyPluginAsync = async (fastify) => {
         lat: body.lat,
         lng: body.lng,
         placeId: body.placeId ?? null,
+        fieldContributors: captured ?? null,
         note: body.note ?? null,
       });
 
-      return { id, listId, name: body.name, lat: body.lat, lng: body.lng };
+      return {
+        id,
+        listId,
+        name: body.name,
+        address: body.address ?? null,
+        lat: body.lat,
+        lng: body.lng,
+        placeId: body.placeId ?? null,
+        note: body.note ?? null,
+        ...(captured === undefined ? {} : { fieldContributors: captured }),
+      };
     },
   });
 
@@ -346,8 +371,10 @@ export const savedRoute: FastifyPluginAsync = async (fastify) => {
         type: "object",
         properties: {
           name: { type: "string", maxLength: 500 },
-          address: { type: "string", maxLength: 500 },
-          note: { type: "string", maxLength: 2000 },
+          address: { type: ["string", "null"], maxLength: 500 },
+          lat: { type: "number", minimum: -90, maximum: 90 },
+          lng: { type: "number", minimum: -180, maximum: 180 },
+          note: { type: ["string", "null"], maxLength: 2000 },
           sortOrder: { type: "number" },
         },
       },
@@ -370,7 +397,9 @@ export const savedRoute: FastifyPluginAsync = async (fastify) => {
 
       const body = req.body as {
         name?: string;
-        address?: string;
+        address?: string | null;
+        lat?: number;
+        lng?: number;
         note?: string;
         sortOrder?: number;
       };
@@ -378,6 +407,16 @@ export const savedRoute: FastifyPluginAsync = async (fastify) => {
       const updates: Record<string, unknown> = {};
       if (body.name !== undefined) updates.name = body.name;
       if (body.address !== undefined) updates.address = body.address;
+      if (body.lat !== undefined) updates.lat = body.lat;
+      if (body.lng !== undefined) updates.lng = body.lng;
+      // Evaluate against the current row atomically: two edits cannot restore a stale receipt.
+      let capture = sql`${savedPlace.fieldContributors}`;
+      for (const field of SAVED_PLACE_FIELDS) {
+        if (body[field] === undefined) continue;
+        capture = sql`CASE WHEN ${savedPlace[field]} IS DISTINCT FROM ${body[field]} AND ${savedPlace.fieldContributors} IS NOT NULL THEN jsonb_set(${capture}, ARRAY[${field}]::text[], '[]'::jsonb) ELSE ${capture} END`;
+      }
+      if (SAVED_PLACE_FIELDS.some((field) => body[field] !== undefined))
+        updates.fieldContributors = capture;
       if (body.note !== undefined) updates.note = body.note;
       if (body.sortOrder !== undefined) updates.sortOrder = body.sortOrder;
 
@@ -442,15 +481,16 @@ export const savedRoute: FastifyPluginAsync = async (fastify) => {
         required: ["name", "lat", "lng"],
         properties: {
           name: { type: "string", maxLength: 500 },
-          address: { type: "string", maxLength: 500 },
-          lat: { type: "number" },
-          lng: { type: "number" },
-          placeId: { type: "string", maxLength: 200 },
+          address: { type: ["string", "null"], maxLength: 500 },
+          lat: { type: "number", minimum: -90, maximum: 90 },
+          lng: { type: "number", minimum: -180, maximum: 180 },
+          placeId: { type: ["string", "null"], maxLength: 200 },
+          fieldContributors: { type: "object", maxProperties: 4 },
           icon: { type: "string", maxLength: 50 },
         },
       },
     },
-    handler: async (req, _reply) => {
+    handler: async (req, reply) => {
       const userId = getUserId(req);
 
       const { label } = req.params as { label: string };
@@ -460,9 +500,16 @@ export const savedRoute: FastifyPluginAsync = async (fastify) => {
         lat: number;
         lng: number;
         placeId?: string;
+        fieldContributors?: SavedPlaceFieldContributors;
         icon?: string;
       };
 
+      const captured =
+        body.fieldContributors === undefined
+          ? undefined
+          : parseSavedPlaceContributors(body.fieldContributors);
+      if (body.fieldContributors !== undefined && captured === undefined)
+        return reply.status(400).send({ error: "Invalid fieldContributors" });
       const existing = await db
         .select({ id: labeledPlace.id })
         .from(labeledPlace)
@@ -478,6 +525,7 @@ export const savedRoute: FastifyPluginAsync = async (fastify) => {
             lat: body.lat,
             lng: body.lng,
             placeId: body.placeId ?? null,
+            fieldContributors: captured ?? null,
             icon: body.icon ?? null,
           })
           .where(eq(labeledPlace.id, existing[0].id));
@@ -495,6 +543,7 @@ export const savedRoute: FastifyPluginAsync = async (fastify) => {
         lat: body.lat,
         lng: body.lng,
         placeId: body.placeId ?? null,
+        fieldContributors: captured ?? null,
         icon: body.icon ?? null,
       });
 

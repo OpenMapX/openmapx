@@ -24,3 +24,27 @@ export const CROWD_SOURCES: CreditSources = {
   link: () => undefined,
   crowd: () => CROWD_CREDIT,
 };
+
+/** Synthetic expanded observation capture, independent of the later /sources catalogue. */
+export const CROWD_PROVENANCE = {
+  sourceId: "@fused",
+  attribution: { provider: "Fusion winner" },
+  mergedSources: [
+    {
+      source: "crowd",
+      recordId: "oc:observation:crowd:report",
+      attribution: {
+        provider: CROWD_CREDIT.name,
+        name: CROWD_CREDIT.name,
+        url: CROWD_CREDIT.url,
+        licensing: CROWD_CREDIT.licensing,
+      },
+    },
+  ],
+};
+
+/** The captured observation preserves the supplied notice separately from its display name. */
+export const CROWD_READING_CREDIT: Attribution = {
+  ...CROWD_CREDIT,
+  attributionText: CROWD_CREDIT.name,
+};

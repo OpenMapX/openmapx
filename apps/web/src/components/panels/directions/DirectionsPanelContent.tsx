@@ -61,6 +61,7 @@ import {
 import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import {
+  contributorsForField,
   contributorsForNestedRecordFields,
   contributorsForRecords,
   snapshotContributors,
@@ -776,7 +777,7 @@ export function DirectionsPanelContent() {
     );
   }, [registry, displayedGroundResult, scheduleRequest, waypoints.length]);
 
-  const getCachedTime = (m: TravelMode): string | undefined => {
+  const getCachedDuration = (m: TravelMode) => {
     if (!allWaypointsFilled) return undefined;
     // Build the key with the shared builder so it always matches what
     // useDirections stored — driving carries the time pickers, other modes don't.
@@ -794,9 +795,46 @@ export function DirectionsPanelContent() {
         arriveBy: m === "driving" ? drivingArriveByStr : undefined,
       }),
     );
-    const duration = cached?.routes[0]?.duration;
-    return duration !== undefined ? formatDuration(duration) : undefined;
+    const route = cached?.routes[0];
+    return route?.duration !== undefined
+      ? {
+          time: formatDuration(route.duration),
+          contributors: contributorsForField(route, "duration"),
+        }
+      : undefined;
   };
+  // Derive the visible text and its captured ownership together, once per button.
+  const modeButtons = MODES.map((button) => {
+    const isActive = mode === button.mode;
+    const isTransit = button.mode === "transit";
+    const cached = isTransit || button.disabled ? undefined : getCachedDuration(button.mode);
+    const record = isTransit
+      ? isActive
+        ? transitItineraries[0]
+        : undefined
+      : isActive
+        ? data?.routes[0]
+        : undefined;
+    const duration = button.disabled
+      ? undefined
+      : record?.duration !== undefined
+        ? {
+            time: formatDuration(record.duration),
+            contributors: contributorsForField(record, "duration"),
+          }
+        : cached;
+    const loading = isActive && (isTransit ? transitLoading : isLoading && !cached);
+    return {
+      ...button,
+      isActive,
+      loading,
+      time: duration?.time,
+      contributors: !loading && duration ? duration.contributors : [],
+    };
+  });
+  const modeDurationAttributions = snapshotContributors(
+    ...modeButtons.map((button) => button.contributors),
+  );
 
   const handleUseMyLocation = useCallback(() => {
     if (userLocation) {
@@ -1078,25 +1116,7 @@ export function DirectionsPanelContent() {
           flexWrap: "wrap",
         }}
       >
-        {MODES.map(({ mode: m, icon, labelKey, disabled }) => {
-          // EV is a sub-option of driving (isEvMode), so the driving button
-          // stays highlighted while EV planning is active — isEvMode only ever
-          // coexists with mode === "driving".
-          const isActive = mode === m;
-          const isTransit = m === "transit";
-          const timeStr = disabled
-            ? undefined
-            : isTransit
-              ? isActive && transitItineraries[0]?.duration !== undefined
-                ? formatDuration(transitItineraries[0].duration)
-                : undefined
-              : isActive
-                ? data?.routes[0]?.duration !== undefined
-                  ? formatDuration(data.routes[0].duration)
-                  : getCachedTime(m)
-                : getCachedTime(m);
-          const modeLoading =
-            isActive && (isTransit ? transitLoading : isLoading && !getCachedTime(m));
+        {modeButtons.map(({ mode: m, icon, labelKey, disabled, isActive, time, loading }) => {
           return (
             <ModeButton
               key={m}
@@ -1104,10 +1124,10 @@ export function DirectionsPanelContent() {
               name="travel-mode"
               icon={icon}
               label={t(labelKey)}
-              time={timeStr}
+              time={time}
               active={isActive}
               disabled={disabled}
-              loading={modeLoading}
+              loading={loading}
               onClick={() => {
                 setMode(m);
                 setDetailsRouteIndex(null);
@@ -1117,6 +1137,11 @@ export function DirectionsPanelContent() {
           );
         })}
       </Box>
+      <AttributionStrip
+        attributions={modeDurationAttributions}
+        variant="plain"
+        provenanceDisplay="details"
+      />
       {/* Driving sub-mode: normal route vs. EV charge planning. EV is a subtype
           of driving, not its own top-level mode, so it lives here rather than in
           the mode row. */}

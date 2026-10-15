@@ -1,3 +1,5 @@
+import type { SavedPlaceFieldContributors } from "../saved-place-contributors";
+
 export interface SavedList {
   id: string;
   name: string;
@@ -17,6 +19,7 @@ export interface SavedPlace {
   lat: number;
   lng: number;
   placeId: string | null;
+  fieldContributors?: SavedPlaceFieldContributors | null;
   note: string | null;
   sortOrder: number;
   createdAt: string;
@@ -31,4 +34,5 @@ export interface LabeledPlace {
   lat: number;
   lng: number;
   placeId: string | null;
+  fieldContributors?: SavedPlaceFieldContributors | null;
 }

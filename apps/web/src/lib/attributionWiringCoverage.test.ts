@@ -11,6 +11,7 @@ import { describe, expect, it } from "vitest";
 const INTEGRATIONS_DIR = fileURLToPath(new URL("../../../../integrations", import.meta.url));
 const WEB_SRC_DIR = fileURLToPath(new URL("..", import.meta.url));
 const MAP_WIRES = {
+  renderedMapAttributionTracker: "@/integration-api/overlay/renderedMapAttributionTracker",
   useRenderedMapAttributions: "@/integration-api/overlay/useRenderedMapAttributions",
   useRasterMapAttributions: "@/integration-api/overlay/useRasterMapAttributions",
   useMarkerMapAttributions: "@/integration-api/overlay/useMarkerMapAttributions",
@@ -166,6 +167,19 @@ describe("attribution-display coverage", () => {
       ),
     ).toEqual([]);
   });
+});
+
+describe("navigation host attribution wiring", () => {
+  it.each(["RouteSearchResultsLayer.tsx", "ArrivalParkingMarkers.tsx"])(
+    "owns displayed receipts in %s",
+    (filename) => {
+      const source = fs.readFileSync(
+        path.join(WEB_SRC_DIR, "components/navigation", filename),
+        "utf8",
+      );
+      expect(mentionsWire(source)).toBe(true);
+    },
+  );
 });
 
 describe("attribution wiring guard conformance", () => {

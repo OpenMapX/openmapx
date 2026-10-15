@@ -2,10 +2,20 @@
 
 import Box from "@mui/material/Box";
 import { useColorScheme } from "@mui/material/styles";
+import {
+  type SavedPlaceFieldContributors,
+  savedPlaceContributors,
+} from "@openmapx/core/saved-place-contributors";
+import type { Attribution } from "@openmapx/mobility-core/attribution";
+import {
+  snapshotContributors,
+  withFeatureContributors,
+} from "@openmapx/mobility-core/contributors";
 import type * as maplibregl from "maplibre-gl";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { MapCredits } from "@/components/map/MapCredits";
 import { createGeoJsonSourceDataBridge } from "@/integration-api/map/layerStyleUtils";
+import { renderedMapAttributionTracker } from "@/integration-api/overlay/renderedMapAttributionTracker";
 import { useEnv } from "@/integration-api/runtime/EnvProvider";
 import { baseMapVectorCredits, loadMaptilerStyle, loadOpenMapXStyle } from "@/lib/map";
 import { loadMapLibreRuntime } from "@/lib/maplibreRuntime";
@@ -22,6 +32,7 @@ const POINT_COLOR = "#C62828";
 export interface SharedMapPoint {
   lat: number;
   lng: number;
+  fieldContributors?: SavedPlaceFieldContributors;
 }
 
 interface Props {
@@ -32,11 +43,16 @@ interface Props {
 function pointsData(points: SharedMapPoint[]): GeoJSON.FeatureCollection {
   return {
     type: "FeatureCollection",
-    features: points.map((p) => ({
-      type: "Feature",
-      properties: {},
-      geometry: { type: "Point", coordinates: [p.lng, p.lat] },
-    })),
+    features: points.map((p) =>
+      withFeatureContributors(
+        {
+          type: "Feature",
+          properties: {},
+          geometry: { type: "Point", coordinates: [p.lng, p.lat] },
+        },
+        savedPlaceContributors(p.fieldContributors, ["lat", "lng"]),
+      ),
+    ),
   };
 }
 
@@ -117,6 +133,7 @@ function fitToContent(
 
 /** Read-only mini map for the public share page: markers plus an optional polyline. */
 export function SharedMapView({ points, routeGeometry }: Props) {
+  const [pointAttributions, setPointAttributions] = useState<Attribution[]>([]);
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const bridgeRef = useRef<ReturnType<typeof createGeoJsonSourceDataBridge> | null>(null);
@@ -139,6 +156,7 @@ export function SharedMapView({ points, routeGeometry }: Props) {
     let destroyed = false;
     let map: maplibregl.Map | null = null;
     let replay: (() => void) | null = null;
+    let unsubscribePoints: (() => void) | undefined;
 
     const init = async () => {
       const maplibregl = await loadMapLibreRuntime();
@@ -168,6 +186,16 @@ export function SharedMapView({ points, routeGeometry }: Props) {
         ]);
         bridge.apply(map);
         fitToContent(map, pointsRef.current, routeRef.current);
+        unsubscribePoints = renderedMapAttributionTracker(map).subscribe("shared-list-points", {
+          kind: "geometry",
+          layerIds: [POINTS_LAYER],
+          publish: (entries) => {
+            const captured = entries.flatMap((entry) => (entry.detail ? [entry.detail] : []));
+            setPointAttributions((previous) =>
+              JSON.stringify(previous) === JSON.stringify(captured) ? previous : captured,
+            );
+          },
+        });
       });
       replay = () => bridge.apply(map as maplibregl.Map);
       map.on("styledata", replay);
@@ -180,6 +208,7 @@ export function SharedMapView({ points, routeGeometry }: Props) {
 
     return () => {
       destroyed = true;
+      unsubscribePoints?.();
       if (map && replay && typeof map.off === "function") {
         map.off("styledata", replay);
         map.off("idle", replay);
@@ -204,7 +233,9 @@ export function SharedMapView({ points, routeGeometry }: Props) {
   return (
     <Box sx={{ position: "relative", width: "100%", height: "100%" }}>
       <Box ref={containerRef} sx={{ position: "absolute", inset: 0 }} />
-      <MapCredits attributions={baseMapVectorCredits(env)} />
+      <MapCredits
+        attributions={snapshotContributors(baseMapVectorCredits(env), pointAttributions)}
+      />
     </Box>
   );
 }

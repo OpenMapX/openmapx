@@ -1,12 +1,11 @@
 import type { FuelProduct, FuelStation } from "@openmapx/integration-framework";
+import { contributorsForRecords, snapshotContributors } from "@openmapx/mobility-core/contributors";
 import {
   addressOf,
   allowedReadings,
   type CreditSources,
   countryOf,
   credit,
-  crowdCredits,
-  crowdReported,
   firstText,
   instantOf,
   itemIdOf,
@@ -17,10 +16,12 @@ import {
   newestReading,
   pointOf,
   type Rec,
+  readingCredits,
   rec,
   sourcesOf,
   splitKey,
   str,
+  upstreamCredits,
 } from "../features/record.js";
 
 const UNITS = new Set(["L", "kg", "m3"]);
@@ -90,7 +91,6 @@ export function recordToFuelStation(
     newestReading(readings, property, componentKey);
 
   const products: FuelProduct[] = [];
-  let crowd = false;
   for (const component of list(record["components"])) {
     const rawKey = str(component["key"]);
     const details = rec(component["details"]);
@@ -113,6 +113,10 @@ export function recordToFuelStation(
     const service = details["service"];
     const product: FuelProduct = {
       key,
+      contributors: readingCredits(
+        price ? priced : undefined,
+        typeof inStock === "boolean" ? stocked : undefined,
+      ),
       grade,
       ...(service === "self" || service === "served" ? { service } : {}),
       ...(vehicleScope ? { vehicleScope } : {}),
@@ -124,7 +128,6 @@ export function recordToFuelStation(
     };
     if (held === -1) products.push(product);
     else products[held] = product;
-    crowd ||= crowdReported(priced) || crowdReported(stocked);
   }
 
   const details = rec(record["details"]);
@@ -145,7 +148,11 @@ export function recordToFuelStation(
     ...(openingHours ? { openingHours } : {}),
     products,
     productsComplete: details["productsComplete"] === true,
-    sources: kept.map((s) => s.id),
-    attributions: [...kept.map((s) => credit(s, sources)), ...crowdCredits(crowd, sources)],
+    sources: [...new Set(kept.map((s) => s.id))],
+    attributions: snapshotContributors(
+      kept.map((s) => credit(s, sources)),
+      upstreamCredits(kept, sources),
+      contributorsForRecords(products),
+    ),
   };
 }

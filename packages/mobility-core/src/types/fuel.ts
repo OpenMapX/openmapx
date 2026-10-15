@@ -1,3 +1,4 @@
+import type { ContributingRecord } from "../contributors.js";
 import type { Attribution } from "./attribution.js";
 
 /**
@@ -6,7 +7,7 @@ import type { Attribution } from "./attribution.js";
  * cubic metre. Each product carries its own price and the time that price was
  * reported, because grades at one station are rarely updated together.
  */
-export interface FuelProduct {
+export interface FuelProduct extends ContributingRecord {
   /**
    * Unique within the station: the grade code, plus `:self`/`:served` where
    * both are priced, or `:hgv` for a lorries-only product.

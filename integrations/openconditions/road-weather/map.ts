@@ -21,6 +21,7 @@ import {
   noticeCredits,
   pointOf,
   type Rec,
+  readingCredits,
   readingCurrent,
   rec,
   sourcesOf,
@@ -204,6 +205,7 @@ export function recordToRoadWeatherStation(
   }
 
   const air: RoadWeatherAir = {};
+  const used = new Map<string, LatestReading>();
   const surface = new Map<number, RoadSurfaceSensor>();
   const pairs = new Set(readings.map((r) => `${r.property}\u0000${r.componentKey ?? ""}`));
   for (const pair of pairs) {
@@ -213,12 +215,18 @@ export function recordToRoadWeatherStation(
     if (key === "") {
       if (property === "weather.precipitation_type") {
         const type = categoryOf<PrecipitationType>(reading, PRECIPITATION_TYPES);
-        if (type) air.precipitation = measured(reading, type);
+        if (type) {
+          air.precipitation = measured(reading, type);
+          used.set("air.precipitation", reading);
+        }
         continue;
       }
       const field = AIR[property];
       const value = quantityOf(reading);
-      if (field && value !== undefined) air[field] = measured(reading, value);
+      if (field && value !== undefined) {
+        air[field] = measured(reading, value);
+        used.set(`air.${field}`, reading);
+      }
       continue;
     }
     const index = channels.get(key);
@@ -228,12 +236,14 @@ export function recordToRoadWeatherStation(
       const state = categoryOf<RoadSurfaceState>(reading, SURFACE_STATES);
       if (state && (!sensor.state || sensor.state.value === "unknown")) {
         sensor.state = measured(reading, state);
+        used.set(`sensor.${index}.state`, reading);
       }
     } else {
       const field = SURFACE[property];
       const value = quantityOf(reading);
       if (field && value !== undefined && sensor[field] === undefined) {
         sensor[field] = measured(reading, value);
+        used.set(`sensor.${index}.${field}`, reading);
       }
     }
     if (Object.keys(sensor).length > 1) surface.set(index, sensor);
@@ -274,11 +284,16 @@ export function recordToRoadWeatherStation(
     surface: [...surface.values()].sort((a, b) => a.index - b.index),
     ...(updatedAt ? { updatedAt } : {}),
     stale: !fresh,
-    sources: kept.map((s) => s.id),
+    sources: [...new Set(kept.map((s) => s.id))],
     attributions: [
       ...kept.map((s) => credit(s, sources)),
       ...upstreamCredits(kept, sources),
       ...noticeCredits(kept, sources),
+      ...readingCredits(
+        ...used.values(),
+        newest,
+        device ? newestReading(allowed, DEVICE_STATUS, undefined) : undefined,
+      ),
     ],
   };
 }

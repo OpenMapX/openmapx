@@ -94,7 +94,7 @@ export type RideUnavailableReason =
   | "no-products"
   | "provider-error";
 
-export interface RideAvailability {
+export interface RideAvailability extends ContributingRecord {
   available: boolean;
   /**
    * False when the provider cannot verify service at these coordinates — true

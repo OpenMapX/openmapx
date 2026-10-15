@@ -65,6 +65,42 @@ beforeEach(() => {
   useRouteSearchStore.getState().setCategoryKey("preset:amenity/fuel");
 });
 describe("route stop confidence", () => {
+  it("credits only selected-card name, access and displayed detour metrics", () => {
+    const name = { sourceId: "poi", name: "Stop name" };
+    const coordinate = { sourceId: "coords", name: "Coordinate access" };
+    const seconds = { sourceId: "engine", name: "Duration receipt" };
+    const meters = { sourceId: "engine", name: "Distance receipt" };
+    const hidden = { sourceId: "hidden", name: "Hidden rating" };
+    fixture.results = [
+      {
+        ...poi(),
+        place: {
+          ...poi().place,
+          contributors: [hidden],
+          fieldContributors: { name: [name], coordinates: [coordinate], rating: [hidden] },
+        },
+        detour: {
+          id: "stop",
+          kind: "network",
+          seconds: 600,
+          meters: 4000,
+          provider: "routing-fixture",
+          access: { kind: "coordinate", coordinates: [0.001, 0.001] },
+          waypoints: [],
+          fieldContributors: { seconds: [seconds], meters: [meters] },
+        },
+      },
+    ];
+    render(view());
+    fireEvent.click(screen.getByText("Select stop"));
+    fireEvent.click(screen.getByRole("button", { name: en.footer.attributions }));
+    const dialog = screen.getByRole("dialog");
+    expect(dialog).toHaveTextContent("Stop name");
+    expect(dialog).toHaveTextContent("Coordinate access");
+    expect(dialog).toHaveTextContent("Duration receipt");
+    expect(dialog).toHaveTextContent("Distance receipt");
+    expect(dialog).not.toHaveTextContent("Hidden rating");
+  });
   it("exits search after its successful add changes the active route", async () => {
     let finish!: (value: boolean) => void;
     fixture.addStop.mockReturnValue(

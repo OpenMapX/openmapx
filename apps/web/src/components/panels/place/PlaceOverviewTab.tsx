@@ -54,6 +54,7 @@ import {
   useTides,
   useUpdateLabel,
 } from "@openmapx/core";
+import { captureSavedPlaceContributors } from "@openmapx/core/saved-place-contributors";
 import {
   contributorsForField,
   contributorsForRecordFields,
@@ -394,6 +395,7 @@ export function PlaceOverviewTab({
         lat: place.coordinates[1],
         lng: place.coordinates[0],
         placeId: place.id,
+        fieldContributors: captureSavedPlaceContributors(place),
       });
     }
     setLabelDialogOpen(false);

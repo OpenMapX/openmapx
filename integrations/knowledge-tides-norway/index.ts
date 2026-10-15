@@ -1,10 +1,14 @@
 import { createPlace, type Place, USER_AGENT } from "@openmapx/core";
 import {
+  type ContributingRecord,
   createTidesIntegration,
   type IntegrationContext,
+  resolveIntegrationContributors,
+  snapshotContributors,
   type TideCurvePoint,
   type TideEvent,
   type TidesResponse,
+  withContributors,
 } from "@openmapx/integration-framework";
 
 /**
@@ -30,7 +34,7 @@ const TIDES_TTL = 6 * 60 * 60;
 const MAX_STATION_DISTANCE_KM = 50; // Norway has only ~30 stations; widen the radius
 const CM_TO_FT = 0.0328084;
 
-export interface CachedStation {
+export interface CachedStation extends ContributingRecord {
   code: string;
   name: string;
   lat: number;
@@ -65,8 +69,9 @@ async function fetchText(url: string): Promise<string | null> {
 }
 
 async function loadStations(ctx: IntegrationContext): Promise<CachedStation[]> {
-  const cached = await ctx.cache.get<CachedStation[]>("catalog");
+  const cached = await ctx.cache.get<CachedStation[]>("catalog:contributors-v1");
   if (cached) return cached;
+  const captured = resolveIntegrationContributors(ctx, ["kartverket-sehavniva"]);
 
   const xml = await fetchText(`${BASE}?tide_request=stationlist&type=perm&lang=en`);
   if (!xml) {
@@ -82,8 +87,9 @@ async function loadStations(ctx: IntegrationContext): Promise<CachedStation[]> {
     if (!Number.isFinite(lat) || !Number.isFinite(lng)) continue;
     stations.push({ code: m[2], name: m[1], lat, lng });
   }
-  await ctx.cache.set("catalog", stations, CATALOG_TTL);
-  return stations;
+  const acquired = stations.map((station) => withContributors(station, captured));
+  await ctx.cache.set("catalog:contributors-v1", acquired, CATALOG_TTL);
+  return acquired;
 }
 
 function buildDateWindow(): { from: string; to: string } {
@@ -148,14 +154,21 @@ async function buildTidesResponse(
   distanceKm: number,
 ): Promise<TidesResponse | null> {
   const dayKey = new Date().toISOString().slice(0, 10);
-  const cacheKey = `tides:${station.code}:${dayKey}`;
+  const cacheKey = `tides:contributors-v1:${station.code}:${dayKey}`;
   const cached = await ctx.cache.get<TidesResponse>(cacheKey);
   if (cached) return cached;
+  const captured = resolveIntegrationContributors(ctx, ["kartverket-sehavniva"]);
 
   const [events, curve] = await Promise.all([fetchHilo(station), fetchCurve(station)]);
   if (events.length === 0 && curve.length === 0) return null;
 
   const result: TidesResponse = {
+    contributors: snapshotContributors(station.contributors ?? [], captured),
+    fieldContributors: {
+      station: snapshotContributors(station.contributors ?? []),
+      events: snapshotContributors(captured),
+      curve: snapshotContributors(captured),
+    },
     station: {
       id: station.code,
       name: station.name,
@@ -184,6 +197,7 @@ export function setup(ctx: IntegrationContext): void {
         primaryScheme: "kartverket",
         ids: { kartverket: station.code },
         name: station.name,
+        contributors: snapshotContributors(station.contributors ?? []),
         address: "",
         countryCode: "no",
         coordinates: [station.lng, station.lat],

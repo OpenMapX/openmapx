@@ -10,6 +10,7 @@ import {
 } from "@/integration-api/map/layerStyleUtils";
 import { useMap } from "@/integration-api/map/MapContext";
 import { subscribeStyleLoaded } from "@/integration-api/map/styleLoadedSync";
+import { useRenderedMapAttributions } from "@/integration-api/overlay/useRenderedMapAttributions";
 
 const SOURCE = "imported-geometry-source";
 const FILL = "imported-geometry-fill";
@@ -30,6 +31,8 @@ export function ImportedGeometryLayer() {
   // imported object identity so a style/theme reload (which re-runs this effect
   // to re-add the layers) doesn't yank the camera back and discard the user's pan.
   const fittedRef = useRef<ImportedGeometry | null>(null);
+
+  useRenderedMapAttributions("imported-geometry", [FILL, LINE, POINT], Boolean(imported));
 
   useEffect(() => {
     void styleVersion;
@@ -113,7 +116,14 @@ export function ImportedGeometryLayer() {
 
     // Re-add after a style/theme swap (which wipes all sources). The shared
     // subscription also retries once at idle when styledata fires mid-load.
-    return subscribeStyleLoaded(map, apply);
+    const unsubscribe = subscribeStyleLoaded(map, apply);
+    return () => {
+      unsubscribe();
+      removeLayerAndSource(map, [POINT, LINE, FILL], SOURCE);
+      unregisterLayerSlot(POINT);
+      unregisterLayerSlot(LINE);
+      unregisterLayerSlot(FILL);
+    };
   }, [publish, imported, mapReady, styleVersion, mapRef, fitBounds]);
 
   return null;
