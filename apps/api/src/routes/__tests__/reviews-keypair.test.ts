@@ -189,7 +189,7 @@ describe("reviews-keypair routes", () => {
     app = await buildTestApp(reviewsKeypairRoute, { prefix: "/api" });
   });
   afterAll(async () => {
-    await app.close();
+    await app?.close();
   });
   afterEach(() => {
     vi.clearAllMocks();

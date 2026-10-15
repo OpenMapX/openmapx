@@ -71,7 +71,7 @@ beforeAll(async () => {
   await app.ready();
 });
 
-afterAll(() => app.close());
+afterAll(() => app?.close());
 afterEach(() => {
   enqueue.mockClear();
   findActive.mockReset().mockResolvedValue(null);

@@ -25,7 +25,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   vi.unstubAllGlobals();
-  await app.close();
+  await app?.close();
 });
 
 beforeEach(() => {

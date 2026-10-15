@@ -198,7 +198,7 @@ beforeAll(async () => {
   app = await createAdminTestApp(adminServicesRoute);
 });
 
-afterAll(() => app.close());
+afterAll(() => app?.close());
 afterEach(() => {
   vi.clearAllMocks();
   mockRegistryGet.mockReset();

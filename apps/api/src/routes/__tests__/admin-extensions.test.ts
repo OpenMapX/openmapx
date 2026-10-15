@@ -112,7 +112,7 @@ beforeAll(async () => {
   await app.register(adminExtensionsRoute);
   await app.ready();
 });
-afterAll(() => app.close());
+afterAll(() => app?.close());
 afterEach(() => vi.clearAllMocks());
 
 describe("GET /admin/extensions/catalog", () => {

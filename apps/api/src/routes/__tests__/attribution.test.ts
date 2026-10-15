@@ -72,7 +72,7 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  await app.close();
+  await app?.close();
   setAttributionIndex(null);
   rmSync(tmpDir, { recursive: true, force: true });
 });

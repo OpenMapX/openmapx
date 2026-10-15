@@ -58,7 +58,7 @@ beforeAll(async () => {
   await app.ready();
 });
 
-afterAll(() => app.close());
+afterAll(() => app?.close());
 
 beforeEach(() => {
   selectResolveWith = [];

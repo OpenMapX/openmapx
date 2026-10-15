@@ -58,7 +58,7 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  await app.close();
+  await app?.close();
 });
 
 function primeListAndPlaces() {

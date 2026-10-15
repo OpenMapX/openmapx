@@ -200,7 +200,7 @@ beforeAll(async () => {
   app = await createAdminTestApp(adminRoute);
 });
 
-afterAll(() => app.close());
+afterAll(() => app?.close());
 afterEach(() => vi.clearAllMocks());
 
 describe("GET /admin/overview", () => {

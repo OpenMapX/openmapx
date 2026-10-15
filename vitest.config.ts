@@ -24,6 +24,10 @@ const shared = {
     // decrypt) and the conformance test's 84 per-integration dynamic imports.
     // 15s keeps headroom while still catching a genuine hang.
     testTimeout: 15_000,
+    // Suite hooks boot whole Fastify apps and their route plugin graphs once per
+    // file, which under the same saturation outlasts a single test. A hook that
+    // times out leaves its fixtures unassigned for the teardown hooks.
+    hookTimeout: 30_000,
     server: { deps: { inline: [/@mui\/material/] } },
   },
 };

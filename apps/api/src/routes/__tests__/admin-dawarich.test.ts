@@ -126,7 +126,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   delete process.env.DOMAIN;
-  await app.close();
+  await app?.close();
 });
 
 beforeEach(() => {

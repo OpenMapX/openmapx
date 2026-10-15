@@ -56,7 +56,7 @@ beforeAll(async () => {
   app = await createAdminTestApp(adminCacheRoute);
 });
 
-afterAll(() => app.close());
+afterAll(() => app?.close());
 afterEach(() => {
   vi.clearAllMocks();
   // Restore the store between tests so destructive tests don't leak.

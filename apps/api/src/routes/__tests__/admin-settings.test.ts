@@ -95,7 +95,7 @@ beforeAll(async () => {
   app = await createAdminTestApp(adminSettingsRoute);
 });
 
-afterAll(() => app.close());
+afterAll(() => app?.close());
 afterEach(() => {
   selectResolveWith = [];
   vi.unstubAllEnvs();
