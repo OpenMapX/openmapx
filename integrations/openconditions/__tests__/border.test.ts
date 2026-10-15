@@ -145,6 +145,54 @@ describe("border-crossings-openconditions", () => {
     expect(later.queues.every((q) => q.stale)).toBe(true);
   });
 
+  test("takes a crossing's hours from a member when the survivor states none", async () => {
+    // CBSA survives the Peace Bridge cluster and states no hours; CBP's member states them.
+    const perSource = {
+      records: [
+        {
+          id: `oc:feature:${CBP}:090101`,
+          kind: "border_crossing",
+          provenance: { sourceId: CBP },
+          openingHours: { osm: "24/7", twentyFourSeven: true, timezone: "America/New_York" },
+        },
+      ],
+      next: null,
+    };
+    const http = fakeHttpClient((req: FakeHttpRequest) =>
+      req.url === `${BASE_URL}/features`
+        ? req.options?.params?.canonical === 0
+          ? perSource
+          : body()
+        : undefined,
+    );
+    const client = createOpenConditionsClient({ OPENCONDITIONS_URL: BASE_URL }, http)!;
+    const provider = createBorderCrossingProvider(client, EVERY_SOURCE, { now: () => NOW });
+
+    const { crossings } = await provider.searchCrossings(BBOX);
+    const peace = crossings.find((c) => c.name === "Peace Bridge")!;
+    expect(peace.openingHours).toBe("24/7");
+    // Calais states its own hours and keeps them.
+    expect(crossings.find((c) => c.name === "Calais: Milltown")?.openingHours).toBe("08:00-16:00");
+
+    await expect(provider.getCrossing(peace.id)).resolves.toMatchObject({ openingHours: "24/7" });
+    const withoutCbp = await provider.searchCrossings(BBOX, { excludedSourceIds: [CBP] });
+    expect(withoutCbp.crossings.find((c) => c.name === "Peace Bridge")).not.toHaveProperty(
+      "openingHours",
+    );
+  });
+
+  test("a failed read of the members costs the hours, not the crossings", async () => {
+    const http = fakeHttpClient((req: FakeHttpRequest) => {
+      if (req.url !== `${BASE_URL}/features`) return undefined;
+      if (req.options?.params?.canonical === 0) throw new Error("timeout");
+      return body();
+    });
+    const client = createOpenConditionsClient({ OPENCONDITIONS_URL: BASE_URL }, http)!;
+    const provider = createBorderCrossingProvider(client, EVERY_SOURCE, { now: () => NOW });
+    const { crossings } = await provider.searchCrossings(BBOX);
+    expect(crossings).toHaveLength(5);
+  });
+
   test("serves nothing until the source list arrives, and nothing of a source it does not list", async () => {
     const waiting = providerWith(body(), { ...EVERY_SOURCE, ready: false });
     await expect(waiting.provider.searchCrossings(BBOX)).resolves.toEqual({
