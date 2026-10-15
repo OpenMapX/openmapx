@@ -152,6 +152,11 @@ export interface TrustedConfigurationQueueLockOptions {
   ttlMs?: number;
   acquireTimeoutMs?: number;
   retryMs?: number;
+  /**
+   * Lease clock for issued and expiry timestamps and expiry checks. The acquire
+   * deadline and retry waits always follow real time. Defaults to `Date.now`.
+   */
+  now?: () => number;
   afterHeartbeatRecordWrite?: () => void;
   afterRecoveryHeartbeatUnlink?: () => void;
   afterRecoveryOwnerUnlink?: () => void;
@@ -174,6 +179,10 @@ export interface TrustedConfigurationQueueLock {
 
 function fail(): never {
   throw new Error(FAILED);
+}
+
+function leaseNow(options: TrustedConfigurationQueueLockOptions): number {
+  return options.now?.() ?? Date.now();
 }
 
 class ArtifactGuidanceError extends Error {
@@ -638,7 +647,7 @@ function publishGeneration(options: TrustedConfigurationQueueLockOptions, ttlMs:
   let published = false;
   let simulatedCrash = false;
   try {
-    const issuedAtMs = Date.now();
+    const issuedAtMs = leaseNow(options);
     runPublicationHook(options.beforeLockDirectoryCreate);
     mkdirSync(lockPath, { mode: DIRECTORY_MODE });
     const createdLock = lstatSync(lockPath);
@@ -702,7 +711,7 @@ function publishGeneration(options: TrustedConfigurationQueueLockOptions, ttlMs:
       HEARTBEAT_NAME,
       writeRecord(
         join(lockPath, HEARTBEAT_NAME),
-        heartbeatBytes(owner, 0, Date.now(), options.token),
+        heartbeatBytes(owner, 0, leaseNow(options), options.token),
         options.ownerUid,
         options.ownerGid,
       ),
@@ -1221,12 +1230,12 @@ function createLease(
       !equalBytes(current.ownerIdentity.bytes, inspected.ownerIdentity.bytes) ||
       current.heartbeatIdentity.ino !== inspected.heartbeatIdentity.ino ||
       !equalBytes(current.heartbeatIdentity.bytes, inspected.heartbeatIdentity.bytes) ||
-      current.heartbeat.expiresAtMs <= Date.now()
+      current.heartbeat.expiresAtMs <= leaseNow(options)
     )
       fail();
     const sequence = current.heartbeat.sequence + 1;
     const temporary = join(lockPath, `.heartbeat.${sequence}.${inspected.owner.nonce}.tmp`);
-    const bytes = heartbeatBytes(current.owner, sequence, Date.now(), options.token);
+    const bytes = heartbeatBytes(current.owner, sequence, leaseNow(options), options.token);
     const nextIdentity = writeRecord(temporary, bytes, options.ownerUid, options.ownerGid);
     options.afterHeartbeatRecordWrite?.();
     renameSync(temporary, join(lockPath, HEARTBEAT_NAME));
@@ -1327,7 +1336,7 @@ export async function acquireTrustedConfigurationQueueLock(
     const deadline = Date.now() + acquireTimeoutMs;
     const lockPath = join(options.directory, OPS_TRUSTED_CONFIG_QUEUE_LOCK_NAME);
     while (true) {
-      const nowMs = Date.now();
+      const nowMs = leaseNow(options);
       const artifactsLive = reconcileArtifacts(options, nowMs);
       try {
         lstatSync(lockPath);
