@@ -57,8 +57,9 @@ built-in list when it exists; you can change the destination during review.
 Files are read in your browser. Missing or approximate locations are looked up
 through this server's configured geocoder using the place name and available
 address or nearby location. These lookups follow the server's provider settings;
-the importer does not contact Google directly. The review shows credits for
-geocoding sources that supplied matched locations.
+the importer does not contact Google directly. Captured source credits stay with
+imported places, including credits for coordinates found by the geocoder. The
+review shows the credits that will be saved with the selected places.
 
 **Ready** places have file coordinates or a matching geocoder result.
 **Approximate** places retain an estimated location from the export that could
@@ -90,6 +91,10 @@ Each exported place includes its **name** and **coordinates**, plus its
 **address** and **note** where you've set them (these become the description in
 GPX and KML). GeoJSON additionally preserves OpenMapX's internal place ID in the
 feature properties.
+
+OpenMapX preserves captured source credits through GPX, KML, and GeoJSON export
+and re-import. Its exports also keep addresses separate from personal notes, so
+re-importing a list does not add generated credits or address lines to your notes.
 
 :::note[What exports — and what doesn't]
 Export covers the places in a single **list**. Labeled places (Home, Work) and

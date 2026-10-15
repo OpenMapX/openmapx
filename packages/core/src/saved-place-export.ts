@@ -1,9 +1,12 @@
 import {
   parseSavedPlaceContributors,
   type SavedPlaceFieldContributors,
-  savedPlaceContributors,
 } from "./saved-place-contributors";
-import { buildAttributionPresentation, parseAttributionHtml } from "./utils/attribution-api";
+import {
+  describeSavedPlace,
+  SAVED_PLACE_XML_NAMESPACE,
+  savedPlaceAttribution,
+} from "./saved-place-description";
 
 /**
  * Pure converters that turn saved places into the three file formats the app
@@ -44,33 +47,8 @@ function escapeXml(value: string): string {
     .replace(/'/g, "&apos;");
 }
 
-/** Full safe file notices are self-contained: static files cannot open the application's credit dialog. */
-function attributionForPlace(place: ExportPlace) {
-  return savedPlaceContributors(place.fieldContributors, [
-    "name",
-    ...(place.address ? ["address" as const] : []),
-    "lat",
-    "lng",
-  ]).map((receipt) =>
-    parseAttributionHtml(buildAttributionPresentation(receipt, "content").fullHtml),
-  );
-}
-
 function captureForPlace(place: ExportPlace) {
   return parseSavedPlaceContributors(place.fieldContributors);
-}
-
-/** Build the `<desc>` text shared by GPX/KML: note first, then address. */
-function describePlace(place: ExportPlace): string | null {
-  const attribution = attributionForPlace(place)
-    .map(({ text, links }) =>
-      [text, ...links.map((link) => `${link.label}: ${link.url}`)].join("\n"),
-    )
-    .join("\n");
-  const parts = [place.note, place.address, attribution].filter(
-    (p): p is string => typeof p === "string" && p.length > 0,
-  );
-  return parts.length > 0 ? parts.join("\n") : null;
 }
 
 /**
@@ -88,7 +66,7 @@ export function placesToGeoJson(places: ExportPlace[]): GeoJSON.FeatureCollectio
       if (place.placeId) properties.placeId = place.placeId;
       const capture = captureForPlace(place);
       if (capture !== undefined) properties.fieldContributors = capture;
-      const attribution = attributionForPlace(place);
+      const attribution = savedPlaceAttribution(place);
       if (attribution.length) properties.attribution = attribution;
       return {
         type: "Feature",
@@ -107,23 +85,28 @@ export function placesToGeoJson(places: ExportPlace[]): GeoJSON.FeatureCollectio
 export function placesToGpx(places: ExportPlace[]): string {
   const lines = [
     '<?xml version="1.0" encoding="UTF-8"?>',
-    '<gpx version="1.1" creator="OpenMapX" xmlns="http://www.topografix.com/GPX/1/1" xmlns:omx="https://openmapx.org/ns/saved-place/1">',
+    `<gpx version="1.1" creator="OpenMapX" xmlns="http://www.topografix.com/GPX/1/1" xmlns:omx="${SAVED_PLACE_XML_NAMESPACE}">`,
   ];
   for (const place of places) {
     lines.push(`  <wpt lat="${place.lat}" lon="${place.lng}">`);
     lines.push(`    <name>${escapeXml(place.name)}</name>`);
-    const desc = describePlace(place);
+    const desc = describeSavedPlace(place);
     if (desc) lines.push(`    <desc>${escapeXml(desc)}</desc>`);
-    for (const link of attributionForPlace(place).flatMap((notice) => notice.links)) {
+    for (const link of savedPlaceAttribution(place).flatMap((notice) => notice.links)) {
       lines.push(
         `    <link href="${escapeXml(link.url)}"><text>${escapeXml(link.label)}</text></link>`,
       );
     }
     const capture = captureForPlace(place);
-    if (capture !== undefined)
-      lines.push(
-        `    <extensions><omx:fieldContributors>${escapeXml(JSON.stringify(capture))}</omx:fieldContributors></extensions>`,
-      );
+    if (capture !== undefined || place.address) {
+      lines.push("    <extensions>");
+      if (place.address) lines.push(`      <omx:address>${escapeXml(place.address)}</omx:address>`);
+      if (capture !== undefined)
+        lines.push(
+          `      <omx:fieldContributors>${escapeXml(JSON.stringify(capture))}</omx:fieldContributors>`,
+        );
+      lines.push("    </extensions>");
+    }
     lines.push("  </wpt>");
   }
   lines.push("</gpx>");
@@ -145,15 +128,18 @@ export function placesToKml(places: ExportPlace[]): string {
   for (const place of places) {
     lines.push("    <Placemark>");
     lines.push(`      <name>${escapeXml(place.name)}</name>`);
-    const desc = describePlace(place);
+    if (place.address) lines.push(`      <address>${escapeXml(place.address)}</address>`);
+    const desc = describeSavedPlace(place);
     // KML viewers interpret descriptions as HTML after XML entity decoding.
     // Escape both layers so required plain notices and user notes remain inert text.
     if (desc) lines.push(`      <description>${escapeXml(escapeXml(desc))}</description>`);
     const capture = captureForPlace(place);
+    lines.push('      <ExtendedData><Data name="openmapx:savedPlace"><value>1</value></Data>');
     if (capture !== undefined)
       lines.push(
-        `      <ExtendedData><Data name="fieldContributors"><value>${escapeXml(JSON.stringify(capture))}</value></Data></ExtendedData>`,
+        `        <Data name="fieldContributors"><value>${escapeXml(JSON.stringify(capture))}</value></Data>`,
       );
+    lines.push("      </ExtendedData>");
     lines.push("      <Point>");
     lines.push(`        <coordinates>${place.lng},${place.lat}</coordinates>`);
     lines.push("      </Point>");

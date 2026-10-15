@@ -1,3 +1,5 @@
+import { parseSavedPlaceContributors } from "@openmapx/core/saved-place-contributors";
+import { savedPlaceNoteFromDescription } from "@openmapx/core/saved-place-description";
 import {
   fileList,
   ImportFileError,
@@ -28,6 +30,17 @@ export function parseKml(
       const [lng, lat] = coordinates.map(Number);
       if (!validCoordinates(lat, lng)) return [];
       const extended = elements(mark, "ExtendedData")[0];
+      const data = extended ? elements(extended, "Data") : [];
+      const capture = data.find((element) => element.getAttribute("name") === "fieldContributors");
+      const fieldContributors = parseSavedPlaceContributors(capture && childText(capture, "value"));
+      // The explicit format marker also identifies our exports without acquired credits.
+      const ownExport =
+        fieldContributors !== undefined ||
+        data.some(
+          (element) =>
+            element.getAttribute("name") === "openmapx:savedPlace" &&
+            childText(element, "value") === "1",
+        );
       const mwm = (name: string) =>
         extended
           ? Array.from(extended.getElementsByTagName("*"))
@@ -42,6 +55,10 @@ export function parseKml(
               ?.textContent?.trim()
           : "") ||
         "";
+      const description = plainText(
+        childText(mark, "description", !ownExport) || mwm("description"),
+        ownExport,
+      );
       return [
         makePlace({
           name: childText(mark, "name") || mwm("name") || options.droppedPin || "Dropped pin",
@@ -49,7 +66,10 @@ export function parseKml(
           lng,
           status: "exact",
           address,
-          note: plainText(childText(mark, "description") || mwm("description")),
+          fieldContributors,
+          note: ownExport
+            ? savedPlaceNoteFromDescription(description, { address, fieldContributors })
+            : description,
         }),
       ];
     });

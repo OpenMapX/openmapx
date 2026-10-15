@@ -28,6 +28,16 @@ describe("saved field captures", () => {
     original.name = "Original publisher";
   });
 
+  it("captures only requested coordinate fields without borrowing name ownership", () => {
+    expect(
+      captureSavedPlaceContributors(
+        { fieldContributors: { name: [other], coordinates: [original], "coordinates.0": [] } },
+        ["lat", "lng"],
+      ),
+    ).toEqual({ lat: [original], lng: [] });
+    expect(captureSavedPlaceContributors({}, ["lat", "lng"])).toBeUndefined();
+  });
+
   it("preserves unknown and explicit empty without any catalogue reconstruction", () => {
     expect(captureSavedPlaceContributors({})).toBeUndefined();
     expect(parseSavedPlaceContributors(null)).toBeUndefined();

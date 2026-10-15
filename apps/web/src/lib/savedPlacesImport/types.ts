@@ -1,4 +1,5 @@
 import type { SearchResult } from "@openmapx/core";
+import type { SavedPlaceFieldContributors } from "@openmapx/core/saved-place-contributors";
 
 export const SAVED_IMPORT_ACCEPT = ".zip,.csv,.json,.geojson,.gpx,.kml,.kmz";
 
@@ -11,6 +12,7 @@ export interface ImportPlace {
   lng?: number;
   status: ImportStatus;
   geocoder?: SearchResult;
+  fieldContributors?: SavedPlaceFieldContributors;
 }
 export interface ImportList {
   name: string;

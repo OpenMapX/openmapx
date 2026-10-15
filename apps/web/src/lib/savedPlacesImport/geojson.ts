@@ -1,3 +1,4 @@
+import { parseSavedPlaceContributors } from "@openmapx/core/saved-place-contributors";
 import { addressFromGoogleUrl, coordinatesFromGoogleUrl, nameFromGoogleUrl } from "./googleUrl";
 import {
   fileList,
@@ -76,7 +77,15 @@ export function parseGeojson(
       text(p.note) ||
       text(p.description) ||
       (comment === "No location information is available for this saved place" ? "" : comment);
-    return [makePlace({ name, address, note, ...coords })];
+    return [
+      makePlace({
+        name,
+        address,
+        note,
+        ...coords,
+        fieldContributors: parseSavedPlaceContributors(p.fieldContributors),
+      }),
+    ];
   });
   const list = fileList(filename, places, filename);
   if (saved) list.systemList = "$starredPlaces";

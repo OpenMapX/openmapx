@@ -8103,6 +8103,10 @@
                         "note": {
                           "type": "string",
                           "maxLength": 2000
+                        },
+                        "fieldContributors": {
+                          "type": "object",
+                          "maxProperties": 4
                         }
                       }
                     }

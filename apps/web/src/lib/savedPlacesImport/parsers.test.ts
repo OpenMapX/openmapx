@@ -1,3 +1,4 @@
+import { placesToGeoJson, placesToGpx, placesToKml } from "@openmapx/core/saved-place-export";
 import { strToU8, zipSync } from "fflate";
 import { describe, expect, it } from "vitest";
 import { coordinatesFromGoogleUrl, s2CellCenter } from "./googleUrl";
@@ -381,5 +382,112 @@ describe("saved place file parsers", () => {
       parse("notes.csv", `Title,Note,URL,Comment\nCafe,${note},https://google.com/?q=52%2C13,`)[0]
         .places[0].note,
     ).toBe("a".repeat(1999));
+  });
+});
+
+const captured = {
+  lat: [
+    {
+      sourceId: "original",
+      name: "Original publisher",
+      attributionText: '<a href="https://example.test/license">Required notice</a>',
+    },
+  ],
+  lng: [],
+};
+const exportedPlace = {
+  name: 'Café & <bar> "name"',
+  lat: 52,
+  lng: 13,
+  address: 'Road & <lane> "20"',
+  note: "Keep & <literal> > \"quotes\" and 'apostrophes'\n\nSecond line",
+  fieldContributors: captured,
+};
+describe("OpenMapX export round trips", () => {
+  it.each([
+    ["geojson", () => JSON.stringify(placesToGeoJson([exportedPlace]))],
+    ["gpx", () => placesToGpx([exportedPlace])],
+    ["kml", () => placesToKml([exportedPlace])],
+  ] as const)(
+    "preserves names, clean notes, addresses and validated captures in %s",
+    (format, output) => {
+      expect(parse(`export.${format}`, output())[0].places[0]).toEqual({
+        ...exportedPlace,
+        status: "exact",
+      });
+    },
+  );
+  it.each(["gpx", "kml"])(
+    "keeps edited descriptions when the generated suffix is no longer exact in %s",
+    (format) => {
+      const output = format === "gpx" ? placesToGpx([exportedPlace]) : placesToKml([exportedPlace]);
+      const tag = format === "gpx" ? "desc" : "description";
+      const edited = output.replace(`</${tag}>`, `\nUser addition</${tag}>`);
+      expect(parse(`export.${format}`, edited)[0].places[0].note).toContain("Required notice");
+      expect(parse(`export.${format}`, edited)[0].places[0].note).toContain("User addition");
+    },
+  );
+  it.each(["gpx", "kml"])(
+    "does not strip generated text followed by extra whitespace in %s",
+    (format) => {
+      const output = format === "gpx" ? placesToGpx([exportedPlace]) : placesToKml([exportedPlace]);
+      const tag = format === "gpx" ? "desc" : "description";
+      const edited = output.replace(`</${tag}>`, `  </${tag}>`);
+      expect(parse(`export.${format}`, edited)[0].places[0].note).toContain("Required notice");
+    },
+  );
+  it.each(["gpx", "kml"])("round trips an address without captures in %s", (format) => {
+    const place = { name: "Mine", lat: 52, lng: 13, address: "My address", note: "My note" };
+    const output = format === "gpx" ? placesToGpx([place]) : placesToKml([place]);
+    expect(parse(`export.${format}`, output)[0].places[0]).toMatchObject(place);
+  });
+  it.each([
+    [
+      "gpx",
+      '<gpx xmlns:osmand="https://osmand.net"><wpt lat="52" lon="13"><name>Place</name><desc>My note\nMy address</desc><extensions><osmand:address>My address</osmand:address></extensions></wpt></gpx>',
+    ],
+    [
+      "kml",
+      "<kml><Placemark><name>Place</name><address>My address</address><description>My note\nMy address</description><Point><coordinates>13,52</coordinates></Point></Placemark></kml>",
+    ],
+  ])("does not strip an unmarked third-party description in %s", (format, output) => {
+    expect(parse(`external.${format}`, output)[0].places[0].note).toBe("My note\nMy address");
+  });
+  it("matches GPX extension namespaces rather than prefixes and ignores unvalidated metadata", () => {
+    const output = placesToGpx([exportedPlace])
+      .replaceAll("omx:", "other:")
+      .replace("xmlns:omx=", "xmlns:other=");
+    expect(parse("renamed.gpx", output)[0].places[0].fieldContributors).toEqual(captured);
+    const spoof = output.replaceAll(
+      "https://openmapx.org/ns/saved-place/1",
+      "https://untrusted.test/ns",
+    );
+    expect(parse("spoof.gpx", spoof)[0].places[0].fieldContributors).toBeUndefined();
+  });
+  it.each([
+    [
+      "geojson",
+      JSON.stringify({
+        type: "Feature",
+        geometry: { type: "Point", coordinates: [13, 52] },
+        properties: {
+          name: "Place",
+          fieldContributors: { lat: [{}] },
+          _mapAttributions: captured.lat,
+        },
+      }),
+    ],
+    [
+      "gpx",
+      '<gpx xmlns:omx="https://openmapx.org/ns/saved-place/1"><wpt lat="52" lon="13"><name>Place</name><extensions><omx:fieldContributors>{"lat":[{}]}</omx:fieldContributors></extensions></wpt></gpx>',
+    ],
+    [
+      "kml",
+      '<kml><Placemark><name>Place</name><ExtendedData><Data name="fieldContributors"><value>{"lat":[{}]}</value></Data></ExtendedData><Point><coordinates>13,52</coordinates></Point></Placemark></kml>',
+    ],
+  ])("silently drops invalid captures but retains the place in %s", (format, output) => {
+    const place = parse(`bad.${format}`, output)[0].places[0];
+    expect(place.name).toBe("Place");
+    expect(place.fieldContributors).toBeUndefined();
   });
 });

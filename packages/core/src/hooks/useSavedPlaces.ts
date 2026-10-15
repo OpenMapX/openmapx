@@ -76,7 +76,14 @@ export function useCreateList() {
 
 export interface ImportPlacesInput {
   target: { listId: string } | { name: string };
-  places: { name: string; address?: string; lat: number; lng: number; note?: string }[];
+  places: {
+    name: string;
+    address?: string;
+    lat: number;
+    lng: number;
+    note?: string;
+    fieldContributors?: SavedPlaceFieldContributors;
+  }[];
 }
 
 export interface ImportPlacesResult {

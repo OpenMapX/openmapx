@@ -1,3 +1,8 @@
+import { parseSavedPlaceContributors } from "@openmapx/core/saved-place-contributors";
+import {
+  SAVED_PLACE_XML_NAMESPACE,
+  savedPlaceNoteFromDescription,
+} from "@openmapx/core/saved-place-description";
 import { fileList, type ImportList, makePlace, type ParseOptions, validCoordinates } from "./types";
 import { childText, elements, xml } from "./xml";
 
@@ -19,14 +24,37 @@ export function parseGpx(
     if (!latText || !lngText || !validCoordinates(lat, lng)) continue;
     const group = childText(waypoint, "type");
     const places = groups.get(group) || [];
-    const address = elements(waypoint, "extensions")
-      .flatMap((extension) => elements(extension, "address"))
-      .find(
-        (element) =>
-          element.namespaceURI === "https://osmand.net" ||
-          element.namespaceURI?.startsWith("https://osmand.net/"),
-      )
-      ?.textContent?.trim();
+    const extensions = elements(waypoint, "extensions");
+    const omxText = (name: string) =>
+      extensions
+        .flatMap((extension) => elements(extension, name))
+        .find((element) => element.namespaceURI === SAVED_PLACE_XML_NAMESPACE)
+        ?.textContent?.trim();
+    const fieldContributors = parseSavedPlaceContributors(omxText("fieldContributors"));
+    const address =
+      omxText("address") ||
+      elements(waypoint, "extensions")
+        .flatMap((extension) => elements(extension, "address"))
+        .find(
+          (element) =>
+            element.namespaceURI === "https://osmand.net" ||
+            element.namespaceURI?.startsWith("https://osmand.net/"),
+        )
+        ?.textContent?.trim();
+    // Our namespace marks the description convention even when no source receipts were acquired.
+    const ownExport =
+      extensions.some((extension) =>
+        Array.from(extension.getElementsByTagName("*")).some(
+          (element) => element.namespaceURI === SAVED_PLACE_XML_NAMESPACE,
+        ),
+      ) ||
+      Array.from(doc.documentElement.attributes).some(
+        (attribute) =>
+          attribute.namespaceURI === "http://www.w3.org/2000/xmlns/" &&
+          attribute.value === SAVED_PLACE_XML_NAMESPACE,
+      );
+    const description =
+      childText(waypoint, "desc", !ownExport) || childText(waypoint, "cmt", !ownExport);
     places.push(
       makePlace({
         name: childText(waypoint, "name") || options.droppedPin || "Dropped pin",
@@ -34,7 +62,10 @@ export function parseGpx(
         lng,
         status: "exact",
         address,
-        note: childText(waypoint, "desc") || childText(waypoint, "cmt"),
+        fieldContributors,
+        note: ownExport
+          ? savedPlaceNoteFromDescription(description, { address, fieldContributors })
+          : description,
       }),
     );
     groups.set(group, places);

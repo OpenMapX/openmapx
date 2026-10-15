@@ -1,4 +1,5 @@
 import { API_ENDPOINTS, apiClient, haversineDistance, type SearchResult } from "@openmapx/core";
+import { captureSavedPlaceContributors } from "@openmapx/core/saved-place-contributors";
 import type { ImportList, ImportPlace } from "./types";
 import { validCoordinates } from "./types";
 
@@ -94,6 +95,9 @@ export async function resolveImportPlaces(
           place.lng = match.coordinates[0];
           place.status = "located";
           place.geocoder = match;
+          const { lat: _lat, lng: _lng, ...retained } = place.fieldContributors ?? {};
+          const captured = captureSavedPlaceContributors(match, ["lat", "lng"]);
+          place.fieldContributors = { ...retained, ...captured };
         } else if (place.status === "needsLookup") place.status = "unresolved";
         options.onProgress?.(++done, pending.length);
       }

@@ -26,12 +26,15 @@ import {
   useSavedLists,
   useSavedPlacesStore,
 } from "@openmapx/core";
-import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
+import {
+  SAVED_PLACE_FIELDS,
+  savedPlaceContributors,
+} from "@openmapx/core/saved-place-contributors";
+import { contributorsForRecords } from "@openmapx/mobility-core/contributors";
 import { useLocale, useTranslations } from "next-intl";
 import { useEffect, useMemo, useState } from "react";
 import { AttributionStrip } from "@/components/ui/AttributionStrip";
 import type { ImportList, ImportPlace, ParsedImport } from "@/lib/savedPlacesImport/types";
-import { servedAttributions } from "@/lib/servedAttributions";
 
 interface ReviewList extends ImportList {
   id: string;
@@ -60,6 +63,9 @@ function payloadPlaces(list: ReviewList): ImportPlacesInput["places"] {
               lng: place.lng,
               ...(place.address ? { address: place.address } : {}),
               ...(place.note ? { note: place.note } : {}),
+              ...(place.fieldContributors === undefined
+                ? {}
+                : { fieldContributors: place.fieldContributors }),
             },
           ]
         : [],
@@ -80,7 +86,6 @@ export function ImportPlacesDialog({
   const lang = useLocale();
   const theme = useTheme();
   const fullScreen = useMediaQuery(theme.breakpoints.down("sm"));
-  const registry = useIntegrationRegistry();
   const { data: savedLists } = useSavedLists();
   const mutation = useImportPlaces();
   const selectList = useSavedPlacesStore((state) => state.selectList);
@@ -145,11 +150,19 @@ export function ImportPlacesDialog({
   }, [files, initialLists, lang, t, targetListId]);
   const attributions = useMemo(
     () =>
-      servedAttributions(
-        registry,
-        lists.flatMap((list) => list.places.map((place) => place.geocoder)),
+      contributorsForRecords(
+        lists
+          .filter((list) => list.included)
+          .flatMap((list) =>
+            payloadPlaces(list).map((place) => ({
+              contributors: savedPlaceContributors(
+                place.fieldContributors,
+                SAVED_PLACE_FIELDS.filter((field) => field !== "address" || Boolean(place.address)),
+              ),
+            })),
+          ),
       ),
-    [lists, registry],
+    [lists],
   );
   const update = (index: number, patch: Partial<ReviewList>) =>
     setLists((previous) => previous.map((list, i) => (i === index ? { ...list, ...patch } : list)));

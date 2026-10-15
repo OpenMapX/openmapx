@@ -50,10 +50,11 @@ export function parseSavedPlaceContributors(
 /** Only captured fields are copied. Absence stays unknown; an acquired [] stays authoritative. */
 export function captureSavedPlaceContributors(
   place: ContributingRecord & { fieldContributors?: FieldContributors },
+  fieldsToCapture: readonly SavedPlaceField[] = SAVED_PLACE_FIELDS,
 ): SavedPlaceFieldContributors | undefined {
   if (place.contributors === undefined && place.fieldContributors === undefined) return undefined;
   const fields: SavedPlaceFieldContributors = {};
-  for (const field of SAVED_PLACE_FIELDS) {
+  for (const field of fieldsToCapture) {
     const coordinate = field === "lat" || field === "lng";
     const sourceField = coordinate ? `coordinates.${field === "lat" ? 1 : 0}` : field;
     if (place.fieldContributors !== undefined) {

@@ -10,6 +10,7 @@ const state = vi.hoisted(() => ({
   resolve: vi.fn(),
   mutate: vi.fn(),
   select: vi.fn(),
+  credits: vi.fn(),
 }));
 vi.mock("@/lib/savedPlacesImport", () => ({ parseImportFiles: state.parse }));
 vi.mock("@/lib/savedPlacesImport/resolve", () => ({ resolveImportPlaces: state.resolve }));
@@ -25,11 +26,11 @@ vi.mock("@openmapx/core", async (original) => ({
   useSavedPlacesStore: (selector: (store: unknown) => unknown) =>
     selector({ selectList: state.select }),
 }));
-vi.mock("@openmapx/integration-framework/react", () => ({
-  useIntegrationRegistry: () => ({ get: () => ({ dataSources: [] }) }),
-}));
 vi.mock("@/components/ui/AttributionStrip", () => ({
-  AttributionStrip: () => <div>Geocoder credit</div>,
+  AttributionStrip: (props: unknown) => {
+    state.credits(props);
+    return <div>Geocoder credit</div>;
+  },
 }));
 
 import { ImportPlacesDialog } from "./ImportPlacesDialog";
@@ -140,20 +141,62 @@ describe("import dialog", () => {
       places: [{ name: "Place 2000", lat: 52, lng: 13 }],
     });
   });
-  it("shows the served geocoder credit for matched coordinates", async () => {
+  it("displays and sends only the frozen field credits being imported", async () => {
+    const receipt = { sourceId: "test-source", name: "Test source" };
+    const hidden = { sourceId: "hidden-name", name: "Unused geocoder name" };
     const input = parsed();
-    input.lists[0].places[0].status = "located";
-    input.lists[0].places[0].geocoder = {
-      id: "osm:node:1",
-      label: "Exact",
-      coordinates: [13, 52],
-      type: "poi",
-      confidence: 1,
-      contributors: [{ sourceId: "test-source", name: "Test source" }],
+    input.lists[0].places[0] = {
+      ...input.lists[0].places[0],
+      status: "located",
+      fieldContributors: { lat: [receipt], lng: [] },
+      geocoder: {
+        id: "osm:node:1",
+        label: "Exact",
+        coordinates: [13, 52],
+        type: "poi",
+        confidence: 1,
+        contributors: [hidden],
+      },
     };
+    input.lists[0].places[1].fieldContributors = { lat: [hidden] };
     state.parse.mockResolvedValue(input);
     mount();
     expect(await screen.findByText("Geocoder credit")).toBeInTheDocument();
+    expect(state.credits).toHaveBeenLastCalledWith(
+      expect.objectContaining({ attributions: [receipt] }),
+    );
+    fireEvent.click(screen.getByLabelText(/Include approximate/));
+    expect(state.credits).toHaveBeenLastCalledWith(
+      expect.objectContaining({ attributions: [receipt, hidden] }),
+    );
+    fireEvent.click(screen.getByLabelText(/Include approximate/));
+    expect(state.credits).toHaveBeenLastCalledWith(
+      expect.objectContaining({ attributions: [receipt] }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Import" }));
+    await waitFor(() => expect(state.mutate).toHaveBeenCalled());
+    expect(
+      (state.mutate.mock.calls[0][0] as ImportPlacesInput).places[0].fieldContributors,
+    ).toEqual({
+      lat: [receipt],
+      lng: [],
+    });
+  });
+  it("preserves and displays validated credits imported from a file", async () => {
+    const receipt = { sourceId: "file", name: "File publisher" };
+    const input = parsed();
+    input.lists[0].places[0].fieldContributors = { name: [receipt], lat: [], lng: [] };
+    state.parse.mockResolvedValue(input);
+    mount();
+    await screen.findByText("Geocoder credit");
+    expect(state.credits).toHaveBeenLastCalledWith(
+      expect.objectContaining({ attributions: [receipt] }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Import" }));
+    await waitFor(() => expect(state.mutate).toHaveBeenCalled());
+    expect(
+      (state.mutate.mock.calls[0][0] as ImportPlacesInput).places[0].fieldContributors,
+    ).toEqual(input.lists[0].places[0].fieldContributors);
   });
   it("aborts parsing/lookup when unmounted", async () => {
     state.resolve.mockImplementation(() => new Promise(() => {}));

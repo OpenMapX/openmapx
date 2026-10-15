@@ -89,6 +89,24 @@ describe("saved list imports", () => {
       expect.objectContaining({ name: "New", sortOrder: 9, placeId: null, listId: "list-1" }),
     ]);
   });
+  it("stores validated field captures without changing duplicate handling", async () => {
+    const fieldContributors = { lat: [{ sourceId: "geo", name: "Geocoder" }], lng: [] };
+    state.queue.push([{ id: "list-1", name: "Trip" }], [], [], []);
+    expect(
+      (await request({ listId: "list-1" }, [{ ...point, fieldContributors }])).statusCode,
+    ).toBe(200);
+    expect(state.inserted[0].rows).toEqual([expect.objectContaining({ fieldContributors })]);
+  });
+  it.each([{ phone: [] }, { lat: [{}] }, { lng: "bad" }])(
+    "rejects an entire batch with invalid captures %j",
+    async (fieldContributors) => {
+      const response = await request({ name: "Trip" }, [point, { ...point, fieldContributors }]);
+      expect(response.statusCode).toBe(400);
+      expect(response.json()).toEqual({ error: "Invalid fieldContributors" });
+      expect(state.transactions).toBe(0);
+      expect(state.inserted).toHaveLength(0);
+    },
+  );
   it("suffixes a colliding list name without exceeding 200 characters", async () => {
     state.queue.push([], [{ id: "new-list" }], [], [], []);
     const response = await request({ name: "a".repeat(200) });

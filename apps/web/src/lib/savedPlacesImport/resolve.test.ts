@@ -44,6 +44,40 @@ describe("import coordinate resolution", () => {
       geocoder: { provider: "geocoding-photon" },
     });
   });
+  it("replaces only coordinate ownership with the matched coordinate receipts", async () => {
+    const old = { sourceId: "file", name: "File publisher" };
+    const geo = { sourceId: "geo", name: "Coordinate publisher" };
+    const hidden = { sourceId: "hidden", name: "Hidden name publisher" };
+    vi.spyOn(apiClient, "get").mockResolvedValue([
+      result({
+        contributors: [hidden],
+        fieldContributors: { name: [hidden], coordinates: [geo], "coordinates.0": [] },
+      }),
+    ]);
+    const input = lists();
+    input[0].places[0].fieldContributors = { name: [old], address: [], lat: [old], lng: [old] };
+    expect((await resolveImportPlaces(input))[0].places[0].fieldContributors).toEqual({
+      name: [old],
+      address: [],
+      lat: [geo],
+      lng: [],
+    });
+    expect(input[0].places[0].fieldContributors?.lat).toEqual([old]);
+  });
+  it("clears old coordinate receipts when a new match has unknown ownership", async () => {
+    vi.spyOn(apiClient, "get").mockResolvedValue([result()]);
+    const input = lists();
+    input[0].places[0].fieldContributors = { name: [], lat: [{ sourceId: "old", name: "Old" }] };
+    expect((await resolveImportPlaces(input))[0].places[0].fieldContributors).toEqual({ name: [] });
+  });
+  it("leaves exact file captures untouched without lookup", async () => {
+    const get = vi.spyOn(apiClient, "get");
+    const input = lists();
+    input[0].places[0].status = "exact";
+    input[0].places[0].fieldContributors = { lat: [], lng: [] };
+    expect(await resolveImportPlaces(input)).toEqual(input);
+    expect(get).not.toHaveBeenCalled();
+  });
   it.each([
     result({ coordinates: [13.1, 52] }),
     result({ name: "Different shop", label: "Different shop, Berlin" }),

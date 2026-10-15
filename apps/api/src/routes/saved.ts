@@ -143,6 +143,7 @@ export const savedRoute: FastifyPluginAsync = async (fastify) => {
                 lat: { type: "number", minimum: -90, maximum: 90 },
                 lng: { type: "number", minimum: -180, maximum: 180 },
                 note: { type: "string", maxLength: 2000 },
+                fieldContributors: { type: "object", maxProperties: 4 },
               },
             },
           },
@@ -167,7 +168,14 @@ export const savedRoute: FastifyPluginAsync = async (fastify) => {
       const userId = getUserId(req);
       const { target, places } = req.body as {
         target: { listId?: string; name?: string };
-        places: { name: string; address?: string; lat: number; lng: number; note?: string }[];
+        places: {
+          name: string;
+          address?: string;
+          lat: number;
+          lng: number;
+          note?: string;
+          fieldContributors?: SavedPlaceFieldContributors;
+        }[];
       };
       if (
         (target.listId === undefined) === (target.name === undefined) ||
@@ -176,6 +184,13 @@ export const savedRoute: FastifyPluginAsync = async (fastify) => {
         return reply
           .status(400)
           .send({ error: "Specify exactly one listId or non-reserved list name" });
+      }
+      for (const place of places) {
+        if (place.fieldContributors === undefined) continue;
+        const captured = parseSavedPlaceContributors(place.fieldContributors);
+        if (captured === undefined)
+          return reply.status(400).send({ error: "Invalid fieldContributors" });
+        place.fieldContributors = captured;
       }
       const result = await db.transaction(async (tx) => {
         let listId = target.listId;

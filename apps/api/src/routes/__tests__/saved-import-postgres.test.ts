@@ -39,7 +39,8 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         await fixture?.stop();
       }
     });
-    const point = { name: "Cafe", lat: 52, lng: 13 };
+    const fieldContributors = { lat: [{ sourceId: "geo", name: "Original geocoder" }], lng: [] };
+    const point = { name: "Cafe", lat: 52, lng: 13, fieldContributors };
     const send = (target: unknown, places = [point]) =>
       app.inject({ method: "POST", url: "/api/saved/lists/import", payload: { target, places } });
 
@@ -50,13 +51,13 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       const listId = responses[0].json().listId as string;
       const duplicate = await send({ listId }, [
         { ...point, lat: 52.000009 },
-        { name: "Museum", lat: 53, lng: 14 },
-        { name: "Museum", lat: 53, lng: 14 },
+        { ...point, name: "Museum", lat: 53, lng: 14 },
+        { ...point, name: "Museum", lat: 53, lng: 14 },
       ]);
       expect(duplicate.json()).toMatchObject({ imported: 1, skippedDuplicates: 2 });
       const more = await Promise.all([
-        send({ listId }, [{ name: "Park", lat: 54, lng: 15 }]),
-        send({ listId }, [{ name: "Park", lat: 54, lng: 15 }]),
+        send({ listId }, [{ ...point, name: "Park", lat: 54, lng: 15 }]),
+        send({ listId }, [{ ...point, name: "Park", lat: 54, lng: 15 }]),
       ]);
       expect(more.map((r) => r.json().imported).sort()).toEqual([0, 1]);
       const places = await fixture.db
@@ -66,6 +67,11 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         .orderBy(savedPlace.sortOrder);
       expect(places.map((p) => p.sortOrder)).toEqual([0, 1, 2]);
       expect(places.every((p) => p.placeId === null)).toBe(true);
+      expect(places.map((p) => p.fieldContributors)).toEqual([
+        fieldContributors,
+        fieldContributors,
+        fieldContributors,
+      ]);
     });
     it("rolls back a newly created list if any place cannot be inserted", async () => {
       await fixture.sql`CREATE FUNCTION import_test_reject() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.name = 'Reject' THEN RAISE EXCEPTION 'test failure'; END IF; RETURN NEW; END $$`;
