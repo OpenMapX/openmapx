@@ -122,8 +122,7 @@ export function mergeAttributionDetails(
     const bucket = groups.get(key) ?? [];
     const previous = bucket.at(-1);
     if (!previous?.attribution || !attr) {
-      bucket.push(structuredClone(entry));
-      groups.set(key, bucket);
+      groups.set(key, [structuredClone(entry)]);
       continue;
     }
     const distinct = <T>(items: readonly T[]): T[] => [

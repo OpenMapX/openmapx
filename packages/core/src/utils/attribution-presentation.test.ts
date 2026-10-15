@@ -143,11 +143,22 @@ it.each(["bindings", "declarations"] as const)(
     expect(groups.length).toBeGreaterThan(1);
     expect(groups.every((group) => parseLicensing(group.attribution?.licensing))).toBe(true);
     expect(
-      new Set(groups.flatMap((group) => licensingReferenceUrls(group.attribution!.licensing!)))
-        .size,
+      new Set(
+        groups.flatMap((group) =>
+          group.attribution?.licensing ? licensingReferenceUrls(group.attribution.licensing) : [],
+        ),
+      ).size,
     ).toBe(field === "bindings" ? 1 : 65);
-    expect(groups.flatMap((group) => group.attribution!.licensing!.bindings)).toHaveLength(
+    expect(groups.flatMap((group) => group.attribution?.licensing?.bindings ?? [])).toHaveLength(
       field === "bindings" ? 65 : 0,
     );
   },
 );
+
+it("deduplicates unstructured notices while preserving their links", () => {
+  const entry = {
+    html: "Captured provider notice",
+    links: [{ label: "Provider", url: "https://provider.example/" }],
+  };
+  expect(mergeAttributionDetails([entry, structuredClone(entry)])).toEqual([entry]);
+});
