@@ -3,7 +3,7 @@ import {
   parseSavedPlaceContributors,
   type SavedPlaceFieldContributors,
 } from "@openmapx/core/saved-place-contributors";
-import type { ExportPlace } from "../utils/geo-export";
+import type { ExportPlace } from "@openmapx/core/saved-place-export";
 
 /** Route-schema pattern for the public token param (43-char base64url plus slack). */
 export const SHARE_TOKEN_PATTERN = "^[A-Za-z0-9_-]{20,64}$";

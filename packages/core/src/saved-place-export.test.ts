@@ -5,7 +5,7 @@ import {
   placesToGeoJson,
   placesToGpx,
   placesToKml,
-} from "../geo-export.js";
+} from "./saved-place-export";
 
 const TWO_PLACES: ExportPlace[] = [
   {

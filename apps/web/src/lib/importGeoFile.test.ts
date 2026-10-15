@@ -1,5 +1,5 @@
+import { placesToGeoJson, placesToGpx, placesToKml } from "@openmapx/core/saved-place-export";
 import { expect, it } from "vitest";
-import { placesToGeoJson, placesToGpx, placesToKml } from "../../../api/src/utils/geo-export";
 import { parseGeoFile } from "./importGeoFile";
 
 const name = { sourceId: "names", name: "Name supplier", attributionText: "Name notice" };

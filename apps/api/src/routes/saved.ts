@@ -4,10 +4,6 @@ import {
   SAVED_PLACE_FIELDS,
   type SavedPlaceFieldContributors,
 } from "@openmapx/core/saved-place-contributors";
-import { and, eq, sql } from "drizzle-orm";
-import type { FastifyPluginAsync } from "fastify";
-import { db } from "../db/index";
-import { labeledPlace, savedList, savedPlace } from "../db/schema";
 import {
   EXPORT_CONTENT_TYPE,
   EXPORT_EXTENSION,
@@ -17,7 +13,11 @@ import {
   placesToGeoJson,
   placesToGpx,
   placesToKml,
-} from "../utils/geo-export";
+} from "@openmapx/core/saved-place-export";
+import { and, eq, sql } from "drizzle-orm";
+import type { FastifyPluginAsync } from "fastify";
+import { db } from "../db/index";
+import { labeledPlace, savedList, savedPlace } from "../db/schema";
 import { getUserId, requireAuthHook } from "../utils/require-auth";
 import { declareRouteAuth } from "../utils/route-auth";
 

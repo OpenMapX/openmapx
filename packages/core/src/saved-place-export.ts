@@ -1,9 +1,9 @@
-import { buildAttributionPresentation, parseAttributionHtml } from "@openmapx/core/attribution";
 import {
   parseSavedPlaceContributors,
   type SavedPlaceFieldContributors,
   savedPlaceContributors,
-} from "@openmapx/core/saved-place-contributors";
+} from "./saved-place-contributors";
+import { buildAttributionPresentation, parseAttributionHtml } from "./utils/attribution-api";
 
 /**
  * Pure converters that turn saved places into the three file formats the app
