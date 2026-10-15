@@ -444,6 +444,13 @@ The bundled Traefik also adds HSTS on its entrypoint. Behind your own proxy,
 configure HSTS there, for example with the `hsts@file` middleware from the same
 file.
 
+Place, transit and road-condition ids travel encoded in the request path, for
+example `/api/places/osm%3Anode%2F1`. Traefik 3.6.4 to 3.6.6 rejects encoded
+slashes and similar characters with a 400 by default, so give the external
+entrypoint the same `encodedCharacters` settings as the bundled
+`services/traefik/config/traefik.yml`. Without them, opening a place or a
+transit stop fails on those versions.
+
 ## Where to go next
 
 - **[Getting started](./getting-started.md)** — the first-deployment walkthrough
