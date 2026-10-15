@@ -57,7 +57,7 @@ it("makes no requests when cached details already resolve the missing address", 
     name: incomplete.name,
     hasAddress: false,
   });
-  client.setQueryData(["place", request.identity], {
+  client.setQueryData(["place", request.identity, 3], {
     ...selected,
     id: "osm:node/1",
     primaryScheme: "osm",
@@ -116,7 +116,7 @@ it("reuses a complete cached reverse address for a fixed data-source place", () 
     name: incomplete.name,
     hasAddress: false,
   });
-  client.setQueryData(["place", request.identity], {
+  client.setQueryData(["place", request.identity, 3], {
     ...selected,
     addressEvidence: {
       source: "geocoding-nominatim",
