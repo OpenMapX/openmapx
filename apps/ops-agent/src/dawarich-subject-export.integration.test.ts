@@ -4,13 +4,14 @@ import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { Readable } from "node:stream";
+import { setTimeout as delay } from "node:timers/promises";
 import {
   DAWARICH_EXPECTED_SCHEMA_FINGERPRINT,
   DAWARICH_SUPPORTED_COMMIT,
   DAWARICH_SUPPORTED_IMAGE_DIGEST,
   dawarichSourceManifestV1Schema,
 } from "@openmapx/core/privacy";
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 import { parseDawarichTar } from "../../api/src/privacy/dawarich-source-part.js";
 
 /**
@@ -25,6 +26,7 @@ const DATABASE_IMAGE =
   "ghcr.io/baosystems/postgis:18-3.6@sha256:8784f86b3e0e046859c96ea25eb8b10f0b801fd891b99a82b82f28ac4a643db8";
 const DATABASE_CONTAINER = `openmapx-dawarich-export-test-${randomBytes(8).toString("hex")}`;
 const DATABASE_PASSWORD = "openmapx-isolated-export-fixture";
+const DATABASE_READY_TIMEOUT_MS = 45_000;
 const ROOT = resolve(process.cwd());
 const SCRIPT_MOUNT = join(ROOT, "services", "dawarich-app", "scripts");
 
@@ -76,6 +78,10 @@ function command(
   });
 }
 
+function stderrTail(result: CommandResult): string {
+  return result.stderr.toString("utf8").slice(-4096);
+}
+
 function sql(value: string): string {
   return `'${value.replaceAll("'", "''")}'`;
 }
@@ -97,10 +103,7 @@ async function runPsql(database: string, input: string): Promise<void> {
     ],
     { input },
   );
-  if (result.code !== 0)
-    throw new Error(
-      `exact-image fixture SQL failed: ${result.stderr.toString("utf8").slice(-4096)}`,
-    );
+  if (result.code !== 0) throw new Error(`exact-image fixture SQL failed: ${stderrTail(result)}`);
 }
 
 async function startDatabase(): Promise<void> {
@@ -118,8 +121,11 @@ async function startDatabase(): Promise<void> {
     `POSTGRES_PASSWORD=${DATABASE_PASSWORD}`,
     DATABASE_IMAGE,
   ]);
-  if (started.code !== 0) throw new Error("isolated exact-image database failed to start");
-  for (let attempt = 0; attempt < 30; attempt += 1) {
+  if (started.code !== 0) {
+    throw new Error(`isolated exact-image database failed to start: ${stderrTail(started)}`);
+  }
+  const deadline = Date.now() + DATABASE_READY_TIMEOUT_MS;
+  while (true) {
     const ready = await command("docker", [
       "exec",
       DATABASE_CONTAINER,
@@ -128,9 +134,13 @@ async function startDatabase(): Promise<void> {
       "postgres",
     ]);
     if (ready.code === 0) return;
-    await new Promise((resolveWait) => setTimeout(resolveWait, 500));
+    if (Date.now() >= deadline) {
+      throw new Error(
+        `isolated exact-image database did not become ready within ${DATABASE_READY_TIMEOUT_MS} ms: ${`${ready.stdout.toString("utf8")}${stderrTail(ready)}`.trim()}`,
+      );
+    }
+    await delay(500);
   }
-  throw new Error("isolated exact-image database did not become ready");
 }
 
 function imageArgs(
@@ -141,6 +151,8 @@ function imageArgs(
 ): string[] {
   return [
     "run",
+    "--pull",
+    "never",
     "--rm",
     "-i",
     "--network",
@@ -201,7 +213,18 @@ async function runRails(
     "docker",
     imageArgs(database, password, storageDirectory, commandArgs),
   );
-  if (result.code !== 0) throw new Error("exact-image Rails fixture command failed");
+  if (result.code !== 0) {
+    throw new Error(`exact-image Rails fixture command failed: ${stderrTail(result)}`);
+  }
+}
+
+async function assertImagePresent(): Promise<void> {
+  const inspected = await command("docker", ["image", "inspect", "--format", "{{.Id}}", IMAGE]);
+  if (inspected.code !== 0) {
+    throw new Error(
+      `${IMAGE} is not available locally and this suite runs it with --pull=never; pull it first with \`docker pull ${IMAGE}\`: ${stderrTail(inspected)}`,
+    );
+  }
 }
 
 function fixtureSql(subject: string): string {
@@ -325,6 +348,10 @@ COMMIT;
 }
 
 describe.skipIf(!runExactImage)("managed Dawarich exact-image export", () => {
+  // Registry pulls are not part of the export contract and are too flaky for
+  // the test budget; CI pulls the pinned digest with retries beforehand.
+  beforeAll(assertImagePresent);
+
   it("projects every reviewed relation, isolates the subject and redacts secrets", async () => {
     const password = DATABASE_PASSWORD;
     const suffix = randomBytes(6).toString("hex");
@@ -353,7 +380,9 @@ describe.skipIf(!runExactImage)("managed Dawarich exact-image export", () => {
         "postgres",
         database,
       ]);
-      if (created.code !== 0) throw new Error("exact-image fixture database creation failed");
+      if (created.code !== 0) {
+        throw new Error(`exact-image fixture database creation failed: ${stderrTail(created)}`);
+      }
       await runRails(database, password, storageDirectory, ["rails", "db:prepare"]);
       await runPsql(database, fixtureSql(subject));
       // Active Storage's disk service uses this descriptor-anchored path. The

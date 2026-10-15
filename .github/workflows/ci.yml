@@ -266,6 +266,22 @@ jobs:
       - name: Apply the production database migrations
         run: pnpm --filter @openmapx/api exec drizzle-kit migrate
 
+      # Docker Hub throttles and fails transiently. Pull the pinned digest with
+      # backoff here so the export test, which runs it with --pull=never, only
+      # spends its budget on the fixture itself. No Docker Hub login: the
+      # workflow holds no Docker Hub credentials.
+      - name: Pull the pinned managed Dawarich image
+        timeout-minutes: 10
+        run: |
+          image="freikin/dawarich@$(node --input-type=module -e 'const { DAWARICH_SUPPORTED_IMAGE_DIGEST } = await import("./packages/core/src/privacy/dawarich-contract.ts"); console.log(DAWARICH_SUPPORTED_IMAGE_DIGEST)')"
+          for backoff in 0 15 30 60 120; do
+            sleep "$backoff"
+            docker pull --quiet "$image" && exit 0
+            echo "::warning::Pulling $image failed; retrying with backoff"
+          done
+          echo "::error::Could not pull $image after 5 attempts"
+          exit 1
+
       - name: Verify the pinned managed Dawarich subject export
         timeout-minutes: 10
         run: OPENMAPX_RUN_DAWARICH_EXPORT_TESTS=1 pnpm exec vitest run --project node apps/ops-agent/src/dawarich-subject-export.integration.test.ts
