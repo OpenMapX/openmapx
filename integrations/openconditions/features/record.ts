@@ -194,6 +194,19 @@ export interface CreditSources {
   link(sourceId: string): string | undefined;
   /** The crowd's credit, as `/sources` states it. */
   crowd(): Attribution | undefined;
+  /** The notice a source's publisher requires to accompany any display of its data. */
+  noticeOf?(sourceId: string): string | undefined;
+}
+
+/** One credit per notice the publishers of the kept sources require to accompany their data. */
+export function noticeCredits(
+  kept: readonly RecordSource[],
+  sources: CreditSources,
+): Attribution[] {
+  return kept.flatMap((source) => {
+    const notice = sources.noticeOf?.(source.id);
+    return notice ? [{ sourceId: source.id, name: notice }] : [];
+  });
 }
 
 /** No live data sources: no links and no crowd credit. */

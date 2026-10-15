@@ -1,7 +1,8 @@
 /**
  * OpenConditions, built in: reads the OpenConditions HTTP API at
  * `OPENCONDITIONS_URL` and registers its road-conditions, fuel-stations,
- * parking-sites, charging-sites, cameras, message-signs and hazards providers. The OpenConditions
+ * parking-sites, charging-sites, cameras, message-signs, road-weather,
+ * service-vehicles, border-crossings and hazards providers. The OpenConditions
  * services themselves run beside OpenMapX; no OpenConditions code runs here.
  *
  * The data sources are the instance's own: the integration reads its
@@ -21,6 +22,7 @@
  * Without `OPENCONDITIONS_URL` the integration registers nothing.
  */
 import type { IntegrationContext } from "@openmapx/integration-framework";
+import { createBorderCrossingProvider } from "./border/provider.js";
 import { createCameraProvider } from "./cameras/provider.js";
 import { createChargingSiteProvider } from "./charging/provider.js";
 import { createOpenConditionsClient } from "./client.js";
@@ -29,8 +31,10 @@ import { createFuelStationProvider } from "./fuel/provider.js";
 import { createHazardsProvider } from "./hazards/provider.js";
 import { createParkingSiteProvider } from "./parking/provider.js";
 import { createRoadConditionsProvider } from "./road-conditions/provider.js";
+import { createRoadWeatherProvider } from "./road-weather/provider.js";
 import { createMessageSignProvider } from "./signs/provider.js";
 import { createLiveSources, createSourceScopes, startSourceSync } from "./sources.js";
+import { createServiceVehicleProvider } from "./vehicles/provider.js";
 
 /** How long setup waits for the first `/sources` list before registering the providers. */
 const FIRST_SOURCES_WAIT_MS = 3_000;
@@ -70,5 +74,8 @@ export async function setup(
   ctx.registerChargingSiteProvider(createChargingSiteProvider(client, sources, { evidence }));
   ctx.registerCameraProvider(createCameraProvider(client, sources, { evidence }));
   ctx.registerMessageSignProvider(createMessageSignProvider(client, sources));
+  ctx.registerRoadWeatherProvider(createRoadWeatherProvider(client, sources));
+  ctx.registerServiceVehicleProvider(createServiceVehicleProvider(client, sources));
+  ctx.registerBorderCrossingProvider(createBorderCrossingProvider(client, sources));
   ctx.registerHazardsProvider(createHazardsProvider(client, sources));
 }

@@ -473,9 +473,11 @@ instance lists at `GET /sources`. The integration reads that list during
 
 OpenConditions `roads` feeds are credited under `road-conditions`, `fuel` feeds
 under `fuel-stations`, `parking` feeds under `parking-sites`, `charging` feeds
-under `charging-sites`, `cameras` feeds under `cameras`, and `hazards` feeds
-under `hazards`; the roads domain's message-sign feeds are credited under
-`road-conditions` too. Feeds of other OpenConditions domains are left out.
+under `charging-sites`, `cameras` feeds under `cameras`, `hazards` feeds
+under `hazards`, `weather` feeds under `road-weather`, `vehicles` feeds under
+`service-vehicles`, and `border` feeds under `border-crossings`; the roads
+domain's message-sign feeds are credited under `road-conditions` too. Feeds of
+other OpenConditions domains are left out.
 OpenConditions lists restricted feeds too, since the list is metadata, not
 records. Each `/sources` answer names the `scope` it was served in, and an
 answer without one is malformed (the last good list stays). In the `public`
@@ -634,6 +636,9 @@ interface IntegrationContext {
   registerChargingSiteProvider(p: ChargingSiteProvider): void; // → "charging-sites"
   registerCameraProvider(p: CameraProvider): void; // → "cameras"
   registerMessageSignProvider(p: MessageSignProvider): void; // → "message-signs"
+  registerRoadWeatherProvider(p: RoadWeatherProvider): void; // → "road-weather"
+  registerServiceVehicleProvider(p: ServiceVehicleProvider): void; // → "service-vehicles"
+  registerBorderCrossingProvider(p: BorderCrossingProvider): void; // → "border-crossings"
   registerHazardsProvider(p: HazardsProvider): void; // → "hazards"
 
   registerRoute(method, path, handler, options?): void; // options.rateLimitTier
@@ -692,26 +697,29 @@ interface; the domain orchestrator consumes the typed shape. The contracts in
 the mobility domains return their data wrapped in a `MobilityResult<T>`, so
 attribution and freshness flow through every call unmodified.
 
-| Domain            | Contract                     | What providers in it do                                                                                                                              |
-| ----------------- | ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `geocoding`       | `GeocodingProvider`          | Forward geocode, autocomplete, reverse geocode.                                                                                                      |
-| `routing`         | `RoutingProvider`            | Turn-by-turn directions, plus optional isochrones and map-matching.                                                                                  |
-| `transit`         | `TransitProvider`            | Stops, departures/arrivals, routes, trip planning, vehicle positions, alerts.                                                                        |
-| `live-transit`    | `RealtimeProvider`           | Realtime overlays: vehicle positions, service alerts, trip-update deltas.                                                                            |
-| `data-source`     | `MobilityDataSourceProvider` | Map data sources — bike/car/scooter sharing, and the user-facing merger over the charging-sites, parking-sites, fuel-stations and cameras providers. |
-| `weather`         | `WeatherProvider`            | Current conditions, hourly and daily forecasts.                                                                                                      |
-| `photos`          | `PhotoProvider`              | Place imagery, including fast OSM-tag-based hero lookups.                                                                                            |
-| `reviews`         | `ReviewProvider`             | Fetch, aggregate, and submit place reviews.                                                                                                          |
-| `poi-search`      | `PoiSearchProvider`          | Category and free-text POI search within a bounding box.                                                                                             |
-| `knowledge`       | `KnowledgeProvider`          | Place enrichment from reference sources.                                                                                                             |
-| `gtfs-catalog`    | `GtfsCatalogProvider`        | List GTFS feeds for the schedule-feed importer to ingest.                                                                                            |
-| `road-conditions` | `RoadConditionsProvider`     | Live road/traffic conditions — incidents, roadworks, closures, and per-segment congestion speeds.                                                    |
-| `charging-sites`  | `ChargingSiteProvider`       | EV charging sites with charge-point status and tariffs, merged by the `ev-charging` data source.                                                     |
-| `parking-sites`   | `ParkingSiteProvider`        | Parking facilities with live occupancy, merged by the `parking` data source.                                                                         |
-| `fuel-stations`   | `FuelStationProvider`        | Fuel stations with per-grade prices, merged by the `fuel` data source.                                                                               |
-| `cameras`         | `CameraProvider`             | Traffic and scenic cameras with their views, current stills and streams, merged by the `webcam` data source.                                         |
-| `message-signs`   | `MessageSignProvider`        | Dynamic message signs and the pages each shows, merged by the `message-signs` data source.                                                           |
-| `hazards`         | `HazardsProvider`            | Weather alerts, natural hazards, fire detections and their density grid, read by the four hazard overlays through `createHazardsOrchestrator`.       |
+| Domain             | Contract                     | What providers in it do                                                                                                                              |
+| ------------------ | ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `geocoding`        | `GeocodingProvider`          | Forward geocode, autocomplete, reverse geocode.                                                                                                      |
+| `routing`          | `RoutingProvider`            | Turn-by-turn directions, plus optional isochrones and map-matching.                                                                                  |
+| `transit`          | `TransitProvider`            | Stops, departures/arrivals, routes, trip planning, vehicle positions, alerts.                                                                        |
+| `live-transit`     | `RealtimeProvider`           | Realtime overlays: vehicle positions, service alerts, trip-update deltas.                                                                            |
+| `data-source`      | `MobilityDataSourceProvider` | Map data sources — bike/car/scooter sharing, and the user-facing merger over the charging-sites, parking-sites, fuel-stations and cameras providers. |
+| `weather`          | `WeatherProvider`            | Current conditions, hourly and daily forecasts.                                                                                                      |
+| `photos`           | `PhotoProvider`              | Place imagery, including fast OSM-tag-based hero lookups.                                                                                            |
+| `reviews`          | `ReviewProvider`             | Fetch, aggregate, and submit place reviews.                                                                                                          |
+| `poi-search`       | `PoiSearchProvider`          | Category and free-text POI search within a bounding box.                                                                                             |
+| `knowledge`        | `KnowledgeProvider`          | Place enrichment from reference sources.                                                                                                             |
+| `gtfs-catalog`     | `GtfsCatalogProvider`        | List GTFS feeds for the schedule-feed importer to ingest.                                                                                            |
+| `road-conditions`  | `RoadConditionsProvider`     | Live road/traffic conditions — incidents, roadworks, closures, and per-segment congestion speeds.                                                    |
+| `charging-sites`   | `ChargingSiteProvider`       | EV charging sites with charge-point status and tariffs, merged by the `ev-charging` data source.                                                     |
+| `parking-sites`    | `ParkingSiteProvider`        | Parking facilities with live occupancy, merged by the `parking` data source.                                                                         |
+| `fuel-stations`    | `FuelStationProvider`        | Fuel stations with per-grade prices, merged by the `fuel` data source.                                                                               |
+| `cameras`          | `CameraProvider`             | Traffic and scenic cameras with their views, current stills and streams, merged by the `webcam` data source.                                         |
+| `message-signs`    | `MessageSignProvider`        | Dynamic message signs and the pages each shows, merged by the `message-signs` data source.                                                           |
+| `road-weather`     | `RoadWeatherProvider`        | Road weather stations with the surface and air values they measure, merged by the `road-weather` data source.                                        |
+| `service-vehicles` | `ServiceVehicleProvider`     | Where road service vehicles are and the work they report, merged by the `road-maintenance` data source.                                              |
+| `border-crossings` | `BorderCrossingProvider`     | Land border crossings with each queue's wait in each direction, merged by the `border-crossings` data source.                                        |
+| `hazards`          | `HazardsProvider`            | Weather alerts, natural hazards, fire detections and their density grid, read by the four hazard overlays through `createHazardsOrchestrator`.       |
 
 A few patterns recur across the contracts and are worth calling out:
 

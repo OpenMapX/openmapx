@@ -1,0 +1,1455 @@
+{
+  "records": [
+    {
+      "id": "oc:feature:conditions.example:14c133ed46f7d4e16139f079c122cf140cd6c7eafd00c4ddd8487a710d1479ba",
+      "temporality": "static",
+      "externalIds": [
+        {
+          "scheme": "wikidata",
+          "id": "Q24191041"
+        }
+      ],
+      "location": {
+        "geometry": {
+          "type": "Point",
+          "coordinates": [-97.23921, 48.99912]
+        },
+        "extent": "point",
+        "geometryOrigin": "source",
+        "fuzziness": "exact",
+        "admin": {
+          "country": "CA"
+        },
+        "areaDescription": [
+          {
+            "lang": "en",
+            "text": "Emerson, MB/Pembina, ND"
+          }
+        ]
+      },
+      "provenance": {
+        "origin": "feed",
+        "sourceId": "ca-cbsa-waits",
+        "sourceFormat": "cbsa-bwt",
+        "accessMode": "bulk",
+        "recordId": "Emerson",
+        "attribution": {
+          "provider": "Canada Border Services Agency. Contains information licensed under the Open Government Licence – Canada.",
+          "name": "CBSA border wait times",
+          "licensing": {
+            "version": 1,
+            "declarations": [
+              {
+                "text": "OGL-Canada-2.0",
+                "url": "https://open.canada.ca/en/open-government-licence-canada"
+              }
+            ],
+            "bindings": [
+              {
+                "scope": "data",
+                "subject": "CBSA border wait times",
+                "license": {
+                  "kind": "spdx",
+                  "expression": "OGL-Canada-2.0",
+                  "url": "https://open.canada.ca/en/open-government-licence-canada"
+                },
+                "conditions": [
+                  "The Open Government Portal publishes this CSV as the \"Current Border Wait Times\" dataset under the Open Government Licence – Canada, which overrides the CBSA website's terms on commercial reproduction. CBSA names no attribution statement, so the licence's own is used."
+                ]
+              }
+            ]
+          },
+          "license": "OGL-Canada-2.0",
+          "url": "https://www.cbsa-asfc.gc.ca/bwt-taf/menu-eng.html",
+          "licenseUrl": "https://open.canada.ca/en/open-government-licence-canada",
+          "rights": {
+            "source_redistribution": "yes",
+            "derived_redistribution": "yes",
+            "commercial_use": "yes",
+            "attribution_required": "yes",
+            "retention": "yes",
+            "evidence_origin": "https://open.canada.ca/data/en/dataset/d4a716f5-a2fc-4c3c-88ed-451fe05900e4",
+            "evidence_version": "OGL-Canada-2.0",
+            "reviewed_at": "2026-10-14T00:00:00.000Z"
+          }
+        },
+        "privacy": {
+          "class": "authoritative"
+        },
+        "instanceId": "conditions.example",
+        "derivedFrom": {
+          "records": [
+            {
+              "class": "feature",
+              "id": "oc:feature:ca-cbsa-waits:emerson"
+            }
+          ],
+          "method": "canonical_view",
+          "version": "1"
+        }
+      },
+      "freshness": {
+        "fetchedAt": "2026-10-14T23:38:07Z"
+      },
+      "class": "feature",
+      "kind": "border_crossing",
+      "name": [
+        {
+          "lang": "en",
+          "text": "Emerson"
+        }
+      ],
+      "lifecycle": "operational",
+      "details": {
+        "kind": "border_crossing",
+        "v": 1,
+        "countries": ["CA", "US"],
+        "ports": [
+          {
+            "country": "CA",
+            "name": [
+              {
+                "lang": "en",
+                "text": "Emerson"
+              }
+            ]
+          }
+        ],
+        "modes": ["commercial", "passenger"]
+      },
+      "canonicalId": "50c7c7ed30c197b527d32c5460c125fb822e9c574a069c30d0aa834725ca50d8",
+      "domain": "border",
+      "revision": 1,
+      "recordedAt": "2026-10-14T23:38:07Z",
+      "contentHash": "ee43568e5ff3f2931d3f181ca8736e10bc9e67ee41867a3e597eed8a5ff39bca",
+      "components": [
+        {
+          "key": "commercial",
+          "kind": "lane_group",
+          "details": {
+            "kind": "lane_group",
+            "v": 1,
+            "mode": "commercial",
+            "direction": {
+              "from": "US",
+              "to": "CA"
+            }
+          }
+        },
+        {
+          "key": "passenger",
+          "kind": "lane_group",
+          "details": {
+            "kind": "lane_group",
+            "v": 1,
+            "mode": "passenger",
+            "direction": {
+              "from": "US",
+              "to": "CA"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "oc:feature:conditions.example:45036e24beaa5d9fc9000edac6f09026e48283b4c380ad9e4a33e881a401a652",
+      "temporality": "static",
+      "externalIds": [
+        {
+          "scheme": "cbp:port",
+          "id": "011502",
+          "authority": "CBP"
+        },
+        {
+          "scheme": "wikidata",
+          "id": "Q17986205"
+        }
+      ],
+      "location": {
+        "geometry": {
+          "type": "Point",
+          "coordinates": [-67.29686, 45.1701]
+        },
+        "extent": "point",
+        "geometryOrigin": "source",
+        "fuzziness": "exact",
+        "admin": {
+          "country": "US"
+        }
+      },
+      "provenance": {
+        "origin": "feed",
+        "sourceId": "us-cbp-waits",
+        "sourceFormat": "cbp-bwt",
+        "accessMode": "bulk",
+        "recordId": "011502",
+        "attribution": {
+          "provider": "U.S. Customs and Border Protection",
+          "name": "CBP border wait times",
+          "licensing": {
+            "version": 1,
+            "declarations": [
+              {
+                "text": "LicenseRef-US-Gov-Public-Domain",
+                "url": "https://www.cbp.gov/site-policy-notices/copyright-notice"
+              }
+            ],
+            "bindings": [
+              {
+                "scope": "data",
+                "subject": "CBP border wait times",
+                "license": {
+                  "kind": "custom",
+                  "id": "LicenseRef-US-Gov-Public-Domain",
+                  "namespace": "openconditions:licences",
+                  "name": "U.S. Government Public Domain (17 U.S.C. §105)",
+                  "url": "https://www.cbp.gov/site-policy-notices/copyright-notice"
+                },
+                "conditions": [
+                  "Information on the CBP website is in the public domain unless a copyright is indicated; CBP asks to be cited as the source."
+                ]
+              }
+            ]
+          },
+          "license": "LicenseRef-US-Gov-Public-Domain",
+          "url": "https://bwt.cbp.gov/",
+          "licenseUrl": "https://www.cbp.gov/site-policy-notices/copyright-notice",
+          "rights": {
+            "source_redistribution": "yes",
+            "derived_redistribution": "yes",
+            "commercial_use": "yes",
+            "attribution_required": "no",
+            "retention": "yes",
+            "evidence_origin": "https://www.cbp.gov/site-policy-notices/copyright-notice",
+            "evidence_version": "LicenseRef-US-Gov-Public-Domain",
+            "reviewed_at": "2026-10-14T00:00:00.000Z"
+          }
+        },
+        "privacy": {
+          "class": "authoritative"
+        },
+        "instanceId": "conditions.example",
+        "derivedFrom": {
+          "records": [
+            {
+              "class": "feature",
+              "id": "oc:feature:us-cbp-waits:011502"
+            }
+          ],
+          "method": "canonical_view",
+          "version": "1"
+        }
+      },
+      "freshness": {
+        "fetchedAt": "2026-10-14T23:38:05Z"
+      },
+      "class": "feature",
+      "kind": "border_crossing",
+      "name": [
+        {
+          "lang": "en",
+          "text": "Calais: Milltown"
+        }
+      ],
+      "lifecycle": "operational",
+      "openingHours": {
+        "osm": "08:00-16:00",
+        "timezone": "America/New_York"
+      },
+      "details": {
+        "kind": "border_crossing",
+        "v": 1,
+        "countries": ["CA", "US"],
+        "ports": [
+          {
+            "country": "US",
+            "name": [
+              {
+                "lang": "en",
+                "text": "Calais: Milltown"
+              }
+            ],
+            "externalIds": [
+              {
+                "scheme": "cbp:port",
+                "id": "011502"
+              }
+            ]
+          }
+        ],
+        "modes": ["passenger"]
+      },
+      "canonicalId": "ff03b0f67b0cd08d01973935e780887ed49a04ae35455c018b340b300473092f",
+      "domain": "border",
+      "revision": 1,
+      "recordedAt": "2026-10-14T23:38:05Z",
+      "contentHash": "ba2ac780643acffff3957586de25435a472cbb58f1181e06457bfc38c2c04537",
+      "components": [
+        {
+          "key": "passenger/standard",
+          "kind": "lane_group",
+          "details": {
+            "kind": "lane_group",
+            "v": 1,
+            "mode": "passenger",
+            "program": "standard",
+            "direction": {
+              "from": "CA",
+              "to": "US"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "oc:feature:conditions.example:9c8d0dd00922c2043b3e48d6efff74e3676418408d7cc46b7feadc7d9117a7cc",
+      "temporality": "static",
+      "externalIds": [
+        {
+          "scheme": "wikidata",
+          "id": "Q1188691"
+        }
+      ],
+      "location": {
+        "geometry": {
+          "type": "Point",
+          "coordinates": [-78.9056, 42.9069]
+        },
+        "extent": "point",
+        "geometryOrigin": "source",
+        "fuzziness": "exact",
+        "admin": {
+          "country": "CA"
+        },
+        "areaDescription": [
+          {
+            "lang": "en",
+            "text": "Fort Erie, ON/Buffalo, NY"
+          }
+        ]
+      },
+      "provenance": {
+        "origin": "feed",
+        "sourceId": "ca-cbsa-waits",
+        "sourceFormat": "cbsa-bwt",
+        "accessMode": "bulk",
+        "recordId": "Peace Bridge",
+        "attribution": {
+          "provider": "Canada Border Services Agency. Contains information licensed under the Open Government Licence – Canada.",
+          "name": "CBSA border wait times",
+          "licensing": {
+            "version": 1,
+            "declarations": [
+              {
+                "text": "OGL-Canada-2.0",
+                "url": "https://open.canada.ca/en/open-government-licence-canada"
+              }
+            ],
+            "bindings": [
+              {
+                "scope": "data",
+                "subject": "CBSA border wait times",
+                "license": {
+                  "kind": "spdx",
+                  "expression": "OGL-Canada-2.0",
+                  "url": "https://open.canada.ca/en/open-government-licence-canada"
+                },
+                "conditions": [
+                  "The Open Government Portal publishes this CSV as the \"Current Border Wait Times\" dataset under the Open Government Licence – Canada, which overrides the CBSA website's terms on commercial reproduction. CBSA names no attribution statement, so the licence's own is used."
+                ]
+              }
+            ]
+          },
+          "license": "OGL-Canada-2.0",
+          "url": "https://www.cbsa-asfc.gc.ca/bwt-taf/menu-eng.html",
+          "licenseUrl": "https://open.canada.ca/en/open-government-licence-canada",
+          "rights": {
+            "source_redistribution": "yes",
+            "derived_redistribution": "yes",
+            "commercial_use": "yes",
+            "attribution_required": "yes",
+            "retention": "yes",
+            "evidence_origin": "https://open.canada.ca/data/en/dataset/d4a716f5-a2fc-4c3c-88ed-451fe05900e4",
+            "evidence_version": "OGL-Canada-2.0",
+            "reviewed_at": "2026-10-14T00:00:00.000Z"
+          }
+        },
+        "privacy": {
+          "class": "authoritative"
+        },
+        "instanceId": "conditions.example",
+        "mergedSources": [
+          {
+            "source": "us-cbp-waits",
+            "recordId": "oc:feature:us-cbp-waits:090101",
+            "attribution": {
+              "provider": "U.S. Customs and Border Protection",
+              "name": "CBP border wait times",
+              "licensing": {
+                "version": 1,
+                "declarations": [
+                  {
+                    "text": "LicenseRef-US-Gov-Public-Domain",
+                    "url": "https://www.cbp.gov/site-policy-notices/copyright-notice"
+                  }
+                ],
+                "bindings": [
+                  {
+                    "scope": "data",
+                    "subject": "CBP border wait times",
+                    "license": {
+                      "kind": "custom",
+                      "id": "LicenseRef-US-Gov-Public-Domain",
+                      "namespace": "openconditions:licences",
+                      "name": "U.S. Government Public Domain (17 U.S.C. §105)",
+                      "url": "https://www.cbp.gov/site-policy-notices/copyright-notice"
+                    },
+                    "conditions": [
+                      "Information on the CBP website is in the public domain unless a copyright is indicated; CBP asks to be cited as the source."
+                    ]
+                  }
+                ]
+              },
+              "license": "LicenseRef-US-Gov-Public-Domain",
+              "url": "https://bwt.cbp.gov/",
+              "licenseUrl": "https://www.cbp.gov/site-policy-notices/copyright-notice",
+              "rights": {
+                "source_redistribution": "yes",
+                "derived_redistribution": "yes",
+                "commercial_use": "yes",
+                "attribution_required": "no",
+                "retention": "yes",
+                "evidence_origin": "https://www.cbp.gov/site-policy-notices/copyright-notice",
+                "evidence_version": "LicenseRef-US-Gov-Public-Domain",
+                "reviewed_at": "2026-10-14T00:00:00.000Z"
+              }
+            },
+            "link": "same_asset"
+          }
+        ],
+        "derivedFrom": {
+          "records": [
+            {
+              "class": "feature",
+              "id": "oc:feature:ca-cbsa-waits:peace-bridge"
+            },
+            {
+              "class": "feature",
+              "id": "oc:feature:us-cbp-waits:090101"
+            }
+          ],
+          "method": "canonical_view",
+          "version": "1"
+        }
+      },
+      "freshness": {
+        "fetchedAt": "2026-10-14T23:38:07Z"
+      },
+      "class": "feature",
+      "kind": "border_crossing",
+      "name": [
+        {
+          "lang": "en",
+          "text": "Peace Bridge"
+        }
+      ],
+      "lifecycle": "operational",
+      "details": {
+        "kind": "border_crossing",
+        "v": 1,
+        "countries": ["CA", "US"],
+        "ports": [
+          {
+            "country": "CA",
+            "name": [
+              {
+                "lang": "en",
+                "text": "Peace Bridge"
+              }
+            ]
+          }
+        ],
+        "modes": ["commercial", "passenger"]
+      },
+      "canonicalId": "e7f9370701307b04e57e803ec363531ff2ce8acb71f6b36ed0bc037c14cc4ab6",
+      "domain": "border",
+      "revision": 1,
+      "recordedAt": "2026-10-14T23:38:07Z",
+      "contentHash": "a4c13649ded1e98feb7762f7a8da5da177b65bbd187da1e8eb0929259e9404ec",
+      "components": [
+        {
+          "key": "commercial",
+          "kind": "lane_group",
+          "details": {
+            "kind": "lane_group",
+            "v": 1,
+            "mode": "commercial",
+            "direction": {
+              "from": "US",
+              "to": "CA"
+            }
+          }
+        },
+        {
+          "key": "passenger",
+          "kind": "lane_group",
+          "details": {
+            "kind": "lane_group",
+            "v": 1,
+            "mode": "passenger",
+            "direction": {
+              "from": "US",
+              "to": "CA"
+            }
+          }
+        },
+        {
+          "key": "us-cbp-waits/commercial/standard",
+          "kind": "lane_group",
+          "details": {
+            "kind": "lane_group",
+            "v": 1,
+            "mode": "commercial",
+            "program": "standard",
+            "direction": {
+              "from": "CA",
+              "to": "US"
+            }
+          }
+        },
+        {
+          "key": "us-cbp-waits/passenger/standard",
+          "kind": "lane_group",
+          "details": {
+            "kind": "lane_group",
+            "v": 1,
+            "mode": "passenger",
+            "program": "standard",
+            "direction": {
+              "from": "CA",
+              "to": "US"
+            }
+          }
+        },
+        {
+          "key": "us-cbp-waits/passenger/trusted_traveller",
+          "kind": "lane_group",
+          "details": {
+            "kind": "lane_group",
+            "v": 1,
+            "mode": "passenger",
+            "program": "trusted_traveller",
+            "direction": {
+              "from": "CA",
+              "to": "US"
+            }
+          }
+        },
+        {
+          "key": "us-cbp-waits/passenger/ready_lane",
+          "kind": "lane_group",
+          "details": {
+            "kind": "lane_group",
+            "v": 1,
+            "mode": "passenger",
+            "program": "ready_lane",
+            "direction": {
+              "from": "CA",
+              "to": "US"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "oc:feature:conditions.example:a201e9f30a7fe288b5a05dbc816d4b7262f4e2d012f9636fc1f31c53fd09e3a5",
+      "temporality": "static",
+      "externalIds": [
+        {
+          "scheme": "cbp:port",
+          "id": "260101",
+          "authority": "CBP"
+        },
+        {
+          "scheme": "wikidata",
+          "id": "Q5301214"
+        }
+      ],
+      "location": {
+        "geometry": {
+          "type": "Point",
+          "coordinates": [-109.56, 31.3347]
+        },
+        "extent": "point",
+        "geometryOrigin": "source",
+        "fuzziness": "exact",
+        "admin": {
+          "country": "US"
+        }
+      },
+      "provenance": {
+        "origin": "feed",
+        "sourceId": "us-cbp-waits",
+        "sourceFormat": "cbp-bwt",
+        "accessMode": "bulk",
+        "recordId": "260101",
+        "attribution": {
+          "provider": "U.S. Customs and Border Protection",
+          "name": "CBP border wait times",
+          "licensing": {
+            "version": 1,
+            "declarations": [
+              {
+                "text": "LicenseRef-US-Gov-Public-Domain",
+                "url": "https://www.cbp.gov/site-policy-notices/copyright-notice"
+              }
+            ],
+            "bindings": [
+              {
+                "scope": "data",
+                "subject": "CBP border wait times",
+                "license": {
+                  "kind": "custom",
+                  "id": "LicenseRef-US-Gov-Public-Domain",
+                  "namespace": "openconditions:licences",
+                  "name": "U.S. Government Public Domain (17 U.S.C. §105)",
+                  "url": "https://www.cbp.gov/site-policy-notices/copyright-notice"
+                },
+                "conditions": [
+                  "Information on the CBP website is in the public domain unless a copyright is indicated; CBP asks to be cited as the source."
+                ]
+              }
+            ]
+          },
+          "license": "LicenseRef-US-Gov-Public-Domain",
+          "url": "https://bwt.cbp.gov/",
+          "licenseUrl": "https://www.cbp.gov/site-policy-notices/copyright-notice",
+          "rights": {
+            "source_redistribution": "yes",
+            "derived_redistribution": "yes",
+            "commercial_use": "yes",
+            "attribution_required": "no",
+            "retention": "yes",
+            "evidence_origin": "https://www.cbp.gov/site-policy-notices/copyright-notice",
+            "evidence_version": "LicenseRef-US-Gov-Public-Domain",
+            "reviewed_at": "2026-10-14T00:00:00.000Z"
+          }
+        },
+        "privacy": {
+          "class": "authoritative"
+        },
+        "instanceId": "conditions.example",
+        "derivedFrom": {
+          "records": [
+            {
+              "class": "feature",
+              "id": "oc:feature:us-cbp-waits:260101"
+            }
+          ],
+          "method": "canonical_view",
+          "version": "1"
+        }
+      },
+      "freshness": {
+        "fetchedAt": "2026-10-14T23:38:05Z"
+      },
+      "class": "feature",
+      "kind": "border_crossing",
+      "name": [
+        {
+          "lang": "en",
+          "text": "Douglas (Raul Hector Castro)"
+        }
+      ],
+      "lifecycle": "operational",
+      "openingHours": {
+        "osm": "24/7",
+        "twentyFourSeven": true,
+        "timezone": "America/Phoenix"
+      },
+      "details": {
+        "kind": "border_crossing",
+        "v": 1,
+        "countries": ["MX", "US"],
+        "ports": [
+          {
+            "country": "US",
+            "name": [
+              {
+                "lang": "en",
+                "text": "Douglas (Raul Hector Castro)"
+              }
+            ],
+            "externalIds": [
+              {
+                "scheme": "cbp:port",
+                "id": "260101"
+              }
+            ]
+          }
+        ],
+        "modes": ["commercial", "passenger", "pedestrian"]
+      },
+      "canonicalId": "3a7fee85bdc2184951e4b0affba13401a3371b99e88f920f98bd017dbd630e18",
+      "domain": "border",
+      "revision": 1,
+      "recordedAt": "2026-10-14T23:38:05Z",
+      "contentHash": "5cfd3a7a17389a965f10162539224b1c20a3e0b39984462bb5473627710e10b7",
+      "components": [
+        {
+          "key": "commercial/standard",
+          "kind": "lane_group",
+          "details": {
+            "kind": "lane_group",
+            "v": 1,
+            "mode": "commercial",
+            "program": "standard",
+            "direction": {
+              "from": "MX",
+              "to": "US"
+            }
+          }
+        },
+        {
+          "key": "passenger/standard",
+          "kind": "lane_group",
+          "details": {
+            "kind": "lane_group",
+            "v": 1,
+            "mode": "passenger",
+            "program": "standard",
+            "direction": {
+              "from": "MX",
+              "to": "US"
+            }
+          }
+        },
+        {
+          "key": "passenger/trusted_traveller",
+          "kind": "lane_group",
+          "details": {
+            "kind": "lane_group",
+            "v": 1,
+            "mode": "passenger",
+            "program": "trusted_traveller",
+            "direction": {
+              "from": "MX",
+              "to": "US"
+            }
+          }
+        },
+        {
+          "key": "passenger/ready_lane",
+          "kind": "lane_group",
+          "details": {
+            "kind": "lane_group",
+            "v": 1,
+            "mode": "passenger",
+            "program": "ready_lane",
+            "direction": {
+              "from": "MX",
+              "to": "US"
+            }
+          }
+        },
+        {
+          "key": "pedestrian/standard",
+          "kind": "lane_group",
+          "details": {
+            "kind": "lane_group",
+            "v": 1,
+            "mode": "pedestrian",
+            "program": "standard",
+            "direction": {
+              "from": "MX",
+              "to": "US"
+            }
+          }
+        },
+        {
+          "key": "pedestrian/ready_lane",
+          "kind": "lane_group",
+          "details": {
+            "kind": "lane_group",
+            "v": 1,
+            "mode": "pedestrian",
+            "program": "ready_lane",
+            "direction": {
+              "from": "MX",
+              "to": "US"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "oc:feature:conditions.example:cfd80f4d9b67e53d1e91e63534d265f7ed15ead263dca4e51c6f936b157e99f2",
+      "temporality": "static",
+      "externalIds": [
+        {
+          "scheme": "wikidata",
+          "id": "Q24191180"
+        }
+      ],
+      "location": {
+        "geometry": {
+          "type": "Point",
+          "coordinates": [-75.9834, 44.34732]
+        },
+        "extent": "point",
+        "geometryOrigin": "source",
+        "fuzziness": "exact",
+        "admin": {
+          "country": "CA"
+        },
+        "areaDescription": [
+          {
+            "lang": "en",
+            "text": "Lansdowne, ON/Alexandria Bay, NY"
+          }
+        ]
+      },
+      "provenance": {
+        "origin": "feed",
+        "sourceId": "ca-cbsa-waits",
+        "sourceFormat": "cbsa-bwt",
+        "accessMode": "bulk",
+        "recordId": "Thousand Islands Bridge",
+        "attribution": {
+          "provider": "Canada Border Services Agency. Contains information licensed under the Open Government Licence – Canada.",
+          "name": "CBSA border wait times",
+          "licensing": {
+            "version": 1,
+            "declarations": [
+              {
+                "text": "OGL-Canada-2.0",
+                "url": "https://open.canada.ca/en/open-government-licence-canada"
+              }
+            ],
+            "bindings": [
+              {
+                "scope": "data",
+                "subject": "CBSA border wait times",
+                "license": {
+                  "kind": "spdx",
+                  "expression": "OGL-Canada-2.0",
+                  "url": "https://open.canada.ca/en/open-government-licence-canada"
+                },
+                "conditions": [
+                  "The Open Government Portal publishes this CSV as the \"Current Border Wait Times\" dataset under the Open Government Licence – Canada, which overrides the CBSA website's terms on commercial reproduction. CBSA names no attribution statement, so the licence's own is used."
+                ]
+              }
+            ]
+          },
+          "license": "OGL-Canada-2.0",
+          "url": "https://www.cbsa-asfc.gc.ca/bwt-taf/menu-eng.html",
+          "licenseUrl": "https://open.canada.ca/en/open-government-licence-canada",
+          "rights": {
+            "source_redistribution": "yes",
+            "derived_redistribution": "yes",
+            "commercial_use": "yes",
+            "attribution_required": "yes",
+            "retention": "yes",
+            "evidence_origin": "https://open.canada.ca/data/en/dataset/d4a716f5-a2fc-4c3c-88ed-451fe05900e4",
+            "evidence_version": "OGL-Canada-2.0",
+            "reviewed_at": "2026-10-14T00:00:00.000Z"
+          }
+        },
+        "privacy": {
+          "class": "authoritative"
+        },
+        "instanceId": "conditions.example",
+        "mergedSources": [
+          {
+            "source": "us-cbp-waits",
+            "recordId": "oc:feature:us-cbp-waits:070801",
+            "attribution": {
+              "provider": "U.S. Customs and Border Protection",
+              "name": "CBP border wait times",
+              "licensing": {
+                "version": 1,
+                "declarations": [
+                  {
+                    "text": "LicenseRef-US-Gov-Public-Domain",
+                    "url": "https://www.cbp.gov/site-policy-notices/copyright-notice"
+                  }
+                ],
+                "bindings": [
+                  {
+                    "scope": "data",
+                    "subject": "CBP border wait times",
+                    "license": {
+                      "kind": "custom",
+                      "id": "LicenseRef-US-Gov-Public-Domain",
+                      "namespace": "openconditions:licences",
+                      "name": "U.S. Government Public Domain (17 U.S.C. §105)",
+                      "url": "https://www.cbp.gov/site-policy-notices/copyright-notice"
+                    },
+                    "conditions": [
+                      "Information on the CBP website is in the public domain unless a copyright is indicated; CBP asks to be cited as the source."
+                    ]
+                  }
+                ]
+              },
+              "license": "LicenseRef-US-Gov-Public-Domain",
+              "url": "https://bwt.cbp.gov/",
+              "licenseUrl": "https://www.cbp.gov/site-policy-notices/copyright-notice",
+              "rights": {
+                "source_redistribution": "yes",
+                "derived_redistribution": "yes",
+                "commercial_use": "yes",
+                "attribution_required": "no",
+                "retention": "yes",
+                "evidence_origin": "https://www.cbp.gov/site-policy-notices/copyright-notice",
+                "evidence_version": "LicenseRef-US-Gov-Public-Domain",
+                "reviewed_at": "2026-10-14T00:00:00.000Z"
+              }
+            },
+            "link": "same_asset"
+          }
+        ],
+        "derivedFrom": {
+          "records": [
+            {
+              "class": "feature",
+              "id": "oc:feature:ca-cbsa-waits:thousand-islands-bridge"
+            },
+            {
+              "class": "feature",
+              "id": "oc:feature:us-cbp-waits:070801"
+            }
+          ],
+          "method": "canonical_view",
+          "version": "1"
+        }
+      },
+      "freshness": {
+        "fetchedAt": "2026-10-14T23:38:07Z"
+      },
+      "class": "feature",
+      "kind": "border_crossing",
+      "name": [
+        {
+          "lang": "en",
+          "text": "Thousand Islands Bridge"
+        }
+      ],
+      "lifecycle": "operational",
+      "details": {
+        "kind": "border_crossing",
+        "v": 1,
+        "countries": ["CA", "US"],
+        "ports": [
+          {
+            "country": "CA",
+            "name": [
+              {
+                "lang": "en",
+                "text": "Thousand Islands Bridge"
+              }
+            ]
+          }
+        ],
+        "modes": ["commercial", "passenger"]
+      },
+      "canonicalId": "755b4ffc05d1a5a3fa0c31f395efcd6dc661d098f2bceb80df810a09d5729c6b",
+      "domain": "border",
+      "revision": 1,
+      "recordedAt": "2026-10-14T23:38:07Z",
+      "contentHash": "cbbd484b35366f2f1a3d4c693f7915a1e10d755a0e6e61323f444d3fcae3a620",
+      "components": [
+        {
+          "key": "commercial",
+          "kind": "lane_group",
+          "details": {
+            "kind": "lane_group",
+            "v": 1,
+            "mode": "commercial",
+            "direction": {
+              "from": "US",
+              "to": "CA"
+            }
+          }
+        },
+        {
+          "key": "passenger",
+          "kind": "lane_group",
+          "details": {
+            "kind": "lane_group",
+            "v": 1,
+            "mode": "passenger",
+            "direction": {
+              "from": "US",
+              "to": "CA"
+            }
+          }
+        },
+        {
+          "key": "us-cbp-waits/commercial/standard",
+          "kind": "lane_group",
+          "details": {
+            "kind": "lane_group",
+            "v": 1,
+            "mode": "commercial",
+            "program": "standard",
+            "direction": {
+              "from": "CA",
+              "to": "US"
+            }
+          }
+        },
+        {
+          "key": "us-cbp-waits/passenger/standard",
+          "kind": "lane_group",
+          "details": {
+            "kind": "lane_group",
+            "v": 1,
+            "mode": "passenger",
+            "program": "standard",
+            "direction": {
+              "from": "CA",
+              "to": "US"
+            }
+          }
+        },
+        {
+          "key": "us-cbp-waits/passenger/trusted_traveller",
+          "kind": "lane_group",
+          "details": {
+            "kind": "lane_group",
+            "v": 1,
+            "mode": "passenger",
+            "program": "trusted_traveller",
+            "direction": {
+              "from": "CA",
+              "to": "US"
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "latest": {
+    "oc:feature:conditions.example:14c133ed46f7d4e16139f079c122cf140cd6c7eafd00c4ddd8487a710d1479ba": [
+      {
+        "property": "border.wait",
+        "componentKey": "commercial",
+        "result": {
+          "type": "structured",
+          "schema": "border_wait",
+          "v": 1,
+          "value": {
+            "v": 1,
+            "status": "no_delay"
+          }
+        },
+        "phenomenonTime": {
+          "instant": "2026-10-14T22:51:00Z"
+        },
+        "source": "ca-cbsa-waits"
+      },
+      {
+        "property": "border.wait",
+        "componentKey": "passenger",
+        "result": {
+          "type": "structured",
+          "schema": "border_wait",
+          "v": 1,
+          "value": {
+            "v": 1,
+            "status": "no_delay"
+          }
+        },
+        "phenomenonTime": {
+          "instant": "2026-10-14T22:51:00Z"
+        },
+        "source": "ca-cbsa-waits"
+      }
+    ],
+    "oc:feature:conditions.example:45036e24beaa5d9fc9000edac6f09026e48283b4c380ad9e4a33e881a401a652": [
+      {
+        "property": "facility.open_status",
+        "result": {
+          "type": "category",
+          "value": "closed",
+          "vocabulary": "facility_open_status"
+        },
+        "phenomenonTime": {
+          "instant": "2026-10-14T23:33:33Z"
+        },
+        "validUntil": "2026-10-15T00:08:05Z",
+        "source": "us-cbp-waits"
+      },
+      {
+        "property": "border.wait",
+        "componentKey": "passenger/standard",
+        "result": {
+          "type": "structured",
+          "schema": "border_wait",
+          "v": 1,
+          "value": {
+            "v": 1,
+            "status": "closed"
+          }
+        },
+        "phenomenonTime": {
+          "instant": "2026-10-14T23:33:33Z"
+        },
+        "source": "us-cbp-waits"
+      }
+    ],
+    "oc:feature:conditions.example:9c8d0dd00922c2043b3e48d6efff74e3676418408d7cc46b7feadc7d9117a7cc": [
+      {
+        "property": "facility.open_status",
+        "result": {
+          "type": "category",
+          "value": "open",
+          "vocabulary": "facility_open_status"
+        },
+        "phenomenonTime": {
+          "instant": "2026-10-14T23:33:33Z"
+        },
+        "validUntil": "2026-10-15T00:08:05Z",
+        "source": "us-cbp-waits"
+      },
+      {
+        "property": "border.wait",
+        "componentKey": "us-cbp-waits/commercial/standard",
+        "result": {
+          "type": "structured",
+          "schema": "border_wait",
+          "v": 1,
+          "value": {
+            "v": 1,
+            "status": "no_delay",
+            "waitMinutes": 6,
+            "lanesOpen": 4
+          }
+        },
+        "phenomenonTime": {
+          "instant": "2026-10-14T23:27:00Z"
+        },
+        "source": "us-cbp-waits"
+      },
+      {
+        "property": "border.wait",
+        "componentKey": "us-cbp-waits/passenger/standard",
+        "result": {
+          "type": "structured",
+          "schema": "border_wait",
+          "v": 1,
+          "value": {
+            "v": 1,
+            "status": "no_delay",
+            "waitMinutes": 4,
+            "lanesOpen": 1
+          }
+        },
+        "phenomenonTime": {
+          "instant": "2026-10-14T23:27:00Z"
+        },
+        "source": "us-cbp-waits"
+      },
+      {
+        "property": "border.wait",
+        "componentKey": "us-cbp-waits/passenger/trusted_traveller",
+        "result": {
+          "type": "structured",
+          "schema": "border_wait",
+          "v": 1,
+          "value": {
+            "v": 1,
+            "status": "no_delay",
+            "waitMinutes": 0,
+            "lanesOpen": 1
+          }
+        },
+        "phenomenonTime": {
+          "instant": "2026-10-14T23:27:00Z"
+        },
+        "source": "us-cbp-waits"
+      },
+      {
+        "property": "border.wait",
+        "componentKey": "us-cbp-waits/passenger/ready_lane",
+        "result": {
+          "type": "structured",
+          "schema": "border_wait",
+          "v": 1,
+          "value": {
+            "v": 1,
+            "status": "closed"
+          }
+        },
+        "phenomenonTime": {
+          "instant": "2026-10-14T23:33:33Z"
+        },
+        "source": "us-cbp-waits"
+      },
+      {
+        "property": "border.wait",
+        "componentKey": "commercial",
+        "result": {
+          "type": "structured",
+          "schema": "border_wait",
+          "v": 1,
+          "value": {
+            "v": 1,
+            "status": "delay",
+            "waitMinutes": 11
+          }
+        },
+        "phenomenonTime": {
+          "instant": "2026-10-14T23:20:00Z"
+        },
+        "source": "ca-cbsa-waits"
+      },
+      {
+        "property": "border.wait",
+        "componentKey": "passenger",
+        "result": {
+          "type": "structured",
+          "schema": "border_wait",
+          "v": 1,
+          "value": {
+            "v": 1,
+            "status": "delay",
+            "waitMinutes": 2
+          }
+        },
+        "phenomenonTime": {
+          "instant": "2026-10-14T23:20:00Z"
+        },
+        "source": "ca-cbsa-waits"
+      }
+    ],
+    "oc:feature:conditions.example:a201e9f30a7fe288b5a05dbc816d4b7262f4e2d012f9636fc1f31c53fd09e3a5": [
+      {
+        "property": "facility.open_status",
+        "result": {
+          "type": "category",
+          "value": "open",
+          "vocabulary": "facility_open_status"
+        },
+        "phenomenonTime": {
+          "instant": "2026-10-14T23:33:33Z"
+        },
+        "validUntil": "2026-10-15T00:08:05Z",
+        "source": "us-cbp-waits"
+      },
+      {
+        "property": "border.wait",
+        "componentKey": "commercial/standard",
+        "result": {
+          "type": "structured",
+          "schema": "border_wait",
+          "v": 1,
+          "value": {
+            "v": 1,
+            "status": "closed"
+          }
+        },
+        "phenomenonTime": {
+          "instant": "2026-10-14T23:33:33Z"
+        },
+        "source": "us-cbp-waits"
+      },
+      {
+        "property": "border.wait",
+        "componentKey": "passenger/standard",
+        "result": {
+          "type": "structured",
+          "schema": "border_wait",
+          "v": 1,
+          "value": {
+            "v": 1,
+            "status": "delay",
+            "waitMinutes": 60,
+            "lanesOpen": 4
+          }
+        },
+        "phenomenonTime": {
+          "instant": "2026-10-14T23:00:00Z"
+        },
+        "source": "us-cbp-waits"
+      },
+      {
+        "property": "border.wait",
+        "componentKey": "passenger/trusted_traveller",
+        "result": {
+          "type": "structured",
+          "schema": "border_wait",
+          "v": 1,
+          "value": {
+            "v": 1,
+            "status": "delay",
+            "waitMinutes": 10,
+            "lanesOpen": 1
+          }
+        },
+        "phenomenonTime": {
+          "instant": "2026-10-14T23:00:00Z"
+        },
+        "source": "us-cbp-waits"
+      },
+      {
+        "property": "border.wait",
+        "componentKey": "passenger/ready_lane",
+        "result": {
+          "type": "structured",
+          "schema": "border_wait",
+          "v": 1,
+          "value": {
+            "v": 1,
+            "status": "closed"
+          }
+        },
+        "phenomenonTime": {
+          "instant": "2026-10-14T23:33:33Z"
+        },
+        "source": "us-cbp-waits"
+      },
+      {
+        "property": "border.wait",
+        "componentKey": "pedestrian/standard",
+        "result": {
+          "type": "structured",
+          "schema": "border_wait",
+          "v": 1,
+          "value": {
+            "v": 1,
+            "status": "no_delay",
+            "waitMinutes": 3,
+            "lanesOpen": 2
+          }
+        },
+        "phenomenonTime": {
+          "instant": "2026-10-14T23:00:00Z"
+        },
+        "source": "us-cbp-waits"
+      },
+      {
+        "property": "border.wait",
+        "componentKey": "pedestrian/ready_lane",
+        "result": {
+          "type": "structured",
+          "schema": "border_wait",
+          "v": 1,
+          "value": {
+            "v": 1,
+            "status": "closed"
+          }
+        },
+        "phenomenonTime": {
+          "instant": "2026-10-14T23:33:33Z"
+        },
+        "source": "us-cbp-waits"
+      }
+    ],
+    "oc:feature:conditions.example:cfd80f4d9b67e53d1e91e63534d265f7ed15ead263dca4e51c6f936b157e99f2": [
+      {
+        "property": "facility.open_status",
+        "result": {
+          "type": "category",
+          "value": "open",
+          "vocabulary": "facility_open_status"
+        },
+        "phenomenonTime": {
+          "instant": "2026-10-14T23:33:33Z"
+        },
+        "validUntil": "2026-10-15T00:08:05Z",
+        "source": "us-cbp-waits"
+      },
+      {
+        "property": "border.wait",
+        "componentKey": "us-cbp-waits/commercial/standard",
+        "result": {
+          "type": "structured",
+          "schema": "border_wait",
+          "v": 1,
+          "value": {
+            "v": 1,
+            "status": "no_delay",
+            "waitMinutes": 0,
+            "lanesOpen": 2
+          }
+        },
+        "phenomenonTime": {
+          "instant": "2026-10-14T01:00:00Z"
+        },
+        "source": "us-cbp-waits"
+      },
+      {
+        "property": "border.wait",
+        "componentKey": "us-cbp-waits/passenger/standard",
+        "result": {
+          "type": "structured",
+          "schema": "border_wait",
+          "v": 1,
+          "value": {
+            "v": 1,
+            "status": "no_delay",
+            "waitMinutes": 0,
+            "lanesOpen": 2
+          }
+        },
+        "phenomenonTime": {
+          "instant": "2026-10-14T01:00:00Z"
+        },
+        "source": "us-cbp-waits"
+      },
+      {
+        "property": "border.wait",
+        "componentKey": "us-cbp-waits/passenger/trusted_traveller",
+        "result": {
+          "type": "structured",
+          "schema": "border_wait",
+          "v": 1,
+          "value": {
+            "v": 1,
+            "status": "closed"
+          }
+        },
+        "phenomenonTime": {
+          "instant": "2026-10-14T23:33:33Z"
+        },
+        "source": "us-cbp-waits"
+      },
+      {
+        "property": "border.wait",
+        "componentKey": "commercial",
+        "result": {
+          "type": "structured",
+          "schema": "border_wait",
+          "v": 1,
+          "value": {
+            "v": 1,
+            "status": "no_delay"
+          }
+        },
+        "phenomenonTime": {
+          "instant": "2026-10-14T22:15:00Z"
+        },
+        "source": "ca-cbsa-waits"
+      },
+      {
+        "property": "border.wait",
+        "componentKey": "passenger",
+        "result": {
+          "type": "structured",
+          "schema": "border_wait",
+          "v": 1,
+          "value": {
+            "v": 1,
+            "status": "no_delay"
+          }
+        },
+        "phenomenonTime": {
+          "instant": "2026-10-14T22:15:00Z"
+        },
+        "source": "ca-cbsa-waits"
+      }
+    ]
+  },
+  "next": null
+}

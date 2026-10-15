@@ -16,6 +16,9 @@
     "charging-sites",
     "cameras",
     "message-signs",
+    "road-weather",
+    "service-vehicles",
+    "border-crossings",
     "hazards"
   ],
   "requires": [{ "service": "openconditions-ingest", "optional": true }],

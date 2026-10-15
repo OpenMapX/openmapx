@@ -33,3 +33,32 @@ The message-sign fixture is a documented sample built by hand, not recorded:
   reading of that face. The first sign shows a two-page message, the second is blank. The sign ids,
   names, places and messages are invented; the 511NY Developer Access Agreement does not allow
   publishing the feed's records.
+
+The road-weather, vehicle and border fixtures are OpenConditions answers built, not recorded from a
+running instance. They were made on 2026-10-15 from OpenConditions 662d5bcd by running the real
+parsers of `packages/weather`, `packages/vehicles` and `packages/border` over those packages' own
+captures of the publishers' feeds (`src/__tests__/fixtures/` in each, captured 2026-10-14, see the
+README there for each URL), stamping each draft's attribution with the ingest pipeline's
+`stampAttribution` and sealing it with `sealRecord` against the production registry (instance
+`conditions.example`, revision 1). No OpenConditions service ran. All four feeds are open data
+(CC BY 4.0, OGL – Canada 2.0, U.S. Government public domain).
+
+- `features-weather.json`: the `GET /features?kind=weather_station&canonical=1&expand=components,latest`
+  answer for three Digitraffic stations: Nupuri (1001), with air values and two surface sensors
+  whose third and fourth report a fault; Vuosaari (1071), temporarily closed and without readings;
+  and Lapinlahti (8003), with a salted, chemically wet surface. The station kind has no linking, so
+  each is its own feature. A change-only reading (`road.surface_state`,
+  `weather.precipitation_type`) carries the `validUntil` its feed's polling gives it: the fetch
+  plus the longer of 30 minutes and twice the cadence.
+- `features-border.json`: the `GET /features?kind=border_crossing&canonical=1&expand=components,latest`
+  answer for five crossings. The CBP and CBSA features were linked with `proposeLink` and the
+  kind's linking rules, clustered with `canonicalClusters` and composed with
+  `canonicalComponents` and `canonicalFeatureRecord`, as the canonical view composes them: the
+  Peace Bridge and the Thousand Islands Bridge carry both agencies' queues (CBSA survives, so
+  CBP's are keyed `us-cbp-waits/<key>`), Douglas (Arizona) and Calais: Milltown (closed) are CBP's
+  only, and Emerson is CBSA's only. Each reading is keyed by the canonical component it stands in.
+- `observations-vehicles.json`: the `GET /observations/latest?property=vehicle.position` answer, the
+  eight trackings of the live capture still in effect at its fetch. None ploughs; the tests set
+  a plough on one.
+- `sources-conditions.json`: the `GET /sources` answer in the public scope for the four feeds,
+  produced by OpenConditions' `sourcesOf`.

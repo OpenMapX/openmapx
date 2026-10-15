@@ -63,6 +63,9 @@ const DOMAINS: Readonly<Record<string, string>> = {
   charging: "charging-sites",
   cameras: "cameras",
   hazards: "hazards",
+  weather: "road-weather",
+  vehicles: "service-vehicles",
+  border: "border-crossings",
 };
 
 /**

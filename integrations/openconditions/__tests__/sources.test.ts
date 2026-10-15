@@ -23,6 +23,7 @@ import stringsEn from "../strings/en.json" with { type: "json" };
 import { CROWD_CREDIT } from "./fixtures/crowd.js";
 import featuresResponse from "./fixtures/features-fuel.json" with { type: "json" };
 import sourcesAnswer from "./fixtures/sources.json" with { type: "json" };
+import conditionsSources from "./fixtures/sources-conditions.json" with { type: "json" };
 
 const BASE_URL = "http://openconditions.test:4100";
 const OPERATOR = { OPENCONDITIONS_URL: BASE_URL, OPENCONDITIONS_OPERATOR_TOKEN: "t".repeat(32) };
@@ -279,6 +280,28 @@ describe("toDataSource", () => {
     )!;
     expect(hazards).toMatchObject({ sourceId: "usgs-quakes", domain: "hazards" });
     expect(validateDataSource(hazards, manifest.domains).valid).toBe(true);
+  });
+
+  test("maps the OC weather, vehicles and border feeds to their own domains", () => {
+    const listed = (conditionsSources.sources as unknown as OcSource[]).map(
+      (s) => toDataSource(s)!,
+    );
+    expect(listed.map((d) => [d.sourceId, d.domain])).toEqual([
+      ["ca-cbsa-waits", "border-crossings"],
+      ["fi-digitraffic-maintenance", "service-vehicles"],
+      ["fi-digitraffic-weather", "road-weather"],
+      ["us-cbp-waits", "border-crossings"],
+    ]);
+    for (const source of listed) {
+      expect(validateDataSource(source, manifest.domains).valid).toBe(true);
+      expect(source).toMatchObject({ endUserExposure: "server-only", commercialUse: "yes" });
+    }
+    expect(listed.find((d) => d.sourceId === "fi-digitraffic-weather")).toMatchObject({
+      providerCountry: "FI",
+      url: "https://www.digitraffic.fi/en/",
+      attribution: "Source: Fintraffic / digitraffic.fi, license CC 4.0 BY",
+      redistribution: { sourceData: "yes", derivedData: "yes" },
+    });
   });
 
   test("maps an OC camera feed to the cameras domain with its image hosts as media hosts", () => {
