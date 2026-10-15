@@ -143,6 +143,15 @@ linear events (such as segment closures) render as line segments directly on the
 Where a feed provides measured speed, an incident popup also estimates the delay
 in minutes; otherwise it preserves the source's declared level of service rather
 than inventing a speed.
+The legend's **Show on map** list switches the overlay's layers: the incidents
+(on by default) and, where the server has a source for them, **Message signs**,
+**Road weather**, **Road maintenance** vehicles and **Border crossings**, which
+start off. A switched-on layer shows its color key, or says when nothing is in
+the area; its markers carry the layer's own glyph and open in the place panel.
+The incident filters show only while the incidents are on. These layers are the
+same [mobility data sources](./mobility-data.md) the search finds, drawn for the
+area in view and refreshed as the map moves. The browser remembers which layers
+are on and how incidents are filtered, so they come back on the next visit.
 Without a road-conditions source, such as an OpenConditions instance at
 `OPENCONDITIONS_URL`, **Road conditions** stays in the layer list and its legend
 says traffic incidents are unavailable instead of showing a clear road.

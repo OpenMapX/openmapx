@@ -410,7 +410,7 @@
     "cycling": "Cycling",
     "winterSports": "Winter Sports",
     "hiking": "Hiking",
-    "trafficIncidents": "Traffic incidents",
+    "roadConditions": "Road conditions",
     "wildfires": "Wildfires",
     "weather": "Weather",
     "environment": "Environment",
@@ -481,8 +481,16 @@
     "attribution": "Data"
   },
   "roadConditions": {
-    "trafficIncidents": "Traffic incidents",
-    "toggleOverlay": "Toggle traffic incidents",
+    "title": "Road conditions",
+    "layersLabel": "Show on map",
+    "incidentsLayer": "Incidents & roadworks",
+    "incidentFilters": "Incidents",
+    "source": {
+      "loading": "Loading…",
+      "error": "Couldn't load",
+      "empty": "Nothing in this area right now"
+    },
+    "toggleOverlay": "Toggle road conditions",
     "filterByType": "Type",
     "severity": "Severity",
     "timeHorizon": "Time",

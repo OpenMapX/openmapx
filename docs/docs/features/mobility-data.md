@@ -24,7 +24,12 @@ their own details, freshness, and source credits.
 ## What you get
 
 Each data source is a category you can switch on, and each plots its own kind of
-point with category-appropriate detail in the place panel:
+point with category-appropriate detail in the place panel. The places to go —
+charging, fuel, parking, sharing and webcams — sit in the category bar above the
+map. The ones about the road itself — message signs, road weather, road
+maintenance and border crossings — are layers of the
+[**Road conditions** overlay](./map-layers.md) instead, beside the incidents;
+search still finds each of them by name.
 
 - **EV charging** — charging stations colored by operational status, with
   connector types, power ratings, tariffs, and live charge-point status where a

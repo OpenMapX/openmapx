@@ -24,12 +24,15 @@ import { useEnv } from "@/integration-api/runtime/EnvProvider";
 import { useDateTimeFormat } from "@/integration-api/runtime/useDateTimeFormat";
 import { roadConditionAttributions } from "./attributions";
 import { buildRoadConditionDisplayGroups, buildRoadConditionFeatures } from "./display";
-import { markerImageData, parseMarkerImageId } from "./markers";
-import { buildRoadConditionPopupHtml } from "./popup";
-import { RouteConditionsLayer } from "./route-layer";
-import { SEVERITY_LINE_COLOR } from "./severity";
 // The named import also runs the module side-effect that registers the
 // "road-conditions" overlay store (shared by the layer selector + legend).
+import { useIncidentsVisible } from "./incidents-visible";
+import { markerImageData, parseMarkerImageId } from "./markers";
+import { buildRoadConditionPopupHtml } from "./popup";
+import { useRestoredRoadConditionsChoices } from "./restore-choices";
+import { RouteConditionsLayer } from "./route-layer";
+import { SEVERITY_LINE_COLOR } from "./severity";
+import { RoadSourceLayers } from "./source-layers";
 import { horizonDaysParam, useRoadConditionsStore } from "./store";
 import {
   createViewportFetchScheduler,
@@ -126,15 +129,19 @@ export function buildSources(
 }
 
 export function RoadConditionsLayer() {
+  useRestoredRoadConditionsChoices();
   const { mapRef, mapReady, styleVersion } = useMap();
   const { apiUrl } = useEnv();
   // Declared in this integration's manifest, the same gate the layer selector
   // applies: below it we skip fetching and keep the layers hidden, so a
   // country-sized viewport can't pull thousands of incidents.
   const minZoom = useOverlayMinZoom(OVERLAY_ID);
-  const layerVisible = useOverlayLayerVisible(OVERLAY_ID);
+  const overlayVisible = useOverlayLayerVisible(OVERLAY_ID);
+  // The incidents are one of the overlay's layers; the reader can hide them
+  // and keep only, say, road weather.
+  const layerVisible = useIncidentsVisible();
   useRenderedMapAttributions("road-conditions-area", CREDIT_LAYERS, layerVisible);
-  useOverlayExclusion(OVERLAY_ID, layerVisible);
+  useOverlayExclusion(OVERLAY_ID, overlayVisible);
   const popupRef = useRef<maplibregl.Popup | null>(null);
   const popupSelectionRef = useRef<{
     hits: MapGeoJSONFeature[];
@@ -519,7 +526,12 @@ export function RoadConditionsLayer() {
 
   // The area overlay stops at its min zoom; this covers the route at the zooms
   // below it, where a whole trip is on screen.
-  return <RouteConditionsLayer />;
+  return (
+    <>
+      <RouteConditionsLayer />
+      <RoadSourceLayers />
+    </>
+  );
 }
 
 export default RoadConditionsLayer;

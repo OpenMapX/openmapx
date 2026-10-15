@@ -38,6 +38,7 @@ const PREFERENCE_KEYS = [
   "openmapx:mapNorthUp",
   "openmapx:touchZoomButtons",
   "openmapx:globeView",
+  "openmapx:roadConditions",
   "openmapx-haptics-enabled",
   "openmapx.nlp.cloudConsent",
   "openmapx:evVehicleId",

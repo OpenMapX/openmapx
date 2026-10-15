@@ -20,7 +20,7 @@
     "legend": true,
     "layerSelector": {
       "group": "map-details",
-      "labelKey": "trafficIncidents",
+      "labelKey": "roadConditions",
       "icon": "warning",
       "preview": "preview.svg"
     },
