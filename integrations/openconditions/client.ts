@@ -32,15 +32,6 @@ export interface OpenConditionsClient {
     params?: OpenConditionsParams,
     opts?: OpenConditionsRequestOptions,
   ): Promise<T | null>;
-  /**
-   * As `get`, but a 400 answer is its body as `refused` rather than an error:
-   * an instance older than a query parameter refuses it as an unknown key.
-   */
-  getUnlessRefused<T>(
-    path: string,
-    params?: OpenConditionsParams,
-    opts?: OpenConditionsRequestOptions,
-  ): Promise<{ body: T } | { refused: unknown }>;
 }
 
 /** The client of the configured OpenConditions instance, or null when `OPENCONDITIONS_URL` is unset. */
@@ -57,18 +48,6 @@ export function createOpenConditionsClient(
     headers,
     ...(opts?.timeoutMs !== undefined ? { timeoutMs: opts.timeoutMs } : {}),
   });
-  const getResponse = <T>(
-    path: string,
-    params?: OpenConditionsParams,
-    opts?: OpenConditionsRequestOptions,
-  ) =>
-    http.getResponse<T>(`${baseUrl}${path}`, {
-      ...optionsOf(params, opts),
-      maxBytes: opts?.maxResponseBytes ?? DEFAULT_FETCH_JSON_MAX_BYTES,
-      contentTypes: ["application/json"],
-    });
-  const unexpected = (path: string, status: number) =>
-    new Error(`OpenConditions ${path} responded ${status}`);
   return {
     baseUrl,
     async get<T>(path: string, params?: OpenConditionsParams, opts?: OpenConditionsRequestOptions) {
@@ -84,20 +63,16 @@ export function createOpenConditionsClient(
       params?: OpenConditionsParams,
       opts?: OpenConditionsRequestOptions,
     ) {
-      const res = await getResponse<T>(path, params, opts);
+      const res = await http.getResponse<T>(`${baseUrl}${path}`, {
+        ...optionsOf(params, opts),
+        maxBytes: opts?.maxResponseBytes ?? DEFAULT_FETCH_JSON_MAX_BYTES,
+        contentTypes: ["application/json"],
+      });
       if (res.status === 404) return null;
-      if (res.status < 200 || res.status >= 300) throw unexpected(path, res.status);
+      if (res.status < 200 || res.status >= 300) {
+        throw new Error(`OpenConditions ${path} responded ${res.status}`);
+      }
       return res.body;
-    },
-    async getUnlessRefused<T>(
-      path: string,
-      params?: OpenConditionsParams,
-      opts?: OpenConditionsRequestOptions,
-    ) {
-      const res = await getResponse<T>(path, params, opts);
-      if (res.status === 400) return { refused: res.body as unknown };
-      if (res.status < 200 || res.status >= 300) throw unexpected(path, res.status);
-      return { body: res.body };
     },
   };
 }
