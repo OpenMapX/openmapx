@@ -16,10 +16,7 @@ import { useCallback, useEffect, useState } from "react";
 import { WeatherIcon } from "@/integration-api/components/WeatherIcon";
 import { useMap } from "@/integration-api/map/MapContext";
 import { useContributorResolver } from "@/integration-api/overlay/useContributorResolver";
-import {
-  attributionToHtml,
-  useMapAttributions,
-} from "@/integration-api/overlay/useMapAttributions";
+import { useMapAttributions } from "@/integration-api/overlay/useMapAttributions";
 import { windDirectionLabel } from "./weatherUtils";
 
 export function WeatherWidget() {
@@ -62,9 +59,9 @@ export function WeatherWidget() {
     widgetVisible && data
       ? resolve({ contributors: data.contributors, sourceIds: [data.source] })
       : [];
-  const attrText = parseAttributionHtml(
-    weatherAttributions.map(attributionToHtml).join(" · "),
-  ).text;
+  const attrText = weatherAttributions
+    .map((attr) => parseAttributionHtml(attr.attributionText ?? attr.name).text)
+    .join(" · ");
   useMapAttributions("weather", weatherAttributions);
 
   if (isMobile || !data || zoom < 8) return null;

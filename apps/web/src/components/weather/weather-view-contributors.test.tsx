@@ -1,7 +1,10 @@
 import { sanitizeAttributionHtml } from "@openmapx/core";
+import type { Attribution } from "@openmapx/mobility-core/attribution";
+import { parseLicensing } from "@openmapx/mobility-core/licensing";
 import { beforeEach, expect, it, vi } from "vitest";
 import { useMapAttributionStore } from "@/integration-api/overlay/mapAttributionStore";
 import { createFakeMap, type FakeMap, render, screen } from "@/test";
+import brightSkyManifest from "../../../../../integrations/weather-bright-sky/manifest.json";
 
 let fake: FakeMap;
 const MAP_REF = {
@@ -9,7 +12,20 @@ const MAP_REF = {
     return fake.map;
   },
 };
-let response = {
+let response: {
+  current: {
+    weatherCode: number;
+    isDay: boolean;
+    temperature: number;
+    windSpeed: number;
+    humidity: number;
+    pressure: number;
+    windDirection: number;
+    feelsLike: number;
+  };
+  source: string;
+  contributors: Attribution[];
+} = {
   current: {
     weatherCode: 0,
     isDay: true,
@@ -91,4 +107,31 @@ it("desktop widget map credit uses the displayed response snapshot and honors au
   response = { ...response, contributors: [] };
   rerender(<WeatherWidget />);
   expect(html()).toBe("");
+});
+
+it("keeps the Bright Sky hover hint concise while retaining complete map credit details", () => {
+  const source = brightSkyManifest.dataSources[0];
+  const contributor: Attribution = {
+    sourceId: source.sourceId,
+    name: source.name,
+    url: source.url,
+    attributionText: source.attribution,
+    licensing: parseLicensing(source.licensing),
+  };
+  response = { ...response, source: source.sourceId, contributors: [contributor] };
+  render(<WeatherWidget />);
+  expect(screen.getByLabelText("DWD via Bright Sky")).toBeVisible();
+  const presentations = Object.values(useMapAttributionStore.getState().byLayer).flat();
+  expect(presentations).toHaveLength(1);
+  expect(presentations[0].fullHtml).toContain("Bright Sky access/passed-through DWD policy terms");
+  expect(presentations[0].detail?.licensing).toEqual(source.licensing);
+});
+
+it("uses the captured provider name when no explicit credit is supplied", () => {
+  response = {
+    ...response,
+    contributors: [{ sourceId: "actual", name: "Captured actual supplier" }],
+  };
+  render(<WeatherWidget />);
+  expect(screen.getByLabelText("Captured actual supplier")).toBeVisible();
 });
