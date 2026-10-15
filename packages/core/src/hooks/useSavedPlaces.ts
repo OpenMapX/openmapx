@@ -74,6 +74,31 @@ export function useCreateList() {
   });
 }
 
+export interface ImportPlacesInput {
+  target: { listId: string } | { name: string };
+  places: { name: string; address?: string; lat: number; lng: number; note?: string }[];
+}
+
+export interface ImportPlacesResult {
+  listId: string;
+  name: string;
+  imported: number;
+  skippedDuplicates: number;
+}
+
+export function useImportPlaces() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data: ImportPlacesInput) =>
+      apiClient.post<ImportPlacesResult>(`${API_ENDPOINTS.savedLists}/import`, data),
+    onSuccess: (result) => {
+      void queryClient.invalidateQueries({ queryKey: ["savedLists"] });
+      void queryClient.invalidateQueries({ queryKey: ["savedListPlaces", result.listId] });
+      void queryClient.invalidateQueries({ queryKey: ["savedCheck"] });
+    },
+  });
+}
+
 export function useUpdateList() {
   const queryClient = useQueryClient();
   return useMutation({
