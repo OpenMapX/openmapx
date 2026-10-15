@@ -2,6 +2,7 @@ import type {
   DailyForecastPoint,
   HourlyForecastPoint,
   LngLat,
+  WeatherForecastResponse,
   WeatherOptions,
   WeatherResponse,
 } from "@openmapx/core";
@@ -142,7 +143,7 @@ export function setup(ctx: IntegrationContext): void {
       coords: LngLat,
       hours: number,
       options?: WeatherOptions,
-    ): Promise<HourlyForecastPoint[]> {
+    ): Promise<WeatherForecastResponse<HourlyForecastPoint>> {
       const units = options?.units === "imperial" ? "imperial" : "metric";
       // 2.5 forecast returns 3-hour steps, max 40 entries (5 days)
       const cnt = Math.min(Math.ceil(hours / 3), 40);
@@ -153,7 +154,7 @@ export function setup(ctx: IntegrationContext): void {
       const data = await fetchJson<OWM25ForecastResponse>(url);
       const windMul = units === "metric" ? 3.6 : 1;
 
-      return data.list.map((e) => ({
+      const points = data.list.map((e) => ({
         time: toIso(e.dt),
         temperature: e.main.temp,
         weatherCode: owmIdToWmo(e.weather[0]?.id ?? 800),
@@ -164,13 +165,14 @@ export function setup(ctx: IntegrationContext): void {
         cloudCover: e.clouds.all,
         pressure: e.main.pressure,
       }));
+      return { source: "openweathermap", points };
     },
 
     async getDailyForecast(
       coords: LngLat,
       days: number,
       options?: WeatherOptions,
-    ): Promise<DailyForecastPoint[]> {
+    ): Promise<WeatherForecastResponse<DailyForecastPoint>> {
       const units = options?.units === "imperial" ? "imperial" : "metric";
       // Fetch full 5-day forecast and aggregate into daily summaries
       const url =
@@ -221,7 +223,7 @@ export function setup(ctx: IntegrationContext): void {
         });
       }
 
-      return result;
+      return { source: "openweathermap", points: result };
     },
   };
 

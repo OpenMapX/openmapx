@@ -192,6 +192,31 @@ Regenerate and read the diff before committing it. If the diff shows a change
 you did not intend — a route you did not think you touched, or an auth level
 moving to something weaker — that is the gate doing its job.
 
+## Generic weather forecasts
+
+`GET /api/integrations/weather/forecast` returns independent `hourly` and `daily`
+`WeatherForecastResponse` envelopes. Each envelope contains `points`, the exact
+selected `source`, and captured `contributors` projected from its returned
+points. Hourly and daily fallback can select different suppliers. A successful
+empty forecast keeps its selected source with empty points and receipts; when
+no provider succeeds, the source is `null` and both arrays are empty.
+
+Each forecast point retains its own canonical `contributors`, including
+authoritative `[]`, so clients can project credits after filtering or selecting
+points. The orchestrator captures the lookup catalogue before each provider
+acquisition and resolves only the response's explicit source or supplied
+receipts. Cached responses keep that acquisition metadata; they never rebuild
+credits from the current integration catalogue. The versioned forecast cache
+namespace excludes older bare-array payloads.
+
+The cache identity also includes the current disallowed-source set so a policy
+change reacquires an eligible fallback. If an adapter identifies its selected
+feed only in the response, the orchestrator rejects a disallowed returned
+source before exposing it. Such adapters still enforce acquisition policy
+internally. The host response filter remains the final authority: a policy
+change after handler resolution can replace a source-tagged envelope with
+`null`, as for other source-tagged API results.
+
 ## Canonical air-quality routes
 
 The built-in `air-quality` integration owns three public, expensive-tier routes.

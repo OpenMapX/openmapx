@@ -2,6 +2,7 @@ import type { FuelStation } from "@openmapx/integration-framework";
 import { snapshotContributors } from "@openmapx/mobility-core/contributors";
 import {
   canonicalLicenseExpression,
+  isSafeAttributionUrl,
   type LicenseDescriptor,
   type Licensing,
   licensingLinks,
@@ -269,11 +270,35 @@ export function readingCredits(
   );
 }
 
+/** Normalize the model's independently captured terms URL into portable evidence.
+ * Matches OpenConditions creditLicensingOf; existing grants/notices stay authoritative.
+ */
+function capturedCreditLicensing(captured: Rec): Licensing | undefined {
+  const licensing = parseLicensing(captured.licensing);
+  const url = str(captured.licenseUrl);
+  if (
+    !url ||
+    !isSafeAttributionUrl(url) ||
+    licensing?.declarations?.some((d) => d.url === url) ||
+    licensing?.bindings.some((b) => b.license.url === url)
+  )
+    return licensing;
+  const declarations = [...(licensing?.declarations ?? [])];
+  const license = str(captured.license);
+  const matched =
+    license === undefined
+      ? -1
+      : declarations.findIndex((d) => d.text === license && d.url === undefined);
+  if (matched >= 0) declarations[matched] = { ...declarations[matched], url };
+  else declarations.push({ ...(license ? { text: license } : {}), url });
+  return parseLicensing({ ...(licensing ?? { version: 1, bindings: [] }), declarations });
+}
+
 /** A source's credit; without a link of its own it takes the source's link from `sources`. */
 export function credit(source: RecordSource, sources: CreditSources): Attribution {
   const a = source.attribution;
   const url = str(a.url) ?? sources.link(source.id);
-  const licensing = parseLicensing(a.licensing);
+  const licensing = capturedCreditLicensing(a);
   return {
     sourceId: source.id,
     name: str(a.name) ?? str(a.provider) ?? source.id,
@@ -306,6 +331,18 @@ export function upstreamCredits(
   for (const source of kept) {
     const feed = credit(source, sources);
     for (const u of source.upstream) {
+      const original = rec(u.source);
+      const originalId = str(original.sourceId);
+      if (originalId) {
+        const attribution = rec(original.attribution);
+        out.push(
+          credit(
+            { id: str(attribution.parentSourceId) ?? originalId, attribution, upstream: [] },
+            NO_SOURCES,
+          ),
+        );
+        continue;
+      }
       const publisher = str(u.publisher);
       if (!publisher) continue;
       const licensing = parseLicensing(u.licensing);
@@ -313,7 +350,6 @@ export function upstreamCredits(
       out.push({
         sourceId: source.id,
         name,
-        ...(feed.url ? { url: feed.url } : {}),
         ...(licensing ? { licensing } : {}),
         publisher: { name: publisher },
         ...(str(u.attribution) ? { attributionText: str(u.attribution) } : {}),

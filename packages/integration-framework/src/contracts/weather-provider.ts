@@ -2,6 +2,7 @@ import type {
   DailyForecastPoint,
   HourlyForecastPoint,
   LngLat,
+  WeatherForecastResponse,
   WeatherOptions,
   WeatherResponse,
 } from "@openmapx/core";
@@ -10,6 +11,7 @@ export type {
   CurrentWeather,
   DailyForecastPoint,
   HourlyForecastPoint,
+  WeatherForecastResponse,
   WeatherOptions,
   WeatherResponse,
 } from "@openmapx/core";
@@ -24,11 +26,11 @@ export interface WeatherProvider {
     coords: LngLat,
     hours: number,
     options?: WeatherOptions,
-  ): Promise<HourlyForecastPoint[]>;
+  ): Promise<WeatherForecastResponse<HourlyForecastPoint>>;
 
   getDailyForecast?(
     coords: LngLat,
     days: number,
     options?: WeatherOptions,
-  ): Promise<DailyForecastPoint[]>;
+  ): Promise<WeatherForecastResponse<DailyForecastPoint>>;
 }

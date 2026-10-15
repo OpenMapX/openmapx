@@ -1507,6 +1507,46 @@ describe("GET /places/:id", () => {
     expect(body.error).toBe("Internal server error");
   });
 
+  it("retains independently acquired boundary receipts in the public place response", async () => {
+    const receipt = { sourceId: "boundary", name: "Boundary acquisition publisher" };
+    const unrelated = { sourceId: "name", name: "Resolved name publisher" };
+    const boundary = {
+      type: "Polygon",
+      coordinates: [
+        [
+          [6, 50],
+          [7, 50],
+          [7, 51],
+          [6, 50],
+        ],
+      ],
+    };
+    mockLookupByOsmRef.mockResolvedValue({
+      ...MOCK_PLACE,
+      ids: { osm: "relation/42" },
+      osmTags: { boundary: "administrative" },
+      contributors: [unrelated],
+      fieldContributors: { name: [unrelated] },
+    });
+    mockGetPlaceKnowledge.mockResolvedValue({ externalIds: {} });
+    mockBuildReviewLinks.mockReturnValue([]);
+    mockFetchOsmBoundary.mockResolvedValue({
+      boundary,
+      boundingBox: [6, 50, 7, 51],
+      contributors: [receipt],
+    });
+    const res = await app.inject({
+      method: "GET",
+      url: `/places/${encodeURIComponent("osm:relation/42")}`,
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({
+      boundary,
+      fieldContributors: { boundary: [receipt], boundingBox: [receipt] },
+    });
+    expect(res.json().fieldContributors.boundary).not.toContainEqual(unrelated);
+  });
+
   it("starts boundary, photos, and reviews while place knowledge is still pending", async () => {
     const adminPlace = {
       ...MOCK_PLACE,

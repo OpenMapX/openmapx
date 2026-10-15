@@ -259,6 +259,7 @@ export type {
   TripUpdate,
   VehicleJourney,
   Waypoint,
+  WeatherForecastResponse,
   WeatherOptions,
   WeatherProvider,
   WeatherResponse,

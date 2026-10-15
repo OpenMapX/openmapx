@@ -9,6 +9,7 @@ import { snapshotContributors, withContributors } from "@openmapx/mobility-core/
 import {
   type AddressEvidence,
   type AreaGeometry,
+  type Attribution,
   addressComponentsFromOsmTags,
   type BBox,
   createPlace,
@@ -333,7 +334,7 @@ interface NominatimBoundaryResult {
 export async function fetchOsmBoundary(
   osmRef: string,
   lang?: string,
-): Promise<{ boundary: AreaGeometry; boundingBox?: BBox } | null> {
+): Promise<{ boundary: AreaGeometry; boundingBox?: BBox; contributors: Attribution[] } | null> {
   const [osmType, osmId] = osmRef.split("/");
   const prefix = OSM_TYPE_PREFIX[osmType];
   if (!prefix || !osmId) return null;
@@ -361,7 +362,11 @@ export async function fetchOsmBoundary(
       }
     }
 
-    return { boundary, boundingBox };
+    return {
+      boundary,
+      boundingBox,
+      contributors: snapshotContributors([OPENSTREETMAP_ATTRIBUTION]),
+    };
   } catch {
     return null;
   }

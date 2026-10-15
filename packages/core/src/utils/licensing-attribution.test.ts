@@ -370,3 +370,33 @@ it("keeps actual required per-item notices adjacent while omitting the catalogue
   expect(credit.visibleHtml).toContain("Preserve operator name");
   expect(credit.visibleHtml).not.toContain("Determined per file");
 });
+
+it("keeps independently captured licence-reference URLs available in full details only", () => {
+  const receipt = {
+    sourceId: "source",
+    name: "Provider",
+    licensing: {
+      version: 1 as const,
+      bindings: [
+        {
+          scope: "data" as const,
+          subject: "Dataset",
+          license: { kind: "spdx" as const, expression: "CC-BY-4.0" },
+          attribution: {
+            placement: "details" as const,
+            surfaces: ["map" as const],
+            basis: "licence" as const,
+            reviewedAt: "2026-10-15",
+            evidenceUrls: ["https://source.example/policy"],
+            reason: "Fixture",
+          },
+        },
+      ],
+      declarations: [{ text: "CC-BY-4.0", url: "https://old.example/original-terms" }],
+    },
+  };
+  const shown = buildAttributionPresentation(receipt, "map");
+  expect(shown.fullHtml).toContain('href="https://old.example/original-terms"');
+  expect(shown.fullHtml).not.toContain(">https://old.example/original-terms<");
+  expect(shown.visibleHtml).not.toContain("original-terms");
+});

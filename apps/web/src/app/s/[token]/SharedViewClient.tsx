@@ -102,7 +102,7 @@ export function SharedViewClient({ share }: { share: PublicShare | null }) {
                     }))
                   : share.route.waypoints.map((w) => ({ lat: w.lat, lng: w.lng }))
               }
-              routeGeometry={routeShare ? (activeRoute?.geometry ?? null) : null}
+              route={routeShare ? activeRoute : null}
             />
           </Box>
           <Box sx={{ flex: 1, overflowY: "auto", px: 2, py: 1.5 }}>

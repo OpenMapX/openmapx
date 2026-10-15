@@ -2,6 +2,7 @@ import type {
   DailyForecastPoint,
   HourlyForecastPoint,
   LngLat,
+  WeatherForecastResponse,
   WeatherOptions,
   WeatherResponse,
 } from "@openmapx/core";
@@ -143,7 +144,7 @@ const metNorwayProvider: WeatherProvider = {
     coords: LngLat,
     hours: number,
     options?: WeatherOptions,
-  ): Promise<HourlyForecastPoint[]> {
+  ): Promise<WeatherForecastResponse<HourlyForecastPoint>> {
     const data = await fetchCompact(coords);
     const isImperial = options?.units === "imperial";
     const windMultiplier = isImperial ? 2.237 : 3.6;
@@ -169,14 +170,14 @@ const metNorwayProvider: WeatherProvider = {
       });
     }
 
-    return results;
+    return { source: "met-norway", points: results };
   },
 
   async getDailyForecast(
     coords: LngLat,
     days: number,
     options?: WeatherOptions,
-  ): Promise<DailyForecastPoint[]> {
+  ): Promise<WeatherForecastResponse<DailyForecastPoint>> {
     const data = await fetchCompact(coords);
     const isImperial = options?.units === "imperial";
     const windMultiplier = isImperial ? 2.237 : 3.6;
@@ -232,7 +233,7 @@ const metNorwayProvider: WeatherProvider = {
       });
     }
 
-    return results;
+    return { source: "met-norway", points: results };
   },
 };
 

@@ -46,3 +46,38 @@ describe("MapCredits", () => {
     expect(onMapClick).not.toHaveBeenCalled();
   });
 });
+
+it("links distinct captured terms in details with a short label and keeps raw URLs out of credit copy", async () => {
+  const url = "https://historical.example/original-terms";
+  render(
+    <MapCredits
+      attributions={[
+        {
+          sourceId: "history",
+          name: "Historical source",
+          licensing: {
+            version: 1,
+            bindings: [
+              {
+                scope: "data",
+                subject: "Historical data",
+                license: { kind: "spdx", expression: "CC-BY-4.0" },
+              },
+            ],
+            declarations: [
+              { text: "CC-BY-4.0", url },
+              { text: "Repeated declaration", url },
+            ],
+          },
+        },
+      ]}
+    />,
+  );
+  expect(screen.getByTestId("map-credits").textContent).not.toContain(url);
+  fireEvent.click(screen.getByRole("button", { name: "credits" }));
+  await screen.findByRole("dialog");
+  const links = screen.getAllByRole("link", { name: "termsOfUse" });
+  expect(links).toHaveLength(1);
+  expect(links[0].getAttribute("href")).toBe(url);
+  expect(screen.queryByText(url)).toBeNull();
+});

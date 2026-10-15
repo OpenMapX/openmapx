@@ -1,5 +1,10 @@
+import { licensingReferenceUrls, parseLicensing } from "@openmapx/mobility-core/licensing";
 import { describe, expect, it } from "vitest";
-import { dedupeAttributionHtml, projectAttributionPresentations } from "./attribution-presentation";
+import {
+  dedupeAttributionHtml,
+  mergeAttributionDetails,
+  projectAttributionPresentations,
+} from "./attribution-presentation";
 
 describe("complete credited publisher fragments", () => {
   it.each([
@@ -81,3 +86,68 @@ it("groups the same displayed source without losing distinct grants, notices or 
   expect(group.details[1]?.attribution?.url).toBe("https://other.example/");
   expect(group.details[1]?.attribution?.attributionText).toBe("Distinct notice");
 });
+
+it("retains every independent declaration URL when grouping credit-only source snapshots", () => {
+  const entry = (url: string) => ({
+    html: "Provider",
+    attribution: {
+      sourceId: "provider",
+      name: "Provider",
+      licensing: {
+        version: 1 as const,
+        bindings: [],
+        declarations: [{ text: "Original terms", url }],
+      },
+    },
+  });
+  const [merged] = mergeAttributionDetails([
+    entry("https://old.example/terms"),
+    entry("https://new.example/terms"),
+  ]);
+  expect(merged.attribution?.licensing?.declarations).toEqual([
+    { text: "Original terms", url: "https://old.example/terms" },
+    { text: "Original terms", url: "https://new.example/terms" },
+  ]);
+});
+
+it.each(["bindings", "declarations"] as const)(
+  "keeps large captured %s unions renderable without losing individual snapshots",
+  (field) => {
+    const entries = Array.from({ length: 65 }, (_, index) => ({
+      html: "Provider",
+      attribution: {
+        sourceId: "provider",
+        name: "Provider",
+        licensing: {
+          version: 1 as const,
+          bindings:
+            field === "bindings"
+              ? [
+                  {
+                    scope: "data" as const,
+                    subject: `Dataset ${index}`,
+                    license: { kind: "spdx" as const, expression: "CC-BY-4.0" },
+                  },
+                ]
+              : [],
+          declarations: [
+            {
+              text: "Original terms",
+              url: `https://provider.example/terms/${field === "bindings" ? "shared" : index}`,
+            },
+          ],
+        },
+      },
+    }));
+    const groups = mergeAttributionDetails(entries);
+    expect(groups.length).toBeGreaterThan(1);
+    expect(groups.every((group) => parseLicensing(group.attribution?.licensing))).toBe(true);
+    expect(
+      new Set(groups.flatMap((group) => licensingReferenceUrls(group.attribution!.licensing!)))
+        .size,
+    ).toBe(field === "bindings" ? 1 : 65);
+    expect(groups.flatMap((group) => group.attribution!.licensing!.bindings)).toHaveLength(
+      field === "bindings" ? 65 : 0,
+    );
+  },
+);

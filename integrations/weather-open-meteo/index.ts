@@ -2,6 +2,7 @@ import type {
   DailyForecastPoint,
   HourlyForecastPoint,
   LngLat,
+  WeatherForecastResponse,
   WeatherOptions,
   WeatherResponse,
 } from "@openmapx/core";
@@ -143,7 +144,7 @@ const openMeteoProvider: WeatherProvider = {
     coords: LngLat,
     hours: number,
     options?: WeatherOptions,
-  ): Promise<HourlyForecastPoint[]> {
+  ): Promise<WeatherForecastResponse<HourlyForecastPoint>> {
     const forecastDays = Math.min(Math.ceil(hours / 24), 7);
     const url = buildUrl(
       coords[1],
@@ -154,14 +155,14 @@ const openMeteoProvider: WeatherProvider = {
         `&forecast_days=${forecastDays}`,
     );
     const data = await fetchOpenMeteo(url);
-    return parseHourly(data).slice(0, hours);
+    return { source: "open-meteo", points: parseHourly(data).slice(0, hours) };
   },
 
   async getDailyForecast(
     coords: LngLat,
     days: number,
     options?: WeatherOptions,
-  ): Promise<DailyForecastPoint[]> {
+  ): Promise<WeatherForecastResponse<DailyForecastPoint>> {
     const forecastDays = Math.min(days, 16);
     const url = buildUrl(
       coords[1],
@@ -172,7 +173,7 @@ const openMeteoProvider: WeatherProvider = {
         `&forecast_days=${forecastDays}`,
     );
     const data = await fetchOpenMeteo(url);
-    return parseDaily(data).slice(0, days);
+    return { source: "open-meteo", points: parseDaily(data).slice(0, days) };
   },
 };
 

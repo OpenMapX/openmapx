@@ -114,14 +114,16 @@ function mergeVisibleNotice(first: string, second: string): string | undefined {
 export function mergeAttributionDetails(
   entries: readonly AttributionDetail[],
 ): AttributionDetail[] {
-  const groups = new Map<string, AttributionDetail>();
+  const groups = new Map<string, AttributionDetail[]>();
   for (const entry of entries) {
     const attr = entry.attribution;
     const { sourceId: _sourceId, licensing: _licensing, ...identity } = attr ?? {};
     const key = attr ? JSON.stringify(identity) : entry.html;
-    const previous = groups.get(key);
+    const bucket = groups.get(key) ?? [];
+    const previous = bucket.at(-1);
     if (!previous?.attribution || !attr) {
-      groups.set(key, structuredClone(entry));
+      bucket.push(structuredClone(entry));
+      groups.set(key, bucket);
       continue;
     }
     const distinct = <T>(items: readonly T[]): T[] => [
@@ -131,18 +133,25 @@ export function mergeAttributionDetails(
       ...(previous.attribution.licensing?.bindings ?? []),
       ...(attr.licensing?.bindings ?? []),
     ]);
-    if (bindings.length)
+    const declarations = distinct([
+      ...(previous.attribution.licensing?.declarations ?? []),
+      ...(attr.licensing?.declarations ?? []),
+    ]);
+    // The portable contract bounds each array. Keep another complete source
+    // snapshot instead of creating an invalid aggregate that renderers reject.
+    if (bindings.length > 64 || declarations.length > 64) {
+      bucket.push(structuredClone(entry));
+      continue;
+    }
+    if (bindings.length || declarations.length)
       previous.attribution.licensing = {
         version: 1,
         bindings,
-        declarations: distinct([
-          ...(previous.attribution.licensing?.declarations ?? []),
-          ...(attr.licensing?.declarations ?? []),
-        ]),
+        declarations,
       };
     previous.links = distinct([...(previous.links ?? []), ...(entry.links ?? [])]);
   }
-  return [...groups.values()];
+  return [...groups.values()].flat();
 }
 
 /** Deduplicate complete and permanent notices independently, keeping the stricter copy. */

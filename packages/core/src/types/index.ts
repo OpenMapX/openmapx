@@ -318,6 +318,7 @@ export type {
   RadarFrame,
   RadarMeta,
   TemperatureUnit,
+  WeatherForecastResponse,
   WeatherOptions,
   WeatherResponse,
   WeatherSubLayer,

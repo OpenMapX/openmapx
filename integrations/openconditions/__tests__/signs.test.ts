@@ -83,6 +83,11 @@ describe("message-signs-openconditions", () => {
           sourceId: "us-ny-511-signs",
           name: "511NY / New York State DOT",
           attributionText: "511NY / New York State DOT",
+          licensing: {
+            version: 1,
+            bindings: [],
+            declarations: [{ text: "LicenseRef-511NY-DAA", url: "https://511ny.org/help/24" }],
+          },
         },
       ],
     });

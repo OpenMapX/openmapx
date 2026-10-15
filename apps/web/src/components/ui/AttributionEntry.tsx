@@ -10,7 +10,11 @@ import {
   parseAttributionHtml,
   sanitizeAttributionHtml,
 } from "@openmapx/core/attribution";
-import { type LicensePresentation, licensingLinks } from "@openmapx/mobility-core/licensing";
+import {
+  type LicensePresentation,
+  licensingLinks,
+  licensingReferenceUrls,
+} from "@openmapx/mobility-core/licensing";
 import { useTranslations } from "next-intl";
 import { AttributionText } from "./AttributionText";
 
@@ -61,6 +65,15 @@ export function AttributionEntry({ entry }: { entry: AttributionDetail }) {
             (other) => other.label === link.label && other.url === link.url,
           ),
       ));
+  const representedUrls = new Set([
+    ...identityParts.links.map((link) => link.url),
+    ...creditParts.links.map((link) => link.url),
+    attr.publisher?.url,
+    ...(entry.links?.map((link) => link.url) ?? []),
+  ]);
+  const referenceUrls = attr.licensing
+    ? licensingReferenceUrls(attr.licensing).filter((url) => !representedUrls.has(url))
+    : [];
   const grant = (binding: LicensePresentation, showSubject: boolean) => (
     <Box key={JSON.stringify(binding)} sx={{ minWidth: 0 }}>
       {showSubject && (
@@ -138,6 +151,22 @@ export function AttributionEntry({ entry }: { entry: AttributionDetail }) {
           }}
         >
           {secondary.map((binding) => grant(binding, binding.scope === "software"))}
+        </Box>
+      )}
+      {referenceUrls.length > 0 && (
+        <Box sx={{ mt: 0.5, display: "flex", flexWrap: "wrap", gap: 1, color: "text.secondary" }}>
+          {referenceUrls.map((url) => (
+            <Link
+              key={url}
+              href={safeHref(url)}
+              target="_blank"
+              rel="noopener noreferrer"
+              underline="hover"
+              color="inherit"
+            >
+              {t("termsOfUse")}
+            </Link>
+          ))}
         </Box>
       )}
       {entry.links && (

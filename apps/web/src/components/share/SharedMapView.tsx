@@ -2,6 +2,7 @@
 
 import Box from "@mui/material/Box";
 import { useColorScheme } from "@mui/material/styles";
+import type { Route } from "@openmapx/core";
 import {
   type SavedPlaceFieldContributors,
   savedPlaceContributors,
@@ -13,6 +14,7 @@ import {
 } from "@openmapx/mobility-core/contributors";
 import type * as maplibregl from "maplibre-gl";
 import { useEffect, useRef, useState } from "react";
+import { routeGeometryFeatures } from "@/components/map/layers/routeGeometryFeatures";
 import { MapCredits } from "@/components/map/MapCredits";
 import { createGeoJsonSourceDataBridge } from "@/integration-api/map/layerStyleUtils";
 import { renderedMapAttributionTracker } from "@/integration-api/overlay/renderedMapAttributionTracker";
@@ -35,9 +37,14 @@ export interface SharedMapPoint {
   fieldContributors?: SavedPlaceFieldContributors;
 }
 
+type SharedMapRoute = Pick<
+  Route,
+  "geometry" | "geometryContributors" | "contributors" | "fieldContributors"
+>;
+
 interface Props {
   points: SharedMapPoint[];
-  routeGeometry?: [number, number][] | null;
+  route?: SharedMapRoute | null;
 }
 
 function pointsData(points: SharedMapPoint[]): GeoJSON.FeatureCollection {
@@ -56,19 +63,8 @@ function pointsData(points: SharedMapPoint[]): GeoJSON.FeatureCollection {
   };
 }
 
-function routeData(geometry: [number, number][] | null | undefined): GeoJSON.FeatureCollection {
-  return {
-    type: "FeatureCollection",
-    features: geometry?.length
-      ? [
-          {
-            type: "Feature",
-            properties: {},
-            geometry: { type: "LineString", coordinates: geometry },
-          },
-        ]
-      : [],
-  };
+function routeData(route: SharedMapRoute | null | undefined): GeoJSON.FeatureCollection {
+  return { type: "FeatureCollection", features: route ? routeGeometryFeatures(route, {}) : [] };
 }
 
 function addLayers(map: maplibregl.Map): void {
@@ -132,8 +128,8 @@ function fitToContent(
 }
 
 /** Read-only mini map for the public share page: markers plus an optional polyline. */
-export function SharedMapView({ points, routeGeometry }: Props) {
-  const [pointAttributions, setPointAttributions] = useState<Attribution[]>([]);
+export function SharedMapView({ points, route }: Props) {
+  const [renderedAttributions, setRenderedAttributions] = useState<Attribution[]>([]);
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const bridgeRef = useRef<ReturnType<typeof createGeoJsonSourceDataBridge> | null>(null);
@@ -143,8 +139,8 @@ export function SharedMapView({ points, routeGeometry }: Props) {
   // props have already changed) — same pattern as AreaPickerMap's boundaryRef.
   const pointsRef = useRef<SharedMapPoint[]>(points);
   pointsRef.current = points;
-  const routeRef = useRef<[number, number][] | null>(routeGeometry ?? null);
-  routeRef.current = routeGeometry ?? null;
+  const routeRef = useRef<SharedMapRoute | null>(route ?? null);
+  routeRef.current = route ?? null;
   const env = useEnv();
   const { mode, systemMode } = useColorScheme();
   const resolvedMode = mode === "system" ? systemMode : mode;
@@ -156,7 +152,7 @@ export function SharedMapView({ points, routeGeometry }: Props) {
     let destroyed = false;
     let map: maplibregl.Map | null = null;
     let replay: (() => void) | null = null;
-    let unsubscribePoints: (() => void) | undefined;
+    let unsubscribeRendered: (() => void) | undefined;
 
     const init = async () => {
       const maplibregl = await loadMapLibreRuntime();
@@ -185,13 +181,13 @@ export function SharedMapView({ points, routeGeometry }: Props) {
           { sourceId: POINTS_SOURCE, data: pointsData(pointsRef.current) },
         ]);
         bridge.apply(map);
-        fitToContent(map, pointsRef.current, routeRef.current);
-        unsubscribePoints = renderedMapAttributionTracker(map).subscribe("shared-list-points", {
+        fitToContent(map, pointsRef.current, routeRef.current?.geometry ?? null);
+        unsubscribeRendered = renderedMapAttributionTracker(map).subscribe("shared-map-content", {
           kind: "geometry",
-          layerIds: [POINTS_LAYER],
+          layerIds: [POINTS_LAYER, ROUTE_CASING, ROUTE_LINE],
           publish: (entries) => {
             const captured = entries.flatMap((entry) => (entry.detail ? [entry.detail] : []));
-            setPointAttributions((previous) =>
+            setRenderedAttributions((previous) =>
               JSON.stringify(previous) === JSON.stringify(captured) ? previous : captured,
             );
           },
@@ -208,7 +204,7 @@ export function SharedMapView({ points, routeGeometry }: Props) {
 
     return () => {
       destroyed = true;
-      unsubscribePoints?.();
+      unsubscribeRendered?.();
       if (map && replay && typeof map.off === "function") {
         map.off("styledata", replay);
         map.off("idle", replay);
@@ -218,23 +214,29 @@ export function SharedMapView({ points, routeGeometry }: Props) {
     };
   }, [env, styleName, variant, bridge]);
 
-  // Re-publish data and re-frame whenever it changes (e.g. route geometry arrives).
+  // Re-publish captured data whenever its geometry or receipts change.
   useEffect(() => {
     const map = mapRef.current;
     bridge.publish([
-      { sourceId: ROUTE_SOURCE, data: routeData(routeGeometry ?? null) },
+      { sourceId: ROUTE_SOURCE, data: routeData(route) },
       { sourceId: POINTS_SOURCE, data: pointsData(points) },
     ]);
     if (!map) return;
     bridge.apply(map);
-    if (map.isStyleLoaded()) fitToContent(map, points, routeGeometry ?? null);
-  }, [points, routeGeometry, bridge]);
+  }, [points, route, bridge]);
+
+  // Route receipt refreshes do not re-frame unchanged point/geometry inputs.
+  const geometry = route?.geometry ?? null;
+  useEffect(() => {
+    const map = mapRef.current;
+    if (map?.isStyleLoaded()) fitToContent(map, points, geometry);
+  }, [points, geometry]);
 
   return (
     <Box sx={{ position: "relative", width: "100%", height: "100%" }}>
       <Box ref={containerRef} sx={{ position: "absolute", inset: 0 }} />
       <MapCredits
-        attributions={snapshotContributors(baseMapVectorCredits(env), pointAttributions)}
+        attributions={snapshotContributors(baseMapVectorCredits(env), renderedAttributions)}
       />
     </Box>
   );

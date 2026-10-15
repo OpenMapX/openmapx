@@ -382,6 +382,26 @@ export function licensingLinks(
     });
 }
 
+/** Captured reference links absent from the structured grants; never inferred permissions. */
+export function licensingReferenceUrls(licensing: Licensing): string[] {
+  const captured = parseLicensing(licensing);
+  if (!captured) return [];
+  const represented = new Set(
+    licensingLinks(captured).flatMap((binding) => [
+      binding.url,
+      ...(binding.licenses && binding.licenses.length > 1
+        ? binding.licenses.map((license) => license.url)
+        : []),
+    ]),
+  );
+  return [
+    ...new Set(
+      captured.declarations?.flatMap(({ url }) => (url && !represented.has(url) ? [url] : [])) ??
+        [],
+    ),
+  ];
+}
+
 export function formatLicensing(
   licensing: Licensing,
   options: LicensingDisplayOptions = {},

@@ -2,11 +2,15 @@ import type {
   DailyForecastPoint,
   HourlyForecastPoint,
   LngLat,
+  WeatherForecastResponse,
   WeatherOptions,
   WeatherResponse,
 } from "@openmapx/core";
 import {
+  type ContributingRecord,
   captureIntegrationContributorCatalogue,
+  captureResultContributors,
+  contributorsForRecords,
   type IntegrationContext,
   resolveCapturedContributors,
   withContributors,
@@ -66,32 +70,56 @@ export function createWeatherOrchestrator(ctx: IntegrationContext) {
     coords: LngLat,
     hours: number,
     options?: WeatherOptions,
-  ): Promise<HourlyForecastPoint[]> {
-    for (const { provider } of await eligibleProviders()) {
+  ): Promise<WeatherForecastResponse<HourlyForecastPoint>> {
+    for (const { provider, integrationId } of await eligibleProviders()) {
       if (!provider.getHourlyForecast) continue;
       try {
-        return await provider.getHourlyForecast(coords, hours, options);
+        const catalogue = captureIntegrationContributorCatalogue(ctx, "weather");
+        const response = await provider.getHourlyForecast(coords, hours, options);
+        // An adapter may identify its serving feed only in the response.
+        if (response.source && (await ctx.getDisallowedSourceIds?.())?.has(response.source))
+          continue;
+        return captureForecast(response, catalogue, integrationId);
       } catch {
         // fall through
       }
     }
-    return [];
+    return { source: null, points: [], contributors: [] };
   }
 
   async function getDailyForecast(
     coords: LngLat,
     days: number,
     options?: WeatherOptions,
-  ): Promise<DailyForecastPoint[]> {
-    for (const { provider } of await eligibleProviders()) {
+  ): Promise<WeatherForecastResponse<DailyForecastPoint>> {
+    for (const { provider, integrationId } of await eligibleProviders()) {
       if (!provider.getDailyForecast) continue;
       try {
-        return await provider.getDailyForecast(coords, days, options);
+        const catalogue = captureIntegrationContributorCatalogue(ctx, "weather");
+        const response = await provider.getDailyForecast(coords, days, options);
+        if (response.source && (await ctx.getDisallowedSourceIds?.())?.has(response.source))
+          continue;
+        return captureForecast(response, catalogue, integrationId);
       } catch {
         // fall through
       }
     }
-    return [];
+    return { source: null, points: [], contributors: [] };
+  }
+
+  function captureForecast<T extends ContributingRecord>(
+    response: WeatherForecastResponse<T>,
+    catalogue: ReturnType<typeof captureIntegrationContributorCatalogue>,
+    integrationId: string,
+  ): WeatherForecastResponse<T> {
+    const envelope = resolveCapturedContributors(catalogue, integrationId, {
+      contributors: response.contributors,
+      sourceIds: response.source === null ? [] : [response.source],
+    });
+    const points = response.points.map((point) =>
+      withContributors(point, captureResultContributors(point, envelope)),
+    );
+    return withContributors({ ...response, points }, contributorsForRecords(points));
   }
 
   return { getCurrentWeather, getHourlyForecast, getDailyForecast };

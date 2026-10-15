@@ -6,6 +6,7 @@ import {
   isSafeAttributionUrl,
   type Licensing,
   licensingLinks,
+  licensingReferenceUrls,
   parseLicensing,
 } from "@openmapx/mobility-core/licensing";
 import escapeHtml from "escape-html";
@@ -270,6 +271,18 @@ export function buildAttributionPresentation(
   }
   if (attribution.notes) fullParts.push(escapeHtml(attribution.notes));
   if (attribution.retrievedAt) fullParts.push(escapeHtml(attribution.retrievedAt));
+  if (attribution.licensing) {
+    const represented = new Set(
+      parseAttributionHtml(fullParts.join(" — ")).links.map((link) => link.url),
+    );
+    for (const url of licensingReferenceUrls(attribution.licensing)) {
+      if (!represented.has(url)) {
+        fullParts.push(
+          `<a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">Terms</a>`,
+        );
+      }
+    }
+  }
   const fullHtml = fullParts.filter(Boolean).join(" — ");
   const licensing =
     attribution.licensing === undefined ? undefined : parseLicensing(attribution.licensing);

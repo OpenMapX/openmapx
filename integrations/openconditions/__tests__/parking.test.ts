@@ -237,7 +237,6 @@ describe("parking-sites-openconditions", () => {
       {
         sourceId: MOBIDATA,
         name: `${MOBIDATA_PROVIDER} – Stadt Karlsruhe`,
-        url: "https://mobidata-bw.de",
         licensing: {
           version: 1,
           bindings: [

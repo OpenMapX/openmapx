@@ -266,6 +266,7 @@ export type {
   CurrentWeather,
   DailyForecastPoint,
   HourlyForecastPoint,
+  WeatherForecastResponse,
   WeatherOptions,
   WeatherProvider,
   WeatherResponse,

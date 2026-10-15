@@ -185,10 +185,11 @@ describe("MET Norway weather provider", () => {
     mockFetch.mockResolvedValueOnce(mockOk(sampleResponse()));
 
     const hourly = await getProvider().getHourlyForecast(COORDS, 24);
+    expect(hourly.source).toBe("met-norway");
 
     // Only the first two entries carry next_1_hours; the third (next_6_hours only) is skipped.
-    expect(hourly).toHaveLength(2);
-    expect(hourly[0]).toMatchObject({
+    expect(hourly.points).toHaveLength(2);
+    expect(hourly.points[0]).toMatchObject({
       time: "2026-03-10T10:00:00Z",
       temperature: 10,
       weatherCode: 0,
@@ -198,23 +199,25 @@ describe("MET Norway weather provider", () => {
       cloudCover: 12,
       pressure: 1015,
     });
-    expect(hourly[0]?.windSpeed).toBeCloseTo(18, 5);
-    expect(hourly[1]?.weatherCode).toBe(61); // lightrain -> 61
+    expect(hourly.points[0]?.windSpeed).toBeCloseTo(18, 5);
+    expect(hourly.points[1]?.weatherCode).toBe(61); // lightrain -> 61
   });
 
   it("respects the requested hour limit", async () => {
     mockFetch.mockResolvedValueOnce(mockOk(sampleResponse()));
     const hourly = await getProvider().getHourlyForecast(COORDS, 1);
-    expect(hourly).toHaveLength(1);
+    expect(hourly.source).toBe("met-norway");
+    expect(hourly.points).toHaveLength(1);
   });
 
   it("aggregates daily min/max temps, precipitation sum, and a midday symbol", async () => {
     mockFetch.mockResolvedValueOnce(mockOk(sampleResponse()));
 
     const daily = await getProvider().getDailyForecast(COORDS, 7);
+    expect(daily.source).toBe("met-norway");
 
-    expect(daily).toHaveLength(2);
-    const day1 = daily[0];
+    expect(daily.points).toHaveLength(2);
+    const day1 = daily.points[0];
     expect(day1?.date).toBe("2026-03-10");
     expect(day1?.temperatureMin).toBe(10);
     expect(day1?.temperatureMax).toBe(14);
@@ -226,7 +229,7 @@ describe("MET Norway weather provider", () => {
     expect(day1?.windSpeedMax).toBeCloseTo(25.2, 5);
 
     // Day 2 widens its min/max from next_6_hours air_temperature_min/max.
-    const day2 = daily[1];
+    const day2 = daily.points[1];
     expect(day2?.date).toBe("2026-03-11");
     expect(day2?.temperatureMin).toBe(1);
     expect(day2?.temperatureMax).toBe(8);

@@ -701,7 +701,13 @@ async function enrichPlace(place: Place, lang: string | undefined): Promise<Plac
     boundary: adminBoundary?.boundary,
     boundingBox: adminBoundary?.boundingBox,
   };
-  return captureEnrichedPlaceContributors(place, knowledgeResult, result, reviewStats);
+  return captureEnrichedPlaceContributors(
+    place,
+    knowledgeResult,
+    result,
+    reviewStats,
+    adminBoundary,
+  );
 }
 
 /** Ownership mirrors the actual enrichment policies above, including tag/ID gap fills. */
@@ -710,6 +716,7 @@ function captureEnrichedPlaceContributors(
   knowledge: KnowledgeResult,
   result: Place,
   reviewStats: Pick<ReviewAggregate, "contributors"> | null,
+  adminBoundary: Awaited<ReturnType<typeof fetchOsmBoundary>>,
 ): Place {
   const fields: Record<string, Attribution[]> = {};
   const metadata = new Set([
@@ -809,6 +816,9 @@ function captureEnrichedPlaceContributors(
     fields,
     Object.keys(fields).filter((key) => key.startsWith("ids.")),
   );
+  // Boundary geometry is acquired independently of the resolved place and knowledge.
+  fields.boundary = result.boundary ? contributorsForRecords([adminBoundary]) : [];
+  fields.boundingBox = result.boundingBox ? contributorsForRecords([adminBoundary]) : [];
   // Ratings are supplied by the review acquisition, independently of the
   // resolved place and knowledge fields. Absence never inherits their receipts.
   fields.rating = contributorsForRecords([reviewStats]);

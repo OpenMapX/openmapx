@@ -1,6 +1,6 @@
 import { OPENSTREETMAP_ATTRIBUTION } from "@openmapx/mobility-core/attribution";
 import { afterEach, expect, it, vi } from "vitest";
-import { lookupByOsmRef } from "../place-lookup";
+import { fetchOsmBoundary, lookupByOsmRef } from "../place-lookup";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -29,4 +29,41 @@ it("preserves the proven underlying OSM receipt when a detail lookup produces a 
   expect(place.contributors).toEqual([OPENSTREETMAP_ATTRIBUTION]);
   expect(place.contributors?.[0]).not.toBe(OPENSTREETMAP_ATTRIBUTION);
   expect(place.phone).toBe("+49");
+});
+
+it("captures the OSM supplier with the acquired boundary and bounding box", async () => {
+  const boundary = {
+    type: "Polygon",
+    coordinates: [
+      [
+        [6, 50],
+        [7, 50],
+        [7, 51],
+        [6, 50],
+      ],
+    ],
+  };
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify([
+            {
+              osm_type: "relation",
+              osm_id: 42,
+              boundingbox: ["50", "51", "6", "7"],
+              geojson: boundary,
+            },
+          ]),
+        ),
+    ),
+  );
+  const result = await fetchOsmBoundary("relation/42");
+  expect(result).toMatchObject({
+    boundary,
+    boundingBox: [6, 50, 7, 51],
+    contributors: [OPENSTREETMAP_ATTRIBUTION],
+  });
+  expect(result?.contributors?.[0]).not.toBe(OPENSTREETMAP_ATTRIBUTION);
 });
