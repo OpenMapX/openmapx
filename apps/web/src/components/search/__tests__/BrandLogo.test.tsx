@@ -85,6 +85,27 @@ describe("BrandLogo", () => {
     expect(container.firstChild).not.toBeNull();
   });
 
+  it("renders a heading alone when the brand has no logo", () => {
+    const { container } = render(
+      <BrandLogo brand={{ qid: "Q1", name: "Nameless", kind: ["brand"] }}>
+        <span>Nameless Hotel</span>
+      </BrandLogo>,
+    );
+    expect(screen.getByText("Nameless Hotel")).toBeVisible();
+    expect(container.querySelector("svg")).toBeNull();
+  });
+
+  it("drops the fallback beside a heading when the logo image fails to load", () => {
+    const { container } = render(
+      <BrandLogo brand={{ qid: "Q1", name: "Aldi", kind: ["brand"], logoFile: "Aldi logo.svg" }}>
+        <span>Aldi Süd</span>
+      </BrandLogo>,
+    );
+    fireEvent.error(screen.getByRole("img", { name: "Aldi" }));
+    expect(screen.getByText("Aldi Süd")).toBeVisible();
+    expect(container.querySelector("svg")).toBeNull();
+  });
+
   it("falls back to the preset icon when the logo image fails to load", () => {
     render(
       <BrandLogo brand={{ qid: "Q1", name: "Aldi", kind: ["brand"], logoFile: "Aldi logo.svg" }} />,

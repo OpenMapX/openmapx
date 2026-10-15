@@ -17,8 +17,8 @@ interface BrandLogoProps {
 
 /**
  * A brand's mark, proxied so the viewer's IP never reaches Wikimedia.
- * Roughly two thirds of catalogued brands have no Commons logo; those fall back
- * to the ordinary preset icon so branded and unbranded rows stay one list.
+ * Roughly two thirds of catalogued brands have no Commons logo; icon-only uses
+ * fall back to the ordinary preset icon, and heading uses show only the heading.
  * NSI-derived Commons filenames can go stale (renamed or deleted on Commons, or
  * a proxy 404), so a failed load also falls back — keyed on the failed URL
  * itself rather than a boolean, so switching to a different brand with a fresh
@@ -46,7 +46,10 @@ export function BrandLogo({ brand, size = 20, children }: BrandLogoProps) {
   ) : (
     <PresetIcon iconKey={undefined} size={size} />
   );
-  if (!children && !showPhoto) return visual;
+  // Beside a heading, a generic pin reads as a status marker, so headings for
+  // logo-less brands render bare and match unbranded rows. Icon-only slots
+  // keep the fallback so their alignment holds.
+  if (!showPhoto) return children || visual;
 
   return (
     <div
