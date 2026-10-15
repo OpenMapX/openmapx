@@ -181,7 +181,7 @@ describe("AttributionStrip", () => {
         ]}
       />,
     );
-    expect(markup).toContain("Entur · NLOD-2.0");
+    expect(markup).toContain("Entur | NLOD-2.0");
   });
 
   it("collapses to maxVisible with a toggle that expands and collapses", () => {

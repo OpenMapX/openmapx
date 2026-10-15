@@ -79,11 +79,11 @@ export function useBrandLogos(qids: string[]): Map<string, BrandDetail | undefin
  */
 export function useBrandLogoAttribution(qid: string | null, hasLogo: boolean) {
   return useQuery<BrandLogoAttribution, Error, BrandLogoAttribution | undefined>({
-    queryKey: ["brand-logo-attribution-v2", qid] as const,
+    queryKey: ["brand-logo-attribution-v3", qid] as const,
     queryFn: () =>
       apiClient.get<BrandLogoAttribution>(
         `${API_ENDPOINTS.brandLogoAttribution}/${qid}/logo-attribution`,
-        { fileMetadata: "2" },
+        { fileMetadata: "3" },
       ),
     enabled: Boolean(qid) && hasLogo,
     staleTime: 24 * 60 * 60 * 1000,

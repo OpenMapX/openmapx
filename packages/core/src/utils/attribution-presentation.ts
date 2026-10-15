@@ -1,5 +1,9 @@
 import escapeHtml from "escape-html";
-import { type AttributionPresentation, parseAttributionHtml } from "./attribution";
+import {
+  type AttributionDetail,
+  type AttributionPresentation,
+  parseAttributionHtml,
+} from "./attribution";
 
 /** Whole credited fragment, never a prefix of another publisher's name. */
 function containsNoticeText(candidate: string, notice: string): boolean {
@@ -68,6 +72,7 @@ export interface VisibleAttribution {
 }
 export interface AttributionPresentationGroup {
   fullHtml: string[];
+  details: AttributionDetail[];
   visible: VisibleAttribution[];
 }
 
@@ -105,6 +110,41 @@ function mergeVisibleNotice(first: string, second: string): string | undefined {
   return parts.join("");
 }
 
+/** Group a source's grants without flattening its distinct notices or source links. */
+export function mergeAttributionDetails(
+  entries: readonly AttributionDetail[],
+): AttributionDetail[] {
+  const groups = new Map<string, AttributionDetail>();
+  for (const entry of entries) {
+    const attr = entry.attribution;
+    const { sourceId: _sourceId, licensing: _licensing, ...identity } = attr ?? {};
+    const key = attr ? JSON.stringify(identity) : entry.html;
+    const previous = groups.get(key);
+    if (!previous?.attribution || !attr) {
+      groups.set(key, structuredClone(entry));
+      continue;
+    }
+    const distinct = <T>(items: readonly T[]): T[] => [
+      ...new Map(items.map((item) => [JSON.stringify(item), item])).values(),
+    ];
+    const bindings = distinct([
+      ...(previous.attribution.licensing?.bindings ?? []),
+      ...(attr.licensing?.bindings ?? []),
+    ]);
+    if (bindings.length)
+      previous.attribution.licensing = {
+        version: 1,
+        bindings,
+        declarations: distinct([
+          ...(previous.attribution.licensing?.declarations ?? []),
+          ...(attr.licensing?.declarations ?? []),
+        ]),
+      };
+    previous.links = distinct([...(previous.links ?? []), ...(entry.links ?? [])]);
+  }
+  return [...groups.values()];
+}
+
 /** Deduplicate complete and permanent notices independently, keeping the stricter copy. */
 export function projectAttributionPresentations(
   entries: readonly AttributionPresentation[],
@@ -120,8 +160,14 @@ export function projectAttributionPresentations(
       group.members.push(entry);
     } else groups.push({ html: entry.visibleHtml, members: [entry] });
   }
+  const fullHtml = dedupeAttributionHtml(entries.map((entry) => entry.fullHtml));
   return {
-    fullHtml: dedupeAttributionHtml(entries.map((entry) => entry.fullHtml)),
+    fullHtml,
+    details: mergeAttributionDetails(
+      entries
+        .filter((entry) => entry.fullHtml)
+        .map((entry) => ({ html: entry.fullHtml, attribution: entry.detail })),
+    ),
     visible: groups.map(({ html, members }) => ({
       html,
       logos: [...new Set(members.flatMap((entry) => entry.logos))],

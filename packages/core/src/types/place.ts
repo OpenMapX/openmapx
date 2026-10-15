@@ -17,6 +17,8 @@ export interface PlacePhoto extends ContributingRecord {
   pageUrl?: string;
   /** File-specific credit/copyright/restriction notices from the metadata acquisition. */
   attributionText?: string;
+  /** Source/acquisition description, separate from required permission and copyright notices. */
+  sourceDescription?: string;
   attributionLinks?: { label: string; url: string }[];
   attributionRequired?: boolean;
   /** Commons custom credit explicitly replaces Artist + Credit. */

@@ -88,18 +88,40 @@ export function parseCommonsPage(page: CommonsPage): PlacePhoto | undefined {
     capturedAt,
     coordinates,
   };
+  const usageTerms = ext?.UsageTerms?.value ? stripHtml(ext.UsageTerms.value) : undefined;
+  const usageGrant = usageTerms
+    ? licensingFromDeclaration(usageTerms, undefined, "Commons file", "imagery").bindings[0]
+        ?.license
+    : undefined;
+  const fileGrant = photo.licensing?.bindings[0]?.license;
+  const sameGrant =
+    usageGrant &&
+    fileGrant &&
+    usageGrant.kind !== "unknown" &&
+    usageGrant.kind !== "per-item" &&
+    JSON.stringify({ ...usageGrant, url: undefined }) ===
+      JSON.stringify({ ...fileGrant, url: undefined });
+  // CommonsMetadata defines Credit as source, Permission as reuse instructions,
+  // and Attribution as an explicit replacement for Artist + Credit.
+  // https://www.mediawiki.org/wiki/Extension:CommonsMetadata#Returned_data
+  photo.sourceDescription = ext?.Credit?.value ? stripHtml(ext.Credit.value) : undefined;
   photo.attributionOverride = ext?.Attribution?.value
     ? stripHtml(ext.Attribution.value)
     : undefined;
   const notices = [
-    photo.attributionOverride ? ext?.Attribution?.value : ext?.Credit?.value,
+    photo.attributionOverride ? ext?.Attribution?.value : undefined,
     ext?.Permission?.value,
-    ext?.UsageTerms?.value,
+    sameGrant ? undefined : ext?.UsageTerms?.value,
     ext?.Copyright?.value,
     ext?.Restrictions?.value,
   ].filter((v): v is string => Boolean(v));
   photo.attributionText = notices.map(stripHtml).filter(Boolean).join(" / ") || undefined;
-  photo.attributionLinks = [photo.attributionOverride ? undefined : artistHtml, ...notices]
+  photo.attributionLinks = [
+    photo.attributionOverride ? undefined : artistHtml,
+    photo.attributionOverride ? undefined : ext?.Credit?.value,
+    sameGrant ? ext?.UsageTerms?.value : undefined,
+    ...notices,
+  ]
     .filter((value): value is string => Boolean(value))
     .flatMap(extractLinks)
     .filter((link) => !(photo.author && !photo.attributionOverride && link.url === authorUrl));

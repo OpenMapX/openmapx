@@ -59,7 +59,7 @@ export function MapCredits({ attributions, sx }: MapCreditsProps) {
         <AttributionNotices notices={presentation.visible} />
         {presentation.visible.length > 0 && " | "}
         <AttributionDetails
-          html={presentation.fullHtml}
+          entries={presentation.details}
           label={t("credits")}
           logos={presentation.visible.flatMap((notice) => notice.logos)}
         />

@@ -173,14 +173,23 @@ export function MapFooter() {
         <Box
           ref={creditsRef}
           data-testid="map-attributions"
-          sx={{ ...barSx, marginLeft: "auto", textAlign: "right", overflowWrap: "anywhere" }}
+          sx={{
+            ...barSx,
+            marginLeft: "auto",
+            textAlign: "right",
+            overflowWrap: "anywhere",
+            display: "flex",
+            flexWrap: "wrap",
+            alignItems: "center",
+            justifyContent: "flex-end",
+          }}
         >
           <Box component="span" ref={mandatoryRef} data-testid="mandatory-map-attributions">
             <AttributionNotices notices={credits.visible} />
           </Box>
           {credits.visible.length > 0 && " | "}
           <AttributionDetails
-            html={credits.fullHtml}
+            entries={credits.details}
             label={t("credits")}
             logos={credits.visible.flatMap((notice) => notice.logos)}
           />

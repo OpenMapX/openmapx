@@ -19,12 +19,12 @@ export function usePlaceDetails(
       ? buildPlaceDetailsRequest({ id: placeId, coordinates, name, lang, hasAddress })
       : null;
   return useQuery({
-    queryKey: ["place", request?.identity ?? null],
+    queryKey: ["place", request?.identity ?? null, 3],
     queryFn: ({ signal }) => {
       if (!request) throw new Error("place details query is disabled without an id");
       return apiClient.get<Place>(
         `${API_ENDPOINTS.places}/${encodeURIComponent(request.identity.id)}`,
-        request.params,
+        { ...request.params, fileMetadata: "3" },
         apiQueryRequestOptions(signal, DETAIL_QUERY_POLICY),
       );
     },

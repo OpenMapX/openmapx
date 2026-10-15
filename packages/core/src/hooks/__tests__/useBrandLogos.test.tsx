@@ -68,8 +68,8 @@ it("keeps a complete cached logo and its captured credit during a failed refresh
     pageUrl: "https://commons.wikimedia.org/wiki/File:Logo.svg",
     contributors: [{ sourceId: "wikimedia-commons", name: "Cached file receipt" }],
   };
-  client.setQueryDefaults(["brand-logo-attribution-v2"], { retryDelay: 0 });
-  client.setQueryData(["brand-logo-attribution-v2", "Q1"], photo);
+  client.setQueryDefaults(["brand-logo-attribution-v3"], { retryDelay: 0 });
+  client.setQueryData(["brand-logo-attribution-v3", "Q1"], photo);
   const get = vi.spyOn(apiClient, "get").mockRejectedValue(new Error("metadata unavailable"));
   try {
     const { result } = renderHook(() => useBrandLogoAttribution("Q1", true), {

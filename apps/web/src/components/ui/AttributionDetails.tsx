@@ -8,20 +8,21 @@ import Dialog from "@mui/material/Dialog";
 import DialogActions from "@mui/material/DialogActions";
 import DialogContent from "@mui/material/DialogContent";
 import DialogTitle from "@mui/material/DialogTitle";
+import type { AttributionDetail } from "@openmapx/core/attribution";
 import type { AttributionLogo } from "@openmapx/mobility-core/licensing";
 import { useTranslations } from "next-intl";
 import { useId, useRef, useState } from "react";
+import { AttributionEntry } from "./AttributionEntry";
 import { AttributionLogos } from "./AttributionNotices";
-import { AttributionText } from "./AttributionText";
 
 /** The current contributed notices, directly reachable by keyboard, touch and pointer. */
 export function AttributionDetails({
-  html,
+  entries,
   label,
   logos = [],
   iconOnly = false,
 }: {
-  html: readonly string[];
+  entries: readonly AttributionDetail[];
   label?: string;
   logos?: readonly AttributionLogo[];
   /** Small image captions retain the same named, keyboard-accessible action. */
@@ -32,7 +33,7 @@ export function AttributionDetails({
   const [open, setOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const titleId = useId();
-  if (html.length === 0) return null;
+  if (entries.length === 0) return null;
   const title = label ?? t("attributions");
   return (
     <>
@@ -55,15 +56,21 @@ export function AttributionDetails({
           color: "inherit",
           font: "inherit",
           fontWeight: 500,
-          lineHeight: 1.5,
+          lineHeight: "inherit",
           cursor: "pointer",
           display: "inline-flex",
           verticalAlign: "middle",
           gap: 0.5,
-          minHeight: 24,
+          position: "relative",
+          minHeight: "1em",
+          "&::after": {
+            content: '""',
+            position: "absolute",
+            inset: "min(0px, calc((100% - 24px) / 2)) 0",
+          },
           minWidth: iconOnly ? 24 : undefined,
           px: iconOnly ? 0.25 : 0.5,
-          py: 0.25,
+          py: 0,
           borderRadius: 1,
           whiteSpace: "nowrap",
           "&:hover": { bgcolor: "action.hover" },
@@ -73,7 +80,7 @@ export function AttributionDetails({
           },
         }}
       >
-        <InfoOutlinedIcon sx={{ fontSize: "1.25em", flexShrink: 0 }} />
+        <InfoOutlinedIcon sx={{ fontSize: "1.15em", flexShrink: 0 }} />
         {!iconOnly && title}
       </ButtonBase>
       <Dialog
@@ -93,7 +100,9 @@ export function AttributionDetails({
         onClick={(event) => event.stopPropagation()}
         onKeyDown={(event) => event.stopPropagation()}
       >
-        <DialogTitle id={titleId}>{title}</DialogTitle>
+        <DialogTitle id={titleId} sx={{ fontWeight: 600, pb: 2 }}>
+          {title}
+        </DialogTitle>
         {logos.length > 0 && (
           <Box sx={{ px: 3, pb: 1 }}>
             <AttributionLogos logos={logos} />
@@ -104,16 +113,16 @@ export function AttributionDetails({
             component="ul"
             sx={{
               p: 0,
-              pl: 2,
               m: 0,
-              "& li + li": { mt: 2 },
+              listStyle: "none",
+              "& li + li": { mt: 2, pt: 2, borderTop: "1px solid", borderColor: "divider" },
               fontSize: "0.875rem",
               lineHeight: 1.6,
             }}
           >
-            {html.map((notice) => (
-              <li key={notice}>
-                <AttributionText html={notice} />
+            {entries.map((entry) => (
+              <li key={entry.html}>
+                <AttributionEntry entry={entry} />
               </li>
             ))}
           </Box>

@@ -87,7 +87,7 @@ function chipLicense(attr: Attribution): string | undefined {
 
 function displayLabel(attr: Attribution): string {
   const text = chipLicense(attr);
-  return text ? `${attr.name} · ${text}` : attr.name;
+  return text ? `${attr.name} | ${text}` : attr.name;
 }
 
 /** Collapse identical displayed receipts, preserving every distinct required notice. */
@@ -266,7 +266,7 @@ export function AttributionStrip({
           >
             {isPlain && idx > 0 && (
               <Box component="span" sx={{ color: "text.disabled", mr: 0.5 }}>
-                ·
+                |
               </Box>
             )}
             <Tooltip title={tooltip} placement="top" arrow>
@@ -306,7 +306,7 @@ export function AttributionStrip({
         </Typography>
       )}
       <AttributionDetails
-        html={group.fullHtml}
+        entries={group.details}
         logos={group.visible.flatMap((notice) => notice.logos)}
       />
     </Box>

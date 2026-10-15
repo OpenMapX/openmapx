@@ -61,7 +61,7 @@ import {
   SiVimeo,
   SiVk,
 } from "react-icons/si";
-import { AttributionStrip } from "@/components/ui/AttributionStrip";
+import { SectionAttribution } from "@/components/ui/SectionAttribution";
 import { BRAND } from "@/integration-api/runtime/theme";
 import { humanizeOsmTagValue } from "@/lib/humanizeOsmTagValue";
 
@@ -1465,7 +1465,7 @@ export function PlaceTagDetails({ osmTags, section = "all", representedEmail, pl
           </Box>
         )}
       </Box>
-      <AttributionStrip attributions={attributions} variant="plain" />
+      <SectionAttribution attributions={attributions} inset={section !== "practical"} />
     </>
   );
 }

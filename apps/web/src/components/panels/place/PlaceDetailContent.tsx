@@ -415,27 +415,22 @@ function PlaceDetailContentInner({ place, isLoading, onClose, clearSearchBar = f
 
         <Box sx={{ display: "flex", alignItems: "flex-start" }}>
           <Box sx={{ flex: 1, minWidth: 0 }}>
-            {/* The brand logo adds a flex row around the title; every other
-                place keeps the plain, unwrapped `Typography` — no wrapper, no
-                extra sx — so unbranded results (still the large majority)
-                render unchanged. Both branches share `titleProps`/`titleSx`
-                above so they can't drift apart on the props they have in
-                common. */}
+            {/* The mark and title share one row; all logo credits use the full
+                width below it so required notices cannot squeeze the title. */}
             {brandQid ? (
-              <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-                <BrandLogo
-                  brand={brandForPlaceLogo(
-                    place,
-                    brandDetail,
-                    brandQid,
-                    brandIdentity?.kind ?? "brand",
-                  )}
-                  size={24}
-                />
+              <BrandLogo
+                brand={brandForPlaceLogo(
+                  place,
+                  brandDetail,
+                  brandQid,
+                  brandIdentity?.kind ?? "brand",
+                )}
+                size={24}
+              >
                 <Typography {...titleProps} sx={{ ...titleSx, flex: 1, minWidth: 0 }}>
                   {place.name}
                 </Typography>
-              </Box>
+              </BrandLogo>
             ) : (
               <Typography {...titleProps} sx={titleSx}>
                 {place.name}

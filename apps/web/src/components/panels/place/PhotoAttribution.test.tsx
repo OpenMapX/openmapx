@@ -52,7 +52,9 @@ describe("photo credit presentation", () => {
     expect(container.textContent).not.toContain("obtained on request");
     fireEvent.click(screen.getByRole("button", { name: /photo credits/i }));
     const dialog = screen.getByRole("dialog");
-    expect(dialog.textContent).toContain("full-sized version obtained on request");
+    expect(dialog.textContent).not.toContain("full-sized version obtained on request");
+    expect(dialog.textContent).not.toContain("https://archive.example/original");
+    expect(dialog.textContent?.match(/Public domain/g)).toHaveLength(1);
     expect(dialog.querySelector('a[href="https://archive.example/original"]')).not.toBeNull();
     expect(dialog.querySelector('a[href*="File:Cathedral.jpg"]')).not.toBeNull();
     expect(photo).toEqual(before);
@@ -72,7 +74,7 @@ describe("photo credit presentation", () => {
     );
     expect(container.textContent).not.toContain("Own work");
     fireEvent.click(screen.getByRole("button", { name: /photo credits/i }));
-    expect(screen.getByRole("dialog").textContent).toContain("Own work");
+    expect(screen.getByRole("dialog").textContent).not.toContain("Own work");
   });
 
   it("retains custom attribution wording and creator links beside the image", () => {
@@ -148,4 +150,24 @@ describe("photo credit presentation", () => {
     expect(dialog.querySelector('a[href*="File:Cathedral.jpg"]')).not.toBeNull();
     expect(photo).toEqual(before);
   });
+});
+
+it("retains a distinct captured publisher when simplifying generated photo credit", () => {
+  const photo = commons();
+  if (!photo.contributors?.[0]) throw new Error("Missing photo receipt");
+  photo.contributors[0].publisher = { name: "Original archive" };
+  caption(photo);
+  fireEvent.click(screen.getByRole("button", { name: /photo credits/i }));
+  expect(screen.getByRole("dialog").textContent).toContain("Original archive");
+});
+
+it("keeps explicitly required Commons source credit even with a public-domain declaration", () => {
+  caption(
+    commons("Public domain", {
+      AttributionRequired: { value: "true" },
+      Credit: { value: "Required original archive credit" },
+    }),
+  );
+  fireEvent.click(screen.getByRole("button", { name: /photo credits/i }));
+  expect(screen.getByRole("dialog").textContent).toContain("Required original archive credit");
 });

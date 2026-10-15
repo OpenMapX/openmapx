@@ -1,10 +1,11 @@
 "use client";
+import { buildAttributionPresentation } from "@openmapx/core/attribution";
 import { useEffect, useId } from "react";
 import { useMap } from "@/integration-api/map/MapContext";
 import { useMapAttributionStore } from "@/integration-api/overlay/mapAttributionStore";
-import { renderedMapAttributionTracker } from "@/integration-api/overlay/renderedMapAttributionTracker";
+import { installedNativeBasemap } from "@/integration-api/overlay/nativeBasemap";
 
-/** Native basemap pixels use installed receipts and the shared rendered pass. */
+/** Conservatively credit the installed native style; never inspect viewport exposure. */
 export function BaseAttributions() {
   const { mapRef, mapReady } = useMap();
   const map = mapRef.current;
@@ -12,14 +13,16 @@ export function BaseAttributions() {
   useEffect(() => {
     if (!map || !mapReady) return;
     const owner = `native-basemap:${instance}`;
-    return renderedMapAttributionTracker(map).subscribe(owner, {
-      kind: "native",
-      publish: (entries) => {
-        const store = useMapAttributionStore.getState();
-        if (entries.length) store.setLayer(owner, entries);
-        else store.clearLayer(owner);
-      },
+    const unsubscribe = installedNativeBasemap(map).subscribe((receipts) => {
+      const entries = receipts.map((receipt) => buildAttributionPresentation(receipt, "map"));
+      const store = useMapAttributionStore.getState();
+      if (entries.length) store.setLayer(owner, entries);
+      else store.clearLayer(owner);
     });
+    return () => {
+      unsubscribe();
+      useMapAttributionStore.getState().clearLayer(owner);
+    };
   }, [map, mapReady, instance]);
   return null;
 }

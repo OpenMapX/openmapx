@@ -149,6 +149,29 @@ Station pagination stores an ordered, projected snapshot for five minutes in
 the distributed runtime (maximum 2,000 features/eight MiB). Signed cursors hold
 only snapshot ID, query hash, schema revision, and offset.
 
+## OpenAQ contributor metadata
+
+OpenAQ distinguishes the station owner from the provider sharing its data. Its
+[official Del Norte example](https://docs.openaq.org/resources/locations) uses
+`Unknown Governmental Organization` for both the owner and licence attribution,
+while identifying AirNow as the provider. The OpenAQ producer treats that exact
+placeholder (ignoring surrounding whitespace and case) as missing. An unknown
+owner stays `null`; a provider must not be relabelled as a station owner.
+
+Credits retain a real supplied licence notice first, then fall back to a known
+owner, a known provider, or OpenAQ. The source name also retains OpenAQ and the
+known provider. Distinct names, licence declarations, terms URLs and attribution
+links are preserved; arbitrary names containing “unknown” are not filtered.
+[OpenAQ terms](https://docs.openaq.org/about/terms) continue to require OpenAQ
+credit and compliance with the original sources' applicable terms.
+
+Provider metadata is cached without rewriting its original names, so previously
+cached raw locations receive this normalization on their next evaluation.
+Already projected point responses normally refresh after five minutes and can
+remain available as stale-if-error for up to three hours; existing station cursor
+snapshots expire after five minutes. No upstream metadata refresh or cache flush
+is needed to normalize a raw location.
+
 ## Open-Meteo modeled evidence
 
 `weather-open-meteo-air-quality` now registers a global modeled provider rather

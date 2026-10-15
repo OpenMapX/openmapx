@@ -65,7 +65,7 @@ import { useLocale, useTranslations } from "next-intl";
 import type { ReactNode } from "react";
 import { useState } from "react";
 import { AuthDialog } from "@/components/auth/AuthDialog";
-import { AttributionStrip } from "@/components/ui/AttributionStrip";
+import { SectionAttribution } from "@/components/ui/SectionAttribution";
 import { BRAND } from "@/integration-api/runtime/theme";
 import { resolveListIcon } from "@/lib/listIcon";
 import { openingHoursTone } from "@/lib/openingHoursTone";
@@ -1110,9 +1110,7 @@ export function PlaceOverviewTab({
           read, never from this merged/enriched place record. */}
       <OsmContributionEntry osmId={place.ids?.osm} />
       {overviewAttributions.length > 0 && (
-        <Box sx={{ px: 2, py: 1 }}>
-          <AttributionStrip attributions={overviewAttributions} variant="plain" />
-        </Box>
+        <SectionAttribution attributions={overviewAttributions} inset />
       )}
       {/* Structured OSM tag details (access, indoor, multilingual descriptions, etc.) */}
       {place.osmTags && Object.keys(place.osmTags).length > 0 && (

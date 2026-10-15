@@ -803,7 +803,8 @@ in `properties._mapAttributions` for GeoJSON/MVT. Register the actual layer IDs
 with `useRenderedMapAttributions(key, layerIds, visible, options?)`. The shared
 per-map scheduler refreshes after viewport/filter/zoom/source and placement
 changes on a shared 250 ms interval. Ordinary overlays use one union viewport
-query per scheduled pass; native basemap coverage can require additional queries.
+query per scheduled pass. Native basemap receipts are published separately on
+installation/style events and never add viewport queries.
 It preserves visible old receipts during refresh/worker lag and does not wait for
 unrelated sources to become idle. Each hook instance owns its registration, even if readable keys
 are reused.
@@ -856,24 +857,20 @@ settled event or a successful request in the past cannot prove present pixels.
 
 Native basemap receipts bind to the installed style/layer/source generation;
 pending or failed style acquisition keeps the retained generation's receipts.
-Style-only backgrounds never establish a data supplier. The MapLibre 6.13 host
-adapter combines evaluated paint and native geometry queries with retained raster
-payload opacity, tile wraps, child/parent priority and fade state. Planar Mercator,
-offered globe and stable projection blends use their actual native tile domains.
-Globe coverage uses the engine's stencil mesh and shader-equivalent blend/pole
-projection; immutable mesh readback and private tile-query seams stay host-owned.
-Native exposed regions can require a query batch within one scheduled pass;
-the 250 ms interval is not a four-engine-calls-per-second cap. Geometry queries
-are not fragment-perfect glyph, dash or antialiasing provenance. Actual terrain
-with raster, unsupported native layer types and invalid renderer frames cannot
-certify opaque coverage and retain ordinary engine contribution evidence.
+Source-object identity preserves the original supplier when a style diff retains
+cached content. Style-only backgrounds never establish a data supplier. The host
+conservatively credits the union of installed native receipts, including hidden,
+out-of-zoom, offscreen or raster-covered layers. It updates on installation and
+style events, without native feature queries, repaint requests, evaluated-paint
+exposure analysis, raster coverage clipping, mesh readback or tile-domain queries.
+Basemap crediting therefore does not depend on projection, terrain, placement,
+alpha or the current viewport. Overlay and incident record-level contribution
+filtering remains independent and uses the rendered-content APIs above.
 
-A MapLibre upgrade must revalidate mesh/index layouts, stencil precedence and
-wraps, tile queries and feature state, shader blends/poles, fades, and isolated
-`COPY_READ_BUFFER` use, with real-engine horizon, antimeridian, partial/failing
-raster and retained-parent fixtures. Measure complete tracker passes as well as
-leaf queries: native polygon/mesh processing can dominate CPU cost, especially
-on globe. These private renderer contracts are unavailable to community payloads.
+A MapLibre upgrade must still verify installed style/layer/source identity and
+style-load event ordering, including retained content during pending or failed
+style changes. Raster overlays retain their separate texture/fade adapter and
+its real-engine validation requirements described above.
 
 `useMapAttributions` remains a lower-level owner for already projected visible
 popup/custom credits, not a geometry visibility detector. Capture exact suppliers
@@ -1028,3 +1025,24 @@ Installing and managing community integrations is an administrator task; see
 ### Reviewed placement of current credits
 
 Use the [shared attribution placement contract](./licensing.md#attribution-placement). Producer-captured per-binding source/product policies override reviewed exact licence defaults. The host renders permanent notices and one-action full details uniformly on map, content and image surfaces; do not infer placement from source names or hide mandatory notices using `maxVisible`. Preserve actual authors, publishers and API branding with each record/view.
+
+### Readable credit details
+
+The host keeps structured captured identities and licence bindings alongside the
+sanitized complete notice. `projectAttributionPresentations` groups equivalent
+source identities without discarding distinct destinations, supplied notices or
+grants. Its `details` projection feeds the shared credits dialog: source headings,
+content licences, provider notices, and separate software/service rows. Placement
+policy reasons and acquisition diagnostics are not display credit copy. Never
+reconstruct this view by concatenating source names and all binding subjects.
+
+For file metadata, keep source/acquisition descriptions separate from required
+permission, copyright and restriction notices. Commons `Credit` supplies
+`PlacePhoto.sourceDescription`; explicit `Attribution` still replaces the default
+artist/source credit. A repeated `UsageTerms` label may be omitted only when its
+canonical grant matches; every supplied source/rights link is retained. Captured
+receipts preserve the original source evidence. The photo UI may omit optional
+public-domain acquisition prose, while explicit required attribution, custom
+credits and unresolved file requirements remain available in their required
+presentation. Compact image credits link creator, file and licence rather than
+printing raw archive URLs.

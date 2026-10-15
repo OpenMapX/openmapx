@@ -233,16 +233,3 @@ export function retainedDemContributors(
     ? snapshotContributors(receipt.contributors ?? [])
     : [];
 }
-
-/** Only the exact committed texture content can certify opaque coverage. */
-export function retainedRasterOpacity(
-  map: MapLibreMap,
-  sourceId: string,
-  tile: RasterTile,
-): RasterPayloadOpacity {
-  const source = map.getSource(sourceId);
-  const receipt = source && sourceReceipts.get(source)?.tiles.get(tile);
-  return tile.texture && receipt?.texture === tile.texture
-    ? (receipt?.opacity ?? "unknown")
-    : "unknown";
-}

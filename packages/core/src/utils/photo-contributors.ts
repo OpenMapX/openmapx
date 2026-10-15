@@ -25,6 +25,9 @@ export function withPhotoContributors(photo: PlacePhoto, sourceName: string): Pl
         ? link(photo.author, photo.authorUrl ?? photo.pageUrl)
         : undefined,
       link(sourceName, photo.pageUrl),
+      photo.sourceDescription && !photo.attributionOverride
+        ? link(photo.sourceDescription)
+        : undefined,
       photo.attributionText ? link(photo.attributionText) : undefined,
       ...(photo.attributionLinks ?? []).map(({ label, url }) => link(label, url)),
     ]

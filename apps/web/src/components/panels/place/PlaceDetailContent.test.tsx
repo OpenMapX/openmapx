@@ -460,7 +460,11 @@ describe("PlaceDetailContent brand header", () => {
 
     renderPlace(osmPlace);
 
-    expect(screen.getByAltText("Q-Park Neumarkt")).toBeInTheDocument();
+    const logo = screen.getByAltText("Q-Park Neumarkt");
+    const title = screen.getByRole("heading", { name: "Q-Park Neumarkt" });
+    expect(logo.parentElement?.contains(title)).toBe(true);
+    expect(logo.parentElement).not.toHaveTextContent("Logo creator");
+    expect(logo.parentElement?.parentElement).toHaveTextContent("Logo creator");
   });
 
   it("shows a logo for a place whose only identity is network:wikidata (EV charging)", () => {

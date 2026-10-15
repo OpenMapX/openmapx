@@ -28,7 +28,7 @@ export function setup(ctx: IntegrationContext): void {
 
     const nameKey = name ? `:${name.slice(0, 40)}` : "";
     const placeKey = placeId ? `:${placeId.slice(0, 40)}` : "";
-    const cacheKey = `cache:photos:v2:${lat.toFixed(4)}:${lng.toFixed(4)}:${limit}${nameKey}${placeKey}`;
+    const cacheKey = `cache:photos:v3:${lat.toFixed(4)}:${lng.toFixed(4)}:${limit}${nameKey}${placeKey}`;
 
     try {
       const photos = await ctx.cache.withCache(cacheKey, 3600, async (signal) => {

@@ -330,7 +330,7 @@ export function setup(ctx: IntegrationContext): void {
       reply.status(503).send({ error: "Logo source disabled" });
       return;
     }
-    const cacheKey = `brand-logo-file:v3:${qid}:${entry.logoFile}`;
+    const cacheKey = `brand-logo-file:v4:${qid}:${entry.logoFile}`;
     try {
       const result = await ctx.cache.withCache(
         cacheKey,

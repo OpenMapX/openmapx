@@ -30,6 +30,7 @@ it("retains installed receipts through pending/rejected requests and binds new s
   };
   controller.adopt(candidate);
   candidate.sourceContributors.data[0].name = "mutated";
+  candidate.styleContributors[0].name = "mutated-design";
   expect(controller.layers()[0].contributors.map((x) => x.name)).toEqual(["A", "design"]);
   // Same source object is retained by a style diff; new metadata is not new content.
   controller.adopt({ ...candidate, sourceContributors: { data: receipt("B") } });
@@ -90,4 +91,56 @@ it("promotes only the matching installation, handling synchronous events and no-
   callbacks.get("style.load")?.();
   expect(changes).toEqual([false, true]); // unchanged source object still owns generation 1
   expect(controller.layers()[0].contributors[0].sourceId).toBe("1");
+});
+
+it("retains installed credits through full-style replacement events until matching adoption", () => {
+  const { map, spec } = harness();
+  const callbacks = new Map<string, () => void>();
+  map.on = ((event: string, fn: () => void) => {
+    callbacks.set(event, fn);
+    return map;
+  }) as unknown as MapLibreMap["on"];
+  const controller = new InstalledNativeBasemap(map);
+  controller.adopt({
+    style: spec,
+    offline: false,
+    sourceContributors: { data: receipt("installed-data") },
+    styleContributors: receipt("installed-design"),
+  });
+  const received: string[][] = [];
+  controller.subscribe((contributors) => received.push(contributors.map((x) => x.sourceId)));
+  let actual: StyleSpecification = spec;
+  map.getStyle = () => actual;
+  // MapLibre's unsupported-diff fallback replaces Style before loadJSON runs.
+  // The incoming style emits styledata before its matching style.load event.
+  map.setStyle = (() => {
+    map.style = {} as MapLibreMap["style"];
+    map.getLayer = (() => undefined) as MapLibreMap["getLayer"];
+    map.getSource = (() => undefined) as MapLibreMap["getSource"];
+    callbacks.get("styledata")?.();
+    return map;
+  }) as MapLibreMap["setStyle"];
+  const candidate = {
+    style: { ...spec, metadata: { "openmapx:native-basemap-generation": 2 } },
+    offline: true,
+    sourceContributors: { data: receipt("replacement-data") },
+    styleContributors: receipt("replacement-design"),
+  };
+  controller.install(candidate, () => {});
+  expect(received.at(-1)).toEqual(["installed-data", "installed-design"]);
+  const late: string[][] = [];
+  controller.subscribe((contributors) => late.push(contributors.map((x) => x.sourceId)));
+  expect(late.at(-1)).toEqual(["installed-data", "installed-design"]);
+  callbacks.get("style.load")?.(); // stale load is not the pending generation
+  callbacks.get("styledata")?.(); // failed/rejected replacement never promotes
+  expect(received.at(-1)).toEqual(["installed-data", "installed-design"]);
+  actual = candidate.style;
+  const source = {};
+  map.getSource = (() => source) as MapLibreMap["getSource"];
+  map.getLayer = (() => spec.layers[0]) as unknown as MapLibreMap["getLayer"];
+  callbacks.get("styledata")?.(); // real engine ordering before style.load
+  expect(received.at(-1)).toEqual(["installed-data", "installed-design"]);
+  callbacks.get("style.load")?.();
+  expect(received.at(-1)).toEqual(["replacement-data", "replacement-design"]);
+  expect(late.at(-1)).toEqual(["replacement-data", "replacement-design"]);
 });

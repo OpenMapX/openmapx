@@ -260,8 +260,8 @@ it("preserves native status-zero network errors and abort identity", async () =>
   }
 });
 
-it("commits uniform receipt and byte opacity atomically, retaining old content on failure and replacing it on 204", async () => {
-  const { addAttributedRasterSource, retainedRasterOpacity } = await import(
+it("retains uniform raster supplier on reload failure and withdraws it after a transparent 204", async () => {
+  const { addAttributedRasterSource, rasterMapContributors } = await import(
     "./rasterMapContribution"
   );
   const jpeg = new Uint8Array([
@@ -278,7 +278,8 @@ it("commits uniform receipt and byte opacity atomically, retaining old content o
     tiles: ["https://fixture.test/tile.jpg"],
     async loadTile(tile: Parameters<RasterTileSource["loadTile"]>[0]) {
       const params = await attributedRasterRequestTransform()(this.tiles[0]);
-      await protocol(params!, new AbortController());
+      if (!params) throw new Error("Raster transform did not return request parameters");
+      await protocol(params, new AbortController());
       tile.texture = tile.texture ?? ({} as typeof tile.texture);
       tile.state = "loaded";
     },
@@ -286,6 +287,13 @@ it("commits uniform receipt and byte opacity atomically, retaining old content o
   const map = {
     addSource: () => {},
     getSource: () => native,
+    getLayer: () => ({ id: "imagery", type: "raster", source: "raster" }),
+    getZoom: () => 10,
+    getLayoutProperty: () => undefined,
+    style: {
+      getLayer: () => ({ paint: { get: (key: string) => (key === "raster-opacity" ? 1 : 0) } }),
+      tileManagers: { raster: { getVisibleCoordinates: () => [{}], getTile: () => tile } },
+    },
   } as unknown as import("maplibre-gl").Map;
   addAttributedRasterSource(map, "raster", { type: "raster", tiles: native.tiles }, [
     { sourceId: "uniform", name: "uniform" },
@@ -293,13 +301,17 @@ it("commits uniform receipt and byte opacity atomically, retaining old content o
   const tile = { hasData: () => true, fadeOpacity: 1 } as Parameters<
     RasterTileSource["loadTile"]
   >[0];
-  expect(retainedRasterOpacity(map, "raster", tile)).toBe("unknown");
+  expect(rasterMapContributors(map, "imagery", "raster")).toEqual([]);
   await native.loadTile(tile);
-  expect(retainedRasterOpacity(map, "raster", tile)).toBe("opaque");
+  expect(rasterMapContributors(map, "imagery", "raster")).toEqual([
+    { sourceId: "uniform", name: "uniform" },
+  ]);
   response = new Response(null, { status: 404 });
   await expect(native.loadTile(tile)).rejects.toThrow();
-  expect(retainedRasterOpacity(map, "raster", tile)).toBe("opaque");
+  expect(rasterMapContributors(map, "imagery", "raster")).toEqual([
+    { sourceId: "uniform", name: "uniform" },
+  ]);
   response = new Response(null, { status: 204 });
   await native.loadTile(tile);
-  expect(retainedRasterOpacity(map, "raster", tile)).toBe("transparent");
+  expect(rasterMapContributors(map, "imagery", "raster")).toEqual([]);
 });

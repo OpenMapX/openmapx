@@ -22,8 +22,10 @@ import {
   usePlaceStore,
   useSidebarStore,
 } from "@openmapx/core";
+import type { Attribution } from "@openmapx/mobility-core/attribution";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useState } from "react";
+import { MapCredits } from "@/components/map/MapCredits";
 import { LocationMinimap } from "@/integration-api/components/LocationMinimap";
 import { useMap } from "@/integration-api/map/MapContext";
 import { useDateTimeFormat } from "@/integration-api/runtime/useDateTimeFormat";
@@ -48,6 +50,7 @@ function PlacePhotoGalleryInner({ open, onClose, placeName, placeId, lat, lng }:
   const tp = useTranslations("photoGallery");
   const fmt = useDateTimeFormat();
   const [selectedIdx, setSelectedIdx] = useState(0);
+  const [minimapCredits, setMinimapCredits] = useState<readonly Attribution[]>([]);
   const { flyTo } = useMap();
   const setClickedLngLat = useMapClickStore((s) => s.setClickedLngLat);
   const setSelectedPlace = usePlaceStore((s) => s.setSelectedPlace);
@@ -168,10 +171,12 @@ function PlacePhotoGalleryInner({ open, onClose, placeName, placeId, lat, lng }:
               alignItems: "center",
               justifyContent: "center",
               position: "relative",
-              overflow: "hidden",
+              overflowX: "hidden",
+              overflowY: "auto",
             }}
           >
             <Box
+              data-testid="gallery-photo-stage"
               sx={{
                 position: "relative",
                 flex: 1,
@@ -237,6 +242,7 @@ function PlacePhotoGalleryInner({ open, onClose, placeName, placeId, lat, lng }:
                       lng={minimapCoords[0]}
                       lat={minimapCoords[1]}
                       sx={GALLERY_MINIMAP_SX}
+                      onCreditsChange={setMinimapCredits}
                       onClick={() => {
                         onClose();
                         setSelectedPlace(null);
@@ -277,6 +283,7 @@ function PlacePhotoGalleryInner({ open, onClose, placeName, placeId, lat, lng }:
             {/* Bottom info bar */}
             {selectedPhoto && (
               <Box
+                data-testid="gallery-information"
                 sx={{
                   width: "100%",
                   flexShrink: 0,
@@ -300,6 +307,22 @@ function PlacePhotoGalleryInner({ open, onClose, placeName, placeId, lat, lng }:
                     </Typography>
                   )}
                 </Box>
+                {minimapCoords && minimapCredits.length > 0 && (
+                  <Box sx={{ display: { xs: "none", md: "block" }, maxWidth: "100%" }}>
+                    <MapCredits
+                      attributions={minimapCredits}
+                      sx={{
+                        position: "static",
+                        '[data-testid="map-credits"]': {
+                          bgcolor: "transparent",
+                          color: "rgba(255,255,255,0.65)",
+                          px: 0,
+                          py: 0,
+                        },
+                      }}
+                    />
+                  </Box>
+                )}
                 <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexShrink: 0 }}>
                   <Typography variant="body2" sx={{ color: "rgba(255,255,255,0.6)" }}>
                     {clampedIdx + 1} / {allPhotos.length}
@@ -385,6 +408,7 @@ function GalleryThumbnail({
 
   return (
     <Box
+      data-testid="gallery-thumbnail"
       onClick={onClick}
       sx={{
         cursor: "pointer",
@@ -396,41 +420,48 @@ function GalleryThumbnail({
         "&:hover": { opacity: 0.85 },
       }}
     >
-      {imgSrc ? (
-        <Box
-          component="img"
-          src={imgSrc}
-          alt={photo.author ?? ""}
-          loading="lazy"
-          onError={() => setAttempt((a) => a + 1)}
-          sx={{
-            width: "100%",
-            height: 150,
-            objectFit: "cover",
-            display: "block",
-          }}
-        />
-      ) : (
-        <Box
-          sx={{
-            width: "100%",
-            height: 150,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            bgcolor: "rgba(255,255,255,0.08)",
-          }}
-        >
-          <BrokenImageIcon sx={{ fontSize: 32, color: "rgba(255,255,255,0.3)" }} />
-        </Box>
-      )}
-      {imgSrc && (
-        <Box
-          sx={{ px: 0.75, py: 0.5, fontSize: "0.6875rem", color: "#fff", overflowWrap: "anywhere" }}
-        >
-          <PhotoAttribution photo={photo} compact />
-        </Box>
-      )}
+      <Box
+        data-testid="thumbnail-image-cell"
+        sx={{ display: "grid", position: "relative", minWidth: 0, minHeight: 150 }}
+      >
+        {imgSrc ? (
+          <Box
+            component="img"
+            src={imgSrc}
+            alt={photo.author ?? ""}
+            loading="lazy"
+            onError={() => setAttempt((a) => a + 1)}
+            sx={{
+              width: "100%",
+              position: "absolute",
+              inset: 0,
+              height: "100%",
+              objectFit: "cover",
+              display: "block",
+            }}
+          />
+        ) : (
+          <Box
+            sx={{
+              width: "100%",
+              minHeight: 150,
+              height: "100%",
+              gridArea: "1 / 1",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              bgcolor: "rgba(255,255,255,0.08)",
+            }}
+          >
+            <BrokenImageIcon sx={{ fontSize: 32, color: "rgba(255,255,255,0.3)" }} />
+          </Box>
+        )}
+        {imgSrc && (
+          <Box sx={THUMBNAIL_CREDIT_SX}>
+            <PhotoAttribution photo={photo} compact />
+          </Box>
+        )}
+      </Box>
     </Box>
   );
 }
@@ -457,6 +488,7 @@ function MobileThumbnail({
 
   return (
     <Box
+      data-testid="gallery-thumbnail"
       onClick={onClick}
       sx={{
         width: 120,
@@ -467,36 +499,48 @@ function MobileThumbnail({
         border: isSelected ? "2px solid #4fc3f7" : "2px solid transparent",
       }}
     >
-      {imgSrc ? (
-        <Box
-          component="img"
-          src={imgSrc}
-          alt=""
-          loading="lazy"
-          onError={() => setAttempt((a) => a + 1)}
-          sx={{ width: "100%", height: 60, objectFit: "cover" }}
-        />
-      ) : (
-        <Box
-          sx={{
-            width: "100%",
-            height: "100%",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            bgcolor: "rgba(255,255,255,0.08)",
-          }}
-        >
-          <BrokenImageIcon sx={{ fontSize: 20, color: "rgba(255,255,255,0.3)" }} />
-        </Box>
-      )}
-      {imgSrc && (
-        <Box
-          sx={{ px: 0.5, py: 0.25, fontSize: "0.6875rem", color: "#fff", overflowWrap: "anywhere" }}
-        >
-          <PhotoAttribution photo={photo} compact />
-        </Box>
-      )}
+      <Box
+        data-testid="thumbnail-image-cell"
+        sx={{ display: "grid", position: "relative", minWidth: 0, minHeight: 60 }}
+      >
+        {imgSrc ? (
+          <Box
+            component="img"
+            src={imgSrc}
+            alt=""
+            loading="lazy"
+            onError={() => setAttempt((a) => a + 1)}
+            sx={{
+              width: "100%",
+              position: "absolute",
+              inset: 0,
+              height: "100%",
+              objectFit: "cover",
+              display: "block",
+            }}
+          />
+        ) : (
+          <Box
+            sx={{
+              width: "100%",
+              minHeight: 60,
+              height: "100%",
+              gridArea: "1 / 1",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              bgcolor: "rgba(255,255,255,0.08)",
+            }}
+          >
+            <BrokenImageIcon sx={{ fontSize: 20, color: "rgba(255,255,255,0.3)" }} />
+          </Box>
+        )}
+        {imgSrc && (
+          <Box sx={THUMBNAIL_CREDIT_SX}>
+            <PhotoAttribution photo={photo} compact />
+          </Box>
+        )}
+      </Box>
     </Box>
   );
 }
@@ -504,7 +548,7 @@ function MobileThumbnail({
 /** Fixed overlay styling for the gallery's capture-location minimap. */
 const GALLERY_MINIMAP_SX = {
   position: "absolute",
-  bottom: 68,
+  bottom: 16,
   right: 16,
   width: 160,
   height: 120,
@@ -514,4 +558,19 @@ const GALLERY_MINIMAP_SX = {
   border: "2px solid rgba(255,255,255,0.3)",
   boxShadow: "0 2px 8px rgba(0,0,0,0.5)",
   display: { xs: "none", md: "block" },
+} as const;
+
+/** A shared grid cell overlays the photo but grows for a long required notice. */
+const THUMBNAIL_CREDIT_SX = {
+  gridArea: "1 / 1",
+  alignSelf: "end",
+  zIndex: 1,
+  minWidth: 0,
+  px: 0.5,
+  py: 0.25,
+  fontSize: "0.625rem",
+  lineHeight: 1.3,
+  color: "#fff",
+  bgcolor: "rgba(0,0,0,0.65)",
+  overflowWrap: "anywhere",
 } as const;

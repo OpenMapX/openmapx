@@ -233,7 +233,7 @@ async function cardPhoto(input: CardInput, lang: string | undefined): Promise<Pl
     Object.entries(input.photoTags ?? {}).sort(([left], [right]) => left.localeCompare(right)),
   ) as Record<string, string>;
   if (Object.keys(tags).length === 0) return null;
-  const key = hashKey("cache:card-photo:v2", {
+  const key = hashKey("cache:card-photo:v3", {
     id: input.id,
     coordinates: input.coordinates,
     name: input.name,
@@ -912,7 +912,7 @@ export const placesRoute: FastifyPluginAsync = async (fastify) => {
             ? await readAmbientPlaceByGers(sql, parsed.value)
             : null;
         const cacheKey = hashKey(
-          "cache:place-v3-review-contributors",
+          "cache:place-v4-photo-metadata",
           published
             ? { ...placeRequest.identity, ambientGeneration: published.generation }
             : placeRequest.identity,

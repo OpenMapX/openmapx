@@ -6,11 +6,16 @@ import {
   buildAttributionPresentation,
   buildLicensingHtml,
   buildRuntimeAttributionHtml,
+  mergeAttributionDetails,
   type PlacePhoto,
+  parseAttributionHtml,
   projectAttributionPresentations,
   safeHref,
+  withPhotoContributors,
 } from "@openmapx/core";
 import { resolveBindingPlacement } from "@openmapx/mobility-core/attribution-placement";
+import { contributorKey } from "@openmapx/mobility-core/contributors";
+import { licensingLinks } from "@openmapx/mobility-core/licensing";
 import { useTranslations } from "next-intl";
 import { AttributionDetails } from "@/components/ui/AttributionDetails";
 import { AttributionNotices } from "@/components/ui/AttributionNotices";
@@ -64,23 +69,17 @@ export function PhotoAttribution({ photo, color = "#fff", compact = false }: Pro
   );
   const linkHtml = (name: string, url?: string) =>
     buildRuntimeAttributionHtml({ sourceId: photo.source, name, url });
-  const fallbackCredit = [
-    photo.author && !photo.attributionOverride
-      ? linkHtml(photo.author, photo.authorUrl ?? sourceUrl)
-      : undefined,
-    linkHtml(sourceName, sourceUrl),
-    photo.attributionText ? linkHtml(photo.attributionText) : undefined,
-    ...(photo.attributionLinks ?? []).map(({ label, url }) => linkHtml(label, url)),
-  ]
-    .filter(Boolean)
-    .join(" / ");
+  const generated = withPhotoContributors(
+    { ...photo, pageUrl: sourceUrl, contributors: undefined },
+    sourceName,
+  ).contributors?.[0];
+  const fallbackCredit = generated?.attributionText;
   const filePresentation = buildAttributionPresentation(
-    {
+    generated ?? {
       sourceId: photo.source,
       name: sourceName,
       url: sourceUrl,
       licensing: photo.licensing,
-      attributionText: fallbackCredit,
     },
     "image",
   );
@@ -105,7 +104,85 @@ export function PhotoAttribution({ photo, color = "#fff", compact = false }: Pro
     ...capturedPresentations,
   ]);
   const notices = group.visible;
-  const detailsHtml = group.fullHtml;
+  // A Commons Credit field may describe acquisition ("Own work", archive
+  // download instructions), not required display wording. Keep that evidence
+  // in the immutable photo, while presenting creator, file and grant separately.
+  // Only simplify the source/credit composition our acquisition helper generated. Distinct
+  // provider notices, custom file credits and strict policies remain unchanged.
+  const seenDetails = new Set<string>();
+  const details = group.details.flatMap((entry) => {
+    const receipt = entry.attribution;
+    const ownPolicy = receipt?.licensing?.bindings.some(
+      (binding) => binding.attribution !== undefined || binding.scope === "service",
+    );
+    const generatedNotice =
+      receipt?.attributionText === fallbackCredit ||
+      (generated !== undefined &&
+        receipt?.attributionText === generated.attributionText &&
+        receipt?.url === generated.url);
+    const optionalSource =
+      fileBindings.length > 0 &&
+      fileBindings.every(
+        (binding) =>
+          binding.license.kind === "public-domain" ||
+          binding.license.kind === "status" ||
+          (binding.license.kind === "spdx" && binding.license.expression === "CC0-1.0"),
+      );
+    const preserveDescription =
+      photo.attributionRequired ||
+      (!optionalSource && !/^own work$/i.test(photo.sourceDescription?.trim() ?? ""));
+    const cleaned =
+      receipt && detailsAllowed && !ownPolicy && generatedNotice
+        ? {
+            ...receipt,
+            attributionText:
+              [
+                photo.attributionOverride
+                  ? linkHtml(photo.attributionOverride, customLink?.url)
+                  : undefined,
+                photo.attributionText ? linkHtml(photo.attributionText) : undefined,
+                photo.sourceDescription && !photo.attributionOverride && preserveDescription
+                  ? linkHtml(photo.sourceDescription)
+                  : undefined,
+              ]
+                .filter(Boolean)
+                .join(" / ") || undefined,
+            publisher:
+              receipt.publisher ??
+              (photo.author
+                ? { name: photo.author, url: photo.authorUrl ?? sourceUrl }
+                : undefined),
+          }
+        : receipt;
+    const key = cleaned ? contributorKey({ ...cleaned, sourceId: "" }) : entry.html;
+    if (seenDetails.has(key)) return [];
+    seenDetails.add(key);
+    const displayedUrls = new Set([
+      cleaned?.url,
+      cleaned?.publisher?.url,
+      ...(cleaned?.licensing
+        ? licensingLinks(cleaned.licensing).flatMap((binding) => [
+            binding.url,
+            ...(binding.licenses?.map((license) => license.url) ?? []),
+          ])
+        : []),
+    ]);
+    const extraLinks = [
+      ...(photo.attributionLinks ?? []),
+      ...parseAttributionHtml(entry.html).links,
+    ].filter((link) => {
+      if (displayedUrls.has(link.url)) return false;
+      displayedUrls.add(link.url);
+      return true;
+    });
+    return [
+      {
+        ...entry,
+        attribution: cleaned,
+        ...(detailsAllowed && generatedNotice ? { links: extraLinks } : {}),
+      },
+    ];
+  });
   const linkSx = {
     color: "inherit",
     textDecoration: "none",
@@ -162,7 +239,7 @@ export function PhotoAttribution({ photo, color = "#fff", compact = false }: Pro
       component="span"
       sx={{
         display: "inline-flex",
-        flexWrap: compact ? "nowrap" : "wrap",
+        flexWrap: "wrap",
         alignItems: "center",
         columnGap: 0.5,
         rowGap: 0,
@@ -176,7 +253,7 @@ export function PhotoAttribution({ photo, color = "#fff", compact = false }: Pro
       <Box
         component="span"
         sx={{
-          display: compact ? "flex" : "contents",
+          display: "contents",
           flexDirection: "column",
           flex: compact ? 1 : undefined,
           minWidth: 0,
@@ -184,9 +261,9 @@ export function PhotoAttribution({ photo, color = "#fff", compact = false }: Pro
       >
         {credits.map(({ key, content }, index) => (
           <Box component="span" key={key} sx={{ minWidth: 0 }}>
-            {index > 0 && !compact && (
+            {index > 0 && (
               <Box component="span" aria-hidden sx={{ mr: 0.5, opacity: 0.6 }}>
-                ·
+                |
               </Box>
             )}
             {content}
@@ -195,7 +272,7 @@ export function PhotoAttribution({ photo, color = "#fff", compact = false }: Pro
         <AttributionNotices notices={notices} />
       </Box>
       <AttributionDetails
-        html={detailsHtml}
+        entries={mergeAttributionDetails(details)}
         label={t("credits")}
         logos={notices.flatMap((notice) => notice.logos)}
         iconOnly

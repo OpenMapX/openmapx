@@ -1690,7 +1690,7 @@ describe("published ambient GERS details without the search provider", () => {
     expect(mockLookupByNameAndCoords).not.toHaveBeenCalled();
     expect(mockLookupByCoords).not.toHaveBeenCalled();
     expect(mockHashKey).toHaveBeenCalledWith(
-      "cache:place-v3-review-contributors",
+      "cache:place-v4-photo-metadata",
       expect.objectContaining({ ambientGeneration: "published-generation" }),
     );
   });

@@ -262,7 +262,7 @@ describe("GET /brand/:qid/logo-attribution per-file receipt", () => {
       source: "wikimedia-commons",
       author: "Logo creator",
       licensing: licensingFromDeclaration("CC BY 4.0", undefined, "Commons file", "imagery"),
-      attributionText: "Mandatory logo notice",
+      sourceDescription: "Mandatory logo notice",
       contributors: [
         expect.objectContaining({
           sourceId: "wikimedia-commons",

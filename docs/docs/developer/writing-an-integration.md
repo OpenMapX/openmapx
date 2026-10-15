@@ -508,24 +508,24 @@ retains body/header identity; a standalone 304 without cached content is an erro
 This is a trusted host transport contract, not executable community extension code.
 
 The host captures raster payload alpha alongside that same texture receipt.
-Fully transparent decoded PNGs contribute no raster supplier; unknown alpha
-cannot certify opaque coverage. JPEG opacity and bounded PNG alpha inspection
-use the acquired bytes, without another provider request. Reload failures retain
+Fully transparent decoded PNGs contribute no raster supplier. JPEG opacity and
+bounded PNG alpha inspection use the acquired bytes, without another provider
+request. Unknown alpha retains the captured supplier. Reload failures retain
 both the old texture receipt and its opacity evidence.
 
 Native basemap attribution is also host-owned. Capture the selected style and
 source suppliers before asynchronous acquisition, then bind receipts to the
 installed style/layer/source generation. Style-only backgrounds cannot create a
-data-source receipt. The shared 250 ms tracker retains one union query per pass
-for ordinary overlays and permits extra native exposed-region query batches. It
-combines engine geometry queries with evaluated paint and retained raster
-coverage. Its MapLibre 6.13 adapters
-handle planar Mercator, globe and stable projection blends using actual tile
-wraps, mesh clipping and retained child/parent priority; actual terrain coverage
-remains unproven. These renderer adapters and immutable mesh readback are private
-host coupling, not APIs or certificates available to community extensions. See
-the [native coverage and upgrade limits](./integration-system.md#crediting-an-overlays-sources)
-for unsupported frames, geometry-query accuracy and performance validation.
+data-source receipt. Pending or failed installation keeps the previous installed
+receipts, and retained source objects keep their original supplier receipts.
+The host credits the conservative union of installed native receipts even when
+layers are hidden, offscreen, out of zoom or covered by raster imagery. It
+publishes on installation/style events without querying native features or
+requesting repaint, and performs no exposure, mesh, clipping or tile-domain
+analysis. Ordinary overlay and incident credits still use rendered record-level
+contribution filtering and the shared 250 ms union query. See the
+[host attribution contract](./integration-system.md#crediting-an-overlays-sources)
+for installation lineage and the separate raster overlay adapter requirements.
 
 Panels import `AttributionStrip` from
 `@/integration-api/components/AttributionStrip` and pass the receipts projected

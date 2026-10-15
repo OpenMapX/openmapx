@@ -371,6 +371,10 @@
     "hideLegend": "Hide overlay legend"
   },
   "footer": {
+    "softwareAndService": "Software and service terms",
+    "termsOfUse": "Terms of use",
+    "sourceLink": "Source",
+    "additionalSource": "Original source",
     "legalNotice": "Legal Notice",
     "privacy": "Privacy",
     "terms": "Terms",

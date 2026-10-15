@@ -21,7 +21,7 @@ describe("usePlacePhotos", () => {
     expect(result.current.data).toEqual(photos);
     expect(spy).toHaveBeenCalledWith(
       API_ENDPOINTS.photos,
-      { lat: "52.5", lng: "13.4", name: "Cafe", placeId: "p1", limit: "5" },
+      { fileMetadata: "3", lat: "52.5", lng: "13.4", name: "Cafe", placeId: "p1", limit: "5" },
       expect.objectContaining({ signal: expect.anything(), timeoutMs: 20_000 }),
     );
   });
@@ -36,14 +36,14 @@ describe("usePlacePhotos", () => {
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(spy).toHaveBeenCalledWith(
       API_ENDPOINTS.photos,
-      { lat: "52.5", lng: "13.4" },
+      { fileMetadata: "3", lat: "52.5", lng: "13.4" },
       expect.objectContaining({ signal: expect.anything(), timeoutMs: 20_000 }),
     );
   });
 
   it("hides a Commons file icon in a persisted gallery query without refetching", async () => {
     const client = createTestQueryClient();
-    client.setQueryData(["placePhotos", 52.5, 13.4, undefined, undefined, undefined], {
+    client.setQueryData(["placePhotos", 52.5, 13.4, undefined, undefined, undefined, 3], {
       photos: [
         {
           url: "https://commons.wikimedia.org/w/resources/assets/file-type-icons/fileicon-ogg.png",

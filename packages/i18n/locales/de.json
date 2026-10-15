@@ -371,6 +371,10 @@
     "hideLegend": "Legende ausblenden"
   },
   "footer": {
+    "softwareAndService": "Software und Nutzungsbedingungen",
+    "termsOfUse": "Nutzungsbedingungen",
+    "sourceLink": "Quelle",
+    "additionalSource": "Originalquelle",
     "legalNotice": "Impressum",
     "privacy": "Datenschutz",
     "terms": "Nutzungsbedingungen",

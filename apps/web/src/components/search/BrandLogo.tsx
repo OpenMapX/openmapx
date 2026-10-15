@@ -3,7 +3,7 @@
 import type { BrandSummary } from "@openmapx/core";
 import { isDisplayablePhoto, proxyImageUrl, useBrandLogoAttribution } from "@openmapx/core";
 import { contributorsForField } from "@openmapx/mobility-core/contributors";
-import { useState } from "react";
+import { type ReactNode, useState } from "react";
 import { AttributionStrip } from "@/components/ui/AttributionStrip";
 import { PhotoAttribution } from "../panels/place/PhotoAttribution";
 import { PresetIcon } from "./PresetIcon";
@@ -11,6 +11,8 @@ import { PresetIcon } from "./PresetIcon";
 interface BrandLogoProps {
   brand: BrandSummary;
   size?: number;
+  /** Optional heading aligned with the mark; file credits use the full row below. */
+  children?: ReactNode;
 }
 
 /**
@@ -22,35 +24,62 @@ interface BrandLogoProps {
  * itself rather than a boolean, so switching to a different brand with a fresh
  * logo tries again instead of staying stuck on the fallback.
  */
-export function BrandLogo({ brand, size = 20 }: BrandLogoProps) {
+export function BrandLogo({ brand, size = 20, children }: BrandLogoProps) {
   const [failedUrl, setFailedUrl] = useState<string | null>(null);
   const { data: photo } = useBrandLogoAttribution(brand.qid, Boolean(brand.logoFile));
   const validPhoto =
     photo && photo.logoFile === brand.logoFile && isDisplayablePhoto(photo) ? photo : undefined;
   const url = validPhoto ? proxyImageUrl(validPhoto.thumbnailUrl ?? validPhoto.url) : null;
 
-  if (!url || failedUrl === url) {
-    return <PresetIcon iconKey={undefined} size={size} />;
-  }
+  const showPhoto = url && failedUrl !== url;
+  const visual = showPhoto ? (
+    // biome-ignore lint/performance/noImgElement: the logo uses the API image proxy.
+    <img
+      src={url}
+      alt={brand.name}
+      width={size}
+      height={size}
+      loading="lazy"
+      onError={() => setFailedUrl(url)}
+      style={{ objectFit: "contain", borderRadius: 2, flexShrink: 0 }}
+    />
+  ) : (
+    <PresetIcon iconKey={undefined} size={size} />
+  );
+  if (!children && !showPhoto) return visual;
 
   return (
-    <div style={{ display: "inline-flex", flexDirection: "column", alignItems: "center" }}>
-      {/* biome-ignore lint/performance/noImgElement: the logo is a Commons file fetched through the API image proxy at runtime, not an app image the Next.js loader can optimize */}
-      <img
-        src={url}
-        alt={brand.name}
-        width={size}
-        height={size}
-        loading="lazy"
-        onError={() => setFailedUrl(url)}
-        style={{ objectFit: "contain", borderRadius: 2 }}
-      />
-      {validPhoto && (
-        <span style={{ fontSize: 9, whiteSpace: "normal", maxWidth: 180 }}>
+    <div
+      style={{
+        display: "inline-flex",
+        flexDirection: "column",
+        alignItems: children ? "stretch" : "center",
+        minWidth: 0,
+        width: children ? "100%" : undefined,
+      }}
+    >
+      {children ? (
+        <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+          {visual}
+          {children}
+        </div>
+      ) : (
+        visual
+      )}
+      {showPhoto && validPhoto && (
+        <span
+          style={{
+            fontSize: 9,
+            whiteSpace: "normal",
+            minWidth: 0,
+            maxWidth: children ? "100%" : 180,
+            overflowWrap: "anywhere",
+          }}
+        >
           <PhotoAttribution photo={validPhoto} color="currentColor" />
         </span>
       )}
-      {contributorsForField(brand, "logoFile").length > 0 && (
+      {showPhoto && contributorsForField(brand, "logoFile").length > 0 && (
         <AttributionStrip attributions={contributorsForField(brand, "logoFile")} variant="plain" />
       )}
     </div>

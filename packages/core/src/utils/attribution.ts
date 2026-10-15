@@ -93,7 +93,7 @@ export function parseAttributionHtml(
  * Parse-and-rebuild manifest HTML with only HTTP(S) anchors and bare code tags.
  * Parsed text and attribute values are escaped; input never supplies tag syntax.
  */
-export function sanitizeAttributionHtml(html: string): string {
+export function sanitizeAttributionHtml(html: string, options: { urlLabel?: string } = {}): string {
   const out: string[] = [];
   const pending: (HtmlNode | "</a>" | "</code>")[] = [attributionFragment(html)];
   while (pending.length) {
@@ -104,7 +104,26 @@ export function sanitizeAttributionHtml(html: string): string {
       continue;
     }
     if ("value" in node) {
-      out.push(escapeHtml(node.value.replace(/\u00a0/g, " ")));
+      const text = node.value.replace(/\u00a0/g, " ");
+      const parent = node.parentNode;
+      const linked = parent && "tagName" in parent && parent.tagName === "a";
+      if (options.urlLabel && linked && /^https?:\/\/\S+$/.test(text.trim())) {
+        out.push(escapeHtml(options.urlLabel));
+      } else if (options.urlLabel && !linked) {
+        // Link bare archive URLs instead of printing their transport spelling.
+        const tokens = text.split(/(https?:\/\/[^\s<>]+)/g);
+        out.push(
+          tokens
+            .map((token) => {
+              const match = token.match(/^(https?:\/\/.*?)([;,.]*)$/);
+              const url = match && safeExternalUrl(match[1]);
+              return url
+                ? `<a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(options.urlLabel ?? "")}</a>${escapeHtml(match?.[2] ?? "")}`
+                : escapeHtml(token);
+            })
+            .join(""),
+        );
+      } else out.push(escapeHtml(text));
       continue;
     }
     if ("tagName" in node && node.tagName === "a") {
@@ -197,7 +216,15 @@ export function buildRuntimeAttributionHtml(
   return licensing ? `${credit} (${licensing})` : credit;
 }
 
+export interface AttributionDetail {
+  html: string;
+  links?: readonly { label: string; url: string }[];
+  /** Captured identity and grants for a readable, structured credits view. */
+  attribution?: Attribution;
+}
+
 export interface AttributionPresentation {
+  detail?: Attribution;
   /** Complete captured receipt, including software subjects and supplied notices. */
   fullHtml: string;
   /** Empty only when every applicable obligation supports direct details. */
@@ -212,6 +239,7 @@ export function buildAttributionPresentation(
   attribution: Attribution,
   surface: AttributionSurface,
 ): AttributionPresentation {
+  const detail = structuredClone(attribution);
   let publisherHtml = "";
   const fullParts = [buildRuntimeAttributionHtml(attribution, { includeSoftware: true })];
   const original = parseAttributionHtml(fullParts[0] ?? "");
@@ -246,7 +274,7 @@ export function buildAttributionPresentation(
   const licensing =
     attribution.licensing === undefined ? undefined : parseLicensing(attribution.licensing);
   if (!licensing || licensing.bindings.length === 0) {
-    return { fullHtml, visibleHtml: buildRuntimeAttributionHtml(attribution), logos: [] };
+    return { detail, fullHtml, visibleHtml: buildRuntimeAttributionHtml(attribution), logos: [] };
   }
   const visible = licensing.bindings
     .map((binding) => ({ binding, decision: resolveBindingPlacement(binding, surface) }))
@@ -254,7 +282,7 @@ export function buildAttributionPresentation(
   const logos = [
     ...new Set(visible.flatMap(({ decision }) => (decision.logo ? [decision.logo] : []))),
   ];
-  if (visible.length === 0) return { fullHtml, visibleHtml: "", logos };
+  if (visible.length === 0) return { detail, fullHtml, visibleHtml: "", logos };
   const prominence = visible.some(({ decision }) => decision.prominence === "normal")
     ? ("normal" as const)
     : undefined;
@@ -271,19 +299,32 @@ export function buildAttributionPresentation(
       ].join(" | ")
     : buildRuntimeAttributionHtml({
         ...attribution,
-        licensing: { ...licensing, bindings: visible.map(({ binding }) => binding) },
+        licensing: {
+          ...licensing,
+          bindings: visible
+            .map(({ binding }) => binding)
+            .filter((binding) => binding.license.kind !== "per-item"),
+        },
       });
   // A partial compact override cannot replace another subject's unknown notice.
   // Its independently required links/wording nevertheless still need display.
   const publisher = visible.some(({ decision }) => decision.includePublisher) ? publisherHtml : "";
+  const perItemNotices = certified
+    ? []
+    : visible
+        .filter(({ binding }) => binding.license.kind === "per-item")
+        .flatMap(({ binding }) => [binding.notice, ...(binding.conditions ?? [])])
+        .filter((notice): notice is string => Boolean(notice))
+        .map(escapeHtml);
   const supplemental = certified
     ? []
     : visible.flatMap(({ decision }) =>
         decision.compactText ? [sanitizeAttributionHtml(decision.compactText)] : [],
       );
   return {
+    detail,
     fullHtml,
-    visibleHtml: [...new Set([visibleHtml, ...supplemental, publisher])]
+    visibleHtml: [...new Set([visibleHtml, ...supplemental, ...perItemNotices, publisher])]
       .filter(Boolean)
       .join(" | "),
     logos,

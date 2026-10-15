@@ -85,6 +85,14 @@ function activeLicense(location: OpenAQLocation, observedAt: string | null) {
   );
 }
 
+function knownContributor(value: string | null | undefined): string | null {
+  // OpenAQ's official Del Norte example uses this sentinel for an unknown owner
+  // and repeats it in the licence attribution. Do not hide arbitrary names that
+  // contain "unknown", or rewrite real supplied attribution notices.
+  const normalized = value?.trim().toLowerCase();
+  return !normalized || normalized === "unknown governmental organization" ? null : (value ?? null);
+}
+
 function coordinateTuple(location: OpenAQLocation): [number, number] | null {
   const latitude = location.coordinates.latitude;
   const longitude = location.coordinates.longitude;
@@ -177,6 +185,8 @@ function evidenceFromSeries(
   const allEnds = series.flatMap((item) => item.samples.map((sample) => sample.endAt));
   const observedAt = allEnds.sort((left, right) => Date.parse(right) - Date.parse(left))[0] ?? null;
   const license = activeLicense(location, observedAt);
+  const owner = knownContributor(location.owner.name);
+  const provider = knownContributor(location.provider.name);
   const spatialSupportId = `openaq-location-${location.id}`;
   const originRecords = series.flatMap((item) =>
     item.samples.map((sample) => ({
@@ -222,14 +232,14 @@ function evidenceFromSeries(
     sources: [
       {
         sourceId: SOURCE_ID,
-        name: `OpenAQ via ${location.provider.name}`,
+        name: provider ? `OpenAQ via ${provider}` : "OpenAQ",
         url: license?.attribution.url ?? null,
-        owner: location.owner.name,
+        owner,
         licensing: license
           ? licensingFromDeclaration(license.name, options.licenseUrls?.get(license.id))
           : null,
         methodologyUrl: "https://docs.openaq.org/resources/measurements",
-        attribution: license?.attribution.name ?? location.owner.name,
+        attribution: knownContributor(license?.attribution.name) ?? owner ?? provider ?? "OpenAQ",
       },
     ],
   };

@@ -94,11 +94,14 @@ describe("PlacePhotoHero", () => {
     };
     renderHero([photo]);
     expect(screen.queryByText("Mandatory notice", { exact: false })).toBeNull();
-    expect(screen.getByRole("link", { name: "Captured Commons" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "Captured artist" })).toHaveAttribute(
       "href",
       photo.pageUrl,
     );
     fireEvent.click(screen.getByRole("button", { name: "Photo credits" }));
+    for (const source of screen.getAllByRole("link", { name: "Captured Commons" })) {
+      expect(source).toHaveAttribute("href", photo.pageUrl);
+    }
     expect(screen.getByText("Mandatory notice", { exact: false })).toBeVisible();
     expect(screen.getByRole("link", { name: "Required credit link" })).toHaveAttribute(
       "href",

@@ -30,3 +30,54 @@ describe("complete credited publisher fragments", () => {
     expect(dedupeAttributionHtml([other, full])).toEqual([other, full]);
   });
 });
+
+it("groups the same displayed source without losing distinct grants, notices or link targets", async () => {
+  const { buildAttributionPresentation } = await import("./attribution");
+  const group = projectAttributionPresentations([
+    buildAttributionPresentation(
+      {
+        sourceId: "one",
+        name: "Same source",
+        url: "https://source.example/",
+        licensing: {
+          version: 1,
+          bindings: [
+            { scope: "data", subject: "Data", license: { kind: "spdx", expression: "CC-BY-4.0" } },
+          ],
+        },
+      },
+      "content",
+    ),
+    buildAttributionPresentation(
+      {
+        sourceId: "two",
+        name: "Same source",
+        url: "https://source.example/",
+        licensing: {
+          version: 1,
+          bindings: [
+            {
+              scope: "software",
+              subject: "Software",
+              license: { kind: "spdx", expression: "MIT" },
+            },
+          ],
+        },
+      },
+      "content",
+    ),
+    buildAttributionPresentation(
+      {
+        sourceId: "three",
+        name: "Same source",
+        url: "https://other.example/",
+        attributionText: "Distinct notice",
+      },
+      "content",
+    ),
+  ]);
+  expect(group.details).toHaveLength(2);
+  expect(group.details[0]?.attribution?.licensing?.bindings).toHaveLength(2);
+  expect(group.details[1]?.attribution?.url).toBe("https://other.example/");
+  expect(group.details[1]?.attribution?.attributionText).toBe("Distinct notice");
+});

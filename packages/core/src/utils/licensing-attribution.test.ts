@@ -322,3 +322,51 @@ it("cannot certify an empty linked compact notice as visible text", () => {
   };
   expect(buildAttributionPresentation(attr, "map").visibleHtml).toContain("Prescribed notice");
 });
+
+it("keeps per-item catalogue guidance in details rather than presenting it as a licence notice", () => {
+  const credit = buildAttributionPresentation(
+    {
+      sourceId: "nsi",
+      name: "Name Suggestion Index",
+      licensing: {
+        version: 1,
+        bindings: [
+          {
+            scope: "imagery",
+            subject: "Individual logo",
+            license: { kind: "per-item", raw: "Determined by each contributing item or operator" },
+          },
+        ],
+      },
+    },
+    "content",
+  );
+  expect(credit.visibleHtml).toContain("Name Suggestion Index");
+  expect(credit.visibleHtml).not.toContain("Determined by each");
+  expect(credit.fullHtml).toContain("Determined by each");
+});
+
+it("keeps actual required per-item notices adjacent while omitting the catalogue guidance label", () => {
+  const credit = buildAttributionPresentation(
+    {
+      sourceId: "logo",
+      name: "Logo source",
+      licensing: {
+        version: 1,
+        bindings: [
+          {
+            scope: "imagery",
+            subject: "Logo",
+            license: { kind: "per-item", raw: "Determined per file" },
+            notice: "Always display the supplied archive notice",
+            conditions: ["Preserve operator name"],
+          },
+        ],
+      },
+    },
+    "image",
+  );
+  expect(credit.visibleHtml).toContain("Always display the supplied archive notice");
+  expect(credit.visibleHtml).toContain("Preserve operator name");
+  expect(credit.visibleHtml).not.toContain("Determined per file");
+});

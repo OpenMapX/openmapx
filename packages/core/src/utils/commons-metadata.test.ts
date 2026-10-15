@@ -426,3 +426,55 @@ it.each([false, true])("keeps one visible creator link with custom attribution=%
     'href="https://creator.example/profile"',
   );
 });
+
+it("keeps Commons source acquisition metadata separate from required display notices", () => {
+  const photo = parseCommonsPage({
+    title: "File:Original.jpg",
+    imageinfo: [
+      {
+        url: "https://upload.wikimedia.org/wikipedia/commons/a/ab/Original.jpg",
+        mime: "image/jpeg",
+        extmetadata: {
+          Artist: { value: "David Scull" },
+          LicenseShortName: { value: "Public domain" },
+          Credit: {
+            value:
+              '<a href="https://archive.example/original">https://archive.example/original</a>; full-sized version obtained on request',
+          },
+          UsageTerms: { value: "Public domain" },
+          Permission: { value: "Retain this notice" },
+        },
+      },
+    ],
+  });
+  expect(photo?.sourceDescription).toContain("full-sized version obtained on request");
+  expect(photo?.attributionText).toBe("Retain this notice");
+  expect(photo?.contributors?.[0].attributionText).toContain(
+    "full-sized version obtained on request",
+  );
+  expect(photo?.attributionLinks).toContainEqual({
+    label: "https://archive.example/original",
+    url: "https://archive.example/original",
+  });
+});
+
+it("preserves original UsageTerms links even when their label repeats the canonical grant", () => {
+  const photo = parseCommonsPage({
+    title: "File:Rights.jpg",
+    imageinfo: [
+      {
+        url: "https://upload.wikimedia.org/wikipedia/commons/a/ab/Rights.jpg",
+        mime: "image/jpeg",
+        extmetadata: {
+          LicenseShortName: { value: "Public domain" },
+          UsageTerms: { value: '<a href="https://archive.example/rights">Public domain</a>' },
+        },
+      },
+    ],
+  });
+  expect(photo?.attributionLinks).toContainEqual({
+    label: "Public domain",
+    url: "https://archive.example/rights",
+  });
+  expect(photo?.contributors?.[0].attributionText).toContain("https://archive.example/rights");
+});

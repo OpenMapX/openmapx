@@ -30,11 +30,39 @@ export class InstalledNativeBasemap {
   > = [];
   private style?: object;
 
+  private subscribers = new Set<(contributors: Attribution[]) => void>();
+  private contributors(): Attribution[] {
+    // A full-style rebuild replaces engine objects before style.load, while
+    // the last painted frame can still need the previous installed receipts.
+    const layers = this.pending ? this.bindings : this.layers();
+    return snapshotContributors(...layers.map((layer) => layer.contributors));
+  }
+  private notify = () => {
+    const contributors = this.contributors();
+    for (const publish of this.subscribers) publish(contributors);
+  };
+  private remove = () => {
+    this.map.off("style.load", this.promote);
+    this.map.off("styledata", this.notify);
+    this.map.off("remove", this.remove);
+    this.subscribers.clear();
+  };
+
+  /** Publish installed-style events independently of rendered geometry. */
+  subscribe(publish: (contributors: Attribution[]) => void): () => void {
+    this.subscribers.add(publish);
+    publish(this.contributors());
+    return () => {
+      this.subscribers.delete(publish);
+    };
+  }
+
   private pending?: NativeBasemapCandidate;
   private installedCallback?: (offline: boolean) => void;
   constructor(private map: MapLibreMap) {
     map.on?.("style.load", this.promote);
-    map.on?.("remove", () => map.off("style.load", this.promote));
+    map.on?.("styledata", this.notify);
+    map.on?.("remove", this.remove);
   }
   private promote = () => {
     const candidate = this.pending;
@@ -83,6 +111,7 @@ export class InstalledNativeBasemap {
         },
       ];
     });
+    this.notify();
   }
 
   layers(): NativeBasemapLayer[] {
