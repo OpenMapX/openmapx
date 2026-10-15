@@ -127,7 +127,9 @@ export function AttributionStrip({
   const isPanelHeader = variant === "panel-header";
   const isPlain = variant === "plain";
   const presentations = items.map((attr) => buildAttributionPresentation(attr, surface));
-  const group = projectAttributionPresentations(presentations);
+  const group = presentations.length
+    ? projectAttributionPresentations(presentations)
+    : { details: [], visible: [] };
   const logos = group.visible.flatMap((notice) => notice.logos);
   const grouped = useGroupedAttributionDetails(
     { entries: group.details, logos },
