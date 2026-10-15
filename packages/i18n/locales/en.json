@@ -371,6 +371,8 @@
     "hideLegend": "Hide overlay legend"
   },
   "footer": {
+    "licenceVariesByItem": "Varies by item",
+    "licenceNotSpecified": "Licence not specified",
     "termsOfUse": "Terms of use",
     "sourceLink": "Source",
     "additionalSource": "Original source",

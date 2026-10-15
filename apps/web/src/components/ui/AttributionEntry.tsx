@@ -10,11 +10,7 @@ import {
   parseAttributionHtml,
   sanitizeAttributionHtml,
 } from "@openmapx/core/attribution";
-import {
-  type LicensePresentation,
-  licensingLinks,
-  licensingReferenceUrls,
-} from "@openmapx/mobility-core/licensing";
+import { licensingLinks, licensingReferenceUrls } from "@openmapx/mobility-core/licensing";
 import { useTranslations } from "next-intl";
 import { AttributionText } from "./AttributionText";
 
@@ -24,14 +20,19 @@ export function AttributionEntry({ entry }: { entry: AttributionDetail }) {
   const attr = entry.attribution;
   const readable = (html: string) => sanitizeAttributionHtml(html, { urlLabel: t("sourceLink") });
   if (!attr) return <AttributionText html={readable(entry.html)} />;
-  const bindings = attr.licensing ? licensingLinks(attr.licensing) : [];
+  const licensing = attr.licensing;
+  // Repeated subjects can have different descriptors; preserve their exact positions.
+  const bindings = licensing
+    ? licensingLinks(licensing).map((binding, index) => ({
+        ...binding,
+        descriptor: licensing.bindings[index]?.license,
+      }))
+    : [];
   const primary = bindings.filter(
     (binding) =>
       binding.scope !== "software" &&
       binding.scope !== "service" &&
-      attr.licensing?.bindings.find(
-        (source) => source.scope === binding.scope && source.subject === binding.subject,
-      )?.license.kind !== "per-item",
+      binding.descriptor?.kind !== "per-item",
   );
   const secondary = bindings.filter((binding) => !primary.includes(binding));
   const credit = attr.attributionText ? readable(attr.attributionText) : undefined;
@@ -74,7 +75,23 @@ export function AttributionEntry({ entry }: { entry: AttributionDetail }) {
   const referenceUrls = attr.licensing
     ? licensingReferenceUrls(attr.licensing).filter((url) => !representedUrls.has(url))
     : [];
-  const grant = (binding: LicensePresentation, showSubject: boolean) => (
+  const licenceLabel = (binding: (typeof bindings)[number]) => {
+    const descriptor = binding.descriptor;
+    if (
+      descriptor?.kind === "per-item" &&
+      (!descriptor.raw ||
+        descriptor.raw === "Per-item licence" ||
+        descriptor.raw === "Determined by each contributing item or operator")
+    )
+      return t("licenceVariesByItem");
+    if (
+      descriptor?.kind === "unknown" &&
+      (!descriptor.raw || descriptor.raw === "Licence not specified")
+    )
+      return t("licenceNotSpecified");
+    return binding.label;
+  };
+  const grant = (binding: (typeof bindings)[number], showSubject: boolean) => (
     <Box key={JSON.stringify(binding)} sx={{ minWidth: 0 }}>
       {showSubject && (
         <Typography component="span" sx={{ font: "inherit", color: "text.secondary", mr: 0.75 }}>
@@ -88,7 +105,7 @@ export function AttributionEntry({ entry }: { entry: AttributionDetail }) {
         underline="hover"
         color="inherit"
       >
-        {binding.scope === "service" && binding.url ? t("termsOfUse") : binding.label}
+        {binding.scope === "service" && binding.url ? t("termsOfUse") : licenceLabel(binding)}
       </Link>
       {binding.licenses && binding.licenses.length > 1 && (
         <Box component="span" sx={{ ml: 0.75 }}>
