@@ -356,8 +356,9 @@ export function setup(ctx: IntegrationContext): void {
         if (partial === "unavailable" && pixels.length === 0) {
           throw new Error("every hazards provider failed");
         }
-        // The credits name the sources of the detections served, not of those left out. A
-        // provider that could not leave out low-confidence detections upstream may return them.
+        // The credits name the sources of the detections served, not of those left out.
+        // OpenConditions leaves out low-confidence detections itself; another hazards
+        // provider whose upstream cannot may still return them, so they are dropped here.
         const served = pixels.flatMap((pixel) => {
           const kept =
             pixel.instrument === instrument && (lowConfidence || !isLowConfidence(pixel));

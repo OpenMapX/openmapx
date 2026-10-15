@@ -82,7 +82,6 @@ function coldestSurface(station: RoadWeatherStation): number | undefined {
   return temperatures.length > 0 ? Math.min(...temperatures) : undefined;
 }
 
-/** The surface state, the coldest road temperature and the air temperature, as far as measured. */
 /** The summary, with a fault its operator suspects or has confirmed after it. */
 function summaryOf(station: RoadWeatherStation): I18nToken {
   const summary = valuesSummaryOf(station);
@@ -90,6 +89,7 @@ function summaryOf(station: RoadWeatherStation): I18nToken {
   return token("summary.withFault", { summary, fault: token(`fault.${station.fault.level}`) });
 }
 
+/** The surface state, the coldest road temperature and the air temperature, as far as measured. */
 function valuesSummaryOf(station: RoadWeatherStation): I18nToken {
   if (station.status === "temporarily_closed") return token("summary.closed");
   if (station.stale) return token("summary.stale");
