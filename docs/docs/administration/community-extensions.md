@@ -185,9 +185,12 @@ road-condition and fuel-price feeds into the shared database and serves them
 over HTTP, and its **contributions API** (`openconditions-contributions-api`)
 accepts signed crowd reports. The extension ships no integration code. OpenMapX
 reads OpenConditions through its built-in `openconditions` integration, which
-feeds two things: **roads** (the road-conditions overlay, navigation and
-routing closure-avoidance) and **fuel** (the fuel-station layer and its prices;
-without OpenConditions the fuel data source is not offered at all). It's
+feeds **roads** (the road-conditions and traffic-flow overlays, navigation and
+routing closure-avoidance), the **hazard** overlays and weather alerts, the
+**fuel**, **charging** and **parking** layers, road cameras and message signs,
+road weather stations, maintenance vehicles and border crossings. Without
+OpenConditions, data sources that only it supplies, such as fuel prices, are
+not offered at all. It's
 published as the first **verified** entry in the curated catalog, so installing
 it is one action:
 

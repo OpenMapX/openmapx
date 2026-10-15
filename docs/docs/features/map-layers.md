@@ -108,21 +108,21 @@ The built-in overlays group into a few themes.
 
 ### Transportation
 
-| Overlay                   | Shows                                                                                                | Data                                                                               |
-| ------------------------- | ---------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
-| **Traffic**               | Live traffic-flow coloring on roads                                                                  | TomTom Traffic (needs an API key)                                                  |
-| **Traffic flow**          | Congestion coloring from your own road-conditions feeds                                              | [OpenConditions](../developer/building-an-external-extension.md) speed data        |
-| **Transit lines**         | Public-transport routes and lines                                                                    | OpenStreetMap                                                                      |
-| **Schematic transit map** | Metro-map style network plans with layout and network-group choice (mutually excludes Transit lines) | [LOOM](./schematic-transit-map.md) (University of Freiburg), OpenStreetMap-derived |
-| **Live transit**          | Real-time bus, tram, and train positions                                                             | Live-vehicle feeds (e.g. DB RIS, Entur)                                            |
-| **Airports**              | Airport locations and metadata                                                                       | OurAirports                                                                        |
-| **Road conditions**       | Incidents, roadworks, and closures (community extension)                                             | [OpenConditions](../developer/building-an-external-extension.md)                   |
+| Overlay                   | Shows                                                                                                | Data                                                                                          |
+| ------------------------- | ---------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| **Traffic**               | Live traffic-flow coloring on roads                                                                  | TomTom Traffic (needs an API key)                                                             |
+| **Traffic flow**          | Congestion coloring from your own road-conditions feeds                                              | [OpenConditions](../administration/community-extensions.md#example-openconditions) speed data |
+| **Transit lines**         | Public-transport routes and lines                                                                    | OpenStreetMap                                                                                 |
+| **Schematic transit map** | Metro-map style network plans with layout and network-group choice (mutually excludes Transit lines) | [LOOM](./schematic-transit-map.md) (University of Freiburg), OpenStreetMap-derived            |
+| **Live transit**          | Real-time bus, tram, and train positions                                                             | Live-vehicle feeds (e.g. DB RIS, Entur)                                                       |
+| **Airports**              | Airport locations and metadata                                                                       | OurAirports                                                                                   |
+| **Road conditions**       | Incidents, roadworks, and closures                                                                   | [OpenConditions](../administration/community-extensions.md#example-openconditions)            |
 
 The traffic overlay needs a TomTom API key (set in the admin panel or via
 `.env`), and only renders above a minimum zoom. The **Traffic flow** overlay is
 the self-hosted alternative: it colors roads by congestion — a green→dark-red
 gradient (free-flow, light, moderate, heavy, severe) computed from the ratio of
-current to free-flow speed in your own [OpenConditions](../developer/building-an-external-extension.md)
+current to free-flow speed in your own [OpenConditions](../administration/community-extensions.md#example-openconditions)
 road-conditions feeds (NDW, Fintraffic, Trafikverket, NYC DOT, and others),
 with line opacity marking whether each reading is measured, estimated, or typical.
 It needs no API key, and because it and the TomTom **Traffic** overlay both color
@@ -229,7 +229,7 @@ with `pnpm --filter @openmapx/integration-overlay-sun-time refresh-timezones`.
 | **Natural events** | Tropical cyclones, volcanoes, floods, droughts and other ongoing events | NASA EONET, GDACS                 |
 
 All four hazard overlays, weather alerts included, read their data through
-[OpenConditions](../developer/building-an-external-extension.md): it fetches the
+[OpenConditions](../administration/community-extensions.md#example-openconditions): it fetches the
 public hazard feeds, and OpenMapX reads the result from the instance at
 `OPENCONDITIONS_URL`. Without it the overlays stay in the layer list and their
 legends say the data is unavailable. The weather alert layer, which loads the
