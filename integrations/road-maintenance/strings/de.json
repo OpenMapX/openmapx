@@ -1,0 +1,96 @@
+{
+  "name": "Straßendienst",
+  "description": "Wo Fahrzeuge des Straßendiensts wie Räum- und Streufahrzeuge unterwegs sind und was sie tun",
+  "vehicle": {
+    "plowing": "Räumfahrzeug",
+    "spreading": "Streufahrzeug",
+    "other": "Straßendienstfahrzeug"
+  },
+  "summary": {
+    "task": "{task}",
+    "tasks": "{task} und {count, plural, one {# weitere Arbeit} other {# weitere Arbeiten}}",
+    "noTask": "Keine Arbeit gemeldet"
+  },
+  "section": {
+    "work": "Arbeit"
+  },
+  "caption": {
+    "reported": "Gemeldet",
+    "anonymous": "Positionen sind anonym und verschwinden zehn Minuten nach der letzten Meldung eines Fahrzeugs."
+  },
+  "row": {
+    "task": "Arbeit",
+    "tasks": "Arbeiten",
+    "plough": "Pflug",
+    "spreader": "Streuer",
+    "heading": "Fahrtrichtung",
+    "provider": "Anbieter"
+  },
+  "value": {
+    "noTask": "Keine gemeldet",
+    "down": "Abgesenkt",
+    "raised": "Angehoben",
+    "on": "An",
+    "off": "Aus",
+    "heading": "{direction} ({degrees}°)"
+  },
+  "compass": {
+    "N": "Norden",
+    "NE": "Nordosten",
+    "E": "Osten",
+    "SE": "Südosten",
+    "S": "Süden",
+    "SW": "Südwesten",
+    "W": "Westen",
+    "NW": "Nordwesten"
+  },
+  "task": {
+    "BRUSHING": "Kehren",
+    "BRUSH_CLEARING": "Gehölzrückschnitt",
+    "CLEANSING_OF_BRIDGES": "Brückenreinigung",
+    "CLEANSING_OF_REST_AREAS": "Reinigung von Rast- und Parkplätzen",
+    "CLEANSING_OF_TRAFFIC_SIGNS": "Reinigung von Verkehrszeichen",
+    "CLIENTS_QUALITY_CONTROL": "Qualitätskontrolle",
+    "COMPACTION_BY_ROLLING": "Walzen",
+    "CRACK_FILLING": "Rissverguss",
+    "DITCHING": "Grabenräumung",
+    "DUST_BINDING_OF_GRAVEL_ROAD_SURFACE": "Staubbindung auf Schotterstraßen",
+    "DUST_BINDING_OF_PAVED_ROAD_SURFACE": "Staubbindung auf befestigten Straßen",
+    "ENSURING_TRAFFIC_IN_RASPUTITSA": "Verkehrssicherung bei Frostschäden",
+    "FILLING_OF_GRAVEL_ROAD_SHOULDERS": "Bankettauffüllung an Schotterstraßen",
+    "FILLING_OF_ROAD_SHOULDERS": "Bankettauffüllung an befestigten Straßen",
+    "GARBAGE_OLLECTION": "Müllsammlung",
+    "GROUP_REPLACEMENT_OF_LAMPS": "Austausch von Straßenleuchten",
+    "HEATING": "Erwärmung",
+    "LEVELLING_GRAVEL_ROAD_SURFACE": "Einebnen von Schotterstraßen",
+    "LEVELLING_OF_ROAD_SHOULDERS": "Bankettschälen",
+    "LEVELLING_OF_ROAD_SHOULDERS_UNDER_RAILING": "Bankettschälen unter Schutzplanken",
+    "LEVELLING_OF_ROAD_SURFACE": "Einebnen der Fahrbahn",
+    "LINE_SANDING": "Linienstreuung mit Sand",
+    "LOWERING_OF_SNOWBANKS": "Abtragen von Schneewällen",
+    "MAINTENANCE_OF_GUIDE_SIGNS_AND_REFLECTOR_POSTS": "Pflege von Wegweisern und Leitpfosten",
+    "MECHANICAL_CUT": "Mähen",
+    "MIXING_OR_STABILIZATION": "Mischen oder Stabilisieren",
+    "OTHER": "Sonstige Arbeit",
+    "OTHER_OPERATIONS_OF_LIGHTING_CONTRACTS": "Arbeiten an der Straßenbeleuchtung",
+    "PATCHING": "Flickarbeiten",
+    "PAVING": "Asphaltieren",
+    "PLOUGHING_AND_SLUSH_REMOVAL": "Schneeräumen und Matschbeseitigung",
+    "PLOUGHING_OF_SLUSH_DITCH": "Ziehen von Matschrinnen",
+    "PREVENTING_MELTING_WATER_PROBLEMS": "Schutz vor Schmelzwasser",
+    "REMOVAL_OF_BULGE_ICE": "Beseitigung von Aufeis",
+    "RENEWAL_OF_EDGE_COLUMNS": "Erneuerung von Leitpfosten",
+    "RESHAPING_GRAVEL_ROAD_SURFACE": "Profilieren von Schotterstraßen",
+    "ROAD_INSPECTIONS": "Streckenkontrolle",
+    "ROAD_MARKINGS": "Fahrbahnmarkierung",
+    "ROAD_STATE_CHECKING": "Zustandskontrolle",
+    "SAFETY_EQUIPMENT": "Sicherheitseinrichtungen",
+    "SALTING": "Salzstreuung",
+    "SERVICE_ROUND": "Wartungsrunde",
+    "SNOW_PLOUGHING_STICKS_AND_SNOW_FENCES": "Schneestangen und Schneezäune",
+    "SPOT_SANDING": "Punktuelle Sandstreuung",
+    "SPREADING_OF_CRUSH": "Splittstreuung",
+    "TRANSFER_OF_SNOW": "Schneeabtransport",
+    "UNKNOWN": "Unbekannte Arbeit"
+  }
+}

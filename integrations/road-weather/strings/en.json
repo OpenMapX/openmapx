@@ -1,0 +1,97 @@
+{
+  "name": "Road weather",
+  "description": "Road weather stations and what they measure: the state and temperature of the road surface and the weather above it",
+  "fallbackName": "Road weather station",
+  "summary": {
+    "two": "{first} · {second}",
+    "three": "{first} · {second} · {third}",
+    "road": "Road {value, number, ::.0} °C",
+    "air": "Air {value, number, ::.0} °C",
+    "grip": "Grip {value, number, ::.00}",
+    "closed": "Out of service",
+    "stale": "No current readings",
+    "noValues": "No values"
+  },
+  "state": {
+    "dry": "Dry",
+    "damp": "Damp",
+    "wet": "Wet",
+    "frost": "Frost",
+    "ice": "Ice",
+    "black_ice": "Black ice",
+    "snow": "Snow",
+    "packed_snow": "Packed snow",
+    "slush": "Slush",
+    "standing_water": "Standing water",
+    "flooded": "Flooded",
+    "chemically_wet": "Wet with de-icer",
+    "unknown": "Unknown"
+  },
+  "precipitation": {
+    "none": "None",
+    "rain": "Rain",
+    "snow": "Snow",
+    "sleet": "Sleet",
+    "hail": "Hail",
+    "drizzle": "Drizzle",
+    "freezing_rain": "Freezing rain"
+  },
+  "section": {
+    "surface": "Road surface",
+    "surfaceSensor": "Road surface, sensor {n}",
+    "air": "Weather",
+    "readings": "Readings"
+  },
+  "caption": {
+    "measured": "Measured",
+    "lastReading": "Last reading"
+  },
+  "text": {
+    "closed": "The station is temporarily out of service.",
+    "stale": "The station has reported no current readings."
+  },
+  "row": {
+    "surface": "Surface",
+    "roadTemperature": "Road temperature",
+    "freezingPoint": "Freezing point",
+    "groundTemperature": "Ground temperature",
+    "grip": "Grip",
+    "water": "Water",
+    "snow": "Snow",
+    "ice": "Ice",
+    "salt": "Salt",
+    "airTemperature": "Air temperature",
+    "dewPoint": "Dew point",
+    "humidity": "Humidity",
+    "wind": "Wind",
+    "gusts": "Gusts",
+    "visibility": "Visibility",
+    "precipitation": "Precipitation",
+    "road": "Road",
+    "municipality": "Municipality",
+    "provider": "Provider"
+  },
+  "value": {
+    "celsius": "{value, number, ::.0} °C",
+    "percent": "{value, number}%",
+    "friction": "{value, number, ::.00}",
+    "mm": "{value, number, ::.##} mm",
+    "salt": "{value, number, ::.#} g/l",
+    "wind": "{speed, number, ::.0} m/s",
+    "windFrom": "{speed, number, ::.0} m/s from the {direction}",
+    "km": "{value, number, ::.#} km",
+    "m": "{value, number} m",
+    "rate": "{value, number, ::.#} mm/h",
+    "precipitationWithRate": "{type}, {rate, number, ::.#} mm/h"
+  },
+  "compass": {
+    "N": "north",
+    "NE": "northeast",
+    "E": "east",
+    "SE": "southeast",
+    "S": "south",
+    "SW": "southwest",
+    "W": "west",
+    "NW": "northwest"
+  }
+}

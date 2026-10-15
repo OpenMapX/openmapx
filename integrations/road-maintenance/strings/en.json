@@ -1,0 +1,96 @@
+{
+  "name": "Road maintenance",
+  "description": "Where road maintenance vehicles such as snowploughs and spreaders are and what they are doing",
+  "vehicle": {
+    "plowing": "Snowplough",
+    "spreading": "Spreader",
+    "other": "Maintenance vehicle"
+  },
+  "summary": {
+    "task": "{task}",
+    "tasks": "{task} and {count, plural, one {# more task} other {# more tasks}}",
+    "noTask": "No work reported"
+  },
+  "section": {
+    "work": "Work"
+  },
+  "caption": {
+    "reported": "Reported",
+    "anonymous": "Positions are anonymous and disappear ten minutes after a vehicle last reports."
+  },
+  "row": {
+    "task": "Task",
+    "tasks": "Tasks",
+    "plough": "Plough",
+    "spreader": "Spreader",
+    "heading": "Heading",
+    "provider": "Provider"
+  },
+  "value": {
+    "noTask": "None reported",
+    "down": "Down",
+    "raised": "Raised",
+    "on": "On",
+    "off": "Off",
+    "heading": "{direction} ({degrees}°)"
+  },
+  "compass": {
+    "N": "North",
+    "NE": "Northeast",
+    "E": "East",
+    "SE": "Southeast",
+    "S": "South",
+    "SW": "Southwest",
+    "W": "West",
+    "NW": "Northwest"
+  },
+  "task": {
+    "BRUSHING": "Brushing",
+    "BRUSH_CLEARING": "Brush clearing",
+    "CLEANSING_OF_BRIDGES": "Cleaning bridges",
+    "CLEANSING_OF_REST_AREAS": "Cleaning rest areas",
+    "CLEANSING_OF_TRAFFIC_SIGNS": "Cleaning traffic signs",
+    "CLIENTS_QUALITY_CONTROL": "Quality inspection",
+    "COMPACTION_BY_ROLLING": "Compaction by rolling",
+    "CRACK_FILLING": "Crack filling",
+    "DITCHING": "Ditching",
+    "DUST_BINDING_OF_GRAVEL_ROAD_SURFACE": "Dust binding on gravel roads",
+    "DUST_BINDING_OF_PAVED_ROAD_SURFACE": "Dust binding on paved roads",
+    "ENSURING_TRAFFIC_IN_RASPUTITSA": "Securing traffic over frost damage",
+    "FILLING_OF_GRAVEL_ROAD_SHOULDERS": "Filling gravel road shoulders",
+    "FILLING_OF_ROAD_SHOULDERS": "Filling paved road shoulders",
+    "GARBAGE_OLLECTION": "Litter collection",
+    "GROUP_REPLACEMENT_OF_LAMPS": "Replacing street lamps",
+    "HEATING": "Heating",
+    "LEVELLING_GRAVEL_ROAD_SURFACE": "Levelling gravel roads",
+    "LEVELLING_OF_ROAD_SHOULDERS": "Levelling road shoulders",
+    "LEVELLING_OF_ROAD_SHOULDERS_UNDER_RAILING": "Levelling road shoulders under railings",
+    "LEVELLING_OF_ROAD_SURFACE": "Levelling the road surface",
+    "LINE_SANDING": "Line sanding",
+    "LOWERING_OF_SNOWBANKS": "Lowering snowbanks",
+    "MAINTENANCE_OF_GUIDE_SIGNS_AND_REFLECTOR_POSTS": "Maintaining signs and reflector posts",
+    "MECHANICAL_CUT": "Mowing",
+    "MIXING_OR_STABILIZATION": "Mixing or stabilisation",
+    "OTHER": "Other work",
+    "OTHER_OPERATIONS_OF_LIGHTING_CONTRACTS": "Street lighting work",
+    "PATCHING": "Patching",
+    "PAVING": "Paving",
+    "PLOUGHING_AND_SLUSH_REMOVAL": "Ploughing and slush removal",
+    "PLOUGHING_OF_SLUSH_DITCH": "Ploughing slush ditches",
+    "PREVENTING_MELTING_WATER_PROBLEMS": "Preventing meltwater damage",
+    "REMOVAL_OF_BULGE_ICE": "Removing bulge ice",
+    "RENEWAL_OF_EDGE_COLUMNS": "Renewing reflector posts",
+    "RESHAPING_GRAVEL_ROAD_SURFACE": "Reshaping gravel roads",
+    "ROAD_INSPECTIONS": "Road inspection",
+    "ROAD_MARKINGS": "Road markings",
+    "ROAD_STATE_CHECKING": "Road condition check",
+    "SAFETY_EQUIPMENT": "Safety equipment",
+    "SALTING": "Salting",
+    "SERVICE_ROUND": "Service round",
+    "SNOW_PLOUGHING_STICKS_AND_SNOW_FENCES": "Snow poles and snow fences",
+    "SPOT_SANDING": "Spot sanding",
+    "SPREADING_OF_CRUSH": "Spreading crushed stone",
+    "TRANSFER_OF_SNOW": "Removing snow",
+    "UNKNOWN": "Unknown work"
+  }
+}

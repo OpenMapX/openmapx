@@ -1,6 +1,6 @@
 ---
 title: Mobility & live data
-description: Live points of interest on the map — EV chargers, fuel prices, parking, shared bikes and scooters, car-sharing, traffic webcams and message signs, drawn from open mobility data.
+description: Live points of interest on the map — EV chargers, fuel prices, parking, shared bikes and scooters, car-sharing, traffic webcams, message signs, road weather, road maintenance vehicles and border wait times, drawn from open mobility data.
 sidebar_position: 9
 ---
 
@@ -12,8 +12,9 @@ and the map fills with charging stations, each colored by whether it's available
 or in use, with connector types and power on click. Pick **Gas Stations** and
 you get live fuel prices per grade. There's also parking with live occupancy from OpenConditions,
 shared bikes and e-scooters and car-sharing vehicles you can actually rent right
-now, traffic and scenic webcams, and the message signs along the roads with
-what they show.
+now, traffic and scenic webcams, the message signs along the roads with what
+they show, road weather stations, the snowploughs and other maintenance
+vehicles at work, and how long the queues at border crossings are.
 
 These are different from map overlays. An overlay paints a theme across the whole
 map; a mobility data source answers a question about the area you're looking at
@@ -45,6 +46,26 @@ point with category-appropriate detail in the place panel:
 - **Message signs** — dynamic message signs beside the roads. A sign showing a
   message is drawn in amber, and its panel lists each page line by line with
   the time it went up; a blank or failed sign is drawn dimmed and says so.
+- **Road weather** — road weather stations, colored by the most hazardous
+  surface any of their sensors measures: green for dry, blue for wet, purple
+  for snow or slush, red for ice or frost. The list sums up each station's
+  surface, coldest road temperature and air temperature and sorts by road
+  temperature; the panel shows each surface sensor (state, road and ground
+  temperature, freezing point, grip, water, snow, ice, salt) and the weather
+  above the road, with the time they were measured. A station out of service,
+  or without a value from the last hour, is drawn dimmed and says so.
+- **Road maintenance** — snowploughs, spreaders and other road maintenance
+  vehicles where they last reported: blue while ploughing, orange while
+  salting or sanding, green for other work. The panel lists the tasks the
+  vehicle reports, whether its plough is down or its spreader on, and its
+  heading. Positions are anonymous and vanish ten minutes after a vehicle last
+  reports.
+- **Border crossings** — land border crossings, colored by the longest current
+  wait for cars: green up to 15 minutes, orange up to 45, red beyond, grey when
+  closed. Where both countries publish their queues, the crossing shows both
+  directions; the panel lists each direction's queues (cars, trucks,
+  pedestrians and their trusted-traveller or Ready lanes) with the wait, the
+  lanes open and the time it was stated, and the list sorts by wait.
 
 Selecting a category queries the visible map, drops markers, and — because these
 feeds are area-based — shows a **Search this area** chip when you pan or zoom so
@@ -98,7 +119,8 @@ server's address rather than your users'.
 ### Where the data lives
 
 The sharing categories are queried live from the upstream API for the bounding
-box you're looking at. EV charging, parking, fuel, webcams and message signs come from
+box you're looking at. EV charging, parking, fuel, webcams, message signs, road
+weather, road maintenance and border crossings come from
 [OpenConditions](../administration/community-extensions.md#example-openconditions),
 which fetches, parses, and links the national registers on its own schedule;
 OpenMapX reads only the sites that intersect your viewport. From the map this
@@ -107,21 +129,24 @@ is invisible; the practical difference is operational, covered under
 
 ## The built-in sources
 
-OpenMapX ships eight data-source categories. The table groups them by what they
+OpenMapX ships eleven data-source categories. The table groups them by what they
 show; the _Origins_ column is a representative sample, not the full list — most
 categories aggregate many regional feeds, and OpenStreetMap is the global
 fallback for the location-only sources.
 
-| Category          | What it shows                                 | Origins (representative)                                                                                                                                                                                                                                                                                                                 |
-| ----------------- | --------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **EV charging**   | Charging stations, status, connectors         | Every enabled charging-site provider: OpenConditions' charging feeds (Bundesnetzagentur and MobiData BW (DE), AFDC (US), France IRVE, NOBIL (NO), Digitraffic (FI), NDW (NL), SFOE (CH), and national registers across Europe, Asia, and Australia; with the operator token also Open Charge Map, OpenStreetMap and Slovenia's register) |
-| **Fuel**          | Gas stations + per-grade prices               | Every enabled fuel-station provider: OpenConditions' national price feeds (Prix Carburants, Minetur; with the operator token also Tankerkönig/MTS-K and E-Control) and OpenStreetMap (operator token only)                                                                                                                               |
-| **Parking**       | Parking + Park & Ride, live occupancy         | Every enabled parking provider: OpenConditions' parking feeds (MobiData BW, NRW.Mobidrom, DB BahnPark, SBB, RDW and NDW truck parking (NL), HDB (SG), and many city and regional open-data portals; with the operator token also the Mobidrom Park & Ride lots, the French BNLS and OpenStreetMap)                                       |
-| **Bike sharing**  | Docks + free-floating bikes, availability     | GBFS feeds via the MobilityData catalog, CityBikes, Nextbike, Donkey Republic, Deutsche Bahn, Entur (NO)                                                                                                                                                                                                                                 |
-| **Car sharing**   | Car-sharing stations + vehicles               | GBFS catalog, Entur, Cambio, Communauto, CoopStroom, Dégage, and German municipal portals                                                                                                                                                                                                                                                |
-| **E-scooters**    | Free-floating scooters + operator zones       | GBFS catalog, Entur (NO), NRW.Mobidrom (Voi, Lime), Felyx                                                                                                                                                                                                                                                                                |
-| **Webcams**       | Traffic + scenic cameras, still or live video | Every enabled camera provider: OpenConditions' camera feeds (Digitraffic (FI), Trafikverket (SE), Statens vegvesen (NO), Vegagerðin (IS), DGT (ES), Ontario 511, Hong Kong TD, Transport for NSW, TDX (TW), TfL, Caltrans, NPS, Oregon TripCheck; with the operator token also Windy, OpenStreetMap, 511NY and five US 511 states)       |
-| **Message signs** | Dynamic message signs + what they show        | Every enabled message-sign provider: OpenConditions' sign feeds (511NY, with the operator token)                                                                                                                                                                                                                                         |
+| Category             | What it shows                                 | Origins (representative)                                                                                                                                                                                                                                                                                                                 |
+| -------------------- | --------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **EV charging**      | Charging stations, status, connectors         | Every enabled charging-site provider: OpenConditions' charging feeds (Bundesnetzagentur and MobiData BW (DE), AFDC (US), France IRVE, NOBIL (NO), Digitraffic (FI), NDW (NL), SFOE (CH), and national registers across Europe, Asia, and Australia; with the operator token also Open Charge Map, OpenStreetMap and Slovenia's register) |
+| **Fuel**             | Gas stations + per-grade prices               | Every enabled fuel-station provider: OpenConditions' national price feeds (Prix Carburants, Minetur; with the operator token also Tankerkönig/MTS-K and E-Control) and OpenStreetMap (operator token only)                                                                                                                               |
+| **Parking**          | Parking + Park & Ride, live occupancy         | Every enabled parking provider: OpenConditions' parking feeds (MobiData BW, NRW.Mobidrom, DB BahnPark, SBB, RDW and NDW truck parking (NL), HDB (SG), and many city and regional open-data portals; with the operator token also the Mobidrom Park & Ride lots, the French BNLS and OpenStreetMap)                                       |
+| **Bike sharing**     | Docks + free-floating bikes, availability     | GBFS feeds via the MobilityData catalog, CityBikes, Nextbike, Donkey Republic, Deutsche Bahn, Entur (NO)                                                                                                                                                                                                                                 |
+| **Car sharing**      | Car-sharing stations + vehicles               | GBFS catalog, Entur, Cambio, Communauto, CoopStroom, Dégage, and German municipal portals                                                                                                                                                                                                                                                |
+| **E-scooters**       | Free-floating scooters + operator zones       | GBFS catalog, Entur (NO), NRW.Mobidrom (Voi, Lime), Felyx                                                                                                                                                                                                                                                                                |
+| **Webcams**          | Traffic + scenic cameras, still or live video | Every enabled camera provider: OpenConditions' camera feeds (Digitraffic (FI), Trafikverket (SE), Statens vegvesen (NO), Vegagerðin (IS), DGT (ES), Ontario 511, Hong Kong TD, Transport for NSW, TDX (TW), TfL, Caltrans, NPS, Oregon TripCheck; with the operator token also Windy, OpenStreetMap, 511NY and five US 511 states)       |
+| **Message signs**    | Dynamic message signs + what they show        | Every enabled message-sign provider: OpenConditions' sign feeds (511NY, with the operator token)                                                                                                                                                                                                                                         |
+| **Road weather**     | Road weather stations, surface + air values   | Every enabled road-weather provider: OpenConditions' road weather feeds (Fintraffic Digitraffic (FI))                                                                                                                                                                                                                                    |
+| **Road maintenance** | Maintenance vehicles + the work they do       | Every enabled service-vehicle provider: OpenConditions' vehicle feeds (Fintraffic Digitraffic maintenance tracking (FI), from the Harja system)                                                                                                                                                                                          |
+| **Border crossings** | Land border crossings + wait times each way   | Every enabled border-crossing provider: OpenConditions' border feeds (U.S. Customs and Border Protection, Canada Border Services Agency)                                                                                                                                                                                                 |
 
 A few notes on origins:
 
@@ -195,6 +220,12 @@ require credentials, declared per integration:
   source that reaches OpenMapX only with the
   [operator token](../administration/community-extensions.md#the-operator-token)
   set on both sides.
+- **Road weather**, **road maintenance** and **border crossings** come from
+  [OpenConditions](../administration/community-extensions.md#example-openconditions);
+  without it these sources are not offered and have no chip. Their feeds are
+  open data (Digitraffic under CC BY 4.0, CBSA under the Open Government
+  Licence – Canada, CBP in the U.S. public domain) and need neither keys nor the
+  operator token. Temperatures, wind and visibility are shown in metric units.
 
 Charging coverage also includes open registries for Belgium, Cyprus, Spain,
 Luxembourg, Lithuania, Hong Kong, New Zealand, and several

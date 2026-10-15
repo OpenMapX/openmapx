@@ -8,8 +8,11 @@ import EvStationIcon from "@mui/icons-material/EvStation";
 import InfoIcon from "@mui/icons-material/Info";
 import LocalGasStationIcon from "@mui/icons-material/LocalGasStation";
 import LocalParkingIcon from "@mui/icons-material/LocalParking";
+import LocalShippingIcon from "@mui/icons-material/LocalShipping";
 import LockOpenIcon from "@mui/icons-material/LockOpen";
 import PedalBikeIcon from "@mui/icons-material/PedalBike";
+import ThermostatIcon from "@mui/icons-material/Thermostat";
+import TimerIcon from "@mui/icons-material/Timer";
 import TrainIcon from "@mui/icons-material/Train";
 import VideocamIcon from "@mui/icons-material/Videocam";
 import Box from "@mui/material/Box";
@@ -72,6 +75,13 @@ const SOURCE_HEADERS: Record<string, { icon: ReactNode; titleKey: string }> = {
   webcam: { icon: <VideocamIcon sx={{ fontSize: 20 }} />, titleKey: "webcams" },
   // Message signs: matched by provider for the same reason.
   "message-signs": { icon: <AnnouncementIcon sx={{ fontSize: 20 }} />, titleKey: "messageSigns" },
+  // Road weather, road maintenance and border crossings: matched by provider too.
+  "road-weather": { icon: <ThermostatIcon sx={{ fontSize: 20 }} />, titleKey: "roadWeather" },
+  "road-maintenance": {
+    icon: <LocalShippingIcon sx={{ fontSize: 20 }} />,
+    titleKey: "roadMaintenance",
+  },
+  "border-crossings": { icon: <TimerIcon sx={{ fontSize: 20 }} />, titleKey: "borderCrossings" },
 };
 
 export function resolveSourceHeader(

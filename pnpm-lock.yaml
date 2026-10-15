@@ -802,6 +802,24 @@ importers:
         specifier: workspace:^
         version: link:../../packages/place-ids
 
+  integrations/border-crossings:
+    dependencies:
+      '@openmapx/core':
+        specifier: workspace:^
+        version: link:../../packages/core
+      '@openmapx/integration-data-source':
+        specifier: workspace:^
+        version: link:../data-source
+      '@openmapx/integration-framework':
+        specifier: workspace:^
+        version: link:../../packages/integration-framework
+      '@openmapx/mobility-core':
+        specifier: workspace:^
+        version: link:../../packages/mobility-core
+      '@openmapx/place-ids':
+        specifier: workspace:^
+        version: link:../../packages/place-ids
+
   integrations/car-sharing:
     dependencies:
       '@openmapx/core':
@@ -1802,6 +1820,42 @@ importers:
       vitest:
         specifier: ^5.0.3
         version: 5.0.3(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(@vitest/coverage-v8@5.0.3)(jsdom@30.1.2(@noble/hashes@2.4.0))(vite@8.0.16(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
+
+  integrations/road-maintenance:
+    dependencies:
+      '@openmapx/core':
+        specifier: workspace:^
+        version: link:../../packages/core
+      '@openmapx/integration-data-source':
+        specifier: workspace:^
+        version: link:../data-source
+      '@openmapx/integration-framework':
+        specifier: workspace:^
+        version: link:../../packages/integration-framework
+      '@openmapx/mobility-core':
+        specifier: workspace:^
+        version: link:../../packages/mobility-core
+      '@openmapx/place-ids':
+        specifier: workspace:^
+        version: link:../../packages/place-ids
+
+  integrations/road-weather:
+    dependencies:
+      '@openmapx/core':
+        specifier: workspace:^
+        version: link:../../packages/core
+      '@openmapx/integration-data-source':
+        specifier: workspace:^
+        version: link:../data-source
+      '@openmapx/integration-framework':
+        specifier: workspace:^
+        version: link:../../packages/integration-framework
+      '@openmapx/mobility-core':
+        specifier: workspace:^
+        version: link:../../packages/mobility-core
+      '@openmapx/place-ids':
+        specifier: workspace:^
+        version: link:../../packages/place-ids
 
   integrations/routing:
     dependencies:

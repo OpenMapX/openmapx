@@ -231,7 +231,9 @@ export interface DataSourceDetailSection extends ContributingRecord {
     | "eco"
     | "open_in_new"
     | "videocam"
-    | "warning";
+    | "warning"
+    | "thermostat"
+    | "construction";
   /** Structured pricing plans for type "pricing". */
   pricingPlans?: PricingPlanEntry[];
   /**

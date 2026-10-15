@@ -78,6 +78,43 @@ describe("translateDataSourceLabel", () => {
     ]);
   });
 
+  it("translates the road-weather, road-maintenance and border-crossing filters in en and de", () => {
+    const labels = [
+      "Road surface",
+      "Dry",
+      "Wet",
+      "Snow or slush",
+      "Ice or frost",
+      "Work",
+      "Ploughing",
+      "Salting or sanding",
+      "Other work",
+      "Wait time",
+      "Up to 15 min",
+      "15 to 45 min",
+      "Over 45 min",
+      "Closed",
+    ];
+
+    expect(labels.map((l) => translateDataSourceLabel(l, translator(en)))).toEqual(labels);
+    expect(labels.map((l) => translateDataSourceLabel(l, translator(de)))).toEqual([
+      "Fahrbahn",
+      "Trocken",
+      "Nass",
+      "Schnee oder Matsch",
+      "Eis oder Reif",
+      "Arbeit",
+      "Schneeräumen",
+      "Salz- oder Sandstreuung",
+      "Sonstige Arbeit",
+      "Wartezeit",
+      "Bis 15 Min.",
+      "15 bis 45 Min.",
+      "Über 45 Min.",
+      "Geschlossen",
+    ]);
+  });
+
   it("leaves a language-neutral label as it is", () => {
     expect(translateDataSourceLabel("CCS2", translator(de))).toBe("CCS2");
   });

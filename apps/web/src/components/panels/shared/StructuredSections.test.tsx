@@ -132,6 +132,25 @@ describe("StructuredSections", () => {
     expect(markup).toContain("5 minutes ago");
   });
 
+  it("draws the road-weather and road-maintenance section icons", () => {
+    const markup = renderToStaticMarkup(
+      <StructuredSections
+        sections={[
+          { title: "Weather", type: "table", rows: [["Air", "1.0 °C"]], sectionIcon: "thermostat" },
+          {
+            title: "Work",
+            type: "table",
+            rows: [["Task", "Salting"]],
+            sectionIcon: "construction",
+          },
+        ]}
+      />,
+    );
+
+    expect(markup).toContain('data-testid="ThermostatIcon"');
+    expect(markup).toContain('data-testid="ConstructionIcon"');
+  });
+
   it("renders the caption without a relative-time suffix when there is no captionTimestamp", () => {
     const markup = renderToStaticMarkup(
       <StructuredSections

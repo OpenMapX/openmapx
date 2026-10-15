@@ -1,12 +1,14 @@
 "use client";
 
 import BoltIcon from "@mui/icons-material/Bolt";
+import ConstructionIcon from "@mui/icons-material/Construction";
 import DirectionsBusIcon from "@mui/icons-material/DirectionsBus";
 import DirectionsCarIcon from "@mui/icons-material/DirectionsCar";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import InfoIcon from "@mui/icons-material/Info";
 import LocalGasStationIcon from "@mui/icons-material/LocalGasStation";
 import PaymentsIcon from "@mui/icons-material/Payments";
+import ThermostatIcon from "@mui/icons-material/Thermostat";
 import VideocamIcon from "@mui/icons-material/Videocam";
 import WarningAmberIcon from "@mui/icons-material/WarningAmber";
 import Box from "@mui/material/Box";
@@ -92,6 +94,10 @@ function renderSectionIcon(sectionIcon?: ReactNode | string): ReactNode {
       return <VideocamIcon sx={{ fontSize: 18 }} />;
     case "warning":
       return <WarningAmberIcon sx={{ fontSize: 18 }} />;
+    case "thermostat":
+      return <ThermostatIcon sx={{ fontSize: 18 }} />;
+    case "construction":
+      return <ConstructionIcon sx={{ fontSize: 18 }} />;
     default:
       return <BoltIcon />;
   }

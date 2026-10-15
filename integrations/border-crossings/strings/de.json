@@ -1,0 +1,66 @@
+{
+  "name": "Grenzübergänge",
+  "description": "Grenzübergänge an Landgrenzen und wie lang ihre Warteschlangen in jeder Richtung sind",
+  "fallbackName": "Grenzübergang",
+  "summary": {
+    "two": "{first} · {second}",
+    "three": "{first} · {second} · {third}",
+    "mode": "{mode}: {wait}",
+    "closed": "Geschlossen",
+    "unknown": "Keine aktuellen Wartezeiten"
+  },
+  "into": {
+    "CA": "Nach Kanada: {wait}",
+    "US": "In die USA: {wait}",
+    "MX": "Nach Mexiko: {wait}",
+    "other": "Nach {country}: {wait}"
+  },
+  "section": {
+    "into": {
+      "CA": "Einreise nach Kanada",
+      "US": "Einreise in die USA",
+      "MX": "Einreise nach Mexiko",
+      "other": "Einreise nach {country}"
+    },
+    "waits": "Wartezeiten"
+  },
+  "caption": {
+    "updated": "Aktualisiert"
+  },
+  "text": {
+    "noQueues": "Für diesen Grenzübergang werden keine Wartezeiten veröffentlicht."
+  },
+  "mode": {
+    "passenger": "Pkw",
+    "commercial": "Lkw",
+    "pedestrian": "Fußgänger",
+    "bus": "Busse",
+    "rail": "Züge"
+  },
+  "program": {
+    "standard": "Normale Spuren",
+    "trusted_traveller": "NEXUS/SENTRI",
+    "ready_lane": "Ready Lane",
+    "fast": "FAST"
+  },
+  "queue": {
+    "program": "{mode}, {program}"
+  },
+  "wait": {
+    "none": "Keine Wartezeit",
+    "delayed": "Verzögerungen",
+    "minutes": "{minutes, number} Min.",
+    "hours": "{hours, number} Std. {minutes, number} Min.",
+    "wholeHours": "{hours, number} Std.",
+    "closed": "Geschlossen",
+    "unknown": "Nicht angegeben",
+    "stale": "Keine aktuelle Wartezeit",
+    "withLanes": "{wait} · {lanes, plural, one {# Spur} other {# Spuren}} offen"
+  },
+  "row": {
+    "status": "Status",
+    "location": "Standort",
+    "provider": "Anbieter",
+    "providers": "Anbieter"
+  }
+}

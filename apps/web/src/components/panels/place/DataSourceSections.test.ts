@@ -23,6 +23,15 @@ describe("resolveSourceHeader", () => {
   it("titles a fuel detail without a domain by its data source", () => {
     expect(resolveSourceHeader(fuelDetail)).toMatchObject({ titleKey: "fuelPrices" });
   });
+
+  it("titles road weather, road maintenance and border crossings by their data source", () => {
+    // Their details carry OpenConditions feed ids, which no header is keyed by.
+    const of = (providerId: string, source: string) =>
+      resolveSourceHeader({ ...fuelDetail, providerId, sources: [source] }).titleKey;
+    expect(of("road-weather", "fi-digitraffic-weather")).toBe("roadWeather");
+    expect(of("road-maintenance", "fi-digitraffic-maintenance")).toBe("roadMaintenance");
+    expect(of("border-crossings", "us-cbp-waits")).toBe("borderCrossings");
+  });
 });
 
 const action = {
