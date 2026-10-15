@@ -17,6 +17,26 @@ const MAX_MEMBERS = 2000;
 /** How many searched crossings the provider remembers the position and members of. */
 const REMEMBERED = 2000;
 const EXPAND = "components,latest";
+/**
+ * The farthest apart OpenConditions links two agencies' features of one
+ * crossing, in metres: `linking.neverMetres` of `border_crossing` in its
+ * model-border. A member stands at most this far from the crossing.
+ */
+const LINKING_NEVER_M = 2000;
+const METRES_PER_DEGREE = 111_320;
+
+/** `bbox` grown by `metres` on every side, clamped to the globe. */
+function grown([west, south, east, north]: BBox, metres: number): BBox {
+  const dLat = metres / METRES_PER_DEGREE;
+  const widest = Math.max(Math.abs(south), Math.abs(north));
+  const dLon = dLat / Math.max(Math.cos((Math.min(widest, 89) * Math.PI) / 180), 0.01);
+  return [
+    Math.max(west - dLon, -180),
+    Math.max(south - dLat, -90),
+    Math.min(east + dLon, 180),
+    Math.min(north + dLat, 90),
+  ];
+}
 
 export interface BorderCrossingProviderOptions {
   remembered?: number;
@@ -42,8 +62,9 @@ interface MemberHours {
  * A canonical feature carries only its survivor's fields, and only some
  * agencies state a crossing's opening hours (CBP does, CBSA does not). A
  * crossing whose survivor states none takes them from another member that
- * does, read from the per-source features of the same area; a member of an
- * excluded source lends none.
+ * does, read from the per-source features within the linking distance of
+ * it, and only when such a crossing is found; a member of an excluded
+ * source lends none.
  */
 export function createBorderCrossingProvider(
   client: OpenConditionsClient,
@@ -119,16 +140,22 @@ export function createBorderCrossingProvider(
   /** The member hours of an area; none when the read fails, since hours are an extra. */
   const hoursIn = (bbox: BBox) => memberHours(bbox).catch(() => new Map<string, MemberHours>());
 
+  /** Whether a crossing lacks hours another of its members may state: it has several. */
+  const mayBorrowHours = (crossing: BorderCrossing) =>
+    !crossing.openingHours && (members.get(crossing.id)?.length ?? 0) > 1;
+
   return {
     id: PROVIDER_ID,
     async searchCrossings(bbox, q) {
       // No list yet: every crossing is missing until it arrives, whatever the view.
       if (!sources.ready) return { crossings: [], partial: "unavailable" };
       const excluded = excludedBy(sources, q?.excludedSourceIds);
-      const [{ items, partArea }, hours] = await Promise.all([
-        reader.search(bbox, excluded),
-        hoursIn(bbox),
-      ]);
+      const { items, partArea } = await reader.search(bbox, excluded);
+      // A member stands at most the linking distance from its crossing, so it may lie just
+      // outside the view; read the members only when a crossing could take hours from one.
+      const hours = items.some(mayBorrowHours)
+        ? await hoursIn(grown(bbox, LINKING_NEVER_M))
+        : new Map<string, MemberHours>();
       const crossings = items.map((c) => withHours(c, hours, excluded));
       return partArea ? { crossings, partial: "area" } : { crossings };
     },
@@ -136,8 +163,9 @@ export function createBorderCrossingProvider(
       if (!sources.ready) return null;
       const excluded = excludedBy(sources, q?.excludedSourceIds);
       const crossing = await reader.open(id, excluded);
-      if (!crossing || crossing.openingHours) return crossing;
-      return withHours(crossing, await hoursIn(boxAround(crossing.coordinates)), excluded);
+      if (!crossing || !mayBorrowHours(crossing)) return crossing;
+      const hours = await hoursIn(boxAround(crossing.coordinates, LINKING_NEVER_M));
+      return withHours(crossing, hours, excluded);
     },
   };
 }

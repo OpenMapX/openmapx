@@ -8,7 +8,7 @@ import { describe, expect, test } from "vitest";
 import { recordToBorderCrossing } from "../border/map.js";
 import { createBorderCrossingProvider } from "../border/provider.js";
 import { createOpenConditionsClient } from "../client.js";
-import type { LatestReading } from "../features/record.js";
+import { type LatestReading, rec } from "../features/record.js";
 import { setup } from "../index.js";
 import type { LiveSources } from "../sources.js";
 import stringsDe from "../strings/de.json" with { type: "json" };
@@ -204,6 +204,55 @@ describe("border-crossings-openconditions", () => {
     expect(withoutCbp.crossings.find((c) => c.name === "Peace Bridge")).not.toHaveProperty(
       "openingHours",
     );
+  });
+
+  test("a crossing's detail finds a member up to the linking distance away", async () => {
+    // The CBP member stands 1.5 km north of the CBSA survivor the crossing is placed at.
+    const member = {
+      id: `oc:feature:${CBP}:090101`,
+      kind: "border_crossing",
+      location: { geometry: { type: "Point", coordinates: [-78.9056, 42.9204] } },
+      provenance: { sourceId: CBP },
+      openingHours: { osm: "24/7" },
+    };
+    const http = fakeHttpClient((req: FakeHttpRequest) => {
+      if (req.url !== `${BASE_URL}/features`) return undefined;
+      if (req.options?.params?.canonical !== 0) return body();
+      const [w, s, e, n] = String(req.options.params.bbox).split(",").map(Number);
+      const [lon, lat] = member.location.geometry.coordinates;
+      const inside = lon! >= w! && lon! <= e! && lat! >= s! && lat! <= n!;
+      return { records: inside ? [member] : [], next: null };
+    });
+    const client = createOpenConditionsClient({ OPENCONDITIONS_URL: BASE_URL }, http)!;
+    const provider = createBorderCrossingProvider(client, EVERY_SOURCE, { now: () => NOW });
+
+    // A view ending just south of the member still reaches it.
+    const { crossings } = await provider.searchCrossings([-79, 42.85, -78.8, 42.915]);
+    const peace = crossings.find((c) => c.name === "Peace Bridge")!;
+    expect(peace.openingHours).toBe("24/7");
+    await expect(provider.getCrossing(peace.id)).resolves.toMatchObject({ openingHours: "24/7" });
+  });
+
+  test("reads the members only when a merged crossing lacks hours", async () => {
+    const answer = body();
+    const single = (r: Rec) =>
+      ((rec(r.provenance).derivedFrom as Rec | undefined)?.records as unknown[]).length === 1;
+    const answerOfSingles = {
+      ...answer,
+      records: answer.records.filter(single),
+    };
+    const http = fakeHttpClient((req: FakeHttpRequest) =>
+      req.url === `${BASE_URL}/features` ? answerOfSingles : undefined,
+    );
+    const client = createOpenConditionsClient({ OPENCONDITIONS_URL: BASE_URL }, http)!;
+    const provider = createBorderCrossingProvider(client, EVERY_SOURCE, { now: () => NOW });
+    const { crossings } = await provider.searchCrossings(BBOX);
+    expect(crossings.map((c) => c.name).sort()).toEqual([
+      "Calais: Milltown",
+      "Douglas (Raul Hector Castro)",
+      "Emerson",
+    ]);
+    expect(http.calls.filter((c) => c.options?.params?.canonical === 0)).toEqual([]);
   });
 
   test("a failed read of the members costs the hours, not the crossings", async () => {

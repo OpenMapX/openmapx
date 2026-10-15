@@ -39,12 +39,12 @@
     },
     "domain:service-vehicles": {
       "purpose": "Wo Fahrzeuge des Straßendiensts wie Räum- und Streufahrzeuge unterwegs sind und was sie tun, gelesen über OpenConditions",
-      "dataSent": "Nichts über die Nutzer: OpenMapX übermittelt dem OpenConditions-Server nur den gesuchten Kartenausschnitt (bzw. beim Öffnen eines Fahrzeugs einen Ausschnitt von etwa 200 m um es), und OpenConditions liest die Positionen aus seinem eigenen Bestand, den es durch Abruf seiner Quellen nach eigenem Zeitplan füllt",
+      "dataSent": "Nichts über die Nutzer: OpenMapX übermittelt dem OpenConditions-Server nur den gesuchten Kartenausschnitt (bzw. beim Öffnen eines Fahrzeugs einen Ausschnitt von etwa 10 km um die Stelle, an der es war, um es wiederzufinden, nachdem es weitergefahren ist), und OpenConditions liest die Positionen aus seinem eigenen Bestand, den es durch Abruf seiner Quellen nach eigenem Zeitplan füllt",
       "dataReceived": "Anonyme Fahrzeugpositionen mit Zeit, Fahrtrichtung, den gemeldeten Arbeiten und ob der Pflug abgesenkt oder der Streuer in Betrieb ist; kein Fahrzeug und kein Fahrer wird genannt"
     },
     "domain:border-crossings": {
       "purpose": "Grenzübergänge an Landgrenzen und wie lang ihre Warteschlangen sind, gelesen über OpenConditions",
-      "dataSent": "Nichts über die Nutzer: OpenMapX übermittelt dem OpenConditions-Server nur den gesuchten Kartenausschnitt (bzw. beim Öffnen eines Übergangs einen Ausschnitt von etwa 200 m um ihn), und OpenConditions liest die Übergänge aus seinem eigenen Bestand, den es durch Abruf seiner Quellen nach eigenem Zeitplan füllt",
+      "dataSent": "Nichts über die Nutzer: OpenMapX übermittelt dem OpenConditions-Server nur den gesuchten Kartenausschnitt (bzw. beim Öffnen eines Übergangs einen Ausschnitt von etwa 200 m um ihn) sowie, um Öffnungszeiten zu finden, die eine Behörde für einen von einer anderen veröffentlichten Übergang angibt, diesen Ausschnitt um 2 km erweitert (bzw. einen Ausschnitt von etwa 4 km um den geöffneten Übergang); und OpenConditions liest die Übergänge aus seinem eigenen Bestand, den es durch Abruf seiner Quellen nach eigenem Zeitplan füllt",
       "dataReceived": "Übergänge mit Standort, den Ländern, die sie verbinden, Öffnungszeiten und Status sowie für jede Warteschlange ihre Richtung, die Wartezeit und die geöffneten Spuren"
     },
     "domain:hazards": {

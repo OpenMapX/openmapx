@@ -39,12 +39,12 @@
     },
     "domain:service-vehicles": {
       "purpose": "Where road maintenance vehicles such as snowploughs and spreaders are and what they are doing, read through OpenConditions",
-      "dataSent": "Nothing about the user: OpenMapX sends the OpenConditions server only the searched map area (or a box of about 200 m around a vehicle when one is opened), and OpenConditions reads the positions from its own store, filled by polling its sources on its own schedule",
+      "dataSent": "Nothing about the user: OpenMapX sends the OpenConditions server only the searched map area (or, when a vehicle is opened, a box of about 10 km around where it was, to find it again after it moved on), and OpenConditions reads the positions from its own store, filled by polling its sources on its own schedule",
       "dataReceived": "Anonymous vehicle positions with time, heading, the tasks reported and whether the plough is down or the spreader on; no vehicle or driver is named"
     },
     "domain:border-crossings": {
       "purpose": "Land border crossings and how long their queues are, read through OpenConditions",
-      "dataSent": "Nothing about the user: OpenMapX sends the OpenConditions server only the searched map area (or a box of about 200 m around a crossing when one is opened), and OpenConditions reads the crossings from its own store, filled by polling its sources on its own schedule",
+      "dataSent": "Nothing about the user: OpenMapX sends the OpenConditions server only the searched map area (or a box of about 200 m around a crossing when one is opened), and, to find opening hours one agency states for a crossing another publishes, that area widened by 2 km (or a box of about 4 km around the opened crossing); and OpenConditions reads the crossings from its own store, filled by polling its sources on its own schedule",
       "dataReceived": "Crossings with location, the countries they join, opening hours and status, and for each queue its direction, the wait time and the lanes open"
     },
     "domain:hazards": {
