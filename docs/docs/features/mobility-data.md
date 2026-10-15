@@ -52,14 +52,18 @@ point with category-appropriate detail in the place panel:
   surface, coldest road temperature and air temperature and sorts by road
   temperature; the panel shows each surface sensor (state, road and ground
   temperature, freezing point, grip, water, snow, ice, salt) and the weather
-  above the road, with the time they were measured. A station out of service,
-  or without a value from the last hour, is drawn dimmed and says so.
+  above the road, with the time they were measured. A station out of service
+  or offline, or without a value from the last hour, is drawn dimmed and says
+  so. A station whose operator suspects or has confirmed a fault keeps its
+  values, with the fault noted in the list and atop the panel.
 - **Road maintenance** — snowploughs, spreaders and other road maintenance
-  vehicles where they last reported: blue while ploughing, orange while
-  salting or sanding, green for other work. The panel lists the tasks the
-  vehicle reports, whether its plough is down or its spreader on, and its
-  heading. Positions are anonymous and vanish ten minutes after a vehicle last
-  reports.
+  vehicles where they last reported, each trailing a faint line of where it
+  has been in its current task over the last ten minutes: blue while
+  ploughing, orange while salting or sanding, green for other work. The panel
+  names what the vehicle is doing, lists the tasks it reports, whether its
+  plough is down or its spreader on, and its heading. Positions are anonymous
+  and vanish ten minutes after a vehicle last reports; an open panel follows
+  the vehicle to its next position.
 - **Border crossings** — land border crossings, colored by the longest current
   wait for cars: green up to 15 minutes, orange up to 45, red beyond, grey when
   closed. Where both countries publish their queues, the crossing shows both

@@ -43,15 +43,30 @@ const statedTasks = (vehicle: ServiceVehicle): string[] =>
  */
 export function variantOf(vehicle: ServiceVehicle): VehicleWork {
   if (vehicle.plowDown === true || vehicle.activity === "plowing") return "plowing";
-  if (vehicle.spreaderOn === true || vehicle.activity === "salting") return "spreading";
+  if (
+    vehicle.spreaderOn === true ||
+    vehicle.activity === "salting" ||
+    vehicle.activity === "sanding"
+  ) {
+    return "spreading";
+  }
   return statedTasks(vehicle).length > 0 ? "other" : "unknown";
 }
 
-/** What the vehicle is called by the work it does, since its publisher names no vehicle. */
+/**
+ * What the vehicle is called by the work it does, since its publisher names
+ * no vehicle: a spreader by what it spreads, when it says.
+ */
 function nameOf(vehicle: ServiceVehicle): I18nToken {
   const work = variantOf(vehicle);
+  if (work === "spreading" && (vehicle.activity === "salting" || vehicle.activity === "sanding")) {
+    return token(`vehicle.${vehicle.activity}`);
+  }
   return token(work === "plowing" || work === "spreading" ? `vehicle.${work}` : "vehicle.other");
 }
+
+/** The activities the strings name; an unknown one says nothing worth a row. */
+const LABELLED_ACTIVITIES = new Set(Object.keys(strings.activity));
 
 function summaryOf(vehicle: ServiceVehicle): I18nToken {
   const [first, ...rest] = statedTasks(vehicle);
@@ -75,6 +90,9 @@ function headingOf(degrees: number): I18nToken {
 
 function workSection(vehicle: ServiceVehicle): DataSourceDetailSection {
   const rows: Row[] = [];
+  if (vehicle.activity && LABELLED_ACTIVITIES.has(vehicle.activity)) {
+    rows.push([token("row.activity"), token(`activity.${vehicle.activity}`)]);
+  }
   const tasks = statedTasks(vehicle);
   if (tasks.length === 1) rows.push([token("row.task"), taskLabel(tasks[0]!)]);
   if (tasks.length > 1) rows.push([token("row.tasks"), tasks.map(taskLabel)]);
@@ -117,6 +135,7 @@ export function mapVehicleToResult(vehicle: ServiceVehicle): DataSourceResult {
     name: "",
     fallbackName: nameOf(vehicle),
     coordinates: vehicle.coordinates,
+    ...(vehicle.trail ? { track: vehicle.trail.map((p) => [p[0], p[1]] as [number, number]) } : {}),
     source: vehicle.sources[0] ?? "unknown",
     sources: [...vehicle.sources],
     contributors: siteAttributions([vehicle]),

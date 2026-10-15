@@ -4,7 +4,17 @@
   "vehicle": {
     "plowing": "Snowplough",
     "spreading": "Spreader",
+    "salting": "Salt spreader",
+    "sanding": "Sand spreader",
     "other": "Maintenance vehicle"
+  },
+  "activity": {
+    "plowing": "Ploughing",
+    "salting": "Salting",
+    "sanding": "Sanding",
+    "deadheading": "Driving to work",
+    "idle": "Idle",
+    "responding": "Responding"
   },
   "summary": {
     "task": "{task}",
@@ -19,6 +29,7 @@
     "anonymous": "Positions are anonymous and disappear ten minutes after a vehicle last reports."
   },
   "row": {
+    "activity": "Activity",
     "task": "Task",
     "tasks": "Tasks",
     "plough": "Plough",

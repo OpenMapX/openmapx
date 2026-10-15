@@ -83,7 +83,14 @@ function coldestSurface(station: RoadWeatherStation): number | undefined {
 }
 
 /** The surface state, the coldest road temperature and the air temperature, as far as measured. */
+/** The summary, with a fault its operator suspects or has confirmed after it. */
 function summaryOf(station: RoadWeatherStation): I18nToken {
+  const summary = valuesSummaryOf(station);
+  if (station.status === "temporarily_closed" || !station.fault) return summary;
+  return token("summary.withFault", { summary, fault: token(`fault.${station.fault.level}`) });
+}
+
+function valuesSummaryOf(station: RoadWeatherStation): I18nToken {
   if (station.status === "temporarily_closed") return token("summary.closed");
   if (station.stale) return token("summary.stale");
   const state = worstSensor(station)?.state?.value;
@@ -233,6 +240,18 @@ function silentSection(station: RoadWeatherStation): DataSourceDetailSection {
   };
 }
 
+/** A fault in the station's equipment, which its values are shown beside, and since when. */
+function faultSection(fault: NonNullable<RoadWeatherStation["fault"]>): DataSourceDetailSection {
+  const since = validObservedAt(fault.since);
+  return {
+    title: token("section.status"),
+    type: "text",
+    content: token(`text.fault.${fault.level}`),
+    sectionIcon: "warning",
+    ...(since ? { caption: token("caption.since"), captionTimestamp: since } : {}),
+  };
+}
+
 function infoSection(station: RoadWeatherStation): DataSourceDetailSection | null {
   const rows: Row[] = [];
   if (station.road) rows.push([token("row.road"), station.road]);
@@ -274,6 +293,9 @@ export function mapStationToResult(station: RoadWeatherStation): DataSourceResul
  */
 export function mapStationToDetail(station: RoadWeatherStation): DataSourceDetail {
   const sections: DataSourceDetailSection[] = [];
+  if (station.fault && station.status !== "temporarily_closed") {
+    sections.push(faultSection(station.fault));
+  }
   if (reporting(station)) {
     for (const sensor of station.surface) {
       const section = surfaceSection(sensor, station.surface.length);

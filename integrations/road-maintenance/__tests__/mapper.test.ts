@@ -86,6 +86,33 @@ describe("mapVehicleToResult", () => {
     expect(variantOf({ ...brushing, tasks: [] })).toBe("unknown");
   });
 
+  it("puts sanding with salting, each named by what it spreads", () => {
+    const spreader = (activity: "salting" | "sanding") =>
+      vehicle({ activity, plowDown: undefined, spreaderOn: true, tasks: ["SPOT_SANDING"] });
+    const sanding = mapVehicleToResult(spreader("sanding"));
+    expect(sanding.variant).toBe("spreading");
+    expect(text(sanding.fallbackName)).toBe("Sand spreader");
+    expect(text(sanding.fallbackName, "de")).toBe("Sandstreuer");
+    expect(text(mapVehicleToResult(spreader("salting")).fallbackName)).toBe("Salt spreader");
+    expect(rows(mapVehicleToDetail(spreader("sanding")).sections[0], "de")[0]).toEqual([
+      "Tätigkeit",
+      "Sandstreuen",
+    ]);
+    // A spreader that says nothing of what it spreads is a spreader.
+    expect(
+      text(mapVehicleToResult(vehicle({ activity: undefined, plowDown: undefined })).fallbackName),
+    ).toBe("Spreader");
+  });
+
+  it("carries the vehicle's trail as the track the map draws behind it", () => {
+    const trail: [number, number][] = [
+      [25.5, 65.01],
+      [25.507827, 65.017175],
+    ];
+    expect(mapVehicleToResult(vehicle({ trail })).track).toEqual(trail);
+    expect(mapVehicleToResult(vehicle())).not.toHaveProperty("track");
+  });
+
   it("shows a task the strings do not know as the publisher writes it", () => {
     const result = mapVehicleToResult(
       vehicle({
@@ -108,12 +135,13 @@ describe("mapVehicleToDetail", () => {
     expect(text(detail.fallbackName)).toBe("Snowplough");
     expect(detail.sections.map((s) => text(s.title))).toEqual(["Work", "Info"]);
     expect(rows(detail.sections[0])).toEqual([
+      ["Activity", "Ploughing"],
       ["Tasks", "Ploughing and slush removal, Spot sanding"],
       ["Plough", "Down"],
       ["Spreader", "On"],
       ["Heading", "North (5°)"],
     ]);
-    expect(rows(detail.sections[0], "de")[3]).toEqual(["Fahrtrichtung", "Norden (5°)"]);
+    expect(rows(detail.sections[0], "de")[4]).toEqual(["Fahrtrichtung", "Norden (5°)"]);
     expect(detail.sections[0]).toMatchObject({ sectionIcon: "construction", captionTimestamp: AT });
     expect(rows(detail.sections[1])).toEqual([
       ["Provider", "Fintraffic Digitraffic road maintenance tracking"],
@@ -128,6 +156,7 @@ describe("mapVehicleToDetail", () => {
   it("states one task, or none, and leaves out what the vehicle does not report", () => {
     const one = mapVehicleToDetail(
       vehicle({
+        activity: undefined,
         tasks: ["SALTING"],
         plowDown: undefined,
         spreaderOn: undefined,
@@ -136,7 +165,7 @@ describe("mapVehicleToDetail", () => {
     );
     expect(rows(one.sections[0])).toEqual([["Task", "Salting"]]);
     const none = mapVehicleToDetail(
-      vehicle({ tasks: [], plowDown: undefined, spreaderOn: undefined }),
+      vehicle({ activity: "unknown", tasks: [], plowDown: undefined, spreaderOn: undefined }),
     );
     expect(rows(none.sections[0], "de")[0]).toEqual(["Arbeit", "Keine gemeldet"]);
   });

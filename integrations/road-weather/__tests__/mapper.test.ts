@@ -176,6 +176,56 @@ describe("mapStationToDetail", () => {
     ]);
   });
 
+  it("notes a fault above the values it still shows, and states it in the summary", () => {
+    const since = "2026-08-25T13:14:17Z";
+    const suspected = station({ fault: { level: "suspected", since } });
+    const detail = mapStationToDetail(suspected);
+    expect(detail.sections.map((s) => text(s.title))).toEqual([
+      "Station status",
+      "Road surface, sensor 1",
+      "Road surface, sensor 2",
+      "Weather",
+      "Info",
+    ]);
+    expect(detail.sections[0]).toMatchObject({
+      type: "text",
+      sectionIcon: "warning",
+      captionTimestamp: since,
+    });
+    expect(text(detail.sections[0]?.content as I18nToken)).toMatch(/suspects a fault/);
+    const result = mapStationToResult(suspected);
+    expect(result).toMatchObject({ variant: "icy", status: "operational" });
+    expect(text(result.summary)).toBe("Black ice · Road -1.5 °C · Air 0.4 °C · Fault suspected");
+    expect(
+      text(mapStationToResult(station({ fault: { level: "confirmed" } })).summary, "de"),
+    ).toMatch(/· Störung bestätigt$/);
+    // Out of service says so alone.
+    const closed = station({ status: "temporarily_closed", fault: { level: "confirmed" } });
+    expect(text(mapStationToResult(closed).summary)).toBe("Out of service");
+    expect(mapStationToDetail(closed).sections.map((s) => text(s.title))).toEqual([
+      "Readings",
+      "Info",
+    ]);
+  });
+
+  it("shows a dry sensor without salt or freezing point cleanly", () => {
+    const detail = mapStationToDetail(
+      station({
+        surface: [
+          {
+            index: 1,
+            state: { value: "dry", observedAt: AT },
+            temperatureC: { value: 9.6, observedAt: AT },
+          },
+        ],
+      }),
+    );
+    expect(rows(detail.sections[0])).toEqual([
+      ["Surface", "Dry"],
+      ["Road temperature", "9.6 °C"],
+    ]);
+  });
+
   it("titles a single sensor's section the road surface", () => {
     const detail = mapStationToDetail(station({ surface: [station().surface[0]!] }));
     expect(text(detail.sections[0]?.title, "de")).toBe("Fahrbahn");

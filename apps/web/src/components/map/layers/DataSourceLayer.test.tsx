@@ -200,6 +200,49 @@ it("refreshes locale and context data, clears context, and handles zoom and sour
   context = undefined;
 });
 
+it("draws a moving result's track under its marker, credited by the track, and clears it", () => {
+  fake.state.zoom = 12;
+  const tracked = results[0] as (typeof results)[number] & { track?: number[][] };
+  tracked.track = [
+    [7.99, 49.99],
+    [8, 50],
+  ];
+  useDataSourceStore.setState({ activeSource: "sample", filters: {}, viewportZoom: 12 });
+  const view = render(<DataSourceLayer />);
+  const tracks = fake.state.sources.get("ds-sample-tracks")?.data as GeoJSON.FeatureCollection;
+  expect(tracks.features).toHaveLength(1);
+  expect(tracks.features[0]?.geometry).toEqual({ type: "LineString", coordinates: tracked.track });
+  expect(fake.state.layers.get("ds-sample-tracks")).toMatchObject({ type: "line" });
+
+  act(() => {
+    useDataSourceStore.setState({ activeSource: null });
+  });
+  expect(fake.state.sources.has("ds-sample-tracks")).toBe(false);
+  expect(fake.state.layers.has("ds-sample-tracks")).toBe(false);
+  view.unmount();
+  delete tracked.track;
+});
+
+it("builds tracks only for results with two or more positions", async () => {
+  const { buildTrackGeoJson } = await import("./DataSourceLayer");
+  const base = { id: "v", name: "", source: "s", variant: "plowing", coordinates: [8, 50] };
+  expect(
+    buildTrackGeoJson([
+      { ...base, track: [[8, 50]] },
+      { ...base, id: "w" },
+      {
+        ...base,
+        id: "x",
+        status: "non-operational",
+        track: [
+          [7, 49],
+          [8, 50],
+        ],
+      },
+    ] as never).features.map((f) => f.properties),
+  ).toEqual([expect.objectContaining({ id: "x", variant: "plowing", status: "non-operational" })]);
+});
+
 it("adds a supplied logo pin while retaining live availability styling and fallback", async () => {
   results[0].branding = { logoUrl: "https://provider.example/logo.png" };
   results[0].availability = { available: 0, total: 4 };

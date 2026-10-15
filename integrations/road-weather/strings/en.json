@@ -10,7 +10,12 @@
     "grip": "Grip {value, number, ::.00}",
     "closed": "Out of service",
     "stale": "No current readings",
-    "noValues": "No values"
+    "noValues": "No values",
+    "withFault": "{summary} · {fault}"
+  },
+  "fault": {
+    "suspected": "Fault suspected",
+    "confirmed": "Fault confirmed"
   },
   "state": {
     "dry": "Dry",
@@ -40,15 +45,21 @@
     "surface": "Road surface",
     "surfaceSensor": "Road surface, sensor {n}",
     "air": "Weather",
-    "readings": "Readings"
+    "readings": "Readings",
+    "status": "Station status"
   },
   "caption": {
     "measured": "Measured",
-    "lastReading": "Last reading"
+    "lastReading": "Last reading",
+    "since": "Since"
   },
   "text": {
     "closed": "The station is temporarily out of service.",
-    "stale": "The station has reported no current readings."
+    "stale": "The station has reported no current readings.",
+    "fault": {
+      "suspected": "Its operator suspects a fault in the station's equipment, so its values may be wrong.",
+      "confirmed": "Its operator has confirmed a fault in the station's equipment, so its values may be wrong."
+    }
   },
   "row": {
     "surface": "Surface",

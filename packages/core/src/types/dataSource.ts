@@ -99,6 +99,11 @@ export interface DataSourceResult extends ContributingRecord {
   /** The title shown, translated, when `name` is empty: what the item is (e.g. "Fuel station"). */
   fallbackName?: I18nToken;
   coordinates: LngLat;
+  /**
+   * Where a moving item has just been, oldest first and ending at
+   * `coordinates`; the map draws it as a short line behind the marker.
+   */
+  track?: LngLat[];
   source: string;
   /** All contributing source ids when a result merges records from multiple providers. */
   sources?: string[];

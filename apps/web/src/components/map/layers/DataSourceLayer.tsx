@@ -82,6 +82,14 @@ function labelsLayerId(dsId: string) {
   return `ds-${dsId}-labels`;
 }
 
+function tracksSourceId(dsId: string) {
+  return `ds-${dsId}-tracks`;
+}
+
+function tracksLayerId(dsId: string) {
+  return `ds-${dsId}-tracks`;
+}
+
 function mapContextSourceId(dsId: string) {
   return `ds-${dsId}-map-context`;
 }
@@ -184,6 +192,32 @@ export function buildGeoJson(
   };
 }
 
+/** The tracks of the results that carry one, as lines coloured like their markers. */
+export function buildTrackGeoJson(results: DataSourceResult[]) {
+  return {
+    type: "FeatureCollection" as const,
+    features: results.flatMap((r) => {
+      if (!r.track || r.track.length < 2) return [];
+      const contributors = contributorsForRecordFields(r, ["track", "variant"]);
+      return [
+        withFeatureContributors(
+          {
+            type: "Feature" as const,
+            geometry: { type: "LineString" as const, coordinates: r.track },
+            properties: {
+              id: r.id,
+              variant: r.variant,
+              status: r.status ?? "",
+              _mapTrackAttributions: serializeContributors(contributors),
+            },
+          },
+          contributors,
+        ),
+      ];
+    }),
+  };
+}
+
 function buildMapContextSelection(results: DataSourceResult[]): DataSourceMapContextSelection {
   const systemIds = new Set<string>();
   const vehicleTypeIds = new Set<string>();
@@ -251,7 +285,10 @@ function removeLayers(map: maplibregl.Map, dsId: string) {
   const mapContextSid = mapContextSourceId(dsId);
   const mapContextFill = mapContextFillLayerId(dsId);
   const mapContextOutline = mapContextOutlineLayerId(dsId);
+  const tracks = tracksLayerId(dsId);
   try {
+    if (map.getLayer(tracks)) map.removeLayer(tracks);
+    if (map.getSource(tracksSourceId(dsId))) map.removeSource(tracksSourceId(dsId));
     if (map.getLayer(mapContextOutline)) map.removeLayer(mapContextOutline);
     if (map.getLayer(mapContextFill)) map.removeLayer(mapContextFill);
     if (map.getLayer(brandLogosLayerId(dsId))) map.removeLayer(brandLogosLayerId(dsId));
@@ -263,6 +300,7 @@ function removeLayers(map: maplibregl.Map, dsId: string) {
   } catch {
     // Source may already be torn down
   }
+  unregisterLayerSlot(tracks);
   unregisterLayerSlot(mapContextOutline);
   unregisterLayerSlot(mapContextFill);
   unregisterLayerSlot(brandLogosLayerId(dsId));
@@ -427,6 +465,7 @@ export function DataSourceLayer() {
             brandHalosLayerId(activeSource),
             mapContextFillLayerId(activeSource),
             mapContextOutlineLayerId(activeSource),
+            tracksLayerId(activeSource),
           ]
         : [],
     [activeSource],
@@ -461,6 +500,8 @@ export function DataSourceLayer() {
             : [];
         if (feature.layer.id === markersLayerId(activeSource))
           return readCapturedContributors(properties._mapMarkerAttributions) ?? [];
+        if (feature.layer.id === tracksLayerId(activeSource))
+          return readCapturedContributors(properties._mapTrackAttributions) ?? [];
         // Shared-mobility context geometry carries its own producer receipts.
         return undefined;
       },
@@ -557,6 +598,7 @@ export function DataSourceLayer() {
       ),
     [filteredResults, activeMeta, activeSource, resolveToken, t],
   );
+  const trackGeojson = useMemo(() => buildTrackGeoJson(filteredResults), [filteredResults]);
 
   // Sync GeoJSON source + layers
   useEffect(() => {
@@ -702,6 +744,41 @@ export function DataSourceLayer() {
             "overlay-markers",
             18,
           );
+      }
+
+      const tracksSid = tracksSourceId(activeSource);
+      const tracksLid = tracksLayerId(activeSource);
+      if (trackGeojson.features.length > 0) {
+        publish(map, tracksSid, trackGeojson);
+        if (!map.getLayer(tracksLid)) {
+          // Thin and faint under the markers: where the item has just been, not a route.
+          const opacity: maplibregl.ExpressionSpecification = [
+            "case",
+            ["==", ["get", "status"], "non-operational"],
+            0.25,
+            0.55,
+          ];
+          addLayerInSlot(
+            map,
+            {
+              id: tracksLid,
+              type: "line",
+              source: tracksSid,
+              layout: { "line-cap": "round", "line-join": "round" },
+              paint: {
+                "line-color": buildVariantColorExpression(activeMeta.markerStyle),
+                "line-width": ["interpolate", ["linear"], ["zoom"], 8, 1.5, 14, 3],
+                "line-opacity": opacity,
+              },
+            },
+            "overlay-lines",
+            17,
+          );
+        }
+      } else {
+        if (map.getLayer(tracksLid)) map.removeLayer(tracksLid);
+        if (map.getSource(tracksSid)) map.removeSource(tracksSid);
+        unregisterLayerSlot(tracksLid);
       }
 
       const mapContextData = mapContext?.geojson;
@@ -879,6 +956,7 @@ export function DataSourceLayer() {
     activeSource,
     activeMeta,
     geojson,
+    trackGeojson,
     publish,
     viewportZoom,
     mapReady,

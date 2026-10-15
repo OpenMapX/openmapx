@@ -10,7 +10,12 @@
     "grip": "Griffigkeit {value, number, ::.00}",
     "closed": "Außer Betrieb",
     "stale": "Keine aktuellen Messwerte",
-    "noValues": "Keine Messwerte"
+    "noValues": "Keine Messwerte",
+    "withFault": "{summary} · {fault}"
+  },
+  "fault": {
+    "suspected": "Störung vermutet",
+    "confirmed": "Störung bestätigt"
   },
   "state": {
     "dry": "Trocken",
@@ -40,15 +45,21 @@
     "surface": "Fahrbahn",
     "surfaceSensor": "Fahrbahn, Sensor {n}",
     "air": "Wetter",
-    "readings": "Messwerte"
+    "readings": "Messwerte",
+    "status": "Stationszustand"
   },
   "caption": {
     "measured": "Gemessen",
-    "lastReading": "Letzter Messwert"
+    "lastReading": "Letzter Messwert",
+    "since": "Seit"
   },
   "text": {
     "closed": "Die Station ist vorübergehend außer Betrieb.",
-    "stale": "Die Station hat keine aktuellen Messwerte gemeldet."
+    "stale": "Die Station hat keine aktuellen Messwerte gemeldet.",
+    "fault": {
+      "suspected": "Der Betreiber vermutet eine Störung der Station, ihre Messwerte können daher falsch sein.",
+      "confirmed": "Der Betreiber hat eine Störung der Station bestätigt, ihre Messwerte können daher falsch sein."
+    }
   },
   "row": {
     "surface": "Zustand",

@@ -4,7 +4,17 @@
   "vehicle": {
     "plowing": "Räumfahrzeug",
     "spreading": "Streufahrzeug",
+    "salting": "Salzstreuer",
+    "sanding": "Sandstreuer",
     "other": "Straßendienstfahrzeug"
+  },
+  "activity": {
+    "plowing": "Schneeräumen",
+    "salting": "Salzstreuen",
+    "sanding": "Sandstreuen",
+    "deadheading": "Anfahrt zum Einsatz",
+    "idle": "Im Stand",
+    "responding": "Im Einsatz"
   },
   "summary": {
     "task": "{task}",
@@ -19,6 +29,7 @@
     "anonymous": "Positionen sind anonym und verschwinden zehn Minuten nach der letzten Meldung eines Fahrzeugs."
   },
   "row": {
+    "activity": "Tätigkeit",
     "task": "Arbeit",
     "tasks": "Arbeiten",
     "plough": "Pflug",
