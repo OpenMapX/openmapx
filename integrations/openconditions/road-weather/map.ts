@@ -21,6 +21,7 @@ import {
   noticeCredits,
   pointOf,
   type Rec,
+  readingCurrent,
   rec,
   sourcesOf,
   str,
@@ -119,9 +120,7 @@ function deviceStatusOf(
   now: number,
 ): { value: "ok" | "warning" | "error" | "offline"; since?: string } | undefined {
   const reading = newestReading(readings, DEVICE_STATUS, undefined);
-  if (reading === undefined) return undefined;
-  const until = reading.validUntil === undefined ? Number.NaN : Date.parse(reading.validUntil);
-  if (Number.isFinite(until) && until < now) return undefined;
+  if (reading === undefined || !readingCurrent(reading, now, 0)) return undefined;
   const value = categoryOf<"ok" | "warning" | "error" | "offline">(reading, DEVICE_STATUSES);
   if (!value) return undefined;
   const since = instantOf(reading.phenomenonTime);
@@ -135,14 +134,12 @@ function timeOf(reading: LatestReading): number {
 }
 
 /**
- * Whether a reading is current at `now`: measured within its freshness
- * window, and not past the validity OpenConditions gives a change-only one.
+ * Whether a reading is current at `now`: a measured value within its
+ * freshness window, a change-only one (the surface state, the precipitation
+ * type) while its validity lasts, however long ago it last changed.
  */
-function current(reading: LatestReading, now: number): boolean {
-  const until = reading.validUntil === undefined ? Number.NaN : Date.parse(reading.validUntil);
-  if (Number.isFinite(until) && until < now) return false;
-  return now - timeOf(reading) <= VALUE_FRESH_MS;
-}
+const current = (reading: LatestReading, now: number): boolean =>
+  readingCurrent(reading, now, VALUE_FRESH_MS);
 
 function measured<T>(reading: LatestReading, value: T): RoadWeatherValue<T> {
   const at = instantOf(reading.phenomenonTime);

@@ -139,6 +139,31 @@ describe("border-crossings-openconditions", () => {
     });
   });
 
+  test("a crossing closed for months is closed while the status's validity lasts", () => {
+    const answer = body();
+    const record = named(answer, "Calais: Milltown");
+    const readings = answer.latest[String(record.id)]!.map((r) =>
+      r.property === "facility.open_status"
+        ? {
+            ...r,
+            phenomenonTime: { instant: "2026-03-02T12:00:00Z" },
+            validUntil: "2026-10-15T00:08:05Z",
+          }
+        : r,
+    );
+    expect(recordToBorderCrossing(record, readings, undefined, undefined, NOW)?.open).toBe(
+      "closed",
+    );
+    const unbounded = readings.map((r) => {
+      if (r.property !== "facility.open_status") return r;
+      const { validUntil: _validUntil, ...rest } = r;
+      return rest;
+    });
+    expect(recordToBorderCrossing(record, unbounded, undefined, undefined, NOW)).not.toHaveProperty(
+      "open",
+    );
+  });
+
   test("a status past its validity states nothing", () => {
     const later = crossing("Peace Bridge", undefined, new Date("2026-10-15T02:00:00Z"))!;
     expect(later.open).toBeUndefined();

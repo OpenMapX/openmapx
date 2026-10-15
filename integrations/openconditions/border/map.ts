@@ -20,6 +20,7 @@ import {
   noticeCredits,
   pointOf,
   type Rec,
+  readingCurrent,
   rec,
   sourcesOf,
   splitKey,
@@ -29,8 +30,6 @@ import {
 
 /** How long a stated wait stays current: the freshness window of `border.wait`. */
 export const WAIT_FRESH_MS = 7_200_000;
-/** How long a crossing's stated open status stays current: the window of `facility.open_status`. */
-export const OPEN_STATUS_FRESH_MS = 86_400_000;
 
 const MODES: ReadonlySet<string> = new Set<BorderCrossingMode>([
   "commercial",
@@ -63,15 +62,6 @@ const country = (value: unknown): string | undefined =>
 const count = (value: unknown): number | undefined =>
   typeof value === "number" && Number.isInteger(value) && value >= 0 ? value : undefined;
 
-/** Whether a reading is current at `now`: stated within `freshMs`, and not past its validity. */
-function current(reading: LatestReading, now: number, freshMs: number): boolean {
-  const until = reading.validUntil === undefined ? Number.NaN : Date.parse(reading.validUntil);
-  if (Number.isFinite(until) && until < now) return false;
-  const at = instantOf(reading.phenomenonTime);
-  const ms = at === undefined ? Number.NaN : Date.parse(at);
-  return Number.isFinite(ms) && now - ms <= freshMs;
-}
-
 /**
  * An OpenConditions `border_crossing` record with its readings in effect as
  * a border crossing. Each `lane_group` component is a queue, in the
@@ -79,7 +69,8 @@ function current(reading: LatestReading, now: number, freshMs: number): boolean 
  * it; a canonical crossing lists the queues of every agency that publishes
  * one way across it. A queue without a current wait reads `unknown` and
  * stale, keeping a stale reading's last stated wait. The crossing is open
- * or closed as a current `facility.open_status` reading states it.
+ * or closed as a `facility.open_status` reading states it while its validity
+ * lasts: it is written only when it changes, so its age says nothing.
  *
  * Every source `excluded` holds is taken out: its credit, its readings and
  * the queues it published. Null when the record is no placeable crossing or
@@ -126,7 +117,7 @@ export function recordToBorderCrossing(
     const waitMinutes = count(value.waitMinutes);
     const lanesOpen = count(value.lanesOpen);
     const updatedAt = reading ? instantOf(reading.phenomenonTime) : undefined;
-    const fresh = reading !== undefined && current(reading, at, WAIT_FRESH_MS);
+    const fresh = reading !== undefined && readingCurrent(reading, at, WAIT_FRESH_MS);
     queues.push({
       key,
       mode,
@@ -143,9 +134,7 @@ export function recordToBorderCrossing(
 
   const openReading = newestReading(readings, "facility.open_status", undefined);
   const openValue =
-    openReading && current(openReading, at, OPEN_STATUS_FRESH_MS)
-      ? rec(openReading.result).value
-      : undefined;
+    openReading && readingCurrent(openReading, at, 0) ? rec(openReading.result).value : undefined;
   const open = openValue === "open" || openValue === "closed" ? openValue : undefined;
   const countries = Array.isArray(rec(record.details).countries)
     ? (rec(record.details).countries as unknown[]).flatMap((c) => country(c) ?? [])

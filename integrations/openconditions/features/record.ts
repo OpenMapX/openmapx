@@ -147,6 +147,36 @@ export function instantOf(time: unknown): string | undefined {
   return str(t.instant) ?? str(t.end) ?? str(t.start);
 }
 
+/**
+ * The properties OpenConditions keeps only the changes of (`retention.changeOnly`
+ * in its model: model-weather, model-facilities and model-roads). A reading of
+ * one is written once per change, so its `phenomenonTime` is when the value
+ * last changed, however long ago; OpenConditions serves it with the
+ * `validUntil` its source's polling gives it (`withPolledValidity`).
+ */
+export const CHANGE_ONLY_PROPERTIES: ReadonlySet<string> = new Set([
+  "weather.precipitation_type",
+  "road.surface_state",
+  "facility.open_status",
+  "traffic.los",
+  "vms.display",
+  "camera.image",
+  "device.status",
+]);
+
+/**
+ * Whether a reading is in effect at `now` (epoch milliseconds). A change-only
+ * reading is while its `validUntil` lies ahead, however old it is; any other
+ * reading while it was observed within `freshMs` and is not past a
+ * `validUntil` it states.
+ */
+export function readingCurrent(reading: LatestReading, now: number, freshMs: number): boolean {
+  const until = reading.validUntil === undefined ? Number.NaN : Date.parse(reading.validUntil);
+  if (CHANGE_ONLY_PROPERTIES.has(reading.property)) return Number.isFinite(until) && until > now;
+  if (Number.isFinite(until) && until < now) return false;
+  return now - observedAt(reading) <= freshMs;
+}
+
 /** When a reading was observed, in epoch milliseconds; -Infinity when it does not say. */
 function observedAt(reading: LatestReading): number {
   const at = instantOf(reading.phenomenonTime);

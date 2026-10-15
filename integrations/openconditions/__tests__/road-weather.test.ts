@@ -181,6 +181,43 @@ describe("road-weather-openconditions", () => {
     expect(expired?.updatedAt).toBe("2026-10-14T23:19:55Z");
   });
 
+  test("a change-only value is current while its validity lasts, however long ago it changed", () => {
+    const answer = body();
+    // The road has been dry since summer; the feed still polls, so the state stands.
+    const readings = answer.latest[NUPURI]!.map((r) =>
+      r.property === "road.surface_state" || r.property === "weather.precipitation_type"
+        ? {
+            ...r,
+            phenomenonTime: { instant: "2026-06-01T08:00:00Z" },
+            validUntil: "2026-10-14T23:55:19Z",
+          }
+        : r,
+    );
+    const station = recordToRoadWeatherStation(
+      answer.records[0]!,
+      readings,
+      undefined,
+      undefined,
+      NOW,
+    );
+    expect(station?.surface[0]?.state).toEqual({
+      value: "dry",
+      observedAt: "2026-06-01T08:00:00Z",
+    });
+    expect(station?.air.precipitation?.value).toBe("none");
+
+    // Without a validity a change-only value says nothing about now.
+    const unbounded = answer.latest[NUPURI]!.map((r) => {
+      if (r.property !== "road.surface_state") return r;
+      const { validUntil: _validUntil, ...rest } = r;
+      return rest;
+    });
+    expect(
+      recordToRoadWeatherStation(answer.records[0]!, unbounded, undefined, undefined, NOW)
+        ?.surface[0]?.state,
+    ).toBeUndefined();
+  });
+
   test("a change-only value past the validity OpenConditions gives it is no current one", () => {
     const answer = body();
     const readings = answer.latest[NUPURI]!.map((r) =>
