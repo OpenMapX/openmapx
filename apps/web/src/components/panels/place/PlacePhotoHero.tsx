@@ -134,7 +134,7 @@ export function PlacePhotoHero({
           px: 0.5,
           py: 0.125,
           maxWidth: "calc(100% - 12px)",
-          fontSize: "0.6875rem",
+          fontSize: "0.625rem",
           color: "#fff",
           lineHeight: 1.3,
           "& a": { fontSize: "inherit" },

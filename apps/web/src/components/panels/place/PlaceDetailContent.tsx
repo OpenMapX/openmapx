@@ -22,6 +22,7 @@ import type { MergedRoute, TransportMode } from "@openmapx/mobility-core/transit
 import { useLocale, useTranslations } from "next-intl";
 import { useEffect, useMemo, useState } from "react";
 import { BrandLogo } from "@/components/search/BrandLogo";
+import { AttributionDetailsGroup } from "@/components/ui/AttributionDetailsGroup";
 import { BRAND } from "@/integration-api/runtime/theme";
 import { useDetailChrome } from "../DetailShell";
 import { useFloatingMobileSheetHandle } from "../sheet/mobileSheetShared";
@@ -344,7 +345,7 @@ function PlaceDetailContentInner({ place, isLoading, onClose, clearSearchBar = f
   const titleSx = { fontWeight: 600, pr: onClose && !showHeaderWeather ? 4 : 0 };
 
   return (
-    <>
+    <AttributionDetailsGroup>
       {/* Header photo with "View photos" — hidden at peek so the collapsed
           sheet shows the marked [data-omx-peek] subtree (title + chips)
           instead of a cropped slice of the photo. The photo sits ABOVE that
@@ -560,6 +561,6 @@ function PlaceDetailContentInner({ place, isLoading, onClose, clearSearchBar = f
       {tab === 1 && <PlaceReviewsTab place={place} />}
       {showPrices && tab === pricesIndex && <PlaceHotelPricesTab place={place} />}
       {tab === infoIndex && <PlaceInfoTab place={place} isLoading={isLoading} />}
-    </>
+    </AttributionDetailsGroup>
   );
 }

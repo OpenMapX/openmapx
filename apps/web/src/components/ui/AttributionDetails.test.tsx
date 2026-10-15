@@ -44,7 +44,8 @@ describe("structured credit details", () => {
     });
     expect(dialog.getByRole("heading", { name: "© OpenMapTiles" })).toBeTruthy();
     expect(dialog.getByRole("link", { name: "CC-BY-4.0" })).toBeTruthy();
-    expect(dialog.getByText("OpenMapTiles code").closest("details")).not.toBeNull();
+    expect(dialog.getByText("OpenMapTiles code")).toBeTruthy();
+    expect(dialog.queryByText("Software and service terms")).toBeNull();
     expect(dialog.queryByText(/OpenMapTiles \(OpenMapTiles schema/)).toBeNull();
     expect(dialog.getByRole("link", { name: "BSD-3-Clause" })).toHaveAttribute(
       "href",
@@ -129,4 +130,31 @@ it("retains same-named credit and publisher links when their destinations differ
     "https://publisher.example/credit",
   ])
     expect(destinations).toContain(url);
+});
+
+it("uses the supplied linked source credit as the heading without repeating its generated source name", () => {
+  const dialog = show({
+    sourceId: "weather",
+    name: "Weather gateway (agency observations)",
+    url: "https://gateway.example/",
+    attributionText:
+      '<a href="https://agency.example/">Agency</a> via <a href="https://gateway.example/">Gateway</a>',
+    licensing: {
+      version: 1,
+      bindings: [
+        { scope: "data", subject: "Data", license: { kind: "spdx", expression: "CC-BY-4.0" } },
+      ],
+    },
+  });
+  const heading = within(dialog.getByRole("heading", { name: "Agency via Gateway" }));
+  expect(heading.getByRole("link", { name: "Agency" })).toHaveAttribute(
+    "href",
+    "https://agency.example/",
+  );
+  expect(heading.getByRole("link", { name: "Gateway" })).toHaveAttribute(
+    "href",
+    "https://gateway.example/",
+  );
+  expect(dialog.queryByText("Weather gateway (agency observations)")).toBeNull();
+  expect(dialog.getByRole("link", { name: "CC-BY-4.0" })).toBeTruthy();
 });

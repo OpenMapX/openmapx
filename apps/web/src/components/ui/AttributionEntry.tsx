@@ -46,8 +46,14 @@ export function AttributionEntry({ entry }: { entry: AttributionDetail }) {
     !covers(creditParts, attr.publisher.name, attr.publisher.url)
       ? buildRuntimeAttributionHtml({ sourceId: attr.sourceId, ...attr.publisher })
       : undefined;
+  // A supplied credit already linking the canonical source can be the heading.
+  // Otherwise retain both: identical labels can still lead to distinct required URLs.
+  const creditIsHeading = Boolean(
+    credit && attr.url && creditParts.links.some((link) => link.url === attr.url),
+  );
   const distinctCredit =
     credit &&
+    !creditIsHeading &&
     (creditParts.text !== identityParts.text ||
       creditParts.links.some(
         (link) =>
@@ -105,7 +111,7 @@ export function AttributionEntry({ entry }: { entry: AttributionDetail }) {
         component="h3"
         sx={{ m: 0, fontSize: "0.9375rem", fontWeight: 600, lineHeight: 1.5 }}
       >
-        <AttributionText html={identity} />
+        <AttributionText html={creditIsHeading ? (credit ?? identity) : identity} />
       </Typography>
       {publisher && (
         <Box sx={{ mt: 0.5, color: "text.secondary" }}>
@@ -124,17 +130,13 @@ export function AttributionEntry({ entry }: { entry: AttributionDetail }) {
       )}
       {secondary.length > 0 && (
         <Box
-          component="details"
-          open
           sx={{
             mt: 1,
             color: "text.secondary",
             fontSize: "0.75rem",
-            "& summary": { cursor: "pointer", mb: 0.5 },
             "& > div + div": { mt: 0.5 },
           }}
         >
-          <summary>{t("softwareAndService")}</summary>
           {secondary.map((binding) => grant(binding, binding.scope === "software"))}
         </Box>
       )}

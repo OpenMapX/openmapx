@@ -20,6 +20,7 @@ import {
 import { useTranslations } from "next-intl";
 import { type JSX, useState } from "react";
 import { AttributionDetails } from "./AttributionDetails";
+import { useGroupedAttributionDetails } from "./AttributionDetailsGroup";
 import { AttributionNotices } from "./AttributionNotices";
 
 /**
@@ -87,7 +88,7 @@ function chipLicense(attr: Attribution): string | undefined {
 
 function displayLabel(attr: Attribution): string {
   const text = chipLicense(attr);
-  return text ? `${attr.name} | ${text}` : attr.name;
+  return text ? `${attr.name} · ${text}` : attr.name;
 }
 
 /** Collapse identical displayed receipts, preserving every distinct required notice. */
@@ -121,14 +122,18 @@ export function AttributionStrip({
 }: AttributionStripProps): JSX.Element | null {
   const tc = useTranslations("common");
   const [expanded, setExpanded] = useState(false);
-  if (!attributions || attributions.length === 0) return null;
-  const items = dedupeForDisplay(attributions);
-  if (items.length === 0) return null;
+  const items = dedupeForDisplay(attributions ?? []);
 
   const isPanelHeader = variant === "panel-header";
   const isPlain = variant === "plain";
   const presentations = items.map((attr) => buildAttributionPresentation(attr, surface));
   const group = projectAttributionPresentations(presentations);
+  const logos = group.visible.flatMap((notice) => notice.logos);
+  const grouped = useGroupedAttributionDetails(
+    { entries: group.details, logos },
+    surface === "content",
+  );
+  if (items.length === 0) return null;
   const eligible = items.filter((_, index) => !presentations[index]?.visibleHtml);
   const collapsible =
     provenanceDisplay === "chips" && typeof maxVisible === "number" && eligible.length > maxVisible;
@@ -264,11 +269,6 @@ export function AttributionStrip({
             component="span"
             sx={{ minWidth: 0, overflowWrap: "anywhere", ...fitSx }}
           >
-            {isPlain && idx > 0 && (
-              <Box component="span" sx={{ color: "text.disabled", mr: 0.5 }}>
-                |
-              </Box>
-            )}
             <Tooltip title={tooltip} placement="top" arrow>
               <Box
                 component="span"
@@ -278,6 +278,11 @@ export function AttributionStrip({
                 {node}
               </Box>
             </Tooltip>
+            {isPlain && idx < visibleItems.length - 1 && (
+              <Box component="span" aria-hidden sx={{ color: "text.disabled", ml: 0.5 }}>
+                |
+              </Box>
+            )}
           </Box>
         );
       })}
@@ -305,10 +310,7 @@ export function AttributionStrip({
           {expanded ? tc("showLess") : tc("showMore", { count: hiddenCount })}
         </Typography>
       )}
-      <AttributionDetails
-        entries={group.details}
-        logos={group.visible.flatMap((notice) => notice.logos)}
-      />
+      {!grouped && <AttributionDetails entries={group.details} logos={logos} />}
     </Box>
   );
 }

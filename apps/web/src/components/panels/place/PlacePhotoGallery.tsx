@@ -298,7 +298,7 @@ function PlacePhotoGalleryInner({ open, onClose, placeName, placeId, lat, lng }:
                 }}
               >
                 <Box sx={{ minWidth: 0, flex: 1 }}>
-                  <Box sx={{ color: "#fff", fontSize: "0.8125rem" }}>
+                  <Box sx={{ color: "#fff", fontSize: "0.875rem" }}>
                     <PhotoAttribution key={selectedPhoto.url} photo={selectedPhoto} />
                   </Box>
                   {selectedPhoto.capturedAt && (

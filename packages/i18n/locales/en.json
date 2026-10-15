@@ -371,7 +371,6 @@
     "hideLegend": "Hide overlay legend"
   },
   "footer": {
-    "softwareAndService": "Software and service terms",
     "termsOfUse": "Terms of use",
     "sourceLink": "Source",
     "additionalSource": "Original source",
@@ -381,7 +380,7 @@
     "licenses": "Licenses",
     "credits": "Map credits",
     "attributions": "Credits",
-    "manyRequiredCredits": "These sources require visible credit. Disable an overlay to make more room for the map.",
+    "manyRequiredCredits": "Too many credits?",
     "manageOverlays": "Manage overlays"
   },
   "layers": {

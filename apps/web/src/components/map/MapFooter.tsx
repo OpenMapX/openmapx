@@ -86,8 +86,8 @@ export function MapFooter() {
         setMerged(false);
         return;
       }
-      // Flex rows align their bottom edges. The credits button (or wrapped
-      // text inside either bar) can give same-row bars different heights.
+      // Bars stretch to the same height within each flex row. Different
+      // bottom edges therefore indicate that the groups wrapped onto separate rows.
       const sameLine = Math.abs(l.bottom - c.bottom) < 1;
       setMerged(!sameLine || c.left - l.right < MERGE_GAP);
     };
@@ -133,7 +133,7 @@ export function MapFooter() {
         zIndex: 5,
         display: "flex",
         flexWrap: "wrap",
-        alignItems: "flex-end",
+        alignItems: "stretch",
         justifyContent: "flex-start",
         columnGap: 0,
         rowGap: 0,
@@ -155,7 +155,17 @@ export function MapFooter() {
         },
       }}
     >
-      <Box ref={linksRef} sx={{ ...barSx, display: "flex", flexWrap: "wrap", columnGap: "0.6em" }}>
+      <Box
+        ref={linksRef}
+        sx={{
+          ...barSx,
+          display: "flex",
+          flexWrap: "wrap",
+          alignItems: "center",
+          alignContent: "center",
+          columnGap: "0.6em",
+        }}
+      >
         <Link component={NextLink} href="/imprint">
           {t("legalNotice")}
         </Link>

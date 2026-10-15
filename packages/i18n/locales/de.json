@@ -371,7 +371,6 @@
     "hideLegend": "Legende ausblenden"
   },
   "footer": {
-    "softwareAndService": "Software und Nutzungsbedingungen",
     "termsOfUse": "Nutzungsbedingungen",
     "sourceLink": "Quelle",
     "additionalSource": "Originalquelle",
@@ -381,7 +380,7 @@
     "licenses": "Lizenzen",
     "credits": "Kartendaten",
     "attributions": "Quellen",
-    "manyRequiredCredits": "Diese Quellen benötigen sichtbare Hinweise. Deaktiviere eine Ebene, um mehr Platz für die Karte zu schaffen.",
+    "manyRequiredCredits": "Zu viele Quellenangaben?",
     "manageOverlays": "Ebenen verwalten"
   },
   "layers": {

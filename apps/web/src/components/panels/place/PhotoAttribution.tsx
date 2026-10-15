@@ -238,11 +238,7 @@ export function PhotoAttribution({ photo, color = "#fff", compact = false }: Pro
     <Box
       component="span"
       sx={{
-        display: "inline-flex",
-        flexWrap: "wrap",
-        alignItems: "center",
-        columnGap: 0.5,
-        rowGap: 0,
+        display: "inline",
         color,
         minWidth: 0,
         maxWidth: "100%",
@@ -253,17 +249,14 @@ export function PhotoAttribution({ photo, color = "#fff", compact = false }: Pro
       <Box
         component="span"
         sx={{
-          display: "contents",
-          flexDirection: "column",
-          flex: compact ? 1 : undefined,
           minWidth: 0,
         }}
       >
         {credits.map(({ key, content }, index) => (
           <Box component="span" key={key} sx={{ minWidth: 0 }}>
             {index > 0 && (
-              <Box component="span" aria-hidden sx={{ mr: 0.5, opacity: 0.6 }}>
-                |
+              <Box component="span" aria-hidden sx={{ mx: 0.5, opacity: 0.6 }}>
+                ·
               </Box>
             )}
             {content}
