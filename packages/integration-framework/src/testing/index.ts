@@ -22,6 +22,7 @@ import type {
   SecretsClient,
 } from "../context.js";
 import type { AirQualityProvider } from "../contracts/air-quality-provider.js";
+import type { BorderCrossingProvider } from "../contracts/border-crossing-provider.js";
 import type { CameraProvider } from "../contracts/camera-provider.js";
 import type { ChargingSiteProvider } from "../contracts/charging-site-provider.js";
 import type { FuelStationProvider } from "../contracts/fuel-station-provider.js";
@@ -38,8 +39,10 @@ import type { RealtimeProvider } from "../contracts/realtime-provider.js";
 import type { ReviewProvider } from "../contracts/review-provider.js";
 import type { RideProvider } from "../contracts/ride-provider.js";
 import type { RoadConditionsProvider } from "../contracts/road-conditions-provider.js";
+import type { RoadWeatherProvider } from "../contracts/road-weather-provider.js";
 import type { RoutingProvider } from "../contracts/routing-provider.js";
 import type { SearchSuggestionProvider } from "../contracts/search-suggestion-provider.js";
+import type { ServiceVehicleProvider } from "../contracts/service-vehicle-provider.js";
 import type { StreetLevelProvider } from "../contracts/street-level-imagery-provider.js";
 import type { TransitProvider } from "../contracts/transit-provider.js";
 import type { WeatherProvider } from "../contracts/weather-provider.js";
@@ -230,6 +233,9 @@ export interface CapturedRegistrations {
   chargingSites: ChargingSiteProvider[];
   cameras: CameraProvider[];
   messageSigns: MessageSignProvider[];
+  roadWeather: RoadWeatherProvider[];
+  serviceVehicles: ServiceVehicleProvider[];
+  borderCrossings: BorderCrossingProvider[];
   hazards: HazardsProvider[];
   photo: PhotoProvider[];
   streetLevel: StreetLevelProvider[];
@@ -285,6 +291,9 @@ export function createMockIntegrationContext(
     chargingSites: [],
     cameras: [],
     messageSigns: [],
+    roadWeather: [],
+    serviceVehicles: [],
+    borderCrossings: [],
     hazards: [],
     photo: [],
     streetLevel: [],
@@ -356,6 +365,15 @@ export function createMockIntegrationContext(
     },
     registerMessageSignProvider: (p) => {
       registered.messageSigns.push(p);
+    },
+    registerRoadWeatherProvider: (p) => {
+      registered.roadWeather.push(p);
+    },
+    registerServiceVehicleProvider: (p) => {
+      registered.serviceVehicles.push(p);
+    },
+    registerBorderCrossingProvider: (p) => {
+      registered.borderCrossings.push(p);
     },
     registerHazardsProvider: (p) => {
       registered.hazards.push(p);

@@ -1,4 +1,5 @@
 import type { AirQualityProvider } from "./contracts/air-quality-provider.js";
+import type { BorderCrossingProvider } from "./contracts/border-crossing-provider.js";
 import type { CameraProvider } from "./contracts/camera-provider.js";
 import type { ChargingSiteProvider } from "./contracts/charging-site-provider.js";
 import type { FuelStationProvider } from "./contracts/fuel-station-provider.js";
@@ -15,9 +16,11 @@ import type { RealtimeProvider } from "./contracts/realtime-provider.js";
 import type { ReviewProvider } from "./contracts/review-provider.js";
 import type { RideProvider } from "./contracts/ride-provider.js";
 import type { RoadConditionsProvider } from "./contracts/road-conditions-provider.js";
+import type { RoadWeatherProvider } from "./contracts/road-weather-provider.js";
 import type { RoutingProvider } from "./contracts/routing-provider.js";
 import type { AiCloudProcessor } from "./contracts/search-nlp-provider.js";
 import type { SearchSuggestionProvider } from "./contracts/search-suggestion-provider.js";
+import type { ServiceVehicleProvider } from "./contracts/service-vehicle-provider.js";
 import type { StreetLevelProvider } from "./contracts/street-level-imagery-provider.js";
 import type { TransitProvider } from "./contracts/transit-provider.js";
 import type { WeatherProvider } from "./contracts/weather-provider.js";
@@ -536,6 +539,24 @@ export interface IntegrationContext {
    * `message-signs` orchestrator merges all registered providers.
    */
   registerMessageSignProvider(provider: MessageSignProvider): void;
+  /**
+   * Typed registrar for road-weather providers (road weather stations and
+   * what they measure). Stored under the `road-weather` key; the
+   * `road-weather` orchestrator merges all registered providers.
+   */
+  registerRoadWeatherProvider(provider: RoadWeatherProvider): void;
+  /**
+   * Typed registrar for service-vehicle providers (where road service
+   * vehicles are and what they do). Stored under the `service-vehicles` key;
+   * the `road-maintenance` orchestrator merges all registered providers.
+   */
+  registerServiceVehicleProvider(provider: ServiceVehicleProvider): void;
+  /**
+   * Typed registrar for border-crossing providers (crossings and their
+   * queues). Stored under the `border-crossings` key; the `border-crossings`
+   * orchestrator merges all registered providers.
+   */
+  registerBorderCrossingProvider(provider: BorderCrossingProvider): void;
   /**
    * Typed registrar for hazards providers (alerts, natural hazards, fire
    * detections). Stored under the `hazards` key; the hazards orchestrator

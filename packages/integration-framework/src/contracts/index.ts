@@ -17,6 +17,15 @@ export {
   assertTransitProviderContract,
 } from "./assert-contract";
 export type {
+  BorderCrossing,
+  BorderCrossingMode,
+  BorderCrossingProgram,
+  BorderCrossingProvider,
+  BorderCrossingQuery,
+  BorderCrossingQueue,
+  BorderWaitStatus,
+} from "./border-crossing-provider.js";
+export type {
   Camera,
   CameraProvider,
   CameraQuery,
@@ -171,6 +180,16 @@ export type {
   RoadFlowQuery,
   RoadFlowSegment,
 } from "./road-conditions-provider.js";
+export type {
+  PrecipitationType,
+  RoadSurfaceSensor,
+  RoadSurfaceState,
+  RoadWeatherAir,
+  RoadWeatherProvider,
+  RoadWeatherQuery,
+  RoadWeatherStation,
+  RoadWeatherValue,
+} from "./road-weather-provider.js";
 export { RoutingProviderError } from "./routing-provider";
 export type {
   DirectionsResult,
@@ -211,6 +230,12 @@ export type {
   TimeConstraint,
 } from "./search-nlp-provider.js";
 export type { SearchSuggestionProvider } from "./search-suggestion-provider.js";
+export type {
+  ServiceVehicle,
+  ServiceVehicleActivity,
+  ServiceVehicleProvider,
+  ServiceVehicleQuery,
+} from "./service-vehicle-provider.js";
 export type {
   StreetLevelCapabilities,
   StreetLevelCoverage,

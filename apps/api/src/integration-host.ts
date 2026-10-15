@@ -653,6 +653,21 @@ function buildIntegrationContext(args: {
       existing.push(provider);
       providers.set("message-signs", existing);
     },
+    registerRoadWeatherProvider(provider) {
+      const existing = providers.get("road-weather") ?? [];
+      existing.push(provider);
+      providers.set("road-weather", existing);
+    },
+    registerServiceVehicleProvider(provider) {
+      const existing = providers.get("service-vehicles") ?? [];
+      existing.push(provider);
+      providers.set("service-vehicles", existing);
+    },
+    registerBorderCrossingProvider(provider) {
+      const existing = providers.get("border-crossings") ?? [];
+      existing.push(provider);
+      providers.set("border-crossings", existing);
+    },
     registerHazardsProvider(provider) {
       const existing = providers.get("hazards") ?? [];
       existing.push(provider);

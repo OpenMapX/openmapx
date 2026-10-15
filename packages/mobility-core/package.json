@@ -25,6 +25,18 @@
       "types": "./src/types/message-sign.ts",
       "default": "./src/types/message-sign.ts"
     },
+    "./road-weather": {
+      "types": "./src/types/road-weather.ts",
+      "default": "./src/types/road-weather.ts"
+    },
+    "./service-vehicle": {
+      "types": "./src/types/service-vehicle.ts",
+      "default": "./src/types/service-vehicle.ts"
+    },
+    "./border-crossing": {
+      "types": "./src/types/border-crossing.ts",
+      "default": "./src/types/border-crossing.ts"
+    },
     "./hazards": {
       "types": "./src/types/hazards.ts",
       "default": "./src/types/hazards.ts"

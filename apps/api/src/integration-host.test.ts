@@ -482,6 +482,47 @@ describe("initIntegrations — loader", () => {
     }
   });
 
+  it.each([
+    ["registerRoadWeatherProvider", "road-weather", "searchStations", "getStation"],
+    ["registerServiceVehicleProvider", "service-vehicles", "searchVehicles", "getVehicle"],
+    ["registerBorderCrossingProvider", "border-crossings", "searchCrossings", "getCrossing"],
+  ])("%s stores its providers under the %s key", async (registrar, key, search, get) => {
+    const parent = mkdtempSync(join(tmpdir(), "omx-conditions-provider-"));
+    const directory = join(parent, "conditions-probe");
+    mkdirSync(directory, { recursive: true });
+    writeFileSync(
+      join(directory, "manifest.json"),
+      JSON.stringify({
+        id: "conditions-probe",
+        version: "1.0.0",
+        author: "Test",
+        licensing: licensingFromDeclaration("MIT", undefined),
+        domains: ["data-source"],
+        quality: "built-in",
+      }),
+    );
+    writeFileSync(
+      join(directory, "index.js"),
+      [
+        "export function setup(ctx) {",
+        `  ctx.${registrar}({`,
+        "    id: 'probe', coverage: { all: true },",
+        `    ${search}: async () => ({}), ${get}: async () => null,`,
+        "  });",
+        "}",
+      ].join("\n"),
+    );
+    const app = makeApp();
+    try {
+      await initIntegrations(app, [{ directory: parent, isBuiltIn: true }]);
+      expect(getIntegrationProviders<{ id: string }>("conditions-probe", key)).toMatchObject([
+        { id: "probe" },
+      ]);
+    } finally {
+      rmSync(parent, { recursive: true, force: true });
+    }
+  });
+
   it("stores hazards providers under the hazards key", async () => {
     const parent = mkdtempSync(join(tmpdir(), "omx-hazards-provider-"));
     const directory = join(parent, "hazards-probe");
