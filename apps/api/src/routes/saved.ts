@@ -113,6 +113,178 @@ export const savedRoute: FastifyPluginAsync = async (fastify) => {
     },
   });
 
+  fastify.post("/saved/lists/import", {
+    bodyLimit: 40 * 1024 * 1024,
+    schema: {
+      body: {
+        type: "object",
+        required: ["target", "places"],
+        additionalProperties: false,
+        properties: {
+          target: {
+            type: "object",
+            additionalProperties: false,
+            properties: {
+              listId: { type: "string", minLength: 1 },
+              name: { type: "string", minLength: 1, maxLength: 200, pattern: "^[^$]" },
+            },
+          },
+          places: {
+            type: "array",
+            minItems: 1,
+            maxItems: 2000,
+            items: {
+              type: "object",
+              required: ["name", "lat", "lng"],
+              additionalProperties: false,
+              properties: {
+                name: { type: "string", minLength: 1, maxLength: 500 },
+                address: { type: "string", maxLength: 500 },
+                lat: { type: "number", minimum: -90, maximum: 90 },
+                lng: { type: "number", minimum: -180, maximum: 180 },
+                note: { type: "string", maxLength: 2000 },
+                fieldContributors: { type: "object", maxProperties: 4 },
+              },
+            },
+          },
+        },
+      },
+      response: {
+        400: { type: "object", required: ["error"], properties: { error: { type: "string" } } },
+        404: { type: "object", required: ["error"], properties: { error: { type: "string" } } },
+        200: {
+          type: "object",
+          required: ["listId", "name", "imported", "skippedDuplicates"],
+          properties: {
+            listId: { type: "string" },
+            name: { type: "string" },
+            imported: { type: "integer" },
+            skippedDuplicates: { type: "integer" },
+          },
+        },
+      },
+    },
+    handler: async (req, reply) => {
+      const userId = getUserId(req);
+      const { target, places } = req.body as {
+        target: { listId?: string; name?: string };
+        places: {
+          name: string;
+          address?: string;
+          lat: number;
+          lng: number;
+          note?: string;
+          fieldContributors?: SavedPlaceFieldContributors;
+        }[];
+      };
+      if (
+        (target.listId === undefined) === (target.name === undefined) ||
+        (target.name !== undefined && (!target.name.trim() || target.name.trim().startsWith("$")))
+      ) {
+        return reply
+          .status(400)
+          .send({ error: "Specify exactly one listId or non-reserved list name" });
+      }
+      for (const place of places) {
+        if (place.fieldContributors === undefined) continue;
+        const captured = parseSavedPlaceContributors(place.fieldContributors);
+        if (captured === undefined)
+          return reply.status(400).send({ error: "Invalid fieldContributors" });
+        place.fieldContributors = captured;
+      }
+      const result = await db.transaction(async (tx) => {
+        let listId = target.listId;
+        let name = target.name?.trim() || "";
+        if (listId) {
+          // Serialize imports into this list before reading membership and sort order.
+          const [existing] = await tx
+            .select({ id: savedList.id, name: savedList.name })
+            .from(savedList)
+            .where(and(eq(savedList.id, listId), eq(savedList.userId, userId)))
+            .for("update");
+          if (!existing) return null;
+          name = existing.name;
+        } else {
+          const base = name;
+          for (let suffix = 1; ; suffix++) {
+            const ending = suffix === 1 ? "" : ` (${suffix})`;
+            name = `${base.slice(0, 200 - ending.length).replace(/[\uD800-\uDBFF]$/, "")}${ending}`;
+            const id = crypto.randomUUID();
+            // ON CONFLICT permits concurrent imports and ordinary list creation to race safely.
+            const inserted = await tx
+              .insert(savedList)
+              .values({ id, userId, name })
+              .onConflictDoNothing({ target: [savedList.userId, savedList.name] })
+              .returning({ id: savedList.id });
+            if (inserted.length) {
+              listId = id;
+              break;
+            }
+          }
+        }
+        const existing = await tx
+          .select({
+            name: savedPlace.name,
+            lat: savedPlace.lat,
+            lng: savedPlace.lng,
+            sortOrder: savedPlace.sortOrder,
+          })
+          .from(savedPlace)
+          .where(eq(savedPlace.listId, listId));
+        const cells = new Map<string, { lat: number; lng: number }[]>();
+        const cellKey = (name: string, x: number, y: number) => JSON.stringify([name, x, y]);
+        const remember = (place: { name: string; lat: number; lng: number }) => {
+          const key = cellKey(
+            place.name,
+            Math.floor(place.lat / 1e-5),
+            Math.floor(place.lng / 1e-5),
+          );
+          const cell = cells.get(key) || [];
+          cell.push(place);
+          cells.set(key, cell);
+        };
+        for (const place of existing) remember(place);
+        let order = existing.reduce((max, place) => Math.max(max, place.sortOrder), -1);
+        const rows: (typeof savedPlace.$inferInsert)[] = [];
+        for (const place of places) {
+          const x = Math.floor(place.lat / 1e-5);
+          const y = Math.floor(place.lng / 1e-5);
+          let duplicate = false;
+          for (let dx = -1; dx <= 1 && !duplicate; dx++) {
+            for (let dy = -1; dy <= 1 && !duplicate; dy++) {
+              duplicate = (cells.get(cellKey(place.name, x + dx, y + dy)) || []).some(
+                (other) =>
+                  Math.abs(other.lat - place.lat) <= 1e-5 &&
+                  Math.abs(other.lng - place.lng) <= 1e-5,
+              );
+            }
+          }
+          if (duplicate) continue;
+          remember(place);
+          rows.push({
+            ...place,
+            id: crypto.randomUUID(),
+            listId,
+            placeId: null,
+            sortOrder: ++order,
+          });
+        }
+        if (rows.length) {
+          await tx.insert(savedPlace).values(rows);
+          await tx.update(savedList).set({ updatedAt: new Date() }).where(eq(savedList.id, listId));
+        }
+        return {
+          listId,
+          name,
+          imported: rows.length,
+          skippedDuplicates: places.length - rows.length,
+        };
+      });
+      if (!result) return reply.status(404).send({ error: "List not found" });
+      return result;
+    },
+  });
+
   fastify.patch("/saved/lists/:id", {
     schema: {
       body: {

@@ -4,6 +4,7 @@ import AddIcon from "@mui/icons-material/Add";
 import DeleteIcon from "@mui/icons-material/Delete";
 import LockIcon from "@mui/icons-material/Lock";
 import MoreVertIcon from "@mui/icons-material/MoreVert";
+import UploadFileIcon from "@mui/icons-material/UploadFile";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import CircularProgress from "@mui/material/CircularProgress";
@@ -28,11 +29,14 @@ import {
 } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import type React from "react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { BRAND, BRAND_LIGHT } from "@/integration-api/runtime/theme";
 import { resolveListIcon } from "@/lib/listIcon";
 
+import { ImportPlacesPicker } from "./ImportPlacesPicker";
+
 export function SavedListsTab() {
+  const importInput = useRef<HTMLInputElement>(null);
   const t = useTranslations("saved");
   const tCommon = useTranslations("common");
 
@@ -112,6 +116,22 @@ export function SavedListsTab() {
       >
         {t("newList")}
       </Button>
+      <Button
+        fullWidth
+        startIcon={<UploadFileIcon />}
+        onClick={() => importInput.current?.click()}
+        sx={{
+          borderRadius: 24,
+          bgcolor: BRAND_LIGHT,
+          color: BRAND,
+          textTransform: "none",
+          fontWeight: 500,
+          mb: 1.5,
+        }}
+      >
+        {t("import")}
+      </Button>
+      <ImportPlacesPicker inputRef={importInput} />
       {lists?.map((list) => (
         <Box
           key={list.id}

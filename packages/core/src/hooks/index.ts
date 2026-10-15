@@ -170,9 +170,12 @@ export { type RideQuoteResult, useRideQuotes } from "./useRideQuotes";
 export { routeFlowQueryKey, useRouteFlow } from "./useRouteFlow";
 export { useRouteInGermany } from "./useRouteInGermany";
 export {
+  type ImportPlacesInput,
+  type ImportPlacesResult,
   useCreateList,
   useDeleteLabel,
   useDeleteList,
+  useImportPlaces,
   useIsSaved,
   useLabeledPlaces,
   useRemovePlace,

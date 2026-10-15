@@ -8,6 +8,7 @@ import DownloadIcon from "@mui/icons-material/Download";
 import LockIcon from "@mui/icons-material/Lock";
 import MoreVertIcon from "@mui/icons-material/MoreVert";
 import ShareIcon from "@mui/icons-material/Share";
+import UploadFileIcon from "@mui/icons-material/UploadFile";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import CircularProgress from "@mui/material/CircularProgress";
@@ -47,16 +48,18 @@ import {
 } from "@openmapx/core/saved-place-contributors";
 import { useTranslations } from "next-intl";
 import type React from "react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { AttributionStrip } from "@/components/ui/AttributionStrip";
 import { useMap } from "@/integration-api/map/MapContext";
 import { BRAND, BRAND_LIGHT } from "@/integration-api/runtime/theme";
 import { exportSavedList } from "@/lib/exportSavedList";
 import { resolveListIcon } from "@/lib/listIcon";
+import { ImportPlacesPicker } from "./ImportPlacesPicker";
 import { PlaceThumbnail } from "./PlaceThumbnail";
 import { ShareListDialog } from "./ShareListDialog";
 
 export function SavedListDetail() {
+  const importInput = useRef<HTMLInputElement>(null);
   const t = useTranslations("saved");
   const tCommon = useTranslations("common");
 
@@ -468,6 +471,17 @@ export function SavedListDetail() {
             <ListItemText>{t("removeIcon")}</ListItemText>
           </MenuItem>
         )}
+        <MenuItem
+          onClick={() => {
+            handleMenuClose();
+            importInput.current?.click();
+          }}
+        >
+          <ListItemIcon>
+            <UploadFileIcon fontSize="small" />
+          </ListItemIcon>
+          <ListItemText>{t("importPlaces")}</ListItemText>
+        </MenuItem>
         <MenuItem onClick={() => handleExport("gpx")}>
           <ListItemIcon>
             <DownloadIcon fontSize="small" />
@@ -493,6 +507,7 @@ export function SavedListDetail() {
           <ListItemText>{t("deleteList")}</ListItemText>
         </MenuItem>
       </Menu>
+      <ImportPlacesPicker inputRef={importInput} targetListId={selectedListId || undefined} />
       <Popover
         open={Boolean(iconAnchor)}
         anchorEl={iconAnchor}

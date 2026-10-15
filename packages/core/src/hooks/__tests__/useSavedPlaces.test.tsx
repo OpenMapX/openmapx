@@ -9,6 +9,7 @@ vi.mock("../../auth/useSession", () => ({ useSession: () => ({ data: session.val
 
 import {
   useDeleteList,
+  useImportPlaces,
   useIsSaved,
   useLabeledPlaces,
   useSavedListPlaces,
@@ -19,6 +20,23 @@ describe("useSavedPlaces", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     session.value = { user: { id: "u1" } };
+  });
+
+  it("imports places and invalidates lists, the target list, and membership", async () => {
+    const response = { listId: "l1", name: "Trip", imported: 1, skippedDuplicates: 0 };
+    const post = vi.spyOn(apiClient, "post").mockResolvedValue(response);
+    const client = createTestQueryClient();
+    for (const key of [["savedLists"], ["savedListPlaces", "l1"], ["savedCheck", "p1"]])
+      client.setQueryData(key, []);
+    const { result } = renderHook(() => useImportPlaces(), { wrapper: createQueryWrapper(client) });
+    const payload = { target: { name: "Trip" }, places: [{ name: "Cafe", lat: 52, lng: 13 }] };
+    await act(async () => {
+      expect(await result.current.mutateAsync(payload)).toEqual(response);
+    });
+    expect(post).toHaveBeenCalledWith(`${API_ENDPOINTS.savedLists}/import`, payload);
+    for (const key of [["savedLists"], ["savedListPlaces", "l1"], ["savedCheck", "p1"]])
+      expect(client.getQueryState(key)?.isInvalidated).toBe(true);
+    client.clear();
   });
 
   it("cannot accept an initial membership response captured before list deletion", async () => {

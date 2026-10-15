@@ -1,6 +1,6 @@
 ---
 title: Saved places
-description: Save places to lists, label your Home and Work, and export any list as GPX, GeoJSON, or KML.
+description: Save places to lists, label your Home and Work, import places from files, and export lists as GPX, GeoJSON, or KML.
 sidebar_position: 8
 ---
 
@@ -24,6 +24,52 @@ The Saved panel has two tabs:
   **Work**. Labeled places are set from the **Add a label** row on a place's
   Overview tab, and they surface near the top of search.
 
+## Importing places
+
+In **Saved → Lists**, choose **Import** and select one or more files. To add
+places to a particular list, open that list and choose **Import places…** from
+its overflow (⋮) menu. Review each detected list, edit its name, and choose a
+new list or an existing destination before importing. Existing places with the
+same name and nearly identical coordinates are skipped as duplicates.
+
+Supported formats are:
+
+- **Google Takeout ZIP**, individual saved-list **CSV**, and **Saved Places.json**
+  from both older and current exports. Unrelated archive contents, including
+  reviews, are ignored.
+- **KML** and **KMZ** bookmarks, including every KML file inside a KMZ. Folders
+  remain together in their document's list. A KML that only links to online data
+  must be exported again without the **keep data up to date** option.
+- **GPX waypoints** (favourites). Tracks and routes are ignored. A GPX containing
+  several waypoint groups becomes one list per group.
+- **GeoJSON Point features**, with names, descriptions, and addresses.
+- **CSV** with latitude and longitude columns (`lat`/`latitude`/`y` and
+  `lon`/`lng`/`long`/`longitude`/`x`), optionally a name/title, note/description/comment,
+  and address.
+
+For a Google Takeout export, open [Google Takeout](https://takeout.google.com/),
+deselect unrelated products, and select **Saved** and **Maps (your places)**.
+Create and download a ZIP export, then select the whole ZIP in OpenMapX. You can
+also select the saved-list CSV files or Saved Places JSON separately. Recognized
+Favorites, Want to go, and Starred places lists default to the corresponding
+built-in list when it exists; you can change the destination during review.
+
+Files are read in your browser. Missing or approximate locations are looked up
+through this server's configured geocoder using the place name and available
+address or nearby location. These lookups follow the server's provider settings;
+the importer does not contact Google directly. Captured source credits stay with
+imported places, including credits for coordinates found by the geocoder. The
+review shows the credits that will be saved with the selected places.
+
+**Ready** places have file coordinates or a matching geocoder result.
+**Approximate** places retain an estimated location from the export that could
+not be verified. They are excluded by default; include them only if that
+uncertainty is acceptable. **Not found** places have no usable coordinates and
+are skipped; expand the count to see their names. Check the result summary for
+imported places, duplicates, and any failures. Successful batches remain saved
+if a later batch fails. Files and extracted archive contents are limited to
+200 MB per selected file.
+
 ## Exporting a list
 
 Any list can be exported to a standard geographic file, so you can take your
@@ -45,6 +91,10 @@ Each exported place includes its **name** and **coordinates**, plus its
 **address** and **note** where you've set them (these become the description in
 GPX and KML). GeoJSON additionally preserves OpenMapX's internal place ID in the
 feature properties.
+
+OpenMapX preserves captured source credits through GPX, KML, and GeoJSON export
+and re-import. Its exports also keep addresses separate from personal notes, so
+re-importing a list does not add generated credits or address lines to your notes.
 
 :::note[What exports — and what doesn't]
 Export covers the places in a single **list**. Labeled places (Home, Work) and
