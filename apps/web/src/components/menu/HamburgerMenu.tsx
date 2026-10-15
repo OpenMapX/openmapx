@@ -120,9 +120,17 @@ export function HamburgerMenu() {
             py: 1.5,
           }}
         >
-          <Typography variant="h6" sx={{ fontWeight: 600 }}>
-            OpenMapX
-          </Typography>
+          <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
+            <Box
+              component="img"
+              src="/icons/app/icon-192.png"
+              alt=""
+              sx={{ width: 32, height: 32, borderRadius: "22%", flexShrink: 0 }}
+            />
+            <Typography variant="h6" sx={{ fontWeight: 600 }}>
+              OpenMapX
+            </Typography>
+          </Box>
           <IconButton onClick={close} aria-label={tCommon("close")} size="small">
             <CloseIcon />
           </IconButton>
