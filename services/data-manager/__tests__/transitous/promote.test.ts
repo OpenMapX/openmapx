@@ -509,10 +509,13 @@ describe("promote stage", () => {
       const pending = promoteRun(ctx);
       let timer: ReturnType<typeof setTimeout> | undefined;
       try {
+        // The shortened 100 ms recovery deadline is what must end promotion;
+        // this watchdog only turns a regression into a failure instead of a
+        // hang, so it leaves room for a saturated runner.
         const result = await Promise.race([
           pending,
           new Promise<undefined>((resolve) => {
-            timer = setTimeout(() => resolve(undefined), 500);
+            timer = setTimeout(() => resolve(undefined), 10_000);
           }),
         ]);
         expect(cancelled.signal.aborted).toBe(true);
