@@ -1,4 +1,4 @@
-import type { ContributingRecord } from "@openmapx/mobility-core/contributors";
+import type { ContributingRecord, FieldContributors } from "@openmapx/mobility-core/contributors";
 export interface TideEvent {
   /** Station-local wall time or ISO-8601 with an explicit UTC offset. */
   time: string;
@@ -40,6 +40,8 @@ export interface TideResponseStation {
 }
 
 export interface TidesPayload extends ContributingRecord {
+  /** Captured ownership for independently acquired station, predictions and observations. */
+  fieldContributors?: FieldContributors;
   station: TideResponseStation;
   events: TideEvent[];
   curve: TideCurvePoint[];

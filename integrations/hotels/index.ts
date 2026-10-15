@@ -1,5 +1,11 @@
 import { bareDomain, type HotelOffer, type HotelProviderInfo } from "@openmapx/core/server";
-import { type IntegrationContext, scalarQueries } from "@openmapx/integration-framework";
+import {
+  captureResultContributors,
+  type IntegrationContext,
+  resolveIntegrationContributors,
+  scalarQueries,
+  withContributors,
+} from "@openmapx/integration-framework";
 import { buildExactDeepLink, type IdResolverDeps, resolveOtaHotelId } from "./idResolver.js";
 import { fetchOfficialBookingUrl } from "./official.js";
 import { createLiteApiProvider } from "./provider.js";
@@ -155,7 +161,7 @@ export function setup(ctx: IntegrationContext): void {
     // The hotel name is part of the key because searchOffer picks WHICH nearby
     // hotel to price by name — two different hotels rounding to the same coords
     // must not share a cached rate.
-    const key = `hotels:offer:${q.name.toLowerCase()}:${q.lat.toFixed(4)}:${q.lng.toFixed(4)}:${q.checkIn}:${q.checkOut}:${q.adults ?? 2}:${q.rooms ?? 1}:${opts.currency}:${opts.guestNationality}`;
+    const key = `hotels:offer:contributors-v1:${q.name.toLowerCase()}:${q.lat.toFixed(4)}:${q.lng.toFixed(4)}:${q.checkIn}:${q.checkOut}:${q.adults ?? 2}:${q.rooms ?? 1}:${opts.currency}:${opts.guestNationality}`;
     try {
       // Explicit get/set (not withCache) so positives and "no availability"
       // negatives get different TTLs — see OFFER_NEGATIVE_TTL. "" is the negative
@@ -165,7 +171,11 @@ export function setup(ctx: IntegrationContext): void {
       if (cached != null) {
         best = cached || null;
       } else {
-        best = await ratesProvider.searchOffer(q, opts);
+        const captured = resolveIntegrationContributors(ctx, ["liteapi"]);
+        const acquired = await ratesProvider.searchOffer(q, opts);
+        best = acquired
+          ? withContributors(acquired, captureResultContributors(acquired, captured))
+          : null;
         await ctx.cache.set(key, best ?? "", best ? OFFER_TTL : OFFER_NEGATIVE_TTL);
       }
       if (!best) {
@@ -173,7 +183,7 @@ export function setup(ctx: IntegrationContext): void {
         return;
       }
       reply.header("Cache-Control", "private, max-age=900");
-      reply.send({ best, attributionId: "liteapi" });
+      reply.send({ best });
     } catch (err) {
       ctx.log.debug?.(`[hotels] offer lookup failed: ${(err as Error).message}`);
       reply.status(204).send({});

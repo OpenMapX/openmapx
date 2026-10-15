@@ -14,6 +14,7 @@ import {
   makeId,
   useDirections,
 } from "@openmapx/core";
+import { savedPlaceContributors } from "@openmapx/core/saved-place-contributors";
 import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import { useLocale, useTranslations } from "next-intl";
 import { useMemo } from "react";
@@ -94,7 +95,11 @@ export function SharedViewClient({ share }: { share: PublicShare | null }) {
             <SharedMapView
               points={
                 share.type === "list"
-                  ? share.places.map((p) => ({ lat: p.lat, lng: p.lng }))
+                  ? share.places.map((p) => ({
+                      lat: p.lat,
+                      lng: p.lng,
+                      fieldContributors: p.fieldContributors,
+                    }))
                   : share.route.waypoints.map((w) => ({ lat: w.lat, lng: w.lng }))
               }
               routeGeometry={routeShare ? (activeRoute?.geometry ?? null) : null}
@@ -127,6 +132,13 @@ export function SharedViewClient({ share }: { share: PublicShare | null }) {
                           {place.address}
                         </Typography>
                       )}
+                      <AttributionStrip
+                        attributions={savedPlaceContributors(place.fieldContributors, [
+                          "name",
+                          ...(place.address ? ["address" as const] : []),
+                        ])}
+                        variant="inline"
+                      />
                       {place.note && (
                         <Typography variant="body2" sx={{ fontStyle: "italic" }}>
                           {place.note}

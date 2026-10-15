@@ -7916,18 +7916,32 @@
                     "maxLength": 500
                   },
                   "address": {
-                    "type": "string",
+                    "type": [
+                      "string",
+                      "null"
+                    ],
                     "maxLength": 500
                   },
                   "lat": {
-                    "type": "number"
+                    "type": "number",
+                    "minimum": -90,
+                    "maximum": 90
                   },
                   "lng": {
-                    "type": "number"
+                    "type": "number",
+                    "minimum": -180,
+                    "maximum": 180
                   },
                   "placeId": {
-                    "type": "string",
+                    "type": [
+                      "string",
+                      "null"
+                    ],
                     "maxLength": 200
+                  },
+                  "fieldContributors": {
+                    "type": "object",
+                    "maxProperties": 4
                   },
                   "icon": {
                     "type": "string",
@@ -8185,21 +8199,38 @@
                     "maxLength": 500
                   },
                   "address": {
-                    "type": "string",
+                    "type": [
+                      "string",
+                      "null"
+                    ],
                     "maxLength": 500
                   },
                   "lat": {
-                    "type": "number"
+                    "type": "number",
+                    "minimum": -90,
+                    "maximum": 90
                   },
                   "lng": {
-                    "type": "number"
+                    "type": "number",
+                    "minimum": -180,
+                    "maximum": 180
                   },
                   "placeId": {
-                    "type": "string",
+                    "type": [
+                      "string",
+                      "null"
+                    ],
                     "maxLength": 200
                   },
+                  "fieldContributors": {
+                    "type": "object",
+                    "maxProperties": 4
+                  },
                   "note": {
-                    "type": "string",
+                    "type": [
+                      "string",
+                      "null"
+                    ],
                     "maxLength": 2000
                   }
                 }
@@ -8265,11 +8296,27 @@
                     "maxLength": 500
                   },
                   "address": {
-                    "type": "string",
+                    "type": [
+                      "string",
+                      "null"
+                    ],
                     "maxLength": 500
                   },
+                  "lat": {
+                    "type": "number",
+                    "minimum": -90,
+                    "maximum": 90
+                  },
+                  "lng": {
+                    "type": "number",
+                    "minimum": -180,
+                    "maximum": 180
+                  },
                   "note": {
-                    "type": "string",
+                    "type": [
+                      "string",
+                      "null"
+                    ],
                     "maxLength": 2000
                   },
                   "sortOrder": {

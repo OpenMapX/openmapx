@@ -1,3 +1,4 @@
+import type { SavedPlaceFieldContributors } from "../saved-place-contributors";
 import type { WaypointSchedule } from "./routing";
 
 /** Owner-facing projection of a share link — never contains the token or its hash. */
@@ -32,6 +33,7 @@ export interface RouteSharePayload {
 }
 
 export interface PublicSharePlace {
+  fieldContributors?: SavedPlaceFieldContributors;
   name: string;
   lat: number;
   lng: number;

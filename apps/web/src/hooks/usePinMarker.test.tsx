@@ -84,7 +84,7 @@ it("activates a focused pin by pointer and keyboard", async () => {
   expect(pin?.getAttribute("aria-label")).toBe("Cafe");
   const label = pin?.querySelector("span");
   expect(label?.parentElement?.style.pointerEvents).toBe("auto");
-  expect(label?.parentElement?.style.left).toBe("20px");
+  expect(label?.parentElement?.style.left).toBe("26px");
   fireEvent.click(pin as HTMLElement);
   fireEvent.click(label as HTMLElement);
   fireEvent.keyDown(pin as HTMLElement, { key: "Enter" });
@@ -127,7 +127,7 @@ it("shortens a long pin label before it runs under the map controls", async () =
   controlsLeft = 300;
   act(() => fireEvent.transitionEnd(controls, { propertyName: "bottom" }));
   await act(async () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())));
-  expect(label.parentElement?.style.right).toBe("20px");
+  expect(label.parentElement?.style.right).toBe("26px");
   expect(label.style.maxWidth).toBe("149px");
   view.unmount();
   controls.remove();
@@ -145,11 +145,11 @@ it("refits a label when a sidebar opens without moving the map", async () => {
   Object.defineProperty(label, "scrollWidth", { configurable: true, value: 230 });
   act(() => fake.emit("move"));
   await act(async () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())));
-  expect(label.parentElement?.style.right).toBe("20px");
+  expect(label.parentElement?.style.right).toBe("26px");
 
   act(() => publishMapObstruction("pin-test-sidebar", "left", 250));
   await act(async () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())));
-  expect(label.parentElement?.style.left).toBe("20px");
+  expect(label.parentElement?.style.left).toBe("26px");
   expect(label.style.maxWidth).toBe("62px");
 
   view.unmount();

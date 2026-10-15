@@ -539,6 +539,8 @@ export type LiveTransitPositionKind = "observed" | "interpolated";
 
 /** A map-ready vehicle position produced by a realtime integration. */
 export interface LiveTransitVehicle extends VehiclePosition {
+  /** Captured ownership of independently supplied vehicle display fields. */
+  fieldContributors?: FieldContributors;
   /** Manifest data-source id used for attribution and source filtering. */
   sourceId: string;
   mode: TransportMode;

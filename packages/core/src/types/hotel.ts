@@ -1,3 +1,5 @@
+import type { ContributingRecord } from "@openmapx/mobility-core/contributors";
+
 /** Serialisable `/providers` row — the shared client/integration contract. */
 export interface HotelProviderInfo {
   id: string;
@@ -47,7 +49,7 @@ export interface HotelConfig {
 }
 
 /** One live rate (LiteAPI). */
-export interface HotelOffer {
+export interface HotelOffer extends ContributingRecord {
   /** Provider/source id, e.g. `liteapi`. */
   source: string;
   /** Lowest total price for the whole stay, in `currency`. */
@@ -65,6 +67,4 @@ export interface HotelOffer {
 export interface HotelOffersResponse {
   /** Best (lowest) offer found for the matched hotel, or null when none. */
   best: HotelOffer | null;
-  /** Source attribution id (matches a manifest dataSource sourceId). */
-  attributionId?: string;
 }

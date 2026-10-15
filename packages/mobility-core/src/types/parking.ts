@@ -1,3 +1,4 @@
+import type { ContributingRecord } from "../contributors.js";
 import type { Attribution } from "./attribution.js";
 
 export type ParkingSiteType =
@@ -33,7 +34,7 @@ export type ParkingTrend = "filling" | "clearing" | "steady";
  * absent when the source does not give it, never a zero standing in for
  * "unknown".
  */
-export interface ParkingCounts {
+export interface ParkingCounts extends ContributingRecord {
   capacity?: number;
   /** Free spaces. */
   available?: number;

@@ -125,6 +125,49 @@ describe("remaining-itinerary stop detours", () => {
       ["unreachable", undefined, undefined],
     ]);
   });
+  it("captures separate baseline and candidate metric receipts without hidden route fields", async () => {
+    const baselineDuration = { sourceId: "engine", name: "Baseline duration" };
+    const candidateDuration = { sourceId: "engine", name: "Candidate duration" };
+    const distance = { sourceId: "distance", name: "Distance" };
+    const hidden = { sourceId: "hidden", name: "Hidden geometry" };
+    let calls = 0;
+    const [result] = await evaluateRouteStopDetours({
+      ...input,
+      candidates: [{ id: "u", coordinates: urban }],
+      requestRoute: async ({ waypoints }) => {
+        const response = graphRoute(waypoints);
+        response.routes[0].contributors = [hidden];
+        response.routes[0].fieldContributors = {
+          duration: [calls++ === 0 ? baselineDuration : candidateDuration],
+          distance: [distance],
+          geometry: [hidden],
+        };
+        return response;
+      },
+    });
+    expect(result).toMatchObject({
+      fieldContributors: { seconds: [baselineDuration, candidateDuration], meters: [distance] },
+    });
+    baselineDuration.name = "Changed after acquisition";
+    expect(result).toMatchObject({
+      fieldContributors: {
+        seconds: [{ sourceId: "engine", name: "Baseline duration" }, candidateDuration],
+      },
+    });
+  });
+  it("keeps explicit empty detour metric ownership authoritative", async () => {
+    const [result] = await evaluateRouteStopDetours({
+      ...input,
+      candidates: [{ id: "u", coordinates: urban }],
+      requestRoute: async ({ waypoints }) => {
+        const response = graphRoute(waypoints);
+        response.routes[0].contributors = [{ sourceId: "hidden", name: "Hidden" }];
+        response.routes[0].fieldContributors = { duration: [], distance: [] };
+        return response;
+      },
+    });
+    expect(result).toMatchObject({ fieldContributors: { seconds: [], meters: [] } });
+  });
   it("uses a supplied entrance and retains its identity distinct from the centroid", async () => {
     const [result] = await evaluateRouteStopDetours({
       ...input,

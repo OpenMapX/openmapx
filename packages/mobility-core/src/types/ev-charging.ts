@@ -13,7 +13,7 @@ export type EvseStatus =
   | "removed"
   | "unknown";
 
-export interface ChargingConnector {
+export interface ChargingConnector extends ContributingRecord {
   /** `<evseKey>/<connectorId>`; unique within the site. */
   key: string;
   /** The OCPI connector standard, e.g. `IEC_62196_T2`. */
@@ -33,7 +33,7 @@ export interface ChargingConnector {
   stale: boolean;
 }
 
-export interface Evse {
+export interface Evse extends ContributingRecord {
   key: string;
   evseId?: string;
   /** Identical charge points the source does not tell apart; they carry no live status. */

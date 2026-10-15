@@ -1,10 +1,13 @@
 "use client";
 
 import { PANEL, useSavedListPlaces, useSavedPlacesStore, useSidebarStore } from "@openmapx/core";
+import { savedPlaceContributors } from "@openmapx/core/saved-place-contributors";
+import { withFeatureContributors } from "@openmapx/mobility-core/contributors";
 import { useEffect } from "react";
 import { addLayerInSlot, unregisterLayerSlot } from "@/integration-api/map/layerStack";
 import { removeLayerAndSource, upsertGeoJsonSource } from "@/integration-api/map/layerStyleUtils";
 import { useMap } from "@/integration-api/map/MapContext";
+import { useRenderedMapAttributions } from "@/integration-api/overlay/useRenderedMapAttributions";
 
 const SOURCE_ID = "saved-places-source";
 const LAYER_ID = "saved-places-layer";
@@ -17,6 +20,8 @@ export function SavedPlacesLayer() {
     isPanelOpen && selectedListId ? selectedListId : null,
   );
 
+  useRenderedMapAttributions("saved-places", [LAYER_ID], Boolean(isPanelOpen && selectedListId));
+
   useEffect(() => {
     void styleVersion;
     const map = mapRef.current;
@@ -24,14 +29,19 @@ export function SavedPlacesLayer() {
 
     const geojson: GeoJSON.FeatureCollection = {
       type: "FeatureCollection",
-      features: places.map((p) => ({
-        type: "Feature" as const,
-        geometry: {
-          type: "Point" as const,
-          coordinates: [p.lng, p.lat],
-        },
-        properties: { id: p.id, name: p.name },
-      })),
+      features: places.map((p) =>
+        withFeatureContributors(
+          {
+            type: "Feature" as const,
+            geometry: {
+              type: "Point" as const,
+              coordinates: [p.lng, p.lat],
+            },
+            properties: { id: p.id, name: p.name },
+          },
+          savedPlaceContributors(p.fieldContributors, ["lat", "lng"]),
+        ),
+      ),
     };
 
     const created = !map.getSource(SOURCE_ID);

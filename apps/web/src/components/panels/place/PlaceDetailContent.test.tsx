@@ -15,8 +15,9 @@ vi.mock("next-intl", () => ({
   useLocale: () => "en",
 }));
 
+const aggregateState = vi.hoisted(() => ({ data: undefined as unknown }));
 vi.mock("@openmapx/mangrove-react", () => ({
-  useReviewAggregate: () => ({ data: undefined, isLoading: false }),
+  useReviewAggregate: () => ({ data: aggregateState.data, isLoading: false }),
 }));
 
 // useBrandDetail is the only hook here that hits the network; stub it so
@@ -36,6 +37,7 @@ vi.mock("@openmapx/core", async () => {
 });
 
 beforeEach(() => {
+  aggregateState.data = undefined;
   mockUseBrandDetail.mockReturnValue({ data: undefined });
   mockUseBrandLogoAttribution.mockReturnValue({ data: undefined });
 });
@@ -498,5 +500,54 @@ describe("PlaceDetailContent brand header", () => {
     renderPlace(place);
     expect(screen.getByText("Test Place")).toBeInTheDocument();
     expect(screen.queryByRole("img")).toBeNull();
+  });
+});
+
+describe("persistent header attribution", () => {
+  const receipt = (name: string) => ({ sourceId: name, name, url: `https://example.com/${name}` });
+  const headerPlace = {
+    ...place,
+    category: "Cafe",
+    rating: 4,
+    reviewCount: 2,
+    openingHoursInfo: { status: { isOpen: true }, isAlwaysOpen: true, weekBitmap: "" },
+    fieldContributors: {
+      name: [receipt("Name supplier")],
+      category: [receipt("Category supplier")],
+      openingHoursInfo: [receipt("Hours supplier")],
+      rating: [receipt("Fallback rating")],
+      reviewCount: [receipt("Fallback count")],
+    },
+  } as Place;
+
+  it("keeps aggregate and header field receipts available outside Reviews", () => {
+    aggregateState.data = { stars: 1.25, count: 1, contributors: [receipt("Mangrove capture")] };
+    renderAtDetent("mid", headerPlace);
+    fireEvent.click(screen.getByRole("tab", { name: "info" }));
+    fireEvent.click(screen.getByRole("button", { name: "attributions" }));
+    const dialog = screen.getByRole("dialog");
+    for (const name of ["Name supplier", "Category supplier", "Hours supplier", "Mangrove capture"])
+      expect(within(dialog).getByText(name)).toBeVisible();
+    expect(within(dialog).queryByText("Fallback rating")).toBeNull();
+  });
+
+  it("credits fallback rating fields only when those values are displayed", () => {
+    renderAtDetent("mid", headerPlace);
+    fireEvent.click(screen.getByRole("tab", { name: "info" }));
+    fireEvent.click(screen.getByRole("button", { name: "attributions" }));
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByText("Fallback rating")).toBeVisible();
+    expect(within(dialog).getByText("Fallback count")).toBeVisible();
+  });
+
+  it("does not add hidden rating receipts at peek", () => {
+    aggregateState.data = { stars: 1.25, count: 1, contributors: [receipt("Hidden aggregate")] };
+    renderAtDetent("peek", headerPlace);
+    fireEvent.click(screen.getByRole("tab", { name: "info" }));
+    fireEvent.click(screen.getByRole("button", { name: "attributions" }));
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByText("Name supplier")).toBeVisible();
+    expect(within(dialog).queryByText("Hidden aggregate")).toBeNull();
+    expect(within(dialog).queryByText("Fallback rating")).toBeNull();
   });
 });

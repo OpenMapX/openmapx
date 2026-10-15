@@ -241,7 +241,7 @@ function CategoryPlaceCard({
           />
         )}
         {brandIdentity ? (
-          <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+          <Box sx={{ display: "flex", minWidth: 0 }}>
             <BrandLogo
               brand={brandForPlaceLogo(
                 place,
@@ -250,12 +250,12 @@ function CategoryPlaceCard({
                 brandIdentity.kind,
               )}
               size={20}
-            />
-            {/* minWidth: 0 lets the name shrink/wrap inside the row instead of
-              pushing the fixed-size logo out or overflowing the list item. */}
-            <Box sx={{ minWidth: 0, flex: 1 }}>
-              <ResultItemName>{place.name}</ResultItemName>
-            </Box>
+            >
+              {/* Only the mark shares the heading row; credits wrap below it. */}
+              <Box sx={{ minWidth: 0, flex: 1 }}>
+                <ResultItemName>{place.name}</ResultItemName>
+              </Box>
+            </BrandLogo>
           </Box>
         ) : (
           <ResultItemName>{place.name}</ResultItemName>

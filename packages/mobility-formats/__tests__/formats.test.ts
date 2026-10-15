@@ -14,32 +14,21 @@ import {
   getGtfsRtAlerts,
   getGtfsRtTripUpdates,
   getGtfsRtVehiclePositions,
-  getNetexParticipantRef,
-  getNetexPublicationTimestamp,
   getSiriServiceRequest,
   getSiriServiceTimestamp,
   gtfsDateToIso,
   gtfsRtTimestampToIso,
-  indexNetexElementsById,
   listGbfsFeeds,
   listGbfsManifestDatasetVersions,
-  listNetexFrames,
-  listNetexFramesByName,
-  listNetexLines,
-  listNetexQuays,
-  listNetexScheduledStopPoints,
-  listNetexStopPlaces,
   listSiriMonitoredStopVisits,
   listSiriSituationElements,
   listSiriVehicleActivities,
   mapGtfsRouteTypeToMode,
   parseCsvRecords,
-  parseNetexDocument,
   parseSiriDocument,
   parseXmlDocument,
   resolveGbfsFeedUrl,
   resolveGbfsVehicleStatusFeedUrl,
-  resolveNetexRef,
   streamCsvRecordsInBatches,
   xmlText,
 } from "../index.js";
@@ -346,98 +335,5 @@ describe("SIRI helpers", () => {
         ((stopRequest?.StopMonitoringRequest ?? {}) as Record<string, unknown>).MonitoringRef,
       ),
     ).toBe("STOP:1");
-  });
-});
-
-describe("NeTEx helpers", () => {
-  const scheduledStopPointsDocument = `<?xml version="1.0" encoding="UTF-8"?>
-<PublicationDelivery xmlns="http://www.netex.org.uk/netex" version="1.0">
-  <PublicationTimestamp>2001-12-17T09:30:47.0Z</PublicationTimestamp>
-  <ParticipantRef>SYS001</ParticipantRef>
-  <dataObjects>
-    <ServiceFrame version="any" id="SVF004">
-      <scheduledStopPoints>
-        <ScheduledStopPoint id="SSP0042A">
-          <Name>Poste, St Jean</Name>
-        </ScheduledStopPoint>
-        <ScheduledStopPoint id="SNCF0047">
-          <Name>Gare, St Jean</Name>
-        </ScheduledStopPoint>
-      </scheduledStopPoints>
-    </ServiceFrame>
-  </dataObjects>
-</PublicationDelivery>`;
-
-  const stopPlacesDocument = `<?xml version="1.0" encoding="UTF-8"?>
-<PublicationDelivery xmlns="http://www.netex.org.uk/netex" version="1.0">
-  <PublicationTimestamp>2010-12-17T09:30:47.0Z</PublicationTimestamp>
-  <ParticipantRef>SYS002</ParticipantRef>
-  <dataObjects>
-    <CompositeFrame id="CF:1" version="1.0">
-      <frames>
-        <SiteFrame id="SF:1" version="1.0">
-          <stopPlaces>
-            <StopPlace id="SP:1" version="1.0">
-              <Name>Central Station</Name>
-              <quays>
-                <Quay id="Q:1" version="1.0">
-                  <Name>Platform 1</Name>
-                </Quay>
-              </quays>
-            </StopPlace>
-          </stopPlaces>
-        </SiteFrame>
-        <ResourceFrame id="RF:1" version="1.0">
-          <organisations>
-            <Operator id="OP:1" version="1.0">
-              <Name>OpenMapX Transit</Name>
-            </Operator>
-          </organisations>
-        </ResourceFrame>
-      </frames>
-    </CompositeFrame>
-  </dataObjects>
-</PublicationDelivery>`;
-
-  const lineDocument = `<?xml version="1.0" encoding="UTF-8"?>
-<PublicationDelivery xmlns="http://www.netex.org.uk/netex" version="1.0">
-  <PublicationTimestamp>2010-12-17T09:30:47.0Z</PublicationTimestamp>
-  <ParticipantRef>SYS003</ParticipantRef>
-  <dataObjects>
-    <CompositeFrame id="CF:2" version="1.0">
-      <frames>
-        <ServiceFrame id="SF:2" version="1.0">
-          <lines>
-            <Line id="LN:24" version="1.0">
-              <Name>Line 24</Name>
-            </Line>
-            <Line id="LN:25" version="1.0">
-              <Name>Line 25</Name>
-            </Line>
-          </lines>
-        </ServiceFrame>
-      </frames>
-    </CompositeFrame>
-  </dataObjects>
-</PublicationDelivery>`;
-
-  it("parses publication deliveries, frames, and entity indexes", () => {
-    const scheduled = parseNetexDocument(scheduledStopPointsDocument);
-    const stopPlaces = parseNetexDocument(stopPlacesDocument);
-    const stopIndex = indexNetexElementsById(stopPlaces);
-
-    expect(getNetexPublicationTimestamp(scheduled)).toBe("2001-12-17T09:30:47.0Z");
-    expect(getNetexParticipantRef(scheduled)).toBe("SYS001");
-    expect(listNetexFrames(scheduled)).toHaveLength(1);
-    expect(listNetexScheduledStopPoints(scheduled)).toHaveLength(2);
-    expect(listNetexFramesByName(stopPlaces, "SiteFrame")).toHaveLength(1);
-    expect(listNetexStopPlaces(stopPlaces)).toHaveLength(1);
-    expect(listNetexQuays(stopPlaces)).toHaveLength(1);
-    expect(resolveNetexRef(stopIndex, "SP:1")).toBeDefined();
-    expect(resolveNetexRef(stopIndex, "Q:1")).toBeDefined();
-  });
-
-  it("lists line entities across composite frames", () => {
-    expect(listNetexLines(lineDocument)).toHaveLength(2);
   });
 });

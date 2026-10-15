@@ -254,3 +254,39 @@ describe("quote contributor ownership", () => {
     expect(result.attributions).toEqual([a]);
   });
 });
+
+describe("availability contributor ownership", () => {
+  it.each([undefined, []])(
+    "keeps availability rules credited even without quotes, with native %j",
+    async (native) => {
+      const notice = {
+        sourceId: "feed",
+        name: "Booking rules supplier",
+        attributionText: "Captured notice",
+      };
+      const provider = makeProvider({
+        id: "supplier",
+        getAvailability: async () => ({
+          data: {
+            available: true,
+            coverageChecked: true,
+            products: [],
+            bookingRules: { bookingType: 1, priorNoticeMinutesMin: 30 },
+            ...(native === undefined ? {} : { contributors: native }),
+          },
+          attributions: [notice],
+          freshness,
+        }),
+      });
+      const orchestrator = createRideOrchestrator(ctxWith([provider]));
+      const listing = await orchestrator.listProviders(request);
+      notice.attributionText = "Changed later";
+      expect(JSON.parse(JSON.stringify(listing)).providers[0].availability.contributors).toEqual(
+        native ?? [
+          { sourceId: "feed", name: "Booking rules supplier", attributionText: "Captured notice" },
+        ],
+      );
+      expect((await orchestrator.getQuotes(request, ["supplier"]))[0].attributions).toEqual([]);
+    },
+  );
+});

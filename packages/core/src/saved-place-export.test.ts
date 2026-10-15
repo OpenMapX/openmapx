@@ -5,7 +5,7 @@ import {
   placesToGeoJson,
   placesToGpx,
   placesToKml,
-} from "../geo-export.js";
+} from "./saved-place-export";
 
 const TWO_PLACES: ExportPlace[] = [
   {
@@ -49,7 +49,7 @@ describe("placesToGpx", () => {
     const gpx = placesToGpx(TWO_PLACES);
     const expected = [
       '<?xml version="1.0" encoding="UTF-8"?>',
-      '<gpx version="1.1" creator="OpenMapX" xmlns="http://www.topografix.com/GPX/1/1">',
+      '<gpx version="1.1" creator="OpenMapX" xmlns="http://www.topografix.com/GPX/1/1" xmlns:omx="https://openmapx.org/ns/saved-place/1">',
       '  <wpt lat="52.5163" lon="13.3777">',
       "    <name>Brandenburg Gate</name>",
       "    <desc>Meet at the columns\nPariser Platz, Berlin</desc>",
@@ -124,7 +124,7 @@ describe("XML escaping", () => {
   it("test 8: KML escapes the same characters in name and description", () => {
     const kml = placesToKml(tricky);
     expect(kml).toContain("<name>Café &amp; &lt;bar&gt; &quot;x&quot;</name>");
-    expect(kml).toContain("<description>a &lt; b &amp; c &gt; d</description>");
+    expect(kml).toContain("<description>a &amp;lt; b &amp;amp; c &amp;gt; d</description>");
     expect(kml).not.toContain("<bar>");
   });
 });
@@ -141,4 +141,49 @@ describe("exportFilename", () => {
   it("falls back to 'list' when the name slugifies to empty", () => {
     expect(exportFilename("!!!", "kml")).toBe("list.kml");
   });
+});
+
+it("exports complete acquired notices and durable links with structured field receipts", () => {
+  const receipt = {
+    sourceId: "provider",
+    name: "Original publisher",
+    url: "https://source.example/data",
+    attributionText: '<a href="https://rights.example/license">Original notice</a>',
+    notes: "Special restriction",
+  };
+  const place = {
+    name: "Original place",
+    lat: 50,
+    lng: 8,
+    fieldContributors: { name: [receipt], address: [], lat: [receipt], lng: [receipt] },
+  };
+  const feature = placesToGeoJson([place]).features[0];
+  expect(feature.properties?.fieldContributors).toEqual(place.fieldContributors);
+  expect(JSON.stringify(feature.properties?.attribution)).toContain("Original notice");
+  for (const output of [placesToGpx([place]), placesToKml([place])]) {
+    expect(output).toContain("Original notice");
+    expect(output).toContain("https://rights.example/license");
+    expect(output).toContain("Special restriction");
+    expect(output).toContain("fieldContributors");
+  }
+});
+
+it("keeps required notices inert in KML's HTML description after XML decoding", () => {
+  const place = {
+    name: "Place",
+    lat: 50,
+    lng: 8,
+    fieldContributors: {
+      name: [
+        {
+          sourceId: "source",
+          name: "Publisher",
+          attributionText: "Literal &lt;img src=x onerror=alert(1)&gt; notice",
+        },
+      ],
+    },
+  };
+  const kml = placesToKml([place]);
+  expect(kml).toContain("Literal &amp;lt;img src=x onerror=alert(1)&amp;gt; notice");
+  expect(kml).not.toContain("<img");
 });

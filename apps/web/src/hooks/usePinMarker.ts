@@ -22,6 +22,8 @@ const NO_CONTRIBUTORS: readonly Attribution[] = [];
 const PIN_RED: PinColor = { fill: "#EA4335", stroke: "#C5221F" };
 const LABEL_MAX_WIDTH = 200;
 const LABEL_GAP = 8;
+/** Distance from the pin element's near edge to its label, leaving room beside the 20px-wide pin. */
+const LABEL_OFFSET = "26px";
 
 function fitPinLabel(
   map: maplibregl.Map,
@@ -48,8 +50,8 @@ function fitPinLabel(
   const desiredWidth = Math.min(LABEL_MAX_WIDTH, Math.max(label.scrollWidth, labelRect.width));
   const useLeft = rightRoom < desiredWidth && leftRoom > rightRoom;
   const previousFit = [container.style.left, container.style.right, label.style.maxWidth].join(";");
-  container.style.left = useLeft ? "auto" : "20px";
-  container.style.right = useLeft ? "20px" : "auto";
+  container.style.left = useLeft ? "auto" : LABEL_OFFSET;
+  container.style.right = useLeft ? LABEL_OFFSET : "auto";
   label.style.maxWidth = `${Math.min(LABEL_MAX_WIDTH, useLeft ? leftRoom : rightRoom)}px`;
   if (previousFit !== [container.style.left, container.style.right, label.style.maxWidth].join(";"))
     map.triggerRepaint();
@@ -288,7 +290,7 @@ export function usePinMarker(
       `;
 
         const labelContainer = document.createElement("div");
-        labelContainer.style.cssText = `position:absolute;left:20px;top:0;bottom:0;display:flex;align-items:center;pointer-events:${onActivate ? "auto" : "none"};${onActivate ? "cursor:pointer;" : ""}`;
+        labelContainer.style.cssText = `position:absolute;left:${LABEL_OFFSET};top:0;bottom:0;display:flex;align-items:center;pointer-events:${onActivate ? "auto" : "none"};${onActivate ? "cursor:pointer;" : ""}`;
 
         const labelSpan = document.createElement("span");
         labelSpan.textContent = label;

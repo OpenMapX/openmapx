@@ -281,6 +281,13 @@
       "when": 1791275642373,
       "tag": "0039_drop_poi_ingest",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1792088019122,
+      "tag": "0040_saved_place_contributors",
+      "breakpoints": true
     }
   ]
 }

@@ -12,8 +12,6 @@ import {
   type CreditSources,
   countryOf,
   credit,
-  crowdCredits,
-  crowdReported,
   firstText,
   instantOf,
   itemIdOf,
@@ -24,6 +22,7 @@ import {
   newestReading,
   pointOf,
   type Rec,
+  readingCredits,
   rec,
   sourcesOf,
   splitKey,
@@ -235,7 +234,6 @@ export function recordToChargingSite(
   const readings = allowedReadings(latest, excluded);
   const components = list(record["components"]);
   const sourceOf = (key: string) => splitKey(key, prefixes).source ?? survivor.id;
-  let crowd = false;
 
   const tariffs = offers
     .filter((offer) => {
@@ -276,6 +274,7 @@ export function recordToChargingSite(
       const maxAmperage = number(cDetails["maxAmperage"]);
       connectors.push({
         key: connectorKey,
+        contributors: readingCredits(...live.used),
         standard,
         ...(format ? { format } : {}),
         ...(powerType ? { powerType } : {}),
@@ -291,12 +290,12 @@ export function recordToChargingSite(
     }
     // A charge point only an excluded source published goes, unless a reading we may show is about it.
     if (excluded(sourceOf(key)) && used.length === 0) continue;
-    if (used.some(crowdReported)) crowd = true;
 
     const evseId = str(details["evseId"]);
     const lifecycle = str(component["lifecycle"]);
     evses.push({
       key,
+      contributors: readingCredits(...used),
       ...(evseId ? { evseId } : {}),
       quantity,
       ...(lifecycle ? { lifecycle } : {}),
@@ -351,11 +350,11 @@ export function recordToChargingSite(
     tariffs,
     ...(tariffText ? { tariffText } : {}),
     ...(notes ? { notes } : {}),
-    sources: kept.map((s) => s.id),
+    sources: [...new Set(kept.map((s) => s.id))],
     attributions: [
       ...kept.map((s) => credit(s, sources)),
       ...upstreamCredits(kept, sources),
-      ...crowdCredits(crowd, sources),
+      ...evses.flatMap((evse) => evse.contributors ?? []),
     ],
   };
 }

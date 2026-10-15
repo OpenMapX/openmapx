@@ -13,8 +13,6 @@ import {
   allowedReadings,
   countryOf,
   credit,
-  crowdCredits,
-  crowdReported,
   firstText,
   itemIdOf,
   keyPrefixesOf,
@@ -23,6 +21,7 @@ import {
   newestReading,
   pointOf,
   type Rec,
+  readingCredits,
   readingFeeds,
   rec,
   sourcesOf,
@@ -152,7 +151,6 @@ export function recordToCamera(
     details.imageRedistribution,
   );
   let detailUrl = cameraPage;
-  let crowd = false;
 
   const views: CameraView[] = [];
   for (const component of list(record.components)) {
@@ -170,7 +168,6 @@ export function recordToCamera(
       ) ?? (ownView ? cameraTerms : undefined);
 
     const reading = newestReading(readings, "camera.image", key);
-    if (crowdReported(reading)) crowd = true;
     const value = rec(rec(reading?.result).value);
     // A fused reading names its contributors; any of them declaring the host admits the still.
     const contributors = reading ? readingFeeds(reading) : [];
@@ -207,16 +204,15 @@ export function recordToCamera(
     const native = readCapturedContributors(
       component.contributors ?? rec(component.provenance).contributors,
     );
-    const selectedSources = kept.filter(
-      (source) => source.id === owner || contributors.includes(source.id),
-    );
-    const viewCredits =
+    const selectedSources = kept.filter((source) => source.id === owner);
+    const viewCredits = snapshotContributors(
       native ??
-      snapshotContributors(
-        selectedSources.map((source) => credit(source, sources)),
-        upstreamCredits(selectedSources, sources),
-        crowdCredits(crowdReported(reading), sources),
-      );
+        snapshotContributors(
+          selectedSources.map((source) => credit(source, sources)),
+          upstreamCredits(selectedSources, sources),
+        ),
+      readingCredits(reading),
+    );
     views.push({
       key,
       contributors: viewCredits,
@@ -270,11 +266,11 @@ export function recordToCamera(
         }
       : {}),
     views,
-    sources: kept.map((s) => s.id),
-    attributions: [
-      ...kept.map((s) => credit(s, sources)),
-      ...upstreamCredits(kept, sources),
-      ...crowdCredits(crowd, sources),
-    ],
+    sources: [...new Set(kept.map((s) => s.id))],
+    attributions: snapshotContributors(
+      kept.map((s) => credit(s, sources)),
+      upstreamCredits(kept, sources),
+      views.flatMap((view) => view.contributors ?? []),
+    ),
   };
 }

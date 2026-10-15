@@ -327,6 +327,25 @@ describe("integration frontend modules", () => {
     ).toEqual([`@integrations/${interpolation}expression}/map-layer`]);
   });
 
+  it("keeps web sources and integration frontends independent of API source files", () => {
+    const apiDir = fileURLToPath(new URL("../../../api/src", import.meta.url));
+    const files = [
+      ...filesUnder(WEB_SRC_DIR).filter((file) => /\.tsx?$/.test(file)),
+      ...scanFrontendImports(productionFrontendRoots()).scannedFiles,
+    ];
+    const violations = files.flatMap((file) =>
+      moduleSpecifiers(file, fs.readFileSync(file, "utf8"))
+        .filter((specifier) => {
+          if (!specifier.startsWith(".")) return false;
+          const target = path.resolve(path.dirname(file), specifier);
+          return target === apiDir || target.startsWith(`${apiDir}${path.sep}`);
+        })
+        .map((specifier) => `${path.relative(WEB_SRC_DIR, file)}: ${specifier}`),
+    );
+
+    expect(violations).toEqual([]);
+  });
+
   it("keeps production integration frontends on the focused integration API", () => {
     const { violations } = scanFrontendImports(productionFrontendRoots());
     expect(violations).toEqual([]);

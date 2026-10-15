@@ -43,7 +43,7 @@ afterEach(() => {
     c.clear();
   });
 });
-function setup(initial = false) {
+function setup(initial = false, savedPlace = place) {
   const rows: SavedPlace[] = initial ? [row] : [];
   const lists = [{ id: "l1", name: "Trip", icon: null, isPrivate: true }] as SavedList[];
   let finishCreate: () => void = () => {};
@@ -107,7 +107,7 @@ function setup(initial = false) {
   clients.push(client);
   const view = render(
     <QueryClientProvider client={client}>
-      <SavePlaceDialog open onClose={() => {}} place={place} />
+      <SavePlaceDialog open onClose={() => {}} place={savedPlace} />
     </QueryClientProvider>,
   );
   return {
@@ -377,4 +377,28 @@ describe("saved-place failure and creation reconciliation", () => {
     await reopen(fixture);
     await waitFor(() => expect(screen.getByRole("checkbox")).toBeChecked());
   });
+});
+
+it("captures immutable name/address/coordinate field winners at the save action", async () => {
+  const name = { sourceId: "names", name: "Original name supplier" };
+  const geometry = { sourceId: "geometry", name: "Original coordinate supplier" };
+  const sourced = {
+    ...place,
+    fieldContributors: { name: [name], address: [], coordinates: [geometry], phone: [name] },
+  };
+  const fixture = setup(false, sourced);
+  await waitFor(() => expect(screen.getByText("Trip")).toBeInTheDocument());
+  await userEvent.click(screen.getByText("Trip"));
+  await waitFor(() => expect(fixture.post).toHaveBeenCalled());
+  expect(fixture.post.mock.calls[0][1]).toEqual(
+    expect.objectContaining({
+      fieldContributors: { name: [name], address: [], lat: [geometry], lng: [geometry] },
+    }),
+  );
+  name.name = "Changed catalogue";
+  expect(
+    (fixture.post.mock.calls[0][1] as { fieldContributors: { name: { name: string }[] } })
+      .fieldContributors.name[0].name,
+  ).toBe("Original name supplier");
+  await act(async () => fixture.finishPost());
 });

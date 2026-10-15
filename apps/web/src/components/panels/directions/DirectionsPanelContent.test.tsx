@@ -1,5 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, createQueryWrapper, fireEvent, render, screen, waitFor } from "@/test";
+import {
+  act,
+  createQueryWrapper,
+  createTestQueryClient,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@/test";
 
 vi.mock("next-intl", async () =>
   (await import("@/test/intl")).mockNextIntl({ useLocale: () => "de" }),
@@ -58,6 +66,9 @@ vi.mock("@/components/panels/directions/TransitRouteView", () => ({
 
 import {
   ApiClientError,
+  type DirectionsResult,
+  directionsQueryKey,
+  formatDuration,
   useDirectionsStore,
   useMapStore,
   useSettingsStore,
@@ -1113,7 +1124,7 @@ describe("EV and chained transit recovery", () => {
   });
 });
 
-it("credits scheduled cards and selected details rather than retained ordinary results", () => {
+it("credits scheduled cards, the ordinary mode-button duration and selected details", () => {
   seedOriginDestination();
   act(() => useDirectionsStore.getState().setWaypointSchedule(1, { dwellSeconds: 1800 }));
   const route = (name: string) => ({
@@ -1156,7 +1167,8 @@ it("credits scheduled cards and selected details rather than retained ordinary r
   renderPanel();
   expect(screen.getByText("Scheduled first source")).toBeTruthy();
   expect(screen.getByText("Scheduled alternate source")).toBeTruthy();
-  expect(screen.queryByText("Retained ordinary source")).toBeNull();
+  // The ordinary duration remains painted on the active mode button.
+  expect(screen.getByText("Retained ordinary source")).toBeTruthy();
   fireEvent.click(screen.getAllByText("common.details")[1]);
   expect(screen.getByText("Scheduled alternate source")).toBeTruthy();
   expect(screen.queryByText("Scheduled first source")).toBeNull();
@@ -1204,4 +1216,96 @@ it("projects multi-stop leg metrics from indexed fields without reviving canonic
   renderPanel();
   expect(screen.getByText("Visible leg metrics")).toBeTruthy();
   expect(screen.queryByText("Hidden leg container")).toBeNull();
+});
+
+it("credits the exact duration fields on inactive cached mode buttons", () => {
+  seedOriginDestination();
+  const queryClient = createTestQueryClient();
+  const duration = { sourceId: "engine", name: "Captured walking duration" };
+  const hidden = { sourceId: "engine", name: "Hidden walking geometry" };
+  queryClient.setQueryData(
+    directionsQueryKey({
+      waypoints: [
+        [13.3, 52.5],
+        [11.5, 48.1],
+      ],
+      mode: "walking",
+      avoidHighways: useDirectionsStore.getState().avoidHighways,
+      avoidTolls: useDirectionsStore.getState().avoidTolls,
+      avoidFerries: useDirectionsStore.getState().avoidFerries,
+      avoidClosures: useSettingsStore.getState().avoidIncidents,
+      units: useSettingsStore.getState().units,
+      lang: "de",
+    }),
+    {
+      routes: [
+        {
+          mode: "walking",
+          duration: 600,
+          distance: 5000,
+          geometry: [],
+          legs: [],
+          steps: [],
+          contributors: [hidden],
+          fieldContributors: { duration: [duration], geometry: [hidden] },
+        },
+      ],
+      waypoints: [],
+      activeRouteIndex: 0,
+      provider: "historical-engine",
+    } satisfies DirectionsResult,
+  );
+  render(<DirectionsPanelContent />, { wrapper: createQueryWrapper(queryClient) });
+  expect(screen.getByText(formatDuration(600))).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "footer.attributions" }));
+  expect(screen.getByRole("dialog")).toHaveTextContent("Captured walking duration");
+  expect(screen.queryByText("Hidden walking geometry")).toBeNull();
+});
+
+it("keeps cached empty duration receipts authoritative and hides spinner-only duration credits", () => {
+  seedOriginDestination();
+  const queryClient = createTestQueryClient();
+  const hidden = { sourceId: "engine", name: "Hidden duration owner" };
+  useDirectionsMock.mockReturnValue({
+    data: { routes: [{ duration: 600, contributors: [hidden] }] },
+    isLoading: true,
+    isError: false,
+  });
+  queryClient.setQueryData(
+    directionsQueryKey({
+      waypoints: [
+        [13.3, 52.5],
+        [11.5, 48.1],
+      ],
+      mode: "cycling",
+      avoidHighways: useDirectionsStore.getState().avoidHighways,
+      avoidTolls: useDirectionsStore.getState().avoidTolls,
+      avoidFerries: useDirectionsStore.getState().avoidFerries,
+      avoidClosures: useSettingsStore.getState().avoidIncidents,
+      units: useSettingsStore.getState().units,
+      lang: "de",
+    }),
+    {
+      routes: [
+        {
+          mode: "cycling",
+          duration: 1200,
+          distance: 5000,
+          geometry: [],
+          legs: [],
+          steps: [],
+          contributors: [hidden],
+          fieldContributors: { duration: [] },
+        },
+      ],
+      waypoints: [],
+      activeRouteIndex: 0,
+      provider: "historical-engine",
+    } satisfies DirectionsResult,
+  );
+  render(<DirectionsPanelContent />, { wrapper: createQueryWrapper(queryClient) });
+  expect(screen.getByText(formatDuration(1200))).toBeTruthy();
+  expect(screen.queryByText(formatDuration(600))).toBeNull();
+  expect(screen.queryByText("Hidden duration owner")).toBeNull();
+  expect(screen.queryByRole("button", { name: "footer.attributions" })).toBeNull();
 });

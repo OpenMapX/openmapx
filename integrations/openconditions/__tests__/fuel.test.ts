@@ -12,7 +12,7 @@ import { recordToFuelStation } from "../fuel/map.js";
 import { createFuelStationProvider } from "../fuel/provider.js";
 import { setup } from "../index.js";
 import { createLiveSources, type LiveSources } from "../sources.js";
-import { CROWD_CREDIT, CROWD_SOURCES } from "./fixtures/crowd.js";
+import { CROWD_PROVENANCE, CROWD_READING_CREDIT, CROWD_SOURCES } from "./fixtures/crowd.js";
 import featureResponse from "./fixtures/feature-fuel.json" with { type: "json" };
 import featuresResponse from "./fixtures/features-fuel.json" with { type: "json" };
 
@@ -133,6 +133,7 @@ describe("fuel-stations-openconditions", () => {
     });
     expect(product(station, "e5")).toEqual({
       key: "e5",
+      contributors: [],
       grade: "e5",
       per: "L",
       price: { amount: 1.009, currency: "EUR" },
@@ -154,6 +155,7 @@ describe("fuel-stations-openconditions", () => {
     // OSM's lorry diesel is its own product, marked for lorries only.
     expect(product(station, "diesel:hgv")).toEqual({
       key: "diesel:hgv",
+      contributors: [],
       grade: "diesel",
       vehicleScope: "hgv",
       per: "L",
@@ -211,6 +213,7 @@ describe("fuel-stations-openconditions", () => {
     // OSM alone says LPG is sold here: available, with no price.
     expect(product(station!, "lpg")).toEqual({
       key: "lpg",
+      contributors: [],
       grade: "lpg",
       per: "L",
       available: true,
@@ -825,10 +828,11 @@ describe("recordToFuelStation", () => {
     expect(without.products.map((p) => p.key)).toEqual(["diesel"]);
   });
 
-  test("crowd reports in a fused reading keep it and are credited as /sources states the crowd", () => {
+  test("crowd reports in a fused reading retain their captured credit", () => {
     const fused: LatestReading = {
       ...price("diesel", 1.55, "2026-10-04T10:00:00Z", "@fused"),
       contributors: [SURVIVOR, "crowd"],
+      provenance: CROWD_PROVENANCE,
     };
     const station = recordToFuelStation(
       canonical([fuelProduct("diesel")]),
@@ -838,7 +842,7 @@ describe("recordToFuelStation", () => {
     )!;
     expect(station.products[0]).toMatchObject({ price: { amount: 1.55, currency: "EUR" } });
     expect(station.attributions.map((a) => a.sourceId)).toEqual([SURVIVOR, MEMBER, "crowd"]);
-    expect(station.attributions.at(-1)).toEqual(CROWD_CREDIT);
+    expect(station.attributions.at(-1)).toEqual(CROWD_READING_CREDIT);
 
     // Without a crowd contributor there is no crowd credit.
     const plain = recordToFuelStation(

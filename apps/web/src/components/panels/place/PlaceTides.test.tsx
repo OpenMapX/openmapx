@@ -78,3 +78,28 @@ describe("PlaceTidesContent", () => {
     expect(screen.queryByText("nextLow")).not.toBeInTheDocument();
   });
 });
+
+it("projects the old prediction and fresh current-level receipts while excluding hidden tide fields", () => {
+  render(
+    <PlaceTidesContent
+      data={{
+        ...baseResponse,
+        currentLevel: { time: "2026-05-18T00:00:00Z", valueFt: 2.1 },
+        events: [{ time: "2026-05-18T02:00:00Z", type: "H", valueFt: 3.4 }],
+        contributors: [{ sourceId: "blended", name: "Unselected blended credit" }],
+        fieldContributors: {
+          station: [],
+          events: [{ sourceId: "same", name: "Prediction terms A" }],
+          currentLevel: [{ sourceId: "same", name: "Observation terms B" }],
+          curve: [{ sourceId: "hidden", name: "Hidden curve credit" }],
+          met: [{ sourceId: "hidden", name: "Hidden met credit" }],
+        },
+      }}
+    />,
+  );
+  expect(screen.getByText(/Prediction terms A/)).toBeInTheDocument();
+  expect(screen.getByText(/Observation terms B/)).toBeInTheDocument();
+  expect(
+    screen.queryByText(/Hidden curve credit|Hidden met credit|Unselected blended credit/),
+  ).not.toBeInTheDocument();
+});

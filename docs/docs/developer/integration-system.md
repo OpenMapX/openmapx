@@ -382,6 +382,27 @@ own author, license and file-page identity; a Wikimedia publisher receipt cannot
 substitute for that per-file metadata. Recover missing metadata or defer that
 file while keeping valid cached receipts.
 
+Acquisition boundaries inside providers own their receipts too: a wrapper cannot
+stamp today's catalogue onto an already cached hotel offer, tide prediction or
+observation. Independently refreshed fields retain their own `fieldContributors`.
+Availability receipts remain separate from quote receipts. Derived values, such
+as detours or animated positions, retain the receipts of their actual inputs;
+prepare animation ownership once per update rather than recalculating it in
+frame callbacks. Marker, label and popup channels project their own fields.
+
+OpenConditions expanded readings carry a bounded captured `provenance` credit
+snapshot, independently of the feature and current source catalogue. Their
+`contributors` source IDs identify fusion participants for filtering; they are
+not historical credit evidence. Preserve distinct captured snapshots from the
+same source ID and use the selected reading's capture for its displayed values.
+
+Saved places and labels use the focused `@openmapx/core/saved-place-contributors`
+contract: bounded `name`, `address`, `lat` and `lng` field receipts persist through
+storage, offline mirroring, sharing and GPX/KML/GeoJSON export and import.
+User edits clear ownership only for values that actually change. Static files
+retain complete notices and links alongside portable metadata; their credits
+must remain meaningful without a running OpenMapX instance.
+
 Contributor metadata is data, not executable presentation or permission. Host
 renderers use the shared credit HTML builders/sanitizer; names are text, only
 allowed markup and HTTP(S) links survive. Parsing a receipt establishes its

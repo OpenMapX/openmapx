@@ -182,3 +182,45 @@ describe("saved-list mirror cleanup", () => {
     client.clear();
   });
 });
+
+it("hydrates and persists exact saved/label field receipts including authoritative empty", async () => {
+  vi.useFakeTimers();
+  const fields = {
+    name: [{ sourceId: "old", name: "Original publisher", attributionText: "Original terms" }],
+    address: [],
+    lat: [],
+    lng: [],
+  };
+  const saved = { id: "saved-1", fieldContributors: fields };
+  const label = { id: "label-1", fieldContributors: fields };
+  storage.get.mockResolvedValue({
+    userId: "u1",
+    lists: [{ id: "l1" }],
+    labels: [label],
+    listPlaces: { l1: [saved] },
+  });
+  const client = new QueryClient();
+  const view = render(
+    <QueryClientProvider client={client}>
+      <SavedPlacesMirror />
+    </QueryClientProvider>,
+  );
+  await act(async () => {
+    await Promise.resolve();
+  });
+  expect(client.getQueryData(["savedListPlaces", "l1"])).toEqual([saved]);
+  expect(client.getQueryData(["labeledPlaces"])).toEqual([label]);
+  await act(async () => {
+    client.setQueryData(["savedListPlaces", "l1"], [{ ...saved, note: "My note" }]);
+    await vi.advanceTimersByTimeAsync(1000);
+  });
+  expect(storage.set).toHaveBeenCalledWith(
+    "omx-saved-mirror",
+    expect.objectContaining({
+      listPlaces: { l1: [{ ...saved, note: "My note" }] },
+      labels: [label],
+    }),
+  );
+  view.unmount();
+  client.clear();
+});

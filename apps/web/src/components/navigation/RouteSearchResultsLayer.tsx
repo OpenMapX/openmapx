@@ -1,20 +1,32 @@
 "use client";
 
 import type { AlongRoutePoi, CategoryPlace } from "@openmapx/core";
+import {
+  contributorsForField,
+  readCapturedContributors,
+  serializeContributors,
+  snapshotContributors,
+} from "@openmapx/mobility-core/contributors";
 import type * as maplibregl from "maplibre-gl";
 import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
-import { brandImageId, loadBrandMarkerImage } from "@/components/map/CategoryResultMarkers";
+import {
+  brandImageId,
+  loadBrandMarkerImage,
+  loadedBrandMarkerContributors,
+} from "@/components/map/CategoryResultMarkers";
 import { addLayerInSlot } from "@/integration-api/map/layerStack";
 import { useMap } from "@/integration-api/map/MapContext";
 import { getMapClickOwner } from "@/integration-api/map/mapClickOwnership";
 import { useGeoJsonSourceDataBridge } from "@/integration-api/map/useGeoJsonSourceDataBridge";
+import { useRenderedMapAttributions } from "@/integration-api/overlay/useRenderedMapAttributions";
 import { BRAND_HEX } from "@/integration-api/runtime/theme";
 import { createMarkerSvg } from "@/lib/markerSvg";
 import { routeStopCopy } from "@/lib/navigation/routeStopCopy";
 
 const SOURCE = "route-search-source";
 const LAYER = "route-search-layer";
+const LABEL_LAYER = "route-search-labels";
 
 function ensurePinImage(
   map: maplibregl.Map,
@@ -52,6 +64,21 @@ export function RouteSearchResultsLayer({
 }) {
   const { mapRef, mapReady, styleVersion } = useMap();
   const t = useTranslations("navigation");
+  useRenderedMapAttributions("route-search", [LAYER, LABEL_LAYER], true, {
+    resolveFeatureContributors: (feature) => {
+      const label = feature.layer.id === LABEL_LAYER;
+      const captured =
+        readCapturedContributors(
+          feature.properties?.[label ? "_mapLabelAttributions" : "_mapMarkerAttributions"],
+        ) ?? [];
+      const qid = feature.properties?._mapBrandQid;
+      // A shared same-QID image may be replaced after this feature was published.
+      // Credit the captured file installed now, while coordinates stay feature-bound.
+      return !label && mapRef.current && typeof qid === "string" && qid
+        ? snapshotContributors(captured, loadedBrandMarkerContributors(mapRef.current, qid))
+        : captured;
+    },
+  });
   const fallbackImageId = `route-search-pin-${categoryKey}`;
   const [loadedBrand, setLoadedBrand] = useState<{ qid: string; styleVersion: number } | null>(
     null,
@@ -88,6 +115,18 @@ export function RouteSearchResultsLayer({
           "icon-size": 0.55,
           "icon-allow-overlap": true,
           "icon-anchor": "bottom",
+        },
+      },
+      "route-markers",
+      23,
+    );
+    addLayerInSlot(
+      map,
+      {
+        id: LABEL_LAYER,
+        type: "symbol",
+        source: SOURCE,
+        layout: {
           "text-field": ["get", "label"],
           "text-size": 11,
           "text-offset": [0, 0.5],
@@ -97,7 +136,7 @@ export function RouteSearchResultsLayer({
         paint: { "text-color": "#202124", "text-halo-color": "#ffffff", "text-halo-width": 1.4 },
       },
       "route-markers",
-      23,
+      24,
     );
   }, [mapRef, mapReady, styleVersion]);
 
@@ -128,12 +167,21 @@ export function RouteSearchResultsLayer({
           type: "FeatureCollection",
           features: results.map((poi) => {
             const copy = routeStopCopy(poi, true);
+            const coordinateReceipts = contributorsForField(poi.place, "coordinates");
+            const durationReceipts =
+              poi.detour?.kind === "network" ? contributorsForField(poi.detour, "seconds") : [];
+
             return {
               type: "Feature" as const,
               properties: {
                 id: poi.place.id,
                 imageId,
                 label: t(copy.key, copy.values),
+                _mapBrandQid: imageId === fallbackImageId ? "" : (brandQid ?? ""),
+                _mapMarkerAttributions: serializeContributors(coordinateReceipts),
+                _mapLabelAttributions: serializeContributors(
+                  snapshotContributors(coordinateReceipts, durationReceipts),
+                ),
               },
               geometry: { type: "Point" as const, coordinates: poi.place.coordinates },
             };
@@ -141,7 +189,7 @@ export function RouteSearchResultsLayer({
         },
       },
     ]);
-  }, [imageId, publishGeoJson, results, styleVersion, t]);
+  }, [brandQid, fallbackImageId, imageId, publishGeoJson, results, styleVersion, t]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -158,13 +206,14 @@ export function RouteSearchResultsLayer({
     const onLeave = () => {
       map.getCanvas().style.cursor = "";
     };
-    map.on("click", LAYER, onClick);
-    map.on("mouseenter", LAYER, onEnter);
-    map.on("mouseleave", LAYER, onLeave);
+    const layers = [LAYER, LABEL_LAYER];
+    map.on("click", layers, onClick);
+    map.on("mouseenter", layers, onEnter);
+    map.on("mouseleave", layers, onLeave);
     return () => {
-      map.off("click", LAYER, onClick);
-      map.off("mouseenter", LAYER, onEnter);
-      map.off("mouseleave", LAYER, onLeave);
+      map.off("click", layers, onClick);
+      map.off("mouseenter", layers, onEnter);
+      map.off("mouseleave", layers, onLeave);
     };
   }, [mapRef, results, onSelect]);
 

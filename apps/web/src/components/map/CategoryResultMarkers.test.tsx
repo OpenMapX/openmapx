@@ -153,7 +153,9 @@ it("keeps brand-enriched data on unrelated events and fences old image completio
   try {
     fake.map.setStyle({} as never);
     const { apiClient } = await import("@openmapx/core");
-    const { loadBrandMarkerImage } = await import("./CategoryResultMarkers");
+    const { loadBrandMarkerImage, loadedBrandMarkerContributors } = await import(
+      "./CategoryResultMarkers"
+    );
     const photo = {
       logoFile: "Logo.svg",
       url: "https://upload.wikimedia.org/wikipedia/commons/a/ab/Logo.svg",
@@ -188,6 +190,14 @@ it("keeps brand-enriched data on unrelated events and fences old image completio
     await waitFor(() => expect(images.length).toBeGreaterThan(0));
     images.at(-1)?.onload?.();
     expect(await loaded).toBe(true);
+    const loadedReceipts = loadedBrandMarkerContributors(fake.map, "Q1");
+    expect(loadedReceipts.map((receipt) => receipt.name)).toEqual([
+      "NSI logo selection",
+      "Logo Commons credit",
+    ]);
+    loadedReceipts[0].name = "Mutated consumer";
+    expect(loadedBrandMarkerContributors(fake.map, "Q1")[0].name).toBe("NSI logo selection");
+
     reach.filtered = [
       {
         id: "brand",
@@ -217,6 +227,7 @@ it("keeps brand-enriched data on unrelated events and fences old image completio
     act(() => {
       fake.map.setStyle({} as never);
     });
+    expect(loadedBrandMarkerContributors(fake.map, "Q1")).toEqual([]);
     await act(async () => {
       oldImage.onload?.();
     });
@@ -356,23 +367,25 @@ it("keeps the selected result out of the ordinary layers through hover and style
     view = render(<CategoryResultMarkers />);
     await act(async () => {});
 
-    const filter = ["all", ["!=", ["get", "id"], "osm:node/1"], ["!=", ["get", "id"], ""]];
+    const filter = ["!=", ["get", "id"], "osm:node/1"];
+    const labelOpacity = () => fake.map.getPaintProperty("category-results-labels", "text-opacity");
+    const hiddenLabel = (id: string) => ["case", ["==", ["get", "id"], id], 0, 1];
     expect(fake.state.filters.get("category-results-layer")).toEqual(filter);
     expect(fake.state.filters.get("category-results-labels")).toEqual(filter);
+    expect(labelOpacity()).toEqual(hiddenLabel(""));
     const uploads = fake.state.counts.setData.get("category-results-source") ?? 0;
     act(() => useCategorySearchStore.getState().setHoveredCategoryPlaceId("osm:node/2"));
-    const hoveredFilter = [
-      "all",
-      ["!=", ["get", "id"], "osm:node/1"],
-      ["!=", ["get", "id"], "osm:node/2"],
-    ];
-    expect(fake.state.filters.get("category-results-layer")).toEqual(hoveredFilter);
+    // The hovered marker stays rendered under the hover pin; only its label hides.
+    expect(fake.state.filters.get("category-results-layer")).toEqual(filter);
+    expect(fake.state.filters.get("category-results-labels")).toEqual(filter);
+    expect(labelOpacity()).toEqual(hiddenLabel("osm:node/2"));
     expect(fake.state.counts.setData.get("category-results-source") ?? 0).toBe(uploads);
     act(() => fake.map.setStyle({} as never));
     await act(async () => images.at(-1)?.onload?.());
-    expect(fake.state.filters.get("category-results-layer")).toEqual(hoveredFilter);
-    act(() => useCategorySearchStore.getState().setHoveredCategoryPlaceId(null));
     expect(fake.state.filters.get("category-results-layer")).toEqual(filter);
+    expect(labelOpacity()).toEqual(hiddenLabel("osm:node/2"));
+    act(() => useCategorySearchStore.getState().setHoveredCategoryPlaceId(null));
+    expect(labelOpacity()).toEqual(hiddenLabel(""));
   } finally {
     view?.unmount();
     usePlaceStore.setState({ selectedPlace: null });

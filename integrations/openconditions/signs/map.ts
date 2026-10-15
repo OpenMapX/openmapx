@@ -8,8 +8,6 @@ import {
   type CreditSources,
   countryOf,
   credit,
-  crowdCredits,
-  crowdReported,
   firstText,
   itemIdOf,
   type LatestReading,
@@ -18,6 +16,7 @@ import {
   newestReading,
   pointOf,
   type Rec,
+  readingCredits,
   rec,
   sourcesOf,
   str,
@@ -115,11 +114,11 @@ export function recordToMessageSign(
     status,
     pages: status === "in_service" ? pagesOf(value) : [],
     ...(updatedAt ? { updatedAt } : {}),
-    sources: kept.map((s) => s.id),
+    sources: [...new Set(kept.map((s) => s.id))],
     attributions: [
       ...kept.map((s) => credit(s, sources)),
       ...upstreamCredits(kept, sources),
-      ...crowdCredits(crowdReported(reading), sources),
+      ...readingCredits(reading),
     ],
   };
 }

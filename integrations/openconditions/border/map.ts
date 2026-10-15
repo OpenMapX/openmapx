@@ -20,6 +20,7 @@ import {
   noticeCredits,
   pointOf,
   type Rec,
+  readingCredits,
   readingCurrent,
   rec,
   sourcesOf,
@@ -99,6 +100,7 @@ export function recordToBorderCrossing(
   const at = now.getTime();
 
   const queues: BorderCrossingQueue[] = [];
+  const used: LatestReading[] = [];
   for (const component of list(record.components)) {
     const key = str(component.key);
     if (component.kind !== "lane_group" || !key) continue;
@@ -118,6 +120,7 @@ export function recordToBorderCrossing(
     const lanesOpen = count(value.lanesOpen);
     const updatedAt = reading ? instantOf(reading.phenomenonTime) : undefined;
     const fresh = reading !== undefined && readingCurrent(reading, at, WAIT_FRESH_MS);
+    if (reading) used.push(reading);
     queues.push({
       key,
       mode,
@@ -151,11 +154,12 @@ export function recordToBorderCrossing(
     ...(open ? { open } : {}),
     ...(hours ? { openingHours: hours } : {}),
     queues,
-    sources: kept.map((s) => s.id),
+    sources: [...new Set(kept.map((s) => s.id))],
     attributions: [
       ...kept.map((s) => credit(s, sources)),
       ...upstreamCredits(kept, sources),
       ...noticeCredits(kept, sources),
+      ...readingCredits(...used, open ? openReading : undefined),
     ],
   };
 }

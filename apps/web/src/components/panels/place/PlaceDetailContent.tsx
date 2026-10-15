@@ -18,11 +18,16 @@ import {
   usePlaceStore,
 } from "@openmapx/core";
 import { useReviewAggregate } from "@openmapx/mangrove-react";
+import {
+  contributorsForRecordFields,
+  snapshotContributors,
+} from "@openmapx/mobility-core/contributors";
 import type { MergedRoute, TransportMode } from "@openmapx/mobility-core/transit";
 import { useLocale, useTranslations } from "next-intl";
 import { useEffect, useMemo, useState } from "react";
 import { BrandLogo } from "@/components/search/BrandLogo";
 import { AttributionDetailsGroup } from "@/components/ui/AttributionDetailsGroup";
+import { AttributionStrip } from "@/components/ui/AttributionStrip";
 import { BRAND } from "@/integration-api/runtime/theme";
 import { useDetailChrome } from "../DetailShell";
 import { useFloatingMobileSheetHandle } from "../sheet/mobileSheetShared";
@@ -197,6 +202,21 @@ function PlaceDetailContentInner({ place, isLoading, onClose, clearSearchBar = f
       : place.rating
         ? { rating: place.rating, count: place.reviewCount ?? 0 }
         : null;
+  const headerAttributions = snapshotContributors(
+    contributorsForRecordFields(place, [
+      "name",
+      ...(place.category ? ["category"] : []),
+      ...(place.openingHoursInfo?.status ? ["openingHoursInfo.status"] : []),
+    ]),
+    detent !== "peek" && headerReviewStats
+      ? headerAggregateQuery.data !== undefined
+        ? (headerAggregateQuery.data.contributors ?? [])
+        : contributorsForRecordFields(place, [
+            "rating",
+            ...(place.reviewCount !== undefined ? ["reviewCount"] : []),
+          ])
+      : [],
+  );
   const placePhotos = place.photos ?? [];
   // Skip photos that already failed to load so the hero advances through any
   // remaining candidates and, when none load, falls back to the no-photo layout.
@@ -472,6 +492,8 @@ function PlaceDetailContentInner({ place, isLoading, onClose, clearSearchBar = f
             </Box>
           )}
         </Box>
+
+        <AttributionStrip attributions={headerAttributions} provenanceDisplay="details" />
 
         {/* Inline action row, sheet only. It sits above the tabs here so it
             falls inside the peek-collapsed subtree and stays reachable

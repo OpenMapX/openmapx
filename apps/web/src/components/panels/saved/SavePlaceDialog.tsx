@@ -21,6 +21,7 @@ import {
   useSavedLists,
   useSavePlace,
 } from "@openmapx/core";
+import { captureSavedPlaceContributors } from "@openmapx/core/saved-place-contributors";
 import { useQueryClient } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -129,6 +130,7 @@ export function SavePlaceDialog({ open, onClose, place }: Props) {
                   lat: capturedPlace.coordinates[1],
                   lng: capturedPlace.coordinates[0],
                   placeId: capturedPlace.id,
+                  fieldContributors: captureSavedPlaceContributors(capturedPlace),
                 });
                 current.savedId = saved.id;
                 current.present = true;

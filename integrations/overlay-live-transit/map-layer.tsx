@@ -1,15 +1,12 @@
 "use client";
 
+import { useDebouncedCallback, useNavigationStore, useOverlayExclusion } from "@openmapx/core";
 import {
-  buildAttributionHtml,
-  escapeHtml,
-  useDebouncedCallback,
-  useNavigationStore,
-  useOverlayExclusion,
-} from "@openmapx/core";
-import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
-import {
-  contributorsForRecords,
+  contributorKey,
+  contributorsForField,
+  contributorsForRecordFields,
+  readCapturedContributors,
+  readCapturedFieldContributors,
   serializeContributors,
   snapshotContributors,
 } from "@openmapx/mobility-core/contributors";
@@ -17,6 +14,7 @@ import type { LiveTransitVehicle } from "@openmapx/mobility-core/transit";
 import type { GeoJSONFeatureDiff, GeoJSONSourceDiff, MapLayerMouseEvent } from "maplibre-gl";
 import * as maplibregl from "maplibre-gl";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { INTERACTIVE_LAYER_IDS } from "@/integration-api/map/interactiveLayers";
 import { addLayerInSlot, unregisterLayerSlot } from "@/integration-api/map/layerStack";
 import { useMap } from "@/integration-api/map/MapContext";
@@ -31,6 +29,7 @@ import { useOverlayMinZoom } from "@/integration-api/overlay/overlayZoomGate";
 import { useRenderedMapAttributions } from "@/integration-api/overlay/useRenderedMapAttributions";
 import { useEnv } from "@/integration-api/runtime/EnvProvider";
 import { isFreshVehicleObservation } from "./freshness";
+import { LiveTransitPopup, type ParsedVehicle } from "./popup";
 import { useLiveTransitStore } from "./store";
 import type { LiveTransitSnapshot } from "./types.js";
 
@@ -47,16 +46,11 @@ const POSITION_EPSILON = 0.00001;
 
 type AlertSeverity = "info" | "warning" | "severe" | "critical";
 
-interface ParsedVehicle extends LiveTransitVehicle {
-  speedKmh: number | null;
-  color: string;
-  alerts: LiveTransitSnapshot["alerts"];
-}
-
 type VehicleFeature = GeoJSON.Feature<
   GeoJSON.Point,
   {
     _mapAttributions: string;
+    _mapFieldAttributions?: string;
     id: string;
     sourceId: string;
     mode: string;
@@ -79,13 +73,6 @@ function severityRank(severity: AlertSeverity): number {
   if (severity === "severe") return 3;
   if (severity === "warning") return 2;
   return 1;
-}
-
-function severityColor(severity: AlertSeverity): string {
-  if (severity === "critical") return "#B91C1C";
-  if (severity === "severe") return "#DC2626";
-  if (severity === "warning") return "#D97706";
-  return "#2563EB";
 }
 
 function easeInOutCubic(t: number): number {
@@ -116,6 +103,72 @@ function interpolateBearing(
   if (to == null) return from;
   const delta = ((to - from + 540) % 360) - 180;
   return (from + delta * t + 360) % 360;
+}
+
+/** Prepare receipt ownership once per snapshot update, never inside the animation loop. */
+export function prepareVehicleTransition(previous: ParsedVehicle, target: ParsedVehicle) {
+  const fields = ["lat", "lng", "bearing", "speed"] as const;
+  const same = (
+    a: ReturnType<typeof snapshotContributors>,
+    b: ReturnType<typeof snapshotContributors>,
+  ) =>
+    a.length === b.length &&
+    a.every((receipt, index) => {
+      const other = b[index];
+      return other !== undefined && contributorKey(receipt) === contributorKey(other);
+    });
+  const capture = (start: boolean) => {
+    const changes: Record<string, ReturnType<typeof snapshotContributors>> = {};
+    for (const field of fields) {
+      const from = previous[field];
+      const to = target[field];
+      // Nullable endpoints are retained rather than interpolated by lerpMaybe.
+      if (from == null || from === to) continue;
+      const a = contributorsForField(previous, field);
+      const b = contributorsForField(target, field);
+      const selected = start || to == null ? a : snapshotContributors(a, b);
+      if (!same(selected, b)) changes[field] = selected;
+    }
+    if (!Object.keys(changes).length) return {};
+    const displayed = [
+      ...new Set(
+        Object.values(VEHICLE_MAP_FIELDS)
+          .flat()
+          .concat(["updatedAt", "secondaryLabel", "codespaceId", "speed"]),
+      ),
+    ];
+    const fieldContributors = {
+      ...Object.fromEntries(displayed.map((field) => [field, contributorsForField(target, field)])),
+      ...target.fieldContributors,
+      ...changes,
+    };
+    return {
+      fieldContributors,
+      contributors: snapshotContributors(target.contributors ?? [], ...Object.values(changes)),
+    };
+  };
+  const unchanged =
+    previous.fieldContributors === undefined &&
+    target.fieldContributors === undefined &&
+    same(
+      snapshotContributors(previous.contributors ?? []),
+      snapshotContributors(target.contributors ?? []),
+    );
+  const initial = unchanged ? {} : capture(true);
+  const blended = unchanged ? {} : capture(false);
+  return (progress: number): ParsedVehicle => {
+    if (progress >= 1) return target;
+    const speed = lerpMaybe(previous.speed, target.speed, progress);
+    return {
+      ...target,
+      ...(progress <= 0 ? initial : blended),
+      lat: lerp(previous.lat, target.lat, progress),
+      lng: lerp(previous.lng, target.lng, progress),
+      bearing: interpolateBearing(previous.bearing, target.bearing, progress),
+      speed,
+      speedKmh: speed != null ? Math.round(speed * 3.6) : target.speedKmh,
+    };
+  };
 }
 
 function hasPositionChange(previous: ParsedVehicle, next: ParsedVehicle): boolean {
@@ -151,6 +204,26 @@ function toParsedVehicles(snapshot: LiveTransitSnapshot | null): ParsedVehicle[]
     }));
 }
 
+const VEHICLE_MAP_FIELDS: Readonly<Record<string, readonly string[]>> = {
+  [ICON_LAYER]: ["lat", "lng", "mode", "bearing", "positionKind"],
+  [LABEL_LAYER]: ["lat", "lng", "displayLabel"],
+  [RING_LAYER]: ["lat", "lng", "tripId"],
+};
+
+/** Preserve one shared snapshot in ordinary features, projecting optional field ownership per painted layer. */
+export function vehicleMapContributors(feature: {
+  properties: Record<string, unknown>;
+  layer: { id: string };
+}) {
+  const fields = readCapturedFieldContributors(feature.properties._mapFieldAttributions);
+  return fields === undefined
+    ? (readCapturedContributors(feature.properties._mapAttributions) ?? [])
+    : contributorsForRecordFields(
+        { fieldContributors: fields },
+        VEHICLE_MAP_FIELDS[feature.layer.id] ?? [],
+      );
+}
+
 export function toFeature(vehicle: ParsedVehicle): VehicleFeature {
   return {
     id: vehicle.id,
@@ -158,8 +231,23 @@ export function toFeature(vehicle: ParsedVehicle): VehicleFeature {
     geometry: { type: "Point", coordinates: [vehicle.lng, vehicle.lat] },
     properties: {
       _mapAttributions: serializeContributors(
-        snapshotContributors(vehicle.contributors ?? [], contributorsForRecords(vehicle.alerts)),
+        contributorsForRecordFields(vehicle, [
+          "lat",
+          "lng",
+          "mode",
+          "bearing",
+          "displayLabel",
+          "tripId",
+          "positionKind",
+        ]),
       ),
+      ...(vehicle.fieldContributors === undefined
+        ? {}
+        : {
+            _mapFieldAttributions: JSON.stringify(
+              readCapturedFieldContributors(vehicle.fieldContributors),
+            ),
+          }),
       id: vehicle.id,
       sourceId: vehicle.sourceId,
       mode: vehicle.mode,
@@ -226,65 +314,6 @@ function buildSourceDiff(
   };
 }
 
-function buildPopupHtml(
-  vehicle: ParsedVehicle,
-  registry: ReturnType<typeof useIntegrationRegistry>,
-): string {
-  const label = escapeHtml(vehicle.displayLabel);
-  const secondary = escapeHtml(vehicle.secondaryLabel ?? "");
-  const provider = registry.findDataSource(vehicle.sourceId);
-  const updatedAt = new Date(vehicle.updatedAt).toLocaleTimeString([], {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-  const details = [
-    secondary ? `<div style="font-size:12px;color:#4b5563">${secondary}</div>` : "",
-    vehicle.codespaceId
-      ? `<div style="font-size:12px;color:#4b5563">Codespace ${escapeHtml(vehicle.codespaceId)}</div>`
-      : "",
-    vehicle.speedKmh != null && vehicle.speedKmh > 0
-      ? `<div style="font-size:12px;color:#4b5563">${vehicle.speedKmh} km/h</div>`
-      : "",
-    `<div style="font-size:11px;color:#6b7280">Updated ${escapeHtml(updatedAt)}</div>`,
-    vehicle.positionKind === "interpolated"
-      ? `<div style="font-size:11px;color:#9ca3af;font-style:italic">Estimated position</div>`
-      : "",
-  ]
-    .filter(Boolean)
-    .join("");
-
-  const alertsHtml =
-    vehicle.alerts.length > 0
-      ? `<div style="display:flex;flex-direction:column;gap:4px;margin-top:10px">
-    ${vehicle.alerts
-      .slice(0, 2)
-      .map((alert) => {
-        const title = escapeHtml(alert.title);
-        const tone = severityColor(alert.severity);
-        return `<div style="display:flex;align-items:center;gap:8px;font-size:12px;color:#374151">
-          <span style="display:inline-flex;align-items:center;justify-content:center;background:${tone};color:#fff;font-weight:700;font-size:10px;border-radius:999px;min-width:20px;height:20px;padding:0 6px">${alert.severity.toUpperCase()}</span>
-          <span>${title}</span>
-        </div>`;
-      })
-      .join("")}
-  </div>`
-      : "";
-
-  // The same credit every other non-chip surface renders for this source.
-  const attributionHtml = provider ? buildAttributionHtml(provider) : escapeHtml(vehicle.sourceId);
-
-  return `<div style="font-family:'Plus Jakarta Sans',Arial,sans-serif;min-width:210px">
-    <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
-      <span style="display:inline-flex;align-items:center;justify-content:center;background:${vehicle.color};color:#fff;font-weight:700;font-size:14px;border-radius:6px;min-width:48px;height:32px;padding:0 10px">${label}</span>
-    </div>
-    ${details}
-    ${alertsHtml}
-    <div style="font-size:11px;color:#6b7280;border-top:1px solid #e5e7eb;padding-top:6px;margin-top:8px">
-      ${attributionHtml}
-    </div>
-  </div>`;
-}
-
 function emptyFeatureCollection() {
   return { type: "FeatureCollection" as const, features: [] as GeoJSON.Feature[] };
 }
@@ -320,9 +349,10 @@ export function LiveTransitLayer() {
   // country-sized viewport can't accumulate thousands of markers.
   const minFetchZoom = useOverlayMinZoom("live-transit");
   const env = useEnv();
-  const registry = useIntegrationRegistry();
   const layerVisible = useLiveTransitStore((s) => s.layerVisible);
-  useRenderedMapAttributions("live-transit", [ICON_LAYER, LABEL_LAYER, RING_LAYER], layerVisible);
+  useRenderedMapAttributions("live-transit", [ICON_LAYER, LABEL_LAYER, RING_LAYER], layerVisible, {
+    resolveFeatureContributors: vehicleMapContributors,
+  });
   const excludedProviders = useLiveTransitStore((s) => s.excludedProviders);
   const excludedModes = useLiveTransitStore((s) => s.excludedModes);
   const excludedCodespaces = useLiveTransitStore((s) => s.excludedCodespaces);
@@ -354,6 +384,10 @@ export function LiveTransitLayer() {
   const [renderVehicles, setRenderVehicles] = useState<ParsedVehicle[]>([]);
   const [styleReadyTick, setStyleReadyTick] = useState(0);
   const popupRef = useRef<maplibregl.Popup | null>(null);
+  const [popupContent, setPopupContent] = useState<{
+    container: HTMLElement;
+    vehicle: ParsedVehicle;
+  } | null>(null);
   const popupVehicleIdRef = useRef<string | null>(null);
   const layerInitRef = useRef(false);
   const animationFrameRef = useRef<number | null>(null);
@@ -472,6 +506,7 @@ export function LiveTransitLayer() {
       popupRef.current?.remove();
       popupVehicleIdRef.current = vehicleId;
 
+      const container = document.createElement("div");
       const popup = new maplibregl.Popup({
         closeButton: true,
         maxWidth: "320px",
@@ -479,17 +514,21 @@ export function LiveTransitLayer() {
         offset: 16,
       })
         .setLngLat(coords)
-        .setHTML(buildPopupHtml(vehicle, registry))
+        .setDOMContent(container)
         .addTo(map);
 
       popup.on("close", () => {
+        if (popupRef.current !== popup) return;
         popupVehicleIdRef.current = null;
+        popupRef.current = null;
+        setPopupContent(null);
         selectVehicle(null);
       });
       popupRef.current = popup;
+      setPopupContent({ container, vehicle });
       selectVehicle(vehicleId);
     },
-    [mapRef, registry, selectVehicle],
+    [mapRef, selectVehicle],
   );
 
   useEffect(() => {
@@ -504,8 +543,8 @@ export function LiveTransitLayer() {
     }
 
     popupRef.current.setLngLat([vehicle.lng, vehicle.lat]);
-    popupRef.current.setHTML(buildPopupHtml(vehicle, registry));
-  }, [renderVehicles, registry, selectVehicle]);
+    setPopupContent((held) => (held ? { ...held, vehicle } : null));
+  }, [renderVehicles, selectVehicle]);
 
   useEffect(() => {
     cancelAnimation();
@@ -532,25 +571,16 @@ export function LiveTransitLayer() {
       return;
     }
 
+    const transitions = filteredVehicles.map((target) => {
+      const previous = previousById.get(target.id);
+      return previous ? prepareVehicleTransition(previous, target) : () => target;
+    });
     const start = performance.now();
 
     const step = (now: number) => {
       const progress = Math.min((now - start) / MOVE_ANIMATION_MS, 1);
       const eased = easeInOutCubic(progress);
-      const nextFrame = filteredVehicles.map((target) => {
-        const prev = previousById.get(target.id);
-        if (!prev) return target;
-
-        const speed = lerpMaybe(prev.speed, target.speed, eased);
-        return {
-          ...target,
-          lat: lerp(prev.lat, target.lat, eased),
-          lng: lerp(prev.lng, target.lng, eased),
-          bearing: interpolateBearing(prev.bearing, target.bearing, eased),
-          speed,
-          speedKmh: speed != null ? Math.round(speed * 3.6) : target.speedKmh,
-        };
-      });
+      const nextFrame = transitions.map((transition) => transition(eased));
 
       commitRenderVehicles(nextFrame);
 
@@ -790,5 +820,7 @@ export function LiveTransitLayer() {
     };
   }, [cancelAnimation]);
 
-  return null;
+  return popupContent
+    ? createPortal(<LiveTransitPopup vehicle={popupContent.vehicle} />, popupContent.container)
+    : null;
 }

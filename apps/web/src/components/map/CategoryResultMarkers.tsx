@@ -29,7 +29,12 @@ import {
   snapshotContributors,
 } from "@openmapx/mobility-core/contributors";
 import type { TransitStop, TransportMode } from "@openmapx/mobility-core/transit";
-import type { FilterSpecification, Map as MaplibreMap, MapMouseEvent } from "maplibre-gl";
+import type {
+  ExpressionSpecification,
+  FilterSpecification,
+  Map as MaplibreMap,
+  MapMouseEvent,
+} from "maplibre-gl";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { usePinMarker } from "@/hooks/usePinMarker";
 import { usePlaceEnrichment } from "@/hooks/usePlaceEnrichment";
@@ -117,6 +122,12 @@ export function brandImageId(qid: string): string {
  * missing logo costs a plain pin rather than a missing one.
  */
 const brandAssetReceipts = new WeakMap<MaplibreMap, Map<string, readonly Attribution[]>>();
+
+/** Receipts certify only the image currently installed in this map; clone before exposing them. */
+export function loadedBrandMarkerContributors(map: MaplibreMap, qid: string): Attribution[] {
+  const id = brandImageId(qid);
+  return map.hasImage(id) ? snapshotContributors(brandAssetReceipts.get(map)?.get(id) ?? []) : [];
+}
 
 export async function loadBrandMarkerImage(
   map: MaplibreMap,
@@ -402,12 +413,16 @@ export function CategoryResultMarkers() {
   );
 
   const focusFilter = useMemo<FilterSpecification>(
-    () => [
-      "all",
-      ["!=", ["get", "id"], selectedResultId ?? ""],
-      ["!=", ["get", "id"], hoveredCategoryPlaceId ?? ""],
-    ],
-    [selectedResultId, hoveredCategoryPlaceId],
+    () => ["!=", ["get", "id"], selectedResultId ?? ""],
+    [selectedResultId],
+  );
+  // The hovered result keeps its marker under the hover pin, and only its name
+  // fades out because the pin labels it. Hiding the label through opacity
+  // rather than a filter keeps the symbol placed, so it still answers hover
+  // queries and the neighbouring labels do not reshuffle.
+  const hoverLabelOpacity = useMemo<ExpressionSpecification>(
+    () => ["case", ["==", ["get", "id"], hoveredCategoryPlaceId ?? ""], 0, 1],
+    [hoveredCategoryPlaceId],
   );
   const applyFocusRef = useRef<() => void>(() => {});
 
@@ -422,6 +437,13 @@ export function CategoryResultMarkers() {
           map.setFilter(layerId, focusFilter);
         }
       }
+      if (
+        map.getLayer(LABEL_LAYER_ID) &&
+        JSON.stringify(map.getPaintProperty(LABEL_LAYER_ID, "text-opacity")) !==
+          JSON.stringify(hoverLabelOpacity)
+      ) {
+        map.setPaintProperty(LABEL_LAYER_ID, "text-opacity", hoverLabelOpacity);
+      }
     };
     applyFocusRef.current = applyFocus;
     const unsubscribe = subscribeStyleLoaded(map, applyFocus);
@@ -429,7 +451,7 @@ export function CategoryResultMarkers() {
       unsubscribe();
       applyFocusRef.current = () => {};
     };
-  }, [mapRef, mapReady, styleVersion, focusFilter]);
+  }, [mapRef, mapReady, styleVersion, focusFilter, hoverLabelOpacity]);
 
   const markerImageFor = useMemo(
     () => (mode === "text" ? textResultImageId : () => categoryMarkerImageId(activeCategory ?? "")),

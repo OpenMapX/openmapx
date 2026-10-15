@@ -41,9 +41,14 @@ import {
   useUpdateList,
   useUpdatePlace,
 } from "@openmapx/core";
+import {
+  savedPlaceContributors,
+  savedPlaceContributorsForPlace,
+} from "@openmapx/core/saved-place-contributors";
 import { useTranslations } from "next-intl";
 import type React from "react";
 import { useState } from "react";
+import { AttributionStrip } from "@/components/ui/AttributionStrip";
 import { useMap } from "@/integration-api/map/MapContext";
 import { BRAND, BRAND_LIGHT } from "@/integration-api/runtime/theme";
 import { exportSavedList } from "@/lib/exportSavedList";
@@ -133,6 +138,7 @@ export function SavedListDetail() {
     setSelectedPlace(
       createPlace({
         ...identity,
+        ...savedPlaceContributorsForPlace(place.fieldContributors),
         name: place.name,
         address: place.address ?? "",
         coordinates: [place.lng, place.lat],
@@ -389,6 +395,13 @@ export function SavedListDetail() {
                     {place.address}
                   </Typography>
                 )}
+                <AttributionStrip
+                  attributions={savedPlaceContributors(place.fieldContributors, [
+                    "name",
+                    ...(place.address ? ["address" as const] : []),
+                  ])}
+                  variant="inline"
+                />
                 {noteEditId === place.id ? (
                   <TextField
                     fullWidth

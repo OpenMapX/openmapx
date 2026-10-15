@@ -13,7 +13,7 @@ import { setup } from "../index.js";
 import type { LiveSources } from "../sources.js";
 import stringsDe from "../strings/de.json" with { type: "json" };
 import stringsEn from "../strings/en.json" with { type: "json" };
-import { CROWD_CREDIT, CROWD_SOURCES } from "./fixtures/crowd.js";
+import { CROWD_PROVENANCE, CROWD_READING_CREDIT, CROWD_SOURCES } from "./fixtures/crowd.js";
 import featureResponse from "./fixtures/feature-charging.json" with { type: "json" };
 import featuresResponse from "./fixtures/features-charging.json" with { type: "json" };
 
@@ -119,6 +119,7 @@ describe("charging-sites-openconditions", () => {
     const [first, second] = site.evses;
     expect(first).toEqual({
       key: "EVSE-1",
+      contributors: [],
       evseId: "DE*BWE*E1001*1",
       quantity: 1,
       lifecycle: "operational",
@@ -130,6 +131,7 @@ describe("charging-sites-openconditions", () => {
       connectors: [
         {
           key: "EVSE-1/1",
+          contributors: [],
           standard: "IEC_62196_T2",
           format: "socket",
           powerType: "AC_3_PHASE",
@@ -288,9 +290,10 @@ describe("charging-sites-openconditions", () => {
     expect(mapped(closed)).toMatchObject({ closed: false, planned: true });
   });
 
-  test("crowd reports are credited as /sources states the crowd", () => {
+  test("crowd reports retain the expanded observation capture", () => {
     const answer = body();
     latestOf(answer)[0]!.contributors = [MOBIDATA, "crowd"];
+    latestOf(answer)[0]!.provenance = CROWD_PROVENANCE;
     const site = recordToChargingSite(
       recordOf(answer),
       latestOf(answer),
@@ -299,7 +302,7 @@ describe("charging-sites-openconditions", () => {
       CROWD_SOURCES,
       FRESH,
     )!;
-    expect(site.attributions.at(-1)).toEqual(CROWD_CREDIT);
+    expect(site.attributions.at(-1)).toEqual(CROWD_READING_CREDIT);
   });
 
   test("a crowd reading is left out while /sources states no crowd credit", () => {
