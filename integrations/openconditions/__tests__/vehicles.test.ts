@@ -129,36 +129,21 @@ describe("service-vehicles-openconditions", () => {
   });
 
   test("follows a reopened vehicle to its next position, whose trail passes where it stood", async () => {
-    const trails = () => structuredClone(trailsResponse) as unknown as Body;
-    const now = new Date("2026-10-15T07:05:00Z");
-    let poll = 0;
+    // No search before: the id alone says where to look, as after a restart.
     const { provider } = providerWith(
-      () => {
-        const answer = trails();
-        if (poll++ === 0) {
-          // The first poll: the vehicle two positions before its current one.
-          const record = answer.records.find(
-            (r) => (r.provenance as Rec).recordId === "202663611",
-          )!;
-          const value = (record.result as Rec).value as Rec;
-          value.point = { type: "Point", coordinates: [26.800866, 61.385386] };
-          delete value.trail;
-          record.id = "oc:observation:fi-digitraffic-maintenance:earlier";
-        }
-        return answer;
-      },
+      () => structuredClone(trailsResponse),
       EVERY_SOURCE,
-      now,
+      new Date("2026-10-15T07:05:00Z"),
     );
-    await provider.searchVehicles(BBOX);
-    const followed = await provider.getVehicle("oc:observation:fi-digitraffic-maintenance:earlier");
-    expect(followed).toMatchObject({
-      id: "oc:observation:fi-digitraffic-maintenance:earlier",
+    // The vehicle two positions before its current one.
+    const earlier = "oc:observation:fi-digitraffic-maintenance:earlier~26.800866~61.385386";
+    await expect(provider.getVehicle(earlier)).resolves.toMatchObject({
+      id: earlier,
       coordinates: [26.797545, 61.383693],
     });
-    // Another vehicle near it is not taken for it.
-    const lone = await provider.getVehicle("oc:observation:never-seen:1");
-    expect(lone).toBeNull();
+    // Another vehicle near where it stood is not taken for it.
+    const lone = "oc:observation:fi-digitraffic-maintenance:lone~26.790000~61.380000";
+    await expect(provider.getVehicle(lone)).resolves.toBeNull();
   });
 
   test("leaves out an expired position, one of an excluded or unlisted source, and another property", async () => {
@@ -194,15 +179,28 @@ describe("service-vehicles-openconditions", () => {
     expect(capped).toEqual({ vehicles: [], partial: "area" });
   });
 
-  test("opens a searched position by reading the box around it, and none it never saw", async () => {
-    const { http, provider } = providerWith(() => body());
-    const { vehicles } = await provider.searchVehicles(BBOX);
+  test("opens a position by reading the box around the place its id carries", async () => {
+    const searched = providerWith(() => body());
+    const { vehicles } = await searched.provider.searchVehicles(BBOX);
     const target = vehicles[2]!;
-    await expect(provider.getVehicle(target.id)).resolves.toMatchObject({ id: target.id });
-    const box = String(http.calls[1]?.options?.params?.bbox).split(",").map(Number);
+    expect(target.id).toBe(
+      `${body().records[2]!.id}~${target.coordinates[0].toFixed(6)}~${target.coordinates[1].toFixed(6)}`,
+    );
+
+    // Another process, one that never searched, opens it from its id alone.
+    const { http, provider } = providerWith(() => body());
+    await expect(provider.getVehicle(target.id)).resolves.toMatchObject({
+      id: target.id,
+      coordinates: target.coordinates,
+    });
+    const box = String(http.calls[0]?.options?.params?.bbox).split(",").map(Number);
     expect(box[0]).toBeLessThan(target.coordinates[0]);
     expect(box[2]).toBeGreaterThan(target.coordinates[0]);
+
+    // An id without a place is none this provider made, and is not looked for.
     await expect(provider.getVehicle("oc:observation:elsewhere:1")).resolves.toBeNull();
+    await expect(provider.getVehicle("oc:observation:elsewhere:1~east~north")).resolves.toBeNull();
+    expect(http.calls).toHaveLength(1);
   });
 
   test("serves nothing until the source list arrives", async () => {

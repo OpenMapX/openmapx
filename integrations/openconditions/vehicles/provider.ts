@@ -1,13 +1,7 @@
 import type { BBox } from "@openmapx/core";
 import type { ServiceVehicle, ServiceVehicleProvider } from "@openmapx/integration-framework";
 import type { OpenConditionsClient } from "../client.js";
-import {
-  boxAround,
-  type Excluded,
-  excludedBy,
-  FeaturePositions,
-  partialCoverage,
-} from "../features/read.js";
+import { boxAround, type Excluded, excludedBy, partialCoverage } from "../features/read.js";
 import { type Rec, rec, str } from "../features/record.js";
 import type { LiveSources } from "../sources.js";
 import { readingToServiceVehicle } from "./map.js";
@@ -19,17 +13,34 @@ const PAGE = 1000;
 const PAGE_MAX_BYTES = 16 * 1024 * 1024;
 /** A read stops after this many positions; the view is then only part of the area. */
 const MAX_POSITIONS = 3000;
-/** How many searched positions the provider remembers the place of. */
-const REMEMBERED = 5000;
 /**
- * Half the side of the box a remembered position is followed in, in metres:
- * far enough for a vehicle that drove on for a few minutes.
+ * Half the side of the box a position is followed in, in metres: far enough
+ * for a vehicle that drove on for a few minutes.
  */
 const FOLLOW_HALF_SIDE_M = 5000;
+/** Joins a position's record id and its place in the vehicle's id; unreserved in a URL. */
+const PLACE_SEPARATOR = "~";
 
 /** Whether two positions are the same place, to the publisher's six decimals. */
 const samePlace = (a: readonly number[], b: readonly number[]): boolean =>
   Math.abs(a[0]! - b[0]!) < 1e-6 && Math.abs(a[1]! - b[1]!) < 1e-6;
+
+/** A position's id: its record id with where it stood, so it can be opened without a search before. */
+function placedId(recordId: string, [lon, lat]: [number, number]): string {
+  return [recordId, lon.toFixed(6), lat.toFixed(6)].join(PLACE_SEPARATOR);
+}
+
+/** The record id and place of a position's id, or undefined for an id this provider did not make. */
+function placeOf(id: string): { recordId: string; at: [number, number] } | undefined {
+  const parts = id.split(PLACE_SEPARATOR);
+  if (parts.length < 3) return undefined;
+  const lat = Number(parts.pop());
+  const lon = Number(parts.pop());
+  if (!Number.isFinite(lon) || !Number.isFinite(lat) || Math.abs(lon) > 180 || Math.abs(lat) > 90) {
+    return undefined;
+  }
+  return { recordId: parts.join(PLACE_SEPARATOR), at: [lon, lat] };
+}
 
 interface WirePage {
   records?: unknown;
@@ -38,7 +49,6 @@ interface WirePage {
 }
 
 export interface ServiceVehicleProviderOptions {
-  remembered?: number;
   /** The clock a position's expiry is judged by. */
   now?: () => Date;
 }
@@ -46,12 +56,14 @@ export interface ServiceVehicleProviderOptions {
 /**
  * A `service-vehicles` provider backed by the OpenConditions record API:
  * the `vehicle.position` readings in effect from `GET /observations/latest`.
- * A position names no vehicle, and its id changes each time the vehicle
- * reports (OpenConditions keeps one position per vehicle, replacing the
- * last), so there is nothing to open by id: a position a search returned is
- * opened by reading the area around where it was, and found by its id or
- * else by the next position of the same vehicle, the one that stands where
- * it stood or whose trail passes there. It is gone once it expired.
+ * A position names no vehicle, and its record id changes each time the
+ * vehicle reports (OpenConditions keeps one position per vehicle, replacing
+ * the last), so there is nothing to open by record id. A position's id
+ * carries where it stood instead, and it is opened by reading the area
+ * around there: found by its record id, or else by the next position of the
+ * same vehicle, the one that stands where it stood or whose trail passes
+ * there. It is gone once it expired, and once its vehicle drove on past its
+ * trail.
  *
  * It fails closed on the live source list: until the first list arrives
  * every search is empty and `unavailable`; after it, a position whose source
@@ -64,7 +76,6 @@ export function createServiceVehicleProvider(
   options: ServiceVehicleProviderOptions = {},
 ): ServiceVehicleProvider {
   const now = options.now ?? (() => new Date());
-  const seen = new FeaturePositions(options.remembered ?? REMEMBERED);
 
   const admitted = (record: Rec, excluded: Excluded, at: number): boolean => {
     const sourceId = str(rec(record.provenance).sourceId);
@@ -107,8 +118,7 @@ export function createServiceVehicleProvider(
         if (!admitted(record, excluded, at)) continue;
         const vehicle = readingToServiceVehicle(record, sources);
         if (!vehicle) continue;
-        seen.set([vehicle.id], vehicle.coordinates);
-        vehicles.push(vehicle);
+        vehicles.push({ ...vehicle, id: placedId(vehicle.id, vehicle.coordinates) });
       }
     } while (cursor !== null && progressed && read < MAX_POSITIONS);
     return { vehicles, partArea: partArea || cursor !== null };
@@ -124,22 +134,22 @@ export function createServiceVehicleProvider(
     },
     async getVehicle(id, q) {
       if (!sources.ready) return null;
-      const at = seen.get(id);
-      if (at === undefined) return null;
+      const placed = placeOf(id);
+      if (placed === undefined) return null;
+      const { recordId, at } = placed;
       const { vehicles } = await read(
         boxAround(at, FOLLOW_HALF_SIDE_M),
         excludedBy(sources, q?.excludedSourceIds),
       );
-      const same = vehicles.find((v) => v.id === id);
-      if (same) return same;
+      const same = vehicles.find((v) => placeOf(v.id)?.recordId === recordId);
       // The vehicle reported again: its next position stands where it stood, or
       // its trail passes there. Without a trail through it, it is gone.
-      const next = vehicles.find(
-        (v) => samePlace(v.coordinates, at) || (v.trail ?? []).some((p) => samePlace(p, at)),
-      );
-      if (!next) return null;
-      seen.set([id, next.id], next.coordinates);
-      return { ...next, id };
+      const next =
+        same ??
+        vehicles.find(
+          (v) => samePlace(v.coordinates, at) || (v.trail ?? []).some((p) => samePlace(p, at)),
+        );
+      return next ? { ...next, id } : null;
     },
   };
 }
