@@ -150,7 +150,8 @@ start off. A switched-on layer shows its color key, or says when nothing is in
 the area; its markers carry the layer's own glyph and open in the place panel.
 The incident filters show only while the incidents are on. These layers are the
 same [mobility data sources](./mobility-data.md) the search finds, drawn for the
-area in view and refreshed as the map moves.
+area in view and refreshed as the map moves. The browser remembers which layers
+are on and how incidents are filtered, so they come back on the next visit.
 Without a road-conditions source, such as an OpenConditions instance at
 `OPENCONDITIONS_URL`, **Road conditions** stays in the layer list and its legend
 says traffic incidents are unavailable instead of showing a clear road.

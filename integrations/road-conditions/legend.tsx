@@ -17,6 +17,7 @@ import {
 } from "@/integration-api/map/dataSourceOverlay";
 import { OverlayLegend } from "@/integration-api/overlay/OverlayLegend";
 import { GLYPHS, glyphFor } from "./markers";
+import { useRestoredRoadConditionsChoices } from "./restore-choices";
 import { ROAD_SOURCE_IDS } from "./road-sources";
 import { SEVERITY_COLORS } from "./severity";
 import { type Horizon, type MinSeverity, useRoadConditionsStore } from "./store";
@@ -349,6 +350,7 @@ function IncidentControls() {
 
 export function RoadConditionsLegend() {
   const t = useTranslations("roadConditions");
+  useRestoredRoadConditionsChoices();
   const panelOpen = useRoadConditionsStore((s) => s.panelOpen);
   const layerVisible = useRoadConditionsStore((s) => s.layerVisible);
   const showIncidents = useRoadConditionsStore((s) => s.showIncidents);

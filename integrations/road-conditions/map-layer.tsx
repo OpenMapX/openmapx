@@ -29,6 +29,7 @@ import { buildRoadConditionDisplayGroups, buildRoadConditionFeatures } from "./d
 import { useIncidentsVisible } from "./incidents-visible";
 import { markerImageData, parseMarkerImageId } from "./markers";
 import { buildRoadConditionPopupHtml } from "./popup";
+import { useRestoredRoadConditionsChoices } from "./restore-choices";
 import { RouteConditionsLayer } from "./route-layer";
 import { SEVERITY_LINE_COLOR } from "./severity";
 import { RoadSourceLayers } from "./source-layers";
@@ -128,6 +129,7 @@ export function buildSources(
 }
 
 export function RoadConditionsLayer() {
+  useRestoredRoadConditionsChoices();
   const { mapRef, mapReady, styleVersion } = useMap();
   const { apiUrl } = useEnv();
   // Declared in this integration's manifest, the same gate the layer selector

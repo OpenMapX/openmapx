@@ -1,4 +1,5 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import type { StorageAdapter } from "@openmapx/core";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { horizonDaysParam, useRoadConditionsStore } from "../store";
 
 describe("road-conditions overlay store", () => {
@@ -59,5 +60,108 @@ describe("horizonDaysParam", () => {
     expect(horizonDaysParam("active")).toBe("0");
     expect(horizonDaysParam("week")).toBe("7");
     expect(horizonDaysParam("all")).toBeUndefined();
+  });
+});
+
+function memoryStorage(initial: Record<string, string> = {}): StorageAdapter {
+  const values = new Map(Object.entries(initial));
+  return {
+    getString: (key) => values.get(key) ?? null,
+    setString: (key, value) => {
+      values.set(key, value);
+    },
+    remove: (key) => {
+      values.delete(key);
+    },
+  };
+}
+
+/** A fresh store module, so each test restores once as a new page load would. */
+async function freshStore(storage: StorageAdapter) {
+  vi.resetModules();
+  const core = await import("@openmapx/core");
+  core.configureStorage(storage);
+  return import("../store");
+}
+
+describe("remembered road-conditions choices", () => {
+  it("starts with incidents shown and no road sources when nothing is saved", async () => {
+    const { restoreRoadConditionsChoices, useRoadConditionsStore } = await freshStore(
+      memoryStorage(),
+    );
+    restoreRoadConditionsChoices();
+    const state = useRoadConditionsStore.getState();
+    expect(state.showIncidents).toBe(true);
+    expect(state.shownSources).toEqual([]);
+    expect(state.horizon).toBe("active");
+  });
+
+  it("brings back the layers and filters saved on an earlier visit", async () => {
+    const storage = memoryStorage({
+      "openmapx:roadConditions": JSON.stringify({
+        showIncidents: false,
+        shownSources: ["road-weather"],
+        hiddenKinds: ["roadworks"],
+        minSeverity: "major",
+        horizon: "week",
+      }),
+    });
+    const { restoreRoadConditionsChoices, useRoadConditionsStore } = await freshStore(storage);
+    restoreRoadConditionsChoices();
+    const state = useRoadConditionsStore.getState();
+    expect(state.showIncidents).toBe(false);
+    expect(state.shownSources).toEqual(["road-weather"]);
+    expect(state.hiddenKinds).toEqual(["roadworks"]);
+    expect(state.minSeverity).toBe("major");
+    expect(state.horizon).toBe("week");
+  });
+
+  it("saves changes once restored, and not the defaults before that", async () => {
+    const storage = memoryStorage();
+    const { restoreRoadConditionsChoices, useRoadConditionsStore } = await freshStore(storage);
+    useRoadConditionsStore.getState().setHorizon("all");
+    expect(storage.getString("openmapx:roadConditions")).toBeNull();
+
+    restoreRoadConditionsChoices();
+    useRoadConditionsStore.getState().toggleSource("road-maintenance");
+    useRoadConditionsStore.getState().setViewportFetchStatus("loading");
+
+    expect(JSON.parse(storage.getString("openmapx:roadConditions") ?? "{}")).toEqual({
+      showIncidents: true,
+      shownSources: ["road-maintenance"],
+      hiddenKinds: [],
+      minSeverity: "all",
+      horizon: "active",
+    });
+  });
+
+  it("ignores unknown sources and values, falling back field by field", async () => {
+    const storage = memoryStorage({
+      "openmapx:roadConditions": JSON.stringify({
+        showIncidents: "yes",
+        shownSources: ["border-crossings", "teleporters", 4, "road-weather"],
+        minSeverity: "apocalyptic",
+        horizon: "week",
+      }),
+    });
+    const { restoreRoadConditionsChoices, useRoadConditionsStore } = await freshStore(storage);
+    restoreRoadConditionsChoices();
+    const state = useRoadConditionsStore.getState();
+    expect(state.showIncidents).toBe(true);
+    expect(state.shownSources).toEqual(["road-weather", "border-crossings"]);
+    expect(state.minSeverity).toBe("all");
+    expect(state.horizon).toBe("week");
+  });
+
+  it("falls back to the defaults when the saved entry is unreadable", async () => {
+    const storage = memoryStorage({ "openmapx:roadConditions": "{not json" });
+    const { loadRoadConditionsChoices } = await freshStore(storage);
+    expect(loadRoadConditionsChoices()).toEqual({
+      showIncidents: true,
+      shownSources: [],
+      hiddenKinds: [],
+      minSeverity: "all",
+      horizon: "active",
+    });
   });
 });
