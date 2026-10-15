@@ -1664,7 +1664,7 @@ while :; do printf "WRITE %s\\n" "$name" >&3; sleep 0.1; done
         ["-e", "process.stdout.write('x\\n'.repeat(600000)); setInterval(()=>{},1000)"],
         {
           signal: new AbortController().signal,
-          timeout: 200,
+          timeout: 10_000,
           maxBuffer: 1024 * 1024,
           onLine: () => {
             emitted += 1;
