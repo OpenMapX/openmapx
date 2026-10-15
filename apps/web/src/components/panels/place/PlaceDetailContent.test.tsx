@@ -1,4 +1,4 @@
-import { createPlace, type Place, usePlaceStore } from "@openmapx/core";
+import { createPlace, type Place, type PlacePhoto, usePlaceStore } from "@openmapx/core";
 import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 import type { MergedDeparture } from "@openmapx/mobility-core/transit";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -281,7 +281,7 @@ const placeWithPhoto = {
   id: "p2",
   name: "Photo Place",
   coordinates: [6.0839, 50.7753],
-  photos: [{ url: "https://example.com/photo.jpg" }],
+  photos: [{ url: "https://example.com/photo.jpg", source: "test-photos" } satisfies PlacePhoto],
 } as unknown as Place;
 
 function renderPhotoPlaceAtDetent(detent: "peek" | "mid" | "full") {
