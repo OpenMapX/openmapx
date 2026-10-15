@@ -21,6 +21,15 @@ const PAGE_MAX_BYTES = 16 * 1024 * 1024;
 const MAX_POSITIONS = 3000;
 /** How many searched positions the provider remembers the place of. */
 const REMEMBERED = 5000;
+/**
+ * Half the side of the box a remembered position is followed in, in metres:
+ * far enough for a vehicle that drove on for a few minutes.
+ */
+const FOLLOW_HALF_SIDE_M = 5000;
+
+/** Whether two positions are the same place, to the publisher's six decimals. */
+const samePlace = (a: readonly number[], b: readonly number[]): boolean =>
+  Math.abs(a[0]! - b[0]!) < 1e-6 && Math.abs(a[1]! - b[1]!) < 1e-6;
 
 interface WirePage {
   records?: unknown;
@@ -37,9 +46,12 @@ export interface ServiceVehicleProviderOptions {
 /**
  * A `service-vehicles` provider backed by the OpenConditions record API:
  * the `vehicle.position` readings in effect from `GET /observations/latest`.
- * A position names no vehicle and expires minutes after it was reported, so
- * there is nothing to open by id: a position a search returned is opened by
- * reading the box around where it was, and is gone once it expired.
+ * A position names no vehicle, and its id changes each time the vehicle
+ * reports (OpenConditions keeps one position per vehicle, replacing the
+ * last), so there is nothing to open by id: a position a search returned is
+ * opened by reading the area around where it was, and found by its id or
+ * else by the next position of the same vehicle, the one that stands where
+ * it stood or whose trail passes there. It is gone once it expired.
  *
  * It fails closed on the live source list: until the first list arrives
  * every search is empty and `unavailable`; after it, a position whose source
@@ -114,8 +126,20 @@ export function createServiceVehicleProvider(
       if (!sources.ready) return null;
       const at = seen.get(id);
       if (at === undefined) return null;
-      const { vehicles } = await read(boxAround(at), excludedBy(sources, q?.excludedSourceIds));
-      return vehicles.find((v) => v.id === id) ?? null;
+      const { vehicles } = await read(
+        boxAround(at, FOLLOW_HALF_SIDE_M),
+        excludedBy(sources, q?.excludedSourceIds),
+      );
+      const same = vehicles.find((v) => v.id === id);
+      if (same) return same;
+      // The vehicle reported again: its next position stands where it stood, or
+      // its trail passes there. Without a trail through it, it is gone.
+      const next = vehicles.find(
+        (v) => samePlace(v.coordinates, at) || (v.trail ?? []).some((p) => samePlace(p, at)),
+      );
+      if (!next) return null;
+      seen.set([id, next.id], next.coordinates);
+      return { ...next, id };
     },
   };
 }

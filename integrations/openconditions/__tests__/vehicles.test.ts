@@ -13,6 +13,7 @@ import stringsEn from "../strings/en.json" with { type: "json" };
 import { readingToServiceVehicle } from "../vehicles/map.js";
 import { createServiceVehicleProvider } from "../vehicles/provider.js";
 import observationsResponse from "./fixtures/observations-vehicles.json" with { type: "json" };
+import trailsResponse from "./fixtures/observations-vehicles-trails.json" with { type: "json" };
 
 /*
  * `observations-vehicles.json` is the `GET /observations/latest?property=vehicle.position` answer
@@ -70,9 +71,10 @@ describe("service-vehicles-openconditions", () => {
       spreaderOn: true,
       observedAt: "2026-10-14T23:20:45Z",
       expiresAt: "2026-10-14T23:30:45Z",
+      activity: "sanding",
       sources: [FEED],
     });
-    expect(sanding).not.toHaveProperty("activity");
+    expect(sanding).not.toHaveProperty("trail");
     expect(sanding.attributions).toEqual([
       {
         sourceId: FEED,
@@ -103,6 +105,60 @@ describe("service-vehicles-openconditions", () => {
       spreaderOn: true,
       tasks: ["PLOUGHING_AND_SLUSH_REMOVAL", "SPOT_SANDING"],
     });
+  });
+
+  test("reads where a vehicle has just been as its trail, ending at its point", () => {
+    const trails = structuredClone(trailsResponse) as unknown as Body;
+    const vehicles = trails.records.map((r) => readingToServiceVehicle(r)!);
+    const poles = vehicles.find((v) => v.trail?.length === 6)!;
+    expect(poles.trail).toEqual([
+      [26.803067, 61.386519],
+      [26.802662, 61.386244],
+      [26.800866, 61.385386],
+      [26.799587, 61.384773],
+      [26.79815, 61.38408],
+      [26.797545, 61.383693],
+    ]);
+    expect(poles.coordinates).toEqual([26.797545, 61.383693]);
+    // A vehicle that stood still has none.
+    expect(vehicles.filter((v) => v.trail === undefined)).toHaveLength(3);
+    // A trail that is no line of positions is none.
+    const [record] = trails.records;
+    ((record!.result as Rec).value as Rec).trail = { type: "LineString", coordinates: [[1, 2]] };
+    expect(readingToServiceVehicle(record!)).not.toHaveProperty("trail");
+  });
+
+  test("follows a reopened vehicle to its next position, whose trail passes where it stood", async () => {
+    const trails = () => structuredClone(trailsResponse) as unknown as Body;
+    const now = new Date("2026-10-15T07:05:00Z");
+    let poll = 0;
+    const { provider } = providerWith(
+      () => {
+        const answer = trails();
+        if (poll++ === 0) {
+          // The first poll: the vehicle two positions before its current one.
+          const record = answer.records.find(
+            (r) => (r.provenance as Rec).recordId === "202663611",
+          )!;
+          const value = (record.result as Rec).value as Rec;
+          value.point = { type: "Point", coordinates: [26.800866, 61.385386] };
+          delete value.trail;
+          record.id = "oc:observation:fi-digitraffic-maintenance:earlier";
+        }
+        return answer;
+      },
+      EVERY_SOURCE,
+      now,
+    );
+    await provider.searchVehicles(BBOX);
+    const followed = await provider.getVehicle("oc:observation:fi-digitraffic-maintenance:earlier");
+    expect(followed).toMatchObject({
+      id: "oc:observation:fi-digitraffic-maintenance:earlier",
+      coordinates: [26.797545, 61.383693],
+    });
+    // Another vehicle near it is not taken for it.
+    const lone = await provider.getVehicle("oc:observation:never-seen:1");
+    expect(lone).toBeNull();
   });
 
   test("leaves out an expired position, one of an excluded or unlisted source, and another property", async () => {

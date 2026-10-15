@@ -173,9 +173,12 @@ export class FeaturePositions {
   }
 }
 
-/** A box about 200 m across centred on `[lon, lat]`, clamped to the globe. */
-export function boxAround([lon, lat]: [number, number]): BBox {
-  const dLat = REREAD_HALF_SIDE_M / METRES_PER_DEGREE;
+/** A box twice `halfSideM` across (about 200 m by default) centred on `[lon, lat]`, clamped to the globe. */
+export function boxAround(
+  [lon, lat]: [number, number],
+  halfSideM: number = REREAD_HALF_SIDE_M,
+): BBox {
+  const dLat = halfSideM / METRES_PER_DEGREE;
   const dLon = dLat / Math.max(Math.cos((lat * Math.PI) / 180), 0.01);
   const clamp = (value: number, limit: number) => Math.min(Math.max(value, -limit), limit);
   return [

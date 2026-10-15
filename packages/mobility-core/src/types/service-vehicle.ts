@@ -4,6 +4,7 @@ import type { Attribution } from "./attribution.js";
 export type ServiceVehicleActivity =
   | "plowing"
   | "salting"
+  | "sanding"
   | "deadheading"
   | "idle"
   | "responding"
@@ -12,11 +13,17 @@ export type ServiceVehicleActivity =
 /**
  * A road service vehicle (a snowplough, a spreader, a maintenance truck)
  * where it last reported. Its publisher names no vehicle: the position is
- * anonymous and stands only until it expires.
+ * anonymous, its id changes as the vehicle reports again, and it stands only
+ * until it expires or the vehicle's next position replaces it.
  */
 export interface ServiceVehicle {
   id: string;
   coordinates: [number, number];
+  /**
+   * Where the vehicle has just been, oldest first and ending at
+   * `coordinates`: at most the last ten minutes of the current task.
+   */
+  trail?: [number, number][];
   /** The heading, in degrees clockwise from north. */
   bearingDeg?: number;
   activity?: ServiceVehicleActivity;

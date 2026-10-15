@@ -106,6 +106,28 @@ const UNITS: Readonly<Record<string, string>> = {
   "road.salt_concentration": "kg/m3",
 };
 
+const DEVICE_STATUS = "device.status";
+const DEVICE_STATUSES: ReadonlySet<string> = new Set(["ok", "warning", "error", "offline"]);
+
+/**
+ * The station's `device.status` in effect: its operator's state of the
+ * station's equipment. The state is dated by its last change, which may be
+ * months ago, so its age says nothing; only its validity ends it.
+ */
+function deviceStatusOf(
+  readings: readonly LatestReading[],
+  now: number,
+): { value: "ok" | "warning" | "error" | "offline"; since?: string } | undefined {
+  const reading = newestReading(readings, DEVICE_STATUS, undefined);
+  if (reading === undefined) return undefined;
+  const until = reading.validUntil === undefined ? Number.NaN : Date.parse(reading.validUntil);
+  if (Number.isFinite(until) && until < now) return undefined;
+  const value = categoryOf<"ok" | "warning" | "error" | "offline">(reading, DEVICE_STATUSES);
+  if (!value) return undefined;
+  const since = instantOf(reading.phenomenonTime);
+  return { value, ...(since ? { since } : {}) };
+}
+
 function timeOf(reading: LatestReading): number {
   const at = instantOf(reading.phenomenonTime);
   const ms = at === undefined ? Number.NaN : Date.parse(at);
@@ -150,8 +172,10 @@ function categoryOf<T extends string>(reading: LatestReading, set: ReadonlySet<s
  * each `sensor_channel` component's readings are a surface sensor's, grouped
  * by the channel's index. A value is shown only while it is current (see
  * `current`); a sensor fault, which OpenConditions states as an unknown
- * result, shows no value. Null when the record is no placeable station or
- * its survivor is excluded.
+ * result, shows no value. The station is out of service when its collection
+ * is removed for now or its `device.status` is `offline`; a `warning` or
+ * `error` status is a suspected or confirmed fault, beside its values.
+ * Null when the record is no placeable station or its survivor is excluded.
  */
 export function recordToRoadWeatherStation(
   record: Rec,
@@ -168,8 +192,11 @@ export function recordToRoadWeatherStation(
   const survivor = all[0];
   if (survivor === undefined || excluded(survivor.id)) return null;
   const kept = all.filter((s) => !excluded(s.id));
-  const readings = allowedReadings(latest, excluded);
+  const allowed = allowedReadings(latest, excluded);
+  // The device status is the station's own state, not a value it measures.
+  const readings = allowed.filter((r) => r.property !== DEVICE_STATUS);
   const at = now.getTime();
+  const device = deviceStatusOf(allowed, at);
 
   const channels = new Map<string, number>();
   for (const component of list(record.components)) {
@@ -234,7 +261,18 @@ export function recordToRoadWeatherStation(
     coordinates,
     ...(road ? { road } : {}),
     ...(municipality ? { municipality } : {}),
-    status: record.lifecycle === "temporarily_closed" ? "temporarily_closed" : "operational",
+    status:
+      record.lifecycle === "temporarily_closed" || device?.value === "offline"
+        ? "temporarily_closed"
+        : "operational",
+    ...(device?.value === "warning" || device?.value === "error"
+      ? {
+          fault: {
+            level: device.value === "error" ? "confirmed" : "suspected",
+            ...(device.since ? { since: device.since } : {}),
+          },
+        }
+      : {}),
     air,
     surface: [...surface.values()].sort((a, b) => a.index - b.index),
     ...(updatedAt ? { updatedAt } : {}),

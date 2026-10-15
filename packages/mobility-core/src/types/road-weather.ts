@@ -78,8 +78,13 @@ export interface RoadWeatherStation {
   road?: string;
   /** The municipality the station stands in. */
   municipality?: string;
-  /** A station `temporarily_closed` collects nothing for now. */
+  /** A station `temporarily_closed` collects nothing for now (out of service or offline). */
   status: "operational" | "temporarily_closed";
+  /**
+   * A fault its operator suspects or has confirmed in the station's
+   * equipment, since when: its values may be wrong.
+   */
+  fault?: { level: "suspected" | "confirmed"; since?: string };
   air: RoadWeatherAir;
   /** The station's surface sensors, by index. */
   surface: RoadSurfaceSensor[];

@@ -346,6 +346,7 @@
             "type": "Point",
             "coordinates": [27.119327, 68.100155]
           },
+          "activity": "sanding",
           "spreaderOn": true
         }
       },
@@ -357,7 +358,7 @@
       "domain": "vehicles",
       "revision": 1,
       "recordedAt": "2026-10-14T23:24:56Z",
-      "contentHash": "9fbb60a4ed18ad13ca09546344d51b4bbfaf18b1b4057926c4504643ca0b7389"
+      "contentHash": "0607b33db9f1849b641a0bf3ce978ace6c7fffd4572b2e0e0a64b48cbdeae899"
     },
     {
       "id": "oc:observation:fi-digitraffic-maintenance:aeb5f6502834a58002af71b214acec92b5c6c6f866624a7dd67dddcd6d9cf788",

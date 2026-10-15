@@ -16,16 +16,35 @@ import {
 const ACTIVITIES: ReadonlySet<string> = new Set<ServiceVehicleActivity>([
   "plowing",
   "salting",
+  "sanding",
   "deadheading",
   "idle",
   "responding",
   "unknown",
 ]);
 
+const lonLat = (value: unknown): [number, number] | undefined =>
+  Array.isArray(value) &&
+  typeof value[0] === "number" &&
+  typeof value[1] === "number" &&
+  Number.isFinite(value[0]) &&
+  Number.isFinite(value[1])
+    ? [value[0], value[1]]
+    : undefined;
+
+/** A `trail` LineString's positions; none for anything else or fewer than two positions. */
+function trailOf(value: unknown): [number, number][] | undefined {
+  const line = rec(value);
+  if (line.type !== "LineString" || !Array.isArray(line.coordinates)) return undefined;
+  const positions = line.coordinates.map(lonLat);
+  if (positions.length < 2 || positions.some((p) => p === undefined)) return undefined;
+  return positions as [number, number][];
+}
+
 /**
  * One `vehicle.position` reading as a service vehicle: placed at its
- * `vehicle_position` point (or the reading's location), with what it says
- * the vehicle is doing and the publisher's task codes from its extras. Null
+ * `vehicle_position` point (or the reading's location), with its trail, what
+ * it says the vehicle is doing and the publisher's task codes from its extras. Null
  * for a reading of another property, or one without a place, a time or a
  * source.
  */
@@ -53,9 +72,11 @@ export function readingToServiceVehicle(
   const activity = str(value.activity);
   const tasks = rec(record.extras).tasks;
   const expiresAt = str(rec(record.freshness).expiresAt);
+  const trail = trailOf(value.trail);
   return {
     id,
     coordinates,
+    ...(trail ? { trail } : {}),
     ...(typeof bearing === "number" && bearing >= 0 && bearing < 360
       ? { bearingDeg: bearing }
       : {}),

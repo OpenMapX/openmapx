@@ -17,7 +17,7 @@ import featuresResponse from "./fixtures/features-weather.json" with { type: "js
 
 /*
  * `features-weather.json` is the `GET /features?kind=weather_station&canonical=1&expand=components,latest`
- * answer for three Digitraffic stations, built from OpenConditions' own parser; see fixtures/README.md.
+ * answer for four Digitraffic stations, built from OpenConditions' own parser; see fixtures/README.md.
  */
 
 type Rec = Record<string, unknown>;
@@ -26,6 +26,7 @@ const BASE_URL = "http://openconditions.test:4100";
 const BBOX: BBox = [24.5, 60.1, 27.5, 63.4];
 const NUPURI = "oc:feature:fi-digitraffic-weather:1001";
 const VUOSAARI = "oc:feature:fi-digitraffic-weather:1071";
+const KOUSA = "oc:feature:fi-digitraffic-weather:7037";
 const LAPINLAHTI = "oc:feature:fi-digitraffic-weather:8003";
 /** Ten minutes after the stations measured. */
 const NOW = new Date("2026-10-14T23:30:00Z");
@@ -63,7 +64,7 @@ describe("road-weather-openconditions", () => {
       limit: 500,
     });
     expect(partial).toBeUndefined();
-    expect(stations.map((s) => s.id)).toEqual([NUPURI, VUOSAARI, LAPINLAHTI]);
+    expect(stations.map((s) => s.id)).toEqual([NUPURI, VUOSAARI, KOUSA, LAPINLAHTI]);
     const nupuri = stations[0]!;
     expect(nupuri).toMatchObject({
       name: "Tie 1 Espoo, Nupuri",
@@ -92,9 +93,12 @@ describe("road-weather-openconditions", () => {
       index: 1,
       state: { value: "dry" },
       temperatureC: { value: 9.6 },
-      freezingPointC: { value: 0 },
       friction: { value: 0.82 },
     });
+    // A dry sensor measures no solution: OpenConditions states no salt or freezing point.
+    expect(nupuri.surface[0]).not.toHaveProperty("saltKgM3");
+    expect(nupuri.surface[0]).not.toHaveProperty("freezingPointC");
+    expect(nupuri).not.toHaveProperty("fault");
     expect(nupuri.attributions).toEqual([
       {
         sourceId: "fi-digitraffic-weather",
@@ -106,12 +110,11 @@ describe("road-weather-openconditions", () => {
     ]);
   });
 
-  test("a sensor fault shows no value; a salted surface keeps its own state", async () => {
+  test("a sensor slot the station lacks adds no sensor; a salted surface keeps its own state", async () => {
     const { provider } = providerWith(body());
     const { stations } = await provider.searchStations(BBOX);
-    // 1001's third and fourth surface sensors report a fault (KELI 0): no sensor.
     expect(stations[0]!.surface.some((s) => s.index > 2)).toBe(false);
-    expect(stations[2]!.surface[0]).toMatchObject({
+    expect(stations[3]!.surface[0]).toMatchObject({
       state: { value: "chemically_wet" },
       saltKgM3: { value: 7.3 },
       freezingPointC: { value: -4.2 },
@@ -139,6 +142,43 @@ describe("road-weather-openconditions", () => {
     );
     expect(later).toMatchObject({ stale: true, surface: [], updatedAt: "2026-10-14T23:19:55Z" });
     expect(later?.air).toEqual({});
+  });
+
+  test("the station's device status: offline is out of service, warning and error a fault", () => {
+    const answer = body();
+    const station = (id: string, readings = answer.latest[id]!) =>
+      recordToRoadWeatherStation(
+        answer.records.find((r) => r.id === id)!,
+        readings,
+        undefined,
+        undefined,
+        NOW,
+      );
+    // Kousa's repair was interrupted: a suspected fault, dated by the state's change months ago.
+    expect(station(KOUSA)).toMatchObject({
+      status: "operational",
+      fault: { level: "suspected", since: "2026-08-25T13:14:17Z" },
+      // Its values are eight hours old.
+      stale: true,
+    });
+    expect(station(VUOSAARI)?.status).toBe("temporarily_closed");
+
+    const withStatus = (value: string, validUntil?: string) =>
+      answer.latest[NUPURI]!.map((r) =>
+        r.property === "device.status"
+          ? { ...r, result: { ...(r.result as Rec), value }, ...(validUntil ? { validUntil } : {}) }
+          : r,
+      );
+    expect(station(NUPURI, withStatus("error"))).toMatchObject({
+      status: "operational",
+      fault: { level: "confirmed" },
+      stale: false,
+    });
+    expect(station(NUPURI, withStatus("offline"))?.status).toBe("temporarily_closed");
+    // A status past its validity states nothing; the old status is no current value either.
+    const expired = station(NUPURI, withStatus("error", "2026-10-14T23:00:00Z"));
+    expect(expired).not.toHaveProperty("fault");
+    expect(expired?.updatedAt).toBe("2026-10-14T23:19:55Z");
   });
 
   test("a change-only value past the validity OpenConditions gives it is no current one", () => {
