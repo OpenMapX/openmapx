@@ -16,6 +16,7 @@ import {
   removeMapOverlayPopup,
   replaceMapOverlayPopup,
 } from "@/integration-api/map/mapInteractionArbiter";
+import { subscribeStyleLoaded } from "@/integration-api/map/styleLoadedSync";
 import { useGeoJsonSourceDataBridge } from "@/integration-api/map/useGeoJsonSourceDataBridge";
 import { useOverlayMinZoom } from "@/integration-api/overlay/overlayZoomGate";
 import { useOverlayLayerVisible } from "@/integration-api/overlay/useOverlayStoreState";
@@ -303,10 +304,8 @@ export function RoadConditionsLayer() {
     const map = mapRef.current;
     if (!map || !mapReady) return;
 
-    let idleRetryScheduled = false;
     const sync = () => {
       if (!layerVisible) {
-        idleRetryScheduled = false;
         try {
           if (map.getLayer(MARKER_LAYER)) map.removeLayer(MARKER_LAYER);
           if (map.getLayer(LINE_LAYER)) map.removeLayer(LINE_LAYER);
@@ -322,13 +321,6 @@ export function RoadConditionsLayer() {
         }
         return;
       }
-      if (!map.isStyleLoaded()) {
-        if (idleRetryScheduled) map.off("idle", sync);
-        idleRetryScheduled = true;
-        map.once("idle", sync);
-        return;
-      }
-      idleRetryScheduled = false;
       try {
         if (!map.getSource(SOURCE)) {
           map.addSource(SOURCE, {
@@ -388,11 +380,9 @@ export function RoadConditionsLayer() {
       }
     };
 
-    sync();
-    map.on("styledata", sync);
+    const unsubscribeStyle = subscribeStyleLoaded(map, sync);
     return () => {
-      map.off("styledata", sync);
-      if (idleRetryScheduled) map.off("idle", sync);
+      unsubscribeStyle();
     };
   }, [mapReady, mapRef, styleVersion, layerVisible, minZoom]);
 

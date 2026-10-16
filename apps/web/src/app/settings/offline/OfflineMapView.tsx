@@ -5,6 +5,7 @@ import { useColorScheme } from "@mui/material/styles";
 import type * as maplibregl from "maplibre-gl";
 import { useEffect, useRef } from "react";
 import { MapCredits } from "@/components/map/MapCredits";
+import { subscribeStyleLoaded } from "@/integration-api/map/styleLoadedSync";
 import { useEnv } from "@/integration-api/runtime/EnvProvider";
 import { baseMapVectorCredits, loadOpenMapXStyle } from "@/lib/map";
 import { loadMapLibreRuntime } from "@/lib/maplibreRuntime";
@@ -91,6 +92,7 @@ export function OfflineMapView({ packages, fitTo, height = 360 }: Props) {
     if (!containerRef.current || packages.length === 0) return;
     let destroyed = false;
     let map: maplibregl.Map | undefined;
+    let unsubscribeStyle: (() => void) | undefined;
     const frame = fitTo ?? unionBbox(packages);
 
     void (async () => {
@@ -124,19 +126,18 @@ export function OfflineMapView({ packages, fitTo, height = 360 }: Props) {
       });
       map.touchZoomRotate.disableRotation();
       map.keyboard.disableRotation();
-      map.on("load", () => {
-        if (!map) return;
-        addRectLayers(map, packages.map(packageToFeature));
-        if (frame) {
-          map.fitBounds(
-            [
-              [frame.west, frame.south],
-              [frame.east, frame.north],
-            ],
-            { padding: 32, duration: 0 },
-          );
-        }
-      });
+      const activeMap = map;
+      const features = packages.map(packageToFeature);
+      unsubscribeStyle = subscribeStyleLoaded(activeMap, () => addRectLayers(activeMap, features));
+      if (frame) {
+        activeMap.fitBounds(
+          [
+            [frame.west, frame.south],
+            [frame.east, frame.north],
+          ],
+          { padding: 32, duration: 0 },
+        );
+      }
     })().catch(() => {
       // The surrounding settings UI still exposes package metadata when a
       // browser cannot render a local archive.
@@ -144,6 +145,7 @@ export function OfflineMapView({ packages, fitTo, height = 360 }: Props) {
 
     return () => {
       destroyed = true;
+      unsubscribeStyle?.();
       map?.remove();
     };
   }, [env, fitTo, packages, variant]);

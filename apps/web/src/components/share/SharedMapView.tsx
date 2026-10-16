@@ -17,6 +17,7 @@ import { useEffect, useRef, useState } from "react";
 import { routeGeometryFeatures } from "@/components/map/layers/routeGeometryFeatures";
 import { MapCredits } from "@/components/map/MapCredits";
 import { createGeoJsonSourceDataBridge } from "@/integration-api/map/layerStyleUtils";
+import { subscribeStyleLoaded } from "@/integration-api/map/styleLoadedSync";
 import { renderedMapAttributionTracker } from "@/integration-api/overlay/renderedMapAttributionTracker";
 import { useEnv } from "@/integration-api/runtime/EnvProvider";
 import { baseMapVectorCredits, loadMaptilerStyle, loadOpenMapXStyle } from "@/lib/map";
@@ -135,8 +136,7 @@ export function SharedMapView({ points, route }: Props) {
   const bridgeRef = useRef<ReturnType<typeof createGeoJsonSourceDataBridge> | null>(null);
   if (!bridgeRef.current) bridgeRef.current = createGeoJsonSourceDataBridge();
   const bridge = bridgeRef.current;
-  // Latest data, read by the map's `load` handler (which may run after the
-  // props have already changed) — same pattern as AreaPickerMap's boundaryRef.
+  // Keep framing inputs current while asynchronous map construction runs.
   const pointsRef = useRef<SharedMapPoint[]>(points);
   pointsRef.current = points;
   const routeRef = useRef<SharedMapRoute | null>(route ?? null);
@@ -151,7 +151,7 @@ export function SharedMapView({ points, route }: Props) {
     if (!containerRef.current) return;
     let destroyed = false;
     let map: maplibregl.Map | null = null;
-    let replay: (() => void) | null = null;
+    let unsubscribeStyle: (() => void) | undefined;
     let unsubscribeRendered: (() => void) | undefined;
 
     const init = async () => {
@@ -173,16 +173,15 @@ export function SharedMapView({ points, route }: Props) {
       });
       mapRef.current = map;
 
-      map.on("load", () => {
-        if (!map) return;
-        addLayers(map);
-        bridge.publish([
-          { sourceId: ROUTE_SOURCE, data: routeData(routeRef.current) },
-          { sourceId: POINTS_SOURCE, data: pointsData(pointsRef.current) },
-        ]);
-        bridge.apply(map);
-        fitToContent(map, pointsRef.current, routeRef.current?.geometry ?? null);
-        unsubscribeRendered = renderedMapAttributionTracker(map).subscribe("shared-map-content", {
+      const activeMap = map;
+      fitToContent(activeMap, pointsRef.current, routeRef.current?.geometry ?? null);
+      unsubscribeStyle = subscribeStyleLoaded(activeMap, () => {
+        addLayers(activeMap);
+        bridge.apply(activeMap);
+      });
+      unsubscribeRendered = renderedMapAttributionTracker(activeMap).subscribe(
+        "shared-map-content",
+        {
           kind: "geometry",
           layerIds: [POINTS_LAYER, ROUTE_CASING, ROUTE_LINE],
           publish: (entries) => {
@@ -191,11 +190,8 @@ export function SharedMapView({ points, route }: Props) {
               JSON.stringify(previous) === JSON.stringify(captured) ? previous : captured,
             );
           },
-        });
-      });
-      replay = () => bridge.apply(map as maplibregl.Map);
-      map.on("styledata", replay);
-      map.on("idle", replay);
+        },
+      );
     };
 
     // Style-fetch failures leave the container empty rather than emitting an
@@ -205,10 +201,7 @@ export function SharedMapView({ points, route }: Props) {
     return () => {
       destroyed = true;
       unsubscribeRendered?.();
-      if (map && replay && typeof map.off === "function") {
-        map.off("styledata", replay);
-        map.off("idle", replay);
-      }
+      unsubscribeStyle?.();
       map?.remove();
       mapRef.current = null;
     };
@@ -229,7 +222,7 @@ export function SharedMapView({ points, route }: Props) {
   const geometry = route?.geometry ?? null;
   useEffect(() => {
     const map = mapRef.current;
-    if (map?.isStyleLoaded()) fitToContent(map, points, geometry);
+    if (map) fitToContent(map, points, geometry);
   }, [points, geometry]);
 
   return (

@@ -7,6 +7,7 @@ import type * as maplibregl from "maplibre-gl";
 import { useEffect, useRef } from "react";
 import { MapCredits } from "@/components/map/MapCredits";
 import { createGeoJsonSourceDataBridge } from "@/integration-api/map/layerStyleUtils";
+import { subscribeStyleLoaded } from "@/integration-api/map/styleLoadedSync";
 import { useEnv } from "@/integration-api/runtime/EnvProvider";
 import { baseMapVectorCredits, loadMaptilerStyle, loadOpenMapXStyle } from "@/lib/map";
 import { loadMapLibreRuntime } from "@/lib/maplibreRuntime";
@@ -62,6 +63,16 @@ function boundaryData(boundary: AreaGeometry | null): GeoJSON.FeatureCollection 
     : EMPTY;
 }
 
+function fitToBbox(map: maplibregl.Map, bbox: OfflinePackageBbox): void {
+  map.fitBounds(
+    [
+      [bbox.west, bbox.south],
+      [bbox.east, bbox.north],
+    ],
+    { padding: 24, duration: 600 },
+  );
+}
+
 /**
  * Mini MapLibre instance used as the bbox picker. Whatever the user has visible
  * is the area they'll download — a simple, gesture-driven "download offline
@@ -80,10 +91,9 @@ export function AreaPickerMap({ initialCenter, initialZoom, onChange, fitBbox, b
   // from the parent must not tear down and recreate the map on every move.
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
-  // Latest boundary, read by the map's `load` handler (which may run after the
-  // boundary prop has already arrived).
-  const boundaryRef = useRef<AreaGeometry | null>(boundary ?? null);
-  boundaryRef.current = boundary ?? null;
+  // Keep inputs current while the map's asynchronous construction is pending.
+  const fitBboxRef = useRef(fitBbox);
+  fitBboxRef.current = fitBbox;
   const env = useEnv();
   const { mode, systemMode } = useColorScheme();
   const resolvedMode = mode === "system" ? systemMode : mode;
@@ -95,7 +105,7 @@ export function AreaPickerMap({ initialCenter, initialZoom, onChange, fitBbox, b
     if (!containerRef.current) return;
     let destroyed = false;
     let map: maplibregl.Map | null = null;
-    let replayBoundary: (() => void) | null = null;
+    let unsubscribeStyle: (() => void) | undefined;
 
     const init = async () => {
       const maplibregl = await loadMapLibreRuntime();
@@ -125,6 +135,7 @@ export function AreaPickerMap({ initialCenter, initialZoom, onChange, fitBbox, b
       map.touchZoomRotate.disableRotation();
       map.keyboard.disableRotation();
       mapRef.current = map;
+      if (fitBboxRef.current) fitToBbox(map, fitBboxRef.current);
 
       const emit = () => {
         if (!map) return;
@@ -140,18 +151,12 @@ export function AreaPickerMap({ initialCenter, initialZoom, onChange, fitBbox, b
         );
       };
 
-      map.on("load", () => {
-        if (!map) return;
-        addBoundaryLayers(map);
-        boundaryBridge.publish([
-          { sourceId: BOUNDARY_SOURCE, data: boundaryData(boundaryRef.current) },
-        ]);
-        boundaryBridge.apply(map);
-        emit();
+      const activeMap = map;
+      unsubscribeStyle = subscribeStyleLoaded(activeMap, () => {
+        addBoundaryLayers(activeMap);
+        boundaryBridge.apply(activeMap);
       });
-      replayBoundary = () => boundaryBridge.apply(map as maplibregl.Map);
-      map.on("styledata", replayBoundary);
-      map.on("idle", replayBoundary);
+      emit();
       map.on("moveend", emit);
     };
 
@@ -162,10 +167,7 @@ export function AreaPickerMap({ initialCenter, initialZoom, onChange, fitBbox, b
 
     return () => {
       destroyed = true;
-      if (map && replayBoundary && typeof map.off === "function") {
-        map.off("styledata", replayBoundary);
-        map.off("idle", replayBoundary);
-      }
+      unsubscribeStyle?.();
       map?.remove();
       mapRef.current = null;
     };
@@ -177,16 +179,8 @@ export function AreaPickerMap({ initialCenter, initialZoom, onChange, fitBbox, b
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !fitBbox) return;
-    const fit = () =>
-      map.fitBounds(
-        [
-          [fitBbox.west, fitBbox.south],
-          [fitBbox.east, fitBbox.north],
-        ],
-        { padding: 24, duration: 600 },
-      );
-    if (map.isStyleLoaded()) fit();
-    else void map.once("load", fit);
+    // Camera framing does not depend on source tiles or style readiness.
+    fitToBbox(map, fitBbox);
   }, [fitBbox]);
 
   // Sync the highlighted boundary outline whenever it changes.

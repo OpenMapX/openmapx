@@ -301,7 +301,9 @@ export function MapCanvas() {
         notifyMapReady();
         setStatus("ready");
       };
-      if (map.isStyleLoaded()) {
+      // Parsed styles are usable while tiles are pending; style.load may
+      // already have fired when a cached style finished during construction.
+      if (map.getStyle()) {
         markReady();
       } else {
         map.on("error", handleInitialStyleError);

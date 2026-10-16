@@ -20,6 +20,7 @@ import { INTERACTIVE_LAYER_IDS } from "@/integration-api/map/interactiveLayers";
 import { addLayerInSlot, unregisterLayerSlot } from "@/integration-api/map/layerStack";
 import { useMap } from "@/integration-api/map/MapContext";
 import { claimMapClick } from "@/integration-api/map/mapClickOwnership";
+import { subscribeStyleLoaded } from "@/integration-api/map/styleLoadedSync";
 import { useGeoJsonSourceDataBridge } from "@/integration-api/map/useGeoJsonSourceDataBridge";
 import { useRenderedMapAttributions } from "@/integration-api/overlay/useRenderedMapAttributions";
 import { resolveTravelTimeBackend, type TravelTimeMode, useTravelTimeStore } from "./store";
@@ -274,13 +275,10 @@ export function TravelTimeLayer() {
       );
     };
 
-    if (map.isStyleLoaded()) {
-      setup();
-    } else {
-      map.once("styledata", setup);
-    }
+    const unsubscribeStyle = subscribeStyleLoaded(map, setup);
 
     return () => {
+      unsubscribeStyle();
       if (!map.getStyle()) return;
       for (const id of [ORIGIN_LAYER, ORIGIN_PULSE_LAYER, REACH_LAYER, OUTLINE_LAYER, FILL_LAYER]) {
         if (map.getLayer(id)) map.removeLayer(id);
@@ -312,9 +310,9 @@ export function TravelTimeLayer() {
         addLayerInSlot(map, layer, "route-markers", 17);
       }
     };
-    if (map.isStyleLoaded()) setup();
-    else map.once("styledata", setup);
+    const unsubscribeStyle = subscribeStyleLoaded(map, setup);
     return () => {
+      unsubscribeStyle();
       if (transitFieldLayerRef.current === layer) transitFieldLayerRef.current = null;
       if (map.getStyle() && map.getLayer(TRANSIT_FIELD_LAYER)) map.removeLayer(TRANSIT_FIELD_LAYER);
       unregisterLayerSlot(TRANSIT_FIELD_LAYER);

@@ -106,17 +106,10 @@ export function GlobeProjection() {
       }
     };
 
-    // isStyleLoaded also waits for tiles. Retry on idle as well as root style
-    // loads, and cancel the retry when selection/theme changes supersede it.
     const unsubscribe = subscribeStyleLoaded(map, apply);
-    const onStyleLoad = () => {
-      if (map.isStyleLoaded()) apply();
-    };
-    map.on("style.load", onStyleLoad);
 
     return () => {
       unsubscribe();
-      map.off("style.load", onStyleLoad);
       if (map.getLayer(space.id)) map.removeLayer(space.id);
       // A replacement style may already have dropped the layer without its
       // onRemove callback. Disposal is idempotent and also covers that path.

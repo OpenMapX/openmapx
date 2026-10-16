@@ -11,6 +11,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { addLayerInSlot, unregisterLayerSlot } from "@/integration-api/map/layerStack";
 import type { GeoJsonSourceDataEntry } from "@/integration-api/map/layerStyleUtils";
 import { useMap } from "@/integration-api/map/MapContext";
+import { subscribeStyleLoaded } from "@/integration-api/map/styleLoadedSync";
 import { useGeoJsonSourceDataBridge } from "@/integration-api/map/useGeoJsonSourceDataBridge";
 import { useRenderedMapAttributions } from "@/integration-api/overlay/useRenderedMapAttributions";
 import { useEnv } from "@/integration-api/runtime/EnvProvider";
@@ -265,10 +266,6 @@ export default function SunTimeLayer() {
     const map = mapRef.current;
     if (!map || !mapReady) return;
 
-    // Guards a `map.once("idle", syncLayers)` scheduled by this effect run:
-    // if the overlay is hidden (or the component unmounts) mid-style-load,
-    // the cleanup below flips this before the idle event fires, so the stale
-    // closure bails out instead of re-adding layers nobody wants anymore.
     let disposed = false;
 
     const teardownTerminator = () => {
@@ -315,11 +312,6 @@ export default function SunTimeLayer() {
       if (!active && !tzActive) {
         teardownTerminator();
         teardownTimeZones();
-        return;
-      }
-
-      if (!map.isStyleLoaded()) {
-        map.once("idle", syncLayers);
         return;
       }
 
@@ -464,11 +456,10 @@ export default function SunTimeLayer() {
       }
     };
 
-    syncLayers();
-    if (active || tzActive) map.on("styledata", syncLayers);
+    const unsubscribeStyle = subscribeStyleLoaded(map, syncLayers);
 
     // Runs on every dep change, not just true unmount: disposing here cancels
-    // any pending idle callback from this run, and tearing down unconditionally
+    // any pending style callback from this run, and tearing down unconditionally
     // (not just when `active`/`tzActive` flip off) is what stops the band
     // layers, the time zone layers, their sources, and their layerStack slots
     // from being stranded if the component unmounts — e.g. the overlay
@@ -476,7 +467,7 @@ export default function SunTimeLayer() {
     // idempotent when there is nothing to do.
     return () => {
       disposed = true;
-      if (active || tzActive) map.off("styledata", syncLayers);
+      unsubscribeStyle();
       teardownTerminator();
       teardownTimeZones();
     };

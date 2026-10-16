@@ -541,14 +541,13 @@ export function CategoryResultMarkers() {
               map,
               m,
               () =>
-                !cancelled &&
-                map.getSource(TRANSIT_SOURCE_ID) === source &&
-                map.isStyleLoaded() === true,
+                !cancelled && mapRef.current === map && map.getSource(TRANSIT_SOURCE_ID) === source,
             ),
           ),
         ).then(() => {
           markerPending.delete(source);
-          if (cancelled || map.getSource(TRANSIT_SOURCE_ID) !== source) return;
+          if (cancelled || mapRef.current !== map || map.getSource(TRANSIT_SOURCE_ID) !== source)
+            return;
           if (!map.getLayer(TRANSIT_LAYER_ID)) {
             addLayerInSlot(
               map,
@@ -610,7 +609,10 @@ export function CategoryResultMarkers() {
       const source = publish(map, SOURCE_ID, categoryData);
       initialized.add(source);
 
-      // Load images then add layers (images may already be cached)
+      // The source identity certifies this parsed style. isStyleLoaded() also
+      // waits for source uploads/tiles, which must not discard image completion
+      // or layer installation: their completion need not emit another styledata.
+      // Load images then add layers (images may already be cached).
       if (
         !markerPending.has(source) &&
         (!map.getLayer(LAYER_ID) ||
@@ -619,14 +621,14 @@ export function CategoryResultMarkers() {
       ) {
         markerPending.add(source);
         const isCurrent = () =>
-          !cancelled && map.getSource(SOURCE_ID) === source && map.isStyleLoaded() === true;
+          !cancelled && mapRef.current === map && map.getSource(SOURCE_ID) === source;
         void Promise.all(
           markerImageIds.map((imageId) =>
             loadMarkerImage(map, imageId, markerIconPath(imageId), isCurrent),
           ),
         ).then(() => {
           markerPending.delete(source);
-          if (cancelled || map.getSource(SOURCE_ID) !== source || !map.isStyleLoaded()) return;
+          if (!isCurrent()) return;
           if (!map.getLayer(LAYER_ID)) {
             addLayerInSlot(
               map,
@@ -699,15 +701,14 @@ export function CategoryResultMarkers() {
             (await loadBrandMarkerImage(
               map,
               qid,
-              () =>
-                !cancelled && map.getSource(SOURCE_ID) === source && map.isStyleLoaded() === true,
+              () => !cancelled && mapRef.current === map && map.getSource(SOURCE_ID) === source,
             ))
               ? qid
               : null,
           ),
         ).then((loaded) => {
           brandPending.delete(source);
-          if (cancelled || map.getSource(SOURCE_ID) !== source) return;
+          if (cancelled || mapRef.current !== map || map.getSource(SOURCE_ID) !== source) return;
           const brandImageIds = new Set(
             loaded.filter((qid): qid is string => qid !== null).map((qid) => brandImageId(qid)),
           );

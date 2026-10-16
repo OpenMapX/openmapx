@@ -11,6 +11,7 @@ import { INTERACTIVE_LAYER_IDS } from "@/integration-api/map/interactiveLayers";
 import { addLayerInSlot, unregisterLayerSlot } from "@/integration-api/map/layerStack";
 import { useMap } from "@/integration-api/map/MapContext";
 import { claimMapClick } from "@/integration-api/map/mapClickOwnership";
+import { subscribeStyleLoaded } from "@/integration-api/map/styleLoadedSync";
 import { useGeoJsonSourceDataBridge } from "@/integration-api/map/useGeoJsonSourceDataBridge";
 import { useMeasurementStore } from "./store";
 
@@ -360,13 +361,10 @@ export function MeasurementLayer() {
       );
     };
 
-    if (map.isStyleLoaded()) {
-      setup();
-    } else {
-      map.once("styledata", setup);
-    }
+    const unsubscribeStyle = subscribeStyleLoaded(map, setup);
 
     return () => {
+      unsubscribeStyle();
       if (!map.getStyle()) return;
       for (const id of [
         LABELS_LAYER,

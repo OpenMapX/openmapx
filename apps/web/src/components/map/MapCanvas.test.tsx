@@ -139,7 +139,7 @@ vi.mock("maplibre-gl", () => {
       mapOptions.container.append(document.createElement("canvas"));
     }
 
-    getStyle = () => options[instances.indexOf(this)]?.style;
+    getStyle = () => (this.style._loaded ? options[instances.indexOf(this)]?.style : undefined);
     setStyle = vi.fn((input: unknown) => {
       const style = input as { layers: Array<{ id: string }> };
       options[instances.indexOf(this)].style = style;
@@ -250,6 +250,7 @@ const maplibreTest = (
         cameraReads: number;
         emitError(error: Error, data?: Record<string, unknown>): void;
         emitStyleLoad(): void;
+        isStyleLoaded(): boolean;
         setStyle: ReturnType<typeof vi.fn>;
         jumpTo: ReturnType<typeof vi.fn>;
         on: ReturnType<typeof vi.fn>;
@@ -627,6 +628,18 @@ describe("MapCanvas", () => {
     expect(screen.queryByRole("alert")).toBeNull();
     expect(maplibreTest.instances[1]?.remove).not.toHaveBeenCalled();
     expect(mapContextTest.notifyMapReady).toHaveBeenCalledTimes(1);
+  });
+
+  it("publishes map readiness for a parsed initial style with pending tiles", async () => {
+    maplibreTest.reset();
+    mapStyleTest.reset();
+    maplibreTest.deferInitialStyle(true);
+    vi.stubGlobal("navigator", { ...navigator, geolocation: undefined, permissions: undefined });
+    render(<MapCanvas />);
+    await waitFor(() => expect(maplibreTest.instances).toHaveLength(1));
+    expect(maplibreTest.instances[0]?.isStyleLoaded()).toBe(false);
+    expect(mapContextTest.notifyMapReady).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("status")).toBeNull();
   });
 
   it("keeps the initial map usable when a tile fails before style readiness", async () => {

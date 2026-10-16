@@ -316,13 +316,16 @@ describe("SunTimeLayer lifecycle teardown", () => {
     // afterEach resets showTimeZones.
   });
 
-  it("cancels a pending idle sync so hiding the overlay mid-style-load does not resurrect it", () => {
+  it("cancels a pending style sync so hiding the overlay mid-style-load does not resurrect it", () => {
     fake = createFakeMap({ styleLoaded: false });
+    const parsedStyle = fake.map.getStyle();
+    vi.spyOn(fake.map, "getStyle").mockImplementation(() =>
+      fake.state.styleLoaded ? parsedStyle : (undefined as never),
+    );
     mapRefBox.current = fake.map;
     render(<SunTimeLayer />);
 
-    // The style hasn't finished loading, so the first pass only scheduled
-    // itself on "idle" instead of adding anything.
+    // Parsing is pending, so installation waits for a style or render event.
     expect(fake.state.layers.has("sun-time-band-0")).toBe(false);
 
     act(() => {

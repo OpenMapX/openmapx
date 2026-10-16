@@ -18,6 +18,7 @@ import {
   removeMapOverlayPopup,
   replaceMapOverlayPopup,
 } from "@/integration-api/map/mapInteractionArbiter";
+import { subscribeStyleLoaded } from "@/integration-api/map/styleLoadedSync";
 import { useDrawnDirectionsRoutes } from "@/integration-api/map/useDrawnDirectionsRoutes";
 import { useGeoJsonSourceDataBridge } from "@/integration-api/map/useGeoJsonSourceDataBridge";
 import { useOverlayMinZoom } from "@/integration-api/overlay/overlayZoomGate";
@@ -257,10 +258,8 @@ export function RouteConditionsLayer() {
     const map = mapRef.current;
     if (!map || !mapReady) return;
 
-    let idleRetryScheduled = false;
     const sync = () => {
       if (!layerVisible) {
-        idleRetryScheduled = false;
         try {
           if (map.getLayer(MARKER_LAYER)) map.removeLayer(MARKER_LAYER);
           if (map.getLayer(LINE_LAYER)) map.removeLayer(LINE_LAYER);
@@ -272,13 +271,6 @@ export function RouteConditionsLayer() {
         unregisterLayerSlot(LINE_LAYER);
         return;
       }
-      if (!map.isStyleLoaded()) {
-        if (idleRetryScheduled) map.off("idle", sync);
-        idleRetryScheduled = true;
-        map.once("idle", sync);
-        return;
-      }
-      idleRetryScheduled = false;
       if (!map.getSource(SOURCE)) {
         map.addSource(SOURCE, { type: "geojson", data: EMPTY });
       }
@@ -329,11 +321,9 @@ export function RouteConditionsLayer() {
       }
     };
 
-    sync();
-    map.on("styledata", sync);
+    const unsubscribeStyle = subscribeStyleLoaded(map, sync);
     return () => {
-      map.off("styledata", sync);
-      if (idleRetryScheduled) map.off("idle", sync);
+      unsubscribeStyle();
     };
   }, [mapRef, mapReady, styleVersion, layerVisible, minZoom]);
 

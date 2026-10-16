@@ -10,11 +10,11 @@ import { subscribeStyleLoaded } from "./styleLoadedSync";
  * Shared "style-synced overlay layer" effect.
  *
  * Encapsulates the recurring pattern used by single-source/single-layer raster
- * overlays: defer work until the style is loaded (re-running via `map.once("idle")`),
- * add the source/layer, toggle visibility, and keep everything in sync across
- * `styledata` events with proper listener cleanup.
+ * overlays: apply once the stylesheet is parsed, add the source/layer, toggle
+ * visibility, and reconcile style rebuilds with proper listener cleanup. Pending
+ * source tiles must not delay installation or require an idle event.
  *
- * Behaviour is identical to the hand-written effect each overlay previously had:
+ * As in the hand-written effect each overlay previously had:
  * the source is only added when `visible` is true and missing; the layer is only
  * added when `visible` is true and missing; visibility is always synced.
  *

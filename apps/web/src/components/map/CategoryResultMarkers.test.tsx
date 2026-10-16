@@ -140,7 +140,7 @@ it("reuses category data across style events and restores it after replacement",
 
 it("keeps brand-enriched data on unrelated events and fences old image completions after a style replacement", async () => {
   const OriginalImage = globalThis.Image;
-  const images: Array<{ onload: (() => void) | null }> = [];
+  const images: Array<{ onload: (() => void) | null; src: string }> = [];
   globalThis.Image = class {
     onload: (() => void) | null = null;
     onerror: (() => void) | null = null;
@@ -185,7 +185,7 @@ it("keeps brand-enriched data on unrelated events and fences old image completio
             },
           },
     );
-    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(new Blob(["logo"])));
+    vi.spyOn(globalThis, "fetch").mockImplementation(async () => new Response(new Blob(["logo"])));
     const loaded = loadBrandMarkerImage(fake.map, "Q1");
     await waitFor(() => expect(images.length).toBeGreaterThan(0));
     images.at(-1)?.onload?.();
@@ -228,10 +228,23 @@ it("keeps brand-enriched data on unrelated events and fences old image completio
       fake.map.setStyle({} as never);
     });
     expect(loadedBrandMarkerContributors(fake.map, "Q1")).toEqual([]);
+    fake.state.styleLoaded = false;
     await act(async () => {
       oldImage.onload?.();
     });
     expect(fake.state.layers.has("category-results-layer")).toBe(false);
+    // Resolve this style's optional logo while an unrelated source stays pending.
+    await waitFor(() =>
+      expect(
+        images.slice(1).some((image) => decodeURIComponent(image.src).includes("<image ")),
+      ).toBe(true),
+    );
+    await act(async () => {
+      for (const image of images.slice(1)) image.onload?.();
+    });
+    expect(fake.map.hasImage("brand-marker-Q1")).toBe(true);
+    expect(data().features[0].properties?.imageId).toBe("brand-marker-Q1");
+    expect(data().features[0].properties?._mapMarkerAttributions).toContain("Required logo artist");
     reach.filtered = [{ id: "new", name: "New", coordinates: [9, 51] }];
     view.rerender(<CategoryResultMarkers />);
     await act(async () => {
@@ -242,6 +255,7 @@ it("keeps brand-enriched data on unrelated events and fences old image completio
   } finally {
     globalThis.Image = OriginalImage;
     reach.filtered = oldResults;
+    fake.state.styleLoaded = true;
     vi.restoreAllMocks();
   }
 });
@@ -394,34 +408,59 @@ it("keeps the selected result out of the ordinary layers through hover and style
   }
 });
 
-it("waits for style readiness if an image finishes while the style is loading", async () => {
-  const OriginalImage = globalThis.Image;
-  const images: Array<{ onload: (() => void) | null }> = [];
-  globalThis.Image = class {
-    onload: (() => void) | null = null;
-    onerror: (() => void) | null = null;
-    src = "";
-    constructor() {
-      images.push(this);
+it.each([
+  { mode: "category", transit: false, cached: false, imageId: "category-marker-hotels" },
+  { mode: "category", transit: false, cached: true, imageId: "category-marker-hotels" },
+  { mode: "text", transit: false, cached: false, imageId: "category-marker-text" },
+  { mode: "category", transit: true, cached: false, imageId: "transit-marker-bus" },
+] as const)(
+  "installs $mode markers while sources remain pending (transit=$transit cached=$cached)",
+  async ({ mode, transit, cached, imageId }) => {
+    const OriginalImage = globalThis.Image;
+    const images: Array<{ onload: (() => void) | null }> = [];
+    globalThis.Image = class {
+      onload: (() => void) | null = null;
+      onerror: (() => void) | null = null;
+      src = "";
+      constructor() {
+        images.push(this);
+      }
+    } as unknown as typeof Image;
+    let view: ReturnType<typeof render> | undefined;
+    const layerId = transit ? "transit-stops-layer" : "category-results-layer";
+    const sourceId = transit ? "transit-stops-source" : "category-results-source";
+    try {
+      fake.map.setStyle({} as never);
+      // A parsed stylesheet is writable even while this or another source loads.
+      fake.state.styleLoaded = false;
+      if (cached) fake.map.addImage(imageId, {} as never);
+      reach.isTransitCategory = transit;
+      transitStops = transit
+        ? [{ id: "stop", name: "Stop", lat: 50, lng: 8, modes: ["bus"], provider: "test" }]
+        : undefined;
+      useCategorySearchStore.setState({ activeCategory: "hotels", mode, textQuery: "Hotels" });
+      view = render(<CategoryResultMarkers />);
+      expect(fake.map.getSource(sourceId)).toBeDefined();
+      await act(async () => {
+        for (const image of images) image.onload?.();
+      });
+      // No source-ready, idle or artificial styledata event is needed.
+      expect(fake.map.hasImage(imageId)).toBe(true);
+      expect(fake.map.getLayer(layerId)).toBeDefined();
+      expect(
+        fake.map.getLayer(transit ? "transit-stops-labels" : "category-results-labels"),
+      ).toBeDefined();
+      expect(fake.map.isStyleLoaded()).toBe(false);
+    } finally {
+      view?.unmount();
+      fake.state.styleLoaded = true;
+      reach.isTransitCategory = false;
+      transitStops = undefined;
+      useCategorySearchStore.setState({ mode: "category", textQuery: "" });
+      globalThis.Image = OriginalImage;
     }
-  } as unknown as typeof Image;
-  try {
-    fake.map.setStyle({} as never);
-    useCategorySearchStore.setState({ activeCategory: "restaurant" });
-    const view = render(<CategoryResultMarkers />);
-    fake.state.styleLoaded = false;
-    await act(async () => images[0].onload?.());
-    expect(fake.state.layers.has("category-results-layer")).toBe(false);
-    fake.state.styleLoaded = true;
-    await act(async () => fake.emit("styledata"));
-    await act(async () => images.at(-1)?.onload?.());
-    expect(fake.state.layers.has("category-results-layer")).toBe(true);
-    view.unmount();
-  } finally {
-    fake.state.styleLoaded = true;
-    globalThis.Image = OriginalImage;
-  }
-});
+  },
+);
 
 it("opens full result details from focused and ordinary markers", async () => {
   fake.map.setStyle({} as never);

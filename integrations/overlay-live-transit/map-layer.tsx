@@ -19,6 +19,7 @@ import { INTERACTIVE_LAYER_IDS } from "@/integration-api/map/interactiveLayers";
 import { addLayerInSlot, unregisterLayerSlot } from "@/integration-api/map/layerStack";
 import { useMap } from "@/integration-api/map/MapContext";
 import { getMapClickOwner } from "@/integration-api/map/mapClickOwnership";
+import { subscribeStyleLoaded } from "@/integration-api/map/styleLoadedSync";
 import {
   loadTransitVehicleMarkers,
   modeColor,
@@ -628,140 +629,143 @@ export function LiveTransitLayer() {
       return;
     }
 
-    if (layerInitRef.current) return;
-    if (!map.isStyleLoaded()) {
-      // styledata fires during loading but doesn't reliably re-fire after
-      // sources finish, so register a one-shot idle listener that bumps a
-      // local counter to re-run this effect once the style is settled.
-      map.once("idle", () => setStyleReadyTick((t) => t + 1));
-      return;
-    }
+    let cleanupLayers: (() => void) | undefined;
+    const unsubscribeStyle = subscribeStyleLoaded(map, () => {
+      if (layerInitRef.current && map.getSource(SOURCE_ID)) return;
+      cleanupLayers?.();
 
-    loadTransitVehicleMarkers(map);
-    sourceFeaturesRef.current = new Map();
-    map.addSource(SOURCE_ID, {
-      type: "geojson",
-      data: emptyFeatureCollection(),
-      promoteId: "id",
+      loadTransitVehicleMarkers(map);
+      sourceFeaturesRef.current = new Map();
+      map.addSource(SOURCE_ID, {
+        type: "geojson",
+        data: emptyFeatureCollection(),
+        promoteId: "id",
+      });
+
+      // On-route highlight ring, drawn beneath the vehicle icons. Its filter is
+      // kept in sync with the active itinerary's trip ids by a dedicated effect.
+      addLayerInSlot(
+        map,
+        {
+          id: RING_LAYER,
+          minzoom: minFetchZoom,
+          type: "circle",
+          source: SOURCE_ID,
+          filter: MATCH_NONE,
+          paint: {
+            "circle-radius": ["interpolate", ["linear"], ["zoom"], 8, 12, 14, 18],
+            "circle-color": "rgba(0,0,0,0)",
+            "circle-stroke-color": "#111827",
+            "circle-stroke-width": 3,
+          },
+        },
+        "overlay-points",
+        14,
+      );
+
+      addLayerInSlot(
+        map,
+        {
+          id: ICON_LAYER,
+          minzoom: minFetchZoom,
+          type: "symbol",
+          source: SOURCE_ID,
+          layout: {
+            "icon-image": transitVehicleIconExpression() as maplibregl.ExpressionSpecification,
+            "icon-size": ["interpolate", ["linear"], ["zoom"], 5, 0.42, 8, 0.68, 12, 0.95],
+            "icon-allow-overlap": true,
+            "icon-ignore-placement": true,
+            "icon-rotate": ["get", "bearing"],
+            "icon-rotation-alignment": "map",
+          },
+          paint: {
+            // Schedule-interpolated positions (MOTIS map/trips) are shown dimmer
+            // than genuine GPS observations to signal they are estimated.
+            "icon-opacity": [
+              "case",
+              ["==", ["get", "positionKind"], "interpolated"],
+              0.55,
+              1,
+            ] as maplibregl.ExpressionSpecification,
+          },
+        },
+        "overlay-markers",
+        9,
+      );
+
+      addLayerInSlot(
+        map,
+        {
+          id: LABEL_LAYER,
+          type: "symbol",
+          source: SOURCE_ID,
+          minzoom: Math.max(9, minFetchZoom),
+          layout: {
+            "text-field": ["get", "displayLabel"],
+            "text-size": 11,
+            "text-offset": [0, 1.8],
+            "text-anchor": "top",
+            "text-optional": true,
+            "text-allow-overlap": true,
+            "text-ignore-placement": true,
+          },
+          paint: {
+            "text-color": "#1f2937",
+            "text-halo-color": "#ffffff",
+            "text-halo-width": 1.5,
+          },
+        },
+        "overlay-markers",
+        10,
+      );
+
+      const handleMouseEnter = () => {
+        map.getCanvas().style.cursor = "pointer";
+      };
+      const handleMouseLeave = () => {
+        map.getCanvas().style.cursor = "";
+      };
+
+      map.on("click", ICON_LAYER, handleClick);
+      map.on("mouseenter", ICON_LAYER, handleMouseEnter);
+      map.on("mouseleave", ICON_LAYER, handleMouseLeave);
+      INTERACTIVE_LAYER_IDS.add(ICON_LAYER);
+
+      layerInitRef.current = true;
+
+      // If a snapshot fetch already resolved while the source didn't exist yet
+      // (deep-link path: setLayerVisible runs before the style finishes loading),
+      // push the latest vehicles into the freshly-created source. Otherwise the
+      // map would stay empty until the next poll tick (15 s).
+      if (renderVehiclesRef.current.length > 0) {
+        updateSourceData(renderVehiclesRef.current);
+      }
+
+      cleanupLayers = () => {
+        map.off("click", ICON_LAYER, handleClick);
+        map.off("mouseenter", ICON_LAYER, handleMouseEnter);
+        map.off("mouseleave", ICON_LAYER, handleMouseLeave);
+        INTERACTIVE_LAYER_IDS.delete(ICON_LAYER);
+        try {
+          if (map.getLayer(LABEL_LAYER)) map.removeLayer(LABEL_LAYER);
+          if (map.getLayer(ICON_LAYER)) map.removeLayer(ICON_LAYER);
+          if (map.getLayer(RING_LAYER)) map.removeLayer(RING_LAYER);
+          if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
+        } catch {
+          // race during style swaps
+        }
+        unregisterLayerSlot(LABEL_LAYER);
+        unregisterLayerSlot(ICON_LAYER);
+        unregisterLayerSlot(RING_LAYER);
+        sourceFeaturesRef.current = new Map();
+        layerInitRef.current = false;
+      };
+      setStyleReadyTick((tick) => tick + 1);
     });
 
-    // On-route highlight ring, drawn beneath the vehicle icons. Its filter is
-    // kept in sync with the active itinerary's trip ids by a dedicated effect.
-    addLayerInSlot(
-      map,
-      {
-        id: RING_LAYER,
-        minzoom: minFetchZoom,
-        type: "circle",
-        source: SOURCE_ID,
-        filter: MATCH_NONE,
-        paint: {
-          "circle-radius": ["interpolate", ["linear"], ["zoom"], 8, 12, 14, 18],
-          "circle-color": "rgba(0,0,0,0)",
-          "circle-stroke-color": "#111827",
-          "circle-stroke-width": 3,
-        },
-      },
-      "overlay-points",
-      14,
-    );
-
-    addLayerInSlot(
-      map,
-      {
-        id: ICON_LAYER,
-        minzoom: minFetchZoom,
-        type: "symbol",
-        source: SOURCE_ID,
-        layout: {
-          "icon-image": transitVehicleIconExpression() as maplibregl.ExpressionSpecification,
-          "icon-size": ["interpolate", ["linear"], ["zoom"], 5, 0.42, 8, 0.68, 12, 0.95],
-          "icon-allow-overlap": true,
-          "icon-ignore-placement": true,
-          "icon-rotate": ["get", "bearing"],
-          "icon-rotation-alignment": "map",
-        },
-        paint: {
-          // Schedule-interpolated positions (MOTIS map/trips) are shown dimmer
-          // than genuine GPS observations to signal they are estimated.
-          "icon-opacity": [
-            "case",
-            ["==", ["get", "positionKind"], "interpolated"],
-            0.55,
-            1,
-          ] as maplibregl.ExpressionSpecification,
-        },
-      },
-      "overlay-markers",
-      9,
-    );
-
-    addLayerInSlot(
-      map,
-      {
-        id: LABEL_LAYER,
-        type: "symbol",
-        source: SOURCE_ID,
-        minzoom: Math.max(9, minFetchZoom),
-        layout: {
-          "text-field": ["get", "displayLabel"],
-          "text-size": 11,
-          "text-offset": [0, 1.8],
-          "text-anchor": "top",
-          "text-optional": true,
-          "text-allow-overlap": true,
-          "text-ignore-placement": true,
-        },
-        paint: {
-          "text-color": "#1f2937",
-          "text-halo-color": "#ffffff",
-          "text-halo-width": 1.5,
-        },
-      },
-      "overlay-markers",
-      10,
-    );
-
-    const handleMouseEnter = () => {
-      map.getCanvas().style.cursor = "pointer";
-    };
-    const handleMouseLeave = () => {
-      map.getCanvas().style.cursor = "";
-    };
-
-    map.on("click", ICON_LAYER, handleClick);
-    map.on("mouseenter", ICON_LAYER, handleMouseEnter);
-    map.on("mouseleave", ICON_LAYER, handleMouseLeave);
-    INTERACTIVE_LAYER_IDS.add(ICON_LAYER);
-
-    layerInitRef.current = true;
-
-    // If a snapshot fetch already resolved while the source didn't exist yet
-    // (deep-link path: setLayerVisible runs before the style finishes loading),
-    // push the latest vehicles into the freshly-created source. Otherwise the
-    // map would stay empty until the next poll tick (15 s).
-    if (renderVehiclesRef.current.length > 0) {
-      updateSourceData(renderVehiclesRef.current);
-    }
-
     return () => {
-      map.off("click", ICON_LAYER, handleClick);
-      map.off("mouseenter", ICON_LAYER, handleMouseEnter);
-      map.off("mouseleave", ICON_LAYER, handleMouseLeave);
-      INTERACTIVE_LAYER_IDS.delete(ICON_LAYER);
-      try {
-        if (map.getLayer(LABEL_LAYER)) map.removeLayer(LABEL_LAYER);
-        if (map.getLayer(ICON_LAYER)) map.removeLayer(ICON_LAYER);
-        if (map.getLayer(RING_LAYER)) map.removeLayer(RING_LAYER);
-        if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
-      } catch {
-        // race during style swaps
-      }
-      unregisterLayerSlot(LABEL_LAYER);
-      unregisterLayerSlot(ICON_LAYER);
-      unregisterLayerSlot(RING_LAYER);
-      sourceFeaturesRef.current = new Map();
-      layerInitRef.current = false;
+      unsubscribeStyle();
+      cleanupLayers?.();
     };
   }, [
     cancelAnimation,
@@ -772,7 +776,6 @@ export function LiveTransitLayer() {
     mapRef,
     resetSnapshotMeta,
     selectVehicle,
-    styleReadyTick,
     styleVersion,
     updateSourceData,
   ]);

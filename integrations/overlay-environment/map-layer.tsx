@@ -13,6 +13,7 @@ import { INTERACTIVE_LAYER_IDS } from "@/integration-api/map/interactiveLayers";
 import { addLayerInSlot, unregisterLayerSlot } from "@/integration-api/map/layerStack";
 import { useMap } from "@/integration-api/map/MapContext";
 import { getMapClickOwner } from "@/integration-api/map/mapClickOwnership";
+import { subscribeStyleLoaded } from "@/integration-api/map/styleLoadedSync";
 import { useGeoJsonSourceDataBridge } from "@/integration-api/map/useGeoJsonSourceDataBridge";
 import { useOverlayMinZoom } from "@/integration-api/overlay/overlayZoomGate";
 import { attributionToHtml } from "@/integration-api/overlay/useMapAttributions";
@@ -247,11 +248,6 @@ export function EnvironmentLayer() {
         return;
       }
 
-      if (!map.isStyleLoaded()) {
-        map.once("idle", syncLayer);
-        return;
-      }
-
       if (!map.getSource(ENV_SOURCE_ID)) {
         map.addSource(ENV_SOURCE_ID, {
           type: "geojson",
@@ -324,10 +320,9 @@ export function EnvironmentLayer() {
       return;
     }
 
-    syncLayer();
-    map.on("styledata", syncLayer);
+    const unsubscribeStyle = subscribeStyleLoaded(map, syncLayer);
     return () => {
-      map.off("styledata", syncLayer);
+      unsubscribeStyle();
     };
   }, [
     mapReady,

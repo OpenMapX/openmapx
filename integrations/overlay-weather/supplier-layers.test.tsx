@@ -401,6 +401,10 @@ it.each(["radar", "disabled", "unmounted", "map-replaced"] as const)(
     });
     fake.state.styleLoaded = false;
     const oldMap = fake;
+    const parsedStyle = oldMap.map.getStyle();
+    vi.spyOn(oldMap.map, "getStyle").mockImplementation(() =>
+      oldMap.state.styleLoaded ? parsedStyle : (undefined as never),
+    );
     const view = render(<WeatherLayer />, { wrapper });
     expect(oldMap.map.getLayer("weather-owm-layer")).toBeUndefined();
     if (change === "unmounted") view.unmount();

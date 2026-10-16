@@ -221,6 +221,10 @@ describe("RouteConditionsLayer", () => {
   });
   it("replays route data received before the map sources become ready", async () => {
     fake = createFakeMap({ styleLoaded: false, zoom: 5 });
+    const parsedStyle = fake.map.getStyle();
+    vi.spyOn(fake.map, "getStyle").mockImplementation(() =>
+      fake.state.styleLoaded ? parsedStyle : (undefined as never),
+    );
 
     render(<RouteConditionsLayer />);
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
@@ -604,4 +608,12 @@ describe("RouteConditionsLayer", () => {
     await Promise.resolve();
     expect(fetchMock).not.toHaveBeenCalled();
   });
+});
+
+it("installs route incident layers while unrelated sources are pending without idle", () => {
+  fake.state.styleLoaded = false;
+  const view = render(<RouteConditionsLayer />);
+  expect(fake.map.getLayer("omx-road-conditions-route-markers")).toBeDefined();
+  expect(fake.map.getLayer("omx-road-conditions-route-line")).toBeDefined();
+  view.unmount();
 });

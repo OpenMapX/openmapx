@@ -11,6 +11,7 @@ import { INTERACTIVE_LAYER_IDS } from "@/integration-api/map/interactiveLayers";
 import { addLayerInSlot, unregisterLayerSlot } from "@/integration-api/map/layerStack";
 import { useMap } from "@/integration-api/map/MapContext";
 import { getMapClickOwner } from "@/integration-api/map/mapClickOwnership";
+import { subscribeStyleLoaded } from "@/integration-api/map/styleLoadedSync";
 import { useGeoJsonSourceDataBridge } from "@/integration-api/map/useGeoJsonSourceDataBridge";
 import { useContributorResolver } from "@/integration-api/overlay/useContributorResolver";
 import { useRenderedMapAttributions } from "@/integration-api/overlay/useRenderedMapAttributions";
@@ -388,9 +389,7 @@ export function EarthquakeLayer() {
           void fetchEarthquakes();
         }
       } catch {
-        // Style not ready — styledata fires during loading but doesn't
-        // reliably re-fire after sources finish, so register an idle retry.
-        map.once("idle", syncLayers);
+        // A style rebuild will retry installation.
       }
     };
 
@@ -401,10 +400,9 @@ export function EarthquakeLayer() {
 
     // Reset fetchedRef so syncLayers will fetch (handles filter param changes via fetchEarthquakes)
     fetchedRef.current = false;
-    syncLayers();
-    map.on("styledata", syncLayers);
+    const unsubscribeStyle = subscribeStyleLoaded(map, syncLayers);
     return () => {
-      map.off("styledata", syncLayers);
+      unsubscribeStyle();
     };
   }, [mapReady, mapRef, styleVersion, layerVisible, fetchEarthquakes]);
 

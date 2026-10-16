@@ -807,6 +807,15 @@ export default function MapLayer() {
 }
 ```
 
+Source and layer installation needs a parsed stylesheet, not fully loaded tiles.
+Use `useMapLayerGroup` for a source/layer descriptor, or `subscribeStyleLoaded`
+for imperative reconciliation. Both use focused `@/integration-api/map/...`
+imports. Do not gate installation or image completion on `isStyleLoaded()` or
+wait for an idle event: an unrelated pending source or continuous animation can
+otherwise leave the overlay missing. Cancel subscriptions on cleanup, and fence
+asynchronous image completions by the current effect, map and source identity.
+Keep reconciliation idempotent, since adding an image can itself emit `styledata`.
+
 The modules under `apps/web/src/integration-api/` are an app-local API for
 trusted integrations compiled into the OpenMapX web build. They group map,
 overlay, runtime, and reusable component capabilities behind focused import

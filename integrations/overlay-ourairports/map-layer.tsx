@@ -19,6 +19,7 @@ import { INTERACTIVE_LAYER_IDS } from "@/integration-api/map/interactiveLayers";
 import { addLayerInSlot, unregisterLayerSlot } from "@/integration-api/map/layerStack";
 import { useMap } from "@/integration-api/map/MapContext";
 import { getMapClickOwner } from "@/integration-api/map/mapClickOwnership";
+import { subscribeStyleLoaded } from "@/integration-api/map/styleLoadedSync";
 import { useGeoJsonSourceDataBridge } from "@/integration-api/map/useGeoJsonSourceDataBridge";
 import { useOverlayMinZoom } from "@/integration-api/overlay/overlayZoomGate";
 import { useRenderedMapAttributions } from "@/integration-api/overlay/useRenderedMapAttributions";
@@ -257,17 +258,16 @@ export function AirportsOverlay() {
           );
         }
       } catch {
-        map.once("idle", syncLayers);
+        // A style rebuild will retry installation.
       }
     };
 
-    syncLayers();
+    const unsubscribeStyle = subscribeStyleLoaded(map, syncLayers);
     if (layerVisible) {
       void fetchAirports();
     }
-    map.on("styledata", syncLayers);
     return () => {
-      map.off("styledata", syncLayers);
+      unsubscribeStyle();
     };
   }, [mapReady, mapRef, styleVersion, layerVisible, fetchAirports, minZoom]);
 

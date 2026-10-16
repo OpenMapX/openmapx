@@ -9,6 +9,7 @@ import {
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { addLayerInSlot, unregisterLayerSlot } from "@/integration-api/map/layerStack";
 import { useMap } from "@/integration-api/map/MapContext";
+import { subscribeStyleLoaded } from "@/integration-api/map/styleLoadedSync";
 import { addAttributedRasterSource } from "@/integration-api/overlay/rasterMapContribution";
 import { useContributorResolver } from "@/integration-api/overlay/useContributorResolver";
 import { useRasterMapAttributions } from "@/integration-api/overlay/useRasterMapAttributions";
@@ -161,11 +162,6 @@ export function WeatherLayer() {
         return;
       }
 
-      if (!map.isStyleLoaded()) {
-        map.once("idle", syncLayer);
-        return;
-      }
-
       // During playback, bias the window forward to preload upcoming frames
       const preloadAhead = radarPlaying ? 2 : 0;
       const halfWindow = Math.floor(WINDOW_SIZE / 2);
@@ -219,10 +215,7 @@ export function WeatherLayer() {
       }
     };
 
-    syncLayer();
-    return () => {
-      map.off("idle", syncLayer);
-    };
+    return subscribeStyleLoaded(map, syncLayer);
   }, [
     mapReady,
     styleVersion,
@@ -242,6 +235,7 @@ export function WeatherLayer() {
     if (!map || !mapReady) return;
 
     const owmLayerName = OWM_LAYER_MAP[activeSubLayer];
+    let installedSource: ReturnType<typeof map.getSource> | undefined;
 
     const syncLayer = () => {
       if (!layerVisible || !owmLayerName) {
@@ -255,10 +249,12 @@ export function WeatherLayer() {
         return;
       }
 
-      if (!map.isStyleLoaded()) {
-        map.once("idle", syncLayer);
+      if (
+        installedSource &&
+        map.getSource(OWM_SOURCE_ID) === installedSource &&
+        map.getLayer(OWM_LAYER_ID)
+      )
         return;
-      }
 
       const tileUrl = `${env.apiUrl}/api/integrations/overlay-weather/tiles/${owmLayerName}/{z}/{x}/{y}.png`;
 
@@ -295,12 +291,10 @@ export function WeatherLayer() {
         "raster-overlays",
         21,
       );
+      installedSource = map.getSource(OWM_SOURCE_ID);
     };
 
-    syncLayer();
-    return () => {
-      map.off("idle", syncLayer);
-    };
+    return subscribeStyleLoaded(map, syncLayer);
   }, [mapReady, styleVersion, currentMap, layerVisible, activeSubLayer, env.apiUrl]);
 
   // Cleanup on unmount

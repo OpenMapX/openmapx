@@ -14,6 +14,7 @@ import { INTERACTIVE_LAYER_IDS } from "@/integration-api/map/interactiveLayers";
 import { addLayerInSlot, unregisterLayerSlot } from "@/integration-api/map/layerStack";
 import { useMap } from "@/integration-api/map/MapContext";
 import { getMapClickOwner } from "@/integration-api/map/mapClickOwnership";
+import { subscribeStyleLoaded } from "@/integration-api/map/styleLoadedSync";
 import { useGeoJsonSourceDataBridge } from "@/integration-api/map/useGeoJsonSourceDataBridge";
 import { addAttributedRasterSource } from "@/integration-api/overlay/rasterMapContribution";
 import { useContributorResolver } from "@/integration-api/overlay/useContributorResolver";
@@ -396,11 +397,6 @@ export function NauticalLayer() {
     if (!map || !mapReady) return;
 
     const sync = () => {
-      if (!map.isStyleLoaded()) {
-        map.once("idle", sync);
-        return;
-      }
-
       // ---- Depth shaded relief (lowest layer) ----
       if (layerVisible && showDepth) {
         if (!map.getSource(DEPTH_RELIEF_SOURCE)) {
@@ -714,10 +710,9 @@ export function NauticalLayer() {
       }
     };
 
-    sync();
-    map.on("styledata", sync);
+    const unsubscribeStyle = subscribeStyleLoaded(map, sync);
     return () => {
-      map.off("styledata", sync);
+      unsubscribeStyle();
     };
   }, [
     mapReady,

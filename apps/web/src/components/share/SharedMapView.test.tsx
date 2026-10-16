@@ -154,3 +154,47 @@ it("projects captured geometry spans and credits line-only viewport content loca
   view.unmount();
   expect(fake.state.handlers.get("render")?.size ?? 0).toBe(0);
 });
+
+it("frames changed share content while source tiles are pending", async () => {
+  const view = render(<SharedMapView points={[{ lat: 50, lng: 8 }]} />);
+  await act(async () => {
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  act(() => fake.emit("load"));
+  fake.state.styleLoaded = false;
+  const fit = vi.spyOn(fake.map, "fitBounds");
+  view.rerender(
+    <SharedMapView
+      points={[
+        { lat: 51, lng: 9 },
+        { lat: 52, lng: 10 },
+      ]}
+    />,
+  );
+  expect(fit).toHaveBeenCalledWith(
+    [
+      [9, 51],
+      [10, 52],
+    ],
+    { padding: 60, duration: 0, maxZoom: 15 },
+  );
+  view.unmount();
+});
+
+it("installs initial shared content and restores it without waiting for tiles", async () => {
+  fake.state.styleLoaded = false;
+  const view = render(<SharedMapView points={[{ lat: 50, lng: 8 }]} />);
+  await act(async () => {
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  const data = () =>
+    fake.state.sources.get("shared-points-source")?.data as GeoJSON.FeatureCollection | undefined;
+  expect(data()?.features[0].geometry).toEqual({ type: "Point", coordinates: [8, 50] });
+  act(() => fake.map.setStyle({} as never));
+  expect(data()?.features[0].geometry).toEqual({ type: "Point", coordinates: [8, 50] });
+  expect(fake.map.getLayer("shared-points-layer")).toBeDefined();
+  view.unmount();
+  expect(fake.state.handlers.get("styledata")?.size ?? 0).toBe(0);
+});

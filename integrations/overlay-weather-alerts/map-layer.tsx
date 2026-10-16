@@ -11,6 +11,7 @@ import { INTERACTIVE_LAYER_IDS } from "@/integration-api/map/interactiveLayers";
 import { addLayerInSlot, unregisterLayerSlot } from "@/integration-api/map/layerStack";
 import { useMap } from "@/integration-api/map/MapContext";
 import { getMapClickOwner } from "@/integration-api/map/mapClickOwnership";
+import { subscribeStyleLoaded } from "@/integration-api/map/styleLoadedSync";
 import { useGeoJsonSourceDataBridge } from "@/integration-api/map/useGeoJsonSourceDataBridge";
 import { useContributorResolver } from "@/integration-api/overlay/useContributorResolver";
 import { useRenderedMapAttributions } from "@/integration-api/overlay/useRenderedMapAttributions";
@@ -334,11 +335,6 @@ export function WeatherAlertLayer() {
         return;
       }
 
-      if (!map.isStyleLoaded()) {
-        map.once("idle", syncLayer);
-        return;
-      }
-
       if (!map.getSource(SOURCE_ID)) {
         map.addSource(SOURCE_ID, {
           type: "geojson",
@@ -416,10 +412,9 @@ export function WeatherAlertLayer() {
       return;
     }
 
-    syncLayer();
-    map.on("styledata", syncLayer);
+    const unsubscribeStyle = subscribeStyleLoaded(map, syncLayer);
     return () => {
-      map.off("styledata", syncLayer);
+      unsubscribeStyle();
     };
   }, [mapReady, styleVersion, mapRef, layerVisible, activeSeverities, fetchAlerts, setAlertCount]);
 

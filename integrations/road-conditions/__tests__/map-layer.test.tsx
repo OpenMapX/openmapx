@@ -257,6 +257,10 @@ describe("RoadConditionsLayer marker images", () => {
 describe("RoadConditionsLayer horizon query", () => {
   it("replays a response received before the map sources become ready", async () => {
     fake = createFakeMap({ styleLoaded: false });
+    const parsedStyle = fake.map.getStyle();
+    vi.spyOn(fake.map, "getStyle").mockImplementation(() =>
+      fake.state.styleLoaded ? parsedStyle : (undefined as never),
+    );
     respondWith([
       {
         geometry: {

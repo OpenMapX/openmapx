@@ -8,6 +8,7 @@ import { useEffect } from "react";
 import { addLayerInSlot } from "@/integration-api/map/layerStack";
 import { findVectorLineReference, setLayerVisibility } from "@/integration-api/map/layerStyleUtils";
 import { useMap } from "@/integration-api/map/MapContext";
+import { subscribeStyleLoaded } from "@/integration-api/map/styleLoadedSync";
 import { useGeoJsonSourceDataBridge } from "@/integration-api/map/useGeoJsonSourceDataBridge";
 import { useTransitItineraryOnMap } from "@/integration-api/map/useTransitItineraryOnMap";
 import { useRenderedMapAttributions } from "@/integration-api/overlay/useRenderedMapAttributions";
@@ -65,11 +66,6 @@ export function TransitLayer() {
     if (!map || !mapReady) return;
 
     const syncLayer = () => {
-      if (!map.isStyleLoaded()) {
-        map.once("idle", syncLayer);
-        return;
-      }
-
       if (showTransit && !map.getLayer(TRANSIT_LAYER_ID)) {
         const reference = findVectorLineReference(map, TRANSIT_LAYER_HINTS);
         if (reference) {
@@ -114,10 +110,9 @@ export function TransitLayer() {
       setLayerVisibility(map, TRANSIT_LAYER_ID, showTransit);
     };
 
-    syncLayer();
-    map.on("styledata", syncLayer);
+    const unsubscribeStyle = subscribeStyleLoaded(map, syncLayer);
     return () => {
-      map.off("styledata", syncLayer);
+      unsubscribeStyle();
     };
   }, [mapReady, mapRef, styleVersion, showTransit]);
 
@@ -134,7 +129,7 @@ export function TransitLayer() {
     let activeRequest: ReturnType<typeof beginRequest> | null = null;
 
     const ensureLayer = () => {
-      if (!map.isStyleLoaded() || map.getSource(MOTIS_SOURCE_ID)) return;
+      if (map.getSource(MOTIS_SOURCE_ID)) return;
       map.addSource(MOTIS_SOURCE_ID, { type: "geojson", data: EMPTY_FC });
       addLayerInSlot(
         map,
@@ -199,12 +194,12 @@ export function TransitLayer() {
       if (showTransit) scheduleFetch();
     };
 
+    let unsubscribeStyle: (() => void) | undefined;
     if (showTransit) {
-      ensureLayer();
+      unsubscribeStyle = subscribeStyleLoaded(map, ensureLayer);
       setLayerVisibility(map, MOTIS_LINE_ID, true);
       scheduleFetch();
       map.on("moveend", onMoveEnd);
-      map.on("styledata", ensureLayer);
     } else {
       setLayerVisibility(map, MOTIS_LINE_ID, false);
       clearData();
@@ -215,7 +210,7 @@ export function TransitLayer() {
       activeRequest?.cancel();
       if (debounceTimer) clearTimeout(debounceTimer);
       map.off("moveend", onMoveEnd);
-      map.off("styledata", ensureLayer);
+      unsubscribeStyle?.();
     };
   }, [beginRequest, mapReady, mapRef, publishGeoJson, resetGeoJson, styleVersion, showTransit]);
 
