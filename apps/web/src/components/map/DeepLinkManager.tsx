@@ -417,6 +417,8 @@ function applyDirections(parsed: ParsedDeepLink["directions"]): void {
     directions.setBikeProfile(parsed.bikeProfile ?? "trekking");
     directions.setBikeHillPreference(parsed.bikeHillPreference ?? "default");
     directions.setBikePreferQuietRoads(parsed.bikePreferQuietRoads ?? false);
+    directions.setBikePreferSmoothSurfaces(parsed.bikePreferSmoothSurfaces ?? false);
+    directions.setBikeSpeedKmh(parsed.bikeSpeedKmh);
   }
 
   const waypoints = parsed.waypoints.slice(0, 10);

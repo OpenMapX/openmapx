@@ -140,7 +140,13 @@ export function RouteCard({
   const avoidHighways = useDirectionsStore((s) => s.avoidHighways);
   const avoidTolls = useDirectionsStore((s) => s.avoidTolls);
   const avoidFerries = useDirectionsStore((s) => s.avoidFerries);
-  const { bikeProfile, bikeHillPreference, bikePreferQuietRoads } = useDirectionsStore();
+  const {
+    bikeProfile,
+    bikeHillPreference,
+    bikePreferQuietRoads,
+    bikePreferSmoothSurfaces,
+    bikeSpeedKmh,
+  } = useDirectionsStore();
   const avoidIncidents = useSettingsStore((s) => s.avoidIncidents);
   // Only meaningful under native authority, where Start is a round trip rather
   // than a synchronous store write.
@@ -183,7 +189,13 @@ export function RouteCard({
             avoidTolls: route.mode === "driving" && avoidTolls,
             avoidFerries,
             ...(route.mode === "cycling"
-              ? { bikeProfile, bikeHillPreference, bikePreferQuietRoads }
+              ? {
+                  bikeProfile,
+                  bikeHillPreference,
+                  bikePreferQuietRoads,
+                  bikePreferSmoothSurfaces,
+                  bikeSpeedKmh,
+                }
               : {}),
             avoidClosures: avoidIncidents,
           },

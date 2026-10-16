@@ -560,8 +560,14 @@ export function buildCostingOptions(
         gravel: "cross",
         mountain: "mountain",
       }[options.bikeProfile];
+    // Penalties are relative to the bike type, and remain soft even in smooth mode.
+    const surfacePenalty = { road: 0.75, trekking: 0.5, gravel: 0.25, mountain: 0.1 };
+    costingOptions.avoid_bad_surfaces = options.bikePreferSmoothSurfaces
+      ? 0.9
+      : surfacePenalty[options.bikeProfile ?? "trekking"];
+    if (options.bikeSpeedKmh !== undefined) costingOptions.cycling_speed = options.bikeSpeedKmh;
     if (options.bikeHillPreference && options.bikeHillPreference !== "default")
-      costingOptions.use_hills = options.bikeHillPreference === "strongly-avoid" ? 0 : 0.2;
+      costingOptions.use_hills = options.bikeHillPreference === "strongly-avoid" ? 0 : 0.1;
     if (options.bikePreferQuietRoads) costingOptions.use_roads = 0.1;
   }
   if (options.avoidHighways) costingOptions.use_highways = 0;

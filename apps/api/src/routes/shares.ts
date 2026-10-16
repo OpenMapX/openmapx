@@ -120,6 +120,8 @@ export const sharesRoute: FastifyPluginAsync = async (fastify) => {
                 bikeProfile: { type: "string", enum: [...BIKE_PROFILES] },
                 bikeHillPreference: { type: "string", enum: [...BIKE_HILL_PREFERENCES] },
                 bikePreferQuietRoads: { type: "boolean" },
+                bikePreferSmoothSurfaces: { type: "boolean" },
+                bikeSpeedKmh: { type: "number", minimum: 5, maximum: 60 },
                 waypoints: {
                   type: "array",
                   minItems: 2,

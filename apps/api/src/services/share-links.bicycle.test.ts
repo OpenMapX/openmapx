@@ -16,16 +16,22 @@ describe("cycling share snapshots", () => {
         bikeProfile: "road",
         bikeHillPreference: "avoid",
         bikePreferQuietRoads: true,
+        bikePreferSmoothSurfaces: true,
+        bikeSpeedKmh: 19.5,
       }),
     ).toMatchObject({
       bikeProfile: "road",
       bikeHillPreference: "avoid",
       bikePreferQuietRoads: true,
+      bikePreferSmoothSurfaces: true,
+      bikeSpeedKmh: 19.5,
     }));
   it.each([
     { bikeProfile: "car" },
     { bikeHillPreference: "flat" },
     { bikePreferQuietRoads: "true" },
+    { bikePreferSmoothSurfaces: "true" },
+    ...[null, "20", 0, 61, NaN, Infinity].map((bikeSpeedKmh) => ({ bikeSpeedKmh })),
   ])("rejects malformed fields %j", (fields) =>
     expect(validateRouteShare({ ...base, ...fields })).toBeNull(),
   );

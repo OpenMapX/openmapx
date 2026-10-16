@@ -7,6 +7,7 @@ import {
   bicycleQueryParameters,
   isBikeHillPreference,
   isBikeProfile,
+  isBikeSpeedKmh,
   type LngLat,
   PANEL,
   type Waypoint,
@@ -31,6 +32,8 @@ export const DEEPLINK_PARAMS = new Set([
   "bikeProfile",
   "bikeHillPreference",
   "bikePreferQuietRoads",
+  "bikePreferSmoothSurfaces",
+  "bikeSpeedKmh",
   "avoid",
   "units",
   "wp",
@@ -459,6 +462,10 @@ export function parseDeepLinkSearch(search: string | URLSearchParams): ParsedDee
                     ? (params.get("bikeHillPreference") as BikeRoutingOptions["bikeHillPreference"])
                     : undefined,
                   bikePreferQuietRoads: params.get("bikePreferQuietRoads") === "true",
+                  bikePreferSmoothSurfaces: params.get("bikePreferSmoothSurfaces") === "true",
+                  bikeSpeedKmh: isBikeSpeedKmh(Number(params.get("bikeSpeedKmh")))
+                    ? Number(params.get("bikeSpeedKmh"))
+                    : undefined,
                 })
               : {}),
             avoid: splitCsv(params.get("avoid")),

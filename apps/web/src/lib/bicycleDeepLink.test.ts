@@ -9,11 +9,15 @@ describe("cycling route links", () => {
       bikeProfile: "gravel",
       bikeHillPreference: "strongly-avoid",
       bikePreferQuietRoads: true,
+      bikePreferSmoothSurfaces: true,
+      bikeSpeedKmh: 19.5,
     });
     expect(parseDeepLinkSearch(new URL(url).search).directions).toMatchObject({
       bikeProfile: "gravel",
       bikeHillPreference: "strongly-avoid",
       bikePreferQuietRoads: true,
+      bikePreferSmoothSurfaces: true,
+      bikeSpeedKmh: 19.5,
     });
   });
   it("defaults legacy cycling links and ignores malformed fields", () => {
@@ -29,4 +33,10 @@ describe("cycling route links", () => {
       parseDeepLinkSearch("?panel=directions&mode=driving&bikeProfile=road").directions,
     ).not.toHaveProperty("bikeProfile");
   });
+});
+
+it.each(["", "0", "61", "NaN", "Infinity"])("ignores malformed speed %s in links", (speed) => {
+  expect(
+    parseDeepLinkSearch(`?panel=directions&mode=cycling&bikeSpeedKmh=${speed}`).directions,
+  ).not.toHaveProperty("bikeSpeedKmh");
 });

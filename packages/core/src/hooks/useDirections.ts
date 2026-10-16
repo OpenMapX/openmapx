@@ -52,7 +52,9 @@ export function directionsQueryKey({
   bikeProfile,
   bikeHillPreference,
   bikePreferQuietRoads,
-}: UseDirectionsParams): (string | boolean | undefined)[] {
+  bikePreferSmoothSurfaces,
+  bikeSpeedKmh,
+}: UseDirectionsParams): (string | number | boolean | undefined)[] {
   const waypointsStr = waypoints.map(([lng, lat]) => `${lng},${lat}`).join(";");
   const eff = effectiveAvoid(mode, avoidHighways, avoidTolls);
   return [
@@ -69,7 +71,13 @@ export function directionsQueryKey({
     arriveBy,
     ...(mode === "cycling"
       ? Object.values(
-          bicycleOptions(mode, { bikeProfile, bikeHillPreference, bikePreferQuietRoads }),
+          bicycleOptions(mode, {
+            bikeProfile,
+            bikeHillPreference,
+            bikePreferQuietRoads,
+            bikePreferSmoothSurfaces,
+            bikeSpeedKmh,
+          }),
         )
       : []),
   ];

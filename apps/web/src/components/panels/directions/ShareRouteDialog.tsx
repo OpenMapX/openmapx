@@ -44,6 +44,8 @@ export function ShareRouteDialog({ open, onClose }: { open: boolean; onClose: ()
             bikeProfile: state.bikeProfile,
             bikeHillPreference: state.bikeHillPreference,
             bikePreferQuietRoads: state.bikePreferQuietRoads,
+            bikePreferSmoothSurfaces: state.bikePreferSmoothSurfaces,
+            bikeSpeedKmh: state.bikeSpeedKmh,
           }
         : {}),
     };

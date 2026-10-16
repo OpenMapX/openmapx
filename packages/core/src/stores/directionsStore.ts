@@ -11,6 +11,7 @@ import {
   type BikeProfile,
   isBikeHillPreference,
   isBikeProfile,
+  isBikeSpeedKmh,
 } from "../routing/bicycleOptions";
 import type { LngLat } from "../types/geometry";
 import type { TravelMode, Waypoint, WaypointSchedule } from "../types/routing";
@@ -33,6 +34,10 @@ function readBikePrefs() {
     bikeProfile: isBikeProfile(profile) ? profile : ("trekking" as const),
     bikeHillPreference: isBikeHillPreference(hills) ? hills : ("default" as const),
     bikePreferQuietRoads: readBool("openmapx:bikePreferQuietRoads"),
+    bikePreferSmoothSurfaces: readBool("openmapx:bikePreferSmoothSurfaces"),
+    bikeSpeedKmh: isBikeSpeedKmh(Number(storage.getString("openmapx:bikeSpeedKmh")))
+      ? Number(storage.getString("openmapx:bikeSpeedKmh"))
+      : undefined,
   };
 }
 let waypointCounter = 0;
@@ -125,6 +130,8 @@ export interface DirectionsState {
   bikeHillPreference: BikeHillPreference;
   bikeProfile: BikeProfile;
   bikePreferQuietRoads: boolean;
+  bikePreferSmoothSurfaces: boolean;
+  bikeSpeedKmh: number | undefined;
   /** Germany-only: restrict transit to Deutschlandticket-covered services. */
   deutschlandticketOnly: boolean;
 
@@ -174,6 +181,8 @@ export interface DirectionsState {
   setBikeHillPreference: (v: BikeHillPreference) => void;
   setBikeProfile: (v: BikeProfile) => void;
   setBikePreferQuietRoads: (v: boolean) => void;
+  setBikePreferSmoothSurfaces: (v: boolean) => void;
+  setBikeSpeedKmh: (v: number | undefined) => void;
   setDeutschlandticketOnly: (v: boolean) => void;
 }
 
@@ -383,6 +392,16 @@ export const useDirectionsStore = create<DirectionsState>((set, get) => {
     setBikePreferQuietRoads: (bikePreferQuietRoads) => {
       getStorage().setString("openmapx:bikePreferQuietRoads", String(bikePreferQuietRoads));
       set({ bikePreferQuietRoads, activeRouteIndex: 0 });
+    },
+    setBikePreferSmoothSurfaces: (bikePreferSmoothSurfaces) => {
+      getStorage().setString("openmapx:bikePreferSmoothSurfaces", String(bikePreferSmoothSurfaces));
+      set({ bikePreferSmoothSurfaces, activeRouteIndex: 0 });
+    },
+    setBikeSpeedKmh: (bikeSpeedKmh) => {
+      if (bikeSpeedKmh !== undefined && !isBikeSpeedKmh(bikeSpeedKmh)) return;
+      if (bikeSpeedKmh === undefined) getStorage().remove("openmapx:bikeSpeedKmh");
+      else getStorage().setString("openmapx:bikeSpeedKmh", String(bikeSpeedKmh));
+      set({ bikeSpeedKmh, activeRouteIndex: 0 });
     },
     setDeutschlandticketOnly: (deutschlandticketOnly) =>
       set({ deutschlandticketOnly, activeItineraryIndex: 0 }),

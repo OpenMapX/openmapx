@@ -12,6 +12,8 @@ afterEach(() => {
     bikeProfile: "trekking",
     bikeHillPreference: "default",
     bikePreferQuietRoads: false,
+    bikePreferSmoothSurfaces: false,
+    bikeSpeedKmh: undefined,
   });
 });
 const draw = () =>
@@ -26,6 +28,8 @@ it("shows cycling preferences only for cycling and applies selections", () => {
     bikeProfile: "trekking",
     bikeHillPreference: "default",
     bikePreferQuietRoads: false,
+    bikePreferSmoothSurfaces: false,
+    bikeSpeedKmh: undefined,
   });
   draw();
   fireEvent.mouseDown(screen.getByRole("combobox", { name: "Bike type" }));
@@ -41,4 +45,32 @@ it("keeps driving controls separate", () => {
   draw();
   expect(screen.queryByRole("combobox", { name: "Bike type" })).toBeNull();
   expect(screen.getByRole("checkbox", { name: "Highways" })).toBeTruthy();
+});
+
+it("applies surface preference and optional pace and restores automatic", () => {
+  useDirectionsStore.setState({ mode: "cycling" });
+  draw();
+  fireEvent.click(screen.getByRole("checkbox", { name: "Prefer smoother surfaces" }));
+  fireEvent.mouseDown(screen.getByRole("combobox", { name: "Cruising speed" }));
+  fireEvent.click(screen.getByRole("option", { name: "20 km/h" }));
+  expect(useDirectionsStore.getState()).toMatchObject({
+    bikePreferSmoothSurfaces: true,
+    bikeSpeedKmh: 20,
+  });
+  fireEvent.mouseDown(screen.getByRole("combobox", { name: "Cruising speed" }));
+  fireEvent.click(screen.getByRole("option", { name: "Automatic for bike type" }));
+  expect(useDirectionsStore.getState().bikeSpeedKmh).toBeUndefined();
+});
+
+it("displays a shared non-preset cruising speed in imperial units without changing its value", async () => {
+  const { useSettingsStore } = await import("@openmapx/core");
+  const previous = useSettingsStore.getState().units;
+  useSettingsStore.setState({ units: "imperial" });
+  useDirectionsStore.setState({ mode: "cycling", bikeSpeedKmh: 19.5 });
+  draw();
+  expect(screen.getByRole("combobox", { name: "Cruising speed" }).textContent).toContain(
+    "12.1 mph",
+  );
+  expect(useDirectionsStore.getState().bikeSpeedKmh).toBe(19.5);
+  useSettingsStore.setState({ units: previous });
 });

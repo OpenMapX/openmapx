@@ -105,6 +105,8 @@ describe("GroundRerouteService", () => {
       bikeProfile: "gravel",
       bikeHillPreference: "strongly-avoid",
       bikePreferQuietRoads: true,
+      bikePreferSmoothSurfaces: true,
+      bikeSpeedKmh: 19.5,
     };
     const { client, calls } = fakeClient(routeAnswer());
     await service(client).request({ requestId: "bike", session: current, origin: ORIGIN });
@@ -113,6 +115,8 @@ describe("GroundRerouteService", () => {
       bikeProfile: "gravel",
       bikeHillPreference: "strongly-avoid",
       bikePreferQuietRoads: "true",
+      bikePreferSmoothSurfaces: "true",
+      bikeSpeedKmh: "19.5",
     });
   });
 

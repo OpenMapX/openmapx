@@ -44,6 +44,10 @@ describe("cycling preference boundaries", () => {
     { bikeProfile: "car" },
     { bikeHillPreference: "flat" },
     { bikePreferQuietRoads: "yes" },
+    { bikePreferSmoothSurfaces: "yes" },
+    ...["", "0", "4.9", "60.1", "NaN", "Infinity", "20km/h"].map((bikeSpeedKmh) => ({
+      bikeSpeedKmh,
+    })),
   ])("rejects invalid cycling values %j", (values) => expect(() => parse(values)).toThrow(/bike/));
   it("preserves and validates scheduled cycling options", () => {
     const req = parseScheduleRequest({
@@ -63,3 +67,37 @@ describe("cycling preference boundaries", () => {
     ).toThrow(/bike/);
   });
 });
+
+it("preserves surface and decimal pace through ordinary, optimize and schedule identities", () => {
+  const req = parse({ bikeSpeedKmh: "19.5", bikePreferSmoothSurfaces: "true" });
+  expect(req.routingOptions).toMatchObject({ bikeSpeedKmh: 19.5, bikePreferSmoothSurfaces: true });
+  expect(createDirectionsCacheIdentity(req, null)).toMatchObject({
+    bikeSpeedKmh: 19.5,
+    bikePreferSmoothSurfaces: true,
+  });
+  const scheduled = parseScheduleRequest({
+    waypoints: points,
+    mode: "cycling",
+    bikeSpeedKmh: 19.5,
+    bikePreferSmoothSurfaces: true,
+  });
+  expect(createScheduleCacheIdentity(scheduled, null)).toMatchObject({
+    bikeSpeedKmh: 19.5,
+    bikePreferSmoothSurfaces: true,
+  });
+});
+
+it.each([5, 60])("accepts cruising-speed boundary %s", (bikeSpeedKmh) => {
+  expect(parse({ bikeSpeedKmh: String(bikeSpeedKmh) }).routingOptions.bikeSpeedKmh).toBe(
+    bikeSpeedKmh,
+  );
+});
+
+it.each([null, "20", 4.9, 60.1, NaN, Infinity])(
+  "rejects malformed scheduled speed %s",
+  (bikeSpeedKmh) => {
+    expect(() =>
+      parseScheduleRequest({ waypoints: points, mode: "cycling", bikeSpeedKmh }),
+    ).toThrow(/bike/);
+  },
+);

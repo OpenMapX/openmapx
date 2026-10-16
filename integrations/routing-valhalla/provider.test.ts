@@ -241,13 +241,17 @@ describe("transformTrip motorway flag and bearings", () => {
 describe("buildCostingOptions", () => {
   const defaultSpeedTypes = { speed_types: ["freeflow", "constrained", "predicted"] };
 
-  it("returns only the default speed_types when no avoid flags are set (non-motorised costing)", () => {
-    expect(buildCostingOptions({}, "bicycle")).toEqual(defaultSpeedTypes);
+  it("uses trekking surface preferences and default speed sources for cycling", () => {
+    expect(buildCostingOptions({}, "bicycle")).toEqual({
+      avoid_bad_surfaces: 0.5,
+      ...defaultSpeedTypes,
+    });
   });
 
   it("sets use_tolls=0 when avoidTolls is set", () => {
     expect(buildCostingOptions({ avoidTolls: true }, "bicycle")).toEqual({
       use_tolls: 0,
+      avoid_bad_surfaces: 0.5,
       ...defaultSpeedTypes,
     });
   });
@@ -255,7 +259,13 @@ describe("buildCostingOptions", () => {
   it("maps every avoid flag to its Valhalla costing knob", () => {
     expect(
       buildCostingOptions({ avoidHighways: true, avoidTolls: true, avoidFerries: true }, "bicycle"),
-    ).toEqual({ use_highways: 0, use_tolls: 0, use_ferry: 0, ...defaultSpeedTypes });
+    ).toEqual({
+      use_highways: 0,
+      use_tolls: 0,
+      use_ferry: 0,
+      avoid_bad_surfaces: 0.5,
+      ...defaultSpeedTypes,
+    });
   });
 
   it("adds a maneuver penalty for motorised costings only", () => {

@@ -32,12 +32,20 @@ export function useOptimizeRoute() {
       bikeProfile,
       bikeHillPreference,
       bikePreferQuietRoads,
+      bikePreferSmoothSurfaces,
+      bikeSpeedKmh,
     }: OptimizeRouteParams) => {
       const waypointsStr = waypoints.map(([lng, lat]) => `${lng},${lat}`).join(";");
       return apiClient.get<DirectionsResult>(API_ENDPOINTS.directionsOptimize, {
         waypoints: waypointsStr,
         mode,
-        ...bicycleQueryParameters(mode, { bikeProfile, bikeHillPreference, bikePreferQuietRoads }),
+        ...bicycleQueryParameters(mode, {
+          bikeProfile,
+          bikeHillPreference,
+          bikePreferQuietRoads,
+          bikePreferSmoothSurfaces,
+          bikeSpeedKmh,
+        }),
         avoidHighways: String(avoidHighways),
         avoidTolls: String(avoidTolls),
         avoidFerries: String(avoidFerries),

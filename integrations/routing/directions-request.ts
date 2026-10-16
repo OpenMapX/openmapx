@@ -122,6 +122,15 @@ export function parseDirectionsRequest(
 
     const bikeRaw = {
       bikeProfile: query.bikeProfile,
+      bikePreferSmoothSurfaces:
+        query.bikePreferSmoothSurfaces === undefined
+          ? undefined
+          : query.bikePreferSmoothSurfaces === "true"
+            ? true
+            : query.bikePreferSmoothSurfaces === "false"
+              ? false
+              : query.bikePreferSmoothSurfaces,
+      bikeSpeedKmh: query.bikeSpeedKmh === undefined ? undefined : Number(query.bikeSpeedKmh),
       bikeHillPreference: query.bikeHillPreference,
       bikePreferQuietRoads:
         query.bikePreferQuietRoads === undefined

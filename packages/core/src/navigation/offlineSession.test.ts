@@ -489,6 +489,8 @@ it("retains validated cycling preferences and rejects corrupt saved values", () 
         bikeProfile: "gravel",
         bikeHillPreference: "avoid",
         bikePreferQuietRoads: true,
+        bikePreferSmoothSurfaces: true,
+        bikeSpeedKmh: 19.5,
       },
     }),
   );
@@ -496,6 +498,8 @@ it("retains validated cycling preferences and rejects corrupt saved values", () 
     bikeProfile: "gravel",
     bikeHillPreference: "avoid",
     bikePreferQuietRoads: true,
+    bikePreferSmoothSurfaces: true,
+    bikeSpeedKmh: 19.5,
   });
   const corrupt = structuredClone(snapshot);
   Object.assign(corrupt.routeOptions, { bikeProfile: "car" });

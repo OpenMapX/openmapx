@@ -125,3 +125,14 @@ it("falls through for unsupported strong gravel hill avoidance before any HTTP r
   ).rejects.toThrow(/hill/);
   expect(ctx.http.get).not.toHaveBeenCalled();
 });
+
+it.each([{ bikePreferSmoothSurfaces: true }, { bikeSpeedKmh: 19.5 }])(
+  "defers unsupported explicit preferences %j before acquisition",
+  async (options) => {
+    const ctx = context();
+    await expect(
+      createBrouterProvider(ctx, "http://brouter:17777").getRoute(points, "cycling", options),
+    ).rejects.toThrow(/preference/);
+    expect(ctx.http.get).not.toHaveBeenCalled();
+  },
+);

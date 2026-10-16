@@ -9,6 +9,10 @@ function brouterParameters(
 ): Record<string, string | number> {
   const bike = bicycleOptions("cycling", options),
     kind = bike.bikeProfile;
+  // These pinned profiles expose power, not an equivalent cruising-speed model,
+  // and have no common soft surface control. Let the next engine honor the choice.
+  if (bike.bikePreferSmoothSurfaces || bike.bikeSpeedKmh !== undefined)
+    throw new Error("BRouter cannot honor this explicit cycling preference");
   if (kind === "gravel" && options.avoidFerries)
     throw new Error("BRouter gravel profile cannot avoid ferries");
   if (kind === "gravel" && bike.bikeHillPreference === "strongly-avoid")

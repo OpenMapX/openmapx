@@ -175,6 +175,9 @@ export function validateRouteShare(input: unknown): RouteSharePayload | null {
   if (avoidFerries !== undefined) payload.avoidFerries = avoidFerries as boolean;
   if (mode === "cycling") {
     const bike = input as BikeRoutingOptions;
+    if (bike.bikePreferSmoothSurfaces !== undefined)
+      payload.bikePreferSmoothSurfaces = bike.bikePreferSmoothSurfaces;
+    if (bike.bikeSpeedKmh !== undefined) payload.bikeSpeedKmh = bike.bikeSpeedKmh;
     if (bike.bikeProfile !== undefined) payload.bikeProfile = bike.bikeProfile;
     if (bike.bikeHillPreference !== undefined) payload.bikeHillPreference = bike.bikeHillPreference;
     if (bike.bikePreferQuietRoads !== undefined)

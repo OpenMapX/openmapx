@@ -7,6 +7,7 @@ import RadioButtonUncheckedIcon from "@mui/icons-material/RadioButtonUnchecked";
 import Box from "@mui/material/Box";
 import Divider from "@mui/material/Divider";
 import FormControl from "@mui/material/FormControl";
+import FormHelperText from "@mui/material/FormHelperText";
 import InputLabel from "@mui/material/InputLabel";
 import MenuItem from "@mui/material/MenuItem";
 import Select from "@mui/material/Select";
@@ -326,10 +327,18 @@ function CyclingRouteOptions() {
     bikeProfile,
     bikeHillPreference,
     bikePreferQuietRoads,
+    bikePreferSmoothSurfaces,
+    bikeSpeedKmh,
     setBikeProfile,
     setBikeHillPreference,
     setBikePreferQuietRoads,
+    setBikePreferSmoothSurfaces,
+    setBikeSpeedKmh,
   } = useDirectionsStore();
+  const units = useSettingsStore((state) => state.units);
+  const speeds = [
+    ...new Set([10, 15, 18, 20, 25, 30, 35, ...(bikeSpeedKmh === undefined ? [] : [bikeSpeedKmh])]),
+  ].sort((a, b) => a - b);
   const profiles = {
     trekking: "bikeTrekking",
     road: "bikeRoad",
@@ -377,7 +386,37 @@ function CyclingRouteOptions() {
           ))}
         </Select>
       </FormControl>
+      <FormControl fullWidth size="small">
+        <InputLabel id="cycling-speed-label" shrink>
+          {t("bikeCruisingSpeed")}
+        </InputLabel>
+        <Select<number | "">
+          labelId="cycling-speed-label"
+          label={t("bikeCruisingSpeed")}
+          value={bikeSpeedKmh ?? ""}
+          onChange={(event) =>
+            setBikeSpeedKmh(event.target.value === "" ? undefined : Number(event.target.value))
+          }
+          displayEmpty
+          slotProps={{ input: { "aria-describedby": "cycling-speed-hint" } }}
+        >
+          <MenuItem value="">{t("bikeSpeedAutomatic")}</MenuItem>
+          {speeds.map((speed) => (
+            <MenuItem key={speed} value={speed}>
+              {t(units === "imperial" ? "bikeSpeedMph" : "bikeSpeedKmh", {
+                speed: units === "imperial" ? Math.round((speed / 1.609344) * 10) / 10 : speed,
+              })}
+            </MenuItem>
+          ))}
+        </Select>
+        <FormHelperText id="cycling-speed-hint">{t("bikeSpeedHint")}</FormHelperText>
+      </FormControl>
       <Box>
+        <CheckRow
+          label={t("bikeSmoothSurfaces")}
+          checked={bikePreferSmoothSurfaces}
+          onChange={setBikePreferSmoothSurfaces}
+        />
         <CheckRow
           label={t("bikeQuietRoads")}
           checked={bikePreferQuietRoads}

@@ -1208,6 +1208,12 @@
     "bikeGravel": "Gravel bike",
     "bikeMountain": "Mountain bike",
     "bikeQuietRoads": "Prefer quieter roads",
+    "bikeSmoothSurfaces": "Prefer smoother surfaces",
+    "bikeCruisingSpeed": "Cruising speed",
+    "bikeSpeedAutomatic": "Automatic for bike type",
+    "bikeSpeedKmh": "{speed} km/h",
+    "bikeSpeedMph": "{speed} mph",
+    "bikeSpeedHint": "Your riding speed on flat, paved roads. Hills and surfaces affect the estimate.",
     "bikePreferencesHint": "Preferences influence route choice; road conditions and traffic may vary."
   },
   "openingHours": {
