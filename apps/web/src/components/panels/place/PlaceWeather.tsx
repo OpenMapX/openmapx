@@ -60,7 +60,9 @@ export function PlaceWeather({ lat, lng, enabled = true }: Props) {
           {t("pressure")}: {current.pressure} hPa
         </Typography>
       </Box>
+      {/* Weather providers can require a source link directly beside their readings. */}
       <AttributionStrip
+        keepVisibleWithContent
         variant="plain"
         attributions={resolve({ contributors: data.contributors, sourceIds: [data.source] })}
       />

@@ -59,7 +59,9 @@ export function PlaceHeaderWeather({ lat, lng }: Props) {
       <Typography variant="body2" sx={{ color: "text.secondary", whiteSpace: "nowrap" }}>
         {localTime}
       </Typography>
+      {/* Weather providers can require a source link directly beside their readings. */}
       <AttributionStrip
+        keepVisibleWithContent
         variant="plain"
         attributions={resolve({ contributors: data.contributors, sourceIds: [data.source] })}
       />

@@ -1167,6 +1167,10 @@ it("credits scheduled cards, the ordinary mode-button duration and selected deta
   renderPanel();
   expect(screen.getByText("Scheduled first source")).toBeTruthy();
   expect(screen.getByText("Scheduled alternate source")).toBeTruthy();
+  const footer = screen.getByRole("contentinfo", { name: "Data sources" });
+  const modes = screen.getByRole("radiogroup", { name: "directions.travelMode" });
+  expect(modes.compareDocumentPosition(footer) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(screen.getAllByRole("button", { name: "footer.attributions" })).toHaveLength(1);
   // The ordinary duration remains painted on the active mode button.
   expect(screen.getByText("Retained ordinary source")).toBeTruthy();
   fireEvent.click(screen.getAllByText("common.details")[1]);

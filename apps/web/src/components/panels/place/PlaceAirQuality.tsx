@@ -126,6 +126,7 @@ function EvidenceSources({ evidence }: { evidence: AirQualityEvidence }) {
               </Typography>
             )}
             <SectionAttribution
+              keepVisibleWithContent
               attributions={[
                 {
                   sourceId: source.sourceId,

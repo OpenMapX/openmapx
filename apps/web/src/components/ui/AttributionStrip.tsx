@@ -5,14 +5,17 @@ import Link from "@mui/material/Link";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import {
+  type AttributionDetail,
   buildAttributionPresentation,
   buildRuntimeAttributionHtml,
+  mergeAttributionDetails,
   projectAttributionPresentations,
   safeHref,
 } from "@openmapx/core";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import { contributorKey } from "@openmapx/mobility-core/contributors";
 import {
+  type AttributionLogo,
   type AttributionSurface,
   DISPLAY_LICENSE_SCOPES,
   formatLicensing,
@@ -20,8 +23,8 @@ import {
 import { useTranslations } from "next-intl";
 import { type JSX, useState } from "react";
 import { AttributionDetails } from "./AttributionDetails";
-import { useGroupedAttributionDetails } from "./AttributionDetailsGroup";
 import { AttributionNotices } from "./AttributionNotices";
+import { useGroupedAttributionDetails } from "./attributionGroupContext";
 
 /**
  * Visual variant for the AttributionStrip.
@@ -56,6 +59,12 @@ export interface AttributionStripProps {
   provenanceDisplay?: "chips" | "details";
   /** The actual context of the contributed data; image policies remain image-bound. */
   surface?: AttributionSurface;
+  /** Keep required notices beside a widget when its provider requires adjacency. */
+  keepVisibleWithContent?: boolean;
+  /** Captured panel details retained independently of deduplicated visible notices. */
+  additionalDetails?: readonly AttributionDetail[];
+  /** Required branding retained by a grouped dialog when a widget stays adjacent. */
+  additionalLogos?: readonly AttributionLogo[];
   /** Contextual contrast, for example white credits on an image. */
   color?: string;
 }
@@ -118,6 +127,9 @@ export function AttributionStrip({
   maxVisible,
   provenanceDisplay = "chips",
   surface = "content",
+  keepVisibleWithContent = false,
+  additionalDetails = [],
+  additionalLogos = [],
   color,
 }: AttributionStripProps): JSX.Element | null {
   const tc = useTranslations("common");
@@ -132,15 +144,27 @@ export function AttributionStrip({
     : { details: [], visible: [] };
   const logos = group.visible.flatMap((notice) => notice.logos);
   const grouped = useGroupedAttributionDetails(
-    { entries: group.details, logos },
+    {
+      attributions: keepVisibleWithContent
+        ? items.filter((_, index) => !presentations[index]?.visibleHtml)
+        : items,
+      entries: group.details,
+      logos,
+    },
     surface === "content",
   );
-  if (items.length === 0) return null;
+  if (
+    (items.length === 0 && additionalDetails.length === 0) ||
+    (grouped === "footer" && !keepVisibleWithContent)
+  )
+    return null;
+  const showOptional =
+    provenanceDisplay === "chips" && !(grouped === "footer" && keepVisibleWithContent);
   const eligible = items.filter((_, index) => !presentations[index]?.visibleHtml);
   const collapsible =
-    provenanceDisplay === "chips" && typeof maxVisible === "number" && eligible.length > maxVisible;
+    showOptional && typeof maxVisible === "number" && eligible.length > maxVisible;
   const selected = new Set(
-    provenanceDisplay === "details"
+    !showOptional
       ? []
       : collapsible && !expanded
         ? eligible.slice(0, Math.max(0, maxVisible))
@@ -312,7 +336,12 @@ export function AttributionStrip({
           {expanded ? tc("showLess") : tc("showMore", { count: hiddenCount })}
         </Typography>
       )}
-      {!grouped && <AttributionDetails entries={group.details} logos={logos} />}
+      {!grouped && (
+        <AttributionDetails
+          entries={mergeAttributionDetails([...group.details, ...additionalDetails])}
+          logos={[...logos, ...additionalLogos]}
+        />
+      )}
     </Box>
   );
 }

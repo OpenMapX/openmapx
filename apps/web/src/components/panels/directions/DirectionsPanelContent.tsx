@@ -92,6 +92,7 @@ import { WaypointList } from "@/components/panels/directions/WaypointList";
 import { WaypointScheduleDialog } from "@/components/panels/directions/WaypointScheduleDialog";
 import { useExpandOnBackgroundTap, useMobileSheet } from "@/components/panels/sheet/sheetState";
 import { AutocompleteDropdown } from "@/components/search/AutocompleteDropdown";
+import { AttributionDetailsGroup } from "@/components/ui/AttributionDetailsGroup";
 import { AttributionStrip } from "@/components/ui/AttributionStrip";
 import { useMapOptional } from "@/integration-api/map/MapContext";
 import { BRAND } from "@/integration-api/runtime/theme";
@@ -1171,11 +1172,6 @@ export function DirectionsPanelContent() {
           );
         })}
       </Box>
-      <AttributionStrip
-        attributions={modeDurationAttributions}
-        variant="plain"
-        provenanceDisplay="details"
-      />
       {/* Driving sub-mode: normal route vs. EV charge planning. EV is a subtype
           of driving, not its own top-level mode, so it lives here rather than in
           the mode row. */}
@@ -1411,393 +1407,400 @@ export function DirectionsPanelContent() {
             gets its own vehicle inputs via EvVehiclePanel above). */}
 
         {/* Route results */}
-        {isFlightMode ? (
-          <FlightPanel />
-        ) : isRideMode ? (
-          <>
-            {allWaypointsFilled &&
-              (isLoading || (isError && directionsQuery.isFetching) || (!data && !isError) ? (
+        <AttributionDetailsGroup placement="footer" label={tc("dataSources")}>
+          <AttributionStrip attributions={modeDurationAttributions} provenanceDisplay="details" />
+          {isFlightMode ? (
+            <FlightPanel />
+          ) : isRideMode ? (
+            <>
+              {allWaypointsFilled &&
+                (isLoading || (isError && directionsQuery.isFetching) || (!data && !isError) ? (
+                  <Box sx={{ display: "flex", justifyContent: "center", py: 4 }}>
+                    <CircularProgress size={28} sx={{ color: BRAND }} />
+                  </Box>
+                ) : isError ? (
+                  <RouteRecovery
+                    failed
+                    error={directionsQuery.error}
+                    onRetry={() => void directionsQuery.refetch()}
+                    {...recoveryActions}
+                  />
+                ) : data?.routes.length === 0 ? (
+                  <RouteRecovery failed={false} {...recoveryActions} />
+                ) : null)}
+              <RidePanel
+                route={
+                  !isError && data?.routes[0]
+                    ? {
+                        distanceMeters: data.routes[0].distance,
+                        durationSeconds: data.routes[0].duration,
+                      }
+                    : undefined
+                }
+              />
+            </>
+          ) : !allWaypointsFilled ? (
+            <Box sx={{ px: 2, py: 3, textAlign: "center" }}>
+              <Typography
+                variant="body2"
+                sx={{
+                  color: "text.secondary",
+                }}
+              >
+                {t("chooseOrigin")}
+              </Typography>
+            </Box>
+          ) : isEvMode ? (
+            <>
+              <EvVehiclePanel />
+              {!evRequest ? null : evLoading ||
+                (evIsError && evQuery.isFetching) ||
+                (!evData && !evIsError) ? (
                 <Box sx={{ display: "flex", justifyContent: "center", py: 4 }}>
                   <CircularProgress size={28} sx={{ color: BRAND }} />
                 </Box>
-              ) : isError ? (
+              ) : evIsError ? (
                 <RouteRecovery
                   failed
-                  error={directionsQuery.error}
-                  onRetry={() => void directionsQuery.refetch()}
+                  error={evQuery.error}
+                  onRetry={() => void evQuery.refetch()}
                   {...recoveryActions}
                 />
-              ) : data?.routes.length === 0 ? (
+              ) : evData?.routes.length === 0 ? (
                 <RouteRecovery failed={false} {...recoveryActions} />
-              ) : null)}
-            <RidePanel
-              route={
-                !isError && data?.routes[0]
-                  ? {
-                      distanceMeters: data.routes[0].distance,
-                      durationSeconds: data.routes[0].duration,
-                    }
-                  : undefined
-              }
-            />
-          </>
-        ) : !allWaypointsFilled ? (
-          <Box sx={{ px: 2, py: 3, textAlign: "center" }}>
-            <Typography
-              variant="body2"
-              sx={{
-                color: "text.secondary",
-              }}
-            >
-              {t("chooseOrigin")}
-            </Typography>
-          </Box>
-        ) : isEvMode ? (
-          <>
-            <EvVehiclePanel />
-            {!evRequest ? null : evLoading ||
-              (evIsError && evQuery.isFetching) ||
-              (!evData && !evIsError) ? (
+              ) : evData ? (
+                <EvPlanCard
+                  result={evData}
+                  onRetryWithoutNetworkRestriction={() => setEvForceNonExclusive(true)}
+                />
+              ) : null}
+            </>
+          ) : transitIsChained ? (
+            transitChainQuery.isLoading ||
+            (transitChainQuery.isError && transitChainQuery.isFetching) ||
+            (!transitChainData && !transitChainQuery.isError) ? (
               <Box sx={{ display: "flex", justifyContent: "center", py: 4 }}>
                 <CircularProgress size={28} sx={{ color: BRAND }} />
               </Box>
-            ) : evIsError ? (
+            ) : transitChainQuery.isError ? (
               <RouteRecovery
                 failed
-                error={evQuery.error}
-                onRetry={() => void evQuery.refetch()}
+                error={transitChainQuery.error}
+                onRetry={() => void transitChainQuery.refetch()}
                 {...recoveryActions}
               />
-            ) : evData?.routes.length === 0 ? (
+            ) : transitChainData ? (
+              <>
+                {transitChainData.segments.length === 0 && (
+                  <RouteRecovery failed={false} {...recoveryActions} />
+                )}
+                <TransitChainView
+                  plan={transitChainData}
+                  waypointLabels={waypoints.map((wp) => wp.label)}
+                />
+              </>
+            ) : null
+          ) : isTransitMode ? (
+            transitLoading ||
+            (transitError && transitPlanQuery.isFetching) ||
+            (!transitPlanData && !transitError) ? (
+              <Box sx={{ display: "flex", justifyContent: "center", py: 4 }}>
+                <CircularProgress size={28} sx={{ color: BRAND }} />
+              </Box>
+            ) : transitError ? (
+              <RouteRecovery
+                failed
+                error={transitPlanQuery.error}
+                onRetry={() => void transitPlanQuery.refetch()}
+                {...recoveryActions}
+              />
+            ) : transitPlanData?.itineraries.length === 0 && !transitPageToken ? (
               <RouteRecovery failed={false} {...recoveryActions} />
-            ) : evData ? (
-              <EvPlanCard
-                result={evData}
-                onRetryWithoutNetworkRestriction={() => setEvForceNonExclusive(true)}
-              />
-            ) : null}
-          </>
-        ) : transitIsChained ? (
-          transitChainQuery.isLoading ||
-          (transitChainQuery.isError && transitChainQuery.isFetching) ||
-          (!transitChainData && !transitChainQuery.isError) ? (
-            <Box sx={{ display: "flex", justifyContent: "center", py: 4 }}>
-              <CircularProgress size={28} sx={{ color: BRAND }} />
-            </Box>
-          ) : transitChainQuery.isError ? (
-            <RouteRecovery
-              failed
-              error={transitChainQuery.error}
-              onRetry={() => void transitChainQuery.refetch()}
-              {...recoveryActions}
-            />
-          ) : transitChainData ? (
-            <>
-              {transitChainData.segments.length === 0 && (
-                <RouteRecovery failed={false} {...recoveryActions} />
-              )}
-              <TransitChainView
-                plan={transitChainData}
-                waypointLabels={waypoints.map((wp) => wp.label)}
-              />
-            </>
-          ) : null
-        ) : isTransitMode ? (
-          transitLoading ||
-          (transitError && transitPlanQuery.isFetching) ||
-          (!transitPlanData && !transitError) ? (
-            <Box sx={{ display: "flex", justifyContent: "center", py: 4 }}>
-              <CircularProgress size={28} sx={{ color: BRAND }} />
-            </Box>
-          ) : transitError ? (
-            <RouteRecovery
-              failed
-              error={transitPlanQuery.error}
-              onRetry={() => void transitPlanQuery.refetch()}
-              {...recoveryActions}
-            />
-          ) : transitPlanData?.itineraries.length === 0 && !transitPageToken ? (
-            <RouteRecovery failed={false} {...recoveryActions} />
-          ) : transitItineraries.length === 0 ? (
-            <RouteRecovery failed={false} {...recoveryActions} />
-          ) : (
-            <>
-              {transitItineraries.map((itin, i) => (
-                // biome-ignore lint/suspicious/noArrayIndexKey: itineraries have no stable id
-                <Box key={i}>
-                  <TransitItineraryCard
-                    itinerary={itin}
-                    active={i === activeItineraryIndex}
-                    isLowestCo2={lowestCo2Grams !== null && itin.co2Grams === lowestCo2Grams}
-                    replanOptions={transitReplanOptions}
-                    originTimeZone={originTimeZone}
-                    destinationTimeZone={destinationTimeZone}
-                    onSelect={() => {
-                      setActiveItineraryIndex(i);
-                      snapTo("peek");
-                    }}
-                    onDetails={() => setTransitDetailsIndex(i)}
-                    onRefreshed={(updated, changed, fallbackOccurred) => {
-                      const current = useDirectionsStore.getState().transitItineraries;
-                      setTransitItineraries(
-                        current.map((candidate, index) => (index === i ? updated : candidate)),
-                      );
-                      if (changed || fallbackOccurred) {
-                        setSnackbar(
-                          fallbackOccurred ? t("connectionReplanned") : t("connectionUpdated"),
+            ) : transitItineraries.length === 0 ? (
+              <RouteRecovery failed={false} {...recoveryActions} />
+            ) : (
+              <>
+                {transitItineraries.map((itin, i) => (
+                  // biome-ignore lint/suspicious/noArrayIndexKey: itineraries have no stable id
+                  <Box key={i}>
+                    <TransitItineraryCard
+                      itinerary={itin}
+                      active={i === activeItineraryIndex}
+                      isLowestCo2={lowestCo2Grams !== null && itin.co2Grams === lowestCo2Grams}
+                      replanOptions={transitReplanOptions}
+                      originTimeZone={originTimeZone}
+                      destinationTimeZone={destinationTimeZone}
+                      onSelect={() => {
+                        setActiveItineraryIndex(i);
+                        snapTo("peek");
+                      }}
+                      onDetails={() => setTransitDetailsIndex(i)}
+                      onRefreshed={(updated, changed, fallbackOccurred) => {
+                        const current = useDirectionsStore.getState().transitItineraries;
+                        setTransitItineraries(
+                          current.map((candidate, index) => (index === i ? updated : candidate)),
                         );
-                      }
+                        if (changed || fallbackOccurred) {
+                          setSnackbar(
+                            fallbackOccurred ? t("connectionReplanned") : t("connectionUpdated"),
+                          );
+                        }
+                      }}
+                    />
+                    {i < transitItineraries.length - 1 && <Divider />}
+                  </Box>
+                ))}
+                {destinationOffsetLabel && (
+                  <Typography sx={{ fontSize: 11, color: "text.secondary", px: 2, pb: 1 }}>
+                    {t("arrivalInDestinationTime")}
+                  </Typography>
+                )}
+                {(transitPlanData?.previousPageToken || transitPlanData?.nextPageToken) && (
+                  <Box sx={{ px: 2, py: 1, borderTop: "1px solid", borderColor: "divider" }}>
+                    <Box sx={{ display: "flex", justifyContent: "space-between", gap: 1 }}>
+                      <Button
+                        size="small"
+                        disabled={!transitPlanData.previousPageToken || transitLoading}
+                        onClick={() => {
+                          setTransitPageDirection("previous");
+                          setTransitPageToken(transitPlanData.previousPageToken);
+                        }}
+                      >
+                        {t("earlierConnections")}
+                      </Button>
+                      <Button
+                        size="small"
+                        disabled={!transitPlanData.nextPageToken || transitLoading}
+                        onClick={() => {
+                          setTransitPageDirection("next");
+                          setTransitPageToken(transitPlanData.nextPageToken);
+                        }}
+                      >
+                        {t("laterConnections")}
+                      </Button>
+                    </Box>
+                  </Box>
+                )}
+                <AttributionStrip
+                  attributions={transitPlanAttributions}
+                  variant="panel-header"
+                  label={tc("dataSources")}
+                />
+              </>
+            )
+          ) : scheduleRequest &&
+            (scheduledQuery.isLoading || (scheduledQuery.isError && scheduledQuery.isFetching)) ? (
+            <Box sx={{ display: "flex", justifyContent: "center", py: 4 }}>
+              <CircularProgress size={28} sx={{ color: BRAND }} />
+            </Box>
+          ) : scheduleRequest && scheduledQuery.isError ? (
+            <RouteRecovery
+              failed
+              error={scheduledQuery.error}
+              onRetry={() => void scheduledQuery.refetch()}
+              {...recoveryActions}
+            />
+          ) : scheduleRequest && scheduledData?.routes.length === 0 ? (
+            <RouteRecovery failed={false} {...recoveryActions} />
+          ) : scheduleRequest && !scheduledData ? (
+            <Box sx={{ display: "flex", justifyContent: "center", py: 4 }}>
+              <CircularProgress size={28} sx={{ color: BRAND }} />
+            </Box>
+          ) : !scheduleRequest &&
+            (isLoading || (isError && directionsQuery.isFetching) || (!data && !isError)) ? (
+            <Box sx={{ display: "flex", justifyContent: "center", py: 4 }}>
+              <CircularProgress size={28} sx={{ color: BRAND }} />
+            </Box>
+          ) : !scheduleRequest && isError ? (
+            <RouteRecovery
+              failed
+              error={directionsQuery.error}
+              onRetry={() => void directionsQuery.refetch()}
+              {...recoveryActions}
+            />
+          ) : !scheduleRequest && hasMultipleStops && data?.routes[0] ? (
+            // Multi-stop: single route with leg summary
+            <>
+              <Box>
+                <Box
+                  sx={{
+                    px: 2,
+                    py: 1.5,
+                    cursor: "pointer",
+                    borderLeft: `4px solid ${BRAND}`,
+                    bgcolor: "rgba(0,123,139,0.04)",
+                    "&:hover": { bgcolor: "rgba(0,123,139,0.07)" },
+                  }}
+                  onClick={() => setDetailsRouteIndex(0)}
+                >
+                  <Box
+                    sx={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "baseline",
                     }}
-                  />
-                  {i < transitItineraries.length - 1 && <Divider />}
-                </Box>
-              ))}
-              {destinationOffsetLabel && (
-                <Typography sx={{ fontSize: 11, color: "text.secondary", px: 2, pb: 1 }}>
-                  {t("arrivalInDestinationTime")}
-                </Typography>
-              )}
-              {(transitPlanData?.previousPageToken || transitPlanData?.nextPageToken) && (
-                <Box sx={{ px: 2, py: 1, borderTop: "1px solid", borderColor: "divider" }}>
-                  <Box sx={{ display: "flex", justifyContent: "space-between", gap: 1 }}>
-                    <Button
-                      size="small"
-                      disabled={!transitPlanData.previousPageToken || transitLoading}
-                      onClick={() => {
-                        setTransitPageDirection("previous");
-                        setTransitPageToken(transitPlanData.previousPageToken);
+                  >
+                    <Typography
+                      variant="body2"
+                      sx={{
+                        fontWeight: 600,
+                        color: "text.primary",
                       }}
                     >
-                      {t("earlierConnections")}
-                    </Button>
-                    <Button
-                      size="small"
-                      disabled={!transitPlanData.nextPageToken || transitLoading}
-                      onClick={() => {
-                        setTransitPageDirection("next");
-                        setTransitPageToken(transitPlanData.nextPageToken);
+                      {formatDuration(data.routes[0].duration)}
+                    </Typography>
+                    <Typography
+                      variant="body2"
+                      sx={{
+                        color: "text.secondary",
                       }}
                     >
-                      {t("laterConnections")}
-                    </Button>
+                      {units === "imperial"
+                        ? `${(data.routes[0].distance / 1609.34).toFixed(1)} mi`
+                        : formatDistance(data.routes[0].distance)}
+                    </Typography>
+                  </Box>
+                  {data.routes[0].legs.length > 1 && (
+                    <Box sx={{ mt: 1 }}>
+                      {data.routes[0].legs.map((leg, i) => {
+                        const fromLabel = waypoints[i]?.label || t("origin");
+                        const toLabel = waypoints[i + 1]?.label || t("destination");
+                        return (
+                          <Typography
+                            // biome-ignore lint/suspicious/noArrayIndexKey: legs have no stable id
+                            key={i}
+                            variant="caption"
+                            sx={{
+                              color: "text.secondary",
+                              display: "block",
+                              lineHeight: 1.6,
+                            }}
+                          >
+                            {fromLabel}→ {toLabel}
+                            {" · "}
+                            {formatDuration(leg.duration)}
+                            {" · "}
+                            {units === "imperial"
+                              ? `${(leg.distance / 1609.34).toFixed(1)} mi`
+                              : formatDistance(leg.distance)}
+                          </Typography>
+                        );
+                      })}
+                    </Box>
+                  )}
+                  <Box sx={{ mt: 0.5, ml: -1.5 }}>
+                    <Typography
+                      component="span"
+                      variant="caption"
+                      sx={{
+                        color: BRAND,
+                        cursor: "pointer",
+                        fontWeight: 500,
+                        px: 1.5,
+                        py: 0.75,
+                        borderRadius: 99,
+                        "&:hover": { bgcolor: `${BRAND}18` },
+                        transition: "background-color 0.15s",
+                      }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setDetailsRouteIndex(0);
+                      }}
+                    >
+                      {tc("details")}
+                    </Typography>
                   </Box>
                 </Box>
-              )}
+              </Box>
               <AttributionStrip
-                attributions={transitPlanAttributions}
+                attributions={routingAttributions}
                 variant="panel-header"
                 label={tc("dataSources")}
               />
             </>
-          )
-        ) : scheduleRequest &&
-          (scheduledQuery.isLoading || (scheduledQuery.isError && scheduledQuery.isFetching)) ? (
-          <Box sx={{ display: "flex", justifyContent: "center", py: 4 }}>
-            <CircularProgress size={28} sx={{ color: BRAND }} />
-          </Box>
-        ) : scheduleRequest && scheduledQuery.isError ? (
-          <RouteRecovery
-            failed
-            error={scheduledQuery.error}
-            onRetry={() => void scheduledQuery.refetch()}
-            {...recoveryActions}
-          />
-        ) : scheduleRequest && scheduledData?.routes.length === 0 ? (
-          <RouteRecovery failed={false} {...recoveryActions} />
-        ) : scheduleRequest && !scheduledData ? (
-          <Box sx={{ display: "flex", justifyContent: "center", py: 4 }}>
-            <CircularProgress size={28} sx={{ color: BRAND }} />
-          </Box>
-        ) : !scheduleRequest &&
-          (isLoading || (isError && directionsQuery.isFetching) || (!data && !isError)) ? (
-          <Box sx={{ display: "flex", justifyContent: "center", py: 4 }}>
-            <CircularProgress size={28} sx={{ color: BRAND }} />
-          </Box>
-        ) : !scheduleRequest && isError ? (
-          <RouteRecovery
-            failed
-            error={directionsQuery.error}
-            onRetry={() => void directionsQuery.refetch()}
-            {...recoveryActions}
-          />
-        ) : !scheduleRequest && hasMultipleStops && data?.routes[0] ? (
-          // Multi-stop: single route with leg summary
-          <>
-            <Box>
-              <Box
-                sx={{
-                  px: 2,
-                  py: 1.5,
-                  cursor: "pointer",
-                  borderLeft: `4px solid ${BRAND}`,
-                  bgcolor: "rgba(0,123,139,0.04)",
-                  "&:hover": { bgcolor: "rgba(0,123,139,0.07)" },
-                }}
-                onClick={() => setDetailsRouteIndex(0)}
-              >
-                <Box
-                  sx={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}
-                >
-                  <Typography
-                    variant="body2"
-                    sx={{
-                      fontWeight: 600,
-                      color: "text.primary",
-                    }}
-                  >
-                    {formatDuration(data.routes[0].duration)}
-                  </Typography>
-                  <Typography
-                    variant="body2"
-                    sx={{
-                      color: "text.secondary",
-                    }}
-                  >
-                    {units === "imperial"
-                      ? `${(data.routes[0].distance / 1609.34).toFixed(1)} mi`
-                      : formatDistance(data.routes[0].distance)}
-                  </Typography>
-                </Box>
-                {data.routes[0].legs.length > 1 && (
-                  <Box sx={{ mt: 1 }}>
-                    {data.routes[0].legs.map((leg, i) => {
-                      const fromLabel = waypoints[i]?.label || t("origin");
-                      const toLabel = waypoints[i + 1]?.label || t("destination");
-                      return (
-                        <Typography
-                          // biome-ignore lint/suspicious/noArrayIndexKey: legs have no stable id
-                          key={i}
-                          variant="caption"
-                          sx={{
-                            color: "text.secondary",
-                            display: "block",
-                            lineHeight: 1.6,
-                          }}
-                        >
-                          {fromLabel}→ {toLabel}
-                          {" · "}
-                          {formatDuration(leg.duration)}
-                          {" · "}
-                          {units === "imperial"
-                            ? `${(leg.distance / 1609.34).toFixed(1)} mi`
-                            : formatDistance(leg.distance)}
-                        </Typography>
-                      );
-                    })}
-                  </Box>
-                )}
-                <Box sx={{ mt: 0.5, ml: -1.5 }}>
-                  <Typography
-                    component="span"
-                    variant="caption"
-                    sx={{
-                      color: BRAND,
-                      cursor: "pointer",
-                      fontWeight: 500,
-                      px: 1.5,
-                      py: 0.75,
-                      borderRadius: 99,
-                      "&:hover": { bgcolor: `${BRAND}18` },
-                      transition: "background-color 0.15s",
-                    }}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setDetailsRouteIndex(0);
-                    }}
-                  >
-                    {tc("details")}
-                  </Typography>
-                </Box>
-              </Box>
-            </Box>
-            <AttributionStrip
-              attributions={routingAttributions}
-              variant="panel-header"
-              label={tc("dataSources")}
-            />
-          </>
-        ) : scheduledData ? (
-          <>
-            {scheduledData.routes.map((route, i) => (
-              // biome-ignore lint/suspicious/noArrayIndexKey: routes have no stable id
-              <Box key={i}>
-                <RouteCard
-                  route={route}
-                  index={i}
-                  active
-                  selectionKind="peek"
-                  isFastest={i === fastestRouteIndex}
-                  onSelect={() => snapTo("peek")}
-                  onDetails={() => setDetailsRouteIndex(i)}
-                  units={units}
-                  arrivalContext={{
-                    kind: "scheduled",
-                    arrival: scheduledData.schedule.arrival,
-                    destinationTimeZone: destination
-                      ? timeZoneAt(destination[1], destination[0])
-                      : null,
-                  }}
-                  provider={scheduledData.provider}
-                  roadConditionImpact={scheduledData.roadConditionImpact}
-                  impact={routeImpacts[i]}
-                  impactUnavailableReason={routeImpactUnavailableReason}
-                  vehicles={impactVehicles}
-                  onUpdateAssumptions={handleUpdateAssumptions}
-                />
-              </Box>
-            ))}
-            <Divider />
-            <TripScheduleCard
-              schedule={scheduledData.schedule}
-              fidelity={scheduledData.fidelity}
-              warnings={scheduledData.warnings}
-              waypointLabels={waypoints.map((wp) => wp.label)}
-            />
-            <AttributionStrip
-              attributions={routingAttributions}
-              variant="panel-header"
-              label={tc("dataSources")}
-            />
-          </>
-        ) : !scheduleRequest && data?.routes.length ? (
-          <>
-            <Box role="radiogroup" aria-label={t("routes")}>
-              {data.routes.map((route, i) => (
+          ) : scheduledData ? (
+            <>
+              {scheduledData.routes.map((route, i) => (
                 // biome-ignore lint/suspicious/noArrayIndexKey: routes have no stable id
                 <Box key={i}>
                   <RouteCard
                     route={route}
                     index={i}
-                    active={i === activeRouteIndex}
+                    active
+                    selectionKind="peek"
                     isFastest={i === fastestRouteIndex}
-                    onSelect={() => {
-                      setActiveRouteIndex(i);
-                      snapTo("peek");
-                    }}
+                    onSelect={() => snapTo("peek")}
                     onDetails={() => setDetailsRouteIndex(i)}
                     units={units}
-                    arrivalContext={arrivalContext}
-                    alternatives={data.routes.filter((_, idx) => idx !== i)}
-                    provider={data.provider}
-                    roadConditionImpact={data.roadConditionImpact}
+                    arrivalContext={{
+                      kind: "scheduled",
+                      arrival: scheduledData.schedule.arrival,
+                      destinationTimeZone: destination
+                        ? timeZoneAt(destination[1], destination[0])
+                        : null,
+                    }}
+                    provider={scheduledData.provider}
+                    roadConditionImpact={scheduledData.roadConditionImpact}
                     impact={routeImpacts[i]}
                     impactUnavailableReason={routeImpactUnavailableReason}
                     vehicles={impactVehicles}
                     onUpdateAssumptions={handleUpdateAssumptions}
                   />
-                  {i < data.routes.length - 1 && <Divider />}
                 </Box>
               ))}
-            </Box>
-            <AttributionStrip
-              attributions={routingAttributions}
-              variant="panel-header"
-              label={tc("dataSources")}
-            />
-          </>
-        ) : !scheduleRequest && data ? (
-          <RouteRecovery failed={false} {...recoveryActions} />
-        ) : null}
+              <Divider />
+              <TripScheduleCard
+                schedule={scheduledData.schedule}
+                fidelity={scheduledData.fidelity}
+                warnings={scheduledData.warnings}
+                waypointLabels={waypoints.map((wp) => wp.label)}
+              />
+              <AttributionStrip
+                attributions={routingAttributions}
+                variant="panel-header"
+                label={tc("dataSources")}
+              />
+            </>
+          ) : !scheduleRequest && data?.routes.length ? (
+            <>
+              <Box role="radiogroup" aria-label={t("routes")}>
+                {data.routes.map((route, i) => (
+                  // biome-ignore lint/suspicious/noArrayIndexKey: routes have no stable id
+                  <Box key={i}>
+                    <RouteCard
+                      route={route}
+                      index={i}
+                      active={i === activeRouteIndex}
+                      isFastest={i === fastestRouteIndex}
+                      onSelect={() => {
+                        setActiveRouteIndex(i);
+                        snapTo("peek");
+                      }}
+                      onDetails={() => setDetailsRouteIndex(i)}
+                      units={units}
+                      arrivalContext={arrivalContext}
+                      alternatives={data.routes.filter((_, idx) => idx !== i)}
+                      provider={data.provider}
+                      roadConditionImpact={data.roadConditionImpact}
+                      impact={routeImpacts[i]}
+                      impactUnavailableReason={routeImpactUnavailableReason}
+                      vehicles={impactVehicles}
+                      onUpdateAssumptions={handleUpdateAssumptions}
+                    />
+                    {i < data.routes.length - 1 && <Divider />}
+                  </Box>
+                ))}
+              </Box>
+              <AttributionStrip
+                attributions={routingAttributions}
+                variant="panel-header"
+                label={tc("dataSources")}
+              />
+            </>
+          ) : !scheduleRequest && data ? (
+            <RouteRecovery failed={false} {...recoveryActions} />
+          ) : null}
+        </AttributionDetailsGroup>
 
         {/* Suggestions overlay */}
         {showSuggestions && (

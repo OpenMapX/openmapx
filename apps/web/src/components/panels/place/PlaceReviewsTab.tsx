@@ -17,6 +17,7 @@ import { AuthDialog } from "@/components/auth/AuthDialog";
 import { MangroveSetupWizard } from "@/components/auth/MangroveSetupWizard";
 import { MangroveUnlockDialog } from "@/components/auth/MangroveUnlockDialog";
 import { AttributionStrip } from "@/components/ui/AttributionStrip";
+import { useAttributionGroupPlacement } from "@/components/ui/attributionGroupContext";
 import { DeleteReviewDialog } from "./reviews/DeleteReviewDialog";
 import { ReportAbuseDialog } from "./reviews/ReportAbuseDialog";
 import { ReviewAggregate } from "./reviews/ReviewAggregate";
@@ -35,6 +36,7 @@ interface Props {
 }
 
 export function PlaceReviewsTab({ place }: Props) {
+  const creditPlacement = useAttributionGroupPlacement();
   const t = useTranslations("place");
   const [lng, lat] = place.coordinates;
   const { data: session } = useSession();
@@ -200,7 +202,7 @@ export function PlaceReviewsTab({ place }: Props) {
       )}
       {reviewAttributions.length > 0 && (
         <>
-          <Divider sx={{ mt: 2, mb: 1 }} />
+          {creditPlacement !== "footer" && <Divider sx={{ mt: 2, mb: 1 }} />}
           <Box sx={{ display: "flex", justifyContent: "center" }}>
             <AttributionStrip attributions={reviewAttributions} variant="inline" />
           </Box>

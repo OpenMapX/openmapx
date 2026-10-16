@@ -58,7 +58,7 @@ export function PlaceMarineWeatherContent({ data }: { data: MarineWeatherRespons
         </Box>
       )}
 
-      <SectionAttribution attributions={data.contributors ?? []} />
+      <SectionAttribution attributions={data.contributors ?? []} keepVisibleWithContent />
     </Box>
   );
 }

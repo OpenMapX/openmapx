@@ -524,6 +524,9 @@ describe("persistent header attribution", () => {
     aggregateState.data = { stars: 1.25, count: 1, contributors: [receipt("Mangrove capture")] };
     renderAtDetent("mid", headerPlace);
     fireEvent.click(screen.getByRole("tab", { name: "info" }));
+    const footer = screen.getByRole("contentinfo", { name: "Data sources" });
+    expect(footer.closest("[data-omx-peek]")).toBeNull();
+    expect(screen.getAllByRole("button", { name: "attributions" })).toHaveLength(1);
     fireEvent.click(screen.getByRole("button", { name: "attributions" }));
     const dialog = screen.getByRole("dialog");
     for (const name of ["Name supplier", "Category supplier", "Hours supplier", "Mangrove capture"])

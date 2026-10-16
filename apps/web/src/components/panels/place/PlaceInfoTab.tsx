@@ -23,6 +23,7 @@ import {
 import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { AttributionStrip } from "@/components/ui/AttributionStrip";
+import { useAttributionGroupPlacement } from "@/components/ui/attributionGroupContext";
 import { humanizeOsmTagValue } from "@/lib/humanizeOsmTagValue";
 import { buildExternalRefs, type ExternalRef } from "./externalIdLinks";
 import { getOverviewConsumedKeys } from "./PlaceTagDetails";
@@ -274,6 +275,7 @@ function ExternalRefRow({ ref }: { ref: ExternalRef }) {
 }
 
 export function PlaceInfoTab({ place, isLoading }: Props) {
+  const creditPlacement = useAttributionGroupPlacement();
   const t = useTranslations("place");
   const [rawTagsExpanded, setRawTagsExpanded] = useState(false);
   const infoDescription = place.wikipediaExtract ?? place.description;
@@ -296,6 +298,7 @@ export function PlaceInfoTab({ place, isLoading }: Props) {
       contributorsForField(place, place.ids[ref.scheme] ? `ids.${ref.scheme}` : "coordinates"),
     ),
   );
+  const hasInlineCredits = placeAttributions.length > 0 && creditPlacement !== "footer";
   const hasAnyContent =
     hasDescription || hasFacts || hasOsmTags || hasExternalRefs || placeAttributions.length > 0;
 
@@ -452,7 +455,8 @@ export function PlaceInfoTab({ place, isLoading }: Props) {
       )}
       {placeAttributions.length > 0 && (
         <>
-          {(hasDescription || hasFacts || osmGroups.length > 0 || hasExternalRefs) && <Divider />}
+          {hasInlineCredits &&
+            (hasDescription || hasFacts || osmGroups.length > 0 || hasExternalRefs) && <Divider />}
           <AttributionStrip
             attributions={placeAttributions}
             variant="panel-header"
@@ -467,7 +471,7 @@ export function PlaceInfoTab({ place, isLoading }: Props) {
             hasFacts ||
             osmGroups.length > 0 ||
             hasExternalRefs ||
-            placeAttributions.length > 0) && <Divider />}
+            hasInlineCredits) && <Divider />}
           <Box
             component="button"
             type="button"

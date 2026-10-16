@@ -365,7 +365,7 @@ function PlaceDetailContentInner({ place, isLoading, onClose, clearSearchBar = f
   const titleSx = { fontWeight: 600, pr: onClose && !showHeaderWeather ? 4 : 0 };
 
   return (
-    <AttributionDetailsGroup>
+    <AttributionDetailsGroup placement="footer">
       {/* Header photo with "View photos" — hidden at peek so the collapsed
           sheet shows the marked [data-omx-peek] subtree (title + chips)
           instead of a cropped slice of the photo. The photo sits ABOVE that
