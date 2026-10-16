@@ -659,3 +659,77 @@ it("credits the actual name label and adds summary ownership only after its zoom
     vi.useRealTimers();
   }
 });
+
+it("credits the status supplier on a visible track when its endpoint is offscreen", () => {
+  vi.useFakeTimers();
+  fake.state.zoom = 12;
+  useMapAttributionStore.setState({ byLayer: {} });
+  const previous = results[0];
+  const credit = (sourceId: string) => [{ sourceId, name: sourceId }];
+  const row = {
+    id: "track",
+    name: "Vehicle",
+    source: "sample",
+    variant: "plowing",
+    coordinates: [8, 50],
+    status: "non-operational",
+    track: [
+      [7, 49],
+      [8, 50],
+    ],
+    contributors: credit("unused-record"),
+    fieldContributors: {
+      track: credit("track supplier"),
+      variant: credit("variant supplier"),
+      status: credit("status supplier"),
+      coordinates: credit("offscreen endpoint supplier"),
+    },
+  };
+  results[0] = row as unknown as typeof previous;
+  useDataSourceStore.setState({ activeSource: "sample", filters: {}, viewportZoom: 12 });
+  const view = render(<DataSourceLayer />);
+  try {
+    const tracks = fake.state.sources.get("ds-sample-tracks")?.data as GeoJSON.FeatureCollection;
+    fake.setRenderedFeatures("ds-sample-markers", []);
+    fake.setRenderedFeatures("ds-sample-tracks", tracks.features as never);
+    act(() => {
+      fake.emit("render");
+      vi.advanceTimersByTime(250);
+    });
+    const html = Object.values(useMapAttributionStore.getState().byLayer)
+      .flat()
+      .map((entry) => entry.fullHtml)
+      .join(" ");
+    expect(html).toContain("track supplier");
+    expect(html).toContain("variant supplier");
+    expect(html).toContain("status supplier");
+    expect(html).not.toContain("offscreen endpoint supplier");
+    expect(html).not.toContain("unused-record");
+  } finally {
+    view.unmount();
+    results[0] = previous;
+    vi.useRealTimers();
+  }
+});
+
+it("does not credit an unused status field on a track without status", async () => {
+  const { buildTrackGeoJson } = await import("@/integration-api/map/dataSourceFeatures");
+  const track = [{ sourceId: "track", name: "Track" }];
+  const result = {
+    id: "track",
+    name: "",
+    source: "sample",
+    coordinates: [8, 50],
+    track: [
+      [7, 49],
+      [8, 50],
+    ],
+    fieldContributors: {
+      track,
+      variant: [],
+      status: [{ sourceId: "unused", name: "Unused status supplier" }],
+    },
+  };
+  const feature = buildTrackGeoJson([result] as never).features[0];
+  expect(JSON.parse(feature.properties._mapTrackAttributions ?? "null")).toEqual(track);
+});

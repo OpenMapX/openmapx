@@ -104,3 +104,37 @@ it("shows frozen row credits and reconstructs selected details with exact field 
     "coordinates.0": [],
   });
 });
+
+it("collects mounted saved rows into one footer and removes replaced supplier receipts", () => {
+  const receipt = { sourceId: "shared", name: "Shared saved supplier" };
+  const row = (id: string): SavedPlace => ({
+    id,
+    listId: "list-1",
+    placeId: null,
+    note: null,
+    sortOrder: 0,
+    createdAt: "2026-10-16T00:00:00Z",
+    name: id,
+    address: "Address",
+    lat: 50,
+    lng: 8,
+    fieldContributors: { name: [receipt], address: [] },
+  });
+  state.places = [row("one"), row("two")];
+  const view = renderDetail();
+  expect(screen.getAllByText("Shared saved supplier")).toHaveLength(1);
+  expect(screen.getAllByRole("button", { name: "Credits" })).toHaveLength(1);
+  state.places = [
+    {
+      ...row("three"),
+      fieldContributors: { name: [{ sourceId: "new", name: "New saved supplier" }] },
+    },
+  ];
+  view.rerender(
+    <NextIntlClientProvider locale="en" messages={en} timeZone="Europe/Berlin">
+      <SavedListDetail />
+    </NextIntlClientProvider>,
+  );
+  expect(screen.queryByText("Shared saved supplier")).not.toBeInTheDocument();
+  expect(screen.getByText("New saved supplier")).toBeInTheDocument();
+});

@@ -395,3 +395,50 @@ it("keeps optional provenance in details while required image notices stay adjac
   expect(dialog.querySelector('a[href="https://image.test/page"]')).not.toBeNull();
   expect(dialog.querySelector('img[alt="Mapillary"]')).not.toBeNull();
 });
+
+it("renders a shared mandatory notice once while retaining every captured grant in details", () => {
+  const first: Attribution = {
+    sourceId: "one",
+    name: "Agency",
+    attributionText: "Shared credit",
+    licensing: licensingFromDeclaration("ODbL-1.0"),
+  };
+  const second: Attribution = {
+    ...first,
+    sourceId: "two",
+    licensing: {
+      version: 1,
+      bindings: [
+        ...(first.licensing?.bindings ?? []),
+        { scope: "software", subject: "Engine", license: { kind: "spdx", expression: "MIT" } },
+      ],
+    },
+  };
+  const { container } = render(<AttributionStrip attributions={[first, second]} variant="plain" />);
+  expect(container.textContent?.match(/Shared credit/g)).toHaveLength(1);
+  fireEvent.click(screen.getByRole("button", { name: "attributions" }));
+  const dialog = screen.getByRole("dialog");
+  expect(dialog.textContent).toContain("ODbL-1.0");
+  expect(dialog.textContent).toContain("MIT");
+  expect(dialog.textContent).toContain("Engine");
+});
+
+it("shares identical optional source labels without dropping distinct software grants", () => {
+  const first = { ...delfi, sourceId: "first" };
+  const second: Attribution = {
+    ...delfi,
+    sourceId: "second",
+    licensing: {
+      version: 1,
+      bindings: [
+        ...(delfi.licensing?.bindings ?? []),
+        { scope: "software", subject: "Engine", license: { kind: "spdx", expression: "MIT" } },
+      ],
+    },
+  };
+  const { container } = render(<AttributionStrip attributions={[first, second]} variant="plain" />);
+  expect(container.textContent?.match(/DELFI/g)).toHaveLength(1);
+  fireEvent.click(screen.getByRole("button", { name: "attributions" }));
+  expect(screen.getByRole("dialog").textContent).toContain("CC-BY-4.0");
+  expect(screen.getByRole("dialog").textContent).toContain("MIT");
+});

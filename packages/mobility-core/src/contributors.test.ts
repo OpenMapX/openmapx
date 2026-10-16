@@ -254,3 +254,30 @@ it("resolves nested displayed fields from the closest canonical child with index
     ),
   ).toEqual([b]);
 });
+
+it("keeps operator source notes out of captured credits while preserving actual licence notices", async () => {
+  const { dataSourceToAttribution } = await import("./contributors.js");
+  const captured = dataSourceToAttribution({
+    sourceId: "configured",
+    name: "Configured source",
+    url: "https://source.example/",
+    notes: "Endpoint configuration and geometry request details for the operator",
+    attribution: "Required source credit",
+    licensing: {
+      version: 1,
+      bindings: [
+        {
+          scope: "data",
+          subject: "Dataset",
+          license: { kind: "spdx", expression: "CC-BY-4.0" },
+          notice: "Data adapted",
+          conditions: ["Preserve this supplied condition"],
+        },
+      ],
+    },
+  });
+  expect(captured.notes).toBeUndefined();
+  expect(captured.attributionText).toBe("Required source credit");
+  expect(captured.licensing?.bindings[0]?.notice).toBe("Data adapted");
+  expect(captured.licensing?.bindings[0]?.conditions).toEqual(["Preserve this supplied condition"]);
+});

@@ -8,6 +8,7 @@ import type {
   ParkingStatus,
   ParkingTrend,
 } from "@openmapx/integration-framework";
+import { snapshotContributors } from "@openmapx/integration-framework";
 import {
   addressOf,
   allowedReadings,
@@ -26,6 +27,7 @@ import {
   type Rec,
   readingCredits,
   rec,
+  recordCredits,
   sourcesOf,
   splitKey,
   str,
@@ -195,7 +197,7 @@ function rateOf(offer: Rec): ParkingRate | undefined {
   }
   if (rows.length === 0 || currency === undefined) return undefined;
   const text = firstText(offer["displayText"]);
-  return { currency, rows, ...(text ? { text } : {}) };
+  return { currency, rows, ...(text ? { text } : {}), contributors: recordCredits(offer) };
 }
 
 /** Whether an area says more than that the site has such spaces. */
@@ -314,11 +316,12 @@ export function recordToParkingSite(
     ...(tariffText ? { tariffText } : {}),
     ...(notes ? { notes } : {}),
     sources: [...new Set(kept.map((s) => s.id))],
-    attributions: [
+    attributions: snapshotContributors([
       ...kept.map((s) => credit(s, sources)),
       ...upstreamCredits(kept, sources),
+      ...rates.flatMap((rate) => rate.contributors ?? []),
       ...readingCredits(...site.used),
       ...areas.flatMap((area) => area.contributors ?? []),
-    ],
+    ]),
   };
 }

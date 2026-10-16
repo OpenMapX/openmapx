@@ -6,6 +6,7 @@ import {
   buildAttributionPresentation,
   buildLicensingHtml,
   buildRuntimeAttributionHtml,
+  dedupeAttributionHtml,
   mergeAttributionDetails,
   type PlacePhoto,
   parseAttributionHtml,
@@ -104,6 +105,16 @@ export function PhotoAttribution({ photo, color = "#fff", compact = false }: Pro
     ...capturedPresentations,
   ]);
   const notices = group.visible;
+  const completeCaption = generated ? buildRuntimeAttributionHtml(generated) : undefined;
+  // A strict notice can already contain the complete creator/source/grant caption.
+  // Only replace that caption when the retained notice covers every link as well.
+  const useRequiredCaption =
+    !photo.attributionOverride &&
+    completeCaption !== undefined &&
+    notices.some((notice) => {
+      const retained = dedupeAttributionHtml([notice.html, completeCaption]);
+      return retained.length === 1 && retained[0] === notice.html;
+    });
   // A Commons Credit field may describe acquisition ("Own work", archive
   // download instructions), not required display wording. Keep that evidence
   // in the immutable photo, while presenting creator, file and grant separately.
@@ -252,16 +263,22 @@ export function PhotoAttribution({ photo, color = "#fff", compact = false }: Pro
           minWidth: 0,
         }}
       >
-        {credits.map(({ key, content }, index) => (
-          <Box component="span" key={key} sx={{ minWidth: 0 }}>
-            {index > 0 && (
-              <Box component="span" aria-hidden sx={{ mx: 0.5, opacity: 0.6 }}>
-                ·
-              </Box>
-            )}
-            {content}
+        {!useRequiredCaption &&
+          credits.map(({ key, content }, index) => (
+            <Box component="span" key={key} sx={{ minWidth: 0 }}>
+              {index > 0 && (
+                <Box component="span" aria-hidden sx={{ mx: 0.5, opacity: 0.6 }}>
+                  ·
+                </Box>
+              )}
+              {content}
+            </Box>
+          ))}
+        {!useRequiredCaption && credits.length > 0 && notices.length > 0 && (
+          <Box component="span" aria-hidden sx={{ mx: 0.5, opacity: 0.6 }}>
+            ·
           </Box>
-        ))}
+        )}
         <AttributionNotices notices={notices} />
       </Box>
       <AttributionDetails

@@ -1,5 +1,6 @@
 import { IntegrationRegistry } from "@openmapx/integration-framework";
 import { IntegrationRegistryContext } from "@openmapx/integration-framework/react";
+import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 import type { QueryClient } from "@tanstack/react-query";
 import { Profiler } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -12,6 +13,7 @@ import {
   fireEvent,
   render,
   screen,
+  userEvent,
   waitFor,
 } from "@/test";
 import {
@@ -28,6 +30,7 @@ const useGeocodingMock = vi.fn();
 const useNlpSearchMock = vi.fn();
 const useSearchSuggestionsMock = vi.fn();
 const useBrandSuggestMock = vi.fn();
+const useBrandLogoAttributionMock = vi.fn();
 const usePresetSuggestMock = vi.fn();
 const useChipTranslationsMock = vi.fn();
 const useDataSourcesMock = vi.fn();
@@ -69,6 +72,7 @@ vi.mock("@openmapx/core", async (importOriginal) => {
     useNlpSearch: (...a: unknown[]) => useNlpSearchMock(...a),
     useSearchSuggestions: (...a: unknown[]) => useSearchSuggestionsMock(...a),
     useBrandSuggest: (...a: unknown[]) => useBrandSuggestMock(...a),
+    useBrandLogoAttribution: () => useBrandLogoAttributionMock(),
     resolveStopAsPlace: (...a: unknown[]) => resolveStopAsPlaceMock(...a),
     usePresetSuggest: (...a: unknown[]) => usePresetSuggestMock(...a),
     useChipTranslations: (...a: unknown[]) => useChipTranslationsMock(...a),
@@ -166,6 +170,7 @@ beforeEach(() => {
   useNlpSearchMock.mockReset().mockReturnValue({ data: undefined, isFetching: false });
   useSearchSuggestionsMock.mockReset().mockReturnValue({ data: undefined, isFetching: false });
   useBrandSuggestMock.mockReset().mockReturnValue({ data: undefined });
+  useBrandLogoAttributionMock.mockReset().mockReturnValue({ data: undefined });
   usePresetSuggestMock.mockReset().mockReturnValue({ data: undefined });
   useChipTranslationsMock.mockReset().mockReturnValue({ data: {} });
   useDataSourcesMock
@@ -2887,4 +2892,98 @@ it("retains direct object and address evidence when a MapTiler row is selected",
   expect(selected?.address).toBe("Grunerstraße 20");
   expect(selected?.addressEvidence).toEqual(evidence);
   expect(selected?.directOsmReference).toEqual(reference);
+});
+
+describe("SearchBar credit focus ownership", () => {
+  it.each([
+    ["desktop", false, "pointer"],
+    ["desktop", false, "keyboard"],
+    ["mobile", true, "pointer"],
+    ["mobile", true, "keyboard"],
+  ] as const)(
+    "retains %s brand credit controls and dialogs (mobile=%s, %s)",
+    async (_surface, mobile, interaction) => {
+      useMediaQueryMock.mockReturnValue(mobile);
+      useBrandSuggestMock.mockReturnValue({
+        data: {
+          matches: [
+            {
+              qid: "Q1",
+              name: "Brand",
+              kind: ["brand"],
+              logoFile: "Brand.svg",
+              matchedOn: "name",
+              presence: "here",
+            },
+          ],
+        },
+      });
+      useBrandLogoAttributionMock.mockReturnValue({
+        data: {
+          logoFile: "Brand.svg",
+          url: "https://image.test/brand.svg",
+          pageUrl: "https://commons.wikimedia.org/wiki/File:Brand.svg",
+          source: "wikimedia-commons",
+          author: "Captured brand artist",
+          licensing: licensingFromDeclaration(
+            "CC BY 4.0",
+            "https://creativecommons.org/licenses/by/4.0/",
+          ),
+        },
+      });
+      const outside = document.createElement("button");
+      outside.textContent = "Outside search";
+      document.body.appendChild(outside);
+      try {
+        renderBar();
+        const user = userEvent.setup();
+        const input = screen.getByLabelText("search.ariaLabel");
+        await user.click(input);
+        fireEvent.change(input, { target: { value: "Brand" } });
+        const trigger = await screen.findByRole("button", { name: "photoGallery.credits" });
+
+        if (interaction === "keyboard") {
+          for (let step = 0; step < 20 && document.activeElement !== trigger; step++)
+            await user.tab();
+          expect(trigger).toHaveFocus();
+          await act(async () => {
+            await new Promise((resolve) => setTimeout(resolve, 200));
+          });
+          expect(useSearchStore.getState().isFocused).toBe(true);
+          await user.keyboard("{Enter}");
+        } else await user.click(trigger);
+        await act(async () => {
+          await new Promise((resolve) => setTimeout(resolve, 200));
+        });
+        expect(screen.getByRole("dialog", { name: "photoGallery.credits" })).toBeVisible();
+        expect(useSearchStore.getState().isFocused).toBe(true);
+        expect(usePlaceStore.getState().selectedPlace).toBeNull();
+        await user.tab();
+        await act(async () => {
+          await new Promise((resolve) => setTimeout(resolve, 200));
+        });
+        expect(
+          screen
+            .getByRole("dialog", { name: "photoGallery.credits" })
+            .contains(document.activeElement),
+        ).toBe(true);
+        if (interaction === "keyboard") await user.keyboard("{Escape}");
+        else await user.click(screen.getByRole("button", { name: "common.close" }));
+        await act(async () => {
+          await new Promise((resolve) => setTimeout(resolve, 300));
+        });
+        expect(screen.queryByRole("dialog")).toBeNull();
+        expect(trigger).toHaveFocus();
+        expect(screen.getByRole("listbox")).toBeVisible();
+        act(() => outside.focus());
+        await act(async () => {
+          await new Promise((resolve) => setTimeout(resolve, 200));
+        });
+        expect(useSearchStore.getState().isFocused).toBe(false);
+        expect(screen.queryByRole("listbox")).toBeNull();
+      } finally {
+        outside.remove();
+      }
+    },
+  );
 });

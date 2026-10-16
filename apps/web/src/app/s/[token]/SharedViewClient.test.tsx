@@ -116,3 +116,21 @@ it("credits only the frozen shared row fields without a current registry fallbac
   expect(screen.getByText("Different required wording")).toBeInTheDocument();
   expect(screen.queryByText("Map coordinate publisher")).not.toBeInTheDocument();
 });
+
+it("collects repeated frozen shared row suppliers into one data credit action", () => {
+  const receipt = { sourceId: "shared", name: "Shared row supplier" };
+  renderShare({
+    type: "list",
+    mode: "snapshot",
+    name: "Trip",
+    icon: null,
+    places: ["One", "Two"].map((name, index) => ({
+      name,
+      lat: 50 + index,
+      lng: 8,
+      fieldContributors: { name: [receipt] },
+    })),
+  });
+  expect(screen.getAllByText("Shared row supplier")).toHaveLength(1);
+  expect(screen.getAllByRole("button", { name: "Credits" })).toHaveLength(1);
+});

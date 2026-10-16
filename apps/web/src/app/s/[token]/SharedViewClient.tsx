@@ -19,6 +19,7 @@ import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import { useLocale, useTranslations } from "next-intl";
 import { useMemo } from "react";
 import { SharedMapView } from "@/components/share/SharedMapView";
+import { AttributionDetailsGroup } from "@/components/ui/AttributionDetailsGroup";
 import { AttributionStrip } from "@/components/ui/AttributionStrip";
 import { buildDirectionsDeepLinkUrl, buildLocationShareUrl } from "@/lib/deepLink";
 import { resolveListIcon } from "@/lib/listIcon";
@@ -112,7 +113,7 @@ export function SharedViewClient({ share }: { share: PublicShare | null }) {
           </Box>
           <Box sx={{ flex: 1, overflowY: "auto", px: 2, py: 1.5 }}>
             {share.type === "list" ? (
-              <>
+              <AttributionDetailsGroup placement="footer" footerSx={{ px: 0 }}>
                 <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
                   {resolveListIcon(share.icon, 24)}
                   <Typography variant="h6" sx={{ fontWeight: 600 }}>
@@ -155,7 +156,7 @@ export function SharedViewClient({ share }: { share: PublicShare | null }) {
                     </Button>
                   </Box>
                 ))}
-              </>
+              </AttributionDetailsGroup>
             ) : (
               routeShare && (
                 <SharedRouteContent

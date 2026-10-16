@@ -38,42 +38,43 @@ export function BrandHeaderCard() {
   );
 
   return (
-    <Box
-      sx={{
-        display: "flex",
-        alignItems: "center",
-        gap: 1.5,
-        px: 2,
-        py: 1.5,
-        borderBottom: 1,
-        borderColor: "divider",
-      }}
-    >
-      <BrandLogo brand={activeBrand} size={36} />
-      <Box sx={{ minWidth: 0, flex: 1 }}>
-        <Typography sx={{ fontSize: 15, fontWeight: 500 }} noWrap>
-          {activeBrand.name}
-        </Typography>
-        {description && (
-          <Typography sx={{ fontSize: 12, color: "text.secondary" }} noWrap>
-            {description}
-          </Typography>
-        )}
-        {fieldCredits.length > 0 && (
-          <AttributionStrip attributions={fieldCredits} variant="plain" />
-        )}
-      </Box>
-      {website && (
-        <Link
-          href={website}
-          target="_blank"
-          rel="noopener noreferrer"
-          sx={{ display: "flex", alignItems: "center", color: "text.secondary" }}
-          aria-label={`${activeBrand.name} website`}
-        >
-          <LaunchIcon sx={{ fontSize: 18 }} />
-        </Link>
+    <BrandLogo
+      brand={activeBrand}
+      size={36}
+      render={({ mark, credits }) => (
+        <Box sx={{ px: 2, py: 1.5, borderBottom: 1, borderColor: "divider" }}>
+          <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
+            <Box sx={{ display: "flex", flexShrink: 0 }}>{mark}</Box>
+            <Box sx={{ minWidth: 0, flex: 1 }}>
+              <Typography sx={{ fontSize: 15, fontWeight: 500 }} noWrap>
+                {activeBrand.name}
+              </Typography>
+              {description && (
+                <Typography sx={{ fontSize: 12, color: "text.secondary" }} noWrap>
+                  {description}
+                </Typography>
+              )}
+            </Box>
+            {website && (
+              <Link
+                href={website}
+                target="_blank"
+                rel="noopener noreferrer"
+                sx={{ display: "flex", alignItems: "center", color: "text.secondary" }}
+                aria-label={`${activeBrand.name} website`}
+              >
+                <LaunchIcon sx={{ fontSize: 18 }} />
+              </Link>
+            )}
+          </Box>
+          {fieldCredits.length > 0 && (
+            <AttributionStrip attributions={fieldCredits} variant="plain" />
+          )}
+          {credits && (
+            <Box sx={{ mt: 0.5, color: "text.secondary", fontSize: "0.65rem" }}>{credits}</Box>
+          )}
+        </Box>
       )}
-    </Box>
+    />
   );
 }

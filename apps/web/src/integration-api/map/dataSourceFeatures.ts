@@ -93,7 +93,11 @@ export function buildTrackGeoJson(results: DataSourceResult[]) {
     type: "FeatureCollection" as const,
     features: results.flatMap((r) => {
       if (!r.track || r.track.length < 2) return [];
-      const contributors = contributorsForRecordFields(r, ["track", "variant"]);
+      const contributors = contributorsForRecordFields(r, [
+        "track",
+        "variant",
+        ...(r.status ? ["status"] : []),
+      ]);
       return [
         withFeatureContributors(
           {

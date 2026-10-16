@@ -64,7 +64,7 @@ export interface EnergyTariffRestrictions {
   reservation?: string;
 }
 
-export interface EnergyTariff {
+export interface EnergyTariff extends ContributingRecord {
   id: string;
   currency: string;
   type?: string;

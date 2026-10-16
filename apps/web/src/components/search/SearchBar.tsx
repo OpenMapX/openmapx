@@ -525,10 +525,18 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
     }
   }, [exploreBoxOpen, setQuery, setIsFocused]);
 
+  const cancelBlur = useCallback(() => {
+    if (blurTimeoutRef.current !== null) clearTimeout(blurTimeoutRef.current);
+    blurTimeoutRef.current = null;
+  }, []);
   const handleBlur = useCallback(() => {
     cancelPendingSubmit();
-    blurTimeoutRef.current = setTimeout(() => setIsFocused(false), 150);
-  }, [cancelPendingSubmit, setIsFocused]);
+    cancelBlur();
+    blurTimeoutRef.current = setTimeout(() => {
+      blurTimeoutRef.current = null;
+      setIsFocused(false);
+    }, 150);
+  }, [cancelPendingSubmit, cancelBlur, setIsFocused]);
 
   // When user types a short plus code with city, geocode the city name to get
   // the reference coordinates for decoding.
@@ -1329,6 +1337,11 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
       )}
       <Box
         ref={setBarEl}
+        // React focus capture follows our credit dialogs through their portals.
+        // Moving among the input, controls and dialogs still belongs to search;
+        // leaving either search surface starts the ordinary dismissal delay.
+        onFocusCapture={cancelBlur}
+        onBlurCapture={handleBlur}
         sx={{
           position: "absolute",
           top: "calc(12px + var(--omx-safe-top))",
@@ -1411,7 +1424,6 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
                 isComposingRef.current = false;
               }}
               onFocus={() => setIsFocused(true)}
-              onBlur={handleBlur}
               placeholder={
                 nearbyMode && anchor
                   ? t("searchNearbyName", { name: anchor.name })
@@ -1672,6 +1684,8 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
         query → labeled places; otherwise → autocomplete dropdown. */}
       {fullScreen && (
         <Box
+          onFocusCapture={cancelBlur}
+          onBlurCapture={handleBlur}
           sx={{
             position: "absolute",
             top: 72,

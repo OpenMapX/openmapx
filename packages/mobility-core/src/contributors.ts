@@ -298,6 +298,7 @@ export interface SourceCreditMetadata {
   url: string;
   licensing: unknown;
   attribution?: string;
+  /** Operator/privacy context; required notices belong in attribution or licensing. */
   notes?: string;
 }
 
@@ -310,6 +311,5 @@ export function dataSourceToAttribution<T extends SourceCreditMetadata>(ds: T): 
     url: ds.url,
     licensing,
     attributionText: ds.attribution,
-    notes: ds.notes,
   };
 }

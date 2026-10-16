@@ -31,7 +31,7 @@ const supplier = {
   name: "Original Transitous",
   url: "https://transitous.org",
   licensing: licensingFromDeclaration("Mixed feeds", undefined),
-  notes: "Original data notice",
+  attribution: "Original data notice",
 };
 
 beforeEach(() => {
@@ -82,6 +82,9 @@ for (const path of ["primary", "local fallback"] as const) {
     expect(result?.data.lineageComplete).toBe(false);
     const retained = seed?.contributors;
     attribution.set([{ ...supplier, name: "Later catalogue" }]);
-    expect(retained?.[0]).toMatchObject({ name: supplier.name, notes: supplier.notes });
+    expect(retained?.[0]).toMatchObject({
+      name: supplier.name,
+      attributionText: supplier.attribution,
+    });
   });
 }

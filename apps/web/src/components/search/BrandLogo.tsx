@@ -13,6 +13,8 @@ interface BrandLogoProps {
   size?: number;
   /** Optional heading aligned with the mark; file credits use the full row below. */
   children?: ReactNode;
+  /** Owners of buttons/icon slots place the mark and its exact-file credits separately. */
+  render?: (parts: { mark: ReactNode; credits: ReactNode }) => ReactNode;
 }
 
 /**
@@ -24,7 +26,7 @@ interface BrandLogoProps {
  * itself rather than a boolean, so switching to a different brand with a fresh
  * logo tries again instead of staying stuck on the fallback.
  */
-export function BrandLogo({ brand, size = 20, children }: BrandLogoProps) {
+export function BrandLogo({ brand, size = 20, children, render }: BrandLogoProps) {
   const [failedUrl, setFailedUrl] = useState<string | null>(null);
   const { data: photo } = useBrandLogoAttribution(brand.qid, Boolean(brand.logoFile));
   const validPhoto =
@@ -49,6 +51,29 @@ export function BrandLogo({ brand, size = 20, children }: BrandLogoProps) {
   // Beside a heading, a generic pin reads as a status marker, so headings for
   // logo-less brands render bare and match unbranded rows. Icon-only slots
   // keep the fallback so their alignment holds.
+  const mark = children ? (
+    <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+      {showPhoto && visual}
+      {children}
+    </div>
+  ) : (
+    visual
+  );
+  const credits =
+    showPhoto && validPhoto ? (
+      <>
+        <span style={{ fontSize: 9, whiteSpace: "normal", minWidth: 0, overflowWrap: "anywhere" }}>
+          <PhotoAttribution photo={validPhoto} color="currentColor" />
+        </span>
+        {contributorsForField(brand, "logoFile").length > 0 && (
+          <AttributionStrip
+            attributions={contributorsForField(brand, "logoFile")}
+            variant="plain"
+          />
+        )}
+      </>
+    ) : null;
+  if (render) return render({ mark, credits });
   if (!showPhoto) return children || visual;
 
   return (
@@ -61,30 +86,8 @@ export function BrandLogo({ brand, size = 20, children }: BrandLogoProps) {
         width: children ? "100%" : undefined,
       }}
     >
-      {children ? (
-        <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
-          {visual}
-          {children}
-        </div>
-      ) : (
-        visual
-      )}
-      {showPhoto && validPhoto && (
-        <span
-          style={{
-            fontSize: 9,
-            whiteSpace: "normal",
-            minWidth: 0,
-            maxWidth: children ? "100%" : 180,
-            overflowWrap: "anywhere",
-          }}
-        >
-          <PhotoAttribution photo={validPhoto} color="currentColor" />
-        </span>
-      )}
-      {showPhoto && contributorsForField(brand, "logoFile").length > 0 && (
-        <AttributionStrip attributions={contributorsForField(brand, "logoFile")} variant="plain" />
-      )}
+      {mark}
+      {credits}
     </div>
   );
 }

@@ -157,6 +157,9 @@ describe("charging-sites-openconditions", () => {
       }),
     ]);
     expect(site.tariffs[0]).toEqual({
+      contributors: [
+        expect.objectContaining({ sourceId: MOBIDATA, licensing: expect.any(Object) }),
+      ],
       id: TARIFF,
       currency: "EUR",
       type: "ad_hoc",

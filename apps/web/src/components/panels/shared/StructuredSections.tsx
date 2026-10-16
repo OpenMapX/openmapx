@@ -461,7 +461,7 @@ function ImageSection({ section }: { section: StructuredSection }) {
         attributions={[...(section.contributors ?? [])]}
         surface="image"
         variant="plain"
-        maxVisible={0}
+        provenanceDisplay="details"
       />
     </Box>
   );
@@ -552,7 +552,7 @@ function ExternalMediaEmbed({ section }: { section: StructuredSection }) {
           attributions={[...(section.contributors ?? [])]}
           surface="image"
           variant="plain"
-          maxVisible={0}
+          provenanceDisplay="details"
         />
       </Box>
     );
@@ -577,7 +577,7 @@ function ExternalMediaEmbed({ section }: { section: StructuredSection }) {
         attributions={[...(section.contributors ?? [])]}
         surface="image"
         variant="plain"
-        maxVisible={0}
+        provenanceDisplay="details"
       />
     </Box>
   );

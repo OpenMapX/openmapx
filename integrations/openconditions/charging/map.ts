@@ -6,6 +6,7 @@ import type {
   Evse,
   EvseStatus,
 } from "@openmapx/integration-framework";
+import { snapshotContributors } from "@openmapx/integration-framework";
 import {
   addressOf,
   allowedReadings,
@@ -24,6 +25,7 @@ import {
   type Rec,
   readingCredits,
   rec,
+  recordCredits,
   sourcesOf,
   splitKey,
   str,
@@ -169,6 +171,7 @@ function tariffOf(offer: Rec): EnergyTariff | undefined {
     ...(altText ? { altText } : {}),
     ...(url ? { url } : {}),
     sourceId,
+    contributors: recordCredits(offer),
   };
 }
 
@@ -351,10 +354,11 @@ export function recordToChargingSite(
     ...(tariffText ? { tariffText } : {}),
     ...(notes ? { notes } : {}),
     sources: [...new Set(kept.map((s) => s.id))],
-    attributions: [
+    attributions: snapshotContributors([
       ...kept.map((s) => credit(s, sources)),
       ...upstreamCredits(kept, sources),
+      ...tariffs.flatMap((tariff) => tariff.contributors ?? []),
       ...evses.flatMap((evse) => evse.contributors ?? []),
-    ],
+    ]),
   };
 }

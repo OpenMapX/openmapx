@@ -44,11 +44,12 @@ import {
 import type { TransitStop, TransportMode } from "@openmapx/mobility-core/transit";
 import type * as maplibregl from "maplibre-gl";
 import { useLocale, useTranslations } from "next-intl";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { distinctBrandQids, placeBrandIdentity } from "@/components/map/CategoryResultMarkers";
 import { PhotoAttribution } from "@/components/panels/place/PhotoAttribution";
 import { useExpandOnBackgroundTap } from "@/components/panels/sheet/sheetState";
 import { BrandLogo } from "@/components/search/BrandLogo";
+import { AttributionDetailsGroup } from "@/components/ui/AttributionDetailsGroup";
 import { ResultItemName, ResultList, ResultListItem } from "@/components/ui/ResultListItem";
 import { ResultNotice } from "@/components/ui/ResultNotice";
 import { usePlaceEnrichment } from "@/hooks/usePlaceEnrichment";
@@ -208,7 +209,7 @@ function CategoryPlaceCard({
   const showPhoto = Boolean(photoUrl && failedPhotoUrl !== photoUrl);
   const rating = summary?.rating;
 
-  return (
+  const renderCard = (mark?: ReactNode, credits?: ReactNode) => (
     <>
       <ResultListItem
         onClick={() => onSelect(place)}
@@ -240,26 +241,7 @@ function CategoryPlaceCard({
             }}
           />
         )}
-        {brandIdentity ? (
-          <Box sx={{ display: "flex", minWidth: 0 }}>
-            <BrandLogo
-              brand={brandForPlaceLogo(
-                place,
-                brandLogos.get(brandIdentity.qid),
-                brandIdentity.qid,
-                brandIdentity.kind,
-              )}
-              size={20}
-            >
-              {/* Only the mark shares the heading row; credits wrap below it. */}
-              <Box sx={{ minWidth: 0, flex: 1 }}>
-                <ResultItemName>{place.name}</ResultItemName>
-              </Box>
-            </BrandLogo>
-          </Box>
-        ) : (
-          <ResultItemName>{place.name}</ResultItemName>
-        )}
+        {mark ?? <ResultItemName>{place.name}</ResultItemName>}
         <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5, alignItems: "center", mb: 0.25 }}>
           {tagLabel && (
             <Typography
@@ -375,12 +357,33 @@ function CategoryPlaceCard({
           return null;
         })()}
       </ResultListItem>
+      {credits && (
+        <Box sx={{ px: 2, pb: 0.75, color: "text.secondary", fontSize: "0.65rem" }}>{credits}</Box>
+      )}
       {showPhoto && photo && (
         <Box sx={{ px: 2, pb: 0.75, color: "text.secondary", fontSize: "0.65rem" }}>
           <PhotoAttribution photo={photo} color="currentColor" />
         </Box>
       )}
     </>
+  );
+  return brandIdentity ? (
+    <BrandLogo
+      brand={brandForPlaceLogo(
+        place,
+        brandLogos.get(brandIdentity.qid),
+        brandIdentity.qid,
+        brandIdentity.kind,
+      )}
+      size={20}
+      render={({ mark, credits }) => renderCard(mark, credits)}
+    >
+      <Box sx={{ minWidth: 0, flex: 1 }}>
+        <ResultItemName>{place.name}</ResultItemName>
+      </Box>
+    </BrandLogo>
+  ) : (
+    renderCard()
   );
 }
 
@@ -607,173 +610,175 @@ export function CategoryResultsContent() {
       onClick={expandOnBackgroundTap}
       sx={{ flex: 1, overflowY: "auto", pt: { xs: 0, sm: "64px" } }}
     >
-      <BrandHeaderCard />
-      {(anchor || activeCategory || isViewportText || headerCount !== null) && (
-        <CategoryResultsHeader
-          count={headerCount}
-          isTransit={isTransitCategory}
-          sort={
-            chosenSort ??
-            (defaultSort === "distance" && distanceReference ? "distance" : "relevance")
-          }
-          onSort={(value) => setSortChoice({ revision: searchRevision, value })}
-          distanceReference={distanceReference ?? null}
-          showTravelTime={Boolean(anchor)}
-          showMapUpdate={Boolean(activeCategory || isViewportText)}
-          autoRefresh={autoRefresh}
-          onAutoRefresh={setAutoRefresh}
-          adHocLabel={activeCategory === AD_HOC_CATEGORY_ID ? adHocLabel : null}
-          attributions={
-            headerCount !== null && headerCount > 0
-              ? isTransitCategory
-                ? transitAttributions
-                : poiAttributions
-              : null
-          }
-        />
-      )}
-      {loading && (
-        <SearchLoading
-          key={`${mode}:${activeCategory}:${searchRevision}:${JSON.stringify(adHocFilter)}:${waitingForResponse}`}
-          waitingForResponse={waitingForResponse}
-        />
-      )}
-      {!isTransitCategory && isError && (
-        <Box sx={{ px: 2, py: 2 }}>
-          <ResultNotice
-            tone={isAreaTooLarge(error) ? "info" : "error"}
-            action={{
-              label: isAreaTooLarge(error) ? tm("zoomIn") : tc("retry"),
-              kind: isAreaTooLarge(error) ? "zoom" : "retry",
-              onClick: isAreaTooLarge(error) ? zoomIn : () => void refetch(),
-            }}
-          >
-            {isAreaTooLarge(error) ? ts("zoomInToSearch") : ts("failedToLoad")}
-          </ResultNotice>
-        </Box>
-      )}
-      {!isTransitCategory && !isError && partial && (
-        <Box sx={{ px: 2, pt: 1.5 }}>
-          <ResultNotice tone="info">{ts("partialResults")}</ResultNotice>
-        </Box>
-      )}
-      {/* The area holds more matches than the result cap returns. `partial`
+      <AttributionDetailsGroup placement="footer">
+        <BrandHeaderCard />
+        {(anchor || activeCategory || isViewportText || headerCount !== null) && (
+          <CategoryResultsHeader
+            count={headerCount}
+            isTransit={isTransitCategory}
+            sort={
+              chosenSort ??
+              (defaultSort === "distance" && distanceReference ? "distance" : "relevance")
+            }
+            onSort={(value) => setSortChoice({ revision: searchRevision, value })}
+            distanceReference={distanceReference ?? null}
+            showTravelTime={Boolean(anchor)}
+            showMapUpdate={Boolean(activeCategory || isViewportText)}
+            autoRefresh={autoRefresh}
+            onAutoRefresh={setAutoRefresh}
+            adHocLabel={activeCategory === AD_HOC_CATEGORY_ID ? adHocLabel : null}
+            attributions={
+              headerCount !== null && headerCount > 0
+                ? isTransitCategory
+                  ? transitAttributions
+                  : poiAttributions
+                : null
+            }
+          />
+        )}
+        {loading && (
+          <SearchLoading
+            key={`${mode}:${activeCategory}:${searchRevision}:${JSON.stringify(adHocFilter)}:${waitingForResponse}`}
+            waitingForResponse={waitingForResponse}
+          />
+        )}
+        {!isTransitCategory && isError && (
+          <Box sx={{ px: 2, py: 2 }}>
+            <ResultNotice
+              tone={isAreaTooLarge(error) ? "info" : "error"}
+              action={{
+                label: isAreaTooLarge(error) ? tm("zoomIn") : tc("retry"),
+                kind: isAreaTooLarge(error) ? "zoom" : "retry",
+                onClick: isAreaTooLarge(error) ? zoomIn : () => void refetch(),
+              }}
+            >
+              {isAreaTooLarge(error) ? ts("zoomInToSearch") : ts("failedToLoad")}
+            </ResultNotice>
+          </Box>
+        )}
+        {!isTransitCategory && !isError && partial && (
+          <Box sx={{ px: 2, pt: 1.5 }}>
+            <ResultNotice tone="info">{ts("partialResults")}</ResultNotice>
+          </Box>
+        )}
+        {/* The area holds more matches than the result cap returns. `partial`
           already tells the stronger story (something failed), so only one of the
           two notices ever shows. Both phrasings describe the *area*, never "showing
           N" — the count below is post-filter, so a "showing N" here would contradict
           it whenever an hours or facet chip is active. */}
-      {!isTransitCategory && !isError && !partial && truncated && (
-        <Box sx={{ px: 2, pt: 1.5 }}>
-          <ResultNotice tone="info">
-            {total === undefined
-              ? ts("truncatedResultsUnknown")
-              : ts("truncatedResults", { total })}
-          </ResultNotice>
-        </Box>
-      )}
-      {!isTransitCategory && !isError && relaxed && relaxed.length > 0 && (
-        <Box sx={{ px: 2, pt: 1.5 }}>
-          <ResultNotice tone="info">
-            {ts("relaxedFilters", { filters: relaxed.map(relaxedFilterLabel).join(", ") })}
-          </ResultNotice>
-        </Box>
-      )}
-      {/* Transit: empty state */}
-      {isTransitCategory && transitStopsQuery.isError && (
-        <Box sx={{ px: 2, py: 2 }}>
-          <ResultNotice
-            tone={transitAreaTooLarge ? "info" : "error"}
-            action={{
-              label: transitAreaTooLarge ? tm("zoomIn") : tc("retry"),
-              kind: transitAreaTooLarge ? "zoom" : "retry",
-              onClick: transitAreaTooLarge ? zoomIn : () => void transitStopsQuery.refetch(),
-            }}
-          >
-            {transitAreaTooLarge ? ts("zoomInToSearch") : ts("failedToLoad")}
-          </ResultNotice>
-        </Box>
-      )}
-      {isTransitCategory &&
-        !transitLoading &&
-        !transitStopsQuery.isError &&
-        transitStops &&
-        transitStops.length === 0 && (
+        {!isTransitCategory && !isError && !partial && truncated && (
+          <Box sx={{ px: 2, pt: 1.5 }}>
+            <ResultNotice tone="info">
+              {total === undefined
+                ? ts("truncatedResultsUnknown")
+                : ts("truncatedResults", { total })}
+            </ResultNotice>
+          </Box>
+        )}
+        {!isTransitCategory && !isError && relaxed && relaxed.length > 0 && (
+          <Box sx={{ px: 2, pt: 1.5 }}>
+            <ResultNotice tone="info">
+              {ts("relaxedFilters", { filters: relaxed.map(relaxedFilterLabel).join(", ") })}
+            </ResultNotice>
+          </Box>
+        )}
+        {/* Transit: empty state */}
+        {isTransitCategory && transitStopsQuery.isError && (
+          <Box sx={{ px: 2, py: 2 }}>
+            <ResultNotice
+              tone={transitAreaTooLarge ? "info" : "error"}
+              action={{
+                label: transitAreaTooLarge ? tm("zoomIn") : tc("retry"),
+                kind: transitAreaTooLarge ? "zoom" : "retry",
+                onClick: transitAreaTooLarge ? zoomIn : () => void transitStopsQuery.refetch(),
+              }}
+            >
+              {transitAreaTooLarge ? ts("zoomInToSearch") : ts("failedToLoad")}
+            </ResultNotice>
+          </Box>
+        )}
+        {isTransitCategory &&
+          !transitLoading &&
+          !transitStopsQuery.isError &&
+          transitStops &&
+          transitStops.length === 0 && (
+            <Box sx={{ px: 2, py: 4, textAlign: "center" }}>
+              <Typography
+                sx={{
+                  color: "text.secondary",
+                }}
+              >
+                {ts("noStopsFound")}
+              </Typography>
+              <Typography variant="body2" sx={{ color: "text.secondary", mt: 1 }}>
+                {ts("moveMapToSearch")}
+              </Typography>
+              <Button size="small" variant="outlined" sx={{ mt: 1.5 }} onClick={zoomOut}>
+                {tm("zoomOut")}
+              </Button>
+            </Box>
+          )}
+        {/* Transit: results list */}
+        {isTransitCategory &&
+          !transitLoading &&
+          !transitStopsQuery.isError &&
+          transitStops &&
+          transitStops.length > 0 && (
+            <ResultList
+              items={transitStops}
+              getKey={(stop) => stop.id}
+              renderItem={(stop) => <TransitStopCard stop={stop} onSelect={handleSelectStop} />}
+            />
+          )}
+        {/* Non-transit: empty state */}
+        {!isTransitCategory && !isLoading && !isError && results && results.length === 0 && (
           <Box sx={{ px: 2, py: 4, textAlign: "center" }}>
             <Typography
               sx={{
                 color: "text.secondary",
               }}
             >
-              {ts("noStopsFound")}
+              {activeBrand
+                ? ts("noBrandLocationsInView", { brand: activeBrand.name })
+                : ts("noResultsFound")}
             </Typography>
-            <Typography variant="body2" sx={{ color: "text.secondary", mt: 1 }}>
-              {ts("moveMapToSearch")}
-            </Typography>
-            <Button size="small" variant="outlined" sx={{ mt: 1.5 }} onClick={zoomOut}>
-              {tm("zoomOut")}
+            {!hasAppliedFilters && (
+              <Typography variant="body2" sx={{ color: "text.secondary", mt: 1 }}>
+                {ts("moveMapToSearch")}
+              </Typography>
+            )}
+            <Button
+              size="small"
+              variant="outlined"
+              sx={{ mt: 1.5 }}
+              onClick={hasAppliedFilters ? clearAppliedFilters : zoomOut}
+            >
+              {hasAppliedFilters ? ts("clearFilters") : tm("zoomOut")}
             </Button>
           </Box>
         )}
-      {/* Transit: results list */}
-      {isTransitCategory &&
-        !transitLoading &&
-        !transitStopsQuery.isError &&
-        transitStops &&
-        transitStops.length > 0 && (
+        {/* Non-transit: results list */}
+        {!isTransitCategory && !isLoading && !isError && results && results.length > 0 && (
           <ResultList
-            items={transitStops}
-            getKey={(stop) => stop.id}
-            renderItem={(stop) => <TransitStopCard stop={stop} onSelect={handleSelectStop} />}
+            items={results}
+            getKey={(place) => place.id}
+            renderItem={(place) => (
+              <Box data-card-id={place.id}>
+                <CategoryPlaceCard
+                  place={place}
+                  summary={cachedSummary(cardSummaries, place, locale)}
+                  isHovered={hoveredCategoryPlaceId === place.id}
+                  onSelect={handleSelectPlace}
+                  onHover={setHoveredCategoryPlaceId}
+                  onHoverEnd={() => setHoveredCategoryPlaceId(null)}
+                  brandLogos={brandLogos}
+                  distanceReference={distanceReference}
+                />
+              </Box>
+            )}
           />
         )}
-      {/* Non-transit: empty state */}
-      {!isTransitCategory && !isLoading && !isError && results && results.length === 0 && (
-        <Box sx={{ px: 2, py: 4, textAlign: "center" }}>
-          <Typography
-            sx={{
-              color: "text.secondary",
-            }}
-          >
-            {activeBrand
-              ? ts("noBrandLocationsInView", { brand: activeBrand.name })
-              : ts("noResultsFound")}
-          </Typography>
-          {!hasAppliedFilters && (
-            <Typography variant="body2" sx={{ color: "text.secondary", mt: 1 }}>
-              {ts("moveMapToSearch")}
-            </Typography>
-          )}
-          <Button
-            size="small"
-            variant="outlined"
-            sx={{ mt: 1.5 }}
-            onClick={hasAppliedFilters ? clearAppliedFilters : zoomOut}
-          >
-            {hasAppliedFilters ? ts("clearFilters") : tm("zoomOut")}
-          </Button>
-        </Box>
-      )}
-      {/* Non-transit: results list */}
-      {!isTransitCategory && !isLoading && !isError && results && results.length > 0 && (
-        <ResultList
-          items={results}
-          getKey={(place) => place.id}
-          renderItem={(place) => (
-            <Box data-card-id={place.id}>
-              <CategoryPlaceCard
-                place={place}
-                summary={cachedSummary(cardSummaries, place, locale)}
-                isHovered={hoveredCategoryPlaceId === place.id}
-                onSelect={handleSelectPlace}
-                onHover={setHoveredCategoryPlaceId}
-                onHoverEnd={() => setHoveredCategoryPlaceId(null)}
-                brandLogos={brandLogos}
-                distanceReference={distanceReference}
-              />
-            </Box>
-          )}
-        />
-      )}
+      </AttributionDetailsGroup>
     </Box>
   );
 }

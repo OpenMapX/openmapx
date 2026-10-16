@@ -1031,22 +1031,24 @@ export function DirectionsPanelContent() {
 
   if (transitDetailsIndex !== null && transitItineraries[transitDetailsIndex]) {
     return (
-      <TransitDetailsView
-        itinerary={transitItineraries[transitDetailsIndex]}
-        isLowestCo2={
-          lowestCo2Grams !== null &&
-          transitItineraries[transitDetailsIndex]?.co2Grams === lowestCo2Grams
-        }
-        originLabel={originLabel}
-        destinationLabel={destinationLabel}
-        provider={transitPlanData?.provider}
-        attributions={snapshotContributors(
-          transitItineraries[transitDetailsIndex]?.contributors ?? [],
-        )}
-        originTimeZone={originTimeZone}
-        destinationTimeZone={destinationTimeZone}
-        onBack={() => setTransitDetailsIndex(null)}
-      />
+      <AttributionDetailsGroup placement="footer" label={tc("dataSources")}>
+        <TransitDetailsView
+          itinerary={transitItineraries[transitDetailsIndex]}
+          isLowestCo2={
+            lowestCo2Grams !== null &&
+            transitItineraries[transitDetailsIndex]?.co2Grams === lowestCo2Grams
+          }
+          originLabel={originLabel}
+          destinationLabel={destinationLabel}
+          provider={transitPlanData?.provider}
+          attributions={snapshotContributors(
+            transitItineraries[transitDetailsIndex]?.contributors ?? [],
+          )}
+          originTimeZone={originTimeZone}
+          destinationTimeZone={destinationTimeZone}
+          onBack={() => setTransitDetailsIndex(null)}
+        />
+      </AttributionDetailsGroup>
     );
   }
 

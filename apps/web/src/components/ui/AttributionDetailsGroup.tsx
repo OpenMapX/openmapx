@@ -1,6 +1,7 @@
 "use client";
 
 import Box from "@mui/material/Box";
+import type { SxProps, Theme } from "@mui/material/styles";
 import { mergeAttributionDetails } from "@openmapx/core/attribution";
 import { type ReactNode, useCallback, useMemo, useState } from "react";
 import { AttributionDetails } from "./AttributionDetails";
@@ -20,10 +21,13 @@ export function AttributionDetailsGroup({
   children,
   placement = "details",
   label,
+  footerSx,
 }: {
   children: ReactNode;
   placement?: AttributionGroupPlacement;
   label?: string;
+  /** Match an already padded content owner without adding a second gutter. */
+  footerSx?: SxProps<Theme>;
 }) {
   const [contributions, setContributions] = useState(
     new Map<string, AttributionGroupContribution>(),
@@ -49,9 +53,10 @@ export function AttributionDetailsGroup({
       <AttributionGroupContext.Provider value={null}>
         {entries.length > 0 && (
           <Box
-            sx={
-              label ? undefined : { px: 2, py: 1, color: "text.secondary", fontSize: "0.6875rem" }
-            }
+            sx={[
+              ...(label ? [] : [{ px: 2, py: 1, color: "text.secondary", fontSize: "0.6875rem" }]),
+              ...(Array.isArray(footerSx) ? footerSx : footerSx ? [footerSx] : []),
+            ]}
           >
             {placement === "footer" ? (
               <AttributionStrip

@@ -177,7 +177,7 @@ export function StreetLevelInfoCard({
         attributions={[...(image.contributors ?? [])]}
         surface="image"
         variant="plain"
-        maxVisible={0}
+        provenanceDisplay="details"
         color="#fff"
       />
       {image.author && (

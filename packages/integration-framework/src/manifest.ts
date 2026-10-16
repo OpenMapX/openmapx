@@ -76,7 +76,7 @@ export const dataSourceSchema = z.object({
     return licensing;
   }),
   attribution: z.string().optional(),
-  /** Free-form per-source notes (e.g. "via Transitous feed proxy"). */
+  /** Operator/privacy context, not credit copy. Required notices belong in attribution/licensing. */
   notes: z.string().optional(),
   commercialUse: z.enum(["yes", "no", "conditional", "unknown"]).optional(),
   /** Explicit dataset redistribution assertions; omitted means unknown. */

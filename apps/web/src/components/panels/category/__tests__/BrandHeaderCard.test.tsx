@@ -129,7 +129,7 @@ describe("BrandHeaderCard", () => {
     expect(screen.getByText("German supermarket chain")).toBeInTheDocument();
   });
 
-  it("renders author and licence once the attribution query resolves", () => {
+  it("renders resolved file credits below the heading instead of in the logo column", () => {
     useCategorySearchStore.getState().setBrandFilter(
       {
         qid: "Q41171",
@@ -156,6 +156,7 @@ describe("BrandHeaderCard", () => {
 
     renderCard();
 
+    expect(screen.getByRole("img", { name: "Aldi" }).parentElement?.textContent).toBe("");
     expect(screen.getByText("Jane Doe")).toBeInTheDocument();
     expect(screen.getByText("CC-BY-SA-4.0")).toBeInTheDocument();
   });

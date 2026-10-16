@@ -49,6 +49,7 @@ import {
 import { useTranslations } from "next-intl";
 import type React from "react";
 import { useRef, useState } from "react";
+import { AttributionDetailsGroup } from "@/components/ui/AttributionDetailsGroup";
 import { AttributionStrip } from "@/components/ui/AttributionStrip";
 import { useMap } from "@/integration-api/map/MapContext";
 import { BRAND, BRAND_LIGHT } from "@/integration-api/runtime/theme";
@@ -355,104 +356,106 @@ export function SavedListDetail() {
           {t("places", { count: 0 })}
         </Typography>
       ) : (
-        <Box>
-          {places.map((place) => (
-            <Box
-              key={place.id}
-              onClick={() => handlePlaceClick(place)}
-              sx={{
-                display: "flex",
-                alignItems: "center",
-                gap: 1.5,
-                px: 2,
-                py: 1.5,
-                cursor: "pointer",
-                "&:hover": { bgcolor: "action.hover" },
-              }}
-            >
-              <PlaceThumbnail
-                lat={place.lat}
-                lng={place.lng}
-                name={place.name}
-                placeId={place.placeId}
-              />
-              <Box sx={{ flex: 1, minWidth: 0 }}>
-                <Typography
-                  variant="body2"
-                  noWrap
-                  sx={{
-                    fontWeight: 500,
-                  }}
-                >
-                  {place.name}
-                </Typography>
-                {place.address && (
+        <AttributionDetailsGroup placement="footer">
+          <Box>
+            {places.map((place) => (
+              <Box
+                key={place.id}
+                onClick={() => handlePlaceClick(place)}
+                sx={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 1.5,
+                  px: 2,
+                  py: 1.5,
+                  cursor: "pointer",
+                  "&:hover": { bgcolor: "action.hover" },
+                }}
+              >
+                <PlaceThumbnail
+                  lat={place.lat}
+                  lng={place.lng}
+                  name={place.name}
+                  placeId={place.placeId}
+                />
+                <Box sx={{ flex: 1, minWidth: 0 }}>
                   <Typography
-                    variant="caption"
+                    variant="body2"
                     noWrap
                     sx={{
-                      color: "text.secondary",
-                      display: "block",
+                      fontWeight: 500,
                     }}
                   >
-                    {place.address}
+                    {place.name}
                   </Typography>
-                )}
-                <AttributionStrip
-                  attributions={savedPlaceContributors(place.fieldContributors, [
-                    "name",
-                    ...(place.address ? ["address" as const] : []),
-                  ])}
-                  variant="inline"
-                />
-                {noteEditId === place.id ? (
-                  <TextField
-                    fullWidth
-                    size="small"
-                    placeholder={t("note")}
-                    value={noteValue}
-                    onChange={(e) => setNoteValue(e.target.value)}
-                    onBlur={handleNoteSubmit}
-                    onKeyDown={handleNoteKeyDown}
-                    onClick={(e) => e.stopPropagation()}
-                    autoFocus
-                    sx={{ mt: 0.5 }}
+                  {place.address && (
+                    <Typography
+                      variant="caption"
+                      noWrap
+                      sx={{
+                        color: "text.secondary",
+                        display: "block",
+                      }}
+                    >
+                      {place.address}
+                    </Typography>
+                  )}
+                  <AttributionStrip
+                    attributions={savedPlaceContributors(place.fieldContributors, [
+                      "name",
+                      ...(place.address ? ["address" as const] : []),
+                    ])}
+                    variant="inline"
                   />
-                ) : place.note ? (
+                  {noteEditId === place.id ? (
+                    <TextField
+                      fullWidth
+                      size="small"
+                      placeholder={t("note")}
+                      value={noteValue}
+                      onChange={(e) => setNoteValue(e.target.value)}
+                      onBlur={handleNoteSubmit}
+                      onKeyDown={handleNoteKeyDown}
+                      onClick={(e) => e.stopPropagation()}
+                      autoFocus
+                      sx={{ mt: 0.5 }}
+                    />
+                  ) : place.note ? (
+                    <Typography
+                      variant="caption"
+                      onClick={(e) => handleAddNoteClick(e, place)}
+                      sx={{
+                        color: BRAND,
+                        display: "block",
+                        mt: 0.25,
+                        cursor: "pointer",
+                        "&:hover": { textDecoration: "underline" },
+                      }}
+                    >
+                      {place.note}
+                    </Typography>
+                  ) : null}
+                </Box>
+                {noteEditId !== place.id && !place.note && (
                   <Typography
                     variant="caption"
                     onClick={(e) => handleAddNoteClick(e, place)}
                     sx={{
                       color: BRAND,
-                      display: "block",
-                      mt: 0.25,
                       cursor: "pointer",
+                      flexShrink: 0,
+                      ml: 1,
+                      whiteSpace: "nowrap",
                       "&:hover": { textDecoration: "underline" },
                     }}
                   >
-                    {place.note}
+                    + {t("note")}
                   </Typography>
-                ) : null}
+                )}
               </Box>
-              {noteEditId !== place.id && !place.note && (
-                <Typography
-                  variant="caption"
-                  onClick={(e) => handleAddNoteClick(e, place)}
-                  sx={{
-                    color: BRAND,
-                    cursor: "pointer",
-                    flexShrink: 0,
-                    ml: 1,
-                    whiteSpace: "nowrap",
-                    "&:hover": { textDecoration: "underline" },
-                  }}
-                >
-                  + {t("note")}
-                </Typography>
-              )}
-            </Box>
-          ))}
-        </Box>
+            ))}
+          </Box>
+        </AttributionDetailsGroup>
       )}
       <Menu
         anchorEl={menuAnchor}

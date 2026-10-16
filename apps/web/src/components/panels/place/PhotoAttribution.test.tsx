@@ -1,4 +1,4 @@
-import { parseCommonsPage } from "@openmapx/core";
+import { parseCommonsPage, withPhotoContributors } from "@openmapx/core";
 import type { Licensing } from "@openmapx/mobility-core/licensing";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
@@ -170,4 +170,71 @@ it("keeps explicitly required Commons source credit even with a public-domain de
   );
   fireEvent.click(screen.getByRole("button", { name: /photo credits/i }));
   expect(screen.getByRole("dialog").textContent).toContain("Required original archive credit");
+});
+
+it("uses a complete strict photo notice once instead of appending it to a duplicate caption", () => {
+  const photo = withPhotoContributors(
+    {
+      url: "https://images.example/photo.jpg",
+      pageUrl: "https://flickr.example/photo",
+      source: "flickr",
+      author: "Ada",
+      authorUrl: "https://flickr.example/ada",
+      licensing: {
+        version: 1,
+        bindings: [
+          {
+            scope: "imagery",
+            subject: "Photo",
+            license: { kind: "spdx", expression: "CC-BY-ND-2.0" },
+          },
+        ],
+      },
+    },
+    "Flickr",
+  );
+  const before = structuredClone(photo);
+  const { container } = caption(photo);
+  expect(container.textContent?.match(/Ada/g)).toHaveLength(1);
+  expect(container.textContent?.match(/Flickr/g)).toHaveLength(1);
+  expect(container.textContent?.match(/CC-BY-ND-2.0/g)).toHaveLength(1);
+  expect(screen.getByRole("link", { name: "Ada" })).toHaveAttribute(
+    "href",
+    "https://flickr.example/ada",
+  );
+  expect(photo).toEqual(before);
+});
+
+it("separates distinct mandatory image notices from a readable caption", () => {
+  const photo = commons("CC BY 4.0");
+  if (!photo.contributors) throw new Error("Missing photo receipt");
+  photo.contributors = [
+    ...photo.contributors,
+    {
+      sourceId: "service",
+      name: "Camera service",
+      licensing: {
+        version: 1,
+        bindings: [
+          {
+            scope: "service",
+            subject: "API",
+            license: { kind: "unknown" },
+            attribution: {
+              placement: "visible",
+              surfaces: ["image"],
+              basis: "provider-terms",
+              reviewedAt: "2026-10-16",
+              evidenceUrls: ["https://service.example/terms"],
+              reason: "Required notice",
+              compactText: "Exact camera notice",
+            },
+          },
+        ],
+      },
+    },
+  ];
+  const { container } = caption(photo);
+  expect(container.textContent).toContain("CC-BY-4.0");
+  expect(container.textContent).toMatch(/CC-BY-4.0.*[·|].*Exact camera notice/);
 });

@@ -63,7 +63,7 @@ export interface ParkingArea extends ParkingCounts {
  * `fromMin`. A `per_hour` row is an hourly price charged in steps of
  * `stepMin`, applying from `fromMin` to `toMin`.
  */
-export interface ParkingRate {
+export interface ParkingRate extends ContributingRecord {
   currency: string;
   rows: {
     kind: "flat" | "per_hour";

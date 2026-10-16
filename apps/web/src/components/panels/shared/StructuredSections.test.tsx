@@ -1,3 +1,4 @@
+import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen } from "@/test";
@@ -6,7 +7,7 @@ import { StructuredSections } from "./StructuredSections";
 vi.mock("@/components/ui/HlsVideo", () => ({
   HlsVideo: ({ src }: { src: string }) => (
     <video src={src}>
-      <track kind="captions" src="" srcLang="en" label="Captions" />
+      <track kind="captions" src="https://player.test/captions" srcLang="en" label="Captions" />
     </video>
   ),
 }));
@@ -642,5 +643,45 @@ it.each(["video", "iframe"] as const)(
     expect(screen.queryByText("Required player service credit")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Load media" }));
     expect(screen.getByText("Required player service credit")).toBeVisible();
+  },
+);
+
+it.each(["image", "video", "iframe"] as const)(
+  "uses one disclosure for optional %s provenance",
+  (kind) => {
+    const contributors = [
+      {
+        sourceId: "optional",
+        name: "Optional image source",
+        licensing: licensingFromDeclaration(
+          "CC BY-SA 4.0",
+          "https://creativecommons.org/licenses/by-sa/4.0/",
+        ),
+      },
+    ];
+    render(
+      <StructuredSections
+        sections={[
+          kind === "image"
+            ? {
+                title: "Picture",
+                type: "image",
+                imageUrl: "https://image.test/frame",
+                contributors,
+              }
+            : {
+                title: "Player",
+                type: "embed",
+                collapsed: false,
+                embedType: kind,
+                embedUrl: "https://player.test/embed",
+                contributors,
+              },
+        ]}
+      />,
+    );
+    if (kind !== "image") fireEvent.click(screen.getByRole("button", { name: "Load media" }));
+    expect(screen.getAllByRole("button", { name: "attributions" })).toHaveLength(1);
+    expect(screen.queryByRole("button", { name: "showMore" })).toBeNull();
   },
 );

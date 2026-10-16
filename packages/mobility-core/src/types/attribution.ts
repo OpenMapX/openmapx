@@ -21,7 +21,7 @@ export interface Attribution {
   publisher?: { name: string; url?: string };
   /** When this data was last refreshed from upstream (ISO 8601). */
   retrievedAt?: string;
-  /** Free-form per-source notes (e.g. "via Transitous feed proxy"). */
+  /** Supplied credit/modification notices, never operator configuration or privacy prose. */
   notes?: string;
 }
 

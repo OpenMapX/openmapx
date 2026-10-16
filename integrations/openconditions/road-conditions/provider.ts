@@ -6,7 +6,6 @@ import type {
 } from "@openmapx/integration-framework";
 import type { OpenConditionsClient } from "../client.js";
 import { operationalEvidenceOf, type RawOperationalStatus } from "../evidence/read.js";
-import { NO_SOURCES } from "../features/record.js";
 import type { LiveSources } from "../sources.js";
 import { featureCollectionToRoadFlowSegments } from "./flow.js";
 import { situationToRoadConditionEvent } from "./situation.js";
@@ -86,7 +85,6 @@ export function createRoadConditionsProvider(
     const capturedEvents = new Map<Rec, RoadConditionEvent>();
     let cursor: string | null = null;
     do {
-      const credits = sources.captureCredits?.() ?? NO_SOURCES;
       const page: SituationPage = await client.get<SituationPage>(
         "/situations",
         {
@@ -108,7 +106,7 @@ export function createRoadConditionsProvider(
       }
       for (const record of page.records as Rec[]) {
         records.push(record);
-        const event = situationToRoadConditionEvent(record, PROVIDER_ID, credits);
+        const event = situationToRoadConditionEvent(record, PROVIDER_ID);
         if (event) capturedEvents.set(record, { ...event, routingEvidence: {} });
       }
       cursor = page.next as string | null;

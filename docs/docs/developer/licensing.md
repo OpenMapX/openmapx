@@ -76,7 +76,11 @@ Original supplier declarations can be retained in `declarations: [{ "text":
 "...", "url": "https://..." }]`; these are evidence, not combined display
 labels or a permission selector. Bindings retain the actual conditions and
 required wording separately in `conditions` and `notice`. Source-wide
-`attributionText` remains the publisher's original required notice.
+`attributionText` remains the publisher's original required notice. Manifest
+`dataSources[].notes` is operator/privacy context and is not copied into result
+credits. Put required wording in `attribution`, or in the relevant binding's
+`notice`/`conditions`. A captured receipt's own `notes` is reserved for supplied
+credit or modification notices and remains available in Credits.
 
 `parseLicensing` validates and copies the complete bounded structure. Unknown
 versions, malformed expressions, undefined custom references and unsafe licence

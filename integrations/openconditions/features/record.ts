@@ -1,5 +1,8 @@
 import type { FuelStation } from "@openmapx/integration-framework";
-import { snapshotContributors } from "@openmapx/mobility-core/contributors";
+import {
+  readCapturedContributors,
+  snapshotContributors,
+} from "@openmapx/mobility-core/contributors";
 import {
   canonicalLicenseExpression,
   isSafeAttributionUrl,
@@ -266,6 +269,24 @@ export function readingCredits(
         captured.map((source) => credit(source, NO_SOURCES)),
         upstreamCredits(captured, NO_SOURCES),
       );
+    }),
+  );
+}
+
+/** Captured record/offer suppliers, independent of the current source catalogue. */
+export function recordCredits(record: Rec): Attribution[] {
+  const native = readCapturedContributors(record.contributors);
+  if (native !== undefined) return snapshotContributors(native);
+  const captured = sourcesOf(record).map((source) => ({
+    ...source,
+    id: str(source.attribution.parentSourceId) ?? source.id,
+  }));
+  return snapshotContributors(
+    captured.map((source) => credit(source, NO_SOURCES)),
+    upstreamCredits(captured, NO_SOURCES),
+    captured.flatMap((source) => {
+      const notice = str(source.attribution.notice);
+      return notice ? [{ sourceId: source.id, name: notice }] : [];
     }),
   );
 }

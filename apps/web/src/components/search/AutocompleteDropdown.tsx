@@ -26,7 +26,7 @@ import {
   useSettingsStore,
 } from "@openmapx/core";
 import { useTranslations } from "next-intl";
-import { useEffect, useRef } from "react";
+import { type ReactNode, useEffect, useRef } from "react";
 import { BRAND } from "@/integration-api/runtime/theme";
 import { BrandLogo } from "./BrandLogo";
 import { PresetIcon } from "./PresetIcon";
@@ -112,10 +112,6 @@ function CategorySvgIcon({ path }: { path: string }) {
 function getResultIcon(s: AutocompleteResult): React.ReactNode {
   if (s.type === "labeled_place" && s.labelKey) {
     return labeledPlaceIcon[s.labelKey] ?? iconByType.labeled_place;
-  }
-
-  if (s.type === "brand" && s.brand) {
-    return <BrandLogo brand={s.brand} size={20} />;
   }
 
   if (s.iconPath) return <CategorySvgIcon path={s.iconPath} />;
@@ -223,7 +219,7 @@ export function AutocompleteDropdown({
                 distanceReference?.kind === "user_location" ? "fromYou" : "fromMapCenter",
               )}`
             : null;
-        return (
+        const renderSuggestion = (mark: ReactNode, credits?: ReactNode) => (
           <li
             key={`${s.type}:${s.id}`}
             ref={i === highlightedIndex ? activeRef : undefined}
@@ -242,7 +238,7 @@ export function AutocompleteDropdown({
               selected={i === highlightedIndex}
               sx={{ px: 2, py: 1 }}
             >
-              <ListItemIcon sx={{ minWidth: 36 }}>{getResultIcon(s)}</ListItemIcon>
+              <ListItemIcon sx={{ minWidth: 36 }}>{mark}</ListItemIcon>
               <ListItemText
                 primary={
                   <Box component="span" sx={{ display: "flex", alignItems: "center", gap: 0.75 }}>
@@ -276,7 +272,22 @@ export function AutocompleteDropdown({
                 }}
               />
             </ListItemButton>
+            {credits && (
+              <Box sx={{ px: 2, pb: 1, color: "text.secondary", fontSize: "0.65rem" }}>
+                {credits}
+              </Box>
+            )}
           </li>
+        );
+        return s.type === "brand" && s.brand ? (
+          <BrandLogo
+            key={`${s.type}:${s.id}`}
+            brand={s.brand}
+            size={20}
+            render={({ mark, credits }) => renderSuggestion(mark, credits)}
+          />
+        ) : (
+          renderSuggestion(getResultIcon(s))
         );
       })}
     </List>

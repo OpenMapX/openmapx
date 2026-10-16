@@ -167,7 +167,7 @@ describe("road-conditions provider and the live source list", () => {
     expect((await p.getRoutingEvents!(BBOX)).events.map((e) => e.id)).toEqual(ids);
   });
 
-  it("carries a catalogue child's parent credit id and required notice into the event", async () => {
+  it("carries a child's captured parent identity without borrowing catalogue notices", async () => {
     const live = listed("nl-parent");
     live.updateDescribed([
       { id: "nl-parent", format: "datex2", notice: "Required publisher notice" },
@@ -176,8 +176,9 @@ describe("road-conditions provider and the live source list", () => {
     expect(event!.source).toBe("nl-child");
     expect(event!.attribution).toMatchObject({
       sourceId: "nl-parent",
-      notice: "Required publisher notice",
     });
+    expect(event!.attribution.notice).toBeUndefined();
+    expect(JSON.stringify(event!.contributors)).not.toContain("Required publisher notice");
   });
 
   it("credits a listed feed's LicenseRef- licence by the name the list gives it", async () => {
@@ -693,6 +694,7 @@ describe("situationToRoadConditionEvent", () => {
         {
           sourceId: "fi-digitraffic-events",
           name: "Fintraffic / Digitraffic",
+          attributionText: "Fintraffic / Digitraffic",
           licensing: licensingFromDeclaration(
             "CC-BY-4.0",
             "https://creativecommons.org/licenses/by/4.0/",
@@ -793,7 +795,6 @@ describe("situationToRoadConditionEvent", () => {
       [LICENSE]: NAME,
       "CC-BY-4.0": "Creative Commons Attribution 4.0",
     };
-    const sources = EVERY_SOURCE;
     const tfl = record({
       provenance: {
         origin: "feed",
@@ -822,13 +823,13 @@ describe("situationToRoadConditionEvent", () => {
       },
     });
 
-    expect(situationToRoadConditionEvent(tfl, "", sources)!.attribution).toEqual({
+    expect(situationToRoadConditionEvent(tfl)!.attribution).toEqual({
       provider: "Transport for London",
       licensing:
         (tfl.provenance as Rec).attribution &&
         ((tfl.provenance as Rec).attribution as Rec).licensing,
     });
-    expect(situationToRoadConditionEvent(record(), "", sources)!.attribution).toMatchObject({
+    expect(situationToRoadConditionEvent(record())!.attribution).toMatchObject({
       licensing: { bindings: [{ license: { kind: "spdx", expression: "CC-BY-4.0" } }] },
     });
     // Without names (before the first list) the id stays as it is.
@@ -1057,7 +1058,7 @@ describe("featureCollectionToRoadFlowSegments", () => {
 });
 
 describe("situation acquisition receipts", () => {
-  it("captures each page before its acquisition and never guesses a catalogue parent", async () => {
+  it("keeps captured parent identities without importing current catalogue page metadata", async () => {
     const sources = createLiveSources();
     const metadata = (name: string) => [
       {
@@ -1090,12 +1091,12 @@ describe("situation acquisition receipts", () => {
       4, 51, 6, 53,
     ]);
     expect(events.map((event) => event.contributors?.map((c) => c.name))).toEqual([
-      ["First page"],
-      ["Second page"],
-      [],
+      ["parent"],
+      ["parent"],
+      ["parent-child"],
     ]);
   });
-  it("captures the catalogue before a delayed page and preserves native empty receipts", async () => {
+  it("preserves captured record credits and native empty receipts across catalogue changes", async () => {
     const sources = createLiveSources();
     const old = {
       sourceId: "parent",
@@ -1148,14 +1149,7 @@ describe("situation acquisition receipts", () => {
     release();
     const result = await read;
     expect(result[0]?.contributors).toEqual([
-      {
-        sourceId: "parent",
-        name: "Old publisher",
-        url: "https://old.test",
-        licensing: licensingFromDeclaration("CC-BY-4.0"),
-        attributionText: "Old required notice",
-      },
-      { sourceId: "parent", name: "Old extra notice" },
+      { sourceId: "parent", name: "Child", attributionText: "Child" },
       { sourceId: "parent", name: "Record notice" },
     ]);
     expect(result[1]?.contributors).toEqual([]);

@@ -1,6 +1,7 @@
 "use client";
 
 import CloseIcon from "@mui/icons-material/Close";
+import Box from "@mui/material/Box";
 import IconButton from "@mui/material/IconButton";
 import Typography from "@mui/material/Typography";
 import {
@@ -10,8 +11,10 @@ import {
   usePlaceStore,
   useStreetLevelStore,
 } from "@openmapx/core";
+import type { Attribution } from "@openmapx/mobility-core/attribution";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { MapCredits } from "@/components/map/MapCredits";
 import { SearchBar } from "@/components/search/SearchBar";
 import { LocationMinimap } from "@/integration-api/components/LocationMinimap";
 import { useStreetLevelProviders } from "@/integration-api/components/useStreetLevelProviders";
@@ -44,6 +47,7 @@ export default function StreetLevelViewerInner() {
   const tourRef = useRef<TourPlugin | null>(null);
   const lastNodeIdRef = useRef<string | null>(null);
   const [node, setNode] = useState<StreetLevelNode | null>(null);
+  const [minimapCredits, setMinimapCredits] = useState<readonly Attribution[]>([]);
   const [failed, setFailed] = useState(false);
 
   // The viewer effect must not re-run when these change, so read them through
@@ -293,27 +297,51 @@ export default function StreetLevelViewerInner() {
       )}
 
       {node && (
-        <LocationMinimap
-          lng={node.image.lngLat[0]}
-          lat={node.image.lngLat[1]}
-          zoom={17}
-          onClick={handleMinimapClick}
+        <Box
           sx={{
             position: "absolute",
             right: 12,
-            // Lifted off the bottom edge so the whole minimap — including the
-            // credits control in its corner — stays clear of the screen edge.
             bottom: 28,
             width: { xs: 132, sm: 196 },
-            height: { xs: 96, sm: 132 },
-            borderRadius: "10px",
-            overflow: "hidden",
-            border: "2px solid rgba(255,255,255,0.85)",
-            boxShadow: "0 4px 14px rgba(0,0,0,0.45)",
-            cursor: "pointer",
             zIndex: 10,
           }}
-        />
+        >
+          <LocationMinimap
+            lng={node.image.lngLat[0]}
+            lat={node.image.lngLat[1]}
+            zoom={17}
+            onClick={handleMinimapClick}
+            onCreditsChange={setMinimapCredits}
+            sx={{
+              width: "100%",
+              height: { xs: 96, sm: 132 },
+              borderRadius: "10px",
+              overflow: "hidden",
+              border: "2px solid rgba(255,255,255,0.85)",
+              boxShadow: "0 4px 14px rgba(0,0,0,0.45)",
+              cursor: "pointer",
+              zIndex: 10,
+            }}
+          />
+          {minimapCredits.length > 0 && (
+            <Box
+              sx={{ mt: 0.5, p: 0.5, borderRadius: 1, bgcolor: "rgba(0,0,0,0.75)", color: "#fff" }}
+            >
+              <MapCredits
+                attributions={minimapCredits}
+                sx={{
+                  position: "static",
+                  '[data-testid="map-credits"]': {
+                    bgcolor: "transparent",
+                    color: "#fff",
+                    px: 0,
+                    py: 0,
+                  },
+                }}
+              />
+            </Box>
+          )}
+        </Box>
       )}
 
       <IconButton

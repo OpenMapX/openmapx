@@ -135,6 +135,9 @@ describe("parking-sites-openconditions", () => {
     ]);
     expect(site.rates).toEqual([
       {
+        contributors: [
+          expect.objectContaining({ sourceId: MOBIDATA, licensing: expect.any(Object) }),
+        ],
         currency: "EUR",
         rows: [
           { kind: "per_hour", amount: 2, toMin: 180, stepMin: 30 },
@@ -252,6 +255,26 @@ describe("parking-sites-openconditions", () => {
           ],
         } as const,
         publisher: { name: "Stadt Karlsruhe" },
+      },
+      // The rate's independent capture has no feature catalogue URL.
+      {
+        sourceId: MOBIDATA,
+        name: MOBIDATA_PROVIDER,
+        attributionText: MOBIDATA_PROVIDER,
+        licensing: {
+          version: 1,
+          bindings: [
+            {
+              scope: "data",
+              subject: MOBIDATA_PROVIDER,
+              license: {
+                kind: "spdx",
+                expression: "DL-DE-BY-2.0",
+                url: "https://www.govdata.de/dl-de/by-2-0",
+              },
+            },
+          ],
+        },
       },
     ]);
   });

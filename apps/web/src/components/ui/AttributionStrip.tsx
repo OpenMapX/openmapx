@@ -12,6 +12,7 @@ import {
   projectAttributionPresentations,
   safeHref,
 } from "@openmapx/core";
+import type { VisibleAttribution } from "@openmapx/core/attribution";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import { contributorKey } from "@openmapx/mobility-core/contributors";
 import {
@@ -160,7 +161,15 @@ export function AttributionStrip({
     return null;
   const showOptional =
     provenanceDisplay === "chips" && !(grouped === "footer" && keepVisibleWithContent);
-  const eligible = items.filter((_, index) => !presentations[index]?.visibleHtml);
+  const optional = new Map<string, Attribution>();
+  for (const [index, attr] of items.entries()) {
+    if (presentations[index]?.visibleHtml) continue;
+    // Full receipts remain in group.details; identical optional source labels
+    // need only one link even when their software grants or capture notes differ.
+    const key = JSON.stringify([displayLabel(attr), safeHref(attr.url)]);
+    if (!optional.has(key)) optional.set(key, attr);
+  }
+  const eligible = [...optional.values()];
   const collapsible =
     showOptional && typeof maxVisible === "number" && eligible.length > maxVisible;
   const selected = new Set(
@@ -170,10 +179,20 @@ export function AttributionStrip({
         ? eligible.slice(0, Math.max(0, maxVisible))
         : eligible,
   );
-  const visibleItems = items.filter(
-    (attr, index) => presentations[index]?.visibleHtml || selected.has(attr),
-  );
-  const hiddenCount = items.length - visibleItems.length;
+  const visibleItems: { attr?: Attribution; notice?: VisibleAttribution; key: string }[] = [
+    ...group.visible.map((notice) => ({
+      notice,
+      attr: items.find((_, index) => presentations[index]?.visibleHtml === notice.html),
+      key: `notice:${notice.html}`,
+    })),
+    ...eligible
+      .filter((attr) => selected.has(attr))
+      .map((attr) => ({
+        attr,
+        key: `source:${contributorKey(attr)}`,
+      })),
+  ];
+  const hiddenCount = eligible.length - selected.size;
 
   const containerSx = {
     display: "flex",
@@ -214,17 +233,18 @@ export function AttributionStrip({
           {label}
         </Typography>
       )}
-      {visibleItems.map((attr, idx) => {
-        const presentation = presentations[items.indexOf(attr)]!;
-        const mandatory = Boolean(presentation.visibleHtml);
-        const labelText = displayLabel(attr);
-        const link = chipHref(attr);
+      {visibleItems.map(({ attr, notice, key }, idx) => {
+        const mandatory = notice !== undefined;
+        const labelText = attr ? displayLabel(attr) : "";
+        const link = attr ? chipHref(attr) : undefined;
         const tooltip = (
           <Box
             component="span"
             sx={{ "& a": { color: "inherit" } }}
             // biome-ignore lint/security/noDangerouslySetInnerHtml: shared attribution sanitizer escapes captured metadata
-            dangerouslySetInnerHTML={{ __html: buildRuntimeAttributionHtml(attr) }}
+            dangerouslySetInnerHTML={{
+              __html: attr ? buildRuntimeAttributionHtml(attr) : (notice?.html ?? ""),
+            }}
           />
         );
         // Every box from the strip down to the chip is capped at the strip's
@@ -248,28 +268,16 @@ export function AttributionStrip({
           ...(!isPlain && !mandatory && { overflow: "hidden", textOverflow: "ellipsis" }),
         };
         const chipContent = (
-          <Box component="span" sx={chipSx} data-source-id={attr.sourceId}>
-            {mandatory ? (
-              <AttributionNotices
-                notices={[
-                  {
-                    html: presentation.visibleHtml,
-                    logos: presentation.logos,
-                    prominence: presentation.prominence,
-                  },
-                ]}
-              />
-            ) : (
-              labelText
-            )}
+          <Box component="span" sx={chipSx} data-source-id={attr?.sourceId}>
+            {mandatory ? <AttributionNotices notices={notice ? [notice] : []} /> : labelText}
           </Box>
         );
         const node =
           navigable &&
-          (!mandatory ||
-            (!presentation.visibleHtml.includes("<a ") && presentation.logos.length === 0)) ? (
+          link &&
+          (!notice || (!notice.html.includes("<a ") && notice.logos.length === 0)) ? (
             <Link
-              key={contributorKey(attr)}
+              key={key}
               onClick={(event) => event.stopPropagation()}
               href={link.href}
               target={link.external ? "_blank" : undefined}
@@ -285,16 +293,12 @@ export function AttributionStrip({
               {chipContent}
             </Link>
           ) : (
-            <Box key={contributorKey(attr)} component="span" sx={fitSx}>
+            <Box key={key} component="span" sx={fitSx}>
               {chipContent}
             </Box>
           );
         return (
-          <Box
-            key={contributorKey(attr)}
-            component="span"
-            sx={{ minWidth: 0, overflowWrap: "anywhere", ...fitSx }}
-          >
+          <Box key={key} component="span" sx={{ minWidth: 0, overflowWrap: "anywhere", ...fitSx }}>
             <Tooltip title={tooltip} placement="top" arrow>
               <Box
                 component="span"

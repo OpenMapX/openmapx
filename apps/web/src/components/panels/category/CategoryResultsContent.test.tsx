@@ -1931,3 +1931,70 @@ it("credits displayed transit fields with full notices, native empty rows and ne
   expect(screen.getByText("Mode supplier required notice")).toBeInTheDocument();
   expect(screen.queryByText(/Hidden supplier/)).toBeNull();
 });
+
+it("keeps brand credit controls outside result selection and collects catalogue provenance once", async () => {
+  const catalogue = { sourceId: "name-suggestion-index", name: "Captured catalogue" };
+  const brand = {
+    qid: "Q123",
+    name: "Brand",
+    kind: ["brand"],
+    logoFile: "Brand.svg",
+    contributors: [catalogue],
+  };
+  const photo = {
+    logoFile: "Brand.svg",
+    url: "https://images.test/brand.svg",
+    source: "wikimedia-commons",
+    author: "File artist",
+    pageUrl: "https://commons.wikimedia.org/wiki/File:Brand.svg",
+    licensing: licensingFromDeclaration(
+      "CC BY 4.0",
+      "https://creativecommons.org/licenses/by/4.0/",
+    ),
+  };
+  const get = vi
+    .spyOn(apiClient, "get")
+    .mockImplementation(async (url) =>
+      String(url).includes("logo-attribution") ? photo : (brand as never),
+    );
+  const places = ["One", "Two"].map(
+    (name, index) =>
+      ({
+        id: `osm:node/${index}`,
+        name,
+        coordinates: [6, 51],
+        osmTags: { "brand:wikidata": "Q123" },
+      }) as CategoryPlace,
+  );
+  act(() => useCategorySearchStore.setState({ activeCategory: "hotels" }));
+  mockUseExploreReachResults.mockReturnValue({
+    filtered: places,
+    isLoading: false,
+    isError: false,
+    isTransitCategory: false,
+  });
+  try {
+    const { container } = renderPanel(vi.fn());
+    await screen.findAllByRole("img", { name: "One" });
+    const rows = [
+      screen.getByRole("button", { name: /^One/ }),
+      screen.getByRole("button", { name: /^Two/ }),
+    ];
+    for (const row of rows) expect(row.querySelector("button, a")).toBeNull();
+    expect(container.querySelector("button button")).toBeNull();
+    expect(screen.getAllByText("File artist", { exact: false })).toHaveLength(2);
+    expect(screen.getAllByText("Captured catalogue")).toHaveLength(1);
+    fireEvent.click(screen.getAllByRole("button", { name: "photoGallery.credits" })[0]);
+    expect(usePlaceStore.getState().selectedPlace?.name).not.toBe("One");
+    fireEvent.click(screen.getByRole("button", { name: "common.close" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    fireEvent.error(screen.getByRole("img", { name: "One" }));
+    expect(screen.getAllByText("File artist", { exact: false })).toHaveLength(1);
+    expect(screen.getAllByText("Captured catalogue")).toHaveLength(1);
+    fireEvent.error(screen.getByRole("img", { name: "Two" }));
+    expect(screen.queryByText("File artist", { exact: false })).toBeNull();
+    expect(screen.queryByText("Captured catalogue")).toBeNull();
+  } finally {
+    get.mockRestore();
+  }
+});

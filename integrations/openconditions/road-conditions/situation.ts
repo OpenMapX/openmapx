@@ -5,10 +5,9 @@ import type {
   RoadConditionRoadRef,
   RoadConditionValidity,
 } from "@openmapx/integration-framework";
-import { parseContributors, snapshotContributors } from "@openmapx/integration-framework";
+import { snapshotContributors } from "@openmapx/integration-framework";
 import { parseLicensing } from "@openmapx/mobility-core/licensing";
-import { type CreditSources, locationTableCredits, NO_SOURCES } from "../features/record.js";
-import type { CapturedSourceCredits } from "../sources.js";
+import { locationTableCredits, recordCredits } from "../features/record.js";
 
 type Rec = Record<string, unknown>;
 
@@ -68,16 +67,11 @@ function validityOf(raw: Rec): RoadConditionValidity {
 /**
  * One OpenConditions situation record as the host's `RoadConditionEvent`,
  * field for field. A record not yet placed (no geometry) cannot be shown or
- * routed: null. Its credit takes the licence name from `sources`.
+ * routed: null. Its credit projects only the record's captured suppliers.
  */
 export function situationToRoadConditionEvent(
   record: Rec,
   provider = "",
-  sources: {
-    link?: CreditSources["link"];
-    noticeOf?: CapturedSourceCredits["noticeOf"];
-    contributors?: CapturedSourceCredits["contributors"];
-  } = NO_SOURCES,
 ): RoadConditionEvent | null {
   const location = obj(record.location) ?? {};
   const geometry = obj(location.geometry);
@@ -89,33 +83,13 @@ export function situationToRoadConditionEvent(
   const evidence = obj(record.evidence);
   const licensing = parseLicensing(attribution.licensing);
   const parentSourceId = str(attribution.parentSourceId);
-  const notice = sources.noticeOf?.(parentSourceId ?? String(provenance.sourceId));
+  const notice = str(attribution.notice);
   const sourceId = parentSourceId ?? str(provenance.sourceId);
-  const native = parseContributors(record.contributors);
-  const recordedNotice = str(attribution.notice);
-  const resolved = sourceId ? sources.contributors?.(sourceId) : undefined;
-  // The location table a TMC-coded record was placed with is credited beside
-  // its source, native receipts included, since the record itself names it.
-  const tableCredits = locationTableCredits(record, sourceId);
-  const contributors = native
-    ? snapshotContributors(native, tableCredits)
-    : snapshotContributors(
-        resolved?.length && !licensing
-          ? resolved
-          : sourceId && str(attribution.provider)
-            ? [
-                {
-                  sourceId,
-                  name: String(attribution.provider),
-                  ...strField("url", attribution.url),
-                  ...(licensing ? { licensing } : {}),
-                },
-              ]
-            : [],
-        sourceId && notice ? [{ sourceId, name: notice }] : [],
-        sourceId && recordedNotice ? [{ sourceId, name: recordedNotice }] : [],
-        tableCredits,
-      );
+  // A named location table is additional captured evidence, including with native receipts.
+  const contributors = snapshotContributors(
+    recordCredits(record),
+    locationTableCredits(record, sourceId),
+  );
   const direction = obj(location.direction);
   const roads = roadsOf(location);
   return {

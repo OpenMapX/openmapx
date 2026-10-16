@@ -13,12 +13,21 @@ vi.mock("next-intl", async () =>
   (await import("@/test/intl")).mockNextIntl({ useLocale: () => "de" }),
 );
 
+vi.mock("@/integration-api/map/MapContext", () => ({
+  useMap: () => ({ flyTo: vi.fn() }),
+  useMapOptional: () => null,
+}));
+
 const useDirectionsMock = vi.fn();
 const useScheduledDirectionsMock = vi.fn();
 const useTransitPlanMock = vi.fn();
 const useTransitChainPlanMock = vi.fn();
 const useEvDirectionsMock = vi.fn();
 const useAutocompleteMock = vi.fn();
+const transitCollection = vi.hoisted(() => ({
+  journey: undefined as import("@openmapx/mobility-core/transit").VehicleJourney | undefined,
+  alerts: [] as import("@openmapx/mobility-core/transit").ServiceAlert[],
+}));
 let capabilityServices: Record<string, { available: boolean }> = {};
 vi.mock("@openmapx/core", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@openmapx/core")>();
@@ -50,6 +59,8 @@ vi.mock("@openmapx/core", async (importOriginal) => {
       isLoading: false,
     }),
     useRideQuotes: () => ({ results: [], expiresAt: null, refetch: vi.fn() }),
+    useVehicleJourney: () => ({ data: transitCollection.journey }),
+    useRouteAlerts: () => ({ data: transitCollection.alerts }),
     useCapabilities: () => ({ services: capabilityServices }),
     useOptimizeRoute: () => ({ mutate: vi.fn(), isPending: false }),
     useRouteInGermany: () => ({ bothInGermany: false }),
@@ -57,11 +68,27 @@ vi.mock("@openmapx/core", async (importOriginal) => {
 });
 
 // TransitItineraryCard's real mount needs ~8 module mocks (see its own spec);
-// stub it — this spec only asserts DirectionsPanelContent DELEGATES to it.
+// keep the card shallow while its Details action opens the real detail consumer.
 vi.mock("@/components/panels/directions/TransitRouteView", () => ({
-  TransitItineraryCard: ({ itinerary }: { itinerary: { duration: number } }) => (
-    <div data-testid="transit-itinerary-card">{itinerary.duration}</div>
+  TransitItineraryCard: ({
+    itinerary,
+    onDetails,
+  }: {
+    itinerary: { duration: number };
+    onDetails?: () => void;
+  }) => (
+    <div data-testid="transit-itinerary-card">
+      {itinerary.duration}
+      <button type="button" onClick={onDetails}>
+        Open transit details
+      </button>
+    </div>
   ),
+  LegBadge: () => <span />,
+  LegRemarks: () => null,
+  LiveStopTime: ({ scheduledTime }: { scheduledTime: string }) => <span>{scheduledTime}</span>,
+  TransitEmissionsBadge: () => null,
+  TransitLiveBadge: () => null,
 }));
 
 import {
@@ -98,6 +125,8 @@ interface TransitCallArgs {
 
 beforeEach(() => {
   capabilityServices = {};
+  transitCollection.journey = undefined;
+  transitCollection.alerts = [];
   useDirectionsMock
     .mockReset()
     .mockReturnValue({ data: undefined, isLoading: false, isError: false });
@@ -1312,4 +1341,63 @@ it("keeps cached empty duration receipts authoritative and hides spinner-only du
   expect(screen.queryByText(formatDuration(600))).toBeNull();
   expect(screen.queryByText("Hidden duration owner")).toBeNull();
   expect(screen.queryByRole("button", { name: "footer.attributions" })).toBeNull();
+});
+
+it("collects transit details, fetched stops and alerts into one mounted credit footer", () => {
+  seedOriginDestination();
+  act(() => useDirectionsStore.getState().setMode("transit"));
+  const supplier = { sourceId: "transit", name: "Transit plan supplier" };
+  const stopSupplier = { sourceId: "stops", name: "Fetched stop supplier" };
+  const alertSupplier = { sourceId: "alerts", name: "Fetched alert supplier" };
+  const itinerary = {
+    duration: 3600,
+    startTime: "2026-10-16T08:00:00Z",
+    endTime: "2026-10-16T09:00:00Z",
+    transfers: 0,
+    walkDistance: 0,
+    contributors: [supplier],
+    legs: [
+      {
+        mode: "rail",
+        startTime: "2026-10-16T08:00:00Z",
+        endTime: "2026-10-16T09:00:00Z",
+        from: { name: "From", lat: 50, lng: 8, stopId: "from" },
+        to: { name: "To", lat: 51, lng: 9, stopId: "to" },
+        route: { shortName: "ICE", longName: "Express", color: "DF2027" },
+        tripId: "trip",
+        routeId: "route",
+        _intermediateStopCount: 1,
+        contributors: [supplier],
+      },
+    ],
+  };
+  useTransitPlanMock.mockReturnValue({
+    data: { provider: "captured", itineraries: [itinerary] },
+    isLoading: false,
+    isError: false,
+  });
+  const view = renderPanel();
+  fireEvent.click(screen.getByRole("button", { name: "Open transit details" }));
+  expect(screen.getAllByText("Transit plan supplier")).toHaveLength(1);
+  transitCollection.journey = {
+    stops: [
+      { stopId: "from", name: "From", contributors: [supplier] },
+      { stopId: "middle", name: "Middle", contributors: [stopSupplier] },
+      { stopId: "to", name: "To", contributors: [supplier] },
+    ],
+  } as never;
+  transitCollection.alerts = [
+    { id: "alert", severity: "warning", title: "Disruption", contributors: [alertSupplier] },
+  ] as never;
+  view.rerender(<DirectionsPanelContent />);
+  expect(screen.getAllByText("Transit plan supplier")).toHaveLength(1);
+  expect(screen.getByText("Fetched stop supplier")).toBeInTheDocument();
+  expect(screen.getByText("Fetched alert supplier")).toBeInTheDocument();
+  expect(screen.getAllByRole("button", { name: "footer.attributions" })).toHaveLength(1);
+  transitCollection.journey = undefined;
+  transitCollection.alerts = [];
+  view.rerender(<DirectionsPanelContent />);
+  expect(screen.queryByText("Fetched stop supplier")).not.toBeInTheDocument();
+  expect(screen.queryByText("Fetched alert supplier")).not.toBeInTheDocument();
+  expect(screen.getAllByText("Transit plan supplier")).toHaveLength(1);
 });

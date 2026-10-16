@@ -1,4 +1,5 @@
 import type { StreetLevelCapabilities, StreetLevelImage } from "@openmapx/core";
+import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 import { expect, it, vi } from "vitest";
 import { render, screen } from "@/test";
 import { StreetLevelInfoCard } from "./StreetLevelInfoCard";
@@ -59,4 +60,32 @@ it("retains image source and branding when optional capture time and reverse geo
     "/mapillary-logo.svg",
   );
   expect(screen.getByText("Actual Photographer")).toBeVisible();
+});
+
+it("uses one details action for optional image provenance", () => {
+  render(
+    <StreetLevelInfoCard
+      image={{
+        id: "one",
+        providerId: "panoramax",
+        lngLat: [6, 51],
+        isPano: false,
+        assets: { sd: "https://image.test/frame" },
+        contributors: [
+          {
+            sourceId: "panoramax",
+            name: "Panoramax",
+            licensing: licensingFromDeclaration(
+              "CC BY-SA 4.0",
+              "https://creativecommons.org/licenses/by-sa/4.0/",
+            ),
+          },
+        ],
+      }}
+      provider={{ id: "panoramax", name: "Panoramax", color: "#000" } as StreetLevelCapabilities}
+      onClose={vi.fn()}
+    />,
+  );
+  expect(screen.getAllByRole("button", { name: "attributions" })).toHaveLength(1);
+  expect(screen.queryByRole("button", { name: "showMore" })).toBeNull();
 });

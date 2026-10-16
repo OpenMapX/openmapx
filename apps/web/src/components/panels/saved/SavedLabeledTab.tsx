@@ -29,6 +29,7 @@ import {
 } from "@openmapx/core/saved-place-contributors";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
+import { AttributionDetailsGroup } from "@/components/ui/AttributionDetailsGroup";
 import { AttributionStrip } from "@/components/ui/AttributionStrip";
 import { useMap } from "@/integration-api/map/MapContext";
 import { BRAND } from "@/integration-api/runtime/theme";
@@ -105,12 +106,66 @@ export function SavedLabeledTab() {
 
   return (
     <Box sx={{ px: 2, py: 1.5 }}>
-      {PLACEHOLDER_LABELS.map(({ key, icon }) => {
-        const dbLabel = key === "home" ? homeLabel : workLabel;
-        return (
+      <AttributionDetailsGroup placement="footer" footerSx={{ px: 1 }}>
+        {PLACEHOLDER_LABELS.map(({ key, icon }) => {
+          const dbLabel = key === "home" ? homeLabel : workLabel;
+          return (
+            <Box
+              key={key}
+              onClick={dbLabel ? () => handleLabelClick(dbLabel) : undefined}
+              sx={{
+                display: "flex",
+                alignItems: "center",
+                gap: 1.5,
+                py: 1.5,
+                px: 1,
+                borderRadius: 1,
+                cursor: dbLabel ? "pointer" : "default",
+                "&:hover": { bgcolor: "action.hover" },
+              }}
+            >
+              <Box sx={{ display: "flex", alignItems: "center", flexShrink: 0 }}>{icon}</Box>
+              <Box sx={{ flex: 1, minWidth: 0 }}>
+                <Typography
+                  variant="body2"
+                  sx={{
+                    fontWeight: 500,
+                  }}
+                >
+                  {t(key)}
+                </Typography>
+                <Typography
+                  variant="caption"
+                  noWrap
+                  sx={{
+                    color: "text.secondary",
+                  }}
+                >
+                  {dbLabel?.address ?? t("notSet")}
+                </Typography>
+                {dbLabel?.address && (
+                  <AttributionStrip
+                    attributions={savedPlaceContributors(dbLabel.fieldContributors, ["address"])}
+                    variant="inline"
+                  />
+                )}
+              </Box>
+              {dbLabel && (
+                <IconButton
+                  size="small"
+                  onClick={(e) => handleMenuOpen(e, dbLabel)}
+                  sx={{ flexShrink: 0 }}
+                >
+                  <MoreVertIcon fontSize="small" />
+                </IconButton>
+              )}
+            </Box>
+          );
+        })}
+        {customLabels?.map((label) => (
           <Box
-            key={key}
-            onClick={dbLabel ? () => handleLabelClick(dbLabel) : undefined}
+            key={label.id}
+            onClick={() => handleLabelClick(label)}
             sx={{
               display: "flex",
               alignItems: "center",
@@ -118,11 +173,13 @@ export function SavedLabeledTab() {
               py: 1.5,
               px: 1,
               borderRadius: 1,
-              cursor: dbLabel ? "pointer" : "default",
+              cursor: "pointer",
               "&:hover": { bgcolor: "action.hover" },
             }}
           >
-            <Box sx={{ display: "flex", alignItems: "center", flexShrink: 0 }}>{icon}</Box>
+            <Box sx={{ display: "flex", alignItems: "center", flexShrink: 0 }}>
+              <FlagIcon sx={{ color: BRAND }} />
+            </Box>
             <Box sx={{ flex: 1, minWidth: 0 }}>
               <Typography
                 variant="body2"
@@ -130,7 +187,7 @@ export function SavedLabeledTab() {
                   fontWeight: 500,
                 }}
               >
-                {t(key)}
+                {label.label}
               </Typography>
               <Typography
                 variant="caption"
@@ -139,75 +196,25 @@ export function SavedLabeledTab() {
                   color: "text.secondary",
                 }}
               >
-                {dbLabel?.address ?? t("notSet")}
+                {label.address ?? t("notSet")}
               </Typography>
-              {dbLabel?.address && (
+              {label.address && (
                 <AttributionStrip
-                  attributions={savedPlaceContributors(dbLabel.fieldContributors, ["address"])}
+                  attributions={savedPlaceContributors(label.fieldContributors, ["address"])}
                   variant="inline"
                 />
               )}
             </Box>
-            {dbLabel && (
-              <IconButton
-                size="small"
-                onClick={(e) => handleMenuOpen(e, dbLabel)}
-                sx={{ flexShrink: 0 }}
-              >
-                <MoreVertIcon fontSize="small" />
-              </IconButton>
-            )}
-          </Box>
-        );
-      })}
-      {customLabels?.map((label) => (
-        <Box
-          key={label.id}
-          onClick={() => handleLabelClick(label)}
-          sx={{
-            display: "flex",
-            alignItems: "center",
-            gap: 1.5,
-            py: 1.5,
-            px: 1,
-            borderRadius: 1,
-            cursor: "pointer",
-            "&:hover": { bgcolor: "action.hover" },
-          }}
-        >
-          <Box sx={{ display: "flex", alignItems: "center", flexShrink: 0 }}>
-            <FlagIcon sx={{ color: BRAND }} />
-          </Box>
-          <Box sx={{ flex: 1, minWidth: 0 }}>
-            <Typography
-              variant="body2"
-              sx={{
-                fontWeight: 500,
-              }}
+            <IconButton
+              size="small"
+              onClick={(e) => handleMenuOpen(e, label)}
+              sx={{ flexShrink: 0 }}
             >
-              {label.label}
-            </Typography>
-            <Typography
-              variant="caption"
-              noWrap
-              sx={{
-                color: "text.secondary",
-              }}
-            >
-              {label.address ?? t("notSet")}
-            </Typography>
-            {label.address && (
-              <AttributionStrip
-                attributions={savedPlaceContributors(label.fieldContributors, ["address"])}
-                variant="inline"
-              />
-            )}
+              <MoreVertIcon fontSize="small" />
+            </IconButton>
           </Box>
-          <IconButton size="small" onClick={(e) => handleMenuOpen(e, label)} sx={{ flexShrink: 0 }}>
-            <MoreVertIcon fontSize="small" />
-          </IconButton>
-        </Box>
-      ))}
+        ))}
+      </AttributionDetailsGroup>
       <Menu
         anchorEl={menuAnchor}
         open={Boolean(menuAnchor)}

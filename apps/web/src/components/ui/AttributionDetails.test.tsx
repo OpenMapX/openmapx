@@ -243,3 +243,18 @@ it("keeps distinct descriptors sharing a subject separate and preserves specific
   expect(dialog.getByText("Per-file (CC BY-SA, CC BY, or Public Domain)")).toBeVisible();
   expect(dialog.getByText("CC BY-SA")).toBeVisible();
 });
+
+it("retains explicitly supplied credit and modification notes", () => {
+  const dialog = show({
+    sourceId: "dataset",
+    name: "Dataset publisher",
+    notes: "Adapted from the original dataset; names translated",
+    licensing: {
+      version: 1,
+      bindings: [
+        { scope: "data", subject: "Data", license: { kind: "spdx", expression: "CC-BY-4.0" } },
+      ],
+    },
+  });
+  expect(dialog.getByText("Adapted from the original dataset; names translated")).toBeVisible();
+});
