@@ -856,6 +856,18 @@ trusted `complementaryGradientGroups` certificate with the same geometry and
 receipt and complete alpha coverage. Threshold heatmap palettes need a host
 adapter that proves the painted pixels.
 
+The tracker groups queried hits by layer and memoizes validated presentations by
+complete captured content, including notices, timestamps and placement policies.
+It still observes render/idle changes for late symbol placement and transitions.
+For a trusted built-in `resolveFeatureContributors` callback,
+`options.featureContributorKey(feature)` can identify identical projection inputs
+within one layer and refresh. Include every input that can change the returned
+receipts, including explicit absence; never key only by provider/source ID. Omit
+this optimization when equivalence cannot be proven. Keys and resolver results
+are not reused across owners, layers, refreshes or option updates, and every hit
+still passes its evaluated paint visibility checks before grouping. Remote
+records or community payloads cannot supply these callbacks.
+
 DOM markers use `useMarkerMapAttributions(key, element, captured)`, which checks
 painted marker visibility in the map container. Custom GPU/DOM drawing may use
 `options.resolveCustomContributors`, a **trusted host callback** proving the

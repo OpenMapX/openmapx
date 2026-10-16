@@ -15,7 +15,10 @@ import {
 import { buildPopupCard, type PopupCardSpec } from "@/integration-api/map/popupCard";
 import { flowColorExpression } from "@/integration-api/map/trafficFlowExpression";
 import { useStyleSyncedLayer } from "@/integration-api/map/useStyleSyncedLayer";
-import { flowFeatureContributors } from "@/integration-api/overlay/flowContributors";
+import {
+  flowFeatureContributorKey,
+  flowFeatureContributors,
+} from "@/integration-api/overlay/flowContributors";
 import { useMapAttributions } from "@/integration-api/overlay/useMapAttributions";
 import { useRenderedMapAttributions } from "@/integration-api/overlay/useRenderedMapAttributions";
 import { useEnv } from "@/integration-api/runtime/EnvProvider";
@@ -158,6 +161,11 @@ export function TrafficFlowLayer() {
   const [popupContributors, setPopupContributors] = useState<Attribution[]>([]);
   useMapAttributions("traffic-flow-popup", showFlow ? popupContributors : []);
   useRenderedMapAttributions("traffic-flow", [CASING, COLOR], showFlow, {
+    featureContributorKey: (feature) =>
+      flowFeatureContributorKey(
+        feature.properties ?? {},
+        feature.layer.id === CASING ? "casing" : "color",
+      ),
     resolveFeatureContributors: (feature) =>
       flowFeatureContributors(
         feature.properties ?? {},

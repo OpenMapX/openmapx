@@ -24,6 +24,7 @@ interface PreparedRoute {
   segments: Segment[];
   candidates: Candidate[];
   width: number;
+  segmentIndex?: SegmentIndex;
 }
 
 export interface RoutePillAnchor {
@@ -62,12 +63,16 @@ function clipSegment(
   let end = 1;
   const dx = b.x - a.x;
   const dy = b.y - a.y;
-  for (const [p, q] of [
-    [-dx, a.x - rect.left],
-    [dx, rect.right - a.x],
-    [-dy, a.y - rect.top],
-    [dy, rect.bottom - a.y],
-  ]) {
+  for (let edge = 0; edge < 4; edge++) {
+    const p = edge === 0 ? -dx : edge === 1 ? dx : edge === 2 ? -dy : dy;
+    const q =
+      edge === 0
+        ? a.x - rect.left
+        : edge === 1
+          ? rect.right - a.x
+          : edge === 2
+            ? a.y - rect.top
+            : rect.bottom - a.y;
     if (p === 0) {
       if (q < 0) return null;
       continue;
@@ -80,20 +85,88 @@ function clipSegment(
   return { start, end };
 }
 
-function distanceToSegments(point: Point, segments: Segment[]): number {
-  let nearest = Number.POSITIVE_INFINITY;
-  for (const { a, b } of segments) {
-    const dx = b.x - a.x;
-    const dy = b.y - a.y;
-    const lengthSquared = dx * dx + dy * dy;
-    if (lengthSquared <= 0) continue;
-    const t = Math.max(
-      0,
-      Math.min(1, ((point.x - a.x) * dx + (point.y - a.y) * dy) / lengthSquared),
-    );
-    nearest = Math.min(nearest, Math.hypot(point.x - (a.x + dx * t), point.y - (a.y + dy * t)));
+interface SegmentIndex {
+  left: number;
+  right: number;
+  top: number;
+  bottom: number;
+  start: number;
+  end: number;
+  children?: readonly [SegmentIndex, SegmentIndex];
+}
+
+/** Contiguous segment ranges preserve route order and build in linear time. */
+function indexSegments(segments: Segment[], start = 0, end = segments.length): SegmentIndex {
+  const node: SegmentIndex = {
+    left: Infinity,
+    right: -Infinity,
+    top: Infinity,
+    bottom: -Infinity,
+    start,
+    end,
+  };
+  if (end - start > 16) {
+    const middle = (start + end) >>> 1;
+    const a = indexSegments(segments, start, middle);
+    const b = indexSegments(segments, middle, end);
+    node.children = [a, b];
+    node.left = Math.min(a.left, b.left);
+    node.right = Math.max(a.right, b.right);
+    node.top = Math.min(a.top, b.top);
+    node.bottom = Math.max(a.bottom, b.bottom);
+  } else {
+    for (let i = start; i < end; i++) {
+      const { a, b } = segments[i];
+      node.left = Math.min(node.left, a.x, b.x);
+      node.right = Math.max(node.right, a.x, b.x);
+      node.top = Math.min(node.top, a.y, b.y);
+      node.bottom = Math.max(node.bottom, a.y, b.y);
+    }
   }
-  return nearest;
+  return node;
+}
+
+function distanceToRoute(point: Point, route: PreparedRoute): number {
+  if (route.segments.length === 0) return Infinity;
+  route.segmentIndex ??= indexSegments(route.segments);
+  const root = route.segmentIndex;
+  let nearestSquared = Infinity;
+  const lowerBound = (node: SegmentIndex): number => {
+    const dx = Math.max(node.left - point.x, 0, point.x - node.right);
+    const dy = Math.max(node.top - point.y, 0, point.y - node.bottom);
+    return dx * dx + dy * dy;
+  };
+  const visit = (node: SegmentIndex) => {
+    if (lowerBound(node) >= nearestSquared) return;
+    if (node.children) {
+      const [a, b] = node.children;
+      // Exact branch-and-bound search, not vertex sampling or simplified lines.
+      if (lowerBound(a) <= lowerBound(b)) {
+        visit(a);
+        visit(b);
+      } else {
+        visit(b);
+        visit(a);
+      }
+      return;
+    }
+    for (let i = node.start; i < node.end; i++) {
+      const { a, b } = route.segments[i];
+      const dx = b.x - a.x;
+      const dy = b.y - a.y;
+      const lengthSquared = dx * dx + dy * dy;
+      if (lengthSquared <= 0) continue;
+      const t = Math.max(
+        0,
+        Math.min(1, ((point.x - a.x) * dx + (point.y - a.y) * dy) / lengthSquared),
+      );
+      const x = point.x - (a.x + dx * t);
+      const y = point.y - (a.y + dy * t);
+      nearestSquared = Math.min(nearestSquared, x * x + y * y);
+    }
+  };
+  visit(root);
+  return Math.sqrt(nearestSquared);
 }
 
 function overlaps(a: Candidate, widthA: number, b: Candidate, widthB: number): boolean {
@@ -122,40 +195,50 @@ export function routePillAnchors(
     if (rect.left >= rect.right || rect.top >= rect.bottom) continue;
     const segments: Segment[] = [];
     const visible: Array<{ segment: Segment; start: number; end: number; length: number }> = [];
-    for (let i = 1; i < route.geometry.length; i++) {
-      const from = route.geometry[i - 1];
-      const to = route.geometry[i];
-      if (![...from, ...to].every(Number.isFinite)) continue;
-      const a = project(from);
-      const b = project(to);
-      if (![a.x, a.y, b.x, b.y].every(Number.isFinite) || distance(a, b) < 0.01) continue;
-      const segment = { from, to, a, b };
+    let previousCoordinate: LngLat | undefined;
+    let previousPoint: Point | undefined;
+    for (const coordinate of route.geometry) {
+      if (!Number.isFinite(coordinate[0]) || !Number.isFinite(coordinate[1])) {
+        previousCoordinate = undefined;
+        previousPoint = undefined;
+        continue;
+      }
+      const point = project(coordinate);
+      if (!Number.isFinite(point.x) || !Number.isFinite(point.y)) {
+        previousCoordinate = undefined;
+        previousPoint = undefined;
+        continue;
+      }
+      const from = previousCoordinate;
+      const a = previousPoint;
+      previousCoordinate = coordinate;
+      previousPoint = point;
+      if (!from || !a) continue;
+      const length = distance(a, point);
+      if (length < 0.01) continue;
+      const segment = { from, to: coordinate, a, b: point };
       segments.push(segment);
-      const clipped = clipSegment(a, b, rect);
+      const clipped = clipSegment(segment.a, segment.b, rect);
       if (clipped && clipped.end > clipped.start) {
-        visible.push({
-          ...clipped,
-          segment,
-          length: distance(a, b) * (clipped.end - clipped.start),
-        });
+        visible.push({ ...clipped, segment, length: length * (clipped.end - clipped.start) });
       }
     }
     const total = visible.reduce((sum, part) => sum + part.length, 0);
     if (total < 1) continue;
     const candidates: Candidate[] = [];
+    let partIndex = 0;
+    let traversed = 0;
+    // Candidate distances increase monotonically; walk the visible route once.
     for (let step = 1; step <= 39; step++) {
       const progress = step / 40;
-      let remaining = progress * total;
-      for (const part of visible) {
-        if (remaining > part.length) {
-          remaining -= part.length;
-          continue;
-        }
-        const t = part.start + (remaining / part.length) * (part.end - part.start);
-        const coordinate = interpolate(part.segment.from, part.segment.to, t);
-        candidates.push({ coordinate, point: project(coordinate), progress });
-        break;
+      const target = progress * total;
+      while (partIndex < visible.length - 1 && target > traversed + visible[partIndex].length) {
+        traversed += visible[partIndex++].length;
       }
+      const part = visible[partIndex];
+      const t = part.start + ((target - traversed) / part.length) * (part.end - part.start);
+      const coordinate = interpolate(part.segment.from, part.segment.to, t);
+      candidates.push({ coordinate, point: project(coordinate), progress });
     }
     prepared.push({ index: route.routeIndex, segments, candidates, width: route.width });
   }
@@ -169,7 +252,6 @@ export function routePillAnchors(
     accepted.push({ route: active, candidate: middle });
   }
 
-  const activeSegments = active?.segments ?? [];
   for (const route of prepared) {
     if (route.index === activeRouteIndex) continue;
     let best: Candidate | null = null;
@@ -181,16 +263,8 @@ export function routePillAnchors(
         )
       )
         continue;
-      const otherLines = [
-        activeSegments,
-        ...accepted
-          .filter((entry) => entry.route.index !== activeRouteIndex)
-          .map((entry) => entry.route.segments),
-      ];
       const separation = Math.min(
-        ...otherLines
-          .filter((line) => line.length > 0)
-          .map((line) => distanceToSegments(candidate.point, line)),
+        ...accepted.map((entry) => distanceToRoute(candidate.point, entry.route)),
       );
       if (separation < 32) continue;
       const score = separation - 0.01 * Math.abs(candidate.progress - 0.5);
