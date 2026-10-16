@@ -42,7 +42,7 @@
     "zod": "^4.6.5"
   },
   "devDependencies": {
-    "@expo/plist": "^0.8.1",
+    "@expo/plist": "^0.10.1",
     "@react-native/jest-preset": "0.86.3",
     "@testing-library/react-native": "^14.1.0",
     "@types/jest": "^30.0.0",
