@@ -8,6 +8,7 @@ import type { LoadedService, ServiceManifest } from "./types";
 export const RELEASE_BUILT_IN_SERVICE_IDS = Object.freeze([
   "app-api",
   "app-web",
+  "brouter",
   "data-manager",
   "dawarich-app",
   "dawarich-postgis",

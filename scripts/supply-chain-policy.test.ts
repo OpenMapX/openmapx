@@ -107,7 +107,8 @@ describe("production supply-chain policy", () => {
         );
       },
     );
-    expect(managedServices).toHaveLength(24);
+    expect(managedServices).toHaveLength(25);
+    expect(managedServices.map((entry) => entry.name)).toContain("brouter");
 
     const globalMatcher = new RegExp(manager?.matchStrings?.[0] ?? "(?!x)x", "g");
     for (const slug of ["tileserver", "pelias"]) {

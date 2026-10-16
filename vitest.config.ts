@@ -89,6 +89,7 @@ export default defineConfig({
             "services/data-manager/**/*.test.ts",
             "services/motis-feed-proxy/**/*.test.ts",
             "services/valhalla/**/*.test.ts",
+            "services/brouter/**/*.test.ts",
           ],
           // jsdom-owned paths run in the `web` project below — exclude here so
           // they don't run twice.

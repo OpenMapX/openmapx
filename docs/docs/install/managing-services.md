@@ -497,3 +497,61 @@ production statistics reset or shutdown acceptance is implied by these options.
 
 The [disposable replay protocol](../developer/self-hosting-replay.md) describes
 source-level comparisons and their acceptance limits.
+
+## Optional BRouter bicycle routing
+
+BRouter is an opt-in cycling engine. Enable and start it through the same service
+selection used by the other backends:
+
+```bash
+pnpm openmapx services enable brouter
+pnpm openmapx services start brouter
+```
+
+Set `SERVICE_BROUTER_REGION=europe/germany` in `infra/docker/.env` for Germany,
+`europe` for Europe, another [Geofabrik extract path](https://download.geofabrik.de/),
+or `planet` for worldwide coverage. `germany` is accepted as an alias. The service
+configuration form exposes the same `REGION` setting. Re-render and recreate the
+service after configuration changes. This setting is independent of the OSM PBF
+region used by Valhalla and other services.
+
+The service downloads prebuilt, elevation-aware `.rd5` files from
+[BRouter's official segment server](https://brouter.de/brouter/segments4/),
+selecting all existing 5-degree tiles overlapping the extract's bounding rectangle.
+This deliberately includes neighboring areas; it is not a country-border filter.
+Germany's rectangle currently needs about 1.1 GB of routing data. Planet coverage
+requires substantially more disk. Downloads reserve an additional 1 GB of free
+space and require enough space for a replacement generation alongside the active
+one. No OSM graph build or separate elevation download is needed.
+
+The default resource limit is 2 GB (`BROUTER_MEMORY`), with a 1 GB Java heap and
+two concurrent routing calculations. The operator can configure:
+
+- `SERVICE_BROUTER_JAVA_HEAP_MB` (default `1024`), below the container limit.
+- `SERVICE_BROUTER_MAXTHREADS` (default `2`).
+- `SERVICE_BROUTER_REQUEST_TIMEOUT_SECONDS` (default `30`, maximum `300`).
+- `SERVICE_BROUTER_UPDATE_INTERVAL_HOURS` (default `168`, one week).
+
+A checksum-pinned BRouter 1.7.10 release is cached in the `openmapx-brouter` named
+volume and runs on the manifest's digest-pinned Java image. The JDK supplies the
+ZIP extraction tool; no package installation occurs on startup. The volume holds
+recreatable software and routing data and is excluded from backups.
+
+Each refresh downloads a complete generation, checks segment lengths and lookup
+versions, parses every shipped profile with the pinned engine, and publishes it
+atomically. Unreferenced generations left by interrupted updates are removed
+before preparing another update. The engine restarts briefly to discard old
+routing caches. Failed refreshes leave the active generation untouched and retry
+after one hour. A changed region must prepare successfully before it can serve;
+a cached different region is never silently used. Startup health has a 30-minute
+grace period for the initial download. Request-coordinate logging is suppressed.
+
+Port `17777` is available only on the private service network and host loopback;
+`BROUTER_HOST_PORT` can relocate the loopback port. No public BRouter API is used
+as a fallback. The routing integration falls back to the existing Valhalla chain
+when this optional engine is unavailable or cannot serve a request.
+
+Routing data is derived from OpenStreetMap under the ODbL; the BRouter engine is
+MIT-licensed. Preserve the relevant OSM and elevation-data notices when exposing
+results or redistributing prepared data; the download server's current lookup
+metadata and the [BRouter credits](https://brouter.de/) identify upstream sources.

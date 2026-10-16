@@ -1,0 +1,79 @@
+{
+  "id": "brouter",
+  "name": "BRouter",
+  "version": "1.0.0",
+  "description": "Optional bicycle routing with configurable regional or planet coverage, prebuilt elevation-aware data and weekly atomic refreshes (~2 GB RAM).",
+  "license": "MIT",
+  "quality": "built-in",
+  "homepage": "https://brouter.de/",
+  "documentation": "https://github.com/abrensch/brouter",
+  "subjectData": {
+    "storesPersonalData": false,
+    "strategy": "not_personal",
+    "registrationIds": [],
+    "operatorInstructions": null
+  },
+  "container": {
+    "image": "eclipse-temurin",
+    "tag": "17-jdk-jammy",
+    "digest": "sha256:43f4431cc895d37ceb115e2e1f160545ec45caee9c1cb4246fc6bb879d58aeda",
+    "expose": [17777],
+    "entrypoint": ["bash", "/opt/openmapx/brouter/run.sh"],
+    "memory": "${BROUTER_MEMORY:-2g}",
+    "restart": "unless-stopped",
+    "stopGracePeriod": "30s",
+    "healthcheck": {
+      "type": "exec",
+      "command": ["bash", "/opt/openmapx/brouter/run.sh", "health"],
+      "interval": "30s",
+      "timeout": "5s",
+      "retries": 3,
+      "startPeriod": "30m"
+    },
+    "logging": { "driver": "json-file", "options": { "max-size": "10m", "max-file": "3" } }
+  },
+  "provides": ["routing-engine"],
+  "volumes": [{ "name": "openmapx-brouter", "mountAt": "/data/brouter", "backup": false }],
+  "bindMounts": [{ "source": "scripts", "target": "/opt/openmapx/brouter", "readOnly": true }],
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "REGION": {
+        "type": "string",
+        "title": "Routing coverage",
+        "description": "Geofabrik extract path (e.g. europe/germany or europe) or planet. Downloads all existing 5-degree tiles overlapping the extract bounding rectangle, including neighboring areas.",
+        "default": "europe/germany"
+      },
+      "UPDATE_INTERVAL_HOURS": {
+        "type": "integer",
+        "title": "Data refresh interval (hours)",
+        "minimum": 1,
+        "maximum": 8760,
+        "default": 168
+      },
+      "JAVA_HEAP_MB": {
+        "type": "integer",
+        "title": "Maximum Java heap (MB)",
+        "minimum": 128,
+        "maximum": 65536,
+        "default": 1024
+      },
+      "MAXTHREADS": {
+        "type": "integer",
+        "title": "Concurrent routing calculations",
+        "minimum": 1,
+        "maximum": 32,
+        "default": 2
+      },
+      "REQUEST_TIMEOUT_SECONDS": {
+        "type": "integer",
+        "title": "Calculation timeout (seconds)",
+        "minimum": 1,
+        "maximum": 300,
+        "default": 30
+      }
+    }
+  },
+  "exposure": { "hostPorts": [{ "container": 17777, "host": 17777, "bindAddress": "127.0.0.1" }] },
+  "ui": { "category": "routing" }
+}
