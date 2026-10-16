@@ -12,7 +12,7 @@ import {
 export type { RenderedMapAttributionOptions } from "./renderedMapAttributionTracker";
 
 /**
- * Register captured credits only for features actually rendered in this viewport.
+ * Register captured credits for rendered features, or explicitly opted-in tile coverage.
  * Independently hidden/placed icon and text channels need separate query layers:
  * queryRenderedFeatures does not identify which symbol channel matched a hit.
  */

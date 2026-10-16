@@ -283,8 +283,35 @@ it("keeps visible field credits separate from popup-only credits", () => {
         }),
       },
     };
-    fake.setRenderedFeatures(COLOR, [feature] as never);
-    fake.setRenderedFeatures(CASING, [feature] as never);
+    fake.setRenderedFeatures(COLOR, [feature] as never); // Click query remains exact.
+    const query = vi.spyOn(fake.map, "queryRenderedFeatures");
+    const buckets = new Set([COLOR, CASING]);
+    for (const id of [COLOR, CASING])
+      Object.assign(fake.map.getLayer(id) ?? {}, { sourceLayer: "segment_flow" });
+    Object.assign(fake.map, {
+      style: {
+        getLayer: (id: string) => ({
+          ...fake.map.getLayer(id),
+          paint: { get: () => ({ value: 1 }) },
+        }),
+        tileManagers: {
+          [SRC]: {
+            getSource: () => fake.map.getSource(SRC),
+            getVisibleCoordinates: () => [1],
+            getTile: () => ({
+              hasData: () => true,
+              getBucket: (layer: { id: string }) =>
+                buckets.has(layer.id) ? { uploaded: true, isEmpty: () => false } : undefined,
+              latestFeatureIndex: {
+                rawTileData: new ArrayBuffer(8),
+                encoding: "mvt",
+                loadVTLayers: () => ({ segment_flow: { length: 1, feature: () => feature } }),
+              },
+            }),
+          },
+        },
+      },
+    });
     const html = () =>
       Object.values(useMapAttributionStore.getState().byLayer)
         .flat()
@@ -296,6 +323,7 @@ it("keeps visible field credits separate from popup-only credits", () => {
     });
     expect(html()).toContain("ratio-a");
     expect(html()).not.toContain("popup-los-b");
+    expect(query).not.toHaveBeenCalled();
     act(() => fake.emit("click", { point: { x: 10, y: 10 }, lngLat: { lng: 5, lat: 52 } }));
     expect(html()).toContain("popup-los-b");
     act(() =>
@@ -305,14 +333,14 @@ it("keeps visible field credits separate from popup-only credits", () => {
     );
     expect(html()).not.toContain("popup-los-b");
     expect(html()).toContain("ratio-a");
-    fake.setRenderedFeatures(COLOR, []);
+    buckets.delete(COLOR);
     act(() => {
       fake.emit("render");
       vi.advanceTimersByTime(250);
     });
     expect(html()).not.toContain("ratio-a");
     expect(html()).toContain("geometry");
-    fake.setRenderedFeatures(CASING, []);
+    buckets.delete(CASING);
     act(() => {
       fake.emit("render");
       vi.advanceTimersByTime(250);

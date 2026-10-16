@@ -23,6 +23,8 @@ export interface RenderedMapAttributionOptions {
   layerContributors?: Readonly<Record<string, readonly Attribution[]>>;
   /** Trusted host proof for painted DOM/custom-GPU content outside feature queries. Never supplied by remote data. */
   resolveCustomContributors?: () => readonly Attribution[];
+  /** Explicit conservative coverage opt-in: captured suppliers in renderable tiles, including offscreen portions. Host-owned only. */
+  resolveTileCoverageContributors?: () => readonly Attribution[];
   /**
    * Trusted resolver optimization: equal keys within one layer must resolve to
    * identical receipts, including absence. Include every input to the resolver.
@@ -216,6 +218,7 @@ class RenderedMapAttributionTracker {
         continue;
       }
       addReceipts(subscription.resolveCustomContributors?.() ?? []);
+      addReceipts(subscription.resolveTileCoverageContributors?.() ?? []);
       const live = layersByOwner.get(owner);
       if (!live) continue;
       const partialGradientLayers = new Set<string>();

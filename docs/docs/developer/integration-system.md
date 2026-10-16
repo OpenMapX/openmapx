@@ -877,6 +877,30 @@ are not reused across owners, layers, refreshes or option updates, and every hit
 still passes its evaluated paint visibility checks before grouping. Remote
 records or community payloads cannot supply these callbacks.
 
+Dense traffic-flow tiles deliberately use **conservative tile coverage**, rather
+than per-road viewport hit testing. The trusted host factory
+`createVectorTileCoverageContributorResolver` in
+`@/integration-api/overlay/vectorTileCoverageContributors` reads captured field
+receipts from currently renderable, nonempty uploaded vector-tile buckets. Pass
+its result through `options.resolveTileCoverageContributors` and leave those
+layers out of the exact query layer list. This includes suppliers from offscreen
+portions of edge tiles (and potentially filtered/occluded features); it is an
+explicit overcredit tradeoff, never evidence of an exact viewport hit. Incidents
+and ordinary overlays keep exact rendered attribution. Do not opt other layers
+into this scope without deciding that extra tile suppliers are acceptable.
+
+Create the resolver once with immutable options. Its equivalence key must cover
+all field-projection inputs for every configured layer, including full captured
+receipts and explicit absence. It scans properties once per raw payload/encoding,
+then reuses immutable projected snapshots through style reparsing, overzoom and
+refresh failures that retain drawable data. Errored/unloaded tiles that the
+renderer stops drawing contribute nothing. Successful replacement, source replacement, tile eviction,
+layer visibility/zoom and evaluated constant zero paint update the current union.
+No source catalog, provider manifest or successful-request history substitutes
+for retained tile receipts. The host owns the version-pinned MapLibre bridge;
+community payloads cannot configure executable resolvers. FLOW popup credits
+remain projected separately from the clicked feature's actual displayed fields.
+
 DOM markers use `useMarkerMapAttributions(key, element, captured)`, which checks
 painted marker visibility in the map container. Custom GPU/DOM drawing may use
 `options.resolveCustomContributors`, a **trusted host callback** proving the

@@ -4,7 +4,7 @@ import { useOverlayExclusion } from "@openmapx/core";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import * as maplibregl from "maplibre-gl";
 import { useTranslations } from "next-intl";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { addLayerInSlot } from "@/integration-api/map/layerStack";
 import { useMap } from "@/integration-api/map/MapContext";
 import {
@@ -21,6 +21,7 @@ import {
 } from "@/integration-api/overlay/flowContributors";
 import { useMapAttributions } from "@/integration-api/overlay/useMapAttributions";
 import { useRenderedMapAttributions } from "@/integration-api/overlay/useRenderedMapAttributions";
+import { createVectorTileCoverageContributorResolver } from "@/integration-api/overlay/vectorTileCoverageContributors";
 import { useEnv } from "@/integration-api/runtime/EnvProvider";
 import { useTrafficFlowStore } from "./store";
 import { TRAFFIC_FLOW_OPACITY_EXPRESSION } from "./visual-style";
@@ -160,17 +161,24 @@ export function TrafficFlowLayer() {
   const showFlow = useTrafficFlowStore((s) => s.panelOpen && s.layerVisible);
   const [popupContributors, setPopupContributors] = useState<Attribution[]>([]);
   useMapAttributions("traffic-flow-popup", showFlow ? popupContributors : []);
-  useRenderedMapAttributions("traffic-flow", [CASING, COLOR], showFlow, {
-    featureContributorKey: (feature) =>
-      flowFeatureContributorKey(
-        feature.properties ?? {},
-        feature.layer.id === CASING ? "casing" : "color",
-      ),
-    resolveFeatureContributors: (feature) =>
-      flowFeatureContributors(
-        feature.properties ?? {},
-        feature.layer.id === CASING ? "casing" : "color",
-      ),
+  const tileCredits = useMemo(
+    () =>
+      createVectorTileCoverageContributorResolver({
+        sourceId: SRC,
+        sourceLayer: SOURCE_LAYER,
+        layerIds: [CASING, COLOR],
+        // Color includes geometry plus the ratio/LOS and opacity projection inputs.
+        // This key also proves equivalence for casing's geometry-only subset.
+        featureContributorKey: (properties) => flowFeatureContributorKey(properties, "color"),
+        resolveFeatureContributors: (properties, layerId) =>
+          flowFeatureContributors(properties, layerId === CASING ? "casing" : "color"),
+      }),
+    [],
+  );
+  // Deliberately conservative at tile edges. Do not add these dense road layers
+  // to the shared exact query: it materializes ~90k hits for a few suppliers.
+  useRenderedMapAttributions("traffic-flow", [], showFlow, {
+    resolveTileCoverageContributors: () => (glMap ? tileCredits(glMap) : []),
   });
   useOverlayExclusion("traffic-flow", showFlow);
 
