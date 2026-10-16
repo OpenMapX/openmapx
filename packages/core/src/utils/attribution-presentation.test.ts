@@ -1,5 +1,6 @@
 import { licensingReferenceUrls, parseLicensing } from "@openmapx/mobility-core/licensing";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import * as attributionHtml from "./attribution";
 import {
   dedupeAttributionHtml,
   mergeAttributionDetails,
@@ -161,4 +162,57 @@ it("deduplicates unstructured notices while preserving their links", () => {
     links: [{ label: "Provider", url: "https://provider.example/" }],
   };
   expect(mergeAttributionDetails([entry, structuredClone(entry)])).toEqual([entry]);
+});
+
+it("parses each distinct HTML input once when grouping 100 independent visible notices", () => {
+  const parse = vi.spyOn(attributionHtml, "parseAttributionHtml");
+  try {
+    const entries = Array.from({ length: 100 }, (_, i) => ({
+      fullHtml: `<a href="https://publisher.example/${i}">Publisher ${i}</a>`,
+      visibleHtml: `<a href="https://publisher.example/${i}">Publisher ${i}</a>`,
+      logos: [],
+    }));
+    const result = projectAttributionPresentations(entries);
+    expect(result.visible).toHaveLength(100);
+    expect(result.fullHtml).toHaveLength(100);
+    expect(parse).toHaveBeenCalledTimes(100);
+  } finally {
+    parse.mockRestore();
+  }
+});
+
+it("retains combined links through successive visible-notice merges", () => {
+  const result = projectAttributionPresentations(
+    [
+      "© A",
+      '<a href="https://a.example/">© A</a> (ODbL-1.0)',
+      "© A (ODbL-1.0) | © B",
+      '<a href="https://b.example/">© B</a>',
+    ].map((html) => ({ fullHtml: html, visibleHtml: html, logos: [] })),
+  );
+  expect(result.visible).toHaveLength(1);
+  expect(attributionHtml.parseAttributionHtml(result.visible[0].html)).toEqual({
+    text: "© A (ODbL-1.0) | © B",
+    links: [
+      { label: "© A", url: "https://a.example/" },
+      { label: "© B", url: "https://b.example/" },
+    ],
+  });
+});
+
+it("preserves HTML parser normalization between successive notice merges", () => {
+  const entries = [
+    "© A | © B",
+    '<a href="https://a.example/?x=&#13;">© A</a>',
+    '<a href="https://a.example/?x=&#13;">© A</a>',
+    '<a href="https://b.example/">© B</a>',
+  ].map((html) => ({ fullHtml: html, visibleHtml: html, logos: [] }));
+  // Re-parsing the first merged fragment normalizes the raw carriage return
+  // in its href to a line feed. The later original link is distinct.
+  const result = projectAttributionPresentations(entries);
+  expect(result.visible).toHaveLength(2);
+  expect(attributionHtml.parseAttributionHtml(result.visible[0].html).links).toEqual([
+    { label: "© A", url: "https://a.example/?x=\n" },
+    { label: "© B", url: "https://b.example/" },
+  ]);
 });

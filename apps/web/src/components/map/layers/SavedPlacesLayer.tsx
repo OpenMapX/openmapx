@@ -3,7 +3,7 @@
 import { PANEL, useSavedListPlaces, useSavedPlacesStore, useSidebarStore } from "@openmapx/core";
 import { savedPlaceContributors } from "@openmapx/core/saved-place-contributors";
 import { withFeatureContributors } from "@openmapx/mobility-core/contributors";
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { addLayerInSlot, unregisterLayerSlot } from "@/integration-api/map/layerStack";
 import { removeLayerAndSource, upsertGeoJsonSource } from "@/integration-api/map/layerStyleUtils";
 import { useMap } from "@/integration-api/map/MapContext";
@@ -20,32 +20,35 @@ export function SavedPlacesLayer() {
     isPanelOpen && selectedListId ? selectedListId : null,
   );
 
-  useRenderedMapAttributions("saved-places", [LAYER_ID], Boolean(isPanelOpen && selectedListId));
+  const captured = useMemo(() => {
+    let hasContributors = false;
+    const features = (places ?? []).map((p) => {
+      const contributors = savedPlaceContributors(p.fieldContributors, ["lat", "lng"]);
+      hasContributors ||= contributors.length > 0;
+      return withFeatureContributors(
+        {
+          type: "Feature" as const,
+          geometry: { type: "Point" as const, coordinates: [p.lng, p.lat] },
+          properties: { id: p.id, name: p.name },
+        },
+        contributors,
+      );
+    });
+    return { hasContributors, data: { type: "FeatureCollection" as const, features } };
+  }, [places]);
+  useRenderedMapAttributions(
+    "saved-places",
+    [LAYER_ID],
+    Boolean(isPanelOpen && selectedListId && captured.hasContributors),
+  );
 
   useEffect(() => {
     void styleVersion;
     const map = mapRef.current;
-    if (!map || !mapReady || !places || places.length === 0) return;
-
-    const geojson: GeoJSON.FeatureCollection = {
-      type: "FeatureCollection",
-      features: places.map((p) =>
-        withFeatureContributors(
-          {
-            type: "Feature" as const,
-            geometry: {
-              type: "Point" as const,
-              coordinates: [p.lng, p.lat],
-            },
-            properties: { id: p.id, name: p.name },
-          },
-          savedPlaceContributors(p.fieldContributors, ["lat", "lng"]),
-        ),
-      ),
-    };
+    if (!map || !mapReady || captured.data.features.length === 0) return;
 
     const created = !map.getSource(SOURCE_ID);
-    upsertGeoJsonSource(map, SOURCE_ID, geojson);
+    upsertGeoJsonSource(map, SOURCE_ID, captured.data);
     if (created) {
       addLayerInSlot(
         map,
@@ -69,7 +72,7 @@ export function SavedPlacesLayer() {
       removeLayerAndSource(map, LAYER_ID, SOURCE_ID);
       unregisterLayerSlot(LAYER_ID);
     };
-  }, [mapRef, mapReady, styleVersion, places]);
+  }, [mapRef, mapReady, styleVersion, captured]);
 
   // Clean up when panel closes or list deselected
   useEffect(() => {

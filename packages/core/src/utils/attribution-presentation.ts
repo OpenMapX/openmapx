@@ -32,6 +32,21 @@ function containsNoticeText(candidate: string, notice: string): boolean {
   return false;
 }
 
+type ParsedNotice = ReturnType<typeof parseAttributionHtml> & { html: string };
+
+/** A projection owns its cache; no notice or mutable receipt survives the call. */
+function noticeReader(): (html: string) => ParsedNotice {
+  const parsed = new Map<string, ParsedNotice>();
+  return (html) => {
+    let notice = parsed.get(html);
+    if (!notice) {
+      notice = { html, ...parseAttributionHtml(html) };
+      parsed.set(html, notice);
+    }
+    return notice;
+  };
+}
+
 /**
  * Compare complete credited fragments and parsed notices: a linked
  * basemap notice can cover an overlay's plain copy of the same wording. Only
@@ -40,8 +55,11 @@ function containsNoticeText(candidate: string, notice: string): boolean {
  * complementary licence/publisher links remain separate.
  */
 export function dedupeAttributionHtml(items: string[]): string[] {
-  const notices = items.map((html) => ({ html, ...parseAttributionHtml(html) }));
-  type Notice = (typeof notices)[number];
+  return dedupeNotices(items.map(noticeReader()));
+}
+
+function dedupeNotices(notices: readonly ParsedNotice[]): string[] {
+  type Notice = ParsedNotice;
   const coversLinks = (candidate: Notice, original: Notice) =>
     original.links.every((link) =>
       candidate.links.some((other) => other.label === link.label && other.url === link.url),
@@ -77,9 +95,7 @@ export interface AttributionPresentationGroup {
 }
 
 /** Keep the longer wording and every link, only when link spans are unambiguous. */
-function mergeVisibleNotice(first: string, second: string): string | undefined {
-  const a = parseAttributionHtml(first);
-  const b = parseAttributionHtml(second);
+function mergeVisibleNotice(a: ParsedNotice, b: ParsedNotice): string | undefined {
   const text = containsNoticeText(a.text, b.text)
     ? a.text
     : containsNoticeText(b.text, a.text)
@@ -157,18 +173,25 @@ export function mergeAttributionDetails(
 export function projectAttributionPresentations(
   entries: readonly AttributionPresentation[],
 ): AttributionPresentationGroup {
-  const groups: { html: string; members: AttributionPresentation[] }[] = [];
+  const readNotice = noticeReader();
+  const groups: { notice: ParsedNotice; members: AttributionPresentation[] }[] = [];
   for (const entry of entries) {
     if (!entry.visibleHtml) continue;
-    const group = groups.find(
-      (candidate) => mergeVisibleNotice(candidate.html, entry.visibleHtml) !== undefined,
-    );
-    if (group) {
-      group.html = mergeVisibleNotice(group.html, entry.visibleHtml) ?? group.html;
+    const notice = readNotice(entry.visibleHtml);
+    let merged = false;
+    for (const group of groups) {
+      const combined = mergeVisibleNotice(group.notice, notice);
+      if (!combined) continue;
+      // Parse each distinct generated fragment once too, preserving HTML
+      // normalization before its text and links participate in later merges.
+      group.notice = readNotice(combined);
       group.members.push(entry);
-    } else groups.push({ html: entry.visibleHtml, members: [entry] });
+      merged = true;
+      break;
+    }
+    if (!merged) groups.push({ notice, members: [entry] });
   }
-  const fullHtml = dedupeAttributionHtml(entries.map((entry) => entry.fullHtml));
+  const fullHtml = dedupeNotices(entries.map((entry) => readNotice(entry.fullHtml)));
   return {
     fullHtml,
     details: mergeAttributionDetails(
@@ -176,8 +199,8 @@ export function projectAttributionPresentations(
         .filter((entry) => entry.fullHtml)
         .map((entry) => ({ html: entry.fullHtml, attribution: entry.detail })),
     ),
-    visible: groups.map(({ html, members }) => ({
-      html,
+    visible: groups.map(({ notice, members }) => ({
+      html: notice.html,
       logos: [...new Set(members.flatMap((entry) => entry.logos))],
       ...(members.some((entry) => entry.prominence === "normal")
         ? { prominence: "normal" as const }

@@ -1,8 +1,9 @@
+import * as photoCore from "@openmapx/core";
 import { parseCommonsPage, withPhotoContributors } from "@openmapx/core";
 import type { Licensing } from "@openmapx/mobility-core/licensing";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import en from "../../../../../../packages/i18n/locales/en.json";
 import { PhotoAttribution } from "./PhotoAttribution";
 
@@ -237,4 +238,117 @@ it("separates distinct mandatory image notices from a readable caption", () => {
   const { container } = caption(photo);
   expect(container.textContent).toContain("CC-BY-4.0");
   expect(container.textContent).toMatch(/CC-BY-4.0.*[·|].*Exact camera notice/);
+});
+
+it("reuses unchanged photo credits across parent, contrast and compact updates", () => {
+  const photo = commons("CC BY-SA 3.0");
+  const build = vi.spyOn(photoCore, "buildAttributionPresentation");
+  try {
+    const tree = (color = "#fff", compact = false) => (
+      <NextIntlClientProvider locale="en" messages={en}>
+        <PhotoAttribution photo={photo} color={color} compact={compact} />
+      </NextIntlClientProvider>
+    );
+    const view = render(tree());
+    const initialCalls = build.mock.calls.length;
+    expect(initialCalls).toBeGreaterThan(0);
+    view.rerender(tree());
+    view.rerender(tree("#111", true));
+    expect(screen.getByRole("link", { name: "David Scull" })).toBeVisible();
+    expect(view.container.textContent).not.toContain("Wikimedia Commons");
+    expect(build).toHaveBeenCalledTimes(initialCalls);
+  } finally {
+    build.mockRestore();
+  }
+});
+
+it("updates same-file captured notices, links and licence when a photo snapshot changes", () => {
+  const photo = commons("CC BY-SA 3.0");
+  const tree = (current: typeof photo) => (
+    <NextIntlClientProvider locale="en" messages={en}>
+      <PhotoAttribution photo={current} />
+    </NextIntlClientProvider>
+  );
+  const view = render(tree(photo));
+  const replacement = {
+    ...commons("CC BY 4.0", {
+      Attribution: { value: 'Credit: <a href="https://new.example/author">New author</a>' },
+    }),
+    url: photo.url,
+  };
+  view.rerender(tree(replacement));
+  expect(screen.getByRole("link", { name: "New author" })).toHaveAttribute(
+    "href",
+    "https://new.example/author",
+  );
+  expect(view.container.textContent).not.toContain("CC-BY-SA-3.0");
+  fireEvent.click(screen.getByRole("button", { name: /photo credits/i }));
+  expect(screen.getByRole("dialog").textContent).toContain("CC-BY-4.0");
+});
+
+it("updates localized photo-credit actions without rebuilding captured presentations", () => {
+  const photo = commons();
+  const build = vi.spyOn(photoCore, "buildAttributionPresentation");
+  try {
+    const view = render(
+      <NextIntlClientProvider locale="en" messages={en}>
+        <PhotoAttribution photo={photo} />
+      </NextIntlClientProvider>,
+    );
+    const initialCalls = build.mock.calls.length;
+    view.rerender(
+      <NextIntlClientProvider
+        locale="de"
+        messages={{ ...en, photoGallery: { ...en.photoGallery, credits: "Bildnachweise" } }}
+      >
+        <PhotoAttribution photo={photo} />
+      </NextIntlClientProvider>,
+    );
+    expect(screen.getByRole("button", { name: "Bildnachweise" })).toBeVisible();
+    expect(build).toHaveBeenCalledTimes(initialCalls);
+  } finally {
+    build.mockRestore();
+  }
+});
+
+it("applies a changed captured image policy even when the image URL stays the same", () => {
+  const photo = commons("CC BY 4.0");
+  const tree = (current: typeof photo) => (
+    <NextIntlClientProvider locale="en" messages={en}>
+      <PhotoAttribution photo={current} />
+    </NextIntlClientProvider>
+  );
+  const view = render(tree(photo));
+  const source = photo.contributors?.[0];
+  if (!source) throw new Error("Expected captured source");
+  view.rerender(
+    tree({
+      ...photo,
+      contributors: [
+        {
+          ...source,
+          licensing: {
+            version: 1,
+            bindings: [
+              {
+                scope: "imagery",
+                subject: "Photo",
+                license: { kind: "spdx", expression: "CC-BY-4.0" },
+                attribution: {
+                  placement: "visible",
+                  surfaces: ["image"],
+                  basis: "provider-terms",
+                  reason: "Updated captured image policy",
+                  evidenceUrls: ["https://provider.example/terms"],
+                  reviewedAt: "2026-10-16",
+                  compactText: "New required image notice",
+                },
+              },
+            ],
+          },
+        },
+      ],
+    }),
+  );
+  expect(view.container.textContent).toContain("New required image notice");
 });

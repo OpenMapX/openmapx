@@ -18,20 +18,21 @@ import { resolveBindingPlacement } from "@openmapx/mobility-core/attribution-pla
 import { contributorKey } from "@openmapx/mobility-core/contributors";
 import { licensingLinks } from "@openmapx/mobility-core/licensing";
 import { useTranslations } from "next-intl";
+import { memo, useMemo } from "react";
 import { AttributionDetails } from "@/components/ui/AttributionDetails";
 import { AttributionNotices } from "@/components/ui/AttributionNotices";
 import { AttributionText } from "@/components/ui/AttributionText";
 
 interface Props {
+  /** Captured immutable snapshot; metadata updates replace the photo object. */
   photo: PlacePhoto;
   color?: string;
   /** Thumbnails keep creator/licence visible without repeating the provider label. */
   compact?: boolean;
 }
 
-/** One caption across hero, selected image and thumbnails, with lossless photo details. */
-export function PhotoAttribution({ photo, color = "#fff", compact = false }: Props) {
-  const t = useTranslations("photoGallery");
+/** Pure receipt projection; contrast, compactness and locale do not change the grants. */
+function photoCreditPresentation(photo: PlacePhoto) {
   const captured =
     photo.contributors?.find((receipt) => receipt.sourceId === photo.source) ??
     photo.contributors?.[0];
@@ -194,6 +195,40 @@ export function PhotoAttribution({ photo, color = "#fff", compact = false }: Pro
       },
     ];
   });
+  return {
+    sourceName,
+    sourceUrl,
+    customLink,
+    captionNotice,
+    captionLinks,
+    notices,
+    useRequiredCaption,
+    details: mergeAttributionDetails(details),
+    licenceHtml:
+      photo.licensing && fileBindings.length > 0
+        ? buildLicensingHtml({ ...photo.licensing, bindings: fileBindings })
+        : undefined,
+  };
+}
+
+/** One caption across hero, selected image and thumbnails, with lossless photo details. */
+export const PhotoAttribution = memo(function PhotoAttribution({
+  photo,
+  color = "#fff",
+  compact = false,
+}: Props) {
+  const t = useTranslations("photoGallery");
+  const {
+    sourceName,
+    sourceUrl,
+    customLink,
+    captionNotice,
+    captionLinks,
+    notices,
+    useRequiredCaption,
+    details,
+    licenceHtml,
+  } = useMemo(() => photoCreditPresentation(photo), [photo]);
   const linkSx = {
     color: "inherit",
     textDecoration: "none",
@@ -231,12 +266,7 @@ export function PhotoAttribution({ photo, color = "#fff", compact = false }: Pro
     },
     {
       key: "licence",
-      content:
-        photo.licensing && fileBindings.length > 0 ? (
-          <AttributionText
-            html={buildLicensingHtml({ ...photo.licensing, bindings: fileBindings })}
-          />
-        ) : undefined,
+      content: licenceHtml ? <AttributionText html={licenceHtml} /> : undefined,
     },
     { key: "notice", content: captionNotice },
     ...captionLinks.map(({ label, url }) => ({
@@ -282,11 +312,11 @@ export function PhotoAttribution({ photo, color = "#fff", compact = false }: Pro
         <AttributionNotices notices={notices} />
       </Box>
       <AttributionDetails
-        entries={mergeAttributionDetails(details)}
+        entries={details}
         label={t("credits")}
         logos={notices.flatMap((notice) => notice.logos)}
         iconOnly
       />
     </Box>
   );
-}
+});
