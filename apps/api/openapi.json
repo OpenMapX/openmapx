@@ -8564,6 +8564,26 @@
                       "avoidFerries": {
                         "type": "boolean"
                       },
+                      "bikeProfile": {
+                        "type": "string",
+                        "enum": [
+                          "trekking",
+                          "road",
+                          "gravel",
+                          "mountain"
+                        ]
+                      },
+                      "bikeHillPreference": {
+                        "type": "string",
+                        "enum": [
+                          "default",
+                          "avoid",
+                          "strongly-avoid"
+                        ]
+                      },
+                      "bikePreferQuietRoads": {
+                        "type": "boolean"
+                      },
                       "waypoints": {
                         "type": "array",
                         "minItems": 2,

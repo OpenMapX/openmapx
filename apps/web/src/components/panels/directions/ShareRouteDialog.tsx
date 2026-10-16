@@ -39,6 +39,13 @@ export function ShareRouteDialog({ open, onClose }: { open: boolean; onClose: ()
       avoidHighways: state.avoidHighways,
       avoidTolls: state.avoidTolls,
       avoidFerries: state.avoidFerries,
+      ...(state.mode === "cycling"
+        ? {
+            bikeProfile: state.bikeProfile,
+            bikeHillPreference: state.bikeHillPreference,
+            bikePreferQuietRoads: state.bikePreferQuietRoads,
+          }
+        : {}),
     };
   };
 

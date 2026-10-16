@@ -555,3 +555,17 @@ Routing data is derived from OpenStreetMap under the ODbL; the BRouter engine is
 MIT-licensed. Preserve the relevant OSM and elevation-data notices when exposing
 results or redistributing prepared data; the download server's current lookup
 metadata and the [BRouter credits](https://brouter.de/) identify upstream sources.
+
+When the `routing-brouter` integration is enabled, a selected BRouter service is
+preferred for cycling. The route options offer touring/city, road, gravel and
+mountain bikes, hill avoidance and a preference for quieter roads. These are
+routing preferences; they do not guarantee traffic levels or road conditions.
+Shared routes and navigation retain the selected preferences.
+
+If BRouter is absent, unavailable or outside its prepared coverage, cycling falls
+back to Valhalla. Valhalla also handles timed trips and stop optimization. Bike
+preferences map to its bicycle costing options. The bundled BRouter gravel
+profile cannot avoid ferries or provide a stronger general hill-avoidance level,
+so gravel requests with ferry avoidance or strong hill avoidance use Valhalla. Other travel modes keep their existing engines. Operators can configure
+an explicit `routing-brouter` endpoint instead of the managed service; OpenMapX
+never selects a public BRouter endpoint by default.

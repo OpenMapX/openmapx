@@ -27,6 +27,11 @@ export {
   type TransitStopAreaRequest,
   type VehicleJourneyParams,
 } from "../api/transit";
+export {
+  type BikeRoutingOptions,
+  bicycleOptions,
+  validBikeRoutingOptions,
+} from "../routing/bicycleOptions";
 // The capture builder travels with the fetches that feed it: a caller preparing
 // a transit start needs both, and needing them together is the whole reason this
 // module exists.

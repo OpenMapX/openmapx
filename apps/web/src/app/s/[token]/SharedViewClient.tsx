@@ -58,6 +58,9 @@ export function SharedViewClient({ share }: { share: PublicShare | null }) {
     avoidHighways: routeShare?.route.avoidHighways ?? false,
     avoidTolls: routeShare?.route.avoidTolls ?? false,
     avoidFerries: routeShare?.route.avoidFerries ?? false,
+    bikeProfile: routeShare?.route.bikeProfile,
+    bikeHillPreference: routeShare?.route.bikeHillPreference,
+    bikePreferQuietRoads: routeShare?.route.bikePreferQuietRoads,
     lang: locale,
   });
   const activeRoute = directions.data?.routes[directions.data.activeRouteIndex ?? 0] ?? null;
@@ -195,6 +198,9 @@ function SharedRouteContent({
       avoidHighways: share.route.avoidHighways,
       avoidTolls: share.route.avoidTolls,
       avoidFerries: share.route.avoidFerries,
+      bikeProfile: share.route.bikeProfile,
+      bikeHillPreference: share.route.bikeHillPreference,
+      bikePreferQuietRoads: share.route.bikePreferQuietRoads,
     }),
   );
   return (

@@ -1,3 +1,4 @@
+import { BIKE_HILL_PREFERENCES, BIKE_PROFILES } from "@openmapx/core";
 import { httpError } from "@openmapx/integration-framework";
 import { and, desc, eq, sql } from "drizzle-orm";
 import type { FastifyPluginAsync } from "fastify";
@@ -116,6 +117,9 @@ export const sharesRoute: FastifyPluginAsync = async (fastify) => {
                 avoidHighways: { type: "boolean" },
                 avoidTolls: { type: "boolean" },
                 avoidFerries: { type: "boolean" },
+                bikeProfile: { type: "string", enum: [...BIKE_PROFILES] },
+                bikeHillPreference: { type: "string", enum: [...BIKE_HILL_PREFERENCES] },
+                bikePreferQuietRoads: { type: "boolean" },
                 waypoints: {
                   type: "array",
                   minItems: 2,

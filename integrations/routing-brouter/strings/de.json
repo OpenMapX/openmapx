@@ -1,0 +1,11 @@
+{
+  "name": "BRouter Fahrradrouting",
+  "description": "Höhenbewusstes Fahrradrouting mit Fahrradprofilen und ruhigeren Straßen",
+  "dataSources": {
+    "brouter": {
+      "purpose": "Fahrradrouten, Alternativen, Höhenprofile und Abbiegehinweise",
+      "dataSent": "Wegpunktkoordinaten, Fahrradtyp, Steigungs- und Straßenpräferenzen, Fährenvermeidung und Ausschlussgebiete",
+      "dataReceived": "Routengeometrie, Entfernung, geschätzte Dauer, Manöver und Höhen; keine Live-Verkehrsbeobachtungen"
+    }
+  }
+}

@@ -6,6 +6,12 @@ import type {
   TransitRoutePreference,
 } from "../constants/transit";
 import { getStorage } from "../platform/storage";
+import {
+  type BikeHillPreference,
+  type BikeProfile,
+  isBikeHillPreference,
+  isBikeProfile,
+} from "../routing/bicycleOptions";
 import type { LngLat } from "../types/geometry";
 import type { TravelMode, Waypoint, WaypointSchedule } from "../types/routing";
 
@@ -19,6 +25,16 @@ function readBool(key: string): boolean {
   return getStorage().getString(key) === "true";
 }
 
+function readBikePrefs() {
+  const storage = getStorage(),
+    profile = storage.getString("openmapx:bikeProfile"),
+    hills = storage.getString("openmapx:bikeHillPreference");
+  return {
+    bikeProfile: isBikeProfile(profile) ? profile : ("trekking" as const),
+    bikeHillPreference: isBikeHillPreference(hills) ? hills : ("default" as const),
+    bikePreferQuietRoads: readBool("openmapx:bikePreferQuietRoads"),
+  };
+}
 let waypointCounter = 0;
 function newWaypointId(): string {
   return `wp_${++waypointCounter}_${Date.now()}`;
@@ -106,7 +122,9 @@ export interface DirectionsState {
   maxTransfers: number | null;
   transferBuffer: "standard" | "relaxed" | "extra";
   requireBikeTransport: boolean;
-  bikeHillPreference: "default" | "avoid" | "strongly-avoid";
+  bikeHillPreference: BikeHillPreference;
+  bikeProfile: BikeProfile;
+  bikePreferQuietRoads: boolean;
   /** Germany-only: restrict transit to Deutschlandticket-covered services. */
   deutschlandticketOnly: boolean;
 
@@ -153,7 +171,9 @@ export interface DirectionsState {
   setMaxTransfers: (v: number | null) => void;
   setTransferBuffer: (v: "standard" | "relaxed" | "extra") => void;
   setRequireBikeTransport: (v: boolean) => void;
-  setBikeHillPreference: (v: "default" | "avoid" | "strongly-avoid") => void;
+  setBikeHillPreference: (v: BikeHillPreference) => void;
+  setBikeProfile: (v: BikeProfile) => void;
+  setBikePreferQuietRoads: (v: boolean) => void;
   setDeutschlandticketOnly: (v: boolean) => void;
 }
 
@@ -191,7 +211,7 @@ export const useDirectionsStore = create<DirectionsState>((set, get) => {
     maxTransfers: null,
     transferBuffer: "standard" as const,
     requireBikeTransport: false,
-    bikeHillPreference: "default" as const,
+    ...readBikePrefs(),
     deutschlandticketOnly: false,
 
     open: () => set({ isOpen: true }),
@@ -218,7 +238,7 @@ export const useDirectionsStore = create<DirectionsState>((set, get) => {
         maxTransfers: null,
         transferBuffer: "standard" as const,
         requireBikeTransport: false,
-        bikeHillPreference: "default" as const,
+
         deutschlandticketOnly: false,
       });
     },
@@ -323,6 +343,7 @@ export const useDirectionsStore = create<DirectionsState>((set, get) => {
     },
     hydrateRoutePrefs: () =>
       set({
+        ...readBikePrefs(),
         avoidHighways: readBool(AVOID_HIGHWAYS_STORAGE_KEY),
         avoidTolls: readBool(AVOID_TOLLS_STORAGE_KEY),
         avoidFerries: readBool(AVOID_FERRIES_STORAGE_KEY),
@@ -351,8 +372,18 @@ export const useDirectionsStore = create<DirectionsState>((set, get) => {
     setTransferBuffer: (transferBuffer) => set({ transferBuffer, activeItineraryIndex: 0 }),
     setRequireBikeTransport: (requireBikeTransport) =>
       set({ requireBikeTransport, activeItineraryIndex: 0 }),
-    setBikeHillPreference: (bikeHillPreference) =>
-      set({ bikeHillPreference, activeItineraryIndex: 0 }),
+    setBikeHillPreference: (bikeHillPreference) => {
+      getStorage().setString("openmapx:bikeHillPreference", bikeHillPreference);
+      set({ bikeHillPreference, activeItineraryIndex: 0, activeRouteIndex: 0 });
+    },
+    setBikeProfile: (bikeProfile) => {
+      getStorage().setString("openmapx:bikeProfile", bikeProfile);
+      set({ bikeProfile, activeRouteIndex: 0 });
+    },
+    setBikePreferQuietRoads: (bikePreferQuietRoads) => {
+      getStorage().setString("openmapx:bikePreferQuietRoads", String(bikePreferQuietRoads));
+      set({ bikePreferQuietRoads, activeRouteIndex: 0 });
+    },
     setDeutschlandticketOnly: (deutschlandticketOnly) =>
       set({ deutschlandticketOnly, activeItineraryIndex: 0 }),
   };

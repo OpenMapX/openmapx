@@ -480,3 +480,24 @@ describe("offline contributor receipts", () => {
     expect(parseNavigationSessionSnapshot(snapshot)).toBeNull();
   });
 });
+
+it("retains validated cycling preferences and rejects corrupt saved values", () => {
+  const snapshot = createNavigationSessionSnapshot(
+    input({
+      routeOptions: {
+        ...options,
+        bikeProfile: "gravel",
+        bikeHillPreference: "avoid",
+        bikePreferQuietRoads: true,
+      },
+    }),
+  );
+  expect(parseNavigationSessionSnapshot(snapshot)?.routeOptions).toMatchObject({
+    bikeProfile: "gravel",
+    bikeHillPreference: "avoid",
+    bikePreferQuietRoads: true,
+  });
+  const corrupt = structuredClone(snapshot);
+  Object.assign(corrupt.routeOptions, { bikeProfile: "car" });
+  expect(parseNavigationSessionSnapshot(corrupt)).toBeNull();
+});

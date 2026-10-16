@@ -98,6 +98,24 @@ describe("rerouteWaypoints", () => {
 });
 
 describe("GroundRerouteService", () => {
+  it("preserves cycling preferences in background reroute requests", async () => {
+    const current = session();
+    current.payload.startPackage.mode = "cycling";
+    current.payload.startPackage.routeOptions = {
+      bikeProfile: "gravel",
+      bikeHillPreference: "strongly-avoid",
+      bikePreferQuietRoads: true,
+    };
+    const { client, calls } = fakeClient(routeAnswer());
+    await service(client).request({ requestId: "bike", session: current, origin: ORIGIN });
+    expect(calls[0].params).toMatchObject({
+      mode: "cycling",
+      bikeProfile: "gravel",
+      bikeHillPreference: "strongly-avoid",
+      bikePreferQuietRoads: "true",
+    });
+  });
+
   const service = (client: ApiClient) =>
     new GroundRerouteService({ apiOrigin: "https://openmapx.com", client, now: () => NOW });
 

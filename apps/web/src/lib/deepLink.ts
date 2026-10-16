@@ -1,7 +1,12 @@
 "use client";
 
 import {
+  type BikeRoutingOptions,
   type BoundingBox,
+  bicycleOptions,
+  bicycleQueryParameters,
+  isBikeHillPreference,
+  isBikeProfile,
   type LngLat,
   PANEL,
   type Waypoint,
@@ -23,6 +28,9 @@ export const DEEPLINK_PARAMS = new Set([
   "cat",
   "raw",
   "mode",
+  "bikeProfile",
+  "bikeHillPreference",
+  "bikePreferQuietRoads",
   "avoid",
   "units",
   "wp",
@@ -89,7 +97,7 @@ export interface ParsedDeepLink {
   overlays?: string[];
   panel?: string;
   place?: DeepLinkPlace;
-  directions?: {
+  directions?: BikeRoutingOptions & {
     mode?: string;
     avoid: string[];
     units?: string;
@@ -207,7 +215,7 @@ export function buildLocationShareUrl(currentHref: string, target: LocationShare
   return url.toString();
 }
 
-export interface DirectionsShareTarget {
+export interface DirectionsShareTarget extends BikeRoutingOptions {
   waypoints: { coords: LngLat; label?: string }[];
   mode?: string;
   avoidHighways?: boolean;
@@ -220,6 +228,9 @@ export function buildDirectionsDeepLinkUrl(origin: string, target: DirectionsSha
   const url = new URL("/", origin);
   url.searchParams.set("panel", PANEL.DIRECTIONS);
   if (target.mode && target.mode !== "driving") url.searchParams.set("mode", target.mode);
+  if (target.mode === "cycling")
+    for (const [key, value] of Object.entries(bicycleQueryParameters("cycling", target)))
+      url.searchParams.set(key, value);
   const avoid = [
     target.avoidHighways ? "highways" : "",
     target.avoidTolls ? "tolls" : "",
@@ -439,6 +450,17 @@ export function parseDeepLinkSearch(search: string | URLSearchParams): ParsedDee
       params.has("wp") || params.has("mode") || params.get("panel") === "directions"
         ? {
             mode: params.get("mode") ?? undefined,
+            ...(params.get("mode") === "cycling"
+              ? bicycleOptions("cycling", {
+                  bikeProfile: isBikeProfile(params.get("bikeProfile"))
+                    ? (params.get("bikeProfile") as BikeRoutingOptions["bikeProfile"])
+                    : undefined,
+                  bikeHillPreference: isBikeHillPreference(params.get("bikeHillPreference"))
+                    ? (params.get("bikeHillPreference") as BikeRoutingOptions["bikeHillPreference"])
+                    : undefined,
+                  bikePreferQuietRoads: params.get("bikePreferQuietRoads") === "true",
+                })
+              : {}),
             avoid: splitCsv(params.get("avoid")),
             units: params.get("units") ?? undefined,
             waypoints: params

@@ -2,9 +2,12 @@ import { type GroundMobileSession, remainingWaypoints } from "@openmapx/core/nav
 import {
   type ApiClient,
   type ApiRequestOptions,
+  type BikeRoutingOptions,
+  bicycleOptions,
   createApiClient,
   fetchDirections,
   isApiRequestAbortedError,
+  validBikeRoutingOptions,
 } from "@openmapx/core/navigation/api";
 import { validateGroundStartPackage } from "./groundSession";
 import { REQUEST_TIMEOUT_MS } from "./rerouteState";
@@ -124,11 +127,14 @@ export class GroundRerouteService {
     try {
       const { startPackage } = session.payload;
       const routeOptions = startPackage.routeOptions as Record<string, unknown>;
+      if (!validBikeRoutingOptions(routeOptions))
+        throw new Error("Invalid captured bicycle preferences");
       const waypoints = rerouteWaypoints(request);
       const result = await fetchDirections(
         {
           waypoints,
           mode: startPackage.mode,
+          ...bicycleOptions(startPackage.mode, routeOptions as BikeRoutingOptions),
           units: startPackage.units,
           lang: startPackage.locale,
           // Every avoid flag the user captured is carried forward; dropping one

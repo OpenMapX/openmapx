@@ -552,6 +552,18 @@ export function buildCostingOptions(
   costing: string,
 ): Record<string, unknown> {
   const costingOptions: Record<string, unknown> = {};
+  if (costing === "bicycle") {
+    if (options.bikeProfile)
+      costingOptions.bicycle_type = {
+        trekking: "hybrid",
+        road: "road",
+        gravel: "cross",
+        mountain: "mountain",
+      }[options.bikeProfile];
+    if (options.bikeHillPreference && options.bikeHillPreference !== "default")
+      costingOptions.use_hills = options.bikeHillPreference === "strongly-avoid" ? 0 : 0.2;
+    if (options.bikePreferQuietRoads) costingOptions.use_roads = 0.1;
+  }
   if (options.avoidHighways) costingOptions.use_highways = 0;
   if (options.avoidTolls) costingOptions.use_tolls = 0;
   if (options.avoidFerries) costingOptions.use_ferry = 0;

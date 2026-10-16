@@ -1,5 +1,6 @@
 import type { ContributingRecord, FieldContributors } from "@openmapx/mobility-core/contributors";
 import type { GeometryContributorSpan } from "@openmapx/mobility-core/geometry-contributors";
+import type { BikeRoutingOptions } from "../routing/bicycleOptions";
 import type { Attribution } from "./dataSource";
 import type { ConnectorStandard, EvVehicleSpec } from "./ev";
 import type { LngLat } from "./geometry";
@@ -268,7 +269,7 @@ export interface IsochroneResult extends ContributingRecord {
   attributions?: import("@openmapx/mobility-core/attribution").Attribution[];
 }
 
-export interface RoutingOptions {
+export interface RoutingOptions extends BikeRoutingOptions {
   alternatives?: boolean;
   avoidTolls?: boolean;
   avoidHighways?: boolean;
@@ -636,7 +637,7 @@ export type SchedulePlanWarning =
   | { kind: "dwell-ignored-at-endpoint"; waypointIndex: number };
 
 /** Request body for `POST /directions/schedule`. */
-export interface ScheduleDirectionsRequest {
+export interface ScheduleDirectionsRequest extends BikeRoutingOptions {
   /** Origin…destination, in order. 2 to 25 entries. */
   waypoints: LngLat[];
   /** Per-waypoint constraints, aligned index-for-index. `null` means unconstrained. */

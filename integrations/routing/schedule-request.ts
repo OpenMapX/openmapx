@@ -1,8 +1,11 @@
 import {
+  type BikeRoutingOptions,
+  bicycleOptions,
   MAX_DWELL_SECONDS,
   resolveScheduleConstraints,
   type ScheduleAnchor,
   type TravelMode,
+  validBikeRoutingOptions,
   type WaypointSchedule,
 } from "@openmapx/core";
 import { parseWgs84PointList } from "@openmapx/integration-framework";
@@ -117,6 +120,9 @@ export function parseScheduleRequest(body: unknown): ParsedScheduleRequest {
     );
   }
 
+  if (travelMode === "cycling" && !validBikeRoutingOptions(raw))
+    fail("Invalid bike routing preference");
+  const bike = bicycleOptions(travelMode, raw as BikeRoutingOptions);
   const motorised = travelMode === "driving" || travelMode === "motorcycle";
   return {
     waypoints,
@@ -127,6 +133,7 @@ export function parseScheduleRequest(body: unknown): ParsedScheduleRequest {
     optimize,
     avoidClosures: raw.avoidClosures === true || raw.avoidClosures === "1",
     routingOptions: {
+      ...bike,
       avoidHighways: raw.avoidHighways === true,
       avoidTolls: raw.avoidTolls === true,
       avoidFerries: raw.avoidFerries === true,
@@ -155,11 +162,13 @@ export function createScheduleCacheIdentity(
       coords,
       schedule: request.schedules[index] ?? undefined,
     })),
+    ...bicycleOptions(request.travelMode, request.routingOptions),
     anchor: request.anchor,
     nowMs: 0,
   });
 
   return {
+    ...bicycleOptions(request.travelMode, request.routingOptions),
     anchor: request.anchor,
     avoidClosures: request.avoidClosures,
     avoidFerries: request.routingOptions.avoidFerries,

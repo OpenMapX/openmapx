@@ -1,3 +1,4 @@
+import { type BikeRoutingOptions, bicycleQueryParameters } from "../routing/bicycleOptions";
 import type { LngLat } from "../types/geometry";
 import type {
   DirectionsResult,
@@ -10,7 +11,7 @@ import type {
 import { type ApiClient, type ApiRequestOptions, apiClient } from "./client";
 import { API_ENDPOINTS } from "./endpoints";
 
-export interface FetchDirectionsParams {
+export interface FetchDirectionsParams extends BikeRoutingOptions {
   waypoints: LngLat[];
   /** Pin an enabled routing integration; failure must not change graphs. */
   provider?: string;
@@ -43,6 +44,9 @@ export function fetchDirections(
     avoidTolls = false,
     avoidFerries = false,
     avoidClosures = false,
+    bikeProfile,
+    bikeHillPreference,
+    bikePreferQuietRoads,
     units = "metric",
     lang,
     departAt,
@@ -58,6 +62,7 @@ export function fetchDirections(
       waypoints: waypointsStr,
       ...(provider && { provider }),
       mode,
+      ...bicycleQueryParameters(mode, { bikeProfile, bikeHillPreference, bikePreferQuietRoads }),
       avoidHighways: String(avoidHighways),
       avoidTolls: String(avoidTolls),
       avoidFerries: String(avoidFerries),

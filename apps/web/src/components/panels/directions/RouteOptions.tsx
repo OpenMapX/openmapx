@@ -12,6 +12,10 @@ import MenuItem from "@mui/material/MenuItem";
 import Select from "@mui/material/Select";
 import Typography from "@mui/material/Typography";
 import {
+  BIKE_HILL_PREFERENCES,
+  BIKE_PROFILES,
+  isBikeHillPreference,
+  isBikeProfile,
   TRANSIT_ACCESS_OPTIONS,
   TRANSIT_PREFER_OPTIONS,
   type TransitAccessMode,
@@ -316,6 +320,77 @@ function TransitRouteOptions() {
   );
 }
 
+function CyclingRouteOptions() {
+  const t = useTranslations("directions");
+  const {
+    bikeProfile,
+    bikeHillPreference,
+    bikePreferQuietRoads,
+    setBikeProfile,
+    setBikeHillPreference,
+    setBikePreferQuietRoads,
+  } = useDirectionsStore();
+  const profiles = {
+    trekking: "bikeTrekking",
+    road: "bikeRoad",
+    gravel: "bikeGravel",
+    mountain: "bikeMountain",
+  } as const;
+  const hills = {
+    default: "bikeHillsDefault",
+    avoid: "bikeHillsAvoid",
+    "strongly-avoid": "bikeHillsStronglyAvoid",
+  } as const;
+  return (
+    <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5, mb: 2 }}>
+      <FormControl fullWidth size="small">
+        <InputLabel id="bike-profile-label">{t("bikeType")}</InputLabel>
+        <Select
+          labelId="bike-profile-label"
+          label={t("bikeType")}
+          value={bikeProfile}
+          onChange={(e) => {
+            if (isBikeProfile(e.target.value)) setBikeProfile(e.target.value);
+          }}
+        >
+          {BIKE_PROFILES.map((value) => (
+            <MenuItem key={value} value={value}>
+              {t(profiles[value])}
+            </MenuItem>
+          ))}
+        </Select>
+      </FormControl>
+      <FormControl fullWidth size="small">
+        <InputLabel id="cycling-hills-label">{t("bikeHillPreference")}</InputLabel>
+        <Select
+          labelId="cycling-hills-label"
+          label={t("bikeHillPreference")}
+          value={bikeHillPreference}
+          onChange={(e) => {
+            if (isBikeHillPreference(e.target.value)) setBikeHillPreference(e.target.value);
+          }}
+        >
+          {BIKE_HILL_PREFERENCES.map((value) => (
+            <MenuItem key={value} value={value}>
+              {t(hills[value])}
+            </MenuItem>
+          ))}
+        </Select>
+      </FormControl>
+      <Box>
+        <CheckRow
+          label={t("bikeQuietRoads")}
+          checked={bikePreferQuietRoads}
+          onChange={setBikePreferQuietRoads}
+        />
+        <Typography variant="caption" color="text.secondary">
+          {t("bikePreferencesHint")}
+        </Typography>
+      </Box>
+    </Box>
+  );
+}
+
 export function RouteOptions() {
   const t = useTranslations("directions");
   const {
@@ -342,6 +417,7 @@ export function RouteOptions() {
   return (
     <Box sx={{ px: 2, pb: 1.5 }}>
       <Divider sx={{ mb: 1.5, mx: -2 }} />
+      {mode === "cycling" && <CyclingRouteOptions />}
       {isTransit ? (
         <TransitRouteOptions />
       ) : (

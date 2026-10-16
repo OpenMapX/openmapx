@@ -1,4 +1,5 @@
 import { createHash, randomBytes } from "node:crypto";
+import { type BikeRoutingOptions, validBikeRoutingOptions } from "@openmapx/core";
 import {
   parseSavedPlaceContributors,
   type SavedPlaceFieldContributors,
@@ -35,7 +36,7 @@ export interface ShareWaypointSchedule {
   timeZone?: string;
 }
 
-export interface RouteSharePayload {
+export interface RouteSharePayload extends BikeRoutingOptions {
   waypoints: RouteShareWaypoint[];
   mode: RouteShareMode;
   avoidHighways?: boolean;
@@ -155,6 +156,7 @@ export function validateRouteShare(input: unknown): RouteSharePayload | null {
   const { waypoints, mode, avoidHighways, avoidTolls, avoidFerries, scheduleVersion, schedules } =
     input as Record<string, unknown>;
   if (!ROUTE_SHARE_MODES.includes(mode as RouteShareMode)) return null;
+  if (!validBikeRoutingOptions(input as Record<string, unknown>)) return null;
   if (!Array.isArray(waypoints) || waypoints.length < 2 || waypoints.length > MAX_WAYPOINTS) {
     return null;
   }
@@ -171,6 +173,13 @@ export function validateRouteShare(input: unknown): RouteSharePayload | null {
   if (avoidHighways !== undefined) payload.avoidHighways = avoidHighways as boolean;
   if (avoidTolls !== undefined) payload.avoidTolls = avoidTolls as boolean;
   if (avoidFerries !== undefined) payload.avoidFerries = avoidFerries as boolean;
+  if (mode === "cycling") {
+    const bike = input as BikeRoutingOptions;
+    if (bike.bikeProfile !== undefined) payload.bikeProfile = bike.bikeProfile;
+    if (bike.bikeHillPreference !== undefined) payload.bikeHillPreference = bike.bikeHillPreference;
+    if (bike.bikePreferQuietRoads !== undefined)
+      payload.bikePreferQuietRoads = bike.bikePreferQuietRoads;
+  }
 
   if (scheduleVersion !== undefined && scheduleVersion !== 1) return null;
   if (schedules !== undefined) {

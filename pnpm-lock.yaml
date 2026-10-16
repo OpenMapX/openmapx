@@ -1881,6 +1881,21 @@ importers:
         specifier: workspace:^
         version: link:../../packages/mobility-core
 
+  integrations/routing-brouter:
+    dependencies:
+      '@openmapx/core':
+        specifier: workspace:^
+        version: link:../../packages/core
+      '@openmapx/i18n':
+        specifier: workspace:^
+        version: link:../../packages/i18n
+      '@openmapx/integration-framework':
+        specifier: workspace:^
+        version: link:../../packages/integration-framework
+      '@openmapx/integration-routing':
+        specifier: workspace:^
+        version: link:../routing
+
   integrations/routing-osrm:
     dependencies:
       '@openmapx/core':

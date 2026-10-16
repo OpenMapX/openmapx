@@ -1,3 +1,4 @@
+import type { BikeRoutingOptions } from "../routing/bicycleOptions";
 import type { SavedPlaceFieldContributors } from "../saved-place-contributors";
 import type { WaypointSchedule } from "./routing";
 
@@ -20,7 +21,7 @@ export interface RouteShareWaypoint {
 }
 
 /** The stored route-share inputs; viewers re-request the route from these. */
-export interface RouteSharePayload {
+export interface RouteSharePayload extends BikeRoutingOptions {
   waypoints: RouteShareWaypoint[];
   mode: "driving" | "walking" | "cycling" | "motorcycle";
   avoidHighways?: boolean;

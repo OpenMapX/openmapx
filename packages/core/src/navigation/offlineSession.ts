@@ -6,6 +6,7 @@ import {
   snapshotContributors,
 } from "@openmapx/mobility-core/contributors";
 import { parseGeometryContributors } from "@openmapx/mobility-core/geometry-contributors";
+import { validBikeRoutingOptions } from "../routing/bicycleOptions";
 import type { NavigationRouteOptions, RouteSelectionIntent } from "../stores/navigationStore";
 import type { LngLat } from "../types/geometry";
 import type { ManeuverLane, ManeuverSign, Route, RouteLeg, RouteStep } from "../types/routing";
@@ -367,12 +368,11 @@ function validateProgress(value: unknown): value is NavProgress | null {
 function validateRouteOptions(value: unknown): value is NavigationRouteOptions {
   if (!value || typeof value !== "object") return false;
   const options = value as NavigationRouteOptions;
-  return [
-    options.avoidHighways,
-    options.avoidTolls,
-    options.avoidFerries,
-    options.avoidClosures,
-  ].every((entry) => typeof entry === "boolean");
+  return (
+    [options.avoidHighways, options.avoidTolls, options.avoidFerries, options.avoidClosures].every(
+      (entry) => typeof entry === "boolean",
+    ) && validBikeRoutingOptions(value as Record<string, unknown>)
+  );
 }
 
 function equivalentRoute(a: Route, b: Route): boolean {

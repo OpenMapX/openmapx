@@ -1,4 +1,9 @@
-import type { TravelMode } from "@openmapx/core";
+import {
+  type BikeRoutingOptions,
+  bicycleOptions,
+  type TravelMode,
+  validBikeRoutingOptions,
+} from "@openmapx/core";
 import {
   parseWgs84PointList,
   type RouteQuery,
@@ -34,7 +39,8 @@ export const OPTIMIZE_DIRECTIONS_REQUEST_POLICY: DirectionsRequestPolicy = {
 type ParsedRoutingOptions = Required<
   Pick<RoutingOptions, "avoidFerries" | "avoidHighways" | "avoidTolls" | "units" | "useLiveTraffic">
 > &
-  Pick<RoutingOptions, "arriveBy" | "departAt" | "lang">;
+  Pick<RoutingOptions, "arriveBy" | "departAt" | "lang"> &
+  BikeRoutingOptions;
 
 export interface ParsedDirectionsRequest {
   operation: DirectionsRequestPolicy["operation"];
@@ -114,6 +120,21 @@ export function parseDirectionsRequest(
       throw new Error("provider must be a routing integration ID");
     }
 
+    const bikeRaw = {
+      bikeProfile: query.bikeProfile,
+      bikeHillPreference: query.bikeHillPreference,
+      bikePreferQuietRoads:
+        query.bikePreferQuietRoads === undefined
+          ? undefined
+          : query.bikePreferQuietRoads === "true"
+            ? true
+            : query.bikePreferQuietRoads === "false"
+              ? false
+              : query.bikePreferQuietRoads,
+    };
+    if (travelMode === "cycling" && !validBikeRoutingOptions(bikeRaw))
+      throw new Error("Invalid bike routing preference");
+    const bike = bicycleOptions(travelMode, bikeRaw as BikeRoutingOptions);
     return {
       operation: policy.operation,
       waypoints,
@@ -122,6 +143,7 @@ export function parseDirectionsRequest(
       requireTimeAware: Boolean(departAt || arriveBy),
       ...(query.provider && { provider: query.provider }),
       routingOptions: {
+        ...bike,
         avoidHighways: query.avoidHighways === "true",
         avoidTolls: query.avoidTolls === "true",
         avoidFerries: query.avoidFerries === "true",
@@ -147,6 +169,7 @@ export function createDirectionsCacheIdentity(
 ): Record<string, unknown> {
   const { routingOptions } = request;
   return {
+    ...bicycleOptions(request.travelMode, routingOptions),
     arriveBy: routingOptions.arriveBy ?? null,
     avoidClosures: request.avoidClosures,
     avoidFerries: routingOptions.avoidFerries,

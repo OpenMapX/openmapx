@@ -1,3 +1,4 @@
+export * from "./bicycleOptions";
 export {
   MAX_DWELL_SECONDS,
   type ResolvedSchedule,

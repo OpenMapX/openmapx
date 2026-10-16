@@ -8,6 +8,7 @@ import type { RouteCountrySpan } from "../navigation/routeCountries";
 import type { TransitProgress } from "../navigation/transitProgress";
 import type { CameraMode, NavProgress, NavStatus } from "../navigation/types";
 import { getStorage } from "../platform/storage";
+import type { BikeRoutingOptions } from "../routing/bicycleOptions";
 import type { LngLat } from "../types/geometry";
 import type { RoadConditionRouteImpact, Route, TravelMode } from "../types/routing";
 import { expireRoadConditionRouteImpact } from "../utils/roadConditionRouteImpact";
@@ -112,7 +113,7 @@ export interface NativeNavigationEvent {
 }
 
 /** Route constraints that must survive every mid-trip directions request. */
-export interface NavigationRouteOptions {
+export interface NavigationRouteOptions extends BikeRoutingOptions {
   avoidHighways: boolean;
   avoidTolls: boolean;
   avoidFerries: boolean;
