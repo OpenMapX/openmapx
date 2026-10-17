@@ -20,6 +20,8 @@ env:
   # The compact receipts below are sufficient; no image or build-record archive
   # is published by this experiment. Production attestations/scans stay intact.
   DOCKER_BUILD_RECORD_UPLOAD: "false"
+  # Each case already saved its receipts and removed its builder before post-job.
+  DOCKER_BUILD_SUMMARY: "false"
 
 jobs:
   measure:
