@@ -91,30 +91,39 @@ and the [self-hosting guide](https://docs.openmapx.org/install/getting-started/)
 
 ## Quality bar
 
-Every PR must pass the same checks CI runs:
+Before opening a PR, run checks appropriate to the change and report what you
+verified. For code changes, run the focused tests and the affected package's
+type check while iterating. Changes to shared code, dependencies, root config
+or tooling need full local verification:
 
 ```bash
-pnpm lint           # Biome, then Prettier for Markdown and YAML
-pnpm check-types    # tsc across the workspace
-pnpm test           # Vitest
+pnpm verify:full     # lint, workspace types, policy, OpenAPI, portable tests
 ```
 
-Git hooks enforce a two-stage local gate:
+Install both locked dependency sets first (`pnpm install --frozen-lockfile` and
+`pnpm -C docs install --frozen-lockfile`); the policy probes check both.
+`verify:full` waits up to 60 seconds for the machine's shared heavy-test lock,
+reports the wait, and runs tests with half the workers. If another run holds
+the lock longer, retry when it finishes. On systems without `flock` or `lockf`,
+run it without other full suites running; the command prints a warning.
+Database, mobile, production builds and native-device checks remain separate;
+choose those when the changed behavior requires them.
 
-- **pre-commit** — scoped to what you're committing: Biome on staged files
-  only (`biome check --staged`), `pnpm check-translations`, a type check
-  scoped to the workspace packages affected by your uncommitted changes
-  (`turbo run check-types --filter='...[HEAD]'`, falling back to the full
-  workspace when staged files lie outside `apps/`, `packages/`,
-  `integrations/`, or `services/data-manager/`), and the audit gates:
-  `check-legal-tables`, `check-legal-updated`, `check-data-flows`,
-  `check-license-metadata`, `check-toolchain-pins`, `check-feed-ids`,
-  `check-credential-keys`, and `check-dockerfile-sync`. No Docker required.
-  A small in-package commit takes seconds; one touching root config or a
-  widely-depended-on package pays a full type check.
-- **pre-push** — full workspace type check (`pnpm check-types`) as the
-  backstop for the scoped pre-commit check, then the portable test suite
-  (`pnpm test`).
+Git hooks keep everyday commits and pushes inexpensive:
+
+- **pre-commit** checks staged code with Biome and staged Markdown/YAML with
+  Prettier, respecting generated-file exclusions. It reads the Git index and
+  checks a temporary snapshot, so partially staged and unrelated working files
+  stay intact. It reports required fixes without editing or staging files.
+- **commit-msg** checks Conventional Commits with commitlint.
+- There is no **pre-push** gate. A successful push does not establish that the
+  change passes validation.
+
+Whole-workspace types, translation completeness, policy, OpenAPI and portable
+tests run through explicit commands and required CI. The hooks do not select
+affected tests or run a hidden full-suite fallback. Documentation-only changes
+normally need formatting and the affected documentation build; record any
+checks left to CI in the PR.
 
 CI runs lint, types, node/web/mobile tests, the database integration suite, and
 production builds as parallel jobs on every push and PR. Pull requests also

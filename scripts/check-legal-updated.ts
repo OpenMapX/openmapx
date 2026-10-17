@@ -1,14 +1,14 @@
 /**
- * Pre-commit guard: keep the legal pages' "Last updated" date honest.
+ * Repository policy guard: keep the legal pages' "Last updated" date honest.
  *
  * The Privacy Policy and Terms pages each render a hand-set "Last updated: <Month
  * YYYY>" (EN) / "Zuletzt aktualisiert: <Monat JJJJ>" (DE). Two failure modes this
  * guards against:
  *
- *   1. Staleness — a legal content file is staged with changes but its date line
- *      wasn't bumped in the same commit. Uses the staged diff (`git diff --cached`),
- *      which is exactly the pre-commit context and works for direct-to-main commits.
- *      (Skipped gracefully when git/staged info isn't available, e.g. plain CI runs.)
+ *   1. Staleness — a legal content file has changes but its date line
+ *      wasn't bumped in the same change. Uses the staged diff (`git diff --cached`),
+ *      or the committed PR diff when OPENMAPX_POLICY_BASE is supplied by CI.
+ *      A required CI base that cannot be resolved is a failure.
  *   2. Locale drift — the EN and DE copies of a page disagree on the date.
  *
  * Run on demand with `pnpm check-legal-updated`.
@@ -76,6 +76,8 @@ const MONTHS: Record<string, number> = {
 };
 
 const problems: string[] = [];
+// biome-ignore lint/suspicious/noUndeclaredEnvVars: CLI-only input; this policy script does not run through Turbo.
+const comparisonBase = process.env.OPENMAPX_POLICY_BASE;
 
 function parseDate(
   text: string,
@@ -109,15 +111,17 @@ function parseDate(
 /** Staged file list, or null when git/staged info is unavailable. */
 function stagedFiles(): string[] | null {
   try {
-    const out = execFileSync("git", ["diff", "--cached", "--name-only"], {
+    const args = comparisonBase
+      ? ["diff", "--name-only", "-z", comparisonBase, "HEAD", "--"]
+      : ["diff", "--cached", "--name-only", "-z"];
+    const out = execFileSync("git", args, {
       cwd: REPO_ROOT,
       encoding: "utf8",
     });
-    return out
-      .split("\n")
-      .map((s) => s.trim())
-      .filter(Boolean);
+    return out.split("\0").filter(Boolean);
   } catch {
+    if (comparisonBase)
+      problems.push("Cannot compare legal content with the required policy base.");
     return null;
   }
 }
@@ -150,6 +154,25 @@ function mergeHead(): string | null {
  */
 function dateLineChangedInStaged(file: string): boolean {
   const references: Array<string | null> = [null];
+  if (comparisonBase) {
+    try {
+      // Include merge-parent diffs: a same-day merge may retain main's date
+      // while advancing the topic's older date. GitHub adds another synthetic
+      // merge, so inspecting only HEAD's immediate parents loses that evidence.
+      return diffTouchesDateLine(
+        execFileSync(
+          "git",
+          ["log", "--full-history", "--format=", "-m", "-p", `${comparisonBase}..HEAD`, "--", file],
+          {
+            cwd: REPO_ROOT,
+            encoding: "utf8",
+          },
+        ),
+      );
+    } catch {
+      return false;
+    }
+  }
   const secondParent = mergeHead();
   if (secondParent) references.push(secondParent);
   for (const reference of references) {
@@ -169,6 +192,10 @@ function dateLineChangedInStaged(file: string): boolean {
 }
 
 function main(): void {
+  if (comparisonBase && !/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(comparisonBase)) {
+    console.error("OPENMAPX_POLICY_BASE must be a full Git commit SHA.");
+    process.exit(1);
+  }
   const staged = stagedFiles();
 
   for (const page of PAGES) {
@@ -198,7 +225,7 @@ function main(): void {
       for (const rel of [page.files.en, page.files.de]) {
         if (staged.includes(rel) && !dateLineChangedInStaged(rel)) {
           problems.push(
-            `${rel} is staged with changes but its "Last updated" date wasn't bumped — update it in the same commit.`,
+            `${rel} has changes but its "Last updated" date wasn't bumped — update it in the same change.`,
           );
         }
       }

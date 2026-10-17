@@ -14,6 +14,7 @@ docker run --rm -v "$REPO_ROOT:/repo" -w /repo "$ACTIONLINT_IMAGE" -color
 docker run --rm -v "$REPO_ROOT:/repo" -w /repo "$SHELLCHECK_IMAGE" \
   apps/web/docker-entrypoint.sh \
   scripts/check-infrastructure.sh \
+  scripts/verify-full.sh \
   services/dawarich-app/scripts/openmapx-entrypoint.sh \
   services/dawarich-sidekiq/scripts/openmapx-entrypoint.sh \
   services/motis/tools/transitous/run.sh \
