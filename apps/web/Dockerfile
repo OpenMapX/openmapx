@@ -1,4 +1,4 @@
-# syntax=docker/dockerfile:1.19
+# syntax=docker/dockerfile:1.20
 
 FROM node:24.21.0-alpine@sha256:ebfe2f90462722a7a4de65e91990e97fe0d401c70e0e762c5b53302f905ec1c1 AS base
 # Read the pnpm version directly from the repo root package.json to ensure
@@ -31,7 +31,8 @@ COPY packages/presets/package.json packages/presets/
 COPY packages/brands/package.json packages/brands/
 COPY packages/transitous-core/package.json packages/transitous-core/
 COPY apps/web/package.json apps/web/
-COPY integrations/ integrations/
+# Keep integration source changes out of the dependency-install cache key.
+COPY --parents integrations/*/package.json ./
 RUN pnpm install --frozen-lockfile
 
 # Build

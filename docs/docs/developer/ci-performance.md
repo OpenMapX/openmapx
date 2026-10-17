@@ -47,3 +47,24 @@ layout or build toolchain.
 
 References: [Docker cache modes](https://docs.docker.com/build/cache/backends/)
 and [GitHub cache backend](https://docs.docker.com/build/cache/backends/gha/).
+
+## Dependency-layer inputs
+
+The API and web images stage integration `package.json` files before installing
+dependencies. The ops-agent and transitous-runner images do the same for workspace
+packages. [`COPY --parents`](https://docs.docker.com/reference/dockerfile/#copy---parents)
+preserves their directory layout without copying source; these Dockerfiles require
+the stable Dockerfile 1.20 frontend.
+
+Source is copied into later build stages and, where loaded directly at runtime,
+into the final image. The API needs both integration source and the production
+workspace links; copying only the installed manifests would break its dynamic
+integration loader.
+
+When cache is available, a source-only edit should reuse the dependency-install
+layers. A changed package manifest, lockfile or install configuration should
+invalidate them. Cache eviction or a missing remote cache can still force a fresh
+install; distinguish cache availability from input invalidation when measuring. Keep workspace
+install lifecycle scripts independent of application source, or explicitly stage
+the inputs they need before installation and verify the cache behavior again.
+The external dependency build allowlist in `pnpm-workspace.yaml` still applies.

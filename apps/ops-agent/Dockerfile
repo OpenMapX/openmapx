@@ -1,4 +1,4 @@
-# syntax=docker/dockerfile:1.7
+# syntax=docker/dockerfile:1.20
 
 FROM node:24.21.0-alpine@sha256:ebfe2f90462722a7a4de65e91990e97fe0d401c70e0e762c5b53302f905ec1c1 AS base
 COPY package.json /tmp/package.json
@@ -10,7 +10,8 @@ FROM base AS deps
 WORKDIR /app
 ENV HUSKY=0
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json ./
-COPY packages/ packages/
+# Preserve workspace paths without including source in the install cache key.
+COPY --parents packages/*/package.json ./
 COPY apps/ops-agent/package.json apps/ops-agent/
 RUN pnpm install --frozen-lockfile
 
@@ -18,13 +19,14 @@ FROM base AS prod-deps
 WORKDIR /app
 ENV HUSKY=0
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json ./
-COPY packages/ packages/
+# Preserve workspace paths without including source in the install cache key.
+COPY --parents packages/*/package.json ./
 COPY apps/ops-agent/package.json apps/ops-agent/
 RUN pnpm install --frozen-lockfile --prod --ignore-scripts
 
 FROM deps AS builder
 WORKDIR /app
-COPY packages/core/ packages/core/
+COPY packages/ packages/
 COPY apps/ops-agent/ apps/ops-agent/
 COPY tsconfig.base.json ./
 WORKDIR /app/apps/ops-agent

@@ -1,4 +1,4 @@
-# syntax=docker/dockerfile:1.7
+# syntax=docker/dockerfile:1.20
 #
 # The private Transitous runner.
 #
@@ -33,7 +33,8 @@ FROM base AS deps
 WORKDIR /app
 ENV HUSKY=0
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json ./
-COPY packages/ packages/
+# Preserve workspace paths without including source in the install cache key.
+COPY --parents packages/*/package.json ./
 COPY apps/transitous-runner/package.json apps/transitous-runner/
 RUN pnpm install --frozen-lockfile
 
@@ -41,7 +42,8 @@ FROM base AS prod-deps
 WORKDIR /app
 ENV HUSKY=0
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json ./
-COPY packages/ packages/
+# Preserve workspace paths without including source in the install cache key.
+COPY --parents packages/*/package.json ./
 COPY apps/transitous-runner/package.json apps/transitous-runner/
 RUN pnpm install --frozen-lockfile --prod --ignore-scripts && \
     rm -rf node_modules/.pnpm/image-size@*
@@ -51,7 +53,7 @@ RUN pnpm install --frozen-lockfile --prod --ignore-scripts && \
 
 FROM deps AS builder
 WORKDIR /app
-COPY packages/core/ packages/core/
+COPY packages/ packages/
 COPY apps/transitous-runner/ apps/transitous-runner/
 COPY tsconfig.base.json ./
 WORKDIR /app/apps/transitous-runner
