@@ -63,9 +63,12 @@ jobs:
       - run: pnpm lint
 
       - name: Check repository policy invariants
-        # Deterministic/offline checks also used by the local pre-commit hook.
+        # Explicit local verification runs the same offline checks. Legal-date
+        # freshness uses the committed PR diff; CI has no staged Git changes.
         # Live legal-URL and routing probes remain in scheduled workflows.
         run: pnpm check:policy
+        env:
+          OPENMAPX_POLICY_BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || '' }}
 
       - name: Audit production dependencies
         # This live registry check stays out of local hooks. Current no-fix

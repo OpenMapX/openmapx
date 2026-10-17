@@ -59,7 +59,8 @@
     "mobile:release:prepare": "pnpm -C apps/mobile exec tsx release/prepare.mts",
     "mobile:release:ios": "pnpm -C apps/mobile exec tsx release/build-ios.mts",
     "mobile:release:android": "pnpm -C apps/mobile exec tsx release/build-android.mts",
-    "mobile:release:verify": "pnpm -C apps/mobile exec tsx release/verify-artifact.mts"
+    "mobile:release:verify": "pnpm -C apps/mobile exec tsx release/verify-artifact.mts",
+    "verify:full": "sh scripts/verify-full.sh"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.15",
