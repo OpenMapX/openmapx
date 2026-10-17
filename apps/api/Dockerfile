@@ -1,4 +1,4 @@
-# syntax=docker/dockerfile:1.19
+# syntax=docker/dockerfile:1.20
 
 FROM node:24.21.0-alpine@sha256:ebfe2f90462722a7a4de65e91990e97fe0d401c70e0e762c5b53302f905ec1c1 AS base
 # Read the pnpm version directly from the repo root package.json to ensure
@@ -33,7 +33,8 @@ COPY packages/place-ids/package.json packages/place-ids/
 COPY packages/presets/package.json packages/presets/
 COPY packages/brands/package.json packages/brands/
 COPY apps/api/package.json apps/api/
-COPY integrations/ integrations/
+# Keep integration source changes out of the dependency-install cache key.
+COPY --parents integrations/*/package.json ./
 RUN pnpm install --frozen-lockfile
 
 # Install production dependencies only (for runtime)
@@ -61,7 +62,8 @@ COPY packages/place-ids/package.json packages/place-ids/
 COPY packages/presets/package.json packages/presets/
 COPY packages/brands/package.json packages/brands/
 COPY apps/api/package.json apps/api/
-COPY integrations/ integrations/
+# Keep integration source changes out of the dependency-install cache key.
+COPY --parents integrations/*/package.json ./
 # The install and targeted pnpm-store pruning intentionally share a layer;
 # changing WORKDIR here would make the unpruned dependencies part of the image.
 # hadolint ignore=DL3003
@@ -82,6 +84,7 @@ WORKDIR /app
 COPY --from=deps /app ./
 
 COPY --exclude=*/package.json packages/ packages/
+COPY integrations/ integrations/
 COPY apps/api/ apps/api/
 # The privacy source fingerprint is computed inside this build stage. Copy
 # every reviewed external source boundary with its repository-relative path so
@@ -204,6 +207,7 @@ COPY --from=prod-deps /app/packages/transitous-core/node_modules ./packages/tran
 
 # Integrations with pnpm-resolved node_modules (manifests + code + deps)
 COPY --from=prod-deps /app/integrations ./integrations
+COPY integrations/ integrations/
 
 # Service manifests are read at runtime by the API service registry. They are
 # not needed for the bundle itself, but without them self-hosted containers
