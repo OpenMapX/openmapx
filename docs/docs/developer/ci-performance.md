@@ -68,3 +68,8 @@ install; distinguish cache availability from input invalidation when measuring. 
 install lifecycle scripts independent of application source, or explicitly stage
 the inputs they need before installation and verify the cache behavior again.
 The external dependency build allowlist in `pnpm-workspace.yaml` still applies.
+
+Changesets excludes package-root `Dockerfile` edits from release detection;
+these private deployment-image changes do not need empty package notes. Source,
+package manifests and nested Dockerfile fixtures still participate in the gate.
+The wider package/release baseline is handled separately.
