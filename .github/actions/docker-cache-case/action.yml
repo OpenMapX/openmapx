@@ -1,0 +1,71 @@
+name: Measure one isolated API cache case
+description: Build without publication and collect BuildKit cache timings
+inputs:
+  policy:
+    description: max, min, or main-only
+    required: true
+  sample:
+    description: Replicate number
+    required: true
+  phase:
+    description: cold, unchanged, or source
+    required: true
+  output:
+    description: Absolute results directory outside the Docker context
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Prepare and identify inputs
+      id: prepare
+      shell: bash
+      env:
+        POLICY: ${{ inputs.policy }}
+        SAMPLE: ${{ inputs.sample }}
+        PHASE: ${{ inputs.phase }}
+        OUTPUT: ${{ inputs.output }}
+      run: node scripts/docker-cache-benchmark.mjs prepare "$OUTPUT" "$POLICY" "$SAMPLE" "$PHASE"
+    - name: Create a fresh pinned builder
+      id: builder
+      uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      with:
+        version: v0.38.0
+        driver-opts: image=${{ steps.prepare.outputs.buildkit-image }}
+        cleanup: false
+    - name: Start action timing
+      shell: bash
+      env:
+        OUTPUT: ${{ inputs.output }}
+        PHASE: ${{ inputs.phase }}
+      run: node scripts/docker-cache-benchmark.mjs start "$OUTPUT/$PHASE"
+    - name: Build API without publishing
+      id: build
+      uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+      with:
+        builder: ${{ steps.builder.outputs.name }}
+        context: .
+        file: apps/api/Dockerfile
+        platforms: linux/amd64
+        pull: true
+        no-cache: ${{ steps.prepare.outputs.no-cache == 'true' }}
+        cache-from: ${{ steps.prepare.outputs.cache-from }}
+        cache-to: ${{ steps.prepare.outputs.cache-to }}
+        build-args: BUILDKIT_SYNTAX=${{ steps.prepare.outputs.dockerfile-frontend }}
+        outputs: type=cacheonly
+        push: false
+        provenance: mode=max
+        sbom: generator=${{ steps.prepare.outputs.sbom-generator }}
+    - name: Collect completed build evidence
+      shell: bash
+      env:
+        BUILD_METADATA: ${{ steps.build.outputs.metadata }}
+        BENCHMARK_BUILDER: ${{ steps.builder.outputs.name }}
+        OUTPUT: ${{ inputs.output }}
+        PHASE: ${{ inputs.phase }}
+      run: node scripts/docker-cache-benchmark.mjs collect "$OUTPUT/$PHASE"
+    - name: Remove only this case's builder and local cache
+      if: always() && steps.builder.outputs.name != ''
+      shell: bash
+      env:
+        BENCHMARK_BUILDER: ${{ steps.builder.outputs.name }}
+      run: docker buildx rm "$BENCHMARK_BUILDER"
