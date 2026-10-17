@@ -41,11 +41,55 @@ const METEOALARM = "eu-meteoalarm-alerts";
 const NWS = "us-nws-alerts";
 const VIIRS = "nasa-firms-viirs-fires";
 const MODIS = "nasa-firms-modis-fires";
+const SLSTR = "eumetsat-slstr-fires";
 const NOTICE =
   "Time delays between this website and the www.meteoalarm.org website are possible. For the most up-to-date awareness information as published by the participating National Meteorological and Hydrological Services, please refer to www.meteoalarm.org.";
 
 const clone = <T>(value: T): T => structuredClone(value);
 const ocSources = (): OcSource[] => clone(sourcesAnswer.sources) as unknown as OcSource[];
+
+const COPERNICUS_LICENSE = {
+  kind: "custom",
+  id: "LicenseRef-Copernicus-Sentinel-Data",
+  namespace: "openconditions:licences",
+  name: "Legal notice on the use of Copernicus Sentinel Data and Service Information",
+  url: "https://sentinels.copernicus.eu/documents/247904/690755/Sentinel_Data_Legal_Notice",
+};
+
+/**
+ * The EUMETSAT SLSTR feed as `/sources` lists it. The hazards fixture predates
+ * the feed, so the entry is written here in the shape of the FIRMS entries.
+ */
+function slstrSource(): OcSource {
+  const modis = ocSources().find((s) => s.id === MODIS)!;
+  return {
+    ...modis,
+    id: SLSTR,
+    name: "EUMETSAT Sentinel-3 SLSTR active fires",
+    format: "slstr-frp",
+    qualifier: "slstr",
+    operator: "eumetsat",
+    license: COPERNICUS_LICENSE.id,
+    // `/sources` resolves the catalogue's `{year}` to the current year.
+    attribution: "Contains modified Copernicus Sentinel data 2026, processed by EUMETSAT",
+    homepage: "https://data.eumetsat.int/product/EO:EUM:DAT:0417",
+    privacyUrl: "https://www.eumetsat.int/privacy-policy",
+    rights: { ...modis.rights, attributionRequired: true },
+    licensing: {
+      version: 1,
+      bindings: [
+        {
+          scope: "data",
+          subject: "EUMETSAT Sentinel-3 SLSTR active fires",
+          license: COPERNICUS_LICENSE,
+        },
+      ],
+    },
+  } as unknown as OcSource;
+}
+
+/** The hazards sources with the SLSTR feed listed too. */
+const withSlstr = (): OcSource[] => [...ocSources(), slstrSource()];
 
 /** The live list as the integration builds it from a `/sources` answer. */
 function liveSources(list: OcSource[] = ocSources()): UpdatableLiveSources {
@@ -509,6 +553,41 @@ describe("fire detections", () => {
     });
   });
 
+  test("an SLSTR read keeps only the SLSTR feed; confidence is the class with its percentage", async () => {
+    const modis = (fire.records as unknown as Rec[]).find(
+      (r) => (r.provenance as Rec).sourceId === MODIS,
+    )!;
+    const reading = {
+      ...clone(modis),
+      id: `oc:observation:${SLSTR}:1`,
+      provenance: {
+        ...clone(modis.provenance as Rec),
+        sourceId: SLSTR,
+        sourceFormat: "slstr-frp",
+      },
+      extras: { instrument: "slstr", satellite: "S3A", brightnessK: 341.2, daynight: "night" },
+      quality: { supplierCode: "low", confidence: 0.97 },
+    };
+    const { provider, calls } = providerWith(
+      (path, params) => (path === "/observations/latest" ? paged([reading], params) : undefined),
+      liveSources(withSlstr()),
+    );
+    const result = await provider.getFirePixels(BBOX, { since, instrument: "slstr", limit: 5000 });
+
+    expect(callParams(calls)).toMatchObject({ property: "fire.frp", source: SLSTR });
+    expect(result.pixels).toHaveLength(1);
+    expect(result.pixels[0]).toMatchObject({
+      frpMW: 14.13,
+      brightnessK: 341.2,
+      instrument: "slstr",
+      satellite: "S3A",
+      confidence: { level: "low", percent: 97 },
+      dayNight: "night",
+      sources: [SLSTR],
+    });
+    expect(result.pixels[0]!.contributors?.map((c) => c.sourceId)).toContain(SLSTR);
+  });
+
   test("a read stops at the limit and says the area is partly covered", async () => {
     const { provider, calls } = providerWith(serve);
     const result = await provider.getFirePixels(BBOX, { since, instrument: "viirs", limit: 3 });
@@ -673,18 +752,27 @@ describe("the live source list", () => {
     );
   });
 
-  test("firmsSources are the listed FIRMS feeds of an instrument", () => {
-    const live = liveSources();
-    expect(live.firmsSources("viirs")).toEqual([VIIRS]);
-    expect(live.firmsSources("modis")).toEqual([MODIS]);
-    const without = liveSources(ocSources().filter((s) => s.id !== VIIRS));
-    expect(without.firmsSources("viirs")).toEqual([]);
-    expect(createLiveSources().firmsSources("viirs")).toEqual([]);
+  test("fireSources are the listed fire-pixel feeds of an instrument", () => {
+    const live = liveSources(withSlstr());
+    expect(live.fireSources("viirs")).toEqual([VIIRS]);
+    expect(live.fireSources("modis")).toEqual([MODIS]);
+    expect(live.fireSources("slstr")).toEqual([SLSTR]);
+    expect(liveSources().fireSources("slstr")).toEqual([]);
+    const without = liveSources(withSlstr().filter((s) => s.id !== VIIRS));
+    expect(without.fireSources("viirs")).toEqual([]);
+    expect(createLiveSources().fireSources("viirs")).toEqual([]);
   });
 
-  test("a feed of another format with a FIRMS qualifier is not a FIRMS feed", () => {
-    const list = ocSources().map((s) => (s.id === NWS ? { ...s, qualifier: "firms-viirs" } : s));
-    expect(liveSources(list).firmsSources("viirs")).toEqual([VIIRS]);
+  test("a feed of another format with a fire-pixel qualifier is not a fire-pixel feed", () => {
+    const list = withSlstr().map((s) =>
+      s.id === NWS
+        ? { ...s, qualifier: "firms-viirs" }
+        : s.id === MODIS
+          ? { ...s, qualifier: "slstr" }
+          : s,
+    );
+    expect(liveSources(list).fireSources("viirs")).toEqual([VIIRS]);
+    expect(liveSources(list).fireSources("slstr")).toEqual([SLSTR]);
   });
 });
 

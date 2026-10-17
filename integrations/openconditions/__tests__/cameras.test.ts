@@ -72,7 +72,7 @@ const EVERY_SOURCE: MediaSources = {
   link: () => undefined,
   crowd: () => undefined,
   noticeOf: () => undefined,
-  firmsSources: () => [],
+  fireSources: () => [],
   mediaHosts: (id) => HOSTS[id] ?? [],
 };
 
@@ -493,7 +493,7 @@ describe("cameras-openconditions", () => {
       link: () => undefined,
       crowd: () => undefined,
       noticeOf: () => undefined,
-      firmsSources: () => [],
+      fireSources: () => [],
       mediaHosts: () => [],
     });
     expect(await provider.searchCameras(BBOX)).toEqual({ cameras: [], partial: "unavailable" });

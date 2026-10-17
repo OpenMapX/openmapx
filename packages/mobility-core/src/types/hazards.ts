@@ -96,7 +96,8 @@ export interface NaturalHazard extends ContributingRecord {
   attributions: Attribution[];
 }
 
-export type FireInstrument = "viirs" | "modis";
+/** VIIRS (NOAA-20 and -21), MODIS (Terra and Aqua) or SLSTR (Sentinel-3A and -3B). */
+export type FireInstrument = "viirs" | "modis" | "slstr";
 
 /** One satellite fire detection. */
 export interface FirePixel extends ContributingRecord {

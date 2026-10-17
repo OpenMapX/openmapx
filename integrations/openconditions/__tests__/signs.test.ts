@@ -37,7 +37,7 @@ const EVERY_SOURCE: LiveSources = {
   link: () => undefined,
   crowd: () => undefined,
   noticeOf: () => undefined,
-  firmsSources: () => [],
+  fireSources: () => [],
 };
 
 function providerWith(answer: unknown, sources: LiveSources = EVERY_SOURCE) {

@@ -31,8 +31,8 @@ export interface FireQuery extends HazardsQuery {
   instrument: FireInstrument;
   /**
    * Leave out the detections their instrument rates low confidence: VIIRS's
-   * `low`, a MODIS confidence below 30%. A provider whose upstream cannot
-   * apply it may return them.
+   * and SLSTR's `low`, a MODIS confidence below 30%. A provider whose upstream
+   * cannot apply it may return them.
    */
   excludeLowConfidence?: boolean;
 }

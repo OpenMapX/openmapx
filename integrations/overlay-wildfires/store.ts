@@ -1,4 +1,5 @@
 import { createOverlayStore } from "@openmapx/core";
+import type { FirmsInstrument } from "./types.js";
 
 export type WildfireSourceId = "firms" | "nifc" | "effis" | "noaa-hms";
 
@@ -40,7 +41,7 @@ export const useWildfireStore = createOverlayStore({
   overlayId: "wildfires",
   extra: {
     dayRange: 1 as 1 | 2 | 3,
-    source: "viirs" as "viirs" | "modis",
+    source: "viirs" as FirmsInstrument,
     showHotspots: true,
     showNifcPerimeters: true,
     showEffisBurnedAreas: true,
@@ -51,7 +52,7 @@ export const useWildfireStore = createOverlayStore({
   },
   actions: (set) => ({
     setDayRange: (dayRange: 1 | 2 | 3) => set({ dayRange }),
-    setSource: (source: "viirs" | "modis") => set({ source }),
+    setSource: (source: FirmsInstrument) => set({ source }),
     setShowHotspots: (showHotspots: boolean) => set({ showHotspots }),
     setShowNifcPerimeters: (showNifcPerimeters: boolean) => set({ showNifcPerimeters }),
     setShowEffisBurnedAreas: (showEffisBurnedAreas: boolean) => set({ showEffisBurnedAreas }),

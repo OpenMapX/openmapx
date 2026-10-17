@@ -347,7 +347,8 @@ export function readingToFirePixel(
     observedAt,
     frpMW: frp,
     ...field("brightnessK", num(extras["brightnessK"])),
-    instrument: reported === "viirs" || reported === "modis" ? reported : instrument,
+    instrument:
+      reported === "viirs" || reported === "modis" || reported === "slstr" ? reported : instrument,
     ...field("satellite", str(extras["satellite"])),
     ...(Object.keys(confidence).length > 0 ? { confidence } : {}),
     ...(daynight === "day" || daynight === "night" ? { dayNight: daynight } : {}),

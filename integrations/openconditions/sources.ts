@@ -1,6 +1,7 @@
 import { isValidWgs84Bounds } from "@openmapx/core/coverage";
 import {
   dataSourceToAttribution,
+  type FireInstrument,
   type IntegrationContext,
   type IntegrationDataSource,
   parseMediaHostEntry,
@@ -362,10 +363,10 @@ export interface LiveSources {
   /** The notice the source's publisher requires to accompany any display of its data. */
   noticeOf(sourceId: string): string | undefined;
   /**
-   * The listed FIRMS feeds of one instrument: the sources whose format is
-   * `firms` and whose qualifier is `firms-viirs` or `firms-modis`.
+   * The listed fire-pixel feeds of one instrument: FIRMS's `firms-viirs` or
+   * `firms-modis` feeds, or EUMETSAT's `slstr` feeds of format `slstr-frp`.
    */
-  firmsSources(instrument: "viirs" | "modis"): string[];
+  fireSources(instrument: FireInstrument): string[];
 }
 
 /** The listed sources with the image hosts each declares, as the cameras provider checks stills. */
@@ -389,14 +390,19 @@ export interface UpdatableLiveSources extends MediaSources {
   updateCrowd(credit: Attribution | undefined): void;
 }
 
-const FIRMS_QUALIFIERS = { viirs: "firms-viirs", modis: "firms-modis" } as const;
+/** The format and qualifier of each instrument's fire-pixel feeds. */
+const FIRE_FEEDS: Readonly<Record<FireInstrument, { format: string; qualifier: string }>> = {
+  viirs: { format: "firms", qualifier: "firms-viirs" },
+  modis: { format: "firms", qualifier: "firms-modis" },
+  slstr: { format: "slstr-frp", qualifier: "slstr" },
+};
 
 export function createLiveSources(): UpdatableLiveSources {
   let links: ReadonlyMap<string, string> | undefined;
   let receipts = new Map<string, Attribution[]>();
   let media: ReadonlyMap<string, readonly string[]> = new Map();
   let notices: ReadonlyMap<string, string> = new Map();
-  let firms: ReadonlyMap<"viirs" | "modis", readonly string[]> = new Map();
+  let fire: ReadonlyMap<FireInstrument, readonly string[]> = new Map();
   let crowd: Attribution | undefined;
   return {
     get ready() {
@@ -434,8 +440,8 @@ export function createLiveSources(): UpdatableLiveSources {
     mediaHosts: (sourceId) => media.get(sourceId) ?? [],
     noticeOf: (sourceId) => (links?.has(sourceId) ? notices.get(sourceId) : undefined),
     // Only feeds the host accepted count, so a dropped feed's pixels are never read.
-    firmsSources: (instrument) =>
-      (firms.get(instrument) ?? []).filter((sourceId) => links?.has(sourceId) ?? false),
+    fireSources: (instrument) =>
+      (fire.get(instrument) ?? []).filter((sourceId) => links?.has(sourceId) ?? false),
     update(list) {
       links = new Map(list.map((ds) => [ds.sourceId, ds.url]));
       receipts = new Map(
@@ -458,18 +464,17 @@ export function createLiveSources(): UpdatableLiveSources {
           typeof notice === "string" && notice.trim() !== "" ? [[id, notice] as const] : [],
         ),
       );
-      firms = new Map(
-        (Object.keys(FIRMS_QUALIFIERS) as Array<keyof typeof FIRMS_QUALIFIERS>).map(
-          (instrument) => [
-            instrument,
-            list
-              .filter(
-                (source) =>
-                  source.format === "firms" && source.qualifier === FIRMS_QUALIFIERS[instrument],
-              )
-              .map((source) => source.id),
-          ],
-        ),
+      fire = new Map(
+        (Object.keys(FIRE_FEEDS) as FireInstrument[]).map((instrument) => [
+          instrument,
+          list
+            .filter(
+              (source) =>
+                source.format === FIRE_FEEDS[instrument].format &&
+                source.qualifier === FIRE_FEEDS[instrument].qualifier,
+            )
+            .map((source) => source.id),
+        ]),
       );
     },
     updateCrowd(credit) {

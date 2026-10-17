@@ -109,6 +109,30 @@ const MODIS_COLLECTION = {
   ],
 };
 
+const SLSTR_COLLECTION = {
+  type: "FeatureCollection" as const,
+  features: [
+    {
+      type: "Feature" as const,
+      id: "oc:observation:eumetsat-slstr-fires:1",
+      properties: {
+        latitude: 38.3,
+        longitude: -120.2,
+        brightness: 341.2,
+        frp: 42,
+        confidence: "nominal",
+        satellite: "S3B",
+        acqDate: "2026-10-09",
+        acqTime: "0915",
+        dayNight: "D",
+        ageMs: 1_000,
+        instrument: "slstr",
+      },
+      geometry: { type: "Point" as const, coordinates: [-120.2, 38.3] },
+    },
+  ],
+};
+
 const DENSITY_COLLECTION = {
   type: "FeatureCollection" as const,
   features: [
@@ -425,6 +449,37 @@ describe("HotspotLayer", () => {
     await waitFor(() => {
       expect(fake.state.sources.get(SOURCE_ID)?.data).toEqual(published(MODIS_COLLECTION));
     });
+  });
+
+  it("draws SLSTR detections, whose confidence is a class, and refuses a percentage", async () => {
+    const headers = { ...FRESH_HEADERS, "X-OpenMapX-Sources": "eumetsat-slstr-fires" };
+    const percent = {
+      ...SLSTR_COLLECTION,
+      features: SLSTR_COLLECTION.features.map((feature) => ({
+        ...feature,
+        properties: { ...feature.properties, confidence: "76" },
+      })),
+    };
+    const fetchMock = vi.fn(async () =>
+      fetchMock.mock.calls.length === 1
+        ? response(SLSTR_COLLECTION, headers)
+        : response(percent, headers),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    useWildfireStore.setState({ source: "slstr" });
+    render(<HotspotLayer active popupController={popupController()} />);
+
+    await waitFor(() => {
+      expect(fake.state.sources.get(SOURCE_ID)?.data).toEqual(published(SLSTR_COLLECTION));
+    });
+    expect(String(fetchMock.mock.calls[0]?.[0])).toContain("dayRange=1&instrument=slstr");
+    expect(useWildfireStore.getState().statuses.firms.sources).toEqual(["eumetsat-slstr-fires"]);
+
+    act(() => useWildfireStore.getState().setDayRange(2));
+    await waitFor(() =>
+      expect(useWildfireStore.getState().statuses.firms.error).toBe("unavailable"),
+    );
+    expect(fake.state.sources.get(SOURCE_ID)?.data).toEqual(published(SLSTR_COLLECTION));
   });
 
   it("reports a stale and truncated answer from the response headers", async () => {

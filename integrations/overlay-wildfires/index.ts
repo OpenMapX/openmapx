@@ -37,7 +37,7 @@ const WORLD: BBox = [-180, -90, 180, 90];
 const DAY_MS = 86_400_000;
 const ACRES_TO_HECTARES = 0.40468564224;
 const DAY_RANGES: readonly FirmsDayRange[] = [1, 2, 3];
-const INSTRUMENTS: readonly FirmsInstrument[] = ["viirs", "modis"];
+const INSTRUMENTS: readonly FirmsInstrument[] = ["viirs", "modis", "slstr"];
 /** The most detections one view loads; the response says when there were more. */
 const HOTSPOT_LIMIT = 20_000;
 /**
@@ -99,9 +99,12 @@ function cellCount(view: NormalizedViewport, cellDeg: number): number {
   return columns * span(view.south, view.north);
 }
 
-/** The confidence in the instrument's own terms: VIIRS's rating, MODIS's percentage. */
+/**
+ * The confidence in the instrument's own terms: VIIRS's and SLSTR's class, MODIS's percentage.
+ * SLSTR's class is its verdict; its percentage does not follow it.
+ */
 function confidenceLabel(pixel: FirePixel): string | null {
-  if (pixel.instrument === "viirs") return pixel.confidence?.level ?? null;
+  if (pixel.instrument !== "modis") return pixel.confidence?.level ?? null;
   const percent = pixel.confidence?.percent;
   return percent !== undefined && Number.isInteger(percent) && percent >= 0 && percent <= 100
     ? String(percent)
@@ -288,10 +291,14 @@ const SMOKE_ROUTE: LayerRoute = {
   toFeature: smokeFeature,
 };
 
-/** Whether the instrument rates the detection low confidence: VIIRS's `low`, MODIS below 30%. */
+/**
+ * Whether the instrument rates the detection low confidence: VIIRS's and SLSTR's `low`, MODIS
+ * below 30%. A class decides over a percentage the detection also carries.
+ */
 function isLowConfidence(pixel: FirePixel): boolean {
   const { level, percent } = pixel.confidence ?? {};
-  return level === "low" || (percent !== undefined && percent < 30);
+  if (level !== undefined) return level === "low";
+  return percent !== undefined && percent < 30;
 }
 
 function parseFireQuery(

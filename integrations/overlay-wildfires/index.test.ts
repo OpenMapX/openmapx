@@ -214,6 +214,35 @@ describe("GET /wildfires", () => {
     });
   });
 
+  it("reads SLSTR detections and labels their confidence with the class", async () => {
+    const getFirePixels = vi.fn<HazardsProvider["getFirePixels"]>(async () => ({
+      pixels: [
+        pixel({
+          instrument: "slstr",
+          confidence: { level: "high", percent: 76 },
+          satellite: "S3A",
+          sources: ["eumetsat-slstr-fires"],
+        }),
+      ],
+    }));
+    const sent = await call("/wildfires", [provider({ getFirePixels })], {
+      ...VIEW,
+      zoom: "7",
+      instrument: "slstr",
+    });
+
+    expect(getFirePixels.mock.calls[0]?.[1]).toMatchObject({
+      instrument: "slstr",
+      excludeLowConfidence: true,
+    });
+    expect(sent.headers["X-OpenMapX-Sources"]).toBe("eumetsat-slstr-fires");
+    expect((sent.body as Body).features[0]?.properties).toMatchObject({
+      confidence: "high",
+      satellite: "S3A",
+      instrument: "slstr",
+    });
+  });
+
   it("names only the sources of the detections it serves", async () => {
     const getFirePixels = async () => ({
       pixels: [
@@ -289,6 +318,12 @@ describe("GET /wildfires", () => {
         pixel({ id: "viirs-low", confidence: { level: "low" } }),
         pixel({ id: "modis-29", instrument: "modis", confidence: { percent: 29 } }),
         pixel({ id: "modis-30", instrument: "modis", confidence: { percent: 30 } }),
+        pixel({ id: "slstr-low", instrument: "slstr", confidence: { level: "low", percent: 97 } }),
+        pixel({
+          id: "slstr-nominal",
+          instrument: "slstr",
+          confidence: { level: "nominal", percent: 25 },
+        }),
         pixel({ id: "unrated", confidence: undefined }),
       ],
     });
@@ -308,6 +343,12 @@ describe("GET /wildfires", () => {
     expect(await ids({ instrument: "modis", lowConfidence: "1" })).toEqual([
       "modis-29",
       "modis-30",
+    ]);
+    // SLSTR's class decides, whatever its percentage says.
+    expect(await ids({ instrument: "slstr" })).toEqual(["slstr-nominal"]);
+    expect(await ids({ instrument: "slstr", lowConfidence: "1" })).toEqual([
+      "slstr-low",
+      "slstr-nominal",
     ]);
   });
 

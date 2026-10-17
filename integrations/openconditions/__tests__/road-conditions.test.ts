@@ -116,7 +116,7 @@ const EVERY_SOURCE: LiveSources = {
   link: () => undefined,
   crowd: () => undefined,
   noticeOf: () => undefined,
-  firmsSources: () => [],
+  fireSources: () => [],
 };
 
 /** A live list of `ids`, as the `/sources` sync fills it. */

@@ -338,6 +338,12 @@ export function WildfireLegend() {
                   >
                     {t("modis1km")}
                   </ToggleButton>
+                  <ToggleButton
+                    value="slstr"
+                    sx={{ fontSize: 10, px: 0.9, py: 0, textTransform: "none", minWidth: 0 }}
+                  >
+                    {t("slstr1km")}
+                  </ToggleButton>
                 </ToggleButtonGroup>
               </Box>
 

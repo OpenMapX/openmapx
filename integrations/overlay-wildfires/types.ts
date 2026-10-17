@@ -3,7 +3,7 @@ import type { Attribution } from "@openmapx/mobility-core/attribution";
 export type WildfireProvider = "nifc" | "effis" | "noaa-hms";
 
 /** The satellite instrument family of a hotspot. */
-export type FirmsInstrument = "viirs" | "modis";
+export type FirmsInstrument = "viirs" | "modis" | "slstr";
 export type FirmsDayRange = 1 | 2 | 3;
 
 export interface FireFeature {
@@ -19,7 +19,7 @@ export interface FireFeature {
     brightness: number | null;
     /** Fire radiative power in MW. */
     frp: number;
-    /** VIIRS: `low`, `nominal` or `high`; MODIS: a percentage, as text. */
+    /** VIIRS and SLSTR: `low`, `nominal` or `high`; MODIS: a percentage, as text. */
     confidence: string | null;
     satellite: string | null;
     /** `YYYY-MM-DD` and `HHMM`, UTC. */

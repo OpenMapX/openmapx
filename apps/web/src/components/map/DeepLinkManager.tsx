@@ -115,7 +115,7 @@ const WEATHER_SUBLAYERS = [
 const EARTHQUAKE_TIME_RANGES = ["hour", "day", "week", "month"] as const;
 const EARTHQUAKE_COLOR_MODES = ["depth", "recency"] as const;
 const WILDFIRE_DAY_RANGES = [1, 2, 3] as const;
-const WILDFIRE_SOURCES = ["viirs", "modis"] as const;
+const WILDFIRE_SOURCES = ["viirs", "modis", "slstr"] as const;
 const ENVIRONMENT_SENSORS = [
   "temperature",
   "humidity",

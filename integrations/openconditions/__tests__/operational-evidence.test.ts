@@ -40,7 +40,7 @@ const EVERY_SOURCE: LiveSources = {
   link: () => undefined,
   crowd: () => undefined,
   noticeOf: () => undefined,
-  firmsSources: () => [],
+  fireSources: () => [],
 };
 
 const SCOPES: Record<string, SourceScope> = {

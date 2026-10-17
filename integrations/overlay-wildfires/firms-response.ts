@@ -63,11 +63,11 @@ function isPoint(value: unknown): value is GeoJSON.Point {
   );
 }
 
-/** VIIRS rates a detection low, nominal or high; MODIS gives a percentage. */
+/** VIIRS and SLSTR rate a detection low, nominal or high; MODIS gives a percentage. */
 function isConfidence(value: unknown, instrument: FirmsInstrument): boolean {
   if (value === null) return true;
   if (typeof value !== "string") return false;
-  if (instrument === "viirs") return value === "low" || value === "nominal" || value === "high";
+  if (instrument !== "modis") return value === "low" || value === "nominal" || value === "high";
   return /^(?:\d|[1-9]\d|100)$/.test(value);
 }
 

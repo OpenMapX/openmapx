@@ -97,6 +97,10 @@ describe("WildfireLegend source controls", () => {
       "aria-pressed",
       "false",
     );
+    expect(within(sensorGroup).getByRole("button", { name: "wildfires.slstr1km" })).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
     expect(hotspots.getByRole("switch", { name: "wildfires.heatmap" })).toBeTruthy();
     expect(hotspots.getByRole("switch", { name: "wildfires.showLowConfidence" })).not.toBeChecked();
     expect(hotspots.getByText("wildfires.recencyScale")).toBeTruthy();
