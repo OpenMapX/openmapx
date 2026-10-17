@@ -419,7 +419,7 @@ jobs:
           build-args: ${{ matrix.app == 'web' && format('SW_BUILD_ID={0}', github.sha) || '' }}
           push: false
           cache-from: type=gha,scope=${{ matrix.app }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.app }}
+          cache-to: type=gha,mode=${{ matrix.app == 'api' && 'min' || 'max' }},scope=${{ matrix.app }}
 
   # Aggregate gate. Keeps the required-status-check context stable at
   # `lint / types / test` while the real work runs in parallel above.
