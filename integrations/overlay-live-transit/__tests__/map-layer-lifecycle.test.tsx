@@ -181,3 +181,58 @@ it.each(["hide", "unmount"] as const)(
     view.unmount();
   },
 );
+
+it("republishes the full vehicle collection into a rebuilt source before diffing again", async () => {
+  const diffs: Array<{ source: unknown; diff: { update?: Array<{ id: unknown }> } }> = [];
+  const addSource = fake.map.addSource.bind(fake.map);
+  vi.spyOn(fake.map, "addSource").mockImplementation((id, spec) => {
+    addSource(id, spec);
+    const source = fake.state.sources.get(id) as Record<string, unknown> | undefined;
+    if (id === SOURCE && source) {
+      source.updateData = (diff: { update?: Array<{ id: unknown }> }) => {
+        diffs.push({ source, diff });
+      };
+    }
+    return fake.map;
+  });
+  let current = snapshot;
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => ({ ok: true, json: async () => current })),
+  );
+  const relabel = (displayLabel: string): LiveTransitSnapshot => ({
+    ...snapshot,
+    vehicles: snapshot.vehicles.map((vehicle) => ({ ...vehicle, displayLabel })),
+  });
+  const poll = async () => {
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(15_000);
+    });
+  };
+
+  const view = render(<LiveTransitLayer />);
+  await act(async () => {
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  current = relabel("42A");
+  await poll();
+  expect(diffs).toHaveLength(1);
+  expect(diffs[0].source).toBe(fake.map.getSource(SOURCE));
+
+  act(() => {
+    fake.map.setStyle({ version: 8, sources: {}, layers: [] });
+  });
+  const rebuilt = fake.map.getSource(SOURCE);
+  expect(rebuilt).not.toBe(diffs[0].source);
+  expect(vehicleData()?.features).toHaveLength(1);
+  expect(vehicleData()?.features[0].properties).toMatchObject({ displayLabel: "42A" });
+  expect(diffs).toHaveLength(1);
+
+  current = relabel("42B");
+  await poll();
+  expect(diffs).toHaveLength(2);
+  expect(diffs[1].source).toBe(rebuilt);
+  expect(diffs[1].diff.update?.map((entry) => entry.id)).toEqual(["bus-42"]);
+  view.unmount();
+});

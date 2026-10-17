@@ -1,3 +1,5 @@
+import type * as maplibregl from "maplibre-gl";
+
 type TextField = unknown;
 
 function isNameRead(node: unknown): boolean {
@@ -33,4 +35,31 @@ export function localizeTextField(textField: TextField, locale: string): TextFie
   if (textField[0] === "coalesce" && textField.slice(1).every(isNameRead)) return localized;
   if (textField[0] === "literal") return textField;
   return textField.map((part) => localizeTextField(part, locale));
+}
+
+/**
+ * Localize the labels of every symbol layer on the map. Unchanged labels are
+ * skipped, so running it after each style mutation only touches layers that
+ * were added since. It reads layout properties directly: serializing the
+ * style for this would cost a full copy of every layer.
+ */
+export function localizeMapLabels(
+  map: Pick<
+    maplibregl.Map,
+    "getLayersOrder" | "getLayer" | "getLayoutProperty" | "setLayoutProperty"
+  >,
+  locale: string,
+): void {
+  for (const id of map.getLayersOrder()) {
+    if (map.getLayer(id)?.type !== "symbol") continue;
+    const textField = map.getLayoutProperty(id, "text-field");
+    if (!textField) continue;
+    const localized = localizeTextField(textField, locale);
+    if (JSON.stringify(localized) === JSON.stringify(textField)) continue;
+    map.setLayoutProperty(
+      id,
+      "text-field",
+      localized as maplibregl.DataDrivenPropertyValueSpecification<string>,
+    );
+  }
 }

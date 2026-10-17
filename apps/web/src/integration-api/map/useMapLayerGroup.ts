@@ -15,6 +15,8 @@ import { type AppliedGroup, applyGroup, emptyApplied, type MapLayerGroup } from 
  * `setStyle` returns: no blank frame, and no dependency on a React render landing
  * in time. Gating on `isStyleLoaded()` would be wrong — it also waits for every
  * tile and image, while adding sources and layers only needs the style parsed.
+ * While a replacement stylesheet is still being parsed, passes are skipped and
+ * `style.load` performs the rebuild.
  *
  * Returns nothing, deliberately. The predecessor to this hook returned a counter
  * so a separate effect could push data once the sources were recreated; that split
@@ -29,6 +31,7 @@ export function useMapLayerGroup(group: MapLayerGroup | null): void {
   const groupRef = useRef(group);
   groupRef.current = group;
   const appliedRef = useRef(emptyApplied());
+  const parsedRef = useRef(false);
 
   // One bad descriptor must not take the map down with it. Without this, a spec
   // naming a source the group does not declare throws out of a React effect,
@@ -37,7 +40,7 @@ export function useMapLayerGroup(group: MapLayerGroup | null): void {
   const apply = useCallback(
     (from: AppliedGroup) => {
       const map = mapRef.current;
-      if (!map) return;
+      if (!map || !parsedRef.current) return;
       try {
         appliedRef.current = applyGroup(map, groupRef.current, from);
       } catch (error) {
@@ -70,10 +73,23 @@ export function useMapLayerGroup(group: MapLayerGroup | null): void {
     // Everything this group put on the map is gone, so nothing is "already
     // applied" — a full recreate from the latest descriptor is the only correct
     // starting point.
-    const rebuild = () => apply(emptyApplied());
+    const rebuild = () => {
+      parsedRef.current = true;
+      apply(emptyApplied());
+    };
+    // A replacement stylesheet rejects sources and layers until it is parsed.
+    const invalidate = () => {
+      parsedRef.current = false;
+    };
 
+    // The render pass above ran before the parsed state was known. `getStyle()`
+    // serializes the whole style, so it is probed once here, not per render.
+    parsedRef.current = Boolean(map.getStyle());
+    apply(appliedRef.current);
+    map.on("styledataloading", invalidate);
     map.on("style.load", rebuild);
     return () => {
+      map.off("styledataloading", invalidate);
       map.off("style.load", rebuild);
     };
   }, [apply, mapRef, mapReady]);

@@ -20,7 +20,11 @@ import { useLocale, useTranslations } from "next-intl";
 import { useEffect, useMemo, useRef } from "react";
 import { useMap } from "@/integration-api/map/MapContext";
 import { getMapClickOwner } from "@/integration-api/map/mapClickOwnership";
-import type { MapLayerGroup, SlottedLayer } from "@/integration-api/map/mapLayerGroup";
+import {
+  EMPTY_FEATURE_COLLECTION,
+  type MapLayerGroup,
+  type SlottedLayer,
+} from "@/integration-api/map/mapLayerGroup";
 import { useDrawnDirectionsRoutes } from "@/integration-api/map/useDrawnDirectionsRoutes";
 import { useMapLayerGroup } from "@/integration-api/map/useMapLayerGroup";
 import { markerMapContributors } from "@/integration-api/overlay/markerMapContribution";
@@ -46,7 +50,6 @@ const LAYER_ACTIVE_LINE = "route-active-line";
 const UNKNOWN_AVAILABILITY_COLOR = "#5F6368";
 const EV_STOPS_SOURCE_ID = "ev-stops-source";
 const EV_STOPS_LAYER_ID = "ev-stops-layer";
-const EMPTY_FC = { type: "FeatureCollection" as const, features: [] };
 
 function localizedDuration(seconds: number, locale: string): string {
   if (seconds < 60) {
@@ -118,7 +121,7 @@ export function RouteLayer() {
       mode === "flying" ||
       routes.length === 0
     ) {
-      return EMPTY_FC;
+      return EMPTY_FEATURE_COLLECTION;
     }
     const features = routes.flatMap((route, i) =>
       routeGeometryFeatures(route, {

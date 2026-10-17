@@ -7,9 +7,10 @@ import {
   type WeatherSubLayer,
 } from "@openmapx/core";
 import { useCallback, useEffect, useMemo, useRef } from "react";
-import { addLayerInSlot, unregisterLayerSlot } from "@/integration-api/map/layerStack";
+import { addLayerInSlot, removeSlottedLayers } from "@/integration-api/map/layerStack";
 import { useMap } from "@/integration-api/map/MapContext";
 import { subscribeStyleLoaded } from "@/integration-api/map/styleLoadedSync";
+import { useSlottedLayersCleanup } from "@/integration-api/map/useSlottedLayersCleanup";
 import { addAttributedRasterSource } from "@/integration-api/overlay/rasterMapContribution";
 import { useContributorResolver } from "@/integration-api/overlay/useContributorResolver";
 import { useRasterMapAttributions } from "@/integration-api/overlay/useRasterMapAttributions";
@@ -53,9 +54,14 @@ export function WeatherLayer() {
 
   useOverlayExclusion("weather", layerVisible);
 
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const mountedRadarFrames = useRef(new Map<number, string>());
-  const radarRefreshRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  useSlottedLayersCleanup(mapRef, () => {
+    const frames = [...mountedRadarFrames.current.keys()];
+    return {
+      layerIds: [OWM_LAYER_ID, ...frames.map((i) => `${RADAR_LAYER_PREFIX}${i}`)],
+      sourceIds: [OWM_SOURCE_ID, ...frames.map((i) => `${RADAR_SOURCE_PREFIX}${i}`)],
+    };
+  });
   const allFrames = useMemo(
     () => [...radarPastFrames, ...radarNowcastFrames],
     [radarPastFrames, radarNowcastFrames],
@@ -111,10 +117,8 @@ export function WeatherLayer() {
   useEffect(() => {
     if (!layerVisible) return;
     fetchRadarMeta();
-    radarRefreshRef.current = setInterval(fetchRadarMeta, 5 * 60 * 1000);
-    return () => {
-      if (radarRefreshRef.current) clearInterval(radarRefreshRef.current);
-    };
+    const refresh = setInterval(fetchRadarMeta, 5 * 60 * 1000);
+    return () => clearInterval(refresh);
   }, [layerVisible, fetchRadarMeta]);
 
   // Radar animation — use store.getState() to avoid re-creating interval on every frame
@@ -122,19 +126,14 @@ export function WeatherLayer() {
   frameCountRef.current = allFrames.length;
 
   useEffect(() => {
-    if (!radarPlaying || allFrames.length === 0) {
-      if (intervalRef.current) clearInterval(intervalRef.current);
-      return;
-    }
+    if (!radarPlaying || allFrames.length === 0) return;
 
-    intervalRef.current = setInterval(() => {
+    const animation = setInterval(() => {
       const current = useWeatherStore.getState().radarFrameIndex;
       setRadarFrameIndex((current + 1) % frameCountRef.current);
     }, 500);
 
-    return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current);
-    };
+    return () => clearInterval(animation);
   }, [radarPlaying, allFrames.length, setRadarFrameIndex]);
 
   // Manage radar tile sources/layers with sliding window
@@ -144,11 +143,7 @@ export function WeatherLayer() {
     if (!map || !mapReady) return;
 
     const removeFrame = (i: number) => {
-      const layerId = `${RADAR_LAYER_PREFIX}${i}`;
-      const sourceId = `${RADAR_SOURCE_PREFIX}${i}`;
-      if (map.getLayer(layerId)) map.removeLayer(layerId);
-      if (map.getSource(sourceId)) map.removeSource(sourceId);
-      unregisterLayerSlot(layerId);
+      removeSlottedLayers(map, [`${RADAR_LAYER_PREFIX}${i}`], [`${RADAR_SOURCE_PREFIX}${i}`]);
       mountedRadarFrames.current.delete(i);
     };
     const syncLayer = () => {
@@ -190,6 +185,7 @@ export function WeatherLayer() {
           );
         }
 
+        const opacity = i === activeFrame ? 0.7 : 0;
         if (!map.getLayer(layerId)) {
           addLayerInSlot(
             map,
@@ -198,14 +194,16 @@ export function WeatherLayer() {
               type: "raster",
               source: sourceId,
               paint: {
-                "raster-opacity": i === activeFrame ? 0.7 : 0,
+                "raster-opacity": opacity,
               },
             },
             "raster-overlays",
             20,
           );
-        } else {
-          map.setPaintProperty(layerId, "raster-opacity", i === activeFrame ? 0.7 : 0);
+        } else if (map.getPaintProperty(layerId, "raster-opacity") !== opacity) {
+          // Every styledata reruns this pass; an unconditional setter would
+          // schedule a style update for each frame each time.
+          map.setPaintProperty(layerId, "raster-opacity", opacity);
         }
       }
 
@@ -239,13 +237,7 @@ export function WeatherLayer() {
 
     const syncLayer = () => {
       if (!layerVisible || !owmLayerName) {
-        try {
-          if (map.getLayer(OWM_LAYER_ID)) map.removeLayer(OWM_LAYER_ID);
-          if (map.getSource(OWM_SOURCE_ID)) map.removeSource(OWM_SOURCE_ID);
-        } catch {
-          // ignore
-        }
-        unregisterLayerSlot(OWM_LAYER_ID);
+        removeSlottedLayers(map, [OWM_LAYER_ID], [OWM_SOURCE_ID]);
         return;
       }
 
@@ -258,17 +250,8 @@ export function WeatherLayer() {
 
       const tileUrl = `${env.apiUrl}/api/integrations/overlay-weather/tiles/${owmLayerName}/{z}/{x}/{y}.png`;
 
-      if (map.getSource(OWM_SOURCE_ID)) {
-        // Update tile URL when sub-layer changes
-        try {
-          if (map.getLayer(OWM_LAYER_ID)) map.removeLayer(OWM_LAYER_ID);
-          map.removeSource(OWM_SOURCE_ID);
-        } catch {
-          // ignore
-        }
-        unregisterLayerSlot(OWM_LAYER_ID);
-      }
-
+      // A source left by an earlier sub-layer or API URL has the wrong tiles.
+      removeSlottedLayers(map, [OWM_LAYER_ID], [OWM_SOURCE_ID]);
       addAttributedRasterSource(
         map,
         OWM_SOURCE_ID,
@@ -296,14 +279,6 @@ export function WeatherLayer() {
 
     return subscribeStyleLoaded(map, syncLayer);
   }, [mapReady, styleVersion, currentMap, layerVisible, activeSubLayer, env.apiUrl]);
-
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current);
-      if (radarRefreshRef.current) clearInterval(radarRefreshRef.current);
-    };
-  }, []);
 
   // Fetch current weather + reverse geocode for viewport center (displayed in legend)
   const debouncedWeatherFetch = useDebouncedCallback(async () => {

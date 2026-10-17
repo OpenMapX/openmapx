@@ -279,7 +279,8 @@ describe("RoadConditionsLayer horizon query", () => {
     expect(fake.state.sources.has(SOURCE)).toBe(false);
 
     fake.state.styleLoaded = true;
-    fake.emit("idle");
+    fake.emit("styledata");
+    fake.emit("style.load");
 
     await waitFor(() => {
       expect(sourceFeatures("Point")[0]?.properties?._id).toBe("early");
@@ -372,6 +373,29 @@ describe("RoadConditionsLayer horizon query", () => {
     );
 
     expect(sourceFeatures("Point")[0]?.properties?._id).toBe("last-good");
+  });
+
+  it("rebuilds its layers with the last data after a style swap", async () => {
+    respondWith([
+      {
+        geometry: { type: "Point", coordinates: [13.4, 52.5] },
+        properties: props({ id: "kept" }),
+      },
+    ]);
+    render(<RoadConditionsLayer />);
+    await waitFor(() => {
+      expect(sourceFeatures("Point")[0]?.properties?._id).toBe("kept");
+    });
+
+    act(() => {
+      fake.map.setStyle({});
+    });
+
+    expect(fake.state.layers.has(MARKER_LAYER)).toBe(true);
+    expect(fake.state.layers.has(LINE_LAYER)).toBe(true);
+    await waitFor(() => {
+      expect(sourceFeatures("Point")[0]?.properties?._id).toBe("kept");
+    });
   });
 });
 

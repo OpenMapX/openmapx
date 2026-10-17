@@ -5,7 +5,11 @@ import type * as maplibregl from "maplibre-gl";
 import { useEffect, useMemo } from "react";
 import { useMap } from "@/integration-api/map/MapContext";
 import { getMapClickOwner } from "@/integration-api/map/mapClickOwnership";
-import type { MapLayerGroup, SlottedLayer } from "@/integration-api/map/mapLayerGroup";
+import {
+  EMPTY_FEATURE_COLLECTION,
+  type MapLayerGroup,
+  type SlottedLayer,
+} from "@/integration-api/map/mapLayerGroup";
 import { useMapLayerGroup } from "@/integration-api/map/useMapLayerGroup";
 import { useRenderedMapAttributions } from "@/integration-api/overlay/useRenderedMapAttributions";
 import { ROUTE_COLORS, ROUTE_WIDTHS } from "@/lib/routeStyle";
@@ -27,7 +31,6 @@ const REMAINING_CASING = "nav-route-remaining-casing";
 const ALT_SOURCE = "nav-route-alts-source";
 const ALT = "nav-route-alts";
 const PROPOSED = "nav-route-proposed";
-const EMPTY_FC = { type: "FeatureCollection" as const, features: [] };
 const TRANSPARENT = "rgba(0,0,0,0)";
 
 export function NavigationRouteLayer() {
@@ -107,7 +110,7 @@ export function NavigationRouteLayer() {
   }, [activeFeatures, navLine, progressFraction]);
 
   const altFeatures = useMemo(() => {
-    if (status === "idle") return EMPTY_FC;
+    if (status === "idle") return EMPTY_FEATURE_COLLECTION;
     const alts = routes.flatMap((r, i) =>
       i === activeRouteIndex ? [] : routeGeometryFeatures(r, { routeIndex: i, kind: "alt" }),
     );

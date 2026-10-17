@@ -69,11 +69,31 @@ describe("TransitLayer", () => {
     act(() => {
       useTransitStore.setState({ panelOpen: false, layerVisible: false });
     });
+    expect(fake.state.sources.has(SOURCE_ID)).toBe(false);
+    expect(fake.state.layers.has(MOTIS_LINE_ID)).toBe(false);
 
+    act(() => {
+      useTransitStore.setState({ panelOpen: true, layerVisible: true });
+    });
     expect(fake.state.sources.get(SOURCE_ID)?.data).toEqual({
       type: "FeatureCollection",
       features: [],
     });
+  });
+
+  it("keeps the receded network across a style rebuild", () => {
+    useDirectionsStore.setState({
+      mode: "transit",
+      transitItineraries: [ITINERARY],
+      activeItineraryIndex: 0,
+    });
+    render(<TransitLayer />);
+    expect(fake.state.paint.get(MOTIS_LINE_ID)?.["line-opacity"]).toBe(0.25);
+
+    act(() => {
+      fake.map.setStyle({});
+    });
+    expect(fake.state.paint.get(MOTIS_LINE_ID)?.["line-opacity"]).toBe(0.25);
   });
 
   it("recedes the operated network while a chosen itinerary is on the map", () => {

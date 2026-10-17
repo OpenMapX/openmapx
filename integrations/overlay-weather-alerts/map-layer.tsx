@@ -6,13 +6,13 @@ import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import type { MapLayerMouseEvent } from "maplibre-gl";
 import * as maplibregl from "maplibre-gl";
 import { useLocale, useTranslations } from "next-intl";
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { INTERACTIVE_LAYER_IDS } from "@/integration-api/map/interactiveLayers";
-import { addLayerInSlot, unregisterLayerSlot } from "@/integration-api/map/layerStack";
 import { useMap } from "@/integration-api/map/MapContext";
 import { getMapClickOwner } from "@/integration-api/map/mapClickOwnership";
-import { subscribeStyleLoaded } from "@/integration-api/map/styleLoadedSync";
+import { EMPTY_FEATURE_COLLECTION, type MapLayerGroup } from "@/integration-api/map/mapLayerGroup";
 import { useGeoJsonSourceDataBridge } from "@/integration-api/map/useGeoJsonSourceDataBridge";
+import { useMapLayerGroup } from "@/integration-api/map/useMapLayerGroup";
 import { useContributorResolver } from "@/integration-api/overlay/useContributorResolver";
 import { useRenderedMapAttributions } from "@/integration-api/overlay/useRenderedMapAttributions";
 import { useEnv } from "@/integration-api/runtime/EnvProvider";
@@ -88,6 +88,54 @@ function buildPointFilter(active: Set<string>): maplibregl.ExpressionSpecificati
     ["==", ["get", "geometryType"], "point"],
     ["in", ["get", "severity"], ["literal", [...active]]],
   ] as maplibregl.ExpressionSpecification;
+}
+
+function weatherAlertsGroup(activeSeverities: Set<string>): MapLayerGroup {
+  return {
+    sources: { [SOURCE_ID]: { type: "geojson", data: EMPTY_FEATURE_COLLECTION } },
+    layers: [
+      {
+        id: FILL_LAYER_ID,
+        type: "fill",
+        source: SOURCE_ID,
+        filter: buildPolygonFilter(activeSeverities),
+        slot: "area-overlays",
+        order: 1,
+        paint: {
+          "fill-color": buildSeverityColorExpr(),
+          "fill-opacity": 0.25,
+        },
+      },
+      {
+        id: LINE_LAYER_ID,
+        type: "line",
+        source: SOURCE_ID,
+        filter: buildPolygonFilter(activeSeverities),
+        slot: "overlay-lines",
+        order: 10,
+        paint: {
+          "line-color": buildSeverityColorExpr(),
+          "line-width": ["interpolate", ["linear"], ["zoom"], 3, 1, 8, 2, 12, 3],
+          "line-opacity": 0.7,
+        },
+      },
+      {
+        id: CIRCLE_LAYER_ID,
+        type: "circle",
+        source: SOURCE_ID,
+        filter: buildPointFilter(activeSeverities),
+        slot: "overlay-points",
+        order: 24,
+        paint: {
+          "circle-radius": ["interpolate", ["linear"], ["zoom"], 2, 6, 5, 10, 8, 14],
+          "circle-color": buildSeverityColorExpr(),
+          "circle-opacity": 0.85,
+          "circle-stroke-color": "#ffffff",
+          "circle-stroke-width": 1.5,
+        },
+      },
+    ],
+  };
 }
 
 function formatTime(iso: string | null): string {
@@ -217,7 +265,6 @@ export function WeatherAlertLayer() {
   const popupRef = useRef<maplibregl.Popup | null>(null);
   /** The alert the popup shows: it closes once that alert is no longer drawn. */
   const openAlertRef = useRef<{ id: string; severity: string } | null>(null);
-  const fetchedRef = useRef(false);
   /** The last successful load and when it arrived; null once it is too old to show. */
   const lastLoadRef = useRef<{ at: number; data: AlertCollection } | null>(null);
   /** Clears the layer when the last successful load passes the bound, whatever the refreshes do. */
@@ -309,134 +356,34 @@ export function WeatherAlertLayer() {
     setUnavailable,
   ]);
 
-  // Main layer lifecycle
+  useMapLayerGroup(
+    useMemo(
+      () => (layerVisible ? weatherAlertsGroup(activeSeverities) : null),
+      [layerVisible, activeSeverities],
+    ),
+  );
+
+  // Showing the overlay or changing the language fetches immediately; hiding it
+  // forgets the last load so a later show never draws alerts past the bound.
   useEffect(() => {
-    void styleVersion;
-    const map = mapRef.current;
-    if (!map || !mapReady) return;
-
-    const syncLayer = () => {
-      if (!layerVisible) {
-        try {
-          for (const id of ALL_LAYER_IDS) {
-            if (map.getLayer(id)) map.removeLayer(id);
-          }
-          if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
-        } catch {
-          // ignore
-        }
-        unregisterLayerSlot(FILL_LAYER_ID);
-        unregisterLayerSlot(LINE_LAYER_ID);
-        unregisterLayerSlot(CIRCLE_LAYER_ID);
-        popupRef.current?.remove();
-        fetchedRef.current = false;
-        lastLoadRef.current = null;
-        setAlertCount(0);
-        return;
-      }
-
-      if (!map.getSource(SOURCE_ID)) {
-        map.addSource(SOURCE_ID, {
-          type: "geojson",
-          data: { type: "FeatureCollection", features: [] },
-        });
-      }
-
-      if (!map.getLayer(FILL_LAYER_ID)) {
-        addLayerInSlot(
-          map,
-          {
-            id: FILL_LAYER_ID,
-            type: "fill",
-            source: SOURCE_ID,
-            filter: buildPolygonFilter(activeSeverities),
-            paint: {
-              "fill-color": buildSeverityColorExpr(),
-              "fill-opacity": 0.25,
-            },
-          },
-          "area-overlays",
-          1,
-        );
-      }
-
-      if (!map.getLayer(LINE_LAYER_ID)) {
-        addLayerInSlot(
-          map,
-          {
-            id: LINE_LAYER_ID,
-            type: "line",
-            source: SOURCE_ID,
-            filter: buildPolygonFilter(activeSeverities),
-            paint: {
-              "line-color": buildSeverityColorExpr(),
-              "line-width": ["interpolate", ["linear"], ["zoom"], 3, 1, 8, 2, 12, 3],
-              "line-opacity": 0.7,
-            },
-          },
-          "overlay-lines",
-          10,
-        );
-      }
-
-      if (!map.getLayer(CIRCLE_LAYER_ID)) {
-        addLayerInSlot(
-          map,
-          {
-            id: CIRCLE_LAYER_ID,
-            type: "circle",
-            source: SOURCE_ID,
-            filter: buildPointFilter(activeSeverities),
-            paint: {
-              "circle-radius": ["interpolate", ["linear"], ["zoom"], 2, 6, 5, 10, 8, 14],
-              "circle-color": buildSeverityColorExpr(),
-              "circle-opacity": 0.85,
-              "circle-stroke-color": "#ffffff",
-              "circle-stroke-width": 1.5,
-            },
-          },
-          "overlay-points",
-          24,
-        );
-      }
-
-      if (!fetchedRef.current) {
-        fetchedRef.current = true;
-        // The fetch handles its own failures and loading state.
-        void fetchAlerts();
-      }
-    };
-
-    if (!layerVisible) {
-      syncLayer();
-      return;
+    if (!mapReady) return;
+    if (layerVisible) {
+      // The fetch handles its own failures and loading state.
+      void fetchAlerts();
+    } else {
+      lastLoadRef.current = null;
+      setAlertCount(0);
     }
+  }, [mapReady, layerVisible, fetchAlerts, setAlertCount]);
 
-    const unsubscribeStyle = subscribeStyleLoaded(map, syncLayer);
-    return () => {
-      unsubscribeStyle();
-    };
-  }, [mapReady, styleVersion, mapRef, layerVisible, activeSeverities, fetchAlerts, setAlertCount]);
-
-  // Update filters when activeSeverities changes
+  // A hidden severity takes its open popup with it.
   useEffect(() => {
-    const map = mapRef.current;
-    if (!map || !mapReady || !layerVisible) return;
-    if (map.getLayer(FILL_LAYER_ID)) {
-      map.setFilter(FILL_LAYER_ID, buildPolygonFilter(activeSeverities));
-    }
-    if (map.getLayer(LINE_LAYER_ID)) {
-      map.setFilter(LINE_LAYER_ID, buildPolygonFilter(activeSeverities));
-    }
-    if (map.getLayer(CIRCLE_LAYER_ID)) {
-      map.setFilter(CIRCLE_LAYER_ID, buildPointFilter(activeSeverities));
-    }
     const open = openAlertRef.current;
     if (open && !activeSeverities.has(open.severity)) {
       popupRef.current?.remove();
       openAlertRef.current = null;
     }
-  }, [mapRef, mapReady, layerVisible, activeSeverities]);
+  }, [activeSeverities]);
 
   useEffect(
     () => () => {

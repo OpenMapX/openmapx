@@ -5,19 +5,17 @@ import {
   roadConditionFeatureToEvent,
   useOverlayExclusion,
 } from "@openmapx/core";
+import type * as maplibregl from "maplibre-gl";
 import type { GeoJSONSource, MapGeoJSONFeature } from "maplibre-gl";
-import * as maplibregl from "maplibre-gl";
 import { useLocale, useTranslations } from "next-intl";
-import { useCallback, useEffect, useRef } from "react";
-import { addLayerInSlot, unregisterLayerSlot } from "@/integration-api/map/layerStack";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useMap } from "@/integration-api/map/MapContext";
 import {
   registerMapOverlayInteraction,
   removeMapOverlayPopup,
-  replaceMapOverlayPopup,
 } from "@/integration-api/map/mapInteractionArbiter";
-import { subscribeStyleLoaded } from "@/integration-api/map/styleLoadedSync";
 import { useGeoJsonSourceDataBridge } from "@/integration-api/map/useGeoJsonSourceDataBridge";
+import { useMapLayerGroup } from "@/integration-api/map/useMapLayerGroup";
 import { useOverlayMinZoom } from "@/integration-api/overlay/overlayZoomGate";
 import { useOverlayLayerVisible } from "@/integration-api/overlay/useOverlayStoreState";
 import { useRenderedMapAttributions } from "@/integration-api/overlay/useRenderedMapAttributions";
@@ -27,12 +25,18 @@ import { roadConditionAttributions } from "./attributions";
 import { buildRoadConditionDisplayGroups, buildRoadConditionFeatures } from "./display";
 // The named import also runs the module side-effect that registers the
 // "road-conditions" overlay store (shared by the layer selector + legend).
+import {
+  closeIncidentPopup,
+  type IncidentLayerIds,
+  incidentClickHits,
+  incidentLayerGroup,
+  openIncidentPopup,
+} from "./incident-layers";
 import { useIncidentsVisible } from "./incidents-visible";
 import { markerImageData, parseMarkerImageId } from "./markers";
 import { buildRoadConditionPopupHtml } from "./popup";
 import { useRestoredRoadConditionsChoices } from "./restore-choices";
 import { RouteConditionsLayer } from "./route-layer";
-import { SEVERITY_LINE_COLOR } from "./severity";
 import { RoadSourceLayers } from "./source-layers";
 import { horizonDaysParam, useRoadConditionsStore } from "./store";
 import {
@@ -40,21 +44,18 @@ import {
   type ViewportBox,
   type ViewportFetchScheduler,
 } from "./viewport-scheduler";
-import {
-  ROAD_CONDITION_LINE_DASHARRAY,
-  ROAD_CONDITION_LINE_OPACITY,
-  ROAD_CONDITION_MARKER_OPACITY,
-} from "./visual-style";
 
 export { buildRoadConditionPopupGroups } from "./popup";
 
 type GeoJsonData = Parameters<GeoJSONSource["setData"]>[0];
 
 const OVERLAY_ID = "road-conditions";
-const SOURCE = "omx-road-conditions";
-const LINE_LAYER = "omx-road-conditions-line";
-const MARKER_LAYER = "omx-road-conditions-markers";
-const CREDIT_LAYERS = [LINE_LAYER, MARKER_LAYER];
+const AREA_LAYERS: IncidentLayerIds = {
+  source: "omx-road-conditions",
+  line: "omx-road-conditions-line",
+  marker: "omx-road-conditions-markers",
+};
+const CREDIT_LAYERS = [AREA_LAYERS.line, AREA_LAYERS.marker];
 
 /**
  * The server's own `/events` cache TTL (`index.ts` caches the aggregation for
@@ -254,7 +255,7 @@ export function RoadConditionsLayer() {
       eventsByDisplayIdRef.current = eventsByDisplayId;
       viewNeedsRefreshRef.current = false;
       refreshPopup(false);
-      publishGeoJson([{ sourceId: SOURCE, data }]);
+      publishGeoJson([{ sourceId: AREA_LAYERS.source, data }]);
       hasViewportDataRef.current = true;
       setViewportFetchStatus("ready");
     } catch {
@@ -298,93 +299,20 @@ export function RoadConditionsLayer() {
     };
   }, [mapRef, mapReady]);
 
-  // Add/remove source + layers, re-attaching after a style swap.
-  useEffect(() => {
-    void styleVersion;
-    const map = mapRef.current;
-    if (!map || !mapReady) return;
-
-    const sync = () => {
-      if (!layerVisible) {
-        try {
-          if (map.getLayer(MARKER_LAYER)) map.removeLayer(MARKER_LAYER);
-          if (map.getLayer(LINE_LAYER)) map.removeLayer(LINE_LAYER);
-          if (map.getSource(SOURCE)) map.removeSource(SOURCE);
-        } catch {
-          // In-flight render — ignore.
-        }
-        unregisterLayerSlot(MARKER_LAYER);
-        unregisterLayerSlot(LINE_LAYER);
-        if (popupRef.current) {
-          removeMapOverlayPopup(map, popupRef.current);
-          popupRef.current = null;
-        }
-        return;
-      }
-      try {
-        if (!map.getSource(SOURCE)) {
-          map.addSource(SOURCE, {
-            type: "geojson",
-            data: { type: "FeatureCollection", features: [] },
-          });
-        }
-        if (!map.getLayer(LINE_LAYER)) {
-          addLayerInSlot(
-            map,
-            {
-              id: LINE_LAYER,
-              type: "line",
-              source: SOURCE,
-              filter: ["match", ["geometry-type"], ["LineString", "MultiLineString"], true, false],
-              minzoom: minZoom,
-              layout: { "line-cap": "round", "line-join": "round" },
-              paint: {
-                "line-color": SEVERITY_LINE_COLOR,
-                "line-width": ["interpolate", ["linear"], ["zoom"], 5, 3, 12, 6, 16, 9],
-                "line-opacity": ROAD_CONDITION_LINE_OPACITY,
-                "line-dasharray": ROAD_CONDITION_LINE_DASHARRAY,
-              },
-            },
-            "conditions-lines",
-            0,
-          );
-        }
-        if (!map.getLayer(MARKER_LAYER)) {
-          addLayerInSlot(
-            map,
-            {
-              id: MARKER_LAYER,
-              type: "symbol",
-              source: SOURCE,
-              filter: ["==", ["geometry-type"], "Point"],
-              minzoom: minZoom,
-              layout: {
-                "icon-image": ["get", "_icon"],
-                "icon-size": ["interpolate", ["linear"], ["zoom"], 5, 0.42, 10, 0.55, 16, 0.75],
-                "icon-allow-overlap": true,
-                "icon-ignore-placement": true,
-                // Higher sort-key is drawn last (on top), so key by severity rank
-                // — the worst condition's disc sits on top where markers overlap.
-                "symbol-sort-key": ["get", "_sev"],
-              },
-              paint: {
-                "icon-opacity": ROAD_CONDITION_MARKER_OPACITY,
-              },
-            },
-            "overlay-markers",
-            0,
-          );
-        }
-      } catch {
-        // Style not ready — styledata will retry.
-      }
-    };
-
-    const unsubscribeStyle = subscribeStyleLoaded(map, sync);
-    return () => {
-      unsubscribeStyle();
-    };
-  }, [mapReady, mapRef, styleVersion, layerVisible, minZoom]);
+  useMapLayerGroup(
+    useMemo(
+      () =>
+        layerVisible
+          ? incidentLayerGroup(AREA_LAYERS, {
+              zoom: { minzoom: minZoom },
+              order: 0,
+              lineWidth: ["interpolate", ["linear"], ["zoom"], 5, 3, 12, 6, 16, 9],
+              iconSize: ["interpolate", ["linear"], ["zoom"], 5, 0.42, 10, 0.55, 16, 0.75],
+            })
+          : null,
+      [layerVisible, minZoom],
+    ),
+  );
 
   // A followed navigation camera fires `moveend` on every animation frame —
   // up to 60/s for the whole length of a drive — so `fetchData` must never
@@ -453,36 +381,15 @@ export function RoadConditionsLayer() {
 
     const unregister = registerMapOverlayInteraction(map, {
       id: "road-conditions-area",
-      layerIds: [MARKER_LAYER, LINE_LAYER],
+      layerIds: [AREA_LAYERS.marker, AREA_LAYERS.line],
       priority: 100,
-      onClick: ({ event, features }) => {
-        // Collect every marker near the click — not just the top one — so several
-        // conditions stacked at the same spot all stay reachable in a single popup
-        // (linked works often share a segment: roadworks + its lane closure land on
-        // the same point). The radius is ~one marker-width so touching/overlapping
-        // discs are grouped while genuinely separate incidents stay independent.
-        const markerFeatures = features.filter((feature) => feature.layer?.id === MARKER_LAYER);
-        let hits: MapGeoJSONFeature[] = markerFeatures;
-        if (markerFeatures.length > 0) {
-          const r = 24;
-          const box: [[number, number], [number, number]] = [
-            [event.point.x - r, event.point.y - r],
-            [event.point.x + r, event.point.y + r],
-          ];
-          const queried = map.getLayer(MARKER_LAYER)
-            ? (map.queryRenderedFeatures(box, { layers: [MARKER_LAYER] }) as MapGeoJSONFeature[])
-            : [];
-          if (queried.length > 0) hits = queried;
-        } else {
-          hits = features;
-        }
+      onClick: (interaction) => {
+        const hits = incidentClickHits(map, AREA_LAYERS.marker, interaction);
         if (hits.length === 0) return;
 
-        popupSelectionRef.current = {
-          hits,
-          fallbackCoordinates: [event.lngLat.lng, event.lngLat.lat],
-        };
-        const content = buildRoadConditionPopupHtml({
+        const { lngLat } = interaction.event;
+        popupSelectionRef.current = { hits, fallbackCoordinates: [lngLat.lng, lngLat.lat] };
+        openIncidentPopup(map, popupRef, {
           ...popupSelectionRef.current,
           atMs: Date.now(),
           needsRefresh: viewNeedsRefreshRef.current,
@@ -493,24 +400,11 @@ export function RoadConditionsLayer() {
           translate: (key, values) => tRef.current(key, values),
           locale: localeRef.current,
         });
-        if (content.groupCount === 0) return;
-        const popup = new maplibregl.Popup({
-          closeButton: true,
-          maxWidth: "300px",
-          className: "omx-popup",
-        })
-          .setLngLat(content.coordinates)
-          .setHTML(content.html);
-        popupRef.current = popup;
-        replaceMapOverlayPopup(map, popup);
       },
     });
     return () => {
       unregister();
-      if (popupRef.current) {
-        removeMapOverlayPopup(map, popupRef.current);
-        popupRef.current = null;
-      }
+      closeIncidentPopup(map, popupRef);
     };
   }, [mapReady, mapRef, styleVersion, layerVisible]);
 

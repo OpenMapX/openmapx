@@ -1,5 +1,5 @@
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { readdirSync, readFileSync } from "node:fs";
+import { join, relative, resolve } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { createFakeMap } from "@/test";
 import { subscribeStyleLoaded } from "./styleLoadedSync";
@@ -41,6 +41,40 @@ describe("subscribeStyleLoaded", () => {
     expect(fake.state.handlers.get("render")?.size).toBe(0);
     dispose();
     expect(fake.state.handlers.get("style.load")?.size).toBe(0);
+  });
+
+  it("serializes the style once per stylesheet rather than on every styledata", () => {
+    const fake = createFakeMap();
+    const getStyle = vi.spyOn(fake.map, "getStyle");
+    const apply = vi.fn();
+    const dispose = subscribeStyleLoaded(fake.map, apply);
+
+    for (let i = 0; i < 50; i++) fake.emit("styledata");
+
+    expect(apply).toHaveBeenCalledTimes(51);
+    expect(getStyle).toHaveBeenCalledTimes(1);
+    dispose();
+  });
+
+  it("probes a replacement stylesheet again and waits until it is parsed", () => {
+    const fake = unparsedMap();
+    fake.state.styleLoaded = true;
+    const apply = vi.fn();
+    const dispose = subscribeStyleLoaded(fake.map, apply);
+    expect(apply).toHaveBeenCalledTimes(1);
+
+    fake.state.styleLoaded = false;
+    fake.emit("styledataloading");
+    fake.emit("styledata");
+    expect(apply).toHaveBeenCalledTimes(1);
+    expect(fake.state.handlers.get("render")?.size).toBe(1);
+
+    fake.state.styleLoaded = true;
+    fake.emit("style.load");
+    expect(apply).toHaveBeenCalledTimes(2);
+    expect(fake.state.handlers.get("render")?.size).toBe(0);
+    dispose();
+    expect(fake.state.handlers.get("styledataloading")?.size).toBe(0);
   });
 
   it("does not swallow callback errors", () => {
@@ -119,5 +153,27 @@ describe("subscribeStyleLoaded", () => {
       expect(source).toContain("subscribeStyleLoaded(map");
       expect(source).not.toContain('once("idle"');
     }
+  });
+
+  it("is not bypassed by tile-gated or hand-rolled style listeners", () => {
+    const root = resolve(process.cwd());
+    const sources = (dir: string): string[] =>
+      readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+        if (entry.name === "node_modules") return [];
+        const path = join(dir, entry.name);
+        if (entry.isDirectory()) return sources(path);
+        return /\.tsx?$/.test(entry.name) && !/\.test\.tsx?$/.test(entry.name) ? [path] : [];
+      });
+    const offenders = (files: string[], pattern: RegExp) =>
+      files
+        .filter((file) => pattern.test(readFileSync(file, "utf8")))
+        .map((file) => relative(root, file));
+
+    const app = sources(join(root, "apps/web/src"));
+    const integrations = sources(join(root, "integrations"));
+    // isStyleLoaded() waits for every tile and image, and idle may never come.
+    expect(offenders([...app, ...integrations], /\.isStyleLoaded\(|once\("idle"/)).toEqual([]);
+    // Integrations reconcile through useMapLayerGroup or subscribeStyleLoaded.
+    expect(offenders(integrations, /\.on\("styledata"/)).toEqual([]);
   });
 });

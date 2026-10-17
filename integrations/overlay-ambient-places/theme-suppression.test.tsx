@@ -33,7 +33,7 @@ afterEach(() => {
   usePlaceStore.setState({ selectedPlace: null });
 });
 describe("ambient suppression with the real group hook", () => {
-  it("restores filters after paint-only theme recreation with no subsequent style load", async () => {
+  it("keeps suppression through a paint-only theme change and restores it after recreation", async () => {
     const manifest = {
       version: 1,
       policyVersion: 2,
@@ -78,7 +78,8 @@ describe("ambient suppression with the real group hook", () => {
         <AmbientPlacesLayer />
       </ThemeProvider>,
     );
-    expect(fake.state.counts.addLayer.get(AMBIENT_LABEL_LAYER)).toBeGreaterThan(added);
+    // A paint-only change updates the live layer, so its filter is never dropped.
+    expect(fake.state.counts.addLayer.get(AMBIENT_LABEL_LAYER)).toBe(added);
     act(() => fake.emit("idle"));
     for (const layer of [AMBIENT_LANDMARK_LAYER, AMBIENT_LABEL_LAYER])
       expect(JSON.stringify(fake.map.getFilter(layer))).toContain(place.id);

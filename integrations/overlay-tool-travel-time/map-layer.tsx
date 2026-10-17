@@ -17,11 +17,12 @@ import {
 import type { MapMouseEvent } from "maplibre-gl";
 import { useEffect, useMemo, useRef } from "react";
 import { INTERACTIVE_LAYER_IDS } from "@/integration-api/map/interactiveLayers";
-import { addLayerInSlot, unregisterLayerSlot } from "@/integration-api/map/layerStack";
+import { addLayerInSlot, removeSlottedLayers } from "@/integration-api/map/layerStack";
 import { useMap } from "@/integration-api/map/MapContext";
 import { claimMapClick } from "@/integration-api/map/mapClickOwnership";
+import { EMPTY_FEATURE_COLLECTION, type MapLayerGroup } from "@/integration-api/map/mapLayerGroup";
 import { subscribeStyleLoaded } from "@/integration-api/map/styleLoadedSync";
-import { useGeoJsonSourceDataBridge } from "@/integration-api/map/useGeoJsonSourceDataBridge";
+import { useMapLayerGroup } from "@/integration-api/map/useMapLayerGroup";
 import { useRenderedMapAttributions } from "@/integration-api/overlay/useRenderedMapAttributions";
 import { resolveTravelTimeBackend, type TravelTimeMode, useTravelTimeStore } from "./store";
 import { TransitFieldLayer } from "./transit-field-layer";
@@ -61,6 +62,93 @@ function computeOpacity(index: number, total: number): number {
   return minOpacity + t * (maxOpacity - minOpacity);
 }
 
+function travelTimeGroup(
+  contours: GeoJSON.FeatureCollection,
+  reach: GeoJSON.FeatureCollection,
+  origin: GeoJSON.FeatureCollection,
+): MapLayerGroup {
+  // `route-markers`, not an overlay band: the isochrone is the user's
+  // active in-progress query — origin + contours drawn above the base
+  // labels, exactly like the route's own waypoint pins.
+  return {
+    sources: {
+      [SOURCE_ID]: { type: "geojson", data: contours },
+      [REACH_SOURCE]: { type: "geojson", data: reach },
+      [ORIGIN_SOURCE]: { type: "geojson", data: origin },
+    },
+    layers: [
+      {
+        id: FILL_LAYER,
+        type: "fill",
+        source: SOURCE_ID,
+        slot: "route-markers",
+        order: 18,
+        paint: {
+          "fill-color": ["get", "color"],
+          "fill-opacity": ["get", "opacity"],
+        },
+      },
+      {
+        id: OUTLINE_LAYER,
+        type: "line",
+        source: SOURCE_ID,
+        slot: "route-markers",
+        order: 19,
+        paint: {
+          "line-color": ["get", "color"],
+          "line-width": 2,
+          "line-opacity": 0.6,
+        },
+      },
+      // Optional/fallback stop diagnostics, graduated by time band.
+      {
+        id: REACH_LAYER,
+        type: "circle",
+        source: REACH_SOURCE,
+        slot: "route-markers",
+        order: 20,
+        paint: {
+          "circle-radius": ["interpolate", ["linear"], ["zoom"], 8, 3, 13, 5, 16, 7],
+          "circle-color": ["get", "color"],
+          "circle-opacity": ["get", "opacity"],
+          "circle-stroke-color": "#FFFFFF",
+          "circle-stroke-width": 0.5,
+          "circle-stroke-opacity": ["get", "opacity"],
+        },
+      },
+      // Pulsing ring
+      {
+        id: ORIGIN_PULSE_LAYER,
+        type: "circle",
+        source: ORIGIN_SOURCE,
+        slot: "route-markers",
+        order: 21,
+        paint: {
+          "circle-radius": 14,
+          "circle-color": "transparent",
+          "circle-stroke-color": ["get", "color"],
+          "circle-stroke-width": 2,
+          "circle-stroke-opacity": 0.3,
+        },
+      },
+      // Origin dot
+      {
+        id: ORIGIN_LAYER,
+        type: "circle",
+        source: ORIGIN_SOURCE,
+        slot: "route-markers",
+        order: 22,
+        paint: {
+          "circle-radius": 7,
+          "circle-color": ["get", "color"],
+          "circle-stroke-color": "#FFFFFF",
+          "circle-stroke-width": 2,
+        },
+      },
+    ],
+  };
+}
+
 export function TravelTimeLayer() {
   const { mapRef, mapReady, styleVersion } = useMap();
   const currentMap = mapRef.current;
@@ -74,12 +162,6 @@ export function TravelTimeLayer() {
   const transitFieldUnsupported = useTravelTimeStore((s) => s.transitFieldUnsupported);
   const transitSurfaceKind = useTravelTimeStore((s) => s.transitSurfaceKind);
   const transitPolygonBbox = useTravelTimeStore((s) => s.transitPolygonBbox);
-  const { publish: publishGeoJson } = useGeoJsonSourceDataBridge({
-    mapRef,
-    mapReady,
-    styleVersion,
-    visible: isActive,
-  });
 
   const draggingRef = useRef(false);
   const transitFieldLayerRef = useRef<TransitFieldLayer | null>(null);
@@ -168,128 +250,6 @@ export function TravelTimeLayer() {
     };
   }, [isActive]);
 
-  // Set up sources and layers
-  useEffect(() => {
-    void styleVersion;
-    const map = currentMap;
-    if (!map || !mapReady || !isActive) return;
-
-    const setup = () => {
-      if (map.getSource(SOURCE_ID)) return;
-
-      const emptyFC: GeoJSON.FeatureCollection = { type: "FeatureCollection", features: [] };
-
-      map.addSource(SOURCE_ID, { type: "geojson", data: emptyFC });
-      map.addSource(REACH_SOURCE, { type: "geojson", data: emptyFC });
-      map.addSource(ORIGIN_SOURCE, { type: "geojson", data: emptyFC });
-
-      // `route-markers`, not an overlay band: the isochrone is the user's
-      // active in-progress query — origin + contours drawn above the base
-      // labels, exactly like the route's own waypoint pins.
-      addLayerInSlot(
-        map,
-        {
-          id: FILL_LAYER,
-          type: "fill",
-          source: SOURCE_ID,
-          paint: {
-            "fill-color": ["get", "color"],
-            "fill-opacity": ["get", "opacity"],
-          },
-        },
-        "route-markers",
-        18,
-      );
-
-      addLayerInSlot(
-        map,
-        {
-          id: OUTLINE_LAYER,
-          type: "line",
-          source: SOURCE_ID,
-          paint: {
-            "line-color": ["get", "color"],
-            "line-width": 2,
-            "line-opacity": 0.6,
-          },
-        },
-        "route-markers",
-        19,
-      );
-
-      // Optional/fallback stop diagnostics, graduated by time band.
-      addLayerInSlot(
-        map,
-        {
-          id: REACH_LAYER,
-          type: "circle",
-          source: REACH_SOURCE,
-          paint: {
-            "circle-radius": ["interpolate", ["linear"], ["zoom"], 8, 3, 13, 5, 16, 7],
-            "circle-color": ["get", "color"],
-            "circle-opacity": ["get", "opacity"],
-            "circle-stroke-color": "#FFFFFF",
-            "circle-stroke-width": 0.5,
-            "circle-stroke-opacity": ["get", "opacity"],
-          },
-        },
-        "route-markers",
-        20,
-      );
-
-      // Pulsing ring
-      addLayerInSlot(
-        map,
-        {
-          id: ORIGIN_PULSE_LAYER,
-          type: "circle",
-          source: ORIGIN_SOURCE,
-          paint: {
-            "circle-radius": 14,
-            "circle-color": "transparent",
-            "circle-stroke-color": ["get", "color"],
-            "circle-stroke-width": 2,
-            "circle-stroke-opacity": 0.3,
-          },
-        },
-        "route-markers",
-        21,
-      );
-
-      // Origin dot
-      addLayerInSlot(
-        map,
-        {
-          id: ORIGIN_LAYER,
-          type: "circle",
-          source: ORIGIN_SOURCE,
-          paint: {
-            "circle-radius": 7,
-            "circle-color": ["get", "color"],
-            "circle-stroke-color": "#FFFFFF",
-            "circle-stroke-width": 2,
-          },
-        },
-        "route-markers",
-        22,
-      );
-    };
-
-    const unsubscribeStyle = subscribeStyleLoaded(map, setup);
-
-    return () => {
-      unsubscribeStyle();
-      if (!map.getStyle()) return;
-      for (const id of [ORIGIN_LAYER, ORIGIN_PULSE_LAYER, REACH_LAYER, OUTLINE_LAYER, FILL_LAYER]) {
-        if (map.getLayer(id)) map.removeLayer(id);
-        unregisterLayerSlot(id);
-      }
-      if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
-      if (map.getSource(REACH_SOURCE)) map.removeSource(REACH_SOURCE);
-      if (map.getSource(ORIGIN_SOURCE)) map.removeSource(ORIGIN_SOURCE);
-    };
-  }, [currentMap, mapReady, styleVersion, isActive]);
-
   // Own WebGL resources for the lifetime of this style/active transit layer.
   // Data and threshold changes below update only the instance buffer.
   useEffect(() => {
@@ -305,17 +265,17 @@ export function TravelTimeLayer() {
       onUnsupported: setUnsupported,
     });
     transitFieldLayerRef.current = layer;
-    const setup = () => {
+    // A custom layer is a live object, not a serialisable spec, so it stays
+    // outside the layer group.
+    const unsubscribeStyle = subscribeStyleLoaded(map, () => {
       if (!map.getLayer(TRANSIT_FIELD_LAYER)) {
         addLayerInSlot(map, layer, "route-markers", 17);
       }
-    };
-    const unsubscribeStyle = subscribeStyleLoaded(map, setup);
+    });
     return () => {
       unsubscribeStyle();
       if (transitFieldLayerRef.current === layer) transitFieldLayerRef.current = null;
-      if (map.getStyle() && map.getLayer(TRANSIT_FIELD_LAYER)) map.removeLayer(TRANSIT_FIELD_LAYER);
-      unregisterLayerSlot(TRANSIT_FIELD_LAYER);
+      removeSlottedLayers(map, [TRANSIT_FIELD_LAYER]);
     };
   }, [isActive, isTransit, mapReady, currentMap, styleVersion]);
 
@@ -340,30 +300,13 @@ export function TravelTimeLayer() {
     );
   }, [currentMap, origin, selectedMinutes, showPolygons, styleVersion, transitSurface]);
 
-  // Update isochrone polygons
-  useEffect(() => {
-    void styleVersion;
-    if (!mapReady || !isActive) return;
-
+  const contours = useMemo((): GeoJSON.FeatureCollection => {
     // Sampled transit polygons reuse the street-isochrone fill/outline layers:
     // the server already sets `color` and `opacity` per feature, so no paint or
     // slot change is needed and the two surface kinds cannot diverge visually.
-    if (showPolygons) {
-      publishGeoJson([
-        {
-          sourceId: SOURCE_ID,
-          data: transitIsochrone?.featureCollection ?? {
-            type: "FeatureCollection",
-            features: [],
-          },
-        },
-      ]);
-      return;
-    }
-
+    if (showPolygons) return transitIsochrone?.featureCollection ?? EMPTY_FEATURE_COLLECTION;
     if (isTransit || !isochroneData || isochroneData.contours.length === 0) {
-      publishGeoJson([{ sourceId: SOURCE_ID, data: { type: "FeatureCollection", features: [] } }]);
-      return;
+      return EMPTY_FEATURE_COLLECTION;
     }
 
     const color = MODE_COLORS[isochroneData.mode];
@@ -386,32 +329,16 @@ export function TravelTimeLayer() {
           contour.contributors,
         ),
       );
+    return { type: "FeatureCollection", features };
+  }, [isTransit, isochroneData, showPolygons, transitIsochrone]);
 
-    publishGeoJson([{ sourceId: SOURCE_ID, data: { type: "FeatureCollection", features } }]);
-  }, [
-    isActive,
-    isTransit,
-    isochroneData,
-    mapReady,
-    publishGeoJson,
-    showPolygons,
-    styleVersion,
-    transitIsochrone,
-  ]);
-
-  // Update transit reachability dots (one-to-all). Each reachable stop is
-  // coloured by the transit mode and faded by which selected time band it falls
-  // into (nearest band most opaque). Cleared whenever transit isn't selected.
-  useEffect(() => {
-    void styleVersion;
-    if (!mapReady || !isActive) return;
-
+  // Transit reachability dots (one-to-all). Each reachable stop is coloured by
+  // the transit mode and faded by which selected time band it falls into
+  // (nearest band most opaque). Empty whenever transit isn't selected.
+  const reach = useMemo((): GeoJSON.FeatureCollection => {
     const dotsVisible = showTransitStops || transitFieldUnsupported !== null;
     if (!isTransit || !dotsVisible || !transitSurface?.seeds.length) {
-      publishGeoJson([
-        { sourceId: REACH_SOURCE, data: { type: "FeatureCollection", features: [] } },
-      ]);
-      return;
+      return EMPTY_FEATURE_COLLECTION;
     }
 
     const sortedAsc = [...selectedMinutes].sort((a, b) => a - b);
@@ -439,53 +366,36 @@ export function TravelTimeLayer() {
         ),
       );
     }
-    publishGeoJson([{ sourceId: REACH_SOURCE, data: { type: "FeatureCollection", features } }]);
-  }, [
-    isActive,
-    isTransit,
-    mapReady,
-    publishGeoJson,
-    selectedMinutes,
-    showTransitStops,
-    styleVersion,
-    transitFieldUnsupported,
-    transitSurface,
-  ]);
+    return { type: "FeatureCollection", features };
+  }, [isTransit, selectedMinutes, showTransitStops, transitFieldUnsupported, transitSurface]);
 
-  // Update origin marker
-  useEffect(() => {
-    void styleVersion;
-    if (!mapReady || !isActive) return;
+  const originMarker = useMemo(
+    (): GeoJSON.FeatureCollection =>
+      origin
+        ? {
+            type: "FeatureCollection",
+            features: [
+              {
+                type: "Feature",
+                geometry: { type: "Point", coordinates: origin },
+                properties: { color: MODE_COLORS[mode] },
+              },
+            ],
+          }
+        : EMPTY_FEATURE_COLLECTION,
+    [mode, origin],
+  );
 
-    if (!origin) {
-      publishGeoJson([
-        { sourceId: ORIGIN_SOURCE, data: { type: "FeatureCollection", features: [] } },
-      ]);
-      return;
-    }
-
-    const color = MODE_COLORS[mode];
-    publishGeoJson([
-      {
-        sourceId: ORIGIN_SOURCE,
-        data: {
-          type: "FeatureCollection",
-          features: [
-            {
-              type: "Feature",
-              geometry: { type: "Point", coordinates: origin },
-              properties: { color },
-            },
-          ],
-        },
-      },
-    ]);
-  }, [isActive, mapReady, mode, origin, publishGeoJson, styleVersion]);
+  useMapLayerGroup(
+    useMemo(
+      () => (isActive ? travelTimeGroup(contours, reach, originMarker) : null),
+      [contours, isActive, originMarker, reach],
+    ),
+  );
 
   // Click handler to set origin — disabled in anchored mode (e.g. Explore), where
   // the origin is the searched place and a global click would hijack marker clicks.
   useEffect(() => {
-    void styleVersion;
     const map = currentMap;
     if (!map || !mapReady || !isActive || anchored) return;
 
@@ -499,11 +409,10 @@ export function TravelTimeLayer() {
     return () => {
       map.off("click", onClick);
     };
-  }, [currentMap, mapReady, styleVersion, isActive, anchored]);
+  }, [currentMap, mapReady, isActive, anchored]);
 
   // Origin marker drag
   useEffect(() => {
-    void styleVersion;
     const map = currentMap;
     if (!map || !mapReady || !isActive) return;
 
@@ -548,7 +457,7 @@ export function TravelTimeLayer() {
         draggingRef.current = false;
       }
     };
-  }, [currentMap, mapReady, styleVersion, isActive, anchored]);
+  }, [currentMap, mapReady, isActive, anchored]);
 
   // Cursor management — crosshair only when click-to-place is available (not anchored).
   useEffect(() => {

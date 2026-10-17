@@ -5,18 +5,20 @@ import { type DependencyList, useEffect } from "react";
 import type { MapContextValue } from "@/integration-api/map/MapContext";
 import { setLayerVisibility } from "./layerStyleUtils";
 import { subscribeStyleLoaded } from "./styleLoadedSync";
+import { useSlottedLayersCleanup } from "./useSlottedLayersCleanup";
 
 /**
  * Shared "style-synced overlay layer" effect.
  *
- * Encapsulates the recurring pattern used by single-source/single-layer raster
- * overlays: apply once the stylesheet is parsed, add the source/layer, toggle
- * visibility, and reconcile style rebuilds with proper listener cleanup. Pending
- * source tiles must not delay installation or require an idle event.
+ * Encapsulates the recurring pattern used by single-source/single-layer
+ * overlays whose source cannot be declared as data — an attributed raster
+ * acquisition or a tile source the caller builds imperatively. Anything that can
+ * be expressed as a descriptor belongs in `useMapLayerGroup` instead.
  *
- * As in the hand-written effect each overlay previously had:
- * the source is only added when `visible` is true and missing; the layer is only
- * added when `visible` is true and missing; visibility is always synced.
+ * The source is only added when `visible` is true and missing; the layer is only
+ * added when `visible` is true and missing; visibility is always synced. Both are
+ * re-added after a style rebuild once the stylesheet is parsed, without waiting
+ * for pending source tiles, and removed when the overlay unmounts.
  *
  * Per-overlay variation is supplied via:
  *  - `sourceId` / `layerId`: the source and layer ids to manage.
@@ -65,4 +67,6 @@ export function useStyleSyncedLayer(params: {
     return subscribeStyleLoaded(map, syncLayer);
     // biome-ignore lint/correctness/useExhaustiveDependencies: deps are supplied by the caller to mirror each overlay's original effect dependency array exactly
   }, deps);
+
+  useSlottedLayersCleanup(mapRef, () => ({ layerIds: [layerId], sourceIds: [sourceId] }));
 }

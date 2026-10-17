@@ -97,6 +97,39 @@ describe("AirportsOverlay zoom gate", () => {
     expect(fake.state.layers.get(CIRCLE_LAYER_ID)?.minzoom).toBe(MIN_ZOOM);
   });
 
+  it("fetches the viewport once when shown", () => {
+    render(<AirportsOverlay />, { wrapper });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("applies a changed manifest minZoom to the installed layer", () => {
+    const raised = new IntegrationRegistry([
+      {
+        id: "overlay-ourairports",
+        name: "Airports",
+        enabled: true,
+        domains: ["map-overlay"],
+        dataSources: manifest.dataSources,
+        isBuiltIn: true,
+        frontend: { overlay: { minZoom: MIN_ZOOM + 2 } },
+      },
+    ]);
+    const view = render(
+      <IntegrationRegistryContext.Provider value={registry}>
+        <AirportsOverlay />
+      </IntegrationRegistryContext.Provider>,
+    );
+    expect(fake.state.layers.get(CIRCLE_LAYER_ID)?.minzoom).toBe(MIN_ZOOM);
+
+    view.rerender(
+      <IntegrationRegistryContext.Provider value={raised}>
+        <AirportsOverlay />
+      </IntegrationRegistryContext.Provider>,
+    );
+    expect(fake.state.layers.get(CIRCLE_LAYER_ID)?.minzoom).toBe(MIN_ZOOM + 2);
+  });
+
   it("resumes fetching once the user zooms back across the threshold", () => {
     fake = createFakeMap({ zoom: MIN_ZOOM - 1 });
     render(<AirportsOverlay />, { wrapper });

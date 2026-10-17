@@ -9,11 +9,12 @@ import {
 import type { MapLayerMouseEvent, MapMouseEvent } from "maplibre-gl";
 import * as maplibregl from "maplibre-gl";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { addLayerInSlot, unregisterLayerSlot } from "@/integration-api/map/layerStack";
+import { addLayerInSlot, removeSlottedLayers } from "@/integration-api/map/layerStack";
 import { useMap } from "@/integration-api/map/MapContext";
 import { getMapClickOwner } from "@/integration-api/map/mapClickOwnership";
 import { subscribeStyleLoaded } from "@/integration-api/map/styleLoadedSync";
 import { useGeoJsonSourceDataBridge } from "@/integration-api/map/useGeoJsonSourceDataBridge";
+import { useSlottedLayersCleanup } from "@/integration-api/map/useSlottedLayersCleanup";
 import { addAttributedRasterSource } from "@/integration-api/overlay/rasterMapContribution";
 import { useContributorResolver } from "@/integration-api/overlay/useContributorResolver";
 import { useMapAttributions } from "@/integration-api/overlay/useMapAttributions";
@@ -31,6 +32,16 @@ const LIFT_LAYER_ID = "openmapx-winter-lifts";
 const LIFT_HIGHLIGHT_LAYER_ID = "openmapx-winter-lift-highlight";
 const AREA_LAYER_ID = "openmapx-winter-areas";
 const INTERACTIVE_LAYERS = [PISTE_LAYER_ID, LIFT_LAYER_ID] as const;
+/** Every layer this overlay adds, top-most first, and the sources they read. */
+const OWNED_LAYERS = [
+  PISTE_HIGHLIGHT_LAYER_ID,
+  LIFT_HIGHLIGHT_LAYER_ID,
+  PISTE_LAYER_ID,
+  LIFT_LAYER_ID,
+  AREA_LAYER_ID,
+  RASTER_LAYER_ID,
+];
+const OWNED_SOURCES = [VECTOR_SOURCE_ID, RASTER_SOURCE_ID];
 const VECTOR_MIN_ZOOM = 10;
 
 const PISTE_DIFFICULTY_COLORS: Record<string, string> = {
@@ -122,6 +133,7 @@ function liftPopupHtml(props: Record<string, string | number | boolean>): string
 
 export function WinterSportsLayer() {
   const { mapRef, mapReady, styleVersion } = useMap();
+  useSlottedLayersCleanup(mapRef, () => ({ layerIds: OWNED_LAYERS, sourceIds: OWNED_SOURCES }));
   const env = useEnv();
   const layerVisible = useWinterSportsStore((s) => s.layerVisible);
   const resolve = useContributorResolver();
@@ -256,28 +268,7 @@ export function WinterSportsLayer() {
 
     const syncLayers = () => {
       if (!layerVisible) {
-        try {
-          for (const id of [
-            PISTE_HIGHLIGHT_LAYER_ID,
-            LIFT_HIGHLIGHT_LAYER_ID,
-            PISTE_LAYER_ID,
-            LIFT_LAYER_ID,
-            AREA_LAYER_ID,
-            RASTER_LAYER_ID,
-          ]) {
-            if (map.getLayer(id)) map.removeLayer(id);
-          }
-          if (map.getSource(VECTOR_SOURCE_ID)) map.removeSource(VECTOR_SOURCE_ID);
-          if (map.getSource(RASTER_SOURCE_ID)) map.removeSource(RASTER_SOURCE_ID);
-        } catch {
-          // In-flight tiles
-        }
-        unregisterLayerSlot(RASTER_LAYER_ID);
-        unregisterLayerSlot(AREA_LAYER_ID);
-        unregisterLayerSlot(PISTE_LAYER_ID);
-        unregisterLayerSlot(PISTE_HIGHLIGHT_LAYER_ID);
-        unregisterLayerSlot(LIFT_LAYER_ID);
-        unregisterLayerSlot(LIFT_HIGHLIGHT_LAYER_ID);
+        removeSlottedLayers(map, OWNED_LAYERS, OWNED_SOURCES);
         popupRef.current?.remove();
         fetchedRef.current = false;
         return;

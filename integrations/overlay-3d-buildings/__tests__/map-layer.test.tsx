@@ -299,7 +299,11 @@ describe("BuildingExtrusionLayer", () => {
     vi.spyOn(fake.map, "getStyle").mockImplementation(() =>
       fake.state.styleLoaded ? parsedStyle : (undefined as never),
     );
-    act(() => fake.emit("styledata"));
+    // A replacement stylesheet announces itself before it stops being parsed.
+    act(() => {
+      fake.emit("styledataloading");
+      fake.emit("styledata");
+    });
 
     // Parsing finishes before React handles the user's off choice, but the old
     // style callback is still waiting for the later idle event.
@@ -337,7 +341,11 @@ describe("BuildingExtrusionLayer", () => {
     vi.spyOn(fake.map, "getStyle").mockImplementation(() =>
       fake.state.styleLoaded ? parsedStyle : (undefined as never),
     );
-    act(() => fake.emit("styledata"));
+    // A replacement stylesheet announces itself before it stops being parsed.
+    act(() => {
+      fake.emit("styledataloading");
+      fake.emit("styledata");
+    });
     unmount();
     fake.state.layers.delete(LAYER_ID);
     fake.state.styleLoaded = true;

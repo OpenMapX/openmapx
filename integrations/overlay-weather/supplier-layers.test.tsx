@@ -425,3 +425,29 @@ it.each(["radar", "disabled", "unmounted", "map-replaced"] as const)(
     if (change === "map-replaced") expect(fake.map.getLayer("weather-owm-layer")).toBeDefined();
   },
 );
+
+it("weather radar only writes frame opacity that changed", () => {
+  useWeatherStore.setState({
+    layerVisible: true,
+    activeSubLayer: "radar",
+    radarHost: "https://radar.test",
+    radarPastFrames: Array.from({ length: 3 }, (_, i) => ({ time: i, path: `/${i}` })),
+    radarNowcastFrames: [],
+    radarFrameIndex: 0,
+    radarPlaying: false,
+  });
+  render(<WeatherLayer />, { wrapper });
+  const writes = () => new Map(fake.state.counts.setPaintProperty);
+  const before = writes();
+  act(() => {
+    fake.emit("styledata");
+    fake.emit("styledata");
+  });
+  expect(writes()).toEqual(before);
+  act(() => useWeatherStore.setState({ radarFrameIndex: 1 }));
+  expect(fake.map.getPaintProperty("weather-radar-layer-0", "raster-opacity")).toBe(0);
+  expect(fake.map.getPaintProperty("weather-radar-layer-1", "raster-opacity")).toBe(0.7);
+  expect(fake.state.counts.setPaintProperty.get("weather-radar-layer-2")).toBe(
+    before.get("weather-radar-layer-2"),
+  );
+});

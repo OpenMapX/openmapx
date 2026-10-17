@@ -108,11 +108,7 @@ const UNMIGRATED = new Set([
   // Awaiting the follow-up migration.
   "RasterBaseLayer.tsx",
   "RouteSearchResultsLayer.tsx",
-  "SelectedStopInfrastructureLayer.tsx",
   "StreetLevelCoverageLayer.tsx",
-  "TransitItineraryLayer.tsx",
-  "TransitRouteLayer.tsx",
-  "VehicleLiveLayer.tsx",
 ]);
 
 describe("map layers keep their data with their sources", () => {

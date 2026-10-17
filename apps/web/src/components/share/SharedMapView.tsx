@@ -1,8 +1,7 @@
 "use client";
 
 import Box from "@mui/material/Box";
-import { useColorScheme } from "@mui/material/styles";
-import type { Route } from "@openmapx/core";
+import { geoJsonBBox, type Route } from "@openmapx/core";
 import {
   type SavedPlaceFieldContributors,
   savedPlaceContributors,
@@ -16,12 +15,12 @@ import type * as maplibregl from "maplibre-gl";
 import { useEffect, useRef, useState } from "react";
 import { routeGeometryFeatures } from "@/components/map/layers/routeGeometryFeatures";
 import { MapCredits } from "@/components/map/MapCredits";
+import { useStandaloneBasemapStyle, useStandaloneMap } from "@/components/map/useStandaloneMap";
 import { createGeoJsonSourceDataBridge } from "@/integration-api/map/layerStyleUtils";
 import { subscribeStyleLoaded } from "@/integration-api/map/styleLoadedSync";
 import { renderedMapAttributionTracker } from "@/integration-api/overlay/renderedMapAttributionTracker";
 import { useEnv } from "@/integration-api/runtime/EnvProvider";
-import { baseMapVectorCredits, loadMaptilerStyle, loadOpenMapXStyle } from "@/lib/map";
-import { loadMapLibreRuntime } from "@/lib/maplibreRuntime";
+import { baseMapVectorCredits } from "@/lib/map";
 import { ROUTE_COLORS, ROUTE_WIDTHS } from "@/lib/routeStyle";
 
 const POINTS_SOURCE = "shared-points-source";
@@ -104,25 +103,16 @@ function fitToContent(
   points: SharedMapPoint[],
   geometry: [number, number][] | null,
 ): void {
-  const coords: [number, number][] = [
-    ...points.map((p) => [p.lng, p.lat] as [number, number]),
-    ...(geometry ?? []),
-  ];
-  if (coords.length === 0) return;
-  let minLng = coords[0][0];
-  let maxLng = coords[0][0];
-  let minLat = coords[0][1];
-  let maxLat = coords[0][1];
-  for (const [lng, lat] of coords) {
-    if (lng < minLng) minLng = lng;
-    if (lng > maxLng) maxLng = lng;
-    if (lat < minLat) minLat = lat;
-    if (lat > maxLat) maxLat = lat;
-  }
+  const bbox = geoJsonBBox({
+    type: "MultiPoint",
+    coordinates: [...points.map((p) => [p.lng, p.lat]), ...(geometry ?? [])],
+  });
+  if (!bbox) return;
+  const [west, south, east, north] = bbox;
   map.fitBounds(
     [
-      [minLng, minLat],
-      [maxLng, maxLat],
+      [west, south],
+      [east, north],
     ],
     { padding: 60, duration: 0, maxZoom: 15 },
   );
@@ -132,80 +122,47 @@ function fitToContent(
 export function SharedMapView({ points, route }: Props) {
   const [renderedAttributions, setRenderedAttributions] = useState<Attribution[]>([]);
   const containerRef = useRef<HTMLDivElement>(null);
-  const mapRef = useRef<maplibregl.Map | null>(null);
-  const bridgeRef = useRef<ReturnType<typeof createGeoJsonSourceDataBridge> | null>(null);
-  if (!bridgeRef.current) bridgeRef.current = createGeoJsonSourceDataBridge();
-  const bridge = bridgeRef.current;
+  const [bridge] = useState(createGeoJsonSourceDataBridge);
   // Keep framing inputs current while asynchronous map construction runs.
   const pointsRef = useRef<SharedMapPoint[]>(points);
   pointsRef.current = points;
-  const routeRef = useRef<SharedMapRoute | null>(route ?? null);
-  routeRef.current = route ?? null;
+  const geometryRef = useRef(route?.geometry ?? null);
+  geometryRef.current = route?.geometry ?? null;
   const env = useEnv();
-  const { mode, systemMode } = useColorScheme();
-  const resolvedMode = mode === "system" ? systemMode : mode;
-  const styleName = resolvedMode === "dark" ? "streets-v2-dark" : "bright-v2";
-  const variant = resolvedMode === "dark" ? "dark" : "light";
+  const loadStyle = useStandaloneBasemapStyle();
 
-  useEffect(() => {
-    if (!containerRef.current) return;
-    let destroyed = false;
-    let map: maplibregl.Map | null = null;
-    let unsubscribeStyle: (() => void) | undefined;
-    let unsubscribeRendered: (() => void) | undefined;
-
-    const init = async () => {
-      const maplibregl = await loadMapLibreRuntime();
-      if (destroyed || !containerRef.current) return;
-      const style =
-        env.styleProvider === "openmapx"
-          ? await loadOpenMapXStyle(env, variant)
-          : await loadMaptilerStyle(styleName, env);
-      if (destroyed || !containerRef.current) return;
-      map = new maplibregl.Map({
-        container: containerRef.current,
-        style: style as string | maplibregl.StyleSpecification,
-        center: [0, 20],
-        zoom: 2,
-        // Credits render inline below via <MapCredits>, like the main map.
-        attributionControl: false,
-        canvasContextAttributes: { antialias: true },
-      });
-      mapRef.current = map;
-
-      const activeMap = map;
-      fitToContent(activeMap, pointsRef.current, routeRef.current?.geometry ?? null);
-      unsubscribeStyle = subscribeStyleLoaded(activeMap, () => {
-        addLayers(activeMap);
-        bridge.apply(activeMap);
-      });
-      unsubscribeRendered = renderedMapAttributionTracker(activeMap).subscribe(
-        "shared-map-content",
-        {
-          kind: "geometry",
-          layerIds: [POINTS_LAYER, ROUTE_CASING, ROUTE_LINE],
-          publish: (entries) => {
-            const captured = entries.flatMap((entry) => (entry.detail ? [entry.detail] : []));
-            setRenderedAttributions((previous) =>
-              JSON.stringify(previous) === JSON.stringify(captured) ? previous : captured,
-            );
+  const mapRef = useStandaloneMap(
+    containerRef,
+    () => ({
+      loadStyle,
+      options: { center: [0, 20], zoom: 2 },
+      setup: (map) => {
+        fitToContent(map, pointsRef.current, geometryRef.current);
+        const unsubscribeStyle = subscribeStyleLoaded(map, () => {
+          addLayers(map);
+          bridge.apply(map);
+        });
+        const unsubscribeRendered = renderedMapAttributionTracker(map).subscribe(
+          "shared-map-content",
+          {
+            kind: "geometry",
+            layerIds: [POINTS_LAYER, ROUTE_CASING, ROUTE_LINE],
+            publish: (entries) => {
+              const captured = entries.flatMap((entry) => (entry.detail ? [entry.detail] : []));
+              setRenderedAttributions((previous) =>
+                JSON.stringify(previous) === JSON.stringify(captured) ? previous : captured,
+              );
+            },
           },
-        },
-      );
-    };
-
-    // Style-fetch failures leave the container empty rather than emitting an
-    // unhandled rejection — same degradation as AreaPickerMap.
-    void init().catch(() => {});
-
-    return () => {
-      destroyed = true;
-      unsubscribeRendered?.();
-      unsubscribeStyle?.();
-      map?.remove();
-      mapRef.current = null;
-    };
-  }, [env, styleName, variant, bridge]);
+        );
+        return () => {
+          unsubscribeRendered();
+          unsubscribeStyle();
+        };
+      },
+    }),
+    [bridge, loadStyle],
+  );
 
   // Re-publish captured data whenever its geometry or receipts change.
   useEffect(() => {
@@ -216,14 +173,14 @@ export function SharedMapView({ points, route }: Props) {
     ]);
     if (!map) return;
     bridge.apply(map);
-  }, [points, route, bridge]);
+  }, [bridge, mapRef, points, route]);
 
   // Route receipt refreshes do not re-frame unchanged point/geometry inputs.
   const geometry = route?.geometry ?? null;
   useEffect(() => {
     const map = mapRef.current;
     if (map) fitToContent(map, points, geometry);
-  }, [points, geometry]);
+  }, [geometry, mapRef, points]);
 
   return (
     <Box sx={{ position: "relative", width: "100%", height: "100%" }}>

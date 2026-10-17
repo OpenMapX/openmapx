@@ -97,7 +97,7 @@ export interface CreateFakeMapOptions {
    * else — the app's sources and layers do not survive a style change. Defaults
    * to none so existing tests that assert an exact layer list are unaffected.
    */
-  baseLayers?: Array<{ id: string; type: string }>;
+  baseLayers?: Array<{ id: string; type: string; layout?: Record<string, unknown> }>;
   /** Initial `getZoom()` value (default 10). */
   zoom?: number;
   /** Initial camera pitch and pitch constraint. */
@@ -310,6 +310,11 @@ export function createFakeMap(options: CreateFakeMapOptions = {}): FakeMap {
       state.sources.delete(id);
     },
     getLayer: (id: string) => state.layers.get(id),
+    getLayersOrder: () => [...state.layers.keys()],
+    setLayerZoomRange: (layerId: string, minzoom: number, maxzoom: number) => {
+      const layer = state.layers.get(layerId);
+      if (layer) state.layers.set(layerId, { ...layer, minzoom, maxzoom });
+    },
     addLayer: (layer: { id: string } & Record<string, unknown>, beforeId?: string) => {
       bump(state.counts.addLayer, layer.id);
       state.paint.delete(layer.id);
@@ -367,7 +372,11 @@ export function createFakeMap(options: CreateFakeMapOptions = {}): FakeMap {
       m[name] = value;
       state.layout.set(layerId, m);
     },
-    getLayoutProperty: (layerId: string, name: string) => state.layout.get(layerId)?.[name],
+    getLayoutProperty: (layerId: string, name: string) => {
+      const overrides = state.layout.get(layerId);
+      if (overrides && name in overrides) return overrides[name];
+      return (state.layers.get(layerId)?.layout as Record<string, unknown> | undefined)?.[name];
+    },
     setFilter: (layerId: string, filter: unknown) => {
       state.filters.set(layerId, filter);
       bump(state.counts.setFilter, layerId);
@@ -396,9 +405,11 @@ export function createFakeMap(options: CreateFakeMapOptions = {}): FakeMap {
      * style's own layers. `style.load` then fires synchronously, inside this
      * call — that is the diff path MapLibre takes for a style object, and a
      * listener attached after `setStyle` returns misses it entirely. `styledata`
-     * follows. Modelling both facts is the point of this method.
+     * follows. Modelling both facts is the point of this method. A replacement
+     * stylesheet announces itself with `styledataloading` first.
      */
     setStyle: (_style?: unknown) => {
+      api.emit("styledataloading");
       state.layers.clear();
       state.sources.clear();
       state.images.clear();

@@ -231,7 +231,8 @@ describe("RouteConditionsLayer", () => {
     expect(fake.state.sources.has(SOURCE)).toBe(false);
 
     fake.state.styleLoaded = true;
-    fake.emit("idle");
+    fake.emit("styledata");
+    fake.emit("style.load");
 
     await waitFor(() => {
       expect(sourceFeatures("Point")).toHaveLength(1);

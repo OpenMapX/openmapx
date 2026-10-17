@@ -57,6 +57,7 @@ import { DENSITY_LAYER_ID, DENSITY_SOURCE_ID, HotspotLayer } from "./hotspot-lay
 const SOURCE_ID = "openmapx-wildfires-source";
 const CIRCLE_LAYER_ID = "openmapx-wildfires-circles";
 const HEATMAP_LAYER_ID = "openmapx-wildfires-heatmap";
+const DENSITY_HEATMAP_LAYER_ID = "openmapx-wildfires-density-heatmap";
 const EMPTY = { type: "FeatureCollection", features: [] };
 const BOUNDS = { west: -121, south: 37.5, east: -120, north: 38.5 };
 const VIEW_QUERY = "west=-121&south=37.5&east=-120&north=38.5";
@@ -326,6 +327,41 @@ describe("HotspotLayer", () => {
       slot: "overlay-heat",
       order: 0,
     });
+  });
+
+  it("removes both heatmaps and releases their slots when the heatmap is turned off", () => {
+    vi.stubGlobal("fetch", routeFetch());
+    useWildfireStore.setState({ showHeatmap: true });
+    render(<HotspotLayer active popupController={popupController()} />);
+    expect(fake.state.layers.has(DENSITY_HEATMAP_LAYER_ID)).toBe(true);
+
+    act(() => {
+      useWildfireStore.getState().setShowHeatmap(false);
+    });
+
+    for (const id of [HEATMAP_LAYER_ID, DENSITY_HEATMAP_LAYER_ID]) {
+      expect(fake.state.layers.has(id)).toBe(false);
+      expect(layerRegistrations().some((entry) => entry.id === id)).toBe(false);
+    }
+    expect(fake.state.layers.has(CIRCLE_LAYER_ID)).toBe(true);
+    expect(fake.state.layers.has(DENSITY_LAYER_ID)).toBe(true);
+  });
+
+  it("redraws the heatmaps with the detections when the style is replaced", () => {
+    vi.stubGlobal("fetch", routeFetch());
+    useWildfireStore.setState({ showHeatmap: true });
+    render(<HotspotLayer active popupController={popupController()} />);
+
+    act(() => fake.map.setStyle({} as never));
+
+    for (const id of [
+      HEATMAP_LAYER_ID,
+      DENSITY_HEATMAP_LAYER_ID,
+      CIRCLE_LAYER_ID,
+      DENSITY_LAYER_ID,
+    ]) {
+      expect(fake.state.layers.has(id)).toBe(true);
+    }
   });
 
   it("keeps the exact detection circle and heatmap visual contract", () => {

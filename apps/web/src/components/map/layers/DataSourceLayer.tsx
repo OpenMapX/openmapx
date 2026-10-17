@@ -42,7 +42,7 @@ import {
 } from "@/integration-api/map/dataSourceFeatures";
 import { openDataSourceItem } from "@/integration-api/map/dataSourceOverlay";
 import { INTERACTIVE_LAYER_IDS } from "@/integration-api/map/interactiveLayers";
-import { addLayerInSlot, unregisterLayerSlot } from "@/integration-api/map/layerStack";
+import { addLayerInSlot, removeSlottedLayers } from "@/integration-api/map/layerStack";
 import { createGeoJsonSourcePublisher } from "@/integration-api/map/layerStyleUtils";
 import { useMap } from "@/integration-api/map/MapContext";
 import { getMapClickOwner } from "@/integration-api/map/mapClickOwnership";
@@ -159,34 +159,19 @@ function loadMarkerImage(map: MaplibreMap, imageId: string, iconPath: string, fi
 }
 
 function removeLayers(map: maplibregl.Map, dsId: string) {
-  const sid = sourceId(dsId);
-  const markers = markersLayerId(dsId);
-  const labels = labelsLayerId(dsId);
-  const mapContextSid = mapContextSourceId(dsId);
-  const mapContextFill = mapContextFillLayerId(dsId);
-  const mapContextOutline = mapContextOutlineLayerId(dsId);
-  const tracks = tracksLayerId(dsId);
-  try {
-    if (map.getLayer(tracks)) map.removeLayer(tracks);
-    if (map.getSource(tracksSourceId(dsId))) map.removeSource(tracksSourceId(dsId));
-    if (map.getLayer(mapContextOutline)) map.removeLayer(mapContextOutline);
-    if (map.getLayer(mapContextFill)) map.removeLayer(mapContextFill);
-    if (map.getLayer(brandLogosLayerId(dsId))) map.removeLayer(brandLogosLayerId(dsId));
-    if (map.getLayer(brandHalosLayerId(dsId))) map.removeLayer(brandHalosLayerId(dsId));
-    if (map.getLayer(labels)) map.removeLayer(labels);
-    if (map.getLayer(markers)) map.removeLayer(markers);
-    if (map.getSource(mapContextSid)) map.removeSource(mapContextSid);
-    if (map.getSource(sid)) map.removeSource(sid);
-  } catch {
-    // Source may already be torn down
-  }
-  unregisterLayerSlot(tracks);
-  unregisterLayerSlot(mapContextOutline);
-  unregisterLayerSlot(mapContextFill);
-  unregisterLayerSlot(brandLogosLayerId(dsId));
-  unregisterLayerSlot(brandHalosLayerId(dsId));
-  unregisterLayerSlot(labels);
-  unregisterLayerSlot(markers);
+  removeSlottedLayers(
+    map,
+    [
+      tracksLayerId(dsId),
+      mapContextOutlineLayerId(dsId),
+      mapContextFillLayerId(dsId),
+      brandLogosLayerId(dsId),
+      brandHalosLayerId(dsId),
+      labelsLayerId(dsId),
+      markersLayerId(dsId),
+    ],
+    [tracksSourceId(dsId), mapContextSourceId(dsId), sourceId(dsId)],
+  );
 }
 
 export function DataSourceLayer() {
@@ -452,7 +437,6 @@ export function DataSourceLayer() {
 
   // Clean up layers when activeSource changes
   useEffect(() => {
-    void styleVersion;
     const map = mapRef.current;
     if (!map || !mapReady) return;
 
@@ -461,7 +445,7 @@ export function DataSourceLayer() {
       removeLayers(map, prevSource);
     }
     prevSourceRef.current = activeSource;
-  }, [activeSource, mapReady, styleVersion, mapRef]);
+  }, [activeSource, mapReady, mapRef]);
 
   const geojson = useMemo(
     () =>
@@ -645,9 +629,7 @@ export function DataSourceLayer() {
           );
         }
       } else {
-        if (map.getLayer(tracksLid)) map.removeLayer(tracksLid);
-        if (map.getSource(tracksSid)) map.removeSource(tracksSid);
-        unregisterLayerSlot(tracksLid);
+        removeSlottedLayers(map, [tracksLid], [tracksSid]);
       }
 
       const mapContextData = mapContext?.geojson;
@@ -694,11 +676,7 @@ export function DataSourceLayer() {
           );
         }
       } else {
-        if (map.getLayer(mapContextOutlineLid)) map.removeLayer(mapContextOutlineLid);
-        if (map.getLayer(mapContextFillLid)) map.removeLayer(mapContextFillLid);
-        if (map.getSource(mapContextSid)) map.removeSource(mapContextSid);
-        unregisterLayerSlot(mapContextOutlineLid);
-        unregisterLayerSlot(mapContextFillLid);
+        removeSlottedLayers(map, [mapContextOutlineLid, mapContextFillLid], [mapContextSid]);
       }
 
       if (useIconMarkers && imageId) {

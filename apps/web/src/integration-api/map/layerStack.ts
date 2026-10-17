@@ -54,9 +54,21 @@ export interface StackLayer {
 
 /** The subset of the MapLibre map the ordering logic drives. */
 export interface StackMap {
-  getStyle(): { layers?: StackLayer[] } | undefined;
-  getLayer(id: string): unknown;
+  getLayersOrder(): string[];
+  getLayer(id: string): { type: string } | undefined;
   moveLayer(id: string, beforeId?: string): unknown;
+}
+
+/**
+ * The style's layers in render order. `getStyle()` would serialize every
+ * source and layer, and the stack is consulted on each layer insertion and
+ * after every style mutation.
+ */
+function stackLayers(map: StackMap): StackLayer[] {
+  return map.getLayersOrder().flatMap((id) => {
+    const layer = map.getLayer(id);
+    return layer ? [{ id, type: layer.type }] : [];
+  });
 }
 
 const SYMBOL_SLOT_INDEX = MAP_LAYER_SLOTS.indexOf("basemap-symbols");
@@ -192,9 +204,41 @@ export function addLayerInSlot(
   slot: MapLayerSlot,
   order = 0,
 ): void {
-  const styleLayers = (map.getStyle()?.layers ?? []) as StackLayer[];
   registerLayerSlot(spec.id, slot, order);
-  map.addLayer(spec, resolveBeforeId(styleLayers, layerRegistrations(), slot, order));
+  map.addLayer(spec, resolveBeforeId(stackLayers(map), layerRegistrations(), slot, order));
+}
+
+/**
+ * Remove layers added with `addLayerInSlot`, then the sources they read from,
+ * and release their slots. Layers go first because a source cannot be removed
+ * while a layer still uses it, so pass dependent layers before the layers they
+ * sit on. A source another layer still reads from is kept. Slots are released
+ * even when MapLibre throws: a style that is being replaced can report a layer
+ * as present and then refuse to remove it.
+ */
+export function removeSlottedLayers(
+  map: Pick<
+    maplibregl.Map,
+    "getLayer" | "removeLayer" | "getSource" | "removeSource" | "getLayersOrder"
+  >,
+  layerIds: readonly string[],
+  sourceIds: readonly string[] = [],
+): void {
+  try {
+    for (const id of layerIds) {
+      if (map.getLayer(id)) map.removeLayer(id);
+    }
+    const present = sourceIds.filter((id) => map.getSource(id));
+    if (present.length === 0) return;
+    const inUse = new Set(map.getLayersOrder().map((id) => map.getLayer(id)?.source));
+    for (const id of present) {
+      if (!inUse.has(id)) map.removeSource(id);
+    }
+  } catch {
+    // The style is being torn down; its replacement starts without these.
+  } finally {
+    for (const id of layerIds) unregisterLayerSlot(id);
+  }
 }
 
 /**
@@ -222,7 +266,7 @@ export function addLayerWithinBasemap(
 
 /** Re-assert the whole canonical order. Idempotent and cheap when nothing moved. */
 export function anchorMapLayers(map: StackMap): void {
-  const styleLayers = map.getStyle()?.layers ?? [];
+  const styleLayers = stackLayers(map);
   if (styleLayers.length === 0) return;
   for (const move of planAnchorMoves(styleLayers, layerRegistrations())) {
     if (map.getLayer(move.id)) map.moveLayer(move.id, move.beforeId);

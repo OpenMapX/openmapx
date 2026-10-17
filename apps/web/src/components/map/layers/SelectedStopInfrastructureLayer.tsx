@@ -7,10 +7,14 @@ import type {
   TransitGeoJsonPolygon,
   TransitStopInfrastructure,
 } from "@openmapx/mobility-core/transit";
-import type { Map as MaplibreMap } from "maplibre-gl";
 import { useEffect, useMemo, useRef } from "react";
-import { addLayerInSlot, unregisterLayerSlot } from "@/integration-api/map/layerStack";
 import { useMap } from "@/integration-api/map/MapContext";
+import {
+  EMPTY_FEATURE_COLLECTION,
+  type MapLayerGroup,
+  type SlottedLayer,
+} from "@/integration-api/map/mapLayerGroup";
+import { useMapLayerGroup } from "@/integration-api/map/useMapLayerGroup";
 import { useRenderedMapAttributions } from "@/integration-api/overlay/useRenderedMapAttributions";
 
 const STOP_AREA_SOURCE_ID = "selected-stop-area-source";
@@ -26,14 +30,6 @@ const PARKING_SOURCE_ID = "selected-stop-parking-source";
 const PARKING_LAYER_ID = "selected-stop-parking";
 
 type TransitPolygonGeometry = TransitGeoJsonPolygon | TransitGeoJsonMultiPolygon;
-
-function removeLayerIfPresent(map: MaplibreMap, layerId: string): void {
-  if (map.getLayer(layerId)) map.removeLayer(layerId);
-}
-
-function removeSourceIfPresent(map: MaplibreMap, sourceId: string): void {
-  if (map.getSource(sourceId)) map.removeSource(sourceId);
-}
 
 function geometryBounds(
   geometry: TransitPolygonGeometry | null | undefined,
@@ -100,14 +96,12 @@ function fareZoneFeature(
   infrastructure: TransitStopInfrastructure | undefined,
   focusedFareZoneId: string | null,
 ): GeoJSON.FeatureCollection {
-  if (!infrastructure || !focusedFareZoneId) {
-    return { type: "FeatureCollection", features: [] };
-  }
+  if (!infrastructure || !focusedFareZoneId) return EMPTY_FEATURE_COLLECTION;
 
   const zone = infrastructure.geometry?.fareZones?.find(
     (item) => item.fareZoneId === focusedFareZoneId,
   );
-  if (!zone) return { type: "FeatureCollection", features: [] };
+  if (!zone) return EMPTY_FEATURE_COLLECTION;
 
   return {
     type: "FeatureCollection",
@@ -171,8 +165,149 @@ function parkingFeatures(
   };
 }
 
+function stopInfrastructureGroup(
+  stopAreaData: GeoJSON.FeatureCollection,
+  fareZoneData: GeoJSON.FeatureCollection,
+  platformData: GeoJSON.FeatureCollection,
+  parkingData: GeoJSON.FeatureCollection,
+): MapLayerGroup {
+  const layers: SlottedLayer[] = [];
+
+  if (stopAreaData.features.length > 0) {
+    layers.push(
+      {
+        id: STOP_AREA_FILL_LAYER_ID,
+        type: "fill",
+        source: STOP_AREA_SOURCE_ID,
+        slot: "area-overlays",
+        order: 9,
+        paint: {
+          "fill-color": "#0F9D58",
+          "fill-opacity": 0.12,
+        },
+      },
+      {
+        id: STOP_AREA_OUTLINE_LAYER_ID,
+        type: "line",
+        source: STOP_AREA_SOURCE_ID,
+        slot: "overlay-lines",
+        order: 13,
+        paint: {
+          "line-color": "#0F9D58",
+          "line-width": 2.5,
+          "line-opacity": 0.9,
+        },
+      },
+    );
+  }
+
+  if (fareZoneData.features.length > 0) {
+    layers.push(
+      {
+        id: FARE_ZONE_FILL_LAYER_ID,
+        type: "fill",
+        source: FARE_ZONE_SOURCE_ID,
+        slot: "area-overlays",
+        order: 10,
+        paint: {
+          "fill-color": "#D97706",
+          "fill-opacity": 0.1,
+        },
+      },
+      {
+        id: FARE_ZONE_OUTLINE_LAYER_ID,
+        type: "line",
+        source: FARE_ZONE_SOURCE_ID,
+        slot: "overlay-lines",
+        order: 14,
+        paint: {
+          "line-color": "#D97706",
+          "line-width": 2,
+          "line-opacity": 0.85,
+          "line-dasharray": [2, 1],
+        },
+      },
+    );
+  }
+
+  if (platformData.features.length > 0) {
+    layers.push(
+      {
+        id: PLATFORM_LAYER_ID,
+        type: "circle",
+        source: PLATFORM_SOURCE_ID,
+        slot: "overlay-points",
+        order: 17,
+        paint: {
+          "circle-radius": ["case", ["boolean", ["get", "isFocused"], false], 7, 4.5],
+          "circle-color": ["case", ["boolean", ["get", "isFocused"], false], "#D97706", "#0F9D58"],
+          "circle-stroke-width": ["case", ["boolean", ["get", "isFocused"], false], 3, 2],
+          "circle-stroke-color": "#FFFFFF",
+        },
+      },
+      {
+        id: PLATFORM_LABEL_LAYER_ID,
+        type: "symbol",
+        source: PLATFORM_SOURCE_ID,
+        slot: "overlay-markers",
+        order: 13,
+        minzoom: 15.5,
+        filter: ["!=", ["get", "label"], ""],
+        layout: {
+          "text-field": ["get", "label"],
+          "text-size": 11,
+          "text-offset": [0, 1.1],
+          "text-anchor": "top",
+          "text-font": ["Noto Sans Regular"],
+          // These labels sit below the basemap's own symbols, and MapLibre
+          // places symbols top-down, so a street or POI label would win the
+          // collision and suppress "Gleis 3" entirely — at 15.5+, exactly
+          // where basemap labels are densest. Two platform labels crowding
+          // each other still reads; the platform's number vanishing while
+          // the user is looking for it does not.
+          "text-allow-overlap": true,
+        },
+        paint: {
+          "text-color": "#14532D",
+          "text-halo-color": "#FFFFFF",
+          "text-halo-width": 1.5,
+        },
+      },
+    );
+  }
+
+  if (parkingData.features.length > 0) {
+    // `overlay-markers`, not `overlay-points`: these circles belong above
+    // `PLATFORM_LABEL_LAYER_ID`, and `overlay-points` sits structurally below
+    // `overlay-markers` regardless of the order value within it.
+    layers.push({
+      id: PARKING_LAYER_ID,
+      type: "circle",
+      source: PARKING_SOURCE_ID,
+      slot: "overlay-markers",
+      order: 14,
+      paint: {
+        "circle-radius": ["case", ["boolean", ["get", "isFocused"], false], 8, 5.5],
+        "circle-color": ["case", ["boolean", ["get", "isFocused"], false], "#D97706", "#2563EB"],
+        "circle-stroke-width": ["case", ["boolean", ["get", "isFocused"], false], 3, 2],
+        "circle-stroke-color": "#FFFFFF",
+      },
+    });
+  }
+
+  return {
+    sources: {
+      [STOP_AREA_SOURCE_ID]: { type: "geojson", data: stopAreaData },
+      [FARE_ZONE_SOURCE_ID]: { type: "geojson", data: fareZoneData },
+      [PLATFORM_SOURCE_ID]: { type: "geojson", data: platformData },
+      [PARKING_SOURCE_ID]: { type: "geojson", data: parkingData },
+    },
+    layers,
+  };
+}
+
 export function SelectedStopInfrastructureLayer() {
-  const { mapRef, mapReady, styleVersion, fitBounds, flyTo } = useMap();
+  const { mapRef, mapReady, fitBounds, flyTo } = useMap();
   const selectedPlace = usePlaceStore((state) => state.selectedPlace);
   const transitMapFocus = usePlaceStore((state) => state.transitMapFocus);
   const { data: infrastructure } = usePlaceStopInfrastructure(selectedPlace);
@@ -214,212 +349,21 @@ export function SelectedStopInfrastructureLayer() {
     [infrastructure, focusedParkingId],
   );
 
-  useEffect(() => {
-    void styleVersion;
-    const map = mapRef.current;
-    if (!map || !mapReady) return;
-
-    const cleanup = () => {
-      removeLayerIfPresent(map, PLATFORM_LABEL_LAYER_ID);
-      removeLayerIfPresent(map, PLATFORM_LAYER_ID);
-      removeLayerIfPresent(map, PARKING_LAYER_ID);
-      removeLayerIfPresent(map, FARE_ZONE_OUTLINE_LAYER_ID);
-      removeLayerIfPresent(map, FARE_ZONE_FILL_LAYER_ID);
-      removeLayerIfPresent(map, STOP_AREA_OUTLINE_LAYER_ID);
-      removeLayerIfPresent(map, STOP_AREA_FILL_LAYER_ID);
-      removeSourceIfPresent(map, PLATFORM_SOURCE_ID);
-      removeSourceIfPresent(map, PARKING_SOURCE_ID);
-      removeSourceIfPresent(map, FARE_ZONE_SOURCE_ID);
-      removeSourceIfPresent(map, STOP_AREA_SOURCE_ID);
-      unregisterLayerSlot(PLATFORM_LABEL_LAYER_ID);
-      unregisterLayerSlot(PLATFORM_LAYER_ID);
-      unregisterLayerSlot(PARKING_LAYER_ID);
-      unregisterLayerSlot(FARE_ZONE_OUTLINE_LAYER_ID);
-      unregisterLayerSlot(FARE_ZONE_FILL_LAYER_ID);
-      unregisterLayerSlot(STOP_AREA_OUTLINE_LAYER_ID);
-      unregisterLayerSlot(STOP_AREA_FILL_LAYER_ID);
-    };
-
-    const hasVisuals =
-      stopAreaData.features.length > 0 ||
-      fareZoneData.features.length > 0 ||
-      platformData.features.length > 0 ||
-      parkingData.features.length > 0;
-
-    if (!isStopMode || !infrastructure || !hasVisuals) {
-      cleanup();
-      return;
-    }
-
-    cleanup();
-
-    map.addSource(STOP_AREA_SOURCE_ID, { type: "geojson", data: stopAreaData });
-    if (stopAreaData.features.length > 0) {
-      addLayerInSlot(
-        map,
-        {
-          id: STOP_AREA_FILL_LAYER_ID,
-          type: "fill",
-          source: STOP_AREA_SOURCE_ID,
-          paint: {
-            "fill-color": "#0F9D58",
-            "fill-opacity": 0.12,
-          },
-        },
-        "area-overlays",
-        9,
-      );
-      addLayerInSlot(
-        map,
-        {
-          id: STOP_AREA_OUTLINE_LAYER_ID,
-          type: "line",
-          source: STOP_AREA_SOURCE_ID,
-          paint: {
-            "line-color": "#0F9D58",
-            "line-width": 2.5,
-            "line-opacity": 0.9,
-          },
-        },
-        "overlay-lines",
-        13,
-      );
-    }
-
-    map.addSource(FARE_ZONE_SOURCE_ID, { type: "geojson", data: fareZoneData });
-    if (fareZoneData.features.length > 0) {
-      addLayerInSlot(
-        map,
-        {
-          id: FARE_ZONE_FILL_LAYER_ID,
-          type: "fill",
-          source: FARE_ZONE_SOURCE_ID,
-          paint: {
-            "fill-color": "#D97706",
-            "fill-opacity": 0.1,
-          },
-        },
-        "area-overlays",
-        10,
-      );
-      addLayerInSlot(
-        map,
-        {
-          id: FARE_ZONE_OUTLINE_LAYER_ID,
-          type: "line",
-          source: FARE_ZONE_SOURCE_ID,
-          paint: {
-            "line-color": "#D97706",
-            "line-width": 2,
-            "line-opacity": 0.85,
-            "line-dasharray": [2, 1],
-          },
-        },
-        "overlay-lines",
-        14,
-      );
-    }
-
-    map.addSource(PLATFORM_SOURCE_ID, { type: "geojson", data: platformData });
-    if (platformData.features.length > 0) {
-      addLayerInSlot(
-        map,
-        {
-          id: PLATFORM_LAYER_ID,
-          type: "circle",
-          source: PLATFORM_SOURCE_ID,
-          paint: {
-            "circle-radius": ["case", ["boolean", ["get", "isFocused"], false], 7, 4.5],
-            "circle-color": [
-              "case",
-              ["boolean", ["get", "isFocused"], false],
-              "#D97706",
-              "#0F9D58",
-            ],
-            "circle-stroke-width": ["case", ["boolean", ["get", "isFocused"], false], 3, 2],
-            "circle-stroke-color": "#FFFFFF",
-          },
-        },
-        "overlay-points",
-        17,
-      );
-
-      addLayerInSlot(
-        map,
-        {
-          id: PLATFORM_LABEL_LAYER_ID,
-          type: "symbol",
-          source: PLATFORM_SOURCE_ID,
-          minzoom: 15.5,
-          filter: ["!=", ["get", "label"], ""],
-          layout: {
-            "text-field": ["get", "label"],
-            "text-size": 11,
-            "text-offset": [0, 1.1],
-            "text-anchor": "top",
-            "text-font": ["Noto Sans Regular"],
-            // These labels sit below the basemap's own symbols, and MapLibre
-            // places symbols top-down, so a street or POI label would win the
-            // collision and suppress "Gleis 3" entirely — at 15.5+, exactly
-            // where basemap labels are densest. Two platform labels crowding
-            // each other still reads; the platform's number vanishing while
-            // the user is looking for it does not.
-            "text-allow-overlap": true,
-          },
-          paint: {
-            "text-color": "#14532D",
-            "text-halo-color": "#FFFFFF",
-            "text-halo-width": 1.5,
-          },
-        },
-        "overlay-markers",
-        13,
-      );
-    }
-
-    map.addSource(PARKING_SOURCE_ID, { type: "geojson", data: parkingData });
-    if (parkingData.features.length > 0) {
-      // Not in the original slot survey (a gap, not a deliberate omission).
-      // `overlay-markers`, not `overlay-points`: today's last-added-wins order
-      // puts these circles above `PLATFORM_LABEL_LAYER_ID`, and `overlay-points`
-      // sits structurally below `overlay-markers` regardless of the order value
-      // within it — so matching that band, ordered just above the platform
-      // labels, is what actually preserves the current depth.
-      addLayerInSlot(
-        map,
-        {
-          id: PARKING_LAYER_ID,
-          type: "circle",
-          source: PARKING_SOURCE_ID,
-          paint: {
-            "circle-radius": ["case", ["boolean", ["get", "isFocused"], false], 8, 5.5],
-            "circle-color": [
-              "case",
-              ["boolean", ["get", "isFocused"], false],
-              "#D97706",
-              "#2563EB",
-            ],
-            "circle-stroke-width": ["case", ["boolean", ["get", "isFocused"], false], 3, 2],
-            "circle-stroke-color": "#FFFFFF",
-          },
-        },
-        "overlay-markers",
-        14,
-      );
-    }
-
-    return cleanup;
-  }, [
-    mapRef,
-    mapReady,
-    styleVersion,
-    isStopMode,
-    infrastructure,
-    stopAreaData,
-    fareZoneData,
-    platformData,
-    parkingData,
-  ]);
+  const hasVisuals =
+    stopAreaData.features.length > 0 ||
+    fareZoneData.features.length > 0 ||
+    platformData.features.length > 0 ||
+    parkingData.features.length > 0;
+  const shown = isStopMode && Boolean(infrastructure) && hasVisuals;
+  useMapLayerGroup(
+    useMemo(
+      () =>
+        shown
+          ? stopInfrastructureGroup(stopAreaData, fareZoneData, platformData, parkingData)
+          : null,
+      [shown, stopAreaData, fareZoneData, platformData, parkingData],
+    ),
+  );
 
   useEffect(() => {
     const map = mapRef.current;

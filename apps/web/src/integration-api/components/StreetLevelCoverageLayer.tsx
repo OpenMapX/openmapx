@@ -14,7 +14,7 @@ import type {
   MapMouseEvent,
 } from "maplibre-gl";
 import { useEffect, useRef } from "react";
-import { addLayerInSlot, unregisterLayerSlot } from "@/integration-api/map/layerStack";
+import { addLayerInSlot, removeSlottedLayers } from "@/integration-api/map/layerStack";
 import { useMap } from "@/integration-api/map/MapContext";
 import { getMapClickOwner } from "@/integration-api/map/mapClickOwnership";
 import { subscribeStyleLoaded } from "@/integration-api/map/styleLoadedSync";
@@ -71,6 +71,15 @@ function panoFilter(coverage: MvtCoverage, wantPano: boolean): FilterSpecificati
   ) as FilterSpecification;
 }
 
+/** Remove one provider's coverage layers and its tile source, by source id. */
+function removeCoverage(map: MapLibreMap, sourceId: string): void {
+  removeSlottedLayers(
+    map,
+    ["grid", "sequences", "pictures", "pictures-pano"].map((suffix) => `${sourceId}-${suffix}`),
+    [sourceId],
+  );
+}
+
 export function StreetLevelCoverageLayer() {
   const { mapRef, mapReady, styleVersion } = useMap();
   const currentMap = mapRef.current;
@@ -109,14 +118,7 @@ export function StreetLevelCoverageLayer() {
     () => () => {
       if (!currentMap) return;
       const retained = snapshots.current.get(currentMap);
-      for (const sourceId of retained?.keys() ?? []) {
-        for (const suffix of ["grid", "sequences", "pictures", "pictures-pano"]) {
-          const id = `${sourceId}-${suffix}`;
-          if (currentMap.getLayer(id)) currentMap.removeLayer(id);
-          unregisterLayerSlot(id);
-        }
-        if (currentMap.getSource(sourceId)) currentMap.removeSource(sourceId);
-      }
+      for (const sourceId of retained?.keys() ?? []) removeCoverage(currentMap, sourceId);
       snapshots.current.delete(currentMap);
     },
     [currentMap],
@@ -134,12 +136,7 @@ export function StreetLevelCoverageLayer() {
     }
     const sourceSnapshots = retained;
     const removeProvider = (sourceId: string) => {
-      for (const suffix of ["grid", "sequences", "pictures", "pictures-pano"]) {
-        const id = `${sourceId}-${suffix}`;
-        if (map.getLayer(id)) map.removeLayer(id);
-        unregisterLayerSlot(id);
-      }
-      if (map.getSource(sourceId)) map.removeSource(sourceId);
+      removeCoverage(map, sourceId);
       sourceSnapshots.delete(sourceId);
     };
     const syncLayers = () => {
@@ -147,20 +144,7 @@ export function StreetLevelCoverageLayer() {
       for (const id of sourceSnapshots.keys())
         if (!layerVisible || !selected.has(id)) removeProvider(id);
       if (!layerVisible) {
-        for (const provider of providers) {
-          try {
-            for (const layerId of Object.values(coverageLayerIds(provider.id))) {
-              if (map.getLayer(layerId)) map.removeLayer(layerId);
-            }
-            const sourceId = coverageSourceId(provider.id);
-            if (map.getSource(sourceId)) map.removeSource(sourceId);
-          } catch {
-            // Tiles may still be in-flight when the source is torn down
-          }
-          for (const layerId of Object.values(coverageLayerIds(provider.id))) {
-            unregisterLayerSlot(layerId);
-          }
-        }
+        for (const provider of providers) removeCoverage(map, coverageSourceId(provider.id));
         return;
       }
 
@@ -307,10 +291,10 @@ export function StreetLevelCoverageLayer() {
     if (!map || !mapReady || !layerVisible) return;
 
     // Bind unconditionally rather than filtering by `map.getLayer(id)` here:
-    // layer creation is deferred until idle whenever the style is still
-    // loading, so an existence check at effect time would attach nothing and
-    // leave the dots permanently unclickable. MapLibre resolves the layer list
-    // at event time and ignores ids that don't exist yet.
+    // layer creation waits for the style to be parsed, so an existence check at
+    // effect time could attach nothing and leave the dots permanently
+    // unclickable. MapLibre resolves the layer list at event time and ignores
+    // ids that don't exist yet.
     const interactive = pictureLayerIds(providers);
     if (interactive.length === 0) return;
 

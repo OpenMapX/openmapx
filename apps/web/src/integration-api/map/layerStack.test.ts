@@ -136,8 +136,8 @@ function repoRootFrom(start: string): string {
 
 /**
  * Resolve a scanned order argument to a number, or `undefined` if the scan
- * can't evaluate it. Two shapes are understood: an integer literal (`-16`,
- * `0`), and a bare identifier that names a module-level `const NAME = <int>;`
+ * can't evaluate it. Two shapes are understood: a number literal (`-16`,
+ * `0`, `0.5`), and a bare identifier that names a module-level `const NAME = <int>;`
  * (optionally `export`ed, since a guard test may need to import the constant
  * too — e.g. `TZ_FILL_ORDER`) in the same file (e.g. `SUBSOLAR_ORDER`).
  * Anything else — including a computed expression like `BAND_ORDER_BASE +
@@ -146,7 +146,7 @@ function repoRootFrom(start: string): string {
  * checking.
  */
 function resolveOrder(raw: string, source: string): number | undefined {
-  if (/^-?\d+$/.test(raw)) return Number(raw);
+  if (/^-?\d+(?:\.\d+)?$/.test(raw)) return Number(raw);
   if (!/^[A-Za-z_$][A-Za-z0-9_$]*$/.test(raw)) return undefined;
   const constMatch = source.match(
     new RegExp(`^(?:export\\s+)?const\\s+${raw}\\s*=\\s*(-?\\d+)\\s*;`, "m"),
@@ -160,21 +160,28 @@ function resolveOrder(raw: string, source: string): number | undefined {
  * snapshot of the registry ever holds the whole stack — the one thing a
  * duplicate check has to see all of.
  *
- * `unresolved` lists the `addLayerInSlot`-shaped call sites whose order
- * argument `resolveOrder` couldn't evaluate, so a change to the scan doesn't
- * silently drop coverage — a future reader can see exactly what it doesn't
- * see.
+ * Two declaration shapes are read: an `addLayerInSlot(map, spec, "slot", order)`
+ * call, and a `useMapLayerGroup` descriptor layer's `slot: "slot", order: n`
+ * properties, where an omitted order is the primitive's default of 0.
+ *
+ * `unresolved` lists the declarations whose order `resolveOrder` couldn't
+ * evaluate, so a change to the scan doesn't silently drop coverage — a future
+ * reader can see exactly what it doesn't see.
  */
 function declaredSlots(): {
   found: Array<{ id: string; slot: LayerRegistration["slot"]; order: number }>;
   unresolved: string[];
 } {
   const repoRoot = repoRootFrom(process.cwd());
-  // The order argument can be an integer literal (optionally negative) or an
-  // arbitrary expression; capture whatever sits between the slot string and
-  // the call's closing paren and let `resolveOrder` decide what it can read.
-  const pattern = new RegExp(
-    `"(${MAP_LAYER_SLOTS.join("|")})"\\s*,\\s*([^,()]+?)\\s*,?\\s*\\)`,
+  // The order can be an integer literal (optionally negative) or an arbitrary
+  // expression; capture whatever follows the slot and let `resolveOrder`
+  // decide what it can read.
+  const slots = MAP_LAYER_SLOTS.join("|");
+  const callPattern = new RegExp(`"(${slots})"\\s*,\\s*([^,()]+?)\\s*,?\\s*\\)`, "g");
+  // A descriptor's order may follow on the next line, after a comment, or be
+  // the `order` shorthand for a variable (left unresolved).
+  const descriptorPattern = new RegExp(
+    `\\bslot:\\s*"(${slots})"(?:\\s+as\\s+const)?\\s*(?:,(?:\\s*//[^\\n]*)*\\s*order\\b(?::\\s*([^,}\\n]+?))?\\s*[,}\\n])?`,
     "g",
   );
   const found: Array<{ id: string; slot: LayerRegistration["slot"]; order: number }> = [];
@@ -191,15 +198,23 @@ function declaredSlots(): {
       if (!/\.tsx?$/.test(entry.name) || /\.test\.tsx?$/.test(entry.name)) continue;
       if (entry.name === "layerStack.ts") continue;
       const source = readFileSync(path, "utf8");
-      for (const match of source.matchAll(pattern)) {
-        const line = source.slice(0, match.index).split("\n").length;
+      const declarations = [
+        ...[...source.matchAll(callPattern)].map((m) => ({ at: m.index, slot: m[1], raw: m[2] })),
+        ...[...source.matchAll(descriptorPattern)].map((m) => ({
+          at: m.index,
+          slot: m[1],
+          raw: m[2] ?? (/\border\b/.test(m[0]) ? "order" : "0"),
+        })),
+      ];
+      for (const { at, slot, raw } of declarations) {
+        const line = source.slice(0, at).split("\n").length;
         const id = `${path.slice(repoRoot.length)}:${line}`;
-        const order = resolveOrder(match[2], source);
+        const order = resolveOrder(raw, source);
         if (order === undefined) {
-          unresolved.push(`${id} [${match[1]}] order expression ${JSON.stringify(match[2])}`);
+          unresolved.push(`${id} [${slot}] order expression ${JSON.stringify(raw)}`);
           continue;
         }
-        found.push({ id, slot: match[1] as LayerRegistration["slot"], order });
+        found.push({ id, slot: slot as LayerRegistration["slot"], order });
       }
     }
   };

@@ -4,7 +4,11 @@ import { greatCircleArc, useDirectionsStore, useFlightStore } from "@openmapx/co
 import type * as maplibregl from "maplibre-gl";
 import { useEffect, useMemo } from "react";
 import { useMap } from "@/integration-api/map/MapContext";
-import type { MapLayerGroup, SlottedLayer } from "@/integration-api/map/mapLayerGroup";
+import {
+  EMPTY_FEATURE_COLLECTION,
+  type MapLayerGroup,
+  type SlottedLayer,
+} from "@/integration-api/map/mapLayerGroup";
 import { useMapLayerGroup } from "@/integration-api/map/useMapLayerGroup";
 import { PRIMARY_BLUE_HEX } from "@/integration-api/runtime/theme";
 
@@ -12,8 +16,6 @@ const SOURCE_ID = "flight-arc-source";
 const LAYER_LINE = "flight-arc-line";
 const LAYER_POINTS = "flight-arc-points";
 const LAYER_LABELS = "flight-arc-labels";
-
-const EMPTY = { type: "FeatureCollection" as const, features: [] };
 
 function withSlot(
   layer: maplibregl.AddLayerObject,
@@ -35,7 +37,7 @@ export function FlightArcLayer() {
   const to = useFlightStore((s) => s.to);
 
   const arcFeatures = useMemo(() => {
-    if (mode !== "flying" || !from || !to) return EMPTY;
+    if (mode !== "flying" || !from || !to) return EMPTY_FEATURE_COLLECTION;
 
     const arc = greatCircleArc(from.coordinates, to.coordinates, 96);
     return {

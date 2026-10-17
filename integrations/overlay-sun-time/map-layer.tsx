@@ -7,12 +7,16 @@ import {
   readCapturedContributors,
   withFeatureContributors,
 } from "@openmapx/mobility-core/contributors";
+import type * as maplibregl from "maplibre-gl";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { addLayerInSlot, unregisterLayerSlot } from "@/integration-api/map/layerStack";
-import type { GeoJsonSourceDataEntry } from "@/integration-api/map/layerStyleUtils";
 import { useMap } from "@/integration-api/map/MapContext";
-import { subscribeStyleLoaded } from "@/integration-api/map/styleLoadedSync";
+import {
+  EMPTY_FEATURE_COLLECTION,
+  type MapLayerGroup,
+  type SlottedLayer,
+} from "@/integration-api/map/mapLayerGroup";
 import { useGeoJsonSourceDataBridge } from "@/integration-api/map/useGeoJsonSourceDataBridge";
+import { useMapLayerGroup } from "@/integration-api/map/useMapLayerGroup";
 import { useRenderedMapAttributions } from "@/integration-api/overlay/useRenderedMapAttributions";
 import { useEnv } from "@/integration-api/runtime/EnvProvider";
 import { useSunTimeStore } from "./store";
@@ -91,6 +95,111 @@ interface DecoratedTimeZones {
   features: DecoratedTimeZoneFeature[];
 }
 
+function loadSunIcon(map: maplibregl.Map) {
+  const image = new Image(56, 56);
+  image.onload = () => {
+    if (!map.hasImage(SUBSOLAR_IMAGE_ID)) {
+      map.addImage(SUBSOLAR_IMAGE_ID, image, { pixelRatio: 2 });
+    }
+  };
+  image.src = SUN_ICON;
+}
+
+function terminatorGroup(
+  bands: GeoJSON.FeatureCollection,
+  subsolar: GeoJSON.FeatureCollection,
+): MapLayerGroup {
+  return {
+    sources: {
+      [SOURCE_ID]: { type: "geojson", data: bands },
+      [SUBSOLAR_SOURCE_ID]: { type: "geojson", data: subsolar },
+    },
+    images: { [SUBSOLAR_IMAGE_ID]: loadSunIcon },
+    layers: [
+      ...BAND_LAYER_IDS.map(
+        (id, band): SlottedLayer => ({
+          id,
+          type: "fill",
+          source: SOURCE_ID,
+          filter: ["==", ["get", "band"], band],
+          slot: "area-overlays",
+          order: BAND_ORDER_BASE + band,
+          paint: {
+            "fill-color": BAND_COLOR,
+            "fill-opacity": BAND_OPACITY,
+            "fill-antialias": false,
+          },
+        }),
+      ),
+      {
+        id: SUBSOLAR_LAYER_ID,
+        type: "symbol",
+        source: SUBSOLAR_SOURCE_ID,
+        maxzoom: SUBSOLAR_MAX_ZOOM,
+        slot: "overlay-markers",
+        order: SUBSOLAR_ORDER,
+        layout: {
+          "icon-image": SUBSOLAR_IMAGE_ID,
+          "icon-allow-overlap": true,
+          "icon-ignore-placement": true,
+        },
+      },
+    ],
+  };
+}
+
+function timeZoneGroup(zones: GeoJSON.FeatureCollection): MapLayerGroup {
+  return {
+    sources: { [TZ_SOURCE_ID]: { type: "geojson", data: zones } },
+    layers: [
+      {
+        id: TZ_FILL_LAYER_ID,
+        type: "fill",
+        source: TZ_SOURCE_ID,
+        maxzoom: TZ_MAX_ZOOM,
+        slot: "area-overlays",
+        order: TZ_FILL_ORDER,
+        paint: {
+          "fill-color": ["get", "color"],
+          "fill-opacity": 0.18,
+          "fill-antialias": false,
+        },
+      },
+      {
+        id: TZ_LINE_LAYER_ID,
+        type: "line",
+        source: TZ_SOURCE_ID,
+        maxzoom: TZ_MAX_ZOOM,
+        slot: "overlay-lines",
+        order: TZ_LINE_ORDER,
+        paint: { "line-color": ["get", "color"], "line-width": 1, "line-opacity": 0.4 },
+      },
+      // MapLibre places point symbols for polygon features at a computed
+      // interior point, so the label layer needs no centroid pass and no
+      // turf dependency.
+      {
+        id: TZ_LABEL_LAYER_ID,
+        type: "symbol",
+        source: TZ_SOURCE_ID,
+        minzoom: 2,
+        maxzoom: TZ_MAX_ZOOM,
+        slot: "overlay-markers",
+        order: TZ_LABEL_ORDER,
+        layout: {
+          "text-field": ["get", "offsetLabel"],
+          "text-font": ["Open Sans Bold", "Arial Unicode MS Bold"],
+          "text-size": 11,
+        },
+        paint: {
+          "text-color": "#ffffff",
+          "text-halo-color": "rgba(0,0,0,0.5)",
+          "text-halo-width": 1,
+        },
+      },
+    ],
+  };
+}
+
 export default function SunTimeLayer() {
   const { mapRef, mapReady, styleVersion } = useMap();
   const layerVisible = useSunTimeStore((s) => s.layerVisible);
@@ -115,11 +224,9 @@ export default function SunTimeLayer() {
 
   const active = layerVisible && showTerminator;
 
-  // `visible` also has to cover tzActive: with only the terminator's `active`
-  // here, toggling the time zone layer on while the terminator is off would
-  // leave the bridge believing nothing is visible, and `publish()` below
-  // would silently drop the decorated data instead of applying it.
-  const { publish, clear, beginRequest } = useGeoJsonSourceDataBridge({
+  // Only the boundary request goes through the bridge: the layer groups below
+  // carry the map data themselves, so nothing is ever published into it.
+  const { beginRequest } = useGeoJsonSourceDataBridge({
     mapRef,
     mapReady,
     styleVersion,
@@ -219,7 +326,7 @@ export default function SunTimeLayer() {
   // `instant` has to stay a real dependency below (it's used to build `at`),
   // but the cache keyed on `zoneOffsetSignature` returns the previous result
   // object — same identity — whenever a tick didn't change any zone's offset,
-  // so `publish()` sees the same `data` reference and skips the source update.
+  // so the layer group sees the same `data` reference and skips the source update.
   const decoratedZonesCache = useRef<{
     zones: TimeZoneFeatureCollection | null;
     signature: string;
@@ -261,237 +368,15 @@ export default function SunTimeLayer() {
     return result;
   }, [zones, instant, zoneOffsetSignature]);
 
-  useEffect(() => {
-    void styleVersion;
-    const map = mapRef.current;
-    if (!map || !mapReady) return;
-
-    let disposed = false;
-
-    const teardownTerminator = () => {
-      for (const id of BAND_LAYER_IDS) {
-        try {
-          if (map.getLayer(id)) map.removeLayer(id);
-        } catch {
-          // The style may already have dropped it during a base-map swap.
-        }
-        unregisterLayerSlot(id);
-      }
-      try {
-        if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
-      } catch {
-        // ignore
-      }
-      try {
-        if (map.getLayer(SUBSOLAR_LAYER_ID)) map.removeLayer(SUBSOLAR_LAYER_ID);
-        if (map.getSource(SUBSOLAR_SOURCE_ID)) map.removeSource(SUBSOLAR_SOURCE_ID);
-      } catch {
-        // ignore
-      }
-      unregisterLayerSlot(SUBSOLAR_LAYER_ID);
-    };
-
-    const teardownTimeZones = () => {
-      for (const id of [TZ_FILL_LAYER_ID, TZ_LINE_LAYER_ID, TZ_LABEL_LAYER_ID]) {
-        try {
-          if (map.getLayer(id)) map.removeLayer(id);
-        } catch {
-          // The style may already have dropped it during a base-map swap.
-        }
-        unregisterLayerSlot(id);
-      }
-      try {
-        if (map.getSource(TZ_SOURCE_ID)) map.removeSource(TZ_SOURCE_ID);
-      } catch {
-        // ignore
-      }
-    };
-
-    const syncLayers = () => {
-      if (disposed) return;
-      if (!active && !tzActive) {
-        teardownTerminator();
-        teardownTimeZones();
-        return;
-      }
-
-      if (active) {
-        if (!map.getSource(SOURCE_ID)) {
-          map.addSource(SOURCE_ID, {
-            type: "geojson",
-            data: { type: "FeatureCollection", features: [] },
-          });
-        }
-
-        BAND_LAYER_IDS.forEach((id, band) => {
-          if (map.getLayer(id)) return;
-          addLayerInSlot(
-            map,
-            {
-              id,
-              type: "fill",
-              source: SOURCE_ID,
-              filter: ["==", ["get", "band"], band],
-              paint: {
-                "fill-color": BAND_COLOR,
-                "fill-opacity": BAND_OPACITY,
-                "fill-antialias": false,
-              },
-            },
-            "area-overlays",
-            BAND_ORDER_BASE + band,
-          );
-        });
-
-        if (!map.hasImage(SUBSOLAR_IMAGE_ID)) {
-          const image = new Image(56, 56);
-          image.onload = () => {
-            if (!map.hasImage(SUBSOLAR_IMAGE_ID)) {
-              map.addImage(SUBSOLAR_IMAGE_ID, image, { pixelRatio: 2 });
-            }
-          };
-          image.src = SUN_ICON;
-        }
-
-        if (!map.getSource(SUBSOLAR_SOURCE_ID)) {
-          map.addSource(SUBSOLAR_SOURCE_ID, {
-            type: "geojson",
-            data: { type: "FeatureCollection", features: [] },
-          });
-        }
-
-        if (!map.getLayer(SUBSOLAR_LAYER_ID)) {
-          addLayerInSlot(
-            map,
-            {
-              id: SUBSOLAR_LAYER_ID,
-              type: "symbol",
-              source: SUBSOLAR_SOURCE_ID,
-              maxzoom: SUBSOLAR_MAX_ZOOM,
-              layout: {
-                "icon-image": SUBSOLAR_IMAGE_ID,
-                "icon-allow-overlap": true,
-                "icon-ignore-placement": true,
-              },
-            },
-            "overlay-markers",
-            SUBSOLAR_ORDER,
-          );
-        }
-      } else {
-        teardownTerminator();
-      }
-
-      if (tzActive) {
-        if (!map.getSource(TZ_SOURCE_ID)) {
-          map.addSource(TZ_SOURCE_ID, {
-            type: "geojson",
-            data: { type: "FeatureCollection", features: [] },
-          });
-        }
-
-        if (!map.getLayer(TZ_FILL_LAYER_ID)) {
-          addLayerInSlot(
-            map,
-            {
-              id: TZ_FILL_LAYER_ID,
-              type: "fill",
-              source: TZ_SOURCE_ID,
-              maxzoom: TZ_MAX_ZOOM,
-              paint: {
-                "fill-color": ["get", "color"],
-                "fill-opacity": 0.18,
-                "fill-antialias": false,
-              },
-            },
-            "area-overlays",
-            TZ_FILL_ORDER,
-          );
-        }
-
-        if (!map.getLayer(TZ_LINE_LAYER_ID)) {
-          addLayerInSlot(
-            map,
-            {
-              id: TZ_LINE_LAYER_ID,
-              type: "line",
-              source: TZ_SOURCE_ID,
-              maxzoom: TZ_MAX_ZOOM,
-              paint: { "line-color": ["get", "color"], "line-width": 1, "line-opacity": 0.4 },
-            },
-            "overlay-lines",
-            TZ_LINE_ORDER,
-          );
-        }
-
-        if (!map.getLayer(TZ_LABEL_LAYER_ID)) {
-          // MapLibre places point symbols for polygon features at a computed
-          // interior point, so the label layer needs no centroid pass and no
-          // turf dependency.
-          addLayerInSlot(
-            map,
-            {
-              id: TZ_LABEL_LAYER_ID,
-              type: "symbol",
-              source: TZ_SOURCE_ID,
-              minzoom: 2,
-              maxzoom: TZ_MAX_ZOOM,
-              layout: {
-                "text-field": ["get", "offsetLabel"],
-                "text-font": ["Open Sans Bold", "Arial Unicode MS Bold"],
-                "text-size": 11,
-              },
-              paint: {
-                "text-color": "#ffffff",
-                "text-halo-color": "rgba(0,0,0,0.5)",
-                "text-halo-width": 1,
-              },
-            },
-            "overlay-markers",
-            TZ_LABEL_ORDER,
-          );
-        }
-      } else {
-        teardownTimeZones();
-      }
-    };
-
-    const unsubscribeStyle = subscribeStyleLoaded(map, syncLayers);
-
-    // Runs on every dep change, not just true unmount: disposing here cancels
-    // any pending style callback from this run, and tearing down unconditionally
-    // (not just when `active`/`tzActive` flip off) is what stops the band
-    // layers, the time zone layers, their sources, and their layerStack slots
-    // from being stranded if the component unmounts — e.g. the overlay
-    // integration is disabled at runtime — while still active. Every call is
-    // idempotent when there is nothing to do.
-    return () => {
-      disposed = true;
-      unsubscribeStyle();
-      teardownTerminator();
-      teardownTimeZones();
-    };
-  }, [mapRef, mapReady, styleVersion, active, tzActive]);
-
-  useEffect(() => {
-    // The bridge is all-or-nothing: apply() skips every setData call if any
-    // one retained source is missing, and publish() never drops a source from
-    // the retained set on its own. Without these, turning one sub-toggle off
-    // would leave its source retained-but-gone, and the *other* sub-layer's
-    // otherwise-still-valid entry would stop applying right along with it.
-    if (!active) clear([SOURCE_ID, SUBSOLAR_SOURCE_ID]);
-    if (!tzActive || !decoratedZones) clear([TZ_SOURCE_ID]);
-
-    const entries: GeoJsonSourceDataEntry[] = [];
-    if (active) {
-      entries.push({ sourceId: SOURCE_ID, data: bands });
-      entries.push({ sourceId: SUBSOLAR_SOURCE_ID, data: subsolar });
-    }
-    if (tzActive && decoratedZones) {
-      entries.push({ sourceId: TZ_SOURCE_ID, data: decoratedZones });
-    }
-    if (entries.length > 0) publish(entries);
-  }, [active, tzActive, bands, subsolar, decoratedZones, publish, clear]);
+  useMapLayerGroup(
+    useMemo(() => (active ? terminatorGroup(bands, subsolar) : null), [active, bands, subsolar]),
+  );
+  useMapLayerGroup(
+    useMemo(
+      () => (tzActive ? timeZoneGroup(decoratedZones ?? EMPTY_FEATURE_COLLECTION) : null),
+      [tzActive, decoratedZones],
+    ),
+  );
 
   return null;
 }

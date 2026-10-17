@@ -23,6 +23,7 @@ import { SavePlaceDialog } from "@/components/panels/saved/SavePlaceDialog";
 import { INTERACTIVE_LAYER_IDS } from "@/integration-api/map/interactiveLayers";
 import { useMap } from "@/integration-api/map/MapContext";
 import { getMapClickOwner } from "@/integration-api/map/mapClickOwnership";
+import { subscribeStyleLoaded } from "@/integration-api/map/styleLoadedSync";
 import { useMapObstructionInsets } from "@/lib/mapObstructions";
 import { findStylePoiAtPoint, getStylePoiLayerIds, type StylePoiTarget } from "./mapStylePoiTarget";
 import { StylePoiHoverCard } from "./StylePoiHoverCard";
@@ -141,7 +142,6 @@ export function MapStylePoiClickHandler() {
     let registeredIds: string[] = [];
 
     const syncLayers = () => {
-      // getStyle() returns null/undefined while style is still loading
       const ids = getStylePoiLayerIds(map);
       if (ids.length === 0 && registeredIds.length === 0) return;
 
@@ -154,16 +154,11 @@ export function MapStylePoiClickHandler() {
       poiLayerIdsRef.current = ids;
     };
 
-    // "load" fires when the style is fully ready; "styledata" covers subsequent
-    // layer changes (e.g. satellite toggle). We try immediately as well in case
-    // the style was already loaded before this effect ran.
-    syncLayers();
-    map.on("load", syncLayers);
-    map.on("styledata", syncLayers);
+    // Basemap layers change with the stylesheet, which may still be parsing.
+    const unsubscribeStyle = subscribeStyleLoaded(map, syncLayers);
 
     return () => {
-      map.off("load", syncLayers);
-      map.off("styledata", syncLayers);
+      unsubscribeStyle();
       for (const id of registeredIds) INTERACTIVE_LAYER_IDS.delete(id);
       poiLayerIdsRef.current = [];
     };

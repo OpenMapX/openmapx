@@ -19,6 +19,7 @@ import { addLayerInSlot } from "@/integration-api/map/layerStack";
 import { useMap } from "@/integration-api/map/MapContext";
 import { getMapClickOwner } from "@/integration-api/map/mapClickOwnership";
 import { useGeoJsonSourceDataBridge } from "@/integration-api/map/useGeoJsonSourceDataBridge";
+import { useSlottedLayersCleanup } from "@/integration-api/map/useSlottedLayersCleanup";
 import { useRenderedMapAttributions } from "@/integration-api/overlay/useRenderedMapAttributions";
 import { BRAND_HEX } from "@/integration-api/runtime/theme";
 import { createMarkerSvg } from "@/lib/markerSvg";
@@ -217,12 +218,8 @@ export function RouteSearchResultsLayer({
     };
   }, [mapRef, results, onSelect]);
 
-  // Clear pins when the layer unmounts (search closed).
-  useEffect(() => {
-    return () => {
-      publishGeoJson([{ sourceId: SOURCE, data: { type: "FeatureCollection", features: [] } }]);
-    };
-  }, [publishGeoJson]);
+  // Closing the search unmounts the layer; take its pins off the map.
+  useSlottedLayersCleanup(mapRef, () => ({ layerIds: [LABEL_LAYER, LAYER], sourceIds: [SOURCE] }));
 
   return null;
 }
