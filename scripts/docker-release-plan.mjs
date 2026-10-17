@@ -101,6 +101,7 @@ export function targetInputs(target, readDockerfile) {
     posix.join(target.context, ".dockerignore"),
     `${target.dockerfile}.dockerignore`,
     ...globalInputs,
+    ...(target.app === "docs" ? [".github/workflows/docs.yml", ".trivyignore.yaml", ".nvmrc"] : []),
   ];
 }
 
@@ -373,7 +374,8 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     const root = process.cwd();
     const changedPaths = execFileSync(
       "git",
-      ["diff", "--name-only", "-z", `${base}...${head}`, "--"],
+      // Renames must retain the removed input as well as the destination.
+      ["diff", "--no-renames", "--name-only", "-z", `${base}...${head}`, "--"],
       { cwd: root, encoding: "utf8", maxBuffer: 32 * 1024 * 1024 },
     )
       .split("\0")

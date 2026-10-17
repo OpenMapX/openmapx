@@ -12,17 +12,22 @@ of the root's supply-chain hardening. Run everything from this directory:
 cd docs
 pnpm install
 pnpm start          # dev server with live reload
+pnpm typecheck      # check TypeScript before building
 pnpm build          # static output in ./build
 pnpm serve          # preview the production build
 ```
 
 ## Deploy
 
-The dedicated `.github/workflows/docs.yml` workflow builds and type-checks docs
-on docs changes. Trusted main builds publish an untagged candidate, run the
-vulnerability audit and mandatory scan gate, then publish a run-qualified tag
+Pull requests validate docs once through required CI's `build Docker (docs)` job,
+without registry credentials or publication. The shared `docs/Dockerfile` runs
+TypeScript checks before building the site.
+
+The independent `.github/workflows/docs.yml` publisher uses the same Dockerfile
+for trusted main builds. It publishes an untagged candidate, runs the
+vulnerability audit and mandatory scan gate, then publishes a run-qualified tag
 (`<commit>-<run-id>-<attempt>`), a SHA convenience alias, and verified `docs:latest`.
-Pull requests build without publishing. Weekly scheduled builds refresh OS packages
+Weekly scheduled builds refresh OS packages
 without layer caching; the repository variable `OPENMAPX_FORCE_DOCS_REBUILD=true`
 also forces an uncached build on the next docs run. Manual runs are restricted to main.
 

@@ -106,6 +106,26 @@ describe("Dockerfile build input coverage", () => {
   });
 });
 
+describe("docs PR validation input coverage", () => {
+  it.each([
+    "docs/docs/developer/ci-performance.md",
+    "docs/Dockerfile",
+    "docs/.dockerignore",
+    "docs/pnpm-lock.yaml",
+    "docs/patches/image-size+2.0.2.patch",
+    ".github/workflows/docs.yml",
+    ".trivyignore.yaml",
+    ".nvmrc",
+  ])("retains a single docs target for edits or deletions of %s", (path) => {
+    const selected = selectChangedTargets({
+      changedPaths: [path],
+      readDockerfile: (file: string) =>
+        readFileSync(resolve(import.meta.dirname, "..", file), "utf8"),
+    });
+    expect(selected.filter((target: string) => target === "docs")).toEqual(["docs"]);
+  });
+});
+
 describe("selective release planning", () => {
   it("bootstraps all seven builds without a previous release or legacy build metadata", () => {
     expect(
