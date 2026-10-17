@@ -325,7 +325,7 @@ describe("SunTimeLayer lifecycle teardown", () => {
     mapRefBox.current = fake.map;
     render(<SunTimeLayer />);
 
-    // Parsing is pending, so installation waits for a style or render event.
+    // Parsing is pending, so installation waits for the stylesheet to load.
     expect(fake.state.layers.has("sun-time-band-0")).toBe(false);
 
     act(() => {
@@ -336,6 +336,8 @@ describe("SunTimeLayer lifecycle teardown", () => {
     fake.state.styleLoaded = true;
     act(() => {
       fake.emit("idle");
+      fake.emit("styledata");
+      fake.emit("style.load");
     });
 
     expect(fake.state.layers.has("sun-time-band-0")).toBe(false);

@@ -3,11 +3,8 @@
 import type { ImportedGeometry } from "@openmapx/core";
 import { geoJsonBBox, useImportedGeometryStore } from "@openmapx/core";
 import { useEffect, useRef } from "react";
-import { addLayerInSlot, unregisterLayerSlot } from "@/integration-api/map/layerStack";
-import {
-  createGeoJsonSourcePublisher,
-  removeLayerAndSource,
-} from "@/integration-api/map/layerStyleUtils";
+import { addLayerInSlot, removeSlottedLayers } from "@/integration-api/map/layerStack";
+import { createGeoJsonSourcePublisher } from "@/integration-api/map/layerStyleUtils";
 import { useMap } from "@/integration-api/map/MapContext";
 import { subscribeStyleLoaded } from "@/integration-api/map/styleLoadedSync";
 import { useRenderedMapAttributions } from "@/integration-api/overlay/useRenderedMapAttributions";
@@ -16,6 +13,7 @@ const SOURCE = "imported-geometry-source";
 const FILL = "imported-geometry-fill";
 const LINE = "imported-geometry-line";
 const POINT = "imported-geometry-point";
+const LAYERS = [POINT, LINE, FILL];
 // Purple — distinct from the route (blue) and admin-boundary (red) overlays.
 const COLOR = "#7c3aed";
 
@@ -40,10 +38,7 @@ export function ImportedGeometryLayer() {
     if (!map || !mapReady) return;
 
     if (!imported) {
-      removeLayerAndSource(map, [POINT, LINE, FILL], SOURCE);
-      unregisterLayerSlot(POINT);
-      unregisterLayerSlot(LINE);
-      unregisterLayerSlot(FILL);
+      removeSlottedLayers(map, LAYERS, [SOURCE]);
       fittedRef.current = null;
       return;
     }
@@ -119,10 +114,7 @@ export function ImportedGeometryLayer() {
     const unsubscribe = subscribeStyleLoaded(map, apply);
     return () => {
       unsubscribe();
-      removeLayerAndSource(map, [POINT, LINE, FILL], SOURCE);
-      unregisterLayerSlot(POINT);
-      unregisterLayerSlot(LINE);
-      unregisterLayerSlot(FILL);
+      removeSlottedLayers(map, LAYERS, [SOURCE]);
     };
   }, [publish, imported, mapReady, styleVersion, mapRef, fitBounds]);
 

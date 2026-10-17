@@ -16,6 +16,7 @@ import type * as maplibregl from "maplibre-gl";
 import { useLocale, useTranslations } from "next-intl";
 import { useEffect, useRef, useState } from "react";
 import { useMap } from "@/integration-api/map/MapContext";
+import { subscribeStyleLoaded } from "@/integration-api/map/styleLoadedSync";
 import {
   installedNativeBasemap,
   type NativeBasemapCandidate,
@@ -37,7 +38,7 @@ import {
   selectOnlineFirstOpenMapXStyle,
   setOfflinePackageActive,
 } from "@/lib/offlineAreas";
-import { localizeTextField } from "./localizeTextField";
+import { localizeMapLabels } from "./localizeTextField";
 
 /** The main map uses its camera-aware 3D layer instead of basemap extrusions. */
 function withoutNativeBuildingExtrusions(style: Record<string, unknown>): Record<string, unknown> {
@@ -432,28 +433,7 @@ export function MapCanvas() {
     const map = mapRef.current;
     if (!map || !mapReady) return;
 
-    const setLabels = () => {
-      const style = map.getStyle();
-      if (!style?.layers) return;
-      for (const layer of style.layers) {
-        if (layer.type !== "symbol") continue;
-        const tf = layer.layout?.["text-field"];
-        if (!tf) continue;
-        const localized = localizeTextField(tf, locale);
-        if (JSON.stringify(localized) === JSON.stringify(tf)) continue;
-        map.setLayoutProperty(
-          layer.id,
-          "text-field",
-          localized as maplibregl.DataDrivenPropertyValueSpecification<string>,
-        );
-      }
-    };
-
-    setLabels();
-    map.on("styledata", setLabels);
-    return () => {
-      map.off("styledata", setLabels);
-    };
+    return subscribeStyleLoaded(map, () => localizeMapLabels(map, locale));
   }, [locale, mapRef, mapReady]);
 
   // Outer div owns the absolute positioning.

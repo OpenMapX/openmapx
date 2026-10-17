@@ -24,10 +24,9 @@ const ALLOWED = new Set([
   "apps/web/src/lib/navigation/useTransitNavigationEngine.ts",
   // Eases between the flat and globe projections, keeping the current framing.
   "apps/web/src/components/map/layers/GlobeProjection.tsx",
-  // Standalone map in the offline settings page, with no app chrome over it.
-  "apps/web/src/app/settings/offline/AreaPickerMap.tsx",
-  // Standalone map in the offline settings page, with no app chrome over it.
-  "apps/web/src/app/settings/offline/OfflineMapView.tsx",
+  // Framing for the offline settings page's standalone maps, which have no app
+  // chrome over them.
+  "apps/web/src/app/settings/offline/fitPackageBbox.ts",
   // Standalone shared-link viewer map, laid out without the app's panels.
   "apps/web/src/components/share/SharedMapView.tsx",
   // Small embedded preview map that fills its own box.

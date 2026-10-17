@@ -798,23 +798,58 @@ web host's focused integration API instead of importing arbitrary application
 modules:
 
 ```tsx
-import { useMap } from "@/integration-api/map/MapContext";
+import { useMemo } from "react";
+import { EMPTY_FEATURE_COLLECTION } from "@/integration-api/map/mapLayerGroup";
+import { useMapLayerGroup } from "@/integration-api/map/useMapLayerGroup";
 
 export default function MapLayer() {
-  const { mapRef, mapReady, styleVersion } = useMap();
-  // add sources/layers, anchor with the host utilities, react to styleVersion…
+  const visible = useMyOverlayStore((s) => s.layerVisible);
+  useMapLayerGroup(
+    useMemo(
+      () =>
+        visible
+          ? {
+              sources: { "my-source": { type: "geojson", data: EMPTY_FEATURE_COLLECTION } },
+              layers: [
+                { id: "my-circles", type: "circle", source: "my-source", slot: "overlay-points" },
+              ],
+            }
+          : null,
+      [visible],
+    ),
+  );
   return null;
 }
 ```
 
-Source and layer installation needs a parsed stylesheet, not fully loaded tiles.
-Use `useMapLayerGroup` for a source/layer descriptor, or `subscribeStyleLoaded`
-for imperative reconciliation. Both use focused `@/integration-api/map/...`
-imports. Do not gate installation or image completion on `isStyleLoaded()` or
-wait for an idle event: an unrelated pending source or continuous animation can
-otherwise leave the overlay missing. Cancel subscriptions on cleanup, and fence
-asynchronous image completions by the current effect, map and source identity.
-Keep reconciliation idempotent, since adding an image can itself emit `styledata`.
+A style change (theme, basemap or satellite switch) destroys every source and
+layer an overlay added, so installation is a reconciliation, not a one-off
+call. Choose the narrowest lifecycle primitive:
+
+- `useMapLayerGroup` from `@/integration-api/map/useMapLayerGroup` declares the
+  sources and slotted layers as data. It reconciles on every render, rebuilds
+  inside the style change, applies a changed layer spec, and tears everything
+  down when the descriptor is `null`. Put GeoJSON data in the descriptor, or
+  declare `EMPTY_FEATURE_COLLECTION` and publish features through
+  `useGeoJsonSourceDataBridge`, which replays the latest payload onto a
+  recreated source. Its stable identity keeps a re-memoized descriptor from
+  resetting published data.
+- `useStyleSyncedLayer` covers one source and one layer whose source cannot be
+  declared as data, such as an attributed raster acquired through
+  `addAttributedRasterSource`.
+- `subscribeStyleLoaded` from `@/integration-api/map/styleLoadedSync` runs an
+  imperative reconciliation now and after every style mutation. Use it for
+  placement relative to basemap layers, custom layers or per-frame updates.
+  The callback runs often and must be cheap and idempotent: adding a source,
+  layer or image emits another `styledata`. Return its unsubscribe from the
+  effect, and remove what it added with `removeSlottedLayers`.
+
+Installation needs a parsed stylesheet, not loaded tiles. Do not gate it, or
+asynchronous image completion, on `isStyleLoaded()` or an idle event: an
+unrelated pending source or continuous animation would leave the overlay
+missing. Fence asynchronous completions by the current effect, map and source
+identity. Layer-scoped event listeners tolerate a layer that does not exist yet,
+so bind interactions to the overlay's visibility rather than to installation.
 
 The modules under `apps/web/src/integration-api/` are an app-local API for
 trusted integrations compiled into the OpenMapX web build. They group map,

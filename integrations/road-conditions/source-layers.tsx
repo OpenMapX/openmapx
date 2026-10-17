@@ -215,6 +215,8 @@ function RoadSourceLayer({ sourceId }: { sourceId: string }) {
         [ids.tracksSource]: { type: "geojson", data: trackGeojson },
       },
       images: withGlyph ? glyph.images : {},
+      // Drawn like the host's data-source layers, half a step above them, so
+      // the two never tie on depth when both are shown.
       layers: [
         {
           id: ids.tracks,
@@ -223,7 +225,7 @@ function RoadSourceLayer({ sourceId }: { sourceId: string }) {
           layout: DATA_SOURCE_TRACK_LAYOUT,
           paint: dataSourceTrackPaint(listing.markerStyle),
           slot: "overlay-lines",
-          order: 17,
+          order: 17.5,
         },
         {
           id: ids.markers,
@@ -231,7 +233,7 @@ function RoadSourceLayer({ sourceId }: { sourceId: string }) {
           source: ids.source,
           paint: dataSourceCirclePaint(listing.markerStyle, MARKER_RADIUS),
           slot: "overlay-points",
-          order: 15,
+          order: 15.5,
         },
         ...(withGlyph
           ? [
@@ -242,7 +244,7 @@ function RoadSourceLayer({ sourceId }: { sourceId: string }) {
                 layout: glyph.layout,
                 paint: glyph.paint,
                 slot: "overlay-points" as const,
-                order: 16,
+                order: 16.5,
               },
             ]
           : []),

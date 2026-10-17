@@ -8,7 +8,11 @@ import {
 } from "@openmapx/mobility-core/contributors";
 import { useEffect, useMemo, useRef } from "react";
 import { useMap } from "@/integration-api/map/MapContext";
-import type { MapLayerGroup, SlottedLayer } from "@/integration-api/map/mapLayerGroup";
+import {
+  EMPTY_FEATURE_COLLECTION,
+  type MapLayerGroup,
+  type SlottedLayer,
+} from "@/integration-api/map/mapLayerGroup";
 import { useMapLayerGroup } from "@/integration-api/map/useMapLayerGroup";
 import { useRenderedMapAttributions } from "@/integration-api/overlay/useRenderedMapAttributions";
 
@@ -18,8 +22,6 @@ const LAYER_LINE = "place-boundary-line";
 
 // Muted red for the administrative boundary outline.
 const BOUNDARY_COLOR = "#A52714";
-
-const EMPTY = { type: "FeatureCollection" as const, features: [] };
 
 /** Derive a [west, south, east, north] extent from a Polygon/MultiPolygon. */
 function bboxFromGeometry(geometry: AreaGeometry): BBox {
@@ -85,7 +87,7 @@ export function PlaceBoundaryLayer() {
               ),
             ],
           }
-        : EMPTY,
+        : EMPTY_FEATURE_COLLECTION,
     [boundary, data],
   );
 

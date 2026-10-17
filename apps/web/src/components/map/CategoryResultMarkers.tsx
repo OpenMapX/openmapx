@@ -38,7 +38,7 @@ import type {
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { usePinMarker } from "@/hooks/usePinMarker";
 import { usePlaceEnrichment } from "@/hooks/usePlaceEnrichment";
-import { addLayerInSlot, unregisterLayerSlot } from "@/integration-api/map/layerStack";
+import { addLayerInSlot, removeSlottedLayers } from "@/integration-api/map/layerStack";
 import { createGeoJsonSourcePublisher } from "@/integration-api/map/layerStyleUtils";
 import { useMap } from "@/integration-api/map/MapContext";
 import { getMapClickOwner } from "@/integration-api/map/mapClickOwnership";
@@ -491,21 +491,17 @@ export function CategoryResultMarkers() {
     const brandPublished = new WeakMap<object, string>();
     let categoryData = categoryGeojson;
 
-    const removeCategoryLayers = () => {
-      if (map.getLayer(LABEL_LAYER_ID)) map.removeLayer(LABEL_LAYER_ID);
-      if (map.getLayer(LAYER_ID)) map.removeLayer(LAYER_ID);
-      if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
-      unregisterLayerSlot(LABEL_LAYER_ID);
-      unregisterLayerSlot(LAYER_ID);
-    };
+    const removeCategoryLayers = () =>
+      removeSlottedLayers(map, [LABEL_LAYER_ID, LAYER_ID], [SOURCE_ID]);
+    const removeTransitLayers = () =>
+      removeSlottedLayers(map, [TRANSIT_LABEL_LAYER_ID, TRANSIT_LAYER_ID], [TRANSIT_SOURCE_ID]);
 
-    const removeTransitLayers = () => {
-      if (map.getLayer(TRANSIT_LABEL_LAYER_ID)) map.removeLayer(TRANSIT_LABEL_LAYER_ID);
-      if (map.getLayer(TRANSIT_LAYER_ID)) map.removeLayer(TRANSIT_LAYER_ID);
-      if (map.getSource(TRANSIT_SOURCE_ID)) map.removeSource(TRANSIT_SOURCE_ID);
-      unregisterLayerSlot(TRANSIT_LABEL_LAYER_ID);
-      unregisterLayerSlot(TRANSIT_LAYER_ID);
-    };
+    // Asynchronous image completions belong to this effect, this map and the
+    // exact source instance they were started for. The source identity also
+    // certifies the parsed style: isStyleLoaded() waits for tiles, and image or
+    // layer completion need not emit another styledata to be retried.
+    const ownsSource = (sourceId: string, source: object) => () =>
+      !cancelled && mapRef.current === map && map.getSource(sourceId) === source;
 
     const sync = () => {
       const hasContext = mode === "text" ? Boolean(textQuery) : Boolean(activeCategory);
@@ -533,63 +529,56 @@ export function CategoryResultMarkers() {
         )
           return;
         markerPending.add(source);
+        const isCurrent = ownsSource(TRANSIT_SOURCE_ID, source);
 
         // Reconcile missing layers/images without republishing unchanged data.
-        void Promise.all(
-          transitModes.map((m) =>
-            loadTransitMarkerImage(
-              map,
-              m,
-              () =>
-                !cancelled && mapRef.current === map && map.getSource(TRANSIT_SOURCE_ID) === source,
-            ),
-          ),
-        ).then(() => {
-          markerPending.delete(source);
-          if (cancelled || mapRef.current !== map || map.getSource(TRANSIT_SOURCE_ID) !== source)
-            return;
-          if (!map.getLayer(TRANSIT_LAYER_ID)) {
-            addLayerInSlot(
-              map,
-              {
-                id: TRANSIT_LAYER_ID,
-                type: "symbol",
-                source: TRANSIT_SOURCE_ID,
-                layout: {
-                  "icon-image": ["get", "imageId"],
-                  "icon-allow-overlap": true,
-                  "icon-ignore-placement": true,
+        void Promise.all(transitModes.map((m) => loadTransitMarkerImage(map, m, isCurrent))).then(
+          () => {
+            markerPending.delete(source);
+            if (!isCurrent()) return;
+            if (!map.getLayer(TRANSIT_LAYER_ID)) {
+              addLayerInSlot(
+                map,
+                {
+                  id: TRANSIT_LAYER_ID,
+                  type: "symbol",
+                  source: TRANSIT_SOURCE_ID,
+                  layout: {
+                    "icon-image": ["get", "imageId"],
+                    "icon-allow-overlap": true,
+                    "icon-ignore-placement": true,
+                  },
                 },
-              },
-              "route-markers",
-              8,
-            );
-          }
-          if (!map.getLayer(TRANSIT_LABEL_LAYER_ID)) {
-            addLayerInSlot(
-              map,
-              {
-                id: TRANSIT_LABEL_LAYER_ID,
-                type: "symbol",
-                source: TRANSIT_SOURCE_ID,
-                layout: {
-                  "text-field": ["get", "name"],
-                  "text-size": 11,
-                  "text-offset": [0, 2.0],
-                  "text-anchor": "top",
-                  "text-max-width": 8,
+                "route-markers",
+                8,
+              );
+            }
+            if (!map.getLayer(TRANSIT_LABEL_LAYER_ID)) {
+              addLayerInSlot(
+                map,
+                {
+                  id: TRANSIT_LABEL_LAYER_ID,
+                  type: "symbol",
+                  source: TRANSIT_SOURCE_ID,
+                  layout: {
+                    "text-field": ["get", "name"],
+                    "text-size": 11,
+                    "text-offset": [0, 2.0],
+                    "text-anchor": "top",
+                    "text-max-width": 8,
+                  },
+                  paint: {
+                    "text-color": "#333333",
+                    "text-halo-color": "#FFFFFF",
+                    "text-halo-width": 1.5,
+                  },
                 },
-                paint: {
-                  "text-color": "#333333",
-                  "text-halo-color": "#FFFFFF",
-                  "text-halo-width": 1.5,
-                },
-              },
-              "route-markers",
-              9,
-            );
-          }
-        });
+                "route-markers",
+                9,
+              );
+            }
+          },
+        );
         return;
       }
 
@@ -609,9 +598,6 @@ export function CategoryResultMarkers() {
       const source = publish(map, SOURCE_ID, categoryData);
       initialized.add(source);
 
-      // The source identity certifies this parsed style. isStyleLoaded() also
-      // waits for source uploads/tiles, which must not discard image completion
-      // or layer installation: their completion need not emit another styledata.
       // Load images then add layers (images may already be cached).
       if (
         !markerPending.has(source) &&
@@ -620,8 +606,7 @@ export function CategoryResultMarkers() {
           !markerImageIds.every((imageId) => map.hasImage(imageId)))
       ) {
         markerPending.add(source);
-        const isCurrent = () =>
-          !cancelled && mapRef.current === map && map.getSource(SOURCE_ID) === source;
+        const isCurrent = ownsSource(SOURCE_ID, source);
         void Promise.all(
           markerImageIds.map((imageId) =>
             loadMarkerImage(map, imageId, markerIconPath(imageId), isCurrent),
@@ -684,8 +669,8 @@ export function CategoryResultMarkers() {
       // (`loadBrandMarkerImage` short-circuits on `map.hasImage`, so panning
       // back over the same chain never refetches). Runs independently of the
       // fallback-icon load above; once resolved, swap the matching pins over
-      // to their logo. `cancelled`/`getSource` re-checked here because this can
-      // resolve after a newer `sync()` call (or teardown) already moved on.
+      // to their logo. Ownership is re-checked because this can resolve after a
+      // newer `sync()` call (or teardown) already moved on.
       const allBrandIds = qids.map(brandImageId);
       if (
         qids.length > 0 &&
@@ -696,19 +681,12 @@ export function CategoryResultMarkers() {
         )
       ) {
         brandPending.add(source);
+        const isCurrent = ownsSource(SOURCE_ID, source);
         void Promise.all(
-          qids.map(async (qid) =>
-            (await loadBrandMarkerImage(
-              map,
-              qid,
-              () => !cancelled && mapRef.current === map && map.getSource(SOURCE_ID) === source,
-            ))
-              ? qid
-              : null,
-          ),
+          qids.map(async (qid) => ((await loadBrandMarkerImage(map, qid, isCurrent)) ? qid : null)),
         ).then((loaded) => {
           brandPending.delete(source);
-          if (cancelled || mapRef.current !== map || map.getSource(SOURCE_ID) !== source) return;
+          if (!isCurrent()) return;
           const brandImageIds = new Set(
             loaded.filter((qid): qid is string => qid !== null).map((qid) => brandImageId(qid)),
           );
@@ -756,20 +734,11 @@ export function CategoryResultMarkers() {
     return () => {
       const map = mapRef.current;
       if (!map) return;
-      try {
-        if (map.getLayer(LABEL_LAYER_ID)) map.removeLayer(LABEL_LAYER_ID);
-        if (map.getLayer(LAYER_ID)) map.removeLayer(LAYER_ID);
-        if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
-        if (map.getLayer(TRANSIT_LABEL_LAYER_ID)) map.removeLayer(TRANSIT_LABEL_LAYER_ID);
-        if (map.getLayer(TRANSIT_LAYER_ID)) map.removeLayer(TRANSIT_LAYER_ID);
-        if (map.getSource(TRANSIT_SOURCE_ID)) map.removeSource(TRANSIT_SOURCE_ID);
-      } catch {
-        // Map may already be destroyed
-      }
-      unregisterLayerSlot(LABEL_LAYER_ID);
-      unregisterLayerSlot(LAYER_ID);
-      unregisterLayerSlot(TRANSIT_LABEL_LAYER_ID);
-      unregisterLayerSlot(TRANSIT_LAYER_ID);
+      removeSlottedLayers(
+        map,
+        [LABEL_LAYER_ID, LAYER_ID, TRANSIT_LABEL_LAYER_ID, TRANSIT_LAYER_ID],
+        [SOURCE_ID, TRANSIT_SOURCE_ID],
+      );
     };
   }, [mapRef]);
 

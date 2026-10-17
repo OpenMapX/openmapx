@@ -1,87 +1,71 @@
 "use client";
 
-import { PANEL, useSavedListPlaces, useSavedPlacesStore, useSidebarStore } from "@openmapx/core";
+import {
+  PANEL,
+  type SavedPlace,
+  useSavedListPlaces,
+  useSavedPlacesStore,
+  useSidebarStore,
+} from "@openmapx/core";
 import { savedPlaceContributors } from "@openmapx/core/saved-place-contributors";
 import { withFeatureContributors } from "@openmapx/mobility-core/contributors";
-import { useEffect, useMemo } from "react";
-import { addLayerInSlot, unregisterLayerSlot } from "@/integration-api/map/layerStack";
-import { removeLayerAndSource, upsertGeoJsonSource } from "@/integration-api/map/layerStyleUtils";
-import { useMap } from "@/integration-api/map/MapContext";
+import { useMemo } from "react";
+import type { MapLayerGroup } from "@/integration-api/map/mapLayerGroup";
+import { useMapLayerGroup } from "@/integration-api/map/useMapLayerGroup";
 import { useRenderedMapAttributions } from "@/integration-api/overlay/useRenderedMapAttributions";
 
 const SOURCE_ID = "saved-places-source";
 const LAYER_ID = "saved-places-layer";
 
+/** Project saved places once, noting whether any carries a coordinate receipt. */
+function projectSavedPlaces(places: readonly SavedPlace[]) {
+  let hasContributors = false;
+  const features = places.map((place) => {
+    const contributors = savedPlaceContributors(place.fieldContributors, ["lat", "lng"]);
+    hasContributors ||= contributors.length > 0;
+    return withFeatureContributors(
+      {
+        type: "Feature" as const,
+        geometry: { type: "Point" as const, coordinates: [place.lng, place.lat] },
+        properties: { id: place.id, name: place.name },
+      },
+      contributors,
+    );
+  });
+  return { hasContributors, data: { type: "FeatureCollection" as const, features } };
+}
+
+function savedPlacesGroup(data: GeoJSON.FeatureCollection): MapLayerGroup {
+  return {
+    sources: { [SOURCE_ID]: { type: "geojson", data } },
+    layers: [
+      {
+        id: LAYER_ID,
+        type: "circle",
+        source: SOURCE_ID,
+        slot: "route-markers",
+        order: 5,
+        paint: {
+          "circle-radius": 8,
+          "circle-color": "#E53935",
+          "circle-stroke-width": 2,
+          "circle-stroke-color": "#fff",
+        },
+      },
+    ],
+  };
+}
+
 export function SavedPlacesLayer() {
-  const { mapRef, mapReady, styleVersion } = useMap();
   const isPanelOpen = useSidebarStore((s) => s.activeSidebarId === PANEL.SAVED);
   const selectedListId = useSavedPlacesStore((s) => s.selectedListId);
-  const { data: places } = useSavedListPlaces(
-    isPanelOpen && selectedListId ? selectedListId : null,
-  );
+  const activeListId = isPanelOpen && selectedListId ? selectedListId : null;
+  const { data: places } = useSavedListPlaces(activeListId);
+  const shown = activeListId !== null && places !== undefined && places.length > 0;
 
-  const captured = useMemo(() => {
-    let hasContributors = false;
-    const features = (places ?? []).map((p) => {
-      const contributors = savedPlaceContributors(p.fieldContributors, ["lat", "lng"]);
-      hasContributors ||= contributors.length > 0;
-      return withFeatureContributors(
-        {
-          type: "Feature" as const,
-          geometry: { type: "Point" as const, coordinates: [p.lng, p.lat] },
-          properties: { id: p.id, name: p.name },
-        },
-        contributors,
-      );
-    });
-    return { hasContributors, data: { type: "FeatureCollection" as const, features } };
-  }, [places]);
-  useRenderedMapAttributions(
-    "saved-places",
-    [LAYER_ID],
-    Boolean(isPanelOpen && selectedListId && captured.hasContributors),
-  );
-
-  useEffect(() => {
-    void styleVersion;
-    const map = mapRef.current;
-    if (!map || !mapReady || captured.data.features.length === 0) return;
-
-    const created = !map.getSource(SOURCE_ID);
-    upsertGeoJsonSource(map, SOURCE_ID, captured.data);
-    if (created) {
-      addLayerInSlot(
-        map,
-        {
-          id: LAYER_ID,
-          type: "circle",
-          source: SOURCE_ID,
-          paint: {
-            "circle-radius": 8,
-            "circle-color": "#E53935",
-            "circle-stroke-width": 2,
-            "circle-stroke-color": "#fff",
-          },
-        },
-        "route-markers",
-        5,
-      );
-    }
-
-    return () => {
-      removeLayerAndSource(map, LAYER_ID, SOURCE_ID);
-      unregisterLayerSlot(LAYER_ID);
-    };
-  }, [mapRef, mapReady, styleVersion, captured]);
-
-  // Clean up when panel closes or list deselected
-  useEffect(() => {
-    if (isPanelOpen && selectedListId) return;
-    const map = mapRef.current;
-    if (!map) return;
-    removeLayerAndSource(map, LAYER_ID, SOURCE_ID);
-    unregisterLayerSlot(LAYER_ID);
-  }, [mapRef, isPanelOpen, selectedListId]);
+  const projected = useMemo(() => (shown ? projectSavedPlaces(places) : null), [shown, places]);
+  useRenderedMapAttributions("saved-places", [LAYER_ID], Boolean(projected?.hasContributors));
+  useMapLayerGroup(useMemo(() => projected && savedPlacesGroup(projected.data), [projected]));
 
   return null;
 }

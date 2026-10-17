@@ -168,7 +168,7 @@ describe.each(cases)("$name style readiness", ({ Component, layer, activate }) =
     view.unmount();
   });
 
-  it("retries parsing during rendering without idle", () => {
+  it("installs once the stylesheet finishes parsing, without idle", () => {
     activate();
     const style = fake.map.getStyle();
     let parsed = false;
@@ -183,7 +183,10 @@ describe.each(cases)("$name style readiness", ({ Component, layer, activate }) =
     const view = render(<Component />, { wrapper: createQueryWrapper() });
     expect(fake.map.getLayer(layer)).toBeUndefined();
     parsed = true;
-    act(() => fake.emit("render"));
+    act(() => {
+      fake.emit("styledata");
+      fake.emit("style.load");
+    });
     expect(fake.map.getLayer(layer)).toBeDefined();
     view.unmount();
   });

@@ -5,13 +5,18 @@ import { captureHazardFeatures } from "@openmapx/integration-framework";
 import type { MapLayerMouseEvent } from "maplibre-gl";
 import * as maplibregl from "maplibre-gl";
 import { useTranslations } from "next-intl";
-import { useCallback, useEffect, useRef } from "react";
-import { syncHeatmapLayer } from "@/integration-api/map/heatmapLayer";
+import { useCallback, useEffect, useMemo, useRef } from "react";
+import { createHeatmapPaint } from "@/integration-api/map/heatmapLayer";
 import { INTERACTIVE_LAYER_IDS } from "@/integration-api/map/interactiveLayers";
-import { addLayerInSlot, unregisterLayerSlot } from "@/integration-api/map/layerStack";
 import { useMap } from "@/integration-api/map/MapContext";
 import { getMapClickOwner } from "@/integration-api/map/mapClickOwnership";
+import {
+  EMPTY_FEATURE_COLLECTION,
+  type MapLayerGroup,
+  type SlottedLayer,
+} from "@/integration-api/map/mapLayerGroup";
 import { useGeoJsonSourceDataBridge } from "@/integration-api/map/useGeoJsonSourceDataBridge";
+import { useMapLayerGroup } from "@/integration-api/map/useMapLayerGroup";
 import { useContributorResolver } from "@/integration-api/overlay/useContributorResolver";
 import { useRenderedMapAttributions } from "@/integration-api/overlay/useRenderedMapAttributions";
 import { useEnv } from "@/integration-api/runtime/EnvProvider";
@@ -36,8 +41,6 @@ const HEATMAP_LAYER_ID = "openmapx-wildfires-heatmap";
 export const DENSITY_SOURCE_ID = "openmapx-wildfires-density-source";
 export const DENSITY_LAYER_ID = "openmapx-wildfires-density";
 const DENSITY_HEATMAP_LAYER_ID = "openmapx-wildfires-density-heatmap";
-
-const EMPTY_COLLECTION: GeoJSON.FeatureCollection = { type: "FeatureCollection", features: [] };
 
 /** Older detections change less often, so a longer range refreshes less often. */
 const REFRESH_MS: Record<1 | 2 | 3, number> = {
@@ -131,6 +134,67 @@ const DENSITY_COLOR_EXPR = [
   ["get", "frpMax"],
   ...DENSITY_COLOR_STOPS.flatMap(({ frp, color }) => [frp, color]),
 ] as maplibregl.ExpressionSpecification;
+
+function hotspotGroup(showHeatmap: boolean): MapLayerGroup {
+  const heatmaps: SlottedLayer[] = showHeatmap
+    ? [
+        {
+          id: HEATMAP_LAYER_ID,
+          type: "heatmap",
+          source: SOURCE_ID,
+          paint: createHeatmapPaint("frp", 1000),
+          slot: "overlay-heat",
+          order: 0,
+        },
+        {
+          id: DENSITY_HEATMAP_LAYER_ID,
+          type: "heatmap",
+          source: DENSITY_SOURCE_ID,
+          paint: createHeatmapPaint("frpSum", 1000),
+          slot: "overlay-heat",
+          // Between the detection heatmap (0) and the earthquake heatmap (1).
+          order: 0.5,
+        },
+      ]
+    : [];
+  return {
+    sources: {
+      [SOURCE_ID]: { type: "geojson", data: EMPTY_FEATURE_COLLECTION },
+      [DENSITY_SOURCE_ID]: { type: "geojson", data: EMPTY_FEATURE_COLLECTION },
+    },
+    layers: [
+      ...heatmaps,
+      {
+        id: DENSITY_LAYER_ID,
+        type: "circle",
+        source: DENSITY_SOURCE_ID,
+        paint: {
+          "circle-radius": DENSITY_RADIUS_EXPR,
+          "circle-color": DENSITY_COLOR_EXPR,
+          "circle-opacity": 0.75,
+          "circle-stroke-color": "#ffffff",
+          "circle-stroke-width": 0.8,
+        },
+        slot: "overlay-points",
+        order: 3.5,
+      },
+      {
+        id: CIRCLE_LAYER_ID,
+        type: "circle",
+        source: SOURCE_ID,
+        paint: {
+          "circle-radius": CIRCLE_RADIUS_EXPR,
+          "circle-color": RECENCY_COLOR_EXPR,
+          "circle-opacity": 0.8,
+          "circle-stroke-color": "#ffffff",
+          "circle-stroke-width": 0.8,
+        },
+        slot: "overlay-points",
+        order: 4,
+      },
+    ],
+  };
+}
 
 type HotspotData =
   | { kind: "points"; collection: FireFeatureCollection }
@@ -287,11 +351,11 @@ export function HotspotLayer({ active, popupController }: HotspotLayerProps) {
         data.kind === "points"
           ? [
               { sourceId: SOURCE_ID, data: collection },
-              { sourceId: DENSITY_SOURCE_ID, data: EMPTY_COLLECTION },
+              { sourceId: DENSITY_SOURCE_ID, data: EMPTY_FEATURE_COLLECTION },
             ]
           : [
               { sourceId: DENSITY_SOURCE_ID, data: collection },
-              { sourceId: SOURCE_ID, data: EMPTY_COLLECTION },
+              { sourceId: SOURCE_ID, data: EMPTY_FEATURE_COLLECTION },
             ],
       );
     },
@@ -300,8 +364,8 @@ export function HotspotLayer({ active, popupController }: HotspotLayerProps) {
 
   const clear = useCallback(() => {
     bridge.reset([
-      { sourceId: SOURCE_ID, data: EMPTY_COLLECTION },
-      { sourceId: DENSITY_SOURCE_ID, data: EMPTY_COLLECTION },
+      { sourceId: SOURCE_ID, data: EMPTY_FEATURE_COLLECTION },
+      { sourceId: DENSITY_SOURCE_ID, data: EMPTY_FEATURE_COLLECTION },
     ]);
   }, [bridge.reset]);
 
@@ -316,129 +380,18 @@ export function HotspotLayer({ active, popupController }: HotspotLayerProps) {
     clear,
   });
 
+  useMapLayerGroup(
+    useMemo(() => (active ? hotspotGroup(showHeatmap) : null), [active, showHeatmap]),
+  );
+
+  // Removing the hotspots closes the popup one of them opened.
   useEffect(() => {
-    void styleVersion;
-    const map = mapRef.current;
-    if (!map || !mapReady) return;
-
-    const syncLayers = () => {
-      if (!active) {
-        try {
-          for (const id of [
-            HEATMAP_LAYER_ID,
-            DENSITY_HEATMAP_LAYER_ID,
-            CIRCLE_LAYER_ID,
-            DENSITY_LAYER_ID,
-          ]) {
-            if (map.getLayer(id)) map.removeLayer(id);
-          }
-          if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
-          if (map.getSource(DENSITY_SOURCE_ID)) map.removeSource(DENSITY_SOURCE_ID);
-        } catch {
-          // In-flight tiles
-        }
-        for (const id of [
-          HEATMAP_LAYER_ID,
-          DENSITY_HEATMAP_LAYER_ID,
-          CIRCLE_LAYER_ID,
-          DENSITY_LAYER_ID,
-        ]) {
-          unregisterLayerSlot(id);
-        }
-        popupController.close(popupLease.current);
-        return;
-      }
-
-      try {
-        for (const sourceId of [SOURCE_ID, DENSITY_SOURCE_ID]) {
-          if (!map.getSource(sourceId)) {
-            map.addSource(sourceId, { type: "geojson", data: EMPTY_COLLECTION });
-          }
-        }
-
-        if (!map.getLayer(DENSITY_LAYER_ID)) {
-          addLayerInSlot(
-            map,
-            {
-              id: DENSITY_LAYER_ID,
-              type: "circle",
-              source: DENSITY_SOURCE_ID,
-              paint: {
-                "circle-radius": DENSITY_RADIUS_EXPR,
-                "circle-color": DENSITY_COLOR_EXPR,
-                "circle-opacity": 0.75,
-                "circle-stroke-color": "#ffffff",
-                "circle-stroke-width": 0.8,
-              },
-            },
-            "overlay-points",
-            3.5,
-          );
-        }
-
-        if (!map.getLayer(CIRCLE_LAYER_ID)) {
-          addLayerInSlot(
-            map,
-            {
-              id: CIRCLE_LAYER_ID,
-              type: "circle",
-              source: SOURCE_ID,
-              paint: {
-                "circle-radius": CIRCLE_RADIUS_EXPR,
-                "circle-color": RECENCY_COLOR_EXPR,
-                "circle-opacity": 0.8,
-                "circle-stroke-color": "#ffffff",
-                "circle-stroke-width": 0.8,
-              },
-            },
-            "overlay-points",
-            4,
-          );
-        }
-      } catch {
-        // Style not ready — styledata will retry
-      }
-    };
-
-    if (!active) {
-      syncLayers();
-      return;
-    }
-
-    syncLayers();
-    map.on("styledata", syncLayers);
-    return () => {
-      map.off("styledata", syncLayers);
-      popupController.close(popupLease.current);
-    };
-  }, [mapReady, mapRef, styleVersion, active, popupController]);
+    if (!active) return;
+    const lease = popupLease.current;
+    return () => popupController.close(lease);
+  }, [active, popupController]);
 
   useEffect(() => {
-    void styleVersion;
-    const map = mapRef.current;
-    if (!map || !mapReady || !active) return;
-
-    syncHeatmapLayer(map, {
-      enabled: showHeatmap,
-      layerId: HEATMAP_LAYER_ID,
-      sourceId: SOURCE_ID,
-      weightProperty: "frp",
-      weightMax: 1000,
-      order: 0,
-    });
-    syncHeatmapLayer(map, {
-      enabled: showHeatmap,
-      layerId: DENSITY_HEATMAP_LAYER_ID,
-      sourceId: DENSITY_SOURCE_ID,
-      weightProperty: "frpSum",
-      weightMax: 1000,
-      // Between the detection heatmap (0) and the earthquake heatmap (1).
-      order: 0.5,
-    });
-  }, [mapRef, mapReady, styleVersion, active, showHeatmap]);
-
-  useEffect(() => {
-    void styleVersion;
     const map = mapRef.current;
     if (!map || !mapReady || !active) return;
 
@@ -498,7 +451,7 @@ export function HotspotLayer({ active, popupController }: HotspotLayerProps) {
       }
       map.getCanvasContainer().style.cursor = "";
     };
-  }, [mapReady, mapRef, styleVersion, active, popupController, t]);
+  }, [mapReady, mapRef, active, popupController, t]);
 
   return null;
 }
