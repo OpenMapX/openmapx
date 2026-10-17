@@ -2,47 +2,29 @@
 
 ## Reporting a vulnerability
 
-If you find a security vulnerability in OpenMapX, please report it privately.
+Please report suspected security vulnerabilities privately through [GitHub's vulnerability reporting form](https://github.com/OpenMapX/openmapx/security/advisories/new), or email **security@openmapx.org**.
 
-**Do not open a public issue.** Public issues are read by everyone, and a
-vulnerability report becomes a free attack guide before a fix is shipped.
+Avoid including vulnerability details in a public issue. Private reporting lets us investigate and coordinate disclosure with you. If you need encrypted email, ask about the project's PGP key first.
 
-Use one of:
+Include what you know:
 
-1. **GitHub Security Advisory** (preferred) — open a draft advisory at
-   <https://github.com/OpenMapX/openmapx/security/advisories/new>. This keeps
-   the report private and lets us collaborate on a fix and a coordinated
-   disclosure in one place.
-2. **Email** — write to **security@openmapx.org**. If you wish to encrypt your
-   report, ask for our PGP key in your first message.
+- The affected version or commit and component.
+- What happens, its potential impact, and reproduction steps or a small example where possible.
+- Whether authentication, a particular integration, configuration or reachable service is required.
 
-When reporting, please include:
+An incomplete report is still useful; you do not need to establish the full impact before contacting us.
 
-- A description of the vulnerability and its impact.
-- Steps to reproduce, ideally with a minimal proof of concept.
-- The affected component (`apps/web`, `apps/api`, a specific service or
-  integration, a CLI command, etc.) and the version / commit SHA.
-- Whether the issue requires authentication, an admin role, a specific
-  integration to be enabled, or a self-hosted service to be reachable.
+## Response and disclosure
 
-## Our commitment
+During OpenMapX's experimental phase, we aim to acknowledge reports within **seven calendar days** and provide an initial assessment or meaningful status update within **fourteen calendar days**. These are best-effort targets. Credible urgent reports receive priority.
 
-- **Acknowledgement** within **3 business days** of your report.
-- **Triage and an initial assessment** (including severity and a fix plan)
-  within **10 business days**.
-- We will keep you informed of progress, credit you in the advisory and release
-  notes (unless you prefer to remain anonymous), and coordinate the public
-  disclosure date with you.
-- Our target is to ship a fix within **90 days** of triage; complex issues may
-  take longer, and we will say so.
+We will keep you informed and coordinate mitigation, fixes and public disclosure with you. The appropriate timing depends on the finding; we cannot promise a universal repair deadline. We will credit you unless you prefer to remain anonymous.
 
-If you have not received an acknowledgement within 6 business days, please send a
-brief follow-up in case the original report was missed.
+If you have not received an acknowledgement after seven calendar days, please send a brief follow-up using the other reporting route if possible.
 
-## Supported versions
+## Versions receiving fixes
 
-OpenMapX is pre-1.0. Only the latest commit on `main` and the most recent
-tagged release receive security fixes. Older releases are not patched.
+OpenMapX is experimental and its contracts are still evolving. Fixes land on active main development and the most recent named preview when one has been published. Older previews are not maintained. There is no supported stable release commitment yet.
 
 ## Temporary dependency exceptions
 

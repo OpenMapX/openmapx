@@ -8,4 +8,4 @@ contact_links:
     about: For usage questions, integration ideas, and general discussion, please use Discussions instead of opening an issue.
   - name: 🔒 Security vulnerability
     url: https://github.com/OpenMapX/openmapx/security/advisories/new
-    about: Report security issues privately via a draft GitHub Security Advisory. See SECURITY.md for the full process.
+    about: Report a vulnerability privately to the maintainers. See SECURITY.md for the reporting process and email fallback.

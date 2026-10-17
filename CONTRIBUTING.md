@@ -251,9 +251,22 @@ are skipped automatically because those packages are marked `private`.
    application release jobs; see `docs/README.md` for its deployment procedure.
    The application release manifest is a **release lockfile**: it fixes the image
    set selected for an update. Container replacement still happens in steps.
-5. A maintainer reviews. Squash-merge is the default; we keep the merged
-   PR's title and summary as the squash commit message, so make both
-   accurate.
+5. A maintainer reviews. Squash-merge is the only merge method; the reviewed
+   PR title and body become the squash commit message. Make both accurate
+   and retain contributor attribution.
+
+### Branch protection and review
+
+Routine changes, including maintainer changes, reach `main` through a PR with
+required checks. While the project has one active maintainer, no independent
+approval is mandatory. Resolve review threads after fixing the finding,
+explaining why it does not apply, or agreeing on a follow-up.
+
+Branches do not have to be updated after every merge to `main`. Post-merge CI
+still checks the combined result; repair a failing `main` before unrelated
+merges continue. Administrator bypass is reserved for documented emergencies
+through a PR. See the [protection runbook](docs/docs/developer/repository-governance.md)
+for required checks and recovery.
 
 ## Licensing and the CLA
 
