@@ -73,3 +73,36 @@ Changesets excludes package-root `Dockerfile` edits from release detection;
 these private deployment-image changes do not need empty package notes. Source,
 package manifests and nested Dockerfile fixtures still participate in the gate.
 The wider package/release baseline is handled separately.
+
+## Database groups
+
+Database validation runs in three jobs on separate GitHub-hosted runners:
+
+| Group            | Coverage                                                                         | Additional prerequisites                                |
+| ---------------- | -------------------------------------------------------------------------------- | ------------------------------------------------------- |
+| `api-privacy`    | Authentication, API routes, privacy lifecycle, core database and migration tests | Migrated PostGIS                                        |
+| `ingestion`      | Data-manager accounting, search, Overture and ambient publication                | Test-owned PostGIS containers                           |
+| `export-restore` | Controller-wide export and backup restore replay                                 | Exact-image Dawarich export and retained-backup archive |
+
+Each runner gets the same pinned PostgreSQL 18 / PostGIS 3.6 service and applies
+all production migrations. Testcontainers, Compose fixtures and archive paths are
+owned by that runner. No database or archive is shared between jobs. Within each
+group Vitest uses one worker; increasing that can corrupt shared fixture state.
+
+The matrix does not cancel other groups when one fails. The required
+`lint / types / test` aggregate still requires the database matrix to succeed;
+a failure, cancellation or skipped database job cannot pass it. The three privacy
+fixture steps run only in `export-restore`, where the archive is consumed directly
+by controller-wide export. Missing or empty archive input is an error, rather than
+a switch to the synthetic fixture.
+
+Run `pnpm test:database <group>` locally, or omit the group to run the full union
+serially. See [Contributing](https://github.com/OpenMapX/openmapx/blob/main/CONTRIBUTING.md#testing)
+for disposable-database setup and archive preparation. The checked-in inventory
+is validated against discovered opt-in tests and actual Vitest file selection.
+Dawarich's exact-image test remains a separate explicit command in the export job.
+
+This removes serialization between the groups and repeats runner setup three
+times. Compare normal-run gate time, queue delay and summed runner seconds before
+claiming an overall improvement. Local correctness checks do not establish CI
+latency or cost; the ten-run comparison remains required.

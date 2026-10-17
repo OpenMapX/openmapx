@@ -225,9 +225,15 @@ jobs:
         run: pnpm mobile:bundle:check
 
   database:
-    name: test (database)
+    name: test (database, ${{ matrix.group }})
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    strategy:
+      # Each group has a separate runner and service; keep the other groups
+      # running after a failure so all applicable evidence is collected.
+      fail-fast: false
+      matrix:
+        group: [api-privacy, ingestion, export-restore]
     services:
       postgis:
         # Match the production PostGIS line and pin the reviewed multi-arch
@@ -240,7 +246,7 @@ jobs:
         ports:
           - 5432:5432
         options: >-
-          --health-cmd "pg_isready -U postgres -d openmapx_test"
+          --health-cmd "pg_isready -h 127.0.0.1 -U postgres -d openmapx_test"
           --health-interval 5s
           --health-timeout 5s
           --health-retries 12
@@ -273,6 +279,7 @@ jobs:
       # spends its budget on the fixture itself. No Docker Hub login: the
       # workflow holds no Docker Hub credentials.
       - name: Pull the pinned managed Dawarich image
+        if: matrix.group == 'export-restore'
         timeout-minutes: 10
         run: |
           image="freikin/dawarich@$(node --input-type=module -e 'const { DAWARICH_SUPPORTED_IMAGE_DIGEST } = await import("./packages/core/src/privacy/dawarich-contract.ts"); console.log(DAWARICH_SUPPORTED_IMAGE_DIGEST)')"
@@ -285,17 +292,19 @@ jobs:
           exit 1
 
       - name: Verify the pinned managed Dawarich subject export
+        if: matrix.group == 'export-restore'
         timeout-minutes: 10
         run: OPENMAPX_RUN_DAWARICH_EXPORT_TESTS=1 pnpm exec vitest run --project node apps/ops-agent/src/dawarich-subject-export.integration.test.ts
 
       - name: Verify the isolated retained-backup export
+        if: matrix.group == 'export-restore'
         timeout-minutes: 10
         run: node services/ops-agent/privacy-backup/test-fixture.mjs --output "$RUNNER_TEMP/openmapx-real-backup-result.tar"
 
       - name: Run the required database integration suites
         env:
           OPENMAPX_REAL_BACKUP_FIXTURE: ${{ runner.temp }}/openmapx-real-backup-result.tar
-        run: pnpm test:database
+        run: pnpm test:database ${{ matrix.group }}
 
   build:
     name: build (production)

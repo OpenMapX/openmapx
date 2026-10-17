@@ -125,7 +125,7 @@ affected tests or run a hidden full-suite fallback. Documentation-only changes
 normally need formatting and the affected documentation build; record any
 checks left to CI in the PR.
 
-CI runs lint, types, node/web/mobile tests, the database integration suite, and
+CI runs lint, types, node/web/mobile tests, three isolated database groups, and
 production builds as parallel jobs on every push and PR. Pull requests also
 build each affected deployable Docker target without publishing it. These jobs are
 aggregated under the required `lint / types / test` check; repo-wide coverage
@@ -148,19 +148,50 @@ or `test` scripts; always run from the repo root:
 pnpm test                            # whole suite
 pnpm test --project web              # scope to one environment (web | node)
 pnpm exec vitest run packages/core   # scope by path or test-name substring
-DATABASE_URL=postgresql://postgres:postgres@localhost:5432/openmapx \
-  pnpm test:database                 # migrated PostGIS + Docker required
+pnpm test:database api-privacy       # migrated disposable PostGIS + Docker required
+pnpm test:database ingestion         # isolated ingestion fixtures + Docker required
+pnpm test:database export-restore    # also requires retained-backup fixture below
+pnpm test:database                   # all three groups, serially
 pnpm build                           # production app/service/package outputs
 pnpm check-packed-packages           # clean tarball consumer smoke test
 pnpm test:coverage                   # V8 coverage report (written to coverage/)
 ```
 
-The normal suite skips database tests through one explicit opt-in. CI applies
-the production Drizzle migrations to its PostGIS service before setting
-`OPENMAPX_RUN_DATABASE_TESTS=1`; after that point a missing database, schema,
-or Docker daemon is a hard test failure. For a local run, apply migrations to
-the `DATABASE_URL` target first (`pnpm --filter @openmapx/api exec drizzle-kit
-migrate`).
+The normal suite skips database tests. `test:database` enables them explicitly,
+including restore replay for `export-restore` and the all-groups command. Each CI
+group owns a separate runner and PostGIS service with the full production Drizzle
+migrations. Suites stay serial within a group because some fixtures mutate shared
+state. Missing databases, schemas, Docker or required backup input fail the run.
+
+For a local run, use an owned disposable PostgreSQL 18 / PostGIS 3.6 database,
+export its `DATABASE_URL`, and apply production migrations first. API/privacy,
+export/restore and all-groups runs require that variable explicitly:
+
+```bash
+pnpm --filter @openmapx/api exec drizzle-kit migrate
+```
+
+The export group and all-groups command also require the real retained-backup
+fixture. Pull the reviewed Dawarich image and generate the archive before running:
+
+```bash
+image="freikin/dawarich@$(node --input-type=module -e 'const { DAWARICH_SUPPORTED_IMAGE_DIGEST } = await import("./packages/core/src/privacy/dawarich-contract.ts"); console.log(DAWARICH_SUPPORTED_IMAGE_DIGEST)')"
+docker pull "$image"
+export OPENMAPX_REAL_BACKUP_FIXTURE="$(mktemp -d)/openmapx-real-backup-result.tar"
+node services/ops-agent/privacy-backup/test-fixture.mjs --output "$OPENMAPX_REAL_BACKUP_FIXTURE"
+pnpm test:database export-restore
+```
+
+CI also runs the separate exact-image Dawarich export test in that group:
+
+```bash
+OPENMAPX_RUN_DAWARICH_EXPORT_TESTS=1 pnpm exec vitest run --project node apps/ops-agent/src/dawarich-subject-export.integration.test.ts
+```
+
+The group inventory lives in `scripts/database-test-groups.json`. The database CI
+contract discovers opt-in suites and checks that every suite has exactly one owner
+and that Vitest selects exactly those files. Register new database suites there;
+do not add another command that silently falls outside required CI.
 
 Conventions:
 
