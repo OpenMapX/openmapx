@@ -106,3 +106,26 @@ This removes serialization between the groups and repeats runner setup three
 times. Compare normal-run gate time, queue delay and summed runner seconds before
 claiming an overall improvement. Local correctness checks do not establish CI
 latency or cost; the ten-run comparison remains required.
+
+## Docs validation
+
+Matching pull requests build docs once in required CI's `build Docker (docs)` job.
+The shared `docs/Dockerfile` runs `pnpm typecheck` followed by `pnpm build`, so
+either TypeScript errors or site compilation errors fail the image build. This
+job uses read-only permissions and does not log into a registry or publish images.
+
+The Docker target selector retains the previous docs workflow's PR coverage:
+`docs/**`, `.github/workflows/docs.yml`, `.trivyignore.yaml` and `.nvmrc`.
+These inputs add docs validation without narrowing other image targets. CI runs
+on every PR, and the stable `lint / types / test` aggregate rejects a failed,
+cancelled or missing applicable Docker build.
+
+The dedicated docs workflow publishes only from trusted main. It resolves current
+main before checkout and builds independently through the same Dockerfile; it
+does not reuse an untrusted PR artifact or wait for application publication.
+Exact-digest vulnerability scans still precede alias promotion. Weekly scheduled
+builds and forced refreshes retain uncached builds for fresh OS packages.
+
+This removes a duplicate PR validation job. It does not establish an overall
+latency or runner-cost improvement; compare at least ten comparable normal runs
+before making that claim.

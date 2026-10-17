@@ -426,6 +426,7 @@ jobs:
           platforms: linux/amd64
           build-args: ${{ matrix.app == 'web' && format('SW_BUILD_ID={0}', github.sha) || '' }}
           push: false
+          pull: ${{ matrix.app == 'docs' }}
           cache-from: type=gha,scope=${{ matrix.app }}
           cache-to: type=gha,mode=${{ matrix.app == 'api' && 'min' || 'max' }},scope=${{ matrix.app }}
 

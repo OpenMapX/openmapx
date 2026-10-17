@@ -1,9 +1,17 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { loadPreviousRelease } from "./docker-release-plan.mjs";
+import { loadPreviousRelease, pullRequestTargets } from "./docker-release-plan.mjs";
 
 const sha = "a".repeat(40);
 const digest = `sha256:${"b".repeat(64)}`;
@@ -13,6 +21,51 @@ const workflow = readFileSync(
   "utf8",
 );
 const planner = resolve(import.meta.dirname, "docker-release-plan.mjs");
+
+describe("changed-image CLI input discovery", () => {
+  it("retains docs validation when a required input is renamed outside the docs context", () => {
+    const temp = mkdtempSync(join(tmpdir(), "openmapx-renamed-docs-"));
+    const env = { ...process.env, GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: "/dev/null" };
+    const git = (...args: string[]) => {
+      const result = spawnSync("git", args, { cwd: temp, env, encoding: "utf8" });
+      expect(result.status, result.stderr).toBe(0);
+      return result.stdout.trim();
+    };
+    try {
+      git("init", "--initial-branch=main");
+      git("config", "user.name", "CI test");
+      git("config", "user.email", "ci@example.invalid");
+      for (const target of pullRequestTargets) {
+        const path = join(temp, target.dockerfile);
+        mkdirSync(dirname(path), { recursive: true });
+        writeFileSync(path, readFileSync(resolve(import.meta.dirname, "..", target.dockerfile)));
+      }
+      writeFileSync(join(temp, "docs/sidebars.ts"), "export default {};\n");
+      git("add", ".");
+      git("commit", "-m", "baseline");
+      const base = git("rev-parse", "HEAD");
+      mkdirSync(join(temp, "archive"));
+      renameSync(join(temp, "docs/sidebars.ts"), join(temp, "archive/sidebars.ts"));
+      git("add", "--all");
+      git("commit", "-m", "move required docs input");
+      const head = git("rev-parse", "HEAD");
+      expect(git("diff", "--name-status", `${base}...${head}`)).toBe(
+        "R100\tdocs/sidebars.ts\tarchive/sidebars.ts",
+      );
+      const output = join(temp, "output");
+      const result = spawnSync(process.execPath, [planner, "changed", base, head], {
+        cwd: temp,
+        env: { ...env, GITHUB_OUTPUT: output },
+        encoding: "utf8",
+      });
+      expect(result.status, result.stderr).toBe(0);
+      const apps: string[] = JSON.parse(readFileSync(output, "utf8").trim().slice("apps=".length));
+      expect(apps.filter((app) => app === "docs")).toEqual(["docs"]);
+    } finally {
+      rmSync(temp, { recursive: true, force: true });
+    }
+  });
+});
 
 describe("previous published release acquisition", () => {
   it("bootstraps only on an explicit missing manifest", () => {
