@@ -161,5 +161,11 @@
     "@types/spdx-expression-parse": "4.0.0",
     "tsup": "8.5.1",
     "typescript": "^6.0.3"
-  }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/OpenMapX/openmapx.git",
+    "directory": "packages/extension-contracts"
+  },
+  "homepage": "https://github.com/OpenMapX/openmapx"
 }

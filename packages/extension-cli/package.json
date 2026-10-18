@@ -33,5 +33,11 @@
   },
   "engines": {
     "node": ">=24"
-  }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/OpenMapX/openmapx.git",
+    "directory": "packages/extension-cli"
+  },
+  "homepage": "https://github.com/OpenMapX/openmapx"
 }

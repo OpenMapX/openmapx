@@ -27,8 +27,8 @@ jobs:
           steps.meta.outputs.update-type == 'version-update:semver-patch' ||
           steps.meta.outputs.update-type == 'version-update:semver-minor'
         # PR_URL via env (never interpolated into the shell) to avoid injection.
-        # No approval step: the GITHUB_TOKEN can't approve PRs, and main requires
-        # status checks (not reviews), so auto-merge just waits on CI then merges.
+        # No approval step: main requires status checks (not reviews), so
+        # auto-merge waits for those checks and normal merge conditions.
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

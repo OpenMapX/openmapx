@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 import {
   copyFileSync,
   existsSync,
+  lstatSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -13,7 +14,24 @@ import {
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { parseArgs } from "node:util";
 
+const { values } = parseArgs({
+  options: { contracts: { type: "string" }, cli: { type: "string" } },
+});
+assert(
+  Boolean(values.contracts) === Boolean(values.cli),
+  "Supply both --contracts and --cli, or neither",
+);
+const supplied = values.contracts ? [resolve(values.contracts), resolve(values.cli)] : [];
+for (const path of supplied)
+  assert(
+    lstatSync(path).isFile() && !lstatSync(path).isSymbolicLink(),
+    "Supplied candidate must be a regular tarball",
+  );
+const candidateHashes = supplied.map((path) =>
+  createHash("sha512").update(readFileSync(path)).digest("hex"),
+);
 const root = resolve(import.meta.dirname, "..");
 const work = mkdtempSync(join(tmpdir(), "openmapx-packed-packages-"));
 const artifacts = join(work, "artifacts");
@@ -59,8 +77,13 @@ try {
   mkdirSync(consumer);
   const contractsTarball = join(artifacts, "extension-contracts.tgz");
   const cliTarball = join(artifacts, "extension-cli.tgz");
-  run("pnpm", ["--filter", "@openmapx/extension-contracts", "pack", "--out", contractsTarball]);
-  run("pnpm", ["--filter", "@openmapx/extension-cli", "pack", "--out", cliTarball]);
+  if (supplied.length) {
+    copyFileSync(supplied[0], contractsTarball);
+    copyFileSync(supplied[1], cliTarball);
+  } else {
+    run("pnpm", ["--filter", "@openmapx/extension-contracts", "pack", "--out", contractsTarball]);
+    run("pnpm", ["--filter", "@openmapx/extension-cli", "pack", "--out", cliTarball]);
+  }
   checkTarball(contractsTarball, "extension-contracts");
   checkTarball(cliTarball, "extension-cli");
   writeFileSync(
@@ -297,5 +320,11 @@ void artifact; void receipts; void serviceCheck;
     "Packed contracts/CLI, strict consumers, independent scaffold install, deterministic artifacts and rejection paths passed.",
   );
 } finally {
+  for (const [index, path] of supplied.entries())
+    assert.equal(
+      createHash("sha512").update(readFileSync(path)).digest("hex"),
+      candidateHashes[index],
+      "Supplied tarball mutated during consumer qualification",
+    );
   rmSync(work, { recursive: true, force: true });
 }
