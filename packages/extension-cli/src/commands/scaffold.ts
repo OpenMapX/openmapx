@@ -9,6 +9,7 @@ import {
 } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import packageInfo from "../../package.json";
 
 const VALID_ID = /^[a-z][a-z0-9-]*$/;
 
@@ -39,7 +40,10 @@ function substituteTokensInDir(dir: string, id: string, domain: string): void {
       substituteTokensInDir(fullPath, id, domain);
     } else if (entry.isFile()) {
       const content = readFileSync(fullPath, "utf-8");
-      const replaced = content.replaceAll("__ID__", id).replaceAll("__DOMAIN__", domain);
+      const replaced = content
+        .replaceAll("__ID__", id)
+        .replaceAll("__DOMAIN__", domain)
+        .replaceAll("__CLI_VERSION__", packageInfo.version);
       if (replaced !== content) {
         writeFileSync(fullPath, replaced, "utf-8");
       }

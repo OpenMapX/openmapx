@@ -14,6 +14,7 @@ WORKDIR /app
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json ./
 COPY packages/command-palette/package.json packages/command-palette/
 COPY packages/core/package.json packages/core/
+COPY packages/extension-contracts/package.json packages/extension-contracts/
 COPY packages/hey-api-client-fetch/package.json packages/hey-api-client-fetch/
 COPY packages/i18n/package.json packages/i18n/
 COPY packages/air-quality/package.json packages/air-quality/

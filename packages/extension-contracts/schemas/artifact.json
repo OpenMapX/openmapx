@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "schemaVersion": {
+      "type": "number",
+      "const": 1
+    },
+    "id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "platformVersion": {
+      "type": "string"
+    },
+    "builtAt": {
+      "type": "string"
+    }
+  },
+  "required": ["schemaVersion", "id", "platformVersion", "builtAt"],
+  "additionalProperties": false,
+  "$id": "https://openmapx.org/schemas/extension-contracts/0.1.0/artifact.json",
+  "$comment": "Structural authoring schema. Runtime validation additionally checks structured licensing, media hosts, component references, compatibility and community policy. This identifier does not imply hosted schema availability."
+}

@@ -86,6 +86,8 @@ COPY --from=prod-deps /app/node_modules ./node_modules
 COPY --from=prod-deps /app/apps/transitous-runner/node_modules ./apps/transitous-runner/node_modules
 COPY --from=prod-deps /app/packages/core/node_modules ./packages/core/node_modules
 COPY packages/core/ ./packages/core/
+COPY packages/extension-contracts/ ./packages/extension-contracts/
+COPY --from=prod-deps /app/packages/extension-contracts/node_modules ./packages/extension-contracts/node_modules
 COPY --from=builder /app/apps/transitous-runner/dist ./apps/transitous-runner/dist
 COPY apps/transitous-runner/package.json ./apps/transitous-runner/
 COPY pnpm-workspace.yaml tsconfig.base.json ./

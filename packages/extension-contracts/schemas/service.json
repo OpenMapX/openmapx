@@ -1,0 +1,645 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[a-z0-9][a-z0-9-]*$"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "description": {
+      "type": "string"
+    },
+    "author": {
+      "type": "string"
+    },
+    "license": {
+      "type": "string"
+    },
+    "homepage": {
+      "type": "string",
+      "format": "uri"
+    },
+    "documentation": {
+      "type": "string",
+      "format": "uri"
+    },
+    "quality": {
+      "type": "string",
+      "enum": ["built-in", "community-verified", "community"]
+    },
+    "platform": {
+      "type": "string"
+    },
+    "container": {
+      "type": "object",
+      "properties": {
+        "image": {
+          "type": "string",
+          "pattern": "^[a-z0-9]([a-z0-9._\\-/])*$"
+        },
+        "tag": {
+          "type": "string",
+          "pattern": "^[a-zA-Z0-9._-]+$"
+        },
+        "digest": {
+          "type": "string",
+          "pattern": "^sha256:[a-f0-9]{64}$"
+        },
+        "containerName": {
+          "type": "string",
+          "pattern": "^[a-zA-Z0-9][a-zA-Z0-9_.-]*$"
+        },
+        "expose": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 65535
+          }
+        },
+        "networkAliases": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9]([a-zA-Z0-9._-]*[a-zA-Z0-9])?$"
+          }
+        },
+        "command": {
+          "anyOf": [
+            {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            {
+              "type": "string"
+            }
+          ]
+        },
+        "entrypoint": {
+          "anyOf": [
+            {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            {
+              "type": "string"
+            }
+          ]
+        },
+        "environment": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "envFile": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "workingDir": {
+          "type": "string"
+        },
+        "user": {
+          "type": "string"
+        },
+        "shmSize": {
+          "type": "string"
+        },
+        "capAdd": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "capDrop": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "devices": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^\\/dev\\/[a-zA-Z0-9_\\-/]+$"
+          }
+        },
+        "gpu": {
+          "type": "object",
+          "properties": {
+            "driver": {
+              "default": "nvidia",
+              "type": "string"
+            },
+            "count": {
+              "default": "all",
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "exclusiveMinimum": 0,
+                  "maximum": 9007199254740991
+                },
+                {
+                  "type": "string",
+                  "const": "all"
+                }
+              ]
+            },
+            "capabilities": {
+              "default": ["gpu"],
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "privileged": {
+          "type": "boolean"
+        },
+        "networkMode": {
+          "type": "string",
+          "enum": ["bridge", "host"]
+        },
+        "memory": {
+          "type": "string"
+        },
+        "restart": {
+          "type": "string",
+          "enum": ["no", "on-failure", "always", "unless-stopped"]
+        },
+        "stopGracePeriod": {
+          "type": "string",
+          "pattern": "^(\\d+(h|m|s|ms))+$"
+        },
+        "healthcheck": {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": ["http", "tcp", "exec"]
+            },
+            "path": {
+              "type": "string"
+            },
+            "port": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 65535
+            },
+            "command": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                {
+                  "type": "string"
+                }
+              ]
+            },
+            "interval": {
+              "type": "string"
+            },
+            "timeout": {
+              "type": "string"
+            },
+            "retries": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "startPeriod": {
+              "type": "string"
+            }
+          },
+          "required": ["type"]
+        },
+        "dependsOn": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "service": {
+                "type": "string"
+              },
+              "condition": {
+                "type": "string",
+                "enum": ["service_started", "service_healthy"]
+              }
+            },
+            "required": ["service"]
+          }
+        },
+        "logging": {
+          "type": "object",
+          "properties": {
+            "driver": {
+              "type": "string"
+            },
+            "options": {
+              "type": "object",
+              "propertyNames": {
+                "type": "string"
+              },
+              "additionalProperties": {
+                "type": "string"
+              }
+            }
+          },
+          "required": ["driver"]
+        }
+      },
+      "required": ["image", "tag"]
+    },
+    "provides": {
+      "type": "array",
+      "items": {
+        "anyOf": [
+          {
+            "type": "string",
+            "minLength": 1
+          },
+          {
+            "type": "object",
+            "properties": {
+              "capability": {
+                "type": "string",
+                "minLength": 1
+              },
+              "metadata": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {}
+              }
+            },
+            "required": ["capability"]
+          }
+        ]
+      }
+    },
+    "consumes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "minLength": 1
+          },
+          "instance": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]*$"
+          },
+          "mountAt": {
+            "type": "string",
+            "pattern": "^\\/[^\\s]+$"
+          },
+          "targetFilename": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9._-]+$"
+          },
+          "readOnly": {
+            "type": "boolean"
+          },
+          "required": {
+            "type": "boolean"
+          }
+        },
+        "required": ["type", "mountAt"]
+      }
+    },
+    "produces": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "minLength": 1
+          },
+          "instance": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]*$"
+          },
+          "sourceDir": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["type", "sourceDir"]
+      }
+    },
+    "selectionDependencies": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z0-9][a-z0-9-]*$"
+      }
+    },
+    "communityNetworkAccess": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z0-9][a-z0-9-]*$"
+      }
+    },
+    "configSchema": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "object"
+        },
+        "properties": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {}
+        },
+        "required": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": {
+          "type": "boolean"
+        }
+      },
+      "required": ["type", "properties"],
+      "additionalProperties": {}
+    },
+    "envVars": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "required": {
+            "type": "boolean"
+          },
+          "description": {
+            "type": "string"
+          },
+          "default": {
+            "type": "string"
+          }
+        },
+        "required": ["name"]
+      }
+    },
+    "ownsSchema": {
+      "type": "string",
+      "pattern": "^[a-z_][a-z0-9_]*$"
+    },
+    "volumes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "pattern": "^openmapx-[a-z0-9-]+$"
+          },
+          "mountAt": {
+            "type": "string",
+            "pattern": "^\\/[^\\s]+$"
+          },
+          "readOnly": {
+            "type": "boolean"
+          },
+          "backup": {
+            "type": "boolean"
+          },
+          "backupMode": {
+            "type": "string",
+            "enum": ["tar", "pg_dump"]
+          }
+        },
+        "required": ["name", "mountAt"]
+      }
+    },
+    "bindMounts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "source": {
+            "type": "string",
+            "minLength": 1
+          },
+          "target": {
+            "type": "string",
+            "minLength": 1
+          },
+          "readOnly": {
+            "type": "boolean"
+          },
+          "optional": {
+            "type": "boolean"
+          }
+        },
+        "required": ["source", "target"]
+      }
+    },
+    "exposure": {
+      "type": "object",
+      "properties": {
+        "hostPorts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "container": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 65535
+              },
+              "host": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 65535
+              },
+              "protocol": {
+                "type": "string",
+                "enum": ["tcp", "udp"]
+              },
+              "bindAddress": {
+                "type": "string"
+              }
+            },
+            "required": ["container", "host"]
+          }
+        },
+        "proxy": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "host": {
+              "type": "object",
+              "properties": {
+                "default": {
+                  "type": "string"
+                },
+                "configKey": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+                }
+              },
+              "required": ["default"]
+            },
+            "pathPrefix": {
+              "type": "string",
+              "pattern": "^\\/[a-zA-Z0-9._\\-/]*$"
+            },
+            "stripPrefix": {
+              "type": "boolean"
+            },
+            "middleware": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "authRequired": {
+              "type": "boolean"
+            },
+            "priority": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 1000000
+            },
+            "additionalRoutes": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "pathPrefix": {
+                    "type": "string",
+                    "pattern": "^\\/[a-zA-Z0-9._\\-/]*$"
+                  },
+                  "path": {
+                    "type": "string",
+                    "pattern": "^\\/[a-zA-Z0-9._\\-/]*$"
+                  },
+                  "middleware": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "required": ["enabled"]
+        }
+      }
+    },
+    "buildCommand": {
+      "type": "string"
+    },
+    "buildImages": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string",
+        "pattern": "^[a-z0-9][a-z0-9-]*$"
+      },
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "image": {
+            "type": "string",
+            "pattern": "^[a-z0-9]([a-z0-9._\\-/])*$"
+          },
+          "tag": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9._-]+$"
+          },
+          "digest": {
+            "type": "string",
+            "pattern": "^sha256:[a-f0-9]{64}$"
+          }
+        },
+        "required": ["image", "tag", "digest"]
+      }
+    },
+    "ui": {
+      "type": "object",
+      "properties": {
+        "icon": {
+          "type": "string"
+        },
+        "category": {
+          "type": "string"
+        }
+      }
+    },
+    "subjectData": {
+      "type": "object",
+      "properties": {
+        "storesPersonalData": {
+          "type": "boolean"
+        },
+        "strategy": {
+          "type": "string",
+          "enum": ["collector", "operator_task", "not_personal"]
+        },
+        "registrationIds": {
+          "maxItems": 64,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]*$"
+          }
+        },
+        "operatorInstructions": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2000
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": ["storesPersonalData", "strategy", "registrationIds", "operatorInstructions"],
+      "additionalProperties": false
+    }
+  },
+  "required": ["id", "name", "version", "quality", "container"],
+  "$id": "https://openmapx.org/schemas/extension-contracts/0.1.0/service.json",
+  "$comment": "Structural authoring schema. Runtime validation additionally checks structured licensing, media hosts, component references, compatibility and community policy. This identifier does not imply hosted schema availability."
+}

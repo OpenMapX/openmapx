@@ -13,6 +13,7 @@ FROM base AS deps
 WORKDIR /app
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json ./
 COPY packages/core/package.json packages/core/
+COPY packages/extension-contracts/package.json packages/extension-contracts/
 COPY packages/db-schema/package.json packages/db-schema/
 COPY packages/hardlinks/package.json packages/hardlinks/
 COPY packages/mobility-core/package.json packages/mobility-core/
@@ -42,6 +43,7 @@ FROM base AS prod-deps
 WORKDIR /app
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json ./
 COPY packages/core/package.json packages/core/
+COPY packages/extension-contracts/package.json packages/extension-contracts/
 COPY packages/db-schema/package.json packages/db-schema/
 COPY packages/hardlinks/package.json packages/hardlinks/
 COPY packages/mobility-core/package.json packages/mobility-core/
@@ -159,6 +161,8 @@ COPY --from=prod-deps /app/apps/api/node_modules ./apps/api/node_modules
 # .ts file's location upward, so `@better-auth/passkey` imported from
 # packages/core must be reachable via packages/core/node_modules).
 COPY packages/core/ packages/core/
+COPY packages/extension-contracts/ ./packages/extension-contracts/
+COPY --from=prod-deps /app/packages/extension-contracts/node_modules ./packages/extension-contracts/node_modules
 COPY packages/i18n/ packages/i18n/
 COPY packages/db-schema/ packages/db-schema/
 COPY packages/hardlinks/ packages/hardlinks/

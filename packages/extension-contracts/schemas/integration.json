@@ -1,0 +1,478 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*$"
+    },
+    "name": {
+      "type": "string"
+    },
+    "version": {
+      "type": "string"
+    },
+    "description": {
+      "type": "string"
+    },
+    "author": {
+      "type": "string"
+    },
+    "license": {
+      "type": "string"
+    },
+    "documentation": {
+      "type": "string"
+    },
+    "platform": {
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$"
+    },
+    "domains": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "dependencies": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "requires": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "service": {
+            "type": "string"
+          },
+          "capability": {
+            "type": "string"
+          },
+          "optional": {
+            "type": "boolean"
+          }
+        }
+      }
+    },
+    "frontend": {
+      "type": "object",
+      "properties": {
+        "mapLayer": {
+          "type": "boolean"
+        },
+        "sharedMapLayer": {
+          "type": "string"
+        },
+        "legend": {
+          "type": "boolean"
+        },
+        "panel": {
+          "type": "boolean"
+        },
+        "searchCategory": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "label": {
+              "type": "string"
+            },
+            "showInChipBar": {
+              "type": "boolean"
+            },
+            "iconPath": {
+              "type": "string"
+            }
+          },
+          "required": ["id"]
+        },
+        "layerSelector": {
+          "type": "object",
+          "properties": {
+            "group": {
+              "type": "string",
+              "enum": ["map-details", "map-tools", "map-types"]
+            },
+            "labelKey": {
+              "type": "string"
+            },
+            "icon": {
+              "type": "string"
+            },
+            "preview": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 256
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "quickSelector": {
+              "type": "boolean"
+            }
+          },
+          "required": ["group", "labelKey"]
+        },
+        "overlay": {
+          "type": "object",
+          "properties": {
+            "excludes": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "minZoom": {
+              "type": "number"
+            },
+            "legend": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "enum": ["categorical", "ramp"]
+                },
+                "title": {
+                  "type": "string"
+                },
+                "titleKey": {
+                  "type": "string"
+                },
+                "items": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "color": {
+                        "type": "string"
+                      },
+                      "label": {
+                        "type": "string"
+                      },
+                      "labelKey": {
+                        "type": "string"
+                      }
+                    },
+                    "required": ["color"]
+                  }
+                },
+                "stops": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "value": {
+                        "type": "number"
+                      },
+                      "color": {
+                        "type": "string"
+                      }
+                    },
+                    "required": ["value", "color"]
+                  }
+                }
+              },
+              "required": ["kind"]
+            }
+          }
+        }
+      }
+    },
+    "backend": {
+      "type": "object",
+      "properties": {
+        "routes": {
+          "type": "boolean"
+        },
+        "cron": {
+          "type": ["string", "null"]
+        }
+      }
+    },
+    "configSchema": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string"
+      },
+      "additionalProperties": {}
+    },
+    "healthCheck": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "enum": ["http", "ping", "tcp", "custom"]
+            },
+            "url": {
+              "type": "string"
+            },
+            "urlTemplate": {
+              "type": "string"
+            },
+            "headers": {
+              "type": "object",
+              "propertyNames": {
+                "type": "string"
+              },
+              "additionalProperties": {
+                "type": "string"
+              }
+            },
+            "requiredConfigKeys": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "category": {
+              "type": "string"
+            }
+          },
+          "required": ["type"]
+        },
+        {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string",
+                "enum": ["http", "ping", "tcp", "custom"]
+              },
+              "url": {
+                "type": "string"
+              },
+              "urlTemplate": {
+                "type": "string"
+              },
+              "headers": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "type": "string"
+                }
+              },
+              "requiredConfigKeys": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "category": {
+                "type": "string"
+              }
+            },
+            "required": ["type"]
+          }
+        }
+      ]
+    },
+    "quality": {
+      "type": "string",
+      "enum": ["built-in", "community-verified", "community"]
+    },
+    "dataSources": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "sourceId": {
+            "type": "string",
+            "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"
+          },
+          "domain": {
+            "type": "string",
+            "minLength": 1
+          },
+          "name": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          },
+          "owner": {
+            "type": "string",
+            "minLength": 1
+          },
+          "termsUrl": {
+            "type": "string",
+            "format": "uri"
+          },
+          "methodologyUrl": {
+            "type": "string",
+            "format": "uri"
+          },
+          "dataUseClass": {
+            "type": "string",
+            "enum": [
+              "open",
+              "attribution",
+              "share-alike",
+              "non-commercial",
+              "restricted",
+              "unknown"
+            ]
+          },
+          "credentialOwner": {
+            "type": "string",
+            "enum": ["none", "instance-operator", "openmapx-project", "end-user"]
+          },
+          "reviewedAt": {
+            "type": "string",
+            "format": "date",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+          },
+          "apiHosts": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "mediaHosts": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "licensing": {},
+          "attribution": {
+            "type": "string"
+          },
+          "notes": {
+            "type": "string"
+          },
+          "commercialUse": {
+            "type": "string",
+            "enum": ["yes", "no", "conditional", "unknown"]
+          },
+          "redistribution": {
+            "type": "object",
+            "properties": {
+              "sourceData": {
+                "type": "string",
+                "enum": ["yes", "no", "conditional", "unknown"]
+              },
+              "derivedData": {
+                "type": "string",
+                "enum": ["yes", "no", "conditional", "unknown"]
+              }
+            },
+            "required": ["sourceData", "derivedData"]
+          },
+          "usageConditions": {
+            "maxItems": 32,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1000
+            }
+          },
+          "providerCountry": {
+            "type": "string"
+          },
+          "providerPrivacyUrl": {
+            "type": "string"
+          },
+          "endUserExposure": {
+            "type": "string",
+            "enum": ["direct", "mixed", "proxied", "server-only", "build-time"]
+          },
+          "personalData": {
+            "type": "boolean"
+          },
+          "cookies": {
+            "type": "boolean"
+          },
+          "dpaAvailable": {
+            "type": "boolean"
+          },
+          "dpaUrl": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "sourceId",
+          "name",
+          "url",
+          "licensing",
+          "providerCountry",
+          "providerPrivacyUrl"
+        ]
+      }
+    },
+    "runtimeDataSources": {
+      "type": "boolean",
+      "const": true
+    },
+    "infrastructure": {
+      "type": "object",
+      "properties": {
+        "dataRequirements": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "planetScale": {
+          "type": "boolean"
+        }
+      }
+    },
+    "subjectData": {
+      "type": "object",
+      "properties": {
+        "storesPersonalData": {
+          "type": "boolean"
+        },
+        "strategy": {
+          "type": "string",
+          "enum": ["collector", "operator_task", "not_personal"]
+        },
+        "registrationIds": {
+          "maxItems": 64,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]*$"
+          }
+        },
+        "operatorInstructions": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2000
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": ["storesPersonalData", "strategy", "registrationIds", "operatorInstructions"],
+      "additionalProperties": false
+    }
+  },
+  "required": ["id", "domains"],
+  "$id": "https://openmapx.org/schemas/extension-contracts/0.1.0/integration.json",
+  "$comment": "Structural authoring schema. Runtime validation additionally checks structured licensing, media hosts, component references, compatibility and community policy. This identifier does not imply hosted schema availability."
+}

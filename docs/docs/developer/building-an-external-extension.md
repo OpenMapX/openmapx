@@ -37,10 +37,10 @@ The two dependency directions to keep in mind:
 1. **OpenMapX → your integration**: app-api discovers its manifest and serves its
    approved presentation assets; it does not execute community server code.
 2. **You → OpenMapX tooling**: use `@openmapx/extension-cli` to scaffold,
-   validate, package, and assemble the signed component manifest. Runtime code
+   validate, package, and assemble the component manifest. Runtime code
    stays in the service container.
 
-The CLI is published under Apache-2.0 and designed for use outside this repository.
+The CLI is licensed under Apache-2.0 and designed for use outside this repository. The CLI and `@openmapx/extension-contracts` are being qualified for their first public release. Until publication, use the exact locally built CLI tarball; registry installation commands below apply to published versions.
 
 ## Set up your repo
 
@@ -62,6 +62,15 @@ npm install -g @openmapx/extension-cli
 npx @openmapx/extension-cli --help
 ```
 
+During local qualification, build and install the candidate instead:
+
+```sh
+# In the OpenMapX checkout:
+pnpm --filter @openmapx/extension-cli pack --out /tmp/extension-cli.tgz
+# In your independent authoring project:
+npm install -g /tmp/extension-cli.tgz
+```
+
 Then scaffold the integration directory:
 
 ```sh
@@ -73,7 +82,7 @@ This creates `integrations/conditions/` with `manifest.json`, `package.json`, an
 `companion-response.example.json` response example, with `__ID__` and `__DOMAIN__`
 tokens substituted throughout. The response example is for your companion
 service; it is not a manifest field or an automatically consumed host protocol.
-Authoring notes/examples are excluded from the packaged artifact's allowlist.
+Authoring notes/examples are excluded from the packaged artifact's allowlist. The generated package has no OpenMapX workspace dependencies. Install the published development dependency with `npm install`, or install the exact candidate tarball in that generated directory during local qualification. Its `npm run validate` and `npm run package` scripts use the standalone CLI. Installed development dependencies remain outside the declarative artifact.
 
 ## Write the integration metadata
 
@@ -91,7 +100,9 @@ At any point:
 openmapx-ext validate ./integrations/conditions
 ```
 
-Exits non-zero and prints errors if the manifest is invalid.
+This checks the manifest and the same declarative-code and asset rules used by packaging, without writing an archive. Other inputs use `--kind service`, `--kind extension` or `--kind contributors` with a JSON file. Service checks always use community policy; contributor files contain canonical receipt arrays. Extension checks validate component references and the minimum protocol version. Invalid input exits non-zero with diagnostics.
+
+The shared `@openmapx/extension-contracts` package supplies types, semantic validators and structural JSON Schemas for these inputs. Editor schemas supplement the runtime validators; they do not certify download access, installation authority or running-service readiness.
 
 ## Preserve companion-service contributor receipts
 
@@ -213,15 +224,14 @@ archives your source directory. Anything not on this list simply is not
 collected, so a stray `.env`, key, or scratch file next to a declared file
 cannot reach a release:
 
-| Included                                                          | Limit                   |
-| ----------------------------------------------------------------- | ----------------------- |
-| `manifest.json` (after schema validation)                         | —                       |
-| `openmapx-artifact.json` (generated)                              | —                       |
-| `dist/frontend/index.js`, `dist/backend/index.mjs` when permitted | —                       |
-| `dist/licenses.json` (generated)                                  | —                       |
-| `strings/<locale>.json` matching `[a-z0-9-]{2,35}`                | 100 files, 256 KiB each |
-| The exact manifest-referenced SVG preview                         | 64 KiB                  |
-| `LICENSE`, `LICENSE.txt`, `LICENSE.md`, `NOTICE`, `NOTICE.txt`    | 1 MiB each              |
+| Included                                                       | Limit                   |
+| -------------------------------------------------------------- | ----------------------- |
+| `manifest.json` (after schema validation)                      | —                       |
+| `openmapx-artifact.json` (generated)                           | —                       |
+| `dist/licenses.json` (generated)                               | —                       |
+| `strings/<locale>.json` matching `[a-z0-9-]{2,35}`             | 100 files, 256 KiB each |
+| The exact manifest-referenced SVG preview                      | 64 KiB                  |
+| `LICENSE`, `LICENSE.txt`, `LICENSE.md`, `NOTICE`, `NOTICE.txt` | 1 MiB each              |
 
 Everything else is excluded: source and tests, source maps, `package.json`,
 lockfiles, dotfiles and `.env*`, VCS data, `node_modules/`, caches, unreferenced
@@ -260,8 +270,7 @@ declare the platform version you build against:
 }
 ```
 
-The host refuses to load a bundle whose major version differs from the running
-platform, or whose minor is lower.
+The host requires the same extension-protocol major and a host minor at least as high as the declared requirement. Product versions, npm package versions, protocol versions and archive schema versions are separate identities. Protocol `1.0` does not imply a supported OpenMapX product release.
 
 ### Install through the Extensions store or the CLI
 
@@ -408,18 +417,16 @@ openmapx-ext bundle \
   --out extension.json
 ```
 
-Publish `extension.json` at an HTTPS URL — and point it at a **moving "latest
-release"** location so updates flow from your releases, not from catalog edits.
-The simplest way: attach `extension.json` to each GitHub release (regenerated so
-`version` and the service `ref` are that release's tag) and use the stable
-`https://github.com/<owner>/<repo>/releases/latest/download/extension.json` asset
-url. List it **once** by opening a PR to the curated
-[`openmapx/community-extensions`](https://github.com/openmapx/community-extensions)
-catalog pointing `manifest` at that url (inclusion is what makes it a **verified**
-entry). The store reads the version from your manifest, so **every later release
-surfaces as an available update with no further catalog change**. (If you instead
-pin the manifest url to a specific tag, updates stay gated behind a catalog edit —
-useful when you want each version curated.)
+To author configuration and readiness along with the components, use a complete source document:
+
+```sh
+openmapx-ext bundle --input extension.source.json --out extension.json
+openmapx-ext validate extension.json --kind extension
+```
+
+The input can include `config` and `readiness`. Do not combine `--input` with metadata or component flags. Validation finishes before the output file is written.
+
+Publish `extension.json` at an HTTPS URL after the artifacts and service revision it references are available. Catalog verification binds the exact manifest bytes to a SHA-256 pin; a moving URL or catalog inclusion alone does not establish verified trust. Updates to verified content require reviewed pins for the new version. Direct-URL installs remain community trust. See [Community extensions](../administration/community-extensions.md) for the current catalog and update rules.
 
 ### End-to-end install
 
@@ -445,8 +452,7 @@ service component; app-api, data-manager, and the same-origin web page do not
 execute community integration modules.
 
 **Platform-version compatibility.** The host rejects an integration whose
-declared `platform` major version differs from the running OpenMapX, or whose
-minor is lower than the current minor. Pin a `platform` field in your
+declared protocol major differs from the host, or whose required minor exceeds the host’s minor. Use exactly `major.minor`; legacy range strings such as `>=1.0.0` must be corrected to `1.0`. Pin a `platform` field in your
 `manifest.json` and test against each OpenMapX release before publishing a new
 artifact.
 
