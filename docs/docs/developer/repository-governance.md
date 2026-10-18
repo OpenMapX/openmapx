@@ -43,9 +43,29 @@ workflow, so review workflow changes and avoid duplicate job names.
 
 Preserve linear history, deletion protection and force-push protection.
 CodeQL analysis completion and alert-severity blocking are distinct controls.
-The approved High/Critical alert threshold is staged until finding triage and
-platform blocking behavior have been verified. Do not bulk-dismiss alerts to
-establish a clean baseline.
+Readback on 18 October 2026 confirmed an active native `code_scanning` rule
+in this ruleset with tool `CodeQL`, `security_alerts_threshold: high_or_higher`
+and `alerts_threshold: none`. The app-bound `Analyze (javascript-typescript)`
+context remains independently required; successful analysis alone does not
+establish that its findings satisfy the native rule.
+
+Applicable new High/Critical security findings in changed lines block merging;
+all lines identified by an alert must be in the PR diff. Existing out-of-diff
+backlog and Medium/Low findings remain subject to triage, rather than a
+universal clean-scan requirement. Do not bulk-dismiss alerts to establish a
+clean baseline.
+
+Hosted verification on 18 October 2026 observed a High-finding PR blocked
+after successful analysis and a failing native CodeQL result. In-progress
+analysis also blocked merging. A Medium-only PR had successful analysis and
+checks and was mergeable despite existing out-of-diff findings.
+
+[GitHub documents](https://docs.github.com/en/code-security/concepts/code-scanning/merge-protection)
+that an unconfigured required tool also blocks merging. No missing-tool trial
+was performed; this is documented platform behavior, not an observed case.
+Missing or unfinished required analysis must not be treated as approval:
+retain both the app-bound completion check and the native rule, and use only
+the incident-specific recovery procedure below when necessary.
 
 ## Actions and security reporting
 
