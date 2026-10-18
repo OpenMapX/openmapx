@@ -1,4 +1,4 @@
-import { chmodSync, existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   applyFeedOverlay,
@@ -13,6 +13,7 @@ import {
   listTransitousFeedFiles,
   pruneUnresolvableSources,
   sumActiveGtfsSources,
+  writePrivateCatalogFile,
 } from "./internal.js";
 import type { JobContext, JobLogger, StageFn } from "./types.js";
 
@@ -228,10 +229,7 @@ function applyFeedsOverlayToCatalog(
     // part of the Transitous catalog schema and would confuse fetch.py.
     const serialisable = { ...feed } as Record<string, unknown>;
     delete serialisable.region;
-    writeFileSync(feedPath, `${JSON.stringify(serialisable, null, 2)}\n`, "utf-8");
-    // This rewrite may preserve an API key or credentialed URL override, so
-    // repair the catalog checkout's default 0644 mode after writing.
-    chmodSync(feedPath, 0o600);
+    writePrivateCatalogFile(feedPath, `${JSON.stringify(serialisable, null, 2)}\n`);
   }
   for (const unmatched of result.unmatched) {
     logger.warn(

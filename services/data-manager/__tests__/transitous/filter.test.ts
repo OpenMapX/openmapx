@@ -1,7 +1,19 @@
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  existsSync,
+  fstatSync,
+  linkSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { run as filterRun } from "../../src/jobs/transitous/filter.js";
 import { OperatorFeedRelayStore } from "../../src/jobs/transitous/operator-feed-relay.js";
 import { buildJobContext } from "../../src/jobs/transitous/pipeline.js";
@@ -10,9 +22,21 @@ import { StateStore } from "../../src/state.js";
 
 type FeedSource = { name?: string; skip?: boolean; "api-key"?: string };
 
+vi.mock("node:fs", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:fs")>();
+  return {
+    ...actual,
+    writeFileSync: vi.fn(actual.writeFileSync),
+    readFileSync: vi.fn(actual.readFileSync),
+  };
+});
+const actualFs = await vi.importActual<typeof import("node:fs")>("node:fs");
+
 let tmp: string | undefined;
 
 afterEach(() => {
+  vi.mocked(writeFileSync).mockImplementation(actualFs.writeFileSync);
+  vi.mocked(readFileSync).mockImplementation(actualFs.readFileSync);
   if (tmp) {
     rmSync(tmp, { recursive: true, force: true });
     tmp = undefined;
@@ -45,6 +69,167 @@ function makeRunner(behaviours: Array<"ok" | string>): {
   };
   return { runScript, state };
 }
+
+describe("feeds-overlay catalog write security", () => {
+  function fixture(existing = true) {
+    tmp = mkdtempSync(join(tmpdir(), "openmapx-filter-private-write-"));
+    const catalogDir = makeCatalog(tmp);
+    const feedPath = join(catalogDir, "feeds", "de.json");
+    if (existing) {
+      writeFileSync(
+        feedPath,
+        JSON.stringify({
+          name: "Germany",
+          sources: [
+            {
+              name: "BVG",
+              "api-key": "PLAN119_SYNTHETIC_KEY",
+              url: "https://operator.example/gtfs?token=PLAN119_SYNTHETIC_URL",
+            },
+          ],
+        }),
+      );
+      chmodSync(feedPath, 0o644);
+    }
+    const overlayPath = join(tmp, "feeds-overlay.json");
+    writeFileSync(
+      overlayPath,
+      JSON.stringify({
+        version: 3,
+        sources: existing
+          ? []
+          : [
+              {
+                spec: "gtfs",
+                type: "http",
+                region: "de",
+                name: "operator-feed",
+                url: "https://operator.example/gtfs",
+                origin: "operator",
+                license: { spdxIdentifier: "CC-BY-4.0", attribution: "Fixture operator" },
+              },
+            ],
+        patches: existing ? [{ sourceId: "catalog:de:BVG", skip: false }] : [],
+        quarantine: [],
+      }),
+    );
+    const ctx = buildJobContext({
+      dataDir: tmp,
+      store: new StateStore(tmp),
+      countries: ["de"],
+      apiKeysPath: join(tmp, "absent-api-keys.json"),
+      feedsOverlayPath: overlayPath,
+      runner: async () => {},
+      runScript: async () => {},
+      logger: { info: () => {}, warn: () => {}, error: () => {} },
+    });
+    ctx.state.catalogDir = catalogDir;
+    return { ctx, feedPath };
+  }
+
+  it.each([false, true])(
+    "is private before preserving credential bytes, including partial failure=%s",
+    async (fail) => {
+      const { ctx, feedPath } = fixture();
+      const before = statSync(feedPath);
+      const modes: number[] = [];
+      let descriptor: number | undefined;
+      vi.mocked(writeFileSync).mockImplementation((file, data, options) => {
+        if (typeof data === "string" && data.includes("PLAN119_SYNTHETIC_KEY")) {
+          modes.push((typeof file === "number" ? fstatSync(file) : statSync(file)).mode & 0o777);
+          if (typeof file === "number") descriptor = file;
+          if (fail) {
+            actualFs.writeFileSync(
+              file,
+              data.slice(0, data.indexOf("PLAN119_SYNTHETIC_KEY") + 21),
+              options,
+            );
+            throw new Error("injected catalog write failure");
+          }
+        }
+        actualFs.writeFileSync(file, data, options);
+      });
+      const result = await filterRun(ctx);
+      expect(result.status).toBe(fail ? "error" : "ok");
+      if (fail) expect(result.message).toBe("injected catalog write failure");
+      else
+        expect(JSON.parse(readFileSync(feedPath, "utf-8"))).toEqual({
+          name: "Germany",
+          sources: [
+            {
+              name: "BVG",
+              "api-key": "PLAN119_SYNTHETIC_KEY",
+              url: "https://operator.example/gtfs?token=PLAN119_SYNTHETIC_URL",
+              skip: false,
+            },
+          ],
+        });
+      expect(modes).toEqual([0o600]);
+      expect(readFileSync(feedPath, "utf-8")).toContain("PLAN119_SYNTHETIC_KEY");
+      const after = statSync(feedPath);
+      expect([after.uid, after.gid, after.ino, after.mode & 0o777]).toEqual([
+        before.uid,
+        before.gid,
+        before.ino,
+        0o600,
+      ]);
+      expect(descriptor).toBeTypeOf("number");
+      expect(() => fstatSync(descriptor as number)).toThrow();
+    },
+  );
+
+  it.each(["symlink", "hardlink"])(
+    "rejects a final-path %s without changing external bytes",
+    async (kind) => {
+      const { ctx, feedPath } = fixture();
+      const external = join(ctx.catalogDir, "external.json");
+      const original = readFileSync(feedPath, "utf-8");
+      writeFileSync(external, original, { mode: 0o644 });
+      rmSync(feedPath);
+      if (kind === "symlink") symlinkSync(external, feedPath);
+      else linkSync(external, feedPath);
+
+      expect((await filterRun(ctx)).status).toBe("error");
+      expect(readFileSync(external, "utf-8")).toBe(original);
+      expect(statSync(external).mode & 0o777).toBe(0o644);
+    },
+  );
+
+  it("rejects a final path replaced by a directory before writing", async () => {
+    const { ctx, feedPath } = fixture();
+    vi.mocked(readFileSync).mockImplementation((file, options) => {
+      const data = actualFs.readFileSync(file, options);
+      if (file === feedPath) {
+        rmSync(feedPath);
+        mkdirSync(feedPath);
+      }
+      return data;
+    });
+    expect((await filterRun(ctx)).status).toBe("error");
+    expect(statSync(feedPath).isDirectory()).toBe(true);
+  });
+
+  it("creates new operator catalog files privately without a synthetic region field", async () => {
+    const { ctx, feedPath } = fixture(false);
+    const modes: number[] = [];
+    vi.mocked(writeFileSync).mockImplementation((file, data, options) => {
+      if (typeof data === "string" && data.includes("operator-feed")) {
+        if (typeof file !== "number" && !existsSync(feedPath)) {
+          actualFs.writeFileSync(file, data, options);
+          modes.push(statSync(feedPath).mode & 0o777);
+          return;
+        }
+        modes.push((typeof file === "number" ? fstatSync(file) : statSync(feedPath)).mode & 0o777);
+      }
+      actualFs.writeFileSync(file, data, options);
+    });
+    expect((await filterRun(ctx)).status).toBe("ok");
+    expect(modes).toEqual([0o600]);
+    expect(statSync(feedPath).mode & 0o777).toBe(0o600);
+    expect(JSON.parse(readFileSync(feedPath, "utf-8"))).not.toHaveProperty("region");
+    await ctx.operatorFeedRelay.endRun(ctx.jobId);
+  });
+});
 
 describe("filter stage", () => {
   it("tightens API-key-stamped feed files to owner-only permissions", async () => {

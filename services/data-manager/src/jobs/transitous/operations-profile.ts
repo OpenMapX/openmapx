@@ -56,10 +56,16 @@ function positiveInteger(value: number | undefined, fallback: number, label: str
   return resolved;
 }
 
-function artifactOrigin(url: string | undefined): string | undefined {
+/** Match DNS labels, including a fully qualified hostname's optional root dot. */
+export function isTransitousHostname(hostname: string): boolean {
+  const normalizedHostname = hostname.toLowerCase().replace(/\.$/, "");
+  return normalizedHostname === "transitous.org" || normalizedHostname.endsWith(".transitous.org");
+}
+
+function artifactUrl(url: string | undefined): URL | undefined {
   if (!url) return undefined;
   try {
-    return new URL(url).origin;
+    return new URL(url);
   } catch {
     throw new Error(`Invalid Transitous artifact URL: ${url}`);
   }
@@ -75,7 +81,8 @@ export function resolveOperationsProfile(
   const countries = normalized(input.countries);
   const feedAllowList = normalized(input.feedAllowList);
   const source = input.source ?? (profile === "regional-assisted" ? "mirror" : "build");
-  const origin = artifactOrigin(input.artifactBaseUrl);
+  const artifact = artifactUrl(input.artifactBaseUrl);
+  const origin = artifact?.origin;
 
   if (
     profile !== "planet" &&
@@ -92,7 +99,7 @@ export function resolveOperationsProfile(
   }
   if (profile === "regional-sovereign") {
     if (source !== "build") throw new Error("regional-sovereign requires origin build acquisition");
-    if (origin?.includes("transitous.org")) {
+    if (artifact && isTransitousHostname(artifact.hostname)) {
       throw new Error("regional-sovereign prohibits Transitous artifact domains");
     }
   }

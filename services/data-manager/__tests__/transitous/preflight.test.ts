@@ -105,6 +105,76 @@ describe("MOTIS capacity preflight", () => {
     ).toMatch(/outside allow-list: de_vbb/);
   });
 
+  const sovereign = resolveOperationsProfile({
+    profile: "regional-sovereign",
+    countries: ["de"],
+    source: "build",
+    osmInput: "germany.osm.pbf",
+  });
+
+  it.each([
+    "https://transitous.org/",
+    "https://api.transitous.org:8443/feeds/de.json",
+    "https://A.B.TRANSITOUS.ORG/gtfs/",
+    "https://TRANSITOUS.ORG./gtfs/",
+    "http://API.TRANSITOUS.ORG.:8080/gtfs/",
+    "not a URL",
+    "https://[bad",
+    "https://",
+  ])("blocks hosted or malformed source URL %s", (originUrl) => {
+    const result = preflight({
+      policy: sovereign,
+      selectedSources: [{ id: "de_bvg", originUrl, license: { "spdx-identifier": "CC-BY-4.0" } }],
+    });
+    expect(result.ok).toBe(false);
+    expect(result.blockers).toContain("sovereign input contains hosted/invalid Transitous URLs");
+  });
+
+  it.each([
+    "https://nottransitous.org/gtfs/",
+    "https://nottransitous.org.:8443/gtfs/",
+    "https://mirror-transitous.org/gtfs/",
+    "https://transitous.org.example/gtfs/",
+    "https://sub.transitous.org.example/gtfs/",
+    "https://operator.example/transitous.org?next=https://api.transitous.org/",
+    "https://transitous.org@operator.example:8443/gtfs/",
+    "http://operator.example:8080/gtfs/",
+  ])("allows unrelated source hostname in %s with other requirements met", (originUrl) => {
+    const result = preflight({
+      policy: sovereign,
+      selectedSources: [{ id: "de_bvg", originUrl, license: { "spdx-identifier": "CC-BY-4.0" } }],
+    });
+    expect(result.ok).toBe(true);
+    expect(result.blockers).toEqual([]);
+  });
+
+  it.each([
+    ["https://nottransitous.org/feed.zip", true],
+    ["https://transitous.org/feed.zip", false],
+    ["https://api.transitous.org./feed.zip", false],
+    ["not a URL", false],
+  ])("applies the same boundary to sourceUrls fallback %s", (url, ok) => {
+    expect(preflight({ policy: sovereign, sourceUrls: [url] }).ok).toBe(ok);
+  });
+
+  it("keeps license, origin, allow-list and local OSM blockers for unrelated hosts", () => {
+    const result = preflight({
+      policy: { ...sovereign, feedAllowList: ["de_bvg"] },
+      selectedFeedIds: ["de_unknown"],
+      selectedSources: [
+        { id: "de_unknown", originUrl: "https://nottransitous.org/feed.zip" },
+        { id: "de_missing_origin", license: { "spdx-identifier": "CC-BY-4.0" } },
+      ],
+      osmAvailable: false,
+    });
+    expect(result.ok).toBe(false);
+    expect(result.blockers.join(" ")).not.toMatch(/hosted\/invalid/);
+    expect(result.blockers.join(" ")).toMatch(/outside allow-list: de_unknown/);
+    expect(result.blockers.join(" ")).toMatch(/missing license metadata: de_unknown/);
+    expect(result.blockers.join(" ")).toMatch(/missing origin URLs: de_missing_origin/);
+    expect(result.blockers.join(" ")).toMatch(/matching local OSM/);
+  });
+
   it("labels unknown-size estimates instead of pretending they are measured", () => {
     const result = preflight({ measuredCompressedBytes: undefined });
     expect(result.estimate.basis).toBe("conservative-defaults");
