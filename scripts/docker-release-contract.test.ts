@@ -1,5 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { runInNewContext } from "node:vm";
@@ -10,6 +11,29 @@ const root = resolve(import.meta.dirname, "..");
 function read(relativePath: string): string {
   return readFileSync(resolve(root, relativePath), "utf8");
 }
+
+type WorkflowStep = {
+  name?: string;
+  uses?: string;
+  if?: string;
+  "continue-on-error"?: boolean;
+  with?: Record<string, unknown>;
+  env?: Record<string, string>;
+};
+type Workflow = {
+  jobs: Record<
+    string,
+    {
+      steps: WorkflowStep[];
+      needs?: string[];
+      permissions?: Record<string, string>;
+      "continue-on-error"?: boolean;
+    }
+  >;
+};
+const { load } = createRequire(resolve(root, "packages/transitous-core/package.json"))(
+  "js-yaml",
+) as { load: (source: string) => Workflow };
 
 // Execute the actual github-script gate, replacing only the Actions/GitHub APIs.
 async function verifyCandidate({
@@ -141,6 +165,46 @@ describe("Docker release trust gate", () => {
     const gateEnd = release.indexOf("- name:", gateStart + 10);
     expect(gateStart).toBeGreaterThan(-1);
     expect(release.slice(gateStart, gateEnd)).not.toContain("ENABLE_CODE_SCANNING");
+  });
+
+  it("blocks affected PR images on the same actionable findings before the required aggregate", () => {
+    const workflow = load(ci);
+    const job = workflow.jobs["docker-build"];
+    const buildIndex = job.steps.findIndex((step) =>
+      step.uses?.startsWith("docker/build-push-action@"),
+    );
+    const scanIndex = job.steps.findIndex((step) =>
+      step.uses?.startsWith("aquasecurity/trivy-action@"),
+    );
+    const build = job.steps[buildIndex];
+    expect(build.with).toMatchObject({ push: false, load: true });
+    expect(scanIndex).toBeGreaterThan(buildIndex);
+    const scan = job.steps[scanIndex];
+    const mainScan = load(release).jobs.build.steps.find(
+      (step) =>
+        step.uses?.startsWith("aquasecurity/trivy-action@") && step.with?.["exit-code"] === "1",
+    );
+    expect(mainScan).toBeDefined();
+    for (const key of [
+      "version",
+      "scanners",
+      "vuln-type",
+      "severity",
+      "ignore-unfixed",
+      "trivyignores",
+      "exit-code",
+    ]) {
+      expect(scan.with?.[key], key).toEqual(mainScan?.with?.[key]);
+    }
+    expect(scan.uses).toBe(mainScan?.uses);
+    expect(scan.with?.["image-ref"]).toBe(build.with?.tags);
+    expect(scan.env).toMatchObject({ TRIVY_IMAGE_SRC: "docker" });
+    expect(scan.if).toBeUndefined();
+    expect(scan["continue-on-error"]).not.toBe(true);
+    expect(job["continue-on-error"]).not.toBe(true);
+    expect(job.permissions).toEqual({ contents: "read" });
+    expect(job.steps.some((step) => step.uses?.startsWith("docker/login-action@"))).toBe(false);
+    expect(workflow.jobs.ci.needs).toContain("docker-build");
   });
 
   it("publishes immutable image tags before advancing the complete release pointer", () => {
@@ -340,7 +404,7 @@ describe("Docker release trust gate", () => {
       expect(read(dockerfile)).toContain("build-gtfsclean.sh");
     }
     expect(read("services/motis/tools/transitous/build-gtfsclean.sh")).toContain(
-      "golang.org/x/text@v0.39.0",
+      "golang.org/x/text@v0.41.0",
     );
   });
 
