@@ -1,8 +1,12 @@
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
+  closeSync,
+  constants,
+  fstatSync,
   mkdirSync,
   mkdtempSync,
+  openSync,
   readdirSync,
   readFileSync,
   rmSync,
@@ -355,12 +359,22 @@ describe("explicit private candidate storage", () => {
   it("writes a private exclusive receipt and preserves it on a second write", () => {
     const f = candidate();
     const path = join(f.cwd, "receipt.json");
-    expect(statSync(path).mode & 0o777).toBe(0o600);
-    const before = readFileSync(path);
+    const snapshot = () => {
+      const fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW);
+      try {
+        const stat = fstatSync(fd);
+        expect(stat.isFile()).toBe(true);
+        expect(stat.mode & 0o777).toBe(0o600);
+        return readFileSync(fd);
+      } finally {
+        closeSync(fd);
+      }
+    };
+    const before = snapshot();
     expect(() =>
       writePackageCandidate({ directory: f.cwd, batch: f.batch, items: f.items, tools: {} }),
-    ).toThrow();
-    expect(readFileSync(path)).toEqual(before);
+    ).toThrow(/EEXIST/);
+    expect(snapshot()).toEqual(before);
   });
   it("reads candidates from an explicit options directory", async () => {
     const f = candidate();
