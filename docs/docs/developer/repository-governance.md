@@ -56,9 +56,9 @@ universal clean-scan requirement. Do not bulk-dismiss alerts to establish a
 clean baseline.
 
 Hosted verification on 18 October 2026 observed a High-finding PR blocked
-after successful analysis and a failing native CodeQL result. In-progress
-analysis also blocked merging. A Medium-only PR had successful analysis and
-checks and was mergeable despite existing out-of-diff findings.
+after successful analysis. In-progress analysis also blocked merging. A
+Medium-only PR had successful analysis and checks and a `CLEAN` merge state
+despite existing out-of-diff findings.
 
 [GitHub documents](https://docs.github.com/en/code-security/concepts/code-scanning/merge-protection)
 that an unconfigured required tool also blocks merging. No missing-tool trial
