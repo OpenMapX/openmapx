@@ -1,41 +1,29 @@
-<!--
-Thanks for the PR!
+<!-- Use a Conventional Commits title. Read CONTRIBUTING.md, CLA.md and LICENSING.md.
+Keep this concise; combine or omit empty sections for small changes. -->
 
-Title: Conventional Commits format (e.g. `feat(transit-hafas): add DB long-distance`).
-The `pr-title` GitHub Action will reject non-conformant titles.
+## What changed and why
 
-For anything non-trivial, please open an issue first so we can align on approach.
-Mark the PR as a Draft if it isn't ready for review yet.
--->
+<!-- Describe the problem and resulting behavior. A concrete example often helps. -->
 
-## Summary
+## Screenshots
 
-<!-- What does this change, and why? 1–3 bullets. -->
+<!-- Required for every visual/visible-impact change, including docs and generated output.
+Attach real, inspected screenshots here: labeled comparable before/after views for existing
+behavior, or an after view with context for a new surface. Cover affected states/viewports.
+Agents: use gh pr create/edit --attach and inspect the hosted images after upload.
+Local file paths are not delivered evidence. Remove this section only if nothing visible changed. -->
 
--
+## Related work
 
-## Related issues
+<!-- Link relevant issues/designs. Use “Fixes #123” only if this completes that issue. Omit if unnecessary. -->
 
-<!-- Link issues this addresses. "Fixes #123" auto-closes them on merge. -->
+## Verification
 
-Fixes #
+<!-- State relevant commands/results and manual checks, including material checks not performed.
+Keep detailed evidence in a collapsed section or durable public link when needed. -->
 
-## How was this tested?
+## Release and upgrade impact
 
-<!--
-- `pnpm lint && pnpm check-types && pnpm test` locally
-- Manual verification (which feature, browser, dataset, service/integration)?
-- New tests added under which path?
--->
-
--
-
-## Checklist
-
-- [ ] Conventional Commits title (the `pr-title` check enforces this)
-- [ ] `pnpm lint && pnpm check-types && pnpm test` pass locally
-- [ ] Added / updated a [changeset](https://github.com/changesets/changesets) if a publishable package changed
-- [ ] Docs updated if behavior is user-visible (README and/or [docs.openmapx.org](https://docs.openmapx.org) sources under `docs/`)
-- [ ] New code carries the right license header / lands in the correct license tier (see [LICENSING.md](../LICENSING.md))
-- [ ] No secrets, real API keys, or `.env` files committed
-- [ ] I agree to the [Contributor License Agreement](../CLA.md) (the CLA bot will prompt on your first PR)
+<!-- Describe breaking changes, migrations, operator action or security implications; say if none.
+Add release information required by the current CONTRIBUTING.md policy. Do not invent an empty
+Changeset just to fill this section. Ordinary features/fixes can be described clearly above. -->

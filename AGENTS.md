@@ -38,6 +38,23 @@ Select checks and shared test fixtures from [Contributing: Quality bar](CONTRIBU
 and the affected packages' current scripts. Verify the affected runtime and report which
 checks ran, including any database, browser or native-device verification left unperformed.
 
+## Pull request writing and visual evidence
+
+Use the concise prompts in [Contributing](CONTRIBUTING.md#descriptions-and-visual-evidence).
+For every visual/visible-impact change, capture and inspect the actual rendered result,
+including docs and other visible output. Put screenshots near the explanation in the PR:
+comparable labeled before/after for existing behavior, contextual after views for new
+surfaces, and relevant changed states/viewports. Recordings supplement screenshots.
+
+Use `gh pr create/edit --body-file ... --attach ...` to upload images and rewrite
+referenced local paths to hosted assets. Inspect the final description and each hosted
+image after upload; local paths are not delivered evidence. A partial upload can still
+create/edit the PR, so read back its state before retrying. Report unavailable platform
+checks accurately; a local preview does not establish native GitHub form acceptance.
+
+Own the accuracy and verification of authorized AI-assisted work. No declaration or
+model inventory is required; preserve meaningful provenance and never invent results.
+
 <!-- BEGIN:turborepo-agent-rules -->
 
 # This is NOT the Turborepo you know
