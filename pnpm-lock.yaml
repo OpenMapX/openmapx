@@ -199,7 +199,7 @@ importers:
         specifier: ^2.5.15
         version: 2.5.15
       '@changesets/cli':
-        specifier: ^3.0.3
+        specifier: 3.0.3
         version: 3.0.3
       '@commitlint/cli':
         specifier: ^21.2.3

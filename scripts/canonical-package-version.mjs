@@ -16,27 +16,9 @@ export function canonicalPackageVersion({
   git,
   validatePending,
 }) {
-  const config = before.json(".changeset/config.json");
-  if (
-    config?.commit !== false ||
-    config.format !== false ||
-    config.changelog !== "@changesets/cli/changelog" ||
-    (config.privatePackages !== false && config.privatePackages?.version !== false) ||
-    before.entries.has(".changeset/pre.json")
-  )
-    throw new Error(
-      "Canonical package version validation requires the qualified-package baseline (private versioning disabled, default changelog, format:false, no commit hook or prerelease mode)",
-    );
+  validateVersionBaseline(before);
   validatePending();
-  const allowed = (path) =>
-    packages.some(
-      (item) =>
-        path === `${item.directory}/package.json` ||
-        path === `${item.directory}/CHANGELOG.md` ||
-        (item.versionedSchemas &&
-          path.startsWith(`${item.directory}/${item.versionedSchemas}/`) &&
-          path.endsWith(".json")),
-    ) || /^\.changeset\/[a-z0-9][a-z0-9-]*\.md$/.test(path);
+  const allowed = (path) => versionFileAllowed(packages, path);
   if (!changed.length || changed.some((path) => !allowed(path)))
     throw new Error(
       "Canonical version PR contains unexpected source, configuration or lockfile changes",
@@ -51,37 +33,7 @@ export function canonicalPackageVersion({
       join(clone, "node_modules"),
       "dir",
     );
-    const result = spawnSync(process.execPath, [cli, "version"], {
-      cwd: clone,
-      env: { PATH: process.env.PATH, HOME: process.env.HOME, CI: "true" },
-      encoding: "utf8",
-      timeout: 60000,
-      maxBuffer: 8 * 1024 * 1024,
-    });
-    if (result.error || result.status !== 0)
-      throw new Error(
-        `Canonical Changesets replay failed: ${result.error?.message ?? result.stderr ?? result.stdout}`,
-      );
-    for (const item of packages.filter((item) => item.versionedSchemas)) {
-      const previous = before.json(`${item.directory}/package.json`).version;
-      const next = JSON.parse(
-        readFileSync(join(clone, item.directory, "package.json"), "utf8"),
-      ).version;
-      if (previous === next) continue;
-      for (const path of before.entries.keys()) {
-        if (
-          !path.startsWith(`${item.directory}/${item.versionedSchemas}/`) ||
-          !path.endsWith(".json")
-        )
-          continue;
-        const schema = before.json(path);
-        const suffix = `/${previous}/${basename(path)}`;
-        if (typeof schema.$id !== "string" || !schema.$id.endsWith(suffix))
-          throw new Error(`Canonical schema id does not match package version: ${path}`);
-        schema.$id = `${schema.$id.slice(0, -suffix.length)}/${next}/${basename(path)}`;
-        writeFileSync(join(clone, path), `${JSON.stringify(schema, null, 2)}\n`);
-      }
-    }
+    generatePackageVersions({ cwd: clone, before, packages });
     const expected = [
       ...new Set(
         git(clone, "ls-files", "--modified", "--deleted", "--others", "--exclude-standard", "-z")
@@ -117,4 +69,73 @@ export function canonicalPackageVersion({
   } finally {
     rmSync(temp, { recursive: true, force: true });
   }
+}
+
+export function validateVersionBaseline(before) {
+  const config = before.json(".changeset/config.json");
+  if (
+    config?.commit !== false ||
+    config.format !== false ||
+    config.changelog !== "@changesets/cli/changelog" ||
+    (config.privatePackages !== false &&
+      (config.privatePackages?.version !== false || config.privatePackages?.tag !== false)) ||
+    before.entries.has(".changeset/pre.json")
+  )
+    throw new Error(
+      "Canonical package version validation requires the qualified-package baseline (private versioning disabled, default changelog, format:false, no commit hook or prerelease mode)",
+    );
+}
+export function versionFileAllowed(packages, path) {
+  return (
+    packages.some(
+      (item) =>
+        path === `${item.directory}/package.json` ||
+        path === `${item.directory}/CHANGELOG.md` ||
+        (item.versionedSchemas &&
+          path.startsWith(`${item.directory}/${item.versionedSchemas}/`) &&
+          path.endsWith(".json")),
+    ) || /^\.changeset\/[a-z0-9][a-z0-9-]*\.md$/.test(path)
+  );
+}
+export function generatePackageVersions({ cwd, before, packages }) {
+  const result = spawnSync(process.execPath, [cli, "version"], {
+    cwd,
+    env: { PATH: process.env.PATH, HOME: process.env.HOME, CI: "true" },
+    encoding: "utf8",
+    timeout: 60000,
+    maxBuffer: 8 * 1024 * 1024,
+  });
+  if (result.error || result.status !== 0)
+    throw new Error(
+      `Canonical Changesets replay failed: ${result.error?.message ?? result.stderr ?? result.stdout}`,
+    );
+  for (const item of packages.filter((item) => item.versionedSchemas)) {
+    const previous = before.json(`${item.directory}/package.json`).version;
+    const next = JSON.parse(
+      readFileSync(join(cwd, item.directory, "package.json"), "utf8"),
+    ).version;
+    if (previous === next) continue;
+    for (const path of before.entries.keys()) {
+      if (
+        !path.startsWith(`${item.directory}/${item.versionedSchemas}/`) ||
+        !path.endsWith(".json")
+      )
+        continue;
+      const schema = before.json(path);
+      const suffix = `/${previous}/${basename(path)}`;
+      if (typeof schema.$id !== "string" || !schema.$id.endsWith(suffix))
+        throw new Error(`Canonical schema id does not match package version: ${path}`);
+      schema.$id = `${schema.$id.slice(0, -suffix.length)}/${next}/${basename(path)}`;
+      writeFileSync(join(cwd, path), `${JSON.stringify(schema, null, 2)}\n`);
+    }
+  }
+}
+
+export function pendingVersionNotes(state) {
+  const pending = [...state.entries.keys()].filter(
+    (path) => /^\.changeset\/[^/]+\.md$/.test(path) && path !== ".changeset/README.md",
+  );
+  if (pending.some((path) => !/^\.changeset\/[a-z0-9][a-z0-9-]*\.md$/.test(path)))
+    throw new Error("Malformed pending Changeset filename");
+  return pending;
 }

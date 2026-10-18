@@ -57,9 +57,12 @@ tagged external reusable workflows; project review must require full SHAs for
 those too. Pinning selects code; it does not prove that code is safe.
 
 Default workflow tokens have read permissions. Declare additional permissions
-only in jobs that need them. General Actions PR creation/approval remains
-disabled; release-PR automation must account for its identity and event
-behavior. Keep privileged title/CLA workflows metadata-only.
+only in jobs that need them. The approved [package version-PR configuration](./package-releases.md)
+allows Actions PR creation/approval while preserving the read-only default.
+Maintainers own activation and live readback of the organization/repository setting.
+Only the manual version job gets contents/PR write; it never approves or merges.
+Bot-created PR CI still requires maintainer approve-and-run. Keep privileged
+title/CLA workflows metadata-only.
 
 Applicable fork CI from first-time contributors requires approval; returning
 contributors use normal automatic runs. Dependabot patch/minor updates may
