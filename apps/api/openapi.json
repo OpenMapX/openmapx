@@ -1,4 +1,1006 @@
 {
+  "components": {
+    "schemas": {
+      "CapabilitiesResponse": {
+        "type": "object",
+        "properties": {
+          "services": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object",
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "healthy": {
+                  "type": "boolean"
+                },
+                "available": {
+                  "type": "boolean"
+                },
+                "domains": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "required": [
+                "enabled",
+                "healthy",
+                "available",
+                "domains"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "features": {
+            "type": "object",
+            "properties": {
+              "osmContributions": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "osmContributions"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "services",
+          "features"
+        ],
+        "additionalProperties": false
+      },
+      "IntegrationsResponse": {
+        "type": "object",
+        "properties": {
+          "integrations": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "description": {
+                  "type": "string"
+                },
+                "enabled": {
+                  "type": "boolean"
+                },
+                "isBuiltIn": {
+                  "type": "boolean"
+                },
+                "domains": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "frontend": {
+                  "type": "object",
+                  "properties": {
+                    "mapLayer": {
+                      "type": "boolean"
+                    },
+                    "sharedMapLayer": {
+                      "type": "string"
+                    },
+                    "legend": {
+                      "type": "boolean"
+                    },
+                    "panel": {
+                      "type": "boolean"
+                    },
+                    "searchCategory": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "label": {
+                          "type": "string"
+                        },
+                        "showInChipBar": {
+                          "type": "boolean"
+                        },
+                        "iconPath": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "layerSelector": {
+                      "type": "object",
+                      "properties": {
+                        "group": {
+                          "type": "string",
+                          "enum": [
+                            "map-details",
+                            "map-tools",
+                            "map-types"
+                          ]
+                        },
+                        "labelKey": {
+                          "type": "string"
+                        },
+                        "icon": {
+                          "type": "string"
+                        },
+                        "preview": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 256
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "quickSelector": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "group",
+                        "labelKey"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "overlay": {
+                      "type": "object",
+                      "properties": {
+                        "excludes": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "minZoom": {
+                          "type": "number"
+                        },
+                        "legend": {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": [
+                                "categorical",
+                                "ramp"
+                              ]
+                            },
+                            "title": {
+                              "type": "string"
+                            },
+                            "titleKey": {
+                              "type": "string"
+                            },
+                            "items": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "color": {
+                                    "type": "string"
+                                  },
+                                  "label": {
+                                    "type": "string"
+                                  },
+                                  "labelKey": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "color"
+                                ],
+                                "additionalProperties": false
+                              }
+                            },
+                            "stops": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "value": {
+                                    "type": "number"
+                                  },
+                                  "color": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "value",
+                                  "color"
+                                ],
+                                "additionalProperties": false
+                              }
+                            }
+                          },
+                          "required": [
+                            "kind"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "additionalProperties": false
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                "dataSources": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "sourceId": {
+                        "type": "string",
+                        "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"
+                      },
+                      "domain": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "url": {
+                        "type": "string"
+                      },
+                      "owner": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "termsUrl": {
+                        "type": "string",
+                        "format": "uri"
+                      },
+                      "methodologyUrl": {
+                        "type": "string",
+                        "format": "uri"
+                      },
+                      "dataUseClass": {
+                        "type": "string",
+                        "enum": [
+                          "open",
+                          "attribution",
+                          "share-alike",
+                          "non-commercial",
+                          "restricted",
+                          "unknown"
+                        ]
+                      },
+                      "credentialOwner": {
+                        "type": "string",
+                        "enum": [
+                          "none",
+                          "instance-operator",
+                          "openmapx-project",
+                          "end-user"
+                        ]
+                      },
+                      "reviewedAt": {
+                        "type": "string",
+                        "format": "date",
+                        "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+                      },
+                      "apiHosts": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "mediaHosts": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "licensing": {
+                        "type": "object",
+                        "properties": {
+                          "version": {
+                            "type": "number",
+                            "enum": [
+                              1
+                            ]
+                          },
+                          "bindings": {
+                            "readOnly": true,
+                            "maxItems": 64,
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "scope": {
+                                  "type": "string",
+                                  "enum": [
+                                    "data",
+                                    "imagery",
+                                    "style",
+                                    "software",
+                                    "service"
+                                  ]
+                                },
+                                "subject": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 1000
+                                },
+                                "license": {
+                                  "oneOf": [
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "kind": {
+                                          "type": "string",
+                                          "enum": [
+                                            "spdx"
+                                          ]
+                                        },
+                                        "expression": {
+                                          "type": "string",
+                                          "minLength": 1,
+                                          "maxLength": 1000
+                                        },
+                                        "url": {
+                                          "type": "string",
+                                          "maxLength": 2048,
+                                          "format": "uri"
+                                        }
+                                      },
+                                      "required": [
+                                        "kind",
+                                        "expression"
+                                      ],
+                                      "additionalProperties": false
+                                    },
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "kind": {
+                                          "type": "string",
+                                          "enum": [
+                                            "custom"
+                                          ]
+                                        },
+                                        "id": {
+                                          "type": "string",
+                                          "minLength": 1,
+                                          "maxLength": 1000
+                                        },
+                                        "namespace": {
+                                          "type": "string",
+                                          "minLength": 1,
+                                          "maxLength": 256
+                                        },
+                                        "name": {
+                                          "type": "string",
+                                          "minLength": 1,
+                                          "maxLength": 1000
+                                        },
+                                        "url": {
+                                          "type": "string",
+                                          "maxLength": 2048,
+                                          "format": "uri"
+                                        },
+                                        "version": {
+                                          "type": "string",
+                                          "minLength": 1,
+                                          "maxLength": 1000
+                                        }
+                                      },
+                                      "required": [
+                                        "kind",
+                                        "id",
+                                        "namespace",
+                                        "name"
+                                      ],
+                                      "additionalProperties": false
+                                    },
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "kind": {
+                                          "type": "string",
+                                          "enum": [
+                                            "unknown"
+                                          ]
+                                        },
+                                        "raw": {
+                                          "type": "string",
+                                          "minLength": 1,
+                                          "maxLength": 1000
+                                        },
+                                        "url": {
+                                          "type": "string",
+                                          "maxLength": 2048,
+                                          "format": "uri"
+                                        }
+                                      },
+                                      "required": [
+                                        "kind"
+                                      ],
+                                      "additionalProperties": false
+                                    },
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "kind": {
+                                          "type": "string",
+                                          "enum": [
+                                            "per-item"
+                                          ]
+                                        },
+                                        "raw": {
+                                          "type": "string",
+                                          "minLength": 1,
+                                          "maxLength": 1000
+                                        },
+                                        "url": {
+                                          "type": "string",
+                                          "maxLength": 2048,
+                                          "format": "uri"
+                                        }
+                                      },
+                                      "required": [
+                                        "kind"
+                                      ],
+                                      "additionalProperties": false
+                                    },
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "kind": {
+                                          "type": "string",
+                                          "enum": [
+                                            "public-domain"
+                                          ]
+                                        },
+                                        "name": {
+                                          "type": "string",
+                                          "minLength": 1,
+                                          "maxLength": 1000
+                                        },
+                                        "url": {
+                                          "type": "string",
+                                          "maxLength": 2048,
+                                          "format": "uri"
+                                        }
+                                      },
+                                      "required": [
+                                        "kind",
+                                        "name"
+                                      ],
+                                      "additionalProperties": false
+                                    },
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "kind": {
+                                          "type": "string",
+                                          "enum": [
+                                            "status"
+                                          ]
+                                        },
+                                        "id": {
+                                          "type": "string",
+                                          "enum": [
+                                            "CC-PDM-1.0"
+                                          ]
+                                        },
+                                        "url": {
+                                          "type": "string",
+                                          "maxLength": 2048,
+                                          "format": "uri"
+                                        }
+                                      },
+                                      "required": [
+                                        "kind",
+                                        "id"
+                                      ],
+                                      "additionalProperties": false
+                                    }
+                                  ]
+                                },
+                                "notice": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 16000
+                                },
+                                "conditions": {
+                                  "readOnly": true,
+                                  "maxItems": 32,
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 1000
+                                  }
+                                },
+                                "attribution": {
+                                  "type": "object",
+                                  "properties": {
+                                    "placement": {
+                                      "type": "string",
+                                      "enum": [
+                                        "visible",
+                                        "details"
+                                      ]
+                                    },
+                                    "surfaces": {
+                                      "readOnly": true,
+                                      "minItems": 1,
+                                      "maxItems": 3,
+                                      "type": "array",
+                                      "items": {
+                                        "type": "string",
+                                        "enum": [
+                                          "map",
+                                          "content",
+                                          "image"
+                                        ]
+                                      }
+                                    },
+                                    "basis": {
+                                      "type": "string",
+                                      "enum": [
+                                        "licence",
+                                        "provider-terms",
+                                        "recommendation",
+                                        "unresolved"
+                                      ]
+                                    },
+                                    "reviewedAt": {
+                                      "type": "string",
+                                      "format": "date",
+                                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+                                    },
+                                    "evidenceUrls": {
+                                      "readOnly": true,
+                                      "minItems": 1,
+                                      "maxItems": 8,
+                                      "type": "array",
+                                      "items": {
+                                        "type": "string",
+                                        "maxLength": 2048,
+                                        "format": "uri"
+                                      }
+                                    },
+                                    "reason": {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 2000
+                                    },
+                                    "compactText": {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 2000
+                                    },
+                                    "logo": {
+                                      "type": "string",
+                                      "enum": [
+                                        "openweather",
+                                        "mapillary",
+                                        "maptiler",
+                                        "tdx"
+                                      ]
+                                    },
+                                    "prominence": {
+                                      "type": "string",
+                                      "enum": [
+                                        "normal"
+                                      ]
+                                    },
+                                    "includePublisher": {
+                                      "type": "boolean",
+                                      "enum": [
+                                        true
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "placement",
+                                    "surfaces",
+                                    "basis",
+                                    "reviewedAt",
+                                    "evidenceUrls",
+                                    "reason"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              },
+                              "required": [
+                                "scope",
+                                "subject",
+                                "license"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "declarations": {
+                            "readOnly": true,
+                            "maxItems": 64,
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "text": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 1000
+                                },
+                                "url": {
+                                  "type": "string",
+                                  "maxLength": 2048,
+                                  "format": "uri"
+                                }
+                              },
+                              "additionalProperties": false
+                            }
+                          }
+                        },
+                        "required": [
+                          "version",
+                          "bindings"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "attribution": {
+                        "type": "string"
+                      },
+                      "notes": {
+                        "type": "string"
+                      },
+                      "commercialUse": {
+                        "type": "string",
+                        "enum": [
+                          "yes",
+                          "no",
+                          "conditional",
+                          "unknown"
+                        ]
+                      },
+                      "redistribution": {
+                        "type": "object",
+                        "properties": {
+                          "sourceData": {
+                            "type": "string",
+                            "enum": [
+                              "yes",
+                              "no",
+                              "conditional",
+                              "unknown"
+                            ]
+                          },
+                          "derivedData": {
+                            "type": "string",
+                            "enum": [
+                              "yes",
+                              "no",
+                              "conditional",
+                              "unknown"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "sourceData",
+                          "derivedData"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "usageConditions": {
+                        "maxItems": 32,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 1000
+                        }
+                      },
+                      "providerCountry": {
+                        "type": "string"
+                      },
+                      "providerPrivacyUrl": {
+                        "type": "string"
+                      },
+                      "endUserExposure": {
+                        "type": "string",
+                        "enum": [
+                          "direct",
+                          "mixed",
+                          "proxied",
+                          "server-only",
+                          "build-time"
+                        ]
+                      },
+                      "personalData": {
+                        "type": "boolean"
+                      },
+                      "cookies": {
+                        "type": "boolean"
+                      },
+                      "dpaAvailable": {
+                        "type": "boolean"
+                      },
+                      "dpaUrl": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "sourceId",
+                      "name",
+                      "url",
+                      "licensing",
+                      "providerCountry",
+                      "providerPrivacyUrl"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "healthCheck": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "http",
+                            "ping",
+                            "tcp",
+                            "custom"
+                          ]
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "category": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "http",
+                              "ping",
+                              "tcp",
+                              "custom"
+                            ]
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "category": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "type"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  ]
+                },
+                "strings": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "$ref": "#/components/schemas/IntegrationsResponse-__schema0"
+                    }
+                  }
+                }
+              },
+              "required": [
+                "id",
+                "name",
+                "enabled",
+                "isBuiltIn",
+                "domains"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "frameworkStrings": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object",
+              "additionalProperties": {
+                "$ref": "#/components/schemas/IntegrationsResponse-__schema0"
+              }
+            }
+          },
+          "disclosures": {
+            "type": "array",
+            "items": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "enum": [
+                        "ai-search"
+                      ]
+                    },
+                    "integrationId": {
+                      "type": "string"
+                    },
+                    "aiActive": {
+                      "type": "boolean"
+                    },
+                    "localActive": {
+                      "type": "boolean"
+                    },
+                    "cloudActive": {
+                      "type": "boolean"
+                    },
+                    "cloudProcessors": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "countryCode": {
+                            "type": "string"
+                          },
+                          "privacyUrl": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "countryCode",
+                          "privacyUrl"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "cloudAvailable": {
+                      "type": "boolean"
+                    },
+                    "cloudConsentRequired": {
+                      "type": "boolean"
+                    },
+                    "cloudProviderLabels": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "integrationId",
+                    "aiActive",
+                    "localActive",
+                    "cloudActive",
+                    "cloudProcessors",
+                    "cloudAvailable",
+                    "cloudConsentRequired",
+                    "cloudProviderLabels"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "enum": [
+                        "email"
+                      ]
+                    },
+                    "provider": {
+                      "type": "string",
+                      "enum": [
+                        "emaillabs",
+                        "lettermint",
+                        "smtp"
+                      ]
+                    },
+                    "vendorName": {
+                      "type": "string"
+                    },
+                    "countryCode": {
+                      "type": "string"
+                    },
+                    "privacyUrl": {
+                      "type": "string"
+                    },
+                    "transfer": {
+                      "type": "string",
+                      "enum": [
+                        "eea",
+                        "adequacy",
+                        "dpf",
+                        "scc",
+                        "none"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "provider",
+                    "vendorName",
+                    "countryCode",
+                    "transfer"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
+            }
+          },
+          "revision": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          }
+        },
+        "required": [
+          "integrations",
+          "frameworkStrings",
+          "disclosures",
+          "revision"
+        ],
+        "additionalProperties": false
+      },
+      "IntegrationsResponse-__schema0": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "number"
+          },
+          {
+            "type": "boolean"
+          },
+          {
+            "type": "null"
+          },
+          {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/IntegrationsResponse-__schema0"
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/IntegrationsResponse-__schema0"
+            }
+          }
+        ]
+      }
+    }
+  },
   "openapi": "3.1.0",
   "info": {
     "title": "OpenMapX API",
@@ -21,10 +1023,6 @@
     {
       "name": "auth",
       "description": "Authentication and OAuth endpoints served by Better Auth."
-    },
-    {
-      "name": "capabilities",
-      "description": "Routes under /api/capabilities."
     },
     {
       "name": "data-manager",
@@ -105,6 +1103,10 @@
     {
       "name": "reviews",
       "description": "Routes under /api/reviews."
+    },
+    {
+      "name": "runtime-metadata",
+      "description": "Public runtime capabilities, integration metadata and legal disclosures."
     },
     {
       "name": "saved",
@@ -2370,11 +3372,18 @@
         "operationId": "getApiCapabilities",
         "responses": {
           "200": {
-            "description": "Default Response"
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CapabilitiesResponse"
+                }
+              }
+            }
           }
         },
         "tags": [
-          "capabilities"
+          "runtime-metadata"
         ],
         "x-openmapx-auth": "public"
       }
@@ -2773,6 +3782,65 @@
         },
         "tags": [
           "image-proxy"
+        ],
+        "x-openmapx-auth": "public"
+      }
+    },
+    "/api/integrations": {
+      "get": {
+        "operationId": "getApiIntegrations",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
+            "name": "if-none-match",
+            "required": false,
+            "description": "An ETag validator, including weak validators, a comma-separated list, or *."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationsResponse"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "The public metadata has not changed; no response body.",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "runtime-metadata"
         ],
         "x-openmapx-auth": "public"
       }

@@ -1,4 +1,4 @@
-import type { LoadedIntegrationMeta } from "@openmapx/integration-framework";
+import type { IntegrationMetadata } from "@openmapx/core/api-contracts";
 import { describe, expect, it } from "vitest";
 import iocManifest from "../../../../../integrations/knowledge-tides-ioc/manifest.json";
 import iocDe from "../../../../../integrations/knowledge-tides-ioc/strings/de.json";
@@ -27,10 +27,11 @@ const source = (sourceId: string, name: string, domain?: string) => ({
 });
 
 /** One integration in two domains: a road feed in its first domain, a fuel feed naming its own. */
-const openconditions: LoadedIntegrationMeta = {
+const openconditions: IntegrationMetadata = {
   id: "openconditions",
   name: "OpenConditions",
   enabled: true,
+  isBuiltIn: true,
   domains: ["road-conditions", "fuel-stations"],
   dataSources: [
     source("nl-ndw-events", "NDW"),
@@ -39,7 +40,7 @@ const openconditions: LoadedIntegrationMeta = {
 };
 
 describe("legal sections of a runtime source", () => {
-  const runtime: LoadedIntegrationMeta = {
+  const runtime: IntegrationMetadata = {
     ...openconditions,
     dataSources: [
       source("nl-ndw-events", "NDW", "road-conditions"),
@@ -97,7 +98,10 @@ describe("IOC source terms in the generated legal disclosures", () => {
   const integrations = [
     { ...iocManifest, strings: { en: iocEn, de: iocDe } },
     { ...nauticalManifest, strings: { en: nauticalEn, de: nauticalDe } },
-  ].map((manifest) => ({ ...manifest, name: manifest.id, enabled: true }) as LoadedIntegrationMeta);
+  ].map(
+    (manifest) =>
+      ({ ...manifest, name: manifest.id, enabled: true, isBuiltIn: true }) as IntegrationMetadata,
+  );
 
   it.each(integrations)(
     "$id discloses conditional commercial permission with the originator scope",

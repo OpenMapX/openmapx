@@ -3,7 +3,7 @@
 import { useMeasurementStore } from "@integrations/overlay-tool-measurement/store";
 import { useTravelTimeStore } from "@integrations/overlay-tool-travel-time/store";
 import { useNavigationStore, useSidebarStore } from "@openmapx/core";
-import type { LoadedIntegrationMeta } from "@openmapx/integration-framework";
+import type { IntegrationMetadata } from "@openmapx/core/api-contracts";
 import { IntegrationRegistry } from "@openmapx/integration-framework";
 import { IntegrationRegistryContext } from "@openmapx/integration-framework/react";
 import { act, render, screen } from "@testing-library/react";
@@ -60,7 +60,7 @@ const registry = new IntegrationRegistry([
       overlay: { excludes: [] },
     },
   },
-] satisfies LoadedIntegrationMeta[]);
+] satisfies IntegrationMetadata[]);
 
 function renderHost() {
   return render(

@@ -7,7 +7,7 @@ import {
   lexicographicSortSchema,
   printSchema,
 } from "graphql";
-import { formatSource } from "./format-source.mjs";
+import { formatSource } from "../codegen/format-source.mjs";
 
 const directory = new URL("../../packages/mobility-formats/entur/schema/", import.meta.url);
 const sources = [

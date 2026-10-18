@@ -74,7 +74,7 @@ export {
   useBrandLogos,
 } from "./useBrandDetail";
 export { useBrandSuggest } from "./useBrandSuggest";
-export { type ServiceCapability, useCapabilities } from "./useCapabilities";
+export { useCapabilities } from "./useCapabilities";
 export { isAreaTooLarge, useCategorySearch } from "./useCategorySearch";
 export { useChipTranslations } from "./useChipTranslations";
 export { useCountryFromCoordinates } from "./useCountryFromCoordinates";

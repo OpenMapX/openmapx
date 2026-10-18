@@ -107,7 +107,7 @@ it("preserves composed geometry receipts and native empty spans through schedule
     const response = await app.inject({
       method: init?.method as "POST",
       url: `${url.pathname}${url.search}`,
-      headers: init?.headers as Record<string, string>,
+      headers: Object.fromEntries(new Headers(init?.headers)),
       payload: init?.body as string,
     });
     expect(response.statusCode, response.body).toBe(200);

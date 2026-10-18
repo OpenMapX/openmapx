@@ -15,6 +15,7 @@ export async function generateDocument(): Promise<string> {
   return serializeDocument(
     buildDocument({
       corePaths: core.paths,
+      coreComponents: core.components,
       coreAuth: core.auth,
       integrationRoutes: collectIntegrationRoutes(REPO_ROOT),
     }),

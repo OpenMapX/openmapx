@@ -192,6 +192,37 @@ Regenerate and read the diff before committing it. If the diff shows a change
 you did not intend — a route you did not think you touched, or an auth level
 moving to something weaker — that is the gate doing its job.
 
+## Generated runtime metadata SDK
+
+`GET /api/capabilities` and `GET /api/integrations` have shared Zod response
+contracts in `@openmapx/core/api-contracts`. Their real Fastify response schemas
+feed named OpenAPI components. Other inventory-only endpoints are adopted in
+separate families when their actual wire contracts have been specified.
+
+After changing these contracts, run `pnpm openapi:generate`, then
+`pnpm sdk:generate`. Commit both the OpenAPI diff and generated SDK diff.
+`pnpm check-api-sdk` checks the complete generated file set without rewriting it
+and runs in the policy gate. Generation uses the committed OpenAPI document,
+selects the `runtime-metadata` family before validation, and performs no provider
+or database acquisition. Unrelated inventory entries are not SDK input.
+
+Import operations from `@openmapx/core/api-sdk`. Pass an isolated `ApiClient`
+through the operation's options for server/native or independently configured
+browser acquisition. The generated integration operation also accepts typed
+conditional request headers as its first argument. Its result distinguishes
+`200` with metadata from bodyless `304`. The transport owns credentials,
+cancellation through body consumption, deadlines and bounded redacted HTTP
+errors; the generated validator owns the response shape. Contract errors do
+not expose validation inputs. Legal pages use one `cache: "no-store"` snapshot.
+
+The pinned Orval configuration enables reusable recursive Zod schemas and
+selects generated **output** types for validated custom-client responses using
+its supported output transformer. Both are required to preserve recursive
+catalog types. Do not remove them without running SDK type/behavior tests.
+Public integration health metadata contains `type`, optional `name` and
+optional `category`; operational URLs, headers and configuration keys stay
+inside the host. Source licensing uses the portable structured output schema.
+
 ## Generic weather forecasts
 
 `GET /api/integrations/weather/forecast` returns independent `hourly` and `daily`

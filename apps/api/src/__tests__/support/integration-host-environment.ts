@@ -1,5 +1,6 @@
 import Fastify, { type FastifyInstance } from "fastify";
 import { vi } from "vitest";
+import { integrationsRoute } from "../../routes/integrations";
 
 vi.mock("../../redis.js", () => ({ redis: null }));
 
@@ -83,5 +84,5 @@ export function getIntegrationHealthMocks() {
 }
 
 export function createIntegrationHostTestApp(): FastifyInstance {
-  return Fastify({ logger: false });
+  return Fastify({ logger: false }).register(integrationsRoute);
 }

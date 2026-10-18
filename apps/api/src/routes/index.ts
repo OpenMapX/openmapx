@@ -19,6 +19,7 @@ import { dataManagerRoute } from "./data-manager";
 import { elevationRoute } from "./elevation";
 import { garageRoute } from "./garage";
 import { imageProxyRoute } from "./image-proxy";
+import { integrationsRoute } from "./integrations";
 import { internalMetricsRoute } from "./internal-metrics";
 import { isochroneRoute } from "./isochrone";
 import { legalConfigRoute } from "./legal-config";
@@ -75,6 +76,7 @@ export async function registerCoreRoutes(
   await server.register(metaRoute);
 
   await server.register(capabilitiesRoute, { prefix: "/api" });
+  await server.register(integrationsRoute);
   await server.register(legalConfigRoute, { prefix: "/api" });
   await server.register(privacyRequestsRoute, {
     prefix: "/api",

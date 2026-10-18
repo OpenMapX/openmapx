@@ -1,7 +1,8 @@
 "use client";
 
-import { configureApiClient, initOverlayRegistry } from "@openmapx/core";
-import { IntegrationRegistry, type IntegrationsResponse } from "@openmapx/integration-framework";
+import { configureApiClient, createApiClient, initOverlayRegistry } from "@openmapx/core";
+import { getApiIntegrations } from "@openmapx/core/api-sdk";
+import { IntegrationRegistry } from "@openmapx/integration-framework";
 import { IntegrationRegistryContext } from "@openmapx/integration-framework/react";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo } from "react";
@@ -17,18 +18,18 @@ export function IntegrationProvider({ children }: { children: React.ReactNode })
   const { apiUrl } = useEnv();
   const apiBase = apiUrl.replace(/\/$/, "");
 
-  configureApiClient({
-    baseUrl:
-      apiBase || (typeof window !== "undefined" ? window.location.origin : "http://localhost:3001"),
-    credentials: "include",
-  });
+  const baseUrl =
+    apiBase || (typeof window !== "undefined" ? window.location.origin : "http://localhost:3001");
+  const client = useMemo(() => createApiClient({ baseUrl, credentials: "include" }), [baseUrl]);
+  configureApiClient({ baseUrl, credentials: "include" });
 
   const { data, isPending } = useQuery({
     queryKey: integrationRuntimeQueryKey(apiBase),
-    queryFn: async () => {
-      const res = await fetch(`${apiBase}/api/integrations`, { credentials: "include" });
-      if (!res.ok) throw new Error("Failed to load integrations");
-      return (await res.json()) as IntegrationsResponse;
+    queryFn: async ({ signal }) => {
+      const result = await getApiIntegrations(undefined, { client, signal });
+      if (result.status !== 200)
+        throw new Error("Integration metadata requires a complete response");
+      return result.data;
     },
     staleTime: 10_000,
     refetchInterval: INTEGRATION_METADATA_REFRESH_MS,

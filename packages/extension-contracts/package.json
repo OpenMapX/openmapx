@@ -77,7 +77,12 @@
     "./schemas/integration.json": "./schemas/integration.json",
     "./schemas/service.json": "./schemas/service.json",
     "./schemas/extension.json": "./schemas/extension.json",
-    "./schemas/artifact.json": "./schemas/artifact.json"
+    "./schemas/artifact.json": "./schemas/artifact.json",
+    "./licensing-schema": {
+      "types": "./src/licensing-schema.ts",
+      "import": "./src/licensing-schema.ts",
+      "default": "./src/licensing-schema.ts"
+    }
   },
   "files": [
     "dist",
@@ -142,7 +147,11 @@
       "./schemas/integration.json": "./schemas/integration.json",
       "./schemas/service.json": "./schemas/service.json",
       "./schemas/extension.json": "./schemas/extension.json",
-      "./schemas/artifact.json": "./schemas/artifact.json"
+      "./schemas/artifact.json": "./schemas/artifact.json",
+      "./licensing-schema": {
+        "types": "./dist/licensing-schema.d.ts",
+        "import": "./dist/licensing-schema.js"
+      }
     }
   },
   "scripts": {

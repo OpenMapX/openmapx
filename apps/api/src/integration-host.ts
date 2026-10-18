@@ -20,7 +20,6 @@ import {
   type RouteHandler,
   type RouteOptions,
   satisfiesPlatformVersion,
-  toIntegrationMeta,
   validateDataSource,
   validateManifest,
 } from "@openmapx/integration-framework";
@@ -28,7 +27,6 @@ import {
   integrationBackendBundlePath,
   resolveLayerSelectorPreview,
 } from "@openmapx/integration-framework/installer";
-import { sharedStrings } from "@openmapx/integration-framework/strings";
 import { parseLicensing } from "@openmapx/mobility-core/licensing";
 import {
   beginPlaceResolverStaging,
@@ -76,7 +74,6 @@ import {
 import { getSecret, isSecretsConfigured } from "./services/secrets";
 import { getServiceRegistry, resolveRequiresForIntegration } from "./services/service-registry";
 import { createRedisUpstreamRuntime, type UpstreamRedisClient } from "./services/upstream-runtime";
-import { getEmailDisclosure } from "./utils/email";
 
 export type { ConfigSource, ConfigValueWithSource };
 export { resolveConfigWithSources };
@@ -983,51 +980,6 @@ export async function initIntegrations(
   // The index above was seeded from the manifests on disk; runtime integrations
   // supplied their sources during setup, so re-index from the live registry.
   await refreshAttributionFromRegistry();
-
-  // Register the /api/integrations endpoint
-  fastify.get("/api/integrations", async (request, reply) => {
-    const disclosures = Array.from(integrations.values())
-      .filter((i) => i.enabled)
-      .flatMap((i) => i.disclosures ?? []);
-    try {
-      disclosures.push(await getEmailDisclosure());
-    } catch (err) {
-      // Don't fail the whole endpoint if the email disclosure can't be resolved.
-      fastify.log.warn({ err }, "email disclosure unavailable; omitting from /api/integrations");
-    }
-    const metadata = {
-      integrations: Array.from(integrations.values())
-        .filter((i) => i.enabled)
-        .map((i) => ({
-          ...toIntegrationMeta(i),
-          isBuiltIn: i.isBuiltIn,
-        })),
-      frameworkStrings: sharedStrings,
-      disclosures,
-    };
-    const revision = createHash("sha256").update(JSON.stringify(metadata)).digest("hex");
-    const etag = `"${revision}"`;
-    reply.header("Cache-Control", "private, no-cache");
-    reply.header("ETag", etag);
-
-    const ifNoneMatch = request.headers["if-none-match"];
-    const validators: string[] =
-      typeof ifNoneMatch === "string"
-        ? ifNoneMatch.split(",")
-        : Array.isArray(ifNoneMatch)
-          ? ifNoneMatch
-          : [];
-    if (
-      validators.some((validator) => {
-        const candidate = validator.trim();
-        return candidate === "*" || candidate.replace(/^W\//, "") === etag;
-      })
-    ) {
-      return reply.status(304).send();
-    }
-
-    return { revision, ...metadata };
-  });
 
   const warnedPreviewIds = new Set<string>();
   fastify.get<{ Params: { id: string } }>("/api/integrations/:id/preview", async (req, reply) => {

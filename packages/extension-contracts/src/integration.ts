@@ -1,6 +1,7 @@
 import z from "zod/v4";
 import { feedIdSchema } from "./identifiers";
 import { parseLicensing } from "./licensing";
+import { licensingSchema } from "./licensing-schema";
 import { parseMediaHostEntry } from "./media-hosts";
 import { platformVersionSchema } from "./platform";
 
@@ -97,6 +98,9 @@ export const dataSourceSchema = z.object({
   dpaAvailable: z.boolean().optional(),
   dpaUrl: z.string().optional(),
 });
+
+/** Serialized source metadata after authoring validation and normalization. */
+export const dataSourceOutputSchema = dataSourceSchema.extend({ licensing: licensingSchema });
 
 /**
  * Operator-facing "how to obtain this credential" guidance attached to a

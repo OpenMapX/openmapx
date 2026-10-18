@@ -74,8 +74,11 @@ overrides:
   # js-yaml 5.2.x is a dual CJS/ESM package that addresses the merge-key DoS
   # (GHSA-h67p-54hq-rp68) structurally: load() defaults to CORE_SCHEMA (no
   # `!!merge`), plus the maxTotalMergeKeys/maxAliases caps added in 5.2.0.
-  # Pinned to keep one version workspace-wide for every YAML consumer.
+  # Default for YAML consumers; Orval's ESM entry still requires the v4 default export.
   "js-yaml": "^5.2.1"
+  # Orval pins this maintained v4 release, including the merge/omap DoS fixes.
+  # Keep this exception scoped to dev-only code generation, not runtime parsers.
+  "orval@8.43.0>js-yaml": "4.3.2"
   # react-redux@9.2.0 and reselect@5.1.1 ship without provenance attestation
   # even though earlier and later versions have it; pin to the latest provenance-
   # signed releases so pnpm's `trustPolicy: no-downgrade` lets the install

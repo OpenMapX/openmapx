@@ -1,77 +1,18 @@
-import type { LoadedIntegrationMeta } from "../types/integrationMeta";
+import { createApiClient } from "./client";
+import type { IntegrationsResponse } from "./contracts/runtime-metadata";
+import { getApiIntegrations } from "./generated/runtime-metadata.generated";
 import { serverApiUrl } from "./server-url";
 
-/**
- * Wire shape of `/api/integrations`. Mirrors `IntegrationsResponse` from
- * `@openmapx/integration-framework` — duplicated locally so `@openmapx/core`
- * doesn't depend on integration-framework (which itself depends on core).
- */
-
-export interface AiCloudProcessor {
-  id: string;
-  name: string;
-  countryCode: string;
-  privacyUrl: string;
-}
-export interface AiSearchDisclosure {
-  type: "ai-search";
-  integrationId: string;
-  aiActive: boolean;
-  localActive: boolean;
-  cloudActive: boolean;
-  cloudProcessors: AiCloudProcessor[];
-  cloudAvailable: boolean;
-  cloudConsentRequired: boolean;
-  cloudProviderLabels: string[];
-}
-
-export type EmailProvider = "emaillabs" | "lettermint" | "smtp";
-export type TransferSafeguard = "eea" | "adequacy" | "dpf" | "scc" | "none";
-
-export interface EmailDisclosure {
-  type: "email";
-  provider: EmailProvider;
-  vendorName: string;
-  countryCode: string;
-  privacyUrl?: string;
-  transfer: TransferSafeguard;
-}
-
-export type Disclosure = AiSearchDisclosure | EmailDisclosure;
-
-interface IntegrationsApiResponse {
-  revision: string;
-  integrations: LoadedIntegrationMeta[];
-  frameworkStrings: Record<string, Record<string, unknown>>;
-  disclosures?: Disclosure[];
-}
-
-// Not cached: the only callers are the force-dynamic /privacy and /terms
-// pages, whose attribution/disclosure tables must reflect the integrations
-// enabled at runtime. A cached fetch here is seeded empty during `next build`
-// (no API runs then) and baked into the image, rendering those tables stale.
-export async function fetchIntegrations(): Promise<LoadedIntegrationMeta[]> {
+/** Live legal-page metadata: one validated snapshot, never seeded by the build cache. */
+export async function fetchIntegrationMetadata(): Promise<IntegrationsResponse | null> {
   try {
-    const res = await fetch(`${serverApiUrl()}/api/integrations`, {
+    const result = await getApiIntegrations(undefined, {
+      client: createApiClient({ baseUrl: serverApiUrl(), credentials: "omit" }),
       cache: "no-store",
-    } as RequestInit);
-    if (!res.ok) return [];
-    const body = (await res.json()) as IntegrationsApiResponse;
-    return body.integrations ?? [];
+    });
+    return result.status === 200 ? result.data : null;
   } catch {
-    return [];
-  }
-}
-
-export async function fetchDisclosures(): Promise<Disclosure[]> {
-  try {
-    const res = await fetch(`${serverApiUrl()}/api/integrations`, {
-      cache: "no-store",
-    } as RequestInit);
-    if (!res.ok) return [];
-    const body = (await res.json()) as IntegrationsApiResponse;
-    return body.disclosures ?? [];
-  } catch {
-    return [];
+    // Legal pages retain their established empty tables when the API is unavailable.
+    return null;
   }
 }

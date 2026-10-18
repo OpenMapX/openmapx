@@ -10,7 +10,8 @@ import {
   OVERLAY_REGISTRY,
   toggleOverlay,
 } from "@openmapx/core";
-import { IntegrationRegistry, type LoadedIntegrationMeta } from "@openmapx/integration-framework";
+import type { IntegrationMetadata } from "@openmapx/core/api-contracts";
+import { IntegrationRegistry } from "@openmapx/integration-framework";
 import { IntegrationRegistryContext } from "@openmapx/integration-framework/react";
 import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
@@ -30,11 +31,18 @@ vi.mock("@integrations/overlay-ambient-places/map-layer", async () => {
 import { DeepLinkManager } from "./DeepLinkManager";
 import { MapLayerHost } from "./MapLayerHost";
 
-function realIntegration(id: string, enabled = true): LoadedIntegrationMeta {
+function realIntegration(id: string, enabled = true): IntegrationMetadata {
   const manifest = JSON.parse(
     readFileSync(resolve(process.cwd(), "integrations", id, "manifest.json"), "utf8"),
-  ) as LoadedIntegrationMeta;
-  return { ...manifest, name: id, enabled };
+  ) as IntegrationMetadata;
+  return {
+    id,
+    name: id,
+    enabled,
+    isBuiltIn: true,
+    domains: manifest.domains,
+    frontend: manifest.frontend,
+  };
 }
 
 function withRegistry(registry: IntegrationRegistry, children: ReactNode) {

@@ -24,6 +24,7 @@ const WEATHER: IntegrationMeta = {
   id: "overlay-weather",
   name: "Weather",
   enabled: true,
+  isBuiltIn: true,
   domains: ["map-overlay"],
   frontend: { overlay: { excludes: [] } },
 };

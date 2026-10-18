@@ -6,6 +6,10 @@
   "main": "./src/index.ts",
   "types": "./src/index.ts",
   "exports": {
+    "./api-contracts": {
+      "types": "./src/api/contracts/runtime-metadata.ts",
+      "default": "./src/api/contracts/runtime-metadata.ts"
+    },
     ".": {
       "types": "./src/index.ts",
       "default": "./src/index.ts"
@@ -161,6 +165,10 @@
     "./attribution": {
       "types": "./src/utils/attribution-api.ts",
       "default": "./src/utils/attribution-api.ts"
+    },
+    "./api-sdk": {
+      "types": "./src/api/generated/runtime-metadata.generated.ts",
+      "default": "./src/api/generated/runtime-metadata.generated.ts"
     }
   },
   "scripts": {
