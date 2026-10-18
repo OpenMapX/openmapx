@@ -1032,6 +1032,31 @@ describe("integration layer previews", () => {
 // Step 4: Reload and shutdown tests
 // ---------------------------------------------------------------------------
 
+describe("resolved service cache identity", () => {
+  it("captures immutable bindings for initial and reloaded provider generations", async () => {
+    const service = { serviceId: "photon", url: "https://first.example", enabled: true };
+    vi.mocked(resolveRequiresForIntegration).mockReturnValue(new Map([["geocoder", service]]));
+    const app = makeApp();
+    try {
+      await initIntegrations(app, [FIXTURES_DIR]);
+      const initial = getIntegration("alpha");
+      expect(initial?.resolvedServices?.geocoder?.url).toBe("https://first.example");
+      service.url = "https://second.example";
+      expect(initial?.resolvedServices?.geocoder?.url).toBe("https://first.example");
+      expect(Object.isFrozen(initial?.resolvedServices)).toBe(true);
+      expect(Object.isFrozen(initial?.resolvedServices?.geocoder)).toBe(true);
+      await reloadIntegrations();
+      expect(getIntegration("alpha")?.resolvedServices?.geocoder?.url).toBe(
+        "https://second.example",
+      );
+      expect(initial?.resolvedServices?.geocoder?.url).toBe("https://first.example");
+    } finally {
+      vi.mocked(resolveRequiresForIntegration).mockReturnValue(new Map());
+      await app.close();
+    }
+  });
+});
+
 describe("reloadIntegrations", () => {
   it("after reload getAllIntegrations still returns both fixtures", async () => {
     const app = makeApp();

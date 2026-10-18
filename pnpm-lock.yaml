@@ -983,6 +983,9 @@ importers:
       '@openstreetmap/id-tagging-schema':
         specifier: ^7.2.0
         version: 7.2.0
+      lru-cache:
+        specifier: 11.5.3
+        version: 11.5.3
 
   integrations/geocoding-db-ris:
     dependencies:
@@ -2781,6 +2784,9 @@ importers:
       '@openmapx/transitous-core':
         specifier: workspace:^
         version: link:../transitous-core
+      lru-cache:
+        specifier: 11.5.3
+        version: 11.5.3
       spdx-expression-parse:
         specifier: 5.0.0
         version: 5.0.0

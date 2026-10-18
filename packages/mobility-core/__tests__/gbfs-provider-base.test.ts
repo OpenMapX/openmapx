@@ -40,7 +40,7 @@ function dependencies() {
   return {
     cache,
     catalog,
-    nominatim: { reverseGeocodeCity },
+    nominatim: { reverseGeocodeCity, clearCache: () => undefined },
     transport,
   };
 }

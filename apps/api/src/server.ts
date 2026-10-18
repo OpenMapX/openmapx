@@ -95,6 +95,7 @@ import {
   serviceStop,
 } from "./services/admin-ops";
 import { appLogger } from "./services/app-logger";
+import { cacheInvalidation } from "./services/cache-invalidation";
 import {
   filterGatedSources,
   getGatedIntegrationIds,
@@ -660,6 +661,7 @@ const customIntegrationsDir =
 // their setup functions — registration is idempotent.
 registerBuiltinIdSchemeViews();
 
+await cacheInvalidation.start();
 await initIntegrations(server, [
   { directory: integrationsDir, isBuiltIn: true },
   { directory: customIntegrationsDir, isBuiltIn: false },
@@ -798,6 +800,7 @@ for (const signal of ["SIGINT", "SIGTERM"] as const) {
     clearInterval(privacyEscalationTimer);
     await shutdownIntegrations();
     await server.close();
+    await cacheInvalidation.stop();
     await redis?.disconnect();
     await sql.end();
     process.exit(0);

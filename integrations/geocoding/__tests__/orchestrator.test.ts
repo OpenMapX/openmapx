@@ -1,7 +1,7 @@
 import type { IntegrationContext } from "@openmapx/integration-framework";
 import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 import { describe, expect, it, vi } from "vitest";
-import { getGeocodingProvider, setConfiguredProviderList } from "../orchestrator.js";
+import { getGeocodingProvider } from "../orchestrator.js";
 import type { GeocodingProvider, SearchResult } from "../types.js";
 
 function result(id: string): SearchResult {
@@ -17,50 +17,58 @@ function provider(search: SearchResult[]): GeocodingProvider {
   };
 }
 
-function ctxWith(integrations: Array<[string, GeocodingProvider]>): IntegrationContext {
+function ctxWith(
+  integrations: Array<[string, GeocodingProvider]>,
+  order = "maptiler",
+): IntegrationContext {
   const list = integrations.map(([id, p]) => ({
     id,
     providers: new Map<string, GeocodingProvider[]>([["geocoding", [p]]]),
   }));
-  return { getIntegrationsByDomain: () => list } as unknown as IntegrationContext;
+  return {
+    config: { provider: order },
+    getIntegrationsByDomain: () => list,
+  } as unknown as IntegrationContext;
 }
 
 describe("geocoding orchestrator served-provider tagging", () => {
   it("tags single-provider results with the serving integration id", async () => {
-    setConfiguredProviderList("maptiler");
     const ctx = ctxWith([["geocoding-maptiler", provider([result("a")])]]);
     const results = await getGeocodingProvider(ctx).geocode("q");
     expect(results.map((r) => r.provider)).toEqual(["geocoding-maptiler"]);
   });
 
   it("credits the provider that actually produced results, not the first in the chain", async () => {
-    setConfiguredProviderList("maptiler,photon");
-    const ctx = ctxWith([
-      ["geocoding-maptiler", provider([])], // empty → falls through
-      ["geocoding-photon", provider([result("b")])],
-    ]);
+    const ctx = ctxWith(
+      [
+        ["geocoding-maptiler", provider([])], // empty → falls through
+        ["geocoding-photon", provider([result("b")])],
+      ],
+      "maptiler,photon",
+    );
     const results = await getGeocodingProvider(ctx).geocode("q");
     expect(results).toHaveLength(1);
     expect(results[0].provider).toBe("geocoding-photon");
   });
 
   it("tags autocomplete suggestions with the serving integration id", async () => {
-    setConfiguredProviderList("maptiler");
     const ctx = ctxWith([["geocoding-maptiler", provider([result("a")])]]);
     const suggestions = await getGeocodingProvider(ctx).autocomplete("q");
     expect(suggestions.every((s) => s.provider === "geocoding-maptiler")).toBe(true);
   });
 
   it("forwards the location bias through the fallback chain", async () => {
-    setConfiguredProviderList("maptiler,photon");
     const empty = provider([]);
     const served = provider([result("b")]);
     const emptySpy = vi.spyOn(empty, "autocomplete");
     const servedSpy = vi.spyOn(served, "autocomplete");
-    const ctx = ctxWith([
-      ["geocoding-maptiler", empty],
-      ["geocoding-photon", served],
-    ]);
+    const ctx = ctxWith(
+      [
+        ["geocoding-maptiler", empty],
+        ["geocoding-photon", served],
+      ],
+      "maptiler,photon",
+    );
     const bias = { proximity: [13.4, 52.52] as [number, number], zoom: 12 };
     await getGeocodingProvider(ctx).autocomplete("coffee", "de", bias);
     expect(emptySpy).toHaveBeenCalledWith("coffee", "de", bias);
@@ -68,7 +76,6 @@ describe("geocoding orchestrator served-provider tagging", () => {
   });
 
   it("tags reverse-geocode results with the serving integration id", async () => {
-    setConfiguredProviderList("maptiler");
     const ctx = ctxWith([["geocoding-maptiler", provider([result("a")])]]);
     const res = await getGeocodingProvider(ctx).reverseGeocode(0, 0);
     expect(res?.provider).toBe("geocoding-maptiler");
@@ -76,7 +83,6 @@ describe("geocoding orchestrator served-provider tagging", () => {
 });
 
 it("captures only selected backend credits before cache and does not mutate provider-owned records", async () => {
-  setConfiguredProviderList("photon");
   const raw = { ...result("cached"), sourceIds: ["selected"] };
   const selected = {
     sourceId: "selected",
@@ -86,6 +92,7 @@ it("captures only selected backend credits before cache and does not mutate prov
   };
   const sources = [selected, { ...selected, sourceId: "inactive", name: "Missing key backend" }];
   const ctx = {
+    config: { provider: "photon" },
     getIntegrationsByDomain: () => [
       {
         id: "geocoding-photon",
@@ -113,7 +120,6 @@ it("captures only selected backend credits before cache and does not mutate prov
 });
 
 it("captures geocoder metadata before the selected backend request resolves", async () => {
-  setConfiguredProviderList("photon");
   let finish!: (rows: SearchResult[]) => void;
   const source = {
     sourceId: "selected",
@@ -129,6 +135,7 @@ it("captures geocoder metadata before the selected backend request resolves", as
       }),
   };
   const ctx = {
+    config: { provider: "photon" },
     getIntegrationsByDomain: () => [
       {
         id: "geocoding-photon",

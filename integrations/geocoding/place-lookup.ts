@@ -1,5 +1,6 @@
 import { OPENSTREETMAP_ATTRIBUTION } from "@openmapx/mobility-core/attribution";
 import { snapshotContributors, withContributors } from "@openmapx/mobility-core/contributors";
+import { LRUCache } from "lru-cache";
 /**
  * Nominatim place detail lookups.
  * Separate from nominatim geocoding (which handles geocoding/autocomplete)
@@ -140,7 +141,9 @@ function buildIds(result: NominatimDetailResult, requestId: string): PlaceIds {
 // Populated by setup(ctx) from the resolved integration config cascade.
 let NOMINATIM_URL = "https://nominatim.openstreetmap.org";
 export function setPlaceLookupNominatimUrl(value: string | undefined): void {
-  NOMINATIM_URL = value && value.length > 0 ? value : "https://nominatim.openstreetmap.org";
+  const next = value && value.length > 0 ? value : "https://nominatim.openstreetmap.org";
+  if (next !== NOMINATIM_URL) clearPlaceLookupCaches(lookupCacheAvailable);
+  NOMINATIM_URL = next;
 }
 
 const DEFAULT_HEADERS = {
@@ -423,8 +426,22 @@ const CITY_NAME_TTL_MS = 3_600_000; // 1h
 // Country only changes at borders, so a coarse 1° grid (~111 km cell) and a
 // 24h TTL are sufficient. Shared with the nearby-places route so opening-hours
 // public-holiday rules can be evaluated against the right country.
-const countryCodeCache = new Map<string, { countryCode: string | null; expiresAt: number }>();
+// An entry budget for small country-code results, not an estimated heap-byte limit.
+const countryCodeCache = new LRUCache<string, { countryCode: string | null; expiresAt: number }>({
+  max: 4096,
+  ttlResolution: 0,
+  perf: { now: () => Date.now() },
+});
 const COUNTRY_CODE_TTL_MS = 24 * 60 * 60 * 1000;
+let lookupGeneration = 0;
+let lookupCacheAvailable = true;
+
+export function clearPlaceLookupCaches(available = true): void {
+  lookupGeneration++;
+  lookupCacheAvailable = available;
+  countryCodeCache.clear();
+  cityNameCache.clear();
+}
 
 /**
  * Reverse-geocode coordinates to a city name (city-level zoom).
@@ -437,7 +454,8 @@ export async function reverseGeocodeCity(
 ): Promise<string | null> {
   const effectiveLang = lang ?? "en";
   const key = `${Math.round(lat * 10) / 10},${Math.round(lng * 10) / 10}:${effectiveLang}`;
-  const cached = cityNameCache.get(key);
+  const generation = lookupGeneration;
+  const cached = lookupCacheAvailable ? cityNameCache.get(key) : undefined;
   if (cached && cached.expiresAt > Date.now()) return cached.city;
 
   try {
@@ -451,7 +469,9 @@ export async function reverseGeocodeCity(
     const result = await fetchNominatim<NominatimDetailResult>(url, lang);
     const city = result?.address?.city ?? result?.address?.town ?? result?.address?.village ?? null;
 
-    cityNameCache.set(key, { city, expiresAt: Date.now() + CITY_NAME_TTL_MS });
+    if (lookupCacheAvailable && generation === lookupGeneration) {
+      cityNameCache.set(key, { city, expiresAt: Date.now() + CITY_NAME_TTL_MS });
+    }
     return city;
   } catch {
     return null;
@@ -465,12 +485,14 @@ export async function reverseGeocodeCity(
  * unreachable upstream so callers can fall back gracefully.
  */
 export async function reverseGeocodeCountry(lat: number, lng: number): Promise<string | null> {
-  const key = `${Math.round(lat)},${Math.round(lng)}`;
-  const cached = countryCodeCache.get(key);
+  const endpoint = NOMINATIM_URL;
+  const generation = lookupGeneration;
+  const key = `${endpoint}:${Math.round(lat)},${Math.round(lng)}`;
+  const cached = lookupCacheAvailable ? countryCodeCache.get(key) : undefined;
   if (cached && cached.expiresAt > Date.now()) return cached.countryCode;
 
   try {
-    const url = new URL(`${NOMINATIM_URL}/reverse`);
+    const url = new URL(`${endpoint}/reverse`);
     url.searchParams.set("lat", String(lat));
     url.searchParams.set("lon", String(lng));
     url.searchParams.set("format", "jsonv2");
@@ -480,10 +502,16 @@ export async function reverseGeocodeCountry(lat: number, lng: number): Promise<s
     const result = await fetchNominatim<NominatimDetailResult>(url);
     const countryCode = result?.address?.country_code?.toLowerCase() ?? null;
 
-    countryCodeCache.set(key, {
-      countryCode,
-      expiresAt: Date.now() + COUNTRY_CODE_TTL_MS,
-    });
+    if (lookupCacheAvailable && generation === lookupGeneration) {
+      countryCodeCache.set(
+        key,
+        {
+          countryCode,
+          expiresAt: Date.now() + COUNTRY_CODE_TTL_MS,
+        },
+        { ttl: COUNTRY_CODE_TTL_MS },
+      );
+    }
     return countryCode;
   } catch {
     return null;

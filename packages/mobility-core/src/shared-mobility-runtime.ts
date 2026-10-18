@@ -43,6 +43,7 @@ export type RuntimeSharedMobilityOrchestratorConfig = Omit<
 >;
 
 export interface SharedMobilityRuntime {
+  dispose(): void;
   readonly cache: CacheClient;
   readonly transport: MobilityHttpTransport;
   loadCatalog(): Promise<GbfsCatalogEntry[]>;
@@ -86,10 +87,22 @@ export interface SharedMobilityRuntime {
 export function createSharedMobilityRuntime(
   options: SharedMobilityRuntimeOptions,
 ): SharedMobilityRuntime {
-  const catalog = createGbfsCatalogClient({ cache: options.cache, transport: options.transport });
+  let cacheAvailable = !options.cache.onInvalidate;
+  const isCacheAvailable = () => cacheAvailable;
+  const catalog = createGbfsCatalogClient({
+    cache: options.cache,
+    transport: options.transport,
+    isCacheAvailable,
+  });
   const nominatim = createNominatimClient({
     transport: options.transport,
     url: options.nominatimUrl,
+    isCacheAvailable,
+  });
+  const unsubscribe = options.cache.onInvalidate?.(({ available }) => {
+    cacheAvailable = available;
+    catalog.clearCache();
+    nominatim.clearCache();
   });
   const motis = createMotisRentalsClient({
     motisUrl: options.motisUrl,
@@ -112,6 +125,12 @@ export function createSharedMobilityRuntime(
   };
 
   return {
+    dispose() {
+      unsubscribe?.();
+      cacheAvailable = false;
+      catalog.clearCache();
+      nominatim.clearCache();
+    },
     cache: options.cache,
     transport: options.transport,
     loadCatalog: catalog.loadCatalog,

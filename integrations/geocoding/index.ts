@@ -2,10 +2,12 @@ import { createHash } from "node:crypto";
 import { type AutocompleteResult, setOverpassUrl } from "@openmapx/core";
 import { type IntegrationContext, scalarQueries } from "@openmapx/integration-framework";
 import { registerPlaceResolver } from "@openmapx/place-ids";
+import { geocodingCacheIdentity } from "./cache-identity.js";
 import { isStationQuery, mergeForwardEvidence, rankForwardResults } from "./forward-ranking.js";
 import { MemCache } from "./mem-cache.js";
-import { getGeocodingProvider, setConfiguredProviderList } from "./orchestrator.js";
+import { getGeocodingProvider } from "./orchestrator.js";
 import {
+  clearPlaceLookupCaches,
   lookupByOsmRef,
   reverseGeocodeCountry,
   setPlaceLookupNominatimUrl,
@@ -35,13 +37,29 @@ const MAX_BIAS_ZOOM = 24;
 // Soft TTL 5 min (serve stale + background refresh), hard TTL 2 h (evict).
 const MEM_SOFT_MS = 5 * 60_000;
 const MEM_HARD_MS = 2 * 3600_000;
-const memCache = new MemCache<AutocompleteResult[]>(1000);
-
 export function setup(ctx: IntegrationContext): void {
+  const memCache = new MemCache<AutocompleteResult[]>(1000);
+  let generation = 0;
+  let cacheAvailable = !ctx.cache.onInvalidate;
+  let active = false;
+  const unsubscribe = ctx.cache.onInvalidate?.(({ available }) => {
+    generation++;
+    cacheAvailable = available;
+    memCache.clear();
+    if (active) clearPlaceLookupCaches(available);
+  });
+  ctx.onShutdown(async () => {
+    generation++;
+    active = false;
+    cacheAvailable = false;
+    memCache.clear();
+    unsubscribe?.();
+  });
   const nominatim = ctx.getRequiredService("nominatim");
   const overpass = ctx.getRequiredService("overpass");
   ctx.onActivate(() => {
-    setConfiguredProviderList(ctx.config.provider as string | undefined);
+    active = true;
+    clearPlaceLookupCaches(cacheAvailable);
     setPlaceLookupNominatimUrl((ctx.config.nominatimUrl as string | undefined) ?? nominatim?.url);
     if (overpass?.url) setOverpassUrl(overpass.url);
   });
@@ -77,8 +95,14 @@ export function setup(ctx: IntegrationContext): void {
     const proxKey = proximity ? `${round(proximity[0], 2)},${round(proximity[1], 2)}` : "none";
 
     try {
+      const provider = getGeocodingProvider(ctx);
       const result = await ctx.cache.withCache(
-        hashKey("cache:geocode", { q: normalizedQ, lang: effectiveLang, prox: proxKey }),
+        hashKey("cache:geocode", {
+          identity: geocodingCacheIdentity(ctx),
+          q: normalizedQ,
+          lang: effectiveLang,
+          prox: proxKey,
+        }),
         TTL_FORWARD,
         async () => {
           // Equivalent station queries must fetch/deduplicate in the same order,
@@ -86,7 +110,7 @@ export function setup(ctx: IntegrationContext): void {
           const stationQuery = isStationQuery(q);
           const candidates = await fetchWithVariants(
             stationQuery ? normalizedQ : q,
-            (v) => getGeocodingProvider(ctx).geocode(v, effectiveLang, proximity),
+            (v) => provider.geocode(v, effectiveLang, proximity),
             stationQuery ? mergeForwardEvidence : undefined,
           );
           return rankForwardResults(q, candidates);
@@ -114,11 +138,12 @@ export function setup(ctx: IntegrationContext): void {
 
     // Round to 4dp (~11m) to maximise cache hits for nearby queries
     const effectiveLang = lang ?? "en";
-    const key = `cache:geocode:rev:${round(lat, 4)}:${round(lng, 4)}:${effectiveLang}`;
+    const key = `cache:geocode:rev:${geocodingCacheIdentity(ctx)}:${round(lat, 4)}:${round(lng, 4)}:${effectiveLang}`;
 
     try {
+      const provider = getGeocodingProvider(ctx);
       const result = await ctx.cache.withCache(key, TTL_REVERSE, () =>
-        getGeocodingProvider(ctx).reverseGeocode(lat, lng, effectiveLang),
+        provider.reverseGeocode(lat, lng, effectiveLang),
       );
       reply.header("Cache-Control", "public, max-age=86400");
       reply.send(result);
@@ -192,22 +217,29 @@ export function setup(ctx: IntegrationContext): void {
     // Normalize for cache key so "Hamburg"/"hamburg" and "Hbf"/"Hauptbahnhof" share a slot
     const normalizedQ = expandedQ.trim().toLowerCase();
     const key = hashKey("cache:autocomplete", {
+      identity: geocodingCacheIdentity(ctx),
       q: normalizedQ,
       lang: effectiveLang,
       prox: bias ? bias.proximity.join(",") : "none",
       zoom: bias?.zoom ?? "none",
     });
-    const load = () =>
-      fetchWithVariants(q, (v) => getGeocodingProvider(ctx).autocomplete(v, effectiveLang, bias));
+    const provider = getGeocodingProvider(ctx);
+    const requestGeneration = generation;
+    const load = () => fetchWithVariants(q, (v) => provider.autocomplete(v, effectiveLang, bias));
+    const remember = (data: AutocompleteResult[]) => {
+      if (cacheAvailable && requestGeneration === generation) {
+        memCache.set(key, data, MEM_SOFT_MS, MEM_HARD_MS);
+      }
+    };
 
     // L1: in-memory check (sub-millisecond)
-    const mem = memCache.get(key);
+    const mem = cacheAvailable ? memCache.get(key) : null;
     if (mem) {
       if (mem.stale) {
         // Stale-while-revalidate: serve immediately, refresh in background
         void ctx.cache
           .withCache(key, TTL_AUTOCOMPLETE, load)
-          .then((fresh) => memCache.set(key, fresh, MEM_SOFT_MS, MEM_HARD_MS))
+          .then(remember)
           .catch(() => {});
       }
       reply.header("Cache-Control", "public, max-age=3600");
@@ -218,7 +250,7 @@ export function setup(ctx: IntegrationContext): void {
     // L2: Redis + upstream -- gracefully degrade on failure
     try {
       const result = await ctx.cache.withCache(key, TTL_AUTOCOMPLETE, load);
-      memCache.set(key, result, MEM_SOFT_MS, MEM_HARD_MS);
+      remember(result);
       reply.header("Cache-Control", "public, max-age=3600");
       reply.send(result);
     } catch (err) {
@@ -226,7 +258,7 @@ export function setup(ctx: IntegrationContext): void {
       // Try stale Redis data before giving up
       const stale = await ctx.cache.get<AutocompleteResult[]>(key);
       if (stale) {
-        memCache.set(key, stale, MEM_SOFT_MS, MEM_HARD_MS);
+        remember(stale);
         reply.header("Cache-Control", "public, max-age=60");
         reply.send(stale);
         return;

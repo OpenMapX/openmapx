@@ -3,22 +3,68 @@ import {
   runWithProviderDeadline,
 } from "@openmapx/integration-framework";
 import { createNoopLogger } from "@openmapx/integration-framework/testing";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { enturGeocodingService } from "../../../../integrations/geocoding-entur/provider.js";
 
-const { redisMock } = vi.hoisted(() => ({
-  redisMock: {
-    get: vi.fn(),
-    set: vi.fn(),
-    setex: vi.fn(),
-    del: vi.fn(),
-  },
-}));
+const { redisMock, sharedValues, sharedTtls, clearLeases } = vi.hoisted(() => {
+  const sharedValues = new Map<string, string>();
+  const sharedTtls = new Map<string, number>();
+  const clearLeases = new Map<string, number>();
+  const redisMock = {
+    get: vi.fn(async (key: string) => sharedValues.get(key) ?? null),
+    set: vi.fn(async (key: string, value: string) => {
+      sharedValues.set(key, value);
+      return "OK";
+    }),
+    setex: vi.fn(async (key: string, ttl: number, value: string) => {
+      sharedValues.set(key, value);
+      sharedTtls.set(key, ttl);
+      return "OK";
+    }),
+    del: vi.fn(async (key: string) => (sharedValues.delete(key) ? 1 : 0)),
+    publish: vi.fn(async () => 0),
+    eval: vi.fn(async (script: string, keyCount: number, ...args: (string | number)[]) => {
+      const [epochKey, key, ...parameters] = args as [string, string, ...(string | number)[]];
+      const advance = () => {
+        const next = Number(sharedValues.get(epochKey) ?? 0) + 1;
+        sharedValues.set(epochKey, String(next));
+        return next;
+      };
+      if (script.startsWith("-- begin-clear")) {
+        clearLeases.set(String(parameters[0]), Date.now() + Number(parameters[1]));
+        return advance();
+      }
+      if (script.startsWith("-- finish-clear")) {
+        const valid = (clearLeases.get(String(parameters[0])) ?? 0) > Date.now();
+        clearLeases.delete(String(parameters[0]));
+        advance();
+        return valid ? 1 : 0;
+      }
+      if (script.startsWith("-- renew-clear")) {
+        const token = String(parameters[0]);
+        if ((clearLeases.get(token) ?? 0) <= Date.now()) return 0;
+        clearLeases.set(token, Date.now() + Number(parameters[1]));
+        return 1;
+      }
+      if (keyCount === 3) parameters.shift();
+      const [epoch, serialized, ttl] = parameters;
+      for (const [token, expiry] of clearLeases)
+        if (expiry <= Date.now()) clearLeases.delete(token);
+      if (clearLeases.size || (sharedValues.get(epochKey) ?? "0") !== epoch) return 0;
+      sharedValues.set(key, String(serialized));
+      sharedTtls.set(key, Number(ttl));
+      return 1;
+    }),
+  };
+  return { redisMock, sharedValues, sharedTtls, clearLeases };
+});
 
 vi.mock("../redis", () => ({ redis: redisMock }));
 
 import { createCacheClient, createHttpClient } from "../integration-clients";
+import { cacheInvalidation } from "../services/cache-invalidation";
 import { BoundedSingleFlight } from "../utils/bounded-single-flight";
+import { httpCacheKey } from "../utils/http-cache-key";
 
 function deferred(): { promise: Promise<void>; resolve: () => void } {
   let resolve!: () => void;
@@ -31,13 +77,143 @@ function deferred(): { promise: Promise<void>; resolve: () => void } {
 beforeEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
-  redisMock.get.mockReset().mockResolvedValue(null);
-  redisMock.set.mockReset().mockResolvedValue("OK");
-  redisMock.setex.mockReset().mockResolvedValue("OK");
-  redisMock.del.mockReset().mockResolvedValue(1);
+  sharedValues.clear();
+  sharedTtls.clear();
+  clearLeases.clear();
+  vi.clearAllMocks();
+  redisMock.get.mockImplementation(async (key: string) => sharedValues.get(key) ?? null);
 });
+afterEach(() => vi.useRealTimers());
 
 describe("integration cache single-flight", () => {
+  it("starts a new withCache flight after clear and prevents the old fill overwriting shared data", async () => {
+    const gate = deferred();
+    const cache = createCacheClient("clear-race");
+    let attempts = 0;
+    const load = async () => {
+      if (++attempts === 1) {
+        await gate.promise;
+        return "old";
+      }
+      return "fresh";
+    };
+    const first = cache.withCache("value", 60, load);
+    await vi.waitFor(() => expect(attempts).toBe(1));
+    await cacheInvalidation.invalidate(["int:clear-race:*"], async () => {
+      sharedValues.delete("int:clear-race:value");
+    });
+    const second = cache.withCache("value", 60, load);
+    try {
+      await vi.waitFor(() => expect(attempts).toBe(2));
+      await expect(second).resolves.toBe("fresh");
+    } finally {
+      gate.resolve();
+      await first;
+      await second;
+    }
+    expect(await cache.get("value")).toBe("fresh");
+  });
+
+  it("starts a new HTTP flight after clear and prevents old responses refilling shared data", async () => {
+    const gate = deferred();
+    let attempts = 0;
+    vi.stubGlobal("fetch", async () => {
+      if (++attempts === 1) {
+        await gate.promise;
+        return Response.json("old");
+      }
+      return Response.json("fresh");
+    });
+    const url = "https://weather.test/clear-race";
+    const key = httpCacheKey(url);
+    const http = createHttpClient(createNoopLogger());
+    const first = http.get(url, { cache: { ttl: 60 } });
+    await vi.waitFor(() => expect(attempts).toBe(1));
+    await cacheInvalidation.invalidate(["int:http:*"], async () => {
+      sharedValues.delete(key);
+    });
+    const second = http.get(url, { cache: { ttl: 60 } });
+    try {
+      await vi.waitFor(() => expect(attempts).toBe(2));
+      await expect(second).resolves.toBe("fresh");
+    } finally {
+      gate.resolve();
+      await first;
+      await second;
+    }
+    expect(JSON.parse(sharedValues.get(key) ?? "null")).toBe("fresh");
+  });
+
+  it("does not publish a loader that ignores cancellation after all callers leave", async () => {
+    const gate = deferred();
+    const cache = createCacheClient("cancel-race");
+    const controller = new AbortController();
+    let started = false;
+    const first = cache.withCache(
+      "value",
+      60,
+      async () => {
+        started = true;
+        await gate.promise;
+        return "abandoned";
+      },
+      controller.signal,
+    );
+    await vi.waitFor(() => expect(started).toBe(true));
+    controller.abort(new Error("caller left"));
+    await expect(first).rejects.toThrow("caller left");
+    gate.resolve();
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(await cache.get("value")).toBe(null);
+  });
+
+  it("forwards scoped invalidations and releases the subscription", async () => {
+    const cache = createCacheClient("notifications");
+    const events: boolean[] = [];
+    const unsubscribe = cache.onInvalidate?.((event) => events.push(event.available));
+    await cacheInvalidation.invalidate(["int:notifications:*"], async () => undefined);
+    expect(events).toEqual([false, false, false]);
+    unsubscribe?.();
+    await cacheInvalidation.invalidate(["int:*"], async () => undefined);
+    expect(events).toEqual([false, false, false]);
+  });
+
+  it.each([undefined, 60])("blocks direct cache.set during a clear with TTL %s", async (ttl) => {
+    const cache = createCacheClient("direct-set");
+    await cacheInvalidation.invalidate(["int:direct-set:*"], async () => {
+      await cache.set("value", "during", ttl);
+      expect(await cache.get("value")).toBe(null);
+    });
+    await cache.set("value", "after", ttl);
+    expect(await cache.get("value")).toBe("after");
+    expect(sharedTtls.get("int:direct-set:value")).toBe(ttl ?? 0);
+  });
+
+  it.each(["cache", "http"] as const)(
+    "continues %s acquisition after a shared read stops replying",
+    async (mode) => {
+      vi.useFakeTimers();
+      redisMock.get.mockImplementation(async (key: string) => {
+        if (key.startsWith("openmapx:")) return sharedValues.get(key) ?? null;
+        return new Promise<never>(() => {});
+      });
+      vi.stubGlobal("fetch", async () => Response.json("fresh"));
+      const work =
+        mode === "cache"
+          ? createCacheClient("read-timeout").withCache("value", 60, async () => "fresh")
+          : createHttpClient(createNoopLogger()).get("https://weather.test/read-timeout", {
+              cache: { ttl: 60 },
+            });
+      let completed = false;
+      void work.then(() => {
+        completed = true;
+      });
+      await vi.advanceTimersByTimeAsync(3_000);
+      expect(completed).toBe(true);
+      expect(await work).toBe("fresh");
+    },
+  );
+
   it("runs one provider operation for concurrent misses of the same integration key", async () => {
     const gate = deferred();
     let executions = 0;
@@ -82,9 +258,7 @@ describe("integration cache single-flight", () => {
     gate.resolve();
     await expect(second).resolves.toEqual({ suggestions: ["complete"] });
     expect(executions).toBe(1);
-    expect(redisMock.setex).toHaveBeenCalledWith(
-      "int:search-suggestions:berlin",
-      expect.any(Number),
+    expect(sharedValues.get("int:search-suggestions:berlin")).toBe(
       JSON.stringify({ suggestions: ["complete"] }),
     );
   });
@@ -109,11 +283,8 @@ describe("integration cache single-flight", () => {
 
     await cache.withCache("reference-data", 300, async () => "fresh");
 
-    expect(redisMock.setex).toHaveBeenCalledWith(
-      "int:weather:reference-data",
-      330,
-      JSON.stringify("fresh"),
-    );
+    expect(sharedValues.get("int:weather:reference-data")).toBe(JSON.stringify("fresh"));
+    expect(sharedTtls.get("int:weather:reference-data")).toBe(330);
   });
 
   it("returns degraded values without publishing them to the shared cache", async () => {
@@ -130,11 +301,12 @@ describe("integration cache single-flight", () => {
       ),
     ).resolves.toEqual(partial);
 
-    expect(redisMock.setex).not.toHaveBeenCalled();
+    expect(sharedValues.has("int:search-suggestions:berlin")).toBe(false);
   });
 
   it("evicts a previously cached degraded value when a cache policy rejects it", async () => {
-    redisMock.get.mockResolvedValueOnce(
+    sharedValues.set(
+      "int:search-suggestions:berlin",
       JSON.stringify({ suggestions: ["stale-partial"], partial: true }),
     );
     const cache = createCacheClient("search-suggestions");
@@ -146,9 +318,7 @@ describe("integration cache single-flight", () => {
 
     expect(redisMock.del).toHaveBeenCalledWith("int:search-suggestions:berlin");
     expect(load).toHaveBeenCalledTimes(1);
-    expect(redisMock.setex).toHaveBeenCalledWith(
-      "int:search-suggestions:berlin",
-      expect.any(Number),
+    expect(sharedValues.get("int:search-suggestions:berlin")).toBe(
       JSON.stringify({ suggestions: ["complete"], partial: false }),
     );
   });
@@ -331,11 +501,13 @@ describe("geocoder suggestion shared cache ownership", () => {
           secondController.abort(new Error("second caller left"));
           expect(await secondOutcome).toMatchObject({ message: "second caller left" });
           expect(downstreamSignal?.aborted).toBe(true);
-          expect(redisMock.setex).not.toHaveBeenCalled();
+          expect(sharedValues.has("int:search-suggestions:oslo")).toBe(false);
         } else {
           release();
           await expect(second).resolves.toMatchObject({ suggestions: [] });
-          expect(redisMock.setex).toHaveBeenCalledTimes(1);
+          expect(
+            JSON.parse(sharedValues.get("int:search-suggestions:oslo") ?? "null"),
+          ).toMatchObject({ suggestions: [] });
         }
         expect(fetch).toHaveBeenCalledTimes(1);
       } finally {
@@ -348,8 +520,47 @@ describe("geocoder suggestion shared cache ownership", () => {
           suggestions: [],
         });
         expect(fetch).toHaveBeenCalledTimes(2);
-        expect(redisMock.setex).toHaveBeenCalledTimes(1);
+        expect(JSON.parse(sharedValues.get("int:search-suggestions:oslo") ?? "null")).toMatchObject(
+          { suggestions: [] },
+        );
       }
     },
   );
+});
+
+describe("without Redis", () => {
+  it("starts new work after local invalidation instead of joining the old flight", async () => {
+    vi.resetModules();
+    vi.doMock("../redis", () => ({ redis: null }));
+    try {
+      const { createCacheClient: createLocalCache } = await import("../integration-clients");
+      const { cacheInvalidation: localInvalidation } = await import(
+        "../services/cache-invalidation"
+      );
+      const cache = createLocalCache("local-clear-race");
+      const gate = deferred();
+      let attempts = 0;
+      const load = async () => {
+        if (++attempts === 1) {
+          await gate.promise;
+          return "old";
+        }
+        return "fresh";
+      };
+      const first = cache.withCache("value", 60, load);
+      await vi.waitFor(() => expect(attempts).toBe(1));
+      await localInvalidation.invalidate(["int:local-clear-race:*"], async () => undefined);
+      const second = cache.withCache("value", 60, load);
+      try {
+        await vi.waitFor(() => expect(attempts).toBe(2));
+        await expect(second).resolves.toBe("fresh");
+      } finally {
+        gate.resolve();
+        await Promise.all([first, second]);
+      }
+    } finally {
+      vi.doUnmock("../redis");
+      vi.resetModules();
+    }
+  });
 });

@@ -50,16 +50,8 @@ function isProviderName(value: string): value is ProviderName {
   return value in NAME_TO_INTEGRATION;
 }
 
-// Populated by setup(ctx) from the resolved integration config cascade.
-let configuredProviderList = "maptiler";
-export function setConfiguredProviderList(value: string | undefined): void {
-  configuredProviderList = value && value.trim().length > 0 ? value : "maptiler";
-  // Reset the memoised orchestrator so the next call picks up the new chain.
-  cached = null;
-}
-
-function parseProviderList(): ProviderName[] {
-  const raw = configuredProviderList;
+function parseProviderList(configured: unknown): ProviderName[] {
+  const raw = typeof configured === "string" && configured.trim() ? configured : "maptiler";
   const names = raw
     .split(",")
     .map((s) => s.trim().toLowerCase())
@@ -103,8 +95,6 @@ function tagProvider<T extends ContributingRecord & { provider?: string; sourceI
   });
 }
 
-let cached: GeocodingProvider | null = null;
-
 /**
  * Returns a GeocodingProvider that tries each configured provider in order.
  *
@@ -116,9 +106,7 @@ let cached: GeocodingProvider | null = null;
  * result carries a `provider` tag (the serving integration ID) via tagProvider.
  */
 export function getGeocodingProvider(ctx: IntegrationContext): GeocodingProvider {
-  if (cached) return cached;
-
-  const names = parseProviderList();
+  const names = parseProviderList(ctx.config.provider);
   const providersByIntegration = collectProviders(ctx);
 
   const chain: { integrationId: string; provider: GeocodingProvider }[] = [];
@@ -136,7 +124,7 @@ export function getGeocodingProvider(ctx: IntegrationContext): GeocodingProvider
 
   if (chain.length === 1) {
     const single = chain[0];
-    cached = {
+    return {
       ...single.provider,
       async geocode(query, lang, proximity) {
         return tagProvider(
@@ -158,10 +146,9 @@ export function getGeocodingProvider(ctx: IntegrationContext): GeocodingProvider
         return result ? tagProvider(catalogue, [result], single.integrationId)[0] : null;
       },
     };
-    return cached;
   }
 
-  cached = {
+  return {
     async geocode(query, lang, proximity) {
       for (let i = 0; i < chain.length; i++) {
         try {
@@ -201,6 +188,4 @@ export function getGeocodingProvider(ctx: IntegrationContext): GeocodingProvider
       return null;
     },
   };
-
-  return cached;
 }
