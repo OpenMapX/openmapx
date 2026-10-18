@@ -308,8 +308,8 @@ Small PRs can combine prompts or omit empty sections. State relevant checks and
 material limits accurately. Put long evidence ledgers in a collapsed section or
 a durable public link. Use closing keywords only when the PR completes the issue.
 
-Every change with visual/visible impact needs screenshots prominently in the PR
-description, including documentation and other rendered output. Show labeled
+Changes that visibly affect the OpenMapX application UI need screenshots prominently
+in the PR description. Documentation-only changes do not require screenshots. Show labeled
 before/after views for existing behavior, with comparable data and viewport; show
 an after view with context for a new surface. Include affected states and relevant
 mobile/desktop views. Capture the real result, inspect the images, and redact

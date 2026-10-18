@@ -7,9 +7,10 @@ Keep this concise; combine or omit sections that add nothing for a small change.
 <!-- Explain the problem and what someone can do or observe after this change.
 A concrete before/after example often helps. Include relevant scope or trade-offs. -->
 
-<!-- For changes with visible impact, put real, inspected screenshots beside the explanation:
-labeled comparable before/after views for existing behavior, or contextual after views for a
-new surface. Cover affected states/viewports. See CONTRIBUTING.md for capture/upload guidance. -->
+<!-- For changes that visibly affect the OpenMapX application UI, put real, inspected
+screenshots beside the explanation: labeled comparable before/after views for existing
+behavior, or contextual after views for a new surface. Cover affected states/viewports.
+Documentation-only changes do not require screenshots. See CONTRIBUTING.md for guidance. -->
 
 ## Related work
 

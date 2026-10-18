@@ -92,8 +92,9 @@ prompts or omit empty sections; long experiments belong in collapsed details or
 durable public evidence. Do not turn the description into a tool transcript.
 The reviewed PR title/body become squash metadata.
 
-Every visible-impact change needs real inspected screenshots near its explanation,
-including documentation or generated output. Show comparable, labeled before/after
+Changes that visibly affect the OpenMapX application UI need real inspected screenshots
+near their explanation. Documentation-only changes do not require screenshots. Show
+comparable, labeled before/after
 views for existing behavior or contextual after views for new surfaces. Cover the
 relevant viewports and changed states; a short recording can supplement interactions.
 Redact personal data and inspect the hosted result after upload.
