@@ -1,3 +1,4 @@
+import type { DocumentTypeDecoration } from "@graphql-typed-document-node/core";
 import { type BBox, fetchJson } from "@openmapx/core";
 import {
   captureTransitContributors,
@@ -14,72 +15,20 @@ import type {
   ServiceAlert,
   TransportMode,
 } from "@openmapx/mobility-core/transit";
+import {
+  NationalSituationsDocument,
+  type SituationFieldsFragment,
+} from "@openmapx/mobility-formats/entur/journey-planner.generated.js";
+import { affectedLineIds, affectedStops } from "@openmapx/mobility-formats/entur/situations.js";
+import {
+  type VehicleFieldsFragment,
+  VehicleHealthCheckDocument,
+  VehiclesByBoundingBoxDocument,
+} from "@openmapx/mobility-formats/entur/vehicles.generated.js";
 
 interface GraphQlResponse<T> {
   data?: T;
   errors?: Array<{ message?: string }>;
-}
-
-interface EnturVehicle {
-  vehicleId?: string | null;
-  lastUpdated?: string | null;
-  bearing?: number | null;
-  speed?: number | null;
-  monitored?: boolean | null;
-  mode?: string | null;
-  line?: {
-    lineRef?: string | null;
-    lineName?: string | null;
-    publicCode?: string | null;
-  } | null;
-  serviceJourney?: {
-    id?: string | null;
-    date?: string | null;
-  } | null;
-  operator?: {
-    name?: string | null;
-  } | null;
-  location?: {
-    latitude?: number | null;
-    longitude?: number | null;
-  } | null;
-  monitoredCall?: {
-    stopPointRef?: string | null;
-    order?: number | null;
-  } | null;
-}
-
-interface EnturMultilingualText {
-  value?: string | null;
-  language?: string | null;
-}
-
-interface EnturSituation {
-  id: string;
-  summary?: EnturMultilingualText[] | null;
-  description?: EnturMultilingualText[] | null;
-  reportType?: string | null;
-  severity?: string | null;
-  validityPeriod?: {
-    startTime?: string | null;
-    endTime?: string | null;
-  } | null;
-  lines?: Array<{ id?: string | null } | null> | null;
-  stopPlaces?: Array<{
-    id?: string | null;
-    latitude?: number | null;
-    longitude?: number | null;
-  } | null> | null;
-  quays?: Array<{
-    id?: string | null;
-    latitude?: number | null;
-    longitude?: number | null;
-    stopPlace?: {
-      id?: string | null;
-      latitude?: number | null;
-      longitude?: number | null;
-    } | null;
-  } | null> | null;
 }
 
 const DEFAULT_CLIENT_NAME = "openmapx-server";
@@ -89,60 +38,6 @@ const NORWAY_BBOX: BBox = [4.0, 57.0, 32.0, 71.5];
 const ENTUR_PREFIX = "entur:";
 const VEHICLE_SOURCE_ID = "entur-live-vehicles";
 
-const VEHICLES_BY_BBOX_QUERY = `
-query VehiclesByBoundingBox(
-  $minLat: Float!
-  $minLon: Float!
-  $maxLat: Float!
-  $maxLon: Float!
-  $maxDataAge: Duration!
-) {
-  vehicles(
-    boundingBox: { minLat: $minLat, minLon: $minLon, maxLat: $maxLat, maxLon: $maxLon }
-    maxDataAge: $maxDataAge
-    monitored: true
-  ) {
-    vehicleId
-    lastUpdated
-    bearing
-    speed
-    monitored
-    mode
-    line { lineRef lineName publicCode }
-    serviceJourney { id date }
-    operator { name }
-    location { latitude longitude }
-    monitoredCall { stopPointRef order }
-  }
-}`;
-
-const HEALTHCHECK_QUERY = `
-query HealthCheck {
-  vehicles(codespaceId: "RUT", maxDataAge: "PT1H", monitored: true) {
-    lastUpdated
-  }
-}`;
-
-const NATIONAL_SITUATIONS_QUERY = `
-{
-  situations {
-    id
-    summary { value language }
-    description { value language }
-    reportType
-    severity
-    validityPeriod { startTime endTime }
-    lines { id }
-    stopPlaces { id latitude longitude }
-    quays {
-      id
-      latitude
-      longitude
-      stopPlace { id latitude longitude }
-    }
-  }
-}`;
-
 let clientName = DEFAULT_CLIENT_NAME;
 let journeyPlannerEndpoint = DEFAULT_JOURNEY_PLANNER_ENDPOINT;
 let vehiclesEndpoint = DEFAULT_VEHICLES_ENDPOINT;
@@ -150,7 +45,7 @@ let vehiclesEndpoint = DEFAULT_VEHICLES_ENDPOINT;
 // Combined cache budget: national snapshot 15 s + bbox 30 s + HTTP 15 s.
 const SITUATIONS_CACHE_MS = 15_000;
 interface SituationSnapshot {
-  situations: EnturSituation[];
+  situations: SituationFieldsFragment[];
   fetchedAt: string;
   expiresAt: number;
 }
@@ -163,10 +58,7 @@ function getSituationSnapshot(): Promise<SituationSnapshot> {
   if (cache.pending) return cache.pending;
   cache.pending = (async () => {
     try {
-      const data = await fetchGraphQl<{ situations?: EnturSituation[] | null }>(
-        journeyPlannerEndpoint,
-        NATIONAL_SITUATIONS_QUERY,
-      );
+      const data = await fetchGraphQl(journeyPlannerEndpoint, NationalSituationsDocument, {});
       const now = Date.now();
       const snapshot = {
         situations: data.situations ?? [],
@@ -223,7 +115,9 @@ function toTransportMode(raw: string | null | undefined): TransportMode {
   return "bus";
 }
 
-function pickLocalizedText(values: EnturMultilingualText[] | null | undefined): string | undefined {
+function pickLocalizedText(
+  values: SituationFieldsFragment["summary"][number][] | null | undefined,
+): string | undefined {
   if (!values?.length) return undefined;
   const english = values.find((entry) => entry.language?.toLowerCase() === "en" && entry.value);
   if (english?.value) return english.value;
@@ -247,18 +141,18 @@ function isInsideBbox(bbox: BBox, longitude: number, latitude: number): boolean 
   return longitude >= bbox[0] && longitude <= bbox[2] && latitude >= bbox[1] && latitude <= bbox[3];
 }
 
-async function fetchGraphQl<T>(
+async function fetchGraphQl<TResult, TVariables>(
   endpoint: string,
-  query: string,
-  variables?: Record<string, unknown>,
-): Promise<T> {
-  const payload = await fetchJson<GraphQlResponse<T>>(endpoint, {
+  document: DocumentTypeDecoration<TResult, TVariables> & { toString(): string },
+  variables: NoInfer<TVariables>,
+): Promise<TResult> {
+  const payload = await fetchJson<GraphQlResponse<TResult>>(endpoint, {
     timeoutMs: 8_000,
     userAgent: null,
     headers: { "Content-Type": "application/json", "ET-Client-Name": clientName },
     errorMessage: ({ status, statusText }) =>
       `Entur GraphQL request failed: ${status} ${statusText}`,
-    init: { method: "POST", body: JSON.stringify({ query, variables }) },
+    init: { method: "POST", body: JSON.stringify({ query: document.toString(), variables }) },
   });
   if (payload.errors?.length) {
     throw new Error(
@@ -274,9 +168,9 @@ async function fetchGraphQl<T>(
   return payload.data;
 }
 
-function toLiveVehicle(vehicle: EnturVehicle): LiveTransitVehicle | null {
+function toLiveVehicle(vehicle: VehicleFieldsFragment | null): LiveTransitVehicle | null {
   if (
-    typeof vehicle.location?.latitude !== "number" ||
+    typeof vehicle?.location?.latitude !== "number" ||
     typeof vehicle.location?.longitude !== "number" ||
     !isTruthyString(vehicle.lastUpdated)
   ) {
@@ -325,22 +219,14 @@ function toLiveVehicle(vehicle: EnturVehicle): LiveTransitVehicle | null {
   };
 }
 
-function toAlert(situation: EnturSituation): ServiceAlert | null {
+function toAlert(situation: SituationFieldsFragment): ServiceAlert | null {
   if (!situation.id) return null;
 
   const affectedRouteIds = new Set<string>();
   const affectedStopIds = new Set<string>();
 
-  for (const line of situation.lines ?? []) {
-    if (line?.id) affectedRouteIds.add(withEnturPrefix(line.id));
-  }
-  for (const stopPlace of situation.stopPlaces ?? []) {
-    if (stopPlace?.id) affectedStopIds.add(withEnturPrefix(stopPlace.id));
-  }
-  for (const quay of situation.quays ?? []) {
-    if (quay?.id) affectedStopIds.add(withEnturPrefix(quay.id));
-    if (quay?.stopPlace?.id) affectedStopIds.add(withEnturPrefix(quay.stopPlace.id));
-  }
+  for (const id of affectedLineIds(situation)) affectedRouteIds.add(withEnturPrefix(id));
+  for (const stop of affectedStops(situation)) affectedStopIds.add(withEnturPrefix(stop.id));
 
   return {
     id: withEnturPrefix(situation.id),
@@ -354,60 +240,30 @@ function toAlert(situation: EnturSituation): ServiceAlert | null {
     description: pickLocalizedText(situation.description),
     affectedRouteIds: [...affectedRouteIds],
     affectedStopIds: [...affectedStopIds],
-    activePeriods: situation.validityPeriod?.startTime
-      ? [
-          {
-            start: situation.validityPeriod.startTime,
-            end: situation.validityPeriod.endTime ?? undefined,
-          },
-        ]
-      : [],
+    activePeriods: situation.validityPeriods.map((period) => ({
+      start: period.startTime ?? undefined,
+      end: period.endTime ?? undefined,
+    })),
   };
 }
 
-function situationTouchesBbox(situation: EnturSituation, bbox: BBox): boolean {
-  for (const stopPlace of situation.stopPlaces ?? []) {
-    if (
-      typeof stopPlace?.latitude === "number" &&
-      typeof stopPlace.longitude === "number" &&
-      isInsideBbox(bbox, stopPlace.longitude, stopPlace.latitude)
-    ) {
-      return true;
-    }
-  }
-
-  for (const quay of situation.quays ?? []) {
-    if (
-      typeof quay?.latitude === "number" &&
-      typeof quay.longitude === "number" &&
-      isInsideBbox(bbox, quay.longitude, quay.latitude)
-    ) {
-      return true;
-    }
-    if (
-      typeof quay?.stopPlace?.latitude === "number" &&
-      typeof quay.stopPlace.longitude === "number" &&
-      isInsideBbox(bbox, quay.stopPlace.longitude, quay.stopPlace.latitude)
-    ) {
-      return true;
-    }
-  }
-
-  return false;
+function situationTouchesBbox(situation: SituationFieldsFragment, bbox: BBox): boolean {
+  return affectedStops(situation).some(
+    (stop) =>
+      typeof stop.latitude === "number" &&
+      typeof stop.longitude === "number" &&
+      isInsideBbox(bbox, stop.longitude, stop.latitude),
+  );
 }
 
 async function getEnturVehicles(bbox: BBox): Promise<LiveTransitVehicle[]> {
-  const data = await fetchGraphQl<{ vehicles?: EnturVehicle[] | null }>(
-    vehiclesEndpoint,
-    VEHICLES_BY_BBOX_QUERY,
-    {
-      minLat: bbox[1],
-      minLon: bbox[0],
-      maxLat: bbox[3],
-      maxLon: bbox[2],
-      maxDataAge: "PT30M",
-    },
-  );
+  const data = await fetchGraphQl(vehiclesEndpoint, VehiclesByBoundingBoxDocument, {
+    minLat: bbox[1],
+    minLon: bbox[0],
+    maxLat: bbox[3],
+    maxLon: bbox[2],
+    maxDataAge: "PT30M",
+  });
 
   return (data.vehicles ?? [])
     .map((vehicle) => toLiveVehicle(vehicle))
@@ -428,10 +284,7 @@ async function getEnturAlerts(bbox: BBox): Promise<{ data: ServiceAlert[]; fetch
 
 async function isEnturLiveTransitAvailable(): Promise<boolean> {
   try {
-    await fetchGraphQl<{ vehicles?: Array<{ lastUpdated?: string | null }> | null }>(
-      vehiclesEndpoint,
-      HEALTHCHECK_QUERY,
-    );
+    await fetchGraphQl(vehiclesEndpoint, VehicleHealthCheckDocument, {});
     return true;
   } catch {
     return false;

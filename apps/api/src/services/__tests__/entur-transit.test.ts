@@ -167,6 +167,7 @@ describe("Entur boards and trip planning", () => {
             situations: [],
             estimatedCalls: [
               {
+                date: "2026-04-21",
                 aimedDepartureTime: "2026-04-21T22:04:00+02:00",
                 expectedDepartureTime: "2026-04-21T22:06:00+02:00",
                 aimedArrivalTime: "2026-04-21T22:01:00+02:00",
@@ -373,6 +374,7 @@ describe("Entur route, vehicles, journey, and facilities", () => {
             operator: { id: "VYG:Operator:VY", name: "VY" },
             presentation: { colour: "DF2027", textColour: "FFFFFF" },
             journeyPatterns: [
+              null,
               {
                 id: "VYG:JourneyPattern:R14-1061",
                 name: "ASR-KVG",
@@ -420,6 +422,7 @@ describe("Entur route, vehicles, journey, and facilities", () => {
             transportMode: "rail",
             transportSubmode: "unknown",
             journeyPatterns: [
+              null,
               {
                 id: "VYG:JourneyPattern:R14-1061",
                 name: "ASR-KVG",
@@ -477,6 +480,7 @@ describe("Entur route, vehicles, journey, and facilities", () => {
       mockOk({
         data: {
           vehicles: [
+            null,
             {
               vehicleId: "1035-2026-04-21",
               lastUpdated: "2026-04-21T20:05:19.286Z",
@@ -1202,5 +1206,340 @@ describe("Entur route, vehicles, journey, and facilities", () => {
         }),
       ]),
     );
+  });
+});
+
+const contractStop = {
+  id: "NSR:StopPlace:337",
+  name: "Oslo S",
+  latitude: 59.911,
+  longitude: 10.753,
+  transportMode: ["rail"],
+  transportSubmode: ["unknown"],
+};
+const contractQuay = {
+  id: "NSR:Quay:571",
+  name: "Oslo S platform 11",
+  publicCode: "11",
+  latitude: 59.911,
+  longitude: 10.753,
+  stopPlace: contractStop,
+};
+const contractLine = {
+  id: "VYG:Line:R14",
+  publicCode: "R14",
+  name: "Oslo–Kongsvinger",
+  transportMode: "rail",
+  authority: null,
+  operator: null,
+  presentation: null,
+};
+function contractCall() {
+  return {
+    date: "2026-04-21",
+    quay: contractQuay,
+    aimedArrivalTime: "2026-04-22T00:01:00+02:00",
+    expectedArrivalTime: "2026-04-22T00:03:00+02:00",
+    aimedDepartureTime: "2026-04-22T00:04:00+02:00",
+    expectedDepartureTime: "2026-04-22T00:06:00+02:00",
+    actualArrivalTime: null,
+    actualDepartureTime: null,
+    realtime: true,
+    occupancyStatus: "standingAvailable",
+    cancellation: true,
+    forBoarding: true,
+    forAlighting: true,
+    destinationDisplay: { frontText: "Kongsvinger" },
+    serviceJourney: { id: "VYG:ServiceJourney:night", line: contractLine },
+    situations: [],
+  };
+}
+function contractSituation() {
+  return {
+    id: "VYG:Situation:1",
+    summary: [{ value: "Signal failure", language: "en" }],
+    description: [],
+    severity: "severe",
+    reportType: "incident",
+    validityPeriods: [
+      { startTime: "2026-04-21T22:00:00Z", endTime: "2026-04-21T23:00:00Z" },
+      { startTime: "2026-04-22T22:00:00Z", endTime: null },
+      { startTime: null, endTime: "2026-04-23T22:00:00Z" },
+    ],
+    affects: [
+      {
+        __typename: "AffectedStopPlaceOnLine",
+        line: { id: "VYG:Line:R14" },
+        stopPlace: contractStop,
+        quay: contractQuay,
+      },
+    ],
+  };
+}
+function sentVariables(index = 0): Record<string, unknown> {
+  return JSON.parse((mockFetch.mock.calls[index]?.[1] as RequestInit).body as string).variables;
+}
+
+describe("Entur generated-operation behavior", () => {
+  it.each([
+    ["departures", "2026-04-22T00:04:00+02:00", "2026-04-22T00:06:00+02:00"],
+    ["arrivals", "2026-04-22T00:01:00+02:00", "2026-04-22T00:03:00+02:00"],
+  ] as const)(
+    "keeps the operating date and %s times on a quay board",
+    async (kind, scheduledAt, expectedAt) => {
+      mockFetch.mockResolvedValueOnce(
+        mockOk({ data: { quay: { situations: [], estimatedCalls: [contractCall()] } } }),
+      );
+      const mod = await loadModule();
+      const rows =
+        kind === "arrivals"
+          ? await mod.getArrivals("entur:NSR:Quay:571", 15)
+          : await mod.getDepartures("entur:NSR:Quay:571", 15);
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toMatchObject({
+        tripId: "entur:2026-04-21|VYG:ServiceJourney:night",
+        scheduledAt,
+        expectedAt,
+        delaySeconds: 120,
+        canceled: true,
+        platform: "11",
+      });
+      expect(sentVariables()).toMatchObject({
+        id: "NSR:Quay:571",
+        arrivalDeparture: kind,
+        timeRange: 900,
+        numberOfDepartures: 45,
+      });
+    },
+  );
+
+  it("looks up a quay and retains its parent identity and platform", async () => {
+    mockFetch.mockResolvedValueOnce(mockOk({ data: { quay: contractQuay } }));
+    const { getStop } = await loadModule();
+    expect(await getStop("entur:NSR:Quay:571")).toMatchObject({
+      id: "entur:NSR:Quay:571",
+      parentStationId: "entur:NSR:StopPlace:337",
+      platformCode: "11",
+      modes: ["rail"],
+    });
+    expect(sentVariables()).toEqual({ id: "NSR:Quay:571" });
+  });
+
+  it("keeps valid platforms alongside a nullable quay entry", async () => {
+    mockFetch.mockResolvedValueOnce(
+      mockOk({ data: { stopPlace: { ...contractStop, quays: [null, contractQuay] } } }),
+    );
+    const { getStopPlatforms } = await loadModule();
+    const platforms = await getStopPlatforms("entur:NSR:StopPlace:337");
+    expect(platforms.map((platform) => platform.id)).toEqual(["entur:NSR:Quay:571"]);
+  });
+
+  it("requests the full selected timetable day without replacing the service date", async () => {
+    mockFetch.mockResolvedValueOnce(
+      mockOk({ data: { stopPlace: { situations: [], estimatedCalls: [contractCall()] } } }),
+    );
+    const { getStopTimetable } = await loadModule();
+    const rows = await getStopTimetable("entur:NSR:StopPlace:337", "2026-04-21");
+    expect(rows[0]?.tripId).toBe("entur:2026-04-21|VYG:ServiceJourney:night");
+    expect(sentVariables()).toMatchObject({
+      id: "NSR:StopPlace:337",
+      startTime: "2026-04-21T00:00:00Z",
+      timeRange: 86400,
+      numberOfDepartures: 500,
+      arrivalDeparture: "departures",
+    });
+  });
+
+  it.each(["route", "stop", "national"] as const)(
+    "maps current situation affects and every validity period for %s alerts",
+    async (scope) => {
+      const situation = contractSituation();
+      const data =
+        scope === "route"
+          ? { line: { situations: [situation] } }
+          : scope === "stop"
+            ? { stopPlace: { situations: [situation], estimatedCalls: [] } }
+            : {
+                situations: [
+                  situation,
+                  {
+                    ...situation,
+                    id: "far",
+                    affects: [
+                      {
+                        __typename: "AffectedStopPlace",
+                        stopPlace: { ...contractStop, latitude: 0, longitude: 0 },
+                        quay: null,
+                      },
+                    ],
+                  },
+                ],
+              };
+      mockFetch.mockResolvedValueOnce(mockOk({ data }));
+      const mod = await loadModule();
+      const alerts =
+        scope === "route"
+          ? await mod.getRouteAlerts("entur:VYG:Line:R14")
+          : scope === "stop"
+            ? await mod.getStopAlerts("entur:NSR:StopPlace:337")
+            : await mod.getAlerts([10, 59, 11, 60]);
+      expect(alerts).toHaveLength(1);
+      expect(alerts[0]).toMatchObject({
+        id: "entur:VYG:Situation:1",
+        title: "Signal failure",
+        severity: "severe",
+        affectedRouteIds: ["entur:VYG:Line:R14"],
+        affectedStopIds: ["entur:NSR:StopPlace:337", "entur:NSR:Quay:571"],
+        activePeriods: [
+          { start: "2026-04-21T22:00:00Z", end: "2026-04-21T23:00:00Z" },
+          { start: "2026-04-22T22:00:00Z", end: undefined },
+          { start: undefined, end: "2026-04-23T22:00:00Z" },
+        ],
+      });
+    },
+  );
+
+  it("maps radar bbox axes and keeps a valid vehicle beside null", async () => {
+    mockFetch.mockResolvedValueOnce(
+      mockOk({
+        data: {
+          vehicles: [
+            null,
+            {
+              vehicleId: "night",
+              lastUpdated: "2026-04-21T22:00:00Z",
+              location: { latitude: 59.911, longitude: 10.753 },
+              serviceJourney: { id: "VYG:ServiceJourney:night", date: "2026-04-21" },
+            },
+          ],
+        },
+      }),
+    );
+    const { getVehicleRadar } = await loadModule();
+    const rows = await getVehicleRadar([10, 59, 11, 60]);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.tripId).toBe("entur:2026-04-21|VYG:ServiceJourney:night");
+    expect(sentVariables()).toEqual({
+      minLat: 59,
+      minLon: 10,
+      maxLat: 60,
+      maxLon: 11,
+      maxDataAge: "PT30M",
+    });
+  });
+
+  it("slices journey geometry between requested parent stops", async () => {
+    mockFetch.mockResolvedValueOnce(
+      mockOk({
+        data: {
+          serviceJourney: {
+            id: "VYG:ServiceJourney:night",
+            pointsOnLink: { points: "encoded" },
+            estimatedCalls: [
+              {
+                quay: {
+                  ...contractQuay,
+                  stopPlace: {
+                    ...contractStop,
+                    id: "NSR:StopPlace:1",
+                    latitude: 59.915,
+                    longitude: 10.728,
+                  },
+                },
+              },
+              { quay: { ...contractQuay, stopPlace: contractStop } },
+            ],
+          },
+        },
+      }),
+    );
+    const { getLegGeometry } = await loadModule();
+    expect(
+      await getLegGeometry(
+        "entur:2026-04-21|VYG:ServiceJourney:night",
+        "entur:NSR:StopPlace:1",
+        "entur:NSR:StopPlace:337",
+      ),
+    ).toEqual({
+      type: "LineString",
+      coordinates: [
+        [10.728, 59.915],
+        [10.753, 59.911],
+      ],
+    });
+    expect(sentVariables()).toEqual({ id: "VYG:ServiceJourney:night", date: "2026-04-21" });
+  });
+
+  it("requires the planner probe stop and rejects partial GraphQL errors", async () => {
+    mockFetch.mockResolvedValueOnce(mockOk({ data: { stopPlace: { id: "NSR:StopPlace:337" } } }));
+    const { isEnturTransitAvailable } = await loadModule();
+    expect(await isEnturTransitAvailable()).toBe(true);
+    mockFetch.mockResolvedValueOnce(
+      mockOk({
+        data: { stopPlace: { id: "NSR:StopPlace:337" } },
+        errors: [{ message: "upstream failure" }],
+      }),
+    );
+    expect(await isEnturTransitAvailable()).toBe(false);
+  });
+});
+
+describe("Entur operation request semantics", () => {
+  it.each(["NSR:StopPlace:337", "NSR:Quay:571"])(
+    "deduplicates line identities for %s",
+    async (id) => {
+      const data = id.startsWith("NSR:Quay")
+        ? { quay: { id, lines: [contractLine, contractLine] } }
+        : {
+            stopPlace: {
+              id,
+              quays: [
+                null,
+                { id: "NSR:Quay:571", lines: [contractLine] },
+                { id: "NSR:Quay:572", lines: [contractLine] },
+              ],
+            },
+          };
+      mockFetch.mockResolvedValueOnce(mockOk({ data }));
+      const { getRoutesForStop } = await loadModule();
+      const routes = await getRoutesForStop(`entur:${id}`);
+      expect(routes.map((route) => route.id)).toEqual(["entur:VYG:Line:R14"]);
+      expect(sentVariables()).toEqual({ id });
+    },
+  );
+
+  it("uses arrival planning time, requested count and the generated transport-mode input", async () => {
+    mockFetch.mockResolvedValueOnce(
+      mockOk({
+        data: {
+          trip: {
+            fromPlace: { name: "Origin", latitude: 59.9, longitude: 10.7 },
+            toPlace: { name: "Destination", latitude: 60, longitude: 11 },
+            tripPatterns: [],
+          },
+        },
+      }),
+    );
+    const { planTrip } = await loadModule();
+    expect(
+      await planTrip({
+        from: { lat: 59.9, lng: 10.7 },
+        to: { lat: 60, lng: 11 },
+        departureTime: "2026-04-21T22:00:00Z",
+        arrivalTime: "2026-04-21T23:00:00Z",
+        modes: ["REGIONAL_RAIL", "SUBWAY", "SUBURBAN"],
+        numItineraries: 5,
+      }),
+    ).toBeNull();
+    expect(sentVariables()).toEqual({
+      fromLat: 59.9,
+      fromLon: 10.7,
+      toLat: 60,
+      toLon: 11,
+      dateTime: "2026-04-21T23:00:00Z",
+      arriveBy: true,
+      numTripPatterns: 5,
+      modes: { transportModes: [{ transportMode: "rail" }, { transportMode: "metro" }] },
+    });
   });
 });

@@ -1,3 +1,4 @@
+import type { DocumentTypeDecoration } from "@graphql-typed-document-node/core";
 import type { BBox } from "@openmapx/core";
 import { fetchJson as coreFetchJson, decodePolyline } from "@openmapx/core";
 import type {
@@ -32,6 +33,37 @@ import type {
   VehicleJourneyStop,
   VehiclePosition,
 } from "@openmapx/mobility-core/transit";
+import {
+  type BoardCallFieldsFragment,
+  type TransportMode as EnturTransportMode,
+  HealthCheckDocument,
+  type JourneyCallFieldsFragment,
+  type JourneyPatternFieldsFragment,
+  LineDetailDocument,
+  type LineFieldsFragment,
+  NationalSituationsDocument,
+  NearbyStopsDocument,
+  PlanTripDocument,
+  type PlanTripQuery,
+  QuayBoardDocument,
+  QuayDetailDocument,
+  type QuayFieldsFragment,
+  QuayRoutesDocument,
+  ServiceJourneyDocument,
+  type ServiceJourneyQuery,
+  type SituationFieldsFragment,
+  StopPlaceBoardDocument,
+  StopPlaceDetailDocument,
+  type StopPlaceFieldsFragment,
+  StopPlaceRoutesDocument,
+  type TripLegFieldsFragment,
+} from "@openmapx/mobility-formats/entur/journey-planner.generated.js";
+import { affectedLineIds, affectedStops } from "@openmapx/mobility-formats/entur/situations.js";
+import {
+  type VehicleFieldsFragment,
+  VehiclesByBoundingBoxDocument,
+  VehiclesByLineDocument,
+} from "@openmapx/mobility-formats/entur/vehicles.generated.js";
 
 type EnturMultiModal = "parent" | "child" | "all";
 type BoardMode = "departures" | "arrivals" | "both";
@@ -52,214 +84,6 @@ interface EnturFeature {
     category?: string[];
     mode?: Array<Record<string, string | null>>;
   };
-}
-
-interface EnturStopPlaceSummary {
-  id: string;
-  name?: string | null;
-  latitude?: number | null;
-  longitude?: number | null;
-  transportMode?: Array<string | null> | null;
-  transportSubmode?: Array<string | null> | null;
-}
-
-interface EnturQuay {
-  id: string;
-  name?: string | null;
-  publicCode?: string | null;
-  latitude?: number | null;
-  longitude?: number | null;
-  stopPlace?: EnturStopPlaceSummary | null;
-  lines?: EnturLine[] | null;
-}
-
-interface EnturLine {
-  id: string;
-  publicCode?: string | null;
-  name?: string | null;
-  transportMode?: string | null;
-  transportSubmode?: string | null;
-  authority?: {
-    id: string;
-    name?: string | null;
-  } | null;
-  operator?: {
-    id: string;
-    name?: string | null;
-  } | null;
-  presentation?: {
-    colour?: string | null;
-    textColour?: string | null;
-  } | null;
-  journeyPatterns?: EnturJourneyPattern[] | null;
-  situations?: EnturSituation[] | null;
-  quays?: EnturQuay[] | null;
-}
-
-interface EnturJourneyPattern {
-  id: string;
-  name?: string | null;
-  directionType?: string | null;
-  quays?: EnturQuay[] | null;
-  pointsOnLink?: {
-    points?: string | null;
-  } | null;
-}
-
-interface EnturEstimatedCall {
-  quay?: EnturQuay | null;
-  aimedArrivalTime?: string | null;
-  expectedArrivalTime?: string | null;
-  actualArrivalTime?: string | null;
-  aimedDepartureTime?: string | null;
-  expectedDepartureTime?: string | null;
-  actualDepartureTime?: string | null;
-  realtime?: boolean | null;
-  occupancyStatus?: string | null;
-  cancellation?: boolean | null;
-  forBoarding?: boolean | null;
-  forAlighting?: boolean | null;
-  destinationDisplay?: {
-    frontText?: string | null;
-  } | null;
-  serviceJourney?: {
-    id: string;
-    publicCode?: string | null;
-    line?: EnturLine | null;
-    transportMode?: string | null;
-    transportSubmode?: string | null;
-  } | null;
-  situations?: EnturSituation[] | null;
-}
-
-interface EnturStopPlace extends EnturStopPlaceSummary {
-  quays?: EnturQuay[] | null;
-  estimatedCalls?: EnturEstimatedCall[] | null;
-  situations?: EnturSituation[] | null;
-}
-
-interface EnturPlace {
-  name?: string | null;
-  latitude?: number | null;
-  longitude?: number | null;
-  quay?: EnturQuay | null;
-}
-
-interface EnturTripLeg {
-  mode: string;
-  transportSubmode?: string | null;
-  realtime?: boolean | null;
-  ride?: boolean | null;
-  expectedStartTime?: string | null;
-  expectedEndTime?: string | null;
-  distance?: number | null;
-  serviceDate?: string | null;
-  fromPlace?: EnturPlace | null;
-  toPlace?: EnturPlace | null;
-  fromEstimatedCall?: EnturEstimatedCall | null;
-  toEstimatedCall?: EnturEstimatedCall | null;
-  line?: EnturLine | null;
-  serviceJourney?: {
-    id: string;
-    publicCode?: string | null;
-  } | null;
-  pointsOnLink?: {
-    points?: string | null;
-  } | null;
-  intermediateEstimatedCalls?: EnturEstimatedCall[] | null;
-}
-
-interface EnturTripPattern {
-  expectedStartTime?: string | null;
-  expectedEndTime?: string | null;
-  duration?: number | null;
-  streetDistance?: number | null;
-  walkTime?: number | null;
-  distance?: number | null;
-  emission?: {
-    co2?: number | null;
-  } | null;
-  legs?: EnturTripLeg[] | null;
-}
-
-interface EnturTrip {
-  fromPlace?: EnturPlace | null;
-  toPlace?: EnturPlace | null;
-  tripPatterns?: EnturTripPattern[] | null;
-}
-
-interface EnturValidityPeriod {
-  startTime?: string | null;
-  endTime?: string | null;
-}
-
-interface EnturMultilingualText {
-  value?: string | null;
-  language?: string | null;
-}
-
-interface EnturSituation {
-  id: string;
-  summary?: EnturMultilingualText[] | null;
-  description?: EnturMultilingualText[] | null;
-  reportType?: string | null;
-  severity?: string | null;
-  validityPeriod?: EnturValidityPeriod | null;
-  lines?: Array<Pick<EnturLine, "id"> | null> | null;
-  stopPlaces?: Array<EnturStopPlaceSummary | null> | null;
-  quays?: Array<EnturQuay | null> | null;
-}
-
-interface EnturVehicle {
-  vehicleId?: string | null;
-  lastUpdated?: string | null;
-  bearing?: number | null;
-  speed?: number | null;
-  delay?: number | null;
-  monitored?: boolean | null;
-  mode?: string | null;
-  occupancyStatus?: string | null;
-  vehicleStatus?: string | null;
-  line?: {
-    lineRef?: string | null;
-    lineName?: string | null;
-    publicCode?: string | null;
-  } | null;
-  serviceJourney?: {
-    id: string;
-    date?: string | null;
-  } | null;
-  operator?: {
-    operatorRef?: string | null;
-    name?: string | null;
-  } | null;
-  codespace?: {
-    codespaceId?: string | null;
-  } | null;
-  location?: {
-    latitude?: number | null;
-    longitude?: number | null;
-  } | null;
-  monitoredCall?: {
-    stopPointRef?: string | null;
-    order?: number | null;
-    vehicleAtStop?: boolean | null;
-  } | null;
-}
-
-interface EnturServiceJourney {
-  id: string;
-  publicCode?: string | null;
-  transportMode?: string | null;
-  transportSubmode?: string | null;
-  line?: EnturLine | null;
-  journeyPattern?: EnturJourneyPattern | null;
-  quays?: EnturQuay[] | null;
-  estimatedCalls?: EnturEstimatedCall[] | null;
-  pointsOnLink?: {
-    points?: string | null;
-  } | null;
-  situations?: EnturSituation[] | null;
 }
 
 interface NsrTextValue {
@@ -505,624 +329,6 @@ let clientName = DEFAULT_CLIENT_NAME;
 let boundaryCountry = DEFAULT_BOUNDARY_COUNTRY;
 let multiModal: EnturMultiModal = DEFAULT_MULTI_MODAL;
 
-const NEARBY_STOPS_QUERY = `
-query NearbyStops($latitude: Float!, $longitude: Float!, $maximumDistance: Float!, $maximumResults: Int!) {
-  nearest(
-    latitude: $latitude
-    longitude: $longitude
-    maximumDistance: $maximumDistance
-    maximumResults: $maximumResults
-    filterByPlaceTypes: [stopPlace]
-    filterByInUse: true
-    multiModalMode: parent
-  ) {
-    edges {
-      node {
-        distance
-        place {
-          __typename
-          ... on StopPlace {
-            id
-            name
-            latitude
-            longitude
-            transportMode
-            transportSubmode
-          }
-        }
-      }
-    }
-  }
-}`;
-
-const STOP_PLACE_DETAIL_QUERY = `
-query StopPlaceDetail($id: String!) {
-  stopPlace(id: $id) {
-    id
-    name
-    latitude
-    longitude
-    transportMode
-    transportSubmode
-    quays {
-      id
-      name
-      publicCode
-      latitude
-      longitude
-      stopPlace {
-        id
-        name
-        latitude
-        longitude
-        transportMode
-        transportSubmode
-      }
-    }
-  }
-}`;
-
-const QUAY_DETAIL_QUERY = `
-query QuayDetail($id: String!) {
-  quay(id: $id) {
-    id
-    name
-    publicCode
-    latitude
-    longitude
-    stopPlace {
-      id
-      name
-      latitude
-      longitude
-      transportMode
-      transportSubmode
-    }
-  }
-}`;
-
-const ESTIMATED_CALL_FIELDS = `
-  quay {
-    id
-    name
-    publicCode
-    latitude
-    longitude
-    stopPlace {
-      id
-      name
-      latitude
-      longitude
-      transportMode
-      transportSubmode
-    }
-  }
-  aimedArrivalTime
-  expectedArrivalTime
-  actualArrivalTime
-  aimedDepartureTime
-  expectedDepartureTime
-  actualDepartureTime
-  realtime
-  occupancyStatus
-  cancellation
-  forBoarding
-  forAlighting
-  destinationDisplay { frontText }
-  serviceJourney {
-    id
-    publicCode
-    transportMode
-    transportSubmode
-    line {
-      id
-      publicCode
-      name
-      transportMode
-      transportSubmode
-      authority { id name }
-      operator { id name }
-      presentation { colour textColour }
-    }
-  }
-  situations {
-    id
-    summary { value language }
-    description { value language }
-    reportType
-    severity
-    validityPeriod { startTime endTime }
-    lines { id }
-    stopPlaces { id name latitude longitude }
-    quays {
-      id
-      name
-      latitude
-      longitude
-      stopPlace { id name latitude longitude }
-    }
-  }
-`;
-
-const STOP_PLACE_BOARD_QUERY = `
-query StopPlaceBoard(
-  $id: String!
-  $timeRange: Int!
-  $numberOfDepartures: Int!
-  $arrivalDeparture: ArrivalDeparture!
-  $startTime: DateTime
-) {
-  stopPlace(id: $id) {
-    id
-    name
-    situations {
-      id
-      summary { value language }
-      description { value language }
-      reportType
-      severity
-      validityPeriod { startTime endTime }
-      lines { id }
-      stopPlaces { id name latitude longitude }
-      quays {
-        id
-        name
-        latitude
-        longitude
-        stopPlace { id name latitude longitude }
-      }
-    }
-    estimatedCalls(
-      startTime: $startTime
-      timeRange: $timeRange
-      numberOfDepartures: $numberOfDepartures
-      arrivalDeparture: $arrivalDeparture
-      includeCancelledTrips: true
-    ) {
-      ${ESTIMATED_CALL_FIELDS}
-    }
-  }
-}`;
-
-const QUAY_BOARD_QUERY = `
-query QuayBoard(
-  $id: String!
-  $timeRange: Int!
-  $numberOfDepartures: Int!
-  $arrivalDeparture: ArrivalDeparture!
-  $startTime: DateTime
-) {
-  quay(id: $id) {
-    id
-    name
-    publicCode
-    stopPlace {
-      id
-      name
-      latitude
-      longitude
-      transportMode
-      transportSubmode
-    }
-    situations {
-      id
-      summary { value language }
-      description { value language }
-      reportType
-      severity
-      validityPeriod { startTime endTime }
-      lines { id }
-      stopPlaces { id name latitude longitude }
-      quays {
-        id
-        name
-        latitude
-        longitude
-        stopPlace { id name latitude longitude }
-      }
-    }
-    estimatedCalls(
-      startTime: $startTime
-      timeRange: $timeRange
-      numberOfDepartures: $numberOfDepartures
-      arrivalDeparture: $arrivalDeparture
-      includeCancelledTrips: true
-    ) {
-      ${ESTIMATED_CALL_FIELDS}
-    }
-  }
-}`;
-
-const STOP_PLACE_ROUTES_QUERY = `
-query StopPlaceRoutes($id: String!) {
-  stopPlace(id: $id) {
-    id
-    quays {
-      id
-      lines {
-        id
-        publicCode
-        name
-        transportMode
-        transportSubmode
-        authority { id name }
-        operator { id name }
-        presentation { colour textColour }
-      }
-    }
-  }
-}`;
-
-const QUAY_ROUTES_QUERY = `
-query QuayRoutes($id: String!) {
-  quay(id: $id) {
-    id
-    lines {
-      id
-      publicCode
-      name
-      transportMode
-      transportSubmode
-      authority { id name }
-      operator { id name }
-      presentation { colour textColour }
-    }
-  }
-}`;
-
-const LINE_DETAIL_QUERY = `
-query LineDetail($id: ID!) {
-  line(id: $id) {
-    id
-    publicCode
-    name
-    transportMode
-    transportSubmode
-    authority { id name }
-    operator { id name }
-    presentation { colour textColour }
-    journeyPatterns {
-      id
-      name
-      directionType
-      pointsOnLink { points }
-      quays {
-        id
-        name
-        publicCode
-        latitude
-        longitude
-        stopPlace {
-          id
-          name
-          latitude
-          longitude
-        }
-      }
-    }
-    situations {
-      id
-      summary { value language }
-      description { value language }
-      reportType
-      severity
-      validityPeriod { startTime endTime }
-      lines { id }
-      stopPlaces { id name latitude longitude }
-      quays {
-        id
-        name
-        latitude
-        longitude
-        stopPlace { id name latitude longitude }
-      }
-    }
-  }
-}`;
-
-const TRIP_PLAN_QUERY = `
-query PlanTrip(
-  $fromLat: Float!
-  $fromLon: Float!
-  $toLat: Float!
-  $toLon: Float!
-  $dateTime: DateTime!
-  $arriveBy: Boolean
-  $numTripPatterns: Int
-  $modes: Modes
-) {
-  trip(
-    from: { coordinates: { latitude: $fromLat, longitude: $fromLon }, name: "Origin" }
-    to: { coordinates: { latitude: $toLat, longitude: $toLon }, name: "Destination" }
-    dateTime: $dateTime
-    arriveBy: $arriveBy
-    numTripPatterns: $numTripPatterns
-    modes: $modes
-  ) {
-    fromPlace { name latitude longitude }
-    toPlace { name latitude longitude }
-    tripPatterns {
-      expectedStartTime
-      expectedEndTime
-      duration
-      streetDistance
-      walkTime
-      distance
-      emission { co2 }
-      legs {
-        id
-        mode
-        transportSubmode
-        realtime
-        ride
-        expectedStartTime
-        expectedEndTime
-        distance
-        serviceDate
-        fromPlace {
-          name
-          latitude
-          longitude
-          quay {
-            id
-            publicCode
-            stopPlace { id name latitude longitude }
-          }
-        }
-        toPlace {
-          name
-          latitude
-          longitude
-          quay {
-            id
-            publicCode
-            stopPlace { id name latitude longitude }
-          }
-        }
-        fromEstimatedCall {
-          aimedDepartureTime
-          expectedDepartureTime
-          actualDepartureTime
-          occupancyStatus
-          cancellation
-          destinationDisplay { frontText }
-          quay {
-            id
-            publicCode
-            stopPlace { id name latitude longitude }
-          }
-        }
-        toEstimatedCall {
-          aimedArrivalTime
-          expectedArrivalTime
-          actualArrivalTime
-          occupancyStatus
-          cancellation
-          quay {
-            id
-            publicCode
-            stopPlace { id name latitude longitude }
-          }
-        }
-        line {
-          id
-          publicCode
-          name
-          transportMode
-          transportSubmode
-          authority { id name }
-          operator { id name }
-          presentation { colour textColour }
-        }
-        serviceJourney { id publicCode }
-        pointsOnLink { points }
-        intermediateEstimatedCalls {
-          quay {
-            id
-            publicCode
-            stopPlace { id name latitude longitude }
-          }
-          aimedArrivalTime
-          expectedArrivalTime
-          aimedDepartureTime
-          expectedDepartureTime
-          occupancyStatus
-          cancellation
-        }
-      }
-    }
-  }
-}`;
-
-const SERVICE_JOURNEY_QUERY = `
-query ServiceJourney($id: String!, $date: Date!) {
-  serviceJourney(id: $id) {
-    id
-    publicCode
-    transportMode
-    transportSubmode
-    pointsOnLink { points }
-    situations {
-      id
-      summary { value language }
-      description { value language }
-      reportType
-      severity
-      validityPeriod { startTime endTime }
-      lines { id }
-      stopPlaces { id name latitude longitude }
-      quays {
-        id
-        name
-        latitude
-        longitude
-        stopPlace { id name latitude longitude }
-      }
-    }
-    line {
-      id
-      publicCode
-      name
-      transportMode
-      transportSubmode
-      authority { id name }
-      operator { id name }
-      presentation { colour textColour }
-    }
-    journeyPattern {
-      id
-      name
-      pointsOnLink { points }
-      quays {
-        id
-        name
-        publicCode
-        latitude
-        longitude
-        stopPlace {
-          id
-          name
-          latitude
-          longitude
-        }
-      }
-    }
-    quays(first: 200) {
-      id
-      name
-      publicCode
-      latitude
-      longitude
-      stopPlace {
-        id
-        name
-        latitude
-        longitude
-      }
-    }
-    estimatedCalls(date: $date) {
-      quay {
-        id
-        name
-        publicCode
-        latitude
-        longitude
-        stopPlace {
-          id
-          name
-          latitude
-          longitude
-        }
-      }
-      aimedArrivalTime
-      expectedArrivalTime
-      actualArrivalTime
-      aimedDepartureTime
-      expectedDepartureTime
-      actualDepartureTime
-      occupancyStatus
-      cancellation
-      forBoarding
-      forAlighting
-      situations {
-        id
-        summary { value language }
-        description { value language }
-        reportType
-        severity
-        validityPeriod { startTime endTime }
-        lines { id }
-        stopPlaces { id name latitude longitude }
-        quays {
-          id
-          name
-          latitude
-          longitude
-          stopPlace { id name latitude longitude }
-        }
-      }
-    }
-  }
-}`;
-
-const NATIONAL_SITUATIONS_QUERY = `
-{
-  situations {
-    id
-    summary { value language }
-    description { value language }
-    reportType
-    severity
-    validityPeriod { startTime endTime }
-    lines { id }
-    stopPlaces { id name latitude longitude }
-    quays {
-      id
-      name
-      latitude
-      longitude
-      stopPlace { id name latitude longitude }
-    }
-  }
-}`;
-
-const VEHICLES_BY_LINE_QUERY = `
-query VehiclesByLine($lineRef: String!, $maxDataAge: Duration!) {
-  vehicles(lineRef: $lineRef, maxDataAge: $maxDataAge, monitored: true) {
-    vehicleId
-    lastUpdated
-    bearing
-    speed
-    delay
-    monitored
-    mode
-    occupancyStatus
-    vehicleStatus
-    line { lineRef lineName publicCode }
-    serviceJourney { id date }
-    operator { operatorRef name }
-    codespace { codespaceId }
-    location { latitude longitude }
-    monitoredCall { stopPointRef order vehicleAtStop }
-  }
-}`;
-
-const VEHICLES_BY_BBOX_QUERY = `
-query VehiclesByBoundingBox(
-  $minLat: Float!
-  $minLon: Float!
-  $maxLat: Float!
-  $maxLon: Float!
-  $maxDataAge: Duration!
-) {
-  vehicles(
-    boundingBox: { minLat: $minLat, minLon: $minLon, maxLat: $maxLat, maxLon: $maxLon }
-    maxDataAge: $maxDataAge
-    monitored: true
-  ) {
-    vehicleId
-    lastUpdated
-    bearing
-    speed
-    delay
-    monitored
-    mode
-    occupancyStatus
-    vehicleStatus
-    line { lineRef lineName publicCode }
-    serviceJourney { id date }
-    operator { operatorRef name }
-    codespace { codespaceId }
-    location { latitude longitude }
-    monitoredCall { stopPointRef order vehicleAtStop }
-  }
-}`;
-
-const HEALTHCHECK_QUERY = `
-query HealthCheck($id: String!) {
-  stopPlace(id: $id) { id }
-}`;
-
 export function setEnturTransitConfig(config: {
   geocoderEndpoint?: string;
   journeyPlannerEndpoint?: string;
@@ -1306,7 +512,7 @@ export function toAlertSeverity(raw: string | null | undefined): AlertSeverity {
 }
 
 export function pickLocalizedText(
-  values: EnturMultilingualText[] | null | undefined,
+  values: SituationFieldsFragment["summary"][number][] | null | undefined,
 ): string | undefined {
   if (!values?.length) return undefined;
   const normalized = values.filter((value) => isTruthyString(value.value));
@@ -1387,10 +593,10 @@ function decodePoints(points: string | null | undefined): [number, number][] {
 }
 
 function routeGeometryFromPatterns(
-  patterns: EnturJourneyPattern[] | null | undefined,
+  patterns: Array<JourneyPatternFieldsFragment | null> | null | undefined,
 ): TransitRoute["geometry"] | undefined {
   const coordinates = (patterns ?? [])
-    .map((pattern) => decodePoints(pattern.pointsOnLink?.points))
+    .map((pattern) => decodePoints(pattern?.pointsOnLink?.points))
     .filter((line) => line.length >= 2);
   if (coordinates.length === 0) return undefined;
   if (coordinates.length === 1) {
@@ -1438,7 +644,7 @@ function sliceGeometry(
 
 function pointFromStopOrQuay(
   rawStopId: string,
-  estimatedCalls: EnturEstimatedCall[] | null | undefined,
+  estimatedCalls: JourneyCallFieldsFragment[] | null | undefined,
 ): [number, number] | undefined {
   for (const call of estimatedCalls ?? []) {
     const quay = call.quay;
@@ -1465,7 +671,7 @@ function isInsideBbox(bbox: BBox, longitude: number, latitude: number): boolean 
   return longitude >= bbox[0] && longitude <= bbox[2] && latitude >= bbox[1] && latitude <= bbox[3];
 }
 
-export function normalizeLine(line: EnturLine | null | undefined): TransitRoute | null {
+export function normalizeLine(line: LineFieldsFragment | null | undefined): TransitRoute | null {
   if (!line?.id) return null;
   return {
     id: withEnturPrefix(line.id),
@@ -1479,7 +685,7 @@ export function normalizeLine(line: EnturLine | null | undefined): TransitRoute 
 }
 
 export function normalizeStopPlace(
-  stopPlace: EnturStopPlaceSummary | null | undefined,
+  stopPlace: StopPlaceFieldsFragment | null | undefined,
 ): TransitStop | null {
   if (
     !stopPlace?.id ||
@@ -1500,7 +706,7 @@ export function normalizeStopPlace(
   };
 }
 
-function normalizeQuay(quay: EnturQuay | null | undefined): TransitStop | null {
+function normalizeQuay(quay: QuayFieldsFragment | null | undefined): TransitStop | null {
   const stopPlace = quay?.stopPlace ?? null;
   const latitude = quay?.latitude ?? stopPlace?.latitude;
   const longitude = quay?.longitude ?? stopPlace?.longitude;
@@ -1557,7 +763,7 @@ function featureToTransitStop(feature: EnturFeature): TransitStop | null {
 }
 
 function normalizeDeparture(
-  call: EnturEstimatedCall,
+  call: BoardCallFieldsFragment,
   boardMode: Exclude<BoardMode, "both">,
 ): Departure | null {
   const line = normalizeLine(call.serviceJourney?.line);
@@ -1566,9 +772,7 @@ function normalizeDeparture(
   const expectedAt =
     boardMode === "departures" ? call.expectedDepartureTime : call.expectedArrivalTime;
   if (!isTruthyString(scheduledAt)) return null;
-  const date = datePartFromIso(
-    boardMode === "departures" ? call.expectedDepartureTime : call.expectedArrivalTime,
-  );
+  const date = call.date;
   return {
     tripId: call.serviceJourney?.id ? encodeServiceJourneyId(call.serviceJourney.id, date) : "",
     route: {
@@ -1618,7 +822,7 @@ function mergeAlertArrays(alerts: ServiceAlert[]): ServiceAlert[] {
 }
 
 function situationToAlert(
-  situation: EnturSituation,
+  situation: SituationFieldsFragment,
   extra?: { routeId?: string; stopId?: string },
 ): ServiceAlert | null {
   if (!situation.id) return null;
@@ -1630,25 +834,12 @@ function situationToAlert(
   const affectedStopIds = new Set<string>();
   if (extra?.routeId) affectedRouteIds.add(extra.routeId);
   if (extra?.stopId) affectedStopIds.add(extra.stopId);
-  for (const line of situation.lines ?? []) {
-    if (line?.id) affectedRouteIds.add(withEnturPrefix(line.id));
-  }
-  for (const stopPlace of situation.stopPlaces ?? []) {
-    if (stopPlace?.id) affectedStopIds.add(withEnturPrefix(stopPlace.id));
-  }
-  for (const quay of situation.quays ?? []) {
-    if (quay?.id) affectedStopIds.add(withEnturPrefix(quay.id));
-    if (quay?.stopPlace?.id) affectedStopIds.add(withEnturPrefix(quay.stopPlace.id));
-  }
-  const activePeriods =
-    situation.validityPeriod?.startTime != null
-      ? [
-          {
-            start: situation.validityPeriod.startTime,
-            end: situation.validityPeriod.endTime ?? undefined,
-          },
-        ]
-      : [];
+  for (const id of affectedLineIds(situation)) affectedRouteIds.add(withEnturPrefix(id));
+  for (const stop of affectedStops(situation)) affectedStopIds.add(withEnturPrefix(stop.id));
+  const activePeriods = situation.validityPeriods.map((period) => ({
+    start: period.startTime ?? undefined,
+    end: period.endTime ?? undefined,
+  }));
   return {
     id: withEnturPrefix(situation.id),
     providers: ["entur"],
@@ -1663,7 +854,7 @@ function situationToAlert(
 }
 
 function situationsToRemarks(
-  situations: EnturSituation[] | null | undefined,
+  situations: SituationFieldsFragment[] | null | undefined,
 ): Departure["remarks"] | undefined {
   const remarks = (situations ?? [])
     .map((situation) => {
@@ -1681,7 +872,7 @@ function situationsToRemarks(
   return remarks.length > 0 ? remarks : undefined;
 }
 
-function normalizeTripLeg(leg: EnturTripLeg): TripLeg | null {
+function normalizeTripLeg(leg: TripLegFieldsFragment): TripLeg | null {
   const fromLongitude = leg.fromPlace?.longitude;
   const fromLatitude = leg.fromPlace?.latitude;
   const toLongitude = leg.toPlace?.longitude;
@@ -1762,7 +953,7 @@ function normalizeTripLeg(leg: EnturTripLeg): TripLeg | null {
   };
 }
 
-function normalizeTripPlan(trip: EnturTrip | null | undefined): TripPlan | null {
+function normalizeTripPlan(trip: PlanTripQuery["trip"] | null | undefined): TripPlan | null {
   const itineraries: TripItinerary[] = [];
   for (const pattern of trip?.tripPatterns ?? []) {
     const legs = (pattern.legs ?? [])
@@ -1809,9 +1000,9 @@ function normalizeTripPlan(trip: EnturTrip | null | undefined): TripPlan | null 
   };
 }
 
-function normalizeVehiclePosition(vehicle: EnturVehicle): VehiclePosition | null {
+function normalizeVehiclePosition(vehicle: VehicleFieldsFragment | null): VehiclePosition | null {
   if (
-    !vehicle.location ||
+    !vehicle?.location ||
     typeof vehicle.location.latitude !== "number" ||
     typeof vehicle.location.longitude !== "number" ||
     !isTruthyString(vehicle.lastUpdated)
@@ -1846,7 +1037,7 @@ function normalizeVehiclePosition(vehicle: EnturVehicle): VehiclePosition | null
   };
 }
 
-function normalizeJourneyStop(call: EnturEstimatedCall): VehicleJourneyStop | null {
+function normalizeJourneyStop(call: JourneyCallFieldsFragment): VehicleJourneyStop | null {
   const stopPlace = call.quay?.stopPlace ?? null;
   const latitude = stopPlace?.latitude ?? call.quay?.latitude;
   const longitude = stopPlace?.longitude ?? call.quay?.longitude;
@@ -1882,13 +1073,14 @@ function normalizeJourneyStop(call: EnturEstimatedCall): VehicleJourneyStop | nu
 }
 
 function chooseBestJourneyPattern(
-  patterns: EnturJourneyPattern[] | null | undefined,
+  patterns: Array<JourneyPatternFieldsFragment | null> | null | undefined,
   hintStopId?: string,
-): EnturJourneyPattern | null {
+): JourneyPatternFieldsFragment | null {
   const rawHint = hintStopId ? stripKnownPrefix(hintStopId) : undefined;
-  let best: EnturJourneyPattern | null = null;
+  let best: JourneyPatternFieldsFragment | null = null;
   let bestScore = Number.NEGATIVE_INFINITY;
   for (const pattern of patterns ?? []) {
+    if (!pattern) continue;
     const quays = pattern.quays ?? [];
     let score = quays.length;
     if (rawHint) {
@@ -1905,19 +1097,19 @@ function chooseBestJourneyPattern(
   return best;
 }
 
-async function fetchGraphQl<T>(
+async function fetchGraphQl<TResult, TVariables>(
   endpoint: string,
-  query: string,
-  variables?: Record<string, unknown>,
+  document: DocumentTypeDecoration<TResult, TVariables> & { toString(): string },
+  variables: NoInfer<TVariables>,
   signal?: AbortSignal,
-): Promise<T> {
-  const json = await coreFetchJson<GraphQlResponse<T>>(endpoint, {
+): Promise<TResult> {
+  const json = await coreFetchJson<GraphQlResponse<TResult>>(endpoint, {
     timeoutMs: REQUEST_TIMEOUT_MS,
     signal,
     userAgent: null,
     headers: { "Content-Type": "application/json", "ET-Client-Name": clientName },
     errorMessage: ({ status }) => `Entur GraphQL error ${status}`,
-    init: { method: "POST", body: JSON.stringify({ query, variables }) },
+    init: { method: "POST", body: JSON.stringify({ query: document.toString(), variables }) },
   });
   if (json.errors?.length) {
     const message = json.errors
@@ -1968,14 +1160,9 @@ async function fetchStopBoard(
   timeRangeSeconds: number,
   numberOfDepartures: number,
   startTime?: string,
-): Promise<{ situations: EnturSituation[]; estimatedCalls: EnturEstimatedCall[] }> {
+): Promise<{ situations: SituationFieldsFragment[]; estimatedCalls: BoardCallFieldsFragment[] }> {
   if (isQuayId(rawId)) {
-    const data = await fetchGraphQl<{
-      quay?: {
-        situations?: EnturSituation[] | null;
-        estimatedCalls?: EnturEstimatedCall[] | null;
-      } | null;
-    }>(journeyPlannerEndpoint, QUAY_BOARD_QUERY, {
+    const data = await fetchGraphQl(journeyPlannerEndpoint, QuayBoardDocument, {
       id: rawId,
       timeRange: timeRangeSeconds,
       numberOfDepartures,
@@ -1987,12 +1174,7 @@ async function fetchStopBoard(
       estimatedCalls: data.quay?.estimatedCalls ?? [],
     };
   }
-  const data = await fetchGraphQl<{
-    stopPlace?: {
-      situations?: EnturSituation[] | null;
-      estimatedCalls?: EnturEstimatedCall[] | null;
-    } | null;
-  }>(journeyPlannerEndpoint, STOP_PLACE_BOARD_QUERY, {
+  const data = await fetchGraphQl(journeyPlannerEndpoint, StopPlaceBoardDocument, {
     id: rawId,
     timeRange: timeRangeSeconds,
     numberOfDepartures,
@@ -2008,13 +1190,12 @@ async function fetchStopBoard(
 async function fetchServiceJourneyForDates(
   serviceJourneyId: string,
   preferredDate?: string,
-): Promise<{ journey: EnturServiceJourney; date: string } | null> {
+): Promise<{ journey: NonNullable<ServiceJourneyQuery["serviceJourney"]>; date: string } | null> {
   for (const date of dateCandidates(preferredDate)) {
-    const data = await fetchGraphQl<{ serviceJourney?: EnturServiceJourney | null }>(
-      journeyPlannerEndpoint,
-      SERVICE_JOURNEY_QUERY,
-      { id: serviceJourneyId, date },
-    );
+    const data = await fetchGraphQl(journeyPlannerEndpoint, ServiceJourneyDocument, {
+      id: serviceJourneyId,
+      date,
+    });
     if (!data.serviceJourney) continue;
     if ((data.serviceJourney.estimatedCalls ?? []).length > 0) {
       return { journey: data.serviceJourney, date };
@@ -2953,11 +2134,9 @@ function buildChildStopAreas(
 
 export async function isEnturTransitAvailable(): Promise<boolean> {
   try {
-    const data = await fetchGraphQl<{ stopPlace?: { id: string } | null }>(
-      journeyPlannerEndpoint,
-      HEALTHCHECK_QUERY,
-      { id: "NSR:StopPlace:337" },
-    );
+    const data = await fetchGraphQl(journeyPlannerEndpoint, HealthCheckDocument, {
+      id: "NSR:StopPlace:337",
+    });
     return Boolean(data.stopPlace?.id);
   } catch {
     return false;
@@ -2987,15 +2166,7 @@ export async function getStopsNearby(
   radiusMeters: number,
 ): Promise<TransitStop[]> {
   try {
-    const data = await fetchGraphQl<{
-      nearest?: {
-        edges?: Array<{
-          node?: {
-            place?: EnturStopPlaceSummary & { __typename?: string | null };
-          } | null;
-        } | null> | null;
-      } | null;
-    }>(journeyPlannerEndpoint, NEARBY_STOPS_QUERY, {
+    const data = await fetchGraphQl(journeyPlannerEndpoint, NearbyStopsDocument, {
       latitude: lat,
       longitude: lng,
       maximumDistance: radiusMeters,
@@ -3003,9 +2174,7 @@ export async function getStopsNearby(
     });
     return (data.nearest?.edges ?? [])
       .map((edge) => edge?.node?.place)
-      .filter((place): place is EnturStopPlaceSummary & { __typename?: string | null } => {
-        return place?.__typename === "StopPlace";
-      })
+      .filter((place) => place?.__typename === "StopPlace")
       .map((place) => normalizeStopPlace(place))
       .filter((stop): stop is TransitStop => stop !== null);
   } catch {
@@ -3017,18 +2186,10 @@ export async function getStop(stopId: string): Promise<TransitStop | null> {
   const rawId = stripKnownPrefix(stopId);
   try {
     if (isQuayId(rawId)) {
-      const data = await fetchGraphQl<{ quay?: EnturQuay | null }>(
-        journeyPlannerEndpoint,
-        QUAY_DETAIL_QUERY,
-        { id: rawId },
-      );
+      const data = await fetchGraphQl(journeyPlannerEndpoint, QuayDetailDocument, { id: rawId });
       return normalizeQuay(data.quay);
     }
-    const data = await fetchGraphQl<{ stopPlace?: EnturStopPlace | null }>(
-      journeyPlannerEndpoint,
-      STOP_PLACE_DETAIL_QUERY,
-      { id: rawId },
-    );
+    const data = await fetchGraphQl(journeyPlannerEndpoint, StopPlaceDetailDocument, { id: rawId });
     return normalizeStopPlace(data.stopPlace);
   } catch {
     return null;
@@ -3310,11 +2471,7 @@ export async function getStopPlatforms(stopId: string): Promise<TransitStop[]> {
   const rawId = stripKnownPrefix(stopId);
   if (isQuayId(rawId)) return [];
   try {
-    const data = await fetchGraphQl<{ stopPlace?: EnturStopPlace | null }>(
-      journeyPlannerEndpoint,
-      STOP_PLACE_DETAIL_QUERY,
-      { id: rawId },
-    );
+    const data = await fetchGraphQl(journeyPlannerEndpoint, StopPlaceDetailDocument, { id: rawId });
     return (data.stopPlace?.quays ?? [])
       .map((quay) => normalizeQuay(quay))
       .filter((stop): stop is TransitStop => stop !== null);
@@ -3379,11 +2536,7 @@ export async function getRoutesForStop(stopId: string): Promise<TransitRoute[]> 
   const rawId = stripKnownPrefix(stopId);
   try {
     if (isQuayId(rawId)) {
-      const data = await fetchGraphQl<{ quay?: { lines?: EnturLine[] | null } | null }>(
-        journeyPlannerEndpoint,
-        QUAY_ROUTES_QUERY,
-        { id: rawId },
-      );
+      const data = await fetchGraphQl(journeyPlannerEndpoint, QuayRoutesDocument, { id: rawId });
       return dedupeById(
         (data.quay?.lines ?? [])
           .map((line) => normalizeLine(line))
@@ -3391,9 +2544,7 @@ export async function getRoutesForStop(stopId: string): Promise<TransitRoute[]> 
       );
     }
 
-    const data = await fetchGraphQl<{
-      stopPlace?: { quays?: Array<{ lines?: EnturLine[] | null } | null> | null } | null;
-    }>(journeyPlannerEndpoint, STOP_PLACE_ROUTES_QUERY, { id: rawId });
+    const data = await fetchGraphQl(journeyPlannerEndpoint, StopPlaceRoutesDocument, { id: rawId });
     const routes = (data.stopPlace?.quays ?? []).flatMap((quay) => quay?.lines ?? []);
     return dedupeById(
       routes
@@ -3408,11 +2559,7 @@ export async function getRoutesForStop(stopId: string): Promise<TransitRoute[]> 
 export async function getRoute(routeId: string): Promise<TransitRoute | null> {
   const rawId = stripKnownPrefix(routeId);
   try {
-    const data = await fetchGraphQl<{ line?: EnturLine | null }>(
-      journeyPlannerEndpoint,
-      LINE_DETAIL_QUERY,
-      { id: rawId },
-    );
+    const data = await fetchGraphQl(journeyPlannerEndpoint, LineDetailDocument, { id: rawId });
     const line = data.line;
     const normalized = normalizeLine(line);
     if (!normalized) return null;
@@ -3428,11 +2575,7 @@ export async function getRoute(routeId: string): Promise<TransitRoute | null> {
 export async function getRouteStops(routeId: string, hintStopId?: string): Promise<RouteStop[]> {
   const rawId = stripKnownPrefix(routeId);
   try {
-    const data = await fetchGraphQl<{ line?: EnturLine | null }>(
-      journeyPlannerEndpoint,
-      LINE_DETAIL_QUERY,
-      { id: rawId },
-    );
+    const data = await fetchGraphQl(journeyPlannerEndpoint, LineDetailDocument, { id: rawId });
     const pattern = chooseBestJourneyPattern(data.line?.journeyPatterns, hintStopId);
     const quays = pattern?.quays ?? [];
     return quays
@@ -3470,7 +2613,7 @@ export async function getRouteStops(routeId: string, hintStopId?: string): Promi
  * values for the JourneyPlanner v3 `modes` filter. Returns undefined — "all
  * modes" — when no modes are given or none map.
  */
-const MOTIS_MODE_TO_ENTUR: Record<string, string> = {
+const MOTIS_MODE_TO_ENTUR: Record<string, EnturTransportMode> = {
   HIGHSPEED_RAIL: "rail",
   LONG_DISTANCE: "rail",
   NIGHT_RAIL: "rail",
@@ -3486,9 +2629,11 @@ const MOTIS_MODE_TO_ENTUR: Record<string, string> = {
   AERIAL_LIFT: "cableway",
 };
 
-export function motisModesToEntur(modes?: string[]): Array<{ transportMode: string }> | undefined {
+export function motisModesToEntur(
+  modes?: string[],
+): Array<{ transportMode: EnturTransportMode }> | undefined {
   if (!modes || modes.length === 0) return undefined;
-  const set = new Set<string>();
+  const set = new Set<EnturTransportMode>();
   for (const mode of modes) {
     const mapped = MOTIS_MODE_TO_ENTUR[mode];
     if (mapped) set.add(mapped);
@@ -3509,20 +2654,16 @@ export async function planTrip(params: {
   const arriveBy = Boolean(params.arrivalTime);
   const transportModes = motisModesToEntur(params.modes);
   try {
-    const data = await fetchGraphQl<{ trip?: EnturTrip | null }>(
-      journeyPlannerEndpoint,
-      TRIP_PLAN_QUERY,
-      {
-        fromLat: params.from.lat,
-        fromLon: params.from.lng,
-        toLat: params.to.lat,
-        toLon: params.to.lng,
-        dateTime,
-        arriveBy,
-        numTripPatterns: params.numItineraries ?? 3,
-        ...(transportModes ? { modes: { transportModes } } : {}),
-      },
-    );
+    const data = await fetchGraphQl(journeyPlannerEndpoint, PlanTripDocument, {
+      fromLat: params.from.lat,
+      fromLon: params.from.lng,
+      toLat: params.to.lat,
+      toLon: params.to.lng,
+      dateTime,
+      arriveBy,
+      numTripPatterns: params.numItineraries ?? 3,
+      ...(transportModes ? { modes: { transportModes } } : {}),
+    });
     return normalizeTripPlan(data.trip);
   } catch {
     return null;
@@ -3597,14 +2738,10 @@ export async function getVehicleJourney(
 export async function getVehiclePositions(routeId: string): Promise<VehiclePosition[]> {
   const rawId = stripKnownPrefix(routeId);
   try {
-    const data = await fetchGraphQl<{ vehicles?: EnturVehicle[] | null }>(
-      vehiclesEndpoint,
-      VEHICLES_BY_LINE_QUERY,
-      {
-        lineRef: rawId,
-        maxDataAge: "PT30M",
-      },
-    );
+    const data = await fetchGraphQl(vehiclesEndpoint, VehiclesByLineDocument, {
+      lineRef: rawId,
+      maxDataAge: "PT30M",
+    });
     return (data.vehicles ?? [])
       .map((vehicle) => normalizeVehiclePosition(vehicle))
       .filter((vehicle): vehicle is VehiclePosition => vehicle !== null);
@@ -3615,17 +2752,13 @@ export async function getVehiclePositions(routeId: string): Promise<VehiclePosit
 
 export async function getVehicleRadar(bbox: BBox): Promise<VehiclePosition[]> {
   try {
-    const data = await fetchGraphQl<{ vehicles?: EnturVehicle[] | null }>(
-      vehiclesEndpoint,
-      VEHICLES_BY_BBOX_QUERY,
-      {
-        minLat: bbox[1],
-        minLon: bbox[0],
-        maxLat: bbox[3],
-        maxLon: bbox[2],
-        maxDataAge: "PT30M",
-      },
-    );
+    const data = await fetchGraphQl(vehiclesEndpoint, VehiclesByBoundingBoxDocument, {
+      minLat: bbox[1],
+      minLon: bbox[0],
+      maxLat: bbox[3],
+      maxLon: bbox[2],
+      maxDataAge: "PT30M",
+    });
     return (data.vehicles ?? [])
       .map((vehicle) => normalizeVehiclePosition(vehicle))
       .filter((vehicle): vehicle is VehiclePosition => vehicle !== null);
@@ -3637,11 +2770,7 @@ export async function getVehicleRadar(bbox: BBox): Promise<VehiclePosition[]> {
 export async function getRouteAlerts(routeId: string): Promise<ServiceAlert[]> {
   const rawId = stripKnownPrefix(routeId);
   try {
-    const data = await fetchGraphQl<{ line?: { situations?: EnturSituation[] | null } | null }>(
-      journeyPlannerEndpoint,
-      LINE_DETAIL_QUERY,
-      { id: rawId },
-    );
+    const data = await fetchGraphQl(journeyPlannerEndpoint, LineDetailDocument, { id: rawId });
     return mergeAlertArrays(
       (data.line?.situations ?? [])
         .map((situation) => situationToAlert(situation, { routeId: withEnturPrefix(rawId) }))
@@ -3670,27 +2799,15 @@ export async function getStopAlerts(stopId: string): Promise<ServiceAlert[]> {
 
 export async function getAlerts(bbox: BBox): Promise<ServiceAlert[]> {
   try {
-    const data = await fetchGraphQl<{ situations?: EnturSituation[] | null }>(
-      journeyPlannerEndpoint,
-      NATIONAL_SITUATIONS_QUERY,
+    const data = await fetchGraphQl(journeyPlannerEndpoint, NationalSituationsDocument, {});
+    const filtered = (data.situations ?? []).filter((situation) =>
+      affectedStops(situation).some(
+        (stop) =>
+          typeof stop.latitude === "number" &&
+          typeof stop.longitude === "number" &&
+          isInsideBbox(bbox, stop.longitude, stop.latitude),
+      ),
     );
-    const filtered = (data.situations ?? []).filter((situation) => {
-      const stopMatch = (situation.stopPlaces ?? []).some(
-        (stopPlace) =>
-          stopPlace != null &&
-          typeof stopPlace.latitude === "number" &&
-          typeof stopPlace.longitude === "number" &&
-          isInsideBbox(bbox, stopPlace.longitude, stopPlace.latitude),
-      );
-      const quayMatch = (situation.quays ?? []).some(
-        (quay) =>
-          quay != null &&
-          typeof quay.longitude === "number" &&
-          typeof quay.latitude === "number" &&
-          isInsideBbox(bbox, quay.longitude, quay.latitude),
-      );
-      return stopMatch || quayMatch;
-    });
     return mergeAlertArrays(
       filtered
         .map((situation) => situationToAlert(situation))

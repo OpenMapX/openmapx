@@ -28,6 +28,7 @@ describe("repository policy gate", () => {
       "pnpm check-image-size-dos",
       "pnpm check-docker-context-secrets",
       "pnpm check-ops-authority",
+      "pnpm check-entur-graphql",
     ]);
   });
 
