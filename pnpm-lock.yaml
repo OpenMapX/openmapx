@@ -235,6 +235,9 @@ importers:
       orval:
         specifier: 8.43.0
         version: 8.43.0(@tanstack/react-query@5.104.1(react@19.3.0))(prettier@3.9.10)(typescript@6.0.3)(zod@4.6.5)
+      p-map:
+        specifier: 7.1.1
+        version: 7.1.1
       prettier:
         specifier: ^3.9.10
         version: 3.9.10
@@ -361,6 +364,9 @@ importers:
       opening_hours:
         specifier: ^3.15.0
         version: 3.15.0(typescript@6.0.3)
+      p-limit:
+        specifier: 7.3.3
+        version: 7.3.3
       pino:
         specifier: ^10.4.0
         version: 10.4.0
@@ -686,6 +692,9 @@ importers:
       next-intl:
         specifier: ^4.14.9
         version: 4.14.9(@swc/helpers@0.5.23)(@types/react@19.3.0)(next@16.4.0(@babel/core@7.29.7(supports-color@8.1.1))(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(babel-plugin-macros@3.1.0)(babel-plugin-react-compiler@1.0.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react@19.3.0)
+      p-map:
+        specifier: 7.1.1
+        version: 7.1.1
       papaparse:
         specifier: 5.7.0
         version: 5.7.0
@@ -1331,6 +1340,9 @@ importers:
       '@openmapx/integration-framework':
         specifier: workspace:^
         version: link:../../packages/integration-framework
+      p-map:
+        specifier: 7.1.1
+        version: 7.1.1
       zod:
         specifier: ^4.6.5
         version: 4.6.5
@@ -2042,6 +2054,9 @@ importers:
       '@openmapx/mobility-core':
         specifier: workspace:^
         version: link:../../packages/mobility-core
+      p-map:
+        specifier: 7.1.1
+        version: 7.1.1
 
   integrations/street-level-imagery-mapillary:
     dependencies:
@@ -2075,6 +2090,9 @@ importers:
       '@openmapx/mobility-core':
         specifier: workspace:^
         version: link:../../packages/mobility-core
+      p-map:
+        specifier: 7.1.1
+        version: 7.1.1
 
   integrations/transit-db-vendo:
     dependencies:
@@ -2691,6 +2709,9 @@ importers:
       intl-messageformat:
         specifier: ^12.1.3
         version: 12.1.3
+      p-map:
+        specifier: 7.1.1
+        version: 7.1.1
       zod:
         specifier: ^4.6.5
         version: 4.6.5
@@ -2787,6 +2808,9 @@ importers:
       lru-cache:
         specifier: 11.5.3
         version: 11.5.3
+      p-map:
+        specifier: 7.1.1
+        version: 7.1.1
       spdx-expression-parse:
         specifier: 5.0.0
         version: 5.0.0
@@ -2999,6 +3023,9 @@ importers:
       h3-js:
         specifier: ^4.5.0
         version: 4.5.0
+      p-map:
+        specifier: 7.1.1
+        version: 7.1.1
       pino:
         specifier: ^10.4.0
         version: 10.4.0
@@ -10456,9 +10483,17 @@ packages:
     resolution: {integrity: sha512-TYOanM3wGwNGsZN2cVTYPArw454xnXj5qmWF1bEoAc4+cU/ol7GVh7odevjp1FNHduHc3KZMcFduxU5Xc6uJRQ==}
     engines: {node: '>=10'}
 
+  p-limit@7.3.3:
+    resolution: {integrity: sha512-SKgVvDU5TNIxQ4r30U75BNLC6a+6GOEjngrk/ysM5+Zu3oJuk1SC5ApzIzY/7PjCEjoVPMWJ0zho/4QUiEB7TQ==}
+    engines: {node: '>=20'}
+
   p-locate@4.1.0:
     resolution: {integrity: sha512-R79ZZ/0wAxKGu3oYMlz8jy/kbhsNrS7SKZ7PxEHBgJ5+F2mtFW2fK2cOtBh1cHYkQsbzFV7I+EoRKe6Yt0oK7A==}
     engines: {node: '>=8'}
+
+  p-map@7.1.1:
+    resolution: {integrity: sha512-6Lh3jQPLthYujSrlw6ccWXBGZTkoTCz27Hd92g79LH/kjAbgoEu0t442cCCNbegPSJsA0lwDX8z0bcKtkpA32g==}
+    engines: {node: '>=18'}
 
   p-retry@6.2.1:
     resolution: {integrity: sha512-hEt02O4hUct5wtwg4H4KcWgDdm+l1bOaEy/hWzd8xtXB9BqxTWBBhb+2ImAtH4Cv4rPjV76xN3Zumqk3k3AhhQ==}
@@ -12225,6 +12260,10 @@ packages:
   yocto-queue@0.1.0:
     resolution: {integrity: sha512-rVksvsnNCdJ/ohGc6xgPwyN8eheCxsiLM8mxuE/t/mOVqJewPuO1miLpTHQiRgTKCLexL4MeAFVagts7HmNZ2Q==}
     engines: {node: '>=10'}
+
+  yocto-queue@1.2.2:
+    resolution: {integrity: sha512-4LCcse/U2MHZ63HAJVE+v71o7yOdIe4cZ70Wpf8D/IyjDKYQLV5GD46B+hSTjJsvV5PztjvHoU580EftxjDZFQ==}
+    engines: {node: '>=12.20'}
 
   yoctocolors@2.2.0:
     resolution: {integrity: sha512-xYqdZFUK/VYazNl/oCDYN+3WloWQwMfZxBoiNt6qNyk+xfOdi598muWE42rNZFp1kNOiqW936q5RhUdnpqElSg==}
@@ -20550,9 +20589,15 @@ snapshots:
     dependencies:
       yocto-queue: 0.1.0
 
+  p-limit@7.3.3:
+    dependencies:
+      yocto-queue: 1.2.2
+
   p-locate@4.1.0:
     dependencies:
       p-limit: 2.3.0
+
+  p-map@7.1.1: {}
 
   p-retry@6.2.1:
     dependencies:
@@ -22364,6 +22409,8 @@ snapshots:
       yargs-parser: 22.0.0
 
   yocto-queue@0.1.0: {}
+
+  yocto-queue@1.2.2: {}
 
   yoctocolors@2.2.0: {}
 

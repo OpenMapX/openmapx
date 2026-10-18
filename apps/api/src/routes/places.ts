@@ -46,13 +46,13 @@ import {
   type PlaceResolverContext,
 } from "@openmapx/place-ids";
 import type { FastifyPluginAsync } from "fastify";
+import pLimit from "p-limit";
 import { sql } from "../db/index.js";
 import { getAllIntegrations, isEnabledIntegrationScheme } from "../integration-host.js";
 import { getPlaceKnowledge } from "../services/knowledge/index";
 import { recordCardEnrichment } from "../services/metrics/index";
 import { buildReviewLinks } from "../services/review-links";
 import { hashKey, TTL, withCache } from "../utils/cache.js";
-import { createLimiter } from "../utils/concurrency.js";
 import { declareRouteAuth } from "../utils/route-auth.js";
 import { isStaticImageHost } from "./image-hosts.js";
 
@@ -61,9 +61,15 @@ import { isStaticImageHost } from "./image-hosts.js";
 // boundary polygons); a burst of DISTINCT place opens would otherwise run N of
 // them at once and OOM the process. Identical requests already coalesce in
 // withCache, so this caps only the distinct ones. Tunable for high-memory hosts.
-const ENRICH_CONCURRENCY = Math.trunc(Number(process.env.OPENMAPX_PLACE_ENRICH_CONCURRENCY)) || 8;
-const enrichLimit = createLimiter(Math.max(1, ENRICH_CONCURRENCY));
-const cardEnrichLimit = createLimiter(4);
+const ENRICH_CONCURRENCY = Math.max(
+  1,
+  Math.trunc(Number(process.env.OPENMAPX_PLACE_ENRICH_CONCURRENCY)) || 8,
+);
+if (!Number.isFinite(ENRICH_CONCURRENCY)) {
+  throw new Error("OPENMAPX_PLACE_ENRICH_CONCURRENCY must be finite");
+}
+const enrichLimit = pLimit(ENRICH_CONCURRENCY);
+const cardEnrichLimit = pLimit(4);
 const pendingCardRating = new Map<string, Promise<unknown>>();
 const pendingCardPhoto = new Map<string, Promise<unknown>>();
 const cardFailureCooldown = new Map<string, { error: unknown; until: number }>();

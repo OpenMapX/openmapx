@@ -1,7 +1,16 @@
 import { spawnSync } from "node:child_process";
-import { copyFileSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import {
+  copyFileSync,
+  mkdirSync,
+  mkdtempSync,
+  realpathSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   CREDENTIAL_KEYED_INTEGRATIONS,
@@ -25,6 +34,12 @@ function writeManifest(id: string, manifest: Record<string, unknown>) {
 
 function runScript(name: string) {
   mkdirSync(join(root, "scripts"), { recursive: true });
+  mkdirSync(join(root, "node_modules"), { recursive: true });
+  symlinkSync(
+    dirname(fileURLToPath(import.meta.resolve("p-map"))),
+    join(root, "node_modules/p-map"),
+    "dir",
+  );
   copyFileSync(join(import.meta.dirname, name), join(root, "scripts", name));
   const preload = join(root, "no-network.cjs");
   writeFileSync(
@@ -100,7 +115,7 @@ describe("check-legal-urls", () => {
   it("names a runtime integration whose URLs it cannot check", () => {
     writeManifest("runtime-probe", { runtimeDataSources: true });
     const result = runScript("check-legal-urls.ts");
-    expect(result.status).toBe(0);
+    expect(result.status, result.stderr).toBe(0);
     expect(result.stdout).toMatch(/runtime-probe.*runtime/);
   });
 });

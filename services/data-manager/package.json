@@ -29,7 +29,8 @@
     "pino": "^10.4.0",
     "postgres": "^3.4.9",
     "tsx": "4.23.15",
-    "undici": "^8.11.2"
+    "undici": "^8.11.2",
+    "p-map": "7.1.1"
   },
   "devDependencies": {
     "@mapbox/vector-tile": "3.0.0",

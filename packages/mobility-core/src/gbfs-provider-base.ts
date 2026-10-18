@@ -1,3 +1,4 @@
+import { pMapSettled } from "p-map";
 import { snapshotContributors } from "./contributors.js";
 import type { Attribution } from "./types/attribution.js";
 /**
@@ -112,33 +113,6 @@ function probeVehicleTypesMatchTarget(
   return false;
 }
 
-async function mapSettledWithConcurrency<T, R>(
-  items: T[],
-  concurrency: number,
-  fn: (item: T) => Promise<R>,
-): Promise<PromiseSettledResult<R>[]> {
-  const results: PromiseSettledResult<R>[] = new Array(items.length);
-  let nextIndex = 0;
-  const workerCount = Math.min(Math.max(1, concurrency), items.length);
-
-  await Promise.all(
-    Array.from({ length: workerCount }, async () => {
-      while (nextIndex < items.length) {
-        const index = nextIndex;
-        nextIndex += 1;
-        const item = items[index] as T;
-        try {
-          results[index] = { status: "fulfilled", value: await fn(item) };
-        } catch (reason) {
-          results[index] = { status: "rejected", reason };
-        }
-      }
-    }),
-  );
-
-  return results;
-}
-
 /**
  * Fetch stations and vehicles from GBFS systems matching the bbox
  * and filter to the specified form factors.
@@ -172,9 +146,8 @@ export async function fetchGbfsData(
   const sorted = sortByRelevance(filtered, city);
   const probeCandidates = sorted.slice(0, MAX_SYSTEMS_PER_SEARCH);
 
-  const probed = await mapSettledWithConcurrency(
+  const probed = await pMapSettled(
     probeCandidates,
-    SYSTEM_PROBE_CONCURRENCY,
     async (entry) => {
       const probe = await settleWithin(
         catalogClient.probeSystem(entry),
@@ -188,6 +161,7 @@ export async function fetchGbfsData(
       }
       return { entry, systemData: probe.systemData };
     },
+    { concurrency: SYSTEM_PROBE_CONCURRENCY },
   );
   const matchingEntries: Array<{
     entry: (typeof probeCandidates)[number];

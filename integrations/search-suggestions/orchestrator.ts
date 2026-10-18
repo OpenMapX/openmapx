@@ -7,7 +7,6 @@ import {
 } from "@openmapx/core";
 import {
   type IntegrationContext,
-  mapSettledWithConcurrency,
   ProviderCancelledError,
   ProviderTimeoutError,
   runWithProviderDeadline,
@@ -17,6 +16,7 @@ import {
   captureResultContributors,
   contributorsForRecords,
 } from "@openmapx/mobility-core/contributors";
+import { pMapSettled } from "p-map";
 
 export const PROVIDER_TIMEOUT_MS = 1_200;
 export const MAX_PROVIDER_CONCURRENCY = 4;
@@ -108,9 +108,14 @@ export function createSearchSuggestionsOrchestrator(ctx: IntegrationContext): {
       const eligible = collectProviders(ctx).filter(
         ({ integrationId }) => integrationId !== ctx.id && !disallowed.has(integrationId),
       );
-      const settled = await mapSettledWithConcurrency(eligible, MAX_PROVIDER_CONCURRENCY, (entry) =>
-        invokeProvider(ctx, entry, query, signal),
-      );
+      const settled = await pMapSettled(
+        eligible,
+        (entry) => invokeProvider(ctx, entry, query, signal),
+        { concurrency: MAX_PROVIDER_CONCURRENCY, signal },
+      ).catch((error: unknown) => {
+        if (signal?.aborted) throw new ProviderCancelledError();
+        throw error;
+      });
       // Provider fan-out uses all-settled semantics so individual upstream
       // failures can produce a useful partial response. Caller cancellation is
       // different: it must escape as a rejection so cache layers never persist
