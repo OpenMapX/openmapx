@@ -2,9 +2,16 @@ import { createApiClient } from "@openmapx/core";
 import { getApiDataManagerTransitJobsId } from "@openmapx/core/api-admin-sdk";
 import Fastify from "fastify";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { makeRateLimitTierHook } from "../../server-wiring.js";
+import { RateLimiter } from "../../utils/rate-limit.js";
 import { administrationSdkFetch } from "./helpers/administration-sdk-fetch";
 
-const database = vi.hoisted(() => ({ results: [] as unknown[][], calls: 0, authenticated: true }));
+const database = vi.hoisted(() => ({
+  results: [] as unknown[][],
+  calls: 0,
+  authenticated: true,
+  authCalls: 0,
+}));
 vi.mock("../../db/index.js", () => ({
   db: {
     select: () => {
@@ -23,19 +30,67 @@ vi.mock("../../db/index.js", () => ({
   sql: {},
 }));
 vi.mock("../../utils/require-admin.js", () => ({
-  tryAdminSession: async () =>
-    database.authenticated
+  tryAdminSession: async () => {
+    database.authCalls++;
+    return database.authenticated
       ? { user: { id: "admin", role: "admin" }, session: { id: "session" } }
-      : null,
+      : null;
+  },
 }));
 beforeEach(() => {
   database.results = [];
   database.calls = 0;
   database.authenticated = true;
+  database.authCalls = 0;
 });
 afterEach(() => vi.unstubAllGlobals());
 
 describe("serialized data-manager job projections", () => {
+  it("enforces the production public tier before authentication and database work", async () => {
+    database.authenticated = false;
+    const app = Fastify();
+    const limiter = new RateLimiter({ max: 1, windowMs: 60_000 });
+    const unexpectedTier = async () => {
+      throw new Error("Wrong rate-limit tier");
+    };
+    app.addHook(
+      "onRequest",
+      makeRateLimitTierHook({
+        auth: unexpectedTier,
+        tile: unexpectedTier,
+        expensive: unexpectedTier,
+        status: unexpectedTier,
+        public: limiter.preHandler(),
+      }),
+    );
+    const { dataManagerRoute } = await import("../data-manager.js");
+    await app.register(dataManagerRoute, { prefix: "/api" });
+    const request = {
+      method: "GET" as const,
+      url: "/api/data-manager/transit/jobs/not-a-uuid",
+      remoteAddress: "198.51.100.7",
+    };
+    try {
+      expect((await app.inject(request)).statusCode).toBe(401);
+      expect(database.authCalls).toBe(1);
+      const limited = await app.inject(request);
+      expect(limited.statusCode).toBe(429);
+      expect(limited.json()).toMatchObject({
+        error: "Too many requests",
+        retryAfter: expect.any(Number),
+      });
+      expect(Number(limited.headers["retry-after"])).toBeGreaterThan(0);
+      expect(database.authCalls).toBe(1);
+      expect(database.calls).toBe(0);
+      expect((await app.inject({ ...request, remoteAddress: "198.51.100.8" })).statusCode).toBe(
+        401,
+      );
+      expect(database.authCalls).toBe(2);
+    } finally {
+      await app.close();
+      limiter.destroy();
+    }
+  });
   it("rejects malformed job IDs before PostgreSQL UUID casts and authenticates first", async () => {
     const app = Fastify();
     const { dataManagerRoute } = await import("../data-manager.js");
