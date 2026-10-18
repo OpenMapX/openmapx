@@ -1,4 +1,4 @@
-import type { ManifestProvenance, ServiceManifest } from "@openmapx/extension-contracts/service";
+import type { ServiceManifest } from "@openmapx/extension-contracts/service";
 
 export * from "@openmapx/extension-contracts/service";
 
