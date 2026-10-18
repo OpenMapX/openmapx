@@ -141,9 +141,9 @@ export function readDisposition(body) {
   return { reason: meaningful(reason, 24) ? reason : null, impacts, version };
 }
 export function publicPackages(state) {
-  const config = state.json("release/public-packages.json");
+  const config = state.json("scripts/public-packages.json");
   if (config?.schemaVersion !== 1 || !Array.isArray(config.packages) || !config.packages.length)
-    throw new Error("Missing or invalid release/public-packages.json");
+    throw new Error("Missing or invalid scripts/public-packages.json");
   const names = new Set();
   const directories = new Set();
   for (const item of config.packages) {
@@ -226,7 +226,7 @@ export function contributionCheck({ before, after, changed, body }) {
   const packages = new Map();
   const shipped = new Set();
   for (const state of [before, after]) {
-    if (!state.entries.has("release/public-packages.json")) continue;
+    if (!state.entries.has("scripts/public-packages.json")) continue;
     for (const item of publicPackages(state)) {
       for (const path of changed) if (explicitlyShipped(item, state, path)) shipped.add(path);
       if (!packages.has(item.name)) packages.set(item.name, new Set());
@@ -369,7 +369,7 @@ function main() {
     .split("\0")
     .filter(Boolean);
   const packages = publicPackages(
-    before.entries.has("release/public-packages.json") ? before : after,
+    before.entries.has("scripts/public-packages.json") ? before : after,
   );
   const versionDelta = packages.some(
     (item) =>

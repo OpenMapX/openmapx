@@ -28,3 +28,18 @@ Allowed impacts are `breaking`, `migration`, `security` and `operator-action`. I
 Do not put embargoed vulnerability details in a public fragment. Follow [SECURITY.md](../SECURITY.md) and coordinate public release information with disclosure. A fragment does not authorize a release, deployment, data migration or package publication.
 
 Fragments remain pending until the release process deliberately incorporates them. This directory does not reset or consume the historical Changesets queue.
+
+## Preparing product release notes
+
+These files are pending inputs, not the published release history. During release preparation, maintainers should assemble a version-specific page under `docs/docs/releases/` with:
+
+- Highlights that explain the most useful changes to users.
+- Breaking changes and the installations or users they affect.
+- Upgrade instructions, including required actions, their timing and any recovery limitations.
+- A categorized list of ordinary features and fixes drawn from merged PRs, with links back to the changes.
+
+Review every pending fragment against the selected release commit. Incorporate only changes included in that release, preserve the instructions and leave fragments for unreleased changes pending. Remove incorporated fragments in the same preparation PR that adds the release page. Package changelogs remain separate and are produced by Changesets.
+
+This combines the curated release pages and upgrade guidance used by [Authentik](https://github.com/goauthentik/authentik/blob/main/website/docs/releases/_template.mdx) with the PR-based change lists used by [Immich](https://github.com/immich-app/immich/blob/main/packages/scripts/src/commands/notes.ts). Collecting separate pending files follows the established [news-fragment approach](https://towncrier.readthedocs.io/en/stable/); the frontmatter and headings above are OpenMapX's own convention. No additional fragment tool is required.
+
+Release-page generation and publication are not implemented by this contribution gate. The release workflow must assemble and verify the selected release before anything is published.

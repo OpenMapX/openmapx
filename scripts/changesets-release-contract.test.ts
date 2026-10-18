@@ -36,7 +36,7 @@ function fixture() {
   write("pnpm-workspace.yaml", 'packages:\n  - "packages/*"\n');
   write("pnpm-lock.yaml", "lockfileVersion: '9.0'\nimporters: {}\n");
   write(
-    "release/public-packages.json",
+    "scripts/public-packages.json",
     JSON.stringify({
       schemaVersion: 1,
       packages: [
@@ -365,9 +365,9 @@ describe("canonical generated package versions", () => {
 describe("versioned schema identities", () => {
   function candidate(update = true, tamper = false) {
     const f = fixture();
-    const config = JSON.parse(readFileSync(join(f.cwd, "release/public-packages.json"), "utf8"));
+    const config = JSON.parse(readFileSync(join(f.cwd, "scripts/public-packages.json"), "utf8"));
     config.packages[0].versionedSchemas = "schemas";
-    f.write("release/public-packages.json", JSON.stringify(config));
+    f.write("scripts/public-packages.json", JSON.stringify(config));
     f.write(
       "packages/lib/schemas/value.json",
       `${JSON.stringify({ $id: "https://example.org/0.1.0/value.json", type: "object" }, null, 2)}\n`,

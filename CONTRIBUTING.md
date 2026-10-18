@@ -253,7 +253,9 @@ docs(readme): clarify community integration install flow
 | Ordinary product feature or fix                                                             | Clear PR description, curated into product release notes later |
 | Internal maintenance                                                                        | Usually neither                                                |
 
-The explicit package boundary is [release/public-packages.json](release/public-packages.json): currently `@openmapx/extension-contracts` and `@openmapx/extension-cli`. Non-private metadata alone does not qualify a package for publication. The CLI bundles private workspace sources, so a change to one of those dependencies can affect its delivered artifact too.
+The explicit package boundary is [scripts/public-packages.json](scripts/public-packages.json): currently `@openmapx/extension-contracts` and `@openmapx/extension-cli`. Non-private metadata alone does not qualify a package for publication. The CLI bundles private workspace sources, so a change to one of those dependencies can affect its delivered artifact too.
+
+This file sits beside the release-check scripts because it records OpenMapX's package qualification policy. It supplements the standard Changesets configuration in `.changeset/config.json`; it is not a separate versioning or publishing system.
 
 For a public-package change, add a Changeset naming every affected qualified package and explain the consumer impact:
 
@@ -276,6 +278,8 @@ Product impact: migration, operator-action
 ```
 
 The allowed categories are `breaking`, `migration`, `security` and `operator-action`. Ordinary product work needs no marker or fragment. Database migration SQL changes require migration information automatically. Keep embargoed security details private under [SECURITY.md](SECURITY.md). Maintainers review classification, bump correctness, instructions and no-release explanations; CI cannot prove their semantic accuracy and does not introduce another required reviewer.
+
+At product release preparation, maintainers curate a version-specific page in the existing documentation using the pending fragments and merged PRs. It should cover highlights, breaking changes, upgrade instructions and a categorized change list. See the [fragment guide](release-notes/README.md#preparing-product-release-notes) for the intended assembly process; this PR gate does not generate or publish those pages.
 
 Check a committed candidate locally with the PR description saved to a file:
 
