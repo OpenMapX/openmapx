@@ -8,6 +8,8 @@
   ],
   "workspaces": {
     ".": {
+      // Discover dynamically loaded GraphQL Code Generator plugins from their real config.
+      "graphql-codegen": { "config": ["scripts/entur/codegen.config.mjs"] },
       "entry": [
         // The Git pre-commit hook invokes this script directly.
         "scripts/check-staged.mjs",

@@ -1,0 +1,17 @@
+{
+  "retrievedAt": "2026-10-18T17:45:10.281Z",
+  "source": "Entur public GraphQL introspection",
+  "license": "NLOD-2.0",
+  "schemas": [
+    {
+      "name": "journey-planner",
+      "endpoint": "https://api.entur.io/journey-planner/v3/graphql",
+      "sha256": "c24b8c163ad9bff5145ef9af6757b452a04e69612bb9e99cee3c4957981ca251"
+    },
+    {
+      "name": "vehicles",
+      "endpoint": "https://api.entur.io/realtime/v2/vehicles/graphql",
+      "sha256": "ae5b7f0d977fa281a9dc18e4e6bad05733db146f8adda031b0fa12424afcb811"
+    }
+  ]
+}

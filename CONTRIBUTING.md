@@ -140,6 +140,11 @@ The duplicate-code audit reports new clone regions against each PR's base commit
 in the workflow summary, with detailed reports attached as an artifact. PR reports
 are advisory and do not block merging; the full weekly audit remains enabled.
 
+Entur GraphQL operations and generated types are checked offline by
+`pnpm check-entur-graphql`, included in `pnpm check:policy`. See the
+[Entur contract guide](packages/mobility-formats/entur/README.md) for regeneration
+and reviewed schema refreshes.
+
 The lint job also audits production dependencies in the root and docs lockfiles.
 New high or critical advisories block CI. A no-fix advisory can be acknowledged
 temporarily in `scripts/production-audit-allowances.json`; the entry must match

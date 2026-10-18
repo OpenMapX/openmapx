@@ -515,7 +515,8 @@ export interface ServiceAlert extends ContributingRecord {
   imageUrl?: string;
   affectedRouteIds: string[];
   affectedStopIds: string[];
-  activePeriods: { start: string; end?: string }[];
+  /** Omitted bounds mean the period has no start/end limit. */
+  activePeriods: { start?: string; end?: string }[];
 }
 
 export interface VehiclePosition extends ContributingRecord {

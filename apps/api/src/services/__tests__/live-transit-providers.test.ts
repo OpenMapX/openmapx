@@ -239,19 +239,24 @@ describe("live-transit-entur provider", () => {
                 description: [{ value: "Platform changed at Oslo S", language: "en" }],
                 reportType: "stopMoved",
                 severity: "severe",
-                validityPeriod: {
-                  startTime: "2026-04-21T19:00:00Z",
-                  endTime: "2026-04-21T22:00:00Z",
-                },
-                lines: [{ id: "VYG:Line:R14" }],
-                stopPlaces: [
+                validityPeriods: [
                   {
-                    id: "NSR:StopPlace:337",
-                    latitude: 59.910925,
-                    longitude: 10.753276,
+                    startTime: "2026-04-21T19:00:00Z",
+                    endTime: "2026-04-21T22:00:00Z",
                   },
                 ],
-                quays: [],
+                affects: [
+                  { __typename: "AffectedLine", line: { id: "VYG:Line:R14" } },
+                  {
+                    __typename: "AffectedStopPlace",
+                    stopPlace: {
+                      id: "NSR:StopPlace:337",
+                      latitude: 59.910925,
+                      longitude: 10.753276,
+                    },
+                    quay: null,
+                  },
+                ],
               },
             ],
           },
