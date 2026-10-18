@@ -244,27 +244,54 @@ fix(routing): handle empty Valhalla isochrone response
 docs(readme): clarify community integration install flow
 ```
 
-### Changesets
+### Release information
 
-User-facing changes to publishable packages must include a changeset, otherwise
-CI fails:
+| Change                                                                                      | Required release information                                   |
+| ------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
+| Qualified public package artifact or consumer contract                                      | Covering Changeset, or a specific non-release explanation      |
+| Product breaking change, migration, significant security impact or required operator action | Committed product release-note fragment                        |
+| Ordinary product feature or fix                                                             | Clear PR description, curated into product release notes later |
+| Internal maintenance                                                                        | Usually neither                                                |
+
+The explicit package boundary is [scripts/public-packages.json](scripts/public-packages.json): currently `@openmapx/extension-contracts` and `@openmapx/extension-cli`. Non-private metadata alone does not qualify a package for publication. The CLI bundles private workspace sources, so a change to one of those dependencies can affect its delivered artifact too.
+
+This file sits beside the release-check scripts because it records OpenMapX's package qualification policy. It supplements the standard Changesets configuration in `.changeset/config.json`; it is not a separate versioning or publishing system.
+
+For a public-package change, add a Changeset naming every affected qualified package and explain the consumer impact:
 
 ```bash
 pnpm exec changeset
 ```
 
-The CI workflow runs `pnpm exec changeset status --since=origin/main` on
-every PR and exits non-zero if a publishable package changed without one.
-For PRs that touch a publishable package but intentionally don't need a
-release entry — test-only edits, internal refactors, doc-only diffs —
-add an empty changeset:
+Do not select private application packages or broad core internals. Tests-only edits are recognized automatically unless those files are explicitly shipped, such as tests inside the CLI scaffold templates. Other edits that do not affect a release can use a specific explanation in the PR's **Release and upgrade impact** section:
 
-```bash
-pnpm exec changeset --empty
+```text
+No package release: This changes only the test runner configuration; the published files and consumer behavior stay the same.
 ```
 
-App- and service-only changes (under `apps/`, `services/`, `integrations/`)
-are skipped automatically because those packages are marked `private`.
+Do not add empty bookkeeping Changesets. CI validates new/updated notes, allowed packages and affected-package coverage. Shipped schemas, templates and documentation count as artifact inputs. Lockfile and shared build-input changes are treated conservatively; explain when they do not affect the qualified artifacts. A pending note from an earlier PR does not cover new work. These rules apply equally to humans and bots; a relevant dependency update needs a note or an accurate explanation before auto-merge.
+
+For important product effects, add a fragment following [release-notes/README.md](release-notes/README.md) and declare its categories in the same PR section:
+
+```text
+Product impact: migration, operator-action
+```
+
+The allowed categories are `breaking`, `migration`, `security` and `operator-action`. Ordinary product work needs no marker or fragment. Database migration SQL changes require migration information automatically. Keep embargoed security details private under [SECURITY.md](SECURITY.md). Maintainers review classification, bump correctness, instructions and no-release explanations; CI cannot prove their semantic accuracy and does not introduce another required reviewer.
+
+At product release preparation, maintainers curate a version-specific page in the existing documentation using the pending fragments and merged PRs. It should cover highlights, breaking changes, upgrade instructions and a categorized change list. See the [fragment guide](release-notes/README.md#preparing-product-release-notes) for the intended assembly process; this PR gate does not generate or publish those pages.
+
+Check a committed candidate locally with the PR description saved to a file:
+
+```bash
+pnpm check-release-information --base origin/main --head HEAD --body-file /path/to/pr-description.md
+```
+
+Required CI runs this gate in the lint lane and reads the current PR body and target base, checking both immutable commit identities before evaluating the diff. This does not require rebasing the branch onto current main. Editing the PR body triggers CI again so its classification cannot remain stale; this currently reruns the full workflow. No required check name changes.
+
+A generated version PR uses `Package release: version`, or is recognized by an allowlisted manifest version change. It must exactly match a replay of the installed Changesets version command from its base: versions, changelogs, consumed notes and versioned schema IDs. Source/configuration/lockfile edits do not receive a release-PR exemption. A version-only batch cannot introduce important product declarations; commit those product fragments in the source contribution first. Regenerate the contracts schemas with `pnpm --filter @openmapx/extension-contracts generate:schemas` when their package version changes.
+
+The historical mixed queue, private-package versioning configuration and publication workflow still require the separate release-baseline work. Canonical version validation requires private versioning disabled, the default changelog and `format: false` for deterministic replay without invoking a package-manager formatter. It deliberately rejects the unreconciled queue; do not run the old release workflow to consume it. This contribution gate does not publish packages or create a product release.
 
 ## Pull request workflow
 

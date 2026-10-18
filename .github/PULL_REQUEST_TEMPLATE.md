@@ -25,4 +25,8 @@ relevant setup so a reviewer can repeat the manual checks. Note material checks 
 ## Release and upgrade impact
 
 <!-- State any breaking changes, migrations or operator action, including what users need to do.
-If there is no release/upgrade impact, say so. Follow CONTRIBUTING.md for Changesets requirements. -->
+For qualified package edits without a Changeset, write `No package release: <specific reason>`.
+For important product changes, write `Product impact: migration, operator-action` (use the
+applicable categories) and commit a release-notes fragment. Ordinary product/internal work
+needs no bookkeeping note. Generated version PRs use `Package release: version` and receive
+canonical validation. Follow CONTRIBUTING.md for details. -->

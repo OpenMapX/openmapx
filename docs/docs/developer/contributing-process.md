@@ -105,7 +105,7 @@ expiring CI artifacts are not delivered evidence. Partial uploads may still crea
 or update the PR; inspect it before retrying. See
 [Contributing](https://github.com/OpenMapX/openmapx/blob/main/CONTRIBUTING.md#descriptions-and-visual-evidence)
 for commands and the current verification/release-information policy. This process
-change does not replace Changesets enforcement or publish a release.
+uses conditional package Changesets and important product fragments; it does not publish a release.
 
 AI assistance and authorized coding agents follow the same standards. The submitter
 owns understanding, accuracy, verification and follow-up. No mandatory AI footer,

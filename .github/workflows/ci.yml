@@ -2,6 +2,7 @@ name: CI
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, edited, ready_for_review]
   push:
     branches: [main]
   # Reconcile main daily, including merges made with GITHUB_TOKEN that do not
@@ -31,12 +32,15 @@ jobs:
     name: lint
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    permissions:
+      contents: read
+      pull-requests: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
           # Needed so commitlint can walk the PR's commit range (and so
-          # origin/main exists for the changeset gate).
+          # the immutable PR base/head exist for release-information checks).
           # Quoted because `&& 0 || 1` short-circuits past the falsy 0 and always returns 1.
           fetch-depth: ${{ github.event_name == 'pull_request' && '0' || '1' }}
 
@@ -92,16 +96,19 @@ jobs:
         # Mounts the route table in-process — no database, cache or network.
         run: pnpm check-openapi
 
-      - name: Require changeset for publishable-package changes (PR only)
-        # Package-root Dockerfiles are deployment/build inputs, excluded by
-        # changedFilePatterns in .changeset/config.json. Mixed source/manifest
-        # edits still need a note. The existing bot handling and private-package
-        # versioning are migrated separately with the release baseline.
-        if: github.event_name == 'pull_request' && github.event.pull_request.user.login != 'dependabot[bot]'
-        # Exits non-zero if a publishable package changed since main without
-        # an accompanying changeset. The baseBranch is "main" per
-        # .changeset/config.json — keep these in sync.
-        run: pnpm exec changeset status --since=origin/main
+      - name: Validate release information (PR only)
+        if: github.event_name == 'pull_request'
+        # Body edits must revalidate classification, including for Dependabot.
+        # Read current metadata rather than a stale event body on a manual rerun.
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}" > "${RUNNER_TEMP}/release-pr.json"
+          BASE_SHA="$(node -e 'const p=JSON.parse(require("node:fs").readFileSync(process.argv[1],"utf8")); if(!/^[a-f0-9]{40}$/.test(p.base?.sha)) process.exit(1); console.log(p.base.sha)' "${RUNNER_TEMP}/release-pr.json")"
+          git fetch --no-tags origin "${BASE_SHA}"
+          pnpm check-release-information --base "${BASE_SHA}" --head "${HEAD_SHA}" --pr-json "${RUNNER_TEMP}/release-pr.json"
 
   types:
     name: types
