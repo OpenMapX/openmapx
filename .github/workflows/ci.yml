@@ -426,9 +426,28 @@ jobs:
           platforms: linux/amd64
           build-args: ${{ matrix.app == 'web' && format('SW_BUILD_ID={0}', github.sha) || '' }}
           push: false
+          load: true
+          tags: openmapx-ci:${{ matrix.app }}
           pull: ${{ matrix.app == 'docs' }}
           cache-from: type=gha,scope=${{ matrix.app }}
           cache-to: type=gha,mode=${{ matrix.app == 'api' && 'min' || 'max' }},scope=${{ matrix.app }}
+
+      # Scan the image just built on this runner; PRs never need registry
+      # credentials. Main independently rescans exact digests before promotion.
+      - name: Gate built PR image with Trivy
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        env:
+          TRIVY_IMAGE_SRC: docker
+        with:
+          version: v0.75.0
+          image-ref: openmapx-ci:${{ matrix.app }}
+          format: table
+          scanners: vuln
+          vuln-type: os,library
+          severity: CRITICAL,HIGH
+          ignore-unfixed: "true"
+          trivyignores: .trivyignore.yaml
+          exit-code: "1"
 
   # Aggregate gate. Keeps the required-status-check context stable at
   # `lint / types / test` while the real work runs in parallel above.

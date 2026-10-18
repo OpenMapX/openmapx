@@ -83,7 +83,7 @@ describe("pinned gtfsclean build", () => {
         ),
       ),
     ).toHaveLength(3);
-    expect(calls.filter((call) => call.endsWith("get golang.org/x/text@v0.39.0"))).toHaveLength(2);
+    expect(calls.filter((call) => call.endsWith("get golang.org/x/text@v0.41.0"))).toHaveLength(2);
     expect(calls.at(-1)).toBe(
       "direct|build -trimpath -o /usr/local/bin/gtfsclean github.com/public-transport/gtfsclean",
     );
