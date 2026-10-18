@@ -38,9 +38,14 @@ describe("data-manager producer contracts", () => {
         },
       ) as OfflinePackageGenerator,
     });
-    for (const operation of Object.values(dataManagerOperations)) {
+    for (const [index, operation] of Object.values(dataManagerOperations).entries()) {
       const url = operation.path.replace(/:handle/, "0".repeat(64)).replace(/:[^/]+/g, "fixture");
-      const response = await app.inject({ method: operation.method, url });
+      // Each boundary assertion starts with a fresh failed-auth budget.
+      const response = await app.inject({
+        method: operation.method,
+        url,
+        remoteAddress: `192.0.2.${index + 1}`,
+      });
       if (operation.auth === "service")
         expect(response.statusCode, `${operation.method} ${url}`).toBe(401);
       else expect(response.statusCode, `${operation.method} ${url}`).not.toBe(401);

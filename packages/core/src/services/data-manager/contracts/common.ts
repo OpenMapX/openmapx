@@ -1,4 +1,5 @@
 import z from "zod/v4";
+import { authenticationRetryAfterHeadersSchema } from "./headers";
 
 export const countSchema = z.number().finite().nonnegative();
 export const timestampSchema = z.iso.datetime({ offset: true });
@@ -49,6 +50,9 @@ export const empty = { kind: "empty" } as const;
 export const serviceErrors = {
   400: json(httpErrorSchema),
   401: json(httpErrorSchema),
+  413: json(httpErrorSchema),
+  415: json(httpErrorSchema),
+  429: json(httpErrorSchema, authenticationRetryAfterHeadersSchema),
   500: json(httpErrorSchema),
 } as const;
 export const publicErrors = { 400: json(httpErrorSchema), 500: json(httpErrorSchema) } as const;

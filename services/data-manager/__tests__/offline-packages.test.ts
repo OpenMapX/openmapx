@@ -7,6 +7,7 @@ import {
   readFileSync,
   rmSync,
   statSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -173,6 +174,25 @@ describe("offline package source catalog", () => {
 });
 
 describe("offline package storage", () => {
+  it("rejects publication inputs escaping the package root through a parent symlink", async () => {
+    const root = mkdtempSync(join(tmpdir(), "openmapx-offline-storage-containment-"));
+    roots.push(root);
+    const packageRoot = join(root, "packages");
+    const outside = join(root, "outside");
+    mkdirSync(packageRoot);
+    mkdirSync(outside);
+    writeFileSync(join(outside, "archive.part"), "12345678");
+    symlinkSync(outside, join(packageRoot, "linked"));
+    const storage = new OfflinePackageStorage(packageRoot);
+    await expect(
+      storage.publishPackage({
+        archivePath: join(packageRoot, "linked", "archive.part"),
+        manifest: manifest(`omp2-${"d".repeat(64)}`),
+      }),
+    ).rejects.toThrow(/unsafe|escapes/);
+    expect(readFileSync(join(outside, "archive.part"), "utf8")).toBe("12345678");
+  });
+
   it("maps only content-addressed IDs below the package root", () => {
     const root = mkdtempSync(join(tmpdir(), "openmapx-offline-storage-"));
     roots.push(root);

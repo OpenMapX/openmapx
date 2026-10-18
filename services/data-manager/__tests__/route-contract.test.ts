@@ -1,4 +1,5 @@
 import swagger from "@fastify/swagger";
+import { createDataManagerTransport, link as linkDatasets } from "@openmapx/core/data-manager-sdk";
 import Fastify from "fastify";
 import { afterEach, describe, expect, it } from "vitest";
 import { registerAuth } from "../src/auth";
@@ -17,6 +18,70 @@ const app = () => {
   return instance;
 };
 describe("data-manager producer contract metadata", () => {
+  it("preserves native413and415 error envelopes through the real generated link operation", async () => {
+    const instance = Fastify({ bodyLimit: 128, exposeHeadRoutes: false });
+    const baseline = Fastify({ bodyLimit: 128, exposeHeadRoutes: false });
+    apps.push(instance, baseline);
+    registerAuth(instance, "secret");
+    let calls = 0;
+    registerDataManagerRoute(instance, "link", () => {
+      calls++;
+      return { ok: true, linked: 0, skipped: 0, pruned: 0 };
+    });
+    baseline.post("/link", async () => ({ ok: true }));
+    const transport = createDataManagerTransport({
+      baseUrl: "https://data-manager.test",
+      authToken: "secret",
+      fetch: async (input, init) => {
+        const url = new URL(input instanceof Request ? input.url : String(input));
+        expect(new Headers(init?.headers).get("authorization")).toBe("Bearer secret");
+        const response = await instance.inject({
+          method: "POST",
+          url: url.pathname,
+          headers: Object.fromEntries(new Headers(init?.headers)),
+          payload: typeof init?.body === "string" ? init.body : undefined,
+        });
+        return new Response(response.body, {
+          status: response.statusCode,
+          headers: Object.fromEntries(
+            Object.entries(response.headers)
+              .filter(([, value]) => value !== undefined)
+              .map(([name, value]) => [
+                name,
+                Array.isArray(value) ? value.join(", ") : String(value),
+              ]),
+          ),
+        });
+      },
+    });
+    const oversizedBody = {
+      plan: [
+        { source: "x".repeat(100), target: "target", consumerService: "consumer", dataType: "osm" },
+      ],
+    };
+    const media = await baseline.inject({
+      method: "POST",
+      url: "/link",
+      headers: { "content-type": "application/xml" },
+      payload: "<request/>",
+    });
+    const oversized = await baseline.inject({
+      method: "POST",
+      url: "/link",
+      headers: { "content-type": "application/json" },
+      payload: JSON.stringify(oversizedBody),
+    });
+    expect(media.statusCode).toBe(415);
+    expect(oversized.statusCode).toBe(413);
+    await expect(
+      linkDatasets({ plan: [] }, { transport, headers: { "Content-Type": "application/xml" } }),
+    ).resolves.toMatchObject({ status: 415, data: media.json() });
+    await expect(linkDatasets(oversizedBody, { transport })).resolves.toMatchObject({
+      status: 413,
+      data: oversized.json(),
+    });
+    expect(calls).toBe(0);
+  });
   it("rejects missing mandatory response metadata and retains extra valid headers", async () => {
     const invalid = app();
     registerDataManagerRoute(invalid, "getOfflineGlyph", (_request, reply) =>

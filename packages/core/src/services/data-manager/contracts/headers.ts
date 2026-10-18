@@ -27,6 +27,9 @@ export const unsatisfiableArchiveResponseHeadersSchema = z.object({
   etag: z.string().regex(/^sha256-[0-9a-f]{64}$/),
 });
 export const retryAfterHeadersSchema = z.object({ "retry-after": z.literal("30") });
+export const authenticationRetryAfterHeadersSchema = z.object({
+  "retry-after": z.string().regex(/^[1-9]\d*$/),
+});
 export const uncachedResponseHeadersSchema = z.object({ "cache-control": z.literal("no-store") });
 export const coverageResponseHeadersSchema = z.object({
   "cache-control": z.literal("private, no-store"),

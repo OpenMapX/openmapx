@@ -13,6 +13,7 @@
     "bench:overture-h3": "tsx scripts/bench-overture-h3.ts"
   },
   "dependencies": {
+    "@fastify/rate-limit": "11.2.1",
     "@mapbox/glyph-pbf-composite": "0.0.3",
     "@motis-project/motis-client": "2.11.3",
     "@openmapx/cli": "workspace:*",

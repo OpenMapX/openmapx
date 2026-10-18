@@ -9,13 +9,14 @@ import {
   openSync,
   readdirSync,
   readFileSync,
+  realpathSync,
   renameSync,
   rmSync,
   statfsSync,
   statSync,
   writeFileSync,
 } from "node:fs";
-import { join, relative, resolve } from "node:path";
+import { join, relative, resolve, sep } from "node:path";
 import type { OfflineMapPackageManifest } from "@openmapx/core";
 import { validateOfflineMapPackageManifest } from "@openmapx/core";
 import type {
@@ -53,18 +54,27 @@ function ensureDirectory(path: string): void {
   if (!stat.isDirectory() || stat.isSymbolicLink()) throw new Error(`unsafe directory: ${path}`);
 }
 
-function assertRegularFile(path: string): void {
-  const stat = lstatSync(path);
-  if (!stat.isFile() || stat.isSymbolicLink()) throw new Error(`unsafe package file: ${path}`);
-}
-
-function assertDirectChild(root: string, path: string): void {
+function containedPath(root: string, path: string): string {
   const resolvedRoot = resolve(root);
   const resolvedPath = resolve(path);
-  const relativePath = relative(resolvedRoot, resolvedPath);
-  if (!relativePath || relativePath.startsWith("..") || relativePath.includes("/../")) {
+  if (!resolvedPath.startsWith(`${resolvedRoot}${sep}`)) {
     throw new Error("offline package path escapes the package root");
   }
+  return resolvedPath;
+}
+
+/** Return the checked path used by every filesystem consumer, including API streams. */
+export function resolveOfflinePackageFile(root: string, path: string): string {
+  const lexical = containedPath(root, path);
+  const realRoot = realpathSync(root);
+  const checked = realpathSync(lexical);
+  if (!checked.startsWith(`${realRoot}${sep}`))
+    throw new Error("offline package file escapes the package root");
+  // Resolving trusted root ancestors is fine; links beneath that root are not.
+  if (checked !== resolve(realRoot, relative(resolve(root), lexical)))
+    throw new Error("unsafe symbolic link in offline package file");
+  if (!lstatSync(checked).isFile()) throw new Error("unsafe offline package file");
+  return checked;
 }
 
 function fsyncFile(path: string): void {
@@ -102,9 +112,7 @@ async function hashFile(path: string): Promise<string> {
 export function packageDirectory(packageRoot: string, packageId: string): string {
   assertPackageId(packageId);
   const root = resolve(packageRoot);
-  const directory = join(root, packageId);
-  assertDirectChild(root, directory);
-  return directory;
+  return containedPath(root, join(root, packageId));
 }
 
 export class OfflinePackageStorage implements OfflinePackageStorageLike {
@@ -129,17 +137,21 @@ export class OfflinePackageStorage implements OfflinePackageStorageLike {
     assertJobId(jobId);
     const tempRoot = join(this.packageRoot, TEMP_DIRECTORY);
     ensureDirectory(tempRoot);
-    const path = join(tempRoot, `${jobId}.pmtiles.part`);
-    assertDirectChild(tempRoot, path);
-    return path;
+    return containedPath(tempRoot, join(tempRoot, `${jobId}.pmtiles.part`));
   }
 
   private manifestPath(packageId: string): string {
-    return join(this.packageDirectory(packageId), MANIFEST_FILENAME);
+    return containedPath(
+      this.packageRoot,
+      join(this.packageDirectory(packageId), MANIFEST_FILENAME),
+    );
   }
 
   private archivePath(packageId: string): string {
-    return join(this.packageDirectory(packageId), ARCHIVE_FILENAME);
+    return containedPath(
+      this.packageRoot,
+      join(this.packageDirectory(packageId), ARCHIVE_FILENAME),
+    );
   }
 
   async publishPackage(input: {
@@ -151,19 +163,19 @@ export class OfflinePackageStorage implements OfflinePackageStorageLike {
     const finalDirectory = this.packageDirectory(manifest.packageId);
     const packageRoot = this.packageRoot;
     ensureDirectory(packageRoot);
-    assertRegularFile(input.archivePath);
-    const archiveStat = statSync(input.archivePath);
+    const inputArchivePath = resolveOfflinePackageFile(packageRoot, input.archivePath);
+    const archiveStat = statSync(inputArchivePath);
     if (archiveStat.size !== manifest.archive.byteLength) {
       throw new Error("offline package archive byte length does not match manifest");
     }
-    if ((await hashFile(input.archivePath)) !== manifest.archive.sha256) {
+    if ((await hashFile(inputArchivePath)) !== manifest.archive.sha256) {
       throw new Error("offline package archive checksum does not match manifest");
     }
 
     if (existsSync(finalDirectory)) {
       const existing = await this.readPublishedManifest(manifest.packageId);
       if (existing?.archive.sha256 === manifest.archive.sha256) {
-        rmSync(input.archivePath, { force: true });
+        rmSync(inputArchivePath, { force: true });
         return;
       }
       if (existing) throw new Error(`offline package already exists: ${manifest.packageId}`);
@@ -181,7 +193,7 @@ export class OfflinePackageStorage implements OfflinePackageStorageLike {
     ensureDirectory(join(packageRoot, TEMP_DIRECTORY));
     mkdirSync(tempDirectory, { recursive: true });
     try {
-      renameSync(input.archivePath, join(tempDirectory, ARCHIVE_FILENAME));
+      renameSync(inputArchivePath, join(tempDirectory, ARCHIVE_FILENAME));
       writeFileSync(
         join(tempDirectory, MANIFEST_FILENAME),
         `${JSON.stringify(manifest, null, 2)}\n`,
@@ -203,12 +215,12 @@ export class OfflinePackageStorage implements OfflinePackageStorageLike {
     if (!existsSync(directory)) return undefined;
     const directoryStat = lstatSync(directory);
     if (!directoryStat.isDirectory() || directoryStat.isSymbolicLink()) return undefined;
-    const manifestPath = this.manifestPath(packageId);
-    const archivePath = this.archivePath(packageId);
-    if (!existsSync(manifestPath) || !existsSync(archivePath)) return undefined;
     try {
-      assertRegularFile(manifestPath);
-      assertRegularFile(archivePath);
+      const manifestPath = resolveOfflinePackageFile(
+        this.packageRoot,
+        this.manifestPath(packageId),
+      );
+      const archivePath = resolveOfflinePackageFile(this.packageRoot, this.archivePath(packageId));
       const manifest = validateOfflineMapPackageManifest(
         JSON.parse(readFileSync(manifestPath, "utf8")),
       );
@@ -223,7 +235,7 @@ export class OfflinePackageStorage implements OfflinePackageStorageLike {
   async openPublishedArchive(packageId: string): Promise<OfflinePackageArchiveHandle | undefined> {
     const manifest = await this.readPublishedManifest(packageId);
     if (!manifest) return undefined;
-    const path = this.archivePath(packageId);
+    const path = resolveOfflinePackageFile(this.packageRoot, this.archivePath(packageId));
     const current = this.activeStreams.get(packageId) ?? 0;
     this.activeStreams.set(packageId, current + 1);
     let released = false;

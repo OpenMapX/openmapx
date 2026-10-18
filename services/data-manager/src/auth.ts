@@ -1,4 +1,5 @@
 import { randomBytes, timingSafeEqual } from "node:crypto";
+import rateLimit, { normalizeIP } from "@fastify/rate-limit";
 import { assertProductionApplicationSecret } from "@openmapx/core/deployment-secret-policy";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 
@@ -69,15 +70,33 @@ export function resolveAuthToken(app: FastifyInstance): string {
 }
 
 /**
- * Registers a pre-handler that rejects every non-health request without a
- * matching bearer token. Health endpoints remain open so container/k8s probes
+ * Registers an on-request authentication guard with a failed-attempt budget,
+ * before body parsing. Health endpoints remain open so container/k8s probes
  * and cross-service discovery keep working.
  */
 export function registerAuth(app: FastifyInstance, expectedToken: string): void {
+  // Register the maintained limiter in this root scope, while invoking it only
+  // for failed credentials. Successful long-running jobs and probes have no
+  // authentication-attempt budget. The root hook runs before body parsing.
+  app.register(rateLimit, {
+    global: false,
+    max: 20,
+    timeWindow: 60_000,
+    keyGenerator: (req) =>
+      `${normalizeIP(req.ip)}|${normalizeIP(req.socket.remoteAddress ?? req.ip)}`,
+  });
+  let limitFailedAuthentication: ReturnType<FastifyInstance["createRateLimit"]> | undefined;
   app.addHook("onRequest", async (req: FastifyRequest, reply: FastifyReply) => {
     if (bypassesBearerAuth(req)) return;
     const presented = getAuthToken(req);
     if (!presented || !safeEqual(presented, expectedToken)) {
+      limitFailedAuthentication ??= app.createRateLimit();
+      const limit = await limitFailedAuthentication(req);
+      if (!limit.isAllowed && limit.isExceeded)
+        return reply
+          .code(429)
+          .header("Retry-After", String(limit.ttlInSeconds))
+          .send({ error: "Too many authentication attempts" });
       return reply.code(401).send({ error: "Unauthorized" });
     }
   });

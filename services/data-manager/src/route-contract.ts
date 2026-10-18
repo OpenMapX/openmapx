@@ -1,3 +1,4 @@
+import { STATUS_CODES } from "node:http";
 import { dataManagerOperations } from "@openmapx/core/data-manager-contracts";
 import type { FastifyInstance, FastifyReply, FastifyRequest, RouteGenericInterface } from "fastify";
 import { z } from "zod/v4";
@@ -197,14 +198,32 @@ export function registerDataManagerRoute<K extends OperationId>(
           part === "headers" ? { ...req.headers, ...(parsed.data as object) } : parsed.data;
       }
     },
-    preSerialization: async (_req, reply, payload) => {
-      const contract = responses[reply.statusCode];
-      if (contract?.kind !== "json") return payload;
-      // Validate the same JSON-native value that crosses the wire, including
-      // Date serialization and omitted undefined fields, before Fastify's
-      // schema serializer can drop an undeclared producer property.
-      return validateJson(JSON.parse(JSON.stringify(payload)), reply.statusCode);
-    },
+    // Fastify's native error fallback passes an Error-prototype envelope to
+    // the serializer. Normalize its existing public fields rather than asking
+    // strict JSON-schema union selection to inspect inherited implementation
+    // fields. Every ordinary JSON value still validates before serialization.
+    serializerCompiler:
+      ({ httpStatus }) =>
+      (payload) => {
+        const status = Number(httpStatus);
+        const contract = responses[status];
+        if (contract?.kind === "empty") return "";
+        if (contract?.kind !== "json") throw invalidResponse();
+        let wire: unknown;
+        if (payload instanceof Error) {
+          const error = payload as Error & { error?: unknown; code?: unknown };
+          wire = {
+            statusCode: status,
+            error:
+              typeof error.error === "string" ? error.error : (STATUS_CODES[status] ?? "Error"),
+            message: error.message,
+            ...(error.code !== undefined ? { code: error.code } : {}),
+          };
+        } else {
+          wire = JSON.parse(JSON.stringify(payload));
+        }
+        return JSON.stringify(validateJson(wire, status));
+      },
     onSend: async (_req, reply, payload) => {
       const contract = responses[reply.statusCode];
       if (!contract) throw invalidResponse();
@@ -213,8 +232,8 @@ export function registerDataManagerRoute<K extends OperationId>(
       if (contract.kind !== "json") return payload;
       const mediaType = reply.getHeader("content-type")?.toString().split(";", 1)[0];
       if (mediaType !== "application/json") throw invalidResponse();
-      // preSerialization does not run for strings, buffers or null. Check the
-      // final serialized body too, so those paths cannot bypass validation.
+      // String and buffer replies can bypass serialization. Check the final
+      // JSON body too, so those paths cannot bypass canonical validation.
       if (typeof payload !== "string" && !Buffer.isBuffer(payload)) throw invalidResponse();
       let body: unknown;
       try {

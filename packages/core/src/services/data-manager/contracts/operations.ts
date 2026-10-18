@@ -413,7 +413,10 @@ export const dataManagerOperations = {
         z.union([httpErrorSchema, f.offlinePackageErrorSchema, f.offlinePackageUnsuccessfulSchema]),
       ),
       409: json(f.offlinePackageUnsuccessfulSchema),
-      429: json(f.offlinePackageErrorSchema, h.retryAfterHeadersSchema),
+      429: json(
+        z.union([httpErrorSchema, f.offlinePackageErrorSchema]),
+        h.authenticationRetryAfterHeadersSchema,
+      ),
       503: json(f.offlinePackageErrorSchema),
     },
   },
@@ -466,6 +469,7 @@ export const dataManagerOperations = {
       400: empty,
       401: empty,
       404: empty,
+      429: { ...empty, headers: h.authenticationRetryAfterHeadersSchema },
       500: empty,
     },
   },
@@ -502,6 +506,7 @@ export const dataManagerOperations = {
       404: empty,
       416: { ...empty, headers: h.unsatisfiableArchiveResponseHeadersSchema },
       500: empty,
+      429: { ...empty, headers: h.authenticationRetryAfterHeadersSchema },
     },
   },
   getTransitOperatorFeed: {

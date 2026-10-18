@@ -6,59 +6,92 @@ import type {
   AddTransitSource401,
   AddTransitSource404,
   AddTransitSource409,
+  AddTransitSource413,
+  AddTransitSource415,
+  AddTransitSource429,
   AddTransitSource500,
   AddTransitSourceBody,
   ApproveTransitBump200,
   ApproveTransitBump400,
   ApproveTransitBump401,
   ApproveTransitBump404,
+  ApproveTransitBump413,
+  ApproveTransitBump415,
   ApproveTransitBump422,
+  ApproveTransitBump429,
   ApproveTransitBump500,
   ApproveTransitBumpBody,
   BakePredictedTraffic202,
   BakePredictedTraffic400,
   BakePredictedTraffic401,
   BakePredictedTraffic409,
+  BakePredictedTraffic413,
+  BakePredictedTraffic415,
+  BakePredictedTraffic429,
   BakePredictedTraffic500,
   BakePredictedTraffic501,
   BuildAmbientPlaces202,
   BuildAmbientPlaces400,
   BuildAmbientPlaces401,
   BuildAmbientPlaces409,
+  BuildAmbientPlaces413,
+  BuildAmbientPlaces415,
+  BuildAmbientPlaces429,
   BuildAmbientPlaces500,
   BuildAmbientPlacesBody,
   BuildNotablePlaces200,
   BuildNotablePlaces400,
   BuildNotablePlaces401,
+  BuildNotablePlaces413,
+  BuildNotablePlaces415,
+  BuildNotablePlaces429,
   BuildNotablePlaces500,
   BuildSearchIndex200,
   BuildSearchIndex400,
   BuildSearchIndex401,
+  BuildSearchIndex413,
+  BuildSearchIndex415,
+  BuildSearchIndex429,
   BuildSearchIndex500,
   BuildSearchIndexBody,
   ConflateOverture200,
   ConflateOverture400,
   ConflateOverture401,
+  ConflateOverture413,
+  ConflateOverture415,
+  ConflateOverture429,
   ConflateOverture500,
   ConflateOvertureBody,
   ConvertOverpass200,
   ConvertOverpass400,
   ConvertOverpass401,
+  ConvertOverpass413,
+  ConvertOverpass415,
+  ConvertOverpass429,
   ConvertOverpass500,
   ConvertOverpassBody,
   DiscardAmbientPlaces200,
   DiscardAmbientPlaces400,
   DiscardAmbientPlaces401,
   DiscardAmbientPlaces409,
+  DiscardAmbientPlaces413,
+  DiscardAmbientPlaces415,
+  DiscardAmbientPlaces429,
   DiscardAmbientPlaces500,
   DiscardAmbientPlacesBody,
   DownloadFonts200,
   DownloadFonts400,
   DownloadFonts401,
+  DownloadFonts413,
+  DownloadFonts415,
+  DownloadFonts429,
   DownloadFonts500,
   DownloadOsm200,
   DownloadOsm400,
   DownloadOsm401,
+  DownloadOsm413,
+  DownloadOsm415,
+  DownloadOsm429,
   DownloadOsm500,
   DownloadOsmBody,
   EnableTransitSource202,
@@ -66,32 +99,50 @@ import type {
   EnableTransitSource401,
   EnableTransitSource404,
   EnableTransitSource409,
+  EnableTransitSource413,
+  EnableTransitSource415,
+  EnableTransitSource429,
   EnableTransitSource500,
   EnableTransitSourceBody,
   ExtractOverture200,
   ExtractOverture400,
   ExtractOverture401,
+  ExtractOverture413,
+  ExtractOverture415,
+  ExtractOverture429,
   ExtractOverture500,
   ExtractOvertureBody,
   GetAmbientPlacesStatus200,
   GetAmbientPlacesStatus400,
   GetAmbientPlacesStatus401,
+  GetAmbientPlacesStatus413,
+  GetAmbientPlacesStatus415,
+  GetAmbientPlacesStatus429,
   GetAmbientPlacesStatus500,
   GetAppliedTrafficConditions200,
   GetAppliedTrafficConditions400,
   GetAppliedTrafficConditions401,
+  GetAppliedTrafficConditions413,
+  GetAppliedTrafficConditions415,
+  GetAppliedTrafficConditions429,
   GetAppliedTrafficConditions500,
   GetAppliedTrafficConditions501,
   GetCoverageEvidence200,
   GetCoverageEvidence400,
   GetCoverageEvidence401,
   GetCoverageEvidence409,
+  GetCoverageEvidence413,
+  GetCoverageEvidence415,
+  GetCoverageEvidence429,
   GetCoverageEvidence500,
   GetCoverageEvidence503,
   GetCoverageEvidenceParams,
   GetDatasets200,
   GetDatasets400,
   GetDatasets401,
+  GetDatasets413,
+  GetDatasets415,
+  GetDatasets429,
   GetDatasets500,
   GetLive200,
   GetLive400,
@@ -100,45 +151,72 @@ import type {
   GetNotablePlacesStatus400,
   GetNotablePlacesStatus401,
   GetNotablePlacesStatus404,
+  GetNotablePlacesStatus413,
+  GetNotablePlacesStatus415,
+  GetNotablePlacesStatus429,
   GetNotablePlacesStatus500,
   GetOfflineGlyph400,
   GetOfflineGlyph401,
   GetOfflineGlyph404,
+  GetOfflineGlyph413,
+  GetOfflineGlyph415,
+  GetOfflineGlyph429,
   GetOfflineGlyph500,
   GetOfflineGlyphCatalog200,
   GetOfflineGlyphCatalog400,
   GetOfflineGlyphCatalog401,
   GetOfflineGlyphCatalog404,
+  GetOfflineGlyphCatalog413,
+  GetOfflineGlyphCatalog415,
+  GetOfflineGlyphCatalog429,
   GetOfflineGlyphCatalog500,
   GetOfflinePackageArchive400,
   GetOfflinePackageArchive401,
   GetOfflinePackageArchive404,
+  GetOfflinePackageArchive413,
+  GetOfflinePackageArchive415,
+  GetOfflinePackageArchive429,
   GetOfflinePackageArchive500,
   GetOfflinePackageArchiveHeaders,
   GetOfflinePackageCapability200,
   GetOfflinePackageCapability400,
   GetOfflinePackageCapability401,
+  GetOfflinePackageCapability413,
+  GetOfflinePackageCapability415,
+  GetOfflinePackageCapability429,
   GetOfflinePackageCapability500,
   GetOfflinePackageJob200,
   GetOfflinePackageJob400,
   GetOfflinePackageJob401,
   GetOfflinePackageJob404,
+  GetOfflinePackageJob413,
+  GetOfflinePackageJob415,
+  GetOfflinePackageJob429,
   GetOfflinePackageJob500,
   GetOfflinePackageJobHeaders,
   GetOfflinePackageManifest200,
   GetOfflinePackageManifest400,
   GetOfflinePackageManifest401,
   GetOfflinePackageManifest404,
+  GetOfflinePackageManifest413,
+  GetOfflinePackageManifest415,
+  GetOfflinePackageManifest429,
   GetOfflinePackageManifest500,
   GetOvertureStatus200,
   GetOvertureStatus400,
   GetOvertureStatus401,
   GetOvertureStatus404,
+  GetOvertureStatus413,
+  GetOvertureStatus415,
+  GetOvertureStatus429,
   GetOvertureStatus500,
   GetSearchIndexStatus200,
   GetSearchIndexStatus400,
   GetSearchIndexStatus401,
   GetSearchIndexStatus404,
+  GetSearchIndexStatus413,
+  GetSearchIndexStatus415,
+  GetSearchIndexStatus429,
   GetSearchIndexStatus500,
   GetStatus200,
   GetStatus400,
@@ -149,38 +227,59 @@ import type {
   GetTransitCatalog401,
   GetTransitCatalog404,
   GetTransitCatalog409,
+  GetTransitCatalog413,
+  GetTransitCatalog415,
+  GetTransitCatalog429,
   GetTransitCatalog500,
   GetTransitOperatorFeed400,
   GetTransitOperatorFeed401,
   GetTransitOperatorFeed410,
+  GetTransitOperatorFeed413,
+  GetTransitOperatorFeed415,
+  GetTransitOperatorFeed429,
   GetTransitOperatorFeed500,
   GetTransitOperatorFeed502,
   GetTransitProfile200,
   GetTransitProfile400,
   GetTransitProfile401,
+  GetTransitProfile413,
+  GetTransitProfile415,
+  GetTransitProfile429,
   GetTransitProfile500,
   GetTransitSources200,
   GetTransitSources400,
   GetTransitSources401,
   GetTransitSources404,
   GetTransitSources409,
+  GetTransitSources413,
+  GetTransitSources415,
+  GetTransitSources429,
   GetTransitSources500,
   GetTransitSourcesParams,
   HeadOfflinePackageArchiveHeaders,
   IngestOverture200,
   IngestOverture400,
   IngestOverture401,
+  IngestOverture413,
+  IngestOverture415,
+  IngestOverture429,
   IngestOverture500,
   IngestOvertureBody,
   Link200,
   Link400,
   Link401,
+  Link413,
+  Link415,
+  Link429,
   Link500,
   LinkBody,
   PreflightTransit200,
   PreflightTransit400,
   PreflightTransit401,
+  PreflightTransit413,
+  PreflightTransit415,
   PreflightTransit422,
+  PreflightTransit429,
   PreflightTransit500,
   PreflightTransitBody,
   PrepareOfflinePackage200,
@@ -189,6 +288,8 @@ import type {
   PrepareOfflinePackage401,
   PrepareOfflinePackage404,
   PrepareOfflinePackage409,
+  PrepareOfflinePackage413,
+  PrepareOfflinePackage415,
   PrepareOfflinePackage429,
   PrepareOfflinePackage500,
   PrepareOfflinePackage503,
@@ -198,57 +299,87 @@ import type {
   ProposeTransitBump400,
   ProposeTransitBump401,
   ProposeTransitBump409,
+  ProposeTransitBump413,
+  ProposeTransitBump415,
+  ProposeTransitBump429,
   ProposeTransitBump500,
   ProposeTransitBump502,
   ProposeTransitBumpBody,
   PullOverture200,
   PullOverture400,
   PullOverture401,
+  PullOverture413,
+  PullOverture415,
+  PullOverture429,
   PullOverture500,
   PullOvertureBody,
   ReloadDatasets200,
   ReloadDatasets400,
   ReloadDatasets401,
+  ReloadDatasets413,
+  ReloadDatasets415,
+  ReloadDatasets429,
   ReloadDatasets500,
   RemoveTransitSource202,
   RemoveTransitSource400,
   RemoveTransitSource401,
   RemoveTransitSource404,
   RemoveTransitSource409,
+  RemoveTransitSource413,
+  RemoveTransitSource415,
+  RemoveTransitSource429,
   RemoveTransitSource500,
   RemoveTransitSourceBody,
   RestartMotis200,
   RestartMotis400,
   RestartMotis401,
+  RestartMotis413,
+  RestartMotis415,
+  RestartMotis429,
   RestartMotis500,
   RestartMotis503,
   ResumeAmbientPlaces202,
   ResumeAmbientPlaces400,
   ResumeAmbientPlaces401,
   ResumeAmbientPlaces409,
+  ResumeAmbientPlaces413,
+  ResumeAmbientPlaces415,
+  ResumeAmbientPlaces429,
   ResumeAmbientPlaces500,
   ResumeAmbientPlacesBody,
   RollbackAmbientPlaces200,
   RollbackAmbientPlaces400,
   RollbackAmbientPlaces401,
   RollbackAmbientPlaces409,
+  RollbackAmbientPlaces413,
+  RollbackAmbientPlaces415,
+  RollbackAmbientPlaces429,
   RollbackAmbientPlaces500,
   SetAmbientPlacesEnabled200,
   SetAmbientPlacesEnabled400,
   SetAmbientPlacesEnabled401,
   SetAmbientPlacesEnabled409,
+  SetAmbientPlacesEnabled413,
+  SetAmbientPlacesEnabled415,
+  SetAmbientPlacesEnabled429,
   SetAmbientPlacesEnabled500,
   SetAmbientPlacesEnabledBody,
   SyncOverture200,
   SyncOverture400,
   SyncOverture401,
+  SyncOverture413,
+  SyncOverture415,
+  SyncOverture429,
   SyncOverture500,
   SyncOvertureBody,
   SyncTransit202,
   SyncTransit400,
   SyncTransit401,
   SyncTransit409,
+  SyncTransit413,
+  SyncTransit415,
   SyncTransit422,
+  SyncTransit429,
   SyncTransit500,
   SyncTransitBody,
 } from "./models";
@@ -322,6 +453,21 @@ export type getAmbientPlacesStatusResponse401 = {
   status: 401;
 };
 
+export type getAmbientPlacesStatusResponse413 = {
+  data: GetAmbientPlacesStatus413;
+  status: 413;
+};
+
+export type getAmbientPlacesStatusResponse415 = {
+  data: GetAmbientPlacesStatus415;
+  status: 415;
+};
+
+export type getAmbientPlacesStatusResponse429 = {
+  data: GetAmbientPlacesStatus429;
+  status: 429;
+};
+
 export type getAmbientPlacesStatusResponse500 = {
   data: GetAmbientPlacesStatus500;
   status: 500;
@@ -333,6 +479,9 @@ export type getAmbientPlacesStatusResponseSuccess = getAmbientPlacesStatusRespon
 export type getAmbientPlacesStatusResponseError = (
   | getAmbientPlacesStatusResponse400
   | getAmbientPlacesStatusResponse401
+  | getAmbientPlacesStatusResponse413
+  | getAmbientPlacesStatusResponse415
+  | getAmbientPlacesStatusResponse429
   | getAmbientPlacesStatusResponse500
 ) & {
   headers: Headers;
@@ -378,6 +527,21 @@ export type buildAmbientPlacesResponse409 = {
   status: 409;
 };
 
+export type buildAmbientPlacesResponse413 = {
+  data: BuildAmbientPlaces413;
+  status: 413;
+};
+
+export type buildAmbientPlacesResponse415 = {
+  data: BuildAmbientPlaces415;
+  status: 415;
+};
+
+export type buildAmbientPlacesResponse429 = {
+  data: BuildAmbientPlaces429;
+  status: 429;
+};
+
 export type buildAmbientPlacesResponse500 = {
   data: BuildAmbientPlaces500;
   status: 500;
@@ -390,6 +554,9 @@ export type buildAmbientPlacesResponseError = (
   | buildAmbientPlacesResponse400
   | buildAmbientPlacesResponse401
   | buildAmbientPlacesResponse409
+  | buildAmbientPlacesResponse413
+  | buildAmbientPlacesResponse415
+  | buildAmbientPlacesResponse429
   | buildAmbientPlacesResponse500
 ) & {
   headers: Headers;
@@ -454,6 +621,21 @@ export type resumeAmbientPlacesResponse409 = {
   status: 409;
 };
 
+export type resumeAmbientPlacesResponse413 = {
+  data: ResumeAmbientPlaces413;
+  status: 413;
+};
+
+export type resumeAmbientPlacesResponse415 = {
+  data: ResumeAmbientPlaces415;
+  status: 415;
+};
+
+export type resumeAmbientPlacesResponse429 = {
+  data: ResumeAmbientPlaces429;
+  status: 429;
+};
+
 export type resumeAmbientPlacesResponse500 = {
   data: ResumeAmbientPlaces500;
   status: 500;
@@ -466,6 +648,9 @@ export type resumeAmbientPlacesResponseError = (
   | resumeAmbientPlacesResponse400
   | resumeAmbientPlacesResponse401
   | resumeAmbientPlacesResponse409
+  | resumeAmbientPlacesResponse413
+  | resumeAmbientPlacesResponse415
+  | resumeAmbientPlacesResponse429
   | resumeAmbientPlacesResponse500
 ) & {
   headers: Headers;
@@ -530,6 +715,21 @@ export type discardAmbientPlacesResponse409 = {
   status: 409;
 };
 
+export type discardAmbientPlacesResponse413 = {
+  data: DiscardAmbientPlaces413;
+  status: 413;
+};
+
+export type discardAmbientPlacesResponse415 = {
+  data: DiscardAmbientPlaces415;
+  status: 415;
+};
+
+export type discardAmbientPlacesResponse429 = {
+  data: DiscardAmbientPlaces429;
+  status: 429;
+};
+
 export type discardAmbientPlacesResponse500 = {
   data: DiscardAmbientPlaces500;
   status: 500;
@@ -542,6 +742,9 @@ export type discardAmbientPlacesResponseError = (
   | discardAmbientPlacesResponse400
   | discardAmbientPlacesResponse401
   | discardAmbientPlacesResponse409
+  | discardAmbientPlacesResponse413
+  | discardAmbientPlacesResponse415
+  | discardAmbientPlacesResponse429
   | discardAmbientPlacesResponse500
 ) & {
   headers: Headers;
@@ -606,6 +809,21 @@ export type setAmbientPlacesEnabledResponse409 = {
   status: 409;
 };
 
+export type setAmbientPlacesEnabledResponse413 = {
+  data: SetAmbientPlacesEnabled413;
+  status: 413;
+};
+
+export type setAmbientPlacesEnabledResponse415 = {
+  data: SetAmbientPlacesEnabled415;
+  status: 415;
+};
+
+export type setAmbientPlacesEnabledResponse429 = {
+  data: SetAmbientPlacesEnabled429;
+  status: 429;
+};
+
 export type setAmbientPlacesEnabledResponse500 = {
   data: SetAmbientPlacesEnabled500;
   status: 500;
@@ -618,6 +836,9 @@ export type setAmbientPlacesEnabledResponseError = (
   | setAmbientPlacesEnabledResponse400
   | setAmbientPlacesEnabledResponse401
   | setAmbientPlacesEnabledResponse409
+  | setAmbientPlacesEnabledResponse413
+  | setAmbientPlacesEnabledResponse415
+  | setAmbientPlacesEnabledResponse429
   | setAmbientPlacesEnabledResponse500
 ) & {
   headers: Headers;
@@ -685,6 +906,21 @@ export type rollbackAmbientPlacesResponse409 = {
   status: 409;
 };
 
+export type rollbackAmbientPlacesResponse413 = {
+  data: RollbackAmbientPlaces413;
+  status: 413;
+};
+
+export type rollbackAmbientPlacesResponse415 = {
+  data: RollbackAmbientPlaces415;
+  status: 415;
+};
+
+export type rollbackAmbientPlacesResponse429 = {
+  data: RollbackAmbientPlaces429;
+  status: 429;
+};
+
 export type rollbackAmbientPlacesResponse500 = {
   data: RollbackAmbientPlaces500;
   status: 500;
@@ -697,6 +933,9 @@ export type rollbackAmbientPlacesResponseError = (
   | rollbackAmbientPlacesResponse400
   | rollbackAmbientPlacesResponse401
   | rollbackAmbientPlacesResponse409
+  | rollbackAmbientPlacesResponse413
+  | rollbackAmbientPlacesResponse415
+  | rollbackAmbientPlacesResponse429
   | rollbackAmbientPlacesResponse500
 ) & {
   headers: Headers;
@@ -742,6 +981,21 @@ export type getCoverageEvidenceResponse409 = {
   status: 409;
 };
 
+export type getCoverageEvidenceResponse413 = {
+  data: GetCoverageEvidence413;
+  status: 413;
+};
+
+export type getCoverageEvidenceResponse415 = {
+  data: GetCoverageEvidence415;
+  status: 415;
+};
+
+export type getCoverageEvidenceResponse429 = {
+  data: GetCoverageEvidence429;
+  status: 429;
+};
+
 export type getCoverageEvidenceResponse500 = {
   data: GetCoverageEvidence500;
   status: 500;
@@ -759,6 +1013,9 @@ export type getCoverageEvidenceResponseError = (
   | getCoverageEvidenceResponse400
   | getCoverageEvidenceResponse401
   | getCoverageEvidenceResponse409
+  | getCoverageEvidenceResponse413
+  | getCoverageEvidenceResponse415
+  | getCoverageEvidenceResponse429
   | getCoverageEvidenceResponse500
   | getCoverageEvidenceResponse503
 ) & {
@@ -813,6 +1070,21 @@ export type getOfflinePackageCapabilityResponse401 = {
   status: 401;
 };
 
+export type getOfflinePackageCapabilityResponse413 = {
+  data: GetOfflinePackageCapability413;
+  status: 413;
+};
+
+export type getOfflinePackageCapabilityResponse415 = {
+  data: GetOfflinePackageCapability415;
+  status: 415;
+};
+
+export type getOfflinePackageCapabilityResponse429 = {
+  data: GetOfflinePackageCapability429;
+  status: 429;
+};
+
 export type getOfflinePackageCapabilityResponse500 = {
   data: GetOfflinePackageCapability500;
   status: 500;
@@ -824,6 +1096,9 @@ export type getOfflinePackageCapabilityResponseSuccess = getOfflinePackageCapabi
 export type getOfflinePackageCapabilityResponseError = (
   | getOfflinePackageCapabilityResponse400
   | getOfflinePackageCapabilityResponse401
+  | getOfflinePackageCapabilityResponse413
+  | getOfflinePackageCapabilityResponse415
+  | getOfflinePackageCapabilityResponse429
   | getOfflinePackageCapabilityResponse500
 ) & {
   headers: Headers;
@@ -879,6 +1154,16 @@ export type prepareOfflinePackageResponse409 = {
   status: 409;
 };
 
+export type prepareOfflinePackageResponse413 = {
+  data: PrepareOfflinePackage413;
+  status: 413;
+};
+
+export type prepareOfflinePackageResponse415 = {
+  data: PrepareOfflinePackage415;
+  status: 415;
+};
+
 export type prepareOfflinePackageResponse429 = {
   data: PrepareOfflinePackage429;
   status: 429;
@@ -905,6 +1190,8 @@ export type prepareOfflinePackageResponseError = (
   | prepareOfflinePackageResponse401
   | prepareOfflinePackageResponse404
   | prepareOfflinePackageResponse409
+  | prepareOfflinePackageResponse413
+  | prepareOfflinePackageResponse415
   | prepareOfflinePackageResponse429
   | prepareOfflinePackageResponse500
   | prepareOfflinePackageResponse503
@@ -975,6 +1262,21 @@ export type getOfflinePackageJobResponse404 = {
   status: 404;
 };
 
+export type getOfflinePackageJobResponse413 = {
+  data: GetOfflinePackageJob413;
+  status: 413;
+};
+
+export type getOfflinePackageJobResponse415 = {
+  data: GetOfflinePackageJob415;
+  status: 415;
+};
+
+export type getOfflinePackageJobResponse429 = {
+  data: GetOfflinePackageJob429;
+  status: 429;
+};
+
 export type getOfflinePackageJobResponse500 = {
   data: GetOfflinePackageJob500;
   status: 500;
@@ -987,6 +1289,9 @@ export type getOfflinePackageJobResponseError = (
   | getOfflinePackageJobResponse400
   | getOfflinePackageJobResponse401
   | getOfflinePackageJobResponse404
+  | getOfflinePackageJobResponse413
+  | getOfflinePackageJobResponse415
+  | getOfflinePackageJobResponse429
   | getOfflinePackageJobResponse500
 ) & {
   headers: Headers;
@@ -1054,6 +1359,21 @@ export type getOfflinePackageManifestResponse404 = {
   status: 404;
 };
 
+export type getOfflinePackageManifestResponse413 = {
+  data: GetOfflinePackageManifest413;
+  status: 413;
+};
+
+export type getOfflinePackageManifestResponse415 = {
+  data: GetOfflinePackageManifest415;
+  status: 415;
+};
+
+export type getOfflinePackageManifestResponse429 = {
+  data: GetOfflinePackageManifest429;
+  status: 429;
+};
+
 export type getOfflinePackageManifestResponse500 = {
   data: GetOfflinePackageManifest500;
   status: 500;
@@ -1066,6 +1386,9 @@ export type getOfflinePackageManifestResponseError = (
   | getOfflinePackageManifestResponse400
   | getOfflinePackageManifestResponse401
   | getOfflinePackageManifestResponse404
+  | getOfflinePackageManifestResponse413
+  | getOfflinePackageManifestResponse415
+  | getOfflinePackageManifestResponse429
   | getOfflinePackageManifestResponse500
 ) & {
   headers: Headers;
@@ -1112,6 +1435,21 @@ export type getOfflineGlyphCatalogResponse404 = {
   status: 404;
 };
 
+export type getOfflineGlyphCatalogResponse413 = {
+  data: GetOfflineGlyphCatalog413;
+  status: 413;
+};
+
+export type getOfflineGlyphCatalogResponse415 = {
+  data: GetOfflineGlyphCatalog415;
+  status: 415;
+};
+
+export type getOfflineGlyphCatalogResponse429 = {
+  data: GetOfflineGlyphCatalog429;
+  status: 429;
+};
+
 export type getOfflineGlyphCatalogResponse500 = {
   data: GetOfflineGlyphCatalog500;
   status: 500;
@@ -1124,6 +1462,9 @@ export type getOfflineGlyphCatalogResponseError = (
   | getOfflineGlyphCatalogResponse400
   | getOfflineGlyphCatalogResponse401
   | getOfflineGlyphCatalogResponse404
+  | getOfflineGlyphCatalogResponse413
+  | getOfflineGlyphCatalogResponse415
+  | getOfflineGlyphCatalogResponse429
   | getOfflineGlyphCatalogResponse500
 ) & {
   headers: Headers;
@@ -1170,6 +1511,11 @@ export type headOfflineGlyphResponse404 = {
   status: 404;
 };
 
+export type headOfflineGlyphResponse429 = {
+  data: void;
+  status: 429;
+};
+
 export type headOfflineGlyphResponse500 = {
   data: void;
   status: 500;
@@ -1182,6 +1528,7 @@ export type headOfflineGlyphResponseError = (
   | headOfflineGlyphResponse400
   | headOfflineGlyphResponse401
   | headOfflineGlyphResponse404
+  | headOfflineGlyphResponse429
   | headOfflineGlyphResponse500
 ) & {
   headers: Headers;
@@ -1230,6 +1577,21 @@ export type getOfflineGlyphResponse404 = {
   status: 404;
 };
 
+export type getOfflineGlyphResponse413 = {
+  data: GetOfflineGlyph413;
+  status: 413;
+};
+
+export type getOfflineGlyphResponse415 = {
+  data: GetOfflineGlyph415;
+  status: 415;
+};
+
+export type getOfflineGlyphResponse429 = {
+  data: GetOfflineGlyph429;
+  status: 429;
+};
+
 export type getOfflineGlyphResponse500 = {
   data: GetOfflineGlyph500;
   status: 500;
@@ -1242,6 +1604,9 @@ export type getOfflineGlyphResponseError = (
   | getOfflineGlyphResponse400
   | getOfflineGlyphResponse401
   | getOfflineGlyphResponse404
+  | getOfflineGlyphResponse413
+  | getOfflineGlyphResponse415
+  | getOfflineGlyphResponse429
   | getOfflineGlyphResponse500
 ) & {
   headers: Headers;
@@ -1298,6 +1663,11 @@ export type headOfflinePackageArchiveResponse416 = {
   status: 416;
 };
 
+export type headOfflinePackageArchiveResponse429 = {
+  data: void;
+  status: 429;
+};
+
 export type headOfflinePackageArchiveResponse500 = {
   data: void;
   status: 500;
@@ -1314,6 +1684,7 @@ export type headOfflinePackageArchiveResponseError = (
   | headOfflinePackageArchiveResponse401
   | headOfflinePackageArchiveResponse404
   | headOfflinePackageArchiveResponse416
+  | headOfflinePackageArchiveResponse429
   | headOfflinePackageArchiveResponse500
 ) & {
   headers: Headers;
@@ -1386,9 +1757,24 @@ export type getOfflinePackageArchiveResponse404 = {
   status: 404;
 };
 
+export type getOfflinePackageArchiveResponse413 = {
+  data: GetOfflinePackageArchive413;
+  status: 413;
+};
+
+export type getOfflinePackageArchiveResponse415 = {
+  data: GetOfflinePackageArchive415;
+  status: 415;
+};
+
 export type getOfflinePackageArchiveResponse416 = {
   data: void;
   status: 416;
+};
+
+export type getOfflinePackageArchiveResponse429 = {
+  data: GetOfflinePackageArchive429;
+  status: 429;
 };
 
 export type getOfflinePackageArchiveResponse500 = {
@@ -1406,7 +1792,10 @@ export type getOfflinePackageArchiveResponseError = (
   | getOfflinePackageArchiveResponse400
   | getOfflinePackageArchiveResponse401
   | getOfflinePackageArchiveResponse404
+  | getOfflinePackageArchiveResponse413
+  | getOfflinePackageArchiveResponse415
   | getOfflinePackageArchiveResponse416
+  | getOfflinePackageArchiveResponse429
   | getOfflinePackageArchiveResponse500
 ) & {
   headers: Headers;
@@ -1511,6 +1900,21 @@ export type getTransitOperatorFeedResponse410 = {
   status: 410;
 };
 
+export type getTransitOperatorFeedResponse413 = {
+  data: GetTransitOperatorFeed413;
+  status: 413;
+};
+
+export type getTransitOperatorFeedResponse415 = {
+  data: GetTransitOperatorFeed415;
+  status: 415;
+};
+
+export type getTransitOperatorFeedResponse429 = {
+  data: GetTransitOperatorFeed429;
+  status: 429;
+};
+
 export type getTransitOperatorFeedResponse500 = {
   data: GetTransitOperatorFeed500;
   status: 500;
@@ -1528,6 +1932,9 @@ export type getTransitOperatorFeedResponseError = (
   | getTransitOperatorFeedResponse400
   | getTransitOperatorFeedResponse401
   | getTransitOperatorFeedResponse410
+  | getTransitOperatorFeedResponse413
+  | getTransitOperatorFeedResponse415
+  | getTransitOperatorFeedResponse429
   | getTransitOperatorFeedResponse500
   | getTransitOperatorFeedResponse502
 ) & {
@@ -1616,6 +2023,21 @@ export type getDatasetsResponse401 = {
   status: 401;
 };
 
+export type getDatasetsResponse413 = {
+  data: GetDatasets413;
+  status: 413;
+};
+
+export type getDatasetsResponse415 = {
+  data: GetDatasets415;
+  status: 415;
+};
+
+export type getDatasetsResponse429 = {
+  data: GetDatasets429;
+  status: 429;
+};
+
 export type getDatasetsResponse500 = {
   data: GetDatasets500;
   status: 500;
@@ -1627,6 +2049,9 @@ export type getDatasetsResponseSuccess = getDatasetsResponse200 & {
 export type getDatasetsResponseError = (
   | getDatasetsResponse400
   | getDatasetsResponse401
+  | getDatasetsResponse413
+  | getDatasetsResponse415
+  | getDatasetsResponse429
   | getDatasetsResponse500
 ) & {
   headers: Headers;
@@ -1662,6 +2087,21 @@ export type getTransitProfileResponse401 = {
   status: 401;
 };
 
+export type getTransitProfileResponse413 = {
+  data: GetTransitProfile413;
+  status: 413;
+};
+
+export type getTransitProfileResponse415 = {
+  data: GetTransitProfile415;
+  status: 415;
+};
+
+export type getTransitProfileResponse429 = {
+  data: GetTransitProfile429;
+  status: 429;
+};
+
 export type getTransitProfileResponse500 = {
   data: GetTransitProfile500;
   status: 500;
@@ -1673,6 +2113,9 @@ export type getTransitProfileResponseSuccess = getTransitProfileResponse200 & {
 export type getTransitProfileResponseError = (
   | getTransitProfileResponse400
   | getTransitProfileResponse401
+  | getTransitProfileResponse413
+  | getTransitProfileResponse415
+  | getTransitProfileResponse429
   | getTransitProfileResponse500
 ) & {
   headers: Headers;
@@ -1720,6 +2163,21 @@ export type getTransitSourcesResponse409 = {
   status: 409;
 };
 
+export type getTransitSourcesResponse413 = {
+  data: GetTransitSources413;
+  status: 413;
+};
+
+export type getTransitSourcesResponse415 = {
+  data: GetTransitSources415;
+  status: 415;
+};
+
+export type getTransitSourcesResponse429 = {
+  data: GetTransitSources429;
+  status: 429;
+};
+
 export type getTransitSourcesResponse500 = {
   data: GetTransitSources500;
   status: 500;
@@ -1733,6 +2191,9 @@ export type getTransitSourcesResponseError = (
   | getTransitSourcesResponse401
   | getTransitSourcesResponse404
   | getTransitSourcesResponse409
+  | getTransitSourcesResponse413
+  | getTransitSourcesResponse415
+  | getTransitSourcesResponse429
   | getTransitSourcesResponse500
 ) & {
   headers: Headers;
@@ -1793,6 +2254,21 @@ export type addTransitSourceResponse409 = {
   status: 409;
 };
 
+export type addTransitSourceResponse413 = {
+  data: AddTransitSource413;
+  status: 413;
+};
+
+export type addTransitSourceResponse415 = {
+  data: AddTransitSource415;
+  status: 415;
+};
+
+export type addTransitSourceResponse429 = {
+  data: AddTransitSource429;
+  status: 429;
+};
+
 export type addTransitSourceResponse500 = {
   data: AddTransitSource500;
   status: 500;
@@ -1806,6 +2282,9 @@ export type addTransitSourceResponseError = (
   | addTransitSourceResponse401
   | addTransitSourceResponse404
   | addTransitSourceResponse409
+  | addTransitSourceResponse413
+  | addTransitSourceResponse415
+  | addTransitSourceResponse429
   | addTransitSourceResponse500
 ) & {
   headers: Headers;
@@ -1875,6 +2354,21 @@ export type getTransitCatalogResponse409 = {
   status: 409;
 };
 
+export type getTransitCatalogResponse413 = {
+  data: GetTransitCatalog413;
+  status: 413;
+};
+
+export type getTransitCatalogResponse415 = {
+  data: GetTransitCatalog415;
+  status: 415;
+};
+
+export type getTransitCatalogResponse429 = {
+  data: GetTransitCatalog429;
+  status: 429;
+};
+
 export type getTransitCatalogResponse500 = {
   data: GetTransitCatalog500;
   status: 500;
@@ -1888,6 +2382,9 @@ export type getTransitCatalogResponseError = (
   | getTransitCatalogResponse401
   | getTransitCatalogResponse404
   | getTransitCatalogResponse409
+  | getTransitCatalogResponse413
+  | getTransitCatalogResponse415
+  | getTransitCatalogResponse429
   | getTransitCatalogResponse500
 ) & {
   headers: Headers;
@@ -1935,6 +2432,21 @@ export type removeTransitSourceResponse409 = {
   status: 409;
 };
 
+export type removeTransitSourceResponse413 = {
+  data: RemoveTransitSource413;
+  status: 413;
+};
+
+export type removeTransitSourceResponse415 = {
+  data: RemoveTransitSource415;
+  status: 415;
+};
+
+export type removeTransitSourceResponse429 = {
+  data: RemoveTransitSource429;
+  status: 429;
+};
+
 export type removeTransitSourceResponse500 = {
   data: RemoveTransitSource500;
   status: 500;
@@ -1948,6 +2460,9 @@ export type removeTransitSourceResponseError = (
   | removeTransitSourceResponse401
   | removeTransitSourceResponse404
   | removeTransitSourceResponse409
+  | removeTransitSourceResponse413
+  | removeTransitSourceResponse415
+  | removeTransitSourceResponse429
   | removeTransitSourceResponse500
 ) & {
   headers: Headers;
@@ -2021,6 +2536,21 @@ export type enableTransitSourceResponse409 = {
   status: 409;
 };
 
+export type enableTransitSourceResponse413 = {
+  data: EnableTransitSource413;
+  status: 413;
+};
+
+export type enableTransitSourceResponse415 = {
+  data: EnableTransitSource415;
+  status: 415;
+};
+
+export type enableTransitSourceResponse429 = {
+  data: EnableTransitSource429;
+  status: 429;
+};
+
 export type enableTransitSourceResponse500 = {
   data: EnableTransitSource500;
   status: 500;
@@ -2034,6 +2564,9 @@ export type enableTransitSourceResponseError = (
   | enableTransitSourceResponse401
   | enableTransitSourceResponse404
   | enableTransitSourceResponse409
+  | enableTransitSourceResponse413
+  | enableTransitSourceResponse415
+  | enableTransitSourceResponse429
   | enableTransitSourceResponse500
 ) & {
   headers: Headers;
@@ -2097,9 +2630,24 @@ export type preflightTransitResponse401 = {
   status: 401;
 };
 
+export type preflightTransitResponse413 = {
+  data: PreflightTransit413;
+  status: 413;
+};
+
+export type preflightTransitResponse415 = {
+  data: PreflightTransit415;
+  status: 415;
+};
+
 export type preflightTransitResponse422 = {
   data: PreflightTransit422;
   status: 422;
+};
+
+export type preflightTransitResponse429 = {
+  data: PreflightTransit429;
+  status: 429;
 };
 
 export type preflightTransitResponse500 = {
@@ -2113,7 +2661,10 @@ export type preflightTransitResponseSuccess = preflightTransitResponse200 & {
 export type preflightTransitResponseError = (
   | preflightTransitResponse400
   | preflightTransitResponse401
+  | preflightTransitResponse413
+  | preflightTransitResponse415
   | preflightTransitResponse422
+  | preflightTransitResponse429
   | preflightTransitResponse500
 ) & {
   headers: Headers;
@@ -2173,6 +2724,21 @@ export type reloadDatasetsResponse401 = {
   status: 401;
 };
 
+export type reloadDatasetsResponse413 = {
+  data: ReloadDatasets413;
+  status: 413;
+};
+
+export type reloadDatasetsResponse415 = {
+  data: ReloadDatasets415;
+  status: 415;
+};
+
+export type reloadDatasetsResponse429 = {
+  data: ReloadDatasets429;
+  status: 429;
+};
+
 export type reloadDatasetsResponse500 = {
   data: ReloadDatasets500;
   status: 500;
@@ -2184,6 +2750,9 @@ export type reloadDatasetsResponseSuccess = reloadDatasetsResponse200 & {
 export type reloadDatasetsResponseError = (
   | reloadDatasetsResponse400
   | reloadDatasetsResponse401
+  | reloadDatasetsResponse413
+  | reloadDatasetsResponse415
+  | reloadDatasetsResponse429
   | reloadDatasetsResponse500
 ) & {
   headers: Headers;
@@ -2224,6 +2793,21 @@ export type bakePredictedTrafficResponse409 = {
   status: 409;
 };
 
+export type bakePredictedTrafficResponse413 = {
+  data: BakePredictedTraffic413;
+  status: 413;
+};
+
+export type bakePredictedTrafficResponse415 = {
+  data: BakePredictedTraffic415;
+  status: 415;
+};
+
+export type bakePredictedTrafficResponse429 = {
+  data: BakePredictedTraffic429;
+  status: 429;
+};
+
 export type bakePredictedTrafficResponse500 = {
   data: BakePredictedTraffic500;
   status: 500;
@@ -2241,6 +2825,9 @@ export type bakePredictedTrafficResponseError = (
   | bakePredictedTrafficResponse400
   | bakePredictedTrafficResponse401
   | bakePredictedTrafficResponse409
+  | bakePredictedTrafficResponse413
+  | bakePredictedTrafficResponse415
+  | bakePredictedTrafficResponse429
   | bakePredictedTrafficResponse500
   | bakePredictedTrafficResponse501
 ) & {
@@ -2279,6 +2866,21 @@ export type getAppliedTrafficConditionsResponse401 = {
   status: 401;
 };
 
+export type getAppliedTrafficConditionsResponse413 = {
+  data: GetAppliedTrafficConditions413;
+  status: 413;
+};
+
+export type getAppliedTrafficConditionsResponse415 = {
+  data: GetAppliedTrafficConditions415;
+  status: 415;
+};
+
+export type getAppliedTrafficConditionsResponse429 = {
+  data: GetAppliedTrafficConditions429;
+  status: 429;
+};
+
 export type getAppliedTrafficConditionsResponse500 = {
   data: GetAppliedTrafficConditions500;
   status: 500;
@@ -2295,6 +2897,9 @@ export type getAppliedTrafficConditionsResponseSuccess = getAppliedTrafficCondit
 export type getAppliedTrafficConditionsResponseError = (
   | getAppliedTrafficConditionsResponse400
   | getAppliedTrafficConditionsResponse401
+  | getAppliedTrafficConditionsResponse413
+  | getAppliedTrafficConditionsResponse415
+  | getAppliedTrafficConditionsResponse429
   | getAppliedTrafficConditionsResponse500
   | getAppliedTrafficConditionsResponse501
 ) & {
@@ -2336,6 +2941,21 @@ export type downloadOsmResponse401 = {
   status: 401;
 };
 
+export type downloadOsmResponse413 = {
+  data: DownloadOsm413;
+  status: 413;
+};
+
+export type downloadOsmResponse415 = {
+  data: DownloadOsm415;
+  status: 415;
+};
+
+export type downloadOsmResponse429 = {
+  data: DownloadOsm429;
+  status: 429;
+};
+
 export type downloadOsmResponse500 = {
   data: DownloadOsm500;
   status: 500;
@@ -2347,6 +2967,9 @@ export type downloadOsmResponseSuccess = downloadOsmResponse200 & {
 export type downloadOsmResponseError = (
   | downloadOsmResponse400
   | downloadOsmResponse401
+  | downloadOsmResponse413
+  | downloadOsmResponse415
+  | downloadOsmResponse429
   | downloadOsmResponse500
 ) & {
   headers: Headers;
@@ -2409,6 +3032,21 @@ export type getSearchIndexStatusResponse404 = {
   status: 404;
 };
 
+export type getSearchIndexStatusResponse413 = {
+  data: GetSearchIndexStatus413;
+  status: 413;
+};
+
+export type getSearchIndexStatusResponse415 = {
+  data: GetSearchIndexStatus415;
+  status: 415;
+};
+
+export type getSearchIndexStatusResponse429 = {
+  data: GetSearchIndexStatus429;
+  status: 429;
+};
+
 export type getSearchIndexStatusResponse500 = {
   data: GetSearchIndexStatus500;
   status: 500;
@@ -2421,6 +3059,9 @@ export type getSearchIndexStatusResponseError = (
   | getSearchIndexStatusResponse400
   | getSearchIndexStatusResponse401
   | getSearchIndexStatusResponse404
+  | getSearchIndexStatusResponse413
+  | getSearchIndexStatusResponse415
+  | getSearchIndexStatusResponse429
   | getSearchIndexStatusResponse500
 ) & {
   headers: Headers;
@@ -2458,6 +3099,21 @@ export type buildSearchIndexResponse401 = {
   status: 401;
 };
 
+export type buildSearchIndexResponse413 = {
+  data: BuildSearchIndex413;
+  status: 413;
+};
+
+export type buildSearchIndexResponse415 = {
+  data: BuildSearchIndex415;
+  status: 415;
+};
+
+export type buildSearchIndexResponse429 = {
+  data: BuildSearchIndex429;
+  status: 429;
+};
+
 export type buildSearchIndexResponse500 = {
   data: BuildSearchIndex500;
   status: 500;
@@ -2469,6 +3125,9 @@ export type buildSearchIndexResponseSuccess = buildSearchIndexResponse200 & {
 export type buildSearchIndexResponseError = (
   | buildSearchIndexResponse400
   | buildSearchIndexResponse401
+  | buildSearchIndexResponse413
+  | buildSearchIndexResponse415
+  | buildSearchIndexResponse429
   | buildSearchIndexResponse500
 ) & {
   headers: Headers;
@@ -2533,6 +3192,21 @@ export type getNotablePlacesStatusResponse404 = {
   status: 404;
 };
 
+export type getNotablePlacesStatusResponse413 = {
+  data: GetNotablePlacesStatus413;
+  status: 413;
+};
+
+export type getNotablePlacesStatusResponse415 = {
+  data: GetNotablePlacesStatus415;
+  status: 415;
+};
+
+export type getNotablePlacesStatusResponse429 = {
+  data: GetNotablePlacesStatus429;
+  status: 429;
+};
+
 export type getNotablePlacesStatusResponse500 = {
   data: GetNotablePlacesStatus500;
   status: 500;
@@ -2545,6 +3219,9 @@ export type getNotablePlacesStatusResponseError = (
   | getNotablePlacesStatusResponse400
   | getNotablePlacesStatusResponse401
   | getNotablePlacesStatusResponse404
+  | getNotablePlacesStatusResponse413
+  | getNotablePlacesStatusResponse415
+  | getNotablePlacesStatusResponse429
   | getNotablePlacesStatusResponse500
 ) & {
   headers: Headers;
@@ -2585,6 +3262,21 @@ export type buildNotablePlacesResponse401 = {
   status: 401;
 };
 
+export type buildNotablePlacesResponse413 = {
+  data: BuildNotablePlaces413;
+  status: 413;
+};
+
+export type buildNotablePlacesResponse415 = {
+  data: BuildNotablePlaces415;
+  status: 415;
+};
+
+export type buildNotablePlacesResponse429 = {
+  data: BuildNotablePlaces429;
+  status: 429;
+};
+
 export type buildNotablePlacesResponse500 = {
   data: BuildNotablePlaces500;
   status: 500;
@@ -2596,6 +3288,9 @@ export type buildNotablePlacesResponseSuccess = buildNotablePlacesResponse200 & 
 export type buildNotablePlacesResponseError = (
   | buildNotablePlacesResponse400
   | buildNotablePlacesResponse401
+  | buildNotablePlacesResponse413
+  | buildNotablePlacesResponse415
+  | buildNotablePlacesResponse429
   | buildNotablePlacesResponse500
 ) & {
   headers: Headers;
@@ -2633,6 +3328,21 @@ export type downloadFontsResponse401 = {
   status: 401;
 };
 
+export type downloadFontsResponse413 = {
+  data: DownloadFonts413;
+  status: 413;
+};
+
+export type downloadFontsResponse415 = {
+  data: DownloadFonts415;
+  status: 415;
+};
+
+export type downloadFontsResponse429 = {
+  data: DownloadFonts429;
+  status: 429;
+};
+
 export type downloadFontsResponse500 = {
   data: DownloadFonts500;
   status: 500;
@@ -2644,6 +3354,9 @@ export type downloadFontsResponseSuccess = downloadFontsResponse200 & {
 export type downloadFontsResponseError = (
   | downloadFontsResponse400
   | downloadFontsResponse401
+  | downloadFontsResponse413
+  | downloadFontsResponse415
+  | downloadFontsResponse429
   | downloadFontsResponse500
 ) & {
   headers: Headers;
@@ -2679,6 +3392,21 @@ export type linkResponse401 = {
   status: 401;
 };
 
+export type linkResponse413 = {
+  data: Link413;
+  status: 413;
+};
+
+export type linkResponse415 = {
+  data: Link415;
+  status: 415;
+};
+
+export type linkResponse429 = {
+  data: Link429;
+  status: 429;
+};
+
 export type linkResponse500 = {
   data: Link500;
   status: 500;
@@ -2687,7 +3415,14 @@ export type linkResponse500 = {
 export type linkResponseSuccess = linkResponse200 & {
   headers: Headers;
 };
-export type linkResponseError = (linkResponse400 | linkResponse401 | linkResponse500) & {
+export type linkResponseError = (
+  | linkResponse400
+  | linkResponse401
+  | linkResponse413
+  | linkResponse415
+  | linkResponse429
+  | linkResponse500
+) & {
   headers: Headers;
 };
 
@@ -2743,6 +3478,21 @@ export type convertOverpassResponse401 = {
   status: 401;
 };
 
+export type convertOverpassResponse413 = {
+  data: ConvertOverpass413;
+  status: 413;
+};
+
+export type convertOverpassResponse415 = {
+  data: ConvertOverpass415;
+  status: 415;
+};
+
+export type convertOverpassResponse429 = {
+  data: ConvertOverpass429;
+  status: 429;
+};
+
 export type convertOverpassResponse500 = {
   data: ConvertOverpass500;
   status: 500;
@@ -2754,6 +3504,9 @@ export type convertOverpassResponseSuccess = convertOverpassResponse200 & {
 export type convertOverpassResponseError = (
   | convertOverpassResponse400
   | convertOverpassResponse401
+  | convertOverpassResponse413
+  | convertOverpassResponse415
+  | convertOverpassResponse429
   | convertOverpassResponse500
 ) & {
   headers: Headers;
@@ -2811,6 +3564,21 @@ export type pullOvertureResponse401 = {
   status: 401;
 };
 
+export type pullOvertureResponse413 = {
+  data: PullOverture413;
+  status: 413;
+};
+
+export type pullOvertureResponse415 = {
+  data: PullOverture415;
+  status: 415;
+};
+
+export type pullOvertureResponse429 = {
+  data: PullOverture429;
+  status: 429;
+};
+
 export type pullOvertureResponse500 = {
   data: PullOverture500;
   status: 500;
@@ -2822,6 +3590,9 @@ export type pullOvertureResponseSuccess = pullOvertureResponse200 & {
 export type pullOvertureResponseError = (
   | pullOvertureResponse400
   | pullOvertureResponse401
+  | pullOvertureResponse413
+  | pullOvertureResponse415
+  | pullOvertureResponse429
   | pullOvertureResponse500
 ) & {
   headers: Headers;
@@ -2884,6 +3655,21 @@ export type getOvertureStatusResponse404 = {
   status: 404;
 };
 
+export type getOvertureStatusResponse413 = {
+  data: GetOvertureStatus413;
+  status: 413;
+};
+
+export type getOvertureStatusResponse415 = {
+  data: GetOvertureStatus415;
+  status: 415;
+};
+
+export type getOvertureStatusResponse429 = {
+  data: GetOvertureStatus429;
+  status: 429;
+};
+
 export type getOvertureStatusResponse500 = {
   data: GetOvertureStatus500;
   status: 500;
@@ -2896,6 +3682,9 @@ export type getOvertureStatusResponseError = (
   | getOvertureStatusResponse400
   | getOvertureStatusResponse401
   | getOvertureStatusResponse404
+  | getOvertureStatusResponse413
+  | getOvertureStatusResponse415
+  | getOvertureStatusResponse429
   | getOvertureStatusResponse500
 ) & {
   headers: Headers;
@@ -2933,6 +3722,21 @@ export type syncOvertureResponse401 = {
   status: 401;
 };
 
+export type syncOvertureResponse413 = {
+  data: SyncOverture413;
+  status: 413;
+};
+
+export type syncOvertureResponse415 = {
+  data: SyncOverture415;
+  status: 415;
+};
+
+export type syncOvertureResponse429 = {
+  data: SyncOverture429;
+  status: 429;
+};
+
 export type syncOvertureResponse500 = {
   data: SyncOverture500;
   status: 500;
@@ -2944,6 +3748,9 @@ export type syncOvertureResponseSuccess = syncOvertureResponse200 & {
 export type syncOvertureResponseError = (
   | syncOvertureResponse400
   | syncOvertureResponse401
+  | syncOvertureResponse413
+  | syncOvertureResponse415
+  | syncOvertureResponse429
   | syncOvertureResponse500
 ) & {
   headers: Headers;
@@ -3001,6 +3808,21 @@ export type ingestOvertureResponse401 = {
   status: 401;
 };
 
+export type ingestOvertureResponse413 = {
+  data: IngestOverture413;
+  status: 413;
+};
+
+export type ingestOvertureResponse415 = {
+  data: IngestOverture415;
+  status: 415;
+};
+
+export type ingestOvertureResponse429 = {
+  data: IngestOverture429;
+  status: 429;
+};
+
 export type ingestOvertureResponse500 = {
   data: IngestOverture500;
   status: 500;
@@ -3012,6 +3834,9 @@ export type ingestOvertureResponseSuccess = ingestOvertureResponse200 & {
 export type ingestOvertureResponseError = (
   | ingestOvertureResponse400
   | ingestOvertureResponse401
+  | ingestOvertureResponse413
+  | ingestOvertureResponse415
+  | ingestOvertureResponse429
   | ingestOvertureResponse500
 ) & {
   headers: Headers;
@@ -3069,6 +3894,21 @@ export type extractOvertureResponse401 = {
   status: 401;
 };
 
+export type extractOvertureResponse413 = {
+  data: ExtractOverture413;
+  status: 413;
+};
+
+export type extractOvertureResponse415 = {
+  data: ExtractOverture415;
+  status: 415;
+};
+
+export type extractOvertureResponse429 = {
+  data: ExtractOverture429;
+  status: 429;
+};
+
 export type extractOvertureResponse500 = {
   data: ExtractOverture500;
   status: 500;
@@ -3080,6 +3920,9 @@ export type extractOvertureResponseSuccess = extractOvertureResponse200 & {
 export type extractOvertureResponseError = (
   | extractOvertureResponse400
   | extractOvertureResponse401
+  | extractOvertureResponse413
+  | extractOvertureResponse415
+  | extractOvertureResponse429
   | extractOvertureResponse500
 ) & {
   headers: Headers;
@@ -3137,6 +3980,21 @@ export type conflateOvertureResponse401 = {
   status: 401;
 };
 
+export type conflateOvertureResponse413 = {
+  data: ConflateOverture413;
+  status: 413;
+};
+
+export type conflateOvertureResponse415 = {
+  data: ConflateOverture415;
+  status: 415;
+};
+
+export type conflateOvertureResponse429 = {
+  data: ConflateOverture429;
+  status: 429;
+};
+
 export type conflateOvertureResponse500 = {
   data: ConflateOverture500;
   status: 500;
@@ -3148,6 +4006,9 @@ export type conflateOvertureResponseSuccess = conflateOvertureResponse200 & {
 export type conflateOvertureResponseError = (
   | conflateOvertureResponse400
   | conflateOvertureResponse401
+  | conflateOvertureResponse413
+  | conflateOvertureResponse415
+  | conflateOvertureResponse429
   | conflateOvertureResponse500
 ) & {
   headers: Headers;
@@ -3212,9 +4073,24 @@ export type syncTransitResponse409 = {
   status: 409;
 };
 
+export type syncTransitResponse413 = {
+  data: SyncTransit413;
+  status: 413;
+};
+
+export type syncTransitResponse415 = {
+  data: SyncTransit415;
+  status: 415;
+};
+
 export type syncTransitResponse422 = {
   data: SyncTransit422;
   status: 422;
+};
+
+export type syncTransitResponse429 = {
+  data: SyncTransit429;
+  status: 429;
 };
 
 export type syncTransitResponse500 = {
@@ -3229,7 +4105,10 @@ export type syncTransitResponseError = (
   | syncTransitResponse400
   | syncTransitResponse401
   | syncTransitResponse409
+  | syncTransitResponse413
+  | syncTransitResponse415
   | syncTransitResponse422
+  | syncTransitResponse429
   | syncTransitResponse500
 ) & {
   headers: Headers;
@@ -3287,6 +4166,21 @@ export type restartMotisResponse401 = {
   status: 401;
 };
 
+export type restartMotisResponse413 = {
+  data: RestartMotis413;
+  status: 413;
+};
+
+export type restartMotisResponse415 = {
+  data: RestartMotis415;
+  status: 415;
+};
+
+export type restartMotisResponse429 = {
+  data: RestartMotis429;
+  status: 429;
+};
+
 export type restartMotisResponse500 = {
   data: RestartMotis500;
   status: 500;
@@ -3303,6 +4197,9 @@ export type restartMotisResponseSuccess = restartMotisResponse200 & {
 export type restartMotisResponseError = (
   | restartMotisResponse400
   | restartMotisResponse401
+  | restartMotisResponse413
+  | restartMotisResponse415
+  | restartMotisResponse429
   | restartMotisResponse500
   | restartMotisResponse503
 ) & {
@@ -3344,6 +4241,21 @@ export type proposeTransitBumpResponse409 = {
   status: 409;
 };
 
+export type proposeTransitBumpResponse413 = {
+  data: ProposeTransitBump413;
+  status: 413;
+};
+
+export type proposeTransitBumpResponse415 = {
+  data: ProposeTransitBump415;
+  status: 415;
+};
+
+export type proposeTransitBumpResponse429 = {
+  data: ProposeTransitBump429;
+  status: 429;
+};
+
 export type proposeTransitBumpResponse500 = {
   data: ProposeTransitBump500;
   status: 500;
@@ -3361,6 +4273,9 @@ export type proposeTransitBumpResponseError = (
   | proposeTransitBumpResponse400
   | proposeTransitBumpResponse401
   | proposeTransitBumpResponse409
+  | proposeTransitBumpResponse413
+  | proposeTransitBumpResponse415
+  | proposeTransitBumpResponse429
   | proposeTransitBumpResponse500
   | proposeTransitBumpResponse502
 ) & {
@@ -3426,9 +4341,24 @@ export type approveTransitBumpResponse404 = {
   status: 404;
 };
 
+export type approveTransitBumpResponse413 = {
+  data: ApproveTransitBump413;
+  status: 413;
+};
+
+export type approveTransitBumpResponse415 = {
+  data: ApproveTransitBump415;
+  status: 415;
+};
+
 export type approveTransitBumpResponse422 = {
   data: ApproveTransitBump422;
   status: 422;
+};
+
+export type approveTransitBumpResponse429 = {
+  data: ApproveTransitBump429;
+  status: 429;
 };
 
 export type approveTransitBumpResponse500 = {
@@ -3443,7 +4373,10 @@ export type approveTransitBumpResponseError = (
   | approveTransitBumpResponse400
   | approveTransitBumpResponse401
   | approveTransitBumpResponse404
+  | approveTransitBumpResponse413
+  | approveTransitBumpResponse415
   | approveTransitBumpResponse422
+  | approveTransitBumpResponse429
   | approveTransitBumpResponse500
 ) & {
   headers: Headers;
