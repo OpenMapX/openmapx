@@ -2,8 +2,8 @@ import { readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { generate } from "@graphql-codegen/cli";
+import { formatSource } from "../codegen/format-source.mjs";
 import { createCodegenConfig } from "./codegen.config.mjs";
-import { formatSource } from "./format-source.mjs";
 
 export async function generateArtifacts(selectedTargets) {
   const files = await generate(createCodegenConfig(selectedTargets), false);

@@ -1,4 +1,5 @@
 import type { SearchIntent, SpatialConstraint, TimeConstraint } from "@openmapx/core";
+import type { AiCloudProcessor } from "@openmapx/core/api-contracts";
 
 export type { SearchIntent, SpatialConstraint, TimeConstraint };
 
@@ -15,15 +16,7 @@ export function isPlausibleNlSearch(intent: SearchIntent): boolean {
  */
 export type NlpProviderId = string;
 
-export interface AiCloudProcessor {
-  /** Stable machine id used to de-duplicate legal disclosures. */
-  id: string;
-  /** Human-readable processor/service name. */
-  name: string;
-  /** ISO 3166-1 alpha-2 code, or "VARIES" for a routing service. */
-  countryCode: string;
-  privacyUrl: string;
-}
+export type { AiCloudProcessor } from "@openmapx/core/api-contracts";
 
 export interface ParseContext {
   mapCenter: [number, number];

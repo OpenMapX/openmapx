@@ -29,6 +29,7 @@ describe("repository policy gate", () => {
       "pnpm check-docker-context-secrets",
       "pnpm check-ops-authority",
       "pnpm check-entur-graphql",
+      "pnpm check-api-sdk",
     ]);
   });
 

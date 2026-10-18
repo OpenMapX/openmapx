@@ -48,7 +48,7 @@
     "search-eval:record": "pnpm -C packages/cli exec tsx ../../scripts/record-search-eval.mts",
     "check-toolchain-pins": "pnpm -C packages/cli exec tsx ../../scripts/check-toolchain-pins.ts",
     "check-production-audits": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types scripts/check-production-audits.ts",
-    "check:policy": "pnpm check-legal-tables && pnpm check-legal-updated && pnpm check-data-flows && pnpm check-subject-data && pnpm check-license-metadata && pnpm check-air-quality-release-gates && pnpm check-toolchain-pins && pnpm check-feed-ids && pnpm check-credential-keys && pnpm check-dockerfile-sync && pnpm check-image-size-dos && pnpm check-docker-context-secrets && pnpm check-ops-authority && pnpm check-entur-graphql",
+    "check:policy": "pnpm check-legal-tables && pnpm check-legal-updated && pnpm check-data-flows && pnpm check-subject-data && pnpm check-license-metadata && pnpm check-air-quality-release-gates && pnpm check-toolchain-pins && pnpm check-feed-ids && pnpm check-credential-keys && pnpm check-dockerfile-sync && pnpm check-image-size-dos && pnpm check-docker-context-secrets && pnpm check-ops-authority && pnpm check-entur-graphql && pnpm check-api-sdk",
     "check-openapi": "pnpm -C apps/api exec tsx scripts/openapi/generate.ts --check",
     "validate:privacy-release": "node scripts/validate-privacy-release.mjs",
     "check-packed-packages": "node scripts/check-packed-packages.mjs",
@@ -64,7 +64,9 @@
     "check-release-information": "node scripts/check-release-information.mjs",
     "entur:generate": "node scripts/entur/codegen.mjs",
     "check-entur-graphql": "node scripts/entur/codegen.mjs --check",
-    "entur:refresh-schemas": "node scripts/entur/refresh-schemas.mjs"
+    "entur:refresh-schemas": "node scripts/entur/refresh-schemas.mjs",
+    "sdk:generate": "node scripts/api-sdk/codegen.mjs",
+    "check-api-sdk": "node scripts/api-sdk/codegen.mjs --check"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.15",
@@ -79,6 +81,7 @@
     "husky": "^9.1.7",
     "jscpd": "^5.4.1",
     "knip": "^6.41.0",
+    "orval": "8.43.0",
     "prettier": "^3.9.10",
     "turbo": "^2.11.7",
     "typescript": "^6.0.3",

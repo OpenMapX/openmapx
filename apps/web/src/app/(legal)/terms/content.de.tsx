@@ -7,9 +7,10 @@ import TableContainer from "@mui/material/TableContainer";
 import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
 import Typography from "@mui/material/Typography";
+import type { Disclosure, IntegrationMetadata } from "@openmapx/core/api-contracts";
 import { buildLicensingHtml } from "@openmapx/core/attribution";
 import { legalConfig, sectionSlug } from "@openmapx/core/legal";
-import type { Disclosure, PublicLegalConfig } from "@openmapx/core/server-api";
+import type { PublicLegalConfig } from "@openmapx/core/server-api";
 import type { Licensing } from "@openmapx/mobility-core/licensing";
 import { TransitFeedAttribution } from "@/components/legal/TransitFeedAttribution";
 import { AttributionText } from "@/components/ui/AttributionText";
@@ -22,13 +23,11 @@ const T = termsTitles("de");
 const IDS = termsIds("de");
 
 export default function TermsContentDe({
-  capabilities: _capabilities = {},
   integrations = [],
   disclosures = [],
   legal,
 }: {
-  capabilities?: Record<string, boolean>;
-  integrations?: import("@openmapx/integration-framework").LoadedIntegrationMeta[];
+  integrations?: IntegrationMetadata[];
   disclosures?: Disclosure[];
   legal?: PublicLegalConfig | null;
 }) {
@@ -51,7 +50,7 @@ export default function TermsContentDe({
           mb: 4,
         }}
       >
-        Zuletzt aktualisiert: 14. Oktober 2026
+        Zuletzt aktualisiert: 18. Oktober 2026
       </Typography>
       <Section title={T.scope}>
         <Typography>

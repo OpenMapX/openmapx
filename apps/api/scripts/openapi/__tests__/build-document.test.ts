@@ -57,6 +57,32 @@ describe("tagForPath", () => {
 });
 
 describe("buildDocument", () => {
+  it("preserves named schemas and the route-owned runtime metadata tag", () => {
+    const document = buildDocument(
+      input({
+        corePaths: {
+          "/api/integrations": {
+            get: {
+              tags: ["runtime-metadata"],
+              responses: {
+                200: {
+                  content: {
+                    "application/json": { schema: { $ref: "#/components/schemas/Metadata" } },
+                  },
+                },
+              },
+            },
+          },
+        },
+        coreAuth: [{ method: "GET", url: "/api/integrations", auth: "public" }],
+        coreComponents: { schemas: { Metadata: { type: "object" } } },
+      }),
+    );
+    expect(document.components).toEqual({ schemas: { Metadata: { type: "object" } } });
+    expect((document.paths["/api/integrations"]?.get as { tags: string[] }).tags).toEqual([
+      "runtime-metadata",
+    ]);
+  });
   it("emits an OpenAPI 3.1 document", () => {
     const document = buildDocument(input());
     expect(document.openapi).toBe("3.1.0");

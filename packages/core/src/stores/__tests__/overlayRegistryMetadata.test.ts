@@ -18,7 +18,7 @@ function imagery(provider: "mapillary" | "panoramax"): LoadedIntegrationMeta {
       "utf8",
     ),
   ) as LoadedIntegrationMeta;
-  return { ...manifest, name: id, enabled: true };
+  return { ...manifest, name: id, enabled: true, isBuiltIn: true };
 }
 
 afterEach(() => initOverlayRegistry([]));
@@ -32,6 +32,7 @@ describe("initOverlayRegistry metadata refresh", () => {
         id: `overlay-${id}`,
         name: "Refresh test",
         enabled: true,
+        isBuiltIn: true,
         domains: ["map-overlay"],
         frontend: { overlay: {} },
       },
@@ -55,6 +56,7 @@ describe("initOverlayRegistry metadata refresh", () => {
           id: "air-quality",
           name: "Canonical air quality",
           enabled: true,
+          isBuiltIn: true,
           domains: ["air-quality"],
           frontend: { overlay: {} },
         },
@@ -62,6 +64,7 @@ describe("initOverlayRegistry metadata refresh", () => {
           id: "overlay-air-quality",
           name: "Legacy OpenAQ",
           enabled: true,
+          isBuiltIn: true,
           domains: ["air-quality"],
           frontend: { mapLayer: true },
         },

@@ -20,7 +20,14 @@ import { ContextualOverlays } from "./ContextualOverlays";
 type IntegrationMeta = Parameters<typeof initOverlayRegistry>[0][number];
 
 function meta(id: string): IntegrationMeta {
-  return { id, name: id, enabled: true, domains: ["map-overlay"], frontend: { overlay: {} } };
+  return {
+    id,
+    name: id,
+    enabled: true,
+    isBuiltIn: true,
+    domains: ["map-overlay"],
+    frontend: { overlay: {} },
+  };
 }
 
 function isActive(id: string): boolean {

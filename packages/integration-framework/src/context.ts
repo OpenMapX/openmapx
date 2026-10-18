@@ -1,3 +1,4 @@
+import type { Disclosure } from "@openmapx/core/api-contracts";
 import type { AirQualityProvider } from "./contracts/air-quality-provider.js";
 import type { BorderCrossingProvider } from "./contracts/border-crossing-provider.js";
 import type { CameraProvider } from "./contracts/camera-provider.js";
@@ -18,7 +19,6 @@ import type { RideProvider } from "./contracts/ride-provider.js";
 import type { RoadConditionsProvider } from "./contracts/road-conditions-provider.js";
 import type { RoadWeatherProvider } from "./contracts/road-weather-provider.js";
 import type { RoutingProvider } from "./contracts/routing-provider.js";
-import type { AiCloudProcessor } from "./contracts/search-nlp-provider.js";
 import type { SearchSuggestionProvider } from "./contracts/search-suggestion-provider.js";
 import type { ServiceVehicleProvider } from "./contracts/service-vehicle-provider.js";
 import type { StreetLevelProvider } from "./contracts/street-level-imagery-provider.js";
@@ -162,48 +162,13 @@ export interface HealthCheckResult {
 
 export type CustomHealthCheckFn = () => Promise<HealthCheckResult>;
 
-/**
- * A secret-free, server-computed legal disclosure signal surfaced to the
- * client on /api/integrations. Processor metadata only — never config or secrets.
- */
-export interface AiSearchDisclosure {
-  type: "ai-search";
-  integrationId: string;
-  /** Any AI provider (local or cloud) active → show the Terms AI disclaimer. */
-  aiActive: boolean;
-  localActive: boolean;
-  /** A cloud provider configured + in chain → show the Privacy data-transfer row. */
-  cloudActive: boolean;
-  cloudProcessors: AiCloudProcessor[];
-  /** Cloud execution is permitted by the instance privacy policy. */
-  cloudAvailable: boolean;
-  /** The client must obtain an explicit opt-in before sending a query to cloud AI. */
-  cloudConsentRequired: boolean;
-  /** Secret-free, operator-facing labels for the configured cloud provider chain. */
-  cloudProviderLabels: string[];
-}
-
-export type EmailProvider = "emaillabs" | "lettermint" | "smtp";
-/** Art. 44+ transfer safeguard for a non-EEA recipient. */
-export type TransferSafeguard = "eea" | "adequacy" | "dpf" | "scc" | "none";
-
-/**
- * The transactional-email provider currently active for this instance, so the
- * Privacy Policy can name the correct processor. Vendor metadata only — never
- * keys or SMTP credentials.
- */
-export interface EmailDisclosure {
-  type: "email";
-  provider: EmailProvider;
-  /** Human-readable vendor name; empty for an unnamed self-hosted SMTP server. */
-  vendorName: string;
-  /** ISO 3166-1 alpha-2 country code for localization ("PL", "NL", "US"); empty if unknown. */
-  countryCode: string;
-  privacyUrl?: string;
-  transfer: TransferSafeguard;
-}
-
-export type Disclosure = AiSearchDisclosure | EmailDisclosure;
+export type {
+  AiSearchDisclosure,
+  Disclosure,
+  EmailDisclosure,
+  EmailProvider,
+  TransferSafeguard,
+} from "@openmapx/core/api-contracts";
 
 export interface SecretsClient {
   /** Retrieve a decrypted secret from the vault, or null if not stored. */

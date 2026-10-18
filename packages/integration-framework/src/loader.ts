@@ -1,8 +1,11 @@
-import type { LocaleStrings } from "../strings/index";
-import type { CustomHealthCheckFn, Disclosure } from "./context";
-import type { IntegrationManifest } from "./manifest";
+import type { IntegrationMetadata, LocaleStrings } from "@openmapx/core/api-contracts";
 
-export type IntegrationStrings = Record<string, Record<string, unknown>>;
+import type { CustomHealthCheckFn, Disclosure } from "./context";
+import type { IntegrationHealthCheck, IntegrationManifest } from "./manifest";
+
+export type { IntegrationsResponse } from "@openmapx/core/api-contracts";
+
+export type IntegrationStrings = LocaleStrings;
 
 export interface LoadedIntegration {
   id: string;
@@ -24,37 +27,7 @@ export interface LoadedIntegration {
   shutdownHandlers: Array<() => Promise<void>>;
 }
 
-export interface LoadedIntegrationMeta {
-  id: string;
-  name: string;
-  description?: string;
-  enabled: boolean;
-  domains: string[];
-  frontend?: IntegrationManifest["frontend"];
-  dataSources?: IntegrationManifest["dataSources"];
-  healthCheck?: IntegrationManifest["healthCheck"];
-  strings?: IntegrationStrings;
-  /**
-   * False for declarative community integrations loaded from
-   * `custom_integrations/`, true/undefined for trusted built-ins. Community
-   * runtime components stay absent until a separate isolation boundary exists.
-   */
-  isBuiltIn?: boolean;
-}
-
-/**
- * Wire shape of the `/api/integrations` orchestrator response. The host
- * returns the enabled integrations alongside the framework's shared strings
- * catalog (locale-keyed) so clients can resolve `shared.*` i18n tokens
- * without a separate fetch.
- */
-export interface IntegrationsResponse {
-  /** SHA-256 revision of the complete runtime metadata payload. */
-  revision: string;
-  integrations: Array<LoadedIntegrationMeta & { isBuiltIn?: boolean }>;
-  frameworkStrings: LocaleStrings;
-  disclosures: Disclosure[];
-}
+export type LoadedIntegrationMeta = IntegrationMetadata;
 
 export function toIntegrationMeta(integration: LoadedIntegration): LoadedIntegrationMeta {
   const en = integration.strings.en as Record<string, unknown> | undefined;
@@ -63,10 +36,20 @@ export function toIntegrationMeta(integration: LoadedIntegration): LoadedIntegra
     name: (en?.name as string) ?? integration.manifest.name ?? integration.id,
     description: (en?.description as string) ?? integration.manifest.description,
     enabled: integration.enabled,
+    isBuiltIn: integration.isBuiltIn,
     domains: integration.manifest.domains,
     frontend: integration.manifest.frontend,
     dataSources: integration.manifest.dataSources,
-    healthCheck: integration.manifest.healthCheck,
+    healthCheck:
+      integration.manifest.healthCheck === undefined
+        ? undefined
+        : Array.isArray(integration.manifest.healthCheck)
+          ? integration.manifest.healthCheck.map(publicHealthCheck)
+          : publicHealthCheck(integration.manifest.healthCheck),
     strings: Object.keys(integration.strings).length > 0 ? integration.strings : undefined,
   };
+}
+
+function publicHealthCheck({ type, name, category }: IntegrationHealthCheck) {
+  return { type, name, category };
 }

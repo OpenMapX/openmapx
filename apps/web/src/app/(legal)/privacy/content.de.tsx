@@ -7,20 +7,19 @@ import TableContainer from "@mui/material/TableContainer";
 import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
 import Typography from "@mui/material/Typography";
+import type { Disclosure, IntegrationMetadata } from "@openmapx/core/api-contracts";
 import { legalConfig, sectionSlug } from "@openmapx/core/legal";
-import type { Disclosure, PublicLegalConfig } from "@openmapx/core/server-api";
+import type { PublicLegalConfig } from "@openmapx/core/server-api";
 import { emailCountryName, emailTransferNote } from "../emailDisclosure";
 import { generatePrivacySectionsFromManifests } from "../generateLegalSections";
 import { privacyTitles } from "./sections";
 
 export default function PrivacyContentDe({
-  capabilities: _capabilities = {},
   integrations = [],
   disclosures = [],
   legal,
 }: {
-  capabilities?: Record<string, boolean>;
-  integrations?: import("@openmapx/integration-framework").LoadedIntegrationMeta[];
+  integrations?: IntegrationMetadata[];
   disclosures?: Disclosure[];
   legal?: PublicLegalConfig | null;
 }) {
@@ -68,7 +67,7 @@ export default function PrivacyContentDe({
           mb: 4,
         }}
       >
-        Zuletzt aktualisiert: 9. Oktober 2026 (Gefahrendaten jetzt über OpenConditions)
+        Zuletzt aktualisiert: 18. Oktober 2026 (Gefahrendaten jetzt über OpenConditions)
       </Typography>
       <Section title={T.controller}>
         <Typography>

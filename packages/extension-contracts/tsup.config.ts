@@ -10,6 +10,7 @@ export default defineConfig({
     platform: "src/platform.ts",
     contributors: "src/contributors.ts",
     licensing: "src/licensing.ts",
+    "licensing-schema": "src/licensing-schema.ts",
     attribution: "src/attribution.ts",
     identifiers: "src/identifiers.ts",
     "media-hosts": "src/media-hosts.ts",

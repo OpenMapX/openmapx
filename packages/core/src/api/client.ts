@@ -183,6 +183,13 @@ export interface ApiRequestOptions {
   timeoutMs?: number;
   /** Additional per-request headers (for example an idempotency key). */
   headers?: HeadersInit;
+  /** Explicit fetch cache policy, including uncached server metadata reads. */
+  cache?: RequestCache;
+}
+
+export interface ApiResponseOptions extends ApiRequestOptions {
+  /** Bodyless protocol results that are valid outside the 2xx range. */
+  acceptedStatuses?: readonly number[];
 }
 
 /**
@@ -261,20 +268,24 @@ export class ApiClient {
       }, options.timeoutMs);
     }
 
+    let response: Response | undefined;
     try {
-      const response = await fetch(url, {
+      const headers = new Headers({ Accept: "application/json" });
+      for (const source of [init.headers, options.headers, cfg.headerInterceptor?.()]) {
+        new Headers(source).forEach((value, key) => {
+          headers.set(key, value);
+        });
+      }
+      response = await fetch(url, {
         ...init,
-        headers: {
-          Accept: "application/json",
-          ...init.headers,
-          ...options.headers,
-          ...cfg.headerInterceptor?.(),
-        },
+        ...(options.cache === undefined ? {} : { cache: options.cache }),
+        headers,
         credentials: cfg.credentials ?? "omit",
         signal: controller.signal,
       });
       return await consume(response);
     } catch (error) {
+      if (response) discardBody(response);
       if (controller.signal.aborted) {
         throw new ApiRequestAbortedError(timedOut ? "timeout" : "aborted");
       }
@@ -283,6 +294,22 @@ export class ApiClient {
       if (timer !== undefined) clearTimeout(timer);
       options.signal?.removeEventListener("abort", abortFromCaller);
     }
+  }
+
+  /**
+   * Shared SDK boundary. The consumer runs inside the same abort/deadline
+   * lifecycle as acquisition; returning Response early would lose that guard.
+   */
+  async request<T>(
+    path: string,
+    init: RequestInit,
+    consume: (response: Response) => Promise<T>,
+    options: ApiResponseOptions = {},
+  ): Promise<T> {
+    return this.send(this.buildUrl(path), init, options, async (response) => {
+      if (!options.acceptedStatuses?.includes(response.status)) await assertOk(response);
+      return consume(response);
+    });
   }
 
   async get<T>(path: string, params?: ApiQueryParams, options: ApiRequestOptions = {}): Promise<T> {

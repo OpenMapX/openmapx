@@ -1,50 +1,25 @@
 /** Portable, captured licence identity. Presentation never grants usage rights. */
 import parseExpression, { type Info as Expression } from "spdx-expression-parse";
 import spdxLicenseList from "spdx-license-list";
+import type z from "zod/v4";
+import type {
+  attributionPolicySchema,
+  licenseBindingSchema,
+  licenseDescriptorSchema,
+  licensingSchema,
+} from "./licensing-schema";
 
 export const LICENSE_SCOPES = ["data", "imagery", "style", "software", "service"] as const;
 export type LicenseScope = (typeof LICENSE_SCOPES)[number];
-export type LicenseDescriptor =
-  | { kind: "spdx"; expression: string; url?: string }
-  | { kind: "custom"; id: string; namespace: string; name: string; url?: string; version?: string }
-  | { kind: "unknown"; raw?: string; url?: string }
-  | { kind: "per-item"; raw?: string; url?: string }
-  | { kind: "public-domain"; name: string; url?: string }
-  | { kind: "status"; id: "CC-PDM-1.0"; url?: string };
+export type LicenseDescriptor = z.infer<typeof licenseDescriptorSchema>;
 export const ATTRIBUTION_SURFACES = ["map", "content", "image"] as const;
 export type AttributionSurface = (typeof ATTRIBUTION_SURFACES)[number];
 export const ATTRIBUTION_LOGOS = ["openweather", "mapillary", "maptiler", "tdx"] as const;
 export type AttributionLogo = (typeof ATTRIBUTION_LOGOS)[number];
 /** Reviewed display policy, never a grant of data or API permissions. */
-export interface AttributionPolicy {
-  placement: "visible" | "details";
-  surfaces: readonly AttributionSurface[];
-  basis: "licence" | "provider-terms" | "recommendation" | "unresolved";
-  reviewedAt: string;
-  evidenceUrls: readonly string[];
-  reason: string;
-  /** Explicitly reviewed minimal visible wording; the complete notice is retained. */
-  compactText?: string;
-  /** Reviewed local branding asset, never a URL supplied by an extension. */
-  logo?: AttributionLogo;
-  prominence?: "normal";
-  /** Preserve the actual record publisher beside the visible service credit. */
-  includePublisher?: true;
-}
-export interface LicenseBinding {
-  scope: LicenseScope;
-  subject: string;
-  license: LicenseDescriptor;
-  notice?: string;
-  conditions?: readonly string[];
-  attribution?: AttributionPolicy;
-}
-export interface Licensing {
-  version: 1;
-  bindings: readonly LicenseBinding[];
-  /** Original supplier declarations are evidence, never display identity or permissions. */
-  declarations?: readonly { text?: string; url?: string }[];
-}
+export type AttributionPolicy = z.infer<typeof attributionPolicySchema>;
+export type LicenseBinding = z.infer<typeof licenseBindingSchema>;
+export type Licensing = z.infer<typeof licensingSchema>;
 export interface LicensingDisplayOptions {
   fullNames?: boolean;
   scopes?: readonly LicenseScope[];

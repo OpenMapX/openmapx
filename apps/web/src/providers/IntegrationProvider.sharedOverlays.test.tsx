@@ -6,7 +6,7 @@ import {
   toggleOverlay,
   useStreetLevelStore,
 } from "@openmapx/core";
-import type { LoadedIntegrationMeta } from "@openmapx/integration-framework";
+import type { IntegrationMetadata } from "@openmapx/core/api-contracts";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
@@ -23,8 +23,15 @@ const integrations = ["mapillary", "panoramax"].map((provider) => {
   const id = `street-level-imagery-${provider}`;
   const manifest = JSON.parse(
     readFileSync(join(process.cwd(), "integrations", id, "manifest.json"), "utf8"),
-  ) as LoadedIntegrationMeta;
-  return { ...manifest, name: id, enabled: true };
+  ) as IntegrationMetadata;
+  return {
+    id,
+    name: id,
+    enabled: true,
+    isBuiltIn: true,
+    domains: manifest.domains,
+    frontend: manifest.frontend,
+  };
 });
 
 function SharedOverlayControls() {
@@ -40,7 +47,7 @@ function SharedOverlayControls() {
   ));
 }
 
-let metadata: LoadedIntegrationMeta[];
+let metadata: IntegrationMetadata[];
 let client: QueryClient;
 
 beforeEach(() => {
@@ -51,7 +58,7 @@ beforeEach(() => {
   client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   vi.stubGlobal("fetch", async () =>
     Response.json({
-      revision: "fixture",
+      revision: "a".repeat(64),
       integrations: metadata,
       frameworkStrings: {},
       disclosures: [],

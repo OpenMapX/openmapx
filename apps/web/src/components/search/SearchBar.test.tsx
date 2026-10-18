@@ -144,7 +144,7 @@ import {
   useSidebarStore,
   useStreetLevelStore,
 } from "@openmapx/core";
-import type { Disclosure } from "@openmapx/integration-framework";
+import type { Disclosure } from "@openmapx/core/api-contracts";
 import type { TransitStop } from "@openmapx/mobility-core/transit";
 import { IntegrationDisclosuresProvider } from "@/lib/integrationDisclosuresContext";
 import { useRecentSearchStore } from "@/stores/recentSearchStore";
@@ -273,6 +273,7 @@ describe("SearchBar", () => {
         id: "parking",
         name: "Parking",
         enabled: true,
+        isBuiltIn: true,
         domains: ["data-source"],
         frontend: { searchCategory: { id: "parking", label: "Parking" } },
       },
@@ -304,6 +305,7 @@ describe("SearchBar", () => {
         id: "fuel",
         name: "Fuel",
         enabled: true,
+        isBuiltIn: true,
         domains: ["data-source"],
         frontend: { searchCategory: { id: "fuel", label: "Gas Stations" } },
       },
@@ -333,6 +335,7 @@ describe("SearchBar", () => {
         id: "parking",
         name: "Parking",
         enabled: true,
+        isBuiltIn: true,
         domains: ["data-source"],
         frontend: { searchCategory: { id: "parking-lots", label: "Car parks" } },
       },

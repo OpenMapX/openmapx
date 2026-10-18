@@ -12,6 +12,7 @@ import { join } from "node:path";
 import type { IntegrationContext, IntegrationDataSource } from "@openmapx/integration-framework";
 import Fastify, { type FastifyInstance } from "fastify";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { integrationsRoute } from "./routes/integrations";
 
 const attribution = vi.hoisted(() => {
   const index = {
@@ -188,6 +189,7 @@ beforeEach(async () => {
     "__staticCtx",
   );
   app = Fastify({ logger: false });
+  await app.register(integrationsRoute);
   await initIntegrations(app, [{ directory: parent, isBuiltIn: true }]);
   await refreshDataUsePolicy();
 });

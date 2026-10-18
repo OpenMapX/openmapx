@@ -3,7 +3,14 @@ import { createOverlayStore, getRegisteredOverlayStore } from "../createOverlayS
 import { initOverlayRegistry, isOverlayActive, runOverlayTransaction } from "../overlayRegistry";
 
 function meta(id: string) {
-  return { id, name: id, enabled: true, domains: ["map-overlay"], frontend: { overlay: {} } };
+  return {
+    id,
+    name: id,
+    enabled: true,
+    isBuiltIn: true,
+    domains: ["map-overlay"],
+    frontend: { overlay: {} },
+  };
 }
 
 describe("placeholder overlay stores", () => {
