@@ -84,6 +84,41 @@ tokens substituted throughout. The response example is for your companion
 service; it is not a manifest field or an automatically consumed host protocol.
 Authoring notes/examples are excluded from the packaged artifact's allowlist. The generated package has no OpenMapX workspace dependencies. Install the published development dependency with `npm install`, or install the exact candidate tarball in that generated directory during local qualification. Its `npm run validate` and `npm run package` scripts use the standalone CLI. Installed development dependencies remain outside the declarative artifact.
 
+The scaffold also includes a project README and `.github/workflows/validate.yml`. For a standalone integration repository, make the generated directory the repository root. If you keep it under `integrations/` in a companion-service repository, use the [nested repository instructions](#add-author-ci) below.
+
+### Add author CI
+
+First create and commit a lockfile from the generated directory:
+
+```sh
+# After the matching CLI version is published:
+npm install --ignore-scripts
+```
+
+For an unpublished candidate, use a repository-relative tarball instead:
+
+```sh
+mkdir -p tools
+cp /tmp/extension-cli.tgz tools/extension-cli.tgz
+npm install --save-dev --ignore-scripts ./tools/extension-cli.tgz
+```
+
+Commit `package.json`, `package-lock.json` and, for the candidate path, `tools/extension-cli.tgz`. Ignore `node_modules/`. The candidate stays in the authoring repository and is excluded from the integration artifact. Once a CLI release is available, replace the file dependency with the chosen published version, refresh the lockfile and remove the candidate tarball.
+
+The generated workflow uses read-only repository permissions and pinned actions. On pull requests and pushes to `main`, it runs:
+
+```sh
+npm ci --ignore-scripts
+npm run validate
+npm run package
+```
+
+It uploads the resulting `../<integration-id>.tar.gz` as a seven-day Actions artifact for inspection. It does not publish a release, install an extension or use deployment credentials. A successful run proves authoring preflight and packaging, not host readiness. Test companion-service code in its own CI as well.
+
+The workflow expects the integration at the repository root. For a nested layout, move it to the repository's root `.github/workflows/`, set `jobs.validate.defaults.run.working-directory` to the integration directory, and adjust the upload step's `path` relative to the repository root. For example, `integrations/conditions` produces `integrations/conditions.tar.gz`. Change the `main` branch filter if your repository uses another name. Enable the workflow only after its lockfile and any referenced candidate tarball are committed.
+
+GitHub discovers workflows only in the repository's root `.github/workflows/`; run-step defaults do not change action inputs. See [GitHub's workflow syntax](https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax) and [npm's clean-install requirements](https://docs.npmjs.com/cli/v11/commands/npm-ci/) when adapting this recipe.
+
 ## Write the integration metadata
 
 Describe the feature, data flows, attribution, configuration keys, and companion
@@ -304,6 +339,94 @@ manifest is discovered (the Extensions store performs a transactional reload):
 ```sh
 pnpm openmapx services restart app-api
 ```
+
+## Test in a local development host
+
+Keep the authoring project outside the host checkout. Use a separate OpenMapX checkout and a Docker environment reserved for this test; another checkout alone does not isolate Docker ports or volumes. Record the host commit, CLI version and artifact SHA-256 with your test results so the same inputs can be tested again.
+
+### Start a host for metadata and configuration testing
+
+Follow [Development setup](./development-setup.md) for the host prerequisites and environment files. In a fresh checkout:
+
+```sh
+git clone https://github.com/OpenMapX/openmapx.git openmapx-extension-host
+cd openmapx-extension-host
+git rev-parse HEAD
+pnpm install --frozen-lockfile
+cp infra/docker/.env.example infra/docker/.env
+cp apps/api/.env.example apps/api/.env
+cp apps/web/.env.example apps/web/.env.local
+```
+
+Use the Node and pnpm versions pinned by that checkout. Set fresh `POSTGRES_PASSWORD`, `BETTER_AUTH_SECRET` and `DATA_MANAGER_AUTH_TOKEN` values in `infra/docker/.env`; the CLI checks deployment secrets even when rendering the dev preset. Match the password in `apps/api/.env`'s `DATABASE_URL`, set its `BETTER_AUTH_SECRET`, and retain the generated Redis password-file wiring described in Development setup. Do not use example passwords or point this host at an existing deployment's database.
+
+Start the disposable database/cache and initialize the development schema:
+
+```sh
+pnpm openmapx services start --preset dev
+pnpm --filter @openmapx/api db:push
+```
+
+Run the API and web app in separate terminals from the host checkout:
+
+```sh
+pnpm --filter @openmapx/api dev
+```
+
+```sh
+pnpm --filter @openmapx/web dev
+```
+
+Open `http://localhost:3000` and register a test account. From the host checkout, bootstrap the [first administrator](../administration/users-and-access.md#the-first-admin); if SMTP is not configured, the verification command lets that local account sign in:
+
+```sh
+pnpm openmapx users verify your-test-email@example.org
+pnpm openmapx users promote your-test-email@example.org
+```
+
+Sign out and back in after promotion. Keep `OPENMAPX_CUSTOM_INTEGRATIONS_DIR` unset for this recipe so the API and installer both use the checkout's `custom_integrations/` directory.
+
+### Install and repeat the authoring loop
+
+In the independent authoring project, validate and package your integration:
+
+```sh
+npm run validate
+npm run package
+```
+
+Compute the artifact digest with a portable Node command:
+
+```sh
+node --input-type=module -e 'import {readFileSync} from "node:fs"; import {createHash} from "node:crypto"; console.log(createHash("sha256").update(readFileSync(process.argv[1])).digest("hex"))' /absolute/path/conditions.tar.gz
+```
+
+From the host checkout, install that exact artifact and inspect the installed version:
+
+```sh
+pnpm openmapx integrations install /absolute/path/conditions.tar.gz --artifact --sha256 <digest>
+pnpm openmapx integrations list
+```
+
+Restart the host-run API process manually; the Docker `services restart app-api` command does not restart a process launched by `pnpm dev`. Reload the browser and check the integration's metadata, configuration, disclosures and declared static assets under **Admin → Integrations**. Update the authoring source, package again, reinstall the new artifact and repeat the restart. This is a copy/install loop, not a live symlink to the source directory.
+
+Keep a previous artifact and digest to test rollback by reinstalling those exact bytes. To remove the test integration, run `pnpm openmapx integrations remove <integration-id>` from the host checkout, then restart the host-run API again. Stop the disposable infrastructure with `pnpm openmapx services stop --preset dev` when finished; that command retains its data.
+
+### Test companion services and complete bundles
+
+The dev preset runs only the database and cache. It does not qualify Docker service installation, configuration forwarding, readiness, updates or recovery. For those checks, use a separate full stack from [Getting started](../install/getting-started.md), the complete `extension.json` input described below, and the supported host protocol or reviewed adapter that consumes the service's data.
+
+Validate service and bundle documents before installing them:
+
+```sh
+openmapx-ext validate ./services/conditions-ingest/service.json --kind service
+openmapx-ext bundle --input extension.source.json --out extension.json
+openmapx-ext validate extension.json --kind extension
+```
+
+Sign in as an administrator on that disposable full stack, open **Admin → Extensions → Install from URL**, and enter the controlled HTTPS URL of your `extension.json`. Review and confirm the community extension preview. Use the authenticated UI for this full-stack recipe: the default container stack does not expose the API on the host's `localhost:3001`, which is where the `ext` CLI defaults to connecting.
+
+Verify configuration forwarding, actual service readiness and displayed data, required attribution, reinstall/update behavior, and recovery from an intentionally failing candidate. A manifest-only integration does not register a provider or introduce executable UI. Passing author CI or showing a healthy manifest does not establish those runtime results.
 
 ## Add a companion service
 

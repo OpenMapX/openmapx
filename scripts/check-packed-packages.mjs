@@ -1,7 +1,15 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -145,8 +153,28 @@ void artifact; void receipts; void serviceCheck;
     consumer,
   );
   const integration = join(scaffoldRoot, "packed-demo");
-  // Install the exact unpublished candidate rather than querying npm for a future version.
-  run("npm", [...install, "--save-dev", cliTarball], integration);
+  const workflow = readFileSync(join(integration, ".github/workflows/validate.yml"), "utf8");
+  assert(!workflow.includes("__ID__"), "Generated CI must substitute the integration id");
+  assert(workflow.includes("../packed-demo.tar.gz"), "CI must collect the generated artifact");
+  const authorReadme = readFileSync(join(integration, "README.md"), "utf8");
+  assert(authorReadme.startsWith("# `packed-demo`"), "README must name the generated project");
+  assert(authorReadme.includes("npm ci --ignore-scripts"));
+  // Exercise the documented pre-publication path with a repo-relative candidate and lockfile.
+  mkdirSync(join(integration, "tools"));
+  copyFileSync(cliTarball, join(integration, "tools/extension-cli.tgz"));
+  run(
+    "npm",
+    [
+      "install",
+      "--ignore-scripts",
+      "--no-audit",
+      "--no-fund",
+      "--save-dev",
+      "./tools/extension-cli.tgz",
+    ],
+    integration,
+  );
+  run("npm", ["ci", "--ignore-scripts", "--no-audit", "--no-fund"], integration);
   run("npm", ["run", "validate"], integration);
   const serviceDir = join(consumer, "service");
   run(
@@ -164,12 +192,17 @@ void artifact; void receipts; void serviceCheck;
     [cli, "package", integration, "--out", join(artifacts, "dry-run.tar.gz"), "--dry-run"],
     consumer,
   );
-  const first = join(artifacts, "integration-a.tar.gz");
+  const first = join(scaffoldRoot, "packed-demo.tar.gz");
   const second = join(artifacts, "integration-b.tar.gz");
-  for (const out of [first, second])
-    run(process.execPath, [cli, "package", integration, "--out", out], consumer);
+  run("npm", ["run", "package"], integration);
+  run(process.execPath, [cli, "package", integration, "--out", second], consumer);
   const hash = (p) => createHash("sha256").update(readFileSync(p)).digest("hex");
   assert.equal(hash(first), hash(second), "Integration packaging must be deterministic");
+  const members = capture("tar", ["-tzf", first]).trim().split("\n");
+  assert(
+    !members.some((p) => /(?:^|\/)(?:README\.md|\.github|tools|node_modules)(?:\/|$)/.test(p)),
+    "Author instructions, CI and candidate tooling must remain outside the integration artifact",
+  );
   // Match the stored member exactly; GNU tar does not normalize a leading "./" here.
   const metadata = JSON.parse(capture("tar", ["-xOf", first, "openmapx-artifact.json"]));
   assert.equal(metadata.id, "packed-demo");
