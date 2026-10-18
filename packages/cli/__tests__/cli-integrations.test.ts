@@ -48,7 +48,7 @@ const baseManifest = {
   version: "1.0.0",
   domains: ["map-overlay"],
   quality: "community",
-  platform: ">=1.0.0",
+  platform: "1.0",
 };
 
 function writeTarGz(sourceDir: string, artifactPath: string): void {

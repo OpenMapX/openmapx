@@ -11,7 +11,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { packageIntegration } from "../installer";
+import { installIntegration, packageIntegration } from "../installer";
 
 const roots: string[] = [];
 
@@ -42,8 +42,7 @@ function sourceTree(): string {
   writeFileSync(join(directory, "src", "helper.test.ts"), "// tests");
   mkdirSync(join(directory, ".git"), { recursive: true });
   writeFileSync(join(directory, ".git", "config"), "[core]");
-  // `node_modules` is separately rejected outright by the declarative contract,
-  // so it is not part of this fixture.
+  // Installed authoring dependencies have their own exclusion regression below.
   mkdirSync(join(directory, "assets"), { recursive: true });
   writeFileSync(join(directory, "assets", "unreferenced.png"), "not-referenced");
   writeFileSync(join(directory, "dist-map.js.map"), "{}");
@@ -86,6 +85,37 @@ afterEach(async () => {
 });
 
 describe("integration packaging contract", () => {
+  it.each(["0.9", "1.1"])(
+    "rejects an incompatible manifest protocol %s during packaging and installation",
+    async (platform) => {
+      const source = sourceTree();
+      const file = join(source, "manifest.json");
+      writeFileSync(file, JSON.stringify({ ...JSON.parse(readFileSync(file, "utf8")), platform }));
+      await expect(
+        packageIntegration({ rootDir: source, source, outFile: outFile() }),
+      ).rejects.toThrow(/protocol.*compatible/i);
+      const host = mkdtempSync(join(tmpdir(), "openmapx-protocol-host-"));
+      roots.push(host);
+      await expect(installIntegration({ rootDir: host, source })).rejects.toThrow(
+        /protocol.*compatible/i,
+      );
+    },
+  );
+
+  it("excludes installed authoring dependencies from a declarative source tree", async () => {
+    const source = sourceTree();
+    mkdirSync(join(source, "node_modules", "author-tool"), { recursive: true });
+    writeFileSync(
+      join(source, "node_modules", "author-tool", "index.js"),
+      "// author-only fixture",
+    );
+    const target = outFile();
+    await packageIntegration({ rootDir: source, source, outFile: target });
+    const listing = execFileSync("tar", ["-tzf", target], { encoding: "utf8" });
+    expect(listing).not.toContain("node_modules");
+    expect(listing).toContain("manifest.json");
+  });
+
   it("packages exactly the declared contract and no source-tree residue", async () => {
     const source = sourceTree();
     const target = outFile();

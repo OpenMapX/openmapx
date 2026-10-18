@@ -1,6 +1,8 @@
 # @openmapx/extension-cli
 
-Standalone Apache-2.0 CLI for scaffolding, packaging, and validating OpenMapX integrations and services.
+Standalone Apache-2.0 CLI for scaffolding, validating, packaging and bundling declarative OpenMapX extensions. It shares its portable contracts with the host through `@openmapx/extension-contracts`.
+
+This package is being qualified for its first public release; this change does not publish it. For local evaluation, use `pnpm --filter @openmapx/extension-cli pack --out /tmp/extension-cli.tgz` and install that tarball in your authoring project. The registry commands below apply once the release is published. Node.js 24 or newer is required.
 
 ## Install
 
@@ -20,7 +22,7 @@ Scaffold a new integration directory from the built-in template:
 openmapx-ext scaffold integration my-weather --domain weather --out ./integrations
 ```
 
-Creates `integrations/my-weather/` with `manifest.json`, `package.json`, and `strings/en.json`, with `__ID__` and `__DOMAIN__` tokens substituted. Executable behavior belongs in a companion service; community runtime entry points are rejected until a dedicated isolation boundary exists.
+Creates `integrations/my-weather/` with `manifest.json`, `package.json`, localized strings and companion-response/attribution authoring examples. The generated package uses the public CLI as a development tool and has `validate` and `package` scripts; it has no private workspace dependencies. Run `npm install` after a matching CLI version is published, or install the candidate tarball with `npm install --save-dev /path/to/extension-cli.tgz` during local qualification. Then run `npm run validate`. Executable behavior belongs in a companion service; community runtime entry points are rejected until a dedicated isolation boundary exists.
 
 ### scaffold service
 
@@ -34,13 +36,23 @@ Creates `service.json` with the id substituted, ready to be filled in and regist
 
 ### validate
 
-Validate an integration directory against the manifest schema:
+Preflight a declarative integration directory, including the packager’s community-code and referenced-asset checks:
 
 ```sh
 openmapx-ext validate ./integrations/my-weather
 ```
 
-Exits with a non-zero code and prints errors if the manifest is invalid.
+Other authoring inputs have explicit kinds:
+
+```sh
+openmapx-ext validate ./service.json --kind service
+openmapx-ext validate ./extension.json --kind extension
+openmapx-ext validate ./contributors.json --kind contributors
+```
+
+Contributor input is an array of canonical captured receipts, including an explicit `[]` when no external credit is owed. Service validation always uses community provenance and rejects host-only privileges. Extension validation also checks compatibility with this CLI’s extension protocol version.
+
+Invalid input exits non-zero with diagnostics. These checks do not prove download access, host configuration, runtime readiness or trust. The installing host still applies its own checks.
 
 ### package
 
@@ -71,3 +83,14 @@ bundle metadata includes `--description`, `--license`, and `--homepage`.
 
 Integration artifacts are declarative. Put executable behavior and its types in
 the companion service rather than depending on an in-process host SDK.
+
+For bundles with configuration forwarding or readiness requirements, author the complete document and validate it before writing the output:
+
+```sh
+openmapx-ext bundle --input extension.source.json --out extension.json
+openmapx-ext validate extension.json --kind extension
+```
+
+`--input` accepts the full shared extension manifest, including `config` and `readiness`. It cannot be combined with component or metadata flags. Invalid input leaves the output untouched.
+
+The npm package version, extension version and minimum extension protocol are independent. Protocol requirements use `major.minor`, with the same major and a host minor at least as high as the requirement. Legacy range strings such as `>=1.0.0` must be written as `1.0` for this protocol contract.

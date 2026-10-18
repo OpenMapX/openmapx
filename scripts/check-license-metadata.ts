@@ -45,6 +45,7 @@ const APACHE_PACKAGES = new Set([
   "integration-framework",
   "air-quality", // reusable evidence, standards, jurisdiction, and selection foundation
   "core", // Nearly all integrations depend on it; it is the shared foundation
+  "extension-contracts", // portable Apache-2.0 authoring contracts
   "extension-cli", // standalone Apache-2.0 authoring CLI (scaffold / package / validate)
   "presets", // integration-poi-search depends on it
   "brands", // brand/chain catalog distilled from NSI, mirrors presets
@@ -68,7 +69,7 @@ const VENDORED: Record<string, string> = {
 };
 
 /** Packages currently meant to be published to npm (not `private`). */
-const PUBLIC_PACKAGES = new Set(["core", "extension-cli"]);
+const PUBLIC_PACKAGES = new Set(["core", "extension-cli", "extension-contracts"]);
 
 type Plan = { spdx: string; keepPrivate: boolean };
 

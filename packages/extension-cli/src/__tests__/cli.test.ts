@@ -42,6 +42,7 @@ describe("scaffold integration", () => {
       name: string;
     };
     expect(pkg.name).toBe("@openmapx/integration-demo");
+    expect(JSON.stringify(pkg)).not.toContain("workspace:");
   });
 
   it("scaffolds a portable companion receipt example without executable presentation code", () => {
@@ -147,6 +148,38 @@ describe("CLI binary (integration + validate + package)", () => {
 
     expect(output).not.toContain("--no-build");
     expect(output).not.toContain("dist/");
+  });
+
+  it("uses bundle --version as extension metadata and preserves global version reporting", () => {
+    const out = join(tmp, "extension.json");
+    const output = execFileSync(
+      "node",
+      [
+        CLI,
+        "bundle",
+        "--id",
+        "cli-demo",
+        "--name",
+        "CLI demo",
+        "--version",
+        "0.3.0",
+        "--platform",
+        "1.0",
+        "--service",
+        "https://github.com/example/service,v0.3.0,cli-service",
+        "--out",
+        out,
+      ],
+      { encoding: "utf8" },
+    );
+    expect(output).toContain("Wrote");
+    expect(JSON.parse(readFileSync(out, "utf8")).version).toBe("0.3.0");
+    const packageVersion = JSON.parse(
+      readFileSync(resolve(__dirname, "../../package.json"), "utf8"),
+    ).version;
+    expect(execFileSync("node", [CLI, "--version"], { encoding: "utf8" }).trim()).toBe(
+      packageVersion,
+    );
   });
 
   it.skipIf(!existsSync(CLI))("scaffold integration via CLI", () => {

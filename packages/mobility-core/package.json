@@ -216,7 +216,7 @@
     "@openmapx/mobility-formats": "workspace:^",
     "@openmapx/transitous-core": "workspace:^",
     "spdx-expression-parse": "5.0.0",
-    "spdx-license-list": "^6.12.0"
+    "@openmapx/extension-contracts": "workspace:^"
   },
   "devDependencies": {
     "@types/spdx-expression-parse": "4.0.0"

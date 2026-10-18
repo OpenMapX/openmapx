@@ -28,9 +28,13 @@ import { basename, dirname, isAbsolute, join, normalize, relative, resolve, sep 
 import { gunzipSync } from "node:zlib";
 import { scanLicenses } from "@openmapx/core/licenses";
 import { assertAllowedGitUrl, gitShallowClone, safeDownload } from "@openmapx/core/server";
+import {
+  type ArtifactMetadata,
+  validateArtifactMetadata as validatePortableArtifactMetadata,
+} from "@openmapx/extension-contracts/artifact";
 import { createDeterministicTarGz } from "./deterministic-tar";
 import { INTEGRATION_ID_REGEX, validateManifest } from "./manifest";
-import { PLATFORM_VERSION } from "./platform";
+import { PLATFORM_VERSION, satisfiesPlatformVersion } from "./platform";
 
 export interface IntegrationSummary {
   id: string;
@@ -357,6 +361,7 @@ export async function installIntegration(opts: InstallOptions): Promise<InstallR
     if (!validation.valid) {
       throw new Error(`Manifest validation failed:\n  - ${validation.errors.join("\n  - ")}`);
     }
+    assertCompatibleManifestProtocol(manifest);
     const id = manifest.id;
     assertSafeId(id);
     assertDoesNotShadowBuiltIn(opts.rootDir, id);
@@ -1107,13 +1112,6 @@ function regularDirectory(absolute: string): boolean {
   }
 }
 
-interface ArtifactMetadata {
-  schemaVersion: 1;
-  id: string;
-  platformVersion: string;
-  builtAt: string;
-}
-
 const BACKEND_BUNDLE_PATH = ["dist", "backend", "index.mjs"] as const;
 const ARTIFACT_METADATA_FILE = "openmapx-artifact.json";
 // Fixed build stamp so the same source always produces byte-identical output.
@@ -1168,6 +1166,14 @@ export function integrationBackendBundlePath(directory: string): string {
   return join(directory, ...BACKEND_BUNDLE_PATH);
 }
 
+function assertCompatibleManifestProtocol(manifest: Record<string, unknown>): void {
+  if (typeof manifest.platform === "string" && !satisfiesPlatformVersion(manifest.platform)) {
+    throw new Error(
+      `Extension protocol ${manifest.platform} is not compatible with ${PLATFORM_VERSION}`,
+    );
+  }
+}
+
 function validateDeclarativeArtifact(directory: string): void {
   if (existsSync(join(directory, "node_modules"))) {
     throw new Error("Declarative integration artifacts must not ship a node_modules/ directory.");
@@ -1200,34 +1206,8 @@ function validateArtifactMetadata(directory: string, manifest: Record<string, un
     throw new Error(`${ARTIFACT_METADATA_FILE} is not valid JSON`);
   }
 
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    throw new Error(`${ARTIFACT_METADATA_FILE} has an invalid shape`);
-  }
-  const metadata = value as Record<string, unknown>;
-  if (
-    Object.keys(metadata).sort().join(",") !== "builtAt,id,platformVersion,schemaVersion" ||
-    typeof metadata.id !== "string" ||
-    typeof metadata.platformVersion !== "string" ||
-    typeof metadata.builtAt !== "string"
-  ) {
-    throw new Error(`${ARTIFACT_METADATA_FILE} has an invalid shape`);
-  }
-
-  if (metadata.schemaVersion !== 1) {
-    throw new Error(
-      `Unsupported ${ARTIFACT_METADATA_FILE} schemaVersion: ${metadata.schemaVersion}`,
-    );
-  }
-  if (typeof manifest.id === "string" && metadata.id !== manifest.id) {
-    throw new Error(
-      `${ARTIFACT_METADATA_FILE} id mismatch: metadata has ${metadata.id}, manifest has ${manifest.id}`,
-    );
-  }
-  if (metadata.platformVersion !== PLATFORM_VERSION) {
-    throw new Error(
-      `${ARTIFACT_METADATA_FILE} platform version mismatch: expected ${PLATFORM_VERSION}`,
-    );
-  }
+  const result = validatePortableArtifactMetadata(value, String(manifest.id));
+  if (!result.valid) throw new Error(`${ARTIFACT_METADATA_FILE}: ${result.errors.join("; ")}`);
 }
 
 export async function packageIntegration(opts: PackageOptions): Promise<PackageResult> {
@@ -1249,10 +1229,13 @@ export async function packageIntegration(opts: PackageOptions): Promise<PackageR
   if (!validation.valid) {
     throw new Error(`Manifest validation failed:\n  - ${validation.errors.join("\n  - ")}`);
   }
+  assertCompatibleManifestProtocol(manifest);
   resolveLayerSelectorPreview(directory, manifest);
   assertNoExecutableCommunityCode(directory, manifest);
 
-  validateDeclarativeArtifact(directory);
+  // Authoring dependencies may exist in the source tree. The explicit file
+  // allowlist below never stages node_modules; received artifacts are still
+  // rejected by validateDeclarativeArtifact before installation.
 
   // Generated in memory, not written into the caller's tree: packaging must
   // leave the source directory byte-for-byte unchanged.

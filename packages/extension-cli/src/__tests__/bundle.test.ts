@@ -58,3 +58,36 @@ describe("buildExtensionManifest", () => {
     ).toThrow(/sha256/);
   });
 });
+
+// Author tooling must reject the same malformed bundles as the installing host.
+describe("bundle host-contract parity", () => {
+  const base = { id: "demo", name: "Demo", version: "0.1.0" };
+  it.each([
+    ["invalid digest", ["https://example.com/a.tar.gz,not-a-digest,demo"]],
+    ["non-HTTPS artifact", [`http://example.com/a.tar.gz,${"a".repeat(64)},demo`]],
+    ["invalid component ID", [`https://example.com/a.tar.gz,${"a".repeat(64)},Bad ID`]],
+    [
+      "duplicate component",
+      [
+        `https://example.com/a.tar.gz,${"a".repeat(64)},demo`,
+        `https://example.com/b.tar.gz,${"b".repeat(64)},demo`,
+      ],
+    ],
+  ])("rejects %s before emitting a document", (_reason, integration) => {
+    expect(() => buildExtensionManifest({ ...base, integration })).toThrow();
+  });
+});
+
+describe("bundle protocol syntax", () => {
+  it("rejects malformed minimum-protocol metadata", () => {
+    expect(() =>
+      buildExtensionManifest({
+        id: "demo",
+        name: "Demo",
+        version: "0.1.0",
+        platform: "bogus",
+        service: ["https://github.com/example/demo,v0.1.0,demo"],
+      }),
+    ).toThrow(/major.minor/);
+  });
+});

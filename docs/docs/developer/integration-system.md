@@ -1125,8 +1125,13 @@ The host treats the two install locations differently, and the
   integration may declare a minimum `platform` version in its manifest; if the
   running platform's major version differs, or its minor is lower, the host skips
   the integration with a warning. The platform version uses simple
-  `major.minor` semantics — the major is bumped for breaking changes to the
-  manifest schema, context, or contracts, the minor for additive ones.
+  `major.minor` semantics — the major is bumped for breaking protocol changes,
+  the minor for additive ones. This protocol version is independent of product,
+  npm package and extension release versions. The portable
+  `@openmapx/extension-contracts` package supplies the canonical authoring types,
+  validators and structural JSON Schemas; it does not expose host services or
+  grant runtime privileges. See the [external extension guide](./building-an-external-extension.md)
+  for standalone tooling and the current publication status.
 
 Installing and managing community integrations is an administrator task; see
 [Community extensions](../administration/community-extensions.md).

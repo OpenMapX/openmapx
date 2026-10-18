@@ -41,8 +41,9 @@ checks ran, including any database, browser or native-device verification left u
 ## Pull request writing and visual evidence
 
 Use the concise prompts in [Contributing](CONTRIBUTING.md#descriptions-and-visual-evidence).
-For every visual/visible-impact change, capture and inspect the actual rendered result,
-including docs and other visible output. Put screenshots near the explanation in the PR:
+For changes that visibly affect the OpenMapX application UI, capture and inspect the
+actual rendered result. Documentation-only changes do not require screenshots. Put
+screenshots near the explanation in the PR:
 comparable labeled before/after for existing behavior, contextual after views for new
 surfaces, and relevant changed states/viewports. Recordings supplement screenshots.
 

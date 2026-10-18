@@ -42,6 +42,7 @@ COPY packages/motis-feed-proxy-config/package.json packages/motis-feed-proxy-con
 COPY packages/mobility-formats/package.json packages/mobility-formats/
 COPY packages/transitous-core/package.json packages/transitous-core/
 COPY packages/core/package.json packages/core/
+COPY packages/extension-contracts/package.json packages/extension-contracts/
 COPY packages/hey-api-client-fetch/package.json packages/hey-api-client-fetch/
 COPY packages/i18n/package.json packages/i18n/
 COPY packages/cli/package.json packages/cli/
@@ -64,6 +65,7 @@ COPY packages/motis-feed-proxy-config/package.json packages/motis-feed-proxy-con
 COPY packages/mobility-formats/package.json packages/mobility-formats/
 COPY packages/transitous-core/package.json packages/transitous-core/
 COPY packages/core/package.json packages/core/
+COPY packages/extension-contracts/package.json packages/extension-contracts/
 COPY packages/hey-api-client-fetch/package.json packages/hey-api-client-fetch/
 COPY packages/i18n/package.json packages/i18n/
 COPY packages/cli/package.json packages/cli/
@@ -146,6 +148,8 @@ COPY --from=prod-deps /app/packages/mobility-formats/node_modules ./packages/mob
 COPY packages/transitous-core/ ./packages/transitous-core/
 COPY --from=prod-deps /app/packages/transitous-core/node_modules ./packages/transitous-core/node_modules
 COPY packages/core/ ./packages/core/
+COPY packages/extension-contracts/ ./packages/extension-contracts/
+COPY --from=prod-deps /app/packages/extension-contracts/node_modules ./packages/extension-contracts/node_modules
 COPY --from=prod-deps /app/packages/core/node_modules ./packages/core/node_modules
 COPY packages/hey-api-client-fetch/ ./packages/hey-api-client-fetch/
 
