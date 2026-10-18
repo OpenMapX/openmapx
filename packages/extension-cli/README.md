@@ -24,6 +24,10 @@ openmapx-ext scaffold integration my-weather --domain weather --out ./integratio
 
 Creates `integrations/my-weather/` with `manifest.json`, `package.json`, localized strings and companion-response/attribution authoring examples. The generated package uses the public CLI as a development tool and has `validate` and `package` scripts; it has no private workspace dependencies. Run `npm install` after a matching CLI version is published, or install the candidate tarball with `npm install --save-dev /path/to/extension-cli.tgz` during local qualification. Then run `npm run validate`. Executable behavior belongs in a companion service; community runtime entry points are rejected until a dedicated isolation boundary exists.
 
+The generated README explains lockfile setup and a repository-relative candidate tarball for use before publication. The included `.github/workflows/validate.yml` runs `npm ci --ignore-scripts`, validation and packaging, then retains the artifact for inspection without publishing or deploying it. It assumes the generated directory is the repository root; the README explains how to adapt nested projects. Commit the lockfile and any referenced candidate tarball before enabling it.
+
+Use the [local development host walkthrough](https://docs.openmapx.org/developer/building-an-external-extension/#test-in-a-local-development-host) to install, reload, replace and remove the artifact. Companion-service lifecycle and displayed-data acceptance require a separate full-stack test.
+
 ### scaffold service
 
 Scaffold a `service.json` for a new community service:
