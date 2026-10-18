@@ -7,6 +7,8 @@ import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
  * All tests exercise only the public API; no internals are imported or patched.
  */
 
+import { createHash } from "node:crypto";
+import * as fs from "node:fs";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -19,6 +21,20 @@ import {
   getIntegrationHealthMocks,
   createIntegrationHostTestApp as makeApp,
 } from "./__tests__/support/integration-host-environment.js";
+
+vi.mock("node:crypto", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:crypto")>();
+  return { ...actual, createHash: vi.fn(actual.createHash) };
+});
+
+vi.mock("node:fs", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:fs")>();
+  return {
+    ...actual,
+    readFileSync: vi.fn(actual.readFileSync),
+    statSync: vi.fn(actual.statSync),
+  };
+});
 
 // The fixtures directory that contains our test integrations.
 // import.meta.url points to this file: apps/api/src/integration-host.test.ts
@@ -33,9 +49,11 @@ import {
   reloadIntegrations,
   shutdownIntegrations,
 } from "./integration-host.js";
-import { setIntegrationRouteRateLimits } from "./integration-routes.js";
+import { registerIntegrationRoute, setIntegrationRouteRateLimits } from "./integration-routes.js";
+import { makeRateLimitTierHook, type RateLimitTiers } from "./server-wiring.js";
 import { isSecretsConfigured } from "./services/secrets.js";
 import { resolveRequiresForIntegration } from "./services/service-registry.js";
+import { RateLimiter } from "./utils/rate-limit.js";
 
 const integrationHealthMocks = getIntegrationHealthMocks();
 
@@ -93,6 +111,142 @@ describe("integration route rate tiers", () => {
     expect(expensiveLimit).toHaveBeenCalledTimes(1);
     expect(tileLimit).toHaveBeenCalledTimes(1);
   });
+});
+
+describe("host and dispatcher request tier ownership", () => {
+  function installTiers(app: FastifyInstance, max = 2) {
+    const buckets = {
+      public: new RateLimiter({ max, windowMs: 60_000 }),
+      expensive: new RateLimiter({ max, windowMs: 60_000 }),
+      tile: new RateLimiter({ max, windowMs: 60_000 }),
+    };
+    const tiers: RateLimitTiers = {
+      public: buckets.public.preHandler(),
+      expensive: buckets.expensive.preHandler(),
+      tile: buckets.tile.preHandler(),
+      auth: vi.fn(),
+      status: vi.fn(),
+    };
+    app.addHook("onRequest", makeRateLimitTierHook(tiers));
+    setIntegrationRouteRateLimits(tiers);
+    app.addHook("onClose", async () => {
+      for (const bucket of Object.values(buckets)) bucket.destroy();
+    });
+  }
+
+  it.each([
+    ["/api/integrations", 304],
+    ["/api/integrations/health", 200],
+    ["/api/integrations/alpha/preview", 304],
+  ])(
+    "limits host-owned %s before repeated work, including validators and query strings",
+    async (url, conditionalStatus) => {
+      const app = makeApp();
+      installTiers(app);
+      await initIntegrations(app, [FIXTURES_DIR]);
+      const read = vi.mocked(fs.readFileSync);
+      const stat = vi.mocked(fs.statSync);
+      try {
+        const request = { method: "GET" as const, url, remoteAddress: "198.51.100.40" };
+        const first = await app.inject(request);
+        expect(first.statusCode).toBe(200);
+        const conditional = {
+          ...request,
+          url: `${url}?fixture=1`,
+          headers: {
+            "if-none-match": String(first.headers.etag ?? "*"),
+            "x-forwarded-for": "127.0.0.1",
+          },
+        };
+        expect((await app.inject(conditional)).statusCode).toBe(conditionalStatus);
+        const hashesBefore = vi.mocked(createHash).mock.calls.length;
+        const readsBefore = read.mock.calls.length;
+        const statsBefore = stat.mock.calls.length;
+        const healthReadsBefore =
+          integrationHealthMocks.getCachedIntegrationHealthSnapshot.mock.calls.length;
+        const exhausted = await app.inject(conditional);
+        expect(exhausted.statusCode).toBe(429);
+        expect(exhausted.headers["retry-after"]).toBeDefined();
+        expect(vi.mocked(createHash).mock.calls.length).toBe(hashesBefore);
+        expect(read.mock.calls.length).toBe(readsBefore);
+        expect(stat.mock.calls.length).toBe(statsBefore);
+        expect(integrationHealthMocks.getCachedIntegrationHealthSnapshot.mock.calls.length).toBe(
+          healthReadsBefore,
+        );
+      } finally {
+        await app.close();
+      }
+    },
+  );
+
+  it.each([
+    ["public", false],
+    ["expensive", false],
+    ["tile", false],
+    ["public", true],
+    ["expensive", true],
+    ["tile", true],
+  ] as const)(
+    "charges actual dispatcher requests exactly once to %s (root route: %s)",
+    async (tier, rootRoute) => {
+      const app = makeApp();
+      installTiers(app);
+      app.get("/api/floor", async () => ({ ok: true }));
+      await initIntegrations(app, [FIXTURES_DIR]);
+      if (rootRoute) {
+        registerIntegrationRoute(
+          "alpha",
+          "GET",
+          "/",
+          async (_request, reply) => {
+            reply.send({ invoked: true });
+          },
+          { rateLimitTier: tier },
+        );
+      }
+      try {
+        const request = {
+          method: "GET" as const,
+          url: rootRoute
+            ? "/api/integrations/alpha?fixture=1"
+            : `/api/integrations/alpha/tier-${tier}?fixture=1`,
+          remoteAddress: "198.51.100.41",
+        };
+        for (let i = 0; i < 2; i++) {
+          const response = await app.inject(request);
+          expect(response.statusCode).toBe(200);
+          expect(response.json()).toEqual({ invoked: true });
+        }
+        expect((await app.inject(request)).statusCode).toBe(429);
+        const floorRequest = { ...request, url: "/api/floor" };
+        if (tier === "public") {
+          expect((await app.inject(floorRequest)).statusCode).toBe(429);
+        } else {
+          expect((await app.inject(floorRequest)).statusCode).toBe(200);
+          expect((await app.inject(floorRequest)).statusCode).toBe(200);
+          expect((await app.inject(floorRequest)).statusCode).toBe(429);
+        }
+      } finally {
+        await app.close();
+      }
+    },
+  );
+
+  it.each(["/api/integrations", "/api/integrations/health", "/api/integrations/alpha/preview"])(
+    "preserves the loopback exemption for host-owned %s",
+    async (url) => {
+      const app = makeApp();
+      installTiers(app, 1);
+      await initIntegrations(app, [FIXTURES_DIR]);
+      try {
+        for (let i = 0; i < 3; i++) {
+          expect((await app.inject({ url, remoteAddress: "127.0.0.1" })).statusCode).toBe(200);
+        }
+      } finally {
+        await app.close();
+      }
+    },
+  );
 });
 
 // ---------------------------------------------------------------------------

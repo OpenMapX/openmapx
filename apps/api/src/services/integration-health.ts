@@ -361,6 +361,8 @@ async function executeSingleHealthCheck(
         ...interpolatedHeaders,
       },
       timeoutMs: TIMEOUT,
+      allowedRedirectOrigin:
+        Object.keys(interpolatedHeaders).length > 0 ? new URL(checkUrl).origin : undefined,
       allowPrivateHosts: hostExempt ? [new URL(checkUrl).hostname] : [],
     });
     const ms = Date.now() - start;

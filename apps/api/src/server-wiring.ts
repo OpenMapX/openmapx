@@ -369,9 +369,10 @@ export function makeRateLimitTierHook(limits: RateLimitTiers) {
     // limiter or broad public floor on this privacy-sensitive route.
     if (isTimelineDayRequest(request)) return;
 
-    // Integration routes declare and consume exactly one tier after the
-    // dispatcher has matched the owning route.
-    if (url === "/api/integrations" || url.startsWith("/api/integrations/")) return;
+    // Only the matched dispatcher owns tier enforcement. Direct host routes
+    // under the same URL prefix still need the public floor.
+    const route = request.routeOptions.url;
+    if (route === "/api/integrations/:id" || route === "/api/integrations/:id/*") return;
 
     // Trust only the actual TCP peer here, never XFF.
     const peer = request.socket?.remoteAddress;

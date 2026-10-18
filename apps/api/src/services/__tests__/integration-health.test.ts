@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import type { SafeFetchStatusOptions } from "@openmapx/core/server";
 import type { LoadedIntegration } from "@openmapx/integration-framework";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -8,10 +9,15 @@ const coreServerMocks = vi.hoisted(() => ({
   resolvePublicConnectionAddresses: vi.fn(),
   safeFetchStatus: vi.fn(),
 }));
+const dnsMocks = vi.hoisted(() => ({ lookup: vi.fn() }));
 const netMocks = vi.hoisted(() => ({ createConnection: vi.fn() }));
 
 vi.mock("@openmapx/core/server", () => coreServerMocks);
-vi.mock("node:net", () => netMocks);
+vi.mock("node:net", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("node:net")>()),
+  ...netMocks,
+}));
+vi.mock("node:dns/promises", () => dnsMocks);
 
 // Mock service-registry before importing the module under test
 vi.mock("../service-registry", () => ({
@@ -26,6 +32,7 @@ vi.mock("../health-history", () => ({
   recordHealthResult: vi.fn().mockResolvedValue(undefined),
 }));
 
+import { recordHealthResult } from "../health-history";
 import {
   executeAllIntegrationHealthChecks,
   executeIntegrationHealthCheck,
@@ -347,6 +354,164 @@ describe("integration-health SSRF guard", () => {
 
     expect(results[0]).toMatchObject({ status: "down", error: "Connection refused" });
     expect(results[0]?.error).not.toContain(approvedAddress);
+  });
+});
+
+describe("configured health-header redirect boundaries", () => {
+  const marker = "fixture-health-header-secret";
+  const transport = vi.fn<(input: string | URL, init?: RequestInit) => Promise<Response>>();
+
+  beforeEach(async () => {
+    const real =
+      await vi.importActual<typeof import("@openmapx/core/server")>("@openmapx/core/server");
+    coreServerMocks.safeFetchStatus.mockImplementation(
+      (url: string, opts: SafeFetchStatusOptions) =>
+        real.safeFetchStatus(url, { ...opts, fetchImplementation: transport }),
+    );
+    dnsMocks.lookup.mockReset().mockResolvedValue([{ address: "93.184.216.34", family: 4 }]);
+    transport.mockReset();
+    vi.mocked(recordHealthResult).mockClear();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  function credentialCheck(header: string, url = "https://status.example.com/health") {
+    const integration = makeIntegration(
+      {
+        type: "http",
+        url,
+        // biome-ignore lint/suspicious/noTemplateCurlyInString: manifest placeholder
+        headers: { [header]: header === "Authorization" ? "Bearer ${apiKey}" : "${apiKey}" },
+      },
+      { properties: { apiKey: { type: "string", "x-openmapx-secret": true } } },
+    );
+    integration.config = { apiKey: marker };
+    return integration;
+  }
+
+  it.each([
+    ["Authorization", "https://other.example.com/ready"],
+    ["X-Api-Key", "https://other.example.com/ready"],
+    ["Authorization", "https://status.example.com:444/ready"],
+    ["X-Api-Key", "http://status.example.com/ready"],
+  ])(
+    "blocks %s before a second transport request to %s without exposing the header in status outputs",
+    async (header, target) => {
+      const logs = ["error", "warn", "info", "log"] as const;
+      const logSpies = logs.map((level) => vi.spyOn(console, level).mockImplementation(() => {}));
+      transport.mockImplementation(async (input) =>
+        String(input) === "https://status.example.com/health"
+          ? new Response(null, { status: 302, headers: { location: target } })
+          : new Response(null, { status: 200 }),
+      );
+      const integration = credentialCheck(header);
+      const results = await executeIntegrationHealthCheck(integration);
+
+      expect(transport).toHaveBeenCalledTimes(1);
+      expect(new Headers(transport.mock.calls[0]?.[1]?.headers).get(header)).toContain(marker);
+      expect(results[0]).toMatchObject({
+        status: "down",
+        error: expect.stringMatching(/redirect/i),
+      });
+      transport.mockClear();
+      const refreshed = await executeAllIntegrationHealthChecks([integration]);
+      const snapshot = getCachedIntegrationHealthSnapshot([integration]);
+      expect(transport).toHaveBeenCalledTimes(1);
+      expect(refreshed[0]?.status).toBe("down");
+      expect(snapshot.results[0]?.status).toBe("down");
+      expect(recordHealthResult).toHaveBeenCalledWith(
+        "test-integration",
+        "unhealthy",
+        expect.any(Number),
+        expect.stringMatching(/redirect/i),
+      );
+      expect(
+        JSON.stringify({
+          results,
+          refreshed,
+          snapshot,
+          history: vi.mocked(recordHealthResult).mock.calls,
+          logs: logSpies.map((spy) => spy.mock.calls),
+        }),
+      ).not.toContain(marker);
+    },
+  );
+
+  it.each(["Authorization", "X-Api-Key"])(
+    "retains %s on an allowed same-origin redirect",
+    async (header) => {
+      transport
+        .mockResolvedValueOnce(
+          new Response(null, {
+            status: 302,
+            headers: { location: "https://status.example.com:443/ready" },
+          }),
+        )
+        .mockResolvedValueOnce(new Response(null, { status: 200 }));
+
+      const results = await executeIntegrationHealthCheck(credentialCheck(header));
+
+      expect(results[0]?.status).toBe("up");
+      expect(transport.mock.calls.map(([url]) => String(url))).toEqual([
+        "https://status.example.com/health",
+        "https://status.example.com/ready",
+      ]);
+      for (const [, init] of transport.mock.calls) {
+        expect(new Headers(init?.headers).get(header)).toBe(
+          header === "Authorization" ? `Bearer ${marker}` : marker,
+        );
+      }
+    },
+  );
+
+  it.each([undefined, {}])(
+    "keeps cross-origin redirects for checks with no configured headers (%s)",
+    async (headers) => {
+      transport
+        .mockResolvedValueOnce(
+          new Response(null, {
+            status: 302,
+            headers: { location: "https://other.example.com/ready" },
+          }),
+        )
+        .mockResolvedValueOnce(new Response(null, { status: 200 }));
+
+      const results = await executeIntegrationHealthCheck(
+        makeIntegration({ type: "http", url: "https://status.example.com/health", headers }),
+      );
+
+      expect(results[0]?.status).toBe("up");
+      expect(transport.mock.calls.map(([url]) => String(url))).toEqual([
+        "https://status.example.com/health",
+        "https://other.example.com/ready",
+      ]);
+      expect(new Headers(transport.mock.calls[0]?.[1]?.headers).has("User-Agent")).toBe(true);
+    },
+  );
+
+  it("preserves configured service-host private-address access and same-origin redirects", async () => {
+    dnsMocks.lookup.mockResolvedValue([{ address: "10.0.0.4", family: 4 }]);
+    transport
+      .mockResolvedValueOnce(new Response(null, { status: 302, headers: { location: "/ready" } }))
+      .mockResolvedValueOnce(new Response(null, { status: 200 }));
+    const integration = credentialCheck("X-Api-Key");
+    integration.manifest.healthCheck = {
+      type: "http",
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: manifest placeholder
+      urlTemplate: "${service:valhalla}/health",
+      headers: { "X-Api-Key": marker },
+    };
+
+    const results = await executeIntegrationHealthCheck(integration);
+
+    expect(results[0]?.status).toBe("up");
+    expect(transport.mock.calls.map(([url]) => String(url))).toEqual([
+      "http://valhalla:8002/health",
+      "http://valhalla:8002/ready",
+    ]);
+    expect(new Headers(transport.mock.calls[1]?.[1]?.headers).get("X-Api-Key")).toBe(marker);
   });
 });
 
