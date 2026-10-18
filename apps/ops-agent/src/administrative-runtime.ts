@@ -106,7 +106,8 @@ export interface AdministrativeReleaseEffects {
   initialize?(): Promise<void>;
   resolve(context: FixedCliOptions): Promise<string>;
   pull(releaseId: string, context: FixedCliOptions): Promise<void>;
-  inspect(): Promise<{ currentReleaseId?: string; availableReleaseId?: string }>;
+  inspect(): Promise<OpsResultFor<"release.inspect">>;
+  validateCandidate?(releaseId: string, expectedDigest: string): Promise<void>;
   inspectSystem(context: FixedCliOptions): Promise<OpsResultFor<"system.inspect">>;
   apply(
     releaseId: string,
@@ -839,6 +840,7 @@ export function createDefaultReleaseEffects(
     state: join(directory, "current.json"),
     latest: join(directory, "latest.json"),
     transaction: join(directory, "transaction.json"),
+    selections: join(directory, "selections.json"),
   };
   const infraDir = join(rootDir, "infra", "docker");
   const repositoryPaths: coreServices.StackPaths = {
@@ -852,7 +854,7 @@ export function createDefaultReleaseEffects(
   const stackArgs = () => coreServices.stackComposeArgs(repositoryPaths, isRegularComposeFile);
   const manifestNames = () => {
     const entries = readdirSync(directory);
-    if (entries.length > MAX_RELEASE_STORE_ENTRIES + 4)
+    if (entries.length > MAX_RELEASE_STORE_ENTRIES + 5)
       throw new Error("Release store limit exceeded");
     let bytes = 0;
     const names: string[] = [];
@@ -865,10 +867,14 @@ export function createDefaultReleaseEffects(
         }
         continue;
       }
-      if (["current.json", "latest.json", "transaction.json"].includes(name)) {
+      if (["current.json", "latest.json", "transaction.json", "selections.json"].includes(name)) {
         const stat = lstatSync(join(directory, name));
         const maximum =
-          name === "transaction.json" ? MAX_RELEASE_TRANSACTION_BYTES : MAX_RELEASE_STATE_BYTES;
+          name === "transaction.json"
+            ? MAX_RELEASE_TRANSACTION_BYTES
+            : name === "selections.json"
+              ? 32 * 1024
+              : MAX_RELEASE_STATE_BYTES;
         if (
           !stat.isFile() ||
           stat.isSymbolicLink() ||
@@ -919,7 +925,7 @@ export function createDefaultReleaseEffects(
       });
       emitLines(context.emitLog, "stdout", result.stdout);
       emitLines(context.emitLog, "stderr", result.stderr);
-      return result.stdout;
+      return args[0] === "pull" ? `${result.stdout}\n${result.stderr}` : result.stdout;
     });
   const readReleasePointer = (
     path: string,
@@ -963,15 +969,69 @@ export function createDefaultReleaseEffects(
     };
   };
   const readState = () => readReleasePointer(paths.state, true);
-  const inspectRelease = async () => {
+  const configurationIdentity = () =>
+    releaseDigest(JSON.stringify(coreServices.releaseSelection()));
+  const selectionReceipts = (): Record<
+    string,
+    { configuration: string; ociDigest: string; digest: string }
+  > => {
+    if (!existsSync(paths.selections)) return {};
+    const value = JSON.parse(strictReadFile(paths.selections, 32 * 1024));
+    if (
+      !value ||
+      typeof value !== "object" ||
+      Array.isArray(value) ||
+      Object.keys(value).length > MAX_RELEASE_STORE_ENTRIES
+    )
+      throw new Error("Invalid release selection receipts");
+    for (const [id, receipt] of Object.entries(value) as [string, Record<string, unknown>][])
+      if (
+        !/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(id) ||
+        !receipt ||
+        Object.keys(receipt).sort().join() !== "configuration,digest,ociDigest" ||
+        !/^[a-f0-9]{64}$/.test(String(receipt.configuration)) ||
+        !/^[a-f0-9]{64}$/.test(String(receipt.digest)) ||
+        !/^sha256:[a-f0-9]{64}$/.test(String(receipt.ociDigest))
+      )
+        throw new Error("Invalid release selection receipt");
+    return value;
+  };
+  const validateCandidate = async (releaseId: string, expectedDigest: string) => {
+    const manifest = loadManifest(releaseId);
+    const receipt = selectionReceipts()[releaseId];
+    if (
+      !receipt ||
+      receipt.configuration !== configurationIdentity() ||
+      receipt.digest !== expectedDigest ||
+      releaseDigest(coreServices.canonicalReleaseManifest(manifest)) !== expectedDigest
+    )
+      throw new Error(
+        "Checked release is unavailable, changed or belongs to another configuration; check again",
+      );
+    coreServices.validateResolvedSelection(
+      coreServices.releaseSelection(),
+      manifest,
+      receipt.ociDigest,
+    );
+  };
+  const inspectRelease = async (): Promise<OpsResultFor<"release.inspect">> => {
     const state = readState();
-    const candidates = manifestNames();
     const latest = readReleasePointer(paths.latest, true);
+    const candidates = manifestNames();
     const availableReleaseId =
       latest.releaseId ?? (candidates.length === 1 ? candidates[0] : undefined);
+    const current = state.releaseId ? loadManifest(state.releaseId) : undefined;
+    const available = availableReleaseId ? loadManifest(availableReleaseId) : undefined;
+    const receipt = availableReleaseId ? selectionReceipts()[availableReleaseId] : undefined;
     return {
+      configuredSelector: process.env.OPENMAPX_RELEASE ?? "main",
       ...(state.releaseId ? { currentReleaseId: state.releaseId } : {}),
+      ...(current?.product ? { currentVersion: current.product.version } : {}),
       ...(availableReleaseId ? { availableReleaseId } : {}),
+      ...(available?.product ? { availableVersion: available.product.version } : {}),
+      ...(receipt && receipt.configuration === configurationIdentity()
+        ? { availableDigest: receipt.digest }
+        : {}),
     };
   };
   const inspectImageId = async (
@@ -1254,12 +1314,30 @@ export function createDefaultReleaseEffects(
   };
   return {
     initialize,
+    validateCandidate,
     resolve: async (context) => {
       await initialize();
       manifestNames();
-      const image = coreServices.releaseManifestImage();
-      await runDocker(["pull", image], context);
-      const containerId = (await runDocker(["create", image, "true"], context)).trim();
+      const selection = coreServices.releaseSelection();
+      if (selection.kind === "local") throw new coreServices.ReleaseChannelDisabledError();
+      const image = selection.manifestImage;
+      const pulled = await runDocker(["pull", image], context);
+      const ociDigest = coreServices.releaseDigestFromPull(pulled);
+      const imageId = (
+        await runDocker(
+          [
+            "image",
+            "inspect",
+            "--format",
+            "{{.Id}}",
+            `${selection.manifestRepository}@${ociDigest}`,
+          ],
+          context,
+        )
+      ).trim();
+      if (!/^sha256:[a-f0-9]{64}$/.test(imageId))
+        throw new Error("Invalid resolved manifest image ID");
+      const containerId = (await runDocker(["create", imageId, "true"], context)).trim();
       if (!/^[a-f0-9]{64}$/.test(containerId)) throw new Error("Release resolution failed");
       const temporaryDirectory = mkdtempSync(join(tmpdir(), "openmapx-agent-release-"));
       const temporaryManifest = join(temporaryDirectory, "release.json");
@@ -1273,7 +1351,8 @@ export function createDefaultReleaseEffects(
           context,
         );
         const raw = strictReadFile(temporaryManifest, MAX_RELEASE_MANIFEST_BYTES);
-        const manifest = coreServices.parseReleaseManifest(raw);
+        const manifest = coreServices.parseReleaseManifest(raw, selection.imagePrefix);
+        coreServices.validateResolvedSelection(selection, manifest, ociDigest);
         const canonical = coreServices.canonicalReleaseManifest(manifest);
         const destination = releaseManifestPath(rootDir, manifest.release);
         // Re-read the store under the lock. A snapshot taken before the Docker
@@ -1289,6 +1368,13 @@ export function createDefaultReleaseEffects(
             throw new Error("Release store limit exceeded");
           }
           immutableWrite(destination, canonical);
+          const receipts = selectionReceipts();
+          receipts[manifest.release] = {
+            configuration: configurationIdentity(),
+            ociDigest,
+            digest: releaseDigest(canonical),
+          };
+          atomicWrite(paths.selections, JSON.stringify(receipts));
           atomicWrite(
             paths.latest,
             JSON.stringify({ releaseId: manifest.release, digest: releaseDigest(canonical) }),
@@ -1736,6 +1822,9 @@ export function createAdministrativeRuntime(
   };
   runtime["appApi.runtime.inspect"] = async () => releaseEffects.runtimeInspect?.() ?? {};
   runtime["system.update"] = async (operation, context) => {
+    if (!releaseEffects.validateCandidate)
+      throw new Error("Checked release validation unavailable");
+    await releaseEffects.validateCandidate(operation.releaseId, operation.expectedDigest);
     if (operation.createBackup && operation.backupId) {
       await runFixedCli(["backup", "create", "--name", operation.backupId], context);
     }

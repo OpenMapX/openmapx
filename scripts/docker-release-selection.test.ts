@@ -11,7 +11,11 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { loadPreviousRelease, pullRequestTargets } from "./docker-release-plan.mjs";
+import {
+  loadPreviousRelease,
+  pullRequestTargets,
+  sameProducerPlan,
+} from "./docker-release-plan.mjs";
 
 const sha = "a".repeat(40);
 const digest = `sha256:${"b".repeat(64)}`;
@@ -70,7 +74,7 @@ describe("changed-image CLI input discovery", () => {
 describe("previous published release acquisition", () => {
   it("bootstraps only on an explicit missing manifest", () => {
     expect(
-      loadPreviousRelease("example.invalid/release-manifest:latest", () => ({
+      loadPreviousRelease("example.invalid/release-manifest:main", () => ({
         status: 1,
         stderr: "manifest unknown",
       })),
@@ -80,7 +84,7 @@ describe("previous published release acquisition", () => {
     "fails closed on %s",
     (stderr) => {
       expect(() =>
-        loadPreviousRelease("example.invalid/release-manifest:latest", () => ({
+        loadPreviousRelease("example.invalid/release-manifest:main", () => ({
           status: 1,
           stderr,
         })),
@@ -94,8 +98,9 @@ describe("previous published release acquisition", () => {
       const container = "c".repeat(64);
       let copiedTo = "";
       const acquire = () =>
-        loadPreviousRelease("example.invalid/release-manifest:latest", (args: string[]) => {
+        loadPreviousRelease("example.invalid/release-manifest:main", (args: string[]) => {
           calls.push(args);
+          if (args[0] === "pull") return { status: 0, stdout: `Digest: ${digest}` };
           if (args[0] === "image") return { status: 0, stdout: digest };
           if (args[0] === "create") return { status: 0, stdout: container };
           if (args[0] === "cp") {
@@ -164,7 +169,7 @@ describe("build selection and mandatory scanning", () => {
       output: "rebuild=true\nrefresh=true\ndigest=\n",
     });
   });
-  it.each([{ release: `${sha}-123-1` }, { sourceRevision: "b".repeat(40) }, { version: 2 }])(
+  it.each([{ release: `${sha}-124-1` }, { sourceRevision: "b".repeat(40) }, { version: 2 }])(
     "rejects another run, checkout, or schema: %s",
     (patch) => {
       expect(select(patch)).toEqual({ status: 1, output: "" });
@@ -219,4 +224,11 @@ describe("build selection and mandatory scanning", () => {
       }
     },
   );
+});
+
+it("reuses only an earlier plan from the same source/run across producer attempts", () => {
+  expect(sameProducerPlan(`${sha}-123-1`, `${sha}-123-2`)).toBe(true);
+  expect(sameProducerPlan(`${sha}-123-3`, `${sha}-123-2`)).toBe(false);
+  expect(sameProducerPlan(`${sha}-124-1`, `${sha}-123-2`)).toBe(false);
+  expect(sameProducerPlan(`${"b".repeat(40)}-123-1`, `${sha}-123-2`)).toBe(false);
 });

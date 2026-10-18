@@ -1,6 +1,6 @@
 /**
  * The aggregate OpenMapX release manifest published by
- * `.github/workflows/docker.yml` as `<registry>/<namespace>/release-manifest:latest`.
+ * `.github/workflows/docker.yml` as `<registry>/<namespace>/release-manifest:main`.
  * Parsing and overlay rendering are shared by the admin system updater
  * (apps/api) and the CLI so both produce byte-identical
  * `docker-compose.release.yml` overlays.
@@ -26,7 +26,7 @@ import { dirname, join } from "node:path";
 import { JSON_SCHEMA, load } from "js-yaml";
 import z from "zod/v4";
 
-export const DEFAULT_RELEASE_MANIFEST_IMAGE = "ghcr.io/openmapx/release-manifest:latest";
+export const DEFAULT_RELEASE_MANIFEST_IMAGE = "ghcr.io/openmapx/release-manifest:main";
 export const RELEASE_MANIFEST_IMAGE_ENV = "OPENMAPX_RELEASE_MANIFEST_IMAGE";
 export const RELEASE_MANIFEST_CONTAINER_PATH = "/release-manifest.json";
 /** Runtime services whose images the release overlay pins as one release. */
@@ -56,59 +56,168 @@ export const RELEASE_IMAGE_NAMES = [
 ] as const;
 const DIGEST = "sha256:[a-f0-9]{64}";
 
+export const RELEASE_SELECTOR_ENV = "OPENMAPX_RELEASE";
+export const RELEASE_REPOSITORY_ENV = "OPENMAPX_RELEASE_MANIFEST_REPOSITORY";
+export const DEFAULT_RELEASE_MANIFEST_REPOSITORY = "ghcr.io/openmapx/release-manifest";
+export const PRODUCT_VERSION_PATTERN =
+  /^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)-(alpha|beta|rc)\.(0|[1-9]\d*)$/;
+export type ReleaseSelection =
+  | { kind: "local" }
+  | {
+      kind: "main" | "preview" | "version" | "digest";
+      selector: string;
+      manifestImage: string;
+      manifestRepository: string;
+      imagePrefix: string;
+      expectedVersion?: string;
+    };
 export type ReleaseChannel =
   | { kind: "disabled" }
-  | { kind: "enabled"; manifestImage: string; imagePrefix: string };
-
+  | {
+      kind: "enabled";
+      manifestImage: string;
+      imagePrefix: string;
+      selection: Exclude<ReleaseSelection, { kind: "local" }>;
+    };
 function envValue(name: string): string | undefined {
-  return typeof process !== "undefined" ? process.env?.[name] : undefined;
+  return process.env?.[name];
 }
-
 function imagePrefixOf(image: string): string {
-  const slash = image.lastIndexOf("/");
-  if (slash <= 0) {
+  return image.slice(0, image.lastIndexOf("/"));
+}
+export function normalizeReleaseSelection(
+  selector: string = "main",
+  manifestRepository: string = DEFAULT_RELEASE_MANIFEST_REPOSITORY,
+  legacyImage?: string,
+): ReleaseSelection {
+  if (legacyImage !== undefined)
     throw new Error(
-      `${RELEASE_MANIFEST_IMAGE_ENV} must look like <registry>/<namespace>/release-manifest[:tag]`,
+      `${RELEASE_MANIFEST_IMAGE_ENV} is no longer supported. Set ${RELEASE_SELECTOR_ENV}=main|preview|v<version>|sha256:<digest>|local and ${RELEASE_REPOSITORY_ENV} instead.`,
     );
-  }
-  return image.slice(0, slash);
+  if (
+    !/^[a-z0-9][a-z0-9.-]*(?::[0-9]+)?\/[a-z0-9][a-z0-9._/-]*\/release-manifest$/.test(
+      manifestRepository,
+    ) ||
+    manifestRepository.split("/").some((part) => part === "." || part === ".." || part === "")
+  )
+    throw new Error(
+      `${RELEASE_REPOSITORY_ENV} must be a registry/namespace/release-manifest repository without a tag or digest`,
+    );
+  if (selector === "local") return { kind: "local" };
+  const kind =
+    selector === "main" || selector === "preview"
+      ? selector
+      : PRODUCT_VERSION_PATTERN.test(selector)
+        ? "version"
+        : /^sha256:[a-f0-9]{64}$/.test(selector)
+          ? "digest"
+          : undefined;
+  if (!kind)
+    throw new Error(
+      `Unsupported ${RELEASE_SELECTOR_ENV}: ${selector}. Choose main, preview, an exact prerelease version/digest, or local.`,
+    );
+  return {
+    kind,
+    selector,
+    manifestRepository,
+    manifestImage: `${manifestRepository}${kind === "digest" ? "@" : ":"}${selector}`,
+    imagePrefix: imagePrefixOf(manifestRepository),
+    ...(kind === "version" ? { expectedVersion: selector } : {}),
+  };
 }
-
-/**
- * Resolve the release channel. Forks and mirrored registries point
- * `OPENMAPX_RELEASE_MANIFEST_IMAGE` at their own manifest image; its
- * registry/namespace then becomes the approved prefix for every pinned image
- * (digests are still mandatory). An explicitly empty value disables release
- * resolution for local-image workflows, so callers report "unpinned" once
- * instead of retrying the registry on every start.
- */
+export function releaseSelection(): ReleaseSelection {
+  return normalizeReleaseSelection(
+    envValue(RELEASE_SELECTOR_ENV),
+    envValue(RELEASE_REPOSITORY_ENV),
+    envValue(RELEASE_MANIFEST_IMAGE_ENV),
+  );
+}
 export function releaseChannel(
-  configured: string | undefined = envValue(RELEASE_MANIFEST_IMAGE_ENV),
+  ...configuration: [selector?: string, repository?: string]
 ): ReleaseChannel {
-  if (configured !== undefined && configured.trim() === "") return { kind: "disabled" };
-  const manifestImage = configured?.trim() || DEFAULT_RELEASE_MANIFEST_IMAGE;
-  return { kind: "enabled", manifestImage, imagePrefix: imagePrefixOf(manifestImage) };
+  const selection = configuration.length
+    ? normalizeReleaseSelection(...configuration)
+    : releaseSelection();
+  return selection.kind === "local"
+    ? { kind: "disabled" }
+    : {
+        kind: "enabled",
+        manifestImage: selection.manifestImage,
+        imagePrefix: selection.imagePrefix,
+        selection,
+      };
 }
-
 export class ReleaseChannelDisabledError extends Error {
   constructor() {
-    super(`Release resolution is disabled (${RELEASE_MANIFEST_IMAGE_ENV} is empty)`);
+    super(`Release resolution is disabled (${RELEASE_SELECTOR_ENV}=local)`);
     this.name = "ReleaseChannelDisabledError";
   }
 }
-
-/** The manifest image to pull, or throws {@link ReleaseChannelDisabledError}. */
 export function releaseManifestImage(): string {
   const channel = releaseChannel();
   if (channel.kind === "disabled") throw new ReleaseChannelDisabledError();
   return channel.manifestImage;
 }
+/** Docker pull's digest is an OCI identity, not the local image configuration ID. */
+export function releaseDigestFromPull(output: string): string {
+  const matches = [...output.matchAll(/^Digest: (sha256:[a-f0-9]{64})\r?$/gm)];
+  if (matches.length !== 1)
+    throw new Error("Docker pull did not return one unambiguous release manifest digest");
+  return matches[0][1];
+}
+export function validateResolvedSelection(
+  selection: ReleaseSelection,
+  manifest: ReleaseManifest,
+  ociDigest: string,
+): void {
+  if (selection.kind === "local") throw new ReleaseChannelDisabledError();
+  if (selection.kind === "digest" && ociDigest !== selection.selector)
+    throw new Error("Resolved manifest digest does not match selection");
+  if (
+    selection.kind === "version" &&
+    (manifest.release !== selection.expectedVersion ||
+      `v${manifest.product?.version}` !== selection.expectedVersion)
+  )
+    throw new Error("Resolved manifest version does not match selection");
+  if (selection.kind === "preview" && !manifest.product)
+    throw new Error("Preview is not a named product release");
+}
 
+export interface ReleaseProducer {
+  repository: string;
+  workflowPath: ".github/workflows/ci.yml";
+  sourceRevision: string;
+  runId: number;
+  runAttempt: number;
+  event: "push" | "schedule";
+}
+export interface ReleaseBuildMetadata {
+  version: 1;
+  images: Partial<
+    Record<
+      (typeof RELEASE_IMAGE_NAMES)[number],
+      { sourceRevision: string; inputHash: string; builtAt: string; coldRefreshedAt?: string }
+    >
+  >;
+}
+export interface ProductReleaseMetadata {
+  version: string;
+  sourceRelease: string;
+  sourceRevision: string;
+  producer: ReleaseProducer;
+  notesSha256: string;
+  compatibility: { extensionProtocol: string; platforms: string[] };
+  upgradeOrigins: string[];
+  limitations: string[];
+}
 export interface ReleaseManifest {
   schemaVersion: 1;
   release: string;
   images: Record<(typeof RELEASE_IMAGE_NAMES)[number], string>;
   privacyReleaseValidation: PrivacyReleaseValidationEvidence;
+  producer?: ReleaseProducer;
+  buildMetadata?: ReleaseBuildMetadata;
+  product?: ProductReleaseMetadata;
 }
 
 export interface PrivacyReleaseValidationEvidence {
@@ -137,6 +246,50 @@ const privacyReleaseValidationSchema = z
   })
   .strict();
 
+const producerSchema = z.strictObject({
+  repository: z.string().regex(/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/),
+  workflowPath: z.literal(".github/workflows/ci.yml"),
+  sourceRevision: z.string().regex(/^[a-f0-9]{40}$/),
+  runId: z.number().int().positive(),
+  runAttempt: z.number().int().positive(),
+  event: z.enum(["push", "schedule"]),
+});
+const buildMetadataSchema = z.strictObject({
+  version: z.literal(1),
+  images: z.partialRecord(
+    z.enum(RELEASE_IMAGE_NAMES),
+    z.strictObject({
+      sourceRevision: z.string().regex(/^[a-f0-9]{40}$/),
+      inputHash: z.string().regex(/^[a-f0-9]{64}$/),
+      builtAt: z.iso.datetime({ offset: true }),
+      coldRefreshedAt: z.iso.datetime({ offset: true }).optional(),
+    }),
+  ),
+});
+const productSchema = z.strictObject({
+  version: z.string().refine((value) => PRODUCT_VERSION_PATTERN.test(`v${value}`)),
+  sourceRelease: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/),
+  sourceRevision: z.string().regex(/^[a-f0-9]{40}$/),
+  producer: producerSchema,
+  notesSha256: z.string().regex(/^[a-f0-9]{64}$/),
+  compatibility: z.strictObject({
+    extensionProtocol: z.string().min(1),
+    platforms: z.array(z.literal("linux/amd64")).length(1),
+  }),
+  upgradeOrigins: z.array(z.string().min(1)).min(1),
+  limitations: z.array(z.string().min(1)),
+});
+function stableObject(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(stableObject);
+  if (value && typeof value === "object")
+    return Object.fromEntries(
+      Object.entries(value)
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([key, item]) => [key, stableObject(item)]),
+    );
+  return value;
+}
+
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&");
 }
@@ -145,7 +298,7 @@ function defaultImagePrefix(): string {
   const channel = releaseChannel();
   return channel.kind === "enabled"
     ? channel.imagePrefix
-    : imagePrefixOf(DEFAULT_RELEASE_MANIFEST_IMAGE);
+    : imagePrefixOf(envValue(RELEASE_REPOSITORY_ENV) ?? DEFAULT_RELEASE_MANIFEST_REPOSITORY);
 }
 
 export function parseReleaseManifest(
@@ -164,9 +317,15 @@ export function parseReleaseManifest(
     release?: unknown;
     images?: unknown;
     privacyReleaseValidation?: unknown;
+    producer?: unknown;
+    buildMetadata?: unknown;
+    product?: unknown;
   };
   if (candidate.schemaVersion !== 1) throw new Error("Unsupported release lockfile schemaVersion");
-  if (typeof candidate.release !== "string" || !candidate.release.trim()) {
+  if (
+    typeof candidate.release !== "string" ||
+    !/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(candidate.release)
+  ) {
     throw new Error("Release lockfile release must be a non-empty string");
   }
   if (!candidate.images || typeof candidate.images !== "object") {
@@ -189,6 +348,23 @@ export function parseReleaseManifest(
       `Release lockfile privacyReleaseValidation${field ? `.${field}` : ""} is invalid`,
     );
   }
+  for (const [field, schema] of [
+    ["producer", producerSchema],
+    ["buildMetadata", buildMetadataSchema],
+    ["product", productSchema],
+  ] as const) {
+    if (candidate[field] !== undefined && !schema.safeParse(candidate[field]).success)
+      throw new Error(`Release lockfile ${field} is invalid`);
+  }
+  const product = candidate.product as ProductReleaseMetadata | undefined;
+  if (
+    product &&
+    (candidate.release !== `v${product.version}` ||
+      product.sourceRevision !== product.producer.sourceRevision ||
+      JSON.stringify(stableObject(candidate.producer)) !==
+        JSON.stringify(stableObject(product.producer)))
+  )
+    throw new Error("Release product identity does not match producer");
   return {
     ...candidate,
     images: Object.fromEntries(RELEASE_IMAGE_NAMES.map((name) => [name, images[name]])),
@@ -219,6 +395,13 @@ export function canonicalReleaseManifest(manifest: ReleaseManifest): string {
         policyConsistent: manifest.privacyReleaseValidation.checks.policyConsistent,
       },
     },
+    ...(manifest.producer ? { producer: stableObject(manifest.producer) } : {}),
+    // Legacy producerless manifests were stored without this then-informational
+    // field. Preserve their bytes/IDs; producer-bound manifests make it authority.
+    ...(manifest.producer && manifest.buildMetadata
+      ? { buildMetadata: stableObject(manifest.buildMetadata) }
+      : {}),
+    ...(manifest.product ? { product: stableObject(manifest.product) } : {}),
   });
 }
 
@@ -236,7 +419,7 @@ function privacyReleaseValidationEvidenceFilename(manifest: ReleaseManifest): st
 export function renderReleaseCompose(manifest: ReleaseManifest): string {
   const validationEvidenceFile = privacyReleaseValidationEvidenceFilename(manifest);
   return [
-    `x-openmapx-release: ${JSON.stringify({ release: manifest.release, images: Object.fromEntries(RELEASE_IMAGE_NAMES.map((name) => [name, manifest.images[name]])) })}`,
+    `x-openmapx-release: ${JSON.stringify({ release: manifest.release, images: Object.fromEntries(RELEASE_IMAGE_NAMES.map((name) => [name, manifest.images[name]])), ...(manifest.product ? { product: manifest.product } : {}), digest: createHash("sha256").update(canonicalReleaseManifest(manifest)).digest("hex") })}`,
     "services:",
     "  app-api:",
     `    image: ${manifest.images.api}`,

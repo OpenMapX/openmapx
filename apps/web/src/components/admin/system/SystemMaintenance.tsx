@@ -48,7 +48,17 @@ interface ImageStatus {
   error?: string;
 }
 
+interface ReleaseStatus {
+  configuredSelector?: string;
+  currentReleaseId?: string;
+  availableReleaseId?: string;
+  currentVersion?: string;
+  availableVersion?: string;
+  availableDigest?: string;
+}
+
 interface SystemStatus {
+  release?: ReleaseStatus;
   deployment: {
     dockerAvailable: boolean;
     composeRendered: boolean;
@@ -102,6 +112,10 @@ export function SystemMaintenance() {
   const queryClient = useQueryClient();
   const showToast = useAdminToast();
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [candidateToApply, setCandidateToApply] = useState<{
+    releaseId: string;
+    expectedDigest: string;
+  } | null>(null);
   const [confirmation, setConfirmation] = useState("");
   const [createBackup, setCreateBackup] = useState(true);
   const [trackedJob, setTrackedJob] = useState<TrackedJob | null>(null);
@@ -174,6 +188,18 @@ export function SystemMaintenance() {
   const active = Boolean(trackedJob || queueJob.isPending);
   const progress = jobQuery.data?.progress ?? 0;
   const updateCount = status?.images.filter((image) => image.updateAvailable).length ?? 0;
+  const checkedCandidate =
+    status?.release?.availableReleaseId && status.release.availableDigest
+      ? {
+          releaseId: status.release.availableReleaseId,
+          expectedDigest: status.release.availableDigest,
+        }
+      : null;
+  const canUpdate = Boolean(
+    checkedCandidate &&
+      (updateCount > 0 ||
+        status?.release?.availableReleaseId !== status?.release?.currentReleaseId),
+  );
 
   if (statusQuery.isError) {
     return (
@@ -203,6 +229,28 @@ export function SystemMaintenance() {
         </Alert>
       )}
 
+      <Paper variant="outlined" sx={{ p: 2, overflowWrap: "anywhere" }}>
+        <Typography variant="subtitle1">Release selection</Typography>
+        <Typography variant="body2">
+          Configured channel: {status?.release?.configuredSelector ?? "unknown"}
+        </Typography>
+        <Typography variant="body2">
+          Current release: {status?.release?.currentReleaseId ?? "unknown"}
+        </Typography>
+        <Typography variant="body2">
+          Checked release: {status?.release?.availableReleaseId ?? "not checked"}
+        </Typography>
+        {status?.release?.availableDigest && (
+          <Typography variant="caption" sx={{ display: "block", color: "text.secondary" }}>
+            Manifest: {status.release.availableDigest}
+          </Typography>
+        )}
+        <Typography variant="body2" sx={{ mt: 1, color: "text.secondary" }}>
+          Check downloads the configured release without restarting services. Apply uses that exact
+          checked manifest. Change channels in the host configuration.
+        </Typography>
+      </Paper>
+
       {trackedJob && (
         <Paper variant="outlined" sx={{ p: 1.5 }}>
           <Stack direction="row" sx={{ alignItems: "center", gap: 1, mb: 1 }}>
@@ -220,7 +268,7 @@ export function SystemMaintenance() {
 
       <AdminTableSurface
         title="OpenMapX application"
-        description="Checking pulls current image tags into the local cache without restarting anything."
+        description="Checking pulls one coherent release into the local cache without restarting anything."
         toolbar={
           <Stack
             direction={{ xs: "column", sm: "row" }}
@@ -238,9 +286,12 @@ export function SystemMaintenance() {
             <Button
               variant="contained"
               startIcon={<UpdateIcon />}
-              disabled={active || !status?.deployment.maintenanceReady || updateCount === 0}
-              title={updateCount === 0 ? "All core images are up to date" : undefined}
-              onClick={() => setDialogOpen(true)}
+              disabled={active || !status?.deployment.maintenanceReady || !canUpdate}
+              title={!canUpdate ? "Check for a release with changes before updating" : undefined}
+              onClick={() => {
+                setCandidateToApply(checkedCandidate);
+                setDialogOpen(true);
+              }}
             >
               Update OpenMapX
             </Button>
@@ -340,6 +391,10 @@ export function SystemMaintenance() {
         <DialogTitle>Update OpenMapX</DialogTitle>
         <DialogContent>
           <Stack sx={{ gap: 2, pt: 0.5 }}>
+            <Typography variant="body2" sx={{ overflowWrap: "anywhere" }}>
+              Apply checked release {candidateToApply?.releaseId}. Manifest:{" "}
+              {candidateToApply?.expectedDigest}
+            </Typography>
             <Alert severity="info">
               Images are pulled before any container is replaced. Data Manager and Web update first;
               API updates last and briefly interrupts this page.
@@ -377,11 +432,11 @@ export function SystemMaintenance() {
             variant="contained"
             color="warning"
             startIcon={<UpdateIcon />}
-            disabled={confirmation !== CONFIRMATION || queueJob.isPending || updateCount === 0}
+            disabled={confirmation !== CONFIRMATION || queueJob.isPending || !candidateToApply}
             onClick={() => {
               queueJob.mutate({
                 path: "updates/apply",
-                body: { confirmation, createBackup },
+                body: { confirmation, createBackup, ...candidateToApply },
                 label: "OpenMapX update",
               });
               setDialogOpen(false);

@@ -294,18 +294,18 @@ describe("shared release manifest", () => {
 
 describe("release channel", () => {
   it("defaults to the OpenMapX registry and derives the approved prefix from an override", () => {
-    expect(releaseChannel(undefined)).toEqual({
+    expect(releaseChannel(undefined)).toMatchObject({
       kind: "enabled",
-      manifestImage: "ghcr.io/openmapx/release-manifest:latest",
+      manifestImage: "ghcr.io/openmapx/release-manifest:main",
       imagePrefix: "ghcr.io/openmapx",
     });
-    expect(releaseChannel("registry.example.org/fork/release-manifest:stable")).toEqual({
+    expect(releaseChannel("preview", "registry.example.org/fork/release-manifest")).toMatchObject({
       kind: "enabled",
-      manifestImage: "registry.example.org/fork/release-manifest:stable",
+      manifestImage: "registry.example.org/fork/release-manifest:preview",
       imagePrefix: "registry.example.org/fork",
     });
-    expect(releaseChannel("")).toEqual({ kind: "disabled" });
-    expect(() => releaseChannel("release-manifest")).toThrow(/registry/);
+    expect(releaseChannel("local")).toEqual({ kind: "disabled" });
+    expect(() => releaseChannel("release-manifest")).toThrow();
   });
 
   it("validates manifest images against the configured prefix", () => {
@@ -339,7 +339,7 @@ describe("release lockfile image contract and selection", () => {
   );
 
   it("round trips selected identity and seven images, including quoted release IDs", () => {
-    const selected = { ...manifest, release: 'release: "test"' };
+    const selected = { ...manifest, release: "release-test" };
     const images = manifest.images;
     const rendered = renderReleaseCompose(selected);
     expect(parseReleaseComposeSelection(rendered)).toEqual({ release: selected.release, images });

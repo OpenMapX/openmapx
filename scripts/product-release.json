@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "version": "0.1.0-alpha.1",
+  "notesPath": "docs/docs/releases/0.1.0-alpha.1.md",
+  "compatibility": { "extensionProtocol": "1.0", "platforms": ["linux/amd64"] },
+  "upgradeOrigins": ["prebaseline"],
+  "limitations": [
+    "Experimental prerelease; no stable support commitment.",
+    "Only linux/amd64 images are currently qualified. Native mobile/store and ARM acceptance are separate."
+  ]
+}

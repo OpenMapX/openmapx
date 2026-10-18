@@ -187,7 +187,7 @@ pnpm openmapx services start postgis redis traefik app-api data-manager
 ```
 
 `app-api` and `data-manager` are release images, so this first start also
-resolves the aggregate release (`ghcr.io/openmapx/release-manifest:latest`)
+resolves the aggregate release (`ghcr.io/openmapx/release-manifest:main`)
 into `infra/docker/docker-compose.release.yml`. The CLI refuses to start them
 without that pin; if the registry is unreachable, fix access and run
 `pnpm openmapx compose release`.
@@ -294,7 +294,7 @@ pnpm openmapx compose up
 ```
 
 This re-renders, applies the hardlink plan, resolves the aggregate app release
-(`ghcr.io/openmapx/release-manifest:latest`) into
+(`ghcr.io/openmapx/release-manifest:main`) into
 `infra/docker/docker-compose.release.yml` if that overlay does not exist yet,
 and runs `docker compose up -d` for the whole enabled selection. The overlay
 pins the core app images as one coherent set; without it the CLI refuses to

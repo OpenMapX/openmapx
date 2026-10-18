@@ -33,7 +33,7 @@ Two things move during an upgrade, and they move independently:
 - **The images** — the application containers. The core app services
   (`app-api`, `app-web`, `data-manager`) run **prebuilt images published to the
   GitHub Container Registry** (`ghcr.io/openmapx/*`). A complete release is
-  selected through the single `ghcr.io/openmapx/release-manifest:latest`
+  selected through the single `ghcr.io/openmapx/release-manifest:main`
   pointer, which maps every application image to an immutable digest. They are
   **not built on your host**.
 
@@ -174,8 +174,8 @@ release identity while retaining their available image pins.
 Running `pnpm openmapx compose release` prints the previous and candidate release,
 then marks each image **changed**, **reused**, or **unknown** by comparing digests,
 and writes the selected lockfile as the Compose overlay. An existing overlay
-continues to apply even if release resolution is disabled with an empty
-`OPENMAPX_RELEASE_MANIFEST_IMAGE`; the status command reports that explicitly.
+continues to apply even if release resolution is disabled with
+`OPENMAPX_RELEASE=local`; the status command reports that explicitly.
 
 This is the step that actually swaps in the new app version. The short form
 resolves the aggregate release pointer, writes the overlay, and replaces the
@@ -189,73 +189,14 @@ pnpm openmapx services update app-api app-web data-manager ops-agent transitous-
 `compose up`, `services start`, and `services update` refuse to run release
 services when no overlay exists and the release manifest cannot be resolved.
 
-The equivalent manual procedure pulls the one aggregate release pointer and
-writes the same local Compose overlay by hand. The overlay survives later
-`compose render` runs because it is a separate file:
+The shared CLI validates all seven pins and privacy evidence and extracts the frozen metadata image identity. Keep using it rather than writing a partial overlay by hand. `main` is the automatic development pointer; `preview` is the latest deliberately published named prerelease. Exact versions or metadata digests pin a specific selection. A missing preview or pin fails without choosing main.
 
-```bash
-docker pull ghcr.io/openmapx/release-manifest:latest
-release_container=$(docker create ghcr.io/openmapx/release-manifest:latest true)
-docker cp "$release_container:/release-manifest.json" /tmp/openmapx-release-manifest.json
-docker rm "$release_container"
-
-release_api="$(jq -er '.images.api' /tmp/openmapx-release-manifest.json)" || exit 1
-release_web="$(jq -er '.images.web' /tmp/openmapx-release-manifest.json)" || exit 1
-release_data_manager="$(jq -er '.images["data-manager"]' /tmp/openmapx-release-manifest.json)" || exit 1
-release_ops_agent="$(jq -er '.images["ops-agent"]' /tmp/openmapx-release-manifest.json)" || exit 1
-release_transitous_runner="$(jq -er '.images["transitous-runner"]' /tmp/openmapx-release-manifest.json)" || exit 1
-release_transitous_tools="$(jq -er '.images["transitous-tools"]' /tmp/openmapx-release-manifest.json)" || exit 1
-
-if [[ ! "$release_api" =~ ^ghcr\.io/openmapx/api@sha256:[0-9a-f]{64}$ ]] || \
-   [[ ! "$release_web" =~ ^ghcr\.io/openmapx/web@sha256:[0-9a-f]{64}$ ]] || \
-   [[ ! "$release_data_manager" =~ ^ghcr\.io/openmapx/data-manager@sha256:[0-9a-f]{64}$ ]] || \
-   [[ ! "$release_ops_agent" =~ ^ghcr\.io/openmapx/ops-agent@sha256:[0-9a-f]{64}$ ]] || \
-   [[ ! "$release_transitous_runner" =~ ^ghcr\.io/openmapx/transitous-runner@sha256:[0-9a-f]{64}$ ]] || \
-   [[ ! "$release_transitous_tools" =~ ^ghcr\.io/openmapx/transitous-tools@sha256:[0-9a-f]{64}$ ]]; then
-  echo "The release manifest contains an invalid image reference" >&2
-  exit 1
-fi
-
-cat > infra/docker/docker-compose.release.yml <<EOF
-services:
-  app-api:
-    image: $release_api
-  app-web:
-    image: $release_web
-  data-manager:
-    image: $release_data_manager
-    environment:
-      OPENMAPX_TRANSITOUS_TOOLS_IMAGE: $release_transitous_tools
-  ops-agent:
-    image: $release_ops_agent
-  transitous-runner:
-    image: $release_transitous_runner
-EOF
-
-release_compose=(docker compose --env-file infra/docker/.env -f infra/docker/.trusted-config-current/docker-compose.generated.yml -f infra/docker/docker-compose.release.yml)
-"${release_compose[@]}" pull app-api app-web data-manager ops-agent transitous-runner
-"${release_compose[@]}" up -d --force-recreate app-api app-web data-manager ops-agent transitous-runner
-```
-
-The `release-manifest:latest` pointer selects a release atomically only after every image in its
-release has passed promotion. The generated overlay therefore keeps `app-api`,
-`app-web`, `data-manager`, `ops-agent`, `transitous-runner`, and the Transitous
-helper on the same release.
-
-CI also maintains `latest` compatibility aliases for all seven application
-images, after publishing their SHA tags and immutable release manifest. Each
-alias is moved directly to its approved digest and verified before the release
-pointer advances. Existing stale aliases are overwritten; missing aliases are
-created without deleting any image versions. A failed alias update or digest
-check fails publication and leaves the release pointer unchanged. A subsequent
-successful publication reconciles all seven aliases. Because those aliases move
-independently, they can temporarily contain mixed releases; use the release
-manifest for production deployments.
+All seven development aliases are verified before the main manifest pointer advances. Individual aliases can move separately; use the manifest for coherent updates. Named publication promotes the selected image digests without rebuilding them and advances preview only after immutable GitHub publication is verified. See [Product releases](../developer/product-releases.md).
 
 :::note[Admin updater and later service commands]
-The admin system updater performs this same release-manifest resolution and
+The admin system updater checks the configured channel, stores its exact candidate ID and digest, and
 writes `docker-compose.release.yml` atomically after every digest-pinned image
-has been pulled. It replaces API, web, data-manager, and transitous-runner without
+has been pulled. Apply uses that checked candidate rather than resolving the channel again. A configuration change requires a fresh check. It replaces API, web, data-manager, and transitous-runner without
 restarting their dependencies. Before applying, it verifies that the running
 ops-agent image and its privacy-backup helper pin already match the selected
 release. If either differs or cannot be verified, it stops and gives the host-side
@@ -268,14 +209,13 @@ digest-pinned release. Keep the overlay with the deployment;
 clear it with `pnpm openmapx compose release --clear` only when intentionally
 removing the local selection.
 Forks and mirrored registries select their own channel with
-`OPENMAPX_RELEASE_MANIFEST_IMAGE` (see [Configuration](./configuration.md)).
+`OPENMAPX_RELEASE` and `OPENMAPX_RELEASE_MANIFEST_REPOSITORY` (see [Configuration](./configuration.md)).
 `services update` preserves an existing release selection and stops before
 container recreation if pulling that pinned release fails. Run `compose release`
 first when deliberately selecting a newer release.
 :::
 
-For tag-based or local-image workflows, an empty
-`OPENMAPX_RELEASE_MANIFEST_IMAGE` disables automatic release resolution. It does
+For local-image workflows, explicit `OPENMAPX_RELEASE=local` disables automatic release resolution. It does
 not remove or bypass an existing release overlay. Clear the local selection
 explicitly:
 
@@ -292,25 +232,23 @@ transaction awaits completion or recovery. `--clear` cannot be combined with
 
 Clearing does not change your environment. If automatic resolution remains
 enabled, the next start/update selects a release again. To use local images,
-separately set `OPENMAPX_RELEASE_MANIFEST_IMAGE=""` in your deployment environment.
+separately set `OPENMAPX_RELEASE=local` in your deployment environment.
 With no overlay and resolution disabled, service updates pull
 the manifest tags and may continue after pull failures to allow local images.
 This is not an offline mode; Compose can still pull application images.
-`compose pull` uses existing Compose files without resolving a release, so run
-`compose release` first to ensure it pulls the production digests.
+`compose pull` resolves a coherent release when no overlay exists and product services are included; it preserves existing deliberate pins. Exact helper pull failures never build a replacement image.
 
 To reconcile the **entire** enabled stack while retaining the selected app
-release, use the same overlay with Compose:
+release, use the CLI:
 
 ```bash
-"${release_compose[@]}" pull
-"${release_compose[@]}" up -d
+pnpm openmapx compose pull
+pnpm openmapx compose up
 ```
 
-Run `pnpm openmapx compose render` before these commands whenever manifests or
-the service selection changed; it refreshes the generated base file without
-overwriting `docker-compose.release.yml`. Heavy backend engines that did not
-change are left running untouched.
+`compose up` refreshes the generated base file without overwriting the existing
+release selection in `docker-compose.release.yml`. Heavy backend engines that did
+not change are left running untouched.
 
 :::note[Pull vs. build]
 There is no "rebuild the app" step in a normal upgrade. The application images are

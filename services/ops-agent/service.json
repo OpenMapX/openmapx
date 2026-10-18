@@ -13,7 +13,7 @@
   },
   "container": {
     "image": "ghcr.io/openmapx/ops-agent",
-    "tag": "latest",
+    "tag": "main",
     "expose": [4300],
     "user": "${UID:-1000}:${GID:-1000}",
     "environment": {
@@ -22,6 +22,8 @@
       "PORT": "4300",
       "OPENMAPX_ROOT_DIR": "${OPENMAPX_HOST_DIR:?OPENMAPX_HOST_DIR must be set}",
       "OPENMAPX_ENABLED_SERVICES": "${OPENMAPX_ENABLED_SERVICES:-}",
+      "OPENMAPX_RELEASE": "${OPENMAPX_RELEASE:-main}",
+      "OPENMAPX_RELEASE_MANIFEST_REPOSITORY": "${OPENMAPX_RELEASE_MANIFEST_REPOSITORY:-ghcr.io/openmapx/release-manifest}",
       "OPENMAPX_REGION": "${OPENMAPX_REGION:-europe/germany}",
       "OPENMAPX_ALLOWED_REGIONS": "${OPENMAPX_ALLOWED_REGIONS:-europe/germany}",
       "OPENMAPX_ALLOWED_COUNTRIES": "${OPENMAPX_ALLOWED_COUNTRIES:-DE}",

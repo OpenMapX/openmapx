@@ -15,8 +15,8 @@ concurrency:
 env:
   REGISTRY: ghcr.io
   IMAGE_PREFIX: ghcr.io/openmapx
-  # Keep one release identity across failed-job retries of the same workflow.
-  RELEASE_ID: ${{ github.sha }}-${{ github.run_id }}
+  # Each producer attempt has its own immutable identity; successful input artifacts remain reusable.
+  RELEASE_ID: ${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
 
 permissions:
   contents: read
@@ -419,7 +419,8 @@ jobs:
               --tag "${IMAGE}:${RELEASE_SHA}" \
               --tag "${IMAGE}:${RELEASE_ID}" \
               "${IMAGE}@${DIGEST}"
-            docker buildx imagetools inspect "${IMAGE}:${RELEASE_SHA}"
+            published_digest=$(docker buildx imagetools inspect "${IMAGE}:${RELEASE_SHA}" --format '{{.Manifest.Digest}}')
+            if [ "$published_digest" != "$DIGEST" ]; then echo "Published digest mismatch for ${IMAGE}:${RELEASE_SHA}" >&2; exit 1; fi
 
             if [ "$first" = true ]; then
               first=false
@@ -446,7 +447,10 @@ jobs:
           const path = "release-manifest/release-manifest.json";
           const manifest = JSON.parse(readFileSync(path, "utf8"));
           const plan = JSON.parse(readFileSync("release-plan/release-plan.json", "utf8"));
-          if (plan.version !== 1 || plan.release !== manifest.release || plan.sourceRevision !== process.env.RELEASE_SHA ||
+          const planned = /^([a-f0-9]{40}-[1-9][0-9]*)-([1-9][0-9]*)$/.exec(plan.release ?? "");
+          const current = /^([a-f0-9]{40}-[1-9][0-9]*)-([1-9][0-9]*)$/.exec(manifest.release);
+          const samePlan = planned && current && planned[1] === current[1] && BigInt(planned[2]) <= BigInt(current[2]);
+          if (plan.version !== 1 || !samePlan || plan.sourceRevision !== process.env.RELEASE_SHA ||
               plan.privacyFingerprint !== manifest.privacyReleaseValidation.sourceBuildFingerprint ||
               plan.buildMetadata?.version !== 1) {
             throw new Error("Release plan does not match the validated release");
@@ -459,6 +463,12 @@ jobs:
               throw new Error(`Approved digest does not match the release plan for ${app}`);
             }
           }
+          const runId = Number(process.env.GITHUB_RUN_ID);
+          const runAttempt = Number(process.env.GITHUB_RUN_ATTEMPT);
+          if (!Number.isSafeInteger(runId) || runId < 1 || !Number.isSafeInteger(runAttempt) || runAttempt < 1 ||
+              !/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(process.env.GITHUB_REPOSITORY ?? "") ||
+              !["push", "schedule"].includes(process.env.GITHUB_EVENT_NAME)) throw new Error("Invalid trusted producer identity");
+          manifest.producer = {repository: process.env.GITHUB_REPOSITORY, workflowPath: ".github/workflows/ci.yml", sourceRevision: process.env.RELEASE_SHA, runId, runAttempt, event: process.env.GITHUB_EVENT_NAME};
           manifest.buildMetadata = plan.buildMetadata;
           writeFileSync(path, `${JSON.stringify(manifest, null, 2)}\n`);
           NODE
@@ -484,7 +494,7 @@ jobs:
       # Maintain the manifest-tag fallback only from a complete, scanned set.
       # These aliases move independently; production uses the release pointer.
       # Retag directly so existing consumers never hit a delete/recreate gap.
-      - name: Advance and verify application latest aliases
+      - name: Advance and verify application main aliases
         env:
           IMAGE_PREFIX: ${{ env.IMAGE_PREFIX }}
         run: |
@@ -505,11 +515,11 @@ jobs:
             IMAGE="${IMAGE_PREFIX}/${app}"
             docker buildx imagetools create \
               --prefer-index=false \
-              --tag "${IMAGE}:latest" \
+              --tag "${IMAGE}:main" \
               "${IMAGE}@${DIGEST}"
-            published_digest=$(docker buildx imagetools inspect "${IMAGE}:latest" --format '{{.Manifest.Digest}}')
+            published_digest=$(docker buildx imagetools inspect "${IMAGE}:main" --format '{{.Manifest.Digest}}')
             if [ "$published_digest" != "$DIGEST" ]; then
-              echo "Published digest mismatch for ${IMAGE}:latest: expected ${DIGEST}, got ${published_digest}" >&2
+              echo "Published digest mismatch for ${IMAGE}:main: expected ${DIGEST}, got ${published_digest}" >&2
               exit 1
             fi
           done
@@ -522,7 +532,11 @@ jobs:
           RELEASE_MANIFEST_IMAGE: ${{ env.IMAGE_PREFIX }}/release-manifest
           RELEASE_SHA: ${{ needs.gate.outputs.sha }}
         run: |
+          manifest_digest=$(docker buildx imagetools inspect "${RELEASE_MANIFEST_IMAGE}:${RELEASE_ID}" --format '{{.Manifest.Digest}}')
+          if [[ ! "$manifest_digest" =~ ^sha256:[0-9a-f]{64}$ ]]; then echo "Invalid immutable manifest digest" >&2; exit 1; fi
           docker buildx imagetools create \
-            --tag "${RELEASE_MANIFEST_IMAGE}:latest" \
-            "${RELEASE_MANIFEST_IMAGE}:${RELEASE_ID}"
-          docker buildx imagetools inspect "${RELEASE_MANIFEST_IMAGE}:latest"
+            --prefer-index=false \
+            --tag "${RELEASE_MANIFEST_IMAGE}:main" \
+            "${RELEASE_MANIFEST_IMAGE}@${manifest_digest}"
+          published_digest=$(docker buildx imagetools inspect "${RELEASE_MANIFEST_IMAGE}:main" --format '{{.Manifest.Digest}}')
+          if [ "$published_digest" != "$manifest_digest" ]; then echo "Published main manifest digest mismatch" >&2; exit 1; fi

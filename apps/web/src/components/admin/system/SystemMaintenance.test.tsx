@@ -8,6 +8,13 @@ const systemStatus = {
     hostControlConfigured: true,
     maintenanceReady: true,
   },
+  release: {
+    configuredSelector: "preview",
+    currentReleaseId: "prebaseline",
+    availableReleaseId: "v0.1.0-alpha.1",
+    availableVersion: "0.1.0-alpha.1",
+    availableDigest: "a".repeat(64),
+  },
   images: [
     {
       id: "app-api",
@@ -43,6 +50,7 @@ afterEach(() => {
   systemStatus.images[0].localImageId = "sha256:new-image";
   systemStatus.images[0].updateAvailable = true;
   systemStatus.images[0].status = "update-available";
+  systemStatus.release.currentReleaseId = "prebaseline";
 });
 
 describe("SystemMaintenance", () => {
@@ -50,6 +58,8 @@ describe("SystemMaintenance", () => {
     const { SystemMaintenance } = await import("./SystemMaintenance");
     const markup = renderToStaticMarkup(<SystemMaintenance />);
     expect(markup).toContain("System maintenance");
+    expect(markup).toContain("Configured channel: preview");
+    expect(markup).toContain("v0.1.0-alpha.1");
     expect(markup).toContain("Check for updates");
     expect(markup).toContain("Update OpenMapX");
     expect(markup).toContain("Update ready");
@@ -77,12 +87,13 @@ describe("SystemMaintenance", () => {
     systemStatus.images[0].localImageId = "sha256:current-image";
     systemStatus.images[0].updateAvailable = false;
     systemStatus.images[0].status = "up-to-date";
+    systemStatus.release.currentReleaseId = "v0.1.0-alpha.1";
 
     const { SystemMaintenance } = await import("./SystemMaintenance");
     const markup = renderToStaticMarkup(<SystemMaintenance />);
 
     expect(
-      /<button[^>]*disabled=""[^>]*title="All core images are up to date"[^>]*>[\s\S]*?Update OpenMapX/.test(
+      /<button[^>]*disabled=""[^>]*title="Check for a release with changes before updating"[^>]*>[\s\S]*?Update OpenMapX/.test(
         markup,
       ),
     ).toBe(true);

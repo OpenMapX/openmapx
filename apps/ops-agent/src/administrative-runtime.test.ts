@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import {
   existsSync,
   mkdirSync,
@@ -568,7 +569,12 @@ describe("administrative release runtime", () => {
     const dockerCalls: string[][] = [];
     const docker = async (args: readonly string[]) => {
       dockerCalls.push([...args]);
-      if (args[0] === "create") return "a".repeat(64);
+      if (args[0] === "pull") return `Digest: sha256:${"1".repeat(64)}`;
+      if (args[0] === "image") return `sha256:${"2".repeat(64)}`;
+      if (args[0] === "create") {
+        expect(args[1]).toBe(`sha256:${"2".repeat(64)}`);
+        return "a".repeat(64);
+      }
       if (args[0] === "cp") {
         writeFileSync(args.at(-1) as string, manifestText, { mode: 0o600 });
       }
@@ -579,6 +585,19 @@ describe("administrative release runtime", () => {
       runDocker: docker,
     });
     await expect(first.resolve(context)).resolves.toBe(release);
+    const checkedDigest = createHash("sha256").update(manifestText).digest("hex");
+    await expect(first.validateCandidate?.(release, checkedDigest)).resolves.toBeUndefined();
+    await expect(first.validateCandidate?.(release, "0".repeat(64))).rejects.toThrow(
+      "Checked release",
+    );
+    process.env.OPENMAPX_RELEASE = "preview";
+    try {
+      await expect(first.validateCandidate?.(release, checkedDigest)).rejects.toThrow(
+        "Checked release",
+      );
+    } finally {
+      delete process.env.OPENMAPX_RELEASE;
+    }
     await expect(first.pull(release, context)).resolves.toBeUndefined();
     expect(dockerCalls).toContainEqual([
       "pull",
@@ -607,6 +626,64 @@ describe("administrative release runtime", () => {
 
     manifestText = "x".repeat(32 * 1024 + 1);
     await expect(first.resolve(context)).rejects.toThrow();
+  });
+
+  it("stores distinct canonical identities for two producer attempts of the same run", async () => {
+    const rootDir = temporaryRoot();
+    let attempt = 1;
+    const sourceRevision = "a".repeat(40);
+    const manifest = () => ({
+      schemaVersion: 1,
+      release: `${sourceRevision}-123-${attempt}`,
+      images: Object.fromEntries(
+        [
+          "api",
+          "web",
+          "data-manager",
+          "ops-agent",
+          "privacy-backup",
+          "transitous-runner",
+          "transitous-tools",
+        ].map((name) => [name, `ghcr.io/openmapx/${name}@sha256:${String(attempt).repeat(64)}`]),
+      ),
+      privacyReleaseValidation,
+      producer: {
+        repository: "OpenMapX/openmapx",
+        workflowPath: ".github/workflows/ci.yml",
+        sourceRevision,
+        runId: 123,
+        runAttempt: attempt,
+        event: "push",
+      },
+    });
+    const runtime = createDefaultReleaseEffects(rootDir, async () => undefined, {
+      runDocker: async (args) => {
+        if (args[0] === "pull") return `Digest: sha256:${String(attempt).repeat(64)}`;
+        if (args[0] === "image") return `sha256:${"e".repeat(64)}`;
+        if (args[0] === "create") return "a".repeat(64);
+        if (args[0] === "cp") writeFileSync(args.at(-1) as string, JSON.stringify(manifest()));
+        return "";
+      },
+    });
+    const context = { signal: new AbortController().signal, emitLog: vi.fn() };
+    expect(await runtime.resolve(context)).toBe(`${sourceRevision}-123-1`);
+    attempt = 2;
+    expect(await runtime.resolve(context)).toBe(`${sourceRevision}-123-2`);
+    for (const n of [1, 2])
+      expect(
+        JSON.parse(
+          readFileSync(
+            join(
+              rootDir,
+              "infra",
+              "docker",
+              ".ops-agent-releases",
+              `${sourceRevision}-123-${n}.json`,
+            ),
+            "utf8",
+          ),
+        ).producer.runAttempt,
+      ).toBe(n);
   });
 
   it("uses the durable latest pointer instead of lexical release-ID ordering", async () => {
@@ -644,7 +721,10 @@ describe("administrative release runtime", () => {
       { mode: 0o600 },
     );
     const effects = createDefaultReleaseEffects(rootDir, async () => undefined);
-    await expect(effects.inspect()).resolves.toEqual({ availableReleaseId: "a-new" });
+    await expect(effects.inspect()).resolves.toEqual({
+      configuredSelector: "main",
+      availableReleaseId: "a-new",
+    });
   });
 
   it("enforces release entry and aggregate bounds before registry reads", async () => {
@@ -692,7 +772,8 @@ describe("administrative release runtime", () => {
       return createDefaultReleaseEffects(rootDir, async () => undefined, {
         runDocker: async (args) => {
           const joined = args.join(" ");
-          if (joined.startsWith("pull")) return "";
+          if (joined.startsWith("pull")) return `Digest: sha256:${"1".repeat(64)}`;
+          if (joined.startsWith("image inspect")) return `sha256:${"2".repeat(64)}`;
           if (joined.startsWith("create")) return "c".repeat(64);
           if (joined.startsWith("cp")) {
             const destination = args[2] as string;
@@ -717,7 +798,7 @@ describe("administrative release runtime", () => {
     const stayed = readdirSync(directory).filter((name) => name.endsWith(".json")).length;
     const fulfilled = results.filter((result) => result.status === "fulfilled").length;
     // 63 stored + latest.json; exactly one new release may land.
-    expect(stayed).toBeLessThanOrEqual(64 + 1);
+    expect(stayed).toBeLessThanOrEqual(64 + 2);
     expect(fulfilled).toBeGreaterThanOrEqual(1);
     for (const result of results) {
       if (result.status === "rejected") {
@@ -1190,6 +1271,7 @@ describe("administrative release runtime", () => {
         cli.push([...args]);
       },
       releaseEffects: {
+        validateCandidate: async () => undefined,
         resolve: async () => {
           calls.push("resolve");
           return "release-123";
@@ -1272,6 +1354,7 @@ describe("administrative release runtime", () => {
         order.push(`cli:${args.join(" ")}`);
       },
       releaseEffects: {
+        validateCandidate: async () => undefined,
         resolve: async () => "release-123",
         pull: async (releaseId) => {
           order.push(`pull:${releaseId}`);
@@ -1294,6 +1377,7 @@ describe("administrative release runtime", () => {
         runtime,
         {
           kind: "system.update",
+          expectedDigest: "a".repeat(64),
           releaseId: "release-123",
           createBackup: true,
           backupId: "pre-update-job-1",
@@ -1315,6 +1399,7 @@ describe("administrative release runtime", () => {
       rootDir: temporaryRoot(),
       runFixedCli: async () => undefined,
       releaseEffects: {
+        validateCandidate: async () => undefined,
         resolve: async () => "release-123",
         pull: async () => {
           throw new Error("collector pull failed");
@@ -1333,7 +1418,12 @@ describe("administrative release runtime", () => {
     await expect(
       dispatchOpsOperation(
         runtime,
-        { kind: "system.update", releaseId: "release-123", createBackup: false },
+        {
+          kind: "system.update",
+          expectedDigest: "a".repeat(64),
+          releaseId: "release-123",
+          createBackup: false,
+        },
         context("system.update"),
       ),
     ).rejects.toThrow("collector pull failed");

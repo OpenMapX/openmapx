@@ -154,6 +154,7 @@ describe("operation-specific authority policy", () => {
       { kind: "appApi.replace", releaseId: "release-123", updateJobId: "job-1" },
       {
         kind: "system.update",
+        expectedDigest: "a".repeat(64),
         releaseId: "release-123",
         createBackup: true,
         backupId: "pre-update-job-1",

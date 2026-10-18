@@ -13,7 +13,7 @@
   },
   "container": {
     "image": "ghcr.io/openmapx/transitous-runner",
-    "tag": "latest",
+    "tag": "main",
     "expose": [4400],
     "user": "${UID:-1000}:${GID:-1000}",
     "environment": {

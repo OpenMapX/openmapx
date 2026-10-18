@@ -13,6 +13,10 @@
         "scripts/discovery-eval/run.ts",
         "scripts/record-search-eval.mts",
         "scripts/self-hosting-replay-vitest.config.ts",
+        // Release IO tests copy this executable into fake gh/docker/trivy subprocess paths.
+        "scripts/fixtures/product-release-command.mjs",
+        // Release IO tests invoke this fixed JSON-input Node subprocess entry point.
+        "scripts/fixtures/product-release-probe.mjs",
         // The CI privacy-backup fixture spawns this file by path.
         "services/ops-agent/privacy-backup/verify-output.ts",
         "scripts/discovery-eval/business-name-address/replay.ts",

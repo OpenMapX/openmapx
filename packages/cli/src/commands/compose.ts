@@ -31,6 +31,7 @@ import {
   ensureReleaseOverlay,
   releaseStatusLines,
   selectRelease,
+  touchesReleasePinnedServices,
   unpinnedReleaseWarning,
 } from "../lib/release";
 import { applyServiceSelection } from "../lib/service-selection";
@@ -189,6 +190,7 @@ export function rotateRedisPasswordForRepo(
 }
 
 export async function renderComposeForRepo(opts: RenderRepoOptions): Promise<RenderRepoResult> {
+  coreServices.releaseSelection();
   const paths = repoPaths(opts.rootDir);
   assertCliDeploymentSecrets();
   ensurePlatformPrivateDirectory(join(paths.infraDir, "data", "ops-agent", "trusted-config"));
@@ -377,9 +379,7 @@ export function registerComposeCommands(program: Command): void {
         log.err(unpinnedReleaseWarning(overlay.reason));
         process.exit(1);
       } else if (overlay.status === "disabled") {
-        log.dim(
-          "Release pinning disabled (OPENMAPX_RELEASE_MANIFEST_IMAGE is empty); using manifest image tags.",
-        );
+        log.dim("Release pinning disabled (OPENMAPX_RELEASE=local); using manifest image tags.");
       }
       const code = await dockerComposeStream(["up", "-d"]);
       process.exit(code);
@@ -414,9 +414,9 @@ export function registerComposeCommands(program: Command): void {
             "Running containers, release evidence, and recorded running state are preserved.",
           );
           log.dim(
-            process.env.OPENMAPX_RELEASE_MANIFEST_IMAGE?.trim() === ""
+            process.env.OPENMAPX_RELEASE === "local"
               ? "Release resolution is disabled; the next start/update uses manifest image tags."
-              : 'Automatic release resolution will select a release on the next start/update. To use local images, separately set OPENMAPX_RELEASE_MANIFEST_IMAGE="".',
+              : "Automatic release resolution will select a release on the next start/update. To use local images, separately set OPENMAPX_RELEASE=local.",
           );
           return;
         }
@@ -444,8 +444,12 @@ export function registerComposeCommands(program: Command): void {
 
   compose
     .command("pull [ids...]")
-    .description("Pull the latest images (no args = all services)")
+    .description("Pull selected images (no args = all services)")
     .action(async (ids: string[]) => {
+      if (ids.length === 0 || touchesReleasePinnedServices(ids)) {
+        const overlay = await ensureReleaseOverlay();
+        if (overlay.status === "unpinned") throw new Error(unpinnedReleaseWarning(overlay.reason));
+      }
       const code = await dockerComposeStream(["pull", ...ids]);
       process.exit(code);
     });

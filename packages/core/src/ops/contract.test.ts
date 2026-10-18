@@ -75,6 +75,7 @@ const samples: Record<(typeof OPS_OPERATION_KINDS)[number], OpsOperation> = {
   "system.inspect": { kind: "system.inspect" },
   "system.update": {
     kind: "system.update",
+    expectedDigest: "a".repeat(64),
     releaseId: "2026.08.23",
     createBackup: true,
     backupId: "pre-update-20260823",
@@ -342,6 +343,7 @@ describe("ops contract", () => {
       parseOpsRequest(
         request({
           kind: "system.update",
+          expectedDigest: "a".repeat(64),
           releaseId: "release-1",
           createBackup: true,
           backupId: "pre-update-job-1",
@@ -351,20 +353,37 @@ describe("ops contract", () => {
     ).toMatchObject({ createBackup: true, backupId: "pre-update-job-1" });
     expect(
       parseOpsRequest(
-        request({ kind: "system.update", releaseId: "release-1", createBackup: false }),
+        request({
+          kind: "system.update",
+          expectedDigest: "a".repeat(64),
+          releaseId: "release-1",
+          createBackup: false,
+        }),
         { role: "api" },
       ).operation,
-    ).toEqual({ kind: "system.update", releaseId: "release-1", createBackup: false });
+    ).toEqual({
+      kind: "system.update",
+      expectedDigest: "a".repeat(64),
+      releaseId: "release-1",
+      createBackup: false,
+    });
     for (const operation of [
-      { kind: "system.update", releaseId: "release-1", createBackup: true },
       {
         kind: "system.update",
+        expectedDigest: "a".repeat(64),
+        releaseId: "release-1",
+        createBackup: true,
+      },
+      {
+        kind: "system.update",
+        expectedDigest: "a".repeat(64),
         releaseId: "release-1",
         createBackup: false,
         backupId: "unexpected",
       },
       {
         kind: "system.update",
+        expectedDigest: "a".repeat(64),
         releaseId: "release-1",
         createBackup: false,
         path: "/host",
@@ -373,7 +392,12 @@ describe("ops contract", () => {
       expect(() => parseOpsRequest(request(operation), { role: "api" })).toThrow();
     }
     expect(
-      opsResourceId({ kind: "system.update", releaseId: "release-1", createBackup: false }),
+      opsResourceId({
+        kind: "system.update",
+        expectedDigest: "a".repeat(64),
+        releaseId: "release-1",
+        createBackup: false,
+      }),
     ).toBe("release-1");
   });
 
