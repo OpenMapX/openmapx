@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
@@ -39,16 +39,19 @@ export function prepareReleaseRecord(root, version, fragments = []) {
       .trim();
   });
   mkdirSync(dirname(notesPath), { recursive: true });
-  if (!existsSync(notesPath))
+  try {
     writeFileSync(
       notesPath,
       `---\ntitle: ${version} preparation\n---\n\nIntended prerelease; not published.\n\n## Changes and operator actions\n\n${entries.join("\n\n") || "Curate the changes and required operator actions before selecting a candidate."}\n\n## Compatibility and limitations\n\nExperimental linux/amd64 images; extension protocol 1.0. Package and mobile versions are independent.\n\n## Installation, upgrade and recovery\n\nRehearse the declared upgrade origins with the exact candidate. Image rollback does not undo database migrations. Record real checks and recovery limits before publication.\n`,
+      { flag: "wx" },
     );
-  else
+  } catch (error) {
+    if (error.code !== "EEXIST") throw error;
     assert(
       entries.length === 0,
       "Notes already exist; incorporate selected fragments deliberately without duplicating them",
     );
+  }
   writeFileSync(path, `${JSON.stringify(next, null, 2)}\n`);
   return next;
 }

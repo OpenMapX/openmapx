@@ -41,7 +41,12 @@ if (command === "gh") {
   if (args[0] === "release") {
     out({ verified: true });
   } else {
-    const endpoint = args[1].replace(/^https:\/\/uploads.github.com\//, "");
+    const uploadPrefix = "https://uploads.github.com/";
+    const endpoint = args[1].startsWith(uploadPrefix)
+      ? args[1].slice(uploadPrefix.length)
+      : args[1];
+    if (endpoint !== "repos/OpenMapX/openmapx" && !endpoint.startsWith("repos/OpenMapX/openmapx/"))
+      fail("Unsupported synthetic endpoint");
     const method = args.includes("--method") ? args[args.indexOf("--method") + 1] : "GET";
     if (state.authError && endpoint.includes("/releases?"))
       fail(`HTTP ${state.authError}: inaccessible releases`);

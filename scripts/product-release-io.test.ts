@@ -80,16 +80,13 @@ function setup() {
     fn(state);
     writeFileSync(statePath, JSON.stringify(state));
   };
-  const probe = join(root, "probe.mjs");
-  const invoke = (code: string) => {
-    writeFileSync(
-      probe,
-      `import {createReleasePorts} from ${JSON.stringify(resolve(import.meta.dirname, "product-release-io.mjs"))};import {prepareProductRelease,inspectPublication,publishProductRelease} from ${JSON.stringify(resolve(import.meta.dirname, "product-release.mjs"))}; const ports=createReleasePorts(); console.log(JSON.stringify(await (async()=>{${code}})()));`,
-    );
-    return JSON.parse(
+  const probe = resolve(import.meta.dirname, "fixtures/product-release-probe.mjs");
+  const invoke = (operation: string, inputs: Record<string, unknown> = {}) =>
+    JSON.parse(
       execFileSync(process.execPath, [probe], {
+        input: JSON.stringify({ operation, inputs }),
         encoding: "utf8",
-        stdio: "pipe",
+        stdio: ["pipe", "pipe", "pipe"],
         env: {
           ...process.env,
           PATH: `${join(root, "bin")}:${process.env.PATH}`,
@@ -99,13 +96,13 @@ function setup() {
         },
       }),
     );
-  };
   const candidate = planProductRelease(input);
-  const prepare = () => invoke("return prepareProductRelease({sourceRunId:123},ports)");
+  const prepare = () => invoke("prepare", { sourceRunId: 123 });
   const inspect = () =>
-    invoke(
-      `return inspectPublication(${JSON.stringify({ version: candidate.version, expectedCandidateHash: candidateHash(candidate) })},ports)`,
-    );
+    invoke("inspect", {
+      version: candidate.version,
+      expectedCandidateHash: candidateHash(candidate),
+    });
   const stage = () => {
     prepare();
     update((state) => {
@@ -137,10 +134,15 @@ function setup() {
     return inspect();
   };
   const publish = (approved: Record<string, unknown>) =>
-    invoke(
-      `return publishProductRelease(${JSON.stringify({ ...approved, expectedCandidateHash: candidateHash(candidate) })},ports)`,
-    );
-  return { read, update, invoke, prepare, inspect, stage, publish, candidate };
+    invoke("publish", { ...approved, expectedCandidateHash: candidateHash(candidate) });
+  const tool = (args: string[], input: string) =>
+    execFileSync(join(root, "bin", "gh"), args, {
+      input,
+      encoding: "utf8",
+      stdio: ["pipe", "pipe", "pipe"],
+      env: { ...process.env, SYNTHETIC_STATE: statePath },
+    });
+  return { read, update, invoke, prepare, inspect, stage, publish, candidate, tool };
 }
 it("creates, uploads, discovers and retries a tagless draft by exact release ID", () => {
   const t = setup();
@@ -256,19 +258,57 @@ it("hands mismatched workflow mutations to existing owner authority and resumes 
 
 it("does not create a Git tag during read-only discovery", () => {
   const t = setup();
-  expect(
-    t.invoke(
-      `await ports.verifyTagTarget('v0.1.0-alpha.1','${"a".repeat(40)}','check');return true`,
-    ),
-  ).toBe(true);
+  const target = { version: "v0.1.0-alpha.1", revision: "a".repeat(40) };
+  expect(t.invoke("verify-tag-target", { ...target, mode: "check" })).toBe(true);
   expect(t.read().tag).toBeUndefined();
-  expect(() =>
-    t.invoke(
-      `await ports.verifyTagTarget('v0.1.0-alpha.1','${"a".repeat(40)}','require');return true`,
-    ),
-  ).toThrow();
-  t.invoke(
-    `await ports.verifyTagTarget('v0.1.0-alpha.1','${"a".repeat(40)}','create');return true`,
-  );
+  expect(() => t.invoke("verify-tag-target", { ...target, mode: "require" })).toThrow();
+  t.invoke("verify-tag-target", { ...target, mode: "create" });
   expect(t.read().tag).toBe("a".repeat(40));
+});
+it("treats probe operations as data rather than executable JavaScript", () => {
+  const t = setup();
+  const payload =
+    '(await import("node:fs")).writeFileSync(process.env.SYNTHETIC_STATE,"EXECUTED");return true';
+  expect(() => t.invoke(payload)).toThrow();
+  expect(t.read().published).toBe(0);
+});
+it.each([
+  "https://uploads.github.com/",
+  "https://uploadsXgithub.com/",
+  "https://uploads.githubXcom/",
+  "https://uploads.github.com.evil.invalid/",
+])("accepts only the exact upload hostname: %s", (prefix) => {
+  const t = setup();
+  t.update((s) => {
+    s.release = {
+      id: 42,
+      html_url: "https://example.invalid/draft",
+      tag_name: "v0.1.0-alpha.1",
+      target_commitish: "a".repeat(40),
+      name: "synthetic",
+      body: "synthetic",
+      draft: true,
+      prerelease: true,
+      assets: {},
+    };
+  });
+  const upload = () =>
+    t.tool(
+      [
+        "api",
+        `${prefix}repos/OpenMapX/openmapx/releases/42/assets?name=notes.md`,
+        "--method",
+        "POST",
+        "--input",
+        "-",
+      ],
+      "Synthetic notes.\n",
+    );
+  if (prefix === "https://uploads.github.com/") {
+    upload();
+    expect(releaseOf(t.read()).assets["notes.md"]).toBe("Synthetic notes.\n");
+  } else {
+    expect(upload).toThrow();
+    expect(releaseOf(t.read()).assets).toEqual({});
+  }
 });
