@@ -136,6 +136,10 @@ build each affected deployable Docker target without publishing it. These jobs a
 aggregated under the required `lint / types / test` check; repo-wide coverage
 runs on a weekly schedule (non-gating).
 
+The duplicate-code audit reports new clone regions against each PR's base commit
+in the workflow summary, with detailed reports attached as an artifact. PR reports
+are advisory and do not block merging; the full weekly audit remains enabled.
+
 The lint job also audits production dependencies in the root and docs lockfiles.
 New high or critical advisories block CI. A no-fix advisory can be acknowledged
 temporarily in `scripts/production-audit-allowances.json`; the entry must match
