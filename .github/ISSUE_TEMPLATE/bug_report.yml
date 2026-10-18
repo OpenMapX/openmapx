@@ -1,110 +1,92 @@
 name: 🐛 Bug report
-description: Report a defect in OpenMapX
+description: Report something that does not work as expected
 type: Bug
-labels: [bug, needs-triage]
+labels: [needs-triage]
 body:
   - type: markdown
     attributes:
       value: |
-        Describe what you observed and fill out what you know. If the root cause or
-        implementation details are unknown, say so; maintainers can help investigate
-        during triage. Use a descriptive title that names the observed problem.
-
-        - 🔒 **Security issue?** Do **not** file it here — see [SECURITY.md](https://github.com/OpenMapX/openmapx/blob/main/SECURITY.md).
-        - ❓ **Question or idea?** Please use [Discussions](https://github.com/OpenMapX/openmapx/discussions) instead.
-  - type: checkboxes
-    id: preflight
-    attributes:
-      label: Before you start
-      options:
-        - label: I searched [existing issues](https://github.com/OpenMapX/openmapx/issues?q=is%3Aissue) and this isn't a duplicate.
-          required: true
-        - label: I'm on the latest `main` or the most recent release (older versions aren't patched).
-          required: true
-        - label: This report concerns behavior observed in OpenMapX. I included any evidence about upstream services or third-party APIs, if known.
-          required: true
+        Describe one problem per report. [Search existing issues](https://github.com/OpenMapX/openmapx/issues?q=is%3Aissue)
+        for related reports and link any you find. For usage help, use [Discussions](https://github.com/OpenMapX/openmapx/discussions).
+        Report vulnerabilities privately through [SECURITY.md](https://github.com/OpenMapX/openmapx/blob/main/SECURITY.md).
+        Leave out secrets, personal coordinates and private route history.
   - type: textarea
-    id: what-happened
+    id: observed
     attributes:
       label: What happened?
-      description: A clear, concise description of the bug — what you expected and what actually occurred.
+      description: What were you trying to do, and what went wrong? Include the error message if there is one.
     validations:
       required: true
   - type: textarea
-    id: repro
+    id: expected
     attributes:
-      label: Steps to reproduce
-      placeholder: |
-        1. Go to '...'
-        2. Search for '...' / enable service '...' / run `openmapx ...`
-        3. See error
+      label: What did you expect?
+      description: Describe the result you expected instead.
     validations:
       required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: Give the steps, or describe when the problem occurred and what you tried if you cannot reproduce it reliably. For intermittent problems, include how often it happens.
+      placeholder: |
+        1. Start from …
+        2. …
+        3. The problem appears when …
+    validations:
+      required: true
+  - type: markdown
+    attributes:
+      value: "## Environment"
   - type: dropdown
-    id: where
+    id: environment-kind
     attributes:
       label: Where does it happen?
+      description: Select all that apply, for example Android app and Self-hosted deployment.
+      multiple: true
       options:
-        - Self-hosted deployment (Docker Compose)
-        - Local development (`pnpm dev`)
         - Hosted app (openmapx.com)
+        - Self-hosted deployment
+        - Android app
+        - iOS app
+        - Local development
         - Not sure
     validations:
       required: true
-  - type: dropdown
-    id: component
-    attributes:
-      label: Affected area
-      description: Which part of OpenMapX? Pick the closest.
-      options:
-        - Web app (apps/web)
-        - API gateway (apps/api)
-        - Admin panel
-        - A specific integration (integrations/*)
-        - A specific service / container (services/*)
-        - CLI (`openmapx`)
-        - Data pipeline (data-manager / MOTIS / Transitous)
-        - Documentation
-        - Other / not sure
-    validations:
-      required: true
-  - type: input
-    id: component-id
-    attributes:
-      label: Specific integration / service id
-      description: If the area above is an integration or service, name it.
-      placeholder: "integrations/transit-hafas, services/valhalla, …"
   - type: input
     id: version
     attributes:
-      label: Version / commit
-      description: Tag, release, or short SHA from `git rev-parse --short HEAD`.
+      label: Running version(s)
+      description: App version and, if known, server release/tag, selected release-manifest ID or running image digest. For local builds, use the commit that built them. Enter Unknown if unavailable.
+      placeholder: "App: …; server: …; or Unknown"
     validations:
       required: true
   - type: input
-    id: last-working
+    id: last-working-version
     attributes:
-      label: Last working version
-      description: If this used to work, the last version/commit where it did (helps us bisect). Leave blank if unknown.
+      label: Last working version (if known)
+      description: If this used to work, which version worked? If you cannot identify it, describe when you first noticed the problem.
   - type: textarea
     id: environment
     attributes:
-      label: Environment
-      description: Required for self-hosted and local-dev reports. You can skip it for the hosted app.
-      placeholder: |
-        OS: macOS 15.0 / Ubuntu 24.04
-        Node: 24.x
-        pnpm: 12.x
-        Browser: Chrome 132 (if a web issue)
-        Docker: 27.x (if self-hosted)
-        Services enabled: postgis, martin, valhalla, motis, …
-        Integrations enabled: geocoding-photon, routing-valhalla, …
-      render: text
+      label: Environment and affected component (if known)
+      description: Browser and OS, or device and OS version. For self-hosting, include relevant services or deployment details. Name the feature or integration involved if you know it.
+  - type: markdown
+    attributes:
+      value: "## Supporting information (optional)"
+  - type: textarea
+    id: map-context
+    attributes:
+      label: Map, route or provider context
+      description: A rough public area, layer/provider, travel mode or safe example route can help. Leave out home/work locations and private coordinates.
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Screenshots and additional context
+      description: Attach images or recordings that show the problem. Include workarounds or other relevant details, and redact personal information.
   - type: textarea
     id: logs
     attributes:
-      label: Relevant logs and/or screenshots
-      description: |
-        Paste relevant log output (`openmapx logs <service>`, browser console, API errors) or attach screenshots.
-        **Redact secrets, tokens, and `.env` values.**
-      render: shell
+      label: Relevant logs
+      description: Paste only the relevant errors or log entries. Remove tokens, secrets and personal data; do not paste your full environment file.
+      render: text

@@ -1,0 +1,57 @@
+name: Issue lifecycle
+
+on:
+  issues:
+    types: [opened, reopened, closed]
+  schedule:
+    - cron: "17 8 1 * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: issue-lifecycle-${{ github.event.issue.number || 'report' }}
+  cancel-in-progress: false
+
+jobs:
+  housekeeping:
+    if: github.event_name == 'issues' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const { handleIssueLifecycle } = await import(process.env.GITHUB_WORKSPACE + '/scripts/issue-lifecycle.mjs');
+            await handleIssueLifecycle({ github, context });
+
+  drift-report:
+    if: github.event_name != 'issues' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const { reportIssueDrift } = await import(process.env.GITHUB_WORKSPACE + '/scripts/issue-lifecycle.mjs');
+            const report = await reportIssueDrift({ github, context });
+            if (report.fieldAccess === 'unverified') {
+              core.warning('Organization issue fields could not be verified with this token. A maintainer must check visibility/options with gh api orgs/OpenMapX/issue-fields.');
+            }
+            const safeJson = JSON.stringify(report, null, 2).replaceAll('`', '\\u0060').replaceAll('<', '\\u003c');
+            await core.summary.addHeading('Read-only triage drift report')
+              .addRaw('Findings require maintainer review. This job changes no labels, fields, issue state or comments. A successful run does not mean the inventory is clean.\n\n')
+              .addCodeBlock(safeJson, 'json').write();

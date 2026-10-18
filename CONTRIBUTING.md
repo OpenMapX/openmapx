@@ -34,7 +34,10 @@ Use the [issue forms](https://github.com/OpenMapX/openmapx/issues/new/choose)
 to report a bug, request a feature or integration, or plan a task. The forms
 assign the issue type automatically: **Bug** for defects, **Feature** for
 feature and integration requests, and **Task** for maintenance, investigations,
-and technical work. Labels describe the affected area and triage state.
+and technical work. Labels describe a small set of actionable queues; they do
+not duplicate issue types, priorities or estimates. See the
+[contribution process](docs/docs/developer/contributing-process.md) for label meanings
+and the triage lifecycle.
 
 Write a descriptive issue title that names the problem or desired outcome,
 such as "Station searches prefer unrelated POIs" or "Add support for a new
@@ -56,8 +59,10 @@ Before scheduling implementation, maintainers check that an issue has:
 - [ ] A bounded scope, explicit exclusions, and any unresolved decisions.
 - [ ] Testable acceptance criteria and a verification approach. For an
       investigation, define the questions to answer and evidence to deliver.
-- [ ] An appropriate issue type and labels, plus **Priority** and **Effort**
-      values in the repository's issue fields, assigned by a maintainer.
+- [ ] An appropriate issue type and any useful labels. A maintainer has considered
+      **Priority** and **Effort** in the native issue fields; assign values when
+      justified and leave uncertain estimates unset. Initial triage does not
+      require speculative estimates.
 - [ ] Dependencies and blockers recorded as linked issues where possible,
       or an explicit statement that none are known.
 
@@ -294,6 +299,43 @@ are skipped automatically because those packages are marked `private`.
 5. A maintainer reviews. Squash-merge is the only merge method; the reviewed
    PR title and body become the squash commit message. Make both accurate
    and retain contributor attribution.
+
+### Descriptions and visual evidence
+
+Explain what changed and why, related work, verification, and release/upgrade
+impact. Use a concrete problem and result; do not narrate the coding session.
+Small PRs can combine prompts or omit empty sections. State relevant checks and
+material limits accurately. Put long evidence ledgers in a collapsed section or
+a durable public link. Use closing keywords only when the PR completes the issue.
+
+Every change with visual/visible impact needs screenshots prominently in the PR
+description, including documentation and other rendered output. Show labeled
+before/after views for existing behavior, with comparable data and viewport; show
+an after view with context for a new surface. Include affected states and relevant
+mobile/desktop views. Capture the real result, inspect the images, and redact
+personal data. A recording can supplement screenshots for interactions.
+
+Upload images with the installed GitHub CLI, referencing their paths in the body
+so they appear beside the explanation:
+
+```bash
+gh pr create --body-file /tmp/pr-body.md --attach ./before.png --attach ./after.png
+# For an existing PR:
+gh pr edit 123 --body-file /tmp/pr-body.md --attach ./after.png
+```
+
+After upload, inspect the rendered description and hosted images. Local paths
+and expiring CI artifacts are not delivered evidence. If an attachment command
+fails, check whether the PR or some assets already exist before retrying.
+
+### AI assistance and accountability
+
+AI assistance and coding agents working on authorized tasks are welcome. The
+submitting contributor or maintainer owns the accuracy, understanding, verification,
+evidence and review follow-up. The same checks and screenshot requirements apply.
+Do not invent experience, results or claims. No AI declaration, footer or tool/model
+inventory is required; answer honestly if asked and attribute quoted AI output
+where relevant. Preserve meaningful existing provenance.
 
 ### Branch protection and review
 

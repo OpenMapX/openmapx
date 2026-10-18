@@ -1,0 +1,52 @@
+[
+  {
+    "name": "needs-triage",
+    "color": "fbca04",
+    "description": "Open issue awaiting initial maintainer review"
+  },
+  {
+    "name": "needs-info",
+    "color": "d876e3",
+    "description": "Waiting for an answer to a specific linked question"
+  },
+  {
+    "name": "blocked",
+    "color": "b60205",
+    "description": "Cannot proceed until a named linked prerequisite is resolved"
+  },
+  {
+    "name": "dependencies",
+    "color": "ededed",
+    "description": "Dependency updates and dependency maintenance"
+  },
+  {
+    "name": "documentation",
+    "color": "0075ca",
+    "description": "Documentation content, tooling or workspace dependencies"
+  },
+  {
+    "name": "integration",
+    "color": "0e8a16",
+    "description": "New or changed provider, source or backend integration"
+  },
+  {
+    "name": "ci",
+    "color": "5319e7",
+    "description": "Continuous integration and GitHub Actions changes"
+  },
+  {
+    "name": "docker",
+    "color": "0db7ed",
+    "description": "Container images and Docker build or deployment tooling"
+  },
+  {
+    "name": "good first issue",
+    "color": "7057ff",
+    "description": "Triaged, bounded task with enough guidance for a newcomer"
+  },
+  {
+    "name": "help wanted",
+    "color": "008672",
+    "description": "Scoped work actively welcoming outside contributions"
+  }
+]
