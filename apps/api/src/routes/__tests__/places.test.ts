@@ -907,6 +907,53 @@ describe("GET /places/:id", () => {
     expect(res.statusCode).toBe(200);
     expect(res.json().photos).toEqual([realPhoto]);
   });
+  it("shares the enrichment limit across distinct HTTP requests and recovers after a failure", async () => {
+    const release = Promise.withResolvers<void>();
+    let active = 0;
+    let peak = 0;
+    const started: string[] = [];
+    mockLookupByOsmRef.mockImplementation(async (_type, _id, fullId) => ({
+      ...MOCK_PLACE,
+      id: fullId,
+    }));
+    mockGetPlaceKnowledge.mockImplementation(async (place) => {
+      active++;
+      peak = Math.max(peak, active);
+      started.push(place.id);
+      try {
+        await release.promise;
+        if (place.id === "osm:node/9000") throw new Error("one provider unavailable");
+        return MOCK_ENRICHMENT;
+      } finally {
+        active--;
+      }
+    });
+    const requests = Array.from({ length: 12 }, (_, i) =>
+      app
+        .inject({
+          method: "GET",
+          url: `/places/${encodeURIComponent(`osm:node/${9000 + i}`)}`,
+        })
+        .then((response) => response),
+    );
+    try {
+      await vi.waitFor(() => expect(started).toHaveLength(8));
+    } finally {
+      release.resolve();
+    }
+    const responses = await Promise.all(requests);
+    expect(peak).toBe(8);
+    expect(started).toHaveLength(12);
+    expect(responses[0].statusCode).toBe(500);
+    expect(responses.slice(1).every((response) => response.statusCode === 200)).toBe(true);
+    mockGetPlaceKnowledge.mockResolvedValue(MOCK_ENRICHMENT);
+    const recovered = await app.inject({
+      method: "GET",
+      url: `/places/${encodeURIComponent("osm:node/9012")}`,
+    });
+    expect(recovered.statusCode).toBe(200);
+  });
+
   it("returns place with knowledge data for OSM ref", async () => {
     mockLookupByOsmRef.mockResolvedValue(MOCK_PLACE);
     mockGetPlaceKnowledge.mockResolvedValue(MOCK_ENRICHMENT);
@@ -1808,4 +1855,16 @@ it("preserves review rating receipts in place fields while retaining independent
   expect(absent).not.toHaveProperty("rating");
   expect(absent.fieldContributors.rating).toEqual([]);
   expect(absent.contributors).not.toContainEqual(ratingReceipt);
+});
+
+it("rejects an unbounded enrichment setting during route initialization", async () => {
+  vi.stubEnv("OPENMAPX_PLACE_ENRICH_CONCURRENCY", "Infinity");
+  vi.resetModules();
+  try {
+    await expect(import("../places.js")).rejects.toThrow(
+      /OPENMAPX_PLACE_ENRICH_CONCURRENCY.*finite/,
+    );
+  } finally {
+    vi.unstubAllEnvs();
+  }
 });

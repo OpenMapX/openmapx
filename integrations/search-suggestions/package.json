@@ -9,6 +9,7 @@
   "dependencies": {
     "@openmapx/core": "workspace:^",
     "@openmapx/integration-framework": "workspace:^",
-    "@openmapx/mobility-core": "workspace:^"
+    "@openmapx/mobility-core": "workspace:^",
+    "p-map": "7.1.1"
   }
 }

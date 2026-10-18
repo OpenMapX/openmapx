@@ -347,7 +347,6 @@ export {
 export { matchesMediaHost, parseMediaHostEntry } from "./media-hosts";
 export { PLATFORM_VERSION, satisfiesPlatformVersion } from "./platform";
 export {
-  mapSettledWithConcurrency,
   type ProviderCallContext,
   ProviderCancelledError,
   type ProviderDeadlineOptions,

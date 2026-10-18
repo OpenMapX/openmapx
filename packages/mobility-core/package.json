@@ -217,7 +217,8 @@
     "@openmapx/transitous-core": "workspace:^",
     "spdx-expression-parse": "5.0.0",
     "@openmapx/extension-contracts": "workspace:^",
-    "lru-cache": "11.5.3"
+    "lru-cache": "11.5.3",
+    "p-map": "7.1.1"
   },
   "devDependencies": {
     "@types/spdx-expression-parse": "4.0.0"

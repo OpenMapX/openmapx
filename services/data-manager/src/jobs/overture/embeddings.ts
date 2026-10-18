@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import pMap from "p-map";
 import { sql } from "../../db/index.js";
 
 export const DEFAULT_MODEL = "mxbai-embed-large";
@@ -37,25 +38,6 @@ class SqlEmbeddingCache implements EmbeddingCache {
       [hash, model, embedding],
     );
   }
-}
-
-async function runWithConcurrencyLimit<T>(
-  tasks: (() => Promise<T>)[],
-  limit: number,
-): Promise<T[]> {
-  const results: T[] = new Array(tasks.length);
-  let next = 0;
-
-  async function worker(): Promise<void> {
-    while (next < tasks.length) {
-      const idx = next++;
-      results[idx] = await tasks[idx]();
-    }
-  }
-
-  const workers = Array.from({ length: Math.min(limit, tasks.length) }, () => worker());
-  await Promise.all(workers);
-  return results;
 }
 
 async function fetchEmbedding(
@@ -100,13 +82,15 @@ export async function embed(
   const missIndices = texts.map((_, i) => i).filter((i) => results[i] === null);
 
   if (missIndices.length > 0) {
-    const tasks = missIndices.map((i) => async () => {
-      const embedding = await fetchEmbedding(texts[i], model, ollamaUrl, fetchImpl);
-      await cache.set(hashes[i], model, embedding);
-      return embedding;
-    });
-
-    const embeddings = await runWithConcurrencyLimit(tasks, MAX_CONCURRENCY);
+    const embeddings = await pMap(
+      missIndices,
+      async (i) => {
+        const embedding = await fetchEmbedding(texts[i], model, ollamaUrl, fetchImpl);
+        await cache.set(hashes[i], model, embedding);
+        return embedding;
+      },
+      { concurrency: MAX_CONCURRENCY },
+    );
     for (let k = 0; k < missIndices.length; k++) {
       results[missIndices[k]] = embeddings[k];
     }
@@ -130,8 +114,9 @@ export async function embedUncached(
   const ollamaUrl = opts?.ollamaUrl ?? process.env.OLLAMA_URL ?? DEFAULT_OLLAMA_URL;
   const fetchImpl = opts?.fetchImpl ?? fetch;
 
-  const tasks = texts.map((text) => () => fetchEmbedding(text, model, ollamaUrl, fetchImpl));
-  return runWithConcurrencyLimit(tasks, MAX_CONCURRENCY);
+  return pMap(texts, (text) => fetchEmbedding(text, model, ollamaUrl, fetchImpl), {
+    concurrency: MAX_CONCURRENCY,
+  });
 }
 
 /**

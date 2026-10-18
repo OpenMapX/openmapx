@@ -1,7 +1,8 @@
 import { spawnSync } from "node:child_process";
-import { copyFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 // Exercise the CLI and its exit status, replacing only the external HTTP boundary.
@@ -14,6 +15,13 @@ function runCheck(
 ) {
   const root = mkdtempSync(join(tmpdir(), "openmapx-legal-urls-"));
   mkdirSync(join(root, "scripts"));
+  mkdirSync(join(root, "node_modules"));
+  // The copied CLI still uses the real direct dependency; only HTTP is replaced.
+  symlinkSync(
+    dirname(fileURLToPath(import.meta.resolve("p-map"))),
+    join(root, "node_modules/p-map"),
+    "dir",
+  );
   mkdirSync(join(root, "integrations/provider"), { recursive: true });
   copyFileSync(
     join(import.meta.dirname, "check-legal-urls.ts"),

@@ -1,10 +1,10 @@
+import { pMapSettled } from "p-map";
 /**
  * Generic merge strategies for domain orchestrators.
  * Each function takes a lazy getProviders() factory so providers registered
  * after the orchestrator's setup() are picked up at call time.
  */
 import {
-  mapSettledWithConcurrency,
   type ProviderCallContext,
   ProviderCancelledError,
   runWithProviderDeadline,
@@ -86,15 +86,21 @@ export function createMergeAll<TProvider, TItem>(
       providers.length,
     );
 
-    const results = await mapSettledWithConcurrency(
+    const results = await pMapSettled(
       providers,
-      options?.maxConcurrency ?? DEFAULT_PROVIDER_CONCURRENCY,
       (provider) =>
         runWithProviderDeadline((context) => call(provider, perProvider, context), {
           signal: execution.signal,
           timeoutMs: options?.timeoutMs ?? DEFAULT_PROVIDER_TIMEOUT_MS,
         }),
-    );
+      {
+        concurrency: options?.maxConcurrency ?? DEFAULT_PROVIDER_CONCURRENCY,
+        signal: execution.signal,
+      },
+    ).catch((error: unknown) => {
+      if (execution.signal?.aborted) throw new ProviderCancelledError();
+      throw error;
+    });
     if (execution.signal?.aborted) throw new ProviderCancelledError();
 
     const all: TItem[] = [];

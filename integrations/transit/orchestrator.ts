@@ -3,7 +3,6 @@ import {
   captureTransitContributors,
   type IntegrationContext,
   type MetricsRecorder,
-  mapSettledWithConcurrency,
   type ProviderCallContext,
   type ProviderCallOutcome,
   type ProviderHealthHandle,
@@ -37,6 +36,7 @@ import type {
   TransitReachabilitySurface,
   TransitReachabilitySurfaceRequest,
 } from "@openmapx/mobility-core/transit-reachability";
+import { pMapSettled } from "p-map";
 import { deduplicateStops, isTripNumber } from "./dedup.js";
 import { enrichDeparturesWithRealtime } from "./realtime.js";
 import { emptyResult, mergeFreshness } from "./result-merge.js";
@@ -467,15 +467,23 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
       : await filterHealthy(collectProviders().sort((a, b) => a.priority - b.priority));
     const withSearch = baseProviders.filter((p) => p.searchStopsByName);
 
-    const results = await mapSettledWithConcurrency(withSearch, 4, async (p) => {
-      context?.signal.throwIfAborted();
-      if (!p.searchStopsByName) return null;
-      const fn = p.searchStopsByName.bind(p);
-      const outcome = await timed(providerHealth, metricsRecorder, p.id, "searchStopsByName", () =>
-        fn(query, limit, context),
-      );
-      return outcome.ok ? outcome.value : null;
-    });
+    const results = await pMapSettled(
+      withSearch,
+      async (p) => {
+        context?.signal.throwIfAborted();
+        if (!p.searchStopsByName) return null;
+        const fn = p.searchStopsByName.bind(p);
+        const outcome = await timed(
+          providerHealth,
+          metricsRecorder,
+          p.id,
+          "searchStopsByName",
+          () => fn(query, limit, context),
+        );
+        return outcome.ok ? outcome.value : null;
+      },
+      { concurrency: 4, signal: context?.signal },
+    );
 
     const ok = results
       .map((r) => (r.status === "fulfilled" ? r.value : null))

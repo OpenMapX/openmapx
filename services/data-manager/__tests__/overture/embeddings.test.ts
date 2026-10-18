@@ -7,6 +7,16 @@ import {
   ensureEmbeddingModel,
 } from "../../src/jobs/overture/embeddings.js";
 
+function deferredVoid() {
+  let resolve!: () => void;
+  let reject!: (reason: unknown) => void;
+  const promise = new Promise<void>((done, fail) => {
+    resolve = done;
+    reject = fail;
+  });
+  return { promise, resolve, reject };
+}
+
 class MemoryCache implements EmbeddingCache {
   private store = new Map<string, number[]>();
 
@@ -106,6 +116,61 @@ describe("embed", () => {
 });
 
 describe("embedUncached", () => {
+  it("stops dispatching after a fatal batch error while active requests finish", async () => {
+    const release = deferredVoid();
+    const failure = deferredVoid();
+    const started: number[] = [];
+    const fetchImpl = vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
+      const index = Number(JSON.parse(String(init?.body)).prompt);
+      started.push(index);
+      if (index === 0) await failure.promise;
+      else await release.promise;
+      return new Response(JSON.stringify({ embedding: [index] }));
+    });
+    const expected = new Error("fatal model failure");
+    const work = embedUncached(
+      Array.from({ length: 12 }, (_, i) => String(i)),
+      { fetchImpl },
+    );
+    const observed = work.catch((error: unknown) => error);
+    try {
+      await vi.waitFor(() => expect(started).toHaveLength(8));
+      failure.reject(expected);
+      expect(await observed).toBe(expected);
+    } finally {
+      release.resolve();
+      await new Promise<void>((resolve) => setImmediate(resolve));
+    }
+    expect(started).toEqual([0, 1, 2, 3, 4, 5, 6, 7]);
+  });
+
+  it("keeps input ordering while fetching at most eight embeddings at once", async () => {
+    const release = deferredVoid();
+    let active = 0;
+    let peak = 0;
+    const started: number[] = [];
+    const fetchImpl = vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
+      const index = Number(JSON.parse(String(init?.body)).prompt);
+      started.push(index);
+      active++;
+      peak = Math.max(peak, active);
+      await release.promise;
+      active--;
+      return new Response(JSON.stringify({ embedding: [index] }));
+    });
+    const work = embedUncached(
+      Array.from({ length: 12 }, (_, i) => String(i)),
+      { fetchImpl },
+    );
+    try {
+      await vi.waitFor(() => expect(started).toHaveLength(8));
+    } finally {
+      release.resolve();
+    }
+    expect(await work).toEqual(Array.from({ length: 12 }, (_, i) => [i]));
+    expect(peak).toBe(8);
+  });
+
   it("does not check the cache and always calls fetchImpl", async () => {
     const embedding = [0.3, 0.4];
     const fetchImpl = makeFetchImpl(embedding);
