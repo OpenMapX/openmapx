@@ -1,6 +1,6 @@
 {
   "name": "@openmapx/core",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "description": "Platform-agnostic business logic for OpenMapX",
   "type": "module",
   "main": "./src/index.ts",
@@ -215,5 +215,6 @@
     "zod": "^4.6.5",
     "zustand": "^5.0.15",
     "@openmapx/extension-contracts": "workspace:^"
-  }
+  },
+  "private": true
 }
