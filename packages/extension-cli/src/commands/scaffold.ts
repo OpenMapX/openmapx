@@ -112,7 +112,21 @@ export function scaffoldService(opts: { id: string; outDir: string }): string {
   const ownsSchema = id.replace(/-/g, "_");
   const content = readFileSync(serviceTemplatePath, "utf-8");
   const replaced = content.replaceAll("__ID__", id).replaceAll("__OWNS_SCHEMA__", ownsSchema);
-  writeFileSync(destPath, replaced, "utf-8");
+  try {
+    writeFileSync(destPath, replaced, { encoding: "utf-8", flag: "wx" });
+  } catch (error) {
+    if (
+      typeof error !== "object" ||
+      error === null ||
+      !("code" in error) ||
+      error.code !== "EEXIST"
+    ) {
+      throw error;
+    }
+    throw new Error(
+      `"${destPath}" already exists. Remove it first or choose a different output directory.`,
+    );
+  }
 
   return destPath;
 }

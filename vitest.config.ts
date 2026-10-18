@@ -70,6 +70,7 @@ export default defineConfig({
             "apps/api/src/**/*.test.ts",
             "apps/api/scripts/**/*.test.ts",
             "apps/ops-agent/src/**/*.test.ts",
+            "apps/ops-agent/scripts/traffic-maintenance-fixture.test.ts",
             "apps/transitous-runner/src/**/*.test.ts",
             // Mobile Node-side config/plugin tests only. React Native component
             // and coordinator tests run under `apps/mobile`'s own jest-expo

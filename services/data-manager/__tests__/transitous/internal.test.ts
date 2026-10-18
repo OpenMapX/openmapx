@@ -1,16 +1,41 @@
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import {
+  chmodSync,
+  fstatSync,
+  linkSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  applyApiKeysOverlay,
   pruneUnresolvableSources,
   scheduleSourcesForFeed,
 } from "../../src/jobs/transitous/internal.js";
 import type { JobLogger } from "../../src/jobs/transitous/types.js";
 
+vi.mock("node:fs", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:fs")>();
+  return {
+    ...actual,
+    writeFileSync: vi.fn(actual.writeFileSync),
+    readFileSync: vi.fn(actual.readFileSync),
+  };
+});
+const actualFs = await vi.importActual<typeof import("node:fs")>("node:fs");
+
 let tmp: string | undefined;
 
 afterEach(() => {
+  vi.mocked(writeFileSync).mockImplementation(actualFs.writeFileSync);
+  vi.mocked(readFileSync).mockImplementation(actualFs.readFileSync);
   if (tmp) {
     rmSync(tmp, { recursive: true, force: true });
     tmp = undefined;
@@ -60,6 +85,124 @@ function silentLogger(): JobLogger & { warnings: string[] } {
     warnings,
   };
 }
+
+describe("API-key catalog write security", () => {
+  function fixture() {
+    const catalogDir = makeCatalog([
+      { name: "MBTA", "transitland-atlas-id": "f-mbta", skip: true },
+    ]);
+    const feedPath = join(catalogDir, "feeds", "us.json");
+    chmodSync(feedPath, 0o644);
+    const overlayPath = join(catalogDir, "api-keys.json");
+    writeFileSync(overlayPath, JSON.stringify({ "us/MBTA": "PLAN119_SYNTHETIC_KEY" }));
+    return { catalogDir, feedPath, overlayPath };
+  }
+
+  it.each([false, true])(
+    "is private before credential bytes, including partial failure=%s",
+    (fail) => {
+      const { catalogDir, feedPath, overlayPath } = fixture();
+      const before = statSync(feedPath);
+      const modes: number[] = [];
+      let descriptor: number | undefined;
+      vi.mocked(writeFileSync).mockImplementation((file, data, options) => {
+        if (typeof data === "string" && data.includes("PLAN119_SYNTHETIC_KEY")) {
+          const stat = typeof file === "number" ? fstatSync(file) : statSync(file);
+          modes.push(stat.mode & 0o777);
+          if (typeof file === "number") descriptor = file;
+          if (fail) {
+            actualFs.writeFileSync(
+              file,
+              data.slice(0, data.indexOf("PLAN119_SYNTHETIC_KEY") + 21),
+              options,
+            );
+            throw new Error("injected catalog write failure");
+          }
+        }
+        actualFs.writeFileSync(file, data, options);
+      });
+
+      if (fail) {
+        expect(() => applyApiKeysOverlay(catalogDir, overlayPath)).toThrow(
+          "injected catalog write failure",
+        );
+      } else {
+        expect(applyApiKeysOverlay(catalogDir, overlayPath)).toBe(1);
+        expect(JSON.parse(readFileSync(feedPath, "utf-8"))).toEqual({
+          sources: [
+            { name: "MBTA", "transitland-atlas-id": "f-mbta", "api-key": "PLAN119_SYNTHETIC_KEY" },
+          ],
+        });
+      }
+      expect(modes).toEqual([0o600]);
+      expect(readFileSync(feedPath, "utf-8")).toContain("PLAN119_SYNTHETIC_KEY");
+      const after = statSync(feedPath);
+      expect([after.uid, after.gid, after.ino, after.mode & 0o777]).toEqual([
+        before.uid,
+        before.gid,
+        before.ino,
+        0o600,
+      ]);
+      expect(descriptor).toBeTypeOf("number");
+      expect(() => fstatSync(descriptor as number)).toThrow();
+    },
+  );
+
+  it.each(["symlink", "hardlink"])(
+    "rejects a final-path %s without changing external bytes",
+    (kind) => {
+      const { catalogDir, feedPath, overlayPath } = fixture();
+      const external = join(catalogDir, "external.json");
+      const original = readFileSync(feedPath, "utf-8");
+      writeFileSync(external, original, { mode: 0o644 });
+      rmSync(feedPath);
+      if (kind === "symlink") symlinkSync(external, feedPath);
+      else linkSync(external, feedPath);
+
+      expect(() => applyApiKeysOverlay(catalogDir, overlayPath)).toThrow();
+      expect(readFileSync(external, "utf-8")).toBe(original);
+      expect(statSync(external).mode & 0o777).toBe(0o644);
+    },
+  );
+
+  it("rejects a final path replaced by a directory before writing", () => {
+    const { catalogDir, feedPath, overlayPath } = fixture();
+    vi.mocked(readFileSync).mockImplementation((file, options) => {
+      const data = actualFs.readFileSync(file, options);
+      if (file === feedPath) {
+        rmSync(feedPath);
+        mkdirSync(feedPath);
+      }
+      return data;
+    });
+    expect(() => applyApiKeysOverlay(catalogDir, overlayPath)).toThrow();
+    expect(statSync(feedPath).isDirectory()).toBe(true);
+  });
+
+  it("rejects an opened FIFO before changing its permissions", () => {
+    const { catalogDir, feedPath, overlayPath } = fixture();
+    let reader: number | undefined;
+    vi.mocked(readFileSync).mockImplementation((file, options) => {
+      const data = actualFs.readFileSync(file, options);
+      if (file === feedPath) {
+        rmSync(feedPath);
+        execFileSync("mkfifo", ["-m", "644", feedPath]);
+        reader = actualFs.openSync(
+          feedPath,
+          actualFs.constants.O_RDONLY | actualFs.constants.O_NONBLOCK,
+        );
+      }
+      return data;
+    });
+    try {
+      expect(() => applyApiKeysOverlay(catalogDir, overlayPath)).toThrow(/must be regular/);
+      expect(statSync(feedPath).isFIFO()).toBe(true);
+      expect(statSync(feedPath).mode & 0o777).toBe(0o644);
+    } finally {
+      if (reader !== undefined) actualFs.closeSync(reader);
+    }
+  });
+});
 
 describe("scheduleSourcesForFeed", () => {
   it("keeps real schedule source names unchanged", () => {
