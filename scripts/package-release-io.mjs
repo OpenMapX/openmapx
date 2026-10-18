@@ -2,12 +2,16 @@
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
-  existsSync,
+  closeSync,
+  constants,
+  fstatSync,
   lstatSync,
   mkdirSync,
   mkdtempSync,
+  openSync,
   readdirSync,
   readFileSync,
+  readSync,
   realpathSync,
   rmSync,
   writeFileSync,
@@ -31,11 +35,28 @@ const hash = (bytes, algorithm = "sha256", encoding = "hex") =>
   createHash(algorithm).update(bytes).digest(encoding);
 const canonicalHash = (receipt) => hash(JSON.stringify(receipt));
 const json = (file, limit = 128 * 1024) => {
-  assert(
-    lstatSync(file).isFile() && lstatSync(file).size <= limit,
-    "Expected bounded regular JSON file",
-  );
-  return JSON.parse(readFileSync(file, "utf8"));
+  const fd = openSync(file, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+  try {
+    const stat = fstatSync(fd);
+    assert(stat.isFile() && stat.size <= limit, "Expected bounded regular JSON file");
+    // Read one byte beyond the bound to detect growth without an unbounded
+    // readFile allocation. All checks and reads refer to the opened inode.
+    const bytes = Buffer.alloc(limit + 1);
+    let length = 0;
+    while (length < bytes.length) {
+      const count = readSync(fd, bytes, length, bytes.length - length, null);
+      if (count === 0) break;
+      length += count;
+    }
+    assert(length <= limit, "Expected bounded regular JSON file");
+    assert(
+      length === stat.size && fstatSync(fd).size === stat.size,
+      "JSON file changed during bounded read",
+    );
+    return JSON.parse(bytes.toString("utf8", 0, length));
+  } finally {
+    closeSync(fd);
+  }
 };
 function command(executable, args, options = {}) {
   try {
@@ -108,12 +129,15 @@ function tarManifest(file, run = command) {
     "Empty/duplicate/excess tar entries",
   );
   assert(
-    members.every(
-      (path) =>
-        path === "package/" ||
-        (/^package\/(?:[A-Za-z0-9_.@+-]+\/?)+$/.test(path) &&
-          !path.split("/").some((p) => p === ".." || p === ".")),
-    ),
+    members.every((path) => {
+      if (!path.startsWith("package/")) return false;
+      const segments = path.split("/");
+      segments.shift();
+      if (segments.at(-1) === "") segments.pop();
+      return segments.every(
+        (segment) => segment !== "." && segment !== ".." && /^[A-Za-z0-9_.@+-]+$/.test(segment),
+      );
+    }),
     "Unsafe tar member path",
   );
   assert(
@@ -203,6 +227,7 @@ export function writePackageCandidate({ directory, batch, items, tools, run = co
   const receipt = { ...payload, hash: canonicalHash(payload) };
   writeFileSync(join(directory, "receipt.json"), `${JSON.stringify(receipt, null, 2)}\n`, {
     flag: "wx",
+    mode: 0o600,
   });
   readPackageCandidate({ directory, expectedHash: receipt.hash, context: batch.context, run });
   return receipt;
@@ -293,7 +318,7 @@ export function verifyPackageProvenance(statement, item, batch) {
       statement.predicateType === "https://slsa.dev/provenance/v1",
     "Missing supported provenance statement",
   );
-  const purl = `pkg:npm/${item.name.replace("@", "%40")}@${item.version}`;
+  const purl = `pkg:npm/${item.name.replaceAll("@", "%40")}@${item.version}`;
   assert(
     statement.subject?.length === 1 &&
       statement.subject[0].name === purl &&
@@ -333,10 +358,14 @@ export function verifyPackageProvenance(statement, item, batch) {
 
 export function createPackageReleasePorts(options = {}) {
   const cwd = options.cwd ?? process.cwd();
-  const directory =
-    options.directory ??
-    process.env.PACKAGE_ARTIFACT_DIRECTORY ??
-    join(tmpdir(), "openmapx-package-candidate");
+  const candidateDirectory = () => {
+    const directory = options.directory ?? process.env.PACKAGE_ARTIFACT_DIRECTORY;
+    assert(
+      typeof directory === "string" && directory.length > 0,
+      "Candidate operations require an explicit artifact directory",
+    );
+    return directory;
+  };
   const run = options.run ?? command;
   const fetch = options.fetch ?? globalThis.fetch;
   const wait = options.wait ?? setTimeout;
@@ -585,11 +614,14 @@ export function createPackageReleasePorts(options = {}) {
       }
     },
     async qualify(batch, nativePlan) {
-      assert(
-        !existsSync(directory),
-        "Candidate directory already exists; use a fresh fixed-run directory",
-      );
-      mkdirSync(directory, { recursive: true });
+      const directory = candidateDirectory();
+      try {
+        mkdirSync(directory, { mode: 0o700 });
+      } catch (error) {
+        if (error.code === "EEXIST")
+          throw new Error("Candidate directory already exists; use a fresh fixed-run directory");
+        throw error;
+      }
       const temp = mkdtempSync(join(tmpdir(), "openmapx-package-plan-"));
       try {
         const planPath = join(temp, "publish-plan.json");
@@ -664,13 +696,14 @@ export function createPackageReleasePorts(options = {}) {
     },
     async readCandidate(request) {
       return readPackageCandidate({
-        directory,
+        directory: candidateDirectory(),
         expectedHash: request.candidateHash,
         context: request.context,
         run,
       });
     },
     async validateArtifact(candidate, request) {
+      const directory = candidateDirectory();
       const artifact = api(`repos/${repository}/actions/artifacts/${request.artifactId}`);
       assert(
         artifact.id === request.artifactId &&

@@ -1,6 +1,15 @@
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import {
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -84,7 +93,7 @@ function statement(item: { name: string; version: string; sha512: string }) {
     predicateType: "https://slsa.dev/provenance/v1",
     subject: [
       {
-        name: `pkg:npm/${item.name.replace("@", "%40")}@${item.version}`,
+        name: `${item.name === "@openmapx/extension-contracts" ? "pkg:npm/%40openmapx/extension-contracts" : "pkg:npm/%40openmapx/extension-cli"}@${item.version}`,
         digest: { sha512: item.sha512 },
       },
     ],
@@ -186,6 +195,181 @@ describe("immutable candidate receipt and exact bytes", () => {
     ).toThrow();
   });
 });
+function ioProbe(f: ReturnType<typeof candidate>, input: Record<string, unknown>) {
+  return JSON.parse(
+    execFileSync(
+      process.execPath,
+      [join(import.meta.dirname, "fixtures/package-release-io-probe.mjs")],
+      {
+        input: JSON.stringify({
+          directory: f.cwd,
+          expectedHash: f.receipt.hash,
+          context,
+          ...input,
+        }),
+        encoding: "utf8",
+        timeout: 3000,
+      },
+    ),
+  );
+}
+describe("bounded descriptor JSON reads", () => {
+  it("never reads a replacement target after checking the original receipt", () => {
+    const f = candidate();
+    const result = ioProbe(f, { mode: "replacement" });
+    expect(result.replacementRead).toBe(false);
+    expect(result.unboundedRead).toBe(false);
+    expect(result.opened).toBeGreaterThan(0);
+    expect(result.closed).toBe(result.opened);
+  });
+  it("rejects post-stat growth after reading at most limit plus one bytes and closes the descriptor", () => {
+    const result = ioProbe(candidate(), { mode: "growth" });
+    expect(result.error).not.toBeNull();
+    expect(result.error).toMatch(/bounded/i);
+    expect(result.bytesRead).toBe(128 * 1024 + 1);
+    expect(result.maxReadRequest).toBeLessThanOrEqual(128 * 1024 + 1);
+    expect(result.unboundedRead).toBe(false);
+    expect(result.opened).toBeGreaterThan(0);
+    expect(result.closed).toBe(result.opened);
+  });
+  it("detects post-stat growth even when the resulting JSON is below the limit", () => {
+    const result = ioProbe(candidate(), { mode: "small-growth" });
+    expect(result.error).not.toBeNull();
+    expect(result.error).toMatch(/changed during bounded read/);
+    expect(result.bytesRead).toBeLessThanOrEqual(128 * 1024 + 1);
+    expect(result.unboundedRead).toBe(false);
+    expect(result.opened).toBeGreaterThan(0);
+    expect(result.closed).toBe(result.opened);
+  });
+  it("rejects FIFO receipts without blocking or leaking the descriptor", () => {
+    const result = ioProbe(candidate(), { mode: "fifo" });
+    expect(result.error).toMatch(/bounded/i);
+    expect(result.opened).toBeGreaterThan(0);
+    expect(result.closed).toBe(result.opened);
+    expect(result.bytesRead).toBe(0);
+  });
+  it("closes the receipt descriptor on a successful read", () => {
+    const result = ioProbe(candidate(), {});
+    expect(result.error).toBeNull();
+    expect(result.opened).toBeGreaterThan(0);
+    expect(result.closed).toBe(result.opened);
+    expect(result.unboundedRead).toBe(false);
+  });
+  it.each(["oversized", "symlink", "malformed"])("rejects %s receipt JSON", (kind) => {
+    const f = candidate();
+    const path = join(f.cwd, "receipt.json");
+    if (kind === "oversized") writeFileSync(path, " ".repeat(128 * 1024 + 1));
+    if (kind === "malformed") writeFileSync(path, "{");
+    if (kind === "symlink") {
+      rmSync(path);
+      symlinkSync(join(f.cwd, "publish-plan.json"), path);
+    }
+    const result = ioProbe(f, {});
+    expect(result.error).not.toBeNull();
+    expect(result.closed).toBe(result.opened);
+    expect(result.unboundedRead).toBe(false);
+  });
+});
+describe("tar member validation through candidate reads", () => {
+  it("rejects adversarial plus repetitions within a bounded child process", () => {
+    const result = ioProbe(candidate(), {
+      members: ["package/package.json", `package/${"+".repeat(10000)}!`],
+    });
+    expect(result.error).toMatch(/Unsafe tar member/);
+  });
+  it("accepts the package root, nested schema names and optional trailing slash", () => {
+    const result = ioProbe(candidate(), {
+      members: [
+        "package/",
+        "package/package.json",
+        "package/schemas/@scope/a_b-1.2+3.json",
+        "package/dist/",
+      ],
+    });
+    expect(result.error).toBeNull();
+  });
+  it.each([
+    "package//bad",
+    "package/a//b",
+    "package/./bad",
+    "package/../bad",
+    "/package/bad",
+    "package/a b",
+    "package/a\\b",
+    "package//",
+  ])("rejects unsafe member %s", (member) => {
+    expect(ioProbe(candidate(), { members: ["package/package.json", member] }).error).toMatch(
+      /Unsafe tar member/,
+    );
+  });
+});
+describe("explicit private candidate storage", () => {
+  it("requires an explicit directory only when a candidate operation is requested", async () => {
+    vi.stubEnv("PACKAGE_ARTIFACT_DIRECTORY", undefined);
+    try {
+      const run = vi.fn(() => {
+        throw new Error("must not execute a command");
+      });
+      const ports = createPackageReleasePorts({ run });
+      await expect(ports.readCandidate({ candidateHash: "a".repeat(64), context })).rejects.toThrow(
+        /explicit.*directory/i,
+      );
+      await expect(ports.qualify({}, {})).rejects.toThrow(/explicit.*directory/i);
+      expect(run).not.toHaveBeenCalled();
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+  it("does not write to an implicit predictable temporary directory", async () => {
+    const f = fixture();
+    vi.stubEnv("TMPDIR", f.cwd);
+    vi.stubEnv("PACKAGE_ARTIFACT_DIRECTORY", undefined);
+    const before = readdirSync(f.cwd);
+    try {
+      const ports = createPackageReleasePorts({
+        run() {
+          throw new Error("must not execute");
+        },
+      });
+      await expect(ports.qualify({}, {})).rejects.toThrow(/explicit.*directory/i);
+      expect(readdirSync(f.cwd)).toEqual(before);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+  it("creates an explicit fresh directory privately and refuses an existing directory", async () => {
+    const f = fixture();
+    const directory = join(f.cwd, "candidate");
+    const ports = createPackageReleasePorts({
+      directory,
+      run() {
+        throw new Error("stop after directory creation");
+      },
+    });
+    await expect(ports.qualify({}, {})).rejects.toThrow("stop after directory creation");
+    expect(statSync(directory).mode & 0o777).toBe(0o700);
+    writeFileSync(join(directory, "receipt.json"), "preserve existing receipt");
+    await expect(ports.qualify({}, {})).rejects.toThrow(/already exists/i);
+    expect(readFileSync(join(directory, "receipt.json"), "utf8")).toBe("preserve existing receipt");
+  });
+  it("writes a private exclusive receipt and preserves it on a second write", () => {
+    const f = candidate();
+    const path = join(f.cwd, "receipt.json");
+    expect(statSync(path).mode & 0o777).toBe(0o600);
+    const before = readFileSync(path);
+    expect(() =>
+      writePackageCandidate({ directory: f.cwd, batch: f.batch, items: f.items, tools: {} }),
+    ).toThrow();
+    expect(readFileSync(path)).toEqual(before);
+  });
+  it("reads candidates from an explicit options directory", async () => {
+    const f = candidate();
+    const ports = createPackageReleasePorts({ directory: f.cwd });
+    await expect(
+      ports.readCandidate({ candidateHash: f.receipt.hash, context }),
+    ).resolves.toMatchObject({ hash: f.receipt.hash });
+  });
+});
 describe("public registry adapter fails closed", () => {
   it.each([401, 403, 500, 429])(
     "rejects HTTP %s without treating it as absence",
@@ -227,10 +411,15 @@ describe("public registry adapter fails closed", () => {
   });
 });
 describe("verified public provenance identity", () => {
-  it("accepts the bound repository/workflow/source and subject", () => {
+  it.each([
+    ["@openmapx/extension-contracts", "pkg:npm/%40openmapx/extension-contracts@0.1.0"],
+    ["@openmapx/extension-cli", "pkg:npm/%40openmapx/extension-cli@0.1.0"],
+  ])("accepts the canonical npm PURL for %s", (name, purl) => {
     const f = candidate();
-    const item = f.receipt.items[0];
-    expect(() => verifyPackageProvenance(statement(item), item, f.batch)).not.toThrow();
+    const item = f.receipt.items.find((p: { name: string }) => p.name === name);
+    const attestation = statement(item);
+    expect(attestation.subject[0].name).toBe(purl);
+    expect(() => verifyPackageProvenance(attestation, item, f.batch)).not.toThrow();
   });
   it.each(["repository", "workflow", "source", "subject", "event", "builder"])(
     "rejects wrong provenance %s",
@@ -256,7 +445,7 @@ describe("verified public provenance identity", () => {
 });
 
 describe("production npm and GitHub command ports with injected external systems", () => {
-  function adapter() {
+  function adapter(lockPadding = 0) {
     const f = candidate();
     const item = f.receipt.items[0];
     const calls: { executable: string; args: string[] }[] = [];
@@ -296,7 +485,7 @@ describe("production npm and GitHub command ports with injected external systems
             join(options.cwd ?? "", "package-lock.json"),
             JSON.stringify({
               packages: { [`node_modules/${item.name}`]: { integrity: item.integrity } },
-            }),
+            }) + " ".repeat(lockPadding),
           );
           return "";
         }
@@ -363,6 +552,14 @@ describe("production npm and GitHub command ports with injected external systems
     ]);
     expect(f.calls.find((c) => c.args[0] === "install")?.args).toContain("--ignore-scripts");
     expect(f.calls.find((c) => c.args[0] === "audit")?.args).toContain("--include-attestations");
+  });
+  it("accepts an installed lockfile above the receipt limit but below the 4 MiB limit", async () => {
+    const f = adapter(256 * 1024);
+    await expect(f.ports.verifyPublished(f.item, f.metadata, f.batch)).resolves.toBeUndefined();
+  });
+  it("rejects an installed lockfile above the 4 MiB bound", async () => {
+    const f = adapter(4 * 1024 * 1024);
+    await expect(f.ports.verifyPublished(f.item, f.metadata, f.batch)).rejects.toThrow(/bounded/);
   });
   it.each(["absent", "invalid", "wrong subject"])(
     "rejects %s verified audit output",
