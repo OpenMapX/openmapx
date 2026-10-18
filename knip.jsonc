@@ -13,6 +13,8 @@
         "scripts/discovery-eval/run.ts",
         "scripts/record-search-eval.mts",
         "scripts/self-hosting-replay-vitest.config.ts",
+        // Docker-context scanner tests spawn this deadline-isolated fixture by path.
+        "scripts/fixtures/docker-context-redirection-probe.ts",
         // Release IO tests copy this executable into fake gh/docker/trivy subprocess paths.
         "scripts/fixtures/product-release-command.mjs",
         // Release IO tests invoke this fixed JSON-input Node subprocess entry point.
