@@ -4,13 +4,14 @@
   "commit": false,
   "fixed": [],
   "linked": [],
-  "access": "restricted",
+  "access": "public",
   "baseBranch": "main",
   "updateInternalDependencies": "patch",
   "privatePackages": {
-    "version": true,
+    "version": false,
     "tag": false
   },
   "ignore": [],
-  "changedFilePatterns": ["**", "!Dockerfile"]
+  "changedFilePatterns": ["**"],
+  "format": false
 }
