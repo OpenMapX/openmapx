@@ -1,7 +1,12 @@
 import {
-  chmodSync,
+  closeSync,
+  constants,
   existsSync,
+  fchmodSync,
+  fstatSync,
+  ftruncateSync,
   mkdirSync,
+  openSync,
   readdirSync,
   readFileSync,
   rmSync,
@@ -151,6 +156,28 @@ export function ensureTransitousWorkdirs(
   symlinkSync(downloadsDir, cacheDir, "dir");
 }
 
+/** Keep the catalog inode/owner, but make it private before any credential bytes. */
+export function writePrivateCatalogFile(feedPath: string, content: string): void {
+  // No truncation on open: validate and tighten the same descriptor first.
+  // NONBLOCK also lets us reject a FIFO without waiting for a reader.
+  const fd = openSync(
+    feedPath,
+    constants.O_WRONLY | constants.O_CREAT | constants.O_NOFOLLOW | constants.O_NONBLOCK,
+    0o600,
+  );
+  try {
+    const file = fstatSync(fd);
+    if (!file.isFile() || file.nlink !== 1) {
+      throw new Error(`Transitous catalog file must be regular with a single link: ${feedPath}`);
+    }
+    fchmodSync(fd, 0o600);
+    ftruncateSync(fd, 0);
+    writeFileSync(fd, content, "utf-8");
+  } finally {
+    closeSync(fd);
+  }
+}
+
 export function applyApiKeysOverlay(catalogDir: string, overlayPath: string): number {
   if (!existsSync(overlayPath)) return 0;
   let overlay: Record<string, string>;
@@ -189,11 +216,7 @@ export function applyApiKeysOverlay(catalogDir: string, overlayPath: string): nu
     }
 
     if (!modified) continue;
-    writeFileSync(feedPath, `${JSON.stringify(data, null, 2)}\n`, "utf-8");
-    // The file now carries a feed API key. writeFileSync's `mode` only applies
-    // when it creates the file, and catalog files arrive at 0644, so tighten
-    // explicitly to repair files stamped by an earlier run as well.
-    chmodSync(feedPath, 0o600);
+    writePrivateCatalogFile(feedPath, `${JSON.stringify(data, null, 2)}\n`);
     applied++;
   }
 
