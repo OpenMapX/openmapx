@@ -4,6 +4,7 @@ import { access, readFile, realpath } from "node:fs/promises";
 import { promisify } from "node:util";
 import { createDockerRuntime } from "../src/docker-runtime";
 import { dispatchOpsOperation } from "../src/runtime";
+import { withPrivateFixture } from "./traffic-maintenance-fixture.ts";
 
 /**
  * Disposable acceptance probe for the pinned Valhalla maintenance lifecycle.
@@ -11,7 +12,10 @@ import { dispatchOpsOperation } from "../src/runtime";
  * The fixture must be named `om043-maintenance-engine`, bind
  * `/tmp/om043-maintenance/valhalla/osm-pbf` at `/custom_files`, and publish
  * port 8002 only to loopback port 51870. The preflight below rejects any other
- * container or mount before the runtime can stop or mutate it.
+ * container or mount before the runtime can stop or mutate it. The precreated
+ * root must be a current-owned, non-symlink directory with mode 0700; directory
+ * safety is checked before even inspecting Docker. If necessary, the operator
+ * must set mode 0700 on their own fixture root before running this probe.
  */
 
 const SYNTHETIC_CONTAINER = "om043-maintenance-engine";
@@ -27,17 +31,24 @@ interface DockerInspect {
   };
 }
 
-const inspected = await execute("docker", ["inspect", SYNTHETIC_CONTAINER], {
-  timeout: 10_000,
-  maxBuffer: 1024 * 1024,
-});
+const { inspected, expectedSharedDir } = await withPrivateFixture(
+  TRAFFIC_DATA_ROOT,
+  `${TRAFFIC_DATA_ROOT}/valhalla/osm-pbf`,
+  async (expectedSharedDir) => ({
+    expectedSharedDir,
+    inspected: await execute("docker", ["inspect", SYNTHETIC_CONTAINER], {
+      timeout: 10_000,
+      maxBuffer: 1024 * 1024,
+    }),
+  }),
+  process.geteuid?.(),
+);
 const containers = JSON.parse(inspected.stdout) as DockerInspect[];
 assert.equal(containers.length, 1, "expected exactly one synthetic Valhalla fixture");
 const container = containers[0];
 assert.ok(container);
 assert.equal(container.Name, `/${SYNTHETIC_CONTAINER}`);
 
-const expectedSharedDir = await realpath(`${TRAFFIC_DATA_ROOT}/valhalla/osm-pbf`);
 assert.match(expectedSharedDir, /^\/(?:private\/)?tmp\/om043-maintenance(?:\/|$)/);
 const customFiles = container.Mounts.find((mount) => mount.Destination === "/custom_files");
 assert.deepEqual(

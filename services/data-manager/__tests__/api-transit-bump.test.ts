@@ -1,14 +1,39 @@
-import Fastify from "fastify";
-import { describe, expect, it } from "vitest";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import Fastify, { type FastifyInstance } from "fastify";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 const { registerApi } = await import("../src/api.js");
 
 describe("data-manager /transit/bump branch validation", () => {
+  let fixtureRoot: string;
+  let apps: FastifyInstance[];
+
+  beforeEach(() => {
+    fixtureRoot = mkdtempSync(join(tmpdir(), "openmapx-dm-bump-"));
+    apps = [];
+  });
+
+  afterEach(async () => {
+    try {
+      await Promise.all(apps.map((app) => app.close()));
+    } finally {
+      rmSync(fixtureRoot, { recursive: true, force: true });
+    }
+  });
+
+  function createTestApp(): FastifyInstance {
+    const app = Fastify();
+    apps.push(app);
+    return app;
+  }
+
   it.each(["--upload-pack=touch /tmp/x", "-x", "../evil", "main@{upstream}", "feat with spaces"])(
     "rejects unsafe branch %j with 400",
     async (branch) => {
-      const app = Fastify();
-      registerApi(app, { dataDir: "/tmp/openmapx-dm-bump", repoRoot: "/tmp/repo" });
+      const app = createTestApp();
+      registerApi(app, { dataDir: join(fixtureRoot, "data"), repoRoot: join(fixtureRoot, "repo") });
       const res = await app.inject({
         method: "POST",
         url: "/transit/bump",
@@ -16,13 +41,12 @@ describe("data-manager /transit/bump branch validation", () => {
       });
       expect(res.statusCode).toBe(400);
       expect(JSON.parse(res.body).error).toBe("invalid-branch");
-      await app.close();
     },
   );
 
   it("accepts a normal branch name (passes validation, fails later on missing catalog)", async () => {
-    const app = Fastify();
-    registerApi(app, { dataDir: "/tmp/openmapx-dm-bump", repoRoot: "/tmp/repo" });
+    const app = createTestApp();
+    registerApi(app, { dataDir: join(fixtureRoot, "data"), repoRoot: join(fixtureRoot, "repo") });
     const res = await app.inject({
       method: "POST",
       url: "/transit/bump",
@@ -32,6 +56,5 @@ describe("data-manager /transit/bump branch validation", () => {
     // proving the validator did not reject a legitimate ref.
     expect(res.statusCode).toBe(409);
     expect(JSON.parse(res.body).error).toBe("catalog-not-cloned");
-    await app.close();
   });
 });

@@ -2,8 +2,8 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { SafeDownloadOptions } from "@openmapx/core/utils/safe-download";
-import Fastify from "fastify";
-import { describe, expect, it, vi } from "vitest";
+import Fastify, { type FastifyInstance } from "fastify";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { registerApi } from "../src/api.js";
 import { resolveOperationsProfile } from "../src/jobs/transitous/operations-profile.js";
 import { OperatorFeedRelayStore } from "../src/jobs/transitous/operator-feed-relay.js";
@@ -20,6 +20,34 @@ const mockDownloadOsm = vi.hoisted(() =>
 vi.mock("../src/jobs/download-osm.js", () => ({ downloadOsm: mockDownloadOsm }));
 
 describe("data-manager API", () => {
+  let fixtureRoot: string;
+  let apps: FastifyInstance[];
+
+  beforeEach(() => {
+    fixtureRoot = mkdtempSync(join(tmpdir(), "openmapx-dm-api-"));
+    apps = [];
+  });
+
+  afterEach(async () => {
+    try {
+      await Promise.all(apps.map((app) => app.close()));
+    } finally {
+      rmSync(fixtureRoot, { recursive: true, force: true });
+    }
+  });
+
+  function createTestApp(): FastifyInstance {
+    const app = Fastify();
+    apps.push(app);
+    return app;
+  }
+
+  function createDataDir(): string {
+    const dataDir = join(fixtureRoot, "data");
+    mkdirSync(dataDir);
+    return dataDir;
+  }
+
   function sourceCatalog(dataDir: string): void {
     const feedsDir = join(dataDir, ".transitous-catalog", "feeds");
     const gitDir = join(dataDir, ".transitous-catalog", ".git");
@@ -34,29 +62,27 @@ describe("data-manager API", () => {
   }
 
   it("GET /datasets returns empty list when no state", async () => {
-    const app = Fastify();
-    registerApi(app, { dataDir: "/tmp/openmapx-dm-test-empty" });
+    const app = createTestApp();
+    registerApi(app, { dataDir: join(fixtureRoot, "data") });
     const res = await app.inject({ method: "GET", url: "/datasets" });
     expect(res.statusCode).toBe(200);
     expect(JSON.parse(res.body)).toEqual({ datasets: [] });
-    await app.close();
   });
 
   it("GET /status returns service status", async () => {
-    const app = Fastify();
-    registerApi(app, { dataDir: "/tmp/openmapx-dm-test-status" });
+    const app = createTestApp();
+    registerApi(app, { dataDir: join(fixtureRoot, "data") });
     const res = await app.inject({ method: "GET", url: "/status" });
     expect(res.statusCode).toBe(200);
     const body = JSON.parse(res.body) as Record<string, unknown>;
     expect(body.ok).toBe(true);
     expect(body.uptime).toBeGreaterThanOrEqual(0);
-    await app.close();
   });
 
   it("GET /status returns 503 until mandatory startup has completed", async () => {
-    const app = Fastify();
+    const app = createTestApp();
     registerApi(app, {
-      dataDir: "/tmp/openmapx-dm-test-starting",
+      dataDir: join(fixtureRoot, "data"),
       readiness: () => ({ status: "starting", phase: "job-reconciliation" }),
     });
 
@@ -68,13 +94,12 @@ describe("data-manager API", () => {
       status: "starting",
       phase: "job-reconciliation",
     });
-    await app.close();
   });
 
   it("GET /live remains a liveness-only probe while readiness is false", async () => {
-    const app = Fastify();
+    const app = createTestApp();
     registerApi(app, {
-      dataDir: "/tmp/openmapx-dm-test-live",
+      dataDir: join(fixtureRoot, "data"),
       readiness: () => ({ status: "failed", phase: "job-reconciliation" }),
     });
 
@@ -82,11 +107,10 @@ describe("data-manager API", () => {
 
     expect(res.statusCode).toBe(200);
     expect(res.json()).toEqual({ ok: true });
-    await app.close();
   });
 
   it("streams a relay capability once with private response headers", async () => {
-    const dataDir = mkdtempSync(join(tmpdir(), "openmapx-dm-relay-route-"));
+    const dataDir = createDataDir();
     const relay = new OperatorFeedRelayStore({
       download: async (options: SafeDownloadOptions) => {
         writeFileSync(options.destination, "operator archive");
@@ -102,7 +126,7 @@ describe("data-manager API", () => {
       sourceId: "operator:de:route",
       remoteUrl: new URL("https://operator.example/feed.zip"),
     });
-    const app = Fastify();
+    const app = createTestApp();
     registerApi(app, { dataDir, operatorFeedRelay: relay });
 
     const first = await app.inject({ method: "GET", url: registration.url.pathname });
@@ -116,26 +140,23 @@ describe("data-manager API", () => {
     expect(second.statusCode).toBe(410);
     expect(second.body).not.toContain("operator.example");
     await relay.endRun("run-route");
-    await app.close();
-    rmSync(dataDir, { recursive: true, force: true });
   });
 
   it("GET /search-index/status returns 404 when no snapshot is published", async () => {
-    const app = Fastify();
+    const app = createTestApp();
     const unsafe = vi.fn().mockResolvedValue([{ exists: false }]);
     registerApi(app, {
-      dataDir: "/tmp/openmapx-dm-search-index-absent",
+      dataDir: join(fixtureRoot, "data"),
       searchIndexSql: { unsafe, reserve: vi.fn() } as never,
     });
     const res = await app.inject({ method: "GET", url: "/search-index/status" });
     expect(res.statusCode).toBe(404);
     expect(res.json()).toEqual({ ok: false, error: "osm_search index not built" });
-    await app.close();
   });
 
   it("POST /search-index/build streams progress and the final snapshot", async () => {
-    const dataDir = mkdtempSync(join(tmpdir(), "openmapx-dm-search-index-build-"));
-    const app = Fastify();
+    const dataDir = createDataDir();
+    const app = createTestApp();
     const buildSearchIndex = vi.fn(async (options: { onProgress?: (event: object) => void }) => {
       options.onProgress?.({ stage: "extract", message: "streaming" });
       return {
@@ -166,25 +187,22 @@ describe("data-manager API", () => {
       expect.objectContaining({ event: "done", ok: true, epoch: "new-epoch" }),
     ]);
     expect(buildSearchIndex).toHaveBeenCalledOnce();
-    await app.close();
-    rmSync(dataDir, { recursive: true, force: true });
   });
 
   it("GET /notable-places/status returns 404 until a first snapshot is published", async () => {
-    const app = Fastify();
+    const app = createTestApp();
     const unsafe = vi.fn().mockResolvedValue([{ exists: false }]);
     registerApi(app, {
-      dataDir: "/tmp/openmapx-dm-notable-absent",
+      dataDir: join(fixtureRoot, "data"),
       searchIndexSql: { unsafe, reserve: vi.fn() } as never,
     });
     const res = await app.inject({ method: "GET", url: "/notable-places/status" });
     expect(res.statusCode).toBe(404);
     expect(res.json()).toEqual({ ok: false, error: "notable_places index not built" });
-    await app.close();
   });
 
   it("POST /notable-places/build streams progress and the published snapshot", async () => {
-    const app = Fastify();
+    const app = createTestApp();
     const build = vi.fn(async (options: { onProgress?: (event: object) => void }) => {
       options.onProgress?.({ stage: "names", message: "Fetching labels in en" });
       return {
@@ -196,7 +214,7 @@ describe("data-manager API", () => {
       };
     });
     registerApi(app, {
-      dataDir: "/tmp/openmapx-dm-notable-build",
+      dataDir: join(fixtureRoot, "data"),
       searchIndexSql: { reserve: vi.fn() } as never,
       notablePlaces: {
         runtimeState: { building: false, failure: null },
@@ -213,11 +231,10 @@ describe("data-manager API", () => {
       expect.objectContaining({ event: "progress", stage: "names" }),
       expect.objectContaining({ event: "done", ok: true, placeCount: 5, nameCount: 9 }),
     ]);
-    await app.close();
   });
 
   it("keeps a successful OSM download when search-index fingerprint persistence fails", async () => {
-    const dataDir = mkdtempSync(join(tmpdir(), "openmapx-dm-download-fingerprint-"));
+    const dataDir = createDataDir();
     writeFileSync(
       join(dataDir, ".data-manager-state.json"),
       JSON.stringify({
@@ -238,7 +255,7 @@ describe("data-manager API", () => {
       .fn()
       .mockResolvedValueOnce([{ exists: true }])
       .mockRejectedValueOnce(new Error("database unavailable"));
-    const app = Fastify();
+    const app = createTestApp();
     registerApi(app, {
       dataDir,
       searchIndexSql: { unsafe, reserve: vi.fn() } as never,
@@ -251,13 +268,11 @@ describe("data-manager API", () => {
     expect(res.statusCode).toBe(200);
     expect(res.body).toContain('"event":"done"');
     expect(res.body).not.toContain('"event":"error"');
-    await app.close();
-    rmSync(dataDir, { recursive: true, force: true });
   });
 
   it("POST /datasets/reload reloads state from disk", async () => {
-    const dataDir = mkdtempSync(join(tmpdir(), "openmapx-dm-test-reload-"));
-    const app = Fastify();
+    const dataDir = createDataDir();
+    const app = createTestApp();
     registerApi(app, { dataDir });
 
     writeFileSync(
@@ -293,13 +308,10 @@ describe("data-manager API", () => {
         },
       ],
     });
-
-    await app.close();
-    rmSync(dataDir, { recursive: true, force: true });
   });
 
   it("returns 409 without changing the overlay when single-flight is occupied", async () => {
-    const dataDir = mkdtempSync(join(tmpdir(), "openmapx-dm-source-conflict-"));
+    const dataDir = createDataDir();
     sourceCatalog(dataDir);
     const overlayPath = join(dataDir, "overrides", "feeds-overlay.json");
     const singleFlight: SingleFlightController = {
@@ -311,7 +323,7 @@ describe("data-manager API", () => {
       markSyncFinished: vi.fn(),
       getInflight: () => ({ jobId: "running-job", startedAt: new Date() }),
     };
-    const app = Fastify();
+    const app = createTestApp();
     registerApi(app, { dataDir, singleFlight, launchTransitSync: vi.fn() });
     const res = await app.inject({
       method: "POST",
@@ -325,12 +337,10 @@ describe("data-manager API", () => {
     });
     expect(res.statusCode).toBe(409);
     expect(existsSync(overlayPath)).toBe(false);
-    await app.close();
-    rmSync(dataDir, { recursive: true, force: true });
   });
 
   it("returns a reserved visible job before launching an accepted source mutation", async () => {
-    const dataDir = mkdtempSync(join(tmpdir(), "openmapx-dm-source-accepted-"));
+    const dataDir = createDataDir();
     sourceCatalog(dataDir);
     const events: string[] = [];
     const singleFlight: SingleFlightController = {
@@ -342,7 +352,7 @@ describe("data-manager API", () => {
       getInflight: () => ({ jobId: "job-visible", startedAt: new Date() }),
     };
     const launchTransitSync = vi.fn(() => events.push("pipeline-launched"));
-    const app = Fastify();
+    const app = createTestApp();
     registerApi(app, { dataDir, singleFlight, launchTransitSync });
     const res = await app.inject({
       method: "POST",
@@ -365,21 +375,19 @@ describe("data-manager API", () => {
       readFileSync(join(dataDir, "overrides", "feeds-overlay.json"), "utf-8"),
     ) as { version: number };
     expect(overlay.version).toBe(3);
-    await app.close();
-    rmSync(dataDir, { recursive: true, force: true });
   });
 
   it.each([
     { countries: "de", label: "a non-array countries value" },
     { countries: ["-x"], label: "a leading-dash country token" },
   ])("POST /transit/sync rejects $label", async ({ countries }) => {
-    const dataDir = mkdtempSync(join(tmpdir(), "openmapx-dm-transit-sync-invalid-"));
+    const dataDir = createDataDir();
     const singleFlight: SingleFlightController = {
       tryStartSync: vi.fn(),
       markSyncFinished: vi.fn(),
       getInflight: () => null,
     };
-    const app = Fastify();
+    const app = createTestApp();
     registerApi(app, {
       dataDir,
       operationsPolicy: resolveOperationsProfile({ countries: ["de"] }),
@@ -395,19 +403,17 @@ describe("data-manager API", () => {
 
     expect(res.statusCode).toBe(400);
     expect(singleFlight.tryStartSync).not.toHaveBeenCalled();
-    await app.close();
-    rmSync(dataDir, { recursive: true, force: true });
   });
 
   it("POST /transit/sync starts an in-scope country", async () => {
-    const dataDir = mkdtempSync(join(tmpdir(), "openmapx-dm-transit-sync-valid-"));
+    const dataDir = createDataDir();
     const singleFlight: SingleFlightController = {
       tryStartSync: vi.fn(async () => ({ ok: true as const, jobId: "job-sync" })),
       markSyncFinished: vi.fn(),
       getInflight: () => ({ jobId: "job-sync", startedAt: new Date() }),
     };
     const launchTransitSync = vi.fn();
-    const app = Fastify();
+    const app = createTestApp();
     registerApi(app, {
       dataDir,
       operationsPolicy: resolveOperationsProfile({ countries: ["de"] }),
@@ -428,16 +434,14 @@ describe("data-manager API", () => {
       countries: ["DE"],
       trigger: "api",
     });
-    await app.close();
-    rmSync(dataDir, { recursive: true, force: true });
   });
 
   it.each(["../etc", "Europe/Germany"])(
     "POST /download/osm rejects an invalid region: %s",
     async (region) => {
-      const dataDir = mkdtempSync(join(tmpdir(), "openmapx-dm-download-invalid-"));
+      const dataDir = createDataDir();
       mockDownloadOsm.mockClear();
-      const app = Fastify();
+      const app = createTestApp();
       registerApi(app, { dataDir });
 
       const res = await app.inject({
@@ -448,17 +452,15 @@ describe("data-manager API", () => {
 
       expect(res.statusCode).toBe(500);
       expect(mockDownloadOsm).not.toHaveBeenCalled();
-      await app.close();
-      rmSync(dataDir, { recursive: true, force: true });
     },
   );
 
   it.each(["europe/germany/berlin", "planet"])(
     "POST /download/osm accepts a valid region: %s",
     async (region) => {
-      const dataDir = mkdtempSync(join(tmpdir(), "openmapx-dm-download-valid-"));
+      const dataDir = createDataDir();
       mockDownloadOsm.mockClear();
-      const app = Fastify();
+      const app = createTestApp();
       registerApi(app, { dataDir });
 
       const res = await app.inject({
@@ -470,14 +472,12 @@ describe("data-manager API", () => {
       expect(res.statusCode).toBe(200);
       expect(mockDownloadOsm).toHaveBeenCalledWith(expect.objectContaining({ region, dataDir }));
       expect(res.body).toContain('"event":"done"');
-      await app.close();
-      rmSync(dataDir, { recursive: true, force: true });
     },
   );
 
   it("POST /link rejects a plan entry with a traversing targetFilename", async () => {
-    const dataDir = mkdtempSync(join(tmpdir(), "openmapx-dm-link-"));
-    const app = Fastify();
+    const dataDir = createDataDir();
+    const app = createTestApp();
     registerApi(app, { dataDir });
 
     const res = await app.inject({
@@ -497,13 +497,11 @@ describe("data-manager API", () => {
     });
 
     expect(res.statusCode).toBe(400);
-    await app.close();
-    rmSync(dataDir, { recursive: true, force: true });
   });
 
   it("POST /link rejects a plan entry with a traversing dataType", async () => {
-    const dataDir = mkdtempSync(join(tmpdir(), "openmapx-dm-link-"));
-    const app = Fastify();
+    const dataDir = createDataDir();
+    const app = createTestApp();
     registerApi(app, { dataDir });
 
     const res = await app.inject({
@@ -522,25 +520,21 @@ describe("data-manager API", () => {
     });
 
     expect(res.statusCode).toBe(400);
-    await app.close();
-    rmSync(dataDir, { recursive: true, force: true });
   });
 
   it("POST /link rejects a body without a plan array", async () => {
-    const dataDir = mkdtempSync(join(tmpdir(), "openmapx-dm-link-"));
-    const app = Fastify();
+    const dataDir = createDataDir();
+    const app = createTestApp();
     registerApi(app, { dataDir });
 
     const res = await app.inject({ method: "POST", url: "/link", payload: {} });
 
     expect(res.statusCode).toBe(400);
-    await app.close();
-    rmSync(dataDir, { recursive: true, force: true });
   });
 
   it("POST /link rejects unknown top-level properties", async () => {
-    const dataDir = mkdtempSync(join(tmpdir(), "openmapx-dm-link-"));
-    const app = Fastify();
+    const dataDir = createDataDir();
+    const app = createTestApp();
     registerApi(app, { dataDir });
 
     const res = await app.inject({
@@ -550,20 +544,16 @@ describe("data-manager API", () => {
     });
 
     expect(res.statusCode).toBe(400);
-    await app.close();
-    rmSync(dataDir, { recursive: true, force: true });
   });
 
   it("POST /link accepts a well-formed empty plan", async () => {
-    const dataDir = mkdtempSync(join(tmpdir(), "openmapx-dm-link-"));
-    const app = Fastify();
+    const dataDir = createDataDir();
+    const app = createTestApp();
     registerApi(app, { dataDir });
 
     const res = await app.inject({ method: "POST", url: "/link", payload: { plan: [] } });
 
     expect(res.statusCode).toBe(200);
     expect(JSON.parse(res.body).ok).toBe(true);
-    await app.close();
-    rmSync(dataDir, { recursive: true, force: true });
   });
 });
