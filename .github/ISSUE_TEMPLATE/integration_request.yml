@@ -6,9 +6,9 @@ body:
   - type: markdown
     attributes:
       value: |
-        Share what you know; access, licensing or technical details may be Unknown.
-        Maintainers qualify rights, privacy, source policy and attribution before implementation.
-        See the [integration guide](https://docs.openmapx.org/developer/integration-system/).
+        Suggest one source or service per request and link any [related issues](https://github.com/OpenMapX/openmapx/issues?q=is%3Aissue).
+        Share the details you know; access, licensing and implementation details can remain unknown.
+        Maintainers check these before implementation. See the [integration guide](https://docs.openmapx.org/developer/integration-system/).
         Do not paste API keys, account details or personal locations.
   - type: input
     id: provider-name
@@ -20,13 +20,14 @@ body:
     id: use-case
     attributes:
       label: What would this enable?
-      description: Describe the capability or gap this source would address.
+      description: What data or capability would it add, and when would someone use it? Mention any gap in the existing integrations.
     validations:
       required: true
   - type: input
     id: provider-url
     attributes:
-      label: Website or data documentation (if known)
+      label: Official website or documentation (if known)
+      description: Link the provider, dataset or API documentation so maintainers can investigate.
       placeholder: "https://…"
   - type: dropdown
     id: domain
@@ -66,9 +67,9 @@ body:
     id: licensing
     attributes:
       label: Rights and attribution (if known)
-      description: Link terms or license information if available. Unknown is fine; do not guess or promise that the data is reusable.
+      description: Link the official data license, API terms or attribution requirements. Leave blank if unknown.
   - type: textarea
     id: context
     attributes:
-      label: Other context or implementation ideas (optional)
-      description: Existing service support, limitations or an offer to help.
+      label: Additional context (optional)
+      description: Examples, limitations, existing tools that use this source or an offer to help.

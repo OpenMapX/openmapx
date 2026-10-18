@@ -5,7 +5,7 @@ contact_links:
     about: Setup, self-hosting, CLI, and architecture guides — please check here first.
   - name: 💬 Question or discussion
     url: https://github.com/OpenMapX/openmapx/discussions
-    about: For usage questions, integration ideas, and general discussion, please use Discussions instead of opening an issue.
+    about: Usage questions and open-ended discussion. Use the forms above for bug reports, feature requests and integration requests.
   - name: 🔒 Security vulnerability
     url: https://github.com/OpenMapX/openmapx/security/advisories/new
     about: Report a vulnerability privately to the maintainers. See SECURITY.md for the reporting process and email fallback.

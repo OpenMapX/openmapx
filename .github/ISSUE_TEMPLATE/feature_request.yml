@@ -6,45 +6,30 @@ body:
   - type: markdown
     attributes:
       value: |
-        Describe the need and desired result; you do not need an implementation plan.
-        Check existing issues if you can. For a new data source or backend, use the integration/provider form.
-        Early ideas and usage questions can go in [Discussions](https://github.com/OpenMapX/openmapx/discussions).
+        Focus on one idea per request. [Search existing issues](https://github.com/OpenMapX/openmapx/issues?q=is%3Aissue)
+        and link related requests. For a new data source or backend, use the integration/provider form.
+        You do not need to design the implementation. Open-ended ideas and usage questions can go in [Discussions](https://github.com/OpenMapX/openmapx/discussions).
   - type: textarea
     id: problem
     attributes:
       label: What problem would this solve?
-      description: Who encounters it, and in what situation? A concrete example helps.
+      description: Describe a situation where this would help and who would benefit. A concrete example is useful.
     validations:
       required: true
   - type: textarea
     id: outcome
     attributes:
-      label: What should become possible?
-      description: Describe the result you want, without needing to specify code or UI details.
+      label: What would you like to be able to do?
+      description: Describe the outcome you want. You can suggest an approach, but implementation details are optional.
     validations:
       required: true
   - type: textarea
-    id: proposal
+    id: alternatives
     attributes:
-      label: Possible approach or alternatives (optional)
-      description: Share ideas, workarounds or related tools if useful. Leave this blank if you are unsure.
-  - type: dropdown
-    id: area
+      label: Alternatives or workarounds (optional)
+      description: How do you handle this today? Mention other approaches or tools you have considered.
+  - type: textarea
+    id: context
     attributes:
-      label: Area, if known
-      options:
-        - Web or map
-        - Mobile app
-        - API or integration
-        - CLI or self-hosting
-        - Data pipeline
-        - Documentation
-        - Other / not sure
-  - type: dropdown
-    id: contribution
-    attributes:
-      label: Would you like to work on it? (optional)
-      options:
-        - "Yes"
-        - "Maybe, with guidance"
-        - "No, just suggesting"
+      label: Additional context (optional)
+      description: Links, examples, sketches or related discussions. If you would like to help work on this, let us know here.

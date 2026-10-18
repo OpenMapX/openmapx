@@ -6,32 +6,30 @@ body:
   - type: markdown
     attributes:
       value: |
-        Describe the objective and what is known. Use the bug, feature or integration form for those reports.
-        Unknowns are useful: maintainers refine acceptance criteria, dependencies and estimates during triage.
-        Check existing issues if you can; no source-code knowledge is required.
+        Use this form for maintenance or an investigation. For bugs, new features or providers, use the corresponding form.
+        Link [related issues](https://github.com/OpenMapX/openmapx/issues?q=is%3Aissue) and describe what is known.
+        Maintainers refine the scope, acceptance criteria and estimates during triage; you do not need an implementation plan.
   - type: textarea
     id: objective
     attributes:
-      label: Objective
-      description: What should this work achieve, and why? Link relevant evidence if available.
+      label: What needs to be done, and why?
+      description: Describe the work or investigation and the reason for it. Link supporting evidence if available.
     validations:
       required: true
   - type: textarea
     id: scope
     attributes:
-      label: Scope and open questions
-      description: Describe the boundaries you know. Say Unknown rather than inventing implementation details.
-    validations:
-      required: true
+      label: Scope and open questions (if known)
+      description: Mention relevant boundaries, constraints or decisions still needed. Leave unknown details for triage.
   - type: textarea
     id: completion-criteria
     attributes:
-      label: How would we know it is complete?
-      description: Suggest observable outcomes or evidence. For an investigation, list the questions to answer; maintainers can refine these criteria.
+      label: What would show that this is complete?
+      description: Suggest an observable result or a way to check it. For an investigation, list the questions to answer; maintainers can refine this.
     validations:
       required: true
   - type: textarea
     id: dependencies
     attributes:
       label: Dependencies (optional)
-      description: Link prerequisites or unresolved decisions if known. None known or Unknown are both useful answers.
+      description: Link prerequisites or unresolved decisions if known. Leave blank if none are known.

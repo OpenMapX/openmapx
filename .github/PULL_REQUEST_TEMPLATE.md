@@ -1,29 +1,27 @@
-<!-- Use a Conventional Commits title. Read CONTRIBUTING.md, CLA.md and LICENSING.md.
-Keep this concise; combine or omit empty sections for small changes. -->
+<!-- Use a Conventional Commits title. See CONTRIBUTING.md, CLA.md and LICENSING.md.
+For security fixes, follow SECURITY.md before opening a public PR.
+Keep this concise; combine or omit sections that add nothing for a small change. -->
 
 ## What changed and why
 
-<!-- Describe the problem and resulting behavior. A concrete example often helps. -->
+<!-- Explain the problem and what someone can do or observe after this change.
+A concrete before/after example often helps. Include relevant scope or trade-offs. -->
 
-## Screenshots
-
-<!-- Required for every visual/visible-impact change, including docs and generated output.
-Attach real, inspected screenshots here: labeled comparable before/after views for existing
-behavior, or an after view with context for a new surface. Cover affected states/viewports.
-Agents: use gh pr create/edit --attach and inspect the hosted images after upload.
-Local file paths are not delivered evidence. Remove this section only if nothing visible changed. -->
+<!-- For changes with visible impact, put real, inspected screenshots beside the explanation:
+labeled comparable before/after views for existing behavior, or contextual after views for a
+new surface. Cover affected states/viewports. See CONTRIBUTING.md for capture/upload guidance. -->
 
 ## Related work
 
-<!-- Link relevant issues/designs. Use “Fixes #123” only if this completes that issue. Omit if unnecessary. -->
+<!-- Link relevant issues, discussions or designs. Use a closing keyword such as
+"Fixes #123" only if this PR completes the issue. Omit this section if unnecessary. -->
 
 ## Verification
 
-<!-- State relevant commands/results and manual checks, including material checks not performed.
-Keep detailed evidence in a collapsed section or durable public link when needed. -->
+<!-- List the checks you ran and their results. For behavior changes, include steps and
+relevant setup so a reviewer can repeat the manual checks. Note material checks not performed. -->
 
 ## Release and upgrade impact
 
-<!-- Describe breaking changes, migrations, operator action or security implications; say if none.
-Add release information required by the current CONTRIBUTING.md policy. Do not invent an empty
-Changeset just to fill this section. Ordinary features/fixes can be described clearly above. -->
+<!-- State any breaking changes, migrations or operator action, including what users need to do.
+If there is no release/upgrade impact, say so. Follow CONTRIBUTING.md for Changesets requirements. -->

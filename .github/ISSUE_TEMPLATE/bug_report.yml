@@ -6,44 +6,44 @@ body:
   - type: markdown
     attributes:
       value: |
-        Tell us what you observed; you do not need to know the cause or design a fix.
-        Unknown versions and intermittent problems are welcome. Check existing issues if you can.
-        For usage help, use [Discussions](https://github.com/OpenMapX/openmapx/discussions).
-        Report vulnerabilities [privately](https://github.com/OpenMapX/openmapx/security/advisories/new),
-        with the email fallback in [SECURITY.md](https://github.com/OpenMapX/openmapx/blob/main/SECURITY.md).
-        Do not include secrets, personal coordinates or private route history.
+        Describe one problem per report. [Search existing issues](https://github.com/OpenMapX/openmapx/issues?q=is%3Aissue)
+        for related reports and link any you find. For usage help, use [Discussions](https://github.com/OpenMapX/openmapx/discussions).
+        Report vulnerabilities privately through [SECURITY.md](https://github.com/OpenMapX/openmapx/blob/main/SECURITY.md).
+        Leave out secrets, personal coordinates and private route history.
   - type: textarea
     id: observed
     attributes:
       label: What happened?
-      description: Describe what you saw and when it happened. Separate observations from possible explanations.
+      description: What were you trying to do, and what went wrong? Include the error message if there is one.
     validations:
       required: true
   - type: textarea
     id: expected
     attributes:
       label: What did you expect?
+      description: Describe the result you expected instead.
     validations:
       required: true
   - type: textarea
     id: reproduction
     attributes:
-      label: How can we reproduce it?
-      description: Give the steps or what you have tried. If it is intermittent or you cannot reproduce it reliably, say so.
+      label: Steps to reproduce
+      description: Give the steps, or describe when the problem occurred and what you tried if you cannot reproduce it reliably. For intermittent problems, include how often it happens.
+      placeholder: |
+        1. Start from …
+        2. …
+        3. The problem appears when …
     validations:
       required: true
-  - type: input
-    id: version
+  - type: markdown
     attributes:
-      label: Running version
-      description: Release/tag, installed release-manifest ID or image digest, or mobile app version. Use Unknown if unavailable. A local Git SHA only identifies a deployment if that checkout built the running images.
-      placeholder: "v0.x preview, manifest ID, image digest, app version, or Unknown"
-    validations:
-      required: true
+      value: "## Environment"
   - type: dropdown
     id: environment-kind
     attributes:
       label: Where does it happen?
+      description: Select all that apply, for example Android app and Self-hosted deployment.
+      multiple: true
       options:
         - Hosted app (openmapx.com)
         - Self-hosted deployment
@@ -53,32 +53,40 @@ body:
         - Not sure
     validations:
       required: true
+  - type: input
+    id: version
+    attributes:
+      label: Running version(s)
+      description: App version and, if known, server release/tag, selected release-manifest ID or running image digest. For local builds, use the commit that built them. Enter Unknown if unavailable.
+      placeholder: "App: …; server: …; or Unknown"
+    validations:
+      required: true
+  - type: input
+    id: last-working-version
+    attributes:
+      label: Last working version (if known)
+      description: If this used to work, which version worked? If you cannot identify it, describe when you first noticed the problem.
   - type: textarea
     id: environment
     attributes:
-      label: Environment
-      description: Browser and OS, or device/app version. For self-hosting, include relevant services and Docker versions if known.
-  - type: dropdown
-    id: area
+      label: Environment and affected component (if known)
+      description: Browser and OS, or device and OS version. For self-hosting, include relevant services or deployment details. Name the feature or integration involved if you know it.
+  - type: markdown
     attributes:
-      label: Affected area, if known
-      multiple: true
-      options:
-        - Map or search
-        - Routes or navigation
-        - Mobile app
-        - API or integration
-        - Admin or self-hosting
-        - Data pipeline
-        - Documentation
-        - Other / not sure
+      value: "## Supporting information (optional)"
   - type: textarea
     id: map-context
     attributes:
-      label: Map, route or provider context (optional)
-      description: A rough public area, enabled layer/provider, travel mode or safe example route can help. Avoid home/work locations and private coordinates. Say Unknown where needed.
+      label: Map, route or provider context
+      description: A rough public area, layer/provider, travel mode or safe example route can help. Leave out home/work locations and private coordinates.
   - type: textarea
     id: evidence
     attributes:
-      label: Screenshots, logs or other evidence (optional)
-      description: Attach screenshots or paste relevant errors. Redact tokens, secrets, personal data and sensitive coordinates. Mention the last working version or attempted workarounds if known.
+      label: Screenshots and additional context
+      description: Attach images or recordings that show the problem. Include workarounds or other relevant details, and redact personal information.
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      description: Paste only the relevant errors or log entries. Remove tokens, secrets and personal data; do not paste your full environment file.
+      render: text
