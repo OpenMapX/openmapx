@@ -585,10 +585,65 @@ interface IntegrationContext {
 - **`cache`** is a key-value store namespaced per integration (`int:<id>:<key>`),
   with a `withCache(key, ttl, fn)` read-through helper. Namespacing means one
   integration cannot collide with another's keys.
+  Use `withCache` for provider acquisition: the host captures an invalidation
+  epoch before the read/loader and atomically refuses a fill whose epoch changed.
+  Direct `set` captures its invocation epoch, so it cannot identify a provider
+  request that began earlier. HTTP GET caching uses the same acquisition fence.
 - **`db`** is present only when the manifest requires the `postgis` service;
   otherwise it is `undefined`.
 - **`log`** is a structured logger tagged with the integration id.
 - **`secrets`** retrieves a decrypted credential from the vault.
+
+#### Shared and local caches
+
+Redis owns shared results, distributed refresh leases and quota counters. A
+process-local LRU is only a disposable copy or a bounded lookup optimization;
+it does not coordinate workers or enforce upstream quotas.
+
+`cache.onInvalidate?.(listener)` is the host administration notification port.
+Registration immediately reports `{ available: boolean }` and returns an
+unsubscribe function. Clear local copies and advance their fill generation on
+every event. While unavailable, bypass local reads and writes. Unsubscribe on
+shutdown, and prevent an old pending response from repopulating retired state.
+Clients without host administration, such as CLI/test fixtures, may omit this
+capability.
+
+Admin cache clears notify affected integration scopes before and after Redis
+SCAN/UNLINK deletion, including when Redis is not configured. A targeted glob
+conservatively flushes the whole overlapping integration's local copies; Redis
+deletion retains its exact scope. Redis Pub/Sub propagates notifications across
+API workers asynchronously. A disconnect or heartbeat timeout clears and disables
+local copies; subscription acknowledgement clears them again before reuse. This
+is not a linearizable cross-worker read barrier: notifications are asynchronous
+and Pub/Sub can lose messages during a connection failure.
+
+A shared epoch and renewable clear leases under `openmapx:cache-control:` fence
+old fills and writes during concurrent clears. These control keys are outside
+the disposable `int:`/`cache:` prefixes. New callers use the current epoch in
+their single-flight identity, so they do not join pre-clear work. Redis control
+operations have a three-second deadline. A failed epoch capture skips the shared
+write; a failed clear control operation fails the clear request. These fences
+apply to host HTTP/cache acquisition, not the separate quota runtime's policy.
+
+The server uses `lru-cache` for four stores. Limits are entry budgets, not heap
+byte guarantees. Reverse-city and reverse-country stores cache successful
+negative results; transport failures are not cached. Reads update eviction recency without extending the fixed TTL.
+
+| Store                     | Maximum entries | Freshness                      |
+| ------------------------- | --------------: | ------------------------------ |
+| Mobility reverse-city     |           4,096 | 24 hours                       |
+| Geocoding reverse-country |           4,096 | 24 hours                       |
+| GBFS resolved coverage    |          10,000 | 5 minutes                      |
+| Geocoding autocomplete L1 |           1,000 | Soft: 5 minutes; hard: 2 hours |
+
+Autocomplete serves soft-stale values while refreshing in the background and
+evicts them at the hard deadline. Its L1 belongs to one integration setup.
+Geocoding shared keys hash the current configuration, provider declarations and
+resolved service bindings, without exposing credential text. The host captures
+immutable resolved bindings for each loaded integration generation; those internal
+snapshots are not exposed by runtime metadata. Country lookups capture the
+Nominatim endpoint, and GBFS coverage keys include both system ID and discovery
+URL.
 
 A second tier of services is optional — present in production, absent in tests
 and CLI scripts — and orchestrators treat absence as a benign no-op:

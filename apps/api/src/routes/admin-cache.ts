@@ -1,6 +1,7 @@
 import { aggregateCacheNamespaces, resolveCachePattern } from "@openmapx/core/cache-namespaces";
 import type { FastifyInstance } from "fastify";
 import { redis } from "../redis";
+import { cacheInvalidation } from "../services/cache-invalidation";
 import { writeAuditLog } from "../utils/audit-log";
 import { APP_CACHE_PREFIXES, isAppCachePattern } from "../utils/cache-policy";
 import { getAdminSession, requireAdmin } from "../utils/require-admin";
@@ -93,16 +94,13 @@ export async function adminCacheRoute(app: FastifyInstance): Promise<void> {
       request,
     });
 
-    if (!redis) return { deleted: 0 };
-
-    let deleted = 0;
-    if (clearAll) {
-      for (const glob of APP_CACHE_GLOBS) {
-        deleted += await clearPattern(redis, glob);
+    const patterns = clearAll ? APP_CACHE_GLOBS : [resolveCachePattern(namespace as string)];
+    return cacheInvalidation.invalidate(patterns, async () => {
+      let deleted = 0;
+      if (redis) {
+        for (const pattern of patterns) deleted += await clearPattern(redis, pattern);
       }
-    } else {
-      deleted = await clearPattern(redis, resolveCachePattern(namespace as string));
-    }
-    return { deleted };
+      return { deleted };
+    });
   });
 }

@@ -556,6 +556,11 @@ function buildIntegrationContext(args: {
     activationScope,
   } = args;
   const { integration } = args;
+  integration.resolvedServices = Object.freeze(
+    Object.fromEntries(
+      [...requiresMap].map(([key, service]) => [key, Object.freeze({ ...service })]),
+    ),
+  );
   return {
     id,
     manifest,

@@ -4,7 +4,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import snapshots from "../../geocoding-maptiler/__fixtures__/station-search.json";
 import { maptilerGeocodingService, setMaptilerApiKey } from "../../geocoding-maptiler/provider.js";
 import { setup } from "../index.js";
-import { setConfiguredProviderList } from "../orchestrator.js";
 
 const STATION = "maptiler:poi.14564580";
 const TAXI = "maptiler:poi.25722638";
@@ -25,12 +24,10 @@ beforeEach(() => {
 
 afterEach(() => {
   setMaptilerApiKey(undefined);
-  setConfiguredProviderList(undefined);
   vi.unstubAllGlobals();
 });
 
 function harness(cache = new Map<string, unknown>()) {
-  setConfiguredProviderList("maptiler");
   const loads: string[] = [];
   const ctx = createMockIntegrationContext({
     cache: {
@@ -161,7 +158,7 @@ describe("forward geocoding station ranking", () => {
     expect(result).toHaveLength(2);
   });
 
-  it("reuses an existing unversioned forward-cache answer", async () => {
+  it("ignores forward-cache entries without provider configuration identity", async () => {
     const cachedResult: SearchResult = {
       id: TAXI,
       label: "Neusser Tor, Am Hauptbahnhof 8, 47798 Krefeld, Germany",
@@ -173,7 +170,8 @@ describe("forward geocoding station ranking", () => {
     };
     const cache = new Map<string, unknown>([["cache:geocode:669e28ebd7636077", [cachedResult]]]);
     const result = await harness(cache).call("Hauptbahnhof Neuss");
-    expect(result).toEqual([cachedResult]);
+    expect(result[0].id).toBe(STATION);
+    expect(result[0].id).not.toBe(cachedResult.id);
   });
 
   it("preserves provider order for an ordinary POI query whose desired candidate is absent", async () => {

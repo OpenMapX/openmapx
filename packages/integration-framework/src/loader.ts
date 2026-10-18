@@ -11,6 +11,10 @@ export interface LoadedIntegration {
   id: string;
   manifest: IntegrationManifest;
   config: Record<string, unknown>;
+  /** Host snapshot of this generation's resolved bindings; not part of public metadata. */
+  resolvedServices?: Readonly<
+    Record<string, Readonly<{ serviceId: string; url: string; enabled: boolean }>>
+  >;
   directory: string;
   isBuiltIn: boolean;
   enabled: boolean;

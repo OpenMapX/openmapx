@@ -31,6 +31,7 @@ export function setup(ctx: IntegrationContext): void {
       );
     },
   });
+  ctx.onShutdown(async () => runtime.dispose());
   const scooterSharingProvider = createScooterSharingProvider({
     runtime,
     dataSources: ctx.manifest.dataSources ?? [],

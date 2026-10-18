@@ -36,6 +36,7 @@ export function setup(ctx: IntegrationContext): void {
       );
     },
   });
+  ctx.onShutdown(async () => runtime.dispose());
   const searchRegionalClients = createRegionalCarSharingRegistry({
     cache: runtime.cache,
     resolveContributors,

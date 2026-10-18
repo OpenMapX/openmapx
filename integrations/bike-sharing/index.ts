@@ -33,6 +33,7 @@ export function setup(ctx: IntegrationContext): void {
       );
     },
   });
+  ctx.onShutdown(async () => runtime.dispose());
   const bikeSharingProvider = createBikeSharingProvider({
     runtime,
     dataSources: ctx.manifest.dataSources ?? [],

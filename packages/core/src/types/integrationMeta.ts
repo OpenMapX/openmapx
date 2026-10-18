@@ -10,6 +10,12 @@ export type {
 } from "../api/contracts/runtime-metadata";
 
 export interface CacheClient {
+  /**
+   * Host administration events; immediately reports current availability.
+   * Clear local copies on every event and bypass them while unavailable.
+   * Absent in clients without host administration (for example CLI fixtures).
+   */
+  onInvalidate?(listener: (event: { available: boolean }) => void): () => void;
   get<T = unknown>(key: string): Promise<T | null>;
   set(key: string, value: unknown, ttlSeconds?: number): Promise<void>;
   del(key: string): Promise<void>;
