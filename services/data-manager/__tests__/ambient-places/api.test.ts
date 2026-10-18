@@ -2,7 +2,11 @@ import Fastify from "fastify";
 import type postgres from "postgres";
 import { describe, expect, it, vi } from "vitest";
 
-const mock = vi.hoisted(() => ({ build: vi.fn(), resume: vi.fn() }));
+const mock = vi.hoisted(() => ({
+  build: vi.fn(),
+  resume: vi.fn(),
+  readManifest: vi.fn(async () => null),
+}));
 vi.mock("../../src/jobs/ambient-places/build.js", async (importOriginal) => ({
   ...(await importOriginal<object>()),
   buildAmbientPlaces: mock.build,
@@ -11,9 +15,76 @@ vi.mock("../../src/jobs/ambient-places/build.js", async (importOriginal) => ({
   setAmbientEnabled: async () => {},
 }));
 
+vi.mock("@openmapx/core/ambient-places-server", () => ({ readAmbientManifest: mock.readManifest }));
+
 import { registerAmbientPlacesApi } from "../../src/jobs/ambient-places/api.js";
 
 describe("ambient publication job lifecycle", () => {
+  it.each(["Date objects", "Drizzle PostgreSQL strings"])(
+    "publishes database timestamps in ISO wire format from %s",
+    async (representation) => {
+      const checkpoint = {
+        phase: "osm",
+        processed: 1,
+        batches: 1,
+        placeCount: 1,
+        osmType: "node",
+        osmId: "1",
+        gers: "",
+        osmProcessed: 1,
+        overtureProcessed: 0,
+        osmCount: 1,
+        overtureCount: 0,
+      };
+      const sql = {
+        unsafe: async (query: string) => {
+          if (query.includes("to_regclass")) return [{ exists: true }];
+          if (query.includes("FROM ambient_places.planet_builds"))
+            return [
+              {
+                generation: "11111111-1111-4111-8111-111111111111",
+                status: "failed",
+                checkpoint,
+                error: "Interrupted",
+                startedAt: "2026-10-18 12:00:00+00",
+                updatedAt: "2026-10-18 13:00:00+00",
+              },
+            ];
+          if (query.includes("FROM pg_locks")) return [{ busy: false }];
+          return [
+            {
+              previous: null,
+              last_build_error: null,
+              last_build_started_at:
+                representation === "Date objects"
+                  ? new Date("2026-10-18T12:00:00Z")
+                  : "2026-10-18 12:00:00+00",
+              last_build_finished_at:
+                representation === "Date objects"
+                  ? new Date("2026-10-18T13:00:00Z")
+                  : "2026-10-18 13:00:00+00",
+            },
+          ];
+        },
+      } as unknown as postgres.Sql;
+      const app = Fastify();
+      registerAmbientPlacesApi(app, sql);
+      try {
+        const response = await app.inject("/ambient-places/status");
+        expect(response.statusCode).toBe(200);
+        expect(response.json()).toMatchObject({
+          startedAt: "2026-10-18T12:00:00.000Z",
+          finishedAt: "2026-10-18T13:00:00.000Z",
+          candidate: {
+            startedAt: "2026-10-18T12:00:00.000Z",
+            updatedAt: "2026-10-18T13:00:00.000Z",
+          },
+        });
+      } finally {
+        await app.close();
+      }
+    },
+  );
   it("reports staged country progress while the previous map remains active", async () => {
     let release!: () => void;
     const gate = new Promise<void>((r) => {

@@ -1,3 +1,4 @@
+import type { NotablePlacesStatus as CanonicalNotablePlacesStatus } from "@openmapx/core/data-manager-contracts";
 import type postgres from "postgres";
 
 export interface NotablePlacesRuntimeState {
@@ -9,19 +10,7 @@ export function createNotablePlacesRuntimeState(): NotablePlacesRuntimeState {
   return { building: false, failure: null };
 }
 
-export interface NotablePlacesStatus {
-  source: string | null;
-  minSitelinks: number | null;
-  epoch: string | null;
-  status: "building" | "ready" | "failed";
-  placeCount: number;
-  nameCount: number;
-  startedAt: string | null;
-  publishedAt: string | null;
-  updatedAt: string;
-  lastError: string | null;
-  building: boolean;
-}
+export type NotablePlacesStatus = Omit<CanonicalNotablePlacesStatus, "ok">;
 
 interface IndexStateRow {
   source: string;

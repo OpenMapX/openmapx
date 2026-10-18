@@ -64,7 +64,7 @@ describe("transit source proxy", () => {
           sourceId: "operator:de:demo",
           status: "started",
         }),
-        { status: 202 },
+        { status: 202, headers: { "content-type": "application/json" } },
       ),
     );
     const response = await app.inject({
@@ -91,9 +91,13 @@ describe("transit source proxy", () => {
 
   it("propagates a conflict without writing a successful-mutation audit", async () => {
     fetchMock.mockResolvedValue(
-      new Response(JSON.stringify({ reason: "in-flight", existingJobId: "running-job" }), {
-        status: 409,
-      }),
+      new Response(
+        JSON.stringify({ ok: false, reason: "in-flight", existingJobId: "running-job" }),
+        {
+          status: 409,
+          headers: { "content-type": "application/json" },
+        },
+      ),
     );
     const response = await app.inject({
       method: "DELETE",

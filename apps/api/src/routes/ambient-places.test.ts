@@ -75,9 +75,7 @@ describe("ambient HTTP budgets", () => {
   });
   it("validates administrator publication bounds before sending a request to data-manager", async () => {
     session.role = "admin";
-    const proxy = vi.fn(
-      async () => new Response(JSON.stringify({ accepted: true }), { status: 202 }),
-    );
+    const proxy = vi.fn(async () => Response.json({ accepted: true }, { status: 202 }));
     vi.stubGlobal("fetch", proxy);
     const app = Fastify();
     await app.register(ambientPlacesRoute, {});
@@ -119,8 +117,10 @@ describe("ambient HTTP budgets", () => {
   });
   it("accepts planet and protects validated resume/discard actions", async () => {
     session.role = "admin";
-    const proxy = vi.fn(
-      async () => new Response(JSON.stringify({ accepted: true }), { status: 202 }),
+    const proxy = vi.fn(async (input: string | URL | Request) =>
+      String(input).endsWith("/discard")
+        ? Response.json({ ok: true })
+        : Response.json({ accepted: true }, { status: 202 }),
     );
     vi.stubGlobal("fetch", proxy);
     const app = Fastify();
@@ -156,7 +156,7 @@ describe("ambient HTTP budgets", () => {
             payload: { generation },
           })
         ).statusCode,
-      ).toBe(202);
+      ).toBe(action === "discard" ? 200 : 202);
     }
     expect(proxy).toHaveBeenCalledTimes(3);
     session.role = "user";
@@ -175,7 +175,7 @@ describe("ambient HTTP budgets", () => {
     session.role = "admin";
     vi.stubGlobal(
       "fetch",
-      vi.fn(async () => new Response(JSON.stringify({ accepted: true }), { status: 202 })),
+      vi.fn(async () => Response.json({ accepted: true }, { status: 202 })),
     );
     const app = Fastify();
     await app.register(ambientPlacesRoute, {});

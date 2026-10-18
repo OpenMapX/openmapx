@@ -69,6 +69,10 @@ describe("POST /data-manager/transit/bump-transitous-ref", () => {
         JSON.stringify({
           ok: true,
           unchanged: false,
+          proposed: true,
+          submoduleSha: "deadbeef",
+          lockedAt: "2026-10-19T00:00:00.000Z",
+          lockedBy: "admin-1",
           ref: "main@deadbeef",
           previousRef: "main@cafef00d",
         }),

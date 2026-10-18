@@ -78,7 +78,7 @@ export function registerAuth(app: FastifyInstance, expectedToken: string): void 
     if (bypassesBearerAuth(req)) return;
     const presented = getAuthToken(req);
     if (!presented || !safeEqual(presented, expectedToken)) {
-      reply.code(401).send({ error: "Unauthorized" });
+      return reply.code(401).send({ error: "Unauthorized" });
     }
   });
 }

@@ -1,5 +1,5 @@
-import { readBoundedResponseText } from "@openmapx/core";
-import { services as coreServices } from "@openmapx/core/server";
+import { dataManagerOperations } from "@openmapx/core/data-manager-contracts";
+import * as dm from "@openmapx/core/data-manager-sdk";
 import { envString } from "@openmapx/core/server-env";
 import { and, asc, count, desc, eq } from "drizzle-orm";
 import type { FastifyInstance, FastifyRequest } from "fastify";
@@ -73,41 +73,15 @@ async function authenticateDataManager(req: FastifyRequest): Promise<AuthResult>
   return { kind: "denied", reason: "no-credentials" };
 }
 
-interface FastifyJsonResponse {
-  status: number;
-  body: unknown;
-}
-
-async function proxyToDataManager(
-  method: "GET" | "POST" | "DELETE",
-  path: string,
-  body?: unknown,
-): Promise<FastifyJsonResponse> {
-  const baseUrl = coreServices.validateDataManagerBaseUrl(
-    envString("DATA_MANAGER_URL", DATA_MANAGER_URL_DEFAULT),
-  );
-  const url = `${baseUrl}${path}`;
-  const token = envString("DATA_MANAGER_AUTH_TOKEN", "");
-  const res = await fetch(url, {
-    method,
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
-    },
-    body: body !== undefined ? JSON.stringify(body) : undefined,
-    redirect: "error",
-    signal: AbortSignal.timeout(DATA_MANAGER_PROXY_TIMEOUT_MS),
-  });
-  const text = await readBoundedResponseText(res, DATA_MANAGER_PROXY_MAX_BYTES, {
-    label: "data-manager proxy response",
-  });
-  let parsed: unknown;
-  try {
-    parsed = text ? JSON.parse(text) : null;
-  } catch {
-    parsed = { raw: text };
-  }
-  return { status: res.status, body: parsed };
+function dataManagerOptions() {
+  return {
+    transport: dm.createDataManagerTransport({
+      baseUrl: envString("DATA_MANAGER_URL", DATA_MANAGER_URL_DEFAULT),
+      authToken: envString("DATA_MANAGER_AUTH_TOKEN", ""),
+      requestTimeoutMs: DATA_MANAGER_PROXY_TIMEOUT_MS,
+      maxJsonBytes: DATA_MANAGER_PROXY_MAX_BYTES,
+    }),
+  };
 }
 
 interface LockSummary {
@@ -159,14 +133,10 @@ export async function dataManagerRoute(app: FastifyInstance): Promise<void> {
     if (auth.kind === "denied") {
       return reply.code(401).send({ error: "Authentication required" });
     }
-    const params = new URLSearchParams();
-    for (const key of ["search", "lifecycle", "origin", "limit", "offset"] as const) {
-      const value = req.query[key];
-      if (value) params.set(key, value);
-    }
-    const query = params.toString();
-    const result = await proxyToDataManager("GET", `/transit/sources${query ? `?${query}` : ""}`);
-    return reply.code(result.status).send(result.body);
+    const query = dataManagerOperations.getTransitSources.request.query.safeParse(req.query);
+    if (!query.success) return reply.code(400).send({ error: "Invalid transit source query" });
+    const result = await dm.getTransitSources(query.data, dataManagerOptions());
+    return reply.code(result.status).send(result.data);
   });
 
   app.get<{ Querystring: { search?: string; country?: string } }>(
@@ -384,12 +354,14 @@ export async function dataManagerRoute(app: FastifyInstance): Promise<void> {
       return reply.code(401).send({ error: "Authentication required" });
     }
     const triggeredBy = auth.kind === "session" ? `user:${auth.userId}` : "service-token";
-    const result = await proxyToDataManager("POST", "/transit/sources", {
+    const body = dataManagerOperations.addTransitSource.request.body.safeParse({
       ...req.body,
       triggeredBy,
     });
+    if (!body.success) return reply.code(400).send({ error: "Invalid transit source request" });
+    const result = await dm.addTransitSource(body.data, dataManagerOptions());
     if (result.status === 202) {
-      const body = result.body as { sourceId?: string; jobId?: string };
+      const body = result.data;
       await writeAuditLog({
         actorId: auth.kind === "session" ? auth.userId : null,
         targetId: body.sourceId ?? null,
@@ -399,7 +371,7 @@ export async function dataManagerRoute(app: FastifyInstance): Promise<void> {
         request: req,
       });
     }
-    return reply.code(result.status).send(result.body);
+    return reply.code(result.status).send(result.data);
   });
 
   app.delete<{
@@ -411,13 +383,13 @@ export async function dataManagerRoute(app: FastifyInstance): Promise<void> {
       return reply.code(401).send({ error: "Authentication required" });
     }
     const triggeredBy = auth.kind === "session" ? `user:${auth.userId}` : "service-token";
-    const result = await proxyToDataManager(
-      "DELETE",
-      `/transit/sources/${encodeURIComponent(req.params.sourceId)}`,
+    const result = await dm.removeTransitSource(
+      req.params.sourceId,
       { ...req.body, triggeredBy },
+      dataManagerOptions(),
     );
     if (result.status === 202) {
-      const body = result.body as { jobId?: string };
+      const body = result.data;
       await writeAuditLog({
         actorId: auth.kind === "session" ? auth.userId : null,
         targetId: req.params.sourceId,
@@ -427,7 +399,7 @@ export async function dataManagerRoute(app: FastifyInstance): Promise<void> {
         request: req,
       });
     }
-    return reply.code(result.status).send(result.body);
+    return reply.code(result.status).send(result.data);
   });
 
   app.post<{
@@ -439,13 +411,13 @@ export async function dataManagerRoute(app: FastifyInstance): Promise<void> {
       return reply.code(401).send({ error: "Authentication required" });
     }
     const triggeredBy = auth.kind === "session" ? `user:${auth.userId}` : "service-token";
-    const result = await proxyToDataManager(
-      "POST",
-      `/transit/sources/${encodeURIComponent(req.params.sourceId)}/enable`,
+    const result = await dm.enableTransitSource(
+      req.params.sourceId,
       { ...req.body, triggeredBy },
+      dataManagerOptions(),
     );
     if (result.status === 202) {
-      const body = result.body as { jobId?: string };
+      const body = result.data;
       await writeAuditLog({
         actorId: auth.kind === "session" ? auth.userId : null,
         targetId: req.params.sourceId,
@@ -455,7 +427,7 @@ export async function dataManagerRoute(app: FastifyInstance): Promise<void> {
         request: req,
       });
     }
-    return reply.code(result.status).send(result.body);
+    return reply.code(result.status).send(result.data);
   });
 
   app.post<{ Body?: { idempotencyKey?: string; countries?: string[] } }>(
@@ -468,13 +440,16 @@ export async function dataManagerRoute(app: FastifyInstance): Promise<void> {
 
       const body = req.body ?? {};
       const triggeredBy = auth.kind === "session" ? `user:${auth.userId}` : "service-token";
-      const proxied = await proxyToDataManager("POST", "/transit/sync", {
-        idempotencyKey: body.idempotencyKey,
-        countries: body.countries,
-        triggeredBy,
-      });
+      const proxied = await dm.syncTransit(
+        {
+          idempotencyKey: body.idempotencyKey,
+          countries: body.countries,
+          triggeredBy,
+        },
+        dataManagerOptions(),
+      );
       reply.code(proxied.status);
-      return proxied.body;
+      return proxied.data;
     },
   );
 
@@ -483,9 +458,9 @@ export async function dataManagerRoute(app: FastifyInstance): Promise<void> {
     if (auth.kind === "denied") {
       return reply.code(401).send({ error: "Authentication required" });
     }
-    const proxied = await proxyToDataManager("POST", "/transit/restart-motis");
+    const proxied = await dm.restartMotis(dataManagerOptions());
     reply.code(proxied.status);
-    return proxied.body;
+    return proxied.data;
   });
 
   // -------- Provider health --------
@@ -571,11 +546,14 @@ export async function dataManagerRoute(app: FastifyInstance): Promise<void> {
       if (!/^[A-Za-z0-9][A-Za-z0-9._/-]{0,127}$/.test(branch) || branch.includes("..")) {
         return reply.code(400).send({ error: "Invalid Transitous branch name" });
       }
-      const proxied = await proxyToDataManager("POST", "/transit/bump", {
-        branch,
-        force: body.force === true,
-        lockedBy: auth.userId ?? "admin",
-      });
+      const proxied = await dm.proposeTransitBump(
+        {
+          branch,
+          force: body.force === true,
+          lockedBy: auth.userId ?? "admin",
+        },
+        dataManagerOptions(),
+      );
       if (proxied.status >= 200 && proxied.status < 300) {
         await writeAuditLog({
           actorId: auth.userId ?? null,
@@ -587,7 +565,7 @@ export async function dataManagerRoute(app: FastifyInstance): Promise<void> {
         });
       }
       reply.code(proxied.status);
-      return proxied.body;
+      return proxied.data;
     },
   );
 
@@ -599,9 +577,9 @@ export async function dataManagerRoute(app: FastifyInstance): Promise<void> {
     if (auth.kind === "token") {
       return reply.code(403).send({ error: "Overture operator status requires an admin session" });
     }
-    const proxied = await proxyToDataManager("GET", "/overture/status");
+    const proxied = await dm.getOvertureStatus(dataManagerOptions());
     reply.code(proxied.status);
-    return proxied.body;
+    return proxied.data;
   });
 
   app.get("/data-manager/search-index/status", async (req, reply) => {
@@ -614,9 +592,9 @@ export async function dataManagerRoute(app: FastifyInstance): Promise<void> {
         .code(403)
         .send({ error: "Search-index operator status requires an admin session" });
     }
-    const proxied = await proxyToDataManager("GET", "/search-index/status");
+    const proxied = await dm.getSearchIndexStatus(dataManagerOptions());
     reply.code(proxied.status);
-    return proxied.body;
+    return proxied.data;
   });
 
   app.get("/data-manager/notable-places/status", async (req, reply) => {
@@ -629,8 +607,8 @@ export async function dataManagerRoute(app: FastifyInstance): Promise<void> {
         .code(403)
         .send({ error: "Notable-places operator status requires an admin session" });
     }
-    const proxied = await proxyToDataManager("GET", "/notable-places/status");
+    const proxied = await dm.getNotablePlacesStatus(dataManagerOptions());
     reply.code(proxied.status);
-    return proxied.body;
+    return proxied.data;
   });
 }

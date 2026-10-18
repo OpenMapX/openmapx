@@ -40,18 +40,18 @@ export {
   assertTrustedConfigurationSchema,
   validateTrustedConfigurationValues,
 } from "./configuration-schema";
+export type {
+  DataManagerCoverageEvidencePage,
+  NotablePlacesBuildResult,
+  NotablePlacesStatus,
+  SearchIndexBuildResult,
+  SearchIndexStatus,
+} from "./data-manager/contracts";
 export {
   DATA_MANAGER_PLAINTEXT_HOSTS_ENV,
-  DataManagerClient,
-  type DataManagerClientOptions,
-  type DataManagerCoverageEvidencePage,
   DataManagerHttpError,
-  type NotablePlacesBuildResult,
-  type NotablePlacesStatus,
-  type SearchIndexBuildResult,
-  type SearchIndexStatus,
   validateDataManagerBaseUrl,
-} from "./data-manager-client";
+} from "./data-manager/transport";
 export {
   CONFIGURATION_GENERATIONS,
   CURRENT_CONFIGURATION,

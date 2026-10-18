@@ -1,4 +1,3 @@
-import { readBoundedResponseText } from "@openmapx/core";
 import {
   AMBIENT_GENERATION_PATTERN,
   AMBIENT_LIMITS,
@@ -10,7 +9,8 @@ import {
   readAmbientTile,
   validAmbientTile,
 } from "@openmapx/core/ambient-places-server";
-import { services } from "@openmapx/core/server";
+import { dataManagerOperations } from "@openmapx/core/data-manager-contracts";
+import * as dm from "@openmapx/core/data-manager-sdk";
 import { envString } from "@openmapx/core/server-env";
 import type { FastifyInstance } from "fastify";
 import { sql } from "../db/index.js";
@@ -23,24 +23,46 @@ interface AmbientRouteOptions {
   readManifest?: () => Promise<AmbientManifest | null>;
   readTile?: (generation: string, z: number, x: number, y: number) => Promise<Buffer | null>;
 }
-async function proxy(method: "GET" | "POST", action: string, body?: unknown) {
-  const base = services.validateDataManagerBaseUrl(
-    envString("DATA_MANAGER_URL", "http://localhost:4000"),
-  );
-  const response = await fetch(`${base}/ambient-places/${action}`, {
-    method,
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${envString("DATA_MANAGER_AUTH_TOKEN", "")}`,
-    },
-    body: body === undefined ? undefined : JSON.stringify(body),
-    redirect: "error",
-    signal: AbortSignal.timeout(15_000),
-  });
-  const text = await readBoundedResponseText(response, 256 * 1024, {
-    label: "ambient operator response",
-  });
-  return { status: response.status, body: JSON.parse(text) };
+type AmbientAction = "status" | "build" | "enabled" | "rollback" | "resume" | "discard";
+async function proxy(action: AmbientAction, body?: unknown) {
+  const options = {
+    transport: dm.createDataManagerTransport({
+      baseUrl: envString("DATA_MANAGER_URL", "http://localhost:4000"),
+      authToken: envString("DATA_MANAGER_AUTH_TOKEN", ""),
+      maxJsonBytes: 256 * 1024,
+      requestTimeoutMs: 15_000,
+    }),
+  };
+  const operations = dataManagerOperations;
+  const response = await (() => {
+    switch (action) {
+      case "status":
+        return dm.getAmbientPlacesStatus(options);
+      case "build":
+        return dm.buildAmbientPlaces(
+          operations.buildAmbientPlaces.request.body.parse(body),
+          options,
+        );
+      case "enabled":
+        return dm.setAmbientPlacesEnabled(
+          operations.setAmbientPlacesEnabled.request.body.parse(body),
+          options,
+        );
+      case "rollback":
+        return dm.rollbackAmbientPlaces(options);
+      case "resume":
+        return dm.resumeAmbientPlaces(
+          operations.resumeAmbientPlaces.request.body.parse(body),
+          options,
+        );
+      case "discard":
+        return dm.discardAmbientPlaces(
+          operations.discardAmbientPlaces.request.body.parse(body),
+          options,
+        );
+    }
+  })();
+  return { status: response.status, body: response.data };
 }
 export async function ambientPlacesRoute(
   app: FastifyInstance,
@@ -179,11 +201,7 @@ export async function ambientPlacesRoute(
           )
             return reply.code(400).send({ error: "enabled must be a boolean" });
           try {
-            const result = await proxy(
-              action === "status" ? "GET" : "POST",
-              action,
-              action === "status" ? undefined : request.body,
-            );
+            const result = await proxy(action, action === "status" ? undefined : request.body);
             if (action !== "status")
               await writeAuditLog({
                 actorId: getAdminSession(request).user.id,

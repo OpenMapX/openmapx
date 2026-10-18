@@ -1,6 +1,5 @@
 import { randomUUID } from "node:crypto";
 import {
-  AMBIENT_GENERATION_PATTERN,
   type AmbientBuildProgress,
   type AmbientRegion,
   validateAmbientRegion,
@@ -8,6 +7,7 @@ import {
 import { readAmbientManifest } from "@openmapx/core/ambient-places-server";
 import type { FastifyInstance } from "fastify";
 import type postgres from "postgres";
+import { registerDataManagerRoute } from "../../route-contract.js";
 import {
   buildAmbientPlaces,
   discardPlanetPlaces,
@@ -22,9 +22,16 @@ import { AMBIENT_WRITE_LOCK, AmbientPublicationBusyError } from "./schema.js";
 export function registerAmbientPlacesApi(app: FastifyInstance, sql: postgres.Sql): void {
   let building: string | null = null;
   let progress: AmbientBuildProgress | null = null;
-  app.get("/ambient-places/status", async () => {
+  registerDataManagerRoute(app, "getAmbientPlacesStatus", async () => {
     const active = await readAmbientManifest(sql);
-    const candidate = await readPlanetStage(sql);
+    const stage = await readPlanetStage(sql);
+    const candidate = stage
+      ? {
+          ...stage,
+          startedAt: new Date(stage.startedAt).toISOString(),
+          updatedAt: new Date(stage.updatedAt).toISOString(),
+        }
+      : null;
     const [exists] = await sql.unsafe<{ exists: boolean }[]>(
       `SELECT to_regclass('ambient_places.state') IS NOT NULL AS exists`,
     );
@@ -41,8 +48,8 @@ export function registerAmbientPlacesApi(app: FastifyInstance, sql: postgres.Sql
       {
         previous: string | null;
         last_build_error: string | null;
-        last_build_started_at: Date | null;
-        last_build_finished_at: Date | null;
+        last_build_started_at: Date | string | null;
+        last_build_finished_at: Date | string | null;
       }[]
     >(
       `SELECT previous,last_build_error,last_build_started_at,last_build_finished_at FROM ambient_places.state WHERE singleton=1`,
@@ -64,8 +71,17 @@ export function registerAmbientPlacesApi(app: FastifyInstance, sql: postgres.Sql
       previous: state.previous,
       building: Boolean(building) || writer.busy,
       lastError: state.last_build_error,
-      startedAt: state.last_build_started_at,
-      finishedAt: state.last_build_finished_at,
+      // Drizzle installs transparent timestamp parsers on the shared sql
+      // client; isolated clients can still return Date objects. Normalize both
+      // representations before validating the JSON wire timestamp contract.
+      startedAt:
+        state.last_build_started_at === null
+          ? null
+          : new Date(state.last_build_started_at).toISOString(),
+      finishedAt:
+        state.last_build_finished_at === null
+          ? null
+          : new Date(state.last_build_finished_at).toISOString(),
       progress: progress ?? candidate?.checkpoint ?? null,
       candidate,
     };
@@ -126,7 +142,7 @@ export function registerAmbientPlacesApi(app: FastifyInstance, sql: postgres.Sql
     }
     return reply.code(202).send({ accepted: true });
   }
-  app.post("/ambient-places/build", async (request, reply) => {
+  registerDataManagerRoute(app, "buildAmbientPlaces", async (request, reply) => {
     let region: AmbientRegion;
     try {
       region = validateAmbientRegion(request.body);
@@ -136,20 +152,11 @@ export function registerAmbientPlacesApi(app: FastifyInstance, sql: postgres.Sql
     return start((claim, options) => buildAmbientPlaces(sql, region, claim, options), reply);
   });
   for (const action of ["resume", "discard"] as const) {
-    app.post(
-      `/ambient-places/${action}`,
-      {
-        schema: {
-          body: {
-            type: "object",
-            required: ["generation"],
-            additionalProperties: false,
-            properties: { generation: { type: "string", pattern: AMBIENT_GENERATION_PATTERN } },
-          },
-        },
-      },
+    registerDataManagerRoute(
+      app,
+      action === "resume" ? "resumeAmbientPlaces" : "discardAmbientPlaces",
       async (request, reply) => {
-        const { generation } = request.body as { generation: string };
+        const { generation } = request.body;
         if (action === "resume")
           return start(
             (claim, options) => resumePlanetPlaces(sql, generation, claim, options),
@@ -165,28 +172,15 @@ export function registerAmbientPlacesApi(app: FastifyInstance, sql: postgres.Sql
       },
     );
   }
-  app.post(
-    "/ambient-places/enabled",
-    {
-      schema: {
-        body: {
-          type: "object",
-          required: ["enabled"],
-          additionalProperties: false,
-          properties: { enabled: { type: "boolean" } },
-        },
-      },
-    },
-    async (request, reply) => {
-      try {
-        await setAmbientEnabled(sql, (request.body as { enabled: boolean }).enabled);
-        return { ok: true };
-      } catch (error) {
-        return reply.code(409).send({ error: (error as Error).message });
-      }
-    },
-  );
-  app.post("/ambient-places/rollback", async (_request, reply) => {
+  registerDataManagerRoute(app, "setAmbientPlacesEnabled", async (request, reply) => {
+    try {
+      await setAmbientEnabled(sql, request.body.enabled);
+      return { ok: true };
+    } catch (error) {
+      return reply.code(409).send({ error: (error as Error).message });
+    }
+  });
+  registerDataManagerRoute(app, "rollbackAmbientPlaces", async (_request, reply) => {
     try {
       await rollbackAmbientPlaces(sql);
       return { ok: true };

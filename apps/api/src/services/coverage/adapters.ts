@@ -1,8 +1,11 @@
-import type { DataManagerCoverageEvidencePage } from "@openmapx/core/server";
-import { services as coreServices } from "@openmapx/core/server";
+import type { DataManagerCoverageEvidencePage } from "@openmapx/core/data-manager-contracts";
+import {
+  createDataManagerTransport,
+  DataManagerHttpError,
+  getCoverageEvidence,
+  unwrapDataManagerResponse,
+} from "@openmapx/core/data-manager-sdk";
 import { serviceUrl } from "../service-registry.js";
-
-const { DataManagerClient, DataManagerHttpError } = coreServices;
 
 const DATA_MANAGER_TIMEOUT_MS = 3_000;
 const DATA_MANAGER_MAX_PAGES = 100;
@@ -143,13 +146,17 @@ export async function readDataManagerEvidence(
 export function createDataManagerEvidenceReader(
   options: { client?: DataManagerCoverageClient; baseUrl?: string; authToken?: string } = {},
 ): DataManagerEvidenceReader {
-  const client =
-    options.client ??
-    new DataManagerClient({
-      baseUrl: options.baseUrl ?? baseUrl(),
-      authToken: options.authToken,
-      requestTimeoutMs: DATA_MANAGER_TIMEOUT_MS,
-      maxJsonBytes: 4 * 1024 * 1024 + 128 * 1024,
-    });
+  const providedClient = options.client;
+  if (providedClient) return { read: () => readDataManagerEvidence(providedClient) };
+  const transport = createDataManagerTransport({
+    baseUrl: options.baseUrl ?? baseUrl(),
+    authToken: options.authToken ?? process.env.DATA_MANAGER_AUTH_TOKEN?.trim(),
+    requestTimeoutMs: DATA_MANAGER_TIMEOUT_MS,
+    maxJsonBytes: 4 * 1024 * 1024 + 128 * 1024,
+  });
+  const client: DataManagerCoverageClient = {
+    coverageEvidence: async (query = {}) =>
+      unwrapDataManagerResponse(await getCoverageEvidence(query, { transport })),
+  };
   return { read: () => readDataManagerEvidence(client) };
 }

@@ -450,7 +450,7 @@ describe("data-manager API", () => {
         payload: { region },
       });
 
-      expect(res.statusCode).toBe(500);
+      expect(res.statusCode).toBe(400);
       expect(mockDownloadOsm).not.toHaveBeenCalled();
     },
   );

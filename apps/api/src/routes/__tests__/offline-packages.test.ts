@@ -52,8 +52,25 @@ const request = {
   provider: "openmapx",
 };
 
+const canonicalRequest = {
+  request,
+  effective: { bbox: request.bbox, minZoom: request.minZoom, maxZoom: request.maxZoom },
+  source: {
+    datasetId: "openmapx",
+    datasetVersion: "dataset-v1",
+    sourceMaxZoom: 14,
+    sourceBounds: { west: 0, south: 0, east: 10, north: 10 },
+    tileSchema: "openmaptiles",
+    glyphsVersion: "glyphs-v1",
+    packageAlgorithmVersion: "pmtiles-area-v4",
+    attribution: [...manifest.attribution],
+  },
+  requestKey: "fixture",
+};
+
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.unstubAllEnvs();
   auth.userId = "user-a";
 });
 
@@ -74,23 +91,58 @@ function jsonResponse(body: unknown, status = 200): Response {
 }
 
 describe("offline package public API", () => {
+  it("rejects an unsafe internal destination without sending service credentials", async () => {
+    vi.stubEnv("DATA_MANAGER_URL", "http://untrusted.example.test:4000");
+    vi.stubEnv("DATA_MANAGER_AUTH_TOKEN", "private-token");
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      jsonResponse({
+        available: true,
+        provider: "openmapx",
+      }),
+    );
+    const app = Fastify();
+    await app.register(createOfflinePackagesRoute(routeOptions()));
+    const response = await app.inject({ method: "GET", url: "/offline/packages/capability" });
+    expect(response.statusCode).toBe(502);
+    expect(fetchMock).not.toHaveBeenCalled();
+    await app.close();
+  });
   it("validates requests and proxies capability, preparation, and manifests", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
       const url = String(input);
       if (url.endsWith("/offline/packages/capability")) {
-        return jsonResponse({ available: true, provider: "openmapx", sourceMaxZoom: 14 });
+        return jsonResponse({
+          available: true,
+          provider: "openmapx",
+          sourceMaxZoom: 14,
+          datasetVersion: "dataset-v1",
+          glyphsVersion: "glyphs-v1",
+          sourceBounds: canonicalRequest.source.sourceBounds,
+        });
       }
       if (url.endsWith("/offline/packages/prepare")) {
         expect(init?.body).toBe(JSON.stringify(request));
-        expect((init?.headers as Record<string, string>)["x-offline-package-principal"]).toMatch(
+        expect(new Headers(init?.headers).get("x-offline-package-principal")).toMatch(
           /^[a-f0-9]{64}$/,
         );
         expect(JSON.stringify(init)).not.toContain("user-a");
-        return jsonResponse({ status: "ready-to-download", request, manifest, packageId }, 200);
+        return jsonResponse(
+          {
+            jobId: "job-a",
+            status: "ready-to-download",
+            request: canonicalRequest,
+            manifest,
+            packageId,
+          },
+          200,
+        );
       }
       if (url.endsWith(`/offline/packages/${packageId}/manifest`)) return jsonResponse(manifest);
       if (url.endsWith("/offline/packages/glyphs/glyphs-v1/catalog.json")) {
-        return jsonResponse({ Metropolis: ["0-255"] });
+        return Response.json(
+          { Metropolis: ["0-255"] },
+          { headers: { "cache-control": "public, max-age=31536000, immutable" } },
+        );
       }
       if (url.includes("/offline/packages/glyphs/glyphs-v1/")) {
         return new Response("fixture-font", {
@@ -169,10 +221,20 @@ describe("offline package public API", () => {
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
       const url = String(input);
       if (url.endsWith("/offline/packages/capability")) {
-        return jsonResponse({ available: true, provider: "openmapx" });
+        return jsonResponse({
+          available: true,
+          provider: "openmapx",
+          sourceMaxZoom: 14,
+          datasetVersion: "dataset-v1",
+          glyphsVersion: "glyphs-v1",
+          sourceBounds: canonicalRequest.source.sourceBounds,
+        });
       }
-      upstreamHeaders.push(init?.headers as Record<string, string>);
-      return jsonResponse({ jobId: "job-a", status: "preparing", request }, 202);
+      upstreamHeaders.push(Object.fromEntries(new Headers(init?.headers).entries()));
+      return jsonResponse(
+        { jobId: "job-a", status: "preparing", packageId, request: canonicalRequest },
+        url.endsWith("/offline/packages/prepare") ? 202 : 200,
+      );
     });
     const options = routeOptions();
     const app = Fastify();
@@ -204,7 +266,7 @@ describe("offline package public API", () => {
     ).toBe(202);
     expect(
       (await app.inject({ method: "GET", url: "/offline/packages/jobs/job-a" })).statusCode,
-    ).toBe(202);
+    ).toBe(200);
     expect(upstreamHeaders).toHaveLength(2);
     expect(upstreamHeaders[0]?.["x-offline-package-principal"]).toBe(
       upstreamHeaders[1]?.["x-offline-package-principal"],
@@ -221,7 +283,10 @@ describe("offline package public API", () => {
       .mockResolvedValueOnce({ allowed: false, retryAfterSeconds: 599 })
       .mockResolvedValueOnce({ allowed: true, retryAfterSeconds: 0 });
     vi.spyOn(globalThis, "fetch").mockImplementation(async () =>
-      jsonResponse({ jobId: "job", status: "preparing", request }, 202),
+      jsonResponse(
+        { jobId: "job", status: "preparing", packageId, request: canonicalRequest },
+        202,
+      ),
     );
     const app = Fastify({ trustProxy: true });
     await app.register(createOfflinePackagesRoute(options));
@@ -330,9 +395,68 @@ describe("offline package public API", () => {
     await app.close();
   });
 
-  it("forwards archive HEAD and range responses without buffering them", async () => {
+  it("forwards explicit archive HEAD, If-Range and unsatisfiable ranges", async () => {
+    const fetch = vi.spyOn(globalThis, "fetch").mockImplementation(async (_input, init) => {
+      const headers = new Headers(init?.headers);
+      expect(headers.get("range")).toBe("bytes=999-");
+      expect(headers.get("if-range")).toBe('"archive-v1"');
+      expect(init?.method).toBe("HEAD");
+      expect(init?.redirect).toBe("error");
+      return new Response(null, {
+        status: 416,
+        headers: {
+          "content-range": `bytes */${archive.byteLength}`,
+          "accept-ranges": "bytes",
+          etag: manifest.archive.etag,
+        },
+      });
+    });
+    const app = Fastify();
+    await app.register(createOfflinePackagesRoute(routeOptions()));
+    const response = await app.inject({
+      method: "HEAD",
+      url: `/offline/packages/${packageId}/archive`,
+      headers: { range: "bytes=999-", "if-range": '"archive-v1"' },
+    });
+    expect(response.statusCode).toBe(416);
+    expect(response.body).toBe("");
+    expect(response.headers["content-range"]).toBe(`bytes */${archive.byteLength}`);
+    expect(response.headers.etag).toBe(manifest.archive.etag);
+    expect(fetch).toHaveBeenCalledOnce();
+    await app.close();
+  });
+
+  it("uses encoded named glyph parameters for spaces, commas and Unicode", async () => {
+    const fontstack = "Noto Sans,中文字";
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      expect(String(input)).toContain(
+        `/glyphs/glyphs-v1/${encodeURIComponent(fontstack)}/0-255.pbf`,
+      );
+      expect(init?.redirect).toBe("error");
+      return new Response("glyph", {
+        headers: {
+          "content-type": "application/x-protobuf",
+          "content-length": "5",
+          "cache-control": "public, max-age=31536000, immutable",
+          etag: "glyph-v1",
+        },
+      });
+    });
+    const app = Fastify();
+    await app.register(createOfflinePackagesRoute(routeOptions()));
+    const response = await app.inject({
+      method: "GET",
+      url: `/offline/packages/glyphs/glyphs-v1/${encodeURIComponent(fontstack)}/0-255.pbf`,
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.body).toBe("glyph");
+    expect(response.headers.etag).toBe("glyph-v1");
+    await app.close();
+  });
+
+  it("forwards archive range responses without buffering them", async () => {
     vi.spyOn(globalThis, "fetch").mockImplementation(async (_input, init) => {
-      expect(init?.headers).toMatchObject({ Range: "bytes=2-" });
+      expect(new Headers(init?.headers).get("range")).toBe("bytes=2-");
       return new Response(
         Readable.toWeb(Readable.from(Buffer.from(archive.slice(2)))) as ReadableStream,
         {

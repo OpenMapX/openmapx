@@ -16,7 +16,7 @@ import { registerAmbientPlacesApi } from "./jobs/ambient-places/api.js";
 import { convertPbfToBz2ForRegion } from "./jobs/convert-overpass.js";
 import { downloadFonts } from "./jobs/download-fonts.js";
 import { downloadOsm } from "./jobs/download-osm.js";
-import { applyHardlinkPlan, type HardlinkEntry } from "./jobs/link.js";
+import { applyHardlinkPlan } from "./jobs/link.js";
 import {
   type BuildNotablePlacesOptions,
   buildNotablePlaces,
@@ -65,7 +65,6 @@ import {
 } from "./jobs/transitous/operations-profile.js";
 import {
   getOperatorFeedRelayStore,
-  OPERATOR_FEED_RELAY_PATH,
   OperatorFeedRelayCapabilityError,
   type OperatorFeedRelayStore,
 } from "./jobs/transitous/operator-feed-relay.js";
@@ -85,6 +84,11 @@ import {
 import { isContentAddressedPackageId } from "./offline-packages/storage.js";
 import { runOpsOperation } from "./ops-client.js";
 import type { DataManagerReadinessSnapshot } from "./readiness.js";
+import {
+  registerDataManagerRoute,
+  validateDataManagerEvent,
+  validateDataManagerResponseHeaders,
+} from "./route-contract.js";
 import { StateStore } from "./state.js";
 import {
   listPinnedTransitCatalog,
@@ -95,7 +99,6 @@ import {
   resolveTransitOverlayPath,
   type TransitFeedStateEvidence,
   TransitSourceError,
-  type TransitSourceLifecycle,
 } from "./transit-sources.js";
 
 export interface ApiOptions {
@@ -144,75 +147,6 @@ export interface ApiOptions {
 
 const startedAt = Date.now();
 
-// Conservative git ref-name shape. Blocks option injection (leading "-"),
-// path traversal ("..") and refspec magic ("@{", "~", "^", ":", whitespace,
-// control chars) while allowing the slugs/branches the catalog actually uses
-// (e.g. "main", "release/2026-06", "feature/x-y").
-const SAFE_GIT_REF = /^[A-Za-z0-9][A-Za-z0-9._/-]*$/;
-
-const LINK_ENTRY_SCHEMA = {
-  type: "object",
-  required: ["source", "target", "consumerService", "dataType"],
-  additionalProperties: false,
-  properties: {
-    source: { type: "string", minLength: 1, maxLength: 1024 },
-    target: { type: "string", minLength: 1, maxLength: 1024 },
-    consumerService: { type: "string", pattern: "^[A-Za-z0-9][A-Za-z0-9._-]*$" },
-    dataType: { type: "string", pattern: "^[A-Za-z0-9][A-Za-z0-9._-]*$" },
-    instance: { type: "string", pattern: "^[A-Za-z0-9][A-Za-z0-9._-]*$" },
-    targetFilename: { type: "string", pattern: "^[A-Za-z0-9][A-Za-z0-9._-]*$" },
-  },
-} as const;
-
-const LINK_BODY_SCHEMA = {
-  type: "object",
-  required: ["plan"],
-  additionalProperties: false,
-  properties: {
-    plan: { type: "array", maxItems: 2000, items: LINK_ENTRY_SCHEMA },
-    prune: { type: "boolean" },
-  },
-} as const;
-
-const LINK_BODY_KEYS = ["plan", "prune"] as const;
-const LINK_ENTRY_KEYS = [
-  "source",
-  "target",
-  "consumerService",
-  "dataType",
-  "instance",
-  "targetFilename",
-] as const;
-
-const CONVERT_OVERPASS_BODY_SCHEMA = {
-  type: "object",
-  additionalProperties: false,
-  properties: {
-    region: { type: "string" },
-  },
-} as const;
-
-const CONVERT_OVERPASS_BODY_KEYS = ["region"] as const;
-
-function hasUnexpectedKeys(value: unknown, allowed: readonly string[]): boolean {
-  return (
-    value !== null &&
-    typeof value === "object" &&
-    !Array.isArray(value) &&
-    Object.keys(value).some((key) => !allowed.includes(key))
-  );
-}
-
-function isSafeGitRef(ref: string): boolean {
-  return (
-    SAFE_GIT_REF.test(ref) &&
-    !ref.includes("..") &&
-    !ref.includes("@{") &&
-    !ref.endsWith("/") &&
-    !ref.endsWith(".lock")
-  );
-}
-
 interface NdjsonStream {
   writeLine: (obj: Record<string, unknown>) => void;
   end: () => void;
@@ -225,13 +159,18 @@ interface NdjsonStream {
  * longer than that. Safe writes also let the server-side operation finish if a
  * client disconnects for an unrelated reason.
  */
-function openNdjsonStream(reply: FastifyReply): NdjsonStream {
-  reply.hijack();
-  reply.raw.writeHead(200, {
+function openNdjsonStream(
+  reply: FastifyReply,
+  operationId: import("@openmapx/core/data-manager-contracts").DataManagerOperationKey,
+): NdjsonStream {
+  const headers = {
     "Content-Type": "application/x-ndjson",
     "Cache-Control": "no-cache",
     "X-Accel-Buffering": "no",
-  });
+  };
+  validateDataManagerResponseHeaders(operationId, 200, headers);
+  reply.hijack();
+  reply.raw.writeHead(200, headers);
 
   const write = (chunk: string): void => {
     if (reply.raw.destroyed || reply.raw.writableEnded) return;
@@ -246,7 +185,7 @@ function openNdjsonStream(reply: FastifyReply): NdjsonStream {
   keepalive.unref();
 
   return {
-    writeLine: (obj) => write(`${JSON.stringify(obj)}\n`),
+    writeLine: (obj) => write(`${JSON.stringify(validateDataManagerEvent(operationId, obj))}\n`),
     end: () => {
       clearInterval(keepalive);
       if (reply.raw.destroyed || reply.raw.writableEnded) return;
@@ -306,11 +245,11 @@ function registerOfflinePackageRoutes(
     return value;
   };
 
-  app.get("/offline/packages/capability", async (_request, reply) => {
+  registerDataManagerRoute(app, "getOfflinePackageCapability", async (_request, reply) => {
     return reply.send(await generator.getCapability());
   });
 
-  app.post<{ Body: OfflinePackageRequest }>("/offline/packages/prepare", async (request, reply) => {
+  registerDataManagerRoute(app, "prepareOfflinePackage", async (request, reply) => {
     const owner = principal(request);
     if (!owner) {
       return reply.code(400).send({
@@ -361,45 +300,38 @@ function registerOfflinePackageRoutes(
     }
   });
 
-  app.get<{ Params: { jobId: string } }>(
-    "/offline/packages/jobs/:jobId",
-    async (request, reply) => {
-      const owner = principal(request);
-      if (!owner) {
-        return reply.code(400).send({
-          ok: false,
-          errorCode: "invalid-principal",
-          errorMessage: "Exactly one valid offline package principal is required",
-        });
-      }
-      const result = await generator.getJob(owner, request.params.jobId);
-      if (!result)
-        return reply.code(404).send({ ok: false, error: "offline package job not found" });
-      return reply.send(result);
-    },
-  );
+  registerDataManagerRoute(app, "getOfflinePackageJob", async (request, reply) => {
+    const owner = principal(request);
+    if (!owner) {
+      return reply.code(400).send({
+        ok: false,
+        errorCode: "invalid-principal",
+        errorMessage: "Exactly one valid offline package principal is required",
+      });
+    }
+    const result = await generator.getJob(owner, request.params.jobId);
+    if (!result) return reply.code(404).send({ ok: false, error: "offline package job not found" });
+    return reply.send(result);
+  });
 
-  app.get<{ Params: { packageId: string } }>(
-    "/offline/packages/:packageId/manifest",
-    async (request, reply) => {
-      if (!isContentAddressedPackageId(request.params.packageId)) {
-        return reply.code(400).send({ ok: false, error: "invalid offline package id" });
-      }
-      const manifest = await generator.getManifest(request.params.packageId);
-      if (!manifest) return reply.code(404).send({ ok: false, error: "offline package not found" });
-      return reply.send(manifest);
-    },
-  );
+  registerDataManagerRoute(app, "getOfflinePackageManifest", async (request, reply) => {
+    if (!isContentAddressedPackageId(request.params.packageId)) {
+      return reply.code(400).send({ ok: false, error: "invalid offline package id" });
+    }
+    const manifest = await generator.getManifest(request.params.packageId);
+    if (!manifest) return reply.code(404).send({ ok: false, error: "offline package not found" });
+    return reply.send(manifest);
+  });
 
   const serveGlyph = async (
-    request: FastifyRequest<{ Params: { version: string; "*": string } }>,
+    request: FastifyRequest<{ Params: { version: string; fontstack: string; range: string } }>,
     reply: FastifyReply,
   ): Promise<FastifyReply> => {
-    const glyph = /^([^/]+)\/(\d+-\d+)\.pbf$/.exec(request.params["*"] ?? "");
-    if (!/^[A-Za-z0-9_-]{1,256}$/.test(request.params.version) || !glyph) {
-      return reply.code(400).send({ ok: false, error: "invalid offline package glyph identity" });
-    }
-    const asset = await generator.openGlyph(request.params.version, glyph[1], glyph[2]);
+    const asset = await generator.openGlyph(
+      request.params.version,
+      request.params.fontstack,
+      request.params.range,
+    );
     if (!asset)
       return reply.code(404).send({ ok: false, error: "offline package glyph not found" });
     reply
@@ -411,26 +343,17 @@ function registerOfflinePackageRoutes(
     return reply.send(createReadStream(asset.path));
   };
 
-  app.get<{ Params: { version: string } }>(
-    "/offline/packages/glyphs/:version/catalog.json",
-    async (request, reply) => {
-      if (!/^[A-Za-z0-9_-]{1,256}$/.test(request.params.version)) {
-        return reply.code(400).send({ ok: false, error: "invalid offline glyph version" });
-      }
-      const catalog = await generator.glyphCatalog(request.params.version);
-      if (!catalog) return reply.code(404).send({ ok: false, error: "offline glyphs not found" });
-      return reply.header("Cache-Control", "public, max-age=31536000, immutable").send(catalog);
-    },
-  );
+  registerDataManagerRoute(app, "getOfflineGlyphCatalog", async (request, reply) => {
+    if (!/^[A-Za-z0-9_-]{1,256}$/.test(request.params.version)) {
+      return reply.code(400).send({ ok: false, error: "invalid offline glyph version" });
+    }
+    const catalog = await generator.glyphCatalog(request.params.version);
+    if (!catalog) return reply.code(404).send({ ok: false, error: "offline glyphs not found" });
+    return reply.header("Cache-Control", "public, max-age=31536000, immutable").send(catalog);
+  });
 
-  app.head<{ Params: { version: string; "*": string } }>(
-    "/offline/packages/glyphs/:version/*",
-    serveGlyph,
-  );
-  app.get<{ Params: { version: string; "*": string } }>(
-    "/offline/packages/glyphs/:version/*",
-    serveGlyph,
-  );
+  registerDataManagerRoute(app, "headOfflineGlyph", serveGlyph);
+  registerDataManagerRoute(app, "getOfflineGlyph", serveGlyph);
 
   const serveArchive = async (
     request: FastifyRequest<{ Params: { packageId: string } }>,
@@ -492,8 +415,8 @@ function registerOfflinePackageRoutes(
     return reply.send(stream);
   };
 
-  app.head<{ Params: { packageId: string } }>("/offline/packages/:packageId/archive", serveArchive);
-  app.get<{ Params: { packageId: string } }>("/offline/packages/:packageId/archive", serveArchive);
+  registerDataManagerRoute(app, "headOfflinePackageArchive", serveArchive);
+  registerDataManagerRoute(app, "getOfflinePackageArchive", serveArchive);
 }
 
 export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
@@ -617,38 +540,35 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
     return { ok: true, jobId: start.jobId };
   }
 
-  app.get("/live", async () => ({ ok: true }));
+  registerDataManagerRoute(app, "getLive", async () => ({ ok: true }));
 
-  app.get<{ Params: { handle: string } }>(
-    `${OPERATOR_FEED_RELAY_PATH}/:handle`,
-    async (req, reply) => {
-      reply.header("Cache-Control", "no-store");
-      reply.header("Pragma", "no-cache");
-      reply.header("Referrer-Policy", "no-referrer");
-      const requestAbort = new AbortController();
-      const abortDisconnectedClient = (): void => {
-        requestAbort.abort(new Error("Relay client disconnected"));
-      };
-      req.raw.once("aborted", abortDisconnectedClient);
-      reply.raw.once("close", () => {
-        if (!reply.raw.writableEnded) abortDisconnectedClient();
+  registerDataManagerRoute(app, "getTransitOperatorFeed", async (req, reply) => {
+    reply.header("Cache-Control", "no-store");
+    reply.header("Pragma", "no-cache");
+    reply.header("Referrer-Policy", "no-referrer");
+    const requestAbort = new AbortController();
+    const abortDisconnectedClient = (): void => {
+      requestAbort.abort(new Error("Relay client disconnected"));
+    };
+    req.raw.once("aborted", abortDisconnectedClient);
+    reply.raw.once("close", () => {
+      if (!reply.raw.writableEnded) abortDisconnectedClient();
+    });
+    try {
+      const payload = await operatorFeedRelay.consume({
+        handle: req.params.handle,
+        signal: requestAbort.signal,
       });
-      try {
-        const payload = await operatorFeedRelay.consume({
-          handle: req.params.handle,
-          signal: requestAbort.signal,
-        });
-        reply.header("Content-Type", payload.contentType ?? "application/zip");
-        reply.header("Content-Length", String(payload.bytes));
-        return reply.send(payload.stream);
-      } catch (error) {
-        const status = error instanceof OperatorFeedRelayCapabilityError ? 410 : 502;
-        return reply.code(status).send({ error: "operator feed relay unavailable" });
-      }
-    },
-  );
+      reply.header("Content-Type", payload.contentType ?? "application/zip");
+      reply.header("Content-Length", String(payload.bytes));
+      return reply.send(payload.stream);
+    } catch (error) {
+      const status = error instanceof OperatorFeedRelayCapabilityError ? 410 : 502;
+      return reply.code(status).send({ error: "operator feed relay unavailable" });
+    }
+  });
 
-  app.get("/status", async (_req, reply) => {
+  registerDataManagerRoute(app, "getStatus", async (_req, reply) => {
     const readiness = opts.readiness?.() ?? { status: "ready", phase: "complete" };
     const body = {
       ok: readiness.status === "ready",
@@ -661,20 +581,14 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
     return body;
   });
 
-  app.get("/datasets", async () => ({ datasets: store.getAll() }));
+  registerDataManagerRoute(app, "getDatasets", async () => ({ datasets: store.getAll() }));
 
-  app.get("/transit/profile", async () => ({ policy: publicOperationsPolicy(operationsPolicy) }));
+  registerDataManagerRoute(app, "getTransitProfile", async () => ({
+    policy: publicOperationsPolicy(operationsPolicy),
+  }));
 
-  app.get<{
-    Querystring: {
-      search?: string;
-      lifecycle?: TransitSourceLifecycle;
-      origin?: "catalog" | "operator";
-      limit?: string;
-      offset?: string;
-    };
-  }>("/transit/sources", async (req, reply) => {
-    const parseCount = (raw: string | undefined, fallback: number): number => {
+  registerDataManagerRoute(app, "getTransitSources", async (req, reply) => {
+    const parseCount = (raw: number | undefined, fallback: number): number => {
       const value = Number(raw ?? fallback);
       return Number.isFinite(value) ? value : fallback;
     };
@@ -707,7 +621,7 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
     }
   });
 
-  app.get("/transit/catalog", async (_req, reply) => {
+  registerDataManagerRoute(app, "getTransitCatalog", async (_req, reply) => {
     try {
       return { sources: listPinnedTransitCatalog(catalogDir, operationsPolicy.countries) };
     } catch (error) {
@@ -716,22 +630,7 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
     }
   });
 
-  app.post<{
-    Body: {
-      region: string;
-      name: string;
-      url: string;
-      license: {
-        spdxIdentifier?: string;
-        url?: string;
-        attribution: string;
-        publisher?: string;
-        publisherUrl?: string;
-      };
-      idempotencyKey?: string;
-      triggeredBy?: string;
-    };
-  }>("/transit/sources", async (req, reply) => {
+  registerDataManagerRoute(app, "addTransitSource", async (req, reply) => {
     let mutation: ReturnType<typeof prepareAddTransitSource>;
     try {
       mutation = prepareAddTransitSource({
@@ -765,10 +664,7 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
       .send({ jobId: result.jobId, sourceId: mutation.sourceId, status: "started" });
   });
 
-  app.delete<{
-    Params: { sourceId: string };
-    Body?: { idempotencyKey?: string; triggeredBy?: string };
-  }>("/transit/sources/:sourceId", async (req, reply) => {
+  registerDataManagerRoute(app, "removeTransitSource", async (req, reply) => {
     let mutation: ReturnType<typeof prepareRemoveTransitSource>;
     try {
       mutation = prepareRemoveTransitSource({
@@ -794,10 +690,7 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
       .send({ jobId: result.jobId, sourceId: mutation.sourceId, status: "started" });
   });
 
-  app.post<{
-    Params: { sourceId: string };
-    Body?: { idempotencyKey?: string; triggeredBy?: string };
-  }>("/transit/sources/:sourceId/enable", async (req, reply) => {
+  registerDataManagerRoute(app, "enableTransitSource", async (req, reply) => {
     let mutation: ReturnType<typeof prepareEnableTransitSource>;
     try {
       mutation = prepareEnableTransitSource({
@@ -823,20 +716,7 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
       .send({ jobId: result.jobId, sourceId: mutation.sourceId, status: "started" });
   });
 
-  app.post<{
-    Body?: {
-      feedCount?: number;
-      measuredCompressedBytes?: number;
-      osmBytes?: number;
-      osmAvailable?: boolean;
-      freeDiskBytes?: number;
-      freeInodes?: number;
-      slotMemoryGb?: number;
-      slotCpu?: number;
-      fileDescriptorLimit?: number;
-      buildTimeoutHours?: number;
-    };
-  }>("/transit/preflight", async (req, reply) => {
+  registerDataManagerRoute(app, "preflightTransit", async (req, reply) => {
     const body = req.body ?? {};
     const result = runMotisPreflight({
       policy: operationsPolicy,
@@ -857,7 +737,7 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
     return result;
   });
 
-  app.post("/datasets/reload", async () => {
+  registerDataManagerRoute(app, "reloadDatasets", async () => {
     const result = store.reload();
     return { ok: true, ...result };
   });
@@ -866,7 +746,7 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
   // restarts Valhalla, so two concurrent runs would fight over the same tiles.
   let bakeInFlight = false;
 
-  app.post("/traffic/predicted/bake", async (_req, reply) => {
+  registerDataManagerRoute(app, "bakePredictedTraffic", async (_req, reply) => {
     if (!opts.bakePredicted) {
       reply.code(501);
       return { error: "predicted bake not configured" };
@@ -892,7 +772,7 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
   });
 
   // Authenticated, uncached application snapshot for per-request engine proof.
-  app.get("/traffic/conditions/applied", async (_req, reply) => {
+  registerDataManagerRoute(app, "getAppliedTrafficConditions", async (_req, reply) => {
     if (!opts.getTrafficConditionsApplied) {
       reply.code(501);
       return { error: "live traffic not configured" };
@@ -901,7 +781,7 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
     return opts.getTrafficConditionsApplied();
   });
 
-  app.post<{ Body: { region: string } }>("/download/osm", async (req, reply) => {
+  registerDataManagerRoute(app, "downloadOsm", async (req, reply) => {
     const { region } = req.body ?? {};
     if (!region || typeof region !== "string") throw new Error("region required");
     // Same Geofabrik path shape the Overture routes enforce — the region becomes
@@ -910,7 +790,7 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
 
     // Stream NDJSON progress events back to the client. Hijacking the reply
     // lets us write line-by-line; Fastify otherwise buffers the full body.
-    const stream = openNdjsonStream(reply);
+    const stream = openNdjsonStream(reply, "downloadOsm");
 
     try {
       const result = await downloadOsm({
@@ -951,7 +831,7 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
     }
   });
 
-  app.get("/search-index/status", async (_req, reply) => {
+  registerDataManagerRoute(app, "getSearchIndexStatus", async (_req, reply) => {
     const status = await getSearchIndexStatus({
       dataDir,
       store,
@@ -964,13 +844,13 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
     return reply.send({ ok: true, ...status });
   });
 
-  app.post<{ Body: { region: string } }>("/search-index/build", async (req, reply) => {
+  registerDataManagerRoute(app, "buildSearchIndex", async (req, reply) => {
     const { region } = req.body ?? {};
     if (!region || typeof region !== "string") {
       return reply.code(400).send({ ok: false, error: "region required" });
     }
     assertValidRegion(region);
-    const stream = openNdjsonStream(reply);
+    const stream = openNdjsonStream(reply, "buildSearchIndex");
     try {
       const build = opts.buildSearchIndex ?? buildOsmSearchIndex;
       const result = await build({
@@ -990,7 +870,7 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
     }
   });
 
-  app.get("/notable-places/status", async (_req, reply) => {
+  registerDataManagerRoute(app, "getNotablePlacesStatus", async (_req, reply) => {
     const status = await getNotablePlacesStatus({
       sql: searchIndexSql,
       runtimeState: notablePlaces.runtimeState,
@@ -1001,8 +881,8 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
     return reply.send({ ok: true, ...status });
   });
 
-  app.post("/notable-places/build", async (_req, reply) => {
-    const stream = openNdjsonStream(reply);
+  registerDataManagerRoute(app, "buildNotablePlaces", async (_req, reply) => {
+    const stream = openNdjsonStream(reply, "buildNotablePlaces");
     try {
       const build = notablePlaces.build ?? buildNotablePlaces;
       const result = await build({
@@ -1020,87 +900,44 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
     }
   });
 
-  app.post("/download/fonts", async () => {
+  registerDataManagerRoute(app, "downloadFonts", async () => {
     await downloadFonts({ dataDir, store });
     return { ok: true };
   });
 
-  app.post<{ Body: { plan: HardlinkEntry[]; prune?: boolean } }>(
-    "/link",
-    {
-      schema: { body: LINK_BODY_SCHEMA },
-      // Fastify's default Ajv removes additional properties before schema
-      // validation, so reject them here while the original body is intact.
-      preValidation: async (req, reply) => {
-        const body = req.body as { plan?: unknown };
-        if (hasUnexpectedKeys(body, LINK_BODY_KEYS)) {
-          return reply.code(400).send({ error: "unexpected property in link request" });
-        }
-        if (
-          Array.isArray(body?.plan) &&
-          body.plan.some((entry) => hasUnexpectedKeys(entry, LINK_ENTRY_KEYS))
-        ) {
-          return reply.code(400).send({ error: "unexpected property in link plan entry" });
-        }
-      },
-    },
-    async (req) => {
-      const { plan, prune } = req.body;
-      const result = await applyHardlinkPlan(plan, { rootDir: dataDir, prune });
-      return { ok: true, ...result };
-    },
-  );
+  registerDataManagerRoute(app, "link", async (req) => {
+    const { plan, prune } = req.body;
+    const result = await applyHardlinkPlan(plan, { rootDir: dataDir, prune });
+    return { ok: true, ...result };
+  });
 
-  app.post<{ Body?: { region?: string } }>(
-    "/convert/overpass",
-    {
-      schema: { body: CONVERT_OVERPASS_BODY_SCHEMA },
-      // Fastify removes additional properties during schema validation, so
-      // reject them while the original request body is still available.
-      preValidation: async (req, reply) => {
-        if (hasUnexpectedKeys(req.body, CONVERT_OVERPASS_BODY_KEYS)) {
-          return reply.code(400).send({ error: "unexpected property in convert request" });
-        }
-      },
-    },
-    async (req, reply) => {
-      const { region } = req.body ?? {};
+  registerDataManagerRoute(app, "convertOverpass", async (req, reply) => {
+    const { region } = req.body ?? {};
 
-      // Stream NDJSON progress and pick source/target from the state store.
-      // Mirrors the /download/osm protocol so the CLI can reuse its renderer.
-      reply.hijack();
-      reply.raw.writeHead(200, {
-        "Content-Type": "application/x-ndjson",
-        "Cache-Control": "no-cache",
-        "X-Accel-Buffering": "no",
+    const stream = openNdjsonStream(reply, "convertOverpass");
+    try {
+      const result = await convertPbfToBz2ForRegion({
+        region,
+        dataDir,
+        store,
+        onProgress: (bytes, totalBytes) =>
+          stream.writeLine({ event: "progress", bytes, totalBytes }),
       });
-      const writeLine = (obj: Record<string, unknown>) => {
-        reply.raw.write(`${JSON.stringify(obj)}\n`);
-      };
+      stream.writeLine({ event: "done", ok: true, ...result });
+    } catch (err) {
+      stream.writeLine({ event: "error", message: (err as Error).message });
+    } finally {
+      stream.end();
+    }
+    return undefined;
+  });
 
-      try {
-        const result = await convertPbfToBz2ForRegion({
-          region,
-          dataDir,
-          store,
-          onProgress: (bytes, totalBytes) => writeLine({ event: "progress", bytes, totalBytes }),
-        });
-        writeLine({ event: "done", ok: true, ...result });
-      } catch (err) {
-        writeLine({ event: "error", message: (err as Error).message });
-      } finally {
-        reply.raw.end();
-      }
-      return undefined;
-    },
-  );
-
-  app.post<{ Body: { region: string } }>("/overture/pull", async (req, reply) => {
+  registerDataManagerRoute(app, "pullOverture", async (req, reply) => {
     const { region } = req.body;
     if (!region) throw new Error("region required");
     assertValidRegion(region);
 
-    const stream = openNdjsonStream(reply);
+    const stream = openNdjsonStream(reply, "pullOverture");
 
     try {
       const result = await pullOverture({
@@ -1116,7 +953,7 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
     }
   });
 
-  app.get("/overture/status", async (_req, reply) => {
+  registerDataManagerRoute(app, "getOvertureStatus", async (_req, reply) => {
     const state = await getOvertureConflationState();
     if (!state) {
       reply.code(404);
@@ -1131,12 +968,12 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
     };
   });
 
-  app.post<{ Body: { region: string } }>("/overture/sync", async (req, reply) => {
+  registerDataManagerRoute(app, "syncOverture", async (req, reply) => {
     const { region } = req.body;
     if (!region) throw new Error("region required");
     assertValidRegion(region);
 
-    const stream = openNdjsonStream(reply);
+    const stream = openNdjsonStream(reply, "syncOverture");
 
     try {
       const result = await syncOvertureRegion({
@@ -1152,12 +989,12 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
     }
   });
 
-  app.post<{ Body: { region: string } }>("/overture/ingest", async (req, reply) => {
+  registerDataManagerRoute(app, "ingestOverture", async (req, reply) => {
     const { region } = req.body;
     if (!region) throw new Error("region required");
     assertValidRegion(region);
 
-    const stream = openNdjsonStream(reply);
+    const stream = openNdjsonStream(reply, "ingestOverture");
 
     try {
       await withOvertureOperationLock(() =>
@@ -1175,12 +1012,12 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
     }
   });
 
-  app.post<{ Body: { region: string } }>("/overture/extract", async (req, reply) => {
+  registerDataManagerRoute(app, "extractOverture", async (req, reply) => {
     const { region } = req.body;
     if (!region) throw new Error("region required");
     assertValidRegion(region);
 
-    const stream = openNdjsonStream(reply);
+    const stream = openNdjsonStream(reply, "extractOverture");
 
     try {
       await withOvertureOperationLock(() =>
@@ -1198,137 +1035,94 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
     }
   });
 
-  app.post<{ Body: { region: string; restart?: boolean } }>(
-    "/overture/conflate",
-    async (req, reply) => {
-      const { region, restart } = req.body;
-      if (!region) throw new Error("region required");
-      assertValidRegion(region);
+  registerDataManagerRoute(app, "conflateOverture", async (req, reply) => {
+    const { region, restart } = req.body;
+    if (!region) throw new Error("region required");
+    assertValidRegion(region);
 
-      const ollamaUrl = process.env.OLLAMA_URL || "http://local-ai:11434";
+    const ollamaUrl = process.env.OLLAMA_URL || "http://local-ai:11434";
 
-      const stream = openNdjsonStream(reply);
+    const stream = openNdjsonStream(reply, "conflateOverture");
 
-      try {
-        const result = await rebuildOvertureLinks({
-          region,
-          dataDir,
-          force: restart === true,
-          ollamaUrl,
-          useEmbeddings: false,
-          onProgress: (msg) => stream.writeLine({ event: "progress", message: msg }),
-        });
-        stream.writeLine({
-          event: "done",
-          ok: result.status !== "failed" && result.status !== "waiting_for_osm",
-          message:
-            result.status === "failed"
-              ? result.error
-              : result.status === "waiting_for_osm"
-                ? `OSM PBF not found at ${result.pbfPath}`
-                : result.status === "already_running"
-                  ? "Another worker still owns the active conflation lease"
-                  : undefined,
-          ...result,
-        });
-      } catch (err) {
-        stream.writeLine({ event: "error", message: (err as Error).message });
-      } finally {
-        stream.end();
-      }
-    },
-  );
+    try {
+      const result = await rebuildOvertureLinks({
+        region,
+        dataDir,
+        force: restart === true,
+        ollamaUrl,
+        useEmbeddings: false,
+        onProgress: (msg) => stream.writeLine({ event: "progress", message: msg }),
+      });
+      stream.writeLine({
+        event: "done",
+        ok: result.status !== "failed" && result.status !== "waiting_for_osm",
+        message:
+          result.status === "failed"
+            ? result.error
+            : result.status === "waiting_for_osm"
+              ? `OSM PBF not found at ${result.pbfPath}`
+              : result.status === "already_running"
+                ? "Another worker still owns the active conflation lease"
+                : undefined,
+        ...result,
+      });
+    } catch (err) {
+      stream.writeLine({ event: "error", message: (err as Error).message });
+    } finally {
+      stream.end();
+    }
+  });
 
   // POST /transit/sync — fire-and-forget Transitous pipeline trigger. Honours
   // the single-flight lock + idempotency key. apps/api proxies user-facing
   // sync requests here.
-  app.post<{
-    Body?: {
-      idempotencyKey?: string;
-      triggeredBy?: string;
-      countries?: string[];
-    };
-  }>(
-    "/transit/sync",
-    {
-      schema: {
-        body: {
-          type: "object",
-          properties: {
-            idempotencyKey: { type: "string", maxLength: 200 },
-            triggeredBy: { type: "string", maxLength: 200 },
-            countries: {
-              type: "array",
-              maxItems: 250,
-              items: { type: "string", pattern: "^[A-Za-z][A-Za-z0-9_-]{0,31}$" },
-            },
-          },
-        },
-      },
-      // Fastify's default Ajv configuration can coerce a scalar into a
-      // one-element array. Preserve the request contract before validation so
-      // a caller cannot bypass the array shape check with `countries: "de"`.
-      preValidation: async (req, reply) => {
-        const body = req.body as unknown;
-        if (
-          body !== null &&
-          typeof body === "object" &&
-          !Array.isArray(body) &&
-          Object.hasOwn(body, "countries") &&
-          !Array.isArray((body as { countries?: unknown }).countries)
-        ) {
-          return reply.code(400).send({ error: "countries must be an array" });
-        }
-      },
-    },
-    async (req, reply) => {
-      const body = req.body ?? {};
-      // Default to the deployment's configured countries (same as the cron) when
-      // the caller doesn't specify any — an empty list means "every country",
-      // which would kick off a global multi-GB fetch by accident.
-      const countries = body.countries ?? operationsPolicy.countries;
-      const outsideScope = countries.filter(
-        (country) => !operationsPolicy.countries.includes(country.toLowerCase()),
-      );
-      if (operationsPolicy.profile !== "planet" && outsideScope.length > 0) {
-        return reply.code(422).send({
-          ok: false,
-          reason: `countries outside configured operations profile: ${outsideScope.join(", ")}`,
-        });
-      }
-      const start = await singleFlight.tryStartSync({
-        trigger: "api",
-        triggeredBy: body.triggeredBy ?? "api",
-        idempotencyKey: body.idempotencyKey,
-        kind: "transitous-sync",
-        metadata: {
-          source: "api",
-          countries,
-        },
+  registerDataManagerRoute(app, "syncTransit", async (req, reply) => {
+    const body = req.body ?? {};
+    // Default to the deployment's configured countries (same as the cron) when
+    // the caller doesn't specify any — an empty list means "every country",
+    // which would kick off a global multi-GB fetch by accident.
+    const countries = body.countries ?? operationsPolicy.countries;
+    const outsideScope = countries.filter(
+      (country) => !operationsPolicy.countries.includes(country.toLowerCase()),
+    );
+    if (operationsPolicy.profile !== "planet" && outsideScope.length > 0) {
+      return reply.code(422).send({
+        ok: false,
+        reason: `countries outside configured operations profile: ${outsideScope.join(", ")}`,
       });
+    }
+    const start = await singleFlight.tryStartSync({
+      trigger: "api",
+      triggeredBy: body.triggeredBy ?? "api",
+      idempotencyKey: body.idempotencyKey,
+      kind: "transitous-sync",
+      metadata: {
+        source: "api",
+        countries,
+      },
+    });
 
-      if (!start.ok) {
-        // 409 Conflict captures both "in-flight" and "duplicate-idempotency-key".
-        // The caller distinguishes via the `reason` payload.
-        return reply.code(409).send({
-          ok: false,
-          reason: start.reason,
-          existingJobId: start.existingJobId,
-        });
-      }
+    if (!start.ok) {
+      // 409 Conflict captures both "in-flight" and "duplicate-idempotency-key".
+      // The caller distinguishes via the `reason` payload.
+      return reply.code(409).send({
+        ok: false,
+        reason: start.reason,
+        existingJobId: start.existingJobId,
+      });
+    }
 
-      const jobId = start.jobId;
-      launchReservedTransitSync(jobId, countries, "api");
+    const jobId = start.jobId;
+    launchReservedTransitSync(jobId, countries, "api");
 
-      reply.code(202);
-      return { ok: true, jobId, status: "started" };
-    },
-  );
+    reply.code(202);
+    return { ok: true, jobId, status: "started" };
+  });
 
   // POST /transit/restart-motis — bounce the primary MOTIS container. Used
   // when a config change requires a full restart rather than the partial
   // reloads the pipeline already performs.
-  app.post("/transit/restart-motis", async (_req, reply) => {
+  registerDataManagerRoute(app, "restartMotis", async (_req, reply) => {
     try {
       // Data-manager holds no Docker socket: the restart is a typed operation
       // the agent performs against its own fixed container.
@@ -1350,19 +1144,8 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
 
   // POST /transit/bump — propose a new pin set. It never activates the lock;
   // operators must review diffs/build the inactive slot before approval.
-  app.post<{
-    Body?: { branch?: string; force?: boolean; lockedBy?: string };
-  }>("/transit/bump", async (req, reply) => {
+  registerDataManagerRoute(app, "proposeTransitBump", async (req, reply) => {
     const branch = req.body?.branch?.trim() || "main";
-    if (!isSafeGitRef(branch)) {
-      reply.code(400);
-      return {
-        ok: false,
-        error: "invalid-branch",
-        message: `branch "${branch}" is not a valid git ref name`,
-      };
-    }
-
     const force = req.body?.force === true;
     const lockedBy = req.body?.lockedBy?.trim() || "api";
 
@@ -1418,26 +1201,23 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
     };
   });
 
-  app.post<{ Body?: { approveRef?: string; approvedBy?: string } }>(
-    "/transit/bump/approve",
-    async (req, reply) => {
-      const { proposed } = await runOpsOperation({ kind: "transitousLock.inspect" });
-      if (!proposed) return reply.code(404).send({ ok: false, error: "no-proposal" });
-      if (req.body?.approveRef !== proposed.ref) {
-        return reply.code(422).send({
-          ok: false,
-          error: "typed-confirmation-mismatch",
-          expected: proposed.ref,
-        });
-      }
-      // The agent re-matches the ref under its own read, so an approval cannot
-      // land on a proposal that changed after this check.
-      const approved = await runOpsOperation({
-        kind: "transitousLock.approve",
-        ref: proposed.ref,
-        approvedBy: req.body?.approvedBy?.trim() || "api-approval",
+  registerDataManagerRoute(app, "approveTransitBump", async (req, reply) => {
+    const { proposed } = await runOpsOperation({ kind: "transitousLock.inspect" });
+    if (!proposed) return reply.code(404).send({ ok: false, error: "no-proposal" });
+    if (req.body?.approveRef !== proposed.ref) {
+      return reply.code(422).send({
+        ok: false,
+        error: "typed-confirmation-mismatch",
+        expected: proposed.ref,
       });
-      return { ok: true, activated: true, ref: approved.ref, lockedAt: approved.lockedAt };
-    },
-  );
+    }
+    // The agent re-matches the ref under its own read, so an approval cannot
+    // land on a proposal that changed after this check.
+    const approved = await runOpsOperation({
+      kind: "transitousLock.approve",
+      ref: proposed.ref,
+      approvedBy: req.body?.approvedBy?.trim() || "api-approval",
+    });
+    return { ok: true, activated: true, ref: approved.ref, lockedAt: approved.lockedAt };
+  });
 }

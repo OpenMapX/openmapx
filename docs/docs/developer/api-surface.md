@@ -287,3 +287,39 @@ The deprecated `GET /api/integrations/weather-open-meteo-air-quality/aqi`
 route preserves its nine-field body. It now advertises `Deprecation`, `Sunset`,
 and a canonical successor `Link`. Source-policy exclusion is intentionally HTTP
 503 with exactly `{ "message": "Open-Meteo air quality is disabled by data-use policy" }`.
+
+## Internal data-manager service
+
+`services/data-manager/openapi.json` describes all explicit internal operations,
+including progress streams, binary downloads and HEAD responses. It is collected
+from the actual `registerApi` route registrations without starting jobs or
+connecting to a database. Optional offline-package routes are included using an
+inert collaborator. Automatic HEAD routes are excluded; explicit HEAD operations
+remain part of the contract.
+
+The canonical Zod operation table lives in
+`packages/core/src/services/data-manager/contracts`. It owns method, path,
+authentication, request validation, response statuses, wire schemas and required
+headers. Register producer handlers through `registerDataManagerRoute` so runtime
+validation and documentation use that same definition. Validate each hijacked
+NDJSON event before writing it; these streams bypass Fastify serialization.
+
+```bash
+pnpm data-manager:openapi:generate
+pnpm data-manager:sdk:generate
+pnpm check-data-manager-openapi
+pnpm check-data-manager-sdk
+```
+
+The last two commands run in `check:policy`. Commit both the document and generated
+SDK when changing a contract. Orval generates request serialization and plain wire
+types; operation-bound transport closures select the canonical runtime validators.
+Do not edit generated files or introduce a separate handwritten endpoint map.
+
+Server consumers import `@openmapx/core/data-manager-sdk`, explicitly construct a
+transport with their service URL and credentials, and call its generated functions.
+The transport enforces destination policy, deadlines, response sizes, declared
+statuses, media types, headers and payloads. Workflow adapters consume bounded,
+validated NDJSON progress and require a terminal event. Binary operations return an
+unconsumed `Response`; callers own streaming and release. This internal SDK must
+never receive browser credentials or replace the browser-facing API client.

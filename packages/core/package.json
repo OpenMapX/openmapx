@@ -169,6 +169,14 @@
     "./api-sdk": {
       "types": "./src/api/generated/runtime-metadata.generated.ts",
       "default": "./src/api/generated/runtime-metadata.generated.ts"
+    },
+    "./data-manager-contracts": {
+      "types": "./src/services/data-manager/contracts/index.ts",
+      "default": "./src/services/data-manager/contracts/index.ts"
+    },
+    "./data-manager-sdk": {
+      "types": "./src/services/data-manager/index.ts",
+      "default": "./src/services/data-manager/index.ts"
     }
   },
   "scripts": {

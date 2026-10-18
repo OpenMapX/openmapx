@@ -1,5 +1,6 @@
 import { mkdirSync } from "node:fs";
-import { services } from "@openmapx/core/server";
+import type { DatasetMetadata } from "@openmapx/core/data-manager-contracts";
+import * as dm from "@openmapx/core/data-manager-sdk";
 import type { Command } from "commander";
 import kleur from "kleur";
 import {
@@ -29,8 +30,12 @@ import { buildServices, resolveDataBuildServiceId } from "../lib/service-builds"
 import { generateTransitousApiKeys } from "../lib/transitous-api-keys";
 import { renderComposeForRepo } from "./compose";
 
-const { DataManagerClient } = services;
-type DatasetMetadata = services.DatasetMetadata;
+function createCliTransport() {
+  return dm.createDataManagerTransport({
+    baseUrl: dataManagerUrl(),
+    authToken: process.env.DATA_MANAGER_AUTH_TOKEN?.trim(),
+  });
+}
 
 function formatBytes(n: number): string {
   if (n < 1024) return `${n} B`;
@@ -181,7 +186,7 @@ function printOfflineStatus(): void {
 }
 
 async function runOsmDownload(
-  client: services.DataManagerClient,
+  transport: ReturnType<typeof createCliTransport>,
   region: string | undefined,
 ): Promise<string> {
   const resolvedRegion = resolveOsmRegion(region);
@@ -196,16 +201,20 @@ async function runOsmDownload(
 
   const started = Date.now();
   const render = progressRenderer();
-  const r = await client.downloadOsm(resolvedRegion.value, {
-    onProgress: (bytes, total) => render.update(bytes, total, started),
-  });
+  const r = await dm.downloadOsmWithProgress(
+    { region: resolvedRegion.value },
+    {
+      onProgress: ({ bytes, totalBytes }) => render.update(bytes, totalBytes, started),
+      transport,
+    },
+  );
   render.done();
   log.ok(`Downloaded ${resolvedRegion.value} (${(r.sizeBytes / 1e9).toFixed(2)} GB) → ${r.path}`);
   return resolvedRegion.value;
 }
 
 async function runTransitSync(
-  client: services.DataManagerClient,
+  transport: ReturnType<typeof createCliTransport>,
   options: { countries?: string },
 ): Promise<string> {
   const resolvedCountries = resolveTransitousCountries(options.countries);
@@ -215,16 +224,21 @@ async function runTransitSync(
     );
   }
 
-  const result = await client.syncTransit({
-    countries: resolvedCountries.values,
-    triggeredBy: "openmapx-cli",
-  });
+  const result = dm.unwrapDataManagerResponse(
+    await dm.syncTransit(
+      {
+        countries: resolvedCountries.values,
+        triggeredBy: "openmapx-cli",
+      },
+      { transport },
+    ),
+  );
   log.ok(`Transit sync started: jobId=${result.jobId}`);
   return result.jobId;
 }
 
-async function runFontDownload(client: services.DataManagerClient): Promise<void> {
-  await client.downloadFonts();
+async function runFontDownload(transport: ReturnType<typeof createCliTransport>): Promise<void> {
+  dm.unwrapDataManagerResponse(await dm.downloadFonts({ transport }));
   log.ok("Downloaded map glyphs");
 }
 
@@ -252,14 +266,14 @@ export function registerDataCommands(program: Command): void {
       `Comma-separated GTFS country codes (gtfs only; default: $${TRANSITOUS_COUNTRIES_ENV})`,
     )
     .action(async (kind: string, region: string | undefined, options: { countries?: string }) => {
-      const client = new DataManagerClient({ baseUrl: dataManagerUrl() });
+      const transport = createCliTransport();
       try {
         if (kind === "osm") {
-          await runOsmDownload(client, region);
+          await runOsmDownload(transport, region);
         } else if (kind === "gtfs") {
-          await runTransitSync(client, options);
+          await runTransitSync(transport, options);
         } else if (kind === "fonts") {
-          await runFontDownload(client);
+          await runFontDownload(transport);
         } else {
           log.err(`Unknown kind: ${kind} (use osm | gtfs | fonts)`);
           process.exit(1);
@@ -365,12 +379,12 @@ export function registerDataCommands(program: Command): void {
     .option("--fail-fast", "Stop build-all after the first build failure")
     .action(
       async (region: string | undefined, options: { countries?: string; failFast?: boolean }) => {
-        const client = new DataManagerClient({ baseUrl: dataManagerUrl() });
+        const transport = createCliTransport();
         let resolvedRegion: string;
         try {
-          resolvedRegion = await runOsmDownload(client, region);
-          await runTransitSync(client, { countries: options.countries });
-          await runFontDownload(client);
+          resolvedRegion = await runOsmDownload(transport, region);
+          await runTransitSync(transport, { countries: options.countries });
+          await runFontDownload(transport);
         } catch (err) {
           log.err(`update failed: ${(err as Error).message}`);
           if (!(err as Error).message.startsWith("region required")) {
@@ -409,7 +423,7 @@ export function registerDataCommands(program: Command): void {
       "Derive a secondary format from an existing download (kind: overpass — converts OSM PBF → OSM BZ2 for Overpass)",
     )
     .action(async (kind: string, region: string | undefined) => {
-      const client = new DataManagerClient({ baseUrl: dataManagerUrl() });
+      const transport = createCliTransport();
       try {
         if (kind === "overpass") {
           const resolvedRegion = resolveOverpassRegion(region);
@@ -418,12 +432,15 @@ export function registerDataCommands(program: Command): void {
           }
           const started = Date.now();
           const render = progressRenderer();
-          const r = await client.convertOverpass({
-            region: resolvedRegion.value,
-            onProgress: (bytes, total) => render.update(bytes, total, started),
-          });
+          const r = await dm.convertOverpassWithProgress(
+            { region: resolvedRegion.value },
+            {
+              onProgress: ({ bytes, totalBytes }) => render.update(bytes, totalBytes, started),
+              transport,
+            },
+          );
           render.done();
-          log.ok(`Converted → ${r.path} (${(r.sizeBytes / 1e9).toFixed(2)} GB)`);
+          log.ok(`Converted → ${r.targetBz2} (${(r.sizeBytes / 1e9).toFixed(2)} GB)`);
         } else {
           log.err(`Unknown kind: ${kind} (use: overpass)`);
           process.exit(1);
@@ -466,7 +483,7 @@ export function registerDataCommands(program: Command): void {
     )
     .action(async (options: { countries?: string }) => {
       try {
-        await runTransitSync(new DataManagerClient({ baseUrl: dataManagerUrl() }), options);
+        await runTransitSync(createCliTransport(), options);
       } catch (err) {
         log.err(`sync failed: ${(err as Error).message}`);
         dataManagerHint();
@@ -494,15 +511,10 @@ export function registerDataCommands(program: Command): void {
         return;
       }
       try {
-        const result = await new DataManagerClient({ baseUrl: dataManagerUrl() }).buildSearchIndex(
-          resolvedRegion.value,
-          (message) => log.dim(message),
+        const result = await dm.buildSearchIndexWithProgress(
+          { region: resolvedRegion.value },
+          { onProgress: ({ message }) => log.dim(message), transport: createCliTransport() },
         );
-        if (!result.ok) {
-          log.err(`search-index build failed: ${result.message ?? "unknown error"}`);
-          process.exit(1);
-          return;
-        }
         log.ok(
           `Search index published for ${resolvedRegion.value}: ${result.placeCount ?? 0} places, ${result.termCount ?? 0} terms` +
             (result.epoch ? ` (epoch ${result.epoch})` : ""),
@@ -519,9 +531,9 @@ export function registerDataCommands(program: Command): void {
     .description("Show the active OSM search-index snapshot")
     .action(async () => {
       try {
-        const status = await new DataManagerClient({
-          baseUrl: dataManagerUrl(),
-        }).searchIndexStatus();
+        const status = dm.unwrapDataManagerResponse(
+          await dm.getSearchIndexStatus({ transport: createCliTransport() }),
+        );
         console.log(
           table(
             [
@@ -559,14 +571,10 @@ export function registerDataCommands(program: Command): void {
     .description("Fetch the notable places from Wikidata and publish them for search")
     .action(async () => {
       try {
-        const result = await new DataManagerClient({
-          baseUrl: dataManagerUrl(),
-        }).buildNotablePlaces((message) => log.dim(message));
-        if (!result.ok) {
-          log.err(`notable-places build failed: ${result.message ?? "unknown error"}`);
-          process.exit(1);
-          return;
-        }
+        const result = await dm.buildNotablePlacesWithProgress({
+          onProgress: ({ message }) => log.dim(message),
+          transport: createCliTransport(),
+        });
         log.ok(
           `Notable places published: ${result.placeCount ?? 0} places, ${result.nameCount ?? 0} names` +
             (result.epoch ? ` (epoch ${result.epoch})` : ""),
@@ -583,9 +591,9 @@ export function registerDataCommands(program: Command): void {
     .description("Show the published notable-places snapshot")
     .action(async () => {
       try {
-        const status = await new DataManagerClient({
-          baseUrl: dataManagerUrl(),
-        }).notablePlacesStatus();
+        const status = dm.unwrapDataManagerResponse(
+          await dm.getNotablePlacesStatus({ transport: createCliTransport() }),
+        );
         console.log(
           table(
             [
@@ -619,9 +627,14 @@ export function registerDataCommands(program: Command): void {
     .description("List requested and active transit sources")
     .action(async () => {
       try {
-        const result = await new DataManagerClient({ baseUrl: dataManagerUrl() }).transitSources({
-          limit: 500,
-        });
+        const result = dm.unwrapDataManagerResponse(
+          await dm.getTransitSources(
+            {
+              limit: 500,
+            },
+            { transport: createCliTransport() },
+          ),
+        );
         console.log(
           table(
             [
@@ -669,18 +682,21 @@ export function registerDataCommands(program: Command): void {
           process.exit(1);
         }
         try {
-          const result = await new DataManagerClient({
-            baseUrl: dataManagerUrl(),
-          }).addTransitSource({
-            url,
-            name: options.name,
-            region: options.region,
-            license: {
-              attribution: options.attribution,
-              ...(options.licenseSpdx ? { spdxIdentifier: options.licenseSpdx } : {}),
-              ...(options.licenseUrl ? { url: options.licenseUrl } : {}),
-            },
-          });
+          const result = dm.unwrapDataManagerResponse(
+            await dm.addTransitSource(
+              {
+                url,
+                name: options.name,
+                region: options.region,
+                license: {
+                  attribution: options.attribution,
+                  ...(options.licenseSpdx ? { spdxIdentifier: options.licenseSpdx } : {}),
+                  ...(options.licenseUrl ? { url: options.licenseUrl } : {}),
+                },
+              },
+              { transport: createCliTransport() },
+            ),
+          );
           log.ok(`Source ${result.sourceId} queued: jobId=${result.jobId}`);
         } catch (err) {
           log.err(`source add failed: ${(err as Error).message}`);
@@ -695,9 +711,9 @@ export function registerDataCommands(program: Command): void {
     .description("Disable a desired source and start a transactional sync")
     .action(async (sourceId: string) => {
       try {
-        const result = await new DataManagerClient({
-          baseUrl: dataManagerUrl(),
-        }).removeTransitSource(sourceId);
+        const result = dm.unwrapDataManagerResponse(
+          await dm.removeTransitSource(sourceId, {}, { transport: createCliTransport() }),
+        );
         log.ok(`Source ${result.sourceId} removal queued: jobId=${result.jobId}`);
       } catch (err) {
         log.err(`source remove failed: ${(err as Error).message}`);
@@ -711,9 +727,9 @@ export function registerDataCommands(program: Command): void {
     .description("Enable a catalog source and start a transactional sync")
     .action(async (sourceId: string) => {
       try {
-        const result = await new DataManagerClient({
-          baseUrl: dataManagerUrl(),
-        }).enableTransitSource(sourceId);
+        const result = dm.unwrapDataManagerResponse(
+          await dm.enableTransitSource(sourceId, {}, { transport: createCliTransport() }),
+        );
         log.ok(`Source ${result.sourceId} enable queued: jobId=${result.jobId}`);
       } catch (err) {
         log.err(`source enable failed: ${(err as Error).message}`);
@@ -762,8 +778,8 @@ export function registerDataCommands(program: Command): void {
         }
         if (shouldReloadDatasets) {
           try {
-            const client = new DataManagerClient({ baseUrl: dataManagerUrl() });
-            const reloaded = await client.reloadDatasets();
+            const transport = createCliTransport();
+            const reloaded = dm.unwrapDataManagerResponse(await dm.reloadDatasets({ transport }));
             log.dim(
               `Reloaded data-manager dataset cache (${reloaded.datasets} dataset${reloaded.datasets === 1 ? "" : "s"})`,
             );
@@ -788,17 +804,17 @@ export function registerDataCommands(program: Command): void {
     .command("overture-sync [region]")
     .description("Atomically refresh Overture places and rebuild regional OSM links")
     .action(async (region: string | undefined) => {
-      const client = new DataManagerClient({ baseUrl: dataManagerUrl() });
+      const transport = createCliTransport();
       const resolvedRegion = region || process.env.OPENMAPX_REGION || "europe/germany/berlin";
       try {
         log.dim(`Refreshing Overture places for "${resolvedRegion}"…`);
-        const result = await client.syncOverture(resolvedRegion, {
-          onProgress: (msg) => log.dim(msg),
-        });
-        if (!result.ok) {
-          log.err(`overture-sync failed: ${result.message ?? "unknown error"}`);
-          process.exit(1);
-        }
+        const result = await dm.syncOvertureWithProgress(
+          { region: resolvedRegion },
+          {
+            onProgress: ({ message }) => log.dim(message),
+            transport,
+          },
+        );
         log.ok(`Overture ${result.release ?? "release"} active for "${resolvedRegion}"`);
         if (result.conflation === "failed" || result.conflation === "waiting_for_osm") {
           log.warn(
@@ -819,17 +835,17 @@ export function registerDataCommands(program: Command): void {
     .command("overture-pull [region]")
     .description("Pull Overture Maps places parquet for a region from S3")
     .action(async (region: string | undefined) => {
-      const client = new DataManagerClient({ baseUrl: dataManagerUrl() });
+      const transport = createCliTransport();
       const resolvedRegion = region || process.env.OPENMAPX_REGION || "europe/germany/berlin";
       try {
         log.dim(`Pulling Overture places for "${resolvedRegion}"…`);
-        const result = await client.pullOverture(resolvedRegion, {
-          onProgress: (msg) => log.dim(msg),
-        });
-        if (!result.ok) {
-          log.err(`overture-pull failed: ${result.message ?? "unknown error"}`);
-          process.exit(1);
-        }
+        await dm.pullOvertureWithProgress(
+          { region: resolvedRegion },
+          {
+            onProgress: ({ message }) => log.dim(message),
+            transport,
+          },
+        );
         log.ok(`Overture pull complete for "${resolvedRegion}"`);
       } catch (err) {
         log.err(`overture-pull failed: ${(err as Error).message}`);
@@ -842,17 +858,17 @@ export function registerDataCommands(program: Command): void {
     .command("overture-ingest [region]")
     .description("Ingest Overture places parquet into PostGIS for a region")
     .action(async (region: string | undefined) => {
-      const client = new DataManagerClient({ baseUrl: dataManagerUrl() });
+      const transport = createCliTransport();
       const resolvedRegion = region || process.env.OPENMAPX_REGION || "europe/germany/berlin";
       try {
         log.dim(`Ingesting Overture places for "${resolvedRegion}"…`);
-        const result = await client.ingestOverture(resolvedRegion, {
-          onProgress: (msg) => log.dim(msg),
-        });
-        if (!result.ok) {
-          log.err(`overture-ingest failed: ${result.message ?? "unknown error"}`);
-          process.exit(1);
-        }
+        await dm.ingestOvertureWithProgress(
+          { region: resolvedRegion },
+          {
+            onProgress: ({ message }) => log.dim(message),
+            transport,
+          },
+        );
         log.ok(`Overture ingest complete for "${resolvedRegion}"`);
       } catch (err) {
         log.err(`overture-ingest failed: ${(err as Error).message}`);
@@ -866,14 +882,17 @@ export function registerDataCommands(program: Command): void {
     .description("Resume the durable OSM extraction and Overture link rebuild")
     .option("--restart", "Discard saved phases and restart from OSM extraction")
     .action(async (region: string | undefined, options: { restart?: boolean }) => {
-      const client = new DataManagerClient({ baseUrl: dataManagerUrl() });
+      const transport = createCliTransport();
       const resolvedRegion = region || process.env.OPENMAPX_REGION || "europe/germany/berlin";
       try {
         log.dim(`Running Overture conflation for "${resolvedRegion}"…`);
-        const result = await client.conflateOverture(resolvedRegion, {
-          restart: options.restart,
-          onProgress: (msg) => log.dim(msg),
-        });
+        const result = await dm.conflateOvertureWithProgress(
+          { region: resolvedRegion, restart: options.restart === true },
+          {
+            onProgress: ({ message }) => log.dim(message),
+            transport,
+          },
+        );
         if (!result.ok) {
           log.err(
             `overture-conflate failed: ${result.message ?? result.status ?? "unknown error"}`,
@@ -895,7 +914,7 @@ export function registerDataCommands(program: Command): void {
         } else {
           log.ok(
             `Overture conflation complete: ${linked} link${linked === 1 ? "" : "s"} written` +
-              (result.extracted !== undefined && result.candidates !== undefined
+              ("extracted" in result && "candidates" in result
                 ? ` from ${result.extracted} OSM POIs and ${result.candidates} accepted edges`
                 : ""),
           );
@@ -911,9 +930,9 @@ export function registerDataCommands(program: Command): void {
     .command("overture-status")
     .description("Show the installed Overture release and durable conflation phase")
     .action(async () => {
-      const client = new DataManagerClient({ baseUrl: dataManagerUrl() });
+      const transport = createCliTransport();
       try {
-        const result = await client.overtureStatus();
+        const result = dm.unwrapDataManagerResponse(await dm.getOvertureStatus({ transport }));
         console.log(JSON.stringify(result, null, 2));
       } catch (err) {
         log.err(`overture-status failed: ${(err as Error).message}`);
@@ -926,17 +945,17 @@ export function registerDataCommands(program: Command): void {
     .command("overture-extract [region]")
     .description("Extract OSM POIs from the local PBF and write them to overture_places.osm_pois")
     .action(async (region: string | undefined) => {
-      const client = new DataManagerClient({ baseUrl: dataManagerUrl() });
+      const transport = createCliTransport();
       const resolvedRegion = region || process.env.OPENMAPX_REGION || "europe/germany/berlin";
       try {
         log.dim(`Extracting OSM POIs for "${resolvedRegion}"…`);
-        const result = await client.extractOverture(resolvedRegion, {
-          onProgress: (msg) => log.dim(msg),
-        });
-        if (!result.ok) {
-          log.err(`overture-extract failed: ${result.message ?? "unknown error"}`);
-          process.exit(1);
-        }
+        await dm.extractOvertureWithProgress(
+          { region: resolvedRegion },
+          {
+            onProgress: ({ message }) => log.dim(message),
+            transport,
+          },
+        );
         log.ok(`OSM POI extraction complete for "${resolvedRegion}"`);
       } catch (err) {
         log.err(`overture-extract failed: ${(err as Error).message}`);
@@ -991,9 +1010,9 @@ export function registerDataCommands(program: Command): void {
         return;
       }
 
-      const client = new DataManagerClient({ baseUrl: dataManagerUrl() });
+      const transport = createCliTransport();
       try {
-        const datasets = await client.datasets();
+        const { datasets } = dm.unwrapDataManagerResponse(await dm.getDatasets({ transport }));
         printDataManagerStatusTable(datasets);
       } catch (err) {
         log.warn(

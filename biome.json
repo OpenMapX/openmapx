@@ -20,6 +20,7 @@
       "!infra/docker/data",
       "!docs",
       "!apps/api/openapi.json",
+      "!services/data-manager/openapi.json",
       "!packages/brands/src/data/brands-index.json",
       "!integrations/overlay-sun-time/data/timezones.simplified.json"
     ]

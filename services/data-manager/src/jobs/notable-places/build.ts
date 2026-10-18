@@ -1,5 +1,10 @@
 import { randomUUID } from "node:crypto";
 import { normalizeSearchTerm } from "@openmapx/core";
+import type {
+  NotablePlacesBuildProgress as CanonicalNotablePlacesBuildProgress,
+  NotablePlacesBuildResult as CanonicalNotablePlacesBuildResult,
+  NotablePlacesBuildStage as CanonicalNotablePlacesBuildStage,
+} from "@openmapx/core/data-manager-contracts";
 import type postgres from "postgres";
 import { scrubSecrets } from "../../utils/scrub-secrets.js";
 import {
@@ -27,29 +32,9 @@ import {
 } from "./sparql.js";
 import type { NotablePlacesRuntimeState } from "./state.js";
 
-export type NotablePlacesBuildStage =
-  | "places"
-  | "names"
-  | "descriptions"
-  | "index"
-  | "validate"
-  | "publish"
-  | "complete";
-
-export interface NotablePlacesBuildProgress {
-  stage: NotablePlacesBuildStage;
-  message: string;
-  placeCount?: number;
-  nameCount?: number;
-}
-
-export interface NotablePlacesBuildResult {
-  epoch: string;
-  source: string;
-  minSitelinks: number;
-  placeCount: number;
-  nameCount: number;
-}
+export type NotablePlacesBuildStage = CanonicalNotablePlacesBuildStage;
+export type NotablePlacesBuildProgress = CanonicalNotablePlacesBuildProgress;
+export type NotablePlacesBuildResult = CanonicalNotablePlacesBuildResult;
 
 /** Sitelinks at which a place counts as known beyond its town, and fame there. */
 const FAME_FLOOR_SITELINKS = 8;
