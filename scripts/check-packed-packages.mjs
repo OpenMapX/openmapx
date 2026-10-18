@@ -170,7 +170,8 @@ void artifact; void receipts; void serviceCheck;
     run(process.execPath, [cli, "package", integration, "--out", out], consumer);
   const hash = (p) => createHash("sha256").update(readFileSync(p)).digest("hex");
   assert.equal(hash(first), hash(second), "Integration packaging must be deterministic");
-  const metadata = JSON.parse(capture("tar", ["-xOf", first, "./openmapx-artifact.json"]));
+  // Match the stored member exactly; GNU tar does not normalize a leading "./" here.
+  const metadata = JSON.parse(capture("tar", ["-xOf", first, "openmapx-artifact.json"]));
   assert.equal(metadata.id, "packed-demo");
   assert.equal(metadata.schemaVersion, 1);
   const source = join(consumer, "extension-input.json");
