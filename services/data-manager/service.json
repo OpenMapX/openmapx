@@ -14,7 +14,7 @@
   },
   "container": {
     "image": "ghcr.io/openmapx/data-manager",
-    "tag": "latest",
+    "tag": "main",
     "expose": [4000],
     "user": "${UID:-1000}:${GID:-1000}",
     "environment": {

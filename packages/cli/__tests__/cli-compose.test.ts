@@ -678,3 +678,16 @@ describe("renderComposeForRepo and what the admin panel applied", () => {
     expect(yaml).not.toContain("from-env");
   });
 });
+
+it("rejects removed release configuration before rendering a differently configured broker", async () => {
+  process.env.OPENMAPX_RELEASE_MANIFEST_IMAGE = "ghcr.io/example/release-manifest:main";
+  try {
+    await expect(
+      renderComposeForRepo({ rootDir: tmp, domain: "example.com", services: [] }),
+    ).rejects.toThrow(/no longer supported/);
+    expect(existsSync(generatedCompose())).toBe(false);
+    expect(existsSync(join(tmp, "infra/docker/secrets"))).toBe(false);
+  } finally {
+    delete process.env.OPENMAPX_RELEASE_MANIFEST_IMAGE;
+  }
+});

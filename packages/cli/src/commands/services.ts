@@ -409,9 +409,7 @@ export function registerServicesCommands(program: Command): void {
           log.err(unpinnedReleaseWarning(overlay.reason));
           process.exit(1);
         } else if (overlay.status === "disabled") {
-          log.dim(
-            "Release pinning disabled (OPENMAPX_RELEASE_MANIFEST_IMAGE is empty); using manifest image tags.",
-          );
+          log.dim("Release pinning disabled (OPENMAPX_RELEASE=local); using manifest image tags.");
         }
       }
       const code = await dockerComposeStream(["up", "-d", ...allIds]);
@@ -492,7 +490,7 @@ export function registerServicesCommands(program: Command): void {
           process.exit(1);
         } else if (overlay.status === "disabled") {
           log.warn(
-            "Release pinning is disabled (OPENMAPX_RELEASE_MANIFEST_IMAGE is empty); this update uses the manifest image tags instead of a digest-pinned release.",
+            "Release pinning is disabled (OPENMAPX_RELEASE=local); this update uses the manifest image tags instead of a digest-pinned release.",
           );
         }
       }

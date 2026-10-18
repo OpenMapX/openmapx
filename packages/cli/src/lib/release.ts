@@ -20,7 +20,7 @@ import { repoPaths } from "./paths";
 
 const {
   RELEASE_MANIFEST_CONTAINER_PATH,
-  RELEASE_MANIFEST_IMAGE_ENV,
+  RELEASE_SELECTOR_ENV,
   RELEASE_PINNED_SERVICE_IDS,
   parseReleaseManifest,
   releaseChannel,
@@ -54,11 +54,24 @@ export async function resolveReleaseManifest(
 ): Promise<ReleaseManifest> {
   const channel = releaseChannel();
   if (channel.kind === "disabled") {
-    throw new Error(`release resolution is disabled (${RELEASE_MANIFEST_IMAGE_ENV} is empty)`);
+    throw new Error(`release resolution is disabled (${RELEASE_SELECTOR_ENV}=local)`);
   }
   const manifestImage = channel.manifestImage;
-  expectOk(await docker(["pull", manifestImage]), `docker pull ${manifestImage}`);
-  const created = await docker(["create", manifestImage, "true"]);
+  const pulled = await docker(["pull", manifestImage]);
+  expectOk(pulled, `docker pull ${manifestImage}`);
+  const digest = coreServices.releaseDigestFromPull(`${pulled.stdout}\n${pulled.stderr}`);
+  const inspected = await docker([
+    "image",
+    "inspect",
+    "--format",
+    "{{.Id}}",
+    `${channel.selection.manifestRepository}@${digest}`,
+  ]);
+  expectOk(inspected, "docker image inspect release-manifest");
+  const imageId = inspected.stdout.trim();
+  if (!/^sha256:[a-f0-9]{64}$/.test(imageId))
+    throw new Error("Docker returned an invalid release-manifest image id");
+  const created = await docker(["create", imageId, "true"]);
   expectOk(created, "docker create release-manifest");
   const containerId = created.stdout.trim();
   if (!/^[a-f0-9]{64}$/.test(containerId)) {
@@ -71,7 +84,8 @@ export async function resolveReleaseManifest(
       await docker(["cp", `${containerId}:${RELEASE_MANIFEST_CONTAINER_PATH}`, manifestPath]),
       "docker cp release-manifest.json",
     );
-    const manifest = parseReleaseManifest(readFileSync(manifestPath, "utf8"));
+    const manifest = parseReleaseManifest(readFileSync(manifestPath, "utf8"), channel.imagePrefix);
+    coreServices.validateResolvedSelection(channel.selection, manifest, digest);
     expectOk(
       await docker(["pull", manifest.images["privacy-backup"]]),
       `docker pull ${manifest.images["privacy-backup"]}`,
@@ -112,7 +126,23 @@ export async function ensureReleaseOverlay(
   opts: { docker?: ReleaseDockerRunner; path?: string } = {},
 ): Promise<ReleaseOverlayState> {
   const path = opts.path ?? repoPaths().composeReleasePath;
-  if (existsSync(path)) return { status: "present", path };
+  if (existsSync(path)) {
+    const selected = readSelection(path);
+    const channel = releaseChannel();
+    const prefix =
+      channel.kind === "enabled" ? channel.imagePrefix : selected?.images.api?.split("/api@")[0];
+    if (
+      !selected?.release ||
+      !prefix ||
+      !coreServices.RELEASE_IMAGE_NAMES.every((name) =>
+        selected.images[name]?.startsWith(`${prefix}/${name}@`),
+      )
+    )
+      throw new Error(
+        "Existing release overlay is malformed or belongs to another configured repository; explicitly reselect or clear it",
+      );
+    return { status: "present", path };
+  }
   // An operator running local images opts out once instead of paying a
   // failed registry pull (and a warning) on every start.
   if (releaseChannel().kind === "disabled") return { status: "disabled" };
@@ -130,7 +160,7 @@ export function unpinnedReleaseWarning(reason: string): string {
     `No ${repoPaths().composeReleasePath} and the release lockfile could not be resolved (${reason}). ` +
     "Refusing to start release runtime images without atomic release selection. " +
     "Run `pnpm openmapx compose release` once the registry is reachable, or set " +
-    `${RELEASE_MANIFEST_IMAGE_ENV}="" to run local images deliberately.`
+    `${RELEASE_SELECTOR_ENV}=local to run local images deliberately.`
   );
 }
 
@@ -151,6 +181,7 @@ export function releaseStatusLines(path = repoPaths().composeReleasePath): strin
         : "No release lockfile selected locally. Run `pnpm openmapx compose release`.",
     ];
   return [
+    `Configured selection: ${process.env.OPENMAPX_RELEASE ?? "main"}; existing pins remain selected until explicit reselection.`,
     ...(disabled ? ["Release resolution disabled; existing overlay still applies."] : []),
     `Selected release: ${selected.release ?? "unknown (legacy or modified overlay)"}`,
     ...coreServices.RELEASE_IMAGE_NAMES.map(

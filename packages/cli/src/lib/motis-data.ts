@@ -55,10 +55,9 @@ export { DEFAULT_TRANSITOUS_REPO_URL };
 // CI publishes a multi-arch transitous-tools image (.github/workflows/docker.yml).
 // Default to the registry image; ensureTransitousToolsImage falls back to a
 // local docker build when the registry pull fails (offline / private fork).
-const { transitousToolsImageFromReleaseCompose } = coreServices;
 
 export const DEFAULT_TRANSITOUS_TOOLS_IMAGE =
-  process.env.OPENMAPX_TRANSITOUS_TOOLS_IMAGE ?? "ghcr.io/openmapx/transitous-tools:latest";
+  process.env.OPENMAPX_TRANSITOUS_TOOLS_IMAGE ?? "ghcr.io/openmapx/transitous-tools:main";
 
 /**
  * Resolve the helper image at call time: explicit env wins, then the digest
@@ -68,18 +67,24 @@ export const DEFAULT_TRANSITOUS_TOOLS_IMAGE =
  */
 export function resolveTransitousToolsImage(rootDir?: string): string {
   const fromEnv = process.env.OPENMAPX_TRANSITOUS_TOOLS_IMAGE;
-  if (fromEnv) return fromEnv;
-  try {
-    const overlayPath = repoPaths(rootDir).composeReleasePath;
-    if (existsSync(overlayPath)) {
-      const pinned = transitousToolsImageFromReleaseCompose(readFileSync(overlayPath, "utf-8"));
-      if (pinned) return pinned;
-    }
-  } catch {
-    // Fall through to the default; a missing repo root is not this helper's concern.
+  const selection = coreServices.releaseSelection();
+  const overlayPath = repoPaths(rootDir).composeReleasePath;
+  if (existsSync(overlayPath)) {
+    const selected = coreServices.parseReleaseComposeSelection(readFileSync(overlayPath, "utf8"));
+    const pinned = selected.images["transitous-tools"];
+    if (!selected.release || !pinned)
+      throw new Error("Release overlay is malformed; explicitly reselect or clear it");
+    if (fromEnv && fromEnv !== pinned)
+      throw new Error("Transitous helper override conflicts with selected release");
+    return pinned;
   }
-  return DEFAULT_TRANSITOUS_TOOLS_IMAGE;
+  if (selection.kind !== "local")
+    throw new Error(
+      "Select a coherent release with `pnpm openmapx compose release` before building transit data, or explicitly choose OPENMAPX_RELEASE=local",
+    );
+  return fromEnv || DEFAULT_TRANSITOUS_TOOLS_IMAGE;
 }
+
 export const OPENMAPX_TRANSITOUS_FEED_PROXY_URL_ENV = "OPENMAPX_TRANSITOUS_FEED_PROXY_URL";
 export const DEFAULT_OPENMAPX_TRANSITOUS_FEED_PROXY_URL = "http://motis-feed-proxy";
 export const TRANSITOUS_FEED_PROXY_KEY_FILE_ENV = "TRANSITOUS_FEED_PROXY_KEY_FILE";
@@ -238,10 +243,13 @@ async function ensureTransitousToolsImage(
     try {
       await runner("docker", ["pull", image], { cwd: rootDir, stdio: "inherit" });
       return;
-    } catch {
-      // fall through to local build
+    } catch (error) {
+      if (image.includes("@sha256:") || coreServices.releaseSelection().kind !== "local")
+        throw error;
     }
   }
+  if (image.includes("@sha256:") || coreServices.releaseSelection().kind !== "local")
+    throw new Error("Refusing to build a replacement for a release-selected helper image");
   const contextDir = join(rootDir, "services", "motis", "tools", "transitous");
   await runner("docker", ["build", "-t", image, contextDir], { cwd: rootDir, stdio: "inherit" });
 }

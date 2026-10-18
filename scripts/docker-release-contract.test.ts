@@ -214,12 +214,12 @@ describe("Docker release trust gate", () => {
     expect(release).toContain("release-manifest.json");
     expect(release).toContain("docker buildx imagetools create");
     expect(release).toContain("${" + "RELEASE_SHA}");
-    expect(release).toContain('"$' + '{RELEASE_MANIFEST_IMAGE}:latest"');
+    expect(release).toContain('"$' + '{RELEASE_MANIFEST_IMAGE}:main"');
 
     const build = release.indexOf("push-by-digest=true");
     const scan = release.indexOf("Gate exact candidate digest with Trivy");
     const immutablePromotion = release.indexOf('"$' + "{IMAGE}:$" + '{RELEASE_SHA}"');
-    const releasePointer = release.indexOf('"$' + '{RELEASE_MANIFEST_IMAGE}:latest"');
+    const releasePointer = release.indexOf('"$' + '{RELEASE_MANIFEST_IMAGE}:main"');
     expect(build).toBeLessThan(scan);
     expect(scan).toBeLessThan(immutablePromotion);
     expect(immutablePromotion).toBeLessThan(releasePointer);
@@ -289,7 +289,7 @@ describe("Docker release trust gate", () => {
         join(temp, "release-plan/release-plan.json"),
         JSON.stringify({
           version: 1,
-          release: `${"a".repeat(40)}-1`,
+          release: `${"a".repeat(40)}-1-1`,
           sourceRevision: "a".repeat(40),
           privacyFingerprint: "b".repeat(64),
           images: apps.map((app) => ({ app, rebuild: true })),
@@ -314,7 +314,9 @@ describe("Docker release trust gate", () => {
       const docker = join(bin, "docker");
       writeFileSync(
         docker,
-        '#!/usr/bin/env sh\nif [ "$3" = "inspect" ]; then echo "promotion inspection output"; fi\n',
+        '#!/usr/bin/env sh\nif [ "$3" = "inspect" ]; then echo "sha256:' +
+          "a".repeat(64) +
+          '"; fi\n',
       );
       chmodSync(docker, 0o755);
       const scriptPath = join(temp, "promote.sh");
@@ -327,10 +329,12 @@ describe("Docker release trust gate", () => {
           PATH: `${bin}:${process.env.PATH}`,
           GITHUB_RUN_ID: "1",
           GITHUB_RUN_ATTEMPT: "2",
+          GITHUB_REPOSITORY: "OpenMapX/openmapx",
+          GITHUB_EVENT_NAME: "push",
           IMAGE_PREFIX: "example.invalid/openmapx",
           RELEASE_MANIFEST_IMAGE: "example.invalid/openmapx/release-manifest",
           RELEASE_SHA: "a".repeat(40),
-          RELEASE_ID: `${"a".repeat(40)}-1`,
+          RELEASE_ID: `${"a".repeat(40)}-1-2`,
         },
       });
 
@@ -338,8 +342,16 @@ describe("Docker release trust gate", () => {
         JSON.parse(readFileSync(join(temp, "release-manifest", "release-manifest.json"), "utf8")),
       ).toEqual({
         schemaVersion: 1,
-        release: `${"a".repeat(40)}-1`,
+        release: `${"a".repeat(40)}-1-2`,
         buildMetadata,
+        producer: {
+          repository: "OpenMapX/openmapx",
+          workflowPath: ".github/workflows/ci.yml",
+          sourceRevision: "a".repeat(40),
+          runId: 1,
+          runAttempt: 2,
+          event: "push",
+        },
         images: {
           api: `example.invalid/openmapx/api@sha256:${"a".repeat(64)}`,
           web: `example.invalid/openmapx/web@sha256:${"a".repeat(64)}`,
@@ -367,7 +379,7 @@ describe("Docker release trust gate", () => {
 
     const docsReadme = read("docs/README.md");
     expect(docsReadme).toContain("docker pull ghcr.io/openmapx/docs:latest");
-    expect(docsReadme).not.toContain("docker pull ghcr.io/openmapx/release-manifest:latest");
+    expect(docsReadme).not.toContain("docker pull ghcr.io/openmapx/release-manifest:main");
     expect(docsReadme).toContain(String.raw`^ghcr\\.io/openmapx/docs@sha256:[0-9a-f]{64}$`);
     expect(docsReadme).toContain("export OPENMAPX_DOCS_IMAGE");
   });
@@ -428,10 +440,12 @@ describe("Docker release trust gate", () => {
     expect(release).toContain(
       "privacy-release-validation-$" + "{{ needs.gate.outputs.sha }}-$" + "{{ github.run_id }}",
     );
-    expect(release).not.toContain("github.run_attempt");
-    expect(release).not.toContain("GITHUB_RUN_ATTEMPT");
+    expect(release).toContain(
+      "RELEASE_ID: $" + "{{ github.sha }}-$" + "{{ github.run_id }}-$" + "{{ github.run_attempt }}",
+    );
+    expect(release).toContain("runAttempt = Number(process.env.GITHUB_RUN_ATTEMPT)");
     const validation = release.indexOf("pnpm validate:privacy-release");
-    const releasePointer = release.indexOf('"$' + '{RELEASE_MANIFEST_IMAGE}:latest"');
+    const releasePointer = release.indexOf('"$' + '{RELEASE_MANIFEST_IMAGE}:main"');
     expect(validation).toBeGreaterThan(-1);
     expect(validation).toBeLessThan(releasePointer);
     expect(release).toContain("cat privacy-release-validation/privacy-release-validation.json");

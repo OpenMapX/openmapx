@@ -2050,7 +2050,52 @@
         "operationId": "getApiAdminSystem",
         "responses": {
           "200": {
-            "description": "Default Response"
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "deployment": {
+                      "type": "object",
+                      "additionalProperties": true
+                    },
+                    "images": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": true
+                      }
+                    },
+                    "release": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "configuredSelector": {
+                          "type": "string"
+                        },
+                        "currentReleaseId": {
+                          "type": "string"
+                        },
+                        "availableReleaseId": {
+                          "type": "string"
+                        },
+                        "currentVersion": {
+                          "type": "string"
+                        },
+                        "availableVersion": {
+                          "type": "string"
+                        },
+                        "availableDigest": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
           }
         },
         "tags": [
@@ -2076,6 +2121,41 @@
     "/api/admin/system/updates/apply": {
       "post": {
         "operationId": "postApiAdminSystemUpdatesApply",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "confirmation",
+                  "releaseId",
+                  "expectedDigest"
+                ],
+                "properties": {
+                  "confirmation": {
+                    "type": "string",
+                    "enum": [
+                      "UPDATE OPENMAPX"
+                    ]
+                  },
+                  "createBackup": {
+                    "type": "boolean"
+                  },
+                  "releaseId": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
+                  },
+                  "expectedDigest": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  }
+                }
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "Default Response"

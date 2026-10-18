@@ -293,6 +293,7 @@ export const opsOperationSchema = z.discriminatedUnion("kind", [
   z.strictObject({
     kind: z.literal("system.update"),
     releaseId: stableIdSchema,
+    expectedDigest: z.string().regex(/^[a-f0-9]{64}$/),
     createBackup: z.boolean(),
     backupId: backupIdSchema.optional(),
   }),
@@ -825,6 +826,13 @@ export const OPS_RESULT_SCHEMAS = {
   "release.inspect": z.strictObject({
     currentReleaseId: stableIdSchema.optional(),
     availableReleaseId: stableIdSchema.optional(),
+    configuredSelector: z.string().max(128).optional(),
+    currentVersion: z.string().max(128).optional(),
+    availableVersion: z.string().max(128).optional(),
+    availableDigest: z
+      .string()
+      .regex(/^[a-f0-9]{64}$/)
+      .optional(),
   }),
   "release.apply": release,
   "appApi.replace": z.strictObject({ updateJobId: stableIdSchema, replaced: z.boolean() }),
@@ -852,6 +860,13 @@ export const OPS_RESULT_SCHEMAS = {
     release: z.strictObject({
       currentReleaseId: stableIdSchema.optional(),
       availableReleaseId: stableIdSchema.optional(),
+      configuredSelector: z.string().max(128).optional(),
+      currentVersion: z.string().max(128).optional(),
+      availableVersion: z.string().max(128).optional(),
+      availableDigest: z
+        .string()
+        .regex(/^[a-f0-9]{64}$/)
+        .optional(),
     }),
     services: z
       .array(

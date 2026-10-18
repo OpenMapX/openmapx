@@ -19,6 +19,7 @@ let tmp: string;
 
 beforeEach(() => {
   delete process.env.TRANSITOUS_COUNTRIES;
+  process.env.OPENMAPX_RELEASE = "local";
   tmp = mkdtempSync(join(tmpdir(), "openmapx-motis-data-"));
   writeFileSync(join(tmp, "pnpm-workspace.yaml"), "packages: []\n");
   writeFileSync(join(tmp, "turbo.json"), "{}\n");
@@ -31,6 +32,7 @@ beforeEach(() => {
 
 afterEach(() => {
   rmSync(tmp, { recursive: true, force: true });
+  delete process.env.OPENMAPX_RELEASE;
 });
 
 describe("buildMotisData", () => {
@@ -462,4 +464,22 @@ describe("importMotisData", () => {
       /needs at least one GTFS feed/,
     );
   });
+});
+
+it("never builds a missing exact helper image, even in local mode", async () => {
+  process.env.OPENMAPX_RELEASE = "local";
+  const pbf = join(tmp, "infra/docker/data/osm/planet.osm.pbf");
+  writeFileSync(pbf, "PBF");
+  writeFileSync(join(tmp, "infra/docker/data/gtfs/synthetic.gtfs.zip"), "GTFS");
+  const calls: string[][] = [];
+  const image = `ghcr.io/openmapx/transitous-tools@sha256:${"a".repeat(64)}`;
+  const runner: CommandRunner = async (_command, args) => {
+    calls.push(args);
+    if (args[0] === "pull") throw new Error("synthetic registry unavailable");
+  };
+  await expect(buildMotisData({ rootDir: tmp, image, runner, source: "build" })).rejects.toThrow(
+    /registry unavailable/,
+  );
+  expect(calls.some((args) => args[0] === "build")).toBe(false);
+  delete process.env.OPENMAPX_RELEASE;
 });

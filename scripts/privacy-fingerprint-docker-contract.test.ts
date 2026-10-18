@@ -24,7 +24,7 @@ describe("API Docker privacy fingerprint inputs", () => {
       "COPY --exclude=*/package.json packages/ packages/",
       "COPY apps/api/ apps/api/",
       "COPY apps/ops-agent/src/ apps/ops-agent/src/",
-      "COPY .github/workflows/docker.yml .github/workflows/docker.yml",
+      "COPY .github/workflows/docker.yml .github/workflows/product-release.yml .github/workflows/",
       "COPY apps/web/src/app/(legal)/ apps/web/src/app/(legal)/",
       "COPY apps/web/src/app/admin/(full-admin)/privacy-setup/ apps/web/src/app/admin/(full-admin)/privacy-setup/",
       "COPY apps/web/src/components/admin/settings/ apps/web/src/components/admin/settings/",
@@ -33,6 +33,7 @@ describe("API Docker privacy fingerprint inputs", () => {
       "COPY scripts/check-subject-data.ts scripts/check-subject-data.ts",
       "COPY scripts/validate-privacy-release.mjs scripts/validate-privacy-release.mjs",
       "COPY services/ services/",
+      "COPY scripts/product-release-config.mjs scripts/product-release-plan.mjs scripts/product-release.mjs scripts/product-release-io.mjs scripts/",
     ]) {
       expect(dockerfile).toContain(instruction);
     }

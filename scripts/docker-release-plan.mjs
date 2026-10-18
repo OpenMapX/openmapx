@@ -36,7 +36,7 @@ export const pullRequestTargets = [
   { app: "docs", context: "docs", dockerfile: "docs/Dockerfile" },
 ];
 const shaPattern = /^[a-f0-9]{40}$/;
-const releasePattern = /^[a-f0-9]{40}(?:-[1-9][0-9]*)?$/;
+const releasePattern = /^[a-f0-9]{40}(?:-[1-9][0-9]*(?:-[1-9][0-9]*)?)?$/;
 const previousReleasePattern = /^[a-f0-9]{40}(?:-[1-9][0-9]*(?:-[1-9][0-9]*)?)?$/;
 const hashPattern = /^[a-f0-9]{64}$/;
 const digestPattern = /^sha256:[a-f0-9]{64}$/;
@@ -247,7 +247,7 @@ export function createReleasePlan({
           ? "inputs-changed"
           : "unchanged";
     // These proposed timestamps become authoritative only when promotion
-    // advances release-manifest:latest. Failed releases therefore remain due,
+    // advances release-manifest:main. Failed releases therefore remain due,
     // and cached source rebuilds cannot postpone an uncached security refresh.
     buildMetadata.images[target.app] = rebuild
       ? {
@@ -297,7 +297,18 @@ export function loadPreviousRelease(
     );
   }
   // Use the locally pulled image ID, so a mutable remote tag cannot race cp.
-  const id = run(["image", "inspect", image, "--format", "{{.Id}}"]);
+  const digestMatches = [
+    ...`${pulled.stdout}\n${pulled.stderr}`.matchAll(/^Digest: (sha256:[a-f0-9]{64})\r?$/gm),
+  ];
+  if (digestMatches.length !== 1) throw new Error("Missing or ambiguous baseline OCI digest");
+  const repository = image.slice(0, image.lastIndexOf(":"));
+  const id = run([
+    "image",
+    "inspect",
+    `${repository}@${digestMatches[0][1]}`,
+    "--format",
+    "{{.Id}}",
+  ]);
   if (!digestPattern.test(id)) throw new Error("Invalid baseline image ID");
   const container = run(["create", id, "true"]);
   if (!/^[a-f0-9]{64}$/.test(container)) throw new Error("Invalid baseline container ID");
@@ -312,6 +323,14 @@ export function loadPreviousRelease(
   }
 }
 
+// Failed-job retries reuse successful build-plan artifacts, but produce a new immutable release ID.
+export function sameProducerPlan(planned, current) {
+  if (planned === current) return true;
+  if (typeof planned !== "string" || typeof current !== "string") return false;
+  const a = /^([a-f0-9]{40}-[1-9][0-9]*)-([1-9][0-9]*)$/.exec(planned);
+  const b = /^([a-f0-9]{40}-[1-9][0-9]*)-([1-9][0-9]*)$/.exec(current);
+  return Boolean(a && b && a[1] === b[1] && BigInt(a[2]) <= BigInt(b[2]));
+}
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const [command, argument, planPath] = process.argv.slice(2);
   if (command === "plan") {
@@ -324,7 +343,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     if (!imagePrefix || !/^[-a-z0-9./:]+$/.test(imagePrefix))
       throw new Error("Invalid image prefix");
     if (!process.env.RELEASE_ID) throw new Error("Missing run-qualified release ID");
-    const previous = loadPreviousRelease(`${imagePrefix}/release-manifest:latest`);
+    const previous = loadPreviousRelease(`${imagePrefix}/release-manifest:main`);
     const plan = createReleasePlan({
       revision,
       releaseId: process.env.RELEASE_ID,
@@ -352,7 +371,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     if (
       plan.version !== 1 ||
       plan.sourceRevision !== process.env.RELEASE_SHA ||
-      plan.release !== process.env.RELEASE_ID ||
+      !sameProducerPlan(plan.release, process.env.RELEASE_ID) ||
       !targets.some((target) => target.app === argument) ||
       !selected ||
       typeof selected.rebuild !== "boolean" ||

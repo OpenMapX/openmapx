@@ -13,7 +13,7 @@
   },
   "container": {
     "image": "ghcr.io/openmapx/web",
-    "tag": "latest",
+    "tag": "main",
     "expose": [3000],
     "environment": {
       "BASEMAP_PROVIDER": "${BASEMAP_PROVIDER:-}",

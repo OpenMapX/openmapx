@@ -94,7 +94,7 @@ COPY apps/api/ apps/api/
 # input is removed.
 COPY apps/ops-agent/src/ apps/ops-agent/src/
 COPY apps/ops-agent/Dockerfile apps/ops-agent/package.json apps/ops-agent/tsconfig.json apps/ops-agent/tsconfig.build.json apps/ops-agent/
-COPY .github/workflows/docker.yml .github/workflows/docker.yml
+COPY .github/workflows/docker.yml .github/workflows/product-release.yml .github/workflows/
 COPY apps/web/src/app/(legal)/ apps/web/src/app/(legal)/
 COPY apps/web/src/app/admin/(full-admin)/privacy-setup/ apps/web/src/app/admin/(full-admin)/privacy-setup/
 COPY apps/web/src/components/admin/settings/ apps/web/src/components/admin/settings/
@@ -107,6 +107,7 @@ COPY apps/web/src/components/auth/AuthDialog.tsx apps/web/src/components/auth/Au
 COPY apps/web/src/components/auth/PrivacyDataSection.tsx apps/web/src/components/auth/PrivacyDataSection.tsx
 COPY scripts/check-subject-data.ts scripts/check-subject-data.ts
 COPY scripts/validate-privacy-release.mjs scripts/validate-privacy-release.mjs
+COPY scripts/product-release-config.mjs scripts/product-release-plan.mjs scripts/product-release.mjs scripts/product-release-io.mjs scripts/
 COPY services/ services/
 COPY tsconfig.base.json ./
 COPY turbo.json ./

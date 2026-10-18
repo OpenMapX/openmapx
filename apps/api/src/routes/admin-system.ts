@@ -18,6 +18,25 @@ function hasOnlyBodyKeys(body: unknown, allowed: ReadonlySet<string>): boolean {
   );
 }
 
+const SYSTEM_UPDATE_BODY_KEYS = new Set([
+  "confirmation",
+  "createBackup",
+  "releaseId",
+  "expectedDigest",
+]);
+function isExactSystemUpdateBody(body: unknown): boolean {
+  if (!hasOnlyBodyKeys(body, SYSTEM_UPDATE_BODY_KEYS)) return false;
+  const value = body as Record<string, unknown> | undefined;
+  return (
+    value?.confirmation === SYSTEM_UPDATE_CONFIRMATION &&
+    typeof value.releaseId === "string" &&
+    /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(value.releaseId) &&
+    typeof value.expectedDigest === "string" &&
+    /^[a-f0-9]{64}$/.test(value.expectedDigest) &&
+    (value.createBackup === undefined || typeof value.createBackup === "boolean")
+  );
+}
+
 const HOST_MUTATING_JOB_TYPES = [
   "system.update",
   "system.diagnostics",
@@ -119,15 +138,43 @@ export async function adminSystemRoute(app: FastifyInstance): Promise<void> {
     request.adminSession = await requireAdmin(request);
   });
 
-  app.get("/admin/system", async (request, reply) => {
-    const identity = requestIdentity(request);
-    const { deployment, inspection } = await deploymentState(identity);
-    return reply.send({
-      deployment,
-      images: coreImages(inspection.services),
-      release: inspection.release,
-    });
-  });
+  app.get(
+    "/admin/system",
+    {
+      schema: {
+        response: {
+          200: {
+            type: "object",
+            properties: {
+              deployment: { type: "object", additionalProperties: true },
+              images: { type: "array", items: { type: "object", additionalProperties: true } },
+              release: {
+                type: "object",
+                additionalProperties: false,
+                properties: {
+                  configuredSelector: { type: "string" },
+                  currentReleaseId: { type: "string" },
+                  availableReleaseId: { type: "string" },
+                  currentVersion: { type: "string" },
+                  availableVersion: { type: "string" },
+                  availableDigest: { type: "string", pattern: "^[a-f0-9]{64}$" },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      const identity = requestIdentity(request);
+      const { deployment, inspection } = await deploymentState(identity);
+      return reply.send({
+        deployment,
+        images: coreImages(inspection.services),
+        release: inspection.release,
+      });
+    },
+  );
 
   app.post(
     "/admin/system/updates/check",
@@ -158,18 +205,61 @@ export async function adminSystemRoute(app: FastifyInstance): Promise<void> {
   );
 
   app.post<{
-    Body: { confirmation?: unknown; createBackup?: unknown };
+    Body: {
+      confirmation?: unknown;
+      createBackup?: unknown;
+      releaseId?: unknown;
+      expectedDigest?: unknown;
+    };
   }>(
     "/admin/system/updates/apply",
-    { preHandler: [systemMaintenanceLimit.preHandler()] },
+    {
+      // Fastify's default Ajv settings remove unknown keys and coerce scalar types.
+      // Inspect the original JSON first so the declared strict boundary is real.
+      preValidation: async (request, reply) => {
+        if (!isExactSystemUpdateBody(request.body))
+          return reply.code(400).send({
+            error:
+              "Provide confirmation, the exact checked releaseId/expectedDigest, and an optional boolean createBackup; other fields are unsupported",
+          });
+      },
+      preHandler: [systemMaintenanceLimit.preHandler()],
+      schema: {
+        body: {
+          type: "object",
+          additionalProperties: false,
+          required: ["confirmation", "releaseId", "expectedDigest"],
+          properties: {
+            confirmation: { type: "string", const: SYSTEM_UPDATE_CONFIRMATION },
+            createBackup: { type: "boolean" },
+            releaseId: { type: "string", pattern: "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$" },
+            expectedDigest: { type: "string", pattern: "^[a-f0-9]{64}$" },
+          },
+        },
+      },
+    },
     async (request, reply) => {
-      if (!hasOnlyBodyKeys(request.body, new Set(["confirmation", "createBackup"]))) {
+      if (
+        !hasOnlyBodyKeys(
+          request.body,
+          new Set(["confirmation", "createBackup", "releaseId", "expectedDigest"]),
+        )
+      ) {
         reply.status(400);
         return { error: "Request contains unsupported fields" };
       }
       if (request.body?.confirmation !== SYSTEM_UPDATE_CONFIRMATION) {
         reply.status(400);
         return { error: `confirmation must equal "${SYSTEM_UPDATE_CONFIRMATION}"` };
+      }
+      if (
+        typeof request.body?.releaseId !== "string" ||
+        !/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(request.body.releaseId) ||
+        typeof request.body?.expectedDigest !== "string" ||
+        !/^[a-f0-9]{64}$/.test(request.body.expectedDigest)
+      ) {
+        reply.status(400);
+        return { error: "Check a release and provide its exact releaseId and expectedDigest" };
       }
       if (
         request.body?.createBackup !== undefined &&
@@ -189,7 +279,12 @@ export async function adminSystemRoute(app: FastifyInstance): Promise<void> {
       const createBackup = request.body?.createBackup !== false;
       const jobId = await jobRunner.enqueue(
         "system.update",
-        { operation: "apply", createBackup },
+        {
+          operation: "apply",
+          createBackup,
+          releaseId: request.body.releaseId,
+          expectedDigest: request.body.expectedDigest,
+        },
         admin.user.id,
       );
       await writeAuditLog({
@@ -197,7 +292,11 @@ export async function adminSystemRoute(app: FastifyInstance): Promise<void> {
         targetType: "system",
         targetId: "openmapx",
         action: "system.update.apply",
-        details: { createBackup },
+        details: {
+          createBackup,
+          releaseId: request.body.releaseId,
+          expectedDigest: request.body.expectedDigest,
+        },
         request,
       });
       return { ok: true, jobId };

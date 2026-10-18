@@ -305,10 +305,10 @@ The historical mixed queue has been cleared without consuming its bumps. Private
    rebuilds images whose Docker build inputs changed since the last published
    release and reuses unchanged digests. All seven application digests pass the current
    vulnerability scan before publication. It publishes run-qualified release
-   tags (`<commit>-<run-id>-<attempt>`) plus SHA convenience aliases and the
-   complete release manifest, then advances and verifies all seven application `latest`
-   aliases. These compatibility aliases move independently. The final
-   `release-manifest:latest` update is the pointer for atomic release selection.
+   tags (`<commit>-<run-id>`) plus SHA convenience aliases and the
+   complete release manifest with its CI run/attempt receipt, then advances and verifies all seven application `main`
+   aliases. These development aliases move independently. The final
+   `release-manifest:main` update is the pointer for atomic release selection.
    Weekly scheduled CI forces a no-cache security refresh through the same gates.
    Images at least seven days old also refresh on the next release. Set the
    repository variable `OPENMAPX_FORCE_IMAGE_REBUILD=true` to force the next run

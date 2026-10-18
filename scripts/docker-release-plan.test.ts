@@ -161,18 +161,18 @@ describe("selective release planning", () => {
       `sha256:${"1".repeat(64)}`,
     );
   });
-  it("gives runs of the same commit distinct retry-stable identities and accepts older baselines", () => {
-    const first = createReleasePlan({ ...options, releaseId: `${revision}-123` });
+  it("gives producer attempts distinct identities and accepts older baselines", () => {
+    const first = createReleasePlan({ ...options, releaseId: `${revision}-124-1` });
     const next = createReleasePlan({
       ...options,
-      releaseId: `${revision}-124`,
+      releaseId: `${revision}-124-2`,
       previous: { ...baseline(), release: `${revision}-122-1` },
       force: true,
     });
     expect(next.release).not.toBe(first.release);
     expect(next.sourceRevision).toBe(first.sourceRevision);
     expect(next.images.every((image: { rebuild: boolean }) => image.rebuild)).toBe(true);
-    expect(() => createReleasePlan({ ...options, releaseId: `${revision}-124-2` })).toThrow();
+    expect(() => createReleasePlan({ ...options, releaseId: `${revision}-124-0` })).toThrow();
     expect(() => createReleasePlan({ ...options, releaseId: `${"c".repeat(40)}-124` })).toThrow();
   });
   it("does not rebuild application images for a docs edit", () => {

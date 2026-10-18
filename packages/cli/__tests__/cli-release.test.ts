@@ -19,6 +19,7 @@ import {
   ensureReleaseOverlay,
   type ReleaseDockerRunner,
   releaseStatusLines,
+  resolveReleaseManifest,
   selectRelease,
   touchesReleasePinnedServices,
   writeReleaseOverlay,
@@ -51,6 +52,9 @@ const manifestJson = JSON.stringify({
 
 function fakeDocker(manifest = manifestJson): ReleaseDockerRunner {
   return vi.fn(async (args: string[]) => {
+    if (args[0] === "pull")
+      return { stdout: `Digest: sha256:${"1".repeat(64)}`, stderr: "", exitCode: 0 };
+    if (args[0] === "image") return { stdout: `sha256:${"2".repeat(64)}`, stderr: "", exitCode: 0 };
     if (args[0] === "create") return { stdout: "f".repeat(64), stderr: "", exitCode: 0 };
     if (args[0] === "cp") {
       const { writeFileSync } = await import("node:fs");
@@ -89,12 +93,11 @@ describe("ensureReleaseOverlay", () => {
   it("never overwrites an existing overlay", async () => {
     temp = mkdtempSync(join(tmpdir(), "omx-release-"));
     const path = join(temp, "docker-compose.release.yml");
-    const { writeFileSync } = await import("node:fs");
-    writeFileSync(path, "services: {}\n");
+    writeReleaseOverlay(JSON.parse(manifestJson), path);
     const docker = fakeDocker();
     expect(await ensureReleaseOverlay({ docker, path })).toEqual({ status: "present", path });
     expect(docker).not.toHaveBeenCalled();
-    expect(readFileSync(path, "utf-8")).toBe("services: {}\n");
+    expect(readFileSync(path, "utf-8")).toContain("deadbeef");
   });
 
   it("reports an unpinned stack when the registry is unreachable", async () => {
@@ -144,11 +147,11 @@ describe("ensureReleaseOverlay with a disabled channel", () => {
     temp = mkdtempSync(join(tmpdir(), "omx-release-"));
     const path = join(temp, "docker-compose.release.yml");
     const docker = fakeDocker();
-    process.env.OPENMAPX_RELEASE_MANIFEST_IMAGE = "";
+    process.env.OPENMAPX_RELEASE = "local";
     try {
       expect(await ensureReleaseOverlay({ docker, path })).toEqual({ status: "disabled" });
     } finally {
-      delete process.env.OPENMAPX_RELEASE_MANIFEST_IMAGE;
+      delete process.env.OPENMAPX_RELEASE;
     }
     expect(docker).not.toHaveBeenCalled();
     expect(existsSync(path)).toBe(false);
@@ -159,17 +162,16 @@ describe("ensureReleaseOverlay with a disabled channel", () => {
     const path = join(temp, "docker-compose.release.yml");
     const forkManifest = manifestJson.replaceAll("ghcr.io/openmapx", "registry.example.org/fork");
     const docker = fakeDocker(forkManifest);
-    process.env.OPENMAPX_RELEASE_MANIFEST_IMAGE =
-      "registry.example.org/fork/release-manifest:latest";
+    process.env.OPENMAPX_RELEASE_MANIFEST_REPOSITORY = "registry.example.org/fork/release-manifest";
     try {
       const result = await ensureReleaseOverlay({ docker, path });
       expect(result.status).toBe("resolved");
     } finally {
-      delete process.env.OPENMAPX_RELEASE_MANIFEST_IMAGE;
+      delete process.env.OPENMAPX_RELEASE_MANIFEST_REPOSITORY;
     }
     expect(docker).toHaveBeenCalledWith([
       "pull",
-      "registry.example.org/fork/release-manifest:latest",
+      "registry.example.org/fork/release-manifest:main",
     ]);
     expect(readFileSync(path, "utf-8")).toContain("registry.example.org/fork/api@");
   });
@@ -217,7 +219,7 @@ describe("local release visibility", () => {
   it("distinguishes disabled resolution from an existing active overlay", () => {
     temp = mkdtempSync(join(tmpdir(), "omx-release-"));
     const path = join(temp, "docker-compose.release.yml");
-    vi.stubEnv("OPENMAPX_RELEASE_MANIFEST_IMAGE", "");
+    vi.stubEnv("OPENMAPX_RELEASE", "local");
     try {
       expect(releaseStatusLines(path).join("\n")).toContain("Release pinning disabled");
       writeReleaseOverlay(JSON.parse(manifestJson), path);
@@ -306,11 +308,11 @@ describe("clearReleaseSelection", () => {
       name,
       readFileSync(join(evidence, name), "utf8"),
     ]);
-    vi.stubEnv("OPENMAPX_RELEASE_MANIFEST_IMAGE", "");
+    vi.stubEnv("OPENMAPX_RELEASE", "local");
     try {
       expect(await clearReleaseSelection({ path })).toEqual({ path, cleared: true });
       expect(await clearReleaseSelection({ path })).toEqual({ path, cleared: false });
-      expect(process.env.OPENMAPX_RELEASE_MANIFEST_IMAGE).toBe("");
+      expect(process.env.OPENMAPX_RELEASE).toBe("local");
     } finally {
       vi.unstubAllEnvs();
     }
@@ -368,7 +370,7 @@ it("clears through the command without registry access even with a malformed cha
   const directory = join(temp, "infra", "docker");
   mkdirSync(directory, { recursive: true });
   const path = join(directory, "docker-compose.release.yml");
-  writeFileSync(path, "services: {}\n");
+  writeReleaseOverlay(JSON.parse(manifestJson), path);
   vi.stubEnv("OPENMAPX_ROOT_DIR", temp);
   vi.stubEnv("OPENMAPX_RELEASE_MANIFEST_IMAGE", "invalid");
   vi.stubEnv("PATH", "");
@@ -390,4 +392,38 @@ it("clears through the command without registry access even with a malformed cha
     exit.mockRestore();
     vi.unstubAllEnvs();
   }
+});
+
+it("extracts the manifest from the frozen local image ID after a mutable pointer moves", async () => {
+  const calls: string[][] = [];
+  const docker: ReleaseDockerRunner = async (args) => {
+    calls.push(args);
+    if (args[0] === "pull")
+      return { stdout: `Digest: sha256:${"1".repeat(64)}`, stderr: "", exitCode: 0 };
+    if (args[0] === "image") return { stdout: `sha256:${"2".repeat(64)}`, stderr: "", exitCode: 0 };
+    if (args[0] === "create") {
+      expect(args[1]).toBe(`sha256:${"2".repeat(64)}`);
+      return { stdout: "f".repeat(64), stderr: "", exitCode: 0 };
+    }
+    if (args[0] === "cp") writeFileSync(args[2], manifestJson);
+    return { stdout: "", stderr: "", exitCode: 0 };
+  };
+  expect((await resolveReleaseManifest(docker)).release).toBe("deadbeef");
+  expect(calls).toContainEqual([
+    "image",
+    "inspect",
+    "--format",
+    "{{.Id}}",
+    `ghcr.io/openmapx/release-manifest@sha256:${"1".repeat(64)}`,
+  ]);
+});
+
+it("rejects a malformed existing overlay without replacing it or reaching the registry", async () => {
+  temp = mkdtempSync(join(tmpdir(), "omx-invalid-overlay-"));
+  const path = join(temp, "docker-compose.release.yml");
+  writeFileSync(path, "services: {}\n");
+  const docker = fakeDocker();
+  await expect(ensureReleaseOverlay({ path, docker })).rejects.toThrow(/malformed/);
+  expect(readFileSync(path, "utf8")).toBe("services: {}\n");
+  expect(docker).not.toHaveBeenCalled();
 });

@@ -43,7 +43,12 @@ describe("agent-owned system maintenance", () => {
   });
 
   it("delegates backup, release application, and app-api replacement as one durable operation", async () => {
-    const ctx = context({ operation: "apply", createBackup: true });
+    const ctx = context({
+      operation: "apply",
+      createBackup: true,
+      releaseId: "release-checked",
+      expectedDigest: "a".repeat(64),
+    });
     await expect(handleSystemUpdateJob(ctx)).resolves.toEqual({
       operation: "apply",
       release: "release-123",
@@ -53,13 +58,17 @@ describe("agent-owned system maintenance", () => {
       ctx,
       {
         kind: "system.update",
-        releaseId: "release-123",
+        releaseId: "release-checked",
+        expectedDigest: "a".repeat(64),
         createBackup: true,
         backupId: "pre-update-job-1",
       },
       "admin-job.system.update",
     );
     expect(ctx.checkpoint).not.toHaveBeenCalled();
+    expect(
+      executeAdminOperation.mock.calls.some((call) => call[1].kind === "release.resolve"),
+    ).toBe(false);
   });
 
   it("uses the kind-only diagnostic operation", async () => {

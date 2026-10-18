@@ -25,7 +25,7 @@
   },
   "container": {
     "image": "ghcr.io/openmapx/api",
-    "tag": "latest",
+    "tag": "main",
     "expose": [3001],
     "envFile": [".env"],
     "environment": {

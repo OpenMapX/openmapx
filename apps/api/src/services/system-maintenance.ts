@@ -2,7 +2,12 @@ import { executeAdminJobOperation } from "./admin-job-ops";
 import type { JobContext } from "./job-runner";
 
 export async function handleSystemUpdateJob(ctx: JobContext): Promise<Record<string, unknown>> {
-  const payload = ctx.payload as { operation?: "check" | "apply"; createBackup?: boolean };
+  const payload = ctx.payload as {
+    operation?: "check" | "apply";
+    createBackup?: boolean;
+    releaseId?: string;
+    expectedDigest?: string;
+  };
   if (payload.operation === "check") {
     await ctx.setProgress(10);
     const release = await executeAdminJobOperation(
@@ -27,18 +32,20 @@ export async function handleSystemUpdateJob(ctx: JobContext): Promise<Record<str
   }
   if (payload.operation !== "apply") throw new Error("Unsupported system update operation");
 
-  const release = await executeAdminJobOperation(
-    ctx,
-    { kind: "release.resolve" },
-    "admin-job.release.resolve",
-  );
+  if (
+    !payload.releaseId ||
+    typeof payload.expectedDigest !== "string" ||
+    !/^[a-f0-9]{64}$/.test(payload.expectedDigest)
+  )
+    throw new Error("Check a release before applying it");
   await ctx.setProgress(10);
   const createBackup = payload.createBackup !== false;
   const result = await executeAdminJobOperation(
     ctx,
     {
       kind: "system.update",
-      releaseId: release.releaseId,
+      releaseId: payload.releaseId,
+      expectedDigest: payload.expectedDigest,
       createBackup,
       ...(createBackup ? { backupId: `pre-update-${ctx.jobId}` } : {}),
     },
