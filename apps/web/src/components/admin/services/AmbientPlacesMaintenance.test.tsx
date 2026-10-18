@@ -6,33 +6,71 @@ vi.mock("../shared/AdminToast", () => ({ useAdminToast: () => vi.fn() }));
 
 import { AmbientPlacesMaintenance } from "./AmbientPlacesMaintenance";
 
-afterEach(() => {
-  cleanup();
-  vi.unstubAllGlobals();
-});
+const clients: QueryClient[] = [];
+const generation = "11111111-1111-4111-8111-111111111111";
+const date = "2026-10-07T10:00:00.000Z";
+const idle = {
+  active: null,
+  previous: null,
+  building: false,
+  lastError: null,
+  progress: null,
+  candidate: null,
+};
+const checkpoint = {
+  phase: "osm",
+  processed: 2000,
+  batches: 1,
+  placeCount: 1999,
+  osmType: "node",
+  osmId: "2000",
+  gers: "",
+  osmProcessed: 2000,
+  overtureProcessed: 0,
+  osmCount: 1999,
+  overtureCount: 0,
+};
+const active = {
+  version: 2,
+  attributionPrecision: "captured-fields",
+  generation,
+  policyVersion: 2,
+  publishedAt: date,
+  placeCount: 42,
+  enabled: true,
+  region: { name: "Aachen", bounds: [5.9, 50.65, 6.3, 50.95] },
+  sources: {
+    osm: { region: "europe/germany", epoch: "osm-one", publishedAt: date, count: 42 },
+    overture: null,
+  },
+};
+function response(status: unknown, init?: unknown) {
+  return (init as RequestInit | undefined)?.method === "POST"
+    ? Response.json({ accepted: true }, { status: 202, headers: { "cache-control": "no-store" } })
+    : Response.json(status, { headers: { "cache-control": "no-store" } });
+}
 function view() {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+  });
+  clients.push(client);
   return render(
-    <QueryClientProvider
-      client={
-        new QueryClient({
-          defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
-        })
-      }
-    >
+    <QueryClientProvider client={client}>
       <AmbientPlacesMaintenance apiUrl="http://fixture" />
     </QueryClientProvider>,
   );
 }
+afterEach(() => {
+  cleanup();
+  clients.splice(0).forEach((client) => {
+    client.clear();
+  });
+  vi.unstubAllGlobals();
+});
+
 describe("ambient operator workflow", () => {
   it("publishes the fixed planet preset and can resume an interrupted candidate", async () => {
-    const generation = "11111111-1111-4111-8111-111111111111";
-    const fetch = vi.fn(async (_url: unknown, initValue?: unknown) => ({
-      ok: true,
-      json: async () =>
-        (initValue as RequestInit | undefined)?.method
-          ? { accepted: true }
-          : { active: null, previous: null, building: false, lastError: null },
-    }));
+    const fetch = vi.fn(async (_url, init) => response(idle, init));
     vi.stubGlobal("fetch", fetch);
     view();
     fireEvent.click(await screen.findByRole("radio", { name: "Planet" }));
@@ -50,23 +88,23 @@ describe("ambient operator workflow", () => {
       ),
     );
     cleanup();
-    fetch.mockImplementation(async (_url, initValue) => ({
-      ok: true,
-      json: async () =>
-        (initValue as RequestInit | undefined)?.method
-          ? { accepted: true }
-          : {
-              active: null,
-              previous: null,
-              building: false,
-              lastError: "Interrupted",
-              candidate: {
-                generation,
-                status: "failed",
-                checkpoint: { phase: "osm", processed: 2000, batches: 1, placeCount: 1999 },
-              },
-            },
-    }));
+    fetch.mockImplementation(async (_url, init) =>
+      response(
+        {
+          ...idle,
+          lastError: "Interrupted",
+          candidate: {
+            generation,
+            status: "failed",
+            checkpoint,
+            error: "Interrupted",
+            startedAt: date,
+            updatedAt: date,
+          },
+        },
+        init,
+      ),
+    );
     view();
     fireEvent.click(await screen.findByRole("button", { name: "Resume planet build" }));
     await waitFor(() =>
@@ -77,17 +115,12 @@ describe("ambient operator workflow", () => {
     );
     expect(screen.getByRole("button", { name: "Publish map snapshot" })).toBeDisabled();
     fireEvent.click(screen.getByRole("button", { name: "Discard candidate" }));
-    const dialog = await screen.findByRole("dialog");
-    expect(dialog).toHaveTextContent("Discard unpublished planet candidate?");
+    expect(await screen.findByRole("dialog")).toHaveTextContent(
+      "Discard unpublished planet candidate?",
+    );
   });
   it("publishes the fixed Germany preset and keeps staged progress separate from active coverage", async () => {
-    const fetch = vi.fn(async (_url: unknown, initValue?: unknown) => ({
-      ok: true,
-      json: async () =>
-        (initValue as RequestInit | undefined)?.method
-          ? { accepted: true }
-          : { active: null, previous: null, building: false, lastError: null },
-    }));
+    const fetch = vi.fn(async (_url, init) => response(idle, init));
     vi.stubGlobal("fetch", fetch);
     view();
     fireEvent.click(await screen.findByRole("radio", { name: "Germany" }));
@@ -109,16 +142,16 @@ describe("ambient operator workflow", () => {
   it("shows pending country rows without advertising a published country snapshot", async () => {
     vi.stubGlobal(
       "fetch",
-      vi.fn(async () => ({
-        ok: true,
-        json: async () => ({
-          active: null,
-          previous: null,
-          building: true,
-          lastError: null,
-          progress: { phase: "overture", processed: 6000, batches: 3, placeCount: 5200 },
-        }),
-      })),
+      vi.fn(async () =>
+        Response.json(
+          {
+            ...idle,
+            building: true,
+            progress: { phase: "overture", processed: 6000, batches: 3, placeCount: 5200 },
+          },
+          { headers: { "cache-control": "no-store" } },
+        ),
+      ),
     );
     view();
     expect(await screen.findByText(/5,200 staged places/)).toBeInTheDocument();
@@ -126,29 +159,7 @@ describe("ambient operator workflow", () => {
     expect(screen.getByRole("button", { name: "Publish map snapshot" })).toBeDisabled();
   });
   it("shows source versions and publishes the bounded Aachen preset", async () => {
-    const fetch = vi.fn(async (_url: unknown, initValue?: unknown) => ({
-      ok: true,
-      json: async () =>
-        (initValue as RequestInit | undefined)?.method
-          ? { accepted: true }
-          : {
-              active: {
-                generation: "generation-one",
-                policyVersion: 2,
-                publishedAt: "2026-10-07T10:00:00Z",
-                placeCount: 42,
-                enabled: true,
-                region: { name: "Aachen", bounds: [5.9, 50.65, 6.3, 50.95] },
-                sources: {
-                  osm: { epoch: "osm-one", publishedAt: "2026-10-07", count: 42 },
-                  overture: null,
-                },
-              },
-              previous: null,
-              building: false,
-              lastError: null,
-            },
-    }));
+    const fetch = vi.fn(async (_url, init) => response({ ...idle, active }, init));
     vi.stubGlobal("fetch", fetch);
     view();
     await screen.findByText(/osm-one/);
@@ -167,15 +178,12 @@ describe("ambient operator workflow", () => {
     );
   });
   it("shows a failed build and asks before rolling back the publication", async () => {
-    const fetch = vi.fn(async () => ({
-      ok: true,
-      json: async () => ({
-        active: null,
-        previous: "previous-id",
-        building: false,
-        lastError: "Overture conflation must be completed",
-      }),
-    }));
+    const fetch = vi.fn(async () =>
+      Response.json(
+        { ...idle, previous: generation, lastError: "Overture conflation must be completed" },
+        { headers: { "cache-control": "no-store" } },
+      ),
+    );
     vi.stubGlobal("fetch", fetch);
     view();
     await screen.findByText(/Overture conflation must be completed/);

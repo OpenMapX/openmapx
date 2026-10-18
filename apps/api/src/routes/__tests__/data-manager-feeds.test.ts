@@ -131,6 +131,32 @@ describe("GET /data-manager/transit/feeds", () => {
     expect(fakeDb.lastQuery).toEqual({ limit: 100, offset: 0 });
   });
 
+  it.each(["limit=no", "offset=-1", "limit=1.5"])(
+    "rejects malformed pagination %s before querying",
+    async (query) => {
+      const response = await app.inject({
+        method: "GET",
+        url: `/data-manager/transit/feeds?${query}`,
+        headers: { authorization: "Bearer test-token" },
+      });
+      expect(response.statusCode).toBe(400);
+      expect(fakeDb.callIndex).toBe(0);
+    },
+  );
+  it("keeps the feed limit ceiling for oversized valid requests", async () => {
+    const response = await app.inject({
+      method: "GET",
+      url: "/data-manager/transit/feeds?limit=900",
+      headers: { authorization: "Bearer test-token" },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(fakeDb.lastQuery.limit).toBe(500);
+  });
+  it("authenticates malformed queries before their shape validation", async () => {
+    const response = await app.inject("/data-manager/transit/feeds?limit=no");
+    expect(response.statusCode).toBe(401);
+    expect(fakeDb.callIndex).toBe(0);
+  });
   it("rejects unauthenticated requests with 401", async () => {
     const res = await app.inject({
       method: "GET",

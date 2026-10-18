@@ -1,4 +1,5 @@
 import { join, resolve } from "node:path";
+import { convertJsonSchemaTuplesToOpenApi31 } from "@openmapx/core/api-schema";
 import { buildDocument, serializeDocument } from "./build-document.js";
 import { collectCoreRoutes } from "./collect-core-routes.js";
 import { collectIntegrationRoutes } from "./collect-integration-routes.js";
@@ -12,14 +13,14 @@ export const DOCUMENT_PATH = join(REPO_ROOT, "apps", "api", "openapi.json");
  */
 export async function generateDocument(): Promise<string> {
   const core = await collectCoreRoutes();
-  return serializeDocument(
-    buildDocument({
-      corePaths: core.paths,
-      coreComponents: core.components,
-      coreAuth: core.auth,
-      integrationRoutes: collectIntegrationRoutes(REPO_ROOT),
-    }),
-  );
+  const document = buildDocument({
+    corePaths: core.paths,
+    coreComponents: core.components,
+    coreAuth: core.auth,
+    integrationRoutes: collectIntegrationRoutes(REPO_ROOT),
+  });
+  convertJsonSchemaTuplesToOpenApi31(document);
+  return serializeDocument(document);
 }
 
 /** Number of documented operations, for the CLI's summary line. */

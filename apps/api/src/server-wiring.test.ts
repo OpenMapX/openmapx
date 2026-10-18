@@ -2,6 +2,8 @@ import { get as httpGet } from "node:http";
 import type { AddressInfo } from "node:net";
 import { Writable } from "node:stream";
 import cors from "@fastify/cors";
+import { ApiClientError, createApiClient } from "@openmapx/core";
+import { getApiDataManagerTransitState, unwrapAdminResponse } from "@openmapx/core/api-admin-sdk";
 import Fastify, { type FastifyInstance } from "fastify";
 import pino from "pino";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -24,6 +26,7 @@ import { createSafePinoOptions } from "./utils/safe-log-fields.js";
 
 afterEach(() => {
   vi.unstubAllEnvs();
+  vi.unstubAllGlobals();
 });
 
 describe("trustProxyConfig", () => {
@@ -94,6 +97,58 @@ describe("uniformErrorHandler", () => {
 });
 
 describe("corsOptions", () => {
+  it("lets a cross-origin generated client retain rate-limit retry metadata", async () => {
+    const app = Fastify({ logger: false });
+    await app.register(cors, corsOptions(["https://web.example"]));
+    app.get("/api/data-manager/transit/state", async (_request, reply) =>
+      reply
+        .code(429)
+        .header("Retry-After", "7")
+        .send({ error: "Too many requests", retryAfter: 7 }),
+    );
+    vi.stubGlobal("fetch", async () => {
+      const response = await app.inject({
+        method: "GET",
+        url: "/api/data-manager/transit/state",
+        headers: { origin: "https://web.example" },
+      });
+      expect(response.headers["access-control-allow-origin"]).toBe("https://web.example");
+      expect(response.headers["access-control-allow-credentials"]).toBe("true");
+      // Fetch exposes only safelisted headers plus the server's explicit CORS list.
+      const visible = new Set([
+        "cache-control",
+        "content-language",
+        "content-length",
+        "content-type",
+        "expires",
+        "last-modified",
+        "pragma",
+        ...String(response.headers["access-control-expose-headers"] ?? "")
+          .toLowerCase()
+          .split(/,\s*/),
+      ]);
+      const headers = new Headers();
+      for (const [name, value] of Object.entries(response.headers)) {
+        if (visible.has(name) && value !== undefined) headers.set(name, String(value));
+      }
+      return new Response(response.body, { status: response.statusCode, headers });
+    });
+    try {
+      const response = await getApiDataManagerTransitState({
+        client: createApiClient({ baseUrl: "https://api.example", credentials: "include" }),
+      });
+      expect(response.status).toBe(429);
+      expect(() => unwrapAdminResponse(response)).toThrow(ApiClientError);
+      try {
+        unwrapAdminResponse(response);
+      } catch (error) {
+        expect(error).toMatchObject({ status: 429, retryAfterSeconds: 7 });
+      }
+    } finally {
+      await app.close();
+    }
+  });
+
   async function corsApp(): Promise<FastifyInstance> {
     const app = Fastify({ logger: false });
     await app.register(cors, corsOptions());

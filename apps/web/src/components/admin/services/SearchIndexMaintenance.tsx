@@ -11,31 +11,21 @@ import Paper from "@mui/material/Paper";
 import Stack from "@mui/material/Stack";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
+import { createApiClient } from "@openmapx/core";
+import * as sdk from "@openmapx/core/api-admin-sdk";
+import type { SearchIndexStatus } from "@openmapx/core/api-contracts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useLocale, useTranslations } from "next-intl";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { runAdminOperation } from "../operations/adminOperationsApi";
 import { useAdminToast } from "../shared/AdminToast";
 import { ConfirmDialog } from "../shared/ConfirmDialog";
 
-export interface SearchIndexStatus {
-  ok?: boolean;
-  error?: string;
-  region?: string;
-  status?: "building" | "ready" | "failed";
-  stale?: boolean;
-  building?: boolean;
-  epoch?: string | null;
-  placeCount?: number;
-  termCount?: number;
-  sourceFingerprint?: string | null;
-  publishedAt?: string | null;
-  lastError?: string | null;
-}
+export type { SearchIndexStatus };
 
 export function canBuildSearchIndex(
-  status: SearchIndexStatus | undefined,
+  status: Pick<SearchIndexStatus, "building"> | null | undefined,
   region: string,
   pending: boolean,
 ): boolean {
@@ -44,7 +34,7 @@ export function canBuildSearchIndex(
 
 export function resolveSearchIndexRegion(
   input: string,
-  status: SearchIndexStatus | undefined,
+  status: Pick<SearchIndexStatus, "region"> | null | undefined,
 ): string {
   return input.trim() || status?.region || "";
 }
@@ -54,18 +44,18 @@ export function SearchIndexMaintenance({ apiUrl }: { apiUrl: string }) {
   const locale = useLocale();
   const showToast = useAdminToast();
   const queryClient = useQueryClient();
+  const client = useMemo(
+    () => createApiClient({ baseUrl: apiUrl, credentials: "include" }),
+    [apiUrl],
+  );
   const [region, setRegion] = useState("");
   const [confirmOpen, setConfirmOpen] = useState(false);
-  const statusQuery = useQuery<SearchIndexStatus>({
+  const statusQuery = useQuery<SearchIndexStatus | null>({
     queryKey: ["admin", "search-index", "status"],
-    queryFn: async () => {
-      const response = await fetch(`${apiUrl}/api/data-manager/search-index/status`, {
-        credentials: "include",
-      });
-      const body = (await response.json().catch(() => ({}))) as SearchIndexStatus;
-      if (response.status === 404) return body;
-      if (!response.ok) throw new Error(body.error ?? t("loadFailed"));
-      return body;
+    queryFn: async ({ signal }) => {
+      const response = await sdk.getApiDataManagerSearchIndexStatus({ client, signal });
+      if (response.status === 404) return null;
+      return sdk.unwrapAdminResponse(response);
     },
     refetchInterval: (query) => (query.state.data?.building ? 10_000 : 60_000),
   });
@@ -124,10 +114,13 @@ export function SearchIndexMaintenance({ apiUrl }: { apiUrl: string }) {
 
       {statusQuery.isError && (
         <Alert severity="error" sx={{ mt: 1.5 }}>
-          {statusQuery.error instanceof Error ? statusQuery.error.message : t("statusUnavailable")}
+          {sdk.adminErrorMessage(
+            statusQuery.error,
+            statusQuery.error instanceof Error ? statusQuery.error.message : t("statusUnavailable"),
+          )}
         </Alert>
       )}
-      {status?.ok === false && (
+      {status === null && (
         <Alert severity="info" sx={{ mt: 1.5 }}>
           {t("notPublished")}
         </Alert>

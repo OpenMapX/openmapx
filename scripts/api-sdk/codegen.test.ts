@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { generateArtifacts, writeOrCheckArtifacts } from "./codegen.mjs";
+import { selectTaggedDocument } from "./config.mjs";
 import { validatedResponseTypes } from "./validated-response-types.mjs";
 
 const directories: string[] = [];
@@ -18,6 +19,51 @@ afterEach(async () => {
 });
 
 describe("SDK artifact gate", () => {
+  it("isolates family schemas while preserving recursive refs and security definitions", () => {
+    const document = {
+      paths: {
+        "/metadata": {
+          get: {
+            operationId: "metadata",
+            tags: ["runtime-metadata"],
+            responses: {
+              200: {
+                content: {
+                  "application/json": { schema: { $ref: "#/components/schemas/Metadata" } },
+                },
+              },
+            },
+          },
+        },
+        "/admin": {
+          post: {
+            operationId: "admin",
+            tags: ["data-manager-admin"],
+            responses: {
+              200: {
+                content: { "application/json": { schema: { $ref: "#/components/schemas/Admin" } } },
+              },
+            },
+          },
+        },
+      },
+      components: {
+        schemas: {
+          Metadata: { type: "string" },
+          Admin: { type: "object", properties: { next: { $ref: "#/components/schemas/Admin" } } },
+        },
+        securitySchemes: { session: { type: "apiKey", in: "cookie", name: "session" } },
+      },
+    };
+    const metadata = selectTaggedDocument(document, "runtime-metadata");
+    expect(Object.keys(metadata.paths)).toEqual(["/metadata"]);
+    expect(Object.keys(metadata.components.schemas)).toEqual(["Metadata"]);
+    expect(metadata.components.securitySchemes).toEqual(document.components.securitySchemes);
+    expect(
+      Object.keys(selectTaggedDocument(document, "data-manager-admin").components.schemas),
+    ).toEqual(["Admin"]);
+    expect(document.components.schemas).toHaveProperty("Admin");
+  });
   it("rejects unsupported response shapes instead of inventing validator bindings", () => {
     expect(() =>
       validatedResponseTypes({
@@ -54,7 +100,7 @@ describe("SDK artifact gate", () => {
     );
   });
 
-  it("generates deterministically and keeps only the approved family", async () => {
+  it("generates deterministic adopted families while preserving runtime metadata", async () => {
     const first = await generateArtifacts();
     expect(await generateArtifacts()).toEqual(first);
     const sdk = first.find(
@@ -66,8 +112,38 @@ describe("SDK artifact gate", () => {
     expect(sdk).toContain("status: 304");
     expect(sdk).toContain("schema: IntegrationsResponse");
     expect(sdk).not.toContain("getApiAdmin");
+    const admin = first.find(
+      (file: { filename: string }) => file.filename === "admin/data-manager-admin.generated.ts",
+    )?.content;
+    expect(admin).toContain("postApiDataManagerTransitSync");
+    expect(admin).toContain("status: 202");
+    expect(admin).toContain("status: 409");
+    expect(admin).toContain("status: 422");
+    expect(admin).toContain("encodeURIComponent");
+    const bindings = first.find(
+      (file: { filename: string }) => file.filename === "admin/operation-bindings.generated.ts",
+    )?.content;
+    expect(bindings).toContain('bindAdminOperation("getApiDataManagerTransitState")');
+    expect(bindings).not.toContain("/api/");
+    const metadata = first.filter(
+      (file: { filename: string }) => !file.filename.startsWith("admin/"),
+    );
+    expect(metadata).toHaveLength(6);
+    for (const file of metadata)
+      expect(file.content).toBe(
+        await readFile(
+          new URL(`../../packages/core/src/api/generated/${file.filename}`, import.meta.url),
+          "utf8",
+        ),
+      );
+    expect(
+      first
+        .filter((file: { filename: string }) => file.filename.startsWith("admin/"))
+        .map((file: { content: string }) => file.content)
+        .join("\n"),
+    ).not.toContain('from "zod');
     const content = first.map((file: { content: string }) => file.content).join("\n");
     expect(content).toContain("zod.lazy");
     expect(content).not.toContain("zod.unknown()");
-  }, 30_000);
+  }, 90_000);
 });

@@ -94,7 +94,7 @@ function isJsonMediaType(contentType: string | null): boolean {
   return essence === "application/json" || essence.endsWith("+json");
 }
 
-function parseRetryAfter(header: string | null): number | null {
+export function parseRetryAfter(header: string | null): number | null {
   if (!header) return null;
   const trimmed = header.trim();
   if (trimmed === "") return null;
@@ -188,8 +188,8 @@ export interface ApiRequestOptions {
 }
 
 export interface ApiResponseOptions extends ApiRequestOptions {
-  /** Bodyless protocol results that are valid outside the 2xx range. */
-  acceptedStatuses?: readonly number[];
+  /** SDK-owned status validation; `all` passes every response to the consumer. */
+  acceptedStatuses?: readonly number[] | "all";
 }
 
 /**
@@ -249,7 +249,7 @@ export class ApiClient {
     url: string,
     init: RequestInit,
     options: ApiRequestOptions,
-    consume: (response: Response) => Promise<T>,
+    consume: (response: Response, signal: AbortSignal) => Promise<T>,
   ): Promise<T> {
     const cfg = this.config();
     const controller = new AbortController();
@@ -283,7 +283,7 @@ export class ApiClient {
         credentials: cfg.credentials ?? "omit",
         signal: controller.signal,
       });
-      return await consume(response);
+      return await consume(response, controller.signal);
     } catch (error) {
       if (response) discardBody(response);
       if (controller.signal.aborted) {
@@ -298,17 +298,22 @@ export class ApiClient {
 
   /**
    * Shared SDK boundary. The consumer runs inside the same abort/deadline
-   * lifecycle as acquisition; returning Response early would lose that guard.
+   * lifecycle as acquisition; its second argument carries the effective signal
+   * for bounded readers. Returning Response early would lose that guard.
    */
   async request<T>(
     path: string,
     init: RequestInit,
-    consume: (response: Response) => Promise<T>,
+    consume: (response: Response, signal: AbortSignal) => Promise<T>,
     options: ApiResponseOptions = {},
   ): Promise<T> {
-    return this.send(this.buildUrl(path), init, options, async (response) => {
-      if (!options.acceptedStatuses?.includes(response.status)) await assertOk(response);
-      return consume(response);
+    return this.send(this.buildUrl(path), init, options, async (response, signal) => {
+      if (
+        options.acceptedStatuses !== "all" &&
+        !options.acceptedStatuses?.includes(response.status)
+      )
+        await assertOk(response);
+      return consume(response, signal);
     });
   }
 
