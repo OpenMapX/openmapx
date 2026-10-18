@@ -1972,6 +1972,111 @@ describe("production root-context Dockerfile discovery", () => {
   });
 
   it.each([
+    ["output", "> logs/result.txt"],
+    ["input with descriptor", "0<input.txt"],
+    ["append with descriptor", "12>> 'logs/output file.txt'"],
+    ["readwrite with descriptor", '3<>"./state file"'],
+    ["empty quoted targets", ">\"\">''"],
+    ["literal single-quoted expansion characters", ">'$literal`text*'"],
+    ["mixed adjacent redirects", '0<in 2>>"log file"<>state>out'],
+    ["target ending in digits before a descriptor", ">log1234>out"],
+    ["whitespace around targets", '<\t input.txt \t 2>>\t"log file"'],
+  ])("preserves static group redirection grammar: %s", (_name, redirection) => {
+    configureHiddenRootBuild(
+      [
+        "jobs:",
+        "  build:",
+        "    steps:",
+        "      - run: |",
+        `          { true; } ${redirection}`,
+        "          docker build --file docker/Hidden.Dockerfile .",
+      ].join("\n"),
+    );
+
+    expect(rootContextDockerfiles(root)).toEqual(new Set(["docker/Hidden.Dockerfile"]));
+    expect(violations().join("\n")).toContain("docker/Hidden.Dockerfile.dockerignore");
+  });
+
+  it.each([
+    ["missing target", ">"],
+    ["missing append target", ">>"],
+    ["missing readwrite target", "<>"],
+    ["extra unquoted word", ">out extra"],
+    ["glob target", ">*.log"],
+    ["escaped unquoted target", ">log\\ file"],
+    ["concatenated quoted target", '>"log"suffix'],
+    ["unquoted variable", ">$TARGET"],
+    ["double-quoted variable", '>"$TARGET"'],
+    ["command substitution", '>"$(echo log)"'],
+    ["legacy substitution", '>"`echo log`"'],
+    ["unterminated double quote", '>"log'],
+    ["unterminated single quote", ">'log"],
+    ["descriptor duplication", ">out 2>&1"],
+    ["here string", "<<<input"],
+    ["malformed operator", "><>out"],
+  ])("rejects unsupported group redirection grammar: %s", (_name, redirection) => {
+    configureHiddenRootBuild(
+      [
+        "jobs:",
+        "  build:",
+        "    steps:",
+        "      - run: |",
+        `          { true; } ${redirection}`,
+        "          docker build --file docker/Hidden.Dockerfile .",
+      ].join("\n"),
+    );
+
+    expect(() => rootContextDockerfiles(root)).toThrow();
+    expect(violations().length).toBeGreaterThan(0);
+  });
+
+  it.each([
+    ["successful group AND", "{ true; }", "&&", true],
+    ["successful group OR can follow redirect failure", "{ true; }", "||", true],
+    ["failed group AND", "{ false; }", "&&", false],
+    ["failed group OR", "{ false; }", "||", true],
+    ["terminating brace group AND", "{ exit 0; }", "&&", false],
+    ["terminating brace group OR can follow redirect failure", "{ exit 0; }", "||", true],
+    ["successful subshell AND", "( exit 0; )", "&&", true],
+    ["failed subshell AND", "( exit 1; )", "&&", false],
+  ])("preserves redirected group exit modeling: %s", (_name, group, gate, reachable) => {
+    configureHiddenRootBuild(
+      [
+        "jobs:",
+        "  build:",
+        "    steps:",
+        "      - run: |",
+        `          ${group} 2>>"log file" ${gate} docker build --file docker/Hidden.Dockerfile .`,
+      ].join("\n"),
+    );
+
+    expect(rootContextDockerfiles(root).has("docker/Hidden.Dockerfile")).toBe(reachable);
+    expect(violations().some((violation) => violation.includes("Hidden.Dockerfile"))).toBe(
+      reachable,
+    );
+  });
+
+  it("bounds group redirection scanning in an isolated process", () => {
+    configureSyntheticRepository();
+    const result = spawnSync(
+      process.execPath,
+      [
+        "--disable-warning=MODULE_TYPELESS_PACKAGE_JSON",
+        "--experimental-strip-types",
+        join(WORKSPACE_ROOT, "scripts/fixtures/docker-context-redirection-probe.ts"),
+        root,
+      ],
+      { encoding: "utf8", timeout: 10_000, killSignal: "SIGKILL" },
+    );
+
+    expect(result.stdout).toContain("finite redirects accepted\n");
+    expect(result.error, result.stdout).toBeUndefined();
+    expect(result.signal).toBeNull();
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stdout).toBe("finite redirects accepted\nmalformed redirects rejected\n");
+  }, 20_000);
+
+  it.each([
     ["echo", "echo diagnostic >&2"],
     ["printf", "printf '%s\\n' diagnostic >&2"],
   ])("accepts an exact stderr-only diagnostic before exact outputs: %s", (_name, diagnostic) => {
