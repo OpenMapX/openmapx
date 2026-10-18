@@ -9,6 +9,8 @@
   "workspaces": {
     ".": {
       "entry": [
+        // The Git pre-commit hook invokes this script directly.
+        "scripts/check-staged.mjs",
         // Nested workspace commands and an explicitly selected Vitest config.
         "scripts/discovery-eval/run.ts",
         "scripts/record-search-eval.mts",
