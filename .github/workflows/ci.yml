@@ -11,8 +11,11 @@ on:
   schedule:
     - cron: "23 8 * * *"
 
+# Key pull request runs by number: an event on a closed pull request (such as a
+# description edit after merge) reports the base branch as github.ref and would
+# otherwise cancel that branch's push run.
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number && format('pr-{0}', github.event.pull_request.number) || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
