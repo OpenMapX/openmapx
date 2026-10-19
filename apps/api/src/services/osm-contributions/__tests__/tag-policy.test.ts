@@ -158,6 +158,16 @@ describe("field validation", () => {
       { field: "openingHours", action: "set", value: "  Tu-Su 10:00-22:00  " },
     ]);
     expect(element.tags.opening_hours).toBe("Tu-Su 10:00-22:00");
+    for (const validValue of [
+      "Mo-Fr 08:00-18:00; Sa 09:00-14:00; Su,PH off",
+      "SH Mo-Fr 08:00-12:00",
+      "Mo-Fr (sunrise+01:00)-(sunset-00:30)",
+      "Mo-Fr 08:00-16:00/30",
+    ]) {
+      expect(() =>
+        apply([{ field: "openingHours", action: "set", value: validValue }]),
+      ).not.toThrow();
+    }
     expectRejection(
       [{ field: "openingHours", action: "set", value: "every other tuesday maybe" }],
       "INVALID_CHANGE",

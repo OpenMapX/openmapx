@@ -24,12 +24,14 @@ import {
 } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
+import { OpeningHoursControl } from "./OpeningHoursControl";
 import type { OsmContributionEvent, OsmDraft } from "./osmContributionDraft";
 
 const ERROR_KEY = {
   EMPTY: "fieldEmptyError",
   TOO_LONG: "fieldTooLongError",
   FIELD_DISABLED: "fieldDisabledError",
+  INVALID_SYNTAX: "fieldInvalidSyntaxError",
 } as const;
 
 interface Props {
@@ -203,6 +205,29 @@ function FieldControl({
           onUndo={() => dispatch({ type: "undoRemove", field })}
         />
       </FormControl>
+    );
+  }
+
+  if (descriptor.field === "openingHours") {
+    return (
+      <OpeningHoursControl
+        descriptor={descriptor}
+        draft={draft}
+        disabled={removed}
+        error={error}
+        helperText={
+          helper ?? `${t("currentValue")}: ${descriptor.currentValue ?? t("chooserEmptyValue")}`
+        }
+        dispatch={dispatch}
+        removeToggle={
+          <RemoveToggle
+            removed={removed}
+            hasValue={descriptor.currentValue !== null}
+            onRemove={() => dispatch({ type: "removeValue", field })}
+            onUndo={() => dispatch({ type: "undoRemove", field })}
+          />
+        }
+      />
     );
   }
 

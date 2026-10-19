@@ -28,10 +28,11 @@ import {
   type OsmFieldChange,
   type OsmNoteResult,
   type OsmScalarEditableField,
+  parseOsmOpeningHours,
 } from "@openmapx/core";
 
 /** Why a field's current input cannot become an operation. */
-export type OsmDraftFieldError = "EMPTY" | "TOO_LONG" | "FIELD_DISABLED";
+export type OsmDraftFieldError = "EMPTY" | "TOO_LONG" | "FIELD_DISABLED" | "INVALID_SYNTAX";
 
 type ScalarOperation =
   | { kind: "set"; value: string }
@@ -346,6 +347,12 @@ export function osmContributionReducer(
           return editing(state, {
             ...next,
             errors: { ...next.errors, [event.field]: "TOO_LONG" },
+          });
+        }
+        if (event.field === "openingHours" && !parseOsmOpeningHours(value).ok) {
+          return editing(state, {
+            ...next,
+            errors: { ...next.errors, [event.field]: "INVALID_SYNTAX" },
           });
         }
         if (currentValueOf(state.context, event.field) === value) {
