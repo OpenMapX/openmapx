@@ -1,6 +1,9 @@
 import { createNoopLogger } from "@openmapx/integration-framework/testing";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createEnturClient } from "../../../../../packages/entur-client/src/index";
+import {
+  createEnturClient,
+  createEnturGeocoderSources,
+} from "../../../../../packages/entur-client/src/index";
 import { createHttpClient } from "../../integration-clients";
 import { streamedJsonResponse } from "../../test/streamed-response.js";
 
@@ -63,11 +66,15 @@ async function loadModule() {
       nsr: "nsr",
       geocoder: "geocoder",
     },
-    contributors: {},
+    contributors: { "entur-geocoder-nsr": [] },
     isSourceAllowed: async () => true,
   });
   return mod.createEnturTransitProvider(client, new AbortController().signal, {
-    boundaryCountry: "NOR",
+    geocoderSources: createEnturGeocoderSources({
+      contributors: client.contributors,
+      isSourceAllowed: async () => true,
+    }),
+    boundaryCountry: "no",
     multiModal: "parent",
   });
 }
@@ -126,16 +133,23 @@ describe("Entur transit stop discovery", () => {
   it("uses the Entur geocoder for stop-name search and keeps NSR ids", async () => {
     mockFetch.mockResolvedValueOnce(
       mockOk({
+        type: "FeatureCollection",
+        metadata: {
+          query: { limit: 5, lang: "en" },
+          resultCount: 1,
+          timestamp: "2026-10-19T10:00:00Z",
+        },
         features: [
           {
-            geometry: { coordinates: [10.753051, 59.910357] },
+            type: "Feature",
+            geometry: { type: "Point", coordinates: [10.753051, 59.910357] },
             properties: {
               id: "NSR:StopPlace:59872",
-              source_id: "NSR:StopPlace:59872",
-              layer: "venue",
-              name: "Oslo S",
-              category: ["railStation", "onstreetBus"],
-              mode: [{ rail: null }, { bus: null }],
+              source: "nsr",
+              layer: "stopPlace",
+              names: { default: "Oslo S", display: "Oslo S, Oslo" },
+              stopPlaceTypes: ["railStation", "onstreetBus"],
+              transportModes: [{ mode: "rail" }, { mode: "bus" }],
             },
           },
         ],
@@ -159,14 +173,15 @@ describe("Entur transit stop discovery", () => {
         lng: 10.753051,
         modes: ["rail", "bus"],
         provider: "entur",
+        contributors: [],
       },
     ]);
 
     const [url] = mockFetch.mock.calls[0];
     const parsed = new URL(url);
-    expect(parsed.pathname).toBe("/geocoder/v1/autocomplete");
-    expect(parsed.searchParams.get("boundary.country")).toBe("NOR");
-    expect(parsed.searchParams.get("multiModal")).toBe("parent");
+    expect(parsed.pathname).toBe("/geocoder/v3/autocomplete");
+    expect(parsed.searchParams.get("countries")).toBe("no");
+    expect(parsed.searchParams.get("multimodal")).toBe("parent");
   });
 });
 

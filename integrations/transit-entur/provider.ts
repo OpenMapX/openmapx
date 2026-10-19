@@ -2,10 +2,18 @@ import type { DocumentTypeDecoration } from "@graphql-typed-document-node/core";
 import type { BBox } from "@openmapx/core";
 import { decodePolyline } from "@openmapx/core";
 import {
+  createEnturGeocoder,
+  createEnturGeocoderSources,
   type EnturClient,
   type EnturFamily,
+  type EnturGeocoderFeature,
+  type EnturGeocoderSources,
   EnturRequestError,
+  geocoderFeatureCoordinates,
+  geocoderFeatureIdentity,
+  geocoderFeatureModes,
   isEnturRequestError,
+  normalizeEnturGeocoderCountry,
 } from "@openmapx/entur-client";
 import type {
   AlertSeverity,
@@ -74,24 +82,6 @@ import {
 
 type EnturMultiModal = "parent" | "child" | "all";
 type BoardMode = "departures" | "arrivals" | "both";
-
-interface EnturFeatureCollection {
-  features?: EnturFeature[];
-}
-
-interface EnturFeature {
-  geometry?: {
-    coordinates?: [number, number];
-  };
-  properties?: {
-    id?: string;
-    source_id?: string;
-    layer?: string;
-    name?: string;
-    category?: string[];
-    mode?: Array<Record<string, string | null>>;
-  };
-}
 
 interface NsrTextValue {
   lang?: string | null;
@@ -683,31 +673,21 @@ function normalizeQuay(quay: QuayFieldsFragment | null | undefined): TransitStop
   };
 }
 
-function featureNativeId(feature: EnturFeature): string | undefined {
-  return feature.properties?.id ?? feature.properties?.source_id;
-}
-
-function featureToTransitStop(feature: EnturFeature): TransitStop | null {
-  const rawId = featureNativeId(feature);
-  const coordinates = feature.geometry?.coordinates;
-  if (
-    feature.properties?.layer !== "venue" ||
-    !rawId ||
-    !rawId.startsWith(NSR_PREFIX) ||
-    !coordinates ||
-    coordinates.length < 2
-  ) {
+function featureToTransitStop(feature: EnturGeocoderFeature): TransitStop | null {
+  const { nativeId: rawId, primaryScheme, ids } = geocoderFeatureIdentity(feature);
+  const coordinates = geocoderFeatureCoordinates(feature);
+  if (feature.properties.layer !== "stopPlace" || !rawId.startsWith(NSR_PREFIX) || !coordinates)
     return null;
-  }
   const [lng, lat] = coordinates;
-  if (!Number.isFinite(lng) || !Number.isFinite(lat)) return null;
   return {
     id: withEnturPrefix(rawId),
-    ...buildStopIdentity(rawId),
-    name: feature.properties?.name ?? rawId,
+    primaryScheme,
+    ids,
+    codes: [{ value: rawId, namespace: "nsr" }],
+    name: feature.properties.names.default,
     lat,
     lng,
-    modes: collectStopModes(undefined, feature.properties?.category, feature.properties?.mode),
+    modes: geocoderFeatureModes(feature),
     provider: "entur",
   };
 }
@@ -1917,10 +1897,23 @@ export function motisModesToEntur(
 export function createEnturTransitProvider(
   client: EnturClient,
   signal: AbortSignal,
-  options: { boundaryCountry?: string; multiModal?: EnturMultiModal } = {},
+  options: {
+    boundaryCountry?: string;
+    multiModal?: EnturMultiModal;
+    geocoderSources?: EnturGeocoderSources;
+  } = {},
 ) {
   const generationSignal = signal;
-  const boundaryCountry = options.boundaryCountry?.trim().toUpperCase() || "NOR";
+  const boundaryCountry = normalizeEnturGeocoderCountry(options.boundaryCountry);
+  const geocoderSources =
+    options.geocoderSources ??
+    createEnturGeocoderSources({
+      contributors: client.contributors,
+      isSourceAllowed: async () => {
+        throw new EnturRequestError("policy");
+      },
+    });
+  const geocoder = createEnturGeocoder(client, { policy: geocoderSources, timeoutMs: 8000 });
   const multiModal = options.multiModal ?? "parent";
   if (!["parent", "child", "all"].includes(multiModal))
     throw new TypeError("Invalid Entur multimodal filter");
@@ -1940,22 +1933,21 @@ export function createEnturTransitProvider(
 
   async function fetchGeocoderAutocomplete(
     text: string,
-    size: number,
-    signal?: AbortSignal,
-  ): Promise<EnturFeature[]> {
-    const url = new URL("https://entur.invalid/autocomplete");
-    url.searchParams.set("text", text);
-    url.searchParams.set("size", String(size));
-    if (boundaryCountry) {
-      url.searchParams.set("boundary.country", boundaryCountry);
-    }
-    url.searchParams.set("multiModal", multiModal);
-    const data = await client.getJson<EnturFeatureCollection>(
-      "geocoder",
-      `${url.pathname}${url.search}`,
-      signal ? AbortSignal.any([generationSignal, signal]) : generationSignal,
+    limit: number,
+    callerSignal?: AbortSignal,
+  ): Promise<EnturGeocoderFeature[]> {
+    const result = await geocoder.autocomplete(
+      {
+        q: text,
+        limit,
+        layers: ["stopPlace"],
+        sources: ["nsr"],
+        ...(boundaryCountry ? { countries: [boundaryCountry] } : {}),
+        multimodal: multiModal,
+      },
+      callerSignal ? AbortSignal.any([generationSignal, callerSignal]) : generationSignal,
     );
-    return data.features ?? [];
+    return result.features;
   }
 
   async function fetchNsrRecord<T>(path: string): Promise<T> {
@@ -2132,7 +2124,10 @@ export function createEnturTransitProvider(
   ): Promise<TransitStop[]> {
     const features = await fetchGeocoderAutocomplete(query, Math.min(limit, 20), signal);
     return features
-      .map((feature) => featureToTransitStop(feature))
+      .map((feature): TransitStop | null => {
+        const stop = featureToTransitStop(feature);
+        return stop ? { ...stop, contributors: geocoderSources.contributorsFor(feature) } : null;
+      })
       .filter((stop): stop is TransitStop => stop !== null)
       .slice(0, limit);
   }
@@ -2775,7 +2770,7 @@ export function createEnturTransitProvider(
   }
   return Object.freeze({
     isEnturTransitAvailable: owned(isEnturTransitAvailable),
-    searchByName: owned(searchByName, "geocoder", (args) => args[2]),
+    searchByName: owned(searchByName, undefined, (args) => args[2]),
     getStopsNearby: owned(getStopsNearby, "journeyPlanner"),
     getStop: owned(getStop, "journeyPlanner"),
     getStopInfrastructure: owned(getStopInfrastructure, "nsr"),

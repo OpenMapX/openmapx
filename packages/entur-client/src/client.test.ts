@@ -85,9 +85,9 @@ describe("Entur host adapter", () => {
     await client.graphQl("vehicles", HealthCheckDocument, { id: "x" }, signal());
     expect(f.calls[1]?.url).toBe("https://api.entur.io/realtime/v2/vehicles/graphql");
     f.setResponse({ status: 200, headers: {}, body: '{"features":[]}' });
-    await client.getJson("geocoder", "/autocomplete?text=Oslo", signal());
+    await client.getJson("geocoder", "/v3/autocomplete?q=Oslo", signal());
     await client.getJson("nsr", "/stop-places/NSR:StopPlace:1", signal());
-    expect(f.calls[2]?.url).toBe("https://api.entur.io/geocoder/v1/autocomplete?text=Oslo");
+    expect(f.calls[2]?.url).toBe("https://api.entur.io/geocoder/v3/autocomplete?q=Oslo");
     expect(f.calls[3]?.url).toBe(
       "https://api.entur.io/stop-places/v1/read/stop-places/NSR:StopPlace:1",
     );

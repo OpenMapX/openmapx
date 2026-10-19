@@ -18,9 +18,14 @@
       "dataReceived": "Haltestellen- und Bahnsteigdatensätze mit Koordinaten, Namen, Verkehrsmitteln, Bahnsteigcodes, Einschränkungen der Barrierefreiheit, Ausstattung, Parkmöglichkeiten und Tarifzonendetails"
     },
     "entur-geocoder": {
-      "purpose": "Suche nach norwegischen ÖPNV-Haltestellen nach Namen über die Autovervollständigung des Entur Geocoder",
-      "dataSent": "Suchtext, Ergebnislimit, optionaler Norwegen-Filter, Modus für multimodale Haltestellen und ET-Client-Name-Header",
-      "dataReceived": "Passende Haltestellennamen, Koordinaten, Haltestellenkennungen, Verkehrsmittel und übergeordnete Haltestellenreferenzen"
+      "purpose": "Namenssuche nach ÖPNV-Haltestellen über Entur Geocoder v3",
+      "dataSent": "Suchtext, Ergebnislimit, stopPlace-Layer und NSR-Quellenfilter, optionales kleingeschriebenes ISO2-Land, Multimodal-Modus und ET-Client-Name-Header",
+      "dataReceived": "Native GeoJSON-Features mit strukturierten Namen, Koordinaten, NSR-IDs, Haltestellentypen, Verkehrsmitteln und Datenquelle"
+    },
+    "entur-geocoder-nsr": {
+      "purpose": "Bereitstellung von Entur National Stop Register geocoder data über Entur Geocoder v3",
+      "dataSent": "Keine direkte Anfrage an diesen Datenlieferanten; Suchtext, Ergebnislimit sowie Länder-, Layer-, Quellen- und Multimodal-Filter werden an die Entur-API gesendet",
+      "dataReceived": "Native Features von Entur National Stop Register geocoder data mit Namen, Koordinaten, Kennungen und verfügbaren strukturierten Metadaten"
     }
   }
 }

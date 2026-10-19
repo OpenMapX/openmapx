@@ -51,7 +51,7 @@ const DEFAULTS: Required<EnturConfig> = {
   journeyPlannerEndpoint: "https://api.entur.io/journey-planner/v3/graphql",
   vehiclesEndpoint: "https://api.entur.io/realtime/v2/vehicles/graphql",
   nsrEndpoint: "https://api.entur.io/stop-places/v1/read",
-  geocoderEndpoint: "https://api.entur.io/geocoder/v1",
+  geocoderEndpoint: "https://api.entur.io/geocoder",
 };
 // Explicit non-shared observation bound; shared provider delays retain their safe full duration.
 const MAX_LOCAL_COOLDOWN_MS = 24 * 60 * 60 * 1000;

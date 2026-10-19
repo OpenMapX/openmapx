@@ -28,8 +28,9 @@
       "boundaryCountry": {
         "type": "string",
         "title": "Boundary country",
-        "description": "Optional ISO 3166-1 alpha-3 country filter applied to stop search requests. Defaults to NOR.",
-        "default": "NOR"
+        "description": "One lowercase ISO 3166-1 alpha-2 country filter. Defaults to no; an explicit empty string disables country scoping.",
+        "default": "no",
+        "pattern": "^([a-z]{2})?$"
       },
       "multiModal": {
         "type": "string",
@@ -41,7 +42,7 @@
       "geocoderEndpoint": {
         "type": "string",
         "title": "Geocoder endpoint",
-        "description": "Base URL of the Entur geocoder API. Defaults to the public Entur endpoint.",
+        "description": "Unversioned Entur Geocoder service base URL, for example https://api.entur.io/geocoder. Native /v3 operation paths are appended.",
         "format": "url"
       },
       "journeyPlannerEndpoint": {
@@ -75,10 +76,6 @@
   },
   "dataSources": [
     {
-      "sourceId": "entur-geocoder",
-      "name": "Entur Geocoder",
-      "url": "https://developer.entur.org/pages-geocoder-intro/",
-      "attribution": "Inneholder data under Norsk lisens for offentlige data (NLOD) tilgjengeliggjort av Entur AS.",
       "commercialUse": "yes",
       "providerCountry": "NO",
       "providerPrivacyUrl": "https://om.entur.no/personvern/",
@@ -86,12 +83,62 @@
       "personalData": false,
       "cookies": false,
       "dpaAvailable": false,
+      "reviewedAt": "2026-10-19",
+      "sourceId": "entur-geocoder",
+      "name": "Entur Geocoder API",
+      "url": "https://developer.entur.no/docs/open-services/geocoder",
+      "attribution": "Geocoder service provided by Entur",
+      "owner": "Entur AS",
+      "termsUrl": "https://developer.entur.no/terms-of-service",
+      "dataUseClass": "attribution",
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "service",
+            "subject": "Entur Geocoder API access",
+            "license": {
+              "kind": "custom",
+              "namespace": "openmapx:entur",
+              "id": "LicenseRef-Entur-API-Terms",
+              "name": "Entur API terms",
+              "url": "https://developer.entur.no/terms-of-service"
+            },
+            "conditions": [
+              "Identify the application with ET-Client-Name and comply with fair use and service rate limits."
+            ]
+          }
+        ],
+        "declarations": [
+          {
+            "text": "Entur API terms",
+            "url": "https://developer.entur.no/terms-of-service"
+          }
+        ]
+      }
+    },
+    {
+      "commercialUse": "yes",
+      "providerCountry": "NO",
+      "providerPrivacyUrl": "https://om.entur.no/personvern/",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false,
+      "reviewedAt": "2026-10-19",
+      "sourceId": "entur-geocoder-nsr",
+      "name": "Entur National Stop Register geocoder data",
+      "url": "https://developer.entur.no/docs/open-services/geocoder",
+      "attribution": "Inneholder data under Norsk lisens for offentlige data (NLOD) tilgjengeliggjort av Entur AS.",
+      "owner": "Entur AS",
+      "termsUrl": "https://data.norge.no/nlod/en/2.0",
+      "dataUseClass": "attribution",
       "licensing": {
         "version": 1,
         "bindings": [
           {
             "scope": "data",
-            "subject": "Entur Geocoder material",
+            "subject": "Entur National Stop Register geocoder data dataset",
             "license": {
               "kind": "spdx",
               "expression": "NLOD-2.0",

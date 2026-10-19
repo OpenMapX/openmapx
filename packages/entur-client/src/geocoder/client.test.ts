@@ -1,6 +1,7 @@
 import type { HttpClient, ResponseOptions } from "@openmapx/integration-framework";
 import { afterEach, describe, expect, expectTypeOf, it, vi } from "vitest";
 import { createEnturClient } from "../client";
+import { EnturRequestError } from "../errors";
 import { createEnturGeocoder, type EnturGeocoder, type EnturGeocoderPolicy } from "./client";
 import { autocomplete as rawAutocomplete } from "./generated/client";
 import { enturGeocoderRequest } from "./transport";
@@ -384,6 +385,55 @@ describe("bounded generated Entur Geocoder", () => {
     expect(f.calls[0]?.options.signal?.aborted).toBe(false);
     await Promise.all([assertion, vi.advanceTimersByTimeAsync(1)]);
     expect(f.calls[0]?.options.signal?.aborted).toBe(true);
+  });
+  it("rechecks API permission after supplier publication checks", async () => {
+    const f = fixture();
+    let finalSupplierCheck = false;
+    let checks = 0;
+    const assertSourceAllowed = vi.fn(async () => {
+      if (finalSupplierCheck) throw new EnturRequestError("policy");
+    });
+    const client = { ...f.client, assertSourceAllowed };
+    const policy: EnturGeocoderPolicy = {
+      allowedSources: async () => {
+        if (++checks === 2) finalSupplierCheck = true;
+        return ["nsr"];
+      },
+      assertLookupAllowed: async () => undefined,
+    };
+    await expect(
+      createEnturGeocoder(client, { policy }).autocomplete({ q: "Oslo" }, signal()),
+    ).rejects.toMatchObject({ kind: "policy" });
+    expect(assertSourceAllowed).toHaveBeenCalledOnce();
+  });
+  it.each([false, true])(
+    "bounds final API policy and preserves caller cancellation: %s",
+    async (callerAborts) => {
+      vi.useFakeTimers();
+      const f = fixture();
+      const caller = new AbortController();
+      const reason = new Error("caller left during API publication check");
+      const assertSourceAllowed = vi.fn(() => new Promise<void>(() => {}));
+      const client = { ...f.client, assertSourceAllowed };
+      const pending = createEnturGeocoder(client, { timeoutMs: 40 }).autocomplete(
+        { q: "Oslo" },
+        caller.signal,
+      );
+      const assertion = expect(pending).rejects.toMatchObject(
+        callerAborts ? { kind: "abort", cause: reason } : { kind: "timeout" },
+      );
+      await vi.advanceTimersByTimeAsync(10);
+      expect(assertSourceAllowed).toHaveBeenCalledOnce();
+      if (callerAborts) caller.abort(reason);
+      await vi.advanceTimersByTimeAsync(30);
+      await assertion;
+    },
+  );
+  it("rejects an injected client missing the final API policy authority", () => {
+    const f = fixture();
+    expect(() =>
+      createEnturGeocoder({ ...f.client, assertSourceAllowed: undefined } as never),
+    ).toThrow();
   });
   it("requires caller signals and exposes no raw operation authority in its types", () => {
     expectTypeOf<Parameters<typeof createEnturGeocoder>[1]>().toEqualTypeOf<

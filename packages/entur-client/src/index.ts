@@ -19,3 +19,16 @@ export type {
   EnturGeocoderSource,
 } from "./geocoder/client";
 export { createEnturGeocoder } from "./geocoder/client";
+
+export {
+  geocoderFeatureCoordinates,
+  geocoderFeatureIdentity,
+  geocoderFeatureModes,
+} from "./geocoder/features";
+export {
+  createEnturGeocoderSources,
+  ENTUR_GEOCODER_SUPPLIER_SOURCE_IDS,
+  type EnturGeocoderSources,
+  enturGeocoderCoverage,
+  normalizeEnturGeocoderCountry,
+} from "./geocoder/sources";

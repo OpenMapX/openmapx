@@ -97,6 +97,7 @@ export function createEnturGeocoder(
   if (
     !client ||
     typeof client.getJson !== "function" ||
+    typeof client.assertSourceAllowed !== "function" ||
     !Number.isSafeInteger(timeoutMs) ||
     timeoutMs <= 0 ||
     timeoutMs > 8000
@@ -199,6 +200,9 @@ export function createEnturGeocoder(
           ),
           signal,
         );
+      // Supplier/lookup checks can await after the transport's own API guard.
+      // Revalidate API authority at this publication boundary within our deadline.
+      await bounded(client.assertSourceAllowed("geocoder", signal), signal);
       checkDeadline();
       return result;
     } catch (error) {
