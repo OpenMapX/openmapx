@@ -106,7 +106,15 @@
             },
             "conditions": [
               "Identify the application with ET-Client-Name and comply with fair use and service rate limits."
-            ]
+            ],
+            "attribution": {
+              "placement": "details",
+              "surfaces": ["map", "content", "image"],
+              "basis": "provider-terms",
+              "reviewedAt": "2026-10-19",
+              "evidenceUrls": ["https://developer.entur.no/terms-of-service"],
+              "reason": "Entur's API terms require application identification and compliance with fair use and rate limits, not end-user display of API access instructions. Keep these service conditions and terms in directly accessible details on map, content and image surfaces; supplier data attribution remains governed by each separate data binding."
+            }
           }
         ],
         "declarations": [
