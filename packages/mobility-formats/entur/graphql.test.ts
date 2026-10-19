@@ -31,4 +31,15 @@ describe("pure Entur GraphQL envelopes", () => {
     }
     expect(decodeGraphQlEnvelope('{"data":{},"errors":[]}')).toEqual({});
   });
+  it.each([{ data: false }, { data: 0 }, { data: "malformed" }, { data: [] }])(
+    "rejects a non-object or array operation data root: %j",
+    (envelope) => {
+      expect(() => decodeGraphQlEnvelope(JSON.stringify(envelope))).toThrow(
+        "Entur returned an invalid GraphQL envelope",
+      );
+    },
+  );
+  it("accepts an empty operation data object without full result validation", () => {
+    expect(decodeGraphQlEnvelope('{"data":{}}')).toEqual({});
+  });
 });

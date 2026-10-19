@@ -16,7 +16,7 @@ export class GraphQlEnvelopeError extends Error {
   }
 }
 
-/** Checks the envelope only, not the complete generated operation result. */
+/** Checks the envelope and object data root, not the complete generated operation result. */
 export function decodeGraphQlEnvelope<TResult>(text: string): TResult {
   let value: unknown;
   try {
@@ -31,6 +31,7 @@ export function decodeGraphQlEnvelope<TResult>(text: string): TResult {
     (!Array.isArray(envelope.errors) || envelope.errors.length > 0)
   )
     throw new GraphQlEnvelopeError();
-  if (envelope.data === undefined || envelope.data === null) throw new GraphQlEnvelopeError();
+  if (envelope.data === null || typeof envelope.data !== "object" || Array.isArray(envelope.data))
+    throw new GraphQlEnvelopeError();
   return envelope.data as TResult;
 }

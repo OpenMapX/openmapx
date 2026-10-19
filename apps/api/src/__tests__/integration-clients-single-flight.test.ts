@@ -920,6 +920,37 @@ describe("Entur national snapshot through real host cache", () => {
     expect(fetch).toHaveBeenCalledTimes(2);
     await a.retire();
   });
+  it.each([{ data: false }, { data: 0 }, { data: "malformed" }, { data: [] }])(
+    "rejects malformed GraphQL data without caching it and acquires a later valid snapshot: %j",
+    async (envelope) => {
+      const fetch = vi
+        .fn()
+        .mockResolvedValueOnce(Response.json(envelope))
+        .mockResolvedValueOnce(Response.json({ data: { situations: [] } }));
+      vi.stubGlobal("fetch", fetch);
+      const a = enturContext("live", "a");
+      a.setup();
+      try {
+        await expect(
+          required(a.ctx.registered.realtime[0].getAlertsForBbox)(bbox),
+        ).rejects.toMatchObject({ kind: "graphql" });
+        expect(
+          [...sharedValues.keys()].filter((key) => key.startsWith("int:entur-runtime:")),
+        ).toHaveLength(0);
+        const valid = await required(a.ctx.registered.realtime[0].getAlertsForBbox)(bbox);
+        expect(valid.data).toEqual([]);
+        expect(
+          [...sharedValues.keys()].filter((key) => key.startsWith("int:entur-runtime:")),
+        ).toHaveLength(1);
+        const hit = await required(a.ctx.registered.realtime[0].getAlertsForBbox)([10, 59, 11, 60]);
+        expect(hit.data).toEqual([]);
+        expect(hit.freshness.fetchedAt).toBe(valid.freshness.fetchedAt);
+        expect(fetch).toHaveBeenCalledTimes(2);
+      } finally {
+        await a.retire();
+      }
+    },
+  );
   it("administrative clear during fill starts a fresh acquisition and fences the old cache write", async () => {
     const gate = deferred();
     const fetch = vi
