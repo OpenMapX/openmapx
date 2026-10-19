@@ -36,8 +36,15 @@ official [programmatic API](https://the-guild.dev/graphql/codegen/docs/advanced/
 and [string document mode](https://the-guild.dev/graphql/codegen/plugins/presets/preset-client#documentmode).
 String documents retain the existing HTTP transport and its JSON request bodies;
 no GraphQL runtime client is required. Generated types are compile-time contracts,
-not runtime validators for arbitrary provider JSON. HTTP ownership, credentials,
-source receipts, error handling and domain mapping remain in the integration.
+not runtime validators for arbitrary provider JSON. The private
+[`@openmapx/entur-client`](../../entur-client/README.md) owns host HTTP transport,
+immutable configuration/receipts, shared admission, observed provider cooldowns
+and bounded errors. It validates the GraphQL envelope, including rejecting
+partial/error responses, rather than every selected runtime field. Integration
+setups own client/provider lifetimes, source-policy callbacks, domain mapping and
+result publication. Each Entur integration remains independently configurable;
+there is no shared mutable runtime facade. No additional GraphQL runtime library
+is required.
 The operation selections use the current situation `affects` and
 `validityPeriods` fields from the pinned journey-planner schema.
 
