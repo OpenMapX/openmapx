@@ -100,7 +100,6 @@ export {
 } from "./release-authority-inventory";
 export {
   canonicalReleaseManifest,
-  DEFAULT_RELEASE_MANIFEST_IMAGE,
   DEFAULT_RELEASE_MANIFEST_REPOSITORY,
   normalizeReleaseSelection,
   PRIVACY_BACKUP_COLLECTOR_IMAGE_ENV,
@@ -112,7 +111,6 @@ export {
   parseReleaseManifest,
   RELEASE_IMAGE_NAMES,
   RELEASE_MANIFEST_CONTAINER_PATH,
-  RELEASE_MANIFEST_IMAGE_ENV,
   RELEASE_PINNED_SERVICE_IDS,
   RELEASE_REPOSITORY_ENV,
   RELEASE_SELECTOR_ENV,
