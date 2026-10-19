@@ -1162,7 +1162,7 @@ importers:
         version: link:../../packages/integration-framework
       geo-tz:
         specifier: ^8.1.9
-        version: 8.1.9
+        version: 8.1.10
 
   integrations/knowledge-tides-canada:
     dependencies:
@@ -8951,8 +8951,8 @@ packages:
     resolution: {integrity: sha512-3hN7NaskYvMDLQY55gnW3NQ+mesEAepTqlg+VEbj7zzqEMBVNhzcGYYeqFo/TlYz6eQiFcp1HcsCZO+nGgS8zg==}
     engines: {node: '>=6.9.0'}
 
-  geo-tz@8.1.9:
-    resolution: {integrity: sha512-J5hjHEJNJGc7D9WLz9mYJmkWgdCXrn9/rX74/qTdir7lHypz2Xq8aXKzDKbvg189nNtwMYZGsvnB9GoVt9ejxw==}
+  geo-tz@8.1.10:
+    resolution: {integrity: sha512-o7P79JIc9it6V0Nl1h3DlPJ12LMCnpuR0ePmJ+TqNggmGF+7snk6+7Q714te8XAGGvOiY2cJGxRiN/cA5xwFVw==}
     engines: {node: '>=16'}
 
   geobuf@3.0.2:
@@ -18640,7 +18640,7 @@ snapshots:
 
   gensync@1.0.0-beta.2: {}
 
-  geo-tz@8.1.9:
+  geo-tz@8.1.10:
     dependencies:
       '@turf/boolean-point-in-polygon': 7.4.0
       '@turf/helpers': 7.4.0
