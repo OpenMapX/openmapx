@@ -3,15 +3,16 @@ import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 import { expect, it, vi } from "vitest";
 
 vi.mock("./provider.js", () => ({
-  setEnturTransitConfig: () => {},
-  getStopInfrastructure: async () => ({
-    sourceId: "NSR:StopPlace:337",
-    canonicalStop: { id: "entur:337" },
-    focusLevel: "parent_stop",
-    platforms: [{ id: "entur:quay" }],
+  createEnturTransitProvider: () => ({
+    getStopInfrastructure: async () => ({
+      sourceId: "NSR:StopPlace:337",
+      canonicalStop: { id: "entur:337" },
+      focusLevel: "parent_stop",
+      platforms: [{ id: "entur:quay" }],
+    }),
+    getDepartures: async () => [{ tripId: "entur:trip" }],
+    getVehiclePositions: async () => [{ id: "entur:vehicle" }],
   }),
-  getDepartures: async () => [{ tripId: "entur:trip" }],
-  getVehiclePositions: async () => [{ id: "entur:vehicle" }],
 }));
 
 import { setup } from "./index";

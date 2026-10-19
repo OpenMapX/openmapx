@@ -1,35 +1,67 @@
+import { createEnturClient } from "@openmapx/entur-client";
 import {
-  defineTransitProvider,
+  captureTransitContributors,
   type IntegrationContext,
   resolveIntegrationContributors,
+  snapshotContributors,
 } from "@openmapx/integration-framework";
-import * as entur from "./provider.js";
+import { freshnessNow } from "@openmapx/mobility-core/freshness";
+import { withAttribution } from "@openmapx/mobility-core/result";
+import { transitDataContributors } from "@openmapx/mobility-core/transit-contributors";
+import { createEnturTransitProvider } from "./provider.js";
 
 const NORWAY_BBOX: [number, number, number, number] = [4.0, 57.0, 32.0, 71.5];
 
-const { attribution, wrap: wrapSource, wrapRT: wrapRealtimeSource, init } = defineTransitProvider();
-
 export function setup(ctx: IntegrationContext): void {
-  init(ctx);
-  const wrap = <T>(data: T) => wrapSource(data, ["entur-journey-planner"]);
-  const wrapRT = <T>(data: T) => wrapRealtimeSource(data, ["entur-journey-planner"]);
-  ctx.onActivate(() => {
-    entur.setEnturTransitConfig({
-      geocoderEndpoint: ctx.config.geocoderEndpoint as string | undefined,
-      journeyPlannerEndpoint: ctx.config.journeyPlannerEndpoint as string | undefined,
-      vehiclesEndpoint: ctx.config.vehiclesEndpoint as string | undefined,
-      nsrEndpoint: ctx.config.nsrEndpoint as string | undefined,
-      clientName: ctx.config.clientName as string | undefined,
-      boundaryCountry: ctx.config.boundaryCountry as string | undefined,
-      multiModal: ctx.config.multiModal as "parent" | "child" | "all" | undefined,
-    });
+  const { id, http, upstreamRuntime } = ctx;
+  const generation = new AbortController();
+  const sourceIds = {
+    journeyPlanner: "entur-journey-planner",
+    vehicles: "entur-vehicles",
+    geocoder: "entur-geocoder",
+    nsr: "entur-nsr",
+  } as const;
+  const client = createEnturClient({
+    http,
+    upstreamRuntime,
+    config: { ...ctx.config },
+    sourceIds,
+    contributors: Object.fromEntries(
+      Object.values(sourceIds).map((sourceId) => [
+        sourceId,
+        resolveIntegrationContributors(ctx, [sourceId]),
+      ]),
+    ),
+    isSourceAllowed: async (sourceId) => {
+      const denied = await ctx.getDisallowedSourceIds?.();
+      return !denied?.has(sourceId) && !denied?.has(id);
+    },
   });
-
+  const entur = createEnturTransitProvider(client, generation.signal, {
+    boundaryCountry: ctx.config.boundaryCountry as string | undefined,
+    multiModal: ctx.config.multiModal as "parent" | "child" | "all" | undefined,
+  });
+  ctx.onShutdown(async () => {
+    generation.abort(new Error("Entur transit generation retired"));
+  });
+  const receipts = (ids: readonly string[]) =>
+    snapshotContributors(...ids.map((id) => client.contributors[id] ?? []));
+  const wrapSource = <T>(data: T, ids: readonly string[], realtime = false) => {
+    const captured = captureTransitContributors(data, receipts(ids));
+    return withAttribution(
+      captured,
+      transitDataContributors(captured),
+      freshnessNow({ hasRealtimeData: realtime }),
+    );
+  };
+  const wrapRealtimeSource = <T>(data: T, ids: readonly string[]) => wrapSource(data, ids, true);
+  const wrap = <T>(data: T) => wrapSource(data, [sourceIds.journeyPlanner]);
+  const wrapRT = <T>(data: T) => wrapRealtimeSource(data, [sourceIds.journeyPlanner]);
   ctx.registerHealthCheck(async () => {
     const available = await entur.isEnturTransitAvailable();
     return available
       ? { status: "up" as const }
-      : { status: "down" as const, error: "Journey Planner probe failed" };
+      : { status: "down" as const, error: "Entur transit API probe failed" };
   });
 
   ctx.registerTransitProvider({
@@ -38,7 +70,7 @@ export function setup(ctx: IntegrationContext): void {
     coverage: { bbox: NORWAY_BBOX },
     priority: 1,
     role: "regional",
-    attribution: attribution.all(),
+    attribution: receipts(Object.values(sourceIds)),
     capabilities: {
       stops: {
         lookup: true,
@@ -71,10 +103,9 @@ export function setup(ctx: IntegrationContext): void {
     },
     async getStopInfrastructure(stopId) {
       const data = await entur.getStopInfrastructure(stopId);
-      return wrapSource(
-        data ? { ...data, contributors: resolveIntegrationContributors(ctx, ["entur-nsr"]) } : data,
-        ["entur-nsr"],
-      );
+      return wrapSource(data ? { ...data, contributors: receipts(["entur-nsr"]) } : data, [
+        "entur-nsr",
+      ]);
     },
     async getStopPlatforms(stopId) {
       return wrap(await entur.getStopPlatforms(stopId));

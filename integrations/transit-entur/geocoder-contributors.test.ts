@@ -1,4 +1,7 @@
-import { createMockIntegrationContext } from "@openmapx/integration-framework/testing";
+import {
+  createMockIntegrationContext,
+  fakeHttpClient,
+} from "@openmapx/integration-framework/testing";
 import { afterEach, expect, it, vi } from "vitest";
 import { setup } from "./index";
 import manifest from "./manifest.json";
@@ -18,7 +21,15 @@ it("credits the actual autocomplete HTTP source before retaining its stop row", 
       ],
     });
   });
-  const ctx = createMockIntegrationContext({ id: "transit-entur", manifest: manifest as never });
+  const http = fakeHttpClient(async ({ url, options }) => {
+    const response = await fetch(url, { headers: options?.headers });
+    return { status: response.status, headers: {}, body: await response.text() };
+  });
+  const ctx = createMockIntegrationContext({
+    id: "transit-entur",
+    manifest: manifest as never,
+    http,
+  });
   setup(ctx);
   const result = await ctx.registered.transit[0].searchStopsByName?.("Oslo", 10);
   expect(requested).toHaveLength(1);

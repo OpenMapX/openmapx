@@ -2,9 +2,16 @@ import {
   createGeocoderSuggestionProvider,
   runWithProviderDeadline,
 } from "@openmapx/integration-framework";
-import { createNoopLogger } from "@openmapx/integration-framework/testing";
+import {
+  createMockIntegrationContext,
+  createNoopLogger,
+} from "@openmapx/integration-framework/testing";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { enturGeocodingService } from "../../../../integrations/geocoding-entur/provider.js";
+import { setup as setupEnturLive } from "../../../../integrations/live-transit-entur/index";
+import enturLiveManifest from "../../../../integrations/live-transit-entur/manifest.json";
+import { setup as setupEnturTransit } from "../../../../integrations/transit-entur/index";
+import enturTransitManifest from "../../../../integrations/transit-entur/manifest.json";
 import { createSwissTransitClient } from "../../../../integrations/transit-opentransportdata-ch/client.js";
 
 const { redisMock, sharedValues, sharedTtls, clearLeases } = vi.hoisted(() => {
@@ -639,3 +646,406 @@ it("retiring Swiss A leaves an identical shared acquisition alive for Swiss B", 
   expect(quota).toHaveBeenCalledOnce();
   await second.dispose();
 });
+
+function required<T>(value: T | undefined): T {
+  if (value === undefined) throw new Error("Missing required Entur test fixture");
+  return value;
+}
+
+// These integration ownership regressions use the real host HTTP/cache implementations.
+const enturVehicle = {
+  vehicleId: "test-vehicle",
+  lastUpdated: "2026-10-19T07:00:00Z",
+  mode: "BUS",
+  location: { latitude: 60, longitude: 10 },
+};
+function enturContext(
+  kind: "transit" | "live",
+  name: string,
+  cache = createCacheClient("entur-runtime"),
+) {
+  const manifest = structuredClone(kind === "transit" ? enturTransitManifest : enturLiveManifest);
+  for (const source of manifest.dataSources) source.name = name;
+  const ctx = createMockIntegrationContext({
+    id: manifest.id,
+    manifest: manifest as never,
+    config: {
+      clientName: `${name}-client`,
+      journeyPlannerEndpoint: `https://${name}.test/graphql`,
+      vehiclesEndpoint: `https://${name}.test/vehicles`,
+      geocoderEndpoint: `https://${name}.test/geocoder`,
+      nsrEndpoint: `https://${name}.test/nsr`,
+    },
+    http: createHttpClient(createNoopLogger()),
+    cache,
+  });
+  Object.assign(ctx, {
+    upstreamRuntime: {
+      admitSharedRequest: async () => ({ allowed: true }),
+      deferSharedRequests: async () => {},
+    },
+  });
+  const retire: Array<() => Promise<void>> = [];
+  ctx.onShutdown = (cleanup) => {
+    retire.push(cleanup);
+  };
+  return {
+    ctx,
+    retire: async () => {
+      for (const cleanup of retire) await cleanup();
+    },
+    setup: () => (kind === "transit" ? setupEnturTransit : setupEnturLive)(ctx),
+  };
+}
+
+describe("Entur setup ownership through host clients", () => {
+  it.each(["transit", "live"] as const)(
+    "retained %s A keeps its endpoint, identity and immutable receipt after B setup",
+    async (kind) => {
+      const fetch = vi.fn(async (_url: string, _init?: RequestInit) =>
+        Response.json(
+          kind === "live"
+            ? { data: { vehicles: [enturVehicle] } }
+            : {
+                features: [
+                  {
+                    geometry: { coordinates: [10, 60] },
+                    properties: { id: "NSR:StopPlace:1", name: "Stop", layer: "venue" },
+                  },
+                ],
+              },
+        ),
+      );
+      vi.stubGlobal("fetch", fetch);
+      const a = enturContext(kind, "a");
+      a.setup();
+      const b = enturContext(kind, "b");
+      b.setup();
+      required(a.ctx.manifest.dataSources)[0].name = "mutated";
+      const result =
+        kind === "live"
+          ? await required(a.ctx.registered.realtime[0].getVehiclePositions)([4, 57, 32, 71.5])
+          : await required(a.ctx.registered.transit[0].searchStopsByName)("Stop", 1);
+      expect(String(fetch.mock.calls[0]?.[0])).toBe(
+        kind === "live"
+          ? "https://a.test/vehicles"
+          : "https://a.test/geocoder/autocomplete?text=Stop&size=1&boundary.country=NOR&multiModal=parent",
+      );
+      expect((fetch.mock.calls[0]?.[1] as RequestInit).headers).toMatchObject({
+        "ET-Client-Name": "a-client",
+      });
+      expect(result.data[0].contributors?.[0].name).toBe("a");
+      await a.retire();
+      await b.retire();
+    },
+  );
+  it("in-flight live A completion keeps A receipt after B setup", async () => {
+    const gate = deferred();
+    const fetch = vi.fn(async () => {
+      await gate.promise;
+      return Response.json({ data: { vehicles: [enturVehicle] } });
+    });
+    vi.stubGlobal("fetch", fetch);
+    const a = enturContext("live", "a");
+    a.setup();
+    const pending = required(a.ctx.registered.realtime[0].getVehiclePositions)([4, 57, 32, 71.5]);
+    await vi.waitFor(() => expect(fetch).toHaveBeenCalledOnce());
+    const b = enturContext("live", "b");
+    b.setup();
+    gate.resolve();
+    expect((await pending).data[0].contributors?.[0].name).toBe("a");
+    await a.retire();
+    await b.retire();
+  });
+  it("rejects denied sources and retained post-dispose calls before network", async () => {
+    const fetch = vi.fn(async () => Response.json({ data: { vehicles: [] } }));
+    vi.stubGlobal("fetch", fetch);
+    const a = enturContext("live", "a");
+    a.setup();
+    a.ctx.getDisallowedSourceIds = async () => new Set(["entur-live-vehicles"]);
+    await expect(
+      required(a.ctx.registered.realtime[0].getVehiclePositions)([4, 57, 32, 71.5]),
+    ).rejects.toMatchObject({ kind: "policy" });
+    a.ctx.getDisallowedSourceIds = async () => new Set();
+    await a.retire();
+    await expect(
+      required(a.ctx.registered.realtime[0].getVehiclePositions)([4, 57, 32, 71.5]),
+    ).rejects.toMatchObject({ kind: "abort" });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+  it("failed detached setup cannot change the live A provider", async () => {
+    const fetch = vi.fn(async (_url: string, _init?: RequestInit) =>
+      Response.json({ data: { vehicles: [enturVehicle] } }),
+    );
+    vi.stubGlobal("fetch", fetch);
+    const a = enturContext("live", "a");
+    a.setup();
+    const b = enturContext("live", "b");
+    b.ctx.config.vehiclesEndpoint = "http://invalid.test/vehicles";
+    expect(b.setup).toThrow();
+    const result = await required(a.ctx.registered.realtime[0].getVehiclePositions)([
+      4, 57, 32, 71.5,
+    ]);
+    expect(String(fetch.mock.calls[0]?.[0])).toBe("https://a.test/vehicles");
+    expect(result.data[0].contributors?.[0].name).toBe("a");
+    await a.retire();
+  });
+  it("does not publish transit transport failure as cacheable empty stops", async () => {
+    vi.stubGlobal("fetch", async () => new Response("unavailable", { status: 503 }));
+    const a = enturContext("transit", "a");
+    a.setup();
+    await expect(
+      required(a.ctx.registered.transit[0].getStopsNearby)(60, 10, 1000),
+    ).rejects.toMatchObject({
+      kind: "http",
+      status: 503,
+    });
+    await a.retire();
+  });
+});
+
+it("retired transit instances reject even methods with an immediate legitimate no-data branch", async () => {
+  const a = enturContext("transit", "a");
+  a.setup();
+  await a.retire();
+  await expect(
+    required(a.ctx.registered.transit[0].getStopPlatforms)("entur:NSR:Quay:1"),
+  ).rejects.toMatchObject({ kind: "abort" });
+  await expect(
+    required(a.ctx.registered.transit[0].getFacilities)("unsupported"),
+  ).rejects.toMatchObject({
+    kind: "abort",
+  });
+});
+
+describe("Entur national snapshot through real host cache", () => {
+  const bbox: [number, number, number, number] = [4, 57, 32, 71.5];
+  it("retiring A cancels only its waiter while identical B completes one shared acquisition", async () => {
+    const gate = deferred();
+    let acquisitionSignal: AbortSignal | null | undefined;
+    const fetch = vi.fn(async (_url: string, init?: RequestInit) => {
+      acquisitionSignal = init?.signal;
+      await gate.promise;
+      return Response.json({ data: { situations: [] } });
+    });
+    vi.stubGlobal("fetch", fetch);
+    const a = enturContext("live", "same");
+    const b = enturContext("live", "same");
+    a.setup();
+    b.setup();
+    const admission = vi.fn(async () => ({ allowed: true }));
+    Object.assign(required(a.ctx.upstreamRuntime), { admitSharedRequest: admission });
+    Object.assign(required(b.ctx.upstreamRuntime), { admitSharedRequest: admission });
+    const run = vi.spyOn(BoundedSingleFlight.prototype, "run");
+    const first = required(a.ctx.registered.realtime[0].getAlertsForBbox)(bbox);
+    const firstOutcome = first.catch((error) => error);
+    await vi.waitFor(() => expect(fetch).toHaveBeenCalledOnce());
+    const second = required(b.ctx.registered.realtime[0].getAlertsForBbox)([10, 59, 11, 60]);
+    await vi.waitFor(() => expect(run).toHaveBeenCalledTimes(2));
+    await a.retire();
+    expect(await firstOutcome).toMatchObject({ message: "Entur live generation retired" });
+    expect(acquisitionSignal?.aborted).toBe(false);
+    gate.resolve();
+    expect((await second).data).toEqual([]);
+    expect(fetch).toHaveBeenCalledOnce();
+    expect(admission).toHaveBeenCalledOnce();
+    await b.retire();
+  });
+  it("reuses a shared snapshot across replicas without quota or timestamp renewal, then gates hits against live policy", async () => {
+    const fetch = vi.fn(async () => Response.json({ data: { situations: [] } }));
+    vi.stubGlobal("fetch", fetch);
+    const a = enturContext("live", "same", createCacheClient("entur-replica"));
+    a.setup();
+    const first = await required(a.ctx.registered.realtime[0].getAlertsForBbox)(bbox);
+    const b = enturContext("live", "same", createCacheClient("entur-replica"));
+    b.setup();
+    const admission = vi.fn(async () => ({ allowed: true }));
+    Object.assign(required(b.ctx.upstreamRuntime), { admitSharedRequest: admission });
+    const hit = await required(b.ctx.registered.realtime[0].getAlertsForBbox)([10, 59, 11, 60]);
+    expect(hit.freshness.fetchedAt).toBe(first.freshness.fetchedAt);
+    expect(fetch).toHaveBeenCalledOnce();
+    expect(admission).not.toHaveBeenCalled();
+    expect(
+      [...sharedTtls.entries()].filter(([key]) => key.startsWith("int:entur-replica:")),
+    ).toEqual([[expect.any(String), 15]]);
+    b.ctx.getDisallowedSourceIds = async () => new Set(["entur-live-situations"]);
+    await expect(
+      required(b.ctx.registered.realtime[0].getAlertsForBbox)(bbox),
+    ).rejects.toMatchObject({
+      kind: "policy",
+    });
+    await a.retire();
+    await b.retire();
+  });
+  it("keeps snapshots separate for config and captured receipt identities", async () => {
+    const fetch = vi.fn(async () => Response.json({ data: { situations: [] } }));
+    vi.stubGlobal("fetch", fetch);
+    const a = enturContext("live", "same");
+    a.setup();
+    await required(a.ctx.registered.realtime[0].getAlertsForBbox)(bbox);
+    const b = enturContext("live", "same");
+    required(b.ctx.manifest.dataSources)[1].name = "receipt-b";
+    b.setup();
+    await required(b.ctx.registered.realtime[0].getAlertsForBbox)(bbox);
+    const c = enturContext("live", "same");
+    c.ctx.config.journeyPlannerEndpoint = "https://other.test/graphql";
+    c.setup();
+    await required(c.ctx.registered.realtime[0].getAlertsForBbox)(bbox);
+    expect(fetch).toHaveBeenCalledTimes(3);
+    expect(
+      [...sharedValues.keys()].filter((key) => key.startsWith("int:entur-runtime:")),
+    ).toHaveLength(3);
+    await a.retire();
+    await b.retire();
+    await c.retire();
+  });
+  it("does not cache provider failures and can acquire again", async () => {
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce(new Response("unavailable", { status: 503 }))
+      .mockResolvedValueOnce(Response.json({ data: { situations: [] } }));
+    vi.stubGlobal("fetch", fetch);
+    const a = enturContext("live", "a");
+    a.setup();
+    await expect(
+      required(a.ctx.registered.realtime[0].getAlertsForBbox)(bbox),
+    ).rejects.toMatchObject({
+      kind: "http",
+      status: 503,
+    });
+    expect(
+      [...sharedValues.keys()].filter((key) => key.startsWith("int:entur-runtime:")),
+    ).toHaveLength(0);
+    expect((await required(a.ctx.registered.realtime[0].getAlertsForBbox)(bbox)).data).toEqual([]);
+    expect(fetch).toHaveBeenCalledTimes(2);
+    await a.retire();
+  });
+  it("administrative clear during fill starts a fresh acquisition and fences the old cache write", async () => {
+    const gate = deferred();
+    const fetch = vi
+      .fn()
+      .mockImplementationOnce(async () => {
+        await gate.promise;
+        return Response.json({ data: { situations: [] } });
+      })
+      .mockResolvedValueOnce(Response.json({ data: { situations: [] } }));
+    vi.stubGlobal("fetch", fetch);
+    const a = enturContext("live", "a");
+    a.setup();
+    const old = required(a.ctx.registered.realtime[0].getAlertsForBbox)(bbox);
+    await vi.waitFor(() => expect(fetch).toHaveBeenCalledOnce());
+    await cacheInvalidation.invalidate(["int:entur-runtime:*"], async () => undefined);
+    const fresh = await required(a.ctx.registered.realtime[0].getAlertsForBbox)(bbox);
+    gate.resolve();
+    await old;
+    const hit = await required(a.ctx.registered.realtime[0].getAlertsForBbox)(bbox);
+    expect(hit.freshness.fetchedAt).toBe(fresh.freshness.fetchedAt);
+    expect(fetch).toHaveBeenCalledTimes(2);
+    await a.retire();
+  });
+  it("policy revoked during acquisition cannot publish or fill a successful snapshot", async () => {
+    const gate = deferred();
+    const fetch = vi.fn(async () => {
+      await gate.promise;
+      return Response.json({ data: { situations: [] } });
+    });
+    vi.stubGlobal("fetch", fetch);
+    const a = enturContext("live", "a");
+    a.setup();
+    const pending = required(a.ctx.registered.realtime[0].getAlertsForBbox)(bbox);
+    const outcome = expect(pending).rejects.toMatchObject({ kind: "policy" });
+    await vi.waitFor(() => expect(fetch).toHaveBeenCalledOnce());
+    a.ctx.getDisallowedSourceIds = async () => new Set(["entur-live-situations"]);
+    gate.resolve();
+    await outcome;
+    expect(
+      [...sharedValues.keys()].filter((key) => key.startsWith("int:entur-runtime:")),
+    ).toHaveLength(0);
+    await a.retire();
+  });
+  it("retirement completes even when cache-hit policy lookup stalls", async () => {
+    const a = enturContext("live", "a");
+    a.setup();
+    a.ctx.getDisallowedSourceIds = async () => new Promise(() => {});
+    const pending = required(a.ctx.registered.realtime[0].getAlertsForBbox)(bbox);
+    const outcome = expect(pending).rejects.toMatchObject({ kind: "abort" });
+    await a.retire();
+    await outcome;
+  });
+});
+
+it("pending transit A and failed B setup cannot replace A's acquisition-time receipt or search filters", async () => {
+  const gate = deferred();
+  const fetch = vi.fn(async (_url: string, _init?: RequestInit) => {
+    await gate.promise;
+    return Response.json({
+      features: [
+        {
+          geometry: { coordinates: [10, 60] },
+          properties: { id: "NSR:StopPlace:1", name: "Stop", layer: "venue" },
+        },
+      ],
+    });
+  });
+  vi.stubGlobal("fetch", fetch);
+  const a = enturContext("transit", "a");
+  Object.assign(a.ctx.config, { boundaryCountry: " swe ", multiModal: "child" });
+  a.setup();
+  const pending = required(a.ctx.registered.transit[0].searchStopsByName)("Stop", 1);
+  await vi.waitFor(() => expect(fetch).toHaveBeenCalledOnce());
+  const b = enturContext("transit", "b");
+  b.ctx.config.geocoderEndpoint = "http://invalid.test";
+  expect(b.setup).toThrow();
+  const c = enturContext("transit", "c");
+  c.setup();
+  a.ctx.config.boundaryCountry = "FIN";
+  required(a.ctx.manifest.dataSources)[0].name = "mutated";
+  gate.resolve();
+  const result = await pending;
+  expect(result.data[0].contributors?.[0].name).toBe("a");
+  const requested = new URL(String(fetch.mock.calls[0]?.[0]));
+  expect(requested.origin).toBe("https://a.test");
+  expect(requested.searchParams.get("boundary.country")).toBe("SWE");
+  expect(requested.searchParams.get("multiModal")).toBe("child");
+  await a.retire();
+  await c.retire();
+});
+
+it.each(["transit", "live"] as const)(
+  "%s rechecks source policy after awaiting acquisition before retaining rows",
+  async (kind) => {
+    let responseServed = false;
+    let blocked = false;
+    vi.stubGlobal("fetch", async () => {
+      responseServed = true;
+      return Response.json(
+        kind === "live"
+          ? { data: { vehicles: [enturVehicle] } }
+          : {
+              features: [
+                {
+                  geometry: { coordinates: [10, 60] },
+                  properties: { id: "NSR:StopPlace:1", name: "Stop", layer: "venue" },
+                },
+              ],
+            },
+      );
+    });
+    const a = enturContext(kind, "a");
+    a.ctx.getDisallowedSourceIds = async () => {
+      const denied = blocked;
+      if (responseServed)
+        queueMicrotask(() => {
+          blocked = true;
+        });
+      return new Set(denied ? [kind === "live" ? "entur-live-vehicles" : "entur-geocoder"] : []);
+    };
+    a.setup();
+    const pending =
+      kind === "live"
+        ? required(a.ctx.registered.realtime[0].getVehiclePositions)([4, 57, 32, 71.5])
+        : required(a.ctx.registered.transit[0].searchStopsByName)("Stop", 1);
+    await expect(pending).rejects.toMatchObject({ kind: "policy" });
+    await a.retire();
+  },
+);

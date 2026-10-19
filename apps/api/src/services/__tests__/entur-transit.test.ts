@@ -1,4 +1,7 @@
+import { createNoopLogger } from "@openmapx/integration-framework/testing";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { createEnturClient } from "../../../../../packages/entur-client/src/index";
+import { createHttpClient } from "../../integration-clients";
 import { streamedJsonResponse } from "../../test/streamed-response.js";
 
 vi.mock("@openmapx/core", async () => {
@@ -26,7 +29,7 @@ afterEach(() => {
 });
 
 function mockOk(data: unknown) {
-  return streamedJsonResponse(data);
+  return streamedJsonResponse(data, { headers: { "Content-Type": "application/json" } });
 }
 
 function nsrPolygon(...coordinates: number[]) {
@@ -46,18 +49,27 @@ function nsrPolygon(...coordinates: number[]) {
 }
 
 async function loadModule() {
-  vi.resetModules();
   const mod = await import("@integrations/transit-entur/provider.js");
-  mod.setEnturTransitConfig({
-    geocoderEndpoint: "https://api.entur.io/geocoder/v1",
-    journeyPlannerEndpoint: "https://api.entur.io/journey-planner/v3/graphql",
-    vehiclesEndpoint: "https://api.entur.io/realtime/v2/vehicles/graphql",
-    nsrEndpoint: "https://api.entur.io/stop-places/v1/read",
-    clientName: "openmapx-tests",
+  const client = createEnturClient({
+    http: createHttpClient(createNoopLogger()),
+    upstreamRuntime: {
+      admitSharedRequest: async () => ({ allowed: true }),
+      deferSharedRequests: async () => {},
+    } as never,
+    config: { clientName: "openmapx-tests" },
+    sourceIds: {
+      journeyPlanner: "planner",
+      vehicles: "vehicles",
+      nsr: "nsr",
+      geocoder: "geocoder",
+    },
+    contributors: {},
+    isSourceAllowed: async () => true,
+  });
+  return mod.createEnturTransitProvider(client, new AbortController().signal, {
     boundaryCountry: "NOR",
     multiModal: "parent",
   });
-  return mod;
 }
 
 describe("Entur transit stop discovery", () => {
@@ -1472,6 +1484,9 @@ describe("Entur generated-operation behavior", () => {
 
   it("requires the planner probe stop and rejects partial GraphQL errors", async () => {
     mockFetch.mockResolvedValueOnce(mockOk({ data: { stopPlace: { id: "NSR:StopPlace:337" } } }));
+    mockFetch
+      .mockResolvedValueOnce(mockOk({ data: { vehicles: [] } }))
+      .mockResolvedValueOnce(mockOk({ id: "NSR:StopPlace:337" }));
     const { isEnturTransitAvailable } = await loadModule();
     expect(await isEnturTransitAvailable()).toBe(true);
     mockFetch.mockResolvedValueOnce(
@@ -1480,6 +1495,9 @@ describe("Entur generated-operation behavior", () => {
         errors: [{ message: "upstream failure" }],
       }),
     );
+    mockFetch
+      .mockResolvedValueOnce(mockOk({ data: { vehicles: [] } }))
+      .mockResolvedValueOnce(mockOk({ id: "NSR:StopPlace:337" }));
     expect(await isEnturTransitAvailable()).toBe(false);
   });
 });
@@ -1541,5 +1559,95 @@ describe("Entur operation request semantics", () => {
       numTripPatterns: 5,
       modes: { transportModes: [{ transportMode: "rail" }, { transportMode: "metro" }] },
     });
+  });
+});
+
+describe("Entur instance acquisition failure semantics", () => {
+  it.each([
+    ["searchByName", ["Oslo", 10]],
+    ["getStopsNearby", [60, 10, 1000]],
+    ["getStop", ["NSR:StopPlace:337"]],
+    ["getStopInfrastructure", ["NSR:StopPlace:337"]],
+    ["getStopPlatforms", ["NSR:StopPlace:337"]],
+    ["getDepartures", ["NSR:StopPlace:337", 60]],
+    ["getArrivals", ["NSR:Quay:1", 60]],
+    ["getStopTimetable", ["NSR:StopPlace:337", "2026-10-19"]],
+    ["getRoutesForStop", ["NSR:StopPlace:337"]],
+    ["getRoute", ["RUT:Line:1"]],
+    ["getRouteStops", ["RUT:Line:1"]],
+    ["planTrip", [{ from: { lat: 60, lng: 10 }, to: { lat: 61, lng: 11 } }]],
+    ["getLegGeometry", ["RUT:ServiceJourney:1"]],
+    ["getVehicleJourney", ["RUT:ServiceJourney:1", ["RUT:ServiceJourney:2"]]],
+    ["getVehiclePositions", ["RUT:Line:1"]],
+    ["getVehicleRadar", [[4, 57, 32, 71.5]]],
+    ["getRouteAlerts", ["RUT:Line:1"]],
+    ["getStopAlerts", ["NSR:StopPlace:337"]],
+    ["getAlerts", [[4, 57, 32, 71.5]]],
+    ["getFacilities", ["NSR:StopPlace:337"]],
+  ])(
+    "%s rejects unavailable acquisition instead of synthetic empty success",
+    async (method, args) => {
+      mockFetch.mockImplementation(async () => new Response("unavailable", { status: 503 }));
+      const instance = await loadModule();
+      const invoke = instance[method as keyof typeof instance] as (
+        ...args: unknown[]
+      ) => Promise<unknown>;
+      await expect(invoke(...args)).rejects.toMatchObject({ kind: "http", status: 503 });
+      expect(mockFetch).toHaveBeenCalledOnce();
+    },
+  );
+  it.each(["children", "parkings", "fare-zones", "topographic-places"])(
+    "only treats optional NSR 404 as absence for %s",
+    async (branch) => {
+      const stop = {
+        id: "NSR:StopPlace:337",
+        name: { value: "Oslo" },
+        centroid: { location: { latitude: 60, longitude: 10 } },
+        tariffZones: { tariffZoneRef: [{ ref: "RUT:FareZone:1" }] },
+        topographicPlaceRef: { ref: "KVE:TopographicPlace:1" },
+      };
+      let status = 404;
+      mockFetch.mockImplementation(async (input: string) => {
+        const path = new URL(input).pathname;
+        if (path.includes(branch)) return new Response("optional record", { status });
+        return mockOk(
+          path.endsWith("/337") || path.endsWith("%3A337")
+            ? stop
+            : path.includes("children") || path.includes("parkings")
+              ? []
+              : {},
+        );
+      });
+      const { getStopInfrastructure } = await loadModule();
+      expect((await getStopInfrastructure("NSR:StopPlace:337"))?.canonicalStop.name).toBe("Oslo");
+      status = 503;
+      await expect(getStopInfrastructure("NSR:StopPlace:337")).rejects.toMatchObject({
+        kind: "http",
+        status: 503,
+      });
+      status = 429;
+      await expect(getStopInfrastructure("NSR:StopPlace:337")).rejects.toMatchObject({
+        kind: "http",
+        status: 429,
+      });
+    },
+  );
+  it("combines caller search cancellation with the generation lifetime and retains its reason", async () => {
+    const reason = new Error("search caller left");
+    const caller = new AbortController();
+    mockFetch.mockImplementation(
+      async (_url: string, init?: RequestInit) =>
+        new Promise((_resolve, reject) => {
+          init?.signal?.addEventListener("abort", () => reject(init.signal?.reason), {
+            once: true,
+          });
+        }),
+    );
+    const { searchByName } = await loadModule();
+    const pending = searchByName("Oslo", 10, caller.signal);
+    const outcome = expect(pending).rejects.toMatchObject({ kind: "abort", cause: reason });
+    await vi.waitFor(() => expect(mockFetch).toHaveBeenCalledOnce());
+    caller.abort(reason);
+    await outcome;
   });
 });

@@ -1,7 +1,36 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { createMockIntegrationContext } from "@openmapx/integration-framework/testing";
+import {
+  createMockIntegrationContext,
+  createNoopLogger,
+} from "@openmapx/integration-framework/testing";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { createCacheClient, createHttpClient } from "../../apps/api/src/integration-clients";
+
+const { values } = vi.hoisted(() => ({
+  values: new Map<string, { value: string; expires: number }>(),
+}));
+vi.mock("../../apps/api/src/redis", () => ({
+  redis: {
+    get: async (key: string) => {
+      const entry = values.get(key);
+      return entry && Date.now() < entry.expires ? entry.value : null;
+    },
+    setex: async (key: string, ttl: number, value: string) => {
+      values.set(key, { value, expires: Date.now() + ttl * 1000 });
+    },
+    del: async (key: string) => (values.delete(key) ? 1 : 0),
+    eval: async (_script: string, count: number, ...args: (string | number)[]) => {
+      const [epochKey, key, ...rest] = args;
+      if (count === 3) rest.shift();
+      const [epoch, value, ttl] = rest;
+      if ((values.get(String(epochKey))?.value ?? "0") !== epoch) return 0;
+      values.set(String(key), { value: String(value), expires: Date.now() + Number(ttl) * 1000 });
+      return 1;
+    },
+  },
+}));
+
 import { setup } from "./index.js";
 
 const DATA_SOURCES = JSON.parse(readFileSync(join(__dirname, "manifest.json"), "utf-8"))
@@ -16,7 +45,15 @@ function registerProvider(config: Record<string, unknown> = {}) {
   const ctx = createMockIntegrationContext({
     id: "live-transit-entur",
     config,
+    http: createHttpClient(createNoopLogger()),
+    cache: createCacheClient("live-transit-entur"),
     manifest: { dataSources: DATA_SOURCES } as never,
+  });
+  Object.assign(ctx, {
+    upstreamRuntime: {
+      admitSharedRequest: async () => ({ allowed: true }),
+      deferSharedRequests: async () => {},
+    },
   });
   setup(ctx);
   const provider = ctx.registered.realtime[0];
@@ -27,6 +64,7 @@ function registerProvider(config: Record<string, unknown> = {}) {
 let mockFetch: ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
+  values.clear();
   mockFetch = vi.fn();
   vi.stubGlobal("fetch", mockFetch);
 });
@@ -228,7 +266,7 @@ describe("national situation snapshot cache", () => {
     const requests = Array.from({ length: 10 }, (_, i) =>
       provider.getAlertsForBbox([10 + i, 59, 10.5 + i, 61]),
     );
-    expect(mockFetch).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(1));
     resolve(
       mockOk({ situations: Array.from({ length: 10 }, (_, i) => situation(String(i), 10.25 + i)) }),
     );
@@ -257,7 +295,9 @@ describe("national situation snapshot cache", () => {
   it("retries after a failed fetch rather than caching the failure", async () => {
     const provider = registerProvider();
     mockFetch.mockResolvedValueOnce(Response.json({ errors: [{ message: "unavailable" }] }));
-    await expect(provider.getAlertsForBbox([4, 57, 32, 71.5])).rejects.toThrow("unavailable");
+    await expect(provider.getAlertsForBbox([4, 57, 32, 71.5])).rejects.toMatchObject({
+      kind: "graphql",
+    });
     mockFetch.mockResolvedValueOnce(mockOk({ situations: [] }));
     expect((await provider.getAlertsForBbox([4, 57, 32, 71.5])).data).toEqual([]);
     expect(mockFetch).toHaveBeenCalledTimes(2);
@@ -273,6 +313,7 @@ describe("national situation snapshot cache", () => {
         }),
     );
     const oldRequest = old.getAlertsForBbox([4, 57, 32, 71.5]);
+    await vi.waitFor(() => expect(mockFetch).toHaveBeenCalledOnce());
     const current = registerProvider({
       journeyPlannerEndpoint: "https://example.test/graphql",
       clientName: "new-client",
