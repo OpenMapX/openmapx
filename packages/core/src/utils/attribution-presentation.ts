@@ -96,6 +96,9 @@ export interface AttributionPresentationGroup {
 
 /** Keep the longer wording and every link, only when link spans are unambiguous. */
 function mergeVisibleNotice(a: ParsedNotice, b: ParsedNotice): string | undefined {
+  // Identical fragments already preserve every link and its exact position.
+  // Reconstructing them would reject repeated labels in otherwise valid notices.
+  if (a.html === b.html) return a.html;
   const text = containsNoticeText(a.text, b.text)
     ? a.text
     : containsNoticeText(b.text, a.text)
