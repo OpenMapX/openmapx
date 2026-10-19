@@ -27,35 +27,7 @@ export interface ResolutionResult {
   reason?: "ambiguous" | "no-providers" | "service-not-installed" | "service-disabled";
 }
 
-/**
- * Supported dataset types that the data-manager can produce / track. Must stay
- * aligned with the data-manager service's `produces:` declarations and with
- * `services/data-manager/src/state.ts` where this is mirrored for the service.
- */
-export type DatasetType =
-  | "osm-pbf"
-  | "osm-pbf-bz2"
-  | "osrm-graph"
-  | "otp-graph"
-  | "motis-data"
-  | "motis-staging-data"
-  | "motis-feed-proxy-config"
-  | "gtfs"
-  | "tile-mbtiles"
-  | "tile-fonts"
-  | "pelias-placeholder-data"
-  | "pelias-whosonfirst-data";
-
-export interface DatasetMetadata {
-  type: DatasetType;
-  id: string;
-  region?: string;
-  url?: string;
-  sizeBytes: number;
-  downloadedAt: string;
-  sha256?: string;
-  path: string;
-}
+export type { DatasetMetadata, DatasetType } from "./data-manager/contracts/datasets";
 
 export interface HardlinkEntry {
   source: string;

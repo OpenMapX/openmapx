@@ -1,4 +1,9 @@
 import { randomUUID } from "node:crypto";
+import type {
+  SearchIndexBuildProgress as CanonicalSearchIndexBuildProgress,
+  SearchIndexBuildResult as CanonicalSearchIndexBuildResult,
+  SearchIndexBuildStage as CanonicalSearchIndexBuildStage,
+} from "@openmapx/core/data-manager-contracts";
 import type postgres from "postgres";
 import type { StateStore } from "../../state.js";
 import { scrubSecrets } from "../../utils/scrub-secrets.js";
@@ -8,29 +13,9 @@ import { createSearchIndexOperationLock, type SearchIndexOperationLock } from ".
 import { buildSearchIndexIndexesDDL, buildSearchIndexSchemaDDL } from "./schema.js";
 import { fingerprintDataset, resolveOsmDataset, type SearchIndexRuntimeState } from "./state.js";
 
-export type SearchIndexBuildStage =
-  | "resolve"
-  | "extract"
-  | "insert"
-  | "index"
-  | "validate"
-  | "publish"
-  | "complete";
-
-export interface SearchIndexBuildProgress {
-  stage: SearchIndexBuildStage;
-  message: string;
-  placeCount?: number;
-  termCount?: number;
-}
-
-export interface SearchIndexBuildResult {
-  region: string;
-  epoch: string;
-  sourceFingerprint: string;
-  placeCount: number;
-  termCount: number;
-}
+export type SearchIndexBuildStage = CanonicalSearchIndexBuildStage;
+export type SearchIndexBuildProgress = CanonicalSearchIndexBuildProgress;
+export type SearchIndexBuildResult = CanonicalSearchIndexBuildResult;
 
 interface SearchIndexCounts {
   places: number;

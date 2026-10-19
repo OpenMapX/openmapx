@@ -20,6 +20,11 @@
 
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import {
+  createDataManagerTransport,
+  link,
+  unwrapDataManagerResponse,
+} from "@openmapx/core/data-manager-sdk";
 import { services as coreServices } from "@openmapx/core/server";
 import {
   type ApplyHardlinkResult,
@@ -28,8 +33,6 @@ import {
 } from "@openmapx/hardlinks";
 import { dataManagerUrl } from "./data-manager-url";
 import { repoPaths } from "./paths";
-
-const { DataManagerClient } = coreServices;
 
 export type { ApplyHardlinkResult, HardlinkEntry };
 export { applyHardlinkPlan };
@@ -143,8 +146,13 @@ export async function applyGeneratedHardlinks(
     const baseUrl = opts.dataManagerUrl ?? dataManagerUrl();
     const timeout = opts.reachabilityTimeoutMs ?? 1500;
     if (await dataManagerReachable(baseUrl, timeout)) {
-      const client = new DataManagerClient({ baseUrl });
-      const result = await client.link(plan, { prune: opts.prune });
+      const transport = createDataManagerTransport({
+        baseUrl,
+        authToken: process.env.DATA_MANAGER_AUTH_TOKEN?.trim(),
+      });
+      const result = unwrapDataManagerResponse(
+        await link({ plan, prune: opts.prune }, { transport }),
+      );
       return {
         applied: true,
         entries: plan.length,

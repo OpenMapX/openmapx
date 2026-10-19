@@ -1,3 +1,4 @@
+import { licensingSchema } from "@openmapx/extension-contracts/licensing-schema";
 import { isSafeAttributionUrl, parseLicensing } from "@openmapx/mobility-core/licensing";
 import z from "zod/v4";
 import type { CoverageDomain, CoverageReasonCode, StreamEvidence } from "./types";
@@ -147,7 +148,8 @@ const boundsSchema = z
       south < north &&
       west !== east,
     "bounds must be valid WGS84 coordinates",
-  );
+  )
+  .readonly();
 
 const evidenceRegionSchema = z.object({
   keys: z.array(boundedString(256)).max(64),
@@ -211,16 +213,8 @@ export const rightsEvidenceSchema = z
         derivedData: coveragePermissionSchema,
       })
       .strict(),
-    licensing: z
-      .unknown()
-      .transform((value, ctx) => {
-        const licensing = parseLicensing(value);
-        if (!licensing) {
-          ctx.addIssue({ code: "custom", message: "Invalid licensing" });
-          return z.NEVER;
-        }
-        return licensing;
-      })
+    licensing: licensingSchema
+      .refine((value) => Boolean(parseLicensing(value)), "Invalid licensing")
       .optional(),
     termsUrl: safeHttpUrl.optional(),
     attribution: z.string().max(1_000).optional(),

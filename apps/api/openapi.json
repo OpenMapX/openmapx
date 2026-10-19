@@ -7696,9 +7696,9 @@
         "x-openmapx-auth": "public"
       }
     },
-    "/api/offline/packages/glyphs/{version}/{wildcard}": {
+    "/api/offline/packages/glyphs/{version}/{fontstack}/{range}.pbf": {
       "get": {
-        "operationId": "getApiOfflinePackagesGlyphsVersionWildcard",
+        "operationId": "getApiOfflinePackagesGlyphsVersionFontstackRangePbf",
         "parameters": [
           {
             "schema": {
@@ -7713,7 +7713,15 @@
               "type": "string"
             },
             "in": "path",
-            "name": "*",
+            "name": "fontstack",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "range",
             "required": true
           }
         ],

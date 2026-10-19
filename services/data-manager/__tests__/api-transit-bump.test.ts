@@ -40,7 +40,7 @@ describe("data-manager /transit/bump branch validation", () => {
         payload: { branch },
       });
       expect(res.statusCode).toBe(400);
-      expect(JSON.parse(res.body).error).toBe("invalid-branch");
+      expect(JSON.parse(res.body).error).toBe("Invalid data-manager body");
     },
   );
 

@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { OfflineMapPackageManifest, OfflinePackageRequest } from "@openmapx/core";
@@ -317,6 +317,44 @@ describe("data-manager offline package API", () => {
     expect(prepare).not.toHaveBeenCalled();
     await app.close();
   });
+
+  it.each(["directory", "file"])(
+    "rejects %s symlinks escaping the glyph root, including composed stacks",
+    async (kind) => {
+      const root = mkdtempSync(join(tmpdir(), "openmapx-offline-glyph-containment-"));
+      roots.push(root);
+      const fonts = join(root, "tile-fonts");
+      const outside = join(root, "outside");
+      mkdirSync(join(fonts, "Safe"), { recursive: true });
+      mkdirSync(outside);
+      writeFileSync(join(fonts, "Safe", "0-255.pbf"), glyphPbf("Safe", [65]));
+      writeFileSync(join(outside, "0-255.pbf"), glyphPbf("Escaping", [66]));
+      if (kind === "directory") symlinkSync(outside, join(fonts, "Escaping"));
+      else {
+        mkdirSync(join(fonts, "Escaping"));
+        symlinkSync(join(outside, "0-255.pbf"), join(fonts, "Escaping", "0-255.pbf"));
+      }
+      const generator = new OfflinePackageGenerator({
+        source: () => ({ ...source, fontsDirectory: fonts, packageRoot: join(root, "packages") }),
+        storage: new OfflinePackageStorage(join(root, "packages")),
+      });
+      const app = Fastify();
+      registerApi(app, { dataDir: root, offlinePackages: generator });
+      try {
+        for (const stack of ["Escaping", "Safe,Escaping"])
+          expect(
+            (await app.inject(`/offline/packages/glyphs/fixture-glyphs-v1/${stack}/0-255.pbf`))
+              .statusCode,
+          ).toBe(404);
+        expect(
+          (await app.inject("/offline/packages/glyphs/fixture-glyphs-v1/Safe/0-255.pbf"))
+            .statusCode,
+        ).toBe(200);
+      } finally {
+        await app.close();
+      }
+    },
+  );
 
   it("composes comma-separated font stacks from their individual glyph files", async () => {
     const root = mkdtempSync(join(tmpdir(), "openmapx-offline-fonts-"));

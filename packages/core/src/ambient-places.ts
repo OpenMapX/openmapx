@@ -1,3 +1,13 @@
+import type { AmbientRegion } from "./ambient-places-region";
+
+export {
+  AMBIENT_GENERATION_PATTERN,
+  AMBIENT_GERMANY_REGION,
+  AMBIENT_PLANET_REGION,
+  type AmbientRegion,
+  validateAmbientRegion,
+} from "./ambient-places-region";
+
 import { type Attribution, OPENSTREETMAP_ATTRIBUTION } from "@openmapx/mobility-core/attribution";
 import {
   contributorsForRecordFields,
@@ -48,21 +58,6 @@ export const AMBIENT_LIMITS = {
   maxZoom: 18,
   cacheSeconds: 7 * 86400,
 } as const;
-export interface AmbientRegion {
-  name: string;
-  bounds: [number, number, number, number];
-  coverage?: "germany" | "planet";
-}
-export const AMBIENT_GERMANY_REGION: AmbientRegion = {
-  name: "Germany",
-  bounds: [5.8, 47.2, 15.1, 55.1],
-  coverage: "germany",
-};
-export const AMBIENT_PLANET_REGION: AmbientRegion = {
-  name: "Planet",
-  bounds: [-180, -85.051129, 180, 85.051129],
-  coverage: "planet",
-};
 export interface AmbientPlace {
   id: string;
   gersId?: string;
@@ -109,8 +104,6 @@ export interface AmbientPlanetCandidate {
   startedAt: string;
   updatedAt: string;
 }
-export const AMBIENT_GENERATION_PATTERN =
-  "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$";
 export interface AmbientOsmRow {
   osm_type: string;
   osm_id: string;
@@ -136,40 +129,6 @@ export interface AmbientOvertureRow {
   sources?: OvertureSourceItem[] | null;
   sources_catalogue?: Attribution[] | null;
   release?: string;
-}
-export function validateAmbientRegion(value: unknown): AmbientRegion {
-  const region = value as AmbientRegion;
-  const b = region?.bounds;
-  const preset =
-    region?.coverage === "germany"
-      ? AMBIENT_GERMANY_REGION
-      : region?.coverage === "planet"
-        ? AMBIENT_PLANET_REGION
-        : null;
-  if (
-    typeof region?.name !== "string" ||
-    !region.name.trim() ||
-    region.name.length > 80 ||
-    !Array.isArray(b) ||
-    b.length !== 4 ||
-    !b.every(Number.isFinite) ||
-    b[0] < -180 ||
-    b[2] > 180 ||
-    b[1] < -85.051129 ||
-    b[3] > 85.051129 ||
-    b[2] <= b[0] ||
-    b[3] <= b[1] ||
-    (region.coverage !== undefined && !preset) ||
-    (preset ? !b.every((v, i) => v === preset.bounds[i]) : b[2] - b[0] > 0.5 || b[3] - b[1] > 0.5)
-  )
-    throw new Error(
-      "Choose the exact Germany/planet preset or an ordered world region no wider or higher than 0.5 degrees",
-    );
-  return {
-    name: region.name.trim(),
-    bounds: [...b],
-    ...(preset ? { coverage: preset.coverage } : {}),
-  };
 }
 
 const aliases: Record<string, string> = {

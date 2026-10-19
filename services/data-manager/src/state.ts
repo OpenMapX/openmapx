@@ -1,49 +1,9 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
-// Kept in sync with packages/core/src/services/types.ts `DatasetType`. When
-// the data-manager is allowed to depend on @openmapx/core directly (post-Dockerfile
-// refactor), we can import from there and delete this local copy.
-export type DatasetType =
-  | "osm-pbf"
-  | "osm-pbf-bz2"
-  | "osrm-graph"
-  | "otp-graph"
-  | "motis-data"
-  | "motis-staging-data"
-  | "motis-feed-proxy-config"
-  | "gtfs"
-  | "tile-mbtiles"
-  | "tile-fonts"
-  | "pelias-placeholder-data"
-  | "pelias-whosonfirst-data";
+import { type DatasetMetadata, datasetMetadataSchema } from "@openmapx/core/data-manager-contracts";
 
-const DATASET_TYPES = new Set<DatasetType>([
-  "osm-pbf",
-  "osm-pbf-bz2",
-  "osrm-graph",
-  "otp-graph",
-  "motis-data",
-  "motis-staging-data",
-  "motis-feed-proxy-config",
-  "gtfs",
-  "tile-mbtiles",
-  "tile-fonts",
-  "pelias-placeholder-data",
-  "pelias-whosonfirst-data",
-]);
-
-export interface DatasetMetadata {
-  type: DatasetType;
-  id: string;
-  region?: string;
-  url?: string;
-  sizeBytes: number;
-  downloadedAt: string;
-  sha256?: string;
-  md5?: string;
-  path: string;
-}
+export type { DatasetMetadata, DatasetType } from "@openmapx/core/data-manager-contracts";
 
 export interface State {
   datasets: DatasetMetadata[];
@@ -146,23 +106,5 @@ export class StateStore {
 }
 
 function isDatasetMetadata(value: unknown): value is DatasetMetadata {
-  if (!value || typeof value !== "object") return false;
-  const dataset = value as Partial<DatasetMetadata>;
-  return (
-    typeof dataset.type === "string" &&
-    DATASET_TYPES.has(dataset.type as DatasetType) &&
-    typeof dataset.id === "string" &&
-    dataset.id.length > 0 &&
-    typeof dataset.sizeBytes === "number" &&
-    Number.isFinite(dataset.sizeBytes) &&
-    dataset.sizeBytes >= 0 &&
-    typeof dataset.downloadedAt === "string" &&
-    dataset.downloadedAt.length > 0 &&
-    typeof dataset.path === "string" &&
-    dataset.path.length > 0 &&
-    (dataset.region === undefined || typeof dataset.region === "string") &&
-    (dataset.url === undefined || typeof dataset.url === "string") &&
-    (dataset.sha256 === undefined || typeof dataset.sha256 === "string") &&
-    (dataset.md5 === undefined || typeof dataset.md5 === "string")
-  );
+  return datasetMetadataSchema.safeParse(value).success;
 }

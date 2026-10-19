@@ -3,7 +3,13 @@ import { existsSync, readFileSync, statSync } from "node:fs";
 import { readdir } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { services as coreServices, repoPaths } from "@openmapx/core/server";
+import {
+  createDataManagerTransport,
+  getStatus,
+  link,
+  unwrapDataManagerResponse,
+} from "@openmapx/core/data-manager-sdk";
+import { repoPaths } from "@openmapx/core/server";
 import { parseMotisConfigExpectations } from "@openmapx/transitous-core";
 import {
   type DockerComposeAction,
@@ -14,8 +20,6 @@ import type { JobContext } from "./job-runner";
 import { createDurableOpsKey } from "./ops-client";
 import { getServiceRegistry } from "./service-registry";
 import { applyTrustedConfiguration } from "./trusted-config-operations";
-
-const { DataManagerClient } = coreServices;
 
 const HARDLINK_PLAN_FILE = "docker-compose.generated.hardlinks.json";
 const DATA_MANAGER_STARTUP_TIMEOUT_MS = 60_000;
@@ -121,8 +125,8 @@ function dataManagerUrlCandidates(): string[] {
   return [...new Set(out)];
 }
 
-async function waitForDataManagerClient(): Promise<{
-  client: coreServices.DataManagerClient;
+async function waitForDataManagerTransport(): Promise<{
+  transport: ReturnType<typeof createDataManagerTransport>;
   url: string;
 }> {
   const urls = dataManagerUrlCandidates();
@@ -131,10 +135,13 @@ async function waitForDataManagerClient(): Promise<{
 
   while (Date.now() < deadline) {
     for (const url of urls) {
-      const client = new DataManagerClient({ baseUrl: url });
+      const transport = createDataManagerTransport({
+        baseUrl: url,
+        authToken: process.env.DATA_MANAGER_AUTH_TOKEN?.trim(),
+      });
       try {
-        await client.status();
-        return { client, url };
+        unwrapDataManagerResponse(await getStatus({ transport }));
+        return { transport, url };
       } catch (err) {
         lastErr = err;
       }
@@ -197,8 +204,8 @@ export async function applyHardlinksFromPlan(
   }
 
   await opts.log?.(`Applying hardlink plan (${plan.length} entries, prune enabled)...`);
-  const { client, url } = await waitForDataManagerClient();
-  const result = await client.link(plan, { prune: true });
+  const { transport, url } = await waitForDataManagerTransport();
+  const result = unwrapDataManagerResponse(await link({ plan, prune: true }, { transport }));
   return { applied: true, entries: plan.length, via: url, ...result };
 }
 

@@ -161,7 +161,9 @@
         "scripts/verify-engine-watchdog.ts",
         "scripts/verify-road-condition-engine.ts",
         "scripts/verify-route-traffic-proof.ts",
-        "scripts/traffic-writer-fault.ts"
+        "scripts/traffic-writer-fault.ts",
+        // Root package scripts invoke this nested OpenAPI CLI directly.
+        "scripts/openapi/generate.ts"
       ],
       // The glyph utility loads this CommonJS package through its compatibility
       // loader because the dependency does not expose an ESM entry point.

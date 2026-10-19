@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
+import type { SearchIndexStatus as CanonicalSearchIndexStatus } from "@openmapx/core/data-manager-contracts";
 import type postgres from "postgres";
 import type { DatasetMetadata, StateStore } from "../../state.js";
 
@@ -12,22 +13,7 @@ export function createSearchIndexRuntimeState(): SearchIndexRuntimeState {
   return { building: false, failure: null };
 }
 
-export interface SearchIndexStatus {
-  region: string;
-  sourcePath: string | null;
-  sourceFingerprint: string | null;
-  currentFingerprint: string | null;
-  epoch: string | null;
-  status: "building" | "ready" | "failed";
-  placeCount: number;
-  termCount: number;
-  startedAt: string | null;
-  publishedAt: string | null;
-  updatedAt: string;
-  lastError: string | null;
-  stale: boolean;
-  building: boolean;
-}
+export type SearchIndexStatus = Omit<CanonicalSearchIndexStatus, "ok">;
 
 export async function fingerprintDataset(dataset: DatasetMetadata): Promise<string> {
   if (dataset.sha256) return `sha256:${dataset.sha256.toLowerCase()}`;

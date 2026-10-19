@@ -30,6 +30,8 @@ describe("repository policy gate", () => {
       "pnpm check-ops-authority",
       "pnpm check-entur-graphql",
       "pnpm check-api-sdk",
+      "pnpm check-data-manager-openapi",
+      "pnpm check-data-manager-sdk",
     ]);
   });
 

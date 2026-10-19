@@ -1,0 +1,199 @@
+{
+  "revision": "815a24294c283fc829f3a372a1ae21618442cca0",
+  "explicitOperations": 48,
+  "note": "Static inventory. Expands two literal ambient actions and imported relay constant. Excludes Fastify automatic HEAD aliases; binary HEAD routes explicitly included. No route handler was invoked.",
+  "operations": [
+    {
+      "method": "POST",
+      "path": "/ambient-places/build"
+    },
+    {
+      "method": "POST",
+      "path": "/ambient-places/discard"
+    },
+    {
+      "method": "POST",
+      "path": "/ambient-places/enabled"
+    },
+    {
+      "method": "POST",
+      "path": "/ambient-places/resume"
+    },
+    {
+      "method": "POST",
+      "path": "/ambient-places/rollback"
+    },
+    {
+      "method": "GET",
+      "path": "/ambient-places/status"
+    },
+    {
+      "method": "POST",
+      "path": "/convert/overpass"
+    },
+    {
+      "method": "GET",
+      "path": "/coverage/evidence"
+    },
+    {
+      "method": "GET",
+      "path": "/datasets"
+    },
+    {
+      "method": "POST",
+      "path": "/datasets/reload"
+    },
+    {
+      "method": "POST",
+      "path": "/download/fonts"
+    },
+    {
+      "method": "POST",
+      "path": "/download/osm"
+    },
+    {
+      "method": "GET",
+      "path": "/internal/transit/operator-feed/:handle"
+    },
+    {
+      "method": "POST",
+      "path": "/link"
+    },
+    {
+      "method": "GET",
+      "path": "/live"
+    },
+    {
+      "method": "POST",
+      "path": "/notable-places/build"
+    },
+    {
+      "method": "GET",
+      "path": "/notable-places/status"
+    },
+    {
+      "method": "GET",
+      "path": "/offline/packages/:packageId/archive"
+    },
+    {
+      "method": "HEAD",
+      "path": "/offline/packages/:packageId/archive"
+    },
+    {
+      "method": "GET",
+      "path": "/offline/packages/:packageId/manifest"
+    },
+    {
+      "method": "GET",
+      "path": "/offline/packages/capability"
+    },
+    {
+      "method": "GET",
+      "path": "/offline/packages/glyphs/:version/*"
+    },
+    {
+      "method": "HEAD",
+      "path": "/offline/packages/glyphs/:version/*"
+    },
+    {
+      "method": "GET",
+      "path": "/offline/packages/glyphs/:version/catalog.json"
+    },
+    {
+      "method": "GET",
+      "path": "/offline/packages/jobs/:jobId"
+    },
+    {
+      "method": "POST",
+      "path": "/offline/packages/prepare"
+    },
+    {
+      "method": "POST",
+      "path": "/overture/conflate"
+    },
+    {
+      "method": "POST",
+      "path": "/overture/extract"
+    },
+    {
+      "method": "POST",
+      "path": "/overture/ingest"
+    },
+    {
+      "method": "POST",
+      "path": "/overture/pull"
+    },
+    {
+      "method": "GET",
+      "path": "/overture/status"
+    },
+    {
+      "method": "POST",
+      "path": "/overture/sync"
+    },
+    {
+      "method": "POST",
+      "path": "/search-index/build"
+    },
+    {
+      "method": "GET",
+      "path": "/search-index/status"
+    },
+    {
+      "method": "GET",
+      "path": "/status"
+    },
+    {
+      "method": "GET",
+      "path": "/traffic/conditions/applied"
+    },
+    {
+      "method": "POST",
+      "path": "/traffic/predicted/bake"
+    },
+    {
+      "method": "POST",
+      "path": "/transit/bump"
+    },
+    {
+      "method": "POST",
+      "path": "/transit/bump/approve"
+    },
+    {
+      "method": "GET",
+      "path": "/transit/catalog"
+    },
+    {
+      "method": "POST",
+      "path": "/transit/preflight"
+    },
+    {
+      "method": "GET",
+      "path": "/transit/profile"
+    },
+    {
+      "method": "POST",
+      "path": "/transit/restart-motis"
+    },
+    {
+      "method": "GET",
+      "path": "/transit/sources"
+    },
+    {
+      "method": "POST",
+      "path": "/transit/sources"
+    },
+    {
+      "method": "DELETE",
+      "path": "/transit/sources/:sourceId"
+    },
+    {
+      "method": "POST",
+      "path": "/transit/sources/:sourceId/enable"
+    },
+    {
+      "method": "POST",
+      "path": "/transit/sync"
+    }
+  ]
+}

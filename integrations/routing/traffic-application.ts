@@ -10,7 +10,11 @@ import {
   type TrafficApplicationReceipt,
   type TrafficApplicationSnapshot,
 } from "@openmapx/core";
-import { services as coreServices } from "@openmapx/core/server";
+import { dataManagerOperations } from "@openmapx/core/data-manager-contracts";
+import {
+  getGetAppliedTrafficConditionsUrl,
+  validateDataManagerBaseUrl,
+} from "@openmapx/core/data-manager-sdk";
 import { envString } from "@openmapx/core/server-env";
 import type { IntegrationContext, RoadConditionsProvider } from "@openmapx/integration-framework";
 import { assessRoadConditionForRoute } from "./road-condition-routing.js";
@@ -114,16 +118,17 @@ async function readSnapshot(ctx: IntegrationContext): Promise<TrafficApplication
   try {
     const token = envString("DATA_MANAGER_AUTH_TOKEN", "").trim();
     if (!token) return null;
-    const base = coreServices.validateDataManagerBaseUrl(
+    const base = validateDataManagerBaseUrl(
       ctx.getRequiredService("data-manager")?.url ??
         envString("DATA_MANAGER_URL", "http://localhost:4000"),
     );
-    return await ctx.http.get<TrafficApplicationSnapshot>(`${base}/traffic/conditions/applied`, {
+    const response = await ctx.http.get<unknown>(`${base}${getGetAppliedTrafficConditionsUrl()}`, {
       timeoutMs: 2_000,
       maxResponseBytes: 8 * 1024 * 1024,
       cache: { ttl: 0 },
       headers: { Authorization: `Bearer ${token}`, "Cache-Control": "no-cache" },
     });
+    return dataManagerOperations.getAppliedTrafficConditions.responses[200].schema.parse(response);
   } catch {
     return null;
   }
