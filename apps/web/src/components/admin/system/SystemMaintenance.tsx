@@ -1,10 +1,12 @@
 "use client";
 
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
+import CopyIcon from "@mui/icons-material/ContentCopy";
 import DiagnosticsIcon from "@mui/icons-material/MonitorHeart";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import UpdateIcon from "@mui/icons-material/SystemUpdateAlt";
 import Alert from "@mui/material/Alert";
+import AlertTitle from "@mui/material/AlertTitle";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Checkbox from "@mui/material/Checkbox";
@@ -35,6 +37,10 @@ import { useAdminToast } from "../shared/AdminToast";
 import { ErrorState } from "../shared/ErrorState";
 
 const CONFIRMATION = "UPDATE OPENMAPX";
+const HOST_UPDATE_COMMANDS = [
+  "pnpm openmapx compose release",
+  "pnpm openmapx services update app-api app-web data-manager ops-agent transitous-runner",
+].join("\n");
 
 interface ImageStatus {
   id: string;
@@ -69,6 +75,7 @@ interface SystemStatus {
 }
 
 interface TrackedJob {
+  path: string;
   id: string;
   label: string;
 }
@@ -78,6 +85,7 @@ interface JobStatus {
   status: "queued" | "running" | "success" | "failed" | "canceled";
   progress: number | null;
   error: string | null;
+  result?: { errorCode?: string } | null;
 }
 
 export function buildSystemJobRequestInit(body?: Record<string, unknown>): RequestInit {
@@ -119,6 +127,7 @@ export function SystemMaintenance() {
   const [confirmation, setConfirmation] = useState("");
   const [createBackup, setCreateBackup] = useState(true);
   const [trackedJob, setTrackedJob] = useState<TrackedJob | null>(null);
+  const [blockedCandidate, setBlockedCandidate] = useState<string | null>(null);
 
   const statusQuery = useQuery<SystemStatus>({
     queryKey: ["admin", "system"],
@@ -147,12 +156,17 @@ export function SystemMaintenance() {
   useEffect(() => {
     const job = jobQuery.data;
     if (!trackedJob || !job || !["success", "failed", "canceled"].includes(job.status)) return;
-    if (job.status === "success") showToast(`${trackedJob.label} completed`);
-    else showToast(job.error || `${trackedJob.label} ${job.status}`, "error");
+    if (job.result?.errorCode === "host_update_required") {
+      setBlockedCandidate(candidateToApply?.expectedDigest ?? null);
+    }
+    if (job.status === "success") {
+      if (trackedJob.path === "updates/check") setBlockedCandidate(null);
+      showToast(`${trackedJob.label} completed`);
+    } else showToast(job.error || `${trackedJob.label} ${job.status}`, "error");
     void queryClient.invalidateQueries({ queryKey: ["admin", "system"] });
     void queryClient.invalidateQueries({ queryKey: ["admin", "jobs"] });
     setTrackedJob(null);
-  }, [jobQuery.data, queryClient, showToast, trackedJob]);
+  }, [candidateToApply, jobQuery.data, queryClient, showToast, trackedJob]);
 
   const queueJob = useMutation({
     mutationFn: async ({
@@ -174,7 +188,7 @@ export function SystemMaintenance() {
       };
       if (!response.ok || !result.jobId)
         throw new Error(result.error ?? `Failed to queue ${label}`);
-      return { id: result.jobId, label };
+      return { id: result.jobId, label, path };
     },
     onSuccess: (job) => {
       setTrackedJob(job);
@@ -195,8 +209,15 @@ export function SystemMaintenance() {
           expectedDigest: status.release.availableDigest,
         }
       : null;
+  // The agent status includes the backup helper pin check, even when its image is current.
+  const agent = status?.images.find((image) => image.id === "ops-agent");
+  const hostUpdateRequired = Boolean(
+    checkedCandidate &&
+      (agent?.status !== "up-to-date" || blockedCandidate === checkedCandidate.expectedDigest),
+  );
   const canUpdate = Boolean(
     checkedCandidate &&
+      !hostUpdateRequired &&
       (updateCount > 0 ||
         status?.release?.availableReleaseId !== status?.release?.currentReleaseId),
   );
@@ -251,6 +272,45 @@ export function SystemMaintenance() {
         </Typography>
       </Paper>
 
+      {hostUpdateRequired && (
+        <Alert severity="warning" sx={{ minWidth: 0 }}>
+          <AlertTitle>Host update required</AlertTitle>
+          <Typography variant="body2">
+            {agent?.status === "update-available" ||
+            blockedCandidate === checkedCandidate?.expectedDigest
+              ? "This release updates the operations agent or its backup helper and cannot be installed from the admin panel."
+              : "The operations agent or its backup helper could not be verified for this release. Updating from the admin panel is blocked."}{" "}
+            Run these commands from an updated OpenMapX checkout on the host. The agent cannot
+            replace its own container while executing an update.
+          </Typography>
+          <Box
+            component="pre"
+            sx={{
+              whiteSpace: "pre-wrap",
+              overflowWrap: "anywhere",
+              fontSize: "0.8125rem",
+              my: 1.5,
+            }}
+          >
+            {HOST_UPDATE_COMMANDS}
+          </Box>
+          <Button
+            size="small"
+            startIcon={<CopyIcon />}
+            onClick={async () => {
+              try {
+                await navigator.clipboard.writeText(HOST_UPDATE_COMMANDS);
+                showToast("Host update commands copied");
+              } catch {
+                showToast("Could not copy commands. Select and copy the commands above.", "error");
+              }
+            }}
+          >
+            Copy commands
+          </Button>
+        </Alert>
+      )}
+
       {trackedJob && (
         <Paper variant="outlined" sx={{ p: 1.5 }}>
           <Stack direction="row" sx={{ alignItems: "center", gap: 1, mb: 1 }}>
@@ -287,7 +347,13 @@ export function SystemMaintenance() {
               variant="contained"
               startIcon={<UpdateIcon />}
               disabled={active || !status?.deployment.maintenanceReady || !canUpdate}
-              title={!canUpdate ? "Check for a release with changes before updating" : undefined}
+              title={
+                hostUpdateRequired
+                  ? "This release requires an update on the host"
+                  : !canUpdate
+                    ? "Check for a release with changes before updating"
+                    : undefined
+              }
               onClick={() => {
                 setCandidateToApply(checkedCandidate);
                 setDialogOpen(true);
@@ -432,7 +498,12 @@ export function SystemMaintenance() {
             variant="contained"
             color="warning"
             startIcon={<UpdateIcon />}
-            disabled={confirmation !== CONFIRMATION || queueJob.isPending || !candidateToApply}
+            disabled={
+              confirmation !== CONFIRMATION ||
+              queueJob.isPending ||
+              !candidateToApply ||
+              hostUpdateRequired
+            }
             onClick={() => {
               queueJob.mutate({
                 path: "updates/apply",

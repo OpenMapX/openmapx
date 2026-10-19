@@ -1,3 +1,4 @@
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -26,6 +27,16 @@ const systemStatus = {
       updateAvailable: true,
       status: "update-available" as "update-available" | "up-to-date",
     },
+    {
+      id: "ops-agent",
+      name: "Operations agent",
+      image: "ghcr.io/openmapx/ops-agent:latest",
+      containerState: "running",
+      runningImageId: "sha256:agent",
+      localImageId: "sha256:agent",
+      updateAvailable: false,
+      status: "up-to-date" as "up-to-date" | "update-available" | "unknown" | "not-running",
+    },
   ],
 };
 
@@ -46,6 +57,9 @@ vi.mock("@tanstack/react-query", () => ({
 }));
 
 afterEach(() => {
+  cleanup();
+  systemStatus.images[1].status = "up-to-date";
+  systemStatus.images[1].updateAvailable = false;
   systemStatus.images[0].runningImageId = "sha256:old-image";
   systemStatus.images[0].localImageId = "sha256:new-image";
   systemStatus.images[0].updateAvailable = true;
@@ -65,6 +79,54 @@ describe("SystemMaintenance", () => {
     expect(markup).toContain("Update ready");
     expect(markup).toContain("Deep diagnostics");
     expect(markup).toContain("Host-control readiness");
+  });
+
+  it.each(["update-available", "unknown", "not-running"] as const)(
+    "requires a host update when agent and helper readiness is %s",
+    async (status) => {
+      systemStatus.images[1].status = status;
+      const { SystemMaintenance } = await import("./SystemMaintenance");
+      render(<SystemMaintenance />);
+      expect(screen.getByRole("button", { name: "Update OpenMapX" })).toBeDisabled();
+      expect(screen.getByRole("alert")).toHaveTextContent("Host update required");
+      expect(screen.getByRole("alert")).toHaveTextContent("pnpm openmapx compose release");
+      expect(screen.getByRole("alert")).toHaveTextContent(
+        "pnpm openmapx services update app-api app-web data-manager ops-agent transitous-runner",
+      );
+      expect(screen.getByRole("button", { name: "Check for updates" })).not.toBeDisabled();
+    },
+  );
+
+  it("blocks updates if the agent inspection is missing", async () => {
+    const agent = systemStatus.images[1];
+    systemStatus.images.splice(1, 1);
+    try {
+      const { SystemMaintenance } = await import("./SystemMaintenance");
+      render(<SystemMaintenance />);
+      expect(screen.getByRole("button", { name: "Update OpenMapX" })).toBeDisabled();
+      expect(screen.getByRole("alert")).toHaveTextContent("could not be verified");
+    } finally {
+      systemStatus.images.push(agent);
+    }
+  });
+
+  it("copies the host update commands", async () => {
+    systemStatus.images[1].status = "update-available";
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
+    const { SystemMaintenance } = await import("./SystemMaintenance");
+    render(<SystemMaintenance />);
+    fireEvent.click(screen.getByRole("button", { name: "Copy commands" }));
+    expect(writeText).toHaveBeenCalledWith(
+      "pnpm openmapx compose release\npnpm openmapx services update app-api app-web data-manager ops-agent transitous-runner",
+    );
+  });
+
+  it("allows application updates when agent and helper already match", async () => {
+    const { SystemMaintenance } = await import("./SystemMaintenance");
+    render(<SystemMaintenance />);
+    expect(screen.getByRole("button", { name: "Update OpenMapX" })).not.toBeDisabled();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
   it("does not send a JSON content type for bodyless maintenance actions", async () => {

@@ -2,6 +2,7 @@ import type { OpsOperation, OpsOperationKind, OpsResultFor } from "@openmapx/cor
 import type { JobContext } from "./job-runner";
 import {
   type ApiOpsClient,
+  ApiOpsError,
   createApiOpsClient,
   createDurableOpsKey,
   type FollowOpsEventsState,
@@ -209,6 +210,9 @@ export async function executeAdminJobOperation<K extends OpsOperationKind>(
     await persistProjection(context, projection);
     return result;
   } catch (error) {
+    if (error instanceof ApiOpsError && error.errorClass === "host_update_required") {
+      context.checkpointResult = { ...context.checkpointResult, errorCode: error.errorClass };
+    }
     adoptMirrorState(await eventMirror);
     projection.operations[operationKey] = projected;
     await persistProjection(context, projection);

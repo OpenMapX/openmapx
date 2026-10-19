@@ -38,6 +38,62 @@ describe("administrative job operations broker", () => {
     });
   });
 
+  it("retains the host-update failure code in the durable admin job", async () => {
+    const ctx = context();
+    const operationKey = "opk1_abcdefghijklmnop";
+    const operationId = "job1_abcdefghijklmnop";
+    const client = {
+      execute: vi.fn().mockResolvedValue({
+        execution: "async",
+        kind: "system.update",
+        operationId,
+        operationKey,
+        state: "queued",
+      }),
+      status: vi.fn().mockResolvedValue({
+        version: 1,
+        operationId,
+        operationKey,
+        kind: "system.update",
+        resourceId: "release-123",
+        state: "failed",
+        errorClass: "host_update_required",
+        submittedAt: "2026-10-19T00:00:00.000Z",
+        updatedAt: "2026-10-19T00:00:01.000Z",
+      }),
+      events: vi.fn().mockResolvedValue({
+        version: 1,
+        operationId,
+        nextCursor: 0,
+        terminal: true,
+        truncated: false,
+        events: [],
+      }),
+      lookup: vi.fn(),
+      cancel: vi.fn(),
+    };
+    await expect(
+      executeAdminJobOperation(
+        ctx,
+        {
+          kind: "system.update",
+          releaseId: "release-123",
+          expectedDigest: "a".repeat(64),
+          createBackup: false,
+        },
+        "admin-job.system.update",
+        { client: client as never, operationKey, pollIntervalMs: 1 },
+      ),
+    ).rejects.toMatchObject({
+      errorClass: "host_update_required",
+      message: expect.stringContaining("host"),
+    });
+    expect(ctx.checkpointResult).toMatchObject({ errorCode: "host_update_required" });
+    expect(ctx.checkpoint).toHaveBeenLastCalledWith(
+      expect.objectContaining({ errorCode: "host_update_required" }),
+    );
+  });
+
   it("mirrors bounded durable agent events without cancelling a running operation", async () => {
     const ctx = context();
     const operation: Extract<OpsOperation, { kind: "backup.delete" }> = {

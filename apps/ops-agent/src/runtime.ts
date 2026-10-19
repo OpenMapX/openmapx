@@ -1,6 +1,7 @@
 import type { TrustedConfigurationPayload } from "@openmapx/core/ops";
 import {
   OPS_OPERATION_KINDS,
+  OPS_PUBLIC_ERROR_MESSAGES,
   type OpsOperation,
   type OpsOperationKind,
   type OpsResultFor,
@@ -11,6 +12,13 @@ export class OpsNotWiredError extends Error {
   constructor() {
     super("Typed adapter is not wired");
     this.name = "OpsNotWiredError";
+  }
+}
+
+export class OpsHostUpdateRequiredError extends Error {
+  constructor() {
+    super(OPS_PUBLIC_ERROR_MESSAGES.host_update_required);
+    this.name = "OpsHostUpdateRequiredError";
   }
 }
 

@@ -199,8 +199,10 @@ writes `docker-compose.release.yml` atomically after every digest-pinned image
 has been pulled. Apply uses that checked candidate rather than resolving the channel again. A configuration change requires a fresh check. It replaces API, web, data-manager, and transitous-runner without
 restarting their dependencies. Before applying, it verifies that the running
 ops-agent image and its privacy-backup helper pin already match the selected
-release. If either differs or cannot be verified, it stops and gives the host-side
-update commands above. The agent does not replace its own container while it is
+release. If either differs or cannot be verified, the panel shows **Host update
+required**, disables Apply, and provides copyable host-side update commands.
+If the running state changes after inspection, the update guard returns a
+specific `host_update_required` failure with the same guidance. The agent does not replace its own container while it is
 executing the update. System status includes all five running application services.
 
 API and CLI service lifecycle commands automatically include an
