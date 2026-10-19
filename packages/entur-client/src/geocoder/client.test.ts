@@ -133,6 +133,34 @@ describe("bounded generated Entur Geocoder", () => {
     ).rejects.toMatchObject({ kind: "config" });
     expect(f.calls).toHaveLength(0);
   });
+  it.each([
+    { label: "two IDs in one element", ids: ["NSR:StopPlace:1,NSR:StopPlace:2"] },
+    {
+      label: "delimiter in a later element",
+      ids: ["NSR:StopPlace:1", "NSR:StopPlace:2,NSR:StopPlace:3"],
+    },
+    {
+      label: "101 wire IDs in one element",
+      ids: [Array.from({ length: 101 }, (_, index) => `NSR:StopPlace:${index + 1}`).join(",")],
+    },
+  ])("rejects comma-bearing place IDs before policy and HTTP: $label", async ({ ids }) => {
+    const f = fixture();
+    const policyChecks: string[] = [];
+    const policy: EnturGeocoderPolicy = {
+      allowedSources: async () => {
+        policyChecks.push("sources");
+        return ["nsr"];
+      },
+      assertLookupAllowed: async () => {
+        policyChecks.push("lookup");
+      },
+    };
+    await expect(
+      createEnturGeocoder(f.client, { policy }).place({ ids }, signal()),
+    ).rejects.toMatchObject({ kind: "config" });
+    expect(policyChecks).toEqual([]);
+    expect(f.calls).toHaveLength(0);
+  });
   it.each([{ lat: 0 }, { lat: 91, lon: 0 }, { lat: 0, lon: 0, q: "Oslo" }])(
     "rejects invalid reverse before acquisition: %j",
     async (params) => {

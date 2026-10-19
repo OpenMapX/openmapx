@@ -135,7 +135,8 @@ export function createEnturGeocoder(
         else {
           PlaceParams.strict().parse(params);
           const ids = (params as PlaceParams).ids;
-          if (!ids.length || ids.some((id) => !id.trim())) throw new Error("ids");
+          if (!ids.length || ids.some((id) => !id.trim() || id.includes(",")))
+            throw new Error("ids");
         }
       } catch {
         throw new EnturRequestError("config");
