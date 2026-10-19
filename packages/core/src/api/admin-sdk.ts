@@ -8,4 +8,5 @@ export {
   unwrapAdminResponse,
 } from "./admin-sdk-transport";
 export * from "./contracts/activity-admin";
+export * from "./generated/admin/activity-admin.generated";
 export * from "./generated/admin/data-manager-admin.generated";

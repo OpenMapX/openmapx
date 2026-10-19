@@ -155,3 +155,114 @@ describe("application administration contract registration", () => {
     }
   });
 });
+
+describe("shared registration response kinds and ordering", () => {
+  it("preserves legacy preValidation/beforeValidation/preHandler sequencing", async () => {
+    const app = Fastify();
+    const calls: string[] = [];
+    app.addHook("preHandler", async () => {
+      calls.push("inherited guard");
+    });
+    registerDataManagerAdminRoute(
+      app,
+      "postApiDataManagerTransitSync",
+      async (_req, reply) => {
+        calls.push("handler");
+        return reply.code(202).send({ ok: true, jobId: "job", status: "started" });
+      },
+      {
+        beforeValidation: async () => {
+          calls.push("before validation");
+        },
+        preHandler: (_req, _reply, done) => {
+          calls.push("route guard");
+          done();
+        },
+      },
+    );
+    try {
+      expect(
+        (
+          await app.inject({
+            method: "POST",
+            url: "/data-manager/transit/sync",
+            payload: { countries: "bad" },
+          })
+        ).statusCode,
+      ).toBe(400);
+      expect(calls).toEqual(["before validation"]);
+      calls.length = 0;
+      expect(
+        (await app.inject({ method: "POST", url: "/data-manager/transit/sync", payload: {} }))
+          .statusCode,
+      ).toBe(202);
+      expect(calls).toEqual(["before validation", "inherited guard", "route guard", "handler"]);
+    } finally {
+      await app.close();
+    }
+  });
+  it("emits and qualifies explicit text, empty and raw stream responses", async () => {
+    const { createAdminRouteRegistrar } = await import("../admin-contract");
+    const { adminCommonResponses, adminText, adminEmpty, adminStream } = await import(
+      "@openmapx/core/api-contracts"
+    );
+    const { z } = await import("zod/v4");
+    const register = createAdminRouteRegistrar(
+      {
+        text: {
+          method: "GET",
+          path: "/api/text",
+          auth: "admin",
+          responses: { ...adminCommonResponses, 200: adminText(z.literal("hello")) },
+        },
+        empty: {
+          method: "GET",
+          path: "/api/empty",
+          auth: "admin",
+          responses: { ...adminCommonResponses, 204: adminEmpty() },
+        },
+        stream: {
+          method: "GET",
+          path: "/api/stream",
+          auth: "admin",
+          responses: { ...adminCommonResponses, 200: adminStream("text/event-stream") },
+        },
+      },
+      { tag: "fixture", validationPhase: "preHandler" },
+    );
+    const app = Fastify();
+    const schemas: Record<string, unknown> = {};
+    app.addHook("onRoute", (route) => {
+      if (route.method !== "HEAD") schemas[route.url] = route.schema?.response;
+    });
+    register(app, "text", async (_req, reply) => reply.type("text/plain").send("hello"));
+    register(app, "empty", async (_req, reply) => reply.code(204).send());
+    register(app, "stream", async (_req, reply) => {
+      reply.hijack();
+      reply.raw.writeHead(200, { "Content-Type": "text/event-stream" });
+      reply.raw.end("event: fixture\ndata: {}\n\n");
+      return reply;
+    });
+    try {
+      const text = await app.inject("/text");
+      expect(text.statusCode).toBe(200);
+      expect(text.body).toBe("hello");
+      const empty = await app.inject("/empty");
+      expect(empty.statusCode).toBe(204);
+      expect(empty.body).toBe("");
+      const stream = await app.inject("/stream");
+      expect(stream.statusCode).toBe(200);
+      expect(stream.body).toContain("event: fixture");
+      expect(schemas["/text"]).toMatchObject({
+        200: { content: { "text/plain": { schema: { type: "string" } } } },
+      });
+      expect(schemas["/empty"]).toMatchObject({ 204: { description: "Response" } });
+      expect(schemas["/empty"]).not.toHaveProperty("204.content");
+      expect(schemas["/stream"]).toMatchObject({
+        200: { content: { "text/event-stream": { schema: { type: "string" } } } },
+      });
+    } finally {
+      await app.close();
+    }
+  });
+});

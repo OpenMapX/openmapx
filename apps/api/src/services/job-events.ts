@@ -7,30 +7,15 @@
  * route answers that with a fresh snapshot from the database.
  */
 
-/** Fields left undefined were not touched by the transition; viewers keep their value. */
-export interface JobStatusEvent {
-  type: "status";
+import type { AdminJobStreamEvents, AdminJobStreamMetrics } from "@openmapx/core/api-contracts";
+
+/** Producer-domain fields are wider until the route validates the serialized JSON boundary. */
+export type JobStatusEvent = Omit<AdminJobStreamEvents["status"], "status" | "result"> & {
   status: string;
-  progress?: number | null;
-  error?: string | null;
   result?: Record<string, unknown> | null;
-  startedAt?: string | null;
-  finishedAt?: string | null;
-}
-
-export interface JobProgressEvent {
-  type: "progress";
-  progress: number;
-}
-
-export interface JobLogEvent {
-  type: "log";
-  id: string;
-  seq: number;
-  stream: string;
-  line: string;
-  createdAt: string;
-}
+};
+export type JobProgressEvent = AdminJobStreamEvents["progress"];
+export type JobLogEvent = Omit<AdminJobStreamEvents["log"], "stream"> & { stream: string };
 
 export type JobEvent = JobStatusEvent | JobProgressEvent | JobLogEvent;
 
@@ -40,17 +25,7 @@ export interface StoredJobEvent {
   event: JobEvent;
 }
 
-export interface JobStreamMetrics {
-  activeStreams: number;
-  reconnects: number;
-  backfilledEvents: number;
-  snapshotFallbacks: number;
-  droppedEvents: number;
-  publishedEvents: number;
-  maxPublishLagMs: number;
-  handlerDurationMs: { upperBoundMs: number | null; count: number }[];
-  handlerDurations: { count: number; totalMs: number; maxMs: number };
-}
+export type JobStreamMetrics = AdminJobStreamMetrics;
 
 export const TERMINAL_JOB_STATUSES: ReadonlySet<string> = new Set([
   "success",

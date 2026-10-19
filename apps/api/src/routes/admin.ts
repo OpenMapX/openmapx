@@ -10,12 +10,7 @@ import {
   reloadIntegrations,
   resolveConfigWithSources,
 } from "../integration-host";
-import {
-  type ActivityJobFilter,
-  type ActivityJobSource,
-  getActivityJob,
-  listActivityJobs,
-} from "../services/activity-jobs";
+import { listActivityJobs } from "../services/activity-jobs";
 import { isDockerAvailable } from "../services/admin-ops";
 import { getTimeline } from "../services/health-history";
 import {
@@ -844,73 +839,6 @@ export async function adminRoute(app: FastifyInstance): Promise<void> {
         hours,
         timeline,
       };
-    },
-  );
-
-  app.get("/admin/jobs", async (request, reply) => {
-    const {
-      status,
-      limit = "50",
-      offset = "0",
-    } = request.query as {
-      status?: string;
-      limit?: string;
-      offset?: string;
-    };
-
-    const validFilters = new Set<ActivityJobFilter>(["active", "completed", "failed"]);
-    if (status && !validFilters.has(status as ActivityJobFilter)) {
-      return reply.status(400).send({ error: "Invalid job status filter" });
-    }
-
-    const parsedLimit = Number.parseInt(limit, 10);
-    const parsedOffset = Number.parseInt(offset, 10);
-    return listActivityJobs({
-      filter: status as ActivityJobFilter | undefined,
-      limit: Number.isFinite(parsedLimit) ? parsedLimit : 50,
-      offset: Number.isFinite(parsedOffset) ? parsedOffset : 0,
-    });
-  });
-
-  app.get<{ Params: { id: string }; Querystring: { source?: ActivityJobSource } }>(
-    "/admin/jobs/:id",
-    async (request, reply) => {
-      const source = request.query.source ?? "application";
-      if (source !== "application" && source !== "data-manager") {
-        return reply.status(400).send({ error: "Invalid job source" });
-      }
-      const job = await getActivityJob(request.params.id, source);
-      if (!job) return reply.status(404).send({ error: "Job not found" });
-      return job;
-    },
-  );
-
-  app.post<{ Params: { id: string }; Querystring: { source?: ActivityJobSource } }>(
-    "/admin/jobs/:id/cancel",
-    async (request, reply) => {
-      const source = request.query.source ?? "application";
-      if (source !== "application" && source !== "data-manager") {
-        return reply.status(400).send({ error: "Invalid job source" });
-      }
-      if (source === "data-manager") {
-        return reply.status(400).send({ error: "Data-manager jobs cannot be canceled" });
-      }
-      const adminSession = getAdminSession(request);
-
-      const canceled = await jobRunner.cancel(request.params.id);
-      if (!canceled) {
-        return reply.status(400).send({ error: "Job cannot be canceled (not running or queued)" });
-      }
-
-      await writeAuditLog({
-        actorId: adminSession.user.id,
-        targetId: request.params.id,
-        targetType: "job",
-        action: "job.cancel",
-        request,
-      });
-
-      return { ok: true };
     },
   );
 

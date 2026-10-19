@@ -29,6 +29,8 @@ export interface OpenApiDocument {
 const HTTP_METHODS = ["get", "put", "post", "delete", "options", "head", "patch", "trace"];
 
 const TAG_DESCRIPTIONS: Record<string, string> = {
+  "activity-admin":
+    "Activity administration: application and data-manager jobs, cancellation and live application events.",
   "data-manager-admin":
     "Data-manager administration, transit maintenance and ambient publications.",
   "runtime-metadata": "Public runtime capabilities, integration metadata and legal disclosures.",
@@ -145,7 +147,8 @@ export function buildDocument(input: BuildDocumentInput): OpenApiDocument {
       const base = (operation ?? {}) as Record<string, unknown>;
       operations[method] = sortObject({
         ...base,
-        operationId: toOperationId(method, path),
+        operationId:
+          typeof base.operationId === "string" ? base.operationId : toOperationId(method, path),
         tags: Array.isArray(base.tags) ? base.tags : [tagForPath(rawPath)],
         "x-openmapx-auth": authFor(coreAuthIndex, method, path),
       });

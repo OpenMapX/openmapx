@@ -234,6 +234,10 @@ describe("activity generation", () => {
       ["getAdminActivityJobStreamMetrics", "get", "/api/admin/jobs/stream-metrics"],
       ["streamAdminActivityJobEvents", "get", "/api/admin/jobs/{id}/events"],
     ];
+    const previousInput = structuredClone(input);
+    // Once Activity is adopted, the committed spec also contains its full schemas.
+    // Compare the other families against a baseline without this fixture family.
+    for (const [, method, path] of ids) delete previousInput.paths[path]?.[method];
     for (const [id, method, path] of ids) {
       const stream = id === "streamAdminActivityJobEvents";
       input.paths[path] ??= {};
@@ -294,8 +298,8 @@ describe("activity generation", () => {
     });
     try {
       const files = await generateArtifacts({ document: input });
-      // Every previously committed family/model stays byte-stable when adding activity.
-      const previous = await generateArtifacts();
+      // Every other committed family/model stays byte-stable when adding Activity.
+      const previous = await generateArtifacts({ document: previousInput });
       for (const file of previous.filter(
         (f: { filename: string }) => f.filename !== "admin/operation-bindings.generated.ts",
       ))
