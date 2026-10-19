@@ -37,6 +37,132 @@ describe("saved place file parsers", () => {
       });
     },
   );
+  it.each([
+    "https://www.google.com/maps/place/Synthetic/data=!4m2!3m1!1s0x1:0x2",
+    "https://google.co.uk/maps/search/Synthetic",
+    "https://www.google.com.au/maps/place/Synthetic",
+    "https://maps.google.de/?q=Synthetic",
+    "https://maps.google.co.uk/?cid=123",
+    "https://google.com/?q=Synthetic",
+    "https://google.com/?cid=123",
+    "https://maps.app.goo.gl/synthetic",
+    "https://goo.gl/maps/synthetic",
+  ])("accepts a Maps save from %s", (url) => {
+    expect(parse("Mixed.csv", `Title,URL\nSynthetic,${url}`)[0].places).toEqual([
+      expect.objectContaining({ name: "Synthetic" }),
+    ]);
+  });
+  it.each([
+    "https://www.google.com",
+    "https://www.google.com/search?q=film",
+    "https://images.google.com/?q=film",
+    "https://www.google.com/imgres?imgurl=film",
+    "https://example.test/maps/place/Synthetic",
+    "https://google.com.example.test/maps/place/Synthetic",
+    "https://goo.gl/other/synthetic",
+    "javascript:alert(1)",
+    "",
+  ])("ignores non-place saves in a mixed standalone Takeout CSV: %s", (url) => {
+    const lists = parse(
+      "Mixed.csv",
+      `Title,URL\nFilm,${url}\nSynthetic,https://google.com/maps/place/Synthetic`,
+    );
+    expect(lists[0].places.map((place) => place.name)).toEqual(["Synthetic"]);
+  });
+  it("does not offer standalone saved CSVs without Maps rows", async () => {
+    const result = await parseImportFiles([
+      new File(["Title,Note,URL,Tags,Comment\n,,,,\nFilm,,https://www.google.com,,"], "Search.csv"),
+      new File(["Title,Note,URL,Tags,Comment\n,,,,"], "Empty.csv"),
+    ]);
+    expect(result.lists).toEqual([]);
+    expect(result.errors.map((error) => error.code)).toEqual(["empty", "empty"]);
+  });
+  it("summarizes empty and non-place saved lists using names, and offers only Maps rows", async () => {
+    const result = await parseImportFiles([
+      new File(
+        [
+          zipSync({
+            "Takeout/Saved/Mixed.csv": strToU8(
+              "Title,URL\nSynthetic,https://google.com/maps/place/Synthetic\nFilm,https://www.google.com",
+            ),
+            "Takeout/Saved/Search.csv": strToU8("Title,URL\nFilm,https://www.google.com"),
+            "Takeout/Saved/Empty.csv": strToU8("Title,Note,URL,Tags,Comment\n,,,,"),
+          }),
+        ],
+        "takeout.zip",
+      ),
+    ]);
+    expect(result.lists.map((list) => list.name)).toEqual(["Mixed"]);
+    expect(result.lists[0].places.map((place) => place.name)).toEqual(["Synthetic"]);
+    expect(result.errors).toEqual([]);
+    expect(result.skippedLists).toEqual(["Search", "Empty"]);
+  });
+  it("shows only skipped-list information when every saved list has no places", async () => {
+    const result = await parseImportFiles([
+      new File(
+        [
+          zipSync({
+            "Takeout/Saved/Search.csv": strToU8("Title,URL\nFilm,https://www.google.com"),
+          }),
+        ],
+        "takeout.zip",
+      ),
+    ]);
+    expect(result.lists).toEqual([]);
+    expect(result.errors).toEqual([]);
+    expect(result.skippedLists).toEqual(["Search"]);
+  });
+  it("identifies Takeout without Saved and ignores labelled places and reviews", async () => {
+    const result = await parseImportFiles([
+      new File(
+        [
+          zipSync({
+            "Takeout/Maps/My labelled places/Labelled places.json": strToU8(
+              JSON.stringify(current()),
+            ),
+            "Takeout/Maps (your places)/Reviews.json": strToU8(JSON.stringify(current())),
+            "Takeout/Maps/Answers to automated questions/Synthetic.json": strToU8("{}"),
+          }),
+        ],
+        "takeout.zip",
+      ),
+    ]);
+    expect(result.lists).toEqual([]);
+    expect(result.errors).toEqual([{ file: "takeout.zip", code: "takeoutNoSaved" }]);
+  });
+  it("accepts an older Saved Places JSON without the Saved product", async () => {
+    const result = await parseImportFiles([
+      new File(
+        [
+          zipSync({
+            "Takeout/Maps (your places)/Saved Places.json": strToU8(JSON.stringify(current())),
+          }),
+        ],
+        "takeout.zip",
+      ),
+    ]);
+    expect(result.lists).toHaveLength(1);
+    expect(result.errors).toEqual([]);
+  });
+  it.each([
+    ["empty.gpx", "<gpx/>", "empty"],
+    ["route.gpx", "<gpx><rte><rtept lat='52' lon='13'/></rte></gpx>", "emptyTracks"],
+    ["empty.kml", "<kml/>", "empty"],
+    [
+      "route.kml",
+      "<kml><Placemark><LineString><coordinates>13,52 14,53</coordinates></LineString></Placemark></kml>",
+      "emptyTracks",
+    ],
+    [
+      "track.kml",
+      "<kml xmlns:gx='http://www.google.com/kml/ext/2.2'><Placemark><gx:Track/></Placemark></kml>",
+      "emptyTracks",
+    ],
+  ])("mentions tracks and routes only when present: %s", async (filename, input, code) => {
+    expect((await parseImportFiles([new File([input], filename)])).errors).toEqual([
+      { file: filename, code },
+    ]);
+  });
   it("derives a decoded name or translated dropped-pin label", () => {
     const result = parse(
       "pins.csv",
@@ -81,7 +207,7 @@ describe("saved place file parsers", () => {
     expect(result[0].places[0].address).toBe("Floyd Avenue (The Fan) 907, Richmond");
     expect(result[1].places[0].address).toBeUndefined();
   });
-  it("surfaces unsupported and empty saved-list CSVs inside Takeout", async () => {
+  it("keeps unsupported saved-list warnings and summarizes empty lists inside Takeout", async () => {
     const data = zipSync({
       "Takeout/Saved/Broken.csv": strToU8("Wrong,Header\nCafe,Here"),
       "Takeout/Gespeichert/Empty.csv": strToU8("Title,Note,URL,Comment\n"),
@@ -89,8 +215,8 @@ describe("saved place file parsers", () => {
     const result = await parseImportFiles([new File([data], "takeout.zip")]);
     expect(result.errors).toEqual([
       { file: "takeout.zip/Takeout/Saved/Broken.csv", code: "unsupported" },
-      { file: "takeout.zip/Takeout/Gespeichert/Empty.csv", code: "empty" },
     ]);
+    expect(result.skippedLists).toEqual(["Empty"]);
   });
   it("never inflates unrelated CSV entries", async () => {
     const data = zipSync({
@@ -256,7 +382,7 @@ describe("saved place file parsers", () => {
     expect(result[1].places[0].note).toBe("Comment");
     expect(() =>
       parse("track.gpx", '<gpx><trk><trkseg><trkpt lat="52" lon="13"/></trkseg></trk></gpx>'),
-    ).toThrow("empty");
+    ).toThrow("emptyTracks");
     expect(
       parse(
         "one.gpx",

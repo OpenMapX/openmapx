@@ -1,5 +1,5 @@
 import Papa from "papaparse";
-import { coordinatesFromGoogleUrl, nameFromGoogleUrl } from "./googleUrl";
+import { coordinatesFromGoogleUrl, isGoogleMapsUrl, nameFromGoogleUrl } from "./googleUrl";
 import {
   fileList,
   ImportFileError,
@@ -48,6 +48,7 @@ export function parseCsv(
     if (row.every((value) => !value.trim())) return [];
     const field = (...names: string[]) =>
       row[headers.findIndex((h) => names.includes(h))]?.trim() || "";
+    if (takeout && !isGoogleMapsUrl(field("url"))) return [];
     const coords = takeout
       ? coordinatesFromGoogleUrl(field("url"))
       : {
