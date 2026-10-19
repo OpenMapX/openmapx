@@ -29,23 +29,15 @@ import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import type { SavedPlace } from "@openmapx/core";
 import {
-  createPlace,
-  idsFromPrimary,
   isSystemSavedList,
-  PANEL,
   useDeleteList,
-  usePlaceStore,
   useSavedListPlaces,
   useSavedLists,
   useSavedPlacesStore,
-  useSidebarStore,
   useUpdateList,
   useUpdatePlace,
 } from "@openmapx/core";
-import {
-  savedPlaceContributors,
-  savedPlaceContributorsForPlace,
-} from "@openmapx/core/saved-place-contributors";
+import { savedPlaceContributors } from "@openmapx/core/saved-place-contributors";
 import { useTranslations } from "next-intl";
 import type React from "react";
 import { useRef, useState } from "react";
@@ -55,6 +47,7 @@ import { useMap } from "@/integration-api/map/MapContext";
 import { BRAND, BRAND_LIGHT } from "@/integration-api/runtime/theme";
 import { exportSavedList } from "@/lib/exportSavedList";
 import { resolveListIcon } from "@/lib/listIcon";
+import { openSavedPlace } from "@/lib/openSavedPlace";
 import { ImportPlacesPicker } from "./ImportPlacesPicker";
 import { PlaceThumbnail } from "./PlaceThumbnail";
 import { ShareListDialog } from "./ShareListDialog";
@@ -68,7 +61,6 @@ export function SavedListDetail() {
 
   const selectedListId = useSavedPlacesStore((s) => s.selectedListId);
   const clearSelectedList = useSavedPlacesStore((s) => s.clearSelectedList);
-  const setSelectedPlace = usePlaceStore((s) => s.setSelectedPlace);
   const { flyTo } = useMap();
 
   const { data: lists } = useSavedLists();
@@ -134,23 +126,7 @@ export function SavedListDetail() {
     setDeleteDialogOpen(false);
   };
 
-  const handlePlaceClick = (place: SavedPlace) => {
-    const identity = (place.placeId ? idsFromPrimary(place.placeId) : null) ?? {
-      primaryScheme: "saved",
-      ids: { saved: place.id },
-    };
-    setSelectedPlace(
-      createPlace({
-        ...identity,
-        ...savedPlaceContributorsForPlace(place.fieldContributors),
-        name: place.name,
-        address: place.address ?? "",
-        coordinates: [place.lng, place.lat],
-      }),
-    );
-    useSidebarStore.getState().openDetail(PANEL.PLACE_CARD);
-    flyTo([place.lng, place.lat], 15);
-  };
+  const handlePlaceClick = (place: SavedPlace) => openSavedPlace(place, flyTo);
 
   const handleAddNoteClick = (e: React.MouseEvent, place: SavedPlace) => {
     e.stopPropagation();

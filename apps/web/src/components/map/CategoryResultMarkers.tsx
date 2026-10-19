@@ -46,6 +46,7 @@ import { subscribeStyleLoaded } from "@/integration-api/map/styleLoadedSync";
 import { useRenderedMapAttributions } from "@/integration-api/overlay/useRenderedMapAttributions";
 import { createBrandMarkerSvg, createMarkerSvg } from "@/lib/markerSvg";
 import { useExploreReachResults } from "@/lib/useExploreReachResults";
+import { resultMarkerLayers } from "./resultMarkerLayers";
 
 const SOURCE_ID = "category-results-source";
 const LAYER_ID = "category-results-layer";
@@ -614,52 +615,12 @@ export function CategoryResultMarkers() {
         ).then(() => {
           markerPending.delete(source);
           if (!isCurrent()) return;
-          if (!map.getLayer(LAYER_ID)) {
-            addLayerInSlot(
-              map,
-              {
-                id: LAYER_ID,
-                type: "symbol",
-                source: SOURCE_ID,
-                layout: {
-                  "icon-image": ["get", "imageId"],
-                  "icon-size": ["interpolate", ["linear"], ["zoom"], 10, 0.45, 14, 0.6, 17, 0.85],
-                  "icon-allow-overlap": false,
-                  "icon-ignore-placement": false,
-                },
-              },
-              "route-markers",
-              6,
-            );
-          }
-          if (!map.getLayer(LABEL_LAYER_ID)) {
-            addLayerInSlot(
-              map,
-              {
-                id: LABEL_LAYER_ID,
-                type: "symbol",
-                source: SOURCE_ID,
-                minzoom: 15,
-                layout: {
-                  "text-field": ["get", "name"],
-                  "text-size": 11,
-                  "text-offset": [0, 2.0],
-                  "text-anchor": "top",
-                  "text-max-width": 8,
-                  "text-allow-overlap": false,
-                  "text-ignore-placement": false,
-                },
-                paint: {
-                  // The pin's red, deepened for text, so a result's name reads
-                  // apart from the basemap's own category-coloured labels.
-                  "text-color": "#B3261E",
-                  "text-halo-color": "#FFFFFF",
-                  "text-halo-width": 2,
-                },
-              },
-              "route-markers",
-              7,
-            );
+          for (const [index, layer] of resultMarkerLayers(
+            SOURCE_ID,
+            LAYER_ID,
+            LABEL_LAYER_ID,
+          ).entries()) {
+            if (!map.getLayer(layer.id)) addLayerInSlot(map, layer, "route-markers", 6 + index);
           }
           applyFocusRef.current();
         });
