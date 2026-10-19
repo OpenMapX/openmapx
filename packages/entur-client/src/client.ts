@@ -44,7 +44,7 @@ export interface EnturClient {
     signal: AbortSignal,
   ): Promise<TResult>;
   getJson<T>(family: "nsr" | "geocoder", pathAndQuery: string, signal: AbortSignal): Promise<T>;
-  assertSourceAllowed(family: EnturFamily): Promise<void>;
+  assertSourceAllowed(family: EnturFamily, signal?: AbortSignal): Promise<void>;
 }
 const DEFAULTS: Required<EnturConfig> = {
   clientName: "openmapx-server",
@@ -175,7 +175,7 @@ export function createEnturClient(options: EnturClientOptions): EnturClient {
     scope: "entur",
     key: canonical([new URL(endpoint(family)).origin, config.clientName, family]),
   });
-  const assertSourceAllowed = async (family: EnturFamily): Promise<void> => {
+  const checkSourcePolicy = async (family: EnturFamily): Promise<void> => {
     const sourceId = sourceIds[family];
     if (!sourceId) throw new EnturRequestError("source");
     let allowed: boolean;
@@ -185,6 +185,27 @@ export function createEnturClient(options: EnturClientOptions): EnturClient {
       throw new EnturRequestError("unavailable");
     }
     if (!allowed) throw new EnturRequestError("policy");
+  };
+  // Public cache-hit guards own a deadline; execute uses the raw check under its existing deadline.
+  const assertSourceAllowed = async (
+    family: EnturFamily,
+    callerSignal?: AbortSignal,
+  ): Promise<void> => {
+    const timeout = new AbortController();
+    const signal = callerSignal ? AbortSignal.any([callerSignal, timeout.signal]) : timeout.signal;
+    const timer = setTimeout(() => timeout.abort(), TIMEOUT_MS);
+    try {
+      signal.throwIfAborted();
+      await bounded(checkSourcePolicy(family), signal);
+      signal.throwIfAborted();
+    } catch (error) {
+      if (callerSignal?.aborted)
+        throw new EnturRequestError("abort", undefined, { cause: callerSignal.reason });
+      if (timeout.signal.aborted) throw new EnturRequestError("timeout");
+      throw error;
+    } finally {
+      clearTimeout(timer);
+    }
   };
   const admit = async (
     family: EnturFamily,
@@ -233,10 +254,10 @@ export function createEnturClient(options: EnturClientOptions): EnturClient {
     const timer = setTimeout(() => timeout.abort(), TIMEOUT_MS);
     try {
       signal.throwIfAborted();
-      await bounded(assertSourceAllowed(family), signal);
+      await bounded(checkSourcePolicy(family), signal);
       await admit(family, policy, signal);
       // Admission may have waited while an administrator changed source policy.
-      await bounded(assertSourceAllowed(family), signal);
+      await bounded(checkSourcePolicy(family), signal);
       signal.throwIfAborted();
       const requestOptions: ResponseOptions = {
         headers: {
@@ -278,7 +299,7 @@ export function createEnturClient(options: EnturClientOptions): EnturClient {
         throw new EnturRequestError("http", response.status);
       }
       const result = decode(response.body);
-      await bounded(assertSourceAllowed(family), signal);
+      await bounded(checkSourcePolicy(family), signal);
       signal.throwIfAborted();
       return result;
     } catch (error) {

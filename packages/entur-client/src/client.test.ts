@@ -488,4 +488,71 @@ describe("Entur host adapter", () => {
     await expect(instance.getJson("nsr", "/x", signal())).rejects.toMatchObject({ status: 429 });
     expect(f.calls).toHaveLength(2);
   });
+  it("bounds a never-settling public policy assertion to eight seconds", async () => {
+    vi.useFakeTimers();
+    const f = fixture();
+    const instance = createEnturClient({
+      ...f.options,
+      isSourceAllowed: () => new Promise(() => {}),
+    });
+    let result: unknown;
+    const finished = instance.assertSourceAllowed("nsr").then(
+      () => {
+        result = "published";
+      },
+      (error: unknown) => {
+        result = error;
+      },
+    );
+    await vi.advanceTimersByTimeAsync(8001);
+    expect(result).toMatchObject({ kind: "timeout" });
+    await finished;
+    expect(vi.getTimerCount()).toBe(0);
+    expect(f.calls).toHaveLength(0);
+  });
+  it("lets a public policy assertion caller retire promptly and preserves its abort cause", async () => {
+    vi.useFakeTimers();
+    const f = fixture();
+    const controller = new AbortController();
+    const instance = createEnturClient({
+      ...f.options,
+      isSourceAllowed: () => new Promise(() => {}),
+    });
+    let result: unknown;
+    const finished = instance.assertSourceAllowed("nsr", controller.signal).then(
+      () => {
+        result = "published";
+      },
+      (error: unknown) => {
+        result = error;
+      },
+    );
+    await vi.advanceTimersByTimeAsync(1);
+    const reason = new Error("retired caller");
+    controller.abort(reason);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(result).toMatchObject({ kind: "abort", cause: reason });
+    await finished;
+    expect(vi.getTimerCount()).toBe(0);
+    expect(f.calls).toHaveLength(0);
+  });
+  it("keeps internal policy checks within the original operation deadline without leftover timers", async () => {
+    vi.useFakeTimers();
+    const f = fixture();
+    let checks = 0;
+    const instance = createEnturClient({
+      ...f.options,
+      isSourceAllowed: () =>
+        ++checks === 1
+          ? new Promise((resolve) => setTimeout(() => resolve(true), 5000))
+          : new Promise(() => {}),
+    });
+    const work = instance.getJson("nsr", "/x", signal());
+    const assertion = expect(work).rejects.toMatchObject({ kind: "timeout" });
+    await vi.advanceTimersByTimeAsync(8000);
+    await assertion;
+    expect(checks).toBe(2);
+    expect(f.calls).toHaveLength(0);
+    expect(vi.getTimerCount()).toBe(0);
+  });
 });
