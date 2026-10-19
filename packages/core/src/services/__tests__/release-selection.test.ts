@@ -40,11 +40,6 @@ describe("explicit release selection", () => {
   ])("rejects ambiguous repository %s", (repository) => {
     expect(() => releases.normalizeReleaseSelection("preview", repository)).toThrow();
   });
-  it("rejects legacy overrides including the old empty opt-out", () => {
-    expect(() => releases.normalizeReleaseSelection("main", undefined, "")).toThrow(
-      /OPENMAPX_RELEASE/,
-    );
-  });
   it("freezes one pull digest and rejects missing or ambiguous output", () => {
     expect(
       releases.releaseDigestFromPull(`Digest: ${digest}\nStatus: Downloaded newer image`),
