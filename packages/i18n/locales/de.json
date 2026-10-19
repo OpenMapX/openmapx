@@ -3098,7 +3098,10 @@
     "importFailed": "Einige Orte konnten nicht importiert werden. Bereits importierte Orte bleiben erhalten.",
     "importError_unsupported": "Nicht unterstütztes Dateiformat oder nicht unterstützte Spalten.",
     "importError_malformed": "Diese Datei konnte nicht gelesen werden. Prüfe, ob sie ein gültiger Export ist.",
-    "importError_empty": "Keine Orte gefunden. Tracks und Routen werden nicht importiert.",
+    "importError_empty": "Keine Orte gefunden.",
+    "importError_emptyTracks": "Keine Orte gefunden. Tracks und Routen werden nicht importiert.",
+    "importError_takeoutNoSaved": "Dieses Google-Takeout-Archiv enthält keine gespeicherten Listen. Wähle beim Export aus Google Takeout das Produkt „Gespeichert“ („Saved“) aus. „Maps (meine Orte)“ („Maps (your places)“) ist optional und enthält ältere markierte Orte.",
+    "importSkippedLists": "{count, plural, one {# gespeicherte Liste} other {# gespeicherte Listen}} ohne Orte übersprungen: {names}",
     "importError_networkLink": "Diese Datei verlinkt nur auf Onlinedaten. Exportiere sie erneut, ohne die Option zur automatischen Aktualisierung der Daten zu aktivieren.",
     "importError_tooLarge": "Diese Datei ist zu groß. Teile den Export in kleinere Dateien auf (bis zu 200 MB)."
   },

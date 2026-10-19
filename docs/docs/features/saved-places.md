@@ -48,7 +48,9 @@ Supported formats are:
   and address.
 
 For a Google Takeout export, open [Google Takeout](https://takeout.google.com/),
-deselect unrelated products, and select **Saved** and **Maps (your places)**.
+deselect unrelated products, and include **Saved** for saved lists.
+**Maps (your places)** is optional, for older starred places. Non-place saves,
+such as films or images saved from search, and empty lists are ignored.
 Create and download a ZIP export, then select the whole ZIP in OpenMapX. You can
 also select the saved-list CSV files or Saved Places JSON separately. Recognized
 Favorites, Want to go, and Starred places lists default to the corresponding

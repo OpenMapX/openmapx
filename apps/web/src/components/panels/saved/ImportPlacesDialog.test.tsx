@@ -1,9 +1,10 @@
 import type { ImportPlacesInput } from "@openmapx/core";
 import { en } from "@openmapx/i18n";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { strToU8, zipSync } from "fflate";
 import { NextIntlClientProvider } from "next-intl";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { ParsedImport } from "@/lib/savedPlacesImport/types";
+import type { ParsedImport, ParseOptions } from "@/lib/savedPlacesImport/types";
 
 const state = vi.hoisted(() => ({
   parse: vi.fn(),
@@ -49,12 +50,13 @@ const parsed = (): ParsedImport => ({
     },
   ],
   errors: [{ file: "empty.gpx", code: "empty" }],
+  skippedLists: ["Search saves", "Empty list"],
 });
-function mount(targetListId?: string) {
+function mount(targetListId?: string, inputFiles: readonly File[] = files) {
   const close = vi.fn();
   const rendered = render(
     <NextIntlClientProvider locale="en" messages={en} timeZone="Europe/Berlin">
-      <ImportPlacesDialog files={files} targetListId={targetListId} onClose={close} />
+      <ImportPlacesDialog files={inputFiles} targetListId={targetListId} onClose={close} />
     </NextIntlClientProvider>,
   );
   return { close, ...rendered };
@@ -77,10 +79,13 @@ describe("import dialog", () => {
     expect(screen.getByText(/empty.gpx/)).toBeInTheDocument();
     expect(screen.getByLabelText(/Include approximate/)).not.toBeChecked();
     fireEvent.click(screen.getByText(/Not found/));
-    expect(screen.getByText("Missing")).toBeInTheDocument();
+    expect(within(screen.getByRole("list")).getByRole("listitem")).toHaveTextContent("Missing");
+    expect(screen.getByRole("list")).toHaveStyle({ listStyleType: "disc" });
     fireEvent.change(screen.getByLabelText("List name"), { target: { value: "Holiday" } });
     fireEvent.click(screen.getByRole("button", { name: "Import" }));
     await screen.findByText(/Imported 1/);
+    expect(screen.queryByText(/empty.gpx/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Skipped 2 saved lists/)).not.toBeInTheDocument();
     expect(state.mutate).toHaveBeenCalledWith({
       target: { name: "Holiday" },
       places: [{ name: "Exact", lat: 52, lng: 13 }],
@@ -89,6 +94,60 @@ describe("import dialog", () => {
     fireEvent.click(screen.getByRole("button", { name: "Done" }));
     expect(state.select).toHaveBeenCalledWith("created");
     expect(close).toHaveBeenCalled();
+  });
+  it("never offers or resolves Search saves from a real parsed Takeout archive", async () => {
+    const { parseImportFiles } =
+      await vi.importActual<typeof import("@/lib/savedPlacesImport")>("@/lib/savedPlacesImport");
+    state.parse.mockImplementation((input, options) =>
+      parseImportFiles(input as readonly File[], options as ParseOptions | undefined),
+    );
+    const input = new File(
+      [
+        zipSync({
+          "Takeout/Saved/Mixed.csv": strToU8(
+            "Title,URL\nSynthetic Cafe,https://google.com/maps/place/Cafe/data=!3d52!4d13\nSynthetic Film,https://www.google.com",
+          ),
+          "Takeout/Saved/Search.csv": strToU8("Title,URL\nOther Film,https://www.google.com"),
+          "Takeout/Saved/Empty.csv": strToU8("Title,Note,URL,Tags,Comment\n,,,,"),
+        }),
+      ],
+      "takeout.zip",
+    );
+    mount(undefined, [input]);
+    await screen.findByDisplayValue("Mixed");
+    expect(screen.getAllByLabelText("List name")).toHaveLength(1);
+    expect(
+      screen.getByText("Skipped 2 saved lists without places: Search, Empty"),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/Not found/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(state.resolve.mock.calls[0][0]).toEqual([
+      expect.objectContaining({ places: [expect.objectContaining({ name: "Synthetic Cafe" })] }),
+    ]);
+  });
+  it("shows one neutral skipped-lists note alongside real warnings during review", async () => {
+    mount();
+    await screen.findByDisplayValue("Trip");
+    expect(
+      screen
+        .getByText("Skipped 2 saved lists without places: Search saves, Empty list")
+        .closest("[role=alert]"),
+    ).toBeNull();
+    expect(screen.getAllByRole("alert")).toHaveLength(1);
+    expect(screen.getByRole("alert")).toHaveTextContent("empty.gpx: No places found.");
+    expect(screen.getByRole("alert")).not.toHaveTextContent("Tracks and routes");
+  });
+  it("explains how to export Saved when Takeout contains no saved lists", async () => {
+    state.parse.mockResolvedValue({
+      lists: [],
+      errors: [{ file: "takeout.zip", code: "takeoutNoSaved" }],
+      skippedLists: [],
+    });
+    mount();
+    expect(await screen.findByRole("alert")).toHaveTextContent("include the “Saved” product");
+    expect(screen.getByRole("alert")).toHaveTextContent("“Maps (your places)” is optional");
+    expect(screen.queryByLabelText("List name")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Import" })).toBeDisabled();
   });
   it("shows the new-list destination before the target selector is opened", async () => {
     mount();

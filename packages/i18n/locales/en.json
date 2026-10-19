@@ -3098,7 +3098,10 @@
     "importFailed": "Some places could not be imported. Places already imported have been kept.",
     "importError_unsupported": "Unsupported file format or columns.",
     "importError_malformed": "This file could not be read. Check that it is a valid export.",
-    "importError_empty": "No places found. Tracks and routes are not imported.",
+    "importError_empty": "No places found.",
+    "importError_emptyTracks": "No places found. Tracks and routes are not imported.",
+    "importError_takeoutNoSaved": "This Google Takeout archive has no saved lists. When exporting from Google Takeout, include the “Saved” product. “Maps (your places)” is optional, for older starred places.",
+    "importSkippedLists": "Skipped {count, plural, one {# saved list} other {# saved lists}} without places: {names}",
     "importError_networkLink": "This file only links to online data. Export it again without the “keep data up to date” option.",
     "importError_tooLarge": "This file is too large. Split the export into smaller files (up to 200 MB)."
   },

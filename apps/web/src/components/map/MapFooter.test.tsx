@@ -1,10 +1,11 @@
-import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
+import maptilerManifest from "@integrations/geocoding-maptiler/manifest.json";
+import { licensingFromDeclaration, parseLicensing } from "@openmapx/mobility-core/licensing";
 
 // @vitest-environment jsdom
 
 import { buildAttributionPresentation } from "@openmapx/core/attribution";
 import { dataSourceToAttribution } from "@openmapx/integration-framework";
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useMapAttributionStore } from "@/integration-api/overlay/mapAttributionStore";
 import { getMapObstructionInsets } from "@/lib/mapObstructions";
@@ -16,6 +17,48 @@ vi.mock("next-intl", () => ({
 
 beforeEach(() => {
   useMapAttributionStore.setState({ byLayer: {} });
+});
+
+it("shows one captured MapTiler credit across owners while earlier basemap credits change", () => {
+  const source = maptilerManifest.dataSources[0];
+  const maptiler = buildAttributionPresentation(
+    {
+      sourceId: source.sourceId,
+      name: source.name,
+      url: source.url,
+      attributionText: source.attribution,
+      licensing: parseLicensing(source.licensing),
+    },
+    "map",
+  );
+  const osm = buildAttributionPresentation({ sourceId: "osm", name: "© OSM" }, "map");
+  const terrain = buildAttributionPresentation({ sourceId: "terrain", name: "© Terrain" }, "map");
+  const show = (terrainVisible: boolean) =>
+    useMapAttributionStore.setState({
+      byLayer: {
+        base: terrainVisible ? [osm, terrain] : [osm],
+        "rendered:pin-marker::one": [maptiler],
+        "rendered:pin-label::two": [maptiler],
+      },
+    });
+  show(false);
+  render(<MapFooter />);
+  const notices = within(screen.getByTestId("mandatory-map-attributions"));
+  expect(notices.getAllByRole("link", { name: "MapTiler" })).toHaveLength(1);
+  for (let i = 0; i < 4; i++) {
+    act(() => show(true));
+    expect(notices.getAllByRole("link", { name: "MapTiler" })).toHaveLength(1);
+    act(() => show(false));
+    expect(notices.getAllByRole("link", { name: "MapTiler" })).toHaveLength(1);
+  }
+  expect(
+    notices.getByRole("link", { name: "OpenStreetMap contributors" }).getAttribute("href"),
+  ).toBe("https://www.openstreetmap.org/copyright");
+  expect(notices.getByRole("link", { name: "Licence not specified" }).getAttribute("href")).toBe(
+    "https://www.maptiler.com/terms/cloud/",
+  );
+  act(() => useMapAttributionStore.setState({ byLayer: { base: [osm] } }));
+  expect(notices.queryByRole("link", { name: "MapTiler" })).toBeNull();
 });
 
 describe("MapFooter", () => {

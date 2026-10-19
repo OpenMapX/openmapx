@@ -3,7 +3,14 @@ import {
   SAVED_PLACE_XML_NAMESPACE,
   savedPlaceNoteFromDescription,
 } from "@openmapx/core/saved-place-description";
-import { fileList, type ImportList, makePlace, type ParseOptions, validCoordinates } from "./types";
+import {
+  fileList,
+  ImportFileError,
+  type ImportList,
+  makePlace,
+  type ParseOptions,
+  validCoordinates,
+} from "./types";
 import { childText, elements, xml } from "./xml";
 
 export function parseGpx(
@@ -70,6 +77,8 @@ export function parseGpx(
     );
     groups.set(group, places);
   }
+  if (!groups.size && (elements(doc, "trk").length || elements(doc, "rte").length))
+    throw new ImportFileError("emptyTracks");
   if (groups.size <= 1) return [{ ...base, places: [...groups.values()].flat() }];
   return [...groups].map(([name, places]) => ({ ...base, name: name || base.name, places }));
 }
