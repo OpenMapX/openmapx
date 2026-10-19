@@ -64,7 +64,9 @@ function description(feature: EnturGeocoderFeature, lang?: string): string | und
       ? ["eng", "en"]
       : ["no", "nb", "nn"].includes(key)
         ? ["nor", "nob", "nno", "no"]
-        : [key];
+        : key === "de"
+          ? ["deu", "ger", "de"]
+          : [key];
   return (
     preferred.map((key) => values[key]).find((value) => value?.trim()) ??
     Object.values(values).find((value) => value.trim())

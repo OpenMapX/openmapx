@@ -32,7 +32,9 @@ export function createEnturGeocodingProvider(options: {
   ): Promise<T> {
     const signal = caller ? AbortSignal.any([generation, caller]) : generation;
     try {
-      return await call(signal);
+      const result = await call(signal);
+      signal.throwIfAborted();
+      return result;
     } catch (error) {
       if (signal.aborted)
         throw signal.reason instanceof ProviderTimeoutError

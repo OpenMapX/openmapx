@@ -1,6 +1,8 @@
 import { getEventListeners } from "node:events";
+import { createEnturGeocoder } from "@openmapx/entur-client";
 import {
   createGeocoderSuggestionProvider,
+  ProviderCancelledError,
   ProviderTimeoutError,
   runWithProviderDeadline,
 } from "@openmapx/integration-framework";
@@ -10,17 +12,25 @@ import {
 } from "@openmapx/integration-framework/testing";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createSearchSuggestionsOrchestrator } from "../search-suggestions/orchestrator.js";
+import { createEnturGeocodingProvider } from "./provider.js";
 import { collection, fixture, LAYERS } from "./test-support.js";
 
 let mockHttp: ReturnType<typeof vi.fn>;
 let entur: ReturnType<typeof fixture>;
 beforeEach(() => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(() => {
+      throw new Error("Provider tests must use injected HTTP");
+    }),
+  );
   mockHttp = vi.fn().mockResolvedValue(JSON.stringify(collection()));
   entur = fixture({ responder: mockHttp });
 });
 afterEach(() => {
   vi.restoreAllMocks();
   vi.useRealTimers();
+  vi.unstubAllGlobals();
 });
 describe("native geocoder projections", () => {
   it.each(["address", "street", "stopPlace", "groupOfStopPlaces", "poi", "place"] as const)(
@@ -110,6 +120,93 @@ describe("native geocoder projections", () => {
     },
   );
 });
+describe("domain publication after SDK success", () => {
+  it.each(["geocode", "autocomplete", "reverse", "lookup"] as const)(
+    "rejects generation retirement before %s publication",
+    async (operation) => {
+      const f = fixture();
+      let projected = false;
+      const sources = {
+        ...f.sources,
+        contributorsFor(feature: Parameters<typeof f.sources.contributorsFor>[0]) {
+          const receipts = f.sources.contributorsFor(feature);
+          // Projection runs only after the actual SDK succeeds. Queue retirement
+          // before the async domain callback resolves to run's awaiting continuation.
+          projected = true;
+          queueMicrotask(() => f.generation.abort(new Error("generation retired")));
+          return receipts;
+        },
+      };
+      const domain = createEnturGeocodingProvider({
+        geocoder: createEnturGeocoder(f.client, { timeoutMs: 4000, policy: f.sources }),
+        sources,
+        signal: f.generation.signal,
+        country: "no",
+        multiModal: "parent",
+      });
+      const work =
+        operation === "geocode"
+          ? domain.provider.geocode("Oslo")
+          : operation === "autocomplete"
+            ? domain.provider.autocomplete("Oslo")
+            : operation === "reverse"
+              ? domain.provider.reverseGeocode(59.911, 10.75)
+              : domain.lookupPlaceById("NSR:StopPlace:337");
+      await expect(work).rejects.toBeInstanceOf(ProviderCancelledError);
+      expect(projected).toBe(true);
+      expect(f.generation.signal.aborted).toBe(true);
+      expect(f.http.calls).toHaveLength(1);
+    },
+  );
+  it.each(["caller", "deadline"] as const)(
+    "preserves %s cancellation before autocomplete publication",
+    async (mode) => {
+      const f = fixture();
+      const caller = new AbortController();
+      const reason = mode === "deadline" ? new ProviderTimeoutError() : new Error("caller left");
+      const sources = {
+        ...f.sources,
+        contributorsFor(feature: Parameters<typeof f.sources.contributorsFor>[0]) {
+          const receipts = f.sources.contributorsFor(feature);
+          queueMicrotask(() => caller.abort(reason));
+          return receipts;
+        },
+      };
+      const domain = createEnturGeocodingProvider({
+        geocoder: createEnturGeocoder(f.client, { timeoutMs: 4000, policy: f.sources }),
+        sources,
+        signal: f.generation.signal,
+        country: "no",
+        multiModal: "parent",
+      });
+      const work = domain.provider.autocomplete("Oslo", "en", undefined, { signal: caller.signal });
+      if (mode === "deadline") await expect(work).rejects.toBe(reason);
+      else await expect(work).rejects.toBeInstanceOf(ProviderCancelledError);
+      expect(caller.signal.aborted).toBe(true);
+      expect(f.generation.signal.aborted).toBe(false);
+      expect(f.http.calls).toHaveLength(1);
+    },
+  );
+});
+
+describe("native German descriptions", () => {
+  it.each(["deu", "ger"])("prefers available %s over a first Norwegian entry", async (key) => {
+    const stop = LAYERS.stopPlace;
+    const feature = {
+      ...stop,
+      properties: {
+        ...stop.properties,
+        description: { nor: "Norsk tekst", [key]: "Deutscher Text" },
+      },
+    };
+    mockHttp.mockResolvedValue(JSON.stringify(collection([feature])));
+    const [suggestion] = await entur.provider.autocomplete("Oslo", "de");
+    const place = await entur.lookupPlaceById(feature.properties.id, "de");
+    expect(suggestion.sublabel).toBe("Deutscher Text, Oslo");
+    expect(place?.description).toBe("Deutscher Text");
+  });
+});
+
 // These use the real suggestion adapter and provider, replacing only upstream I/O.
 describe("autocomplete cancellation through the suggestion adapter", () => {
   it.each(["deadline", "caller"] as const)(

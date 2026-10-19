@@ -30,7 +30,7 @@
         "title": "Boundary country",
         "description": "One lowercase ISO 3166-1 alpha-2 country filter. Defaults to no; an explicit empty string disables country scoping.",
         "default": "no",
-        "pattern": "^([a-z]{2})?$"
+        "oneOf": [{ "const": "" }, { "type": "string", "pattern": "^[a-z][a-z]$" }]
       },
       "multiModal": {
         "type": "string",

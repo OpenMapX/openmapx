@@ -41,6 +41,42 @@ describe("ops-agent trusted configuration schema", () => {
     }
   });
 
+  it.each(["geocoding-entur", "transit-entur"])(
+    "trusts %s country schema and validates exact lowercase ISO2 or explicit empty",
+    (id) => {
+      const manifest = JSON.parse(
+        readFileSync(join(repositoryRoot, "integrations", id, "manifest.json"), "utf8"),
+      ) as { configSchema: Record<string, unknown> };
+      expect(() => assertTrustedConfigurationSchema(manifest.configSchema)).not.toThrow();
+      for (const boundaryCountry of ["", "no", "de"]) {
+        expect(
+          validateTrustedConfigurationValues({ boundaryCountry }, manifest.configSchema),
+          JSON.stringify(boundaryCountry),
+        ).toBe(true);
+      }
+      for (const boundaryCountry of [
+        "n",
+        "nor",
+        "NOR",
+        "NO",
+        " no",
+        "no ",
+        "  ",
+        "nö",
+        1,
+        null,
+        false,
+        [],
+        {},
+      ]) {
+        expect(
+          validateTrustedConfigurationValues({ boundaryCountry }, manifest.configSchema),
+          JSON.stringify(boundaryCountry),
+        ).toBe(false);
+      }
+    },
+  );
+
   it("validates canonical hyphenated values against their shipped schemas", () => {
     const openTransportData = JSON.parse(
       readFileSync(
