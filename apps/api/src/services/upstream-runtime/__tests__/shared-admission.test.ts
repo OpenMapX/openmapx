@@ -61,6 +61,18 @@ describe("shared admission storage boundary", () => {
 
   it.each([
     null,
+    [1, -1],
+    [1, "01"],
+    [1, "1e3"],
+    [1, "-1"],
+    [1, "1.5"],
+    [1, "9007199254740992"],
+    [0, "quota", "0"],
+    [1, Number.MAX_SAFE_INTEGER + 1],
+    [1, 0, 0],
+    [0, "quota", 0],
+    [0, "quota", Number.MAX_SAFE_INTEGER + 1],
+    [0, "unknown", 1],
     "{}",
     '{"allowed":true,"remaining":-1}',
     '{"allowed":false,"reason":"quota","retryAfterMs":null}',

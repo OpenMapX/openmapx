@@ -91,6 +91,67 @@ describe.skipIf(!url)("shared admission with actual Valkey Lua", () => {
     if (!denied.allowed) expect(denied.retryAfterMs).toBeGreaterThan(2_999_999_999_000);
   });
 
+  it("preserves maximum safe integer quota remaining exactly", async () => {
+    const subject = runtime("one");
+    const target = identity();
+    const maximum = { ...policy, limit: Number.MAX_SAFE_INTEGER };
+    expect(await subject.admitSharedRequest({ ...target, policy: maximum })).toEqual({
+      allowed: true,
+      remaining: 9_007_199_254_740_990,
+    });
+    expect(await subject.admitSharedRequest({ ...target, policy: maximum })).toEqual({
+      allowed: true,
+      remaining: 9_007_199_254_740_989,
+    });
+  });
+
+  it("preserves large denial intervals exactly against server time", async () => {
+    const dedicated = `${namespace}-exact-denial`;
+    const subject = createRedisUpstreamRuntime(
+      {
+        get: (key) => redis.get(key),
+        set: async () => null,
+        del: (key) => redis.del(key),
+        async eval(script, numberOfKeys, ...args) {
+          const transaction = await redis
+            .multi()
+            .time()
+            .eval(script, numberOfKeys, ...args)
+            .time()
+            .exec();
+          if (!transaction || transaction.some(([error]) => error))
+            throw new Error("Store failure");
+          const milliseconds = (value: unknown) => {
+            if (!Array.isArray(value)) throw new Error("Unexpected server time");
+            return Number(value[0]) * 1_000 + Math.floor(Number(value[1]) / 1_000);
+          };
+          before = milliseconds(transaction[0]?.[1]);
+          after = milliseconds(transaction[2]?.[1]);
+          return transaction[1]?.[1];
+        },
+      },
+      { namespace: dedicated, integrationId: "one" },
+    );
+    let before = 0;
+    let after = 0;
+    const target = identity();
+    const long = { ...policy, limit: 1, durationMs: 4_000_000_000_000_033 };
+    expect(await subject.admitSharedRequest({ ...target, policy: long })).toEqual({
+      allowed: true,
+      remaining: 0,
+    });
+    const keys = await redis.keys(`upstream-shared:${dedicated}:*`);
+    expect(keys).toHaveLength(1);
+    const fields = await redis.hgetall(keys[0] as string);
+    const start = Number(Object.entries(fields).find(([field]) => field.endsWith(":start"))?.[1]);
+    const denied = await subject.admitSharedRequest({ ...target, policy: long });
+    expect(denied).toMatchObject({ allowed: false, reason: "quota" });
+    if (!denied.allowed) {
+      expect(denied.retryAfterMs).toBeGreaterThanOrEqual(start + long.durationMs - after);
+      expect(denied.retryAfterMs).toBeLessThanOrEqual(start + long.durationMs - before);
+    }
+  });
+
   it("does not debit spacing rejection and keeps class windows separate", async () => {
     const subject = runtime("one");
     const target = identity();
@@ -137,7 +198,8 @@ describe.skipIf(!url)("shared admission with actual Valkey Lua", () => {
   });
 
   it("keeps long class TTL and shared quotas/cooldown through ordinary cache deletion", async () => {
-    const subject = runtime("one");
+    const dedicated = `${namespace}-ttl`;
+    const subject = runtime("one", dedicated);
     const target = identity();
     await subject.admitSharedRequest({ ...target, policy: { ...policy, limit: 1 } });
     await subject.admitSharedRequest({
@@ -149,7 +211,7 @@ describe.skipIf(!url)("shared admission with actual Valkey Lua", () => {
     await redis.set(`int:${namespace}:ordinary`, "ordinary");
     await redis.set(`cache:${namespace}:ordinary`, "ordinary");
     const disposable = [
-      ...(await redis.keys(`upstream:${namespace}:*:cache:*`)),
+      ...(await redis.keys(`upstream:${dedicated}:*:cache:*`)),
       ...(await redis.keys(`int:${namespace}:*`)),
       ...(await redis.keys(`cache:${namespace}:*`)),
     ];
@@ -162,8 +224,8 @@ describe.skipIf(!url)("shared admission with actual Valkey Lua", () => {
     expect(
       await subject.admitSharedRequest({ ...target, policy: { ...policy, limit: 1 } }),
     ).toMatchObject({ allowed: false, reason: "quota" });
-    const keys = await redis.keys(`upstream-shared:${namespace}:*`);
-    const ttl = await Promise.all(keys.map((key) => redis.pttl(key)));
-    expect(ttl.some((value) => value > 50_000)).toBe(true);
+    const keys = await redis.keys(`upstream-shared:${dedicated}:*`);
+    expect(keys).toHaveLength(1);
+    expect(await redis.pttl(keys[0] as string)).toBeGreaterThan(50_000);
   });
 });

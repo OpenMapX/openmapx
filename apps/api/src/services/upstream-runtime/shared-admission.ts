@@ -36,25 +36,27 @@ const unavailable = (): SharedRequestDecision => ({
   retryAfterMs: null,
 });
 
+function decodeInteger(value: unknown): number {
+  if (typeof value !== "string" || !/^(0|[1-9][0-9]*)$/.test(value)) {
+    throw new Error("Invalid shared upstream integer");
+  }
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed)) throw new Error("Invalid shared upstream integer");
+  return parsed;
+}
+
 function decode(raw: unknown): SharedRequestDecision {
-  if (typeof raw !== "string") throw new Error("Invalid shared upstream response");
-  const value: unknown = JSON.parse(raw);
-  if (value && typeof value === "object" && "allowed" in value) {
-    if (value.allowed === true && "remaining" in value) {
-      const remaining = value.remaining;
-      if (
-        remaining === null ||
-        (typeof remaining === "number" && Number.isSafeInteger(remaining) && remaining >= 0)
-      ) {
-        return { allowed: true, remaining };
-      }
+  // Decimal strings avoid rounding in Lua cjson and Redis clients' integer parsers.
+  if (Array.isArray(raw)) {
+    if (raw[0] === 1 && raw.length === 1) return { allowed: true, remaining: null };
+    if (raw[0] === 1 && raw.length === 2) {
+      return { allowed: true, remaining: decodeInteger(raw[1]) };
     }
-    if (value.allowed === false && "reason" in value && "retryAfterMs" in value) {
-      const { reason, retryAfterMs } = value;
+    if (raw[0] === 0 && raw.length === 3) {
+      const reason: unknown = raw[1];
+      const retryAfterMs = decodeInteger(raw[2]);
       if (
         (reason === "quota" || reason === "spacing" || reason === "cooldown") &&
-        typeof retryAfterMs === "number" &&
-        Number.isSafeInteger(retryAfterMs) &&
         retryAfterMs > 0
       ) {
         return { allowed: false, reason, retryAfterMs };

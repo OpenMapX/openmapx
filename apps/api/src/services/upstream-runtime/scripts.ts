@@ -54,7 +54,7 @@ local function retain(ttl)
   redis.call('PEXPIRE', key, math.max(existing, ttl))
 end
 local function deny(reason, untilAt)
-  return cjson.encode({allowed = false, reason = reason, retryAfterMs = untilAt - now})
+  return {0, reason, string.format('%.0f', untilAt - now)}
 end
 
 if ARGV[1] == 'defer' then
@@ -70,7 +70,7 @@ end
 
 if cooldown > now then return deny('cooldown', cooldown) end
 if ARGV[2] == '' then
-  return cjson.encode({allowed = true, remaining = cjson.null})
+  return {1}
 end
 local field = ARGV[2]
 local limit = tonumber(ARGV[3])
@@ -93,5 +93,5 @@ redis.call('HSET', key,
   field .. ':count', count + 1,
   field .. ':next', now + interval)
 retain(math.max(start + duration - now, interval, cooldown - now))
-return cjson.encode({allowed = true, remaining = limit - count - 1})
+return {1, string.format('%.0f', limit - count - 1)}
 `;
