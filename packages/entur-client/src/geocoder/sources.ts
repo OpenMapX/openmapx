@@ -3,6 +3,7 @@ import type { Attribution } from "@openmapx/mobility-core/attribution";
 import { snapshotContributors } from "@openmapx/mobility-core/contributors";
 import type { EnturClient } from "../client";
 import { EnturRequestError } from "../errors";
+import { bounded } from "./bounded";
 import type { EnturGeocoderFeature, EnturGeocoderPolicy, EnturGeocoderSource } from "./client";
 
 export const ENTUR_GEOCODER_SUPPLIER_SOURCE_IDS = Object.freeze({
@@ -21,28 +22,6 @@ function freeze<T>(value: T): T {
   }
   return value;
 }
-function bounded<T>(operation: Promise<T>, signal: AbortSignal): Promise<T> {
-  return new Promise((resolve, reject) => {
-    const abort = () => {
-      signal.removeEventListener("abort", abort);
-      reject(signal.reason);
-    };
-    signal.addEventListener("abort", abort, { once: true });
-    if (signal.aborted) abort();
-    operation.then(
-      (value) => {
-        signal.removeEventListener("abort", abort);
-        if (signal.aborted) reject(signal.reason);
-        else resolve(value);
-      },
-      (error) => {
-        signal.removeEventListener("abort", abort);
-        reject(error);
-      },
-    );
-  });
-}
-
 /** Only these native namespaces prove a single supplier in the reviewed v3 contract. */
 function lookupSupplier(id: string): EnturGeocoderSource | undefined {
   if (/^NSR:(StopPlace|GroupOfStopPlaces):[^:]+$/.test(id)) return "nsr";

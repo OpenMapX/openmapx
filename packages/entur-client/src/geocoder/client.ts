@@ -1,5 +1,6 @@
 import type { EnturClient } from "../client";
 import { EnturRequestError, isEnturRequestError } from "../errors";
+import { bounded } from "./bounded";
 import { autocomplete, place, reverse } from "./generated/client";
 import type { FeatureOutput, ResultOutput } from "./generated/models";
 import { AutocompleteParams, Place, PlaceParams, ReverseParams } from "./generated/models";
@@ -24,28 +25,6 @@ export interface EnturGeocoder {
   ): Promise<EnturGeocoderResult>;
   reverse(params: EnturGeocoderReverseParams, signal: AbortSignal): Promise<EnturGeocoderResult>;
   place(params: EnturGeocoderPlaceParams, signal: AbortSignal): Promise<EnturGeocoderResult>;
-}
-/** Every async dependency belongs to the SDK deadline, even when it ignores cancellation. */
-function bounded<T>(operation: Promise<T>, signal: AbortSignal): Promise<T> {
-  return new Promise((resolve, reject) => {
-    const abort = () => {
-      signal.removeEventListener("abort", abort);
-      reject(signal.reason);
-    };
-    signal.addEventListener("abort", abort, { once: true });
-    if (signal.aborted) abort();
-    operation.then(
-      (value) => {
-        signal.removeEventListener("abort", abort);
-        if (signal.aborted) reject(signal.reason);
-        else resolve(value);
-      },
-      (error: unknown) => {
-        signal.removeEventListener("abort", abort);
-        reject(error);
-      },
-    );
-  });
 }
 const allSources = Object.freeze([...Place.shape.source.options]);
 function validateAutocomplete(params: AutocompleteParams): void {
