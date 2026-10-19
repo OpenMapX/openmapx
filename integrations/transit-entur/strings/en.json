@@ -18,9 +18,14 @@
       "dataReceived": "Stop place and quay records with coordinates, names, transport modes, platform codes, accessibility limitations, equipment, parking, and fare-zone details"
     },
     "entur-geocoder": {
-      "purpose": "Find Norwegian public transport stops by name through Entur Geocoder autocomplete",
-      "dataSent": "Search text, result limit, optional Norway boundary filter, multimodal stop mode, and the ET-Client-Name header",
-      "dataReceived": "Matching stop names, coordinates, stop identifiers, transport modes, and parent stop references"
+      "purpose": "Find public transport stops by name through Entur Geocoder v3",
+      "dataSent": "Search text, result limit, stopPlace layer and NSR source filters, optional lowercase ISO2 country, multimodal mode, and ET-Client-Name header",
+      "dataReceived": "Native GeoJSON features with structured names, coordinates, NSR IDs, stop types, transport modes, and supplier identity"
+    },
+    "entur-geocoder-nsr": {
+      "purpose": "Supply Entur National Stop Register geocoder data through Entur Geocoder v3",
+      "dataSent": "No direct request to this dataset supplier; search text, result limit, country, layer, source and multimodal filters are sent to Entur's API",
+      "dataReceived": "Native features supplied by Entur National Stop Register geocoder data, with names, coordinates, identifiers and available structured metadata"
     }
   }
 }

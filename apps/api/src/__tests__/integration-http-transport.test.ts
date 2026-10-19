@@ -458,3 +458,128 @@ it("does not expose rejected Location credentials in errors", async () => {
   expect(String(error)).not.toContain("private-user");
   expect(String(error)).not.toContain("private-password");
 });
+
+describe("explicit text/stream success statuses", () => {
+  it.each(["getText", "postText", "getStream"] as const)(
+    "preserves status and bounded bodies for %s outside its success set",
+    async (method) => {
+      for (const [status, body, media] of [
+        [201, "created", "text/plain"],
+        [204, null, undefined],
+        [400, '{"detail":"invalid"}', "application/problem+json"],
+        [429, "slow down", "text/plain"],
+      ] as const) {
+        vi.stubGlobal(
+          "fetch",
+          vi.fn(
+            () => new Response(body, { status, headers: media ? { "Content-Type": media } : {} }),
+          ),
+        );
+        const client = createHttpClient(createNoopLogger());
+        const settings = {
+          maxBytes: 32,
+          contentTypes: ["application/json"],
+          successStatuses: [200],
+        };
+        const result =
+          method === "postText"
+            ? await client.postText("https://api.test/json", "request", settings)
+            : await client[method]("https://api.test/json", settings);
+        expect(result.status).toBe(status);
+        expect("stream" in result ? await new Response(result.stream).text() : result.body).toBe(
+          body ?? "",
+        );
+      }
+    },
+  );
+  it.each(["getText", "postText", "getStream"] as const)(
+    "still enforces the declared success media type for %s",
+    async (method) => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(
+          () => new Response("wrong", { status: 200, headers: { "Content-Type": "text/plain" } }),
+        ),
+      );
+      const client = createHttpClient(createNoopLogger());
+      const settings = { maxBytes: 32, contentTypes: ["application/json"], successStatuses: [200] };
+      await expect(
+        method === "postText"
+          ? client.postText("https://api.test/json", "request", settings)
+          : client[method]("https://api.test/json", settings),
+      ).rejects.toThrow(/content type/i);
+    },
+  );
+  it.each([[], [199], [300], [200.5], [NaN]].map((successStatuses) => ({ successStatuses })))(
+    "rejects invalid success status sets %j",
+    async ({ successStatuses }) => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(() => new Response("{}", { headers: { "Content-Type": "application/json" } })),
+      );
+      await expect(
+        createHttpClient(createNoopLogger()).getText("https://api.test/json", {
+          maxBytes: 32,
+          contentTypes: ["application/json"],
+          successStatuses,
+        }),
+      ).rejects.toThrow(/success statuses/i);
+    },
+  );
+  it("retains all-2xx default media validation and does not alter JSON/bytes semantics", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => new Response("text", { status: 201, headers: { "Content-Type": "text/plain" } })),
+    );
+    const client = createHttpClient(createNoopLogger());
+    const settings = { maxBytes: 32, contentTypes: ["application/json"] };
+    await expect(client.getText("https://api.test/json", settings)).rejects.toThrow(
+      /content type/i,
+    );
+    await expect(
+      client.getBytes("https://api.test/json", { ...settings, successStatuses: [200] }),
+    ).rejects.toThrow(/content type/i);
+    await expect(
+      client.getResponse("https://api.test/json", { ...settings, successStatuses: [200] }),
+    ).rejects.toThrow(/content type/i);
+  });
+  it("keeps streamed byte ceilings and cancellation outside the success set", async () => {
+    const source = controlledResponse();
+    const response = new Response(source.response.body, {
+      status: 201,
+      headers: { "Content-Type": "text/plain" },
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => response),
+    );
+    const result = await createHttpClient(createNoopLogger()).getStream("https://api.test/json", {
+      maxBytes: 3,
+      contentTypes: ["application/json"],
+      successStatuses: [200],
+    });
+    const read = new Response(result.stream).text();
+    source.controller.enqueue(encode("ää"));
+    await expect(read).rejects.toThrow(/too large/i);
+    expect(source.cancel).toHaveBeenCalledOnce();
+  });
+  it("keeps the request deadline on stalled bodies outside the success set", async () => {
+    const source = controlledResponse();
+    const response = new Response(source.response.body, {
+      status: 201,
+      headers: { "Content-Type": "text/plain" },
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => response),
+    );
+    const result = await createHttpClient(createNoopLogger()).getStream("https://api.test/json", {
+      maxBytes: 32,
+      timeoutMs: 20,
+      contentTypes: ["application/json"],
+      successStatuses: [200],
+    });
+    await expect(result.stream.getReader().read()).rejects.toThrow();
+    expect(source.cancel).toHaveBeenCalledOnce();
+  });
+});

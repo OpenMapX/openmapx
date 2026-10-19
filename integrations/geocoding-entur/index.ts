@@ -1,52 +1,73 @@
 import {
+  createEnturClient,
+  createEnturGeocoder,
+  createEnturGeocoderSources,
+  ENTUR_GEOCODER_SUPPLIER_SOURCE_IDS,
+  enturGeocoderCoverage,
+  normalizeEnturGeocoderCountry,
+} from "@openmapx/entur-client";
+import {
   createGeocoderSuggestionProvider,
   type IntegrationContext,
+  resolveIntegrationContributors,
 } from "@openmapx/integration-framework";
-import type { PlaceResolverContext } from "@openmapx/place-ids";
 import { registerPlaceResolver } from "@openmapx/place-ids";
-import {
-  enturGeocodingService,
-  getEnturCoverage,
-  lookupEnturPlaceById,
-  setEnturGeocodingConfig,
-} from "./provider.js";
-
-const ATTRIBUTION_SOURCE_ID = "entur-geocoder";
+import { createEnturGeocodingProvider } from "./provider.js";
 
 export function setup(ctx: IntegrationContext): void {
-  ctx.onActivate(() => {
-    setEnturGeocodingConfig({
-      endpoint: ctx.config.endpoint as string | undefined,
+  const generation = new AbortController();
+  const country = normalizeEnturGeocoderCountry(ctx.config.boundaryCountry);
+  const multiModal = ctx.config.multiModal ?? "parent";
+  if (multiModal !== "parent" && multiModal !== "child" && multiModal !== "all")
+    throw new Error("Invalid Entur multimodal configuration");
+  const contributors = Object.fromEntries(
+    ["entur-geocoder", ...Object.values(ENTUR_GEOCODER_SUPPLIER_SOURCE_IDS)]
+      .filter((sourceId) =>
+        ctx.manifest.dataSources?.some((source) => source.sourceId === sourceId),
+      )
+      .map((sourceId) => [sourceId, resolveIntegrationContributors(ctx, [sourceId])]),
+  );
+  const isSourceAllowed = async (sourceId: string) => {
+    const denied = await ctx.getDisallowedSourceIds?.();
+    return !denied?.has(sourceId) && !denied?.has(ctx.id);
+  };
+  const sources = createEnturGeocoderSources({ contributors, isSourceAllowed });
+  const client = createEnturClient({
+    http: ctx.http,
+    upstreamRuntime: ctx.upstreamRuntime,
+    config: {
+      geocoderEndpoint: ctx.config.endpoint as string | undefined,
       clientName: ctx.config.clientName as string | undefined,
-      boundaryCountry: ctx.config.boundaryCountry as string | undefined,
-      multiModal: ctx.config.multiModal as "parent" | "child" | "all" | undefined,
-    });
+    },
+    sourceIds: { geocoder: "entur-geocoder" },
+    contributors,
+    isSourceAllowed,
   });
-
-  ctx.registerGeocodingProvider(enturGeocodingService);
-  // Also feed the ranked suggestion fan-out, so Norwegian stop places and
-  // addresses surface next to the general geocoder's results instead of only
-  // when every provider ahead of Entur in the fallback chain came back empty.
+  const geocoder = createEnturGeocoder(client, { timeoutMs: 4000, policy: sources });
+  const entur = createEnturGeocodingProvider({
+    geocoder,
+    sources,
+    signal: generation.signal,
+    country,
+    multiModal,
+  });
+  ctx.onShutdown(async () => {
+    generation.abort(new Error("Entur geocoding generation retired"));
+  });
+  ctx.registerGeocodingProvider(entur.provider);
   ctx.registerSearchSuggestionProvider(
     createGeocoderSuggestionProvider({
       id: ctx.id,
-      geocoder: enturGeocodingService,
-      coverage: getEnturCoverage,
-      attributions: () => [
-        ctx.attributionIndex?.getById(ATTRIBUTION_SOURCE_ID) ?? {
-          sourceId: ATTRIBUTION_SOURCE_ID,
-          name: "Entur Geocoder API",
-          url: "https://developer.entur.org/pages-geocoder-intro/",
-          attributionText: "Data made available by Entur",
-        },
-      ],
+      geocoder: entur.provider,
+      coverage: () => enturGeocoderCoverage(country),
+      attributions: () => [],
     }),
   );
-
-  registerPlaceResolver("entur", async (value: string, resolverCtx: PlaceResolverContext) =>
-    lookupEnturPlaceById(value, resolverCtx.lang),
+  ctx.registerHealthCheck(entur.healthCheck);
+  registerPlaceResolver("entur", (value, resolverCtx) =>
+    entur.lookupPlaceById(value, resolverCtx.lang),
   );
-  registerPlaceResolver("nsr", async (value: string, resolverCtx: PlaceResolverContext) =>
-    lookupEnturPlaceById(`NSR:${value}`, resolverCtx.lang),
+  registerPlaceResolver("nsr", (value, resolverCtx) =>
+    entur.lookupPlaceById(`NSR:${value}`, resolverCtx.lang),
   );
 }

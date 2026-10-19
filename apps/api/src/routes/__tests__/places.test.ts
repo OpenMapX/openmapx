@@ -1857,6 +1857,66 @@ it("preserves review rating receipts in place fields while retaining independent
   expect(absent.contributors).not.toContainEqual(ratingReceipt);
 });
 
+it.each(["nsr:StopPlace:337", "entur:NSR:StopPlace:337"])(
+  "retains native geocoder field and ID receipts through detail enrichment and cache for %s",
+  async (id) => {
+    const { setup } = await import("../../../../../integrations/geocoding-entur/index.js");
+    const { collection } = await import(
+      "../../../../../integrations/geocoding-entur/test-support.js"
+    );
+    const { createMockIntegrationContext, fakeHttpClient } = await import(
+      "@openmapx/integration-framework/testing"
+    );
+    const { default: manifest } = await import(
+      "../../../../../integrations/geocoding-entur/manifest.json"
+    );
+    const http = fakeHttpClient(() => JSON.stringify(collection()));
+    const ctx = createMockIntegrationContext({
+      id: "geocoding-entur",
+      manifest: manifest as never,
+      http,
+    });
+    setup(ctx);
+    const stored = new Map<string, unknown>();
+    mockWithCache.mockImplementation(async (key, _ttl, fn) => {
+      if (stored.has(key)) return structuredClone(stored.get(key));
+      const value = await fn();
+      stored.set(key, structuredClone(value));
+      return value;
+    });
+    const knowledgeReceipt = { sourceId: "knowledge-test", name: "Captured knowledge" };
+    mockGetPlaceKnowledge.mockResolvedValue({
+      externalIds: { gers: "gers-test" },
+      website: "https://example.org",
+      contributors: [knowledgeReceipt],
+    });
+    mockBuildReviewLinks.mockReturnValue([]);
+    try {
+      const first = await app.inject(`/places/${encodeURIComponent(id)}?lang=en`);
+      expect(first.statusCode).toBe(200);
+      const body = first.json();
+      const sourceIds = ["entur-geocoder", "entur-geocoder-nsr"];
+      expect(body.ids).toEqual({
+        entur: "NSR:StopPlace:337",
+        nsr: "StopPlace:337",
+        gers: "gers-test",
+      });
+      for (const field of ["name", "address", "coordinates", "ids.entur", "ids.nsr"])
+        expect(body.fieldContributors[field].map((x: { sourceId: string }) => x.sourceId)).toEqual(
+          sourceIds,
+        );
+      expect(body.fieldContributors.website).toEqual([knowledgeReceipt]);
+      expect(body.fieldContributors["ids.gers"]).toEqual([knowledgeReceipt]);
+      Object.assign(ctx, { manifest: { ...ctx.manifest, dataSources: [] } });
+      const cached = await app.inject(`/places/${encodeURIComponent(id)}?lang=en`);
+      expect(cached.json()).toEqual(body);
+      expect(http.calls).toHaveLength(1);
+    } finally {
+      mockWithCache.mockImplementation((_key, _ttl, fn) => fn());
+    }
+  },
+);
+
 it("rejects an unbounded enrichment setting during route initialization", async () => {
   vi.stubEnv("OPENMAPX_PLACE_ENRICH_CONCURRENCY", "Infinity");
   vi.resetModules();

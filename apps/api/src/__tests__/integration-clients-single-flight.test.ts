@@ -1,13 +1,12 @@
-import {
-  createGeocoderSuggestionProvider,
-  runWithProviderDeadline,
-} from "@openmapx/integration-framework";
+import { runWithProviderDeadline } from "@openmapx/integration-framework";
 import {
   createMockIntegrationContext,
   createNoopLogger,
 } from "@openmapx/integration-framework/testing";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { enturGeocodingService } from "../../../../integrations/geocoding-entur/provider.js";
+import { setup as setupEnturGeocoding } from "../../../../integrations/geocoding-entur/index.js";
+import enturGeocodingManifest from "../../../../integrations/geocoding-entur/manifest.json";
+import { collection as geocoderCollection } from "../../../../integrations/geocoding-entur/test-support.js";
 import { setup as setupEnturLive } from "../../../../integrations/live-transit-entur/index";
 import enturLiveManifest from "../../../../integrations/live-transit-entur/manifest.json";
 import { setup as setupEnturTransit } from "../../../../integrations/transit-entur/index";
@@ -478,16 +477,18 @@ describe("geocoder suggestion shared cache ownership", () => {
         (_url: string, init?: RequestInit) =>
           new Promise<Response>((resolve) => {
             downstreamSignal = init?.signal ?? undefined;
-            release = () => resolve(Response.json({ features: [] }));
+            release = () => resolve(Response.json(geocoderCollection([])));
             started.resolve();
           }),
       );
       vi.stubGlobal("fetch", fetch);
-      const provider = createGeocoderSuggestionProvider({
+      const geocodingCtx = createMockIntegrationContext({
         id: "geocoding-entur",
-        geocoder: enturGeocodingService,
-        attributions: () => [],
+        manifest: enturGeocodingManifest as never,
+        http: createHttpClient(createNoopLogger()),
       });
+      setupEnturGeocoding(geocodingCtx);
+      const provider = geocodingCtx.registered.searchSuggestions[0];
       const cache = createCacheClient("search-suggestions");
       const load = (signal: AbortSignal) =>
         runWithProviderDeadline(
@@ -523,7 +524,7 @@ describe("geocoder suggestion shared cache ownership", () => {
         await Promise.all([firstOutcome, secondOutcome]);
       }
       if (mode === "all-cancelled") {
-        fetch.mockImplementationOnce(async () => Response.json({ features: [] }));
+        fetch.mockImplementationOnce(async () => Response.json(geocoderCollection([])));
         await expect(cache.withCache("oslo", 300, load)).resolves.toMatchObject({
           suggestions: [],
         });
@@ -659,6 +660,28 @@ const enturVehicle = {
   mode: "BUS",
   location: { latitude: 60, longitude: 10 },
 };
+function enturStopGeocoderResult() {
+  return {
+    type: "FeatureCollection",
+    features: [
+      {
+        type: "Feature",
+        geometry: { type: "Point", coordinates: [10, 60] },
+        properties: {
+          id: "NSR:StopPlace:1",
+          names: { default: "Stop", display: "Stop, Oslo" },
+          layer: "stopPlace",
+          source: "nsr",
+        },
+      },
+    ],
+    metadata: {
+      query: { limit: 1, lang: "en" },
+      resultCount: 1,
+      timestamp: "2026-10-19T10:00:00Z",
+    },
+  };
+}
 function enturContext(
   kind: "transit" | "live",
   name: string,
@@ -704,16 +727,7 @@ describe("Entur setup ownership through host clients", () => {
     async (kind) => {
       const fetch = vi.fn(async (_url: string, _init?: RequestInit) =>
         Response.json(
-          kind === "live"
-            ? { data: { vehicles: [enturVehicle] } }
-            : {
-                features: [
-                  {
-                    geometry: { coordinates: [10, 60] },
-                    properties: { id: "NSR:StopPlace:1", name: "Stop", layer: "venue" },
-                  },
-                ],
-              },
+          kind === "live" ? { data: { vehicles: [enturVehicle] } } : enturStopGeocoderResult(),
         ),
       );
       vi.stubGlobal("fetch", fetch);
@@ -729,7 +743,7 @@ describe("Entur setup ownership through host clients", () => {
       expect(String(fetch.mock.calls[0]?.[0])).toBe(
         kind === "live"
           ? "https://a.test/vehicles"
-          : "https://a.test/geocoder/autocomplete?text=Stop&size=1&boundary.country=NOR&multiModal=parent",
+          : "https://a.test/geocoder/v3/autocomplete?q=Stop&limit=1&layers=stopPlace&sources=nsr&countries=no&multimodal=parent",
       );
       expect((fetch.mock.calls[0]?.[1] as RequestInit).headers).toMatchObject({
         "ET-Client-Name": "a-client",
@@ -1009,18 +1023,11 @@ it("pending transit A and failed B setup cannot replace A's acquisition-time rec
   const gate = deferred();
   const fetch = vi.fn(async (_url: string, _init?: RequestInit) => {
     await gate.promise;
-    return Response.json({
-      features: [
-        {
-          geometry: { coordinates: [10, 60] },
-          properties: { id: "NSR:StopPlace:1", name: "Stop", layer: "venue" },
-        },
-      ],
-    });
+    return Response.json(enturStopGeocoderResult());
   });
   vi.stubGlobal("fetch", fetch);
   const a = enturContext("transit", "a");
-  Object.assign(a.ctx.config, { boundaryCountry: " swe ", multiModal: "child" });
+  Object.assign(a.ctx.config, { boundaryCountry: "se", multiModal: "child" });
   a.setup();
   const pending = required(a.ctx.registered.transit[0].searchStopsByName)("Stop", 1);
   await vi.waitFor(() => expect(fetch).toHaveBeenCalledOnce());
@@ -1029,15 +1036,15 @@ it("pending transit A and failed B setup cannot replace A's acquisition-time rec
   expect(b.setup).toThrow();
   const c = enturContext("transit", "c");
   c.setup();
-  a.ctx.config.boundaryCountry = "FIN";
+  a.ctx.config.boundaryCountry = "fi";
   required(a.ctx.manifest.dataSources)[0].name = "mutated";
   gate.resolve();
   const result = await pending;
   expect(result.data[0].contributors?.[0].name).toBe("a");
   const requested = new URL(String(fetch.mock.calls[0]?.[0]));
   expect(requested.origin).toBe("https://a.test");
-  expect(requested.searchParams.get("boundary.country")).toBe("SWE");
-  expect(requested.searchParams.get("multiModal")).toBe("child");
+  expect(requested.searchParams.get("countries")).toBe("se");
+  expect(requested.searchParams.get("multimodal")).toBe("child");
   await a.retire();
   await c.retire();
 });
@@ -1050,16 +1057,7 @@ it.each(["transit", "live"] as const)(
     vi.stubGlobal("fetch", async () => {
       responseServed = true;
       return Response.json(
-        kind === "live"
-          ? { data: { vehicles: [enturVehicle] } }
-          : {
-              features: [
-                {
-                  geometry: { coordinates: [10, 60] },
-                  properties: { id: "NSR:StopPlace:1", name: "Stop", layer: "venue" },
-                },
-              ],
-            },
+        kind === "live" ? { data: { vehicles: [enturVehicle] } } : enturStopGeocoderResult(),
       );
     });
     const a = enturContext(kind, "a");

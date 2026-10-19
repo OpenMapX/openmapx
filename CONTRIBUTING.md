@@ -141,9 +141,12 @@ in the workflow summary, with detailed reports attached as an artifact. PR repor
 are advisory and do not block merging; the full weekly audit remains enabled.
 
 Entur GraphQL operations and generated types are checked offline by
-`pnpm check-entur-graphql`, included in `pnpm check:policy`. See the
-[Entur contract guide](packages/mobility-formats/entur/README.md) for regeneration
-and reviewed schema refreshes.
+`pnpm check-entur-graphql`; native Geocoder v3 operations and Zod validators are
+checked offline by `pnpm check-entur-geocoder`. Both are included in
+`pnpm check:policy` and use committed snapshots without live schema downloads.
+See the [GraphQL contract guide](packages/mobility-formats/entur/README.md) and
+[Geocoder contract guide](docs/docs/developer/entur-geocoder.md) for regeneration
+and deliberate, reviewed schema refreshes.
 
 The lint job also audits production dependencies in the root and docs lockfiles.
 New high or critical advisories block CI. A no-fix advisory can be acknowledged

@@ -1,4 +1,4 @@
-import { createEnturClient } from "@openmapx/entur-client";
+import { createEnturClient, createEnturGeocoderSources } from "@openmapx/entur-client";
 import {
   captureTransitContributors,
   type IntegrationContext,
@@ -21,6 +21,20 @@ export function setup(ctx: IntegrationContext): void {
     geocoder: "entur-geocoder",
     nsr: "entur-nsr",
   } as const;
+  const isSourceAllowed = async (sourceId: string) => {
+    const denied = await ctx.getDisallowedSourceIds?.();
+    return !denied?.has(sourceId) && !denied?.has(id);
+  };
+  const geocoderSources = createEnturGeocoderSources({
+    contributors: Object.fromEntries(
+      ["entur-geocoder", "entur-geocoder-nsr"]
+        .filter((sourceId) =>
+          ctx.manifest.dataSources?.some((source) => source.sourceId === sourceId),
+        )
+        .map((sourceId) => [sourceId, resolveIntegrationContributors(ctx, [sourceId])]),
+    ),
+    isSourceAllowed,
+  });
   const client = createEnturClient({
     http,
     upstreamRuntime,
@@ -32,12 +46,10 @@ export function setup(ctx: IntegrationContext): void {
         resolveIntegrationContributors(ctx, [sourceId]),
       ]),
     ),
-    isSourceAllowed: async (sourceId) => {
-      const denied = await ctx.getDisallowedSourceIds?.();
-      return !denied?.has(sourceId) && !denied?.has(id);
-    },
+    isSourceAllowed,
   });
   const entur = createEnturTransitProvider(client, generation.signal, {
+    geocoderSources,
     boundaryCountry: ctx.config.boundaryCountry as string | undefined,
     multiModal: ctx.config.multiModal as "parent" | "child" | "all" | undefined,
   });

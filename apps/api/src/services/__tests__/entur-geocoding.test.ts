@@ -1,68 +1,56 @@
-import { describe, expect, it, vi } from "vitest";
-import { geocodingAdapterContract } from "./support/geocoding-adapter-contract.js";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  ADDRESS,
+  collection,
+  fixture,
+  STOP,
+} from "../../../../../integrations/geocoding-entur/test-support.js";
 
-const { mockFetch, mockOk, mockNotOk } = geocodingAdapterContract("Entur");
+const mockFetch = vi.fn();
+const mockOk = (data: unknown) => JSON.stringify(data);
+const mockNotOk = (status: number) => ({ status, headers: {}, body: "{}" });
+beforeEach(() => mockFetch.mockReset());
 
-function featureCollection(features: unknown[]) {
-  return { features };
-}
-
+const featureCollection = collection;
 function osloStopFeature(overrides: Record<string, unknown> = {}) {
   return {
-    geometry: { coordinates: [10.753051, 59.910357] },
-    properties: {
-      id: "NSR:StopPlace:59872",
-      source_id: "NSR:StopPlace:59872",
-      layer: "venue",
-      name: "Oslo S",
-      label: "Oslo S, Oslo",
-      locality: "Oslo",
-      county: "Oslo",
-      country_a: "NOR",
-      category: ["onstreetBus", "railStation"],
-      mode: [{ bus: "railReplacementBus" }, { rail: null }],
-      description: [{ eng: "Main stop" }],
-      ...overrides,
-    },
+    ...STOP,
+    geometry: { type: "Point" as const, coordinates: [10.753051, 59.910357] },
+    properties: { ...STOP.properties, id: "NSR:StopPlace:59872", ...overrides },
   };
 }
-
-function osloPoiFeature(overrides: Record<string, unknown> = {}) {
+function osloPoiFeature() {
   return {
-    geometry: { coordinates: [10.752276, 59.911116] },
+    ...ADDRESS,
+    geometry: { type: "Point" as const, coordinates: [10.752276, 59.911116] },
     properties: {
+      ...ADDRESS.properties,
       id: "OSM:TopographicPlace:7118275595",
-      source_id: "OSM:TopographicPlace:7118275595",
-      layer: "address",
-      name: "Espresso House Oslo S Hovedhallen",
-      label: "Espresso House Oslo S Hovedhallen, Oslo",
-      locality: "Oslo",
-      county: "Oslo",
-      country_a: "NOR",
-      category: ["poi", "cafe"],
-      ...overrides,
+      source: "openstreetmap" as const,
+      layer: "poi" as const,
+      names: {
+        default: "Espresso House Oslo S Hovedhallen",
+        display: "Espresso House Oslo S Hovedhallen, Oslo",
+      },
+      categories: ["poi", "cafe"],
     },
   };
 }
-
 async function loadModule() {
-  vi.resetModules();
-  const mod = await import("@integrations/geocoding-entur/provider.js");
-  mod.setEnturGeocodingConfig({
-    endpoint: "https://api.entur.io/geocoder/v1",
-    clientName: "openmapx-tests",
-    boundaryCountry: "NOR",
-    multiModal: "parent",
-  });
-  return mod;
+  const instance = fixture({ responder: mockFetch });
+  return {
+    provider: instance.provider,
+    lookupPlaceById: instance.lookupPlaceById,
+    http: instance.http,
+  };
 }
 
 describe("entur autocomplete", () => {
   it("maps NSR stop features to transit-stop suggestions with preserved ids and modes", async () => {
     mockFetch.mockResolvedValueOnce(mockOk(featureCollection([osloStopFeature()])));
-    const { enturGeocodingService } = await loadModule();
+    const { provider, http } = await loadModule();
 
-    const results = await enturGeocodingService.autocomplete("Oslo S", "en");
+    const results = await provider.autocomplete("Oslo S", "en");
 
     expect(results).toHaveLength(1);
     expect(results[0]).toMatchObject({
@@ -73,7 +61,7 @@ describe("entur autocomplete", () => {
       rawCategory: "railStation",
       coordinates: [10.753051, 59.910357],
     });
-    expect(results[0].transitStop).toEqual({
+    expect(results[0].transitStop).toMatchObject({
       id: "nsr:StopPlace:59872",
       primaryScheme: "nsr",
       ids: {
@@ -83,25 +71,25 @@ describe("entur autocomplete", () => {
       name: "Oslo S",
       lat: 59.910357,
       lng: 10.753051,
-      modes: ["bus", "rail"],
+      modes: ["rail", "bus"],
       provider: "entur",
     });
 
-    const [url, options] = mockFetch.mock.calls[0];
+    const { url, options } = http.calls[0];
     const parsed = new URL(url);
-    expect(parsed.pathname).toBe("/geocoder/v1/autocomplete");
-    expect(parsed.searchParams.get("text")).toBe("Oslo S");
+    expect(parsed.pathname).toBe("/geocoder/v3/autocomplete");
+    expect(parsed.searchParams.get("q")).toBe("Oslo S");
     expect(parsed.searchParams.get("lang")).toBe("en");
-    expect(parsed.searchParams.get("boundary.country")).toBe("NOR");
-    expect(parsed.searchParams.get("multiModal")).toBe("parent");
-    expect(options.headers["ET-Client-Name"]).toBe("openmapx-tests");
+    expect(parsed.searchParams.get("countries")).toBe("no");
+    expect(parsed.searchParams.get("multimodal")).toBe("parent");
+    expect(options?.headers?.["ET-Client-Name"]).toBe("openmapx-tests");
   });
 
   it("maps POI categories to normal autocomplete results and keeps the specific category", async () => {
     mockFetch.mockResolvedValueOnce(mockOk(featureCollection([osloPoiFeature()])));
-    const { enturGeocodingService } = await loadModule();
+    const { provider } = await loadModule();
 
-    const results = await enturGeocodingService.autocomplete("Espresso", "en");
+    const results = await provider.autocomplete("Espresso", "en");
 
     expect(results).toHaveLength(1);
     expect(results[0]).toMatchObject({
@@ -120,11 +108,11 @@ describe("entur autocomplete", () => {
 describe("entur geocode and reverse", () => {
   it("maps forward geocoding results using canonical ids", async () => {
     mockFetch.mockResolvedValueOnce(mockOk(featureCollection([osloStopFeature()])));
-    const { enturGeocodingService } = await loadModule();
+    const { provider } = await loadModule();
 
-    const results = await enturGeocodingService.geocode("Oslo S", "en");
+    const results = await provider.geocode("Oslo S", "en");
 
-    expect(results).toEqual([
+    expect(results).toMatchObject([
       {
         id: "nsr:StopPlace:59872",
         label: "Oslo S, Oslo",
@@ -138,11 +126,11 @@ describe("entur geocode and reverse", () => {
 
   it("maps reverse geocoding to address and city", async () => {
     mockFetch.mockResolvedValueOnce(mockOk(featureCollection([osloPoiFeature()])));
-    const { enturGeocodingService } = await loadModule();
+    const { provider } = await loadModule();
 
-    const result = await enturGeocodingService.reverseGeocode(59.911116, 10.752276, "en");
+    const result = await provider.reverseGeocode(59.911116, 10.752276, "en");
 
-    expect(result).toEqual({
+    expect(result).toMatchObject({
       address: "Espresso House Oslo S Hovedhallen, Oslo",
       city: "Oslo",
     });
@@ -150,24 +138,24 @@ describe("entur geocode and reverse", () => {
 
   it("throws on upstream HTTP errors", async () => {
     mockFetch.mockResolvedValueOnce(mockNotOk(429));
-    const { enturGeocodingService } = await loadModule();
+    const { provider } = await loadModule();
 
-    await expect(enturGeocodingService.geocode("Oslo S", "en")).rejects.toThrow(
-      "Entur geocoding error 429",
+    await expect(provider.geocode("Oslo S", "en")).rejects.toThrow(
+      "Entur request failed (http, HTTP 429)",
     );
   });
 });
 
-describe("lookupEnturPlaceById", () => {
+describe("lookupPlaceById", () => {
   it("resolves exact NSR ids without the boundary-country filter", async () => {
     mockFetch.mockResolvedValueOnce(
       mockOk(
-        featureCollection([osloPoiFeature(), osloStopFeature({ description: [{ eng: "Hub" }] })]),
+        featureCollection([osloPoiFeature(), osloStopFeature({ description: { eng: "Hub" } })]),
       ),
     );
-    const { lookupEnturPlaceById } = await loadModule();
+    const { lookupPlaceById, http } = await loadModule();
 
-    const place = await lookupEnturPlaceById("NSR:StopPlace:59872", "en");
+    const place = await lookupPlaceById("NSR:StopPlace:59872", "en");
 
     expect(place).toMatchObject({
       id: "nsr:StopPlace:59872",
@@ -186,10 +174,11 @@ describe("lookupEnturPlaceById", () => {
       description: "Hub",
     });
 
-    const [url] = mockFetch.mock.calls[0];
+    const { url } = http.calls[0];
     const parsed = new URL(url);
-    expect(parsed.searchParams.get("text")).toBe("NSR:StopPlace:59872");
-    expect(parsed.searchParams.get("multiModal")).toBe("all");
-    expect(parsed.searchParams.has("boundary.country")).toBe(false);
+    expect(parsed.pathname).toBe("/geocoder/v3/place");
+    expect(parsed.searchParams.get("ids")).toBe("NSR:StopPlace:59872");
+    expect(parsed.searchParams.has("q")).toBe(false);
+    expect(parsed.searchParams.has("countries")).toBe(false);
   });
 });
