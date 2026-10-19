@@ -2,6 +2,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import swagger from "@fastify/swagger";
+import { convertJsonSchemaTuplesToOpenApi31 } from "@openmapx/core/api-schema";
 import { dataManagerOperations } from "@openmapx/core/data-manager-contracts";
 import Fastify from "fastify";
 import { registerApi } from "../../src/api.js";
@@ -11,18 +12,6 @@ import type { OfflinePackageGenerator } from "../../src/offline-packages/generat
 
 export const DOCUMENT_PATH = new URL("../../openapi.json", import.meta.url);
 const methods = new Set(["get", "head", "post", "delete", "put", "patch", "options"]);
-
-/** Fastify uses draft-7 tuples; OpenAPI 3.1 uses the 2020-12 spelling. */
-function openApiTupleDialect(value: unknown): void {
-  if (!value || typeof value !== "object") return;
-  const schema = value as Record<string, unknown>;
-  if (Array.isArray(schema.items)) {
-    schema.prefixItems = schema.items;
-    schema.items = schema.additionalItems ?? true;
-    delete schema.additionalItems;
-  }
-  for (const child of Object.values(schema)) openApiTupleDialect(child);
-}
 
 /** Collect actual registrations without listening, launching jobs, or opening a database. */
 export async function generateDocument(): Promise<string> {
@@ -57,7 +46,7 @@ export async function generateDocument(): Promise<string> {
             operation.operationId = operation["x-openmapx-contract-id"];
           }
         }
-        openApiTupleDialect(openapiObject);
+        convertJsonSchemaTuplesToOpenApi31(openapiObject);
         return openapiObject;
       },
     });

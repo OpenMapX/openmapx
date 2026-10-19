@@ -11,6 +11,7 @@ import Paper from "@mui/material/Paper";
 import Stack from "@mui/material/Stack";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
+import { adminErrorMessage } from "@openmapx/core/api-admin-sdk";
 import { useState } from "react";
 import { useAdminToast } from "@/components/admin/shared/AdminToast";
 import { formatTransitAdminTimestamp } from "@/components/admin/shared/adminTimestamp";
@@ -153,7 +154,13 @@ export function LockfileCard({ state }: { state: TransitStateSummary }) {
               setConfirmOpen(false);
             },
             onError: (error) =>
-              showToast(error instanceof Error ? error.message : "Pin update failed", "error"),
+              showToast(
+                adminErrorMessage(
+                  error,
+                  error instanceof Error ? error.message : "Pin update failed",
+                ),
+                "error",
+              ),
           })
         }
       />

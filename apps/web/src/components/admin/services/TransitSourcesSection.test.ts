@@ -8,6 +8,7 @@ function source(overrides: Partial<TransitSource>): TransitSource {
     name: "Test",
     format: "gtfs",
     origin: "catalog",
+    license: {},
     requested: true,
     active: true,
     lifecycle: "active",

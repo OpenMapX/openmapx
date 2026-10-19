@@ -12,33 +12,33 @@ import RadioGroup from "@mui/material/RadioGroup";
 import Stack from "@mui/material/Stack";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
+import { createApiClient } from "@openmapx/core";
 import {
   AMBIENT_GERMANY_REGION,
   AMBIENT_PLANET_REGION,
-  type AmbientBuildProgress,
-  type AmbientManifest,
-  type AmbientPlanetCandidate,
+  type AmbientRegion,
   validateAmbientRegion,
 } from "@openmapx/core/ambient-places";
+import * as sdk from "@openmapx/core/api-admin-sdk";
+import type { AmbientPlacesStatus } from "@openmapx/core/api-contracts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useAdminToast } from "../shared/AdminToast";
 import { ConfirmDialog } from "../shared/ConfirmDialog";
 
-interface AmbientStatus {
-  active: AmbientManifest | null;
-  previous: string | null;
-  building: boolean;
-  lastError: string | null;
-  startedAt?: string;
-  finishedAt?: string;
-  progress?: AmbientBuildProgress | null;
-  candidate?: AmbientPlanetCandidate | null;
-}
+type AmbientMutation =
+  | { action: "build"; body: Omit<AmbientRegion, "bounds"> & { bounds: readonly number[] } }
+  | { action: "resume" | "discard"; body: { generation: string } }
+  | { action: "enabled"; body: { enabled: boolean } }
+  | { action: "rollback"; body: Record<string, never> };
 
 export function AmbientPlacesMaintenance({ apiUrl }: { apiUrl: string }) {
   const toast = useAdminToast();
   const client = useQueryClient();
+  const apiClient = useMemo(
+    () => createApiClient({ baseUrl: apiUrl, credentials: "include" }),
+    [apiUrl],
+  );
   const [confirm, setConfirm] = useState<"rollback" | "discard" | null>(null);
   const [name, setName] = useState("Aachen");
   const [bounds, setBounds] = useState([5.9, 50.65, 6.3, 50.95]);
@@ -46,29 +46,33 @@ export function AmbientPlacesMaintenance({ apiUrl }: { apiUrl: string }) {
   const country = coverage === "germany";
   const planet = coverage === "planet";
   const queryKey = ["admin", "ambient-places", "status"];
-  async function request(action: string, body?: unknown) {
-    const response = await fetch(`${apiUrl}/api/admin/ambient-places/${action}`, {
-      credentials: "include",
-      ...(body === undefined
-        ? {}
-        : {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(body),
-          }),
-    });
-    const result = await response.json();
-    if (!response.ok) throw new Error(result.error ?? "Ambient publication service unavailable");
-    return result;
-  }
-  const query = useQuery<AmbientStatus>({
+  const query = useQuery<AmbientPlacesStatus>({
     queryKey,
-    queryFn: () => request("status"),
+    queryFn: async ({ signal }) =>
+      sdk.unwrapAdminResponse(
+        await sdk.getApiAdminAmbientPlacesStatus({ client: apiClient, signal }),
+      ),
     refetchInterval: (q) => (q.state.data?.building ? 2000 : 60_000),
   });
   const operation = useMutation({
-    mutationFn: ({ action, body }: { action: string; body: unknown }) =>
-      request(action, action === "build" ? validateAmbientRegion(body) : body),
+    mutationFn: async (input: AmbientMutation) => {
+      const options = { client: apiClient };
+      const response = await (() => {
+        switch (input.action) {
+          case "build":
+            return sdk.postApiAdminAmbientPlacesBuild(validateAmbientRegion(input.body), options);
+          case "resume":
+            return sdk.postApiAdminAmbientPlacesResume(input.body, options);
+          case "discard":
+            return sdk.postApiAdminAmbientPlacesDiscard(input.body, options);
+          case "enabled":
+            return sdk.postApiAdminAmbientPlacesEnabled(input.body, options);
+          case "rollback":
+            return sdk.postApiAdminAmbientPlacesRollback(options);
+        }
+      })();
+      return sdk.unwrapAdminResponse(response);
+    },
     onSuccess: (_result, variables) => {
       toast(
         ["build", "resume"].includes(variables.action)
@@ -78,10 +82,11 @@ export function AmbientPlacesMaintenance({ apiUrl }: { apiUrl: string }) {
       setConfirm(null);
       void client.invalidateQueries({ queryKey });
     },
-    onError: (error: Error) => toast(error.message, "error"),
+    onError: (error: Error) => toast(sdk.adminErrorMessage(error, error.message), "error"),
   });
   const status = query.data;
   const active = status?.active;
+  const candidate = status?.candidate;
   const busy = operation.isPending || Boolean(status?.building);
   return (
     <Paper variant="outlined" sx={{ p: 3 }}>
@@ -94,7 +99,9 @@ export function AmbientPlacesMaintenance({ apiUrl }: { apiUrl: string }) {
           </Typography>
         </Box>
         {(query.isLoading || busy) && <LinearProgress />}
-        {query.error && <Alert severity="error">{query.error.message}</Alert>}
+        {query.error && (
+          <Alert severity="error">{sdk.adminErrorMessage(query.error, query.error.message)}</Alert>
+        )}
         {status?.lastError && <Alert severity="error">{status.lastError}</Alert>}
         {status?.building && status.progress && (
           <Alert severity="info">
@@ -262,14 +269,14 @@ export function AmbientPlacesMaintenance({ apiUrl }: { apiUrl: string }) {
           <Button disabled={busy || !status?.previous} onClick={() => setConfirm("rollback")}>
             Roll back
           </Button>
-          {status?.candidate && (
+          {candidate && (
             <>
               <Button
                 disabled={busy}
                 onClick={() =>
                   operation.mutate({
                     action: "resume",
-                    body: { generation: status.candidate!.generation },
+                    body: { generation: candidate.generation },
                   })
                 }
               >
@@ -299,12 +306,15 @@ export function AmbientPlacesMaintenance({ apiUrl }: { apiUrl: string }) {
         }
         confirmLabel={confirm === "discard" ? "Discard" : "Roll back"}
         loading={operation.isPending}
-        onConfirm={() =>
-          operation.mutate({
-            action: confirm === "discard" ? "discard" : "rollback",
-            body: confirm === "discard" ? { generation: status?.candidate?.generation } : {},
-          })
-        }
+        onConfirm={() => {
+          if (confirm === "discard") {
+            if (status?.candidate)
+              operation.mutate({
+                action: "discard",
+                body: { generation: status.candidate.generation },
+              });
+          } else operation.mutate({ action: "rollback", body: {} });
+        }}
         onCancel={() => setConfirm(null)}
       />
     </Paper>

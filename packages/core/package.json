@@ -7,8 +7,8 @@
   "types": "./src/index.ts",
   "exports": {
     "./api-contracts": {
-      "types": "./src/api/contracts/runtime-metadata.ts",
-      "default": "./src/api/contracts/runtime-metadata.ts"
+      "types": "./src/api/contracts/index.ts",
+      "default": "./src/api/contracts/index.ts"
     },
     ".": {
       "types": "./src/index.ts",
@@ -177,6 +177,14 @@
     "./data-manager-sdk": {
       "types": "./src/services/data-manager/index.ts",
       "default": "./src/services/data-manager/index.ts"
+    },
+    "./api-schema": {
+      "types": "./src/api/schema.ts",
+      "default": "./src/api/schema.ts"
+    },
+    "./api-admin-sdk": {
+      "types": "./src/api/admin-sdk.ts",
+      "default": "./src/api/admin-sdk.ts"
     }
   },
   "scripts": {

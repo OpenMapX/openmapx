@@ -12,36 +12,36 @@ import Paper from "@mui/material/Paper";
 import Stack from "@mui/material/Stack";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
+import { createApiClient } from "@openmapx/core";
+import * as sdk from "@openmapx/core/api-admin-sdk";
+import type { OvertureStatus } from "@openmapx/core/api-contracts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { runAdminOperation } from "../operations/adminOperationsApi";
 import { useAdminToast } from "../shared/AdminToast";
 import { ConfirmDialog } from "../shared/ConfirmDialog";
 
-interface OvertureStatus {
-  ok?: boolean;
-  error?: string;
-  release?: string;
-  region?: string;
-  placeCount?: number;
-  status?: string;
-  phase?: string;
-  emittedCount?: number | null;
-  extractedCount?: number | null;
-  processedCount?: number | null;
-  componentCount?: number | null;
-  assignmentCursor?: number | null;
-  linkedCount?: number | null;
-  attemptCount?: number;
-  lastError?: string | null;
-  heartbeatAgeMs?: number;
-  stalled?: boolean;
-}
-
 type Operation = "overture-sync" | "overture-conflate";
 
-export function overtureProgress(status: OvertureStatus | undefined): {
+export function overtureProgress(
+  status:
+    | Partial<
+        Pick<
+          OvertureStatus,
+          | "status"
+          | "phase"
+          | "extractedCount"
+          | "processedCount"
+          | "componentCount"
+          | "assignmentCursor"
+          | "emittedCount"
+          | "placeCount"
+        >
+      >
+    | null
+    | undefined,
+): {
   value: number | null;
   label: string;
 } | null {
@@ -78,7 +78,7 @@ export function overtureProgress(status: OvertureStatus | undefined): {
 }
 
 export function canResumeOvertureLinks(
-  status: OvertureStatus | undefined,
+  status: Pick<OvertureStatus, "status" | "stalled"> | null | undefined,
   region: string,
   operationPending: boolean,
 ): boolean {
@@ -92,19 +92,19 @@ export function canResumeOvertureLinks(
 export function OvertureMaintenance({ apiUrl }: { apiUrl: string }) {
   const showToast = useAdminToast();
   const queryClient = useQueryClient();
+  const client = useMemo(
+    () => createApiClient({ baseUrl: apiUrl, credentials: "include" }),
+    [apiUrl],
+  );
   const [region, setRegion] = useState("");
   const [confirmOperation, setConfirmOperation] = useState<Operation | null>(null);
 
-  const statusQuery = useQuery<OvertureStatus>({
+  const statusQuery = useQuery<OvertureStatus | null>({
     queryKey: ["admin", "overture", "status"],
-    queryFn: async () => {
-      const response = await fetch(`${apiUrl}/api/data-manager/overture/status`, {
-        credentials: "include",
-      });
-      const body = (await response.json().catch(() => ({}))) as OvertureStatus;
-      if (response.status === 404) return body;
-      if (!response.ok) throw new Error(body.error ?? "Failed to load Overture status");
-      return body;
+    queryFn: async ({ signal }) => {
+      const response = await sdk.getApiDataManagerOvertureStatus({ client, signal });
+      if (response.status === 404) return null;
+      return sdk.unwrapAdminResponse(response);
     },
     refetchInterval: (query) => (query.state.data?.status === "running" ? 10_000 : 60_000),
   });
@@ -158,10 +158,13 @@ export function OvertureMaintenance({ apiUrl }: { apiUrl: string }) {
 
       {statusQuery.isError && (
         <Alert severity="error" sx={{ mt: 1.5 }}>
-          {statusQuery.error instanceof Error ? statusQuery.error.message : "Status unavailable"}
+          {sdk.adminErrorMessage(
+            statusQuery.error,
+            statusQuery.error instanceof Error ? statusQuery.error.message : "Status unavailable",
+          )}
         </Alert>
       )}
-      {status && status.ok === false && (
+      {status === null && (
         <Alert severity="info" sx={{ mt: 1.5 }}>
           Overture Places has not been ingested yet. Choose the same Geofabrik-style region used for
           OSM data and run a full sync.

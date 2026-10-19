@@ -14,6 +14,7 @@ import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
+import { adminErrorMessage } from "@openmapx/core/api-admin-sdk";
 import { AdminTablePagination } from "@/components/admin/shared/AdminTablePagination";
 import { AdminTableSurface } from "@/components/admin/shared/AdminTableSurface";
 import { useAdminToast } from "@/components/admin/shared/AdminToast";
@@ -50,7 +51,13 @@ export function ProviderHealthTable() {
     resetMutation.mutate(providerId, {
       onSuccess: () => showToast(`Provider "${providerId}" reset`, "success"),
       onError: (err) =>
-        showToast(err instanceof Error ? err.message : `Failed to reset ${providerId}`, "error"),
+        showToast(
+          adminErrorMessage(
+            err,
+            err instanceof Error ? err.message : `Failed to reset ${providerId}`,
+          ),
+          "error",
+        ),
     });
   };
 

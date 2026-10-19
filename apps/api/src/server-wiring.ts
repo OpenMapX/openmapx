@@ -194,6 +194,7 @@ export function corsOptions(trustedWebOrigins: readonly string[] = configuredTru
       "Accept-Ranges",
       "Content-Range",
       "ETag",
+      "Retry-After",
       "X-OpenMapX-Fetched-At",
       "X-OpenMapX-Stale",
       "X-OpenMapX-Truncated",

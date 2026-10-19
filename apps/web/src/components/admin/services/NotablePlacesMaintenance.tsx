@@ -10,26 +10,17 @@ import LinearProgress from "@mui/material/LinearProgress";
 import Paper from "@mui/material/Paper";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
+import { createApiClient } from "@openmapx/core";
+import * as sdk from "@openmapx/core/api-admin-sdk";
+import type { NotablePlacesStatus } from "@openmapx/core/api-contracts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { runAdminOperation } from "../operations/adminOperationsApi";
 import { useAdminToast } from "../shared/AdminToast";
 import { ConfirmDialog } from "../shared/ConfirmDialog";
 
-export interface NotablePlacesStatus {
-  ok?: boolean;
-  error?: string;
-  status?: "building" | "ready" | "failed";
-  building?: boolean;
-  placeCount?: number;
-  nameCount?: number;
-  minSitelinks?: number | null;
-  source?: string | null;
-  epoch?: string | null;
-  publishedAt?: string | null;
-  lastError?: string | null;
-}
+export type { NotablePlacesStatus };
 
 /**
  * The Wikidata index that tells search which of several namesakes is famous.
@@ -39,17 +30,17 @@ export interface NotablePlacesStatus {
 export function NotablePlacesMaintenance({ apiUrl }: { apiUrl: string }) {
   const showToast = useAdminToast();
   const queryClient = useQueryClient();
+  const client = useMemo(
+    () => createApiClient({ baseUrl: apiUrl, credentials: "include" }),
+    [apiUrl],
+  );
   const [confirmOpen, setConfirmOpen] = useState(false);
-  const statusQuery = useQuery<NotablePlacesStatus>({
+  const statusQuery = useQuery<NotablePlacesStatus | null>({
     queryKey: ["admin", "notable-places", "status"],
-    queryFn: async () => {
-      const response = await fetch(`${apiUrl}/api/data-manager/notable-places/status`, {
-        credentials: "include",
-      });
-      const body = (await response.json().catch(() => ({}))) as NotablePlacesStatus;
-      if (response.status === 404) return body;
-      if (!response.ok) throw new Error(body.error ?? "Failed to load notable-places status");
-      return body;
+    queryFn: async ({ signal }) => {
+      const response = await sdk.getApiDataManagerNotablePlacesStatus({ client, signal });
+      if (response.status === 404) return null;
+      return sdk.unwrapAdminResponse(response);
     },
     refetchInterval: (query) => (query.state.data?.building ? 10_000 : 60_000),
   });
@@ -98,10 +89,13 @@ export function NotablePlacesMaintenance({ apiUrl }: { apiUrl: string }) {
 
       {statusQuery.isError && (
         <Alert severity="error" sx={{ mt: 1.5 }}>
-          {statusQuery.error instanceof Error ? statusQuery.error.message : "Status unavailable"}
+          {sdk.adminErrorMessage(
+            statusQuery.error,
+            statusQuery.error instanceof Error ? statusQuery.error.message : "Status unavailable",
+          )}
         </Alert>
       )}
-      {status?.ok === false && (
+      {status === null && (
         <Alert severity="info" sx={{ mt: 1.5 }}>
           No notable-places index is published yet. Search ranks far-away places by the
           geocoder&apos;s order alone until it is.

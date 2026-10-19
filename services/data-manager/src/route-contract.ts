@@ -1,7 +1,8 @@
 import { STATUS_CODES } from "node:http";
+import { routeJsonSchema } from "@openmapx/core/api-schema";
 import { dataManagerOperations } from "@openmapx/core/data-manager-contracts";
 import type { FastifyInstance, FastifyReply, FastifyRequest, RouteGenericInterface } from "fastify";
-import { z } from "zod/v4";
+import type { z } from "zod/v4";
 
 type OperationId = keyof typeof dataManagerOperations;
 type ContractPart<
@@ -29,65 +30,20 @@ interface ResponseContract {
   headers?: z.ZodType;
 }
 
-/** Schemas describe the JSON wire representation; custom refinements stay in Zod. */
+/** Canonical contracts stay independent of Fastify's JSON Schema adapter. */
 function jsonSchema(
   app: FastifyInstance,
   identity: string,
   schema: z.ZodType,
   io: "input" | "output",
 ) {
-  const {
-    $schema: _dialect,
-    definitions,
-    $defs,
-    ...source
-  } = z.toJSONSchema(schema, { target: "draft-7", io });
-  const localDefinitions = {
-    ...(definitions && typeof definitions === "object" ? definitions : {}),
-    ...$defs,
-  };
-  const identities = new Map(
-    Object.keys(localDefinitions).map((name) => [name, `DataManager_${identity}_${name}`]),
-  );
-  function rewrite(value: unknown): unknown {
-    if (Array.isArray(value)) return value.map(rewrite);
-    if (!value || typeof value !== "object") return value;
-    return Object.fromEntries(
-      Object.entries(value).map(([key, child]) => {
-        if (key === "$ref" && typeof child === "string") {
-          const match = /^#\/(?:definitions|\$defs)\/(.+)$/.exec(child);
-          if (match) {
-            const name = (match[1] ?? "").replaceAll("~1", "/").replaceAll("~0", "~");
-            const id = identities.get(name);
-            if (!id) throw new Error(`Unresolved data-manager schema reference: ${identity}`);
-            return [key, `${id}#`];
-          }
-        }
-        return [key, rewrite(child)];
-      }),
-    );
-  }
-  const result = rewrite(source) as Record<string, unknown>;
-  function omitUnrestrictedPropertyNames(value: unknown): void {
-    if (!value || typeof value !== "object") return;
-    const node = value as Record<string, unknown>;
-    const names = node.propertyNames;
-    if (
-      names &&
-      typeof names === "object" &&
-      Object.keys(names).length === 1 &&
-      (names as { type?: unknown }).type === "string"
-    )
-      delete node.propertyNames;
-    for (const child of Object.values(node)) omitUnrestrictedPropertyNames(child);
-  }
-  omitUnrestrictedPropertyNames(result);
-  for (const [name, definition] of Object.entries(localDefinitions)) {
-    const resolved = rewrite(definition) as Record<string, unknown>;
-    omitUnrestrictedPropertyNames(resolved);
-    app.addSchema({ ...resolved, $id: identities.get(name) });
-  }
-  return result;
+  return routeJsonSchema(schema, {
+    identity: `DataManager_${identity}`,
+    io,
+    registerDefinition: (definition) => {
+      app.addSchema(definition);
+    },
+  });
 }
 
 function invalidResponse(): Error {

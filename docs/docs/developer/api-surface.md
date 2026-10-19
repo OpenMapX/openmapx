@@ -323,3 +323,40 @@ statuses, media types, headers and payloads. Workflow adapters consume bounded,
 validated NDJSON progress and require a terminal event. Binary operations return an
 unconsumed `Response`; callers own streaming and release. This internal SDK must
 never receive browser credentials or replace the browser-facing API client.
+
+## Browser-facing data-manager administration
+
+The application API has a separate `data-manager-admin` contract family covering
+all 19 `/api/data-manager` operations and six `/api/admin/ambient-places`
+operations. Its portable schemas live under
+`packages/core/src/api/contracts/data-manager-admin`; API-owned database, Redis,
+operations-agent and merged-catalog projections are defined there rather than
+pretending they are internal data-manager responses.
+
+Register these handlers through `registerDataManagerAdminRoute` and keep their
+actual authentication guards beside the corresponding declarations. Authentication
+metadata does not grant or enforce access. The collector checks all 25 actual
+registrations, their stable operation IDs, status schemas and authentication
+classifications. Shared schema emission supports Fastify's draft-7 runtime and the
+OpenAPI 3.1 document without maintaining parallel handwritten schemas.
+
+```bash
+pnpm openapi:generate
+pnpm sdk:generate
+pnpm check-openapi
+pnpm check-api-sdk
+```
+
+Browser callers import `@openmapx/core/api-admin-sdk`. Generated named operations
+use `ApiClient` for the configured API origin, cookies, cancellation and deadlines.
+Their bound transport validates each declared status and its canonical JSON schema
+within response-size limits. `unwrapAdminResponse` returns successful data or a
+structured, redacted `ApiClientError`. Handle an expected absence such as an index
+status `404` before unwrapping; it is distinct from a malformed response or a
+successful published index. Query keys, polling and invalidation remain owned by
+the browser feature.
+
+The metadata and administration clients are generated together, with independent
+schema selection and one exact artifact-set check. Mechanical file emission and
+operation binding are shared with the internal SDK. Neither browser client uses
+internal service credentials or data-manager destinations.

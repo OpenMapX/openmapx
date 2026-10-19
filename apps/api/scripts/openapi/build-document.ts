@@ -29,6 +29,8 @@ export interface OpenApiDocument {
 const HTTP_METHODS = ["get", "put", "post", "delete", "options", "head", "patch", "trace"];
 
 const TAG_DESCRIPTIONS: Record<string, string> = {
+  "data-manager-admin":
+    "Data-manager administration, transit maintenance and ambient publications.",
   "runtime-metadata": "Public runtime capabilities, integration metadata and legal disclosures.",
   admin: "Operator-facing administration of integrations, services, settings and jobs.",
   "data-manager": "Transit, POI and Overture data pipeline control.",

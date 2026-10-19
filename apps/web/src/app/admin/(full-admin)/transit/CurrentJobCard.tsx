@@ -12,6 +12,7 @@ import LinearProgress from "@mui/material/LinearProgress";
 import Paper from "@mui/material/Paper";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
+import { adminErrorMessage } from "@openmapx/core/api-admin-sdk";
 import type { ReactNode } from "react";
 import { useAdminToast } from "@/components/admin/shared/AdminToast";
 import { formatTransitAdminTimestamp } from "@/components/admin/shared/adminTimestamp";
@@ -106,7 +107,10 @@ export function CurrentJobCard({ state }: { state: TransitStateSummary }) {
           else showToast("Sync queued", "success");
         },
         onError: (err) =>
-          showToast(err instanceof Error ? err.message : "Failed to queue sync", "error"),
+          showToast(
+            adminErrorMessage(err, err instanceof Error ? err.message : "Failed to queue sync"),
+            "error",
+          ),
       },
     );
   };
@@ -115,7 +119,10 @@ export function CurrentJobCard({ state }: { state: TransitStateSummary }) {
     restartMutation.mutate(undefined, {
       onSuccess: () => showToast("MOTIS restart triggered", "success"),
       onError: (err) =>
-        showToast(err instanceof Error ? err.message : "Failed to restart MOTIS", "error"),
+        showToast(
+          adminErrorMessage(err, err instanceof Error ? err.message : "Failed to restart MOTIS"),
+          "error",
+        ),
     });
   };
 

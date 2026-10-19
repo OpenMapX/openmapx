@@ -1,14 +1,28 @@
 "use client";
 
+import { createApiClient } from "@openmapx/core";
+import * as sdk from "@openmapx/core/api-admin-sdk";
+import type {
+  ProviderHealthEntry,
+  ProviderHealthResponse,
+  TransitFeed,
+  TransitFeedsResponse,
+  TransitJob,
+  TransitJobDetail,
+  TransitJobStage,
+  TransitJobsResponse,
+  TransitStateSummary,
+} from "@openmapx/core/api-contracts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMemo } from "react";
 import { useEnv } from "@/integration-api/runtime/EnvProvider";
 
 /**
  * React Query hooks for the /admin/transit page.
  *
  * All endpoints live under `/api/data-manager/*` on the BFF and are documented
- * in apps/api/src/routes/data-manager.ts. The BFF gates them with admin
- * session OR service token; we always send credentials so the admin session
+ * in apps/api/src/routes/data-manager.ts. The BFF owns session/service
+ * authorization; browser requests send credentials so the admin session
  * cookie travels with the request.
  *
  * Refetch cadences are intentionally tiered:
@@ -19,113 +33,34 @@ import { useEnv } from "@/integration-api/runtime/EnvProvider";
  *   - providers: 30s
  */
 
-export interface TransitStateSummary {
-  transitousRef: string | null;
-  transitousLockedAt: string | null;
-  transitousLockedBy: string | null;
-  lastSyncAt: string | null;
-  lastSyncStatus: string | null;
-  currentJob: { jobId: string; startedAt: string } | null;
-  feedCount: number;
-  feeds: { byRegion: Record<string, number>; byStatus: Record<string, number> };
+export type {
+  ProviderHealthEntry,
+  ProviderHealthResponse,
+  TransitFeed,
+  TransitFeedsResponse,
+  TransitJob,
+  TransitJobDetail,
+  TransitJobStage,
+  TransitJobsResponse,
+  TransitStateSummary,
+};
+
+function useAdminClient() {
+  const { apiUrl } = useEnv();
+  return useMemo(() => createApiClient({ baseUrl: apiUrl, credentials: "include" }), [apiUrl]);
 }
 
-export interface TransitFeed {
-  id: string;
-  region: string;
-  name: string;
-  lastFetchedAt: string | null;
-  lastImportedAt: string | null;
-  hash: string | null;
-  validationStatus: string | null;
-  validationMessage: string | null;
-  status: string;
-}
-
-export interface TransitFeedsResponse {
-  feeds: TransitFeed[];
-  total: number;
-  limit: number;
-  offset: number;
-}
-
-export interface TransitJob {
-  id: string;
-  kind: string;
-  status: string;
-  startedAt: string;
-  finishedAt: string | null;
-  triggeredBy: string | null;
-  idempotencyKey: string | null;
-  metadata: unknown;
-}
-
-export interface TransitJobsResponse {
-  jobs: TransitJob[];
-  total: number;
-  limit: number;
-  offset: number;
-}
-
-export interface TransitJobStage {
-  id: string;
-  stage: string;
-  status: string;
-  startedAt: string;
-  finishedAt: string;
-  durationMs: number;
-  message: string | null;
-  // Persisted as a jsonb column; the data-manager writes a structured
-  // `{ message, stack }` object, so this is NOT guaranteed to be a string.
-  // Render it via `formatStageError` — never directly as a React child.
-  error: unknown;
-  artifacts: unknown;
-}
-
-export interface TransitJobDetail extends TransitJob {
-  stages: TransitJobStage[];
-}
-
-export interface ProviderHealthEntry {
-  id: string;
-  success: number;
-  failure: number;
-  emaLatencyMs: number;
-  window: Array<{ outcome: "ok" | "error"; at: string; latencyMs: number }>;
-  windowFailureRate?: number;
-  disabledUntil?: string;
-  disabledReason?: string;
-  lastFailureAt?: string;
-  lastFailureReason?: string;
-}
-
-export interface ProviderHealthResponse {
-  providers: ProviderHealthEntry[];
-}
-
-async function jsonOrThrow<T>(res: Response): Promise<T> {
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    let message = `Request failed (HTTP ${res.status})`;
-    try {
-      const parsed = JSON.parse(text) as { error?: string };
-      if (parsed.error) message = parsed.error;
-    } catch {
-      // fall through with default message
-    }
-    throw new Error(message);
-  }
-  return res.json() as Promise<T>;
+async function adminOrThrow<R extends { status: number; headers: Headers; data: unknown }>(
+  pending: Promise<R>,
+) {
+  return sdk.unwrapAdminResponse(await pending);
 }
 
 export function useTransitState() {
-  const { apiUrl } = useEnv();
-  return useQuery<TransitStateSummary>({
+  const client = useAdminClient();
+  return useQuery({
     queryKey: ["admin", "transit", "state"],
-    queryFn: () =>
-      fetch(`${apiUrl}/api/data-manager/transit/state`, { credentials: "include" }).then(
-        jsonOrThrow<TransitStateSummary>,
-      ),
+    queryFn: ({ signal }) => adminOrThrow(sdk.getApiDataManagerTransitState({ client, signal })),
     refetchInterval: 30_000,
   });
 }
@@ -136,146 +71,93 @@ export interface TransitFeedsFilters {
   limit?: number;
   offset?: number;
 }
-
 export function useTransitFeeds(filters: TransitFeedsFilters) {
-  const { apiUrl } = useEnv();
+  const client = useAdminClient();
   const region = filters.region ?? "";
   const status = filters.status ?? "";
   const limit = filters.limit ?? 100;
   const offset = filters.offset ?? 0;
-  return useQuery<TransitFeedsResponse>({
+  return useQuery({
     queryKey: ["admin", "transit", "feeds", region, status, limit, offset],
-    queryFn: () => {
-      const params = new URLSearchParams();
-      if (region) params.set("region", region);
-      if (status) params.set("status", status);
-      params.set("limit", String(limit));
-      params.set("offset", String(offset));
-      return fetch(`${apiUrl}/api/data-manager/transit/feeds?${params.toString()}`, {
-        credentials: "include",
-      }).then(jsonOrThrow<TransitFeedsResponse>);
-    },
+    queryFn: ({ signal }) =>
+      adminOrThrow(
+        sdk.getApiDataManagerTransitFeeds(
+          { region: region || undefined, status: status || undefined, limit, offset },
+          { client, signal },
+        ),
+      ),
     refetchInterval: 60_000,
   });
 }
-
 export function useTransitJobs(limit = 20) {
-  const { apiUrl } = useEnv();
-  return useQuery<TransitJobsResponse>({
+  const client = useAdminClient();
+  return useQuery({
     queryKey: ["admin", "transit", "jobs", limit],
-    queryFn: () =>
-      fetch(`${apiUrl}/api/data-manager/transit/jobs?limit=${limit}`, {
-        credentials: "include",
-      }).then(jsonOrThrow<TransitJobsResponse>),
+    queryFn: ({ signal }) =>
+      adminOrThrow(sdk.getApiDataManagerTransitJobs({ limit }, { client, signal })),
     refetchInterval: 15_000,
   });
 }
-
 export function useTransitJobDetail(jobId: string | null) {
-  const { apiUrl } = useEnv();
-  return useQuery<TransitJobDetail>({
+  const client = useAdminClient();
+  return useQuery({
     queryKey: ["admin", "transit", "jobs", "detail", jobId],
     enabled: jobId !== null,
-    queryFn: () =>
-      fetch(`${apiUrl}/api/data-manager/transit/jobs/${jobId}`, { credentials: "include" }).then(
-        jsonOrThrow<TransitJobDetail>,
-      ),
-    // Running jobs poll fast; finished jobs are immutable so the slower
-    // cadence below is only a defensive backstop in case a stage updates late.
-    refetchInterval: (query) => {
-      const data = query.state.data;
-      return data?.status === "running" ? 5_000 : 60_000;
+    queryFn: ({ signal }) => {
+      if (jobId === null) throw new Error("A transit job is required");
+      return adminOrThrow(sdk.getApiDataManagerTransitJobsId(jobId, { client, signal }));
     },
+    refetchInterval: (query) => (query.state.data?.status === "running" ? 5_000 : 60_000),
   });
 }
-
 export function useProviderHealth() {
-  const { apiUrl } = useEnv();
-  return useQuery<ProviderHealthResponse>({
+  const client = useAdminClient();
+  return useQuery({
     queryKey: ["admin", "transit", "providers"],
-    queryFn: () =>
-      fetch(`${apiUrl}/api/data-manager/providers`, { credentials: "include" }).then(
-        jsonOrThrow<ProviderHealthResponse>,
-      ),
+    queryFn: ({ signal }) => adminOrThrow(sdk.getApiDataManagerProviders({ client, signal })),
     refetchInterval: 30_000,
   });
 }
-
-export interface SyncTransitInput {
-  idempotencyKey?: string;
-  countries?: string[];
-}
-
+export type SyncTransitInput = NonNullable<Parameters<typeof sdk.postApiDataManagerTransitSync>[0]>;
 export function useSyncTransit() {
-  const { apiUrl } = useEnv();
+  const client = useAdminClient();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (input: SyncTransitInput = {}) => {
-      const res = await fetch(`${apiUrl}/api/data-manager/transit/sync`, {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(input),
-      });
-      return jsonOrThrow<{ jobId?: string; ok?: boolean }>(res);
-    },
+    mutationFn: (input: SyncTransitInput = {}) =>
+      adminOrThrow(sdk.postApiDataManagerTransitSync(input, { client })),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["admin", "transit", "state"] });
       void qc.invalidateQueries({ queryKey: ["admin", "transit", "jobs"] });
     },
   });
 }
-
 export function useRestartMotis() {
-  const { apiUrl } = useEnv();
+  const client = useAdminClient();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async () => {
-      const res = await fetch(`${apiUrl}/api/data-manager/transit/restart-motis`, {
-        method: "POST",
-        credentials: "include",
-      });
-      return jsonOrThrow<{ ok?: boolean }>(res);
-    },
+    mutationFn: () => adminOrThrow(sdk.postApiDataManagerTransitRestartMotis({ client })),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["admin", "transit", "state"] });
     },
   });
 }
-
 export function useBumpTransitous() {
-  const { apiUrl } = useEnv();
+  const client = useAdminClient();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (branch: string) => {
-      const res = await fetch(`${apiUrl}/api/data-manager/transit/bump-transitous-ref`, {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ branch }),
-      });
-      return jsonOrThrow<{ ok?: boolean; ref?: string; summary?: unknown }>(res);
-    },
+    mutationFn: (branch: string) =>
+      adminOrThrow(sdk.postApiDataManagerTransitBumpTransitousRef({ branch }, { client })),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["admin", "transit"] });
     },
   });
 }
-
 export function useResetProvider() {
-  const { apiUrl } = useEnv();
+  const client = useAdminClient();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (providerId: string) => {
-      const res = await fetch(
-        `${apiUrl}/api/data-manager/providers/${encodeURIComponent(providerId)}/reset`,
-        {
-          method: "POST",
-          credentials: "include",
-        },
-      );
-      return jsonOrThrow<{ ok: boolean; providerId: string }>(res);
-    },
+    mutationFn: (providerId: string) =>
+      adminOrThrow(sdk.postApiDataManagerProvidersIdReset(providerId, { client })),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["admin", "transit", "providers"] });
     },

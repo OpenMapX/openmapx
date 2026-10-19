@@ -1,31 +1,12 @@
-import { cp, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
-import { dirname, join, relative, resolve } from "node:path";
+import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { generate } from "orval";
-import { formatSource } from "../codegen/format-source.mjs";
+import { collectArtifacts, writeOrCheckArtifacts as writeOrCheck } from "../codegen/artifacts.mjs";
 import { createCodegenConfig, operationBindings, operationIds } from "./config.mjs";
 
 const root = fileURLToPath(new URL("../../", import.meta.url));
 const generatedDirectory = join(root, "packages/core/src/services/data-manager/generated");
-
-async function listFiles(directory) {
-  try {
-    const entries = await readdir(directory, { withFileTypes: true });
-    return (
-      await Promise.all(
-        entries.map(async (entry) => {
-          const path = join(directory, entry.name);
-          return entry.isDirectory() ? listFiles(path) : [path];
-        }),
-      )
-    )
-      .flat()
-      .sort();
-  } catch (error) {
-    if (error.code === "ENOENT") return [];
-    throw error;
-  }
-}
 
 export async function generateArtifacts({
   document,
@@ -46,55 +27,21 @@ export async function generateArtifacts({
       operationBindings(operationIds(inputDocument)),
     );
     await generate(createCodegenConfig({ inputDocument, outputDirectory: directory }));
-    const target = join(directory, "generated");
-    const files = await listFiles(target);
-    if (!files.includes(join(target, "data-manager.generated.ts")))
-      throw new Error("Orval did not generate the data-manager SDK; check the OpenAPI document.");
-    return await Promise.all(
-      files.map(async (path) => ({
-        filename: relative(target, path),
-        content: formatSource(
-          join(generatedDirectory, relative(target, path)),
-          await readFile(path, "utf8"),
-        ),
-      })),
-    );
+    return await collectArtifacts(join(directory, "generated"), generatedDirectory, [
+      "data-manager.generated.ts",
+    ]);
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
 }
 
-export async function writeOrCheckArtifacts(
-  files,
-  { check = false, outputDirectory = generatedDirectory } = {},
-) {
-  const expected = new Map(files.map((file) => [file.filename, file.content]));
-  const stale = [];
-  for (const [filename, content] of expected) {
-    try {
-      if ((await readFile(join(outputDirectory, filename), "utf8")) !== content)
-        stale.push(`${filename} (stale)`);
-    } catch (error) {
-      if (error.code !== "ENOENT") throw error;
-      stale.push(`${filename} (missing)`);
-    }
-  }
-  for (const path of await listFiles(outputDirectory)) {
-    if (!expected.has(relative(outputDirectory, path)))
-      stale.push(`${relative(outputDirectory, path)} (extra)`);
-  }
-  if (check) {
-    if (stale.length)
-      throw new Error(
-        `Generated data-manager SDK differs:\n${stale.join("\n")}\nRun pnpm data-manager:sdk:generate.`,
-      );
-    return;
-  }
-  await rm(outputDirectory, { recursive: true, force: true });
-  for (const [filename, content] of expected) {
-    await mkdir(dirname(join(outputDirectory, filename)), { recursive: true });
-    await writeFile(join(outputDirectory, filename), content);
-  }
+export function writeOrCheckArtifacts(files, options = {}) {
+  return writeOrCheck(files, {
+    outputDirectory: generatedDirectory,
+    label: "data-manager SDK",
+    regenerateCommand: "pnpm data-manager:sdk:generate",
+    ...options,
+  });
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
