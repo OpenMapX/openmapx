@@ -3,7 +3,13 @@ import { parseCsv } from "./csv";
 import { isSavedPlacesJson, parseGeojson } from "./geojson";
 import { parseGpx } from "./gpx";
 import { parseKml } from "./kml";
-import { ImportFileError, type ImportList, type ParsedImport, type ParseOptions } from "./types";
+import {
+  fileList,
+  ImportFileError,
+  type ImportList,
+  type ParsedImport,
+  type ParseOptions,
+} from "./types";
 
 const MAX_BYTES = 200 * 1024 * 1024;
 const MAX_ENTRIES = 10_000;
@@ -36,14 +42,21 @@ async function archive(file: File, options: ParseOptions): Promise<ParsedImport>
   let count = 0;
   let failure: Error | undefined;
   const kmz = file.name.toLowerCase().endsWith(".kmz");
+  let takeout = false;
+  let hasSavedContent = false;
+  const savedCsv = (path: string) => /(?:^|\/)(?:saved|gespeichert)\/.*\.csv$/i.test(path);
   const data = new Uint8Array(await file.arrayBuffer());
   options.signal?.throwIfAborted();
   const entries: { path: string; chunks: Uint8Array[]; size: number }[] = [];
   const unzip = new Unzip((entry) => {
     if (++count > MAX_ENTRIES) failure = new ImportFileError("tooLarge");
+    takeout ||= /^Takeout\//i.test(entry.name);
+    hasSavedContent ||= savedCsv(entry.name) || /(?:^|\/)Saved Places\.json$/i.test(entry.name);
     const relevant = kmz
       ? /\.kml$/i.test(entry.name)
-      : /\.json$/i.test(entry.name) || /(?:^|\/)(?:saved|gespeichert)\/.*\.csv$/i.test(entry.name);
+      : (/\.json$/i.test(entry.name) &&
+          !/(?:^|\/)(?:Labelled places|Labeled places|Reviews)\.json$/i.test(entry.name)) ||
+        savedCsv(entry.name);
     if (failure || !relevant) return;
     const extracted = { path: entry.name, chunks: [] as Uint8Array[], size: 0 };
     entries.push(extracted);
@@ -72,7 +85,7 @@ async function archive(file: File, options: ParseOptions): Promise<ParsedImport>
     if (failure) throw failure;
     if (offset % (64 * 1024) === 0) await new Promise((resolve) => setTimeout(resolve, 0));
   }
-  const result: ParsedImport = { lists: [], errors: [] };
+  const result: ParsedImport = { lists: [], errors: [], skippedLists: [] };
   for (const { path, chunks, size } of entries) {
     const bytes = new Uint8Array(size);
     let offset = 0;
@@ -90,6 +103,10 @@ async function archive(file: File, options: ParseOptions): Promise<ParsedImport>
         })),
       );
     } catch (error) {
+      if (!kmz && savedCsv(path) && error instanceof ImportFileError && error.code === "empty") {
+        result.skippedLists.push(fileList(path, [], path).name);
+        continue;
+      }
       // Other Takeout products also contain JSON; only recognized saved content is relevant.
       if (kmz || /saved places|saved\/|gespeichert\//i.test(path))
         result.errors.push({
@@ -98,15 +115,18 @@ async function archive(file: File, options: ParseOptions): Promise<ParsedImport>
         });
     }
   }
-  if (!result.lists.length && !result.errors.length)
-    result.errors.push({ file: file.name, code: "empty" });
+  if (!result.lists.length && !result.errors.length && !result.skippedLists.length)
+    result.errors.push({
+      file: file.name,
+      code: !kmz && takeout && !hasSavedContent ? "takeoutNoSaved" : "empty",
+    });
   return result;
 }
 export async function parseImportFiles(
   files: readonly File[],
   options: ParseOptions = {},
 ): Promise<ParsedImport> {
-  const result: ParsedImport = { lists: [], errors: [] };
+  const result: ParsedImport = { lists: [], errors: [], skippedLists: [] };
   for (let i = 0; i < files.length; i++) {
     options.signal?.throwIfAborted();
     const file = files[i];
@@ -116,6 +136,7 @@ export async function parseImportFiles(
         const parsed = await archive(file, options);
         result.lists.push(...parsed.lists);
         result.errors.push(...parsed.errors);
+        result.skippedLists.push(...parsed.skippedLists);
       } else {
         const input = await file.text();
         options.signal?.throwIfAborted();

@@ -20,9 +20,17 @@ export interface ImportList {
   systemList?: "$favorites" | "$wantToGo" | "$starredPlaces";
   places: ImportPlace[];
 }
-export type ImportErrorCode = "unsupported" | "malformed" | "empty" | "networkLink" | "tooLarge";
+export type ImportErrorCode =
+  | "unsupported"
+  | "malformed"
+  | "empty"
+  | "emptyTracks"
+  | "takeoutNoSaved"
+  | "networkLink"
+  | "tooLarge";
 export interface ParsedImport {
   lists: ImportList[];
+  skippedLists: string[];
   errors: { file: string; code: ImportErrorCode }[];
 }
 export interface ParseOptions {

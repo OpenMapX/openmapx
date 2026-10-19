@@ -95,6 +95,7 @@ export function ImportPlacesDialog({
   const [progress, setProgress] = useState({ done: 0, total: files.length });
   const [lists, setLists] = useState<ReviewList[]>([]);
   const [errors, setErrors] = useState<ParsedImport["errors"]>([]);
+  const [skippedLists, setSkippedLists] = useState<string[]>([]);
   const [outcomes, setOutcomes] = useState<ImportOutcome[]>([]);
   // Capture the initial target catalogue; refetches while importing must not restart parsing.
   const [initialLists] = useState(savedLists || []);
@@ -115,6 +116,7 @@ export function ImportPlacesDialog({
         });
         controller.signal.throwIfAborted();
         setErrors(parsed.errors);
+        setSkippedLists(parsed.skippedLists);
         setPhase("locating");
         const { resolveImportPlaces } = await import("@/lib/savedPlacesImport/resolve");
         controller.signal.throwIfAborted();
@@ -246,7 +248,7 @@ export function ImportPlacesDialog({
             />
           </Box>
         )}
-        {!working &&
+        {phase === "review" &&
           errors.map((error) => (
             <Alert
               key={`${error.file}-${error.code}`}
@@ -258,6 +260,18 @@ export function ImportPlacesDialog({
           ))}
         {phase === "review" && (
           <>
+            {skippedLists.length > 0 && (
+              <Typography
+                variant="body2"
+                color="text.secondary"
+                sx={{ mb: 2, overflowWrap: "anywhere" }}
+              >
+                {t("importSkippedLists", {
+                  count: skippedLists.length,
+                  names: skippedLists.join(", "),
+                })}
+              </Typography>
+            )}
             <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
               {t("importLookupInfo")}
             </Typography>
@@ -338,7 +352,7 @@ export function ImportPlacesDialog({
                           {t("importNotFound", { count: missing.length })}
                         </AccordionSummary>
                         <AccordionDetails>
-                          <Box component="ul" sx={{ m: 0, pl: 2 }}>
+                          <Box component="ul" sx={{ m: 0, pl: 2, listStyleType: "disc" }}>
                             {[...new Set(missing.map((place) => place.name))].map((name) => (
                               <li key={name}>{name}</li>
                             ))}

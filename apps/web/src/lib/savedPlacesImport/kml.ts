@@ -21,7 +21,7 @@ export function parseKml(
     throw new ImportFileError("networkLink");
   const documents = elements(doc, "Document");
   const roots = documents.filter((e) => !e.parentElement?.closest("Document"));
-  return (roots.length ? roots : [doc.documentElement]).map((root) => {
+  const lists = (roots.length ? roots : [doc.documentElement]).map((root) => {
     const places = elements(root, "Placemark").flatMap((mark) => {
       const point = elements(mark, "Point")[0];
       const coordinates =
@@ -77,4 +77,10 @@ export function parseKml(
     list.name = childText(root, "name") || list.name;
     return list;
   });
+  if (
+    !lists.some((list) => list.places.length) &&
+    (elements(doc, "LineString").length || elements(doc, "Track").length)
+  )
+    throw new ImportFileError("emptyTracks");
+  return lists;
 }

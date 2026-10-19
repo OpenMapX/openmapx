@@ -8,6 +8,26 @@ export function decodeUrl(value: string): string {
   }
 }
 
+export function isGoogleMapsUrl(value: string): boolean {
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    return false;
+  }
+  if (url.protocol !== "https:" && url.protocol !== "http:") return false;
+  const host = url.hostname;
+  if (host === "maps.app.goo.gl") return url.pathname.length > 1;
+  if (host === "goo.gl") return /^\/maps\//i.test(url.pathname);
+  if (!/^(?:www\.|maps\.)?google\.(?:[a-z]{2,}|(?:com|co)\.[a-z]{2})$/i.test(host)) return false;
+  return (
+    /^\/maps(?:\/|$)/i.test(url.pathname) ||
+    (url.pathname === "/" &&
+      (host.startsWith("maps.") ||
+        ["q", "query", "cid", "ftid"].some((key) => url.searchParams.has(key))))
+  );
+}
+
 /** Google feature IDs carry a Hilbert-ordered S2 cell, not an exact POI coordinate. */
 export function s2CellCenter(hex: string): { lat: number; lng: number } | undefined {
   if (!/^0x[0-9a-f]{1,16}$/i.test(hex)) return;
