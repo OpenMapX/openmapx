@@ -656,8 +656,9 @@ snapshots are not exposed by runtime metadata. Country lookups capture the
 Nominatim endpoint, and GBFS coverage keys include both system ID and discovery
 URL.
 
-A second tier of services is optional — present in production, absent in tests
-and CLI scripts — and orchestrators treat absence as a benign no-op:
+A second tier of services is optional — present in production and sometimes
+absent in tests and CLI scripts. Consumers must define whether absence is safe
+for their upstream policy:
 
 ```ts
 interface IntegrationContext {
@@ -681,6 +682,50 @@ owner-released; and all named quota windows are checked and consumed atomically.
 Do not replace it with process-local maps or counters in production. Redis
 failure must deny a new quota-consuming refresh, although eligible stale data
 may still be returned with its original evidence time.
+
+#### Shared request admission
+
+`upstreamRuntime.admitSharedRequest?({ scope, key, policy?, signal? })` is a
+separate opt-in capability for upstream identities shared across integrations and
+replicas. `scope` and `key` are nonempty strings supplied by the consumer; the
+host hashes them into `upstream-shared:` keys outside integration cache scopes.
+Choose the identity from the upstream's actual quota boundary. Do not include
+integration IDs, result receipts, bounding boxes or reload generations when
+those do not change that boundary. Result-cache identity may need those values
+even though admission identity must omit them.
+
+A numeric `policy` contains `id`, `limit`, `durationMs` and `minIntervalMs`.
+Admission atomically checks a shared cooldown and the policy's counter/spacing
+using Redis time. The window starts on its first admitted request; each policy
+ID has its own counter and spacing, while cooldown is shared by the whole
+`scope`/`key`. Allowed decisions return `remaining` (or `null` without a numeric
+policy); denials identify `spacing`, `quota`, `cooldown` or `store_unavailable`
+and return `retryAfterMs` where known. Calling without `policy` checks cooldown
+without inventing numeric quota counters.
+
+`deferSharedRequests?({ scope, key, delayMs, signal? })` extends a shared cooldown
+without shortening an existing one. Both methods support caller cancellation
+and bound each store operation to three seconds. A dispatched Redis command
+cannot be recalled: cancellation/timeout may leave a conservative reservation or
+cooldown, but its late result must not admit the retired caller or publish data.
+Admin cache clears target `int:*` / `cache:*`, preserving shared admission keys.
+An explicit store wipe, including CLI `cache clear --all` (`FLUSHDB`), removes
+them.
+
+This capability does not change existing `read`/`write`, lease or `consumeQuota`
+consumer policies. Consumers decide whether spacing can wait, whether failures
+may use eligible stale evidence, and whether an absent runtime is allowed. A
+supplied but unavailable admission runtime must never silently become local
+quota enforcement. It cannot count traffic from external applications that
+reuse the same upstream client identity outside the shared store.
+
+The Entur clients require both admission methods and working Redis for fresh
+Journey Planner requests. Their identity is upstream origin + client name + API
+family, with separate trip/other classes and family-wide cooldown. Other Entur
+APIs have no numeric policy: only an entirely absent runtime permits a bounded
+per-client observed cooldown fallback. The
+[Entur runtime guide](https://github.com/OpenMapX/openmapx/blob/main/packages/entur-client/README.md)
+documents those limits and the separate national-situations cache contract.
 
 Use `http.getResponse()` or `http.postResponse()` for JSON when status or
 allowlisted rate-limit headers matter, `http.getBytes()` for buffered binary

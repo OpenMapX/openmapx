@@ -402,6 +402,15 @@ The route example captures `sunrise-sunset` before its HTTP await and caches the
 receipt with the result. Capture inside the cache-miss callback: a cache hit must
 keep its earlier acquisition metadata. Use `ctx.http` for requests and
 `ctx.upstreamRuntime` for quota-bound work, preserving source-policy controls.
+
+When several integrations use the same upstream client identity, use its
+explicit shared admission capability with the upstream's quota identity rather
+than the integration's result-cache key. Treat missing capabilities and store
+failure according to the provider's policy; process-local counters do not
+coordinate replicas. See
+[shared request admission](./integration-system.md#shared-request-admission)
+for numeric policy, cooldown-only calls, cancellation and cache-clear semantics.
+
 If the response chooses an unknown backend/feed, capture its lookup catalogue
 before awaiting rather than looking up current registry metadata afterward:
 

@@ -1,10 +1,11 @@
-import type { DocumentTypeDecoration } from "@graphql-typed-document-node/core";
-import { type BBox, fetchJson } from "@openmapx/core";
+import type { BBox } from "@openmapx/core";
+import { createEnturClient } from "@openmapx/entur-client";
 import {
   captureTransitContributors,
-  createManifestAttribution,
   type IntegrationContext,
   type RealtimeProvider,
+  resolveIntegrationContributors,
+  snapshotContributors,
 } from "@openmapx/integration-framework";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import { freshnessNow } from "@openmapx/mobility-core/freshness";
@@ -26,54 +27,13 @@ import {
   VehiclesByBoundingBoxDocument,
 } from "@openmapx/mobility-formats/entur/vehicles.generated.js";
 
-interface GraphQlResponse<T> {
-  data?: T;
-  errors?: Array<{ message?: string }>;
-}
-
-const DEFAULT_CLIENT_NAME = "openmapx-server";
-const DEFAULT_JOURNEY_PLANNER_ENDPOINT = "https://api.entur.io/journey-planner/v3/graphql";
-const DEFAULT_VEHICLES_ENDPOINT = "https://api.entur.io/realtime/v2/vehicles/graphql";
 const NORWAY_BBOX: BBox = [4.0, 57.0, 32.0, 71.5];
 const ENTUR_PREFIX = "entur:";
 const VEHICLE_SOURCE_ID = "entur-live-vehicles";
 
-let clientName = DEFAULT_CLIENT_NAME;
-let journeyPlannerEndpoint = DEFAULT_JOURNEY_PLANNER_ENDPOINT;
-let vehiclesEndpoint = DEFAULT_VEHICLES_ENDPOINT;
-
-// Combined cache budget: national snapshot 15 s + bbox 30 s + HTTP 15 s.
-const SITUATIONS_CACHE_MS = 15_000;
 interface SituationSnapshot {
   situations: SituationFieldsFragment[];
   fetchedAt: string;
-  expiresAt: number;
-}
-let situationCache: { snapshot?: SituationSnapshot; pending?: Promise<SituationSnapshot> } = {};
-
-function getSituationSnapshot(): Promise<SituationSnapshot> {
-  const cache = situationCache;
-  if (cache.snapshot && Date.now() < cache.snapshot.expiresAt)
-    return Promise.resolve(cache.snapshot);
-  if (cache.pending) return cache.pending;
-  cache.pending = (async () => {
-    try {
-      const data = await fetchGraphQl(journeyPlannerEndpoint, NationalSituationsDocument, {});
-      const now = Date.now();
-      const snapshot = {
-        situations: data.situations ?? [],
-        fetchedAt: new Date(now).toISOString(),
-        expiresAt: now + SITUATIONS_CACHE_MS,
-      };
-      // An old activation owns a different cache object and cannot refill
-      // the current activation's snapshot after its request finishes.
-      cache.snapshot = snapshot;
-      return snapshot;
-    } finally {
-      cache.pending = undefined;
-    }
-  })();
-  return cache.pending;
 }
 
 function withEnturPrefix(id: string): string {
@@ -139,33 +99,6 @@ function toAlertSeverity(raw: string | null | undefined): AlertSeverity {
 
 function isInsideBbox(bbox: BBox, longitude: number, latitude: number): boolean {
   return longitude >= bbox[0] && longitude <= bbox[2] && latitude >= bbox[1] && latitude <= bbox[3];
-}
-
-async function fetchGraphQl<TResult, TVariables>(
-  endpoint: string,
-  document: DocumentTypeDecoration<TResult, TVariables> & { toString(): string },
-  variables: NoInfer<TVariables>,
-): Promise<TResult> {
-  const payload = await fetchJson<GraphQlResponse<TResult>>(endpoint, {
-    timeoutMs: 8_000,
-    userAgent: null,
-    headers: { "Content-Type": "application/json", "ET-Client-Name": clientName },
-    errorMessage: ({ status, statusText }) =>
-      `Entur GraphQL request failed: ${status} ${statusText}`,
-    init: { method: "POST", body: JSON.stringify({ query: document.toString(), variables }) },
-  });
-  if (payload.errors?.length) {
-    throw new Error(
-      payload.errors
-        .map((entry) => entry.message)
-        .filter(Boolean)
-        .join("; "),
-    );
-  }
-  if (!payload.data) {
-    throw new Error("Entur GraphQL response missing data");
-  }
-  return payload.data;
 }
 
 function toLiveVehicle(vehicle: VehicleFieldsFragment | null): LiveTransitVehicle | null {
@@ -256,81 +189,108 @@ function situationTouchesBbox(situation: SituationFieldsFragment, bbox: BBox): b
   );
 }
 
-async function getEnturVehicles(bbox: BBox): Promise<LiveTransitVehicle[]> {
-  const data = await fetchGraphQl(vehiclesEndpoint, VehiclesByBoundingBoxDocument, {
-    minLat: bbox[1],
-    minLon: bbox[0],
-    maxLat: bbox[3],
-    maxLon: bbox[2],
-    maxDataAge: "PT30M",
-  });
-
-  return (data.vehicles ?? [])
-    .map((vehicle) => toLiveVehicle(vehicle))
-    .filter((vehicle): vehicle is LiveTransitVehicle => vehicle !== null);
-}
-
-async function getEnturAlerts(bbox: BBox): Promise<{ data: ServiceAlert[]; fetchedAt: string }> {
-  const snapshot = await getSituationSnapshot();
-  const byId = new Map<string, ServiceAlert>();
-  for (const situation of snapshot.situations) {
-    if (!situationTouchesBbox(situation, bbox)) continue;
-    const alert = toAlert(situation);
-    if (!alert) continue;
-    byId.set(alert.id, alert);
-  }
-  return { data: [...byId.values()], fetchedAt: snapshot.fetchedAt };
-}
-
-async function isEnturLiveTransitAvailable(): Promise<boolean> {
-  try {
-    await fetchGraphQl(vehiclesEndpoint, VehicleHealthCheckDocument, {});
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-// Attribution metadata for the two sub-feeds (vehicles + situations) is
-// declared in the manifest's dataSources; we look each up by sourceId so
-// per-method calls credit only the feed that actually served them.
-const attribution = createManifestAttribution();
-function attributionFor(sourceId: string): Attribution[] {
-  const attr = attribution.bySource(sourceId);
-  return attr ? [attr] : [];
-}
-
 export function setup(ctx: IntegrationContext): void {
-  ctx.onActivate(() => {
-    situationCache = {};
-    attribution.set(ctx.manifest.dataSources ?? []);
-    clientName =
-      ctx.config.clientName && String(ctx.config.clientName).trim().length > 0
-        ? String(ctx.config.clientName).trim()
-        : DEFAULT_CLIENT_NAME;
-    journeyPlannerEndpoint =
-      ctx.config.journeyPlannerEndpoint &&
-      String(ctx.config.journeyPlannerEndpoint).trim().length > 0
-        ? String(ctx.config.journeyPlannerEndpoint).trim()
-        : DEFAULT_JOURNEY_PLANNER_ENDPOINT;
-    vehiclesEndpoint =
-      ctx.config.vehiclesEndpoint && String(ctx.config.vehiclesEndpoint).trim().length > 0
-        ? String(ctx.config.vehiclesEndpoint).trim()
-        : DEFAULT_VEHICLES_ENDPOINT;
+  const { id, http, cache, upstreamRuntime } = ctx;
+  const generation = new AbortController();
+  const sourceIds = {
+    vehicles: "entur-live-vehicles",
+    journeyPlanner: "entur-live-situations",
+  } as const;
+  const client = createEnturClient({
+    http,
+    upstreamRuntime,
+    config: { ...ctx.config },
+    sourceIds,
+    contributors: Object.fromEntries(
+      Object.values(sourceIds).map((sourceId) => [
+        sourceId,
+        resolveIntegrationContributors(ctx, [sourceId]),
+      ]),
+    ),
+    isSourceAllowed: async (sourceId) => {
+      const denied = await ctx.getDisallowedSourceIds?.();
+      return !denied?.has(sourceId) && !denied?.has(id);
+    },
   });
+  ctx.onShutdown(async () => {
+    generation.abort(new Error("Entur live generation retired"));
+  });
+  const attributionFor = (sourceId: string): Attribution[] =>
+    snapshotContributors(client.contributors[sourceId] ?? []);
+  // The host owns the shared fill lifetime; generation retirement cancels only this waiter.
+  const snapshotKey = `national-situations:v1:${client.identity}`;
+  async function getSituationSnapshot(): Promise<SituationSnapshot> {
+    await client.assertSourceAllowed("journeyPlanner", generation.signal);
+    const snapshot = await cache.withCache(
+      snapshotKey,
+      15,
+      async (operationSignal) => {
+        const data = await client.graphQl(
+          "journeyPlanner",
+          NationalSituationsDocument,
+          {},
+          operationSignal,
+        );
+        return { situations: data.situations ?? [], fetchedAt: new Date().toISOString() };
+      },
+      generation.signal,
+    );
+    await client.assertSourceAllowed("journeyPlanner", generation.signal);
+    return snapshot;
+  }
+  async function getEnturVehicles(bbox: BBox): Promise<LiveTransitVehicle[]> {
+    const data = await client.graphQl(
+      "vehicles",
+      VehiclesByBoundingBoxDocument,
+      {
+        minLat: bbox[1],
+        minLon: bbox[0],
+        maxLat: bbox[3],
+        maxLon: bbox[2],
+        maxDataAge: "PT30M",
+      },
+      generation.signal,
+    );
 
-  ctx.registerHealthCheck(async () => {
-    const available = await isEnturLiveTransitAvailable();
-    return available
+    return (data.vehicles ?? [])
+      .map((vehicle) => toLiveVehicle(vehicle))
+      .filter((vehicle): vehicle is LiveTransitVehicle => vehicle !== null);
+  }
+
+  async function getEnturAlerts(bbox: BBox): Promise<{ data: ServiceAlert[]; fetchedAt: string }> {
+    const snapshot = await getSituationSnapshot();
+    const byId = new Map<string, ServiceAlert>();
+    for (const situation of snapshot.situations) {
+      if (!situationTouchesBbox(situation, bbox)) continue;
+      const alert = toAlert(situation);
+      if (!alert) continue;
+      byId.set(alert.id, alert);
+    }
+    return { data: [...byId.values()], fetchedAt: snapshot.fetchedAt };
+  }
+
+  async function isEnturLiveTransitAvailable(): Promise<boolean> {
+    try {
+      await Promise.all([
+        client.graphQl("vehicles", VehicleHealthCheckDocument, {}, generation.signal),
+        client.graphQl("journeyPlanner", NationalSituationsDocument, {}, generation.signal),
+      ]);
+      return true;
+    } catch (error) {
+      if (generation.signal.aborted) throw error;
+      return false;
+    }
+  }
+  ctx.registerHealthCheck(async () =>
+    (await isEnturLiveTransitAvailable())
       ? { status: "up" as const }
-      : { status: "down" as const, error: "Entur realtime vehicle probe failed" };
-  });
-
+      : { status: "down" as const, error: "Entur realtime API probe failed" },
+  );
   const provider: RealtimeProvider = {
     id: "live-transit-entur",
     coverage: { bbox: NORWAY_BBOX },
     priority: 10,
-    attribution: attribution.all(),
+    attribution: Object.values(sourceIds).flatMap(attributionFor),
     capabilities: {
       vehiclePositions: true,
       alerts: { byStop: false, byRoute: false, byBbox: true },
@@ -338,17 +298,19 @@ export function setup(ctx: IntegrationContext): void {
     },
     async getVehiclePositions(bbox: BBox) {
       const data = await getEnturVehicles(bbox);
+      await client.assertSourceAllowed("vehicles", generation.signal);
       return withAttribution(
-        captureTransitContributors(data, attributionFor("entur-live-vehicles")),
-        attributionFor("entur-live-vehicles"),
+        captureTransitContributors(data, attributionFor(sourceIds.vehicles)),
+        attributionFor(sourceIds.vehicles),
         freshnessNow({ hasRealtimeData: true }),
       );
     },
     async getAlertsForBbox(bbox: BBox) {
       const snapshot = await getEnturAlerts(bbox);
+      await client.assertSourceAllowed("journeyPlanner", generation.signal);
       return withAttribution(
-        captureTransitContributors(snapshot.data, attributionFor("entur-live-situations")),
-        attributionFor("entur-live-situations"),
+        captureTransitContributors(snapshot.data, attributionFor(sourceIds.journeyPlanner)),
+        attributionFor(sourceIds.journeyPlanner),
         {
           ...freshnessNow({ hasRealtimeData: true }),
           fetchedAt: snapshot.fetchedAt,
@@ -356,6 +318,5 @@ export function setup(ctx: IntegrationContext): void {
       );
     },
   };
-
   ctx.registerRealtimeProvider(provider);
 }

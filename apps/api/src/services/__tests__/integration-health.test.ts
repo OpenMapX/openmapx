@@ -804,3 +804,107 @@ describe("integration health cache snapshots", () => {
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 });
+
+describe("Entur composite health dispatch", () => {
+  it.each(["transit-entur", "live-transit-entur"] as const)(
+    "dispatches %s to its registered instance and probes every declared API family",
+    async (id) => {
+      const { createMockIntegrationContext, fakeHttpClient } = await import(
+        "@openmapx/integration-framework/testing"
+      );
+      const { setup } =
+        id === "transit-entur"
+          ? await import("../../../../../integrations/transit-entur/index")
+          : await import("../../../../../integrations/live-transit-entur/index");
+      const manifest = JSON.parse(
+        readFileSync(resolve(REPO_ROOT, `integrations/${id}/manifest.json`), "utf8"),
+      );
+      const http = fakeHttpClient(({ url }) => ({
+        status: 200,
+        headers: {},
+        body: JSON.stringify(
+          url.includes("/stop-places/")
+            ? { id: "NSR:StopPlace:337" }
+            : url.includes("/vehicles/")
+              ? { data: { vehicles: [] } }
+              : { data: { stopPlace: { id: "NSR:StopPlace:337" }, situations: [] } },
+        ),
+      }));
+      const ctx = createMockIntegrationContext({ id, manifest, http });
+      Object.assign(ctx, {
+        upstreamRuntime: {
+          admitSharedRequest: async () => ({ allowed: true }),
+          deferSharedRequests: async () => {},
+        },
+      });
+      setup(ctx);
+      const integration = {
+        ...makeIntegration(manifest.healthCheck),
+        id,
+        manifest,
+        customHealthCheck: ctx.registered.healthChecks[0],
+      };
+      const statuses = await executeIntegrationHealthCheck(integration);
+      expect(statuses).toHaveLength(1);
+      expect(statuses[0].status).toBe("up");
+      expect(http.calls.map((call) => new URL(call.url).pathname).sort()).toEqual(
+        id === "transit-entur"
+          ? [
+              "/journey-planner/v3/graphql",
+              "/realtime/v2/vehicles/graphql",
+              "/stop-places/v1/read/stop-places/NSR:StopPlace:337",
+            ]
+          : ["/journey-planner/v3/graphql", "/realtime/v2/vehicles/graphql"],
+      );
+      expect(coreServerMocks.safeFetchStatus).not.toHaveBeenCalled();
+    },
+  );
+  it.each([
+    ["transit-entur", "entur-journey-planner"],
+    ["transit-entur", "entur-vehicles"],
+    ["transit-entur", "entur-nsr"],
+    ["live-transit-entur", "entur-live-vehicles"],
+    ["live-transit-entur", "entur-live-situations"],
+  ] as const)("marks %s down when %s policy denies its acquisition", async (id, source) => {
+    const { createMockIntegrationContext, fakeHttpClient } = await import(
+      "@openmapx/integration-framework/testing"
+    );
+    const { setup } =
+      id === "transit-entur"
+        ? await import("../../../../../integrations/transit-entur/index")
+        : await import("../../../../../integrations/live-transit-entur/index");
+    const manifest = JSON.parse(
+      readFileSync(resolve(REPO_ROOT, `integrations/${id}/manifest.json`), "utf8"),
+    );
+    const ctx = createMockIntegrationContext({
+      id,
+      manifest,
+      http: fakeHttpClient(({ url }) => ({
+        status: 200,
+        headers: {},
+        body: JSON.stringify(
+          url.includes("/stop-places/")
+            ? { id: "NSR:StopPlace:337" }
+            : { data: { stopPlace: { id: "NSR:StopPlace:337" }, vehicles: [], situations: [] } },
+        ),
+      })),
+    });
+    ctx.getDisallowedSourceIds = async () => new Set([source]);
+    Object.assign(ctx, {
+      upstreamRuntime: {
+        admitSharedRequest: async () => ({ allowed: true }),
+        deferSharedRequests: async () => {},
+      },
+    });
+    setup(ctx);
+    const statuses = await executeIntegrationHealthCheck({
+      ...makeIntegration(manifest.healthCheck),
+      id,
+      manifest,
+      customHealthCheck: ctx.registered.healthChecks[0],
+    });
+    expect(statuses).toHaveLength(1);
+    expect(statuses[0].status).toBe("down");
+    expect(coreServerMocks.safeFetchStatus).not.toHaveBeenCalled();
+  });
+});

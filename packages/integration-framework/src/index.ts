@@ -409,6 +409,9 @@ export {
 export type {
   QuotaDecision,
   QuotaWindow,
+  SharedRequestDecision,
+  SharedRequestIdentity,
+  SharedRequestPolicy,
   UpstreamCacheRead,
   UpstreamCacheTtl,
   UpstreamRuntime,

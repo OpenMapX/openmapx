@@ -67,26 +67,12 @@
   "backend": {
     "routes": false
   },
-  "healthCheck": [
-    {
-      "name": "Entur Journey Planner",
-      "type": "ping",
-      "url": "https://api.entur.io/journey-planner/v3/graphql",
-      "urlTemplate": "${journeyPlannerEndpoint}"
-    },
-    {
-      "name": "Entur Vehicle Positions",
-      "type": "ping",
-      "url": "https://api.entur.io/realtime/v2/vehicles/graphql",
-      "urlTemplate": "${vehiclesEndpoint}"
-    },
-    {
-      "name": "Entur National Stop Register",
-      "type": "ping",
-      "url": "https://api.entur.io/stop-places/v1/read/stop-places/NSR:StopPlace:337",
-      "urlTemplate": "${nsrEndpoint}/stop-places/NSR:StopPlace:337"
-    }
-  ],
+  "healthCheck": {
+    "name": "Entur transit APIs",
+    "type": "ping",
+    "url": "https://api.entur.io/journey-planner/v3/graphql",
+    "urlTemplate": "${journeyPlannerEndpoint}"
+  },
   "dataSources": [
     {
       "sourceId": "entur-geocoder",

@@ -41,20 +41,12 @@
       }
     }
   },
-  "healthCheck": [
-    {
-      "name": "Entur Vehicle Positions",
-      "type": "ping",
-      "url": "https://api.entur.io/realtime/v2/vehicles/graphql",
-      "urlTemplate": "${vehiclesEndpoint}"
-    },
-    {
-      "name": "Entur Journey Planner Situations",
-      "type": "ping",
-      "url": "https://api.entur.io/journey-planner/v3/graphql",
-      "urlTemplate": "${journeyPlannerEndpoint}"
-    }
-  ],
+  "healthCheck": {
+    "name": "Entur realtime APIs",
+    "type": "ping",
+    "url": "https://api.entur.io/journey-planner/v3/graphql",
+    "urlTemplate": "${journeyPlannerEndpoint}"
+  },
   "quality": "built-in",
   "category": "Transit",
   "dataSources": [

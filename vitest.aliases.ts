@@ -30,6 +30,10 @@ export function createRepoVitestAliases(repoRoot: string) {
   }));
 
   return [
+    {
+      find: /^@openmapx\/entur-client$/,
+      replacement: resolve(repoRoot, "packages/entur-client/src/index.ts"),
+    },
     // All integration React tests use the web host's declared runtime, even
     // when an integration package exposes its frontend only through the host.
     { find: "react", replacement: resolve(repoRoot, "apps/web/node_modules/react") },
