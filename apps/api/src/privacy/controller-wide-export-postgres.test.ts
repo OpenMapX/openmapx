@@ -23,6 +23,7 @@ import {
   savedList,
   user,
 } from "../db/schema.js";
+import { tar } from "./__tests__/fixtures/source-tar.js";
 import { artifactResultFromRow, parseWrappedDek } from "./artifact-download.js";
 import { EncryptedBlobStore } from "./artifact-storage.js";
 import { createEncryptedAttachment } from "./attachments.js";
@@ -42,29 +43,6 @@ const roots: string[] = [];
 
 function sha256(value: Uint8Array): string {
   return createHash("sha256").update(value).digest("hex");
-}
-
-function tarMember(path: string, content: Buffer): Buffer {
-  const header = Buffer.alloc(512);
-  header.write(path, 0, 100, "utf8");
-  header.write("0000600\0", 100, 8, "ascii");
-  header.write("0000000\0", 108, 8, "ascii");
-  header.write("0000000\0", 116, 8, "ascii");
-  header.write(`${content.byteLength.toString(8).padStart(11, "0")}\0`, 124, 12, "ascii");
-  header.write("00000000000\0", 136, 12, "ascii");
-  header.fill(0x20, 148, 156);
-  header[156] = 48;
-  header.write("ustar\0", 257, 6, "ascii");
-  const checksum = header.reduce((sum, byte) => sum + byte, 0);
-  header.write(`${checksum.toString(8).padStart(6, "0")}\0 `, 148, 8, "ascii");
-  return Buffer.concat([header, content, Buffer.alloc((512 - (content.byteLength % 512)) % 512)]);
-}
-
-function tar(entries: Array<[string, Buffer]>): Buffer {
-  return Buffer.concat([
-    ...entries.map(([path, content]) => tarMember(path, content)),
-    Buffer.alloc(1024),
-  ]);
 }
 
 function dawarichTar(subjectId: string, cutoff: string): Buffer {

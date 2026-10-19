@@ -15,6 +15,7 @@ import tempfile
 
 MAX_INPUT = 64 * 1024
 MAX_ENTRY = 256 * 1024 * 1024
+MAX_MANIFEST = 256 * 1024
 MAX_TOTAL = 2 * 1024 * 1024 * 1024
 MAX_ENTRIES = 256
 DAWARICH_IMAGE = "freikin/dawarich:1.15.3"
@@ -738,14 +739,20 @@ def emit(entries, warnings, schema, backup_manifest):
             inner_entries.append({"id": dawarich_id(entry["path"]), **{key: entry[key] for key in ("bytes", "sha256", "records", "article15", "portability", "redactionCodes")}})
         inner = {"version": 1, "image": DAWARICH_IMAGE, "imageDigest": DAWARICH_IMAGE_DIGEST, "upstreamCommit": DAWARICH_COMMIT, "collectorContract": "openmapx-subject-export-v1", "subjectUserIdDigest": hashlib.sha256(REQUEST["subjectLocator"]["value"].encode()).hexdigest(), "cutoff": REQUEST["cutoff"], "snapshotAt": backup_manifest["createdAt"], "schemaFingerprint": schema["schemaFingerprint"], "schemaRelations": schema["schemaRelations"], "entries": inner_entries, "warnings": sorted(set(code for code in warnings if code.startswith("dawarich-")))}
         entries.append(static_descriptor("dawarich/source-manifest.json", json.dumps(inner, separators=(",", ":")).encode()))
-    if len(entries) > MAX_ENTRIES or sum(entry["bytes"] for entry in entries) > MAX_TOTAL:
-        fail("limit_exceeded")
     outer_entries = []
     for entry in entries:
         outer_entries.append({"path": entry["path"], "family": entry["path"].split("/", 1)[0], **{key: entry[key] for key in ("bytes", "sha256", "records", "article15", "portability", "redactionCodes")}})
     outer = {"version": 1, "collectorContract": "openmapx-subject-export-v1", "cutoff": REQUEST["cutoff"], "subjectUserIdDigest": hashlib.sha256(REQUEST["subjectLocator"]["value"].encode()).hexdigest(), "entries": outer_entries, "warnings": sorted(set(warnings))}
     entries.append(static_descriptor("backup/source-manifest.json", json.dumps(outer, separators=(",", ":")).encode()))
-    with tarfile.open(fileobj=sys.stdout.buffer, mode="w|") as archive:
+    # Validate the complete set, including both final manifests, before writing
+    # any TAR bytes. The readers apply these same content/member bounds.
+    if len(entries) > MAX_ENTRIES or sum(entry["bytes"] for entry in entries) > MAX_TOTAL:
+        fail("limit_exceeded")
+    for entry in entries:
+        limit = MAX_MANIFEST if entry["path"] in {"dawarich/source-manifest.json", "backup/source-manifest.json"} else MAX_ENTRY
+        if entry["bytes"] > limit:
+            fail("limit_exceeded")
+    with tarfile.open(fileobj=sys.stdout.buffer, mode="w|", format=tarfile.USTAR_FORMAT) as archive:
         for entry in entries:
             info = tarfile.TarInfo(entry["path"])
             info.size = entry["bytes"]

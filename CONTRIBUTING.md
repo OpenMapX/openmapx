@@ -156,7 +156,8 @@ its expiry or as soon as a patched version is published.
 Tests run from a single root `vitest.config.ts`, split into two projects —
 `node` (API, integrations, packages, services, scripts) and `web` (the Next.js
 app and React-bound packages, in jsdom). There are no per-package Vitest configs
-or `test` scripts; always run from the repo root:
+or `test` scripts; always run from the repo root. Privacy archive interoperability
+tests require `python3` and `ruby` (including RubyGems) on `PATH`:
 
 ```bash
 pnpm test                            # whole suite
