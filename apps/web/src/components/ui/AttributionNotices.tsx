@@ -54,18 +54,25 @@ export function AttributionLogos({ logos }: { logos: readonly AttributionLogo[] 
 
 /** Permanent notices never use ellipsis, clipping, or a hidden scrolling area. */
 export function AttributionNotices({ notices }: { notices: readonly VisibleAttribution[] }) {
-  return notices.map((notice, index) => (
-    <Box
-      key={notice.html}
-      component="span"
-      sx={{
-        overflowWrap: "anywhere",
-        ...(notice.prominence === "normal" ? { fontSize: "1rem", lineHeight: 1.4 } : {}),
-      }}
-    >
-      {index > 0 && " | "}
-      <AttributionText html={notice.html} />
-      <AttributionLogos logos={notice.logos} />
-    </Box>
-  ));
+  // Callers normally group identical notices. Still render duplicate inputs
+  // faithfully, without orphaning DOM nodes when another credit is inserted.
+  const occurrences = new Map<string, number>();
+  return notices.map((notice, index) => {
+    const occurrence = occurrences.get(notice.html) ?? 0;
+    occurrences.set(notice.html, occurrence + 1);
+    return (
+      <Box
+        key={JSON.stringify([notice.html, occurrence])}
+        component="span"
+        sx={{
+          overflowWrap: "anywhere",
+          ...(notice.prominence === "normal" ? { fontSize: "1rem", lineHeight: 1.4 } : {}),
+        }}
+      >
+        {index > 0 && " | "}
+        <AttributionText html={notice.html} />
+        <AttributionLogos logos={notice.logos} />
+      </Box>
+    );
+  });
 }

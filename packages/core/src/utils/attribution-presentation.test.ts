@@ -216,3 +216,53 @@ it("preserves HTML parser normalization between successive notice merges", () =>
     { label: "© B", url: "https://b.example/" },
   ]);
 });
+
+const repeatedLabelNotice =
+  '© <a href="https://www.maptiler.com/copyright/">MapTiler</a> (MapTiler material: Licence not specified; MapTiler access/account contract: <a href="https://www.maptiler.com/terms/cloud/">Licence not specified</a>)';
+
+it("collapses identical notices with repeated link labels without reconstructing their HTML", () => {
+  const entries = Array.from({ length: 10 }, () => ({
+    fullHtml: repeatedLabelNotice,
+    visibleHtml: repeatedLabelNotice,
+    logos: [],
+  }));
+  const result = projectAttributionPresentations(entries);
+  expect(result.visible).toEqual([{ html: repeatedLabelNotice, logos: [] }]);
+  expect(result.fullHtml).toEqual([repeatedLabelNotice]);
+});
+
+it("keeps full notices and stricter branding when identical visible notices collapse", () => {
+  const result = projectAttributionPresentations([
+    {
+      fullHtml: "Dataset A required notice",
+      visibleHtml: repeatedLabelNotice,
+      logos: ["maptiler"],
+    },
+    {
+      fullHtml: "Dataset B required notice",
+      visibleHtml: repeatedLabelNotice,
+      logos: ["tdx", "maptiler"],
+      prominence: "normal",
+    },
+  ]);
+  expect(result.visible).toEqual([
+    { html: repeatedLabelNotice, logos: ["maptiler", "tdx"], prominence: "normal" },
+  ]);
+  expect(result.fullHtml).toEqual(["Dataset A required notice", "Dataset B required notice"]);
+  expect(result.details).toEqual([
+    { html: "Dataset A required notice", attribution: undefined },
+    { html: "Dataset B required notice", attribution: undefined },
+  ]);
+});
+
+it("retains ambiguous repeated-label notices when their link targets differ", () => {
+  const other = repeatedLabelNotice.replace(
+    "https://www.maptiler.com/terms/cloud/",
+    "https://publisher.example/other-terms",
+  );
+  const result = projectAttributionPresentations(
+    [repeatedLabelNotice, other].map((html) => ({ fullHtml: html, visibleHtml: html, logos: [] })),
+  );
+  expect(result.visible).toHaveLength(2);
+  expect(result.fullHtml).toEqual([repeatedLabelNotice, other]);
+});
