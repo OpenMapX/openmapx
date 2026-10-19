@@ -1,42 +1,40 @@
 import { createHash } from "node:crypto";
-import { fetchWithRedirects, USER_AGENT_TRANSIT } from "@openmapx/core";
-import { readBoundedBinaryResponse } from "@openmapx/core/server";
-import type { CacheClient, Logger } from "@openmapx/integration-framework";
+import { USER_AGENT_TRANSIT } from "@openmapx/core";
+import type {
+  CacheClient,
+  HttpClient,
+  Logger,
+  QuotaWindow,
+  ResponseOptions,
+  UpstreamRuntime,
+} from "@openmapx/integration-framework";
+import type { Attribution } from "@openmapx/mobility-core/attribution";
+import { snapshotContributors } from "@openmapx/mobility-core/contributors";
 import {
   buildOjpLocationInformationRequestXml,
   decodeGtfsRtFeedToObject,
-  type GtfsRtFeedObject,
 } from "@openmapx/mobility-formats";
 
-const DEFAULT_OJP_ENDPOINT = "https://api.opentransportdata.swiss/ojp20";
-const DEFAULT_OJP_FALLBACK_ENDPOINT = "https://api.opentransportdata.swiss/ojp2020";
-const DEFAULT_OJP_FARE_ENDPOINT = "https://api.opentransportdata.swiss/ojpfare";
-const DEFAULT_GTFS_SA_ENDPOINT = "https://api.opentransportdata.swiss/la/gtfs-sa";
-const DEFAULT_GTFS_RT_ENDPOINT = "https://api.opentransportdata.swiss/la/gtfs-rt";
-const DEFAULT_SIRI_SX_ENDPOINT = "https://api.opentransportdata.swiss/la/siri-sx";
-const DEFAULT_SIRI_SX_UNPLANNED_ENDPOINT =
-  "https://api.opentransportdata.swiss/la/siri-sx-unplanned";
-const DEFAULT_FORMATION_ENDPOINT = "https://api.opentransportdata.swiss/formation";
-const SWISS_REDIRECT_HOSTS = ["opentransportdata.swiss", "*.opentransportdata.swiss"];
-
-interface BinaryCacheEntry<T> {
-  expiresAt: number;
-  value: T;
-}
-
-interface SwissRequestCacheOptions {
-  cacheNamespace: string;
-  cacheTtlSeconds: number;
-}
+const DEFAULTS = {
+  fallbackEndpoint: "https://api.opentransportdata.swiss/ojp2020",
+  formationEndpoint: "https://api.opentransportdata.swiss/formation",
+  gtfsRtEndpoint: "https://api.opentransportdata.swiss/la/gtfs-rt",
+  gtfsSaEndpoint: "https://api.opentransportdata.swiss/la/gtfs-sa",
+  ojpEndpoint: "https://api.opentransportdata.swiss/ojp20",
+  ojpFareEndpoint: "https://api.opentransportdata.swiss/ojpfare",
+  requestLanguage: "de",
+  requestorRef: "OpenMapX",
+  siriSxEndpoint: "https://api.opentransportdata.swiss/la/siri-sx",
+  siriSxUnplannedEndpoint: "https://api.opentransportdata.swiss/la/siri-sx-unplanned",
+  userAgent: USER_AGENT_TRANSIT,
+};
 
 export interface SwissTransitConfig {
   apiKey?: string;
-  cache?: CacheClient;
   fallbackEndpoint?: string;
   formationEndpoint?: string;
   gtfsRtEndpoint?: string;
   gtfsSaEndpoint?: string;
-  log?: Logger;
   ojpEndpoint?: string;
   ojpFareEndpoint?: string;
   requestLanguage?: string;
@@ -45,357 +43,281 @@ export interface SwissTransitConfig {
   siriSxUnplannedEndpoint?: string;
   userAgent?: string;
 }
-
+interface SwissRequestCacheOptions {
+  cacheNamespace: string;
+  cacheTtlSeconds: number;
+}
 export interface SwissFormationRequest {
   evu: string;
   operationDate: string;
   trainNumber: string;
 }
+export interface SwissClientOptions {
+  config: Readonly<Record<string, unknown>> | SwissTransitConfig;
+  http: HttpClient;
+  cache: CacheClient;
+  log?: Logger;
+  upstreamRuntime?: UpstreamRuntime;
+  contributors: Readonly<Record<string, readonly Attribution[]>>;
+  isSourceAllowed?: (sourceId: string) => Promise<boolean>;
+}
 
-let config: SwissTransitConfig = {
-  fallbackEndpoint: DEFAULT_OJP_FALLBACK_ENDPOINT,
-  formationEndpoint: DEFAULT_FORMATION_ENDPOINT,
-  gtfsRtEndpoint: DEFAULT_GTFS_RT_ENDPOINT,
-  gtfsSaEndpoint: DEFAULT_GTFS_SA_ENDPOINT,
-  ojpEndpoint: DEFAULT_OJP_ENDPOINT,
-  ojpFareEndpoint: DEFAULT_OJP_FARE_ENDPOINT,
-  requestLanguage: "de",
-  requestorRef: "OpenMapX",
-  siriSxEndpoint: DEFAULT_SIRI_SX_ENDPOINT,
-  siriSxUnplannedEndpoint: DEFAULT_SIRI_SX_UNPLANNED_ENDPOINT,
+const API_WINDOWS: readonly QuotaWindow[] = [
+  { id: "minute", limit: 50, durationMs: 60_000 },
+  { id: "day", limit: 20_000, durationMs: 86_400_000 },
+];
+const QUOTAS: Readonly<Record<string, readonly QuotaWindow[]>> = {
+  ojp: API_WINDOWS,
+  "ojp-fare": API_WINDOWS,
+  formation: API_WINDOWS,
+  "gtfs-sa": [{ id: "minute", limit: 5, durationMs: 60_000 }],
+  "gtfs-rt": [{ id: "minute", limit: 5, durationMs: 60_000 }],
+  "siri-complete": [
+    { id: "hour", limit: 10, durationMs: 3_600_000 },
+    { id: "day", limit: 48, durationMs: 86_400_000 },
+  ],
+  "siri-unplanned": [
+    { id: "minute", limit: 2, durationMs: 60_000 },
+    { id: "day", limit: 3_000, durationMs: 86_400_000 },
+  ],
 };
-
-let gtfsSaCache: BinaryCacheEntry<GtfsRtFeedObject> | null = null;
-let gtfsRtCache: BinaryCacheEntry<GtfsRtFeedObject> | null = null;
-const siriFeedCache = new Map<string, BinaryCacheEntry<string>>();
-const formationCache = new Map<string, BinaryCacheEntry<unknown | null>>();
-
-export function setSwissTransitConfig(nextConfig: SwissTransitConfig): void {
-  config = {
-    ...config,
-    ...nextConfig,
-  };
-  gtfsSaCache = null;
-  gtfsRtCache = null;
-  siriFeedCache.clear();
-  formationCache.clear();
+class SwissAcquisitionDenied extends Error {}
+function hash(value: unknown): string {
+  return createHash("sha256").update(JSON.stringify(value)).digest("hex");
 }
 
-export function getSwissTransitConfig(): SwissTransitConfig {
-  return config;
-}
-
-export function isSwissTransitConfigured(): boolean {
-  return Boolean(config.apiKey?.trim());
-}
-
-function authHeaders(options: { accept?: string; contentType?: string } = {}): Headers {
-  const headers = new Headers({
-    Authorization: `Bearer ${config.apiKey}`,
-    "Accept-Encoding": "gzip, br, deflate",
-    "User-Agent": config.userAgent ?? USER_AGENT_TRANSIT,
+/** Configuration and receipts belong to this setup generation, never the module. */
+export function createSwissTransitClient(options: SwissClientOptions) {
+  const configured = Object.fromEntries(
+    Object.entries(options.config).filter(([, value]) => typeof value === "string"),
+  ) as SwissTransitConfig;
+  const config = Object.freeze({
+    ...DEFAULTS,
+    ...configured,
+    apiKey: configured.apiKey?.trim(),
+    log: options.log,
   });
-  if (options.accept) headers.set("Accept", options.accept);
-  if (options.contentType) headers.set("Content-Type", options.contentType);
-  return headers;
-}
-
-function trustedSwissRedirectHosts(url: string): string[] {
-  return [new URL(url).hostname, ...SWISS_REDIRECT_HOSTS];
-}
-
-async function postXml(endpoint: string, body: string): Promise<string> {
-  const response = await fetchWithRedirects(endpoint, {
-    allowedRedirectHosts: trustedSwissRedirectHosts(endpoint),
-    body,
-    follow203Redirect: true,
-    headers: authHeaders({
-      accept: "application/xml, text/xml;q=0.9, */*;q=0.1",
-      contentType: "application/xml",
-    }),
-    method: "POST",
-    timeoutMs: 20_000,
-  });
-  if (!response.ok) {
-    const text = await response.text().catch(() => "");
-    throw new Error(`Swiss OJP request failed (${response.status}): ${text.slice(0, 200)}`);
-  }
-  return response.text();
-}
-
-function swissCacheKey(
-  namespace: string,
-  payload: { body?: string; endpoints?: string[]; label?: string; url?: string },
-): string {
-  const hash = createHash("sha256").update(JSON.stringify(payload)).digest("hex").slice(0, 24);
-  return `swiss-otdch:${namespace}:${hash}`;
-}
-
-async function requestSwissXml(
-  requestXml: string,
-  endpoints: Array<string | undefined>,
-  label: string,
-  cacheOptions?: SwissRequestCacheOptions,
-): Promise<string> {
-  if (!isSwissTransitConfigured()) {
-    throw new Error(`${label} API key not configured`);
-  }
-  const candidates = endpoints.filter(
-    (value, index, values): value is string => Boolean(value) && values.indexOf(value) === index,
-  );
-
-  const fetchFresh = async () => {
-    let lastError: unknown = null;
-    for (const endpoint of candidates) {
-      try {
-        return await postXml(endpoint, requestXml);
-      } catch (error) {
-        lastError = error;
-        config.log?.warn?.(`${label} endpoint failed`, endpoint, error);
-      }
+  for (const [name, value] of Object.entries(config)) {
+    if (!name.endsWith("Endpoint")) continue;
+    const endpoint = new URL(value as string);
+    if (endpoint.protocol !== "https:" || endpoint.username || endpoint.password) {
+      throw new Error("Swiss API endpoints require HTTPS without URL credentials");
     }
-    throw lastError instanceof Error ? lastError : new Error(`${label} request failed`);
-  };
-
-  if (
-    cacheOptions?.cacheNamespace &&
-    cacheOptions.cacheTtlSeconds > 0 &&
-    config.cache &&
-    candidates.length > 0
-  ) {
-    return config.cache.withCache(
-      swissCacheKey(cacheOptions.cacheNamespace, {
-        body: requestXml,
-        endpoints: candidates,
-        label,
-      }),
-      cacheOptions.cacheTtlSeconds,
-      fetchFresh,
-    );
   }
-  return fetchFresh();
-}
-
-export async function requestSwissOjp(
-  requestXml: string,
-  cacheOptions?: SwissRequestCacheOptions,
-): Promise<string> {
-  return requestSwissXml(
-    requestXml,
-    [config.ojpEndpoint, config.fallbackEndpoint],
-    "Swiss OJP",
-    cacheOptions,
+  const contributors = Object.fromEntries(
+    Object.entries(options.contributors)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([id, receipts]) => [id, snapshotContributors(receipts)]),
   );
-}
-
-export async function requestSwissOjpFare(
-  requestXml: string,
-  cacheOptions?: SwissRequestCacheOptions,
-): Promise<string> {
-  return requestSwissXml(requestXml, [config.ojpFareEndpoint], "Swiss OJP fare", cacheOptions);
-}
-
-async function fetchBinaryFeed(url: string): Promise<ArrayBuffer> {
-  const response = await fetchWithRedirects(url, {
-    allowedRedirectHosts: trustedSwissRedirectHosts(url),
-    follow203Redirect: true,
-    headers: authHeaders({ accept: "application/octet-stream, application/protobuf, */*;q=0.1" }),
-    timeoutMs: 20_000,
-  });
-  if (!response.ok) {
-    const text = await response.text().catch(() => "");
-    throw new Error(`Swiss binary feed failed (${response.status}): ${text.slice(0, 200)}`);
-  }
-  const { data } = await readBoundedBinaryResponse(response, {
-    maxBytes: 32 * 1024 * 1024,
-    fallbackContentType: "application/octet-stream",
-    label: "Swiss realtime binary feed",
-  });
-  return data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) as ArrayBuffer;
-}
-
-async function fetchTextFeed(url: string): Promise<string> {
-  const response = await fetchWithRedirects(url, {
-    allowedRedirectHosts: trustedSwissRedirectHosts(url),
-    follow203Redirect: true,
-    headers: authHeaders({ accept: "application/xml, text/xml;q=0.9, */*;q=0.1" }),
-    timeoutMs: 20_000,
-  });
-  if (!response.ok) {
-    const text = await response.text().catch(() => "");
-    throw new Error(`Swiss text feed failed (${response.status}): ${text.slice(0, 200)}`);
-  }
-  return response.text();
-}
-
-async function fetchJsonFeed<T>(url: string): Promise<T> {
-  const response = await fetchWithRedirects(url, {
-    allowedRedirectHosts: trustedSwissRedirectHosts(url),
-    follow203Redirect: true,
-    headers: authHeaders({ accept: "application/json, */*;q=0.1" }),
-    timeoutMs: 20_000,
-  });
-  if (!response.ok) {
-    const text = await response.text().catch(() => "");
-    throw new Error(`Swiss JSON feed failed (${response.status}): ${text.slice(0, 200)}`);
-  }
-  return (await response.json()) as T;
-}
-
-function localCacheHit<T>(entry: BinaryCacheEntry<T> | null): T | null {
-  if (!entry || entry.expiresAt <= Date.now()) return null;
-  return entry.value;
-}
-
-export async function fetchSwissGtfsSaFeed(): Promise<GtfsRtFeedObject> {
-  if (!isSwissTransitConfigured()) {
-    throw new Error("Swiss GTFS-SA API key not configured");
-  }
-  const local = localCacheHit(gtfsSaCache);
-  if (local) {
-    return local;
-  }
-
-  const endpoint = config.gtfsSaEndpoint ?? DEFAULT_GTFS_SA_ENDPOINT;
-  const feed =
-    config.cache && endpoint
-      ? await config.cache.withCache(swissCacheKey("gtfs-sa", { url: endpoint }), 60, async () =>
-          decodeGtfsRtFeedToObject(await fetchBinaryFeed(endpoint)),
-        )
-      : decodeGtfsRtFeedToObject(await fetchBinaryFeed(endpoint));
-  gtfsSaCache = {
-    expiresAt: Date.now() + 60_000,
-    value: feed,
+  const identity = hash({ config: { ...config, log: undefined }, contributors });
+  const credentialIdentity = hash(config.apiKey ?? "");
+  const lifetime = new AbortController();
+  const isSwissTransitConfigured = () => Boolean(config.apiKey);
+  const sourceId = (source: string) => `opentransportdata-ch-${source}`;
+  const checkPolicy = async (source: string, signal: AbortSignal) => {
+    signal.throwIfAborted();
+    if (!isSwissTransitConfigured())
+      throw new SwissAcquisitionDenied("Swiss API key not configured");
+    if (options.isSourceAllowed && !(await options.isSourceAllowed(sourceId(source))))
+      throw new SwissAcquisitionDenied("Swiss source disabled by policy");
+    signal.throwIfAborted();
   };
-  return feed;
-}
-
-export async function fetchSwissGtfsRtFeed(): Promise<GtfsRtFeedObject> {
-  if (!isSwissTransitConfigured()) {
-    throw new Error("Swiss GTFS-RT API key not configured");
-  }
-  const local = localCacheHit(gtfsRtCache);
-  if (local) {
-    return local;
-  }
-
-  const endpoint = config.gtfsRtEndpoint ?? DEFAULT_GTFS_RT_ENDPOINT;
-  const feed =
-    config.cache && endpoint
-      ? await config.cache.withCache(swissCacheKey("gtfs-rt", { url: endpoint }), 30, async () =>
-          decodeGtfsRtFeedToObject(await fetchBinaryFeed(endpoint)),
-        )
-      : decodeGtfsRtFeedToObject(await fetchBinaryFeed(endpoint));
-  gtfsRtCache = {
-    expiresAt: Date.now() + 30_000,
-    value: feed,
-  };
-  return feed;
-}
-
-export async function fetchSwissSiriSxFeed(
-  kind: "complete" | "unplanned" = "complete",
-): Promise<string> {
-  if (!isSwissTransitConfigured()) {
-    throw new Error("Swiss SIRI-SX API key not configured");
-  }
-  const local = localCacheHit(siriFeedCache.get(kind) ?? null);
-  if (local) {
-    return local;
-  }
-
-  const endpoint =
-    kind === "complete"
-      ? (config.siriSxEndpoint ?? DEFAULT_SIRI_SX_ENDPOINT)
-      : (config.siriSxUnplannedEndpoint ?? DEFAULT_SIRI_SX_UNPLANNED_ENDPOINT);
-  const ttlSeconds = kind === "complete" ? 6 * 60 * 60 : 60;
-  const feed =
-    config.cache && endpoint
-      ? await config.cache.withCache(
-          swissCacheKey(`siri-sx:${kind}`, { url: endpoint }),
-          ttlSeconds,
-          async () => fetchTextFeed(endpoint),
-        )
-      : await fetchTextFeed(endpoint);
-  siriFeedCache.set(kind, {
-    expiresAt: Date.now() + ttlSeconds * 1000,
-    value: feed,
-  });
-  return feed;
-}
-
-function formationCacheKey(request: SwissFormationRequest): string {
-  return `${request.evu}|${request.operationDate}|${request.trainNumber}`;
-}
-
-export async function fetchSwissFormationJourney<T>(
-  request: SwissFormationRequest,
-): Promise<T | null> {
-  if (!isSwissTransitConfigured()) {
-    throw new Error("Swiss formation API key not configured");
-  }
-  const localKey = formationCacheKey(request);
-  const localEntry = formationCache.get(localKey);
-  if (localEntry && localEntry.expiresAt > Date.now()) {
-    return localEntry.value as T | null;
-  }
-
-  const baseEndpoint = config.formationEndpoint ?? DEFAULT_FORMATION_ENDPOINT;
-  const endpoint = new URL(
-    "v2/formations_full",
-    baseEndpoint.endsWith("/") ? baseEndpoint : `${baseEndpoint}/`,
-  );
-  endpoint.searchParams.set("evu", request.evu);
-  endpoint.searchParams.set("operationDate", request.operationDate);
-  endpoint.searchParams.set("trainNumber", request.trainNumber);
-
-  const fetchFresh = async (): Promise<T | null> => {
-    const url = endpoint.toString();
+  const assertAllowed = (source: string) => checkPolicy(source, lifetime.signal);
+  // This is called inside acquisition, so cache hits do not consume provider quota.
+  const consume = async (family: string, signal: AbortSignal) => {
+    await checkPolicy(family.startsWith("siri-") ? "siri-sx" : family, signal);
+    if (!options.upstreamRuntime)
+      throw new SwissAcquisitionDenied("Swiss shared quota runtime unavailable");
+    const windows = QUOTAS[family];
+    if (!windows) throw new SwissAcquisitionDenied("Unknown Swiss quota family");
+    let allowed = false;
     try {
-      return await fetchJsonFeed<T>(url);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      if (message.includes("(401)") || message.includes("(403)") || message.includes("(404)")) {
-        config.log?.warn?.("Swiss formation request unavailable", url, message);
-        return null;
-      }
-      throw error;
+      const decision = await options.upstreamRuntime.consumeQuota({
+        bucket: `swiss-otdch:${family}:${credentialIdentity}`,
+        cost: 1,
+        windows,
+      });
+      allowed = decision.allowed && decision.diagnostic !== "store_unavailable";
+    } catch {
+      throw new SwissAcquisitionDenied("Swiss shared quota runtime unavailable");
     }
+    signal.throwIfAborted();
+    if (!allowed) throw new SwissAcquisitionDenied("Swiss upstream quota unavailable");
   };
-
-  const journey = config.cache
-    ? await config.cache.withCache(
-        swissCacheKey("formation", {
-          label: "Swiss formation",
-          url: endpoint.toString(),
-        }),
-        300,
-        fetchFresh,
-      )
-    : await fetchFresh();
-  formationCache.set(localKey, {
-    expiresAt: Date.now() + 300_000,
-    value: journey,
+  const requestOptions = (
+    url: string,
+    signal: AbortSignal,
+    contentTypes: readonly string[],
+    maxBytes = 32 * 1024 * 1024,
+  ): ResponseOptions => ({
+    signal,
+    timeoutMs: 20_000,
+    maxBytes,
+    contentTypes,
+    fallbackContentType: contentTypes[0],
+    redirect: {
+      allowedHosts: [new URL(url).hostname, "opentransportdata.swiss", "*.opentransportdata.swiss"],
+      follow203: true,
+    },
+    headers: {
+      Authorization: `Bearer ${config.apiKey}`,
+      "Accept-Encoding": "gzip, br, deflate",
+      "User-Agent": config.userAgent,
+    },
   });
-  return journey as T | null;
-}
-
-export async function probeSwissOjp(): Promise<boolean> {
-  if (!isSwissTransitConfigured()) return false;
-  try {
-    const xml = buildOjpLocationInformationRequestXml({
-      language: config.requestLanguage,
-      limit: 1,
-      query: "Bern",
-      requestorRef: config.requestorRef,
-      types: ["stop"],
+  const checkStatus = (status: number) => {
+    if (status < 200 || status >= 300) throw new Error(`Swiss upstream request failed (${status})`);
+  };
+  const cached = async <T>(
+    source: string,
+    namespace: string,
+    payload: unknown,
+    ttl: number,
+    load: (signal: AbortSignal) => Promise<T>,
+  ): Promise<T> => {
+    await assertAllowed(source);
+    const result = await options.cache.withCache(
+      `swiss-otdch:v2:${identity}:${namespace}:${hash(payload)}`,
+      ttl,
+      load,
+      lifetime.signal,
+    );
+    await assertAllowed(source);
+    return result;
+  };
+  const requestXml = async (
+    xml: string,
+    endpoints: readonly string[],
+    family: "ojp" | "ojp-fare",
+    cacheOptions?: SwissRequestCacheOptions,
+  ): Promise<string> => {
+    await assertAllowed(family);
+    const candidates = [...new Set(endpoints)];
+    const load = async (signal: AbortSignal): Promise<string> => {
+      let lastError: unknown;
+      for (const endpoint of candidates) {
+        await consume(family, signal);
+        try {
+          const response = await options.http.postText(endpoint, xml, {
+            ...requestOptions(
+              endpoint,
+              signal,
+              ["application/xml", "text/xml", "text/plain"],
+              8 * 1024 * 1024,
+            ),
+            headers: {
+              ...requestOptions(endpoint, signal, []).headers,
+              Accept: "application/xml, text/xml;q=0.9",
+              "Content-Type": "application/xml",
+            },
+          });
+          checkStatus(response.status);
+          return response.body;
+        } catch (error) {
+          signal.throwIfAborted();
+          lastError = error;
+          options.log?.warn("Swiss XML endpoint failed");
+        }
+      }
+      throw lastError instanceof Error ? lastError : new Error("Swiss XML request failed");
+    };
+    if (cacheOptions && cacheOptions.cacheTtlSeconds > 0)
+      return cached(
+        family,
+        cacheOptions.cacheNamespace,
+        { xml, candidates },
+        cacheOptions.cacheTtlSeconds,
+        load,
+      );
+    const result = await load(lifetime.signal);
+    await assertAllowed(family);
+    return result;
+  };
+  const requestSwissOjp = (xml: string, cacheOptions?: SwissRequestCacheOptions) =>
+    requestXml(xml, [config.ojpEndpoint, config.fallbackEndpoint], "ojp", cacheOptions);
+  const requestSwissOjpFare = (xml: string, cacheOptions?: SwissRequestCacheOptions) =>
+    requestXml(xml, [config.ojpFareEndpoint], "ojp-fare", cacheOptions);
+  const binaryFeed = (family: "gtfs-sa" | "gtfs-rt", endpoint: string, ttl: number) =>
+    cached(family, family, endpoint, ttl, async (signal) => {
+      await consume(family, signal);
+      const response = await options.http.getBytes(
+        endpoint,
+        requestOptions(endpoint, signal, [
+          "application/octet-stream",
+          "application/protobuf",
+          "application/x-protobuf",
+        ]),
+      );
+      checkStatus(response.status);
+      return decodeGtfsRtFeedToObject(response.bytes);
     });
-    await requestSwissOjp(xml, {
-      cacheNamespace: "probe",
-      cacheTtlSeconds: 30,
-    });
-    return true;
-  } catch {
-    return false;
-  }
+  return {
+    config,
+    cacheIdentity: identity,
+    isSwissTransitConfigured,
+    requestSwissOjp,
+    requestSwissOjpFare,
+    fetchSwissGtfsSaFeed: () => binaryFeed("gtfs-sa", config.gtfsSaEndpoint, 60),
+    fetchSwissGtfsRtFeed: () => binaryFeed("gtfs-rt", config.gtfsRtEndpoint, 30),
+    fetchSwissSiriSxFeed: (kind: "complete" | "unplanned" = "complete") => {
+      const endpoint = kind === "complete" ? config.siriSxEndpoint : config.siriSxUnplannedEndpoint;
+      return cached(
+        "siri-sx",
+        `siri-${kind}`,
+        endpoint,
+        kind === "complete" ? 6 * 60 * 60 : 60,
+        async (signal) => {
+          await consume(`siri-${kind}`, signal);
+          const response = await options.http.getText(
+            endpoint,
+            requestOptions(endpoint, signal, ["application/xml", "text/xml", "text/plain"]),
+          );
+          checkStatus(response.status);
+          return response.body;
+        },
+      );
+    },
+    fetchSwissFormationJourney: <T>(request: SwissFormationRequest): Promise<T | null> => {
+      const base = config.formationEndpoint;
+      const endpoint = new URL("v2/formations_full", base.endsWith("/") ? base : `${base}/`);
+      for (const [key, value] of Object.entries(request)) endpoint.searchParams.set(key, value);
+      return cached("formation", "formation", endpoint.toString(), 300, async (signal) => {
+        await consume("formation", signal);
+        const response = await options.http.getText(
+          endpoint.toString(),
+          requestOptions(
+            endpoint.toString(),
+            signal,
+            ["application/json", "text/json", "text/plain"],
+            8 * 1024 * 1024,
+          ),
+        );
+        if ([401, 403, 404].includes(response.status)) return null;
+        checkStatus(response.status);
+        return JSON.parse(response.body) as T;
+      });
+    },
+    async probeSwissOjp(): Promise<boolean> {
+      if (!isSwissTransitConfigured()) return false;
+      try {
+        await requestSwissOjp(
+          buildOjpLocationInformationRequestXml({
+            language: config.requestLanguage,
+            limit: 1,
+            query: "Bern",
+            requestorRef: config.requestorRef,
+            types: ["stop"],
+          }),
+          { cacheNamespace: "probe", cacheTtlSeconds: 30 },
+        );
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    async dispose() {
+      lifetime.abort(new Error("Swiss client retired"));
+    },
+  };
 }
+export type SwissTransitClient = ReturnType<typeof createSwissTransitClient>;

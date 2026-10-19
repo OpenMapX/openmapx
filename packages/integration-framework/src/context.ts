@@ -56,15 +56,24 @@ export interface BinaryHttpResponse extends Omit<HttpResponse<never>, "body"> {
   bytes: Uint8Array;
 }
 
+export interface StreamHttpResponse extends Omit<HttpResponse<never>, "body"> {
+  /** Consume or cancel this stream. Its byte ceiling and request deadline remain active. */
+  stream: ReadableStream<Uint8Array>;
+}
+
 export interface ResponseOptions extends HttpClientOptions {
-  /** Hard ceiling applied before and while buffering the response body. */
+  /** Hard ceiling applied before and while reading the response body. */
   maxBytes: number;
   /** Exact, case-insensitive media types accepted after parameters are removed. */
   contentTypes: readonly string[];
+  /** Media type assumed only when the upstream omits Content-Type. Must be in contentTypes. */
+  fallbackContentType?: string;
   /** Response headers to expose. Names are matched case-insensitively and returned lowercase. */
   responseHeaders?: readonly string[];
-  /** Reject redirects rather than following an untrusted upstream Location. */
-  redirect?: "error";
+  /** Reject redirects, or follow only the explicitly allowlisted target hosts. */
+  redirect?:
+    | "error"
+    | { allowedHosts: readonly string[]; follow203?: boolean; maxRedirects?: number };
 }
 
 export interface HttpClient {
@@ -78,6 +87,12 @@ export interface HttpClient {
     options: ResponseOptions,
   ): Promise<HttpResponse<T>>;
   getBytes(url: string, options: ResponseOptions): Promise<BinaryHttpResponse>;
+  /** Return any status as bounded UTF-8 text; successful responses enforce contentTypes. */
+  getText(url: string, options: ResponseOptions): Promise<HttpResponse<string>>;
+  /** POST the supplied text without JSON encoding. Set its request Content-Type explicitly. */
+  postText(url: string, body: string, options: ResponseOptions): Promise<HttpResponse<string>>;
+  /** Return any status as a bounded stream; successful responses enforce contentTypes. */
+  getStream(url: string, options: ResponseOptions): Promise<StreamHttpResponse>;
 }
 
 export interface CacheClient {
@@ -87,6 +102,15 @@ export interface CacheClient {
    * Absent in clients without host administration (for example CLI fixtures).
    */
   onInvalidate?(listener: (event: { available: boolean }) => void): () => void;
+  /**
+   * Managed shared caches can capture an administrative write fence before
+   * acquisition. Use this writer for additional derived entries after awaits;
+   * late writes are rejected when the captured Redis invalidation epoch changes.
+   * Also guard local state/lifetime with onInvalidate and disposal; this writer
+   * is not a subscriber-availability or linearizable cross-worker read barrier.
+   * Hosts without shared cache administration omit this capability.
+   */
+  captureWriter?(): Promise<Pick<CacheClient, "set">>;
   get<T = unknown>(key: string): Promise<T | null>;
   set(key: string, value: unknown, ttlSeconds?: number): Promise<void>;
   del(key: string): Promise<void>;

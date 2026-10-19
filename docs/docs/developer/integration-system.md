@@ -625,6 +625,17 @@ operations have a three-second deadline. A failed epoch capture skips the shared
 write; a failed clear control operation fails the clear request. These fences
 apply to host HTTP/cache acquisition, not the separate quota runtime's policy.
 
+For additional derived cache entries, managed hosts offer
+`const writer = await ctx.cache.captureWriter?.()` before acquisition. Use
+`writer?.set(key, value, ttlSeconds)` after the upstream await: it retains the
+original administrative invalidation fence. A direct `ctx.cache.set` captures
+its fence only when that write starts. Do not recapture after acquisition if the
+initial capture fails; hosts without this capability keep derived entries local.
+The writer fences the captured Redis invalidation epoch; callers must also guard
+local state/lifetime through `onInvalidate` and disposal. It does not create a
+linearizable cross-worker read barrier. Shared cache reads must retain the
+acquisition's original receipts and expiry.
+
 The server uses `lru-cache` for four stores. Limits are entry budgets, not heap
 byte guarantees. Reverse-city and reverse-country stores cache successful
 negative results; transport failures are not cached. Reads update eviction recency without extending the fixed TTL.
@@ -671,11 +682,36 @@ Do not replace it with process-local maps or counters in production. Redis
 failure must deny a new quota-consuming refresh, although eligible stale data
 may still be returned with its original evidence time.
 
-Use `http.getResponse()` or `http.postResponse()` when status or allowlisted
-rate-limit headers matter, and `http.getBytes()` for binary payloads. Unlike
-`get()` and `post()`, these return a non-success status instead of throwing.
-They require a byte ceiling and media type allowlist; redirects can be rejected.
-Non-success bodies are bounded too.
+Use `http.getResponse()` or `http.postResponse()` for JSON when status or
+allowlisted rate-limit headers matter, `http.getBytes()` for buffered binary
+payloads, and `http.getText()` / `http.postText()` for XML or other text.
+`postText()` sends its string unchanged; set the request `Content-Type` in
+`headers`. Unlike `get()` and `post()`, these methods return a non-success
+status instead of throwing for that status. JSON methods still require a valid
+JSON body. Text and streaming methods return bounded error bodies regardless of
+their media type, so callers can handle a plain-text 404 from a JSON endpoint.
+
+Every response method requires `maxBytes` and an exact `contentTypes` allowlist.
+`fallbackContentType` applies only when the upstream omits `Content-Type`, and
+must itself be allowlisted. The byte ceiling checks declared size and actual
+decoded response bytes, including error bodies.
+
+`http.getStream()` returns `{ status, headers, stream }`, where `stream` is a
+pull-driven `ReadableStream<Uint8Array>`. Consume or cancel it; the host retains
+the byte ceiling and combined caller/timeout signal through the entire body.
+Consumer cancellation, timeouts and rejection of a response cancel its upstream
+reader. This allows archive downloads to stream to disk without buffering them.
+
+Use `redirect: "error"` to reject redirects or
+`redirect: { allowedHosts: ["downloads.example.org"], follow203: true }` to
+follow explicitly trusted targets. Host entries accept exact hostnames or
+`*.example.org` suffixes. `follow203` opts into APIs that use 203 with `Location`;
+`maxRedirects` optionally lowers the default limit of eight. Every redirect is
+checked, and the original timeout covers the whole chain and body. Standard
+authorization, cookie and proxy-authorization headers are removed permanently
+after a cross-origin hop; same-origin redirects retain them. Trusted redirects
+reject HTTPS-to-HTTP downgrades and URL credentials before contacting the target.
+Omitting `redirect` retains native fetch redirect behavior.
 Integration-local raw `fetch` is not an escape hatch for provider work.
 
 Route queries arrive exactly as Fastify parsed them: each value is a string, an
