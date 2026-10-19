@@ -271,6 +271,7 @@ export function createEnturClient(options: EnturClientOptions): EnturClient {
         contentTypes: ["application/json", "application/graphql-response+json"],
         redirect: "error",
         responseHeaders: ["Date", "Retry-After", "Rate-Limit-Expiry-Time"],
+        ...(family === "geocoder" ? { successStatuses: [200] } : {}),
       };
       const response = await bounded(
         body === undefined
@@ -278,7 +279,11 @@ export function createEnturClient(options: EnturClientOptions): EnturClient {
           : http.postText(url, body, requestOptions),
         signal,
       );
-      if (response.status < 200 || response.status >= 300) {
+      if (
+        family === "geocoder"
+          ? response.status !== 200
+          : response.status < 200 || response.status >= 300
+      ) {
         if (response.status === 429) {
           const delayMs = cooldownDelay(response.headers, Date.now());
           if (delayMs > 0) {

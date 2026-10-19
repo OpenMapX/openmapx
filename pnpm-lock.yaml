@@ -2606,6 +2606,9 @@ importers:
       '@openmapx/mobility-formats':
         specifier: workspace:^
         version: link:../mobility-formats
+      zod:
+        specifier: 4.6.5
+        version: 4.6.5
     devDependencies:
       '@graphql-typed-document-node/core':
         specifier: 3.2.0

@@ -1,0 +1,1429 @@
+{
+  "openapi": "3.1.1",
+  "info": {
+    "title": "Geocoder",
+    "description": "Geocoding and reverse geocoding for Norwegian addresses and points of interest.\n",
+    "contact": {
+      "name": "Team Ruter og reiseplanlegging",
+      "url": "https://developer.entur.org"
+    },
+    "license": {
+      "name": "EUPL-1.2",
+      "url": "https://opensource.org/licenses/EUPL-1.2"
+    },
+    "version": "2026.09.1"
+  },
+  "externalDocs": {
+    "description": "Geocoder documentation and v3 migration guide",
+    "url": "https://developer.entur.no/docs/open-services/geocoder"
+  },
+  "servers": [
+    {
+      "url": "https://api.entur.io/geocoder"
+    }
+  ],
+  "security": [
+    {}
+  ],
+  "tags": [
+    {
+      "name": "Autocomplete"
+    },
+    {
+      "name": "Reverse"
+    },
+    {
+      "name": "Place"
+    }
+  ],
+  "paths": {
+    "/v3/autocomplete": {
+      "get": {
+        "tags": [
+          "Autocomplete"
+        ],
+        "summary": "Autocomplete search",
+        "description": "Search for places by text query",
+        "operationId": "autocomplete",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Query"
+          },
+          {
+            "$ref": "#/components/parameters/AutocompleteLatitude"
+          },
+          {
+            "$ref": "#/components/parameters/AutocompleteLongitude"
+          },
+          {
+            "$ref": "#/components/parameters/AutocompleteRadius"
+          },
+          {
+            "$ref": "#/components/parameters/AutocompleteWeight"
+          },
+          {
+            "$ref": "#/components/parameters/Bbox"
+          },
+          {
+            "$ref": "#/components/parameters/Limit"
+          },
+          {
+            "$ref": "#/components/parameters/Language"
+          },
+          {
+            "$ref": "#/components/parameters/Layers"
+          },
+          {
+            "$ref": "#/components/parameters/StopPlaceTypes"
+          },
+          {
+            "$ref": "#/components/parameters/Sources"
+          },
+          {
+            "$ref": "#/components/parameters/Countries"
+          },
+          {
+            "$ref": "#/components/parameters/Counties"
+          },
+          {
+            "$ref": "#/components/parameters/Localities"
+          },
+          {
+            "$ref": "#/components/parameters/FareZones"
+          },
+          {
+            "$ref": "#/components/parameters/FareZoneAuthorities"
+          },
+          {
+            "$ref": "#/components/parameters/Multimodal"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Matching places",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Result"
+                },
+                "examples": {
+                  "default": {
+                    "value": {
+                      "type": "FeatureCollection",
+                      "features": [
+                        {
+                          "type": "Feature",
+                          "geometry": {
+                            "type": "Point",
+                            "coordinates": [
+                              10.7522,
+                              59.911
+                            ]
+                          },
+                          "properties": {
+                            "id": "NSR:StopPlace:59872",
+                            "names": {
+                              "default": "Oslo S",
+                              "display": "Oslo S, Oslo"
+                            },
+                            "layer": "stopPlace",
+                            "source": "nsr",
+                            "fareZones": [
+                              "RUT:FareZone:1"
+                            ],
+                            "transportModes": [
+                              {
+                                "mode": "rail"
+                              }
+                            ],
+                            "stopPlaceTypes": [
+                              "railStation"
+                            ],
+                            "stopPlaceRole": "parent"
+                          }
+                        }
+                      ],
+                      "metadata": {
+                        "query": {
+                          "text": "oslo s",
+                          "limit": 10,
+                          "lang": "no"
+                        },
+                        "resultCount": 1,
+                        "timestamp": "2025-03-04T11:00:00Z"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "default": {
+                    "value": {
+                      "status": 400,
+                      "title": "Bad Request",
+                      "detail": "Unknown parameter(s): foo"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ET-Client-Name"
+        },
+        {
+          "$ref": "#/components/parameters/X-Correlation-Id"
+        }
+      ]
+    },
+    "/v3/reverse": {
+      "get": {
+        "tags": [
+          "Reverse"
+        ],
+        "summary": "Reverse geocode",
+        "description": "Convert coordinates to places",
+        "operationId": "reverse",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Latitude"
+          },
+          {
+            "$ref": "#/components/parameters/Longitude"
+          },
+          {
+            "$ref": "#/components/parameters/Radius"
+          },
+          {
+            "$ref": "#/components/parameters/DistanceSort"
+          },
+          {
+            "$ref": "#/components/parameters/Limit"
+          },
+          {
+            "$ref": "#/components/parameters/Language"
+          },
+          {
+            "$ref": "#/components/parameters/Layers"
+          },
+          {
+            "$ref": "#/components/parameters/StopPlaceTypes"
+          },
+          {
+            "$ref": "#/components/parameters/Sources"
+          },
+          {
+            "$ref": "#/components/parameters/Countries"
+          },
+          {
+            "$ref": "#/components/parameters/Counties"
+          },
+          {
+            "$ref": "#/components/parameters/Localities"
+          },
+          {
+            "$ref": "#/components/parameters/FareZones"
+          },
+          {
+            "$ref": "#/components/parameters/FareZoneAuthorities"
+          },
+          {
+            "$ref": "#/components/parameters/Multimodal"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Nearby places",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Result"
+                },
+                "examples": {
+                  "default": {
+                    "value": {
+                      "type": "FeatureCollection",
+                      "features": [
+                        {
+                          "type": "Feature",
+                          "geometry": {
+                            "type": "Point",
+                            "coordinates": [
+                              10.7522,
+                              59.911
+                            ]
+                          },
+                          "properties": {
+                            "id": "NSR:StopPlace:59872",
+                            "names": {
+                              "default": "Oslo S",
+                              "display": "Oslo S, Oslo"
+                            },
+                            "layer": "stopPlace",
+                            "source": "nsr",
+                            "stopPlaceRole": "parent",
+                            "distance": 0.142
+                          }
+                        }
+                      ],
+                      "metadata": {
+                        "query": {
+                          "lat": 59.911,
+                          "lon": 10.7522,
+                          "limit": 10,
+                          "lang": "no"
+                        },
+                        "resultCount": 1,
+                        "timestamp": "2025-03-04T11:00:00Z"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "default": {
+                    "value": {
+                      "status": 400,
+                      "title": "Bad Request",
+                      "detail": "Parameter 'lat' is required"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ET-Client-Name"
+        },
+        {
+          "$ref": "#/components/parameters/X-Correlation-Id"
+        }
+      ]
+    },
+    "/v3/place": {
+      "get": {
+        "tags": [
+          "Place"
+        ],
+        "summary": "Place lookup",
+        "description": "Look up one or more places by ID",
+        "operationId": "place",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Ids"
+          },
+          {
+            "$ref": "#/components/parameters/Language"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Matching places",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Result"
+                },
+                "examples": {
+                  "default": {
+                    "value": {
+                      "type": "FeatureCollection",
+                      "features": [
+                        {
+                          "type": "Feature",
+                          "geometry": {
+                            "type": "Point",
+                            "coordinates": [
+                              10.7522,
+                              59.911
+                            ]
+                          },
+                          "properties": {
+                            "id": "NSR:StopPlace:59872",
+                            "names": {
+                              "default": "Oslo S",
+                              "display": "Oslo S, Oslo"
+                            },
+                            "layer": "stopPlace",
+                            "source": "nsr",
+                            "stopPlaceRole": "parent"
+                          }
+                        }
+                      ],
+                      "metadata": {
+                        "query": {
+                          "limit": 10,
+                          "lang": "no"
+                        },
+                        "resultCount": 1,
+                        "timestamp": "2025-03-04T11:00:00Z"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "default": {
+                    "value": {
+                      "status": 400,
+                      "title": "Bad Request",
+                      "detail": "Parameter 'ids' is required"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ET-Client-Name"
+        },
+        {
+          "$ref": "#/components/parameters/X-Correlation-Id"
+        }
+      ]
+    }
+  },
+  "components": {
+    "schemas": {
+      "Result": {
+        "required": [
+          "features",
+          "metadata",
+          "type"
+        ],
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "FeatureCollection"
+            ]
+          },
+          "features": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Feature"
+            }
+          },
+          "metadata": {
+            "$ref": "#/components/schemas/Metadata"
+          },
+          "bbox": {
+            "maxItems": 4,
+            "minItems": 4,
+            "type": "array",
+            "description": "[minLon, minLat, maxLon, maxLat]",
+            "items": {
+              "type": "number"
+            },
+            "examples": [
+              [
+                10.7335,
+                59.911,
+                10.7522,
+                59.9144
+              ]
+            ]
+          }
+        }
+      },
+      "Feature": {
+        "required": [
+          "geometry",
+          "properties",
+          "type"
+        ],
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "Feature"
+            ]
+          },
+          "geometry": {
+            "$ref": "#/components/schemas/Geometry"
+          },
+          "properties": {
+            "$ref": "#/components/schemas/Place"
+          },
+          "bbox": {
+            "maxItems": 4,
+            "minItems": 4,
+            "type": "array",
+            "description": "GeoJSON bounding box `[minLon, minLat, maxLon, maxLat]`. Present for features with a real extent (streets, groups of stop places); omitted for point features.",
+            "items": {
+              "type": "number"
+            },
+            "examples": [
+              [
+                10.73,
+                59.91,
+                10.76,
+                59.92
+              ]
+            ]
+          }
+        }
+      },
+      "Geometry": {
+        "required": [
+          "coordinates",
+          "type"
+        ],
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "Point"
+            ]
+          },
+          "coordinates": {
+            "maxItems": 2,
+            "minItems": 2,
+            "type": "array",
+            "description": "[longitude, latitude]",
+            "items": {
+              "type": "number"
+            },
+            "examples": [
+              [
+                10.7522,
+                59.911
+              ]
+            ]
+          }
+        }
+      },
+      "Place": {
+        "required": [
+          "id",
+          "layer",
+          "names",
+          "source"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "examples": [
+              "NSR:StopPlace:59872"
+            ]
+          },
+          "names": {
+            "$ref": "#/components/schemas/Names"
+          },
+          "layer": {
+            "$ref": "#/components/schemas/Layer"
+          },
+          "address": {
+            "$ref": "#/components/schemas/Address"
+          },
+          "categories": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "examples": [
+              [
+                "restaurant"
+              ]
+            ]
+          },
+          "fareZones": {
+            "type": "array",
+            "description": "Zones the place is in; they overlap, so a stop can be in several. A multimodal parent lists its own plus its children's, so use `multimodal=child` for per-departure zones.",
+            "items": {
+              "type": "string"
+            },
+            "examples": [
+              [
+                "RUT:FareZone:4"
+              ]
+            ]
+          },
+          "transportModes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TransportMode"
+            }
+          },
+          "stopPlaceTypes": {
+            "type": "array",
+            "description": "NeTEx StopPlaceType values (same value set as the `stopPlaceTypes` filter parameter)",
+            "items": {
+              "type": "string"
+            },
+            "examples": [
+              [
+                "onstreetBus"
+              ]
+            ]
+          },
+          "stopPlaceRole": {
+            "type": "string",
+            "description": "A stop place's role in the parent-child hierarchy: `parent` (aggregates child stops), `child`, or `standalone`. Present on `stopPlace` features; absent on other layers and on stop places not yet reindexed. Treat an absent or unrecognised value as unknown, not `standalone`. (`parent`/`child` both mean multimodal.)",
+            "enum": [
+              "parent",
+              "child",
+              "standalone"
+            ],
+            "examples": [
+              "parent"
+            ]
+          },
+          "source": {
+            "type": "string",
+            "description": "Data source identifier (same values as the sources filter)",
+            "enum": [
+              "openstreetmap",
+              "kartverket-matrikkelenadresse",
+              "kartverket-stedsnavn",
+              "nsr",
+              "custom-poi"
+            ],
+            "examples": [
+              "nsr"
+            ]
+          },
+          "distance": {
+            "type": "number",
+            "description": "Distance from the reverse query point in kilometres (3-decimal precision). Present on `/v3/reverse` responses only; the field is omitted (not `null`) on autocomplete and place lookup.",
+            "format": "double",
+            "examples": [
+              0.142
+            ]
+          },
+          "description": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "Per-language description. Keys are ISO 639-2 alpha-3 language codes (`nor`, `eng`, etc.). The field is omitted (not `null`) when the underlying record has no description.",
+            "examples": [
+              {
+                "nor": "Norges nasjonalteater",
+                "eng": "Norway's national theatre"
+              }
+            ]
+          }
+        }
+      },
+      "Names": {
+        "required": [
+          "default",
+          "display"
+        ],
+        "type": "object",
+        "properties": {
+          "default": {
+            "type": "string",
+            "description": "Official name",
+            "examples": [
+              "Oslo S"
+            ]
+          },
+          "label": {
+            "type": "string",
+            "description": "Common or colloquial name",
+            "examples": [
+              "Oslo Sentralstasjon"
+            ]
+          },
+          "display": {
+            "type": "string",
+            "description": "Formatted name with locality context, suitable for display",
+            "examples": [
+              "Oslo S, Oslo"
+            ]
+          }
+        }
+      },
+      "Address": {
+        "type": "object",
+        "properties": {
+          "streetName": {
+            "type": "string",
+            "examples": [
+              "Jernbanetorget"
+            ]
+          },
+          "houseNumber": {
+            "type": "string",
+            "examples": [
+              "1"
+            ]
+          },
+          "postalCode": {
+            "type": "string",
+            "examples": [
+              "0154"
+            ]
+          },
+          "locality": {
+            "type": "string",
+            "examples": [
+              "Oslo"
+            ]
+          },
+          "localityId": {
+            "type": "string",
+            "examples": [
+              "KVE:TopographicPlace:0301"
+            ]
+          },
+          "borough": {
+            "type": "string",
+            "examples": [
+              "Sentrum"
+            ]
+          },
+          "boroughId": {
+            "type": "string",
+            "examples": [
+              "KVE:Borough:34200502"
+            ]
+          },
+          "county": {
+            "type": "string",
+            "examples": [
+              "Oslo"
+            ]
+          },
+          "countyId": {
+            "type": "string",
+            "examples": [
+              "KVE:TopographicPlace:03"
+            ]
+          },
+          "countryCode": {
+            "type": "string",
+            "examples": [
+              "no"
+            ]
+          }
+        }
+      },
+      "TransportMode": {
+        "required": [
+          "mode"
+        ],
+        "type": "object",
+        "properties": {
+          "mode": {
+            "type": "string",
+            "examples": [
+              "bus"
+            ]
+          },
+          "subMode": {
+            "type": "string",
+            "examples": [
+              "localBus"
+            ]
+          }
+        }
+      },
+      "Layer": {
+        "type": "string",
+        "enum": [
+          "address",
+          "street",
+          "stopPlace",
+          "groupOfStopPlaces",
+          "poi",
+          "place"
+        ],
+        "examples": [
+          "stopPlace"
+        ]
+      },
+      "Metadata": {
+        "required": [
+          "query",
+          "resultCount",
+          "timestamp"
+        ],
+        "type": "object",
+        "properties": {
+          "query": {
+            "$ref": "#/components/schemas/QueryInfo"
+          },
+          "resultCount": {
+            "type": "integer",
+            "examples": [
+              5
+            ]
+          },
+          "timestamp": {
+            "type": "string",
+            "description": "Response generation time as an ISO 8601 instant (UTC).",
+            "format": "date-time",
+            "examples": [
+              "2025-03-04T11:00:00Z"
+            ]
+          }
+        }
+      },
+      "QueryInfo": {
+        "required": [
+          "lang",
+          "limit"
+        ],
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string",
+            "examples": [
+              "Oslo S"
+            ]
+          },
+          "lat": {
+            "type": "number",
+            "format": "double",
+            "examples": [
+              59.911
+            ]
+          },
+          "lon": {
+            "type": "number",
+            "format": "double",
+            "examples": [
+              10.7522
+            ]
+          },
+          "limit": {
+            "type": "integer",
+            "examples": [
+              10
+            ]
+          },
+          "lang": {
+            "type": "string",
+            "examples": [
+              "no"
+            ]
+          },
+          "filters": {
+            "$ref": "#/components/schemas/Filters"
+          }
+        }
+      },
+      "Filters": {
+        "type": "object",
+        "properties": {
+          "layers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Layer"
+            }
+          },
+          "sources": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "countries": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "counties": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "localities": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "fareZones": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "fareZoneAuthorities": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "stopPlaceTypes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "multimodal": {
+            "type": "string",
+            "enum": [
+              "parent",
+              "child",
+              "all"
+            ]
+          }
+        },
+        "description": "Echoes the request filters as sent, not the effective filter set."
+      },
+      "Error": {
+        "required": [
+          "status",
+          "title"
+        ],
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "integer",
+            "examples": [
+              400
+            ]
+          },
+          "title": {
+            "type": "string",
+            "examples": [
+              "Bad Request"
+            ]
+          },
+          "detail": {
+            "type": "string",
+            "examples": [
+              "Parameter 'lat' is required"
+            ]
+          }
+        }
+      }
+    },
+    "parameters": {
+      "Ids": {
+        "name": "ids",
+        "in": "query",
+        "description": "Place IDs to look up (at most 100)",
+        "required": true,
+        "style": "form",
+        "explode": false,
+        "schema": {
+          "maxItems": 100,
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "examples": {
+          "default": {
+            "value": [
+              "NSR:StopPlace:337",
+              "NSR:StopPlace:59872"
+            ]
+          }
+        }
+      },
+      "Query": {
+        "name": "q",
+        "in": "query",
+        "description": "Search query. Optional when at least one filter (e.g. `layers`, `stopPlaceTypes`, `fareZones`) is given; the response then lists every place matching the filters (e.g. every airport, or every stop place in a fare zone).",
+        "required": false,
+        "style": "form",
+        "explode": true,
+        "schema": {
+          "type": "string"
+        },
+        "examples": {
+          "default": {
+            "value": "Oslo S"
+          }
+        }
+      },
+      "Limit": {
+        "name": "limit",
+        "in": "query",
+        "description": "Maximum number of results",
+        "required": false,
+        "style": "form",
+        "explode": true,
+        "schema": {
+          "maximum": 100,
+          "minimum": 1,
+          "type": "integer",
+          "default": 10
+        },
+        "examples": {
+          "default": {
+            "value": 10
+          }
+        }
+      },
+      "Language": {
+        "name": "lang",
+        "in": "query",
+        "description": "Language code for result names",
+        "required": false,
+        "style": "form",
+        "explode": true,
+        "schema": {
+          "type": "string",
+          "default": "no"
+        },
+        "examples": {
+          "default": {
+            "value": "no"
+          }
+        }
+      },
+      "Layers": {
+        "name": "layers",
+        "in": "query",
+        "description": "Layer filter. See `stopPlaceTypes` for how the two compose.",
+        "required": false,
+        "style": "form",
+        "explode": false,
+        "schema": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "address",
+              "street",
+              "stopPlace",
+              "groupOfStopPlaces",
+              "poi",
+              "place"
+            ]
+          }
+        },
+        "examples": {
+          "default": {
+            "value": [
+              "stopPlace",
+              "address"
+            ]
+          }
+        }
+      },
+      "StopPlaceTypes": {
+        "name": "stopPlaceTypes",
+        "in": "query",
+        "description": "Select stop places of these NeTEx types. Without `layers`, returns only these stop places and excludes other layers. With `layers`, constrains the `stopPlace` layer while other requested layers are returned additively (e.g. `layers=stopPlace,groupOfStopPlaces&stopPlaceTypes=railStation` returns rail stations plus groups). Ignored when `layers` is set but omits `stopPlace`.",
+        "required": false,
+        "style": "form",
+        "explode": false,
+        "schema": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "onstreetBus",
+              "onstreetTram",
+              "airport",
+              "railStation",
+              "metroStation",
+              "busStation",
+              "coachStation",
+              "tramStation",
+              "harbourPort",
+              "ferryPort",
+              "ferryStop",
+              "liftStation",
+              "vehicleRailInterchange",
+              "other"
+            ]
+          }
+        },
+        "examples": {
+          "default": {
+            "value": [
+              "railStation",
+              "metroStation"
+            ]
+          }
+        }
+      },
+      "Sources": {
+        "name": "sources",
+        "in": "query",
+        "description": "Data source filter. These are v3 names; v2 source values (`whosonfirst`, `geonames`, `openaddresses`) are not accepted and match nothing. Omit the parameter to search all sources. Use `layers` to filter by result type.",
+        "required": false,
+        "style": "form",
+        "explode": false,
+        "schema": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "openstreetmap",
+              "kartverket-matrikkelenadresse",
+              "kartverket-stedsnavn",
+              "nsr",
+              "custom-poi"
+            ]
+          }
+        },
+        "examples": {
+          "default": {
+            "value": [
+              "openstreetmap"
+            ]
+          }
+        }
+      },
+      "Countries": {
+        "name": "countries",
+        "in": "query",
+        "description": "ISO 3166-1 alpha-2 country code filter",
+        "required": false,
+        "style": "form",
+        "explode": false,
+        "schema": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "examples": {
+          "default": {
+            "value": [
+              "no"
+            ]
+          }
+        }
+      },
+      "Counties": {
+        "name": "counties",
+        "in": "query",
+        "description": "County IDs filter",
+        "required": false,
+        "style": "form",
+        "explode": false,
+        "schema": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "examples": {
+          "default": {
+            "value": [
+              "KVE:TopographicPlace:03"
+            ]
+          }
+        }
+      },
+      "Localities": {
+        "name": "localities",
+        "in": "query",
+        "description": "Locality IDs filter",
+        "required": false,
+        "style": "form",
+        "explode": false,
+        "schema": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "examples": {
+          "default": {
+            "value": [
+              "KVE:TopographicPlace:0301"
+            ]
+          }
+        }
+      },
+      "FareZones": {
+        "name": "fareZones",
+        "in": "query",
+        "description": "Fare zone IDs filter. Refs must be FareZone-shaped (e.g. `RUT:FareZone:1`); legacy `TariffZone` refs are not supported. A multimodal parent matches if any of its child stops is in the zone.",
+        "required": false,
+        "style": "form",
+        "explode": false,
+        "schema": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "examples": {
+          "default": {
+            "value": [
+              "RUT:FareZone:1"
+            ]
+          }
+        }
+      },
+      "FareZoneAuthorities": {
+        "name": "fareZoneAuthorities",
+        "in": "query",
+        "description": "Fare zone authorities filter",
+        "required": false,
+        "style": "form",
+        "explode": false,
+        "schema": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "examples": {
+          "default": {
+            "value": [
+              "RUT:Authority:RUT"
+            ]
+          }
+        }
+      },
+      "Multimodal": {
+        "name": "multimodal",
+        "in": "query",
+        "description": "Multimodal stop place filter. Standalone (monomodal) stop places always appear; this only decides whether multimodal parents, children, or both appear alongside them: `parent` (default) hides multimodal children, `child` hides multimodal parents, `all` shows both",
+        "required": false,
+        "style": "form",
+        "explode": true,
+        "schema": {
+          "type": "string",
+          "default": "parent",
+          "enum": [
+            "parent",
+            "child",
+            "all"
+          ]
+        },
+        "examples": {
+          "default": {
+            "value": "parent"
+          }
+        }
+      },
+      "AutocompleteLatitude": {
+        "name": "lat",
+        "in": "query",
+        "description": "Focus point latitude. When provided with lon, results near this point are boosted.",
+        "required": false,
+        "style": "form",
+        "explode": true,
+        "schema": {
+          "maximum": 90,
+          "minimum": -90,
+          "type": "number",
+          "format": "double"
+        },
+        "examples": {
+          "default": {
+            "value": 59.911
+          }
+        }
+      },
+      "AutocompleteLongitude": {
+        "name": "lon",
+        "in": "query",
+        "description": "Focus point longitude. Must be provided together with lat.",
+        "required": false,
+        "style": "form",
+        "explode": true,
+        "schema": {
+          "maximum": 180,
+          "minimum": -180,
+          "type": "number",
+          "format": "double"
+        },
+        "examples": {
+          "default": {
+            "value": 10.7522
+          }
+        }
+      },
+      "AutocompleteRadius": {
+        "name": "radius",
+        "in": "query",
+        "description": "Focus radius in kilometres (decimals accepted). Results within this distance from the focus point receive the strongest boost.",
+        "required": false,
+        "style": "form",
+        "explode": true,
+        "schema": {
+          "minimum": 0,
+          "type": "number",
+          "format": "double",
+          "default": 25
+        },
+        "examples": {
+          "default": {
+            "value": 25
+          }
+        }
+      },
+      "AutocompleteWeight": {
+        "name": "weight",
+        "in": "query",
+        "description": "Focus weight: how strongly to prefer results near the focus point. 0 = no preference, 1 = maximum preference.",
+        "required": false,
+        "style": "form",
+        "explode": true,
+        "schema": {
+          "maximum": 1,
+          "minimum": 0,
+          "type": "number",
+          "format": "double",
+          "default": 0.5
+        },
+        "examples": {
+          "default": {
+            "value": 0.5
+          }
+        }
+      },
+      "Bbox": {
+        "name": "bbox",
+        "in": "query",
+        "description": "Restrict results to a bounding box: `minLon,minLat,maxLon,maxLat`. Unlike the focus point (a soft bias), this is a hard filter.",
+        "required": false,
+        "style": "form",
+        "explode": true,
+        "schema": {
+          "pattern": "^\\s*-?\\d+(\\.\\d+)?(\\s*,\\s*-?\\d+(\\.\\d+)?){3}\\s*$",
+          "type": "string"
+        },
+        "examples": {
+          "default": {
+            "value": "10.5,59.8,10.9,60.0"
+          }
+        }
+      },
+      "DistanceSort": {
+        "name": "distanceSort",
+        "in": "query",
+        "description": "Sort reverse results by distance from the query point (default) or by relevance when false.",
+        "required": false,
+        "style": "form",
+        "explode": true,
+        "schema": {
+          "type": "boolean",
+          "default": true
+        },
+        "examples": {
+          "default": {
+            "value": true
+          }
+        }
+      },
+      "Latitude": {
+        "name": "lat",
+        "in": "query",
+        "description": "Latitude",
+        "required": true,
+        "style": "form",
+        "explode": true,
+        "schema": {
+          "maximum": 90,
+          "minimum": -90,
+          "type": "number",
+          "format": "double"
+        },
+        "examples": {
+          "default": {
+            "value": 59.911
+          }
+        }
+      },
+      "Longitude": {
+        "name": "lon",
+        "in": "query",
+        "description": "Longitude",
+        "required": true,
+        "style": "form",
+        "explode": true,
+        "schema": {
+          "maximum": 180,
+          "minimum": -180,
+          "type": "number",
+          "format": "double"
+        },
+        "examples": {
+          "default": {
+            "value": 10.7522
+          }
+        }
+      },
+      "Radius": {
+        "name": "radius",
+        "in": "query",
+        "description": "Search radius in kilometres (decimals accepted). If omitted, no radius limit is applied.",
+        "required": false,
+        "style": "form",
+        "explode": true,
+        "schema": {
+          "minimum": 0,
+          "type": "number",
+          "format": "double"
+        },
+        "examples": {
+          "default": {
+            "value": 0.5
+          }
+        }
+      },
+      "ET-Client-Name": {
+        "name": "ET-Client-Name",
+        "in": "header",
+        "description": "Entur Client Header.\nIt is required that all consumers identify themselves by using this header.\nEntur will deploy strict rate-limiting policies on API-consumers who do not identify with a header and reserves the right to block unidentified consumers.\nThe structure of ET-Client-Name should be: `<company>-<application>`.",
+        "required": false,
+        "style": "simple",
+        "explode": false,
+        "schema": {
+          "type": "string"
+        }
+      },
+      "X-Correlation-Id": {
+        "name": "X-Correlation-Id",
+        "in": "header",
+        "description": "Correlation id",
+        "required": false,
+        "style": "simple",
+        "explode": false,
+        "schema": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

@@ -735,6 +735,13 @@ payloads, and `http.getText()` / `http.postText()` for XML or other text.
 status instead of throwing for that status. JSON methods still require a valid
 JSON body. Text and streaming methods return bounded error bodies regardless of
 their media type, so callers can handle a plain-text 404 from a JSON endpoint.
+For `getText()`, `postText()` and `getStream()`, optional `successStatuses` narrows
+which statuses require the success `contentTypes` allowlist. It must be a nonempty
+list of integer 2xx statuses; omission preserves validation for all 2xx responses.
+For example, `[200]` lets a caller classify a headerless 204 or plain-text 201
+before decoding. All statuses retain the same byte ceiling and body deadline.
+JSON and byte methods ignore `successStatuses` and retain their existing media
+validation.
 
 Every response method requires `maxBytes` and an exact `contentTypes` allowlist.
 `fallbackContentType` applies only when the upstream omits `Content-Type`, and

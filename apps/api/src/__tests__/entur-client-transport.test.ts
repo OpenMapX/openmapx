@@ -1,7 +1,10 @@
 import { createNoopLogger } from "@openmapx/integration-framework/testing";
 import { HealthCheckDocument } from "@openmapx/mobility-formats/entur/journey-planner.generated.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createEnturClient } from "../../../../packages/entur-client/src/index";
+import {
+  createEnturClient,
+  createEnturGeocoder,
+} from "../../../../packages/entur-client/src/index";
 import { createHttpClient } from "../integration-clients";
 
 function client() {
@@ -163,4 +166,29 @@ describe("Entur adapter through real host HTTP transport", () => {
     await Promise.resolve();
     expect(cancelled).toBe(true);
   });
+  it.each([201, 204, 400, 429])(
+    "preserves actual HTTP %s through the Entur geocoder host bridge",
+    async (status) => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(
+          () =>
+            new Response(status === 204 ? null : status === 400 ? '{"detail":"invalid"}' : "text", {
+              status,
+              headers: status === 400 ? { "Content-Type": "application/problem+json" } : {},
+            }),
+        ),
+      );
+      const client = createEnturClient({
+        http: createHttpClient(createNoopLogger()),
+        config: { geocoderEndpoint: "https://api.entur.io/geocoder" },
+        sourceIds: { geocoder: "entur-geocoder" },
+        contributors: {},
+        isSourceAllowed: async () => true,
+      });
+      await expect(
+        createEnturGeocoder(client).autocomplete({ q: "Oslo" }, new AbortController().signal),
+      ).rejects.toMatchObject({ kind: "http", status });
+    },
+  );
 });

@@ -25,7 +25,20 @@ export function boundedIntegrationResponseStream(
     if (Number.isFinite(declared) && declared > options.maxBytes) {
       throw new Error("integration HTTP response too large (declared length exceeds maxBytes)");
     }
-    if (response.ok || !allowErrorContentType) {
+    const successStatuses = allowErrorContentType ? options.successStatuses : undefined;
+    if (
+      successStatuses !== undefined &&
+      (!Array.isArray(successStatuses) ||
+        !successStatuses.length ||
+        successStatuses.some(
+          (status) => !Number.isInteger(status) || status < 200 || status >= 300,
+        ))
+    )
+      throw new Error(
+        "integration HTTP success statuses must be a nonempty list of integer 2xx statuses",
+      );
+    const successful = successStatuses ? successStatuses.includes(response.status) : response.ok;
+    if (successful || !allowErrorContentType) {
       const mediaType = (
         response.headers.get("content-type")?.split(";", 1)[0]?.trim() ??
         options.fallbackContentType

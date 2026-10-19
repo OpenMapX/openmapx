@@ -66,6 +66,12 @@ export interface ResponseOptions extends HttpClientOptions {
   maxBytes: number;
   /** Exact, case-insensitive media types accepted after parameters are removed. */
   contentTypes: readonly string[];
+  /**
+   * getText/postText/getStream only: statuses subject to contentTypes (default: all 2xx).
+   * Must be a nonempty list of integer 2xx statuses. Other statuses still return bounded
+   * bodies for caller classification. JSON and byte methods ignore this option.
+   */
+  successStatuses?: readonly number[];
   /** Media type assumed only when the upstream omits Content-Type. Must be in contentTypes. */
   fallbackContentType?: string;
   /** Response headers to expose. Names are matched case-insensitively and returned lowercase. */
