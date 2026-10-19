@@ -1,13 +1,12 @@
-import {
-  createGeocoderSuggestionProvider,
-  runWithProviderDeadline,
-} from "@openmapx/integration-framework";
+import { runWithProviderDeadline } from "@openmapx/integration-framework";
 import {
   createMockIntegrationContext,
   createNoopLogger,
 } from "@openmapx/integration-framework/testing";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { enturGeocodingService } from "../../../../integrations/geocoding-entur/provider.js";
+import { setup as setupEnturGeocoding } from "../../../../integrations/geocoding-entur/index.js";
+import enturGeocodingManifest from "../../../../integrations/geocoding-entur/manifest.json";
+import { collection as geocoderCollection } from "../../../../integrations/geocoding-entur/test-support.js";
 import { setup as setupEnturLive } from "../../../../integrations/live-transit-entur/index";
 import enturLiveManifest from "../../../../integrations/live-transit-entur/manifest.json";
 import { setup as setupEnturTransit } from "../../../../integrations/transit-entur/index";
@@ -478,16 +477,18 @@ describe("geocoder suggestion shared cache ownership", () => {
         (_url: string, init?: RequestInit) =>
           new Promise<Response>((resolve) => {
             downstreamSignal = init?.signal ?? undefined;
-            release = () => resolve(Response.json({ features: [] }));
+            release = () => resolve(Response.json(geocoderCollection([])));
             started.resolve();
           }),
       );
       vi.stubGlobal("fetch", fetch);
-      const provider = createGeocoderSuggestionProvider({
+      const geocodingCtx = createMockIntegrationContext({
         id: "geocoding-entur",
-        geocoder: enturGeocodingService,
-        attributions: () => [],
+        manifest: enturGeocodingManifest as never,
+        http: createHttpClient(createNoopLogger()),
       });
+      setupEnturGeocoding(geocodingCtx);
+      const provider = geocodingCtx.registered.searchSuggestions[0];
       const cache = createCacheClient("search-suggestions");
       const load = (signal: AbortSignal) =>
         runWithProviderDeadline(
@@ -523,7 +524,7 @@ describe("geocoder suggestion shared cache ownership", () => {
         await Promise.all([firstOutcome, secondOutcome]);
       }
       if (mode === "all-cancelled") {
-        fetch.mockImplementationOnce(async () => Response.json({ features: [] }));
+        fetch.mockImplementationOnce(async () => Response.json(geocoderCollection([])));
         await expect(cache.withCache("oslo", 300, load)).resolves.toMatchObject({
           suggestions: [],
         });

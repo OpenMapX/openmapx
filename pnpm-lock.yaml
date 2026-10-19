@@ -1019,6 +1019,9 @@ importers:
       '@openmapx/core':
         specifier: workspace:^
         version: link:../../packages/core
+      '@openmapx/entur-client':
+        specifier: workspace:^
+        version: link:../../packages/entur-client
       '@openmapx/integration-framework':
         specifier: workspace:^
         version: link:../../packages/integration-framework
