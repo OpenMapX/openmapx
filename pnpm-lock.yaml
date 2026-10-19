@@ -991,7 +991,7 @@ importers:
         version: link:../../packages/place-ids
       '@openstreetmap/id-tagging-schema':
         specifier: ^7.2.0
-        version: 7.2.0
+        version: 7.3.0
       lru-cache:
         specifier: 11.5.3
         version: 11.5.3
@@ -2951,7 +2951,7 @@ importers:
         version: link:../core
       '@openstreetmap/id-tagging-schema':
         specifier: ^7.2.0
-        version: 7.2.0
+        version: 7.3.0
     devDependencies:
       '@types/node':
         specifier: ^26.6.5
@@ -5535,8 +5535,8 @@ packages:
       ai: ^7.0.0
       zod: ^3.25.76 || ^4.1.8
 
-  '@openstreetmap/id-tagging-schema@7.2.0':
-    resolution: {integrity: sha512-7hjV8Xl3CoaO0u+M/Po0u33YIRahL8jEJtOzho189VOqqQQB3L9UGv2o93o/T4G3I0z5sFvQhn0apOz6+j253w==}
+  '@openstreetmap/id-tagging-schema@7.3.0':
+    resolution: {integrity: sha512-z2nQgHLNwCjebDxlKBaERjg02UmcJyemAtsXExJFlXNNc4K9l7EdtfkGs064Y0IgzUltmUxM/FeUBRyhb4kv6w==}
     engines: {node: '>=22'}
 
   '@opentelemetry/api@1.9.1':
@@ -15320,7 +15320,7 @@ snapshots:
       ai: 7.0.137(zod@4.6.5)
       zod: 4.6.5
 
-  '@openstreetmap/id-tagging-schema@7.2.0': {}
+  '@openstreetmap/id-tagging-schema@7.3.0': {}
 
   '@opentelemetry/api@1.9.1': {}
 
