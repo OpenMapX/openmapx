@@ -101,6 +101,10 @@ export function activityClient(clients) {
       const generated = await clients.fetch.client(
         {
           ...verb,
+          // Header models retain the HTTP wire contract. Native EventSource owns
+          // Last-Event-ID, so its target factory exposes no explicit header argument.
+          headers: undefined,
+          props: verb.props.filter((prop) => prop.type !== "header"),
           response: {
             ...verb.response,
             definition: { ...verb.response.definition, success: "AdminEventStreamTarget" },
@@ -134,14 +138,18 @@ export function adminOperationBindings(inputDocument) {
   const activity = selectTaggedDocument(inputDocument, "activity-admin");
   const combined = { paths: { ...previous.paths, ...activity.paths } };
   const bindFunctions = {};
+  const optionsTypes = {};
   for (const item of Object.values(activity.paths))
     for (const operation of Object.values(item)) {
-      if (operation?.operationId && isEventStream(operation))
+      if (operation?.operationId && isEventStream(operation)) {
         bindFunctions[operation.operationId] = "bindAdminStreamOperation";
+        optionsTypes[operation.operationId] = "AdminEventStreamTargetOptions";
+      }
     }
   return emitOperationBindings(operationIds(combined), {
     bindFunction: "bindAdminOperation",
     bindFunctions,
+    optionsTypes,
     optionsType: "AdminSdkRequestOptions",
     transportPath: "../../admin-sdk-transport",
     command: "pnpm sdk:generate",

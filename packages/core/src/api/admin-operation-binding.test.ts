@@ -217,6 +217,53 @@ describe("family-neutral administration operation binding", () => {
         bindAdminStreamOperation("streamAdminActivityJobEvents")(wrong, { client }),
       ).rejects.toThrow();
   });
+  it("rejects finite request options instead of ignoring controls on an EventSource target", async () => {
+    const operation = bindAdminStreamOperation("streamAdminActivityJobEvents");
+    for (const unsupported of [
+      { timeoutMs: 100 },
+      { body: "secret payload" },
+      { cache: "no-store" },
+      { mode: "same-origin" },
+      { credentials: "include" },
+      { maxJsonBytes: 10 },
+      { maxTextBytes: 10 },
+      { maxErrorBytes: 10 },
+      { onTextChunk: () => {} },
+      { integrity: "secret integrity" },
+      { keepalive: true },
+      { referrer: "secret referrer" },
+      { referrerPolicy: "no-referrer" },
+      { redirect: "error" },
+      { unknown: "secret option" },
+    ]) {
+      const error = await operation("/api/admin/jobs/a/events", {
+        client,
+        ...unsupported,
+      } as never).catch((caught) => caught);
+      expect(error).toBeInstanceOf(Error);
+      expect(String(error)).toMatch(/unsupported/i);
+      expect(String(error)).not.toContain("secret");
+      expect(JSON.stringify(error)).not.toContain("secret");
+    }
+  });
+  it("uses the signal only to guard target construction and leaves browser lifetime ownership explicit", async () => {
+    const operation = bindAdminStreamOperation("streamAdminActivityJobEvents");
+    const abort = new AbortController();
+    const target = await operation("/api/admin/jobs/a/events", {
+      client,
+      signal: abort.signal,
+      method: "GET",
+      headers: {},
+    });
+    abort.abort();
+    expect(target).toEqual({
+      url: "https://app.example/api/admin/jobs/a/events",
+      withCredentials: true,
+    });
+    await expect(
+      operation("/api/admin/jobs/a/events", { client, signal: abort.signal }),
+    ).rejects.toMatchObject({ name: "AbortError" });
+  });
   it("never returns configured URL credentials or accepts non-HTTP and authority-replacing targets", () => {
     for (const baseUrl of [
       "https://username:secret@app.example",
@@ -257,10 +304,13 @@ describe("family-neutral administration operation binding", () => {
       expect(String(error)).not.toContain("secret");
     }
     await expect(
-      operation("/api/admin/jobs/a/events", { client, headers: { Authorization: "secret" } }),
+      operation("/api/admin/jobs/a/events", {
+        client,
+        headers: { Authorization: "secret" },
+      } as never),
     ).rejects.toThrow(/headers/);
-    await expect(operation("/api/admin/jobs/a/events", { client, method: "POST" })).rejects.toThrow(
-      /bound operation/,
-    );
+    await expect(
+      operation("/api/admin/jobs/a/events", { client, method: "POST" } as never),
+    ).rejects.toThrow(/bound operation/);
   });
 });

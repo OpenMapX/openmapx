@@ -1,16 +1,84 @@
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const { build } = createRequire(new URL("../../packages/core/package.json", import.meta.url))(
   "esbuild",
 );
 
+const ts = createRequire(new URL("../../packages/core/package.json", import.meta.url))(
+  "typescript",
+);
+
 import { generateArtifacts, writeOrCheckArtifacts } from "./codegen.mjs";
 import { selectTaggedDocument } from "./config.mjs";
 import { validatedResponseTypes } from "./validated-response-types.mjs";
+
+function generatedConsumerDiagnostics(files: { filename: string; content: string }[]) {
+  const base = new URL("../../packages/core", import.meta.url).pathname;
+  const configuration = ts.readConfigFile(resolve(base, "tsconfig.json"), ts.sys.readFile);
+  const { options } = ts.parseJsonConfigFileContent(configuration.config, ts.sys, base);
+  options.typeRoots = [
+    dirname(
+      dirname(
+        createRequire(new URL("../../packages/core/package.json", import.meta.url)).resolve(
+          "@types/node/package.json",
+        ),
+      ),
+    ),
+  ];
+  const filename = resolve(base, "src/api/generated/admin/activity-target.typecheck.ts");
+  const virtual = new Map(
+    files.map((file) => [resolve(base, "src/api/generated", file.filename), file.content]),
+  );
+  virtual.set(
+    filename,
+    `
+    import { streamAdminActivityJobEvents } from "./activity-admin.generated";
+    import type { AdminEventStreamTargetOptions } from "../../admin-sdk-transport";
+    declare const options: AdminEventStreamTargetOptions;
+    const target: Promise<{url: string; withCredentials: boolean}> = streamAdminActivityJobEvents("id", undefined, options);
+    streamAdminActivityJobEvents("id", undefined, {signal: new AbortController().signal, method: "GET", headers: {}});
+    // @ts-expect-error EventSource targets have no finite HTTP deadline.
+    streamAdminActivityJobEvents("id", undefined, {timeoutMs: 100});
+    // @ts-expect-error EventSource targets cannot send request bodies.
+    streamAdminActivityJobEvents("id", undefined, {body: "payload"});
+    // @ts-expect-error EventSource targets cannot apply fetch cache policy.
+    streamAdminActivityJobEvents("id", undefined, {cache: "no-store"});
+    // @ts-expect-error EventSource targets cannot apply fetch request modes.
+    streamAdminActivityJobEvents("id", undefined, {mode: "same-origin"});
+    // @ts-expect-error Target construction cannot consume a text stream.
+    streamAdminActivityJobEvents("id", undefined, {onTextChunk: () => {}});
+    // @ts-expect-error Native EventSource owns Last-Event-ID rather than explicit header arguments.
+    streamAdminActivityJobEvents("id", undefined, {"last-event-id": 1});
+    // @ts-expect-error Target options permit only an empty generated header container.
+    streamAdminActivityJobEvents("id", undefined, {headers: {Authorization: "token"}});
+    // @ts-expect-error Generated EventSource operations use GET only.
+    streamAdminActivityJobEvents("id", undefined, {method: "POST"});
+  `,
+  );
+  const host = ts.createCompilerHost(options);
+  const fileExists = host.fileExists.bind(host),
+    read = host.readFile.bind(host),
+    source = host.getSourceFile.bind(host);
+  const directoryExists = host.directoryExists?.bind(host);
+  host.directoryExists = (path: string) =>
+    Array.from(virtual.keys()).some((file) => file.startsWith(`${path}/`)) ||
+    directoryExists?.(path) === true;
+  host.fileExists = (path: string) => virtual.has(path) || fileExists(path);
+  host.readFile = (path: string) => virtual.get(path) ?? read(path);
+  host.getSourceFile = (path: string, language: unknown, ...rest: unknown[]) =>
+    virtual.has(path)
+      ? ts.createSourceFile(path, virtual.get(path), language, true)
+      : source(path, language, ...rest);
+  return ts
+    .getPreEmitDiagnostics(ts.createProgram([filename], options, host))
+    .map((diagnostic: { messageText: unknown }) =>
+      ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n"),
+    );
+}
 
 const directories: string[] = [];
 async function directory() {
@@ -244,6 +312,7 @@ describe("activity generation", () => {
       const bindings = files.find(
         (f: { filename: string }) => f.filename === "admin/operation-bindings.generated.ts",
       ).content;
+      expect(generatedConsumerDiagnostics(files)).toEqual([]);
       const result = await build({
         stdin: {
           contents: activity.content,
@@ -287,13 +356,29 @@ describe("activity generation", () => {
         sdk.getStreamAdminActivityJobEventsUrl("a/b?#", { source: "application", cursor: 2 }),
       ).toBe("/api/admin/jobs/a%2Fb%3F%23/events?source=application&cursor=2");
       await expect(
-        sdk.streamAdminActivityJobEvents("a/b?#", { source: "application", cursor: 2 }, undefined, {
-          client,
-        }),
+        sdk.streamAdminActivityJobEvents(
+          "a/b?#",
+          { source: "application", cursor: 2 },
+          {
+            client,
+          },
+        ),
       ).resolves.toEqual({
         url: "https://app.example/api/admin/jobs/a%2Fb%3F%23/events?source=application&cursor=2",
         withCredentials: true,
       });
+      for (const unsupported of [
+        { timeoutMs: 100 },
+        { body: "secret payload" },
+        { cache: "no-store" },
+      ]) {
+        const error = await sdk
+          .streamAdminActivityJobEvents("id", undefined, { client, ...unsupported })
+          .catch((caught: unknown) => caught);
+        expect(error).toBeInstanceOf(Error);
+        expect(String(error)).toMatch(/unsupported/i);
+        expect(String(error)).not.toContain("secret");
+      }
       vi.stubGlobal("fetch", async (url: string) => {
         if (url !== "https://app.example/api/admin/jobs") throw new Error("Unexpected network");
         return Response.json({ jobs: [], total: 0 });

@@ -2,6 +2,7 @@
 
 export {
   type AdminEventStreamTarget,
+  type AdminEventStreamTargetOptions,
   type AdminSdkRequestOptions,
   adminErrorMessage,
   unwrapAdminResponse,
