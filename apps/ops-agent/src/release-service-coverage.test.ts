@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { services } from "@openmapx/core/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createDefaultReleaseEffects } from "./administrative-runtime";
+import { buildOpsAgentServer } from "./server";
 
 const roots: string[] = [];
 afterEach(() => {
@@ -89,6 +90,49 @@ describe("complete administrative release coverage", () => {
       );
     },
   );
+  it("reports a safe host-update code through the agent protocol", async () => {
+    const f = fixture("old-agent");
+    const now = new Date();
+    const token = Buffer.alloc(32, 1).toString("base64url");
+    const app = buildOpsAgentServer({
+      tokens: { api: token, "data-manager": Buffer.alloc(32, 2).toString("base64url") },
+      resourcePolicy: { allowRelease: () => true },
+      dispatch: async () => {
+        await f.effects.apply("test-release", [...ids], f.context);
+      },
+    });
+    try {
+      const admitted = await app.inject({
+        method: "POST",
+        url: "/v1/operations",
+        headers: { authorization: `Bearer ${token}` },
+        payload: {
+          version: 1,
+          requestId: "ops1_hostUpdateRequest",
+          operationKey: "opk1_hostUpdateRequest",
+          issuedAt: now.toISOString(),
+          expiresAt: new Date(now.getTime() + 20_000).toISOString(),
+          operation: { kind: "release.apply", releaseId: "test-release" },
+        },
+      });
+      expect(admitted.statusCode).toBe(202);
+      const id = admitted.json().result.operationId;
+      await expect
+        .poll(async () => {
+          const response = await app.inject({
+            method: "GET",
+            url: `/v1/operations/${id}`,
+            headers: { authorization: `Bearer ${token}` },
+          });
+          return response.json().result;
+        })
+        .toMatchObject({ state: "failed", errorClass: "host_update_required" });
+      expect(f.calls).toEqual([]);
+    } finally {
+      await app.close();
+    }
+  });
+
   it("applies all four managed services when the agent and collector already match", async () => {
     const f = fixture();
     await f.effects.apply("test-release", [...ids], f.context);

@@ -23,6 +23,7 @@ import { dirname, join } from "node:path";
 import {
   OPS_MAX_BACKUP_ID_LENGTH,
   OPS_MAX_BACKUP_INVENTORY_ENTRIES,
+  OPS_PUBLIC_ERROR_MESSAGES,
   type OpsResultFor,
 } from "@openmapx/core/ops";
 import { services as coreServices } from "@openmapx/core/server";
@@ -33,7 +34,7 @@ import {
   readDescriptorAnchoredUtf8,
 } from "./descriptor-file";
 import { runContainedProcess } from "./docker-runtime";
-import type { OpsExecutionContext, OpsRuntime } from "./runtime";
+import { type OpsExecutionContext, OpsHostUpdateRequiredError, type OpsRuntime } from "./runtime";
 
 const { acquireStoreLock, acquireReleaseStoreLock, RELEASE_STORE_LOCK_NAME } = coreServices;
 type ReleaseStoreLock = coreServices.ReleaseStoreLock;
@@ -57,8 +58,6 @@ const INSPECT_RELEASE_SERVICE_IDS = [
   "ops-agent",
   "transitous-runner",
 ] as const;
-const HOST_RELEASE_UPDATE_INSTRUCTION =
-  "This release requires a host-side update of ops-agent or its backup helper. Run `pnpm openmapx compose release`, then `pnpm openmapx services update app-api app-web data-manager ops-agent transitous-runner` on the host.";
 const MAX_RELEASE_MANIFEST_BYTES = 32 * 1024;
 const MAX_RELEASE_STATE_BYTES = 4 * 1024;
 const MAX_RELEASE_TRANSACTION_BYTES = 128 * 1024;
@@ -1097,8 +1096,8 @@ export function createDefaultReleaseEffects(
       /* Unknown state must not permit a partial system update. */
     }
     if (!matches) {
-      context.emitLog("stderr", HOST_RELEASE_UPDATE_INSTRUCTION);
-      throw new Error(HOST_RELEASE_UPDATE_INSTRUCTION);
+      context.emitLog("stderr", OPS_PUBLIC_ERROR_MESSAGES.host_update_required);
+      throw new OpsHostUpdateRequiredError();
     }
   };
   interface ReleaseTransaction {

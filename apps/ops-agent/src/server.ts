@@ -39,6 +39,7 @@ import {
   createUnavailableRuntime,
   dispatchOpsOperation,
   type OpsExecutionContext,
+  OpsHostUpdateRequiredError,
   OpsNotWiredError,
   type OpsRuntime,
   type OpsTrustedClaim,
@@ -231,6 +232,8 @@ function classify(error: unknown): { errorClass: OpsErrorClass; statusCode: numb
   if (error instanceof RequestGuardError) {
     return { errorClass: error.errorClass, statusCode: error.statusCode };
   }
+  if (error instanceof OpsHostUpdateRequiredError)
+    return { errorClass: "host_update_required", statusCode: 409 };
   if (error instanceof OpsNotWiredError) return { errorClass: "not_wired", statusCode: 501 };
   return { errorClass: "runtime", statusCode: 500 };
 }

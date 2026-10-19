@@ -6,6 +6,7 @@ import {
   OPS_KIND_POLICIES,
   OPS_MAX_EVENT_BATCH,
   OPS_MAX_EVENT_MESSAGE_BYTES,
+  OPS_PUBLIC_ERROR_MESSAGES,
   OpsClient,
   OpsClientError,
   type OpsErrorClass,
@@ -36,7 +37,11 @@ export type ApiOpsClient = Pick<OpsClient, "execute" | "status" | "events" | "ca
 
 export class ApiOpsError extends Error {
   constructor(readonly errorClass: OpsErrorClass) {
-    super("Operations request failed");
+    super(
+      errorClass === "host_update_required"
+        ? OPS_PUBLIC_ERROR_MESSAGES.host_update_required
+        : "Operations request failed",
+    );
     this.name = "ApiOpsError";
   }
 }

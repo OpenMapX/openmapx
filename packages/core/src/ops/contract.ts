@@ -415,6 +415,7 @@ export type OpsErrorClass =
   | "not_found"
   | "not_wired"
   | "recovery_required"
+  | "host_update_required"
   | "runtime";
 export const OPS_PUBLIC_ERROR_MESSAGES: Record<OpsErrorClass, string> = {
   authentication: "Request authentication failed",
@@ -429,6 +430,8 @@ export const OPS_PUBLIC_ERROR_MESSAGES: Record<OpsErrorClass, string> = {
   not_found: "Operation was not found",
   not_wired: "Operation is not available",
   recovery_required: "Operation requires an explicit retry",
+  host_update_required:
+    "Host update required: this release updates the operations agent or its backup helper and cannot be installed from the admin panel. Run `pnpm openmapx compose release`, then `pnpm openmapx services update app-api app-web data-manager ops-agent transitous-runner` on the host.",
   runtime: "Operation failed",
 };
 export class OpsContractError extends Error {

@@ -43,6 +43,7 @@ const ERROR_CLASSES = new Set<OpsErrorClass>([
   "not_found",
   "not_wired",
   "recovery_required",
+  "host_update_required",
   "runtime",
 ]);
 
