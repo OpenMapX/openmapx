@@ -67,16 +67,22 @@ export class EncryptedSourceSpool {
     if (!stat.isDirectory() || stat.isSymbolicLink() || (stat.mode & 0o077) !== 0)
       throw new Error("encrypted source spool root is unsafe");
     const directory = await mkdtemp(join(parent, "case-"));
-    await writeFile(
-      join(directory, "marker.json"),
-      `${JSON.stringify({ marker: SPOOL_MARKER, pid: process.pid, processInstance: PROCESS_INSTANCE })}\n`,
-      { mode: 0o600, flag: "wx" },
-    );
-    return new EncryptedSourceSpool(directory, {
-      maxMemberBytes: options.maxMemberBytes ?? 512 * 1024 * 1024,
-      maxTotalBytes: options.maxTotalBytes ?? 2 * 1024 * 1024 * 1024,
-      maxFiles: options.maxFiles ?? 512,
-    });
+    try {
+      await writeFile(
+        join(directory, "marker.json"),
+        `${JSON.stringify({ marker: SPOOL_MARKER, pid: process.pid, processInstance: PROCESS_INSTANCE })}\n`,
+        { mode: 0o600, flag: "wx" },
+      );
+      return new EncryptedSourceSpool(directory, {
+        maxMemberBytes: options.maxMemberBytes ?? 512 * 1024 * 1024,
+        maxTotalBytes: options.maxTotalBytes ?? 2 * 1024 * 1024 * 1024,
+        maxFiles: options.maxFiles ?? 512,
+      });
+    } catch (error) {
+      // No instance exists yet to dispose this directory. Keep the original failure.
+      await rm(directory, { recursive: true, force: true }).catch(() => {});
+      throw error;
+    }
   }
 
   async write(input: {
