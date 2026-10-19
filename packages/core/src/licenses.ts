@@ -10,7 +10,15 @@
 //     alongside community integration artifacts so the page can surface the
 //     dependencies bundled into the artifact
 
-import { existsSync, readdirSync, readFileSync, realpathSync, statSync } from "node:fs";
+import {
+  closeSync,
+  existsSync,
+  fstatSync,
+  openSync,
+  readdirSync,
+  readFileSync,
+  realpathSync,
+} from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join, sep } from "node:path";
 
@@ -124,7 +132,6 @@ export function scanLicenses(opts: ScanLicensesOptions): LicenseNotice[] {
   const noticesByKey = new Map<string, LicenseNotice>();
 
   for (const rootPath of opts.rootPackageJsonPaths) {
-    if (!existsSync(rootPath)) continue;
     const pkg = readPackageJson(rootPath);
     if (!pkg) continue;
     const fromDir = dirname(rootPath);
@@ -212,13 +219,11 @@ function findEnclosingPackageJson(entry: string): string | null {
   let dir = dirname(entry);
   while (dir !== dirname(dir)) {
     const candidate = join(dir, "package.json");
-    if (existsSync(candidate)) {
-      const pkg = readPackageJson(candidate);
-      // Skip subdirectory module-type markers (e.g. `dist/cjs/package.json`
-      // containing only `{"type": "commonjs"}`) that lack a package name.
-      if (typeof pkg?.name === "string" && pkg.name.trim() !== "") {
-        return candidate;
-      }
+    const pkg = readPackageJson(candidate);
+    // Skip subdirectory module-type markers (e.g. `dist/cjs/package.json`
+    // containing only `{"type": "commonjs"}`) that lack a package name.
+    if (typeof pkg?.name === "string" && pkg.name.trim() !== "") {
+      return candidate;
     }
     dir = dirname(dir);
   }
@@ -302,13 +307,23 @@ function normalizeUrl(url: string | undefined): string | undefined {
 }
 
 function readTextFileWithinLimit(path: string, maxBytes: number): string | undefined {
+  let fd: number | undefined;
   try {
-    const stat = statSync(path);
+    fd = openSync(path, "r");
+    const stat = fstatSync(fd);
     if (!stat.isFile() || stat.size > maxBytes) return undefined;
-    const text = readFileSync(path, "utf8").trim();
+    const text = readFileSync(fd, "utf8").trim();
     return text || undefined;
   } catch {
     return undefined;
+  } finally {
+    if (fd !== undefined) {
+      try {
+        closeSync(fd);
+      } catch {
+        // Ignore close errors.
+      }
+    }
   }
 }
 
@@ -358,7 +373,6 @@ function readLicenseDirectory(
     const dirPath = join(pkgDir, dirName);
     let children: string[];
     try {
-      if (!statSync(dirPath).isDirectory()) continue;
       children = readdirSync(dirPath)
         .filter((name) => !name.startsWith(".") && !NON_TEXT_LICENSE_SUFFIX.test(name))
         .sort((a, b) => a.localeCompare(b, "en", { sensitivity: "base" }));
