@@ -108,15 +108,21 @@ its existing fallback semantics, and lets each specialist result carry exact
 match evidence and source attribution. The search bar merges both normalized
 responses before rendering.
 
-Regional and special-purpose geocoders bridge the two paths. Entur (Norway)
+Regional and special-purpose geocoders bridge the two paths. Entur
 and DB RIS (German railway stations) register with the geocoding chain _and_
 with the `search-suggestions` fan-out, so their stop places and stations appear
 in the ranked suggestion list alongside the general geocoder's results rather
 than only when every provider ahead of them in the chain returned nothing.
-Each carries a coverage box: when the map is centred outside it, the
-integration is not called at all, which keeps metered upstreams such as DB RIS
-unspent on queries anchored elsewhere. Suggestions for the same place from
-several sources are conflated into one entry that credits every contributor.
+DB RIS carries a coverage box: when the map is centred outside it, the
+integration is not called at all, which keeps its metered upstream unspent on
+queries anchored elsewhere. Entur's `boundaryCountry` defaults to `no` (Norway)
+and also supports a bounded suggestion area for `se` (Sweden); an exact empty
+setting disables country scoping, and other accepted lowercase two-letter
+countries have no suggestion coverage bound. Entur uses native Geocoder v3
+with supplier-specific credits; see the [Entur guide](../developer/entur-geocoder.md)
+for its current configuration and source-policy contract. Suggestions for the
+same place from several sources are conflated into one entry that credits every
+contributor.
 
 ## Photon
 

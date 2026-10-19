@@ -45,6 +45,10 @@ setups own client/provider lifetimes, source-policy callbacks, domain mapping an
 result publication. Each Entur integration remains independently configurable;
 there is no shared mutable runtime facade. No additional GraphQL runtime library
 is required.
+Native Geocoder v3 operations and runtime validators live in the private Entur
+client, separately from these GraphQL contracts; see the
+[Geocoder developer guide](../../../docs/docs/developer/entur-geocoder.md) and
+`pnpm check-entur-geocoder`.
 The operation selections use the current situation `affects` and
 `validityPeriods` fields from the pinned journey-planner schema.
 
