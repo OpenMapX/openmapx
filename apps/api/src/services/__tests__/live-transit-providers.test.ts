@@ -1,7 +1,13 @@
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { integrationManifestSchema, type UpstreamRuntime } from "@openmapx/integration-framework";
+import {
+  createMockIntegrationContext,
+  createNoopLogger,
+} from "@openmapx/integration-framework/testing";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { createHttpClient } from "../../integration-clients";
 import { streamedJsonResponse } from "../../test/streamed-response.js";
 
 const { risPost } = vi.hoisted(() => ({ risPost: vi.fn() }));
@@ -192,10 +198,14 @@ describe("live-transit-entur provider", () => {
     vi.unstubAllGlobals();
   });
 
+  function enturJsonResponse(data: unknown): Response {
+    return streamedJsonResponse(data, { headers: { "Content-Type": "application/json" } });
+  }
+
   it("maps realtime vehicles and local situations into the live-transit contract", async () => {
     mockFetch
       .mockResolvedValueOnce(
-        streamedJsonResponse({
+        enturJsonResponse({
           data: {
             vehicles: [
               {
@@ -230,7 +240,7 @@ describe("live-transit-entur provider", () => {
         }),
       )
       .mockResolvedValueOnce(
-        streamedJsonResponse({
+        enturJsonResponse({
           data: {
             situations: [
               {
@@ -264,18 +274,41 @@ describe("live-transit-entur provider", () => {
       );
 
     const mod = await loadEnturProviderModule();
-    const { ctx, getProvider } = createCtx("live-transit-entur", {
-      clientName: "openmapx-tests",
-      journeyPlannerEndpoint: "https://api.entur.io/journey-planner/v3/graphql",
-      vehiclesEndpoint: "https://api.entur.io/realtime/v2/vehicles/graphql",
-    });
+    const unexpectedRuntimeOperation = async (): Promise<never> => {
+      throw new Error("Unexpected upstream store operation in Entur mapping fixture");
+    };
+    const upstreamRuntime: UpstreamRuntime = {
+      admitSharedRequest: async () => ({ allowed: true, remaining: null }),
+      deferSharedRequests: unexpectedRuntimeOperation,
+      read: unexpectedRuntimeOperation,
+      write: unexpectedRuntimeOperation,
+      acquireLease: unexpectedRuntimeOperation,
+      releaseLease: unexpectedRuntimeOperation,
+      consumeQuota: unexpectedRuntimeOperation,
+    };
+    const ctx = Object.assign(
+      createMockIntegrationContext({
+        id: "live-transit-entur",
+        config: {
+          clientName: "openmapx-tests",
+          journeyPlannerEndpoint: "https://api.entur.io/journey-planner/v3/graphql",
+          vehiclesEndpoint: "https://api.entur.io/realtime/v2/vehicles/graphql",
+        },
+        manifest: integrationManifestSchema.parse(loadManifest("live-transit-entur")),
+        http: createHttpClient(createNoopLogger()),
+      }),
+      { upstreamRuntime },
+    );
 
-    mod.setup(ctx as never);
-    const provider = getProvider();
+    mod.setup(ctx);
+    const provider = ctx.registered.realtime[0];
+    if (!provider?.getVehiclePositions || !provider.getAlertsForBbox) {
+      throw new Error("Entur live provider missing required mapping capabilities");
+    }
     const vehiclesResult = await provider.getVehiclePositions([10.6, 59.8, 10.8, 60.0]);
-    const vehicles = vehiclesResult.data as Array<Record<string, unknown>>;
+    const vehicles = vehiclesResult.data;
     const alertsResult = await provider.getAlertsForBbox?.([10.7, 59.9, 10.8, 59.95]);
-    const alerts = (alertsResult?.data ?? []) as Array<Record<string, unknown>>;
+    const alerts = alertsResult?.data ?? [];
 
     expect(vehicles).toEqual([
       expect.objectContaining({
