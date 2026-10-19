@@ -20,6 +20,7 @@ COPY packages/mobility-core/package.json packages/mobility-core/
 COPY packages/ev-charge-planner/package.json packages/ev-charge-planner/
 COPY packages/motis-feed-proxy-config/package.json packages/motis-feed-proxy-config/
 COPY packages/mobility-formats/package.json packages/mobility-formats/
+COPY packages/entur-client/package.json packages/entur-client/
 COPY packages/hey-api-client-fetch/package.json packages/hey-api-client-fetch/
 COPY packages/i18n/package.json packages/i18n/
 COPY packages/cli/package.json packages/cli/
@@ -50,6 +51,7 @@ COPY packages/mobility-core/package.json packages/mobility-core/
 COPY packages/ev-charge-planner/package.json packages/ev-charge-planner/
 COPY packages/motis-feed-proxy-config/package.json packages/motis-feed-proxy-config/
 COPY packages/mobility-formats/package.json packages/mobility-formats/
+COPY packages/entur-client/package.json packages/entur-client/
 COPY packages/hey-api-client-fetch/package.json packages/hey-api-client-fetch/
 COPY packages/i18n/package.json packages/i18n/
 COPY packages/cli/package.json packages/cli/
@@ -170,6 +172,7 @@ COPY packages/hardlinks/ packages/hardlinks/
 COPY packages/mobility-core/ packages/mobility-core/
 COPY packages/ev-charge-planner/ packages/ev-charge-planner/
 COPY packages/mobility-formats/ packages/mobility-formats/
+COPY packages/entur-client/ packages/entur-client/
 COPY packages/motis-feed-proxy-config/ packages/motis-feed-proxy-config/
 COPY packages/hey-api-client-fetch/ packages/hey-api-client-fetch/
 COPY packages/air-quality/ packages/air-quality/
@@ -187,6 +190,7 @@ COPY --from=prod-deps /app/packages/db-schema/node_modules ./packages/db-schema/
 COPY --from=prod-deps /app/packages/mobility-core/node_modules ./packages/mobility-core/node_modules
 COPY --from=prod-deps /app/packages/ev-charge-planner/node_modules ./packages/ev-charge-planner/node_modules
 COPY --from=prod-deps /app/packages/mobility-formats/node_modules ./packages/mobility-formats/node_modules
+COPY --from=prod-deps /app/packages/entur-client/node_modules ./packages/entur-client/node_modules
 COPY --from=prod-deps /app/packages/air-quality/node_modules ./packages/air-quality/node_modules
 COPY --from=prod-deps /app/packages/integration-framework/node_modules ./packages/integration-framework/node_modules
 COPY --from=prod-deps /app/packages/mangrove-client/node_modules ./packages/mangrove-client/node_modules
