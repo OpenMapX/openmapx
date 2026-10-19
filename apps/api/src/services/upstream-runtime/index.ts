@@ -7,6 +7,7 @@ import type {
   UpstreamRuntime,
 } from "@openmapx/integration-framework";
 import { CONSUME_QUOTA_SCRIPT, RELEASE_LEASE_SCRIPT } from "./scripts";
+import { createSharedAdmission } from "./shared-admission";
 
 export interface UpstreamRedisClient {
   get(key: string): Promise<string | null>;
@@ -68,12 +69,13 @@ function isCacheRecord(value: unknown): value is CacheRecord<unknown> {
 export function createRedisUpstreamRuntime(
   redis: UpstreamRedisClient,
   options: RuntimeOptions,
-): UpstreamRuntime {
+): UpstreamRuntime & ReturnType<typeof createSharedAdmission> {
   const now = options.now ?? Date.now;
   const prefix = `upstream:${options.namespace}:${options.integrationId}`;
   const keyFor = (kind: string, value: string) => `${prefix}:${kind}:${digest(value)}`;
 
   return {
+    ...createSharedAdmission(redis, options.namespace),
     async read<T>(key: string, at = now()): Promise<UpstreamCacheRead<T>> {
       const redisKey = keyFor("cache", key);
       let raw: string | null;

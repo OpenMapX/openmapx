@@ -42,3 +42,56 @@ return cjson.encode({
   retryAt = denied and retryAt or cjson.null
 })
 `;
+
+export const SHARED_REQUEST_SCRIPT = `
+-- openmapx-shared-request
+local time = redis.call('TIME')
+local now = tonumber(time[1]) * 1000 + math.floor(tonumber(time[2]) / 1000)
+local key = KEYS[1]
+local cooldown = tonumber(redis.call('HGET', key, 'cooldown') or '0')
+local function retain(ttl)
+  local existing = redis.call('PTTL', key)
+  redis.call('PEXPIRE', key, math.max(existing, ttl))
+end
+local function deny(reason, untilAt)
+  return cjson.encode({allowed = false, reason = reason, retryAfterMs = untilAt - now})
+end
+
+if ARGV[1] == 'defer' then
+  local delay = tonumber(ARGV[2])
+  if now + delay > 9007199254740991 then return redis.error_reply('Unsafe delay') end
+  local untilAt = math.max(cooldown, now + delay)
+  if untilAt > now then
+    redis.call('HSET', key, 'cooldown', untilAt)
+    retain(untilAt - now)
+  end
+  return 1
+end
+
+if cooldown > now then return deny('cooldown', cooldown) end
+if ARGV[2] == '' then
+  return cjson.encode({allowed = true, remaining = cjson.null})
+end
+local field = ARGV[2]
+local limit = tonumber(ARGV[3])
+local duration = tonumber(ARGV[4])
+local interval = tonumber(ARGV[5])
+if now + math.max(duration, interval) > 9007199254740991 then
+  return redis.error_reply('Unsafe policy duration')
+end
+local start = tonumber(redis.call('HGET', key, field .. ':start') or now)
+local count = tonumber(redis.call('HGET', key, field .. ':count') or '0')
+local nextAt = tonumber(redis.call('HGET', key, field .. ':next') or '0')
+if now >= start + duration then
+  start = now
+  count = 0
+end
+if count >= limit then return deny('quota', start + duration) end
+if nextAt > now then return deny('spacing', nextAt) end
+redis.call('HSET', key,
+  field .. ':start', start,
+  field .. ':count', count + 1,
+  field .. ':next', now + interval)
+retain(math.max(start + duration - now, interval, cooldown - now))
+return cjson.encode({allowed = true, remaining = limit - count - 1})
+`;
