@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, createHmac } from "node:crypto";
 import { USER_AGENT_TRANSIT } from "@openmapx/core";
 import type {
   CacheClient,
@@ -109,8 +109,16 @@ export function createSwissTransitClient(options: SwissClientOptions) {
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([id, receipts]) => [id, snapshotContributors(receipts)]),
   );
-  const identity = hash({ config: { ...config, log: undefined }, contributors });
-  const credentialIdentity = hash(config.apiKey ?? "");
+  // Use the opaque provider token as the key for a purpose-specific Redis identity.
+  const credentialIdentity = config.apiKey
+    ? createHmac("sha256", config.apiKey)
+        .update("OpenMapX:swiss-transit:credential-identity:v1")
+        .digest("hex")
+    : "unconfigured";
+  const publicConfig = Object.fromEntries(
+    Object.keys(DEFAULTS).map((key) => [key, config[key as keyof typeof DEFAULTS]]),
+  );
+  const identity = hash({ config: publicConfig, credentialIdentity, contributors });
   const lifetime = new AbortController();
   const isSwissTransitConfigured = () => Boolean(config.apiKey);
   const sourceId = (source: string) => `opentransportdata-ch-${source}`;
