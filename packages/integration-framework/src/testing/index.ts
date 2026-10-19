@@ -20,6 +20,7 @@ import type {
   RouteHandler,
   RouteOptions,
   SecretsClient,
+  StreamHttpResponse,
 } from "../context.js";
 import type { AirQualityProvider } from "../contracts/air-quality-provider.js";
 import type { BorderCrossingProvider } from "../contracts/border-crossing-provider.js";
@@ -98,7 +99,15 @@ export function fakeMobilityHttpTransport(
  */
 
 export interface FakeHttpRequest {
-  method: "get" | "post" | "getResponse" | "postResponse" | "getBytes";
+  method:
+    | "get"
+    | "post"
+    | "getResponse"
+    | "postResponse"
+    | "getBytes"
+    | "getText"
+    | "postText"
+    | "getStream";
   url: string;
   body?: unknown;
   options?: HttpClientOptions | ResponseOptions;
@@ -190,6 +199,40 @@ export function fakeHttpClient(responder: FakeHttpResponder = {}): FakeHttpClien
         );
       }
       return Promise.resolve({ status: 200, headers: {}, bytes: value });
+    },
+    async getText(url: string, options: ResponseOptions): Promise<HttpResponse<string>> {
+      const req: FakeHttpRequest = { method: "getText", url, options };
+      calls.push(req);
+      return asHttpResponse<string>(await resolve(req));
+    },
+    async postText(
+      url: string,
+      body: string,
+      options: ResponseOptions,
+    ): Promise<HttpResponse<string>> {
+      const req: FakeHttpRequest = { method: "postText", url, body, options };
+      calls.push(req);
+      return asHttpResponse<string>(await resolve(req));
+    },
+    async getStream(url: string, options: ResponseOptions): Promise<StreamHttpResponse> {
+      const req: FakeHttpRequest = { method: "getStream", url, options };
+      calls.push(req);
+      const value = await resolve(req);
+      if (
+        value &&
+        typeof value === "object" &&
+        "status" in value &&
+        "headers" in value &&
+        "stream" in value
+      ) {
+        return value as StreamHttpResponse;
+      }
+      if (!(value instanceof ReadableStream)) {
+        throw new TypeError(
+          "fakeHttpClient: getStream response must be ReadableStream or StreamHttpResponse",
+        );
+      }
+      return { status: 200, headers: {}, stream: value };
     },
   };
 }

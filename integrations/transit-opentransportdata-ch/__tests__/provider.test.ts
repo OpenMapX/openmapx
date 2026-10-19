@@ -1,7 +1,9 @@
+import type { Attribution } from "@openmapx/mobility-core/attribution";
 import { contributorsForField } from "@openmapx/mobility-core/contributors";
 import { encodeGtfsRtFeed } from "@openmapx/mobility-formats";
 import { strToU8, zipSync } from "fflate";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { allowQuota, memoryCache, testHttp } from "./helpers.js";
 
 const SERVICE_POINTS_PAGE =
   "https://data.opentransportdata.swiss/en/dataset/service-points-actual-date";
@@ -13,15 +15,19 @@ const CONTACT_POINT_PAGE = "https://data.opentransportdata.swiss/en/dataset/cont
 const TOILET_PAGE = "https://data.opentransportdata.swiss/en/dataset/toilet-v2";
 const PARKING_LOT_PAGE = "https://data.opentransportdata.swiss/en/dataset/parking-lot-v2";
 const RELATION_PAGE = "https://data.opentransportdata.swiss/en/dataset/relation-v2";
-const SERVICE_POINTS_ZIP = "https://files.test/service-points.csv.zip";
-const TRAFFIC_POINTS_CSV_URL = "https://files.test/traffic-points.csv";
-const STOP_POINT_CSV_URL = "https://files.test/stop-point.csv";
-const PLATFORM_CSV_URL = "https://files.test/platform.csv";
-const REFERENCE_POINT_CSV_URL = "https://files.test/reference-point.csv";
-const CONTACT_POINT_CSV_URL = "https://files.test/contact-point.csv";
-const TOILET_CSV_URL = "https://files.test/toilet.csv";
-const PARKING_LOT_CSV_URL = "https://files.test/parking-lot.csv";
-const RELATION_CSV_URL = "https://files.test/relation.csv";
+const SERVICE_POINTS_ZIP =
+  "https://data.opentransportdata.swiss/test-fixtures/service-points.csv.zip";
+const TRAFFIC_POINTS_CSV_URL =
+  "https://data.opentransportdata.swiss/test-fixtures/traffic-points.csv";
+const STOP_POINT_CSV_URL = "https://data.opentransportdata.swiss/test-fixtures/stop-point.csv";
+const PLATFORM_CSV_URL = "https://data.opentransportdata.swiss/test-fixtures/platform.csv";
+const REFERENCE_POINT_CSV_URL =
+  "https://data.opentransportdata.swiss/test-fixtures/reference-point.csv";
+const CONTACT_POINT_CSV_URL =
+  "https://data.opentransportdata.swiss/test-fixtures/contact-point.csv";
+const TOILET_CSV_URL = "https://data.opentransportdata.swiss/test-fixtures/toilet.csv";
+const PARKING_LOT_CSV_URL = "https://data.opentransportdata.swiss/test-fixtures/parking-lot.csv";
+const RELATION_CSV_URL = "https://data.opentransportdata.swiss/test-fixtures/relation.csv";
 const GO_REALTIME_URL =
   "https://data.opentransportdata.swiss/dataset/27aba9bd-59ed-4d7c-bc71-a3813d1d1799/resource/83b8b8d0-e345-453b-857e-1192d48c4c64/download/go-realtime.csv";
 const GO_SIRI_SX_URL =
@@ -681,28 +687,40 @@ beforeEach(() => {
   vi.stubGlobal("fetch", fetchMock);
 });
 
-afterEach(() => {
+afterEach(async () => {
+  await Promise.all(disposables.splice(0).map((item) => item.dispose()));
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
 
-async function loadProvider() {
-  vi.resetModules();
-  const provider = await import("../provider.js");
-  provider.setOpenTransportDataChConfig(
-    {
-      apiKey: "test-key",
-      formationEndpoint: FORMATION_ENDPOINT,
-      gtfsRtEndpoint: GTFS_RT_ENDPOINT,
-      gtfsSaEndpoint: GTFS_SA_ENDPOINT,
-      ojpEndpoint: OJP_ENDPOINT,
-      ojpFareEndpoint: OJP_FARE_ENDPOINT,
-      requestLanguage: "de",
-      requestorRef: "OpenMapX-Tests",
-      siriSxEndpoint: SIRI_SX_ENDPOINT,
-      siriSxUnplannedEndpoint: SIRI_SX_UNPLANNED_ENDPOINT,
-    },
-    Object.fromEntries(
+const disposables: Array<{ dispose(): Promise<void> }> = [];
+async function loadProvider(
+  overrides: Readonly<Record<string, readonly Attribution[]>> = {},
+  options: {
+    isSourceAllowed?: (sourceId: string) => Promise<boolean>;
+    cache?: ReturnType<typeof memoryCache>;
+    config?: { requestLanguage?: string };
+  } = {},
+) {
+  const { isSourceAllowed } = options;
+  const { createOpenTransportDataChProvider } = await import("../provider.js");
+  const { createSwissTransitClient } = await import("../client.js");
+  const { createSwissDatasets } = await import("../datasets.js");
+  const config = {
+    apiKey: "test-key",
+    formationEndpoint: FORMATION_ENDPOINT,
+    gtfsRtEndpoint: GTFS_RT_ENDPOINT,
+    gtfsSaEndpoint: GTFS_SA_ENDPOINT,
+    ojpEndpoint: OJP_ENDPOINT,
+    ojpFareEndpoint: OJP_FARE_ENDPOINT,
+    requestLanguage: "de",
+    requestorRef: "OpenMapX-Tests",
+    siriSxEndpoint: SIRI_SX_ENDPOINT,
+    siriSxUnplannedEndpoint: SIRI_SX_UNPLANNED_ENDPOINT,
+    ...options.config,
+  };
+  const contributors = {
+    ...Object.fromEntries(
       [
         "ojp",
         "master-data",
@@ -720,8 +738,29 @@ async function loadProvider() {
         [{ sourceId: `opentransportdata-ch-${id}`, name: id }],
       ]),
     ),
-  );
-  return provider;
+    ...overrides,
+  };
+  const http = testHttp();
+  const cacheHandle = options.cache ?? memoryCache();
+  const cache = cacheHandle.cache;
+  const client = createSwissTransitClient({
+    config,
+    contributors,
+    cache,
+    http,
+    upstreamRuntime: allowQuota(),
+    isSourceAllowed,
+  });
+  const datasets = createSwissDatasets({ http, cache, contributors, isSourceAllowed });
+  const provider = createOpenTransportDataChProvider({
+    client,
+    datasets,
+    cache,
+    contributors,
+    isSourceAllowed,
+  });
+  disposables.push(provider, client, datasets);
+  return { ...provider, testDatasets: datasets, testCache: cacheHandle };
 }
 
 describe("transit-opentransportdata-ch provider", () => {
@@ -1165,7 +1204,6 @@ it("credits retained GTFS-RT missing times but excludes a no-op update", async (
 });
 
 it("captures secondary journey forecast fields and keeps the archive's original receipt across config changes", async () => {
-  const provider = await loadProvider();
   const defaultImpl = fetchMock.getMockImplementation();
   fetchMock.mockImplementation(async (input: string | URL, init?: RequestInit) => {
     if (String(input) === OJP_ENDPOINT && String(init?.body ?? "").includes("OJPTripInfoRequest"))
@@ -1178,8 +1216,8 @@ it("captures secondary journey forecast fields and keeps the archive's original 
     name: "Original forecast",
     notes: "Original notice",
   };
-  const datasets = await import("../datasets.js");
-  datasets.setSwissDatasetContributors({ [original.sourceId]: [original] });
+  const provider = await loadProvider({ [original.sourceId]: [original] });
+  const datasets = provider.testDatasets;
   const journey = await provider.getVehicleJourney("otdch:2025-02-03|ojp-92-12-_-j25-1-419-TA");
   expect(journey?.serviceInfo?.occupancySource).toBe("opentransportdata.swiss/occupancy-forecast");
   expect(journey?.serviceInfo?.contributors).toContainEqual(original);
@@ -1189,10 +1227,214 @@ it("captures secondary journey forecast fields and keeps the archive's original 
   ).not.toContain(original.sourceId);
   const cached = await datasets.loadSwissOccupancyForecastDataset("2025-02-03", "11");
   original.name = "Changed registry";
-  datasets.setSwissDatasetContributors({ [original.sourceId]: [original] });
   expect(cached?.contributors).toEqual([{ ...original, name: "Original forecast" }]);
   const again = await provider.getVehicleJourney("otdch:2025-02-03|ojp-92-12-_-j25-1-419-TA");
   expect(contributorsForField(again?.serviceInfo ?? {}, "occupancy")).toEqual([
     { ...original, name: "Original forecast" },
   ]);
+});
+
+it("keeps deferred A mapping receipts separate from B and fences observed routes after invalidation", async () => {
+  const sourceId = "opentransportdata-ch-ojp";
+  const a = { sourceId, name: "Generation A" };
+  const b = { sourceId, name: "Generation B" };
+  const first = await loadProvider({ [sourceId]: [a] });
+  const original = fetchMock.getMockImplementation();
+  let release!: () => void;
+  const hold = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let waiting = false;
+  let held = false;
+  fetchMock.mockImplementation(async (input: string | URL, init?: RequestInit) => {
+    if (
+      !held &&
+      String(input) === OJP_ENDPOINT &&
+      String(init?.body).includes("OJPStopEventRequest")
+    ) {
+      held = true;
+      waiting = true;
+      await hold;
+    }
+    if (!original) throw new Error("missing fixture");
+    return original(input, init);
+  });
+  const pending = first.getDepartures("otdch:8507000", 30);
+  await vi.waitFor(() => expect(waiting).toBe(true));
+  const second = await loadProvider({ [sourceId]: [b] });
+  const fresh = await second.getDepartures("otdch:8507000", 30);
+  expect(fresh[0]?.contributors).toContainEqual(b);
+  first.testCache.invalidate();
+  release();
+  expect((await pending)[0]?.contributors).toContainEqual(a);
+  expect(await first.getRoute("otdch:ojp:91006:H")).toBeNull();
+  expect((await second.getRoute("otdch:ojp:91006:H"))?.contributors).toContainEqual(b);
+});
+
+it("rejects cached observations whose acquired source is now disallowed", async () => {
+  let allowed = true;
+  const provider = await loadProvider(
+    {},
+    { isSourceAllowed: async (id) => id !== "opentransportdata-ch-ojp" || allowed },
+  );
+  await provider.getDepartures("otdch:8507000", 30);
+  expect(await provider.getRoute("otdch:ojp:91006:H")).not.toBeNull();
+  allowed = false;
+  await expect(provider.getRoute("otdch:ojp:91006:H")).rejects.toThrow(/policy/);
+});
+
+it("shares route observations across matching replicas with original expiry and receipt isolation", async () => {
+  const shared = memoryCache();
+  const first = await loadProvider({}, { cache: shared });
+  await first.getDepartures("otdch:8507000", 30);
+  const expected = await first.getRoute("otdch:ojp:91006:H");
+  expect(expected).not.toBeNull();
+  const observation = [...shared.store.entries()].find(([key]) => key.includes(":observed:"));
+  if (!observation) throw new Error("shared observation missing");
+  const at = (observation[1].value as { expiresAt: number }).expiresAt;
+  const second = await loadProvider({}, { cache: shared });
+  const before = fetchMock.mock.calls.length;
+  vi.spyOn(Date, "now").mockReturnValue(at - 1);
+  expect(await second.getRoute("otdch:ojp:91006:H")).toEqual(expected);
+  expect(fetchMock.mock.calls.length).toBe(before);
+  vi.spyOn(Date, "now").mockReturnValue(at + 1);
+  expect(await second.getRoute("otdch:ojp:91006:H")).toBeNull();
+  vi.spyOn(Date, "now").mockReturnValue(at - 1);
+  const otherReceipt = await loadProvider(
+    {
+      "opentransportdata-ch-ojp": [
+        { sourceId: "opentransportdata-ch-ojp", name: "Changed receipt" },
+      ],
+    },
+    { cache: shared },
+  );
+  expect(await otherReceipt.getRoute("otdch:ojp:91006:H")).toBeNull();
+  const otherConfig = await loadProvider({}, { cache: shared, config: { requestLanguage: "fr" } });
+  expect(await otherConfig.getRoute("otdch:ojp:91006:H")).toBeNull();
+});
+
+it("does not return or retain a shared observation that resolves after invalidation", async () => {
+  const shared = memoryCache();
+  const first = await loadProvider({}, { cache: shared });
+  await first.getDepartures("otdch:8507000", 30);
+  const second = await loadProvider({}, { cache: shared });
+  const original = shared.cache.get.bind(shared.cache);
+  let release!: () => void;
+  const hold = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let waiting = false;
+  vi.spyOn(shared.cache, "get").mockImplementation(async (key) => {
+    const value = await original(key);
+    if (key.includes(":observed:")) {
+      waiting = true;
+      await hold;
+    }
+    return value;
+  });
+  const pending = second.getRoute("otdch:ojp:91006:H");
+  await vi.waitFor(() => expect(waiting).toBe(true));
+  shared.invalidate();
+  release();
+  expect(await pending).toBeNull();
+  expect(await second.getRoute("otdch:ojp:91006:H")).toBeNull();
+});
+
+it("captures the local observation fence before waiting for the shared writer", async () => {
+  const shared = memoryCache();
+  const capture = shared.cache.captureWriter?.bind(shared.cache);
+  if (!capture) throw new Error("fixture writer missing");
+  let waiting = false;
+  let release!: () => void;
+  const hold = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  vi.spyOn(shared.cache, "captureWriter").mockImplementationOnce(async () => {
+    const writer = await capture();
+    waiting = true;
+    await hold;
+    return writer;
+  });
+  const provider = await loadProvider({}, { cache: shared });
+  const pending = provider.getDepartures("otdch:8507000", 30);
+  await vi.waitFor(() => expect(waiting).toBe(true));
+  shared.invalidate();
+  release();
+  expect((await pending).length).toBeGreaterThan(0);
+  expect([...shared.store.keys()].some((key) => key.includes(":observed:"))).toBe(false);
+  expect(await provider.getRoute("otdch:ojp:91006:H")).toBeNull();
+});
+
+it("keeps observations local after a writer capture failure", async () => {
+  const shared = memoryCache();
+  vi.spyOn(shared.cache, "captureWriter").mockRejectedValue(new Error("Redis unavailable"));
+  const provider = await loadProvider({}, { cache: shared });
+  await provider.getDepartures("otdch:8507000", 30);
+  expect(await provider.getRoute("otdch:ojp:91006:H")).not.toBeNull();
+  expect([...shared.store.keys()].some((key) => key.includes(":observed:"))).toBe(false);
+});
+
+it("merges concurrent first observations after deferred shared misses", async () => {
+  const shared = memoryCache();
+  const provider = await loadProvider({}, { cache: shared });
+  const original = shared.cache.get.bind(shared.cache);
+  let release!: () => void;
+  const hold = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let misses = 0;
+  vi.spyOn(shared.cache, "get").mockImplementation(async (key) => {
+    const value = await original(key);
+    if (key.endsWith(":ojp:91006:H") && misses < 2) {
+      misses++;
+      await hold;
+    }
+    return value;
+  });
+  const first = provider.getDepartures("otdch:8507000", 30);
+  const second = provider.getDepartures("otdch:8507100", 30);
+  await vi.waitFor(() => expect(misses).toBe(2));
+  release();
+  await Promise.all([first, second]);
+  const entry = [...shared.store.entries()].find(([key]) => key.endsWith(":ojp:91006:H"));
+  expect((entry?.[1].value as { hintStopIds: string[] }).hintStopIds).toEqual(
+    expect.arrayContaining(["otdch:8507000", "otdch:8507100"]),
+  );
+});
+
+it("does not let a delayed shared observation overwrite newer local data", async () => {
+  const shared = memoryCache();
+  const first = await loadProvider({}, { cache: shared });
+  await first.getDepartures("otdch:8507000", 30);
+  const second = await loadProvider({}, { cache: shared });
+  const get = shared.cache.get.bind(shared.cache);
+  let release!: () => void;
+  const hold = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let held = false;
+  vi.spyOn(shared.cache, "get").mockImplementation(async (key) => {
+    const value = await get(key);
+    if (key.endsWith(":ojp:91006:H") && !held) {
+      held = true;
+      await hold;
+    }
+    return value;
+  });
+  const pending = second.getRoute("otdch:ojp:91006:H");
+  await vi.waitFor(() => expect(held).toBe(true));
+  const fetch = fetchMock.getMockImplementation();
+  fetchMock.mockImplementation(async (input: string | URL, init?: RequestInit) => {
+    if (!fetch) throw new Error("missing fixture");
+    const response = await fetch(input, init);
+    if (String(input) === OJP_ENDPOINT && String(init?.body).includes("OJPStopEventRequest"))
+      return new Response(
+        (await response.text()).replaceAll("<Text>IC6</Text>", "<Text>IC99</Text>"),
+      );
+    return response;
+  });
+  await second.getDepartures("otdch:8507100", 30);
+  release();
+  expect((await pending)?.shortName).toBe("IC99");
+  expect((await second.getRoute("otdch:ojp:91006:H"))?.shortName).toBe("IC99");
 });

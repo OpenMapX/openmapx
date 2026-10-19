@@ -43,6 +43,7 @@ export type {
   RouteHandler,
   RouteOptions,
   SecretsClient,
+  StreamHttpResponse,
   TransferSafeguard,
   TransitReachabilityMetrics,
 } from "./context";

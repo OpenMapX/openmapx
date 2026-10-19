@@ -5,6 +5,7 @@ import {
 import { createNoopLogger } from "@openmapx/integration-framework/testing";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { enturGeocodingService } from "../../../../integrations/geocoding-entur/provider.js";
+import { createSwissTransitClient } from "../../../../integrations/transit-opentransportdata-ch/client.js";
 
 const { redisMock, sharedValues, sharedTtls, clearLeases } = vi.hoisted(() => {
   const sharedValues = new Map<string, string>();
@@ -563,4 +564,78 @@ describe("without Redis", () => {
       vi.resetModules();
     }
   });
+});
+
+describe("acquisition-scoped cache writers", () => {
+  it("rejects derived writes from before a clear and retains a fixed integration scope", async () => {
+    const cache = createCacheClient("derived");
+    const writer = await cache.captureWriter?.();
+    if (!writer) throw new Error("managed cache writer missing");
+    await writer.set("route", "before", 60);
+    expect(await cache.get("route")).toBe("before");
+    await cacheInvalidation.invalidate(["int:derived:*"], async () => {
+      sharedValues.delete("int:derived:route");
+    });
+    await writer.set("route", "late", 60);
+    expect(await cache.get("route")).toBeNull();
+    const current = await cache.captureWriter?.();
+    await current?.set("route", "fresh", 30);
+    expect(await cache.get("route")).toBe("fresh");
+    expect(sharedTtls.get("int:derived:route")).toBe(30);
+  });
+
+  it("never recaptures authorization after a failed epoch capture", async () => {
+    const cache = createCacheClient("failed-capture");
+    redisMock.get.mockRejectedValueOnce(new Error("Redis unavailable"));
+    const writer = await cache.captureWriter?.();
+    if (!writer) throw new Error("managed cache writer missing");
+    await writer.set("route", "late", 60);
+    expect(await cache.get("route")).toBeNull();
+    expect(redisMock.eval).not.toHaveBeenCalled();
+  });
+});
+
+it("retiring Swiss A leaves an identical shared acquisition alive for Swiss B", async () => {
+  const gate = deferred();
+  const quota = vi.fn(async () => ({ allowed: true, remaining: {}, retryAt: null }));
+  const runtime = {
+    read: async () => ({ state: "miss" as const }),
+    write: async () => {},
+    acquireLease: async () => ({ token: "test" }),
+    releaseLease: async () => {},
+    consumeQuota: quota,
+  };
+  const cache = createCacheClient("swiss-shared-retirement");
+  const http = createHttpClient(createNoopLogger());
+  const options = {
+    config: { apiKey: "same-key" },
+    contributors: {},
+    http,
+    cache,
+    upstreamRuntime: runtime,
+  };
+  const first = createSwissTransitClient(options);
+  const second = createSwissTransitClient(options);
+  let acquisitionSignal: AbortSignal | null | undefined;
+  const fetch = vi.fn(async (_url: string, init?: RequestInit) => {
+    acquisitionSignal = init?.signal;
+    await gate.promise;
+    return Response.json({ generation: "shared" });
+  });
+  vi.stubGlobal("fetch", fetch);
+  const run = vi.spyOn(BoundedSingleFlight.prototype, "run");
+  const request = { evu: "SBBP", operationDate: "2025-02-03", trainNumber: "419" };
+  const pendingA = first.fetchSwissFormationJourney(request);
+  const rejectedA = expect(pendingA).rejects.toThrow(/retired/);
+  await vi.waitFor(() => expect(fetch).toHaveBeenCalledOnce());
+  const pendingB = second.fetchSwissFormationJourney(request);
+  await vi.waitFor(() => expect(run).toHaveBeenCalledTimes(2));
+  await first.dispose();
+  await rejectedA;
+  expect(acquisitionSignal?.aborted).toBe(false);
+  gate.resolve();
+  expect(await pendingB).toEqual({ generation: "shared" });
+  expect(fetch).toHaveBeenCalledOnce();
+  expect(quota).toHaveBeenCalledOnce();
+  await second.dispose();
 });
