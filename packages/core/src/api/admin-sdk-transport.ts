@@ -9,6 +9,7 @@ import {
 import { activityAdminOperations } from "./contracts/activity-admin";
 import type { AdminOperation } from "./contracts/admin";
 import { dataManagerAdminOperations } from "./contracts/data-manager-admin";
+import { integrationAdminOperations } from "./contracts/integration-admin";
 import { ApiContractError } from "./sdk-transport";
 
 export type AdminSdkRequestOptions = Omit<RequestInit, "signal" | "credentials"> &
@@ -39,7 +40,11 @@ interface AdminResponse {
   headers: Headers;
   data: unknown;
 }
-const operations = { ...dataManagerAdminOperations, ...activityAdminOperations };
+const operations = {
+  ...dataManagerAdminOperations,
+  ...activityAdminOperations,
+  ...integrationAdminOperations,
+};
 type OperationId = keyof typeof operations;
 function positive(value: number | undefined, fallback: number): number {
   const result = value ?? fallback;
