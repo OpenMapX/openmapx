@@ -8,6 +8,7 @@ import { en } from "@openmapx/i18n";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import * as savedPlaceActions from "@/lib/openSavedPlace";
 
 const LEGACY_CUSTOM_LIST = "$trip";
 const state = vi.hoisted(() => ({
@@ -15,10 +16,13 @@ const state = vi.hoisted(() => ({
   name: "",
   update: vi.fn(),
   remove: vi.fn(),
+  updatePlace: vi.fn(),
 }));
 vi.mock("@emoji-mart/react", () => ({ default: () => null }));
 vi.mock("@/integration-api/map/MapContext", () => ({ useMap: () => ({ flyTo: vi.fn() }) }));
-vi.mock("./PlaceThumbnail", () => ({ PlaceThumbnail: () => null }));
+vi.mock("@openmapx/integration-framework/react", () => ({
+  useIntegrationRegistry: () => ({ findDataSource: () => undefined }),
+}));
 vi.mock("./ShareListDialog", () => ({ ShareListDialog: () => null }));
 vi.mock("@openmapx/core", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@openmapx/core")>()),
@@ -30,7 +34,7 @@ vi.mock("@openmapx/core", async (importOriginal) => ({
   useSavedListPlaces: () => ({ data: state.places, isLoading: false }),
   useUpdateList: () => ({ mutate: state.update }),
   useDeleteList: () => ({ mutate: state.remove }),
-  useUpdatePlace: () => ({ mutate: vi.fn() }),
+  useUpdatePlace: () => ({ mutate: state.updatePlace }),
 }));
 
 const { SavedListDetail } = await import("./SavedListDetail");
@@ -47,6 +51,7 @@ beforeEach(() => {
   state.places = [];
   state.update.mockClear();
   state.remove.mockClear();
+  state.updatePlace.mockClear();
   useSavedPlacesStore.getState().selectList("list-1");
 });
 
@@ -137,4 +142,44 @@ it("collects mounted saved rows into one footer and removes replaced supplier re
   );
   expect(screen.queryByText("Shared saved supplier")).not.toBeInTheDocument();
   expect(screen.getByText("New saved supplier")).toBeInTheDocument();
+});
+
+it("adds and edits notes without opening the place, and opens rows through openSavedPlace", () => {
+  const place: SavedPlace = {
+    id: "note-place",
+    listId: "list-1",
+    name: "Public landmark",
+    address: null,
+    placeId: null,
+    note: null,
+    sortOrder: 0,
+    lat: 51,
+    lng: 8,
+    createdAt: "2026-10-20T00:00:00Z",
+  };
+  state.places = [place];
+  const open = vi.spyOn(savedPlaceActions, "openSavedPlace");
+  const view = renderDetail();
+  fireEvent.click(screen.getByRole("button", { name: "+ Note" }));
+  expect(open).not.toHaveBeenCalled();
+  const note = screen.getByPlaceholderText("Note");
+  fireEvent.change(note, { target: { value: "Visit in daylight" } });
+  fireEvent.keyDown(note, { key: "Enter" });
+  expect(state.updatePlace).toHaveBeenCalledWith(
+    { id: "note-place", note: "Visit in daylight" },
+    expect.objectContaining({ onSuccess: expect.any(Function) }),
+  );
+  fireEvent.keyDown(note, { key: "Escape" });
+  state.places = [{ ...place, note: "Visit in daylight" }];
+  view.rerender(
+    <NextIntlClientProvider locale="en" messages={en} timeZone="Europe/Berlin">
+      <SavedListDetail />
+    </NextIntlClientProvider>,
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Visit in daylight" }));
+  expect(screen.getByPlaceholderText("Note")).toHaveValue("Visit in daylight");
+  expect(open).not.toHaveBeenCalled();
+  fireEvent.keyDown(screen.getByPlaceholderText("Note"), { key: "Escape" });
+  fireEvent.click(screen.getByRole("button", { name: /Public landmark/ }));
+  expect(open).toHaveBeenCalledWith(state.places[0], expect.any(Function));
 });
