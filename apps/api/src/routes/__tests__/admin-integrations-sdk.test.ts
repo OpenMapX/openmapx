@@ -3,7 +3,10 @@ import { integrationAdminOperations } from "@openmapx/core/api-contracts";
 import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 import Fastify from "fastify";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { integrationConfig } from "../../db/integration-config-schema";
 import { makeRateLimitTierHook } from "../../server-wiring";
+import { integrationConfigDbFixture } from "../../services/__tests__/helpers/integration-config-db";
+import { TrustedConfigurationApplyError } from "../../services/trusted-config-outcome";
 import { makeCsrfGuardHook } from "../../utils/csrf";
 import { healthCheckSweepLimit, RateLimiter } from "../../utils/rate-limit";
 import { installAdminRouteMocks } from "./admin-test-helpers";
@@ -20,14 +23,8 @@ vi.mock("../../services/job-runner.js", () => ({
   },
 }));
 
-const mockPersistImport = vi.fn().mockImplementation(async () => ({
-  previous: [],
-  owns: async () => true,
-  restore: async () => true,
-}));
-vi.mock("../../services/integration-config-store", () => ({
-  persistIntegrationImport: (...args: unknown[]) => mockPersistImport(...args),
-}));
+const configDb = integrationConfigDbFixture();
+const mockApply = vi.fn().mockResolvedValue({ revisionId: "revision_1" });
 vi.mock("../../services/trusted-config-operations.js", () => ({
   integrationSchemas: () =>
     new Map([["geocoding-maptiler", MOCK_INTEGRATION.manifest.configSchema]]),
@@ -42,7 +39,7 @@ vi.mock("../../services/trusted-config-operations.js", () => ({
       registryUpdateFailed: false,
     },
   }),
-  applyTrustedConfiguration: vi.fn().mockResolvedValue({ revisionId: "revision_1" }),
+  applyTrustedConfiguration: (...args: unknown[]) => mockApply(...args),
 }));
 
 const mockListActivityJobs = vi.fn().mockResolvedValue({ jobs: [], total: 0 });
@@ -59,7 +56,7 @@ const mockDbDelete = vi.fn(() => ({ where: vi.fn().mockResolvedValue(undefined) 
 
 function makeSelectChain(resolveWith: unknown[] = []) {
   const chain: Record<string, unknown> = {
-    from: vi.fn().mockReturnThis(),
+    from: vi.fn((table) => (table === integrationConfig ? configDb.db.select().from() : chain)),
     where: vi.fn().mockReturnThis(),
     limit: vi.fn().mockReturnThis(),
     orderBy: vi.fn().mockReturnThis(),
@@ -82,6 +79,7 @@ mockDbInsert.mockReturnValue(insertChain);
 
 vi.mock("../../db/index.js", () => ({
   db: {
+    transaction: configDb.db.transaction,
     delete: () => mockDbDelete(),
     select: (...args: unknown[]) => mockDbSelect(...args),
     insert: (...args: unknown[]) => mockDbInsert(...args),
@@ -109,7 +107,7 @@ vi.mock("../../db/schema.js", () => ({
     error: "error",
   },
   adminJobLog: { jobId: "jobId", seq: "seq" },
-  integrationConfig: { id: "id", integrationId: "integrationId", config: "config" },
+  integrationConfig,
 }));
 
 // Integration host
@@ -223,6 +221,8 @@ const health = {
   responseTime: 5,
 };
 beforeEach(() => {
+  configDb.reset();
+  mockApply.mockReset().mockResolvedValue({ revisionId: "revision_1" });
   mockRequireAdmin.mockReset().mockResolvedValue(fakeSession);
   mockGetIntegration.mockReset().mockReturnValue(MOCK_INTEGRATION);
   mockGetAllIntegrations.mockReset().mockReturnValue([MOCK_INTEGRATION]);
@@ -353,6 +353,115 @@ describe("actual integration producers through generated SDK", () => {
       await app.close();
     }
   });
+  it.each(["patch", "enable", "disable"] as const)(
+    "merges overlapping ordinary %s with a completed import at the locked row",
+    async (kind) => {
+      const sdk = await import("@openmapx/core/api-admin-sdk");
+      const { app, client } = await wire();
+      const id = MOCK_INTEGRATION.id;
+      const initialEnabled = kind === "disable";
+      configDb.reset([
+        {
+          id: "row-a",
+          integrationId: id,
+          config: { label: "old", nested: { count: 1 }, enabled: initialEnabled },
+          version: "0",
+        },
+      ]);
+      const reached = Promise.withResolvers<void>();
+      const resume = Promise.withResolvers<void>();
+      // Before the row lock: the old handler has already read/merged stale data.
+      // A corrected handler carries only intent into this same transaction boundary.
+      configDb.beforeTransaction = async () => {
+        reached.resolve();
+        await resume.promise;
+      };
+      const ordinary =
+        kind === "patch"
+          ? sdk.patchAdminIntegrationConfig(id, { nested: { count: 9 } }, { client })
+          : kind === "enable"
+            ? sdk.enableAdminIntegration(id, undefined, { client })
+            : sdk.disableAdminIntegration(id, undefined, { client });
+      try {
+        await reached.promise;
+        expect(
+          await sdk.importAdminIntegrationConfigs(
+            {
+              integrations: [
+                {
+                  integrationId: id,
+                  config: { label: "imported", nested: { count: 2 }, enabled: initialEnabled },
+                },
+              ],
+            },
+            { client },
+          ),
+        ).toMatchObject({ status: 200, data: { ok: true, imported: 1 } });
+        resume.resolve();
+        expect(await ordinary).toMatchObject({ status: 200, data: { ok: true } });
+        expect(configDb.rows[0].config).toEqual({
+          label: "imported",
+          nested: { count: kind === "patch" ? 9 : 2 },
+          enabled: kind === "patch" ? initialEnabled : kind === "enable",
+        });
+      } finally {
+        resume.resolve();
+        await ordinary;
+        await app.close();
+      }
+    },
+  );
+  it.each(["patch", "enable", "disable"] as const)(
+    "does not let an older ordinary %s rollback overwrite a completed import",
+    async (kind) => {
+      const sdk = await import("@openmapx/core/api-admin-sdk");
+      const { app, client } = await wire();
+      const id = MOCK_INTEGRATION.id;
+      configDb.reset([
+        {
+          id: "row-a",
+          integrationId: id,
+          config: { label: "old", enabled: kind === "disable" },
+          version: "0",
+        },
+      ]);
+      const reached = Promise.withResolvers<void>();
+      const resume = Promise.withResolvers<void>();
+      mockApply.mockImplementationOnce(async () => {
+        reached.resolve();
+        await resume.promise;
+        throw new TrustedConfigurationApplyError({
+          outcome: "not_committed",
+          reason: "failed",
+          cleanupFailed: false,
+          publisherCleanupFailed: false,
+          registryUpdateFailed: false,
+        });
+      });
+      const ordinary =
+        kind === "patch"
+          ? sdk.patchAdminIntegrationConfig(id, { nested: { count: 9 } }, { client })
+          : kind === "enable"
+            ? sdk.enableAdminIntegration(id, undefined, { client })
+            : sdk.disableAdminIntegration(id, undefined, { client });
+      try {
+        await reached.promise;
+        expect(
+          await sdk.importAdminIntegrationConfigs(
+            { integrations: [{ integrationId: id, config: { label: "imported", enabled: true } }] },
+            { client },
+          ),
+        ).toMatchObject({ status: 200 });
+        resume.resolve();
+        expect(await ordinary).toMatchObject({ status: 500 });
+        expect(configDb.rows[0].config).toEqual({ label: "imported", enabled: true });
+      } finally {
+        resume.resolve();
+        await ordinary;
+        await app.close();
+      }
+    },
+  );
   it("keeps binding body-before-auth, rejects failed writes and never leaks backend errors", async () => {
     const sdk = await import("@openmapx/core/api-admin-sdk");
     const { app, client } = await wire();
@@ -511,8 +620,8 @@ describe("actual integration producers through generated SDK", () => {
           ).statusCode,
         ).toBe(400);
       }
-      expect(mockPersistImport).not.toHaveBeenCalled();
-      mockPersistImport.mockRejectedValueOnce(Error("synthetic-secret"));
+      expect(configDb.writes).toBe(0);
+      configDb.failWrite = true;
       const failed = await sdk.importAdminIntegrationConfigs(
         { integrations: [{ integrationId: "geocoding-maptiler", config: {} }] },
         { client },

@@ -19,6 +19,20 @@ class OwnershipConflict extends Error {}
 export async function persistIntegrationImport(
   entries: AdminIntegrationConfigEntry[],
 ): Promise<PersistedIntegrationImport> {
+  return persistIntegrationConfigs(entries, "replace");
+}
+
+/** Ordinary edits carry partial intent, merged only after acquiring the row lock. */
+export async function persistIntegrationConfigPatch(
+  entry: AdminIntegrationConfigEntry,
+): Promise<PersistedIntegrationImport> {
+  return persistIntegrationConfigs([entry], "merge");
+}
+
+async function persistIntegrationConfigs(
+  entries: AdminIntegrationConfigEntry[],
+  mode: "replace" | "merge",
+): Promise<PersistedIntegrationImport> {
   const ids = entries.map((e) => e.integrationId).sort();
   const saved = await db.transaction(async (tx) => {
     const previous = await tx
@@ -34,6 +48,7 @@ export async function persistIntegrationImport(
     )) {
       const old = byId.get(entry.integrationId);
       const config = {
+        ...(mode === "merge" ? old?.config : {}),
         ...entry.config,
         ...(!Object.hasOwn(entry.config, "enabled") && typeof old?.config.enabled === "boolean"
           ? { enabled: old.config.enabled }

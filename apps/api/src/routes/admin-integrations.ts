@@ -1,6 +1,5 @@
 import { adminIntegrationJsonObjectSchema } from "@openmapx/core/api-contracts";
 import { integrationEnvVarName } from "@openmapx/integration-framework";
-import { eq } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { db } from "../db";
 import { integrationConfig } from "../db/schema";
@@ -16,7 +15,10 @@ import {
   prepareIntegrationImport,
   runIntegrationImport,
 } from "../services/integration-config-import";
-import { persistIntegrationImport } from "../services/integration-config-store";
+import {
+  persistIntegrationConfigPatch,
+  persistIntegrationImport,
+} from "../services/integration-config-store";
 import {
   computeCredentialStatus,
   getIntegrationDisplayName,
@@ -49,12 +51,10 @@ async function persistAndApplyIntegrationConfig(options: {
   actorId: string;
   requestId: string;
 }): Promise<void> {
-  const saved = await persistIntegrationImport([
-    {
-      integrationId: options.integrationId,
-      config: adminIntegrationJsonObjectSchema.parse(options.config),
-    },
-  ]);
+  const saved = await persistIntegrationConfigPatch({
+    integrationId: options.integrationId,
+    config: adminIntegrationJsonObjectSchema.parse(options.config),
+  });
   try {
     await applyTrustedConfiguration({
       kind: "integrationConfig.apply",
@@ -261,19 +261,9 @@ export async function adminIntegrationsRoute(app: FastifyInstance): Promise<void
       return reply.status(400).send({ error: "No valid fields to update" });
     }
 
-    // Merge with existing DB config
-    const [existing] = await db
-      .select({ config: integrationConfig.config })
-      .from(integrationConfig)
-      .where(eq(integrationConfig.integrationId, integration.id))
-      .limit(1);
-
-    const existingConfig = (existing?.config as Record<string, unknown>) ?? {};
-    const newConfig = { ...existingConfig, ...updates };
-
     await persistAndApplyIntegrationConfig({
       integrationId: integration.id,
-      config: newConfig,
+      config: updates,
       actorId: adminSession.user.id,
       requestId: String(request.id),
     });
@@ -299,18 +289,9 @@ export async function adminIntegrationsRoute(app: FastifyInstance): Promise<void
 
     const adminSession = getAdminSession(request);
 
-    const [existing] = await db
-      .select({ config: integrationConfig.config })
-      .from(integrationConfig)
-      .where(eq(integrationConfig.integrationId, integration.id))
-      .limit(1);
-
-    const existingConfig = (existing?.config as Record<string, unknown>) ?? {};
-    const newConfig = { ...existingConfig, enabled: true };
-
     await persistAndApplyIntegrationConfig({
       integrationId: integration.id,
-      config: newConfig,
+      config: { enabled: true },
       actorId: adminSession.user.id,
       requestId: String(request.id),
     });
@@ -334,18 +315,9 @@ export async function adminIntegrationsRoute(app: FastifyInstance): Promise<void
 
     const adminSession = getAdminSession(request);
 
-    const [existing] = await db
-      .select({ config: integrationConfig.config })
-      .from(integrationConfig)
-      .where(eq(integrationConfig.integrationId, integration.id))
-      .limit(1);
-
-    const existingConfig = (existing?.config as Record<string, unknown>) ?? {};
-    const newConfig = { ...existingConfig, enabled: false };
-
     await persistAndApplyIntegrationConfig({
       integrationId: integration.id,
-      config: newConfig,
+      config: { enabled: false },
       actorId: adminSession.user.id,
       requestId: String(request.id),
     });

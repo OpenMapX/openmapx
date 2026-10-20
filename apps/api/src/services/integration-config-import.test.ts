@@ -363,6 +363,49 @@ describe("real batch coordinator with stateful storage and host boundaries", () 
     ).toMatchObject({ recovery: "restored", apply: { outcome: "committed", followUp: "failed" } });
     expect(f.state.events).toEqual(["persist", "apply", "restore", "compensate"]);
   });
+  it.each(["publisherCleanupFailed", "cleanupFailed", "registryUpdateFailed"] as const)(
+    "retains original %s evidence after successful compensation",
+    async (fault) => {
+      const f = fixture();
+      const apply = f.ports.apply;
+      f.ports.apply = async () => {
+        const result = await apply();
+        result.outcome[fault] = true;
+        return result;
+      };
+      const result = await runIntegrationImport(
+        prepareIntegrationImport(input(), manifests),
+        manifests,
+        f.ports as never,
+      );
+      expect(result).toMatchObject({
+        ok: false,
+        phase: "apply",
+        database: "restored",
+        runtime: "unchanged",
+        recovery: fault === "registryUpdateFailed" ? "restored" : "reconciliation_required",
+        apply: {
+          outcome: "committed",
+          revisionId: "A",
+          enabledServiceIds: [],
+          followUp: "complete",
+          cleanupFailed: fault === "cleanupFailed",
+          publisherCleanupFailed: fault === "publisherCleanupFailed",
+          registryUpdateFailed: fault === "registryUpdateFailed",
+        },
+        compensation: {
+          outcome: "committed",
+          followUp: "complete",
+          cleanupFailed: false,
+          publisherCleanupFailed: false,
+          registryUpdateFailed: false,
+        },
+      });
+      expect(f.state.rows.get("alpha")).toEqual({ label: "old", enabled: false });
+      expect(f.state.host.integrationConfigs[0].values).toEqual({ label: "old", enabled: false });
+      expect(f.state.events).toEqual(["persist", "apply", "restore", "compensate"]);
+    },
+  );
   it("does not claim restored when a competing named edit arrives during compensation", async () => {
     const f = fixture();
     f.state.applyMode = "incomplete";

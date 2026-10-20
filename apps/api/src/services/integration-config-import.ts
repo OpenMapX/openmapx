@@ -257,7 +257,12 @@ export async function runIntegrationImport(
     compensation,
     runtime,
     recovery:
-      completeConfigurationApply(compensation) && runtime !== "unknown"
+      // A fresh publication can repair follow-up/registry state, but cannot prove
+      // cleanup of the original publication's artifacts or host writer/claim.
+      !apply.cleanupFailed &&
+      !apply.publisherCleanupFailed &&
+      completeConfigurationApply(compensation) &&
+      runtime !== "unknown"
         ? ("restored" as const)
         : ("reconciliation_required" as const),
   };

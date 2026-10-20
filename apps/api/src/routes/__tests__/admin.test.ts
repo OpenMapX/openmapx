@@ -35,6 +35,11 @@ vi.mock("../../services/job-runner.js", () => ({
 
 const mockRestoreOwned = vi.fn().mockResolvedValue(true);
 vi.mock("../../services/integration-config-store", () => ({
+  persistIntegrationConfigPatch: async () => ({
+    previous: [],
+    owns: async () => true,
+    restore: mockRestoreOwned,
+  }),
   persistIntegrationImport: async () => ({
     previous: [],
     owns: async () => true,
@@ -420,13 +425,6 @@ describe("POST /admin/integrations/:id/enable", () => {
     },
   );
   it("enables an integration, writes audit log, and returns reload result", async () => {
-    // DB select for existing config returns empty (no pre-existing config row)
-    mockDbSelect.mockImplementationOnce(() => ({
-      from: vi.fn().mockReturnThis(),
-      where: vi.fn().mockReturnThis(),
-      limit: vi.fn().mockResolvedValue([]),
-    }));
-
     const res = await app.inject({
       method: "POST",
       url: "/admin/integrations/geocoding-maptiler/enable",
