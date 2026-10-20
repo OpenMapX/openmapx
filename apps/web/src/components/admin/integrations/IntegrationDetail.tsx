@@ -31,13 +31,14 @@ import Tabs from "@mui/material/Tabs";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import { buildLicensingHtml, safeHref } from "@openmapx/core";
-import type { CredentialSetup } from "@openmapx/integration-framework";
-import type { Licensing } from "@openmapx/mobility-core/licensing";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { AttributionText } from "@/components/ui/AttributionText";
-import { useEnv } from "@/integration-api/runtime/EnvProvider";
-import { invalidateIntegrationRuntime } from "@/lib/integrationRuntimeQuery";
+import {
+  hasVaultCredential,
+  useIntegrationAdmin,
+  useIntegrationReload,
+} from "@/lib/admin/integrationAdmin";
 import { AdminTablePagination } from "../shared/AdminTablePagination";
 import { useAdminToast } from "../shared/AdminToast";
 import { MetaRow } from "../shared/MetaRow";
@@ -51,65 +52,8 @@ import { RequiredServicesPanel } from "./RequiredServicesPanel";
 import { SetCredentialDialog } from "./SetCredentialDialog";
 import { StatusBadge } from "./StatusBadge";
 
-type ConfigSource = "default" | "database" | "vault" | "config.json" | "env";
-
-interface CredentialStatus {
-  key: string;
-  title: string;
-  description?: string;
-  source: "vault" | "env" | "missing";
-  sharedSecretName?: string;
-  setup?: CredentialSetup;
-  updatedAt?: string;
-  updatedBy?: string | null;
-  /** False for optional env-var overrides (built-in default exists). */
-  required: boolean;
-}
-
-interface IntegrationDetailData {
-  id: string;
-  name: string;
-  description?: string;
-  version?: string;
-  author?: string;
-  license?: string;
-  documentation?: string;
-  domains: string[];
-  quality: "built-in" | "community-verified" | "community";
-  isBuiltIn: boolean;
-  enabled: boolean;
-  configured: boolean;
-  hasHealthCheck: boolean;
-  health: { status: "up" | "down" | "unconfigured"; responseTime?: number; error?: string } | null;
-  dependencies: string[];
-  requires: Array<{ service?: string; capability?: string; optional?: boolean }>;
-  infrastructure: {
-    dataRequirements?: string[];
-    planetScale?: boolean;
-  } | null;
-  manifest: {
-    configSchema?: Record<string, unknown>;
-    dataSources?: Array<{
-      name: string;
-      url: string;
-      licensing: Licensing;
-      attribution?: string;
-      commercialUse?: string;
-      providerCountry: string;
-      providerPrivacyUrl: string;
-      endUserExposure?: string;
-      personalData?: boolean;
-      cookies?: boolean;
-      dpaAvailable?: boolean;
-      dpaUrl?: string;
-    }>;
-  };
-  resolvedConfig: Record<string, { value: unknown; source: ConfigSource }>;
-  dependencyStatus: Array<{ id: string; loaded: boolean; enabled: boolean }>;
-  envVarEntries: Array<{ name: string; present: boolean }>;
-  credentialStatus: CredentialStatus[];
-  secretsConfigured: boolean;
-}
+type CredentialStatus = import("@openmapx/core/api-contracts").AdminIntegrationCredential;
+type IntegrationDetailData = import("@openmapx/core/api-contracts").AdminIntegrationDetail;
 
 const SOURCE_COLOR: Record<string, "default" | "primary" | "secondary" | "success" | "info"> = {
   default: "default",
@@ -387,11 +331,9 @@ function OverviewTab({ data }: { data: IntegrationDetailData }) {
 function ConfigTab({
   data,
   integrationId,
-  onRefresh,
 }: {
   data: IntegrationDetailData;
   integrationId: string;
-  onRefresh: () => void;
 }) {
   const entries = Object.entries(data.resolvedConfig);
   const { paged: pagedEntries, paginationProps: entriesPagination } = useClientPagination(entries);
@@ -450,7 +392,7 @@ function ConfigTab({
                             fontFamily: "monospace",
                           }}
                         >
-                          {String(value)}
+                          {typeof value === "object" ? JSON.stringify(value) : String(value)}
                         </Typography>
                       </TableCell>
                       <TableCell>
@@ -488,7 +430,6 @@ function ConfigTab({
               integrationId={integrationId}
               schema={data.manifest.configSchema}
               resolvedConfig={data.resolvedConfig}
-              onSaved={onRefresh}
             />
           </CardContent>
         </Card>
@@ -497,33 +438,13 @@ function ConfigTab({
   );
 }
 
-function CredentialSourceBadge({ source }: { source: "vault" | "env" | "missing" }) {
-  if (source === "vault")
-    return (
-      <Chip
-        label="vault"
-        size="small"
-        color="info"
-        variant="outlined"
-        icon={<LockIcon />}
-        sx={{ fontSize: "0.7rem" }}
-      />
-    );
-  if (source === "env")
-    return (
-      <Chip
-        label="env"
-        size="small"
-        color="success"
-        variant="outlined"
-        sx={{ fontSize: "0.7rem" }}
-      />
-    );
+function CredentialSourceBadge({ source }: { source: CredentialStatus["source"] }) {
   return (
     <Chip
-      label="missing"
+      label={source}
+      icon={source === "vault" ? <LockIcon /> : undefined}
       size="small"
-      color="error"
+      color={source === "missing" ? "error" : SOURCE_COLOR[source]}
       variant="outlined"
       sx={{ fontSize: "0.7rem" }}
     />
@@ -537,24 +458,15 @@ function CredentialsTab({
   data: IntegrationDetailData;
   integrationId: string;
 }) {
-  const env = useEnv();
-  const apiUrl = env.apiUrl;
-  const qc = useQueryClient();
+  const admin = useIntegrationAdmin();
   const [dialogField, setDialogField] = useState<CredentialStatus | null>(null);
   const showToast = useAdminToast();
 
   const deleteMutation = useMutation({
-    mutationFn: async (key: string) => {
-      const res = await fetch(`${apiUrl}/api/admin/credentials/${integrationId}/${key}`, {
-        method: "DELETE",
-        credentials: "include",
-      });
-      if (!res.ok) throw new Error("Delete failed");
-      return res.json();
-    },
+    retry: false,
+    mutationFn: (key: string) => admin.deleteCredential(integrationId, key),
     onSuccess: (_, key) => {
-      void qc.invalidateQueries({ queryKey: ["admin", "integrations", integrationId] });
-      void invalidateIntegrationRuntime(qc, apiUrl);
+      void admin.refresh();
       showToast(`Credential "${key}" deleted`);
     },
     onError: (_, key) => showToast(`Failed to delete "${key}"`, "error"),
@@ -602,7 +514,7 @@ function CredentialsTab({
                   <TableRow>
                     <TableCell>Credential</TableCell>
                     <TableCell>Source</TableCell>
-                    <TableCell>Last Updated</TableCell>
+                    <TableCell>Vault Last Updated</TableCell>
                     <TableCell align="right">Actions</TableCell>
                   </TableRow>
                 </TableHead>
@@ -701,9 +613,9 @@ function CredentialsTab({
                             onClick={() => setDialogField(cred)}
                             disabled={!data.secretsConfigured}
                           >
-                            {cred.source === "vault" ? "Rotate" : "Set"}
+                            {hasVaultCredential(cred) ? "Rotate" : "Set"}
                           </Button>
-                          {cred.source === "vault" && (
+                          {hasVaultCredential(cred) && (
                             <Tooltip title="Delete from vault">
                               <IconButton
                                 size="small"
@@ -744,25 +656,23 @@ function CredentialsTab({
 function HealthTab({
   data,
   integrationId,
-  apiUrl,
 }: {
   data: IntegrationDetailData;
   integrationId: string;
-  apiUrl: string;
 }) {
-  const qc = useQueryClient();
+  const admin = useIntegrationAdmin();
   const showToast = useAdminToast();
 
+  const healthQuery = useQuery({ ...admin.queries.health(integrationId), enabled: false });
   const healthMutation = useMutation({
+    retry: false,
     mutationFn: async () => {
-      const res = await fetch(`${apiUrl}/api/admin/integrations/${integrationId}/health`, {
-        credentials: "include",
-      });
-      if (!res.ok) throw new Error("Health check failed");
-      return res.json();
+      const result = await healthQuery.refetch({ throwOnError: true });
+      if (!result.data) throw new Error("Health check was interrupted");
+      return result.data;
     },
     onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ["admin", "integrations", integrationId] });
+      void admin.refresh();
       showToast("Health check completed");
     },
     onError: () => showToast("Health check failed", "error"),
@@ -1073,55 +983,23 @@ interface IntegrationDetailProps {
 }
 
 export function IntegrationDetail({ id }: IntegrationDetailProps) {
-  const env = useEnv();
-  const apiUrl = env.apiUrl;
-  const qc = useQueryClient();
+  const admin = useIntegrationAdmin();
   const [tab, setTab] = useState(0);
   const showToast = useAdminToast();
 
-  const { data, isLoading, isError } = useQuery<IntegrationDetailData>({
-    queryKey: ["admin", "integrations", id],
-    queryFn: async () => {
-      const res = await fetch(`${apiUrl}/api/admin/integrations/${id}`, { credentials: "include" });
-      if (!res.ok) throw new Error("Failed to load integration");
-      return res.json();
-    },
-  });
+  const { data, isLoading, isError } = useQuery(admin.queries.detail(id));
 
   const toggleMutation = useMutation({
-    mutationFn: async (enable: boolean) => {
-      const action = enable ? "enable" : "disable";
-      const res = await fetch(`${apiUrl}/api/admin/integrations/${id}/${action}`, {
-        method: "POST",
-        credentials: "include",
-      });
-      if (!res.ok) throw new Error(`Failed to ${action} integration`);
-      return res.json();
-    },
+    retry: false,
+    mutationFn: (enable: boolean) => admin.toggle(id, enable),
     onSuccess: (_, enable) => {
-      void qc.invalidateQueries({ queryKey: ["admin", "integrations"] });
-      void qc.invalidateQueries({ queryKey: ["admin", "integrations", id] });
-      void invalidateIntegrationRuntime(qc, apiUrl);
+      void admin.refresh();
       showToast(`Integration ${enable ? "enabled" : "disabled"}`);
     },
     onError: (err) => showToast(err instanceof Error ? err.message : "Operation failed", "error"),
   });
 
-  const reloadMutation = useMutation({
-    mutationFn: async () => {
-      const res = await fetch(`${apiUrl}/api/admin/integrations/${id}/reload`, {
-        method: "POST",
-        credentials: "include",
-      });
-      if (!res.ok) throw new Error("Reload failed");
-      return res.json();
-    },
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ["admin", "integrations", id] });
-      showToast("Reload job queued — check Activity for status");
-    },
-    onError: () => showToast("Failed to queue reload job", "error"),
-  });
+  const reloadMutation = useIntegrationReload(id);
 
   if (isLoading) {
     return (
@@ -1214,7 +1092,13 @@ export function IntegrationDetail({ id }: IntegrationDetailProps) {
               size="small"
               variant="outlined"
               startIcon={isBusy ? <CircularProgress size={14} /> : <RefreshIcon />}
-              onClick={() => reloadMutation.mutate()}
+              onClick={() =>
+                reloadMutation.mutate(undefined, {
+                  onSuccess: () =>
+                    showToast("Reload job queued — check Activity for status", "info"),
+                  onError: () => showToast("Failed to queue reload job", "error"),
+                })
+              }
               disabled={isBusy}
             >
               Reload
@@ -1247,15 +1131,9 @@ export function IntegrationDetail({ id }: IntegrationDetailProps) {
         </Tabs>
 
         {tab === 0 && <OverviewTab data={data} />}
-        {tab === 1 && (
-          <ConfigTab
-            data={data}
-            integrationId={id}
-            onRefresh={() => qc.invalidateQueries({ queryKey: ["admin", "integrations", id] })}
-          />
-        )}
+        {tab === 1 && <ConfigTab data={data} integrationId={id} />}
         {tab === 2 && <CredentialsTab data={data} integrationId={id} />}
-        {tab === 3 && <HealthTab data={data} integrationId={id} apiUrl={apiUrl} />}
+        {tab === 3 && <HealthTab data={data} integrationId={id} />}
         {tab === 4 && <DataSourcesTab data={data} />}
       </Box>
     </Stack>

@@ -24,87 +24,27 @@ import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
-import type { CredentialSetup } from "@openmapx/integration-framework";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
-import { useEnv } from "@/integration-api/runtime/EnvProvider";
-import { invalidateIntegrationRuntime } from "@/lib/integrationRuntimeQuery";
+import { hasVaultCredential, useIntegrationAdmin } from "@/lib/admin/integrationAdmin";
 import { AdminPageHeader } from "../shared/AdminPageHeader";
 import { useAdminToast } from "../shared/AdminToast";
 import { ConfigSchemaForm } from "./ConfigSchemaForm";
 import { CredentialSetupGuide } from "./CredentialSetupGuide";
 import { SetCredentialDialog } from "./SetCredentialDialog";
 
-type ConfigSource = "default" | "database" | "vault" | "config.json" | "env";
-
-interface CredentialStatus {
-  key: string;
-  title: string;
-  description?: string;
-  source: "vault" | "env" | "missing";
-  sharedSecretName?: string;
-  setup?: CredentialSetup;
-  updatedAt?: string;
-  updatedBy?: string | null;
-  required: boolean;
-}
-
-interface IntegrationListEntry {
-  id: string;
-  name: string;
-  enabled: boolean;
-  configured: boolean;
-}
-
-interface IntegrationDetail {
-  id: string;
-  name: string;
-  manifest: { configSchema?: Record<string, unknown> };
-  resolvedConfig: Record<string, { value: unknown; source: ConfigSource }>;
-  credentialStatus: CredentialStatus[];
-  secretsConfigured: boolean;
-}
-
-interface EnvVarEntry {
-  key: string;
-  name: string;
-  title: string;
-  description?: string;
-  secret: boolean;
-  present: boolean;
-  defaultValue?: unknown;
-}
-
-interface EnvVarIntegration {
-  id: string;
-  name: string;
-  enabled: boolean;
-  envVars: EnvVarEntry[];
-}
+type CredentialStatus = import("@openmapx/core/api-contracts").AdminIntegrationCredential;
+type IntegrationListEntry = import("@openmapx/core/api-contracts").AdminIntegrationSummary;
+type IntegrationDetail = import("@openmapx/core/api-contracts").AdminIntegrationDetail;
+type EnvVarEntry = import("@openmapx/core/api-contracts").AdminIntegrationEnvVar;
+type EnvVarIntegration =
+  import("@openmapx/core/api-contracts").AdminIntegrationEnvVars["integrations"][number];
 
 export function BulkConfigure() {
-  const env = useEnv();
-  const apiUrl = env.apiUrl;
+  const admin = useIntegrationAdmin();
 
-  const integrationsQuery = useQuery<IntegrationListEntry[]>({
-    queryKey: ["admin", "integrations", "list"],
-    queryFn: async () => {
-      const res = await fetch(`${apiUrl}/api/admin/integrations`, { credentials: "include" });
-      if (!res.ok) throw new Error("Failed to load integrations");
-      return res.json();
-    },
-  });
-
-  const envVarsQuery = useQuery<{ integrations: EnvVarIntegration[] }>({
-    queryKey: ["admin", "integrations", "env-vars"],
-    queryFn: async () => {
-      const res = await fetch(`${apiUrl}/api/admin/integrations/env-vars`, {
-        credentials: "include",
-      });
-      if (!res.ok) throw new Error("Failed to load env-var catalogue");
-      return res.json();
-    },
-  });
+  const integrationsQuery = useQuery(admin.queries.list());
+  const envVarsQuery = useQuery(admin.queries.envVars());
 
   // The env-vars endpoint already filters out integrations whose configSchema
   // exposes nothing beyond the `enabled` toggle (no real fields, no
@@ -184,21 +124,10 @@ export function BulkConfigure() {
 }
 
 function IntegrationAccordion({ entry }: { entry: IntegrationListEntry }) {
-  const env = useEnv();
-  const apiUrl = env.apiUrl;
+  const admin = useIntegrationAdmin();
   const [open, setOpen] = useState(false);
 
-  const detailQuery = useQuery<IntegrationDetail>({
-    queryKey: ["admin", "integrations", entry.id],
-    enabled: open,
-    queryFn: async () => {
-      const res = await fetch(`${apiUrl}/api/admin/integrations/${entry.id}`, {
-        credentials: "include",
-      });
-      if (!res.ok) throw new Error(`Failed to load ${entry.id}`);
-      return res.json();
-    },
-  });
+  const detailQuery = useQuery({ ...admin.queries.detail(entry.id), enabled: open });
 
   return (
     <Accordion
@@ -350,24 +279,15 @@ function CredentialsTable({
   secretsConfigured: boolean;
   credentials: CredentialStatus[];
 }) {
-  const env = useEnv();
-  const apiUrl = env.apiUrl;
-  const qc = useQueryClient();
+  const admin = useIntegrationAdmin();
   const showToast = useAdminToast();
   const [dialogField, setDialogField] = useState<CredentialStatus | null>(null);
 
   const deleteMutation = useMutation({
-    mutationFn: async (key: string) => {
-      const res = await fetch(`${apiUrl}/api/admin/credentials/${integrationId}/${key}`, {
-        method: "DELETE",
-        credentials: "include",
-      });
-      if (!res.ok) throw new Error("Failed to delete credential");
-      return res.json();
-    },
+    retry: false,
+    mutationFn: (key: string) => admin.deleteCredential(integrationId, key),
     onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ["admin", "integrations", integrationId] });
-      void invalidateIntegrationRuntime(qc, apiUrl);
+      void admin.refresh();
       showToast("Credential deleted");
     },
     onError: (e) => showToast(e instanceof Error ? e.message : "Delete failed", "error"),
@@ -433,11 +353,21 @@ function CredentialsTable({
                     label={cred.source}
                     size="small"
                     color={
-                      cred.source === "vault" ? "info" : cred.source === "env" ? "success" : "error"
+                      cred.source === "missing"
+                        ? "error"
+                        : cred.source === "env"
+                          ? "success"
+                          : "info"
                     }
                     variant="outlined"
                     sx={{ fontSize: "0.7rem" }}
                   />
+                  {cred.updatedAt && (
+                    <Typography variant="caption" sx={{ display: "block" }}>
+                      Vault updated {new Date(cred.updatedAt).toLocaleDateString()}
+                      {cred.updatedBy ? ` by ${cred.updatedBy}` : ""}
+                    </Typography>
+                  )}
                 </TableCell>
                 <TableCell align="right">
                   <Stack
@@ -453,9 +383,9 @@ function CredentialsTable({
                       onClick={() => setDialogField(cred)}
                       disabled={!secretsConfigured}
                     >
-                      {cred.source === "vault" ? "Rotate" : "Set"}
+                      {hasVaultCredential(cred) ? "Rotate" : "Set"}
                     </Button>
-                    {cred.source === "vault" && (
+                    {hasVaultCredential(cred) && (
                       <Tooltip title="Delete from vault">
                         <IconButton
                           size="small"

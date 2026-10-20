@@ -48,7 +48,10 @@ const TIMELINE = [
 
 /** Build a response body matching the route shape: { integrationId, hours, timeline }. */
 function bodyFor(url: string) {
-  const hours = new URL(url).searchParams.get("hours") ?? "24";
+  const parsed = new URL(url);
+  expect(parsed.origin).toBe("http://test.local");
+  expect(parsed.pathname).toBe("/api/admin/integrations/demo/health/history");
+  const hours = parsed.searchParams.get("hours") ?? "24";
   return { integrationId: "demo", hours: Number(hours), timeline: TIMELINE };
 }
 
@@ -64,7 +67,7 @@ afterEach(() => {
 describe("HealthHistoryChart", () => {
   it("renders the chart for a populated timeline", async () => {
     fetchMock.mockImplementation((...args: unknown[]) =>
-      Promise.resolve({ ok: true, json: async () => bodyFor(String(args[0])) }),
+      Promise.resolve(Response.json(bodyFor(String(args[0])))),
     );
 
     render(<HealthHistoryChart integrationId="demo" />, { wrapper: createQueryWrapper() });
@@ -79,7 +82,7 @@ describe("HealthHistoryChart", () => {
   it("re-queries with hours=168 when the 7d toggle is clicked", async () => {
     const user = userEvent.setup();
     fetchMock.mockImplementation((...args: unknown[]) =>
-      Promise.resolve({ ok: true, json: async () => bodyFor(String(args[0])) }),
+      Promise.resolve(Response.json(bodyFor(String(args[0])))),
     );
 
     render(<HealthHistoryChart integrationId="demo" />, { wrapper: createQueryWrapper() });
@@ -91,9 +94,9 @@ describe("HealthHistoryChart", () => {
   });
 
   it("shows an empty state when the timeline is empty", async () => {
-    fetchMock.mockResolvedValue({
-      ok: true,
-      json: async () => ({ integrationId: "demo", hours: 24, timeline: [] }),
+    fetchMock.mockImplementation((url: unknown) => {
+      bodyFor(String(url));
+      return Response.json({ integrationId: "demo", hours: 24, timeline: [] });
     });
 
     render(<HealthHistoryChart integrationId="demo" />, { wrapper: createQueryWrapper() });

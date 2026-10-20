@@ -14,10 +14,9 @@ import Stack from "@mui/material/Stack";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import type { CredentialSetup } from "@openmapx/integration-framework";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation } from "@tanstack/react-query";
 import { useState } from "react";
-import { useEnv } from "@/integration-api/runtime/EnvProvider";
-import { invalidateIntegrationRuntime } from "@/lib/integrationRuntimeQuery";
+import { useIntegrationAdmin } from "@/lib/admin/integrationAdmin";
 import { CredentialSetupGuide } from "./CredentialSetupGuide";
 
 interface SetCredentialDialogProps {
@@ -39,31 +38,17 @@ export function SetCredentialDialog({
   description,
   setup,
 }: SetCredentialDialogProps) {
-  const env = useEnv();
-  const apiUrl = env.apiUrl;
-  const qc = useQueryClient();
+  const admin = useIntegrationAdmin();
 
   const [value, setValue] = useState("");
   const [showValue, setShowValue] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const mutation = useMutation({
-    mutationFn: async () => {
-      const res = await fetch(`${apiUrl}/api/admin/credentials/${integrationId}/${credentialKey}`, {
-        method: "PUT",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ value }),
-      });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error((data as { error?: string })?.error ?? "Failed to save credential");
-      }
-      return res.json();
-    },
+    retry: false,
+    mutationFn: () => admin.setCredential(integrationId, credentialKey, value),
     onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ["admin", "integrations", integrationId] });
-      void invalidateIntegrationRuntime(qc, apiUrl);
+      void admin.refresh();
       setValue("");
       setShowValue(false);
       setError(null);

@@ -1,16 +1,16 @@
 "use client";
 
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useEnv } from "@/integration-api/runtime/EnvProvider";
-import { invalidateIntegrationRuntime } from "@/lib/integrationRuntimeQuery";
-import { type ConfigFieldSource, SchemaConfigForm } from "../shared/SchemaConfigForm";
+import type { AdminIntegrationResolvedConfig } from "@openmapx/core/api-contracts";
+import { useMutation } from "@tanstack/react-query";
+import { useIntegrationAdmin } from "@/lib/admin/integrationAdmin";
+import { SchemaConfigForm } from "../shared/SchemaConfigForm";
 
 interface ConfigSchemaFormProps {
   integrationId: string;
   /** The manifest configSchema object. */
   schema: Record<string, unknown> | undefined;
   /** Resolved config values with source annotations. */
-  resolvedConfig: Record<string, { value: unknown; source: ConfigFieldSource }>;
+  resolvedConfig: AdminIntegrationResolvedConfig;
   /** Called after a successful save + reload. */
   onSaved?: () => void;
 }
@@ -28,30 +28,13 @@ export function ConfigSchemaForm({
   resolvedConfig,
   onSaved,
 }: ConfigSchemaFormProps) {
-  const { apiUrl } = useEnv();
-  const qc = useQueryClient();
+  const admin = useIntegrationAdmin();
 
   const saveMutation = useMutation({
-    mutationFn: async (updates: Record<string, unknown>) => {
-      const res = await fetch(`${apiUrl}/api/admin/integrations/${integrationId}/config`, {
-        method: "PATCH",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(updates),
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(
-          (err as { errors?: string[] })?.errors?.join(", ") ??
-            (err as { error?: string })?.error ??
-            "Save failed",
-        );
-      }
-      return res.json();
-    },
+    retry: false,
+    mutationFn: (updates: Record<string, unknown>) => admin.patchConfig(integrationId, updates),
     onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ["admin", "integrations", integrationId] });
-      void invalidateIntegrationRuntime(qc, apiUrl);
+      void admin.refresh();
       onSaved?.();
     },
   });
@@ -61,7 +44,9 @@ export function ConfigSchemaForm({
       schema={schema}
       resolvedConfig={resolvedConfig}
       excludeKeys={["enabled"]}
-      onSave={(diff) => saveMutation.mutateAsync(diff)}
+      onSave={async (diff) => {
+        await saveMutation.mutateAsync(diff);
+      }}
       emptyMessage="No editable configuration fields. Only secrets and the enabled toggle are available for this integration."
     />
   );

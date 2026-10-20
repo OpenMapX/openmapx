@@ -22,11 +22,10 @@ import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { useEnv } from "@/integration-api/runtime/EnvProvider";
-import { invalidateIntegrationRuntime } from "@/lib/integrationRuntimeQuery";
+import { useIntegrationAdmin, useIntegrationReload } from "@/lib/admin/integrationAdmin";
 import { AdminPageHeader } from "../shared/AdminPageHeader";
 import { AdminTablePagination } from "../shared/AdminTablePagination";
 import { AdminTableSurface } from "../shared/AdminTableSurface";
@@ -37,23 +36,7 @@ import { DomainChip } from "./DomainChip";
 import { computeStatusVariant, IntegrationStatusDot } from "./IntegrationStatusDot";
 import { StatusBadge } from "./StatusBadge";
 
-export interface IntegrationSummary {
-  id: string;
-  name: string;
-  description?: string;
-  version?: string;
-  domains: string[];
-  quality: "built-in" | "community-verified" | "community";
-  isBuiltIn: boolean;
-  /** Community directory ships code the server refuses to execute. */
-  blockedCode?: boolean;
-  enabled: boolean;
-  configured: boolean;
-  hasHealthCheck: boolean;
-  health: { status: "up" | "down" | "unconfigured"; responseTime?: number; error?: string } | null;
-  dependencies: string[];
-  infrastructure: { dockerProfile?: string; services?: string[] } | null;
-}
+export type IntegrationSummary = import("@openmapx/core/api-contracts").AdminIntegrationSummary;
 
 type StatusFilter = "all" | "enabled" | "disabled" | "unhealthy" | "unconfigured";
 type QualityFilter = "all" | "built-in" | "community";
@@ -107,9 +90,7 @@ function HealthCell({ integration }: { integration: IntegrationSummary }) {
 }
 
 export function IntegrationList() {
-  const env = useEnv();
-  const apiUrl = env.apiUrl;
-  const qc = useQueryClient();
+  const admin = useIntegrationAdmin();
 
   const [search, setSearch] = useState("");
   const [domainFilter, setDomainFilter] = useState("all");
@@ -120,30 +101,13 @@ export function IntegrationList() {
   const showToast = useAdminToast();
   const [togglingIds, setTogglingIds] = useState<Set<string>>(new Set());
 
-  const {
-    data: integrations = [],
-    isLoading,
-    isError,
-  } = useQuery<IntegrationSummary[]>({
-    queryKey: ["admin", "integrations"],
-    queryFn: async () => {
-      const res = await fetch(`${apiUrl}/api/admin/integrations`, { credentials: "include" });
-      if (!res.ok) throw new Error("Failed to load integrations");
-      return res.json();
-    },
-  });
+  const { data: integrations = [], isLoading, isError } = useQuery(admin.queries.list());
 
   async function toggleIntegration(integrationId: string, enable: boolean) {
     setTogglingIds((prev) => new Set(prev).add(integrationId));
     try {
-      const action = enable ? "enable" : "disable";
-      const res = await fetch(`${apiUrl}/api/admin/integrations/${integrationId}/${action}`, {
-        method: "POST",
-        credentials: "include",
-      });
-      if (!res.ok) throw new Error(`Failed to ${action}`);
-      void qc.invalidateQueries({ queryKey: ["admin", "integrations"] });
-      void invalidateIntegrationRuntime(qc, apiUrl);
+      await admin.toggle(integrationId, enable);
+      void admin.refresh();
       showToast(`Integration ${enable ? "enabled" : "disabled"}`);
     } catch {
       showToast("Operation failed", "error");
@@ -156,33 +120,13 @@ export function IntegrationList() {
     }
   }
 
-  const reloadMutation = useMutation({
-    mutationFn: async () => {
-      const res = await fetch(`${apiUrl}/api/admin/integrations/reload`, {
-        method: "POST",
-        credentials: "include",
-      });
-      if (!res.ok) throw new Error("Reload failed");
-      return res.json();
-    },
-    onSuccess: (data: { jobId: string }) => {
-      void qc.invalidateQueries({ queryKey: ["admin", "integrations"] });
-      showToast(`Reload job queued (${data.jobId})`);
-    },
-    onError: () => showToast("Reload failed", "error"),
-  });
+  const reloadMutation = useIntegrationReload();
 
   const healthMutation = useMutation({
-    mutationFn: async () => {
-      const res = await fetch(`${apiUrl}/api/admin/integrations/health/run`, {
-        method: "POST",
-        credentials: "include",
-      });
-      if (!res.ok) throw new Error("Health check failed");
-      return res.json();
-    },
+    retry: false,
+    mutationFn: admin.healthSweep,
     onSuccess: (data) => {
-      void qc.invalidateQueries({ queryKey: ["admin", "integrations"] });
+      void admin.refresh();
       showToast(`Health checks completed: ${data.count} checked`);
     },
     onError: () => showToast("Health checks failed", "error"),
@@ -434,7 +378,13 @@ export function IntegrationList() {
                 startIcon={
                   reloadMutation.isPending ? <CircularProgress size={14} /> : <RefreshIcon />
                 }
-                onClick={() => reloadMutation.mutate()}
+                onClick={() =>
+                  reloadMutation.mutate(undefined, {
+                    onSuccess: () =>
+                      showToast("Reload job queued — check Activity for status", "info"),
+                    onError: () => showToast("Reload failed", "error"),
+                  })
+                }
                 disabled={reloadMutation.isPending || healthMutation.isPending}
               >
                 Reload All
