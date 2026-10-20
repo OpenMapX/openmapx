@@ -610,8 +610,6 @@ so the catalogue stays in sync with the live manifests.
   and **[Managing services](./managing-services.md)** — the step-by-step
   deployment, data-build, and lifecycle walkthroughs.
 
-### Migrating release selection
-
-Remove `OPENMAPX_RELEASE_MANIFEST_IMAGE`; it is now rejected with migration guidance. Replace a prior full reference such as `registry.example/team/release-manifest:preview` with `OPENMAPX_RELEASE=preview` and `OPENMAPX_RELEASE_MANIFEST_REPOSITORY=registry.example/team/release-manifest`. Replace the former empty opt-out with explicit `OPENMAPX_RELEASE=local`. Re-render and update the operations agent from the host so it receives the same configuration.
+### Changing release selection
 
 The default remains `main` before the first named preview exists. For deliberately published prereleases, set `preview` after the first publication. Changing configuration does not silently replace an existing overlay: inspect `pnpm openmapx compose release --status`, then explicitly reselect with `pnpm openmapx compose release` or clear it when intentionally leaving release mode.

@@ -10,7 +10,15 @@
 //     alongside community integration artifacts so the page can surface the
 //     dependencies bundled into the artifact
 
-import { existsSync, readdirSync, readFileSync, realpathSync, statSync } from "node:fs";
+import {
+  closeSync,
+  existsSync,
+  fstatSync,
+  openSync,
+  readdirSync,
+  readFileSync,
+  realpathSync,
+} from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join, sep } from "node:path";
 
@@ -54,19 +62,48 @@ const LICENSE_FILENAMES = [
   "LICENSE",
   "LICENSE.md",
   "LICENSE.txt",
+  "LICENCE",
+  "LICENCE.md",
+  "LICENCE.txt",
   "LICENSE-MIT",
   "LICENSE.MIT",
   "License",
   "License.md",
   "License.txt",
+  "Licence",
+  "Licence.md",
+  "Licence.txt",
   "license",
   "license.md",
   "license.txt",
+  "licence",
+  "licence.md",
+  "licence.txt",
   "COPYING",
   "COPYING.md",
   "COPYING.txt",
   "UNLICENSE",
 ] as const;
+
+const LICENSE_DIRECTORIES = ["LICENSES", "Licenses", "licenses"] as const;
+
+const ROOT_LICENSE_PATTERN = /^(?:licen[cs]e|copying|unlicense)(?:[-_.].+)?$/i;
+
+const NON_TEXT_LICENSE_SUFFIX =
+  /\.(?:[cm]?[jt]sx?|d\.[cm]?ts|json|ya?ml|toml|html?|css|sh|py|map|wasm|node|png|jpe?g|gif|svg|ico|pdf)$/i;
+
+const SPDX_OPERATORS = new Set([
+  "and",
+  "or",
+  "with",
+  "custom",
+  "not",
+  "specified",
+  "unlicensed",
+  "see",
+  "license",
+  "in",
+]);
 
 interface PackageJsonShape {
   name?: string;
@@ -95,7 +132,6 @@ export function scanLicenses(opts: ScanLicensesOptions): LicenseNotice[] {
   const noticesByKey = new Map<string, LicenseNotice>();
 
   for (const rootPath of opts.rootPackageJsonPaths) {
-    if (!existsSync(rootPath)) continue;
     const pkg = readPackageJson(rootPath);
     if (!pkg) continue;
     const fromDir = dirname(rootPath);
@@ -173,7 +209,7 @@ function resolvePackageJsonPath(name: string, fromDir: string): string | null {
     // Resolve the entry point and walk back to the nearest package.json.
   }
   try {
-    return findEnclosingPackageJson(req.resolve(name));
+    return findEnclosingPackageJson(req.resolve(name)) ?? findNodeModulesPackageJson(name, fromDir);
   } catch {
     return findNodeModulesPackageJson(name, fromDir);
   }
@@ -183,7 +219,12 @@ function findEnclosingPackageJson(entry: string): string | null {
   let dir = dirname(entry);
   while (dir !== dirname(dir)) {
     const candidate = join(dir, "package.json");
-    if (existsSync(candidate)) return candidate;
+    const pkg = readPackageJson(candidate);
+    // Skip subdirectory module-type markers (e.g. `dist/cjs/package.json`
+    // containing only `{"type": "commonjs"}`) that lack a package name.
+    if (typeof pkg?.name === "string" && pkg.name.trim() !== "") {
+      return candidate;
+    }
     dir = dirname(dir);
   }
   return null;
@@ -222,7 +263,7 @@ function buildNotice(
     licenseUrl: info.licenseUrl,
     projectUrl: extractProjectUrl(pkg),
   };
-  const text = readLicenseFile(pkgDir, maxLicenseBytes);
+  const text = readLicenseFile(pkgDir, maxLicenseBytes, info.license);
   if (text) notice.licenseText = text;
   return notice;
 }
@@ -265,7 +306,116 @@ function normalizeUrl(url: string | undefined): string | undefined {
   return cleaned.startsWith("http://") || cleaned.startsWith("https://") ? cleaned : undefined;
 }
 
-function readLicenseFile(pkgDir: string, maxBytes: number): string | undefined {
+function readTextFileWithinLimit(path: string, maxBytes: number): string | undefined {
+  let fd: number | undefined;
+  try {
+    fd = openSync(path, "r");
+    const stat = fstatSync(fd);
+    if (!stat.isFile() || stat.size > maxBytes) return undefined;
+    const text = readFileSync(fd, "utf8").trim();
+    return text || undefined;
+  } catch {
+    return undefined;
+  } finally {
+    if (fd !== undefined) {
+      try {
+        closeSync(fd);
+      } catch {
+        // Ignore close errors.
+      }
+    }
+  }
+}
+
+function joinLicenseTexts(paths: string[], maxBytes: number): string | undefined {
+  const parts: string[] = [];
+  let totalBytes = 0;
+  for (const path of paths) {
+    const text = readTextFileWithinLimit(path, maxBytes);
+    if (!text) continue;
+    const separatorBytes = parts.length > 0 ? 7 : 0; // "\n\n---\n\n".length
+    const nextBytes = Buffer.byteLength(text, "utf8");
+    if (totalBytes + separatorBytes + nextBytes > maxBytes) continue;
+    parts.push(text);
+    totalBytes += separatorBytes + nextBytes;
+  }
+  return parts.length > 0 ? parts.join("\n\n---\n\n") : undefined;
+}
+
+function extractSpdxTokens(declaredLicense: string | undefined): string[] {
+  if (!declaredLicense) return [];
+  const rawTokens = declaredLicense.split(/[\s(),/]+/);
+  const tokens: string[] = [];
+  const seen = new Set<string>();
+  for (const raw of rawTokens) {
+    const cleaned = raw.trim().toLowerCase();
+    if (!cleaned || SPDX_OPERATORS.has(cleaned)) continue;
+    if (!seen.has(cleaned)) {
+      seen.add(cleaned);
+      tokens.push(cleaned);
+    }
+  }
+  return tokens;
+}
+
+function stripLicenseExtension(filename: string): string {
+  return filename.replace(/\.(?:txt|md|rst|license|licence)$/i, "").toLowerCase();
+}
+
+function readLicenseDirectory(
+  pkgDir: string,
+  entries: Set<string>,
+  maxBytes: number,
+  declaredLicense?: string,
+): string | undefined {
+  for (const dirName of LICENSE_DIRECTORIES) {
+    if (!entries.has(dirName)) continue;
+    const dirPath = join(pkgDir, dirName);
+    let children: string[];
+    try {
+      children = readdirSync(dirPath)
+        .filter((name) => !name.startsWith(".") && !NON_TEXT_LICENSE_SUFFIX.test(name))
+        .sort((a, b) => a.localeCompare(b, "en", { sensitivity: "base" }));
+    } catch {
+      continue;
+    }
+    if (children.length === 0) continue;
+
+    // Prefer license files matching the package's declared SPDX expression
+    // (e.g. REUSE 3.3 `LICENSES/<SPDX-ID>.txt`), since REUSE directories can
+    // also carry auxiliary licenses for build configs, docs, or demo sites.
+    const spdxTokens = extractSpdxTokens(declaredLicense);
+    if (spdxTokens.length > 0) {
+      const matchedPaths: string[] = [];
+      const used = new Set<string>();
+      for (const token of spdxTokens) {
+        for (const child of children) {
+          if (used.has(child)) continue;
+          const stem = stripLicenseExtension(child);
+          if (stem === token || child.toLowerCase() === token) {
+            used.add(child);
+            matchedPaths.push(join(dirPath, child));
+          }
+        }
+      }
+      const matchedText = joinLicenseTexts(matchedPaths, maxBytes);
+      if (matchedText) return matchedText;
+    }
+
+    const fallbackText = joinLicenseTexts(
+      children.map((child) => join(dirPath, child)),
+      maxBytes,
+    );
+    if (fallbackText) return fallbackText;
+  }
+  return undefined;
+}
+
+function readLicenseFile(
+  pkgDir: string,
+  maxBytes: number,
+  declaredLicense?: string,
+): string | undefined {
   let entries: string[];
   try {
     entries = readdirSync(pkgDir);
@@ -275,15 +425,23 @@ function readLicenseFile(pkgDir: string, maxBytes: number): string | undefined {
   const present = new Set(entries);
   for (const candidate of LICENSE_FILENAMES) {
     if (!present.has(candidate)) continue;
-    const path = join(pkgDir, candidate);
-    try {
-      const size = statSync(path).size;
-      if (size > maxBytes) return undefined;
-      const text = readFileSync(path, "utf8").trim();
-      return text || undefined;
-    } catch {
-      // Try the next candidate.
-    }
+    const text = readTextFileWithinLimit(join(pkgDir, candidate), maxBytes);
+    if (text) return text;
   }
-  return undefined;
+
+  // Match suffixed or multi-license root files (e.g. `LICENSE-MIT.txt`,
+  // `LICENSE.BSD`, or dual `license-mit` + `license-cc0`).
+  const variantFiles = entries
+    .filter((name) => ROOT_LICENSE_PATTERN.test(name) && !NON_TEXT_LICENSE_SUFFIX.test(name))
+    .sort((a, b) => a.localeCompare(b, "en", { sensitivity: "base" }));
+  if (variantFiles.length > 0) {
+    const variantText = joinLicenseTexts(
+      variantFiles.map((name) => join(pkgDir, name)),
+      maxBytes,
+    );
+    if (variantText) return variantText;
+  }
+
+  // Support REUSE / SPDX `LICENSES/` (or `licenses/`) subdirectories.
+  return readLicenseDirectory(pkgDir, present, maxBytes, declaredLicense);
 }

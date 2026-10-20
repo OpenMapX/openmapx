@@ -372,7 +372,7 @@ it("clears through the command without registry access even with a malformed cha
   const path = join(directory, "docker-compose.release.yml");
   writeReleaseOverlay(JSON.parse(manifestJson), path);
   vi.stubEnv("OPENMAPX_ROOT_DIR", temp);
-  vi.stubEnv("OPENMAPX_RELEASE_MANIFEST_IMAGE", "invalid");
+  vi.stubEnv("OPENMAPX_RELEASE", "invalid");
   vi.stubEnv("PATH", "");
   const output = vi.spyOn(console, "log").mockImplementation(() => {});
   const errors = vi.spyOn(console, "error").mockImplementation(() => {});
@@ -385,7 +385,7 @@ it("clears through the command without registry access even with a malformed cha
     await program.parseAsync(["compose", "release", "--clear"], { from: "user" });
     expect(existsSync(path)).toBe(false);
     expect(output.mock.calls.flat().join("\n")).toContain("next start/update");
-    expect(process.env.OPENMAPX_RELEASE_MANIFEST_IMAGE).toBe("invalid");
+    expect(process.env.OPENMAPX_RELEASE).toBe("invalid");
   } finally {
     output.mockRestore();
     errors.mockRestore();

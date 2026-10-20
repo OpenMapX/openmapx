@@ -26,8 +26,6 @@ import { dirname, join } from "node:path";
 import { JSON_SCHEMA, load } from "js-yaml";
 import z from "zod/v4";
 
-export const DEFAULT_RELEASE_MANIFEST_IMAGE = "ghcr.io/openmapx/release-manifest:main";
-export const RELEASE_MANIFEST_IMAGE_ENV = "OPENMAPX_RELEASE_MANIFEST_IMAGE";
 export const RELEASE_MANIFEST_CONTAINER_PATH = "/release-manifest.json";
 /** Runtime services whose images the release overlay pins as one release. */
 export const RELEASE_PINNED_SERVICE_IDS = [
@@ -88,12 +86,7 @@ function imagePrefixOf(image: string): string {
 export function normalizeReleaseSelection(
   selector: string = "main",
   manifestRepository: string = DEFAULT_RELEASE_MANIFEST_REPOSITORY,
-  legacyImage?: string,
 ): ReleaseSelection {
-  if (legacyImage !== undefined)
-    throw new Error(
-      `${RELEASE_MANIFEST_IMAGE_ENV} is no longer supported. Set ${RELEASE_SELECTOR_ENV}=main|preview|v<version>|sha256:<digest>|local and ${RELEASE_REPOSITORY_ENV} instead.`,
-    );
   if (
     !/^[a-z0-9][a-z0-9.-]*(?::[0-9]+)?\/[a-z0-9][a-z0-9._/-]*\/release-manifest$/.test(
       manifestRepository,
@@ -129,7 +122,6 @@ export function releaseSelection(): ReleaseSelection {
   return normalizeReleaseSelection(
     envValue(RELEASE_SELECTOR_ENV),
     envValue(RELEASE_REPOSITORY_ENV),
-    envValue(RELEASE_MANIFEST_IMAGE_ENV),
   );
 }
 export function releaseChannel(
