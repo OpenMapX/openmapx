@@ -228,13 +228,13 @@ describe("validateConfigBody nested schemas", () => {
         { providers: [{ id: "remote", type: "compatible", baseURL: "file:///tmp/x" }] },
         nestedSchema,
       ).errors,
-    ).toEqual(['"providers"[0] does not match an allowed shape for type "compatible"']);
+    ).toEqual(['"providers"[0] does not match an allowed shape']);
     expect(
       validateConfigBody(
         { providers: [{ id: "keyword", type: "keyword", secret: "nope" }] },
         nestedSchema,
       ).errors,
-    ).toEqual(['"providers"[0] does not match an allowed shape for type "keyword"']);
+    ).toEqual(['"providers"[0] does not match an allowed shape']);
   });
 
   it("enforces collection bounds", () => {
@@ -469,5 +469,36 @@ describe("validateConfigBody schema variations", () => {
     const result = validateConfigBody({ freeform: { nested: true } }, { freeform: {} });
     expect(result.errors).toEqual([]);
     expect(result.updates).toEqual({ freeform: { nested: true } });
+  });
+});
+
+describe("administration import authority boundaries", () => {
+  it("rejects inherited object properties as unknown config fields", () => {
+    expect(
+      validateConfigBody({ constructor: "synthetic" }, { properties: {} }).errors,
+    ).not.toHaveLength(0);
+  });
+  it("applies secret/read-only authority recursively and never echoes discriminator values", () => {
+    const schema = {
+      properties: {
+        nested: {
+          type: "object",
+          properties: {
+            secret: { type: "string", "x-openmapx-secret": true },
+            fixed: { type: "string", readOnly: true },
+          },
+        },
+        choice: { oneOf: [{ type: "object", properties: { type: { const: "allowed" } } }] },
+      },
+    };
+    expect(
+      validateConfigBody({ nested: { secret: "synthetic-secret" } }, schema).errors.length,
+    ).toBeGreaterThan(0);
+    expect(
+      validateConfigBody({ nested: { fixed: "synthetic" } }, schema).errors.length,
+    ).toBeGreaterThan(0);
+    const rejected = validateConfigBody({ choice: { type: "synthetic-secret" } }, schema);
+    expect(rejected.errors.length).toBeGreaterThan(0);
+    expect(JSON.stringify(rejected)).not.toContain("synthetic-secret");
   });
 });

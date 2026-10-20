@@ -433,3 +433,21 @@ credential does not yet enable a provider; the API log says so on startup.
   cascade fits the wider deployment.
 - **[Monitoring](./monitoring.md)** — health history, background jobs, and the
   audit log.
+
+## Importing saved integration configuration
+
+Integration exports contain writable non-secret overrides and optional export
+metadata. Import validates the whole file first, then replaces overrides for the
+named integrations. Omit `enabled` to retain its saved state; provide a boolean to
+change it. Empty per-integration configuration resets its non-secret overrides.
+Unnamed integrations and credential vault entries are unchanged. Unknown,
+read-only or invalid fields reject the whole import, and masked values such as
+`***` cannot become settings. Older unknown database fields are omitted from new
+exports. An empty file has no work to perform and is rejected.
+
+A successful response means the batch was saved, one full trusted configuration
+was applied and integrations were reloaded. A failure can report that prior state
+was restored, or that reconciliation is required. Restoration never authorizes
+overwriting a newer administrator/host edit. If reconciliation is required,
+inspect saved configuration, the applied host generation and runtime state before
+making another deliberate change. Do not automatically retry the import.

@@ -433,7 +433,7 @@ describe("activity generation", () => {
   }, 90_000);
 });
 
-describe("pending integration administration generation", () => {
+describe("integration administration generation", () => {
   it("generates all22operations, isolated models and aggregate bindings without changing prior families", async () => {
     const { integrationAdminOperations } = await import(
       "../../packages/core/src/api/contracts/integration-admin"
@@ -443,7 +443,12 @@ describe("pending integration administration generation", () => {
       await readFile(new URL("../../apps/api/openapi.json", import.meta.url), "utf8"),
     );
     const input = structuredClone(previousInput);
-    // Synthetic local pending-tag fixture only: no real producer adoption is claimed.
+    // Keep the synthetic emitter probe; compare old families to a document without
+    // this family now that actual producers are adopted and separately qualified.
+    for (const operation of Object.values(integrationAdminOperations)) {
+      const path = operation.path.replace(/:([^/]+)/g, "{$1}");
+      delete previousInput.paths[path]?.[operation.method.toLowerCase()];
+    }
     input.components ??= {};
     input.components.schemas ??= {};
     const definitions = input.components.schemas;

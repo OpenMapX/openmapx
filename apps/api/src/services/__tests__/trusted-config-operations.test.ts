@@ -49,9 +49,11 @@ vi.mock("@openmapx/core/ops", async (importOriginal) => ({
   readOpsTokenFile: async () => "token",
 }));
 
-const { applyTrustedConfiguration, applyTrustedConfigurationSnapshot } = await import(
-  "../trusted-config-operations"
-);
+const {
+  applyTrustedConfiguration,
+  applyTrustedConfigurationSnapshot,
+  applyTrustedConfigurationWithEvidence,
+} = await import("../trusted-config-operations");
 
 const { executeTrustedConfigurationAndWait } = await import("../ops-client");
 const { TrustedConfigurationApplyError, isProvenConfigurationNonCommit } = await import(
@@ -79,6 +81,19 @@ describe("applyTrustedConfiguration", () => {
     process.env.OPS_TRUSTED_CONFIG_GID = "1000";
   });
 
+  it("returns the exact submitted payload with settled evidence for scoped compensation", async () => {
+    const result = await applyTrustedConfigurationWithEvidence({
+      kind: "stack.render",
+      operationKey: "opk1_import",
+    });
+    expect(result.payload).toEqual(published[0]);
+    expect(result.outcome).toMatchObject({
+      outcome: "committed",
+      followUp: "complete",
+      publisherCleanupFailed: false,
+    });
+    expect(operations).toHaveLength(1);
+  });
   it("leaves the selection to the deployment and carries every service's saved config", async () => {
     await applyTrustedConfiguration({ kind: "stack.render", operationKey: "opk1_render" });
 

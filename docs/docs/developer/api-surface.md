@@ -390,3 +390,48 @@ overflow emits a qualified control event and closes. Invalid post-hijack state
 closes without exposing producer content, unsubscribes and clears heartbeat timers.
 Regenerate both `pnpm openapi:generate` and `pnpm sdk:generate` after a contract
 change, then run `pnpm check-openapi` and `pnpm check-api-sdk`.
+
+## Integration administration
+
+`integrationAdminOperations` owns all 22 integration, binding, credential and
+`/api/admin/overview` operations. Import the generated functions and canonical
+wire types from `@openmapx/core/api-admin-sdk`. The focused producer plugins inherit
+the administrator guard before contract parsing. Binding POST retains its earlier
+body-validation-before-handler-auth ordering. JSON parsing, global CSRF and rate
+limits retain their existing lifecycle positions. An omitted optional mutation
+body stays absent; explicit JSON null is invalid.
+
+Manifest/config-schema JSON remains lossless. Credential status uses the actual
+resolved winning layer, with stored-vault audit fields reported separately and
+without values. Health-history hours default to 24 and accept one integer from
+1 through 168. SQL timestamp-without-time-zone hour values are interpreted as UTC
+and emitted as ISO timestamps. Reload enqueue responses are HTTP 200 `{ok, jobId}`;
+they do not establish terminal job success.
+
+Configuration import validates the complete file against current manifests before
+writes. It replaces named non-secret overrides, preserves an omitted `enabled`,
+and leaves unnamed rows and the vault untouched. Declared top-level secret fields
+are omitted. Unknown/read-only/invalid fields and masked non-secret values reject
+the file. Exports omit secrets, obsolete/unknown DB fields and read-only fields;
+their optional `exportedAt` and `count` metadata is accepted by import. Empty imports
+are rejected, including an empty export with no saved overrides.
+
+One DB transaction persists the batch, one ordinary full `stack.render` applies
+it, and one normal reload follows. A failed import returns HTTP 409 with
+`ok: false`, `phase`, `recovery`, `database`, optional `runtime`, and optional
+`apply`/`compensation` outcome evidence. `recovery: "restored"` is still a failed
+import, not success. `reconciliation_required` means an operator must inspect
+saved, applied and runtime state before another deliberate action; do not retry
+a mutation automatically. No secret-bearing snapshot enters this response.
+
+Recovery compares each named row's identity and PostgreSQL tuple version in an
+all-or-none transaction. It reverses only those integrations in the full payload
+actually submitted, preserving unrelated changes included during preparation.
+Host compensation authenticates `expectedCurrentRevisionId` using the committed
+import revision. A newer host generation conflicts rather than being overwritten.
+After a reload exception, a successful DB/host restoration also needs a recovery
+reload and a final DB ownership check. Unknown completion, lost ownership,
+compensation failure and incomplete cleanup remain explicit reconciliation.
+This is request-local compensation, not a crash-atomic DB/host/runtime transaction;
+process loss can require operator reconciliation. Live PostgreSQL and deployment
+acceptance are separate from provider-independent fixture qualification.

@@ -9,6 +9,7 @@ import { envString } from "@openmapx/core/server-env";
 import { db } from "../db";
 import { integrationConfig } from "../db/schema";
 import { getAllIntegrations } from "../integration-host";
+import { projectIntegrationConfig } from "./integration-config-projection";
 import { createApiOpsClient, executeTrustedConfigurationAndWait } from "./ops-client";
 import { resolveAllServiceConfigs } from "./service-config-resolver";
 import { getServiceRegistry } from "./service-registry";
@@ -45,25 +46,6 @@ function exactInteger(env: NodeJS.ProcessEnv, name: string): number {
   const parsed = Number(value);
   if (!Number.isSafeInteger(parsed)) throw new Error("Trusted configuration unavailable");
   return parsed;
-}
-
-function nonSecretConfig(
-  schema: Record<string, unknown> | undefined,
-  values: Record<string, unknown>,
-): Record<string, unknown> {
-  const properties = ((schema?.properties ?? schema) || {}) as Record<
-    string,
-    { "x-openmapx-secret"?: unknown }
-  >;
-  return Object.fromEntries(
-    Object.entries(values).filter(
-      ([key]) =>
-        key !== "type" &&
-        key !== "properties" &&
-        properties[key] &&
-        properties[key]?.["x-openmapx-secret"] !== true,
-    ),
-  );
 }
 
 /**
@@ -104,7 +86,7 @@ export async function buildConfigurationInput(): Promise<TrustedConfigurationPay
     }),
     integrationConfigs: integrations.map((integration) => ({
       integrationId: integration.id,
-      values: nonSecretConfig(
+      values: projectIntegrationConfig(
         integration.manifest.configSchema as Record<string, unknown> | undefined,
         configuredById.get(integration.id) ?? {},
       ),
@@ -121,6 +103,22 @@ export async function buildConfigurationInput(): Promise<TrustedConfigurationPay
 export async function applyTrustedConfiguration(
   options: ApplyTrustedConfigurationOptions,
 ): Promise<{ revisionId: string; enabledServiceIds: string[] }> {
+  const { outcome } = await applyTrustedConfigurationWithEvidence(options);
+  if (
+    outcome.outcome !== "committed" ||
+    outcome.followUp !== "complete" ||
+    outcome.cleanupFailed ||
+    outcome.publisherCleanupFailed ||
+    outcome.registryUpdateFailed
+  )
+    throw new TrustedConfigurationApplyError(outcome);
+  return { revisionId: outcome.revisionId, enabledServiceIds: outcome.enabledServiceIds };
+}
+
+/** Internal evidence for scoped compensation. Payload may contain secrets; never serialize it. */
+export async function applyTrustedConfigurationWithEvidence(
+  options: ApplyTrustedConfigurationOptions,
+): Promise<{ payload?: TrustedConfigurationPayload; outcome: TrustedConfigurationApplyOutcome }> {
   let payload: TrustedConfigurationPayload;
   try {
     if ((options.kind === "serviceSelection.apply") !== (options.selectedRoots !== undefined)) {
@@ -131,25 +129,17 @@ export async function applyTrustedConfiguration(
       ...(options.selectedRoots ? { selectedRoots: options.selectedRoots } : {}),
     });
   } catch {
-    throw new TrustedConfigurationApplyError({
-      outcome: "not_committed",
-      reason: "failed",
-      cleanupFailed: false,
-      publisherCleanupFailed: false,
-      registryUpdateFailed: false,
-    });
+    return {
+      outcome: {
+        outcome: "not_committed",
+        reason: "failed",
+        cleanupFailed: false,
+        publisherCleanupFailed: false,
+        registryUpdateFailed: false,
+      },
+    };
   }
-  const outcome = await applySnapshot(options, payload);
-  if (
-    outcome.outcome !== "committed" ||
-    outcome.followUp !== "complete" ||
-    outcome.cleanupFailed ||
-    outcome.publisherCleanupFailed ||
-    outcome.registryUpdateFailed
-  ) {
-    throw new TrustedConfigurationApplyError(outcome);
-  }
-  return { revisionId: outcome.revisionId, enabledServiceIds: outcome.enabledServiceIds };
+  return { payload, outcome: await applySnapshot(options, payload) };
 }
 
 /** Full-snapshot compensation; compare the applied generation, NOT the manifest authority. */

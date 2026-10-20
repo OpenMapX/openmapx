@@ -13,6 +13,7 @@ import {
   adminIntegrationDetailSchema,
   adminIntegrationEmptyMutationSchema,
   adminIntegrationEnvVarsSchema,
+  adminIntegrationImportFailureSchema,
   adminIntegrationParamsSchema,
   adminIntegrationRefParamsSchema,
   adminIntegrationReloadAcceptedSchema,
@@ -82,6 +83,7 @@ export const integrationAdminOperations = {
       ...common,
       400: configErrors,
       200: adminJson(adminIntegrationConfigImportedSchema),
+      409: adminJson(adminIntegrationImportFailureSchema),
     },
   },
   runAdminIntegrationHealthChecks: {

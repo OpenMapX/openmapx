@@ -79,14 +79,17 @@ function validateSchemaValue(
   value: unknown,
   schema: Record<string, unknown>,
   path: string,
+  rejectSecrets = true,
 ): string[] {
+  if (schema.readOnly === true) return [`${path} is read-only`];
+  if (rejectSecrets && schema["x-openmapx-secret"] === true) return [`${path} is a secret field`];
   if (Array.isArray(schema.allOf)) {
     const { allOf, ...baseSchema } = schema;
     return [
-      ...validateSchemaValue(value, baseSchema, path),
+      ...validateSchemaValue(value, baseSchema, path, rejectSecrets),
       ...allOf.flatMap((entry) =>
         isRecord(entry)
-          ? validateSchemaValue(value, entry, path)
+          ? validateSchemaValue(value, entry, path, rejectSecrets)
           : [`${path} has an invalid schema`],
       ),
     ];
@@ -94,11 +97,12 @@ function validateSchemaValue(
 
   if (isRecord(schema.if)) {
     const { if: condition, then, else: otherwise, ...baseSchema } = schema;
-    const conditionMatches = validateSchemaValue(value, condition, path).length === 0;
+    const conditionMatches =
+      validateSchemaValue(value, condition, path, rejectSecrets).length === 0;
     const branch = conditionMatches ? then : otherwise;
     return [
-      ...validateSchemaValue(value, baseSchema, path),
-      ...(isRecord(branch) ? validateSchemaValue(value, branch, path) : []),
+      ...validateSchemaValue(value, baseSchema, path, rejectSecrets),
+      ...(isRecord(branch) ? validateSchemaValue(value, branch, path, rejectSecrets) : []),
     ];
   }
 
@@ -106,15 +110,13 @@ function validateSchemaValue(
   if (Array.isArray(oneOf)) {
     const candidateResults = oneOf.map((candidate) =>
       isRecord(candidate)
-        ? validateSchemaValue(value, candidate, path)
+        ? validateSchemaValue(value, candidate, path, rejectSecrets)
         : [`${path} has an invalid schema`],
     );
     const matches = candidateResults.filter((errors) => errors.length === 0);
     if (matches.length === 1) return [];
     if (matches.length > 1) return [`${path} matches more than one allowed shape`];
-    const discriminator =
-      isRecord(value) && typeof value.type === "string" ? ` for type "${value.type}"` : "";
-    return [`${path} does not match an allowed shape${discriminator}`];
+    return [`${path} does not match an allowed shape`];
   }
 
   if ("const" in schema && value !== schema.const) {
@@ -170,7 +172,12 @@ function validateSchemaValue(
     }
     if (!isRecord(schema.items)) return [];
     return value.flatMap((entry, index) =>
-      validateSchemaValue(entry, schema.items as Record<string, unknown>, `${path}[${index}]`),
+      validateSchemaValue(
+        entry,
+        schema.items as Record<string, unknown>,
+        `${path}[${index}]`,
+        rejectSecrets,
+      ),
     );
   }
   if (type === "object") {
@@ -187,7 +194,9 @@ function validateSchemaValue(
         if (schema.additionalProperties === false) errors.push(`${path}.${key} is not allowed`);
         continue;
       }
-      errors.push(...validateSchemaValue(nestedValue, nestedSchema, `${path}.${key}`));
+      errors.push(
+        ...validateSchemaValue(nestedValue, nestedSchema, `${path}.${key}`, rejectSecrets),
+      );
     }
     return errors;
   }
@@ -213,7 +222,7 @@ export function validateConfigBody(
 
   for (const [key, value] of Object.entries(body as Record<string, unknown>)) {
     if (key === "type" || key === "properties") continue;
-    const def = props[key];
+    const def = Object.hasOwn(props, key) ? props[key] : undefined;
 
     if (!def) {
       result.errors.push(`Unknown config key: "${key}"`);
@@ -232,7 +241,7 @@ export function validateConfigBody(
       continue;
     }
 
-    const errors = validateSchemaValue(value, def, `"${key}"`);
+    const errors = validateSchemaValue(value, def, `"${key}"`, rejectSecrets);
     if (errors.length > 0) {
       result.errors.push(...errors);
       continue;

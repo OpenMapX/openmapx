@@ -33,7 +33,27 @@ vi.mock("../../services/job-runner.js", () => ({
   },
 }));
 
+const mockRestoreOwned = vi.fn().mockResolvedValue(true);
+vi.mock("../../services/integration-config-store", () => ({
+  persistIntegrationImport: async () => ({
+    previous: [],
+    owns: async () => true,
+    restore: mockRestoreOwned,
+  }),
+}));
 vi.mock("../../services/trusted-config-operations.js", () => ({
+  integrationSchemas: () => new Map([["geocoding-maptiler", {}]]),
+  applyTrustedConfigurationWithEvidence: async () => ({
+    outcome: {
+      outcome: "committed",
+      revisionId: `cfg1_${"a".repeat(43)}`,
+      enabledServiceIds: [],
+      followUp: "complete",
+      cleanupFailed: false,
+      publisherCleanupFailed: false,
+      registryUpdateFailed: false,
+    },
+  }),
   applyTrustedConfiguration: vi.fn().mockResolvedValue({ revisionId: "revision_1" }),
 }));
 
@@ -111,18 +131,19 @@ const MOCK_INTEGRATION = {
   isBuiltIn: true,
   directory: "/integrations/geocoding-maptiler",
   manifest: {
+    id: "geocoding-maptiler",
     name: "MapTiler Geocoding",
     description: "Geocoding via MapTiler",
     version: "1.0.0",
     author: "OpenMapX",
     licensing: licensingFromDeclaration("AGPL-3.0", undefined),
-    documentation: null,
+
     domains: ["geocoding"],
-    quality: "stable",
-    healthCheck: null,
+    quality: "built-in",
+
     dependencies: [],
     requires: [],
-    infrastructure: null,
+
     configSchema: undefined,
   },
   strings: { en: { name: "MapTiler Geocoding" } },
@@ -132,7 +153,7 @@ const mockGetAllIntegrations = vi.fn().mockReturnValue([MOCK_INTEGRATION]);
 const mockGetIntegration = vi.fn().mockReturnValue(MOCK_INTEGRATION);
 const mockReloadIntegrations = vi
   .fn()
-  .mockResolvedValue({ reloaded: 1, failed: 0, integrations: [] });
+  .mockResolvedValue({ message: "Integrations reloaded", reloaded: 1, enabled: 1 });
 const mockResolveConfigWithSources = vi.fn().mockResolvedValue({});
 
 vi.mock("../../integration-host.js", () => ({
@@ -234,6 +255,15 @@ describe("GET /admin/overview", () => {
           source: "data-manager",
           id: "job-dm",
           type: "transitous-sync",
+          payload: {},
+          progress: null,
+          createdBy: null,
+          actorLabel: "System",
+          actor: null,
+          createdAt: new Date("2026-10-20T00:00:00Z"),
+          startedAt: null,
+          finishedAt: null,
+          cancelable: false,
           status: "failed",
           error: null,
         },
@@ -343,7 +373,13 @@ describe("GET /admin/integrations/:id", () => {
 describe("POST /admin/integrations/health/run", () => {
   it("runs a fresh health sweep for enabled integrations", async () => {
     mockExecuteAllIntegrationHealthChecks.mockResolvedValueOnce([
-      { id: "geocoding-maptiler", status: "up" },
+      {
+        id: "geocoding-maptiler",
+        name: "Fixture",
+        category: "integration",
+        url: "https://fixture.invalid",
+        status: "up",
+      },
     ]);
 
     const res = await app.inject({ method: "POST", url: "/admin/integrations/health/run" });
@@ -379,7 +415,7 @@ describe("POST /admin/integrations/:id/enable", () => {
         url: "/admin/integrations/geocoding-maptiler/enable",
       });
       expect(res.statusCode).toBe(500);
-      expect(mockDbDelete).toHaveBeenCalledTimes(outcome === "not_committed" ? 1 : 0);
+      expect(mockRestoreOwned).toHaveBeenCalledTimes(outcome === "not_committed" ? 1 : 0);
       expect(mockReloadIntegrations).not.toHaveBeenCalled();
     },
   );
@@ -398,7 +434,7 @@ describe("POST /admin/integrations/:id/enable", () => {
 
     expect(res.statusCode).toBe(200);
     expect(res.json().ok).toBe(true);
-    expect(mockDbInsert).toHaveBeenCalled();
+    expect(mockRestoreOwned).not.toHaveBeenCalled();
     expect(mockWriteAuditLog).toHaveBeenCalledWith(
       expect.objectContaining({ action: "integration.enabled", targetId: "geocoding-maptiler" }),
     );
@@ -697,5 +733,57 @@ describe("DELETE /admin/credentials/:integrationId/:key", () => {
     expect(res.statusCode).toBe(200);
     expect(mockDeleteSecret).toHaveBeenCalledWith("fuel", "apiKey");
     expect(mockReloadIntegrations).toHaveBeenCalled();
+  });
+});
+
+describe("integration contract tightening", () => {
+  it("rejects malformed health hours", async () => {
+    for (const hours of ["0", "169", "NaN", "1.5", "-1", "1&hours=2", ""]) {
+      expect(
+        (await app.inject(`/admin/integrations/geocoding-maptiler/health/history?hours=${hours}`))
+          .statusCode,
+        hours,
+      ).toBe(400);
+    }
+  });
+  it("keeps admin denial before invalid body validation", async () => {
+    mockRequireAdmin.mockRejectedValueOnce(Object.assign(new Error("Denied"), { statusCode: 403 }));
+    expect(
+      (
+        await app.inject({
+          method: "PUT",
+          url: "/admin/credentials/geocoding-maptiler/key",
+          payload: { value: 4, extra: true },
+        })
+      ).statusCode,
+    ).toBe(403);
+  });
+  it("rejects unknown credential mutation keys", async () => {
+    expect(
+      (
+        await app.inject({
+          method: "PUT",
+          url: "/admin/credentials/geocoding-maptiler/key",
+          payload: { value: "synthetic", extra: true },
+        })
+      ).statusCode,
+    ).toBe(400);
+    expect(mockSetSecret).not.toHaveBeenCalled();
+  });
+  it("reports the resolved winning source independently of stored vault audit", async () => {
+    mockGetSecretFields.mockReturnValueOnce([{ key: "key", title: "Key" }]);
+    mockListSecrets.mockResolvedValueOnce([
+      { key: "key", updatedAt: new Date("2026-10-20T00:00:00Z"), updatedBy: "actor" },
+    ]);
+    mockResolveConfigWithSources.mockResolvedValueOnce({
+      key: { value: "synthetic", source: "config.json" },
+    });
+    const response = await app.inject("/admin/credentials/geocoding-maptiler");
+    expect(response.json().credentials[0]).toMatchObject({
+      source: "config.json",
+      updatedBy: "actor",
+      updatedAt: "2026-10-20T00:00:00.000Z",
+    });
+    expect(response.body).not.toContain("synthetic");
   });
 });

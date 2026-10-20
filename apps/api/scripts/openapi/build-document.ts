@@ -29,6 +29,8 @@ export interface OpenApiDocument {
 const HTTP_METHODS = ["get", "put", "post", "delete", "options", "head", "patch", "trace"];
 
 const TAG_DESCRIPTIONS: Record<string, string> = {
+  "integration-admin":
+    "Integration, credential, binding and overview administration with validated contracts.",
   "activity-admin":
     "Activity administration: application and data-manager jobs, cancellation and live application events.",
   "data-manager-admin":

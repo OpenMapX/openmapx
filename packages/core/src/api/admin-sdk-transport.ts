@@ -164,7 +164,12 @@ export function createAdminOperationBinder<const Operations extends Record<strin
         )
       )
         throw new Error("Use the administration stream connection target");
-      validateRequestHeaders(operation, headers);
+      // Orval emits application/json even when an optional body is omitted.
+      // An empty JSON entity is invalid to Fastify; absence must stay absence.
+      const requestHeaders = new Headers(headers);
+      if (body === undefined && operation.request?.body?.isOptional())
+        requestHeaders.delete("content-type");
+      validateRequestHeaders(operation, requestHeaders);
       const jsonBudget = positive(maxJsonBytes, 8 * 1024 * 1024);
       const textBudget = positive(maxTextBytes, 8 * 1024 * 1024);
       const errorBudget = positive(maxErrorBytes, 64 * 1024);
@@ -225,7 +230,7 @@ export function createAdminOperationBinder<const Operations extends Record<strin
             throw new ApiContractError(response.status);
           }
         },
-        { signal, timeoutMs, cache, headers, acceptedStatuses: "all" },
+        { signal, timeoutMs, cache, headers: requestHeaders, acceptedStatuses: "all" },
       );
       return result as T;
     };

@@ -1,0 +1,514 @@
+import type { TrustedConfigurationPayload } from "@openmapx/core/ops";
+import { describe, expect, it } from "vitest";
+import {
+  exportIntegrationConfigs,
+  prepareIntegrationImport,
+  runIntegrationImport,
+} from "./integration-config-import";
+
+const schema = {
+  properties: {
+    enabled: { type: "boolean" },
+    label: { type: "string" },
+    secret: { type: "string", "x-openmapx-secret": true },
+    fixed: { type: "string", readOnly: true },
+    nested: {
+      type: "object",
+      properties: { count: { type: "integer", minimum: 1 } },
+      additionalProperties: false,
+    },
+  },
+};
+const manifests = new Map([
+  ["alpha", schema],
+  ["beta", schema],
+]);
+const input = (config: Record<string, unknown> = { label: "new" }) => ({
+  integrations: [{ integrationId: "alpha", config }],
+});
+
+describe("integration import preparation", () => {
+  it.each([
+    null,
+    {},
+    { integrations: [] },
+    { integrations: [{ integrationId: "alpha", config: null }] },
+    { integrations: [{ integrationId: "unknown", config: {} }] },
+    { integrations: [...input().integrations, ...input().integrations] },
+    input({ enabled: "false" }),
+    input({ fixed: "x" }),
+    input({ unknown: true }),
+    input({ label: "***" }),
+    input({ nested: { count: 0 } }),
+  ])("rejects the entire invalid file before persistence: %j", (body) => {
+    expect(() => prepareIntegrationImport(body, manifests)).toThrow("Invalid integration import");
+  });
+  it("omits declared secrets and preserves optional enabled and valid nested JSON", () => {
+    expect(
+      prepareIntegrationImport(
+        input({ secret: "synthetic", enabled: false, nested: { count: 2 } }),
+        manifests,
+      ),
+    ).toEqual([{ integrationId: "alpha", config: { enabled: false, nested: { count: 2 } } }]);
+    expect(prepareIntegrationImport(input({}), manifests)[0].config).not.toHaveProperty("enabled");
+  });
+  it("exports only current writable nonsecret fields and round trips its metadata", () => {
+    const exported = exportIntegrationConfigs(
+      [
+        {
+          integrationId: "alpha",
+          config: {
+            label: "safe",
+            secret: "synthetic",
+            fixed: "x",
+            retired: "old",
+            enabled: false,
+          },
+        },
+        { integrationId: "retired", config: { secret: "synthetic" } },
+      ],
+      manifests,
+    );
+    expect(exported.integrations).toEqual([
+      { integrationId: "alpha", config: { label: "safe", enabled: false } },
+    ]);
+    expect(prepareIntegrationImport(exported, manifests)).toEqual(exported.integrations);
+    expect(JSON.stringify(exported)).not.toContain("synthetic");
+  });
+});
+
+function fixture() {
+  const rows = new Map<string, Record<string, string | boolean>>([
+    ["alpha", { label: "old", enabled: false }],
+    ["beta", { label: "before" }],
+  ]);
+  let version = 0;
+  const host: TrustedConfigurationPayload = {
+    domain: "fixture.invalid",
+    serviceConfigs: [],
+    serviceSecrets: [],
+    integrationConfigs: [
+      { integrationId: "alpha", values: { label: "old" } },
+      { integrationId: "beta", values: { label: "before" } },
+    ],
+  };
+  const events: string[] = [];
+  let revision = "A";
+  const state = {
+    rows,
+    events,
+    host,
+    applyMode: "ok",
+    reloadFails: false,
+    restoreFails: false,
+    compensateMode: "ok",
+    beforeApply: () => {},
+    beforeRecovery: () => {},
+    writesFail: false,
+  };
+  const ports = {
+    async persist(entries: ReturnType<typeof prepareIntegrationImport>) {
+      events.push("persist");
+      if (state.writesFail) throw Error("synthetic credential must not escape");
+      const previous = entries.map((e) => ({
+        integrationId: e.integrationId,
+        config: structuredClone(rows.get(e.integrationId) ?? null),
+      }));
+      for (const entry of entries)
+        rows.set(entry.integrationId, {
+          ...entry.config,
+          enabled: entry.config.enabled ?? rows.get(entry.integrationId)?.enabled,
+        } as never);
+      const owned = ++version;
+      return {
+        previous,
+        async owns() {
+          return owned === version;
+        },
+        async restore() {
+          events.push("restore");
+          state.beforeRecovery();
+          if (state.restoreFails || owned !== version) return false;
+          for (const entry of previous) {
+            if (entry.config) rows.set(entry.integrationId, entry.config as never);
+            else rows.delete(entry.integrationId);
+          }
+          return true;
+        },
+      };
+    },
+    async apply() {
+      events.push("apply");
+      state.beforeApply();
+      const payload = {
+        ...host,
+        integrationConfigs: [...rows].map(([integrationId, config]) => ({
+          integrationId,
+          values: config,
+        })),
+      };
+      if (state.applyMode === "unknown")
+        return {
+          payload,
+          outcome: {
+            outcome: "unknown",
+            reason: "transport_or_result",
+            publisherCleanupFailed: false,
+            registryUpdateFailed: false,
+          },
+        };
+      if (state.applyMode === "noncommit")
+        return {
+          payload,
+          outcome: {
+            outcome: "not_committed",
+            reason: "failed",
+            cleanupFailed: false,
+            publisherCleanupFailed: false,
+            registryUpdateFailed: false,
+          },
+        };
+      state.host = structuredClone(payload);
+      revision = "A";
+      return {
+        payload,
+        outcome: {
+          outcome: "committed",
+          revisionId: "A",
+          enabledServiceIds: [],
+          followUp: state.applyMode === "incomplete" ? "failed" : "complete",
+          cleanupFailed: false,
+          publisherCleanupFailed: false,
+          registryUpdateFailed: false,
+        },
+      };
+    },
+    async compensate(payload: typeof host, expected: string) {
+      events.push("compensate");
+      if (revision !== expected || state.compensateMode === "conflict")
+        return {
+          outcome: "not_committed",
+          reason: "conflict",
+          currentRevisionId: revision,
+          cleanupFailed: false,
+          publisherCleanupFailed: false,
+          registryUpdateFailed: false,
+        };
+      if (state.compensateMode === "unknown")
+        return {
+          outcome: "unknown",
+          reason: "transport_or_result",
+          publisherCleanupFailed: false,
+          registryUpdateFailed: false,
+        };
+      state.host = structuredClone(payload);
+      revision = "R";
+      return {
+        outcome: "committed",
+        revisionId: "R",
+        enabledServiceIds: [],
+        followUp: "complete",
+        cleanupFailed: false,
+        publisherCleanupFailed: false,
+        registryUpdateFailed: false,
+      };
+    },
+    async reload() {
+      events.push("reload");
+      if (state.reloadFails) {
+        state.reloadFails = false;
+        throw Error("synthetic secret");
+      }
+      return { message: "Reloaded", reloaded: 2, enabled: 1 };
+    },
+  };
+  return {
+    state,
+    ports,
+    editNamed() {
+      version++;
+      rows.set("alpha", { label: "competitor", enabled: true });
+    },
+    editHost() {
+      revision = "B";
+      state.host.integrationConfigs[1].values.label = "competitor";
+    },
+  };
+}
+
+describe("real batch coordinator with stateful storage and host boundaries", () => {
+  it("persists once, applies one complete snapshot and reloads once", async () => {
+    const f = fixture();
+    const result = await runIntegrationImport(
+      prepareIntegrationImport(input(), manifests),
+      manifests,
+      f.ports as never,
+    );
+    expect(result).toMatchObject({ ok: true, imported: 1 });
+    expect(f.state.events).toEqual(["persist", "apply", "reload"]);
+    expect(f.state.rows.get("alpha")).toEqual({ label: "new", enabled: false });
+    expect(f.state.rows.get("beta")).toEqual({ label: "before" });
+  });
+  it("does not apply after persistence or commit failure", async () => {
+    const f = fixture();
+    f.state.writesFail = true;
+    const result = await runIntegrationImport(
+      prepareIntegrationImport(input(), manifests),
+      manifests,
+      f.ports as never,
+    );
+    expect(result).toMatchObject({
+      ok: false,
+      phase: "persistence",
+      recovery: "reconciliation_required",
+    });
+    expect(f.state.events).toEqual(["persist"]);
+    expect(JSON.stringify(result)).not.toContain("synthetic");
+  });
+  it("restores owned rows only on explicit noncommit", async () => {
+    const f = fixture();
+    f.state.applyMode = "noncommit";
+    expect(
+      await runIntegrationImport(
+        prepareIntegrationImport(input(), manifests),
+        manifests,
+        f.ports as never,
+      ),
+    ).toMatchObject({ ok: false, recovery: "restored", apply: { outcome: "not_committed" } });
+    expect(f.state.events).toEqual(["persist", "apply", "restore"]);
+    expect(f.state.rows.get("alpha")?.label).toBe("old");
+  });
+  it("unknown completion never implies noncommit", async () => {
+    const f = fixture();
+    f.state.applyMode = "unknown";
+    expect(
+      await runIntegrationImport(
+        prepareIntegrationImport(input(), manifests),
+        manifests,
+        f.ports as never,
+      ),
+    ).toMatchObject({ ok: false, recovery: "reconciliation_required", database: "retained" });
+    expect(f.state.events).toEqual(["persist", "apply"]);
+  });
+  it("compensates a known committed snapshot without reverting unrelated capture-to-apply edits", async () => {
+    const f = fixture();
+    f.state.reloadFails = true;
+    f.state.beforeApply = () => {
+      f.state.rows.set("beta", { label: "newer" });
+    };
+    expect(
+      await runIntegrationImport(
+        prepareIntegrationImport(input(), manifests),
+        manifests,
+        f.ports as never,
+      ),
+    ).toMatchObject({
+      ok: false,
+      recovery: "restored",
+      database: "restored",
+      compensation: { outcome: "committed" },
+    });
+    expect(f.state.events).toEqual([
+      "persist",
+      "apply",
+      "reload",
+      "restore",
+      "compensate",
+      "reload",
+    ]);
+    expect(f.state.host.integrationConfigs).toEqual([
+      { integrationId: "alpha", values: { label: "old", enabled: false } },
+      { integrationId: "beta", values: { label: "newer" } },
+    ]);
+  });
+  it("does not overwrite an intervening DB edit", async () => {
+    const f = fixture();
+    f.state.reloadFails = true;
+    f.state.beforeRecovery = f.editNamed;
+    expect(
+      await runIntegrationImport(
+        prepareIntegrationImport(input(), manifests),
+        manifests,
+        f.ports as never,
+      ),
+    ).toMatchObject({ recovery: "reconciliation_required", database: "conflict" });
+    expect(f.state.rows.get("alpha")?.label).toBe("competitor");
+    expect(f.state.events).not.toContain("compensate");
+  });
+  it("preserves newer host generation on stale compensation", async () => {
+    const f = fixture();
+    f.state.reloadFails = true;
+    f.state.beforeRecovery = f.editHost;
+    expect(
+      await runIntegrationImport(
+        prepareIntegrationImport(input(), manifests),
+        manifests,
+        f.ports as never,
+      ),
+    ).toMatchObject({
+      recovery: "reconciliation_required",
+      compensation: { outcome: "not_committed", reason: "conflict" },
+    });
+    expect(f.state.host.integrationConfigs[1].values.label).toBe("competitor");
+  });
+  it("preserves committed evidence and compensates a failed follow-up without unnecessary runtime reload", async () => {
+    const f = fixture();
+    f.state.applyMode = "incomplete";
+    expect(
+      await runIntegrationImport(
+        prepareIntegrationImport(input(), manifests),
+        manifests,
+        f.ports as never,
+      ),
+    ).toMatchObject({ recovery: "restored", apply: { outcome: "committed", followUp: "failed" } });
+    expect(f.state.events).toEqual(["persist", "apply", "restore", "compensate"]);
+  });
+  it("does not claim restored when a competing named edit arrives during compensation", async () => {
+    const f = fixture();
+    f.state.applyMode = "incomplete";
+    const original = f.ports.compensate;
+    f.ports.compensate = async (...args) => {
+      const result = await original(...args);
+      f.editNamed();
+      return result;
+    };
+    expect(
+      await runIntegrationImport(
+        prepareIntegrationImport(input(), manifests),
+        manifests,
+        f.ports as never,
+      ),
+    ).toMatchObject({ recovery: "reconciliation_required", database: "conflict" });
+    expect(f.state.rows.get("alpha")?.label).toBe("competitor");
+  });
+  it("reports a failed recovery reload as reconciliation despite restored DB and host", async () => {
+    const f = fixture();
+    f.ports.reload = async () => {
+      throw Error("synthetic secret");
+    };
+    expect(
+      await runIntegrationImport(
+        prepareIntegrationImport(input(), manifests),
+        manifests,
+        f.ports as never,
+      ),
+    ).toMatchObject({
+      recovery: "reconciliation_required",
+      database: "restored",
+      runtime: "unknown",
+      compensation: { outcome: "committed" },
+    });
+  });
+  it("does not compensate a submitted snapshot containing a competing named override", async () => {
+    const f = fixture();
+    f.state.applyMode = "incomplete";
+    f.state.beforeApply = f.editNamed;
+    expect(
+      await runIntegrationImport(
+        prepareIntegrationImport(input(), manifests),
+        manifests,
+        f.ports as never,
+      ),
+    ).toMatchObject({
+      recovery: "reconciliation_required",
+      reason: "submitted_snapshot_not_owned",
+    });
+    expect(f.state.events).toEqual(["persist", "apply"]);
+  });
+  it.each(["unknown", "conflict"])("reports incomplete compensation %s", async (mode) => {
+    const f = fixture();
+    f.state.reloadFails = true;
+    f.state.compensateMode = mode;
+    expect(
+      await runIntegrationImport(
+        prepareIntegrationImport(input(), manifests),
+        manifests,
+        f.ports as never,
+      ),
+    ).toMatchObject({ recovery: "reconciliation_required", database: "restored" });
+  });
+});
+
+describe("coordinator against the actual conditional generation writer", () => {
+  it.each([false, true])(
+    "preserves unrelated pre-apply changes and fences a newer generation (stale=%s)",
+    async (stale) => {
+      const { mkdtempSync, mkdirSync, rmSync } = await import("node:fs");
+      const { tmpdir } = await import("node:os");
+      const { join } = await import("node:path");
+      const { services } = await import("@openmapx/core/server");
+      const root = mkdtempSync(join(tmpdir(), "import-writer-"));
+      const infraDir = join(root, "infra/docker");
+      mkdirSync(infraDir, { recursive: true });
+      const f = fixture();
+      f.state.reloadFails = true;
+      f.state.beforeApply = () => f.state.rows.set("beta", { label: "newer-before-apply" });
+      let submitted: import("@openmapx/core/ops").TrustedConfigurationPayload;
+      const commit = async (payload: typeof submitted, expectedCurrentRevisionId?: string) => {
+        try {
+          const result = await services.commitConfigurationGeneration({
+            infraDir,
+            services: [],
+            input: { ...payload, selectedRoots: [] },
+            expectedCurrentRevisionId,
+          });
+          return {
+            outcome: "committed" as const,
+            revisionId: result.revisionId,
+            enabledServiceIds: result.enabledServiceIds,
+            followUp: "complete" as const,
+            cleanupFailed: false,
+            publisherCleanupFailed: false,
+            registryUpdateFailed: false,
+          };
+        } catch (error) {
+          if (!(error instanceof services.ConfigurationGenerationError)) throw error;
+          return { ...error.result, publisherCleanupFailed: false, registryUpdateFailed: false };
+        }
+      };
+      const prepare = f.ports.apply;
+      const ports = {
+        ...f.ports,
+        async apply() {
+          const { payload } = await prepare();
+          submitted = payload;
+          return { payload, outcome: await commit(payload) };
+        },
+        async compensate(payload: typeof submitted, expected: string) {
+          if (stale)
+            await commit({
+              ...submitted,
+              integrationConfigs: submitted.integrationConfigs.map((entry) =>
+                entry.integrationId === "beta"
+                  ? { ...entry, values: { label: "competing-host" } }
+                  : entry,
+              ),
+            });
+          return commit(payload, expected);
+        },
+      };
+      try {
+        const result = await runIntegrationImport(
+          prepareIntegrationImport(input(), manifests),
+          manifests,
+          ports,
+        );
+        expect(result).toMatchObject({
+          recovery: stale ? "reconciliation_required" : "restored",
+          compensation: stale
+            ? { outcome: "not_committed", reason: "conflict" }
+            : { outcome: "committed" },
+        });
+        const applied = services.readAppliedConfiguration(infraDir);
+        expect(
+          applied.integrationConfigs.find((e) => e.integrationId === "beta")?.values.label,
+        ).toBe(stale ? "competing-host" : "newer-before-apply");
+        expect(
+          applied.integrationConfigs.find((e) => e.integrationId === "alpha")?.values.label,
+        ).toBe(stale ? "new" : "old");
+      } finally {
+        rmSync(root, { recursive: true, force: true });
+      }
+    },
+  );
+});

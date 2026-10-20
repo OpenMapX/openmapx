@@ -3,6 +3,7 @@ import {
   integrationManifestSchema,
 } from "@openmapx/extension-contracts/integration";
 import z from "zod/v4";
+import { configurationApplyResultSchema } from "../../../ops/contract";
 import { adminCountSchema, adminJsonValueSchema, adminTimestampSchema } from "../admin";
 import {
   adminIntegrationConfigSourceSchema,
@@ -220,3 +221,27 @@ export type AdminIntegrationValidationError = z.infer<typeof adminIntegrationVal
 export type AdminIntegrationVaultUnavailable = z.infer<
   typeof adminIntegrationVaultUnavailableSchema
 >;
+
+const importApplyEvidenceSchema = z.union([
+  ...configurationApplyResultSchema.options.map((schema) =>
+    schema.extend({ publisherCleanupFailed: z.boolean(), registryUpdateFailed: z.boolean() }),
+  ),
+  z.strictObject({
+    outcome: z.literal("unknown"),
+    reason: z.literal("transport_or_result"),
+    publisherCleanupFailed: z.boolean(),
+    registryUpdateFailed: z.boolean(),
+  }),
+]);
+export const adminIntegrationImportFailureSchema = z.strictObject({
+  ok: z.literal(false),
+  error: z.literal("Integration import failed"),
+  phase: z.enum(["persistence", "apply", "reload", "ownership"]),
+  recovery: z.enum(["restored", "reconciliation_required"]),
+  database: z.enum(["unknown", "retained", "conflict", "restored"]),
+  runtime: z.enum(["unchanged", "unknown", "restored"]).optional(),
+  apply: importApplyEvidenceSchema.optional(),
+  compensation: importApplyEvidenceSchema.optional(),
+  reason: z.literal("submitted_snapshot_not_owned").optional(),
+});
+export type AdminIntegrationImportFailure = z.infer<typeof adminIntegrationImportFailureSchema>;

@@ -34,7 +34,11 @@ export interface RegistrationOptions {
 /** Shared registration; the family selects validation phase to preserve guard ordering. */
 export function createAdminRouteRegistrar<const R extends Registry>(
   registry: R,
-  family: { tag: string; validationPhase: "preValidation" | "preHandler" },
+  family: {
+    tag: string;
+    validationPhase: "preValidation" | "preHandler";
+    documentOptionalBodies?: boolean;
+  },
 ) {
   return function registerAdminRoute<K extends keyof R & string>(
     app: FastifyInstance,
@@ -105,7 +109,11 @@ export function createAdminRouteRegistrar<const R extends Registry>(
       await options.beforeValidation?.(req as FastifyRequest, reply);
       if (reply.sent) return;
       for (const [part, validator] of Object.entries(request)) {
-        const current = (req as unknown as Record<string, unknown>)[part];
+        const raw = (req as unknown as Record<string, unknown>)[part];
+        // Fastify's schema validation normalizes an absent body to null. Keep
+        // absence distinct from an explicit JSON null for optional mutations.
+        const current =
+          part === "body" && raw === null && !req.headers["content-type"] ? undefined : raw;
         const parsed = validator.safeParse(current);
         if (!parsed.success)
           return reply.code(400).send({ error: `Invalid administration ${part}` });
@@ -116,7 +124,12 @@ export function createAdminRouteRegistrar<const R extends Registry>(
     app.route<ContractRequest<R, K>>({
       method: operation.method,
       url: operation.path.slice("/api".length),
-      config: { auth: operation.auth } as FastifyContextConfig & { auth: "admin" | "service" },
+      config: {
+        auth: operation.auth,
+        ...(family.documentOptionalBodies && request.body?.isOptional()
+          ? { adminOptionalBody: true }
+          : {}),
+      } as FastifyContextConfig & { auth: "admin" | "service"; adminOptionalBody?: boolean },
       schema: {
         operationId,
         tags: [family.tag],
