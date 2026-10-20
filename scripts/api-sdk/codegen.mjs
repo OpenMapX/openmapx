@@ -27,9 +27,11 @@ export async function generateArtifacts({
     const config = createCodegenConfig({ inputDocument, outputDirectory: directory });
     await generate(config.runtimeMetadata);
     await generate(config.dataManagerAdmin);
+    if (config.activityAdmin) await generate(config.activityAdmin);
     return await collectArtifacts(join(directory, "generated"), generatedDirectory, [
       "runtime-metadata.generated.ts",
       "admin/data-manager-admin.generated.ts",
+      ...(config.activityAdmin ? ["admin/activity-admin.generated.ts"] : []),
     ]);
   } finally {
     await rm(directory, { recursive: true, force: true });

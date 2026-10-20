@@ -360,3 +360,33 @@ The metadata and administration clients are generated together, with independent
 schema selection and one exact artifact-set check. Mechanical file emission and
 operation binding are shared with the internal SDK. Neither browser client uses
 internal service credentials or data-manager destinations.
+
+## Activity administration
+
+The `activity-admin` family adopts exactly five core operations: list jobs, inspect
+one source-qualified job, cancel an application job, read stream metrics and open
+an application-job SSE connection. `activityAdminOperations` in
+`@openmapx/core/api-contracts` supplies their request/response schemas. Routes use
+the shared administration registrar after their inherited admin guard; the older
+data-manager family retains its existing validation phase and hooks.
+
+The list query defaults to `limit=50` and `offset=0`; optional pagination accepts
+only bounded safe decimal integers. Detail and cancellation distinguish
+`application` and `data-manager` sources. Complete wire jobs include ISO dates,
+recursive JSON payload/result values, actors in list rows, logs and data-manager
+stages. Invalid output is rejected before Fastify can silently drop fields.
+
+Import the generated operations from `@openmapx/core/api-admin-sdk`. Finite
+operations return status-qualified validated responses. `streamAdminActivityJobEvents`
+returns an `AdminEventStreamTarget` with `url` and `withCredentials`; construct
+native `EventSource` in the browser and retain ownership of its lifetime. It does
+not fetch or parse SSE as JSON. The optional query cursor resumes an initial
+connection; native reconnections use `Last-Event-ID`, which takes precedence.
+Validate each received frame with `adminJobStreamEventSchemas` before applying it.
+
+The raw producer validates snapshots and every event before writing. Both the
+snapshot priming backlog and unflushed writes are bounded to 200 per viewer;
+overflow emits a qualified control event and closes. Invalid post-hijack state
+closes without exposing producer content, unsubscribes and clears heartbeat timers.
+Regenerate both `pnpm openapi:generate` and `pnpm sdk:generate` after a contract
+change, then run `pnpm check-openapi` and `pnpm check-api-sdk`.

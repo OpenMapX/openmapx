@@ -1,4 +1,4 @@
-import { readBoundedJsonResponse } from "../utils/fetchJson";
+import { readBoundedJsonResponse, readBoundedResponseText } from "../utils/fetchJson";
 import {
   type ApiClient,
   ApiClientError,
@@ -6,35 +6,48 @@ import {
   apiClient,
   parseRetryAfter,
 } from "./client";
-import {
-  type DataManagerAdminOperation,
-  dataManagerAdminOperations,
-} from "./contracts/data-manager-admin";
+import { activityAdminOperations } from "./contracts/activity-admin";
+import type { AdminOperation } from "./contracts/admin";
+import { dataManagerAdminOperations } from "./contracts/data-manager-admin";
 import { ApiContractError } from "./sdk-transport";
 
 export type AdminSdkRequestOptions = Omit<RequestInit, "signal" | "credentials"> &
   ApiRequestOptions & {
     client?: ApiClient;
     maxJsonBytes?: number;
+    maxTextBytes?: number;
     maxErrorBytes?: number;
+    /** Called within ApiClient's abort/deadline lifetime; never receives a raw Response. */
+    onTextChunk?: (chunk: string) => void | Promise<void>;
   };
-type OperationId = keyof typeof dataManagerAdminOperations;
+/** Constructs a connection target only; the caller owns the subsequent EventSource lifetime. */
+export interface AdminEventStreamTargetOptions {
+  client?: ApiClient;
+  /** Checked before construction only. Aborting later cannot close a browser-owned EventSource. */
+  signal?: AbortSignal;
+  /** Generated GET bookkeeping; constructing a target never performs a request. */
+  method?: "GET";
+  /** Generated header containers must be empty. Native EventSource cannot transmit custom headers. */
+  headers?: Readonly<Record<string, never>>;
+}
+export interface AdminEventStreamTarget {
+  url: string;
+  withCredentials: boolean;
+}
 interface AdminResponse {
   status: number;
   headers: Headers;
   data: unknown;
 }
+const operations = { ...dataManagerAdminOperations, ...activityAdminOperations };
+type OperationId = keyof typeof operations;
 function positive(value: number | undefined, fallback: number): number {
   const result = value ?? fallback;
   if (!Number.isFinite(result) || result <= 0)
-    throw new Error("Administration JSON limits must be positive finite numbers");
+    throw new Error("Administration response limits must be positive finite numbers");
   return result;
 }
-function matchesBoundRequest(
-  url: string,
-  method: string,
-  operation: { path: string; method: string },
-): boolean {
+function matchesBoundRequest(url: string, method: string, operation: AdminOperation): boolean {
   if (!url.startsWith("/") || url.startsWith("//") || method.toUpperCase() !== operation.method)
     return false;
   const path = new URL(url, "https://api.invalid");
@@ -48,84 +61,205 @@ function matchesBoundRequest(
     )
   );
 }
-
-/** Canonical operation identity and status validators live in the closure. */
-export function bindAdminOperation(operationId: OperationId) {
-  return async <T = AdminResponse>(
-    url: string,
-    options: AdminSdkRequestOptions = {},
-  ): Promise<T> => {
-    const operation: DataManagerAdminOperation = dataManagerAdminOperations[operationId];
-    const {
-      client = apiClient,
-      signal,
-      timeoutMs,
-      cache,
-      headers,
-      maxJsonBytes,
-      maxErrorBytes,
-      method = "GET",
-      body,
-      integrity,
-      keepalive,
-      mode,
-      referrer,
-      referrerPolicy,
-    } = options;
-    if (!matchesBoundRequest(url, method, operation))
-      throw new Error("Administration request does not match its bound operation");
-    const successBudget = positive(maxJsonBytes, 8 * 1024 * 1024);
-    const errorBudget = positive(maxErrorBytes, 64 * 1024);
-    const responses = operation.responses;
-    const result = await client.request(
-      url,
-      { method, body, integrity, keepalive, mode, referrer, referrerPolicy },
-      async (response, effectiveSignal): Promise<AdminResponse> => {
-        const contract = responses[response.status];
-        if (!contract) throw new ApiContractError(response.status);
-        const mediaType = response.headers
-          .get("content-type")
-          ?.split(";", 1)[0]
-          ?.trim()
-          .toLowerCase();
-        if (mediaType !== "application/json" && !mediaType?.endsWith("+json"))
-          throw new ApiContractError(response.status);
-        if (contract.headers) {
-          const values: Record<string, string> = {};
-          response.headers.forEach((value, name) => {
-            values[name.toLowerCase()] = value;
-          });
+function headerValues(headers: Headers): Record<string, string> {
+  const values: Record<string, string> = {};
+  headers.forEach((value, name) => {
+    values[name.toLowerCase()] = value;
+  });
+  return values;
+}
+function validateRequestHeaders(operation: AdminOperation, headers: HeadersInit | undefined): void {
+  if (
+    operation.request?.headers &&
+    !operation.request.headers.safeParse(headerValues(new Headers(headers))).success
+  )
+    throw new Error("Administration request headers violate the contract");
+}
+async function abortable<T>(pending: Promise<T>, signal: AbortSignal): Promise<T> {
+  if (signal.aborted) {
+    // The caller can abort while constructing a rejecting callback promise.
+    // Retain that promise even when cancellation already won.
+    void pending.catch(() => {});
+    signal.throwIfAborted();
+  }
+  let abort = () => {};
+  try {
+    return await Promise.race([
+      pending,
+      new Promise<never>((_resolve, reject) => {
+        abort = () => reject(signal.reason);
+        signal.addEventListener("abort", abort, { once: true });
+      }),
+    ]);
+  } finally {
+    signal.removeEventListener("abort", abort);
+  }
+}
+async function consumeTextStream(
+  response: Response,
+  signal: AbortSignal,
+  consume: (chunk: string) => void | Promise<void>,
+): Promise<void> {
+  if (!response.body) throw new ApiContractError(response.status);
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let completed = false;
+  try {
+    for (;;) {
+      const { done, value } = await abortable(reader.read(), signal);
+      if (done) {
+        completed = true;
+        break;
+      }
+      const chunk = decoder.decode(value, { stream: true });
+      if (chunk) await abortable(Promise.resolve(consume(chunk)), signal);
+    }
+    const final = decoder.decode();
+    if (final) await abortable(Promise.resolve(consume(final)), signal);
+    signal.throwIfAborted();
+  } finally {
+    if (!completed) void reader.cancel().catch(() => {});
+    reader.releaseLock();
+  }
+}
+/** Family descriptors are bound once by trusted SDK generation, never supplied by request callers. */
+export function createAdminOperationBinder<const Operations extends Record<string, AdminOperation>>(
+  registry: Operations,
+) {
+  return (operationId: keyof Operations) => {
+    const operation: AdminOperation = registry[operationId];
+    return async <T = AdminResponse>(
+      url: string,
+      options: AdminSdkRequestOptions = {},
+    ): Promise<T> => {
+      const {
+        client = apiClient,
+        signal,
+        timeoutMs,
+        cache,
+        headers,
+        maxJsonBytes,
+        maxTextBytes,
+        maxErrorBytes,
+        onTextChunk,
+        method = "GET",
+        body,
+        integrity,
+        keepalive,
+        mode,
+        referrer,
+        referrerPolicy,
+      } = options;
+      if (!matchesBoundRequest(url, method, operation))
+        throw new Error("Administration request does not match its bound operation");
+      // SSE is deliberately browser-owned and cannot enter the finite/JSON reader.
+      if (
+        Object.values(operation.responses).some(
+          (c) => c.kind === "stream" && c.mediaType === "text/event-stream",
+        )
+      )
+        throw new Error("Use the administration stream connection target");
+      validateRequestHeaders(operation, headers);
+      const jsonBudget = positive(maxJsonBytes, 8 * 1024 * 1024);
+      const textBudget = positive(maxTextBytes, 8 * 1024 * 1024);
+      const errorBudget = positive(maxErrorBytes, 64 * 1024);
+      const result = await client.request(
+        url,
+        { method, body, integrity, keepalive, mode, referrer, referrerPolicy },
+        async (response, effectiveSignal): Promise<AdminResponse> => {
+          const contract = operation.responses[response.status];
+          if (!contract) throw new ApiContractError(response.status);
           try {
-            if (!contract.headers.safeParse(values).success)
+            if (
+              contract.headers &&
+              !contract.headers.safeParse(headerValues(response.headers)).success
+            )
               throw new ApiContractError(response.status);
-          } catch {
+            const mediaType = response.headers
+              .get("content-type")
+              ?.split(";", 1)[0]
+              ?.trim()
+              .toLowerCase();
+            let data: unknown;
+            if (contract.kind === "empty") {
+              const text = response.body
+                ? await readBoundedResponseText(response, 1, { signal: effectiveSignal })
+                : "";
+              if (text !== "") throw new ApiContractError(response.status);
+              data = undefined;
+            } else {
+              const correctMedia =
+                contract.kind === "json"
+                  ? mediaType === "application/json" || mediaType?.endsWith("+json")
+                  : mediaType === contract.mediaType;
+              if (!correctMedia) throw new ApiContractError(response.status);
+              if (contract.kind === "stream") {
+                if (!onTextChunk) throw new ApiContractError(response.status);
+                await consumeTextStream(response, effectiveSignal, onTextChunk);
+                data = undefined;
+              } else {
+                const raw =
+                  contract.kind === "json"
+                    ? await readBoundedJsonResponse(response, {
+                        maxBytes: response.ok ? jsonBudget : errorBudget,
+                        signal: effectiveSignal,
+                      })
+                    : await readBoundedResponseText(
+                        response,
+                        response.ok ? textBudget : errorBudget,
+                        { signal: effectiveSignal },
+                      );
+                const parsed = contract.schema.safeParse(raw);
+                if (!parsed.success) throw new ApiContractError(response.status);
+                data = parsed.data;
+              }
+            }
+            return { status: response.status, headers: response.headers, data };
+          } catch (error) {
+            if (effectiveSignal.aborted) throw error;
             throw new ApiContractError(response.status);
           }
-        }
-        let body: unknown;
-        try {
-          body = await readBoundedJsonResponse(response, {
-            maxBytes: response.ok ? successBudget : errorBudget,
-            signal: effectiveSignal,
-            label: "Administration response",
-          });
-        } catch (error) {
-          if (effectiveSignal.aborted) throw error;
-          throw new ApiContractError(response.status);
-        }
-        try {
-          const parsed = contract.schema.safeParse(body);
-          if (!parsed.success) throw new ApiContractError(response.status);
-          return { status: response.status, headers: response.headers, data: parsed.data };
-        } catch {
-          throw new ApiContractError(response.status);
-        }
-      },
-      // The bound contract owns every status. Reject unknown results before
-      // reading their bodies rather than entering ApiClient's generic parser.
-      { signal, timeoutMs, cache, headers, acceptedStatuses: "all" },
-    );
-    return result as T;
+        },
+        { signal, timeoutMs, cache, headers, acceptedStatuses: "all" },
+      );
+      return result as T;
+    };
+  };
+}
+/** Canonical operation identity and every status validator live in the closure. */
+export const bindAdminOperation = createAdminOperationBinder(operations);
+export function bindAdminStreamOperation(operationId: OperationId) {
+  const operation: AdminOperation = operations[operationId];
+  if (
+    !Object.values(operation.responses).some(
+      (c) => c.kind === "stream" && c.mediaType === "text/event-stream",
+    )
+  )
+    throw new Error("Operation is not an EventSource stream");
+  return async <T = AdminEventStreamTarget>(
+    url: string,
+    options: AdminEventStreamTargetOptions = {},
+  ): Promise<T> => {
+    const supported = new Set(["client", "signal", "method", "headers"]);
+    if (Reflect.ownKeys(options).some((key) => typeof key !== "string" || !supported.has(key)))
+      throw new Error("Unsupported EventSource target options");
+    if (!matchesBoundRequest(url, options.method ?? "GET", operation))
+      throw new Error("Administration request does not match its bound operation");
+    const query = Object.fromEntries(new URL(url, "https://api.invalid").searchParams);
+    if (operation.request?.query && !operation.request.query.safeParse(query).success)
+      throw new Error("Administration stream query violates the contract");
+    const headers = options.headers;
+    const hasHeaders =
+      headers instanceof Headers
+        ? !headers.keys().next().done
+        : Array.isArray(headers)
+          ? headers.length > 0
+          : headers && typeof headers === "object"
+            ? Reflect.ownKeys(headers).length > 0
+            : headers !== undefined;
+    if (hasHeaders) throw new Error("EventSource cannot honor request headers");
+    options.signal?.throwIfAborted();
+    return (options.client ?? apiClient).connectionTarget(url) as T;
   };
 }
 

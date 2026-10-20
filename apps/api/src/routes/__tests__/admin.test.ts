@@ -197,7 +197,11 @@ let app: FastifyInstance;
 
 beforeAll(async () => {
   const { adminRoute } = await import("../admin.js");
-  app = await createAdminTestApp(adminRoute);
+  const { adminActivityRoute } = await import("../admin-activity.js");
+  app = await createAdminTestApp(async (child) => {
+    await child.register(adminRoute);
+    await child.register(adminActivityRoute);
+  });
 });
 
 afterAll(() => app?.close());
@@ -407,7 +411,18 @@ describe("GET /admin/jobs/:id", () => {
     mockGetActivityJob.mockResolvedValueOnce({
       source: "data-manager",
       id: "job-dm",
+      type: "download",
       status: "running",
+      payload: null,
+      result: null,
+      error: null,
+      progress: null,
+      createdBy: null,
+      actorLabel: "System",
+      cancelable: false,
+      createdAt: new Date("2026-10-19T10:00:00Z"),
+      startedAt: null,
+      finishedAt: null,
       stages: [],
       logs: [],
     });

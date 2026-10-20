@@ -41,7 +41,7 @@ interface ActivityJobRow {
 }
 
 const APPLICATION_STATUSES: Record<ActivityJobFilter, string[]> = {
-  active: ["queued", "running"],
+  active: ["queued", "running", "cancel_pending"],
   completed: ["success", "canceled"],
   failed: ["failed"],
 };

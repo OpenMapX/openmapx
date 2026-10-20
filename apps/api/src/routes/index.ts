@@ -1,5 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { adminRoute } from "./admin";
+import { adminActivityRoute } from "./admin-activity";
 import { adminCacheRoute } from "./admin-cache";
 import { registerCapabilityBindingRoutes } from "./admin-capability-bindings";
 import { registerAdminComposeRoutes } from "./admin-compose";
@@ -114,6 +115,7 @@ export async function registerCoreRoutes(
   await server.register(adminServicesRoute, { prefix: "/api" });
   await server.register(adminOperationsRoute, { prefix: "/api" });
   await server.register(adminCoverageRoute, { prefix: "/api" });
+  await server.register(adminActivityRoute, { prefix: "/api" });
   await server.register(adminJobEventsRoute, { prefix: "/api" });
   await server.register(adminDawarichRoute, { prefix: "/api" });
   await server.register(dataManagerRoute, { prefix: "/api" });

@@ -238,6 +238,33 @@ export class ApiClient {
     return url.toString();
   }
 
+  /** Native EventSource cannot omit same-origin cookies or send custom headers. */
+  connectionTarget(path: string): { url: string; withCredentials: boolean } {
+    const cfg = this.config();
+    if ((cfg.credentials ?? "omit") === "omit")
+      throw new Error("EventSource cannot honor omitted credentials");
+    if (Array.from(new Headers(cfg.headerInterceptor?.()).keys()).length)
+      throw new Error("EventSource cannot honor client headers");
+    let target: URL;
+    try {
+      const base = new URL(cfg.baseUrl);
+      if (
+        !/^https?:$/.test(base.protocol) ||
+        base.username ||
+        base.password ||
+        !path.startsWith("/") ||
+        path.startsWith("//")
+      )
+        throw new Error();
+      target = new URL(path, base);
+      if (target.origin !== base.origin || target.username || target.password || target.hash)
+        throw new Error();
+    } catch {
+      throw new Error("Invalid EventSource connection target");
+    }
+    return { url: target.toString(), withCredentials: cfg.credentials === "include" };
+  }
+
   /**
    * Runs one fetch and consumes its response with a merged abort signal and a
    * guaranteed timer cleanup. Headers alone do not complete the request: the

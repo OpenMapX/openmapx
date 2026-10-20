@@ -1,10 +1,84 @@
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { dirname, join, resolve } from "node:path";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+const { build } = createRequire(new URL("../../packages/core/package.json", import.meta.url))(
+  "esbuild",
+);
+
+const ts = createRequire(new URL("../../packages/core/package.json", import.meta.url))(
+  "typescript",
+);
+
 import { generateArtifacts, writeOrCheckArtifacts } from "./codegen.mjs";
 import { selectTaggedDocument } from "./config.mjs";
 import { validatedResponseTypes } from "./validated-response-types.mjs";
+
+function generatedConsumerDiagnostics(files: { filename: string; content: string }[]) {
+  const base = new URL("../../packages/core", import.meta.url).pathname;
+  const configuration = ts.readConfigFile(resolve(base, "tsconfig.json"), ts.sys.readFile);
+  const { options } = ts.parseJsonConfigFileContent(configuration.config, ts.sys, base);
+  options.typeRoots = [
+    dirname(
+      dirname(
+        createRequire(new URL("../../packages/core/package.json", import.meta.url)).resolve(
+          "@types/node/package.json",
+        ),
+      ),
+    ),
+  ];
+  const filename = resolve(base, "src/api/generated/admin/activity-target.typecheck.ts");
+  const virtual = new Map(
+    files.map((file) => [resolve(base, "src/api/generated", file.filename), file.content]),
+  );
+  virtual.set(
+    filename,
+    `
+    import { streamAdminActivityJobEvents } from "./activity-admin.generated";
+    import type { AdminEventStreamTargetOptions } from "../../admin-sdk-transport";
+    declare const options: AdminEventStreamTargetOptions;
+    const target: Promise<{url: string; withCredentials: boolean}> = streamAdminActivityJobEvents("id", undefined, options);
+    streamAdminActivityJobEvents("id", undefined, {signal: new AbortController().signal, method: "GET", headers: {}});
+    // @ts-expect-error EventSource targets have no finite HTTP deadline.
+    streamAdminActivityJobEvents("id", undefined, {timeoutMs: 100});
+    // @ts-expect-error EventSource targets cannot send request bodies.
+    streamAdminActivityJobEvents("id", undefined, {body: "payload"});
+    // @ts-expect-error EventSource targets cannot apply fetch cache policy.
+    streamAdminActivityJobEvents("id", undefined, {cache: "no-store"});
+    // @ts-expect-error EventSource targets cannot apply fetch request modes.
+    streamAdminActivityJobEvents("id", undefined, {mode: "same-origin"});
+    // @ts-expect-error Target construction cannot consume a text stream.
+    streamAdminActivityJobEvents("id", undefined, {onTextChunk: () => {}});
+    // @ts-expect-error Native EventSource owns Last-Event-ID rather than explicit header arguments.
+    streamAdminActivityJobEvents("id", undefined, {"last-event-id": 1});
+    // @ts-expect-error Target options permit only an empty generated header container.
+    streamAdminActivityJobEvents("id", undefined, {headers: {Authorization: "token"}});
+    // @ts-expect-error Generated EventSource operations use GET only.
+    streamAdminActivityJobEvents("id", undefined, {method: "POST"});
+  `,
+  );
+  const host = ts.createCompilerHost(options);
+  const fileExists = host.fileExists.bind(host),
+    read = host.readFile.bind(host),
+    source = host.getSourceFile.bind(host);
+  const directoryExists = host.directoryExists?.bind(host);
+  host.directoryExists = (path: string) =>
+    Array.from(virtual.keys()).some((file) => file.startsWith(`${path}/`)) ||
+    directoryExists?.(path) === true;
+  host.fileExists = (path: string) => virtual.has(path) || fileExists(path);
+  host.readFile = (path: string) => virtual.get(path) ?? read(path);
+  host.getSourceFile = (path: string, language: unknown, ...rest: unknown[]) =>
+    virtual.has(path)
+      ? ts.createSourceFile(path, virtual.get(path), language, true)
+      : source(path, language, ...rest);
+  return ts
+    .getPreEmitDiagnostics(ts.createProgram([filename], options, host))
+    .map((diagnostic: { messageText: unknown }) =>
+      ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n"),
+    );
+}
 
 const directories: string[] = [];
 async function directory() {
@@ -145,5 +219,180 @@ describe("SDK artifact gate", () => {
     const content = first.map((file: { content: string }) => file.content).join("\n");
     expect(content).toContain("zod.lazy");
     expect(content).not.toContain("zod.unknown()");
+  }, 90_000);
+});
+
+describe("activity generation", () => {
+  it("generates all five operations and an honest EventSource target using the generated URL", async () => {
+    const input = JSON.parse(
+      await readFile(new URL("../../apps/api/openapi.json", import.meta.url), "utf8"),
+    );
+    const ids = [
+      ["listAdminActivityJobs", "get", "/api/admin/jobs"],
+      ["getAdminActivityJob", "get", "/api/admin/jobs/{id}"],
+      ["cancelAdminActivityJob", "post", "/api/admin/jobs/{id}/cancel"],
+      ["getAdminActivityJobStreamMetrics", "get", "/api/admin/jobs/stream-metrics"],
+      ["streamAdminActivityJobEvents", "get", "/api/admin/jobs/{id}/events"],
+    ];
+    const previousInput = structuredClone(input);
+    // Once Activity is adopted, the committed spec also contains its full schemas.
+    // Compare the other families against a baseline without this fixture family.
+    for (const [, method, path] of ids) delete previousInput.paths[path]?.[method];
+    for (const [id, method, path] of ids) {
+      const stream = id === "streamAdminActivityJobEvents";
+      input.paths[path] ??= {};
+      input.paths[path][method] = {
+        operationId: id,
+        tags: ["activity-admin"],
+        parameters: [
+          ...(path.includes("{id}")
+            ? [{ in: "path", name: "id", required: true, schema: { type: "string" } }]
+            : []),
+          ...(id === "listAdminActivityJobs"
+            ? [
+                {
+                  in: "query",
+                  name: "limit",
+                  schema: { type: "integer", minimum: 1, maximum: 200, default: 50 },
+                },
+                {
+                  in: "query",
+                  name: "offset",
+                  schema: {
+                    type: "integer",
+                    minimum: 0,
+                    maximum: Number.MAX_SAFE_INTEGER,
+                    default: 0,
+                  },
+                },
+              ]
+            : []),
+          ...(stream
+            ? [
+                {
+                  in: "header",
+                  name: "last-event-id",
+                  schema: { type: "integer", minimum: 0, maximum: Number.MAX_SAFE_INTEGER },
+                },
+                { in: "query", name: "source", schema: { type: "string", enum: ["application"] } },
+                {
+                  in: "query",
+                  name: "cursor",
+                  schema: { type: "integer", minimum: 0, maximum: Number.MAX_SAFE_INTEGER },
+                },
+              ]
+            : []),
+        ],
+        responses: {
+          200: {
+            description: "ok",
+            content: {
+              [stream ? "text/event-stream" : "application/json"]: { schema: { type: "string" } },
+            },
+          },
+        },
+      };
+    }
+    vi.stubGlobal("fetch", () => {
+      throw new Error("Unexpected network");
+    });
+    try {
+      const files = await generateArtifacts({ document: input });
+      // Every other committed family/model stays byte-stable when adding Activity.
+      const previous = await generateArtifacts({ document: previousInput });
+      for (const file of previous.filter(
+        (f: { filename: string }) => f.filename !== "admin/operation-bindings.generated.ts",
+      ))
+        expect(files.find((f: { filename: string }) => f.filename === file.filename)?.content).toBe(
+          file.content,
+        );
+      const activity = files.find(
+        (f: { filename: string }) => f.filename === "admin/activity-admin.generated.ts",
+      );
+      expect(activity).toBeDefined();
+      for (const [id] of ids) expect(activity.content).toContain(`export const ${id} =`);
+      expect(activity.content).toContain("Promise<AdminEventStreamTarget>");
+      expect(activity.content).not.toContain("Promise<string>");
+      const bindings = files.find(
+        (f: { filename: string }) => f.filename === "admin/operation-bindings.generated.ts",
+      ).content;
+      expect(generatedConsumerDiagnostics(files)).toEqual([]);
+      const result = await build({
+        stdin: {
+          contents: activity.content,
+          loader: "ts",
+          resolveDir: new URL("../../packages/core/src/api/generated/admin", import.meta.url)
+            .pathname,
+        },
+        bundle: true,
+        platform: "node",
+        format: "esm",
+        write: false,
+        plugins: [
+          {
+            name: "generated-bindings",
+            setup(builder) {
+              builder.onResolve({ filter: /operation-bindings.generated/ }, () => ({
+                path: "bindings",
+                namespace: "fixture",
+              }));
+              builder.onLoad({ filter: /.*/, namespace: "fixture" }, () => ({
+                contents: bindings,
+                loader: "ts",
+                resolveDir: new URL("../../packages/core/src/api/generated/admin", import.meta.url)
+                  .pathname,
+              }));
+            },
+          },
+        ],
+      });
+      const sdk = await import(
+        `data:text/javascript;base64,${Buffer.from(result.outputFiles[0].text).toString("base64")}`
+      );
+      expect(
+        Object.keys(sdk)
+          .filter((name) => !name.startsWith("get") || ids.some(([id]) => name === id))
+          .sort(),
+      ).toEqual(ids.map(([id]) => id).sort());
+      const { createApiClient } = await import("../../packages/core/src/api/client");
+      const client = createApiClient({ baseUrl: "https://app.example", credentials: "include" });
+      expect(
+        sdk.getStreamAdminActivityJobEventsUrl("a/b?#", { source: "application", cursor: 2 }),
+      ).toBe("/api/admin/jobs/a%2Fb%3F%23/events?source=application&cursor=2");
+      await expect(
+        sdk.streamAdminActivityJobEvents(
+          "a/b?#",
+          { source: "application", cursor: 2 },
+          {
+            client,
+          },
+        ),
+      ).resolves.toEqual({
+        url: "https://app.example/api/admin/jobs/a%2Fb%3F%23/events?source=application&cursor=2",
+        withCredentials: true,
+      });
+      for (const unsupported of [
+        { timeoutMs: 100 },
+        { body: "secret payload" },
+        { cache: "no-store" },
+      ]) {
+        const error = await sdk
+          .streamAdminActivityJobEvents("id", undefined, { client, ...unsupported })
+          .catch((caught: unknown) => caught);
+        expect(error).toBeInstanceOf(Error);
+        expect(String(error)).toMatch(/unsupported/i);
+        expect(String(error)).not.toContain("secret");
+      }
+      vi.stubGlobal("fetch", async (url: string) => {
+        if (url !== "https://app.example/api/admin/jobs") throw new Error("Unexpected network");
+        return Response.json({ jobs: [], total: 0 });
+      });
+      await expect(sdk.listAdminActivityJobs(undefined, { client })).resolves.toMatchObject({
+        status: 200,
+        data: { jobs: [], total: 0 },
+      });
+    } finally {
+      vi.unstubAllGlobals();
+    }
   }, 90_000);
 });
