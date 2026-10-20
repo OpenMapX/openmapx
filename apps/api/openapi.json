@@ -6477,6 +6477,7 @@
                                 "enum": [
                                   "queued",
                                   "running",
+                                  "cancel_pending",
                                   "success",
                                   "failed",
                                   "canceled"
@@ -7707,6 +7708,7 @@
                           "enum": [
                             "queued",
                             "running",
+                            "cancel_pending",
                             "success",
                             "failed",
                             "canceled"

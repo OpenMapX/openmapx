@@ -21,7 +21,7 @@ export type GetAdminActivityJob200 =
       finishedAt: string | null;
       cancelable: boolean;
       source: "application";
-      status: "queued" | "running" | "success" | "failed" | "canceled";
+      status: "queued" | "running" | "cancel_pending" | "success" | "failed" | "canceled";
       /** Recursive JSON. Objects with an own __proto__ key are rejected at every depth. */
       result: AdminGetAdminActivityJob200Schema0 | null;
       logs: {

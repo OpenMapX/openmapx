@@ -15,7 +15,7 @@ export interface JobStreamState {
   connection: JobStreamConnection;
 }
 
-const ACTIVE_STATUSES = new Set(["queued", "running"]);
+const CANCELABLE_STATUSES = new Set(["queued", "running"]);
 /** Consecutive transport errors without a successful open before giving up. */
 const MAX_CONSECUTIVE_ERRORS = 3;
 const STREAM_EVENTS = ["snapshot", "status", "progress", "log", "end", "overflow"] as const;
@@ -49,7 +49,7 @@ export function reduceJobEvent(
       const parsed = adminJobStreamEventSchemas.status.safeParse(data);
       if (!parsed.success || !state || state.source !== "application") return state;
       const { type: _, ...update } = parsed.data;
-      return { ...state, ...update, cancelable: ACTIVE_STATUSES.has(update.status) };
+      return { ...state, ...update, cancelable: CANCELABLE_STATUSES.has(update.status) };
     }
     case "end": {
       const parsed = adminJobStreamEventSchemas.end.safeParse(data);

@@ -91,6 +91,48 @@ beforeEach(() => {
 });
 
 describe("GET /admin/jobs/:id/events", () => {
+  it.each(["snapshot", "live", "replay"])(
+    "observes cancel_pending via %s until terminal completion",
+    async (mode) => {
+      const id = nextJobId();
+      const pending = { type: "status" as const, status: "cancel_pending" };
+      mockGetActivityJob.mockResolvedValue(
+        jobRow({ id, status: mode === "live" ? "running" : "cancel_pending", cancelable: false }),
+      );
+      if (mode === "replay") {
+        jobEventBus.publish(id, logEvent(0));
+        jobEventBus.publish(id, pending);
+      }
+      const timer = setTimeout(() => {
+        if (mode === "live") jobEventBus.publish(id, pending);
+        jobEventBus.publish(id, { type: "status", status: "canceled" });
+      }, 20);
+      const before = jobEventBus.metrics.activeStreams;
+      try {
+        const response = await app.inject({
+          url: `/admin/jobs/${id}/events`,
+          ...(mode === "replay" ? { headers: { "last-event-id": "1" } } : {}),
+        });
+        expect(response.statusCode).toBe(200);
+        const frames = parseSse(response.body);
+        expect(frames.map((frame) => frame.event)).toEqual(
+          mode === "snapshot"
+            ? ["snapshot", "status", "end"]
+            : mode === "live"
+              ? ["snapshot", "status", "status", "end"]
+              : ["status", "status", "end"],
+        );
+        expect(frames[mode === "live" ? 1 : 0]?.data).toMatchObject(
+          mode === "snapshot" ? { job: { status: "cancel_pending", cancelable: false } } : pending,
+        );
+        expect(frames.at(-1)?.data).toEqual({ status: "canceled" });
+        expect(jobEventBus.metrics.activeStreams).toBe(before);
+      } finally {
+        clearTimeout(timer);
+      }
+    },
+  );
+
   it("rejects data-manager sources and unknown jobs", async () => {
     mockGetActivityJob.mockResolvedValue(null);
     const dm = await app.inject({ method: "GET", url: "/admin/jobs/x/events?source=data-manager" });

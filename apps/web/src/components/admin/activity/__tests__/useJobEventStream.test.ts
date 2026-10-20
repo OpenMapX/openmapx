@@ -74,6 +74,33 @@ describe("useJobEventStream", () => {
     vi.unstubAllGlobals();
   });
 
+  it.each(["snapshot", "status"])(
+    "keeps %s cancel_pending observable but not cancelable",
+    async (mode) => {
+      const { result } = renderHook(() => useJobEventStream(client, "job-1"));
+      const source = await latestSource();
+      act(() => source.open());
+      act(() =>
+        source.emit("snapshot", {
+          job: {
+            ...job(),
+            status: mode === "snapshot" ? "cancel_pending" : "running",
+            cancelable: mode !== "snapshot",
+          },
+        }),
+      );
+      if (mode === "status")
+        act(() => source.emit("status", { type: "status", status: "cancel_pending" }));
+      expect(result.current.connection).toBe("live");
+      expect(source.closed).toBe(false);
+      expect(result.current.data).toMatchObject({ status: "cancel_pending", cancelable: false });
+      act(() => source.emit("status", { type: "status", status: "canceled" }));
+      act(() => source.emit("end", { status: "canceled" }));
+      expect(result.current.connection).toBe("closed");
+      expect(result.current.data).toMatchObject({ status: "canceled", cancelable: false });
+    },
+  );
+
   it("uses the generated encoded target and credentials, applies events, then closes on valid end", async () => {
     const { result } = renderHook(() => useJobEventStream(client, "job /1"));
     const source = await latestSource();

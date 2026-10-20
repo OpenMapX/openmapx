@@ -42,8 +42,12 @@ function formatDuration(startedAt: string | null, finishedAt: string | null): st
   return `${Math.floor(ms / 60000)}m ${Math.floor((ms % 60000) / 1000)}s`;
 }
 
-function isActive(status: string) {
+function isCancelable(status: string) {
   return status === "running" || status === "queued";
+}
+
+function isActive(status: string) {
+  return isCancelable(status) || status === "cancel_pending";
 }
 
 export function JobDetail({ jobId, source }: { jobId: string; source: AdminActivityJobSource }) {
@@ -161,7 +165,7 @@ export function JobDetail({ jobId, source }: { jobId: string; source: AdminActiv
         >
           Duration: {formatDuration(data.startedAt, data.finishedAt)}
         </Typography>
-        {data.cancelable && isActive(data.status) && (
+        {data.cancelable && isCancelable(data.status) && (
           <Button
             size="small"
             color="error"

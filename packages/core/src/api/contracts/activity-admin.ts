@@ -14,6 +14,7 @@ export const adminActivityJobSourceSchema = z.enum(["application", "data-manager
 export const adminApplicationJobStatusSchema = z.enum([
   "queued",
   "running",
+  "cancel_pending",
   "success",
   "failed",
   "canceled",

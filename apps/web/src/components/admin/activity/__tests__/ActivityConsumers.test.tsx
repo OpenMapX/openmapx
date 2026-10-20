@@ -292,6 +292,55 @@ describe("Activity generated SDK consumers", () => {
     expect(reads).toBe(2);
   });
 
+  it("keeps polling a pending cancellation to terminal without repeating the cancel request", async () => {
+    vi.useFakeTimers();
+    let reads = 0;
+    let cancels = 0;
+    vi.stubGlobal("fetch", async (_input: string, init: RequestInit) => {
+      if (init.method === "POST") {
+        cancels += 1;
+        // Real runner pending outcome returns the existing unsuccessful cancel envelope.
+        return Response.json(
+          { error: "Job cannot be canceled (not running or queued)" },
+          { status: 400 },
+        );
+      }
+      reads += 1;
+      return Response.json({
+        ...job(),
+        status: reads === 1 ? "running" : reads < 4 ? "cancel_pending" : "canceled",
+        // Deliberately retain an advisory true flag: pending must never offer Cancel.
+        cancelable: true,
+      });
+    });
+    mount(<JobDetail jobId="job-1" source="application" />, true);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1);
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5_000);
+    });
+    expect(reads).toBe(2);
+    expect(screen.getByText("cancel_pending")).toBeInTheDocument();
+    expect(screen.getByText("Polling")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Cancel" })).not.toBeInTheDocument();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5_000);
+    });
+    expect(reads).toBe(3);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5_000);
+    });
+    expect(reads).toBe(4);
+    expect(screen.getByText("canceled")).toBeInTheDocument();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10_000);
+    });
+    expect(reads).toBe(4);
+    expect(cancels).toBe(1);
+  });
+
   it("shows refreshed polling results after a malformed frame instead of keeping stale streamed data", async () => {
     vi.stubGlobal("EventSource", FakeEventSource);
     let read = 0;

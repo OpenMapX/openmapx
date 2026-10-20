@@ -21,7 +21,7 @@ export type ListAdminActivityJobs200JobsItem =
       finishedAt: string | null;
       cancelable: boolean;
       source: "application";
-      status: "queued" | "running" | "success" | "failed" | "canceled";
+      status: "queued" | "running" | "cancel_pending" | "success" | "failed" | "canceled";
       actor: {
         id: string;
         name: string;
