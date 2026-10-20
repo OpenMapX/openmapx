@@ -610,3 +610,50 @@ produce warnings rather than errors, so the manifest still loads.
   configure, and expose the services you've written.
 - **[How it works](../overview/how-it-works.md)** — the service/integration model
   and the capability binding that ties them together.
+
+## Configuration generation ownership and outcomes
+
+CLI rendering and trusted ops configuration apply share a single writer boundary
+in core. `withConfigurationGenerationWriter(infraDir, run, signal?)` acquires
+`.trusted-config-writer` before reading inputs and holds it through staging,
+initialization/pruning, pointer activation, follow-up files and cleanup. Its
+callback may commit once. Standalone `commitConfigurationGeneration` and
+`initializeConfigurationGenerations` acquire the same ownership.
+
+Ownership uses exclusive directory creation on Linux/macOS local POSIX storage,
+with a five-second acquisition deadline. There is no lease expiry or automatic
+lock stealing. A killed process leaves the lock in place and subsequent writers
+fail closed. Operator recovery must stop **all** CLI and agent writers before
+inspecting and removing an interrupted lock; neither startup nor a contender
+removes it. Network filesystems and Windows are not qualified. All writers must
+run as the stack's user against the same physical infrastructure directory.
+
+`stack.render.expectedCurrentRevisionId` optionally names the applied generation
+that must still be current at activation; `null` deliberately means no applied
+pointer. It is distinct from the candidate `revisionId` and manifest authority
+revision. Strict operation parsing, its authenticated fingerprint and snapshot
+claim bind the condition through execution. Ordinary renders remain unconditional
+but use the same ownership. CLI renders create fresh identities even for repeated
+content, preventing an old condition from becoming true again through content
+reuse. A conflict leaves the current generation and its follow-up files intact;
+a fully staged inert candidate can remain for later bounded pruning.
+
+Configuration ops return `ConfigurationApplyResult`: `outcome: "committed"`
+with the revision, enabled service IDs, `followUp: "complete" | "failed"` and
+`cleanupFailed`, or `outcome: "not_committed"` with `reason: "conflict" | "busy" |
+"failed"`, optional `currentRevisionId`, and `cleanupFailed`. The pointer rename
+is the commit point; subsequent synchronization, follow-up or cleanup errors
+retain commit evidence. A completed result after cancellation still carries that
+evidence. Failed transport or lost journal evidence remains unknown, never proof
+of non-commit. There are no automatic mutation retries.
+
+The API's `applyTrustedConfigurationSnapshot({ payload,
+expectedCurrentRevisionId, operationKey, signal? })` accepts a complete trusted
+snapshot and requires an explicit condition. It returns the host outcome or
+`outcome: "unknown"`, plus `publisherCleanupFailed` and `registryUpdateFailed`.
+Normal `applyTrustedConfiguration` keeps its successful return shape and throws
+`TrustedConfigurationApplyError` for incomplete outcomes. Callers may consider
+restoring their own DB changes only with explicit non-commit evidence, and must
+separately prove DB ownership. Compensation after a known commit must condition
+the full previous snapshot on the committed revision. Conflict, unknown or
+incomplete recovery requires reconciliation.

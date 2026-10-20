@@ -13,7 +13,11 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { OpsOperation, TrustedConfigurationPayload } from "@openmapx/core/ops";
+import {
+  type OpsOperation,
+  opsOperationFingerprint,
+  type TrustedConfigurationPayload,
+} from "@openmapx/core/ops";
 import type { services } from "@openmapx/core/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createUnavailableRuntime, dispatchOpsOperation, type OpsTrustedClaim } from "./runtime";
@@ -81,7 +85,7 @@ function claim(
 ): OpsTrustedClaim {
   const revisionId = "revisionId" in operation ? operation.revisionId : "invalid";
   return {
-    fingerprint: "f".repeat(64),
+    fingerprint: opsOperationFingerprint(operation),
     operation,
     source: "trusted-data",
     capability: { revisionId, values, trustedConfiguration: value },
@@ -151,7 +155,13 @@ describe("ops-agent trusted configuration runtime", () => {
       emitLog: vi.fn(),
       claim: trusted,
     });
-    expect(result).toEqual({ revisionId, enabledServiceIds: ["alpha"] });
+    expect(result).toEqual({
+      outcome: "committed",
+      revisionId,
+      enabledServiceIds: ["alpha"],
+      followUp: "complete",
+      cleanupFailed: false,
+    });
     expect(JSON.parse(readFileSync(paths.selection, "utf8"))).toEqual({ selected: ["alpha"] });
     // The new selection is the operator's from now on, for the CLI too.
     expect(
@@ -265,7 +275,7 @@ describe("ops-agent trusted configuration runtime", () => {
           claim: claim({ kind: "stack.render", revisionId }, invalidPayload),
         },
       ),
-    ).rejects.toThrow("Trusted configuration apply failed");
+    ).resolves.toMatchObject({ outcome: "not_committed", reason: "failed" });
     expect(
       [paths.compose, paths.selection, paths.hardlinks].map((path) => readFileSync(path, "utf8")),
     ).toEqual(["sentinel", "sentinel", "sentinel"]);
@@ -296,7 +306,7 @@ describe("ops-agent trusted configuration runtime", () => {
           }),
         ),
       }),
-    ).rejects.toThrow("Trusted configuration apply failed");
+    ).resolves.toMatchObject({ outcome: "not_committed", reason: "failed" });
     expect(existsSync(paths.current)).toBe(false);
   });
 
@@ -403,7 +413,7 @@ describe("ops-agent trusted configuration runtime", () => {
           }),
         ),
       }),
-    ).rejects.toThrow("Trusted configuration apply failed");
+    ).resolves.toMatchObject({ outcome: "not_committed", reason: "failed" });
     expect(existsSync(paths.current)).toBe(false);
   });
 
@@ -441,7 +451,7 @@ describe("ops-agent trusted configuration runtime", () => {
           }),
         ),
       }),
-    ).rejects.toThrow("Trusted configuration apply failed");
+    ).resolves.toMatchObject({ outcome: "not_committed", reason: "failed" });
     expect(existsSync(paths.current)).toBe(false);
   });
 
@@ -473,7 +483,7 @@ describe("ops-agent trusted configuration runtime", () => {
           payload({ integrationConfigs: [{ integrationId: "custom", values: { value: "aaaa" } }] }),
         ),
       }),
-    ).rejects.toThrow("Trusted configuration apply failed");
+    ).resolves.toMatchObject({ outcome: "not_committed", reason: "failed" });
     expect(existsSync(paths.current)).toBe(false);
   });
 
@@ -519,7 +529,11 @@ describe("ops-agent trusted configuration runtime", () => {
           { authorityRevision: authority.revisionId },
         ),
       }),
-    ).resolves.toEqual({ revisionId: selectionRevision, enabledServiceIds: ["community-live"] });
+    ).resolves.toMatchObject({
+      outcome: "committed",
+      revisionId: selectionRevision,
+      enabledServiceIds: ["community-live"],
+    });
     expect(readFileSync(paths.compose, "utf8")).toContain("community-live:");
 
     authority = {
@@ -548,7 +562,7 @@ describe("ops-agent trusted configuration runtime", () => {
           { authorityRevision: authority.revisionId },
         ),
       }),
-    ).rejects.toThrow("Trusted configuration apply failed");
+    ).resolves.toMatchObject({ outcome: "not_committed", reason: "failed" });
 
     authority = {
       revisionId: "authority-removed",
@@ -571,7 +585,7 @@ describe("ops-agent trusted configuration runtime", () => {
           { authorityRevision: authority.revisionId },
         ),
       }),
-    ).rejects.toThrow("Trusted configuration apply failed");
+    ).resolves.toMatchObject({ outcome: "not_committed", reason: "failed" });
   });
 
   it("keeps all existing outputs intact when interrupted before the commit boundary", async () => {
@@ -597,7 +611,7 @@ describe("ops-agent trusted configuration runtime", () => {
           claim: claim({ kind: "stack.render", revisionId }, payload({ integrationConfigs: [] })),
         },
       ),
-    ).rejects.toThrow("Trusted configuration apply failed");
+    ).resolves.toMatchObject({ outcome: "not_committed", reason: "failed" });
     expect(
       [paths.compose, paths.selection, paths.hardlinks].map((path) => readFileSync(path, "utf8")),
     ).toEqual(["sentinel", "sentinel", "sentinel"]);
@@ -626,7 +640,7 @@ describe("ops-agent trusted configuration runtime", () => {
           claim: claim({ kind: "stack.render", revisionId }, payload({ integrationConfigs: [] })),
         },
       ),
-    ).rejects.toThrow("Trusted configuration apply failed");
+    ).resolves.toMatchObject({ outcome: "committed", followUp: "failed" });
     await initializeTrustedConfigurationRuntime(paths.infraDir);
     expect(readFileSync(paths.compose, "utf8")).toContain("alpha:");
     expect(readFileSync(paths.selection, "utf8")).toContain("alpha");
@@ -651,7 +665,7 @@ describe("ops-agent trusted configuration runtime", () => {
         emitLog: vi.fn(),
         claim: claim(operation, payload({ integrationConfigs: [] })),
       }),
-    ).rejects.toThrow("Trusted configuration apply failed");
+    ).resolves.toMatchObject({ outcome: "not_committed", reason: "failed" });
     expect(existsSync(paths.current)).toBe(false);
     expect(() => readTrustedEnabledServiceIds(paths.infraDir, [service("alpha")])).toThrow(
       "Trusted configuration apply failed",
@@ -669,7 +683,7 @@ describe("ops-agent trusted configuration runtime", () => {
         emitLog: vi.fn(),
         claim: claim(operation, payload({ integrationConfigs: [] })),
       }),
-    ).resolves.toEqual({ revisionId, enabledServiceIds: ["alpha"] });
+    ).resolves.toMatchObject({ outcome: "committed", revisionId, enabledServiceIds: ["alpha"] });
     expect(readFileSync(paths.compose, "utf8")).toContain("alpha:");
   });
 
@@ -713,7 +727,7 @@ describe("ops-agent trusted configuration runtime", () => {
         emitLog: vi.fn(),
         claim: claim(operation, payload({ integrationConfigs: [] })),
       }),
-    ).resolves.toEqual({ revisionId, enabledServiceIds: ["alpha"] });
+    ).resolves.toMatchObject({ outcome: "committed", revisionId, enabledServiceIds: ["alpha"] });
     expect(readFileSync(paths.compose, "utf8")).toContain("alpha:");
   });
 
@@ -736,7 +750,7 @@ describe("ops-agent trusted configuration runtime", () => {
         emitLog: vi.fn(),
         claim: claim(operation, payload({ integrationConfigs: [] })),
       }),
-    ).rejects.toThrow();
+    ).resolves.toMatchObject({ outcome: "committed", followUp: "failed" });
     const retry = createUnavailableRuntime();
     installTrustedConfigurationRuntime(retry, {
       services: [service("alpha")],
@@ -749,7 +763,7 @@ describe("ops-agent trusted configuration runtime", () => {
         emitLog: vi.fn(),
         claim: claim(operation, payload({ integrationConfigs: [] })),
       }),
-    ).resolves.toEqual({ revisionId, enabledServiceIds: ["alpha"] });
+    ).resolves.toMatchObject({ outcome: "committed", revisionId, enabledServiceIds: ["alpha"] });
   });
 
   it("applies an explicit empty vault entry and removes the prior generated secret", async () => {
@@ -829,7 +843,11 @@ describe("ops-agent trusted configuration runtime", () => {
         emitLog: vi.fn(),
         claim: claim(operation, payload({ integrationConfigs: [] })),
       }),
-    ).resolves.toEqual({ revisionId: operation.revisionId, enabledServiceIds: ["beta"] });
+    ).resolves.toMatchObject({
+      outcome: "committed",
+      revisionId: operation.revisionId,
+      enabledServiceIds: ["beta"],
+    });
     const compose = readFileSync(paths.compose, "utf8");
     expect(compose).toContain("beta:");
     expect(compose).not.toContain("alpha:");
@@ -858,7 +876,7 @@ describe("ops-agent trusted configuration runtime", () => {
         emitLog: vi.fn(),
         claim: claim(operation, payload({ selectedRoots: ["beta"], integrationConfigs: [] })),
       }),
-    ).rejects.toThrow("Trusted configuration apply failed");
+    ).resolves.toMatchObject({ outcome: "not_committed", reason: "failed" });
     expect(readFileSync(join(paths.infraDir, "service-selection.json"), "utf8")).toContain("alpha");
     expect(existsSync(paths.current)).toBe(false);
     await expect(

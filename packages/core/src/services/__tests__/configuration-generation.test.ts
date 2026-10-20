@@ -8,6 +8,7 @@ import {
   readAppliedConfiguration,
   readAppliedServiceIds,
   renderConfiguration,
+  withConfigurationGenerationWriter,
 } from "../configuration-generation";
 import {
   readDesiredSelection,
@@ -66,13 +67,13 @@ function input(overrides: Partial<ConfigurationInput> = {}): ConfigurationInput 
 }
 
 describe("configuration generations", () => {
-  it("names a generation by its content and makes it the applied one", async () => {
+  it("gives each application a fresh identity even when content repeats", async () => {
     const { root, infraDir } = checkout();
     const first = await commitConfigurationGeneration({ infraDir, services, input: input() });
     const again = await commitConfigurationGeneration({ infraDir, services, input: input() });
 
     expect(first.revisionId).toMatch(/^cfg1_[A-Za-z0-9_-]{43}$/);
-    expect(again.revisionId).toBe(first.revisionId);
+    expect(again.revisionId).not.toBe(first.revisionId);
     expect(first.enabledServiceIds).toEqual(["alpha"]);
     expect(readAppliedServiceIds(infraDir, services)).toEqual(new Set(["alpha"]));
     const compose = readFileSync(
@@ -86,6 +87,36 @@ describe("configuration generations", () => {
       true,
     );
     expect(existsSync(join(root, "custom_integrations"))).toBe(true);
+  });
+
+  it("retains commit evidence even if the owner callback fails while its write is settling", async () => {
+    const { infraDir } = checkout();
+    const error = await withConfigurationGenerationWriter(infraDir, async (writer) => {
+      void writer.commit({
+        services,
+        input: input(),
+        afterCommit: async () => {
+          throw new Error("post-pointer fault");
+        },
+      });
+      throw new Error("callback fault");
+    }).catch((error) => error);
+    expect(error.result).toMatchObject({ outcome: "committed", followUp: "failed" });
+    expect(readAppliedServiceIds(infraDir, services)).toEqual(new Set(["alpha"]));
+  });
+  it("does not activate when cancellation arrives after staging rename", async () => {
+    const { infraDir } = checkout();
+    const controller = new AbortController();
+    const error = await commitConfigurationGeneration({
+      infraDir,
+      services,
+      input: input(),
+      signal: controller.signal,
+      afterGenerationRename: async () => {
+        controller.abort();
+      },
+    }).catch((error) => error);
+    expect(error.result).toMatchObject({ outcome: "not_committed" });
   });
 
   it("keeps what was saved for services that are not enabled, for a later render", async () => {

@@ -1,6 +1,8 @@
 import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 import type { FastifyInstance } from "fastify";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { applyTrustedConfiguration } from "../../services/trusted-config-operations";
+import { TrustedConfigurationApplyError } from "../../services/trusted-config-outcome";
 import { createAdminTestApp, installAdminRouteMocks } from "./admin-test-helpers.js";
 
 const {
@@ -45,6 +47,7 @@ vi.mock("../../services/activity-jobs.js", () => ({
 // DB — multiple tables used across admin.ts
 const mockDbSelect = vi.fn();
 const mockDbInsert = vi.fn();
+const mockDbDelete = vi.fn(() => ({ where: vi.fn().mockResolvedValue(undefined) }));
 
 function makeSelectChain(resolveWith: unknown[] = []) {
   const chain: Record<string, unknown> = {
@@ -71,6 +74,7 @@ mockDbInsert.mockReturnValue(insertChain);
 
 vi.mock("../../db/index.js", () => ({
   db: {
+    delete: () => mockDbDelete(),
     select: (...args: unknown[]) => mockDbSelect(...args),
     insert: (...args: unknown[]) => mockDbInsert(...args),
   },
@@ -351,6 +355,34 @@ describe("POST /admin/integrations/health/run", () => {
 });
 
 describe("POST /admin/integrations/:id/enable", () => {
+  it.each(["unknown", "committed", "not_committed"] as const)(
+    "restores integration overrides only with proven non-commit (%s)",
+    async (outcome) => {
+      const error = new TrustedConfigurationApplyError({
+        ...(outcome === "unknown"
+          ? { outcome, reason: "transport_or_result" as const }
+          : outcome === "committed"
+            ? {
+                outcome,
+                revisionId: `cfg1_${"a".repeat(43)}`,
+                enabledServiceIds: [],
+                followUp: "failed" as const,
+                cleanupFailed: false,
+              }
+            : { outcome, reason: "failed" as const, cleanupFailed: false }),
+        publisherCleanupFailed: false,
+        registryUpdateFailed: false,
+      });
+      vi.mocked(applyTrustedConfiguration).mockRejectedValueOnce(error);
+      const res = await app.inject({
+        method: "POST",
+        url: "/admin/integrations/geocoding-maptiler/enable",
+      });
+      expect(res.statusCode).toBe(500);
+      expect(mockDbDelete).toHaveBeenCalledTimes(outcome === "not_committed" ? 1 : 0);
+      expect(mockReloadIntegrations).not.toHaveBeenCalled();
+    },
+  );
   it("enables an integration, writes audit log, and returns reload result", async () => {
     // DB select for existing config returns empty (no pre-existing config row)
     mockDbSelect.mockImplementationOnce(() => ({

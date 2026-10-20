@@ -28,6 +28,7 @@ import {
   setSecret,
 } from "../services/secrets";
 import { applyTrustedConfiguration } from "../services/trusted-config-operations";
+import { isProvenConfigurationNonCommit } from "../services/trusted-config-outcome";
 import { writeAuditLog } from "../utils/audit-log";
 import { dockerComposePs, type PsEntry } from "../utils/docker-compose";
 import { maskSecretConfigRecord, maskSecretConfigValues } from "../utils/mask-config.js";
@@ -84,6 +85,7 @@ async function persistAndApplyIntegrationConfig(options: {
       ),
     });
   } catch (error) {
+    if (!isProvenConfigurationNonCommit(error)) throw error;
     if (options.previous === null) {
       await db
         .delete(integrationConfig)

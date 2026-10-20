@@ -141,7 +141,13 @@ describe("reviewed durable admission boundary", () => {
         dispatch: async () => {
           expect(retained).toBe(true);
           if (outcome === "failed") throw new Error("runtime failed");
-          return { revisionId: operation.revisionId, enabledServiceIds: [] };
+          return {
+            outcome: "committed",
+            revisionId: operation.revisionId,
+            enabledServiceIds: [],
+            followUp: "complete",
+            cleanupFailed: false,
+          };
         },
       });
       const admitted = await app.inject({

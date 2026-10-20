@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import {
   constants,
   existsSync,
@@ -14,6 +14,7 @@ import {
 } from "node:fs";
 import { open } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
+import type { ConfigurationApplyResult } from "../ops/contract";
 import type { TrustedConfigurationPayload } from "../ops/trusted-config";
 import {
   GENERATED_SECRETS_DIRNAME,
@@ -27,6 +28,10 @@ import {
   resolveServiceConfigFromEnv,
   serviceConfigEnvPrefix,
 } from "./config-resolver";
+import {
+  acquireConfigurationOwnership,
+  ConfigurationWriterBusyError,
+} from "./configuration-ownership";
 import { validateTrustedConfigurationValues } from "./configuration-schema";
 import {
   CONFIGURATION_GENERATIONS,
@@ -62,8 +67,11 @@ export interface CommitConfigurationOptions {
   input: ConfigurationInput;
   /** Tolerate selected services that are not installed (the default selection in a reduced checkout). */
   allowMissingSelected?: boolean;
-  /** The generation's name; omitted, it is the digest of its content. */
+  /** The authenticated candidate identity; omitted, use a fresh activation identity (no ABA). */
   revisionId?: string;
+  /** Applied identity to compare under writer ownership; null means no pointer. */
+  expectedCurrentRevisionId?: string | null;
+  signal?: AbortSignal;
   beforeCommit?: () => Promise<void>;
   afterGenerationRename?: () => Promise<void>;
   afterCommit?: () => Promise<void>;
@@ -74,6 +82,105 @@ export interface CommittedConfiguration {
   enabledServiceIds: string[];
   /** Render advisories, such as optional bind mounts skipped for a missing source. */
   warnings: string[];
+}
+
+/** Evidence about THIS attempt, never inferred from a transport exception. */
+export class ConfigurationGenerationError extends Error {
+  constructor(
+    readonly result: ConfigurationApplyResult,
+    cause?: unknown,
+  ) {
+    super(cause instanceof Error ? cause.message : "Configuration generation failed", { cause });
+    this.name = "ConfigurationGenerationError";
+  }
+}
+
+export interface ConfigurationGenerationWriter {
+  commit(options: Omit<CommitConfigurationOptions, "infraDir">): Promise<CommittedConfiguration>;
+}
+
+/** Hold ownership before reading state used to construct a write, through all follow-up work. */
+export async function withConfigurationGenerationWriter<T>(
+  infraDir: string,
+  run: (writer: ConfigurationGenerationWriter) => Promise<T>,
+  signal?: AbortSignal,
+): Promise<T> {
+  let release: (() => void) | undefined;
+  let committed: CommittedConfiguration | undefined;
+  let failure: unknown;
+  let value!: T;
+  let active = true;
+  let pending: Promise<CommittedConfiguration> | undefined;
+  try {
+    release = await acquireConfigurationOwnership(infraDir, signal);
+    value = await run({
+      commit: (options) => {
+        if (!active || pending) throw new Error("Configuration writer is not available");
+        pending = commitOwnedConfigurationGeneration({
+          ...options,
+          infraDir,
+          signal: options.signal ?? signal,
+        }).then((result) => {
+          committed = result;
+          return result;
+        });
+        return pending;
+      },
+    });
+  } catch (error) {
+    failure =
+      error instanceof Error
+        ? error
+        : new Error("Configuration generation failed", { cause: error });
+  }
+  active = false;
+  // Even a misbehaving callback that did not await commit cannot release its fence early.
+  try {
+    await pending;
+  } catch (error) {
+    if (error instanceof ConfigurationGenerationError && error.result.outcome === "committed") {
+      failure = new ConfigurationGenerationError(error.result, failure ?? error);
+    } else {
+      failure ??=
+        error instanceof Error
+          ? error
+          : new Error("Configuration generation failed", { cause: error });
+    }
+  }
+  const followUpFailed = failure !== undefined;
+  let cleanupFailed = false;
+  try {
+    release?.();
+  } catch (error) {
+    cleanupFailed = true;
+    failure ??=
+      error instanceof Error
+        ? error
+        : new Error("Configuration generation failed", { cause: error });
+  }
+  if (failure) {
+    const result: ConfigurationApplyResult =
+      failure instanceof ConfigurationGenerationError
+        ? failure.result
+        : committed
+          ? {
+              outcome: "committed",
+              revisionId: committed.revisionId,
+              enabledServiceIds: committed.enabledServiceIds,
+              followUp: followUpFailed ? "failed" : "complete",
+              cleanupFailed: false,
+            }
+          : {
+              outcome: "not_committed",
+              reason: failure instanceof ConfigurationWriterBusyError ? "busy" : "failed",
+              cleanupFailed: false,
+            };
+    throw new ConfigurationGenerationError(
+      { ...result, cleanupFailed: result.cleanupFailed || cleanupFailed },
+      failure,
+    );
+  }
+  return value;
 }
 
 function schemaProperties(
@@ -417,6 +524,12 @@ export function readAppliedConfiguration(
  * generations. The applied generation is never pruned.
  */
 export async function initializeConfigurationGenerations(infraDir: string): Promise<void> {
+  return withConfigurationGenerationWriter(infraDir, () =>
+    initializeOwnedConfigurationGenerations(infraDir),
+  );
+}
+
+async function initializeOwnedConfigurationGenerations(infraDir: string): Promise<void> {
   const generations = join(infraDir, CONFIGURATION_GENERATIONS);
   try {
     lstatSync(generations);
@@ -559,14 +672,35 @@ export function renderConfiguration(options: RenderConfigurationOptions) {
 export async function commitConfigurationGeneration(
   options: CommitConfigurationOptions,
 ): Promise<CommittedConfiguration> {
+  return withConfigurationGenerationWriter(
+    options.infraDir,
+    (writer) => writer.commit(options),
+    options.signal,
+  );
+}
+
+async function commitOwnedConfigurationGeneration(
+  options: CommitConfigurationOptions,
+): Promise<CommittedConfiguration> {
   const { infraDir, input } = options;
+  if (
+    options.expectedCurrentRevisionId !== undefined &&
+    options.expectedCurrentRevisionId !== null &&
+    !REVISION.test(options.expectedCurrentRevisionId)
+  ) {
+    throw new Error("Bad expected current generation");
+  }
+  options.signal?.throwIfAborted();
   const { resolved, context, rendered } = renderConfiguration(options);
   const generations = join(infraDir, CONFIGURATION_GENERATIONS);
-  await initializeConfigurationGenerations(infraDir);
+  await initializeOwnedConfigurationGenerations(infraDir);
   const nonce = randomUUID().replaceAll("-", "");
   const placeholder = options.revisionId ?? `cfg1_${"0".repeat(43)}`;
   if (!REVISION.test(placeholder)) throw new Error(`Bad generation name ${placeholder}`);
   let temporary: string | undefined = join(generations, `.${placeholder}.${nonce}.tmp`);
+  let committed: CommittedConfiguration | undefined;
+  let failure: unknown;
+  let cleanupFailed = false;
   try {
     mkdirSync(temporary, { mode: 0o700 });
     await writeDurable(join(temporary, GENERATED_COMPOSE_FILE), rendered.composeYaml, 0o600);
@@ -610,9 +744,10 @@ export async function commitConfigurationGeneration(
       await syncDirectory(secretsRoot);
     }
     await syncDirectory(temporary);
-    const revisionId = options.revisionId ?? `cfg1_${generationDigest(temporary)}`;
+    const revisionId = options.revisionId ?? `cfg1_${randomBytes(32).toString("base64url")}`;
     const finalGeneration = join(generations, revisionId);
     await options.beforeCommit?.();
+    options.signal?.throwIfAborted();
     if (existsSync(finalGeneration)) {
       if (generationDigest(finalGeneration) !== generationDigest(temporary)) {
         throw new Error(`Generation ${revisionId} exists with other content`);
@@ -625,22 +760,68 @@ export async function commitConfigurationGeneration(
       await syncDirectory(generations);
       await options.afterGenerationRename?.();
     }
-    if (currentConfigurationGeneration(infraDir) !== revisionId) {
+    options.signal?.throwIfAborted();
+    const currentRevisionId = currentConfigurationGeneration(infraDir);
+    if (
+      options.expectedCurrentRevisionId !== undefined &&
+      options.expectedCurrentRevisionId !== currentRevisionId
+    ) {
+      throw new ConfigurationGenerationError({
+        outcome: "not_committed",
+        reason: "conflict",
+        currentRevisionId,
+        cleanupFailed: false,
+      });
+    }
+    if (currentRevisionId !== revisionId) {
       const pointerTemporary = join(infraDir, `.${CURRENT_CONFIGURATION}.${nonce}.tmp`);
       symlinkSync(join(CONFIGURATION_GENERATIONS, revisionId), pointerTemporary);
       renameSync(pointerTemporary, join(infraDir, CURRENT_CONFIGURATION));
+      // The rename is the commit point. Record evidence BEFORE any fallible sync/follow-up.
+      committed = {
+        revisionId,
+        enabledServiceIds: resolved.enabledIdsOrdered,
+        warnings: rendered.warnings ?? [],
+      };
       await syncDirectory(infraDir);
+    } else {
+      committed = {
+        revisionId,
+        enabledServiceIds: resolved.enabledIdsOrdered,
+        warnings: rendered.warnings ?? [],
+      };
     }
     writeStackFiles(infraDir, resolved.enabled, context, rendered.writableBindDirs ?? []);
     await options.afterCommit?.();
-    return {
-      revisionId,
-      enabledServiceIds: resolved.enabledIdsOrdered,
-      warnings: rendered.warnings ?? [],
-    };
-  } finally {
-    // A fully staged generation without the pointer swap is inert and is
-    // cleaned by the next initialization.
-    if (temporary) rmSync(temporary, { recursive: true, force: true });
+  } catch (error) {
+    failure =
+      error instanceof Error
+        ? error
+        : new Error("Configuration generation failed", { cause: error });
   }
+  try {
+    if (temporary) rmSync(temporary, { recursive: true, force: true });
+  } catch (error) {
+    cleanupFailed = true;
+    failure ??=
+      error instanceof Error
+        ? error
+        : new Error("Configuration generation failed", { cause: error });
+  }
+  if (failure) {
+    const result: ConfigurationApplyResult = committed
+      ? {
+          outcome: "committed",
+          revisionId: committed.revisionId,
+          enabledServiceIds: committed.enabledServiceIds,
+          followUp: "failed",
+          cleanupFailed,
+        }
+      : failure instanceof ConfigurationGenerationError
+        ? { ...failure.result, cleanupFailed: failure.result.cleanupFailed || cleanupFailed }
+        : { outcome: "not_committed", reason: "failed", cleanupFailed };
+    throw new ConfigurationGenerationError(result, failure);
+  }
+  if (!committed) throw new Error("Configuration generation did not produce commit evidence");
+  return committed;
 }

@@ -348,13 +348,19 @@ describe("trusted configuration snapshot publisher", () => {
       consumePublishedTrustedConfiguration(first, async () => {
         throw new Error("transport unavailable");
       }),
-    ).rejects.toThrow("transport unavailable");
+    ).resolves.toMatchObject({
+      submission: { status: "rejected", reason: new Error("transport unavailable") },
+      cleanupFailed: false,
+    });
     expect(readdirSync(root)).toEqual([]);
 
     const retry = await make();
     await expect(
       consumePublishedTrustedConfiguration(retry, async () => ({ revisionId: retry.revisionId })),
-    ).resolves.toEqual({ revisionId: retry.revisionId });
+    ).resolves.toEqual({
+      submission: { status: "fulfilled", value: { revisionId: retry.revisionId } },
+      cleanupFailed: false,
+    });
     expect(readdirSync(root)).toEqual([]);
   });
 
@@ -385,7 +391,10 @@ describe("trusted configuration snapshot publisher", () => {
         consumePublishedTrustedConfiguration(published, async () => {
           throw new Error("agent unavailable");
         }),
-      ).rejects.toThrow("agent unavailable");
+      ).resolves.toMatchObject({
+        submission: { status: "rejected", reason: new Error("agent unavailable") },
+        cleanupFailed: false,
+      });
     }
     expect(readdirSync(root).sort()).toEqual(
       seeded.map((snapshot) => `${snapshot.revisionId}.json`).sort(),

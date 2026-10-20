@@ -27,6 +27,8 @@ export {
 export {
   type CommitConfigurationOptions,
   type CommittedConfiguration,
+  ConfigurationGenerationError,
+  type ConfigurationGenerationWriter,
   type ConfigurationInput,
   commitConfigurationGeneration,
   currentConfigurationGeneration,
@@ -35,6 +37,7 @@ export {
   readAppliedConfiguration,
   readAppliedServiceIds,
   renderConfiguration,
+  withConfigurationGenerationWriter,
 } from "./configuration-generation";
 export {
   assertTrustedConfigurationSchema,

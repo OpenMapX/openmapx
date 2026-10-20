@@ -233,10 +233,16 @@ const kindOnly = <T extends OpsOperationKind>(kind: T) => z.strictObject({ kind:
 const serviceOperation = <T extends OpsOperationKind>(kind: T) =>
   z.strictObject({ kind: z.literal(kind), serviceId: serviceIdSchema });
 
+export const configurationGenerationRevisionSchema = z.string().regex(/^cfg1_[A-Za-z0-9_-]{43}$/);
+
 export const opsOperationSchema = z.discriminatedUnion("kind", [
   kindOnly("docker.status"),
   kindOnly("stack.status"),
-  z.strictObject({ kind: z.literal("stack.render"), revisionId: stableIdSchema }),
+  z.strictObject({
+    kind: z.literal("stack.render"),
+    revisionId: stableIdSchema,
+    expectedCurrentRevisionId: configurationGenerationRevisionSchema.nullable().optional(),
+  }),
   kindOnly("stack.start"),
   kindOnly("stack.stop"),
   serviceOperation("service.start"),
@@ -683,10 +689,23 @@ const backupInventoryEntry = z
     }
   });
 const extension = z.strictObject({ extensionId: serviceIdSchema, revisionId: stableIdSchema });
-const revision = z.strictObject({
-  revisionId: stableIdSchema,
-  enabledServiceIds: z.array(serviceIdSchema).max(256),
-});
+export const configurationApplyResultSchema = z.discriminatedUnion("outcome", [
+  z.strictObject({
+    outcome: z.literal("committed"),
+    revisionId: configurationGenerationRevisionSchema,
+    enabledServiceIds: z.array(serviceIdSchema).max(256),
+    followUp: z.enum(["complete", "failed"]),
+    cleanupFailed: z.boolean(),
+  }),
+  z.strictObject({
+    outcome: z.literal("not_committed"),
+    reason: z.enum(["conflict", "busy", "failed"]),
+    currentRevisionId: configurationGenerationRevisionSchema.nullable().optional(),
+    cleanupFailed: z.boolean(),
+  }),
+]);
+export type ConfigurationApplyResult = z.infer<typeof configurationApplyResultSchema>;
+const revision = configurationApplyResultSchema;
 const data = z.strictObject({
   completed: z.literal(true),
   resourceId: resourceIdSchema.optional(),
