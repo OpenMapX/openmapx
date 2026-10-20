@@ -1,5 +1,6 @@
 import Box from "@mui/material/Box";
 import Divider from "@mui/material/Divider";
+import Skeleton from "@mui/material/Skeleton";
 import type { SxProps, Theme } from "@mui/material/styles";
 import Typography from "@mui/material/Typography";
 
@@ -100,6 +101,16 @@ export function ResultList<T>({
           {renderItem(item)}
         </Box>
       ))}
+    </>
+  );
+}
+
+/** Shared pending result content, including saved rows awaiting details. */
+export function ResultRowSkeleton() {
+  return (
+    <>
+      <Skeleton variant="text" width="60%" height={20} />
+      <Skeleton variant="text" width="80%" height={16} />
     </>
   );
 }

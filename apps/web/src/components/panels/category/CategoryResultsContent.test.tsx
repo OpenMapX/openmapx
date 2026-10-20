@@ -19,6 +19,7 @@ import { useEffect } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SearchInAreaChip } from "@/components/map/SearchInAreaChip";
 import { MobileSheetContext } from "@/components/panels/sheet/sheetState";
+import { categoryCardContributors, categoryRatingSourceName } from "@/components/ui/PlaceResultRow";
 import { MapProvider, useMap } from "@/integration-api/map/MapContext";
 import { act, createFakeMap, type FakeMap, fireEvent, render, screen, waitFor } from "@/test";
 import { createQueryWrapper } from "@/test/query";
@@ -1814,7 +1815,6 @@ it("credits captured retained row fields without consulting diagnostic provenanc
 });
 
 it("projects only capped displayed attributes, distance, hours and independent captured rating", async () => {
-  const { categoryCardContributors } = await import("./CategoryResultsContent");
   const credit = (sourceId: string) => [{ sourceId, name: sourceId }];
   const place: CategoryPlace = {
     id: "osm:node/82",
@@ -1859,7 +1859,6 @@ it("projects only capped displayed attributes, distance, hours and independent c
 });
 
 it("uses the captured rating source label and keeps native empty receipts independent of the live registry", async () => {
-  const { categoryRatingSourceName } = await import("./CategoryResultsContent");
   const rating = {
     stars: 4,
     count: 5,
