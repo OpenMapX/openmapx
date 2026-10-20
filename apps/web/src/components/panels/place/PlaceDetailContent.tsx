@@ -434,8 +434,15 @@ function PlaceDetailContentInner({ place, isLoading, onClose, clearSearchBar = f
           </IconButton>
         )}
 
-        <Box sx={{ display: "flex", alignItems: "flex-start" }}>
-          <Box sx={{ flex: 1, minWidth: 0 }}>
+        <Box
+          sx={{
+            display: "grid",
+            // Weather descriptions wrap before they can crowd out the place.
+            gridTemplateColumns: "minmax(0, 1fr) fit-content(32%)",
+            alignItems: "start",
+          }}
+        >
+          <Box sx={{ minWidth: 0 }}>
             {/* The mark and title share one row; all logo credits use the full
                 width below it so required notices cannot squeeze the title. */}
             {brandQid ? (
@@ -485,11 +492,11 @@ function PlaceDetailContentInner({ place, isLoading, onClose, clearSearchBar = f
             </Box>
           </Box>
           {showHeaderWeather && (
-            // Shift down past the absolute close button when the hero isn't
-            // showing, so the weather icon never sits under it.
-            <Box sx={{ mt: onClose && !showHero ? 4 : 0 }}>
-              <PlaceHeaderWeather lat={place.coordinates[1]} lng={place.coordinates[0]} />
-            </Box>
+            <PlaceHeaderWeather
+              lat={place.coordinates[1]}
+              lng={place.coordinates[0]}
+              clearCloseButton={Boolean(onClose && !showHero)}
+            />
           )}
         </Box>
 
