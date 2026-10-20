@@ -5,6 +5,7 @@ import Picker from "@emoji-mart/react";
 import AddIcon from "@mui/icons-material/Add";
 import DeleteIcon from "@mui/icons-material/Delete";
 import DownloadIcon from "@mui/icons-material/Download";
+import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
 import LockIcon from "@mui/icons-material/Lock";
 import MoreVertIcon from "@mui/icons-material/MoreVert";
 import ShareIcon from "@mui/icons-material/Share";
@@ -347,6 +348,30 @@ export function SavedListDetail() {
                   autoFocus
                   sx={{ mt: 0.5 }}
                 />
+              ) : place.note ? (
+                <Box sx={{ display: "flex", alignItems: "flex-start", gap: 0.5 }}>
+                  <Typography
+                    variant="caption"
+                    sx={{
+                      color: "text.secondary",
+                      flex: 1,
+                      minWidth: 0,
+                      pt: 0.25,
+                      whiteSpace: "pre-wrap",
+                      overflowWrap: "anywhere",
+                    }}
+                  >
+                    {place.note}
+                  </Typography>
+                  <IconButton
+                    size="small"
+                    aria-label={t("editNote")}
+                    onClick={(e) => handleAddNoteClick(e, place)}
+                    sx={{ p: 0.25, mr: -0.25 }}
+                  >
+                    <EditOutlinedIcon sx={{ fontSize: 16 }} />
+                  </IconButton>
+                </Box>
               ) : (
                 <Button
                   size="small"
@@ -357,11 +382,9 @@ export function SavedListDetail() {
                     minWidth: 0,
                     fontSize: 12,
                     textTransform: "none",
-                    textAlign: "left",
-                    overflowWrap: "anywhere",
                   }}
                 >
-                  {place.note || `+ ${t("note")}`}
+                  + {t("note")}
                 </Button>
               )
             }

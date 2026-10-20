@@ -3055,6 +3055,7 @@
     "work": "Work",
     "notSet": "Not set",
     "note": "Note",
+    "editNote": "Edit note",
     "delete": "Delete",
     "enterListName": "Enter list name",
     "deleteListConfirm": "Delete this list and all its places?",

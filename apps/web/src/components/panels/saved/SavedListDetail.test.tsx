@@ -176,7 +176,9 @@ it("adds and edits notes without opening the place, and opens rows through openS
       <SavedListDetail />
     </NextIntlClientProvider>,
   );
-  fireEvent.click(screen.getByRole("button", { name: "Visit in daylight" }));
+  expect(screen.queryByRole("button", { name: "Visit in daylight" })).not.toBeInTheDocument();
+  expect(screen.getByText("Visit in daylight")).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Edit note" }));
   expect(screen.getByPlaceholderText("Note")).toHaveValue("Visit in daylight");
   expect(open).not.toHaveBeenCalled();
   fireEvent.keyDown(screen.getByPlaceholderText("Note"), { key: "Escape" });
