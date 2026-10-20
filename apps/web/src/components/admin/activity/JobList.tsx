@@ -18,9 +18,10 @@ import ToggleButton from "@mui/material/ToggleButton";
 import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
+import { listAdminActivityJobs, unwrapAdminResponse } from "@openmapx/core/api-admin-sdk";
+import type { AdminActivityJob, AdminActivityJobsResponse } from "@openmapx/core/api-contracts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { useEnv } from "@/integration-api/runtime/EnvProvider";
 import { relativeTimeFromIso } from "@/lib/formatTime";
 import { AdminTablePagination } from "../shared/AdminTablePagination";
 import { AdminTableSurface } from "../shared/AdminTableSurface";
@@ -28,24 +29,8 @@ import { JobStatusChip } from "../shared/JobStatusChip";
 import { TableSkeleton } from "../shared/TableSkeleton";
 import { useServerPagination } from "../shared/tableHooks";
 import { ActorCell } from "./ActorCell";
+import { ACTIVITY_READ_TIMEOUT_MS, useActivityClient } from "./activityQueries";
 import { JobDetail } from "./JobDetail";
-
-interface AdminJob {
-  source: "application" | "data-manager";
-  id: string;
-  type: string;
-  status: string;
-  payload: unknown;
-  error: string | null;
-  progress: number | null;
-  createdBy: string | null;
-  actor: { id: string; name: string; email: string } | null;
-  actorLabel: string;
-  createdAt: string;
-  startedAt: string | null;
-  finishedAt: string | null;
-  cancelable: boolean;
-}
 
 type StatusFilter = "all" | "active" | "completed" | "failed";
 
@@ -62,7 +47,7 @@ function formatPayload(payload: unknown): string | null {
     .join(", ");
 }
 
-function JobRow({ job }: { job: AdminJob }) {
+function JobRow({ job }: { job: AdminActivityJob }) {
   const [expanded, setExpanded] = useState(false);
   const payload = formatPayload(job.payload);
 
@@ -155,26 +140,20 @@ function JobRow({ job }: { job: AdminJob }) {
 }
 
 export function JobList() {
-  const env = useEnv();
+  const { apiUrl, client } = useActivityClient();
   const queryClient = useQueryClient();
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
-  const { page, rowsPerPage, offset, setPage, paginationProps } = useServerPagination(25);
+  const { rowsPerPage, offset, setPage, paginationProps } = useServerPagination(25);
 
-  const { data, isLoading, isFetching, isError } = useQuery<{
-    jobs: AdminJob[];
-    total: number;
-  }>({
-    queryKey: ["admin", "jobs", "list", statusFilter, page],
-    queryFn: async () => {
-      const params = new URLSearchParams({
-        limit: String(rowsPerPage),
-        offset: String(offset),
-      });
-      if (statusFilter !== "all") params.set("status", statusFilter);
-      const res = await fetch(`${env.apiUrl}/api/admin/jobs?${params}`, { credentials: "include" });
-      if (!res.ok) throw new Error("Failed to load jobs");
-      return res.json();
-    },
+  const { data, isLoading, isFetching, isError } = useQuery<AdminActivityJobsResponse>({
+    queryKey: ["admin", "jobs", "list", apiUrl, statusFilter, rowsPerPage, offset],
+    queryFn: async ({ signal }) =>
+      unwrapAdminResponse(
+        await listAdminActivityJobs(
+          { limit: rowsPerPage, offset, status: statusFilter === "all" ? undefined : statusFilter },
+          { client, signal, timeoutMs: ACTIVITY_READ_TIMEOUT_MS },
+        ),
+      ),
     refetchInterval: 5000,
   });
 

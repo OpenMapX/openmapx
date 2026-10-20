@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
+import { job } from "../activity/__tests__/fixtures";
 import { SystemMaintenance } from "./SystemMaintenance";
 
 vi.mock("@/integration-api/runtime/EnvProvider", () => ({
@@ -45,15 +46,26 @@ it("keeps host instructions after a raced apply failure and clears them after a 
       const init = args[1] as RequestInit | undefined;
       if (init?.method === "POST")
         return Response.json({ jobId: url.endsWith("/check") ? "check-job" : "apply-job" });
-      if (url.endsWith("/apply-job"))
-        return Response.json({
-          id: "apply-job",
-          status: "failed",
-          error: "Operations request failed",
-          result: { errorCode: "host_update_required" },
-        });
-      if (url.endsWith("/check-job"))
-        return Response.json({ id: "check-job", status: "success", error: null });
+      if (url.includes("/apply-job?source=application"))
+        return Response.json(
+          job({
+            id: "apply-job",
+            status: "failed",
+            error: "Operations request failed",
+            result: { errorCode: "host_update_required" },
+            cancelable: false,
+          }),
+        );
+      if (url.includes("/check-job?source=application"))
+        return Response.json(
+          job({
+            id: "check-job",
+            status: "success",
+            error: null,
+            result: ["checked", { nested: true }],
+            cancelable: false,
+          }),
+        );
       return Response.json(status);
     }),
   );

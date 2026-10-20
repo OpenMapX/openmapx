@@ -44,7 +44,8 @@ vi.mock("@/integration-api/runtime/EnvProvider", () => ({
   useEnv: () => ({ apiUrl: "http://api.test" }),
 }));
 vi.mock("../shared/AdminToast", () => ({ useAdminToast: () => vi.fn() }));
-vi.mock("@tanstack/react-query", () => ({
+vi.mock("@tanstack/react-query", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@tanstack/react-query")>()),
   useQueryClient: () => ({ invalidateQueries: vi.fn() }),
   useMutation: () => ({ mutate: vi.fn(), isPending: false }),
   useQuery: (options: { queryKey: unknown[] }) =>

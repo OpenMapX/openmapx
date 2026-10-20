@@ -30,7 +30,7 @@ import Typography from "@mui/material/Typography";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { useEnv } from "@/integration-api/runtime/EnvProvider";
+import { activityJobQueryOptions, useActivityClient } from "../activity/activityQueries";
 import { AdminPageHeader } from "../shared/AdminPageHeader";
 import { AdminTableSurface } from "../shared/AdminTableSurface";
 import { useAdminToast } from "../shared/AdminToast";
@@ -80,14 +80,6 @@ interface TrackedJob {
   label: string;
 }
 
-interface JobStatus {
-  id: string;
-  status: "queued" | "running" | "success" | "failed" | "canceled";
-  progress: number | null;
-  error: string | null;
-  result?: { errorCode?: string } | null;
-}
-
 export function buildSystemJobRequestInit(body?: Record<string, unknown>): RequestInit {
   return {
     method: "POST",
@@ -116,7 +108,7 @@ function imageStatusChip(image: ImageStatus) {
 }
 
 export function SystemMaintenance() {
-  const { apiUrl } = useEnv();
+  const { apiUrl, client } = useActivityClient();
   const queryClient = useQueryClient();
   const showToast = useAdminToast();
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -139,16 +131,8 @@ export function SystemMaintenance() {
     refetchInterval: trackedJob ? 5_000 : false,
   });
 
-  const jobQuery = useQuery<JobStatus>({
-    queryKey: ["admin", "jobs", trackedJob?.id],
-    enabled: Boolean(trackedJob),
-    queryFn: async () => {
-      const response = await fetch(`${apiUrl}/api/admin/jobs/${trackedJob?.id}`, {
-        credentials: "include",
-      });
-      if (!response.ok) throw new Error("Failed to read maintenance job");
-      return response.json();
-    },
+  const jobQuery = useQuery({
+    ...activityJobQueryOptions(client, apiUrl, trackedJob?.id, "application"),
     refetchInterval: trackedJob ? 3_000 : false,
     retry: true,
   });
@@ -156,7 +140,12 @@ export function SystemMaintenance() {
   useEffect(() => {
     const job = jobQuery.data;
     if (!trackedJob || !job || !["success", "failed", "canceled"].includes(job.status)) return;
-    if (job.result?.errorCode === "host_update_required") {
+    if (
+      job.result &&
+      typeof job.result === "object" &&
+      !Array.isArray(job.result) &&
+      job.result.errorCode === "host_update_required"
+    ) {
       setBlockedCandidate(candidateToApply?.expectedDigest ?? null);
     }
     if (job.status === "success") {
