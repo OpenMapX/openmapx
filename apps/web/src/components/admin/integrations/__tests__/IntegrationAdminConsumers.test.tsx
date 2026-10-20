@@ -266,6 +266,89 @@ describe("integration administration browser behavior", () => {
     expect(requests.some(({ url }) => url.pathname.includes("cancel"))).toBe(false);
   });
 
+  it.each(["tab exit", "origin replacement", "integration replacement"])(
+    "does not complete an interrupted repeat health check after %s",
+    async (interruption) => {
+      let healthReads = 0;
+      let healthSignal: AbortSignal | null | undefined;
+      let bodyCanceled = false;
+      const requests = transport((url, init) => {
+        const id = url.pathname.split("/")[4];
+        expect(["demo", "other"]).toContain(id);
+        expect(init.method ?? "GET").toBe("GET");
+        if (url.pathname.endsWith("/health/history"))
+          return Response.json({ integrationId: id, hours: 24, timeline: [] });
+        if (!url.pathname.endsWith("/health")) {
+          expect(url.pathname).toBe(`/api/admin/integrations/${id}`);
+          return Response.json({ ...detail, id, hasHealthCheck: true });
+        }
+        healthReads++;
+        if (healthReads !== 2)
+          return Response.json([
+            { id, name: "Demo", category: "geocoding", url: "https://provider.test", status: "up" },
+          ]);
+        healthSignal = init.signal;
+        return new Response(
+          new ReadableStream({
+            cancel: () => {
+              bodyCanceled = true;
+            },
+          }),
+          { headers: { "content-type": "application/json" } },
+        );
+      });
+      const mounted = mount(<IntegrationDetail id="demo" />);
+      const invalidate = vi.spyOn(mounted.client, "invalidateQueries");
+      await userEvent.click(await screen.findByRole("tab", { name: "Health" }));
+      await userEvent.click(screen.getByRole("button", { name: "Run Check" }));
+      expect(await screen.findByText("Health check completed")).toBeInTheDocument();
+      expect(invalidate).toHaveBeenCalled();
+      await userEvent.click(screen.getByRole("button", { name: "Close" }));
+      await waitFor(() =>
+        expect(screen.queryByText("Health check completed")).not.toBeInTheDocument(),
+      );
+      invalidate.mockClear();
+
+      await userEvent.click(screen.getByRole("button", { name: "Run Check" }));
+      await waitFor(() => expect(healthSignal).toBeInstanceOf(AbortSignal));
+      if (interruption === "tab exit") {
+        await userEvent.click(screen.getByRole("tab", { name: "Overview" }));
+      } else {
+        if (interruption === "origin replacement") apiUrl = "http://replacement.test";
+        const id = interruption === "integration replacement" ? "other" : "demo";
+        // Retained detail data keeps HealthTab mounted while its owner changes.
+        mounted.client.setQueryData(["admin", "integrations", apiUrl, "detail", id], {
+          ...detail,
+          id,
+          hasHealthCheck: true,
+        });
+        mounted.rerender(
+          <QueryClientProvider client={mounted.client}>
+            <AdminToastProvider>
+              <IntegrationDetail id={id} />
+            </AdminToastProvider>
+          </QueryClientProvider>,
+        );
+      }
+      await waitFor(() => expect(healthSignal?.aborted).toBe(true));
+      await waitFor(() => expect(mounted.client.isMutating()).toBe(0));
+      expect(bodyCanceled).toBe(true);
+      expect(invalidate).not.toHaveBeenCalled();
+      expect(screen.queryByText(/Health check (completed|failed)/)).not.toBeInTheDocument();
+      expect(healthReads).toBe(2);
+      expect(requests.some(({ url }) => url.pathname.includes("cancel"))).toBe(false);
+
+      if (interruption === "tab exit")
+        await userEvent.click(screen.getByRole("tab", { name: "Health" }));
+      await userEvent.click(await screen.findByRole("button", { name: "Run Check" }));
+      expect(await screen.findByText("Health check completed")).toBeInTheDocument();
+      expect(healthReads).toBe(3);
+      expect(invalidate).toHaveBeenCalledWith({
+        queryKey: ["admin", "integrations", apiUrl],
+      });
+    },
+  );
+
   it("preserves validation errors and never calls the saved callback for a failed config write", async () => {
     const calls = transport((url, init) => {
       expect(url.pathname).toBe("/api/admin/integrations/demo/config");

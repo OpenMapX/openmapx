@@ -32,7 +32,7 @@ import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import { buildLicensingHtml, safeHref } from "@openmapx/core";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AttributionText } from "@/components/ui/AttributionText";
 import {
   hasVaultCredential,
@@ -664,18 +664,33 @@ function HealthTab({
   const showToast = useAdminToast();
 
   const healthQuery = useQuery({ ...admin.queries.health(integrationId), enabled: false });
+  const healthOwner = useMemo(
+    () => ({ active: true, client: admin.client, integrationId }),
+    [admin.client, integrationId],
+  );
+  useEffect(() => {
+    healthOwner.active = true;
+    return () => {
+      healthOwner.active = false;
+    };
+  }, [healthOwner]);
   const healthMutation = useMutation({
     retry: false,
     mutationFn: async () => {
-      const result = await healthQuery.refetch({ throwOnError: true });
-      if (!result.data) throw new Error("Health check was interrupted");
-      return result.data;
+      // Keep effects with the executing owner; mutation callbacks can be replaced mid-read.
+      const owner = healthOwner;
+      try {
+        const result = await healthQuery.refetch({ throwOnError: true });
+        // Cancellation may resolve with a previous cached success rather than rejecting.
+        if (!owner.active) return;
+        if (!result.data) throw new Error("Health check was interrupted");
+        void admin.refresh();
+        showToast("Health check completed");
+      } catch (error) {
+        if (owner.active) showToast("Health check failed", "error");
+        throw error;
+      }
     },
-    onSuccess: () => {
-      void admin.refresh();
-      showToast("Health check completed");
-    },
-    onError: () => showToast("Health check failed", "error"),
   });
 
   const health = data.health;

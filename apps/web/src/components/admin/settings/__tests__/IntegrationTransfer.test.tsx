@@ -1,6 +1,7 @@
 import { QueryClientProvider } from "@tanstack/react-query";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  act,
   cleanup,
   createTestQueryClient,
   fireEvent,
@@ -12,9 +13,8 @@ import {
 import { AdminToastProvider } from "../../shared/AdminToast";
 import { SystemSettings } from "../SystemSettings";
 
-vi.mock("@/integration-api/runtime/EnvProvider", () => ({
-  useEnv: () => ({ apiUrl: "http://admin.test" }),
-}));
+let apiUrl = "http://admin.test";
+vi.mock("@/integration-api/runtime/EnvProvider", () => ({ useEnv: () => ({ apiUrl }) }));
 const exported = {
   integrations: [
     { integrationId: "demo", config: { enabled: false, endpoint: "https://provider.test" } },
@@ -27,7 +27,7 @@ function mount(handler: (init: RequestInit) => Response) {
   const calls: RequestInit[] = [];
   vi.stubGlobal("fetch", (input: string, init: RequestInit) => {
     const url = new URL(input);
-    expect(url.origin).toBe("http://admin.test");
+    expect(url.origin).toBe(apiUrl);
     if (url.pathname === "/api/admin/settings") return Response.json({ groups: [] });
     if (url.pathname === "/api/admin/integrations/export") return Response.json(exported);
     if (url.pathname !== "/api/admin/integrations/import")
@@ -53,6 +53,9 @@ async function upload(container: HTMLElement, body: unknown) {
   Object.defineProperty(file, "text", { value: async () => JSON.stringify(body) });
   fireEvent.change(inputs[1], { target: { files: [file] } });
 }
+beforeEach(() => {
+  apiUrl = "http://admin.test";
+});
 afterEach(() => {
   cleanup();
   for (const c of clients.splice(0)) c.clear();
@@ -134,6 +137,76 @@ describe("integration config transfer", () => {
     await waitFor(() => expect(signal?.aborted).toBe(true));
     expect(canceled).toBe(true);
   });
+  it.each(["unmount", "origin replacement"])(
+    "does not download cached export data after an interrupted repeat and %s",
+    async (interruption) => {
+      let createdUrls = 0;
+      vi.stubGlobal(
+        "URL",
+        class extends URL {
+          static override createObjectURL(_value: Blob | MediaSource): string {
+            createdUrls++;
+            return "blob:integration-export";
+          }
+          static override revokeObjectURL(_url: string): void {}
+        },
+      );
+      const download = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+      const mounted = mount(() => {
+        throw new Error("No mutation expected");
+      });
+      await userEvent.click(
+        await screen.findByRole("button", { name: "Export Integration Configs" }),
+      );
+      expect(await screen.findByText("Exported 1 integration configs")).toBeInTheDocument();
+      expect(download).toHaveBeenCalledTimes(1);
+      expect(createdUrls).toBe(1);
+      await userEvent.click(screen.getByRole("button", { name: "Close" }));
+      await waitFor(() =>
+        expect(screen.queryByText("Exported 1 integration configs")).not.toBeInTheDocument(),
+      );
+      download.mockClear();
+      createdUrls = 0;
+
+      let signal: AbortSignal | null | undefined;
+      let bodyCanceled = false;
+      vi.stubGlobal("fetch", (input: string, init: RequestInit) => {
+        const url = new URL(input);
+        expect(url.origin).toBe(apiUrl);
+        if (url.pathname === "/api/admin/settings") return Response.json({ groups: [] });
+        expect(url.pathname).toBe("/api/admin/integrations/export");
+        signal = init.signal;
+        return new Response(
+          new ReadableStream({
+            cancel: () => {
+              bodyCanceled = true;
+            },
+          }),
+          { headers: { "content-type": "application/json" } },
+        );
+      });
+      await userEvent.click(screen.getByRole("button", { name: "Export Integration Configs" }));
+      await waitFor(() => expect(signal).toBeInstanceOf(AbortSignal));
+      if (interruption === "unmount") mounted.unmount();
+      else {
+        apiUrl = "http://replacement.test";
+        mounted.rerender(
+          <QueryClientProvider client={mounted.client}>
+            <AdminToastProvider>
+              <SystemSettings />
+            </AdminToastProvider>
+          </QueryClientProvider>,
+        );
+      }
+      await waitFor(() => expect(signal?.aborted).toBe(true));
+      // Flush the canceled observer's cached-result continuation before checking effects.
+      await act(async () => {});
+      expect(bodyCanceled).toBe(true);
+      expect(download).not.toHaveBeenCalled();
+      expect(createdUrls).toBe(0);
+      expect(screen.queryByText(/Exported 1|Export failed/)).not.toBeInTheDocument();
+    },
+  );
   it("downloads the full validated export and imports that exact envelope", async () => {
     let blob: Blob | undefined;
     vi.stubGlobal("URL", URL);
