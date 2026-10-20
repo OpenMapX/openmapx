@@ -591,6 +591,43 @@ describe("actual integration producers through generated SDK", () => {
       await app.close();
     }
   });
+  it("carries bounded entry/field/rule diagnostics from the actual import producer through the SDK", async () => {
+    const sdk = await import("@openmapx/core/api-admin-sdk");
+    const { app, client } = await wire();
+    try {
+      const response = await sdk.importAdminIntegrationConfigs(
+        {
+          integrations: [
+            {
+              integrationId: "geocoding-maptiler",
+              config: { label: "synthetic-secret", nested: { count: 0 } },
+            },
+          ],
+        },
+        { client },
+      );
+      expect(response.status).toBe(400);
+      expect(response.data).toMatchObject({
+        errors: [
+          expect.stringMatching(/entry 1.*geocoding-maptiler.*nested.*(constraint|minimum|range)/i),
+        ],
+      });
+      expect(JSON.stringify(response.data)).not.toContain("synthetic-secret");
+      const { integrationErrorMessage } = await import(
+        "../../../../web/src/lib/admin/integrationErrors"
+      );
+      let displayed = "";
+      try {
+        sdk.unwrapAdminResponse(response);
+      } catch (error) {
+        displayed = integrationErrorMessage(error, "Import failed");
+      }
+      expect(displayed).toMatch(/Entry 1.*geocoding-maptiler.*nested.*minimum/);
+      expect(configDb.writes).toBe(0);
+    } finally {
+      await app.close();
+    }
+  });
   it("validates the whole import before writes and carries explicit reconciliation evidence over generated transport", async () => {
     const sdk = await import("@openmapx/core/api-admin-sdk");
     const { app, client } = await wire();

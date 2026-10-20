@@ -138,10 +138,16 @@ export function RequiredServicesPanel({
     admin.queries.bindings(integrationId),
   );
   const setBinding = useMutation({
+    mutationKey: ["integration-binding", admin.apiUrl, integrationId],
     retry: false,
-    mutationFn: ({ capability, serviceId }: { capability: string; serviceId: string | null }) =>
-      admin.setBinding(integrationId, capability, serviceId),
-    onSuccess: () => {
+    mutationFn: async ({
+      capability,
+      serviceId,
+    }: {
+      capability: string;
+      serviceId: string | null;
+    }) => {
+      await admin.setBinding(integrationId, capability, serviceId);
       void admin.refresh();
     },
   });

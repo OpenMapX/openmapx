@@ -17,6 +17,7 @@ import type { CredentialSetup } from "@openmapx/integration-framework";
 import { useMutation } from "@tanstack/react-query";
 import { useState } from "react";
 import { useIntegrationAdmin } from "@/lib/admin/integrationAdmin";
+import { useIntegrationMutationOwner } from "@/lib/admin/useIntegrationMutationOwner";
 import { CredentialSetupGuide } from "./CredentialSetupGuide";
 
 interface SetCredentialDialogProps {
@@ -39,23 +40,32 @@ export function SetCredentialDialog({
   setup,
 }: SetCredentialDialogProps) {
   const admin = useIntegrationAdmin();
+  const owner = useIntegrationMutationOwner(
+    admin.client,
+    JSON.stringify([integrationId, credentialKey, open]),
+  );
 
   const [value, setValue] = useState("");
   const [showValue, setShowValue] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const mutation = useMutation({
+    mutationKey: ["integration-credential", admin.apiUrl, integrationId, credentialKey, open],
     retry: false,
-    mutationFn: () => admin.setCredential(integrationId, credentialKey, value),
-    onSuccess: () => {
-      void admin.refresh();
-      setValue("");
-      setShowValue(false);
-      setError(null);
-      onClose();
-    },
-    onError: (err) => {
-      setError(err instanceof Error ? err.message : "Failed to save credential");
+    mutationFn: async () => {
+      try {
+        await admin.setCredential(integrationId, credentialKey, value);
+        void admin.refresh();
+        if (!owner.active) return;
+        setValue("");
+        setShowValue(false);
+        setError(null);
+        onClose();
+      } catch (err) {
+        if (owner.active)
+          setError(err instanceof Error ? err.message : "Failed to save credential");
+        throw err;
+      }
     },
   });
 

@@ -1,6 +1,7 @@
 import {
   configurationGenerationRevisionSchema,
   type OpsOperation,
+  type OpsResultFor,
   readOpsTokenFile,
   type TrustedConfigurationPayload,
   trustedConfigurationPayloadSchema,
@@ -10,7 +11,12 @@ import { db } from "../db";
 import { integrationConfig } from "../db/schema";
 import { getAllIntegrations } from "../integration-host";
 import { projectIntegrationConfig } from "./integration-config-projection";
-import { createApiOpsClient, executeTrustedConfigurationAndWait } from "./ops-client";
+import {
+  createApiOpsClient,
+  createDurableOpsKey,
+  executeAndWait,
+  executeTrustedConfigurationAndWait,
+} from "./ops-client";
 import { resolveAllServiceConfigs } from "./service-config-resolver";
 import { getServiceRegistry } from "./service-registry";
 import { resolveServiceVaultSecretsStrict } from "./service-secrets";
@@ -118,12 +124,23 @@ export async function applyTrustedConfiguration(
 /** Internal evidence for scoped compensation. Payload may contain secrets; never serialize it. */
 export async function applyTrustedConfigurationWithEvidence(
   options: ApplyTrustedConfigurationOptions,
-): Promise<{ payload?: TrustedConfigurationPayload; outcome: TrustedConfigurationApplyOutcome }> {
+): Promise<{
+  payload?: TrustedConfigurationPayload;
+  previousApplied?: OpsResultFor<"configuration.inspect">;
+  outcome: TrustedConfigurationApplyOutcome;
+}> {
   let payload: TrustedConfigurationPayload;
+  let previousApplied: OpsResultFor<"configuration.inspect">;
   try {
     if ((options.kind === "serviceSelection.apply") !== (options.selectedRoots !== undefined)) {
       throw new Error("Trusted configuration unavailable");
     }
+    previousApplied = await executeAndWait(
+      createApiOpsClient(),
+      { kind: "configuration.inspect" },
+      createDurableOpsKey("configuration.inspect", options.operationKey),
+      { signal: options.signal },
+    );
     payload = trustedConfigurationPayloadSchema.parse({
       ...(await buildConfigurationInput()),
       ...(options.selectedRoots ? { selectedRoots: options.selectedRoots } : {}),
@@ -139,7 +156,11 @@ export async function applyTrustedConfigurationWithEvidence(
       },
     };
   }
-  return { payload, outcome: await applySnapshot(options, payload) };
+  return {
+    payload,
+    previousApplied,
+    outcome: await applySnapshot(options, payload, previousApplied.revisionId),
+  };
 }
 
 /** Full-snapshot compensation; compare the applied generation, NOT the manifest authority. */
@@ -171,7 +192,7 @@ export async function applyTrustedConfigurationSnapshot(options: {
 async function applySnapshot(
   options: ApplyTrustedConfigurationOptions,
   input: TrustedConfigurationPayload,
-  expectedCurrentRevisionId?: string | null,
+  expectedCurrentRevisionId: string | null,
 ): Promise<TrustedConfigurationApplyOutcome> {
   let submitted = false;
   try {
@@ -186,17 +207,27 @@ async function applySnapshot(
           return {
             kind: options.kind,
             revisionId,
-            ...(expectedCurrentRevisionId !== undefined ? { expectedCurrentRevisionId } : {}),
+            expectedCurrentRevisionId,
           };
         case "serviceSelection.apply":
-          return { kind: options.kind, revisionId };
+          return { kind: options.kind, revisionId, expectedCurrentRevisionId };
         case "serviceConfig.apply":
         case "vault.apply":
           if (!options.serviceId) throw new Error("Trusted configuration unavailable");
-          return { kind: options.kind, serviceId: options.serviceId, revisionId };
+          return {
+            kind: options.kind,
+            serviceId: options.serviceId,
+            revisionId,
+            expectedCurrentRevisionId,
+          };
         case "integrationConfig.apply":
           if (!options.integrationId) throw new Error("Trusted configuration unavailable");
-          return { kind: options.kind, integrationId: options.integrationId, revisionId };
+          return {
+            kind: options.kind,
+            integrationId: options.integrationId,
+            revisionId,
+            expectedCurrentRevisionId,
+          };
       }
     };
     const sealed = await publishTrustedConfigurationSnapshot({

@@ -17,7 +17,17 @@ Trusted configuration operation results now distinguish committed, not committed
 uncertain outcomes, with separate follow-up and cleanup evidence. An accepted job is
 not proof of application success. API and ops-agent must use matching contracts. Old
 successful configuration-result journal records can fail strict validation; there is
-no compatibility reader or journal migration.
+no compatibility reader or journal migration. All five full-snapshot apply kinds
+now require an expected current host revision observed before payload preparation.
+Missing conditions are rejected. A completed competing writer produces a conflict
+without retrying or overwriting its generation.
+
+Import recovery proves that prior saved integration projections match the prior
+applied generation before using them as inverse values. If they diverge, or that
+evidence is unavailable, the response requires reconciliation and retains the saved
+import rather than claiming restoration. Validation errors identify bounded entries,
+known fields and rule categories without exposing supplied values. Pending browser
+mutations retain their original server and view ownership when the UI changes.
 
 CLI and ops-agent configuration writers share a fence on the same local POSIX
 filesystem under the same stack UID. This does not provide a distributed transaction

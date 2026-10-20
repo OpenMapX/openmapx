@@ -24,8 +24,9 @@ import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useIntegrationAdmin, useIntegrationReload } from "@/lib/admin/integrationAdmin";
+import { useIntegrationMutationOwner } from "@/lib/admin/useIntegrationMutationOwner";
 import { AdminPageHeader } from "../shared/AdminPageHeader";
 import { AdminTablePagination } from "../shared/AdminTablePagination";
 import { AdminTableSurface } from "../shared/AdminTableSurface";
@@ -91,6 +92,7 @@ function HealthCell({ integration }: { integration: IntegrationSummary }) {
 
 export function IntegrationList() {
   const admin = useIntegrationAdmin();
+  const owner = useIntegrationMutationOwner(admin.client);
 
   const [search, setSearch] = useState("");
   const [domainFilter, setDomainFilter] = useState("all");
@@ -100,6 +102,9 @@ export function IntegrationList() {
   const [rowsPerPage, setRowsPerPage] = useState(25);
   const showToast = useAdminToast();
   const [togglingIds, setTogglingIds] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    if (owner.active) setTogglingIds(new Set());
+  }, [owner]);
 
   const { data: integrations = [], isLoading, isError } = useQuery(admin.queries.list());
 
@@ -108,28 +113,34 @@ export function IntegrationList() {
     try {
       await admin.toggle(integrationId, enable);
       void admin.refresh();
-      showToast(`Integration ${enable ? "enabled" : "disabled"}`);
+      if (owner.active) showToast(`Integration ${enable ? "enabled" : "disabled"}`);
     } catch {
-      showToast("Operation failed", "error");
+      if (owner.active) showToast("Operation failed", "error");
     } finally {
-      setTogglingIds((prev) => {
-        const next = new Set(prev);
-        next.delete(integrationId);
-        return next;
-      });
+      if (owner.active)
+        setTogglingIds((prev) => {
+          const next = new Set(prev);
+          next.delete(integrationId);
+          return next;
+        });
     }
   }
 
   const reloadMutation = useIntegrationReload();
 
   const healthMutation = useMutation({
+    mutationKey: ["integration-health-sweep", admin.apiUrl],
     retry: false,
-    mutationFn: admin.healthSweep,
-    onSuccess: (data) => {
-      void admin.refresh();
-      showToast(`Health checks completed: ${data.count} checked`);
+    mutationFn: async () => {
+      try {
+        const data = await admin.healthSweep();
+        void admin.refresh();
+        if (owner.active) showToast(`Health checks completed: ${data.count} checked`);
+      } catch (err) {
+        if (owner.active) showToast("Health checks failed", "error");
+        throw err;
+      }
     },
-    onError: () => showToast("Health checks failed", "error"),
   });
 
   const allDomains = useMemo(
@@ -381,8 +392,11 @@ export function IntegrationList() {
                 onClick={() =>
                   reloadMutation.mutate(undefined, {
                     onSuccess: () =>
+                      owner.active &&
                       showToast("Reload job queued — check Activity for status", "info"),
-                    onError: () => showToast("Reload failed", "error"),
+                    onError: () => {
+                      if (owner.active) showToast("Reload failed", "error");
+                    },
                   })
                 }
                 disabled={reloadMutation.isPending || healthMutation.isPending}

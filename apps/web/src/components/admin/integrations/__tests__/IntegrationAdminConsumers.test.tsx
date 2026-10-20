@@ -73,6 +73,359 @@ afterEach(() => {
 });
 
 describe("integration administration browser behavior", () => {
+  it.each(["origin", "integration", "credential", "unmount"])(
+    "owns a deferred credential completion across %s replacement",
+    async (replacement) => {
+      let finish!: (response: Response) => void;
+      const pending = new Promise<Response>((resolve) => {
+        finish = resolve;
+      });
+      const calls = transport(() => pending);
+      const oldClose = vi.fn(),
+        replacementClose = vi.fn();
+      const props = {
+        open: true,
+        integrationId: "demo",
+        credentialKey: "token",
+        title: "Token",
+        onClose: oldClose,
+      };
+      const { client, rerender, unmount } = mount(<SetCredentialDialog {...props} />);
+      const invalidation = vi.spyOn(client, "invalidateQueries");
+      fireEvent.change(screen.getByLabelText("Token"), { target: { value: "old-input" } });
+      await userEvent.click(screen.getByRole("button", { name: "Save Credential" }));
+      await waitFor(() => expect(calls).toHaveLength(1));
+      if (replacement === "unmount") unmount();
+      else {
+        if (replacement === "origin") apiUrl = "http://replacement.test";
+        rerender(
+          <QueryClientProvider client={client}>
+            <AdminToastProvider>
+              <SetCredentialDialog
+                {...props}
+                integrationId={replacement === "integration" ? "other" : "demo"}
+                credentialKey={replacement === "credential" ? "other" : "token"}
+                onClose={replacementClose}
+              />
+            </AdminToastProvider>
+          </QueryClientProvider>,
+        );
+        fireEvent.change(screen.getByLabelText("Token"), {
+          target: { value: "replacement-input" },
+        });
+      }
+      await act(async () => {
+        finish(Response.json({ ok: true, message: "Saved", reloaded: 1, enabled: 1 }));
+        await pending;
+      });
+      await waitFor(() => expect(invalidation).toHaveBeenCalled());
+      expect(oldClose).not.toHaveBeenCalled();
+      expect(replacementClose).not.toHaveBeenCalled();
+      if (replacement !== "unmount")
+        expect(screen.getByLabelText("Token")).toHaveValue("replacement-input");
+      expect(
+        invalidation.mock.calls.every(
+          ([options]) => !JSON.stringify(options).includes("replacement.test"),
+        ),
+      ).toBe(true);
+      expect(calls).toHaveLength(1);
+      expect(calls[0].init.signal?.aborted).toBe(false);
+    },
+  );
+
+  it("keeps replacement config input and feedback when an older save rejects", async () => {
+    let finish!: (response: Response) => void;
+    const pending = new Promise<Response>((resolve) => {
+      finish = resolve;
+    });
+    const calls = transport(() => pending);
+    const saved = vi.fn();
+    const schema = { properties: { label: { type: "string", title: "Label" } } };
+    const resolvedConfig = { label: { value: "before", source: "database" as const } };
+    const { client, rerender } = mount(
+      <ConfigSchemaForm
+        integrationId="demo"
+        schema={schema}
+        resolvedConfig={resolvedConfig}
+        onSaved={saved}
+      />,
+    );
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "old" } });
+    await userEvent.click(screen.getByRole("button", { name: /^Save/ }));
+    await waitFor(() => expect(calls).toHaveLength(1));
+    apiUrl = "http://replacement.test";
+    rerender(
+      <QueryClientProvider client={client}>
+        <AdminToastProvider>
+          <ConfigSchemaForm
+            integrationId="other"
+            schema={schema}
+            resolvedConfig={resolvedConfig}
+            onSaved={saved}
+          />
+        </AdminToastProvider>
+      </QueryClientProvider>,
+    );
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "new-input" } });
+    await act(async () => {
+      finish(Response.json({ errors: ["old-owner-error"] }, { status: 400 }));
+      await pending;
+    });
+    expect(saved).not.toHaveBeenCalled();
+    expect(screen.getByRole("textbox")).toHaveValue("new-input");
+    expect(screen.queryByText("old-owner-error")).not.toBeInTheDocument();
+    expect(screen.queryByText("Configuration saved.")).not.toBeInTheDocument();
+    expect(calls).toHaveLength(1);
+  });
+
+  it.each(
+    [
+      "overview-sweep",
+      "list-sweep",
+      "list-toggle",
+      "detail-toggle",
+      "detail-delete",
+      "bulk-delete",
+      "binding",
+      "overview-reload",
+      "list-reload",
+      "detail-reload",
+    ].flatMap((scenario) => [200, 400].map((status) => [scenario, status] as const)),
+  )("keeps %s completion effects with the originating view (HTTP %s)", async (scenario, status) => {
+    let finish!: (response: Response) => void;
+    const pending = new Promise<Response>((resolve) => {
+      finish = resolve;
+    });
+    const calls = transport((url, init) => {
+      if (init.method && init.method !== "GET") return pending;
+      if (url.pathname === "/api/admin/integrations") return Response.json([summary]);
+      if (url.pathname === "/api/admin/integrations/demo") return Response.json(detail);
+      if (url.pathname.endsWith("/bindings")) return Response.json({ bindings: [] });
+      if (url.pathname.endsWith("/env-vars"))
+        return Response.json({
+          integrations: [
+            {
+              id: "demo",
+              name: "Demo",
+              enabled: true,
+              envVars: [
+                { key: "token", name: "DEMO_TOKEN", title: "Token", secret: true, present: true },
+              ],
+            },
+          ],
+        });
+      if (url.pathname === "/api/admin/credentials")
+        return Response.json({ secretsConfigured: true, credentials: [] });
+      if (url.pathname === "/api/admin/overview")
+        return Response.json({
+          systemHealth: { status: "pass", unhealthyCount: 0 },
+          users: { total: 1, active24h: 1, banned: 0 },
+          integrations: { total: 1, enabled: 1, unhealthy: 0, unconfigured: 0 },
+          services: null,
+          attention: [],
+          recentActivity: [],
+          activeJobs: [],
+        });
+      throw new Error(`Unexpected request ${url}`);
+    });
+    const component = () =>
+      scenario.startsWith("overview") ? (
+        <AdminOverview />
+      ) : scenario.startsWith("list") ? (
+        <IntegrationList />
+      ) : scenario.startsWith("detail") ? (
+        <IntegrationDetail id="demo" />
+      ) : scenario === "bulk-delete" ? (
+        <BulkConfigure />
+      ) : (
+        <RequiredServicesPanel integrationId="demo" requires={[{ capability: "search /places" }]} />
+      );
+    const { client, rerender } = mount(component());
+    const invalidation = vi.spyOn(client, "invalidateQueries");
+    if (scenario === "binding") {
+      await waitFor(() => expect(calls.length).toBeGreaterThan(0));
+      await userEvent.click(screen.getByRole("combobox"));
+      await userEvent.click(await screen.findByRole("option", { name: "Local (local)" }));
+    } else if (scenario.endsWith("delete")) {
+      if (scenario === "bulk-delete")
+        await userEvent.click(await screen.findByRole("button", { name: /Demo demo/ }));
+      else await userEvent.click(await screen.findByRole("tab", { name: /Credentials/ }));
+      await userEvent.click(await screen.findByRole("button", { name: "Delete from vault" }));
+    } else if (scenario === "list-toggle") await userEvent.click(await screen.findByRole("switch"));
+    else
+      await userEvent.click(
+        await screen.findByRole("button", {
+          name: scenario.endsWith("reload")
+            ? /Reload/
+            : scenario === "detail-toggle"
+              ? "Disable"
+              : /Health [Cc]hecks/,
+        }),
+      );
+    await waitFor(() =>
+      expect(calls.filter(({ init }) => init.method && init.method !== "GET")).toHaveLength(1),
+    );
+    apiUrl = "http://replacement.test";
+    rerender(
+      <QueryClientProvider client={client}>
+        <AdminToastProvider>{component()}</AdminToastProvider>
+      </QueryClientProvider>,
+    );
+    const response = scenario.endsWith("reload")
+      ? { ok: true, jobId: "job-old" }
+      : scenario.endsWith("sweep")
+        ? { timestamp: "2026-10-20T10:00:00.000Z", count: 1, results: [] }
+        : scenario === "binding"
+          ? { ok: true }
+          : { ok: true, message: "Saved", reloaded: 1, enabled: 1 };
+    await act(async () => {
+      finish(
+        Response.json(status === 200 ? response : { errors: ["old-owner-error"] }, { status }),
+      );
+      await pending;
+    });
+    await waitFor(() =>
+      expect(
+        client
+          .getMutationCache()
+          .getAll()
+          .every((mutation) => mutation.state.status !== "pending"),
+      ).toBe(true),
+    );
+    expect(
+      screen.queryByText(
+        /old-owner-error|Operation failed|Delete failed|Failed to delete|Health checks failed|Health check sweep failed|Reload failed|Failed to queue reload|Health checks complete|Health checks completed|Integration disabled|Credential.*deleted|Reload job queued/,
+      ),
+    ).not.toBeInTheDocument();
+    expect(
+      invalidation.mock.calls.every(
+        ([options]) => !JSON.stringify(options).includes("replacement.test"),
+      ),
+    ).toBe(true);
+    expect(calls.filter(({ init }) => init.method && init.method !== "GET")).toHaveLength(1);
+    expect(calls.some(({ url }) => url.pathname.includes("cancel"))).toBe(false);
+  });
+
+  it.each(["origin", "identity", "unmount"])(
+    "suppresses credential errors after %s disposal",
+    async (replacement) => {
+      let finish!: (response: Response) => void;
+      const pending = new Promise<Response>((resolve) => {
+        finish = resolve;
+      });
+      const calls = transport(() => pending);
+      const closed = vi.fn();
+      const props = {
+        open: true,
+        integrationId: "demo",
+        credentialKey: "token",
+        title: "Token",
+        onClose: closed,
+      };
+      const { client, rerender, unmount } = mount(<SetCredentialDialog {...props} />);
+      const invalidation = vi.spyOn(client, "invalidateQueries");
+      fireEvent.change(screen.getByLabelText("Token"), { target: { value: "first" } });
+      await userEvent.click(screen.getByRole("button", { name: "Save Credential" }));
+      await waitFor(() => expect(calls).toHaveLength(1));
+      if (replacement === "unmount") unmount();
+      else {
+        if (replacement === "origin") apiUrl = "http://replacement.test";
+        rerender(
+          <QueryClientProvider client={client}>
+            <AdminToastProvider>
+              <SetCredentialDialog
+                {...props}
+                credentialKey={replacement === "identity" ? "other" : "token"}
+              />
+            </AdminToastProvider>
+          </QueryClientProvider>,
+        );
+        fireEvent.change(screen.getByLabelText("Token"), { target: { value: "replacement" } });
+      }
+      await act(async () => {
+        finish(Response.json({ errors: ["old-owner-error"] }, { status: 400 }));
+        await pending;
+      });
+      await waitFor(() =>
+        expect(
+          client
+            .getMutationCache()
+            .getAll()
+            .every((mutation) => mutation.state.status !== "pending"),
+        ).toBe(true),
+      );
+      expect(closed).not.toHaveBeenCalled();
+      expect(screen.queryByText("old-owner-error")).not.toBeInTheDocument();
+      if (replacement !== "unmount")
+        expect(screen.getByLabelText("Token")).toHaveValue("replacement");
+      expect(calls).toHaveLength(1);
+      expect(invalidation).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(["origin", "identity", "unmount"])(
+    "does not call onSaved or clear a replacement config after %s",
+    async (replacement) => {
+      let finish!: (response: Response) => void;
+      const pending = new Promise<Response>((resolve) => {
+        finish = resolve;
+      });
+      const calls = transport(() => pending);
+      const saved = vi.fn(),
+        replaced = vi.fn();
+      const props = {
+        schema: { properties: { label: { type: "string" } } },
+        resolvedConfig: { label: { value: "before", source: "database" as const } },
+      };
+      const { client, rerender, unmount } = mount(
+        <ConfigSchemaForm integrationId="demo" {...props} onSaved={saved} />,
+      );
+      const invalidation = vi.spyOn(client, "invalidateQueries");
+      fireEvent.change(screen.getByRole("textbox"), { target: { value: "old" } });
+      await userEvent.click(screen.getByRole("button", { name: /^Save/ }));
+      await waitFor(() => expect(calls).toHaveLength(1));
+      if (replacement === "unmount") unmount();
+      else {
+        if (replacement === "origin") apiUrl = "http://replacement.test";
+        rerender(
+          <QueryClientProvider client={client}>
+            <AdminToastProvider>
+              <ConfigSchemaForm
+                integrationId={replacement === "identity" ? "other" : "demo"}
+                {...props}
+                onSaved={replaced}
+              />
+            </AdminToastProvider>
+          </QueryClientProvider>,
+        );
+        fireEvent.change(screen.getByRole("textbox"), { target: { value: "replacement" } });
+      }
+      await act(async () => {
+        finish(
+          Response.json({
+            ok: true,
+            updated: ["label"],
+            message: "Saved",
+            reloaded: 1,
+            enabled: 1,
+          }),
+        );
+        await pending;
+      });
+      await waitFor(() => expect(invalidation).toHaveBeenCalled());
+      expect(saved).not.toHaveBeenCalled();
+      expect(replaced).not.toHaveBeenCalled();
+      expect(screen.queryByText("Configuration saved.")).not.toBeInTheDocument();
+      if (replacement !== "unmount") expect(screen.getByRole("textbox")).toHaveValue("replacement");
+      expect(
+        invalidation.mock.calls.every(
+          ([options]) => !JSON.stringify(options).includes("replacement.test"),
+        ),
+      ).toBe(true);
+      expect(calls).toHaveLength(1);
+    },
+  );
+
   it.each(["POST", "DELETE"])(
     "rejects binding %s without success invalidation or retry",
     async (method) => {

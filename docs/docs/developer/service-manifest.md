@@ -628,15 +628,25 @@ inspecting and removing an interrupted lock; neither startup nor a contender
 removes it. Network filesystems and Windows are not qualified. All writers must
 run as the stack's user against the same physical infrastructure directory.
 
-`stack.render.expectedCurrentRevisionId` optionally names the applied generation
-that must still be current at activation; `null` deliberately means no applied
-pointer. It is distinct from the candidate `revisionId` and manifest authority
+All API full-snapshot operations (`stack.render`, `serviceSelection.apply`,
+`serviceConfig.apply`, `integrationConfig.apply`, `vault.apply`) require
+`expectedCurrentRevisionId`; `null` deliberately means no applied pointer. The
+API obtains it through typed `configuration.inspect` **before** preparing the
+complete input. Observation and activation both acquire the shared writer
+boundary. Activation compares the revision before any desired-selection effect
+and again at pointer activation. CLI preparation reads the applied configuration
+inside the same writer ownership, so it needs no separate observation request.
+
+The condition is distinct from the candidate `revisionId` and manifest authority
 revision. Strict operation parsing, its authenticated fingerprint and snapshot
-claim bind the condition through execution. Ordinary renders remain unconditional
-but use the same ownership. CLI renders create fresh identities even for repeated
+claim bind it through execution. Missing conditions are rejected; there is no
+compatibility parser. CLI renders create fresh identities even for repeated
 content, preventing an old condition from becoming true again through content
-reuse. A conflict leaves the current generation and its follow-up files intact;
-a fully staged inert candidate can remain for later bounded pruning.
+reuse. A conflict leaves the current generation and its follow-up files intact.
+The API observation returns only the current revision and bounded fingerprints
+of named integration projections, never configuration values or service secrets.
+A direct replay whose initial condition is no longer current conflicts; duplicate
+accepted operations use the existing journal's settled result.
 
 Configuration ops return `ConfigurationApplyResult`: `outcome: "committed"`
 with the revision, enabled service IDs, `followUp: "complete" | "failed"` and
@@ -655,5 +665,6 @@ Normal `applyTrustedConfiguration` keeps its successful return shape and throws
 `TrustedConfigurationApplyError` for incomplete outcomes. Callers may consider
 restoring their own DB changes only with explicit non-commit evidence, and must
 separately prove DB ownership. Compensation after a known commit must condition
-the full previous snapshot on the committed revision. Conflict, unknown or
+an inverse of only proven named projections in the actually submitted snapshot
+on the committed revision. Unrelated submitted fields must be retained. Conflict, unknown or
 incomplete recovery requires reconciliation.

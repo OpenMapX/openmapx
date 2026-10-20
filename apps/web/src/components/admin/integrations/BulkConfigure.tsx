@@ -27,6 +27,7 @@ import Typography from "@mui/material/Typography";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { hasVaultCredential, useIntegrationAdmin } from "@/lib/admin/integrationAdmin";
+import { useIntegrationMutationOwner } from "@/lib/admin/useIntegrationMutationOwner";
 import { AdminPageHeader } from "../shared/AdminPageHeader";
 import { useAdminToast } from "../shared/AdminToast";
 import { ConfigSchemaForm } from "./ConfigSchemaForm";
@@ -283,14 +284,20 @@ function CredentialsTable({
   const showToast = useAdminToast();
   const [dialogField, setDialogField] = useState<CredentialStatus | null>(null);
 
+  const owner = useIntegrationMutationOwner(admin.client, integrationId);
   const deleteMutation = useMutation({
+    mutationKey: ["integration-credential-delete", admin.apiUrl, integrationId],
     retry: false,
-    mutationFn: (key: string) => admin.deleteCredential(integrationId, key),
-    onSuccess: () => {
-      void admin.refresh();
-      showToast("Credential deleted");
+    mutationFn: async (key: string) => {
+      try {
+        await admin.deleteCredential(integrationId, key);
+        void admin.refresh();
+        if (owner.active) showToast("Credential deleted");
+      } catch (err) {
+        if (owner.active) showToast(err instanceof Error ? err.message : "Delete failed", "error");
+        throw err;
+      }
     },
-    onError: (e) => showToast(e instanceof Error ? e.message : "Delete failed", "error"),
   });
 
   return (

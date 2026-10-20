@@ -12,6 +12,7 @@ import {
 import { getTimeline } from "../services/health-history";
 import {
   exportIntegrationConfigs,
+  IntegrationImportValidationError,
   prepareIntegrationImport,
   runIntegrationImport,
 } from "../services/integration-config-import";
@@ -404,8 +405,13 @@ export async function adminIntegrationsRoute(app: FastifyInstance): Promise<void
     let entries: ReturnType<typeof prepareIntegrationImport>;
     try {
       entries = prepareIntegrationImport(request.body, schemas);
-    } catch {
-      return reply.status(400).send({ errors: ["Invalid integration import"] });
+    } catch (error) {
+      return reply.status(400).send({
+        errors:
+          error instanceof IntegrationImportValidationError
+            ? error.errors
+            : ["Invalid integration import"],
+      });
     }
     const operationKey = createDurableOpsKey(
       "admin-route.integration-import",

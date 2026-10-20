@@ -58,7 +58,11 @@ function seedReadySnapshot(
   const sealed = sealTrustedConfigurationSnapshot({
     role: "api",
     operationKey: "opk1_0123456789abcdef",
-    operationForRevision: (revisionId) => ({ kind: "stack.render", revisionId }),
+    operationForRevision: (revisionId) => ({
+      expectedCurrentRevisionId: null,
+      kind: "stack.render",
+      revisionId,
+    }),
     payload,
     token,
     issuedAtMs: Date.parse("2026-08-24T08:00:00.000Z"),
@@ -80,7 +84,11 @@ describe("trusted configuration snapshot publisher", () => {
       ownerUid: statSync(root).uid,
       ownerGid: statSync(root).gid,
       operationKey: "opk1_0123456789abcdef",
-      operationForRevision: (revisionId) => ({ kind: "stack.render", revisionId }),
+      operationForRevision: (revisionId) => ({
+        expectedCurrentRevisionId: null,
+        kind: "stack.render",
+        revisionId,
+      }),
       payload: {
         domain: "maps.example.test",
         selectedRoots: ["redis"],
@@ -95,10 +103,15 @@ describe("trusted configuration snapshot publisher", () => {
     expect(readFileSync(join(root, `${published.revisionId}.json`))).toEqual(published.bytes);
     expect(published.mode).toBe(0o600);
     expect(published.operation).toEqual({
+      expectedCurrentRevisionId: null,
       kind: "stack.render",
       revisionId: published.revisionId,
     });
-    expect(Object.keys(published.operation).sort()).toEqual(["kind", "revisionId"]);
+    expect(Object.keys(published.operation).sort()).toEqual([
+      "expectedCurrentRevisionId",
+      "kind",
+      "revisionId",
+    ]);
   });
 
   it("never exposes a final snapshot when interrupted before atomic rename", async () => {
@@ -116,7 +129,11 @@ describe("trusted configuration snapshot publisher", () => {
           ownerUid: statSync(root).uid,
           ownerGid: statSync(root).gid,
           operationKey: "opk1_0123456789abcdef",
-          operationForRevision: (revisionId) => ({ kind: "stack.render", revisionId }),
+          operationForRevision: (revisionId) => ({
+            expectedCurrentRevisionId: null,
+            kind: "stack.render",
+            revisionId,
+          }),
           payload: {
             domain: "maps.example.test",
             selectedRoots: [],
@@ -140,7 +157,11 @@ describe("trusted configuration snapshot publisher", () => {
       ownerUid: statSync(root).uid,
       ownerGid: statSync(root).gid,
       operationKey: "opk1_0123456789abcdef",
-      operationForRevision: (revisionId) => ({ kind: "stack.render", revisionId }),
+      operationForRevision: (revisionId) => ({
+        expectedCurrentRevisionId: null,
+        kind: "stack.render",
+        revisionId,
+      }),
       payload: {
         domain: "maps.example.test",
         selectedRoots: [],
@@ -167,7 +188,11 @@ describe("trusted configuration snapshot publisher", () => {
         ownerUid: statSync(root).uid,
         ownerGid: statSync(root).gid,
         operationKey: "opk1_0123456789abcdef",
-        operationForRevision: (revisionId) => ({ kind: "stack.render", revisionId }),
+        operationForRevision: (revisionId) => ({
+          expectedCurrentRevisionId: null,
+          kind: "stack.render",
+          revisionId,
+        }),
         payload: {
           domain: "maps.example.test",
           selectedRoots: [],
@@ -195,7 +220,11 @@ describe("trusted configuration snapshot publisher", () => {
         ownerUid: statSync(root).uid,
         ownerGid: statSync(root).gid,
         operationKey: "opk1_0123456789abcdef",
-        operationForRevision: (revisionId) => ({ kind: "stack.render", revisionId }),
+        operationForRevision: (revisionId) => ({
+          expectedCurrentRevisionId: null,
+          kind: "stack.render",
+          revisionId,
+        }),
         payload: {
           domain: "maps.example.test",
           selectedRoots: [],
@@ -225,7 +254,11 @@ describe("trusted configuration snapshot publisher", () => {
         ownerUid: statSync(root).uid,
         ownerGid: statSync(root).gid,
         operationKey: "opk1_0123456789abcdef",
-        operationForRevision: (revisionId) => ({ kind: "stack.render", revisionId }),
+        operationForRevision: (revisionId) => ({
+          expectedCurrentRevisionId: null,
+          kind: "stack.render",
+          revisionId,
+        }),
         payload: {
           domain: "maps.example.test",
           selectedRoots: [],
@@ -280,7 +313,11 @@ describe("trusted configuration snapshot publisher", () => {
         ownerUid: statSync(root).uid,
         ownerGid: statSync(root).gid,
         operationKey: "opk1_0123456789abcdef",
-        operationForRevision: (revisionId) => ({ kind: "stack.render", revisionId }),
+        operationForRevision: (revisionId) => ({
+          expectedCurrentRevisionId: null,
+          kind: "stack.render",
+          revisionId,
+        }),
         payload,
         now: () => Date.parse("2026-08-24T08:00:00.000Z"),
         nonce: () => `nonce_${index.toString().padStart(16, "0")}`,
@@ -332,7 +369,11 @@ describe("trusted configuration snapshot publisher", () => {
         ownerUid: statSync(root).uid,
         ownerGid: statSync(root).gid,
         operationKey: "opk1_0123456789abcdef",
-        operationForRevision: (revisionId) => ({ kind: "stack.render", revisionId }),
+        operationForRevision: (revisionId) => ({
+          expectedCurrentRevisionId: null,
+          kind: "stack.render",
+          revisionId,
+        }),
         payload: {
           domain: "maps.example.test",
           selectedRoots: [],
@@ -376,7 +417,11 @@ describe("trusted configuration snapshot publisher", () => {
         ownerUid: statSync(root).uid,
         ownerGid: statSync(root).gid,
         operationKey: "opk1_0123456789abcdef",
-        operationForRevision: (revisionId) => ({ kind: "stack.render", revisionId }),
+        operationForRevision: (revisionId) => ({
+          expectedCurrentRevisionId: null,
+          kind: "stack.render",
+          revisionId,
+        }),
         payload: {
           domain: "maps.example.test",
           selectedRoots: [],
@@ -413,7 +458,11 @@ describe("trusted configuration snapshot publisher", () => {
         ownerUid: statSync(root).uid,
         ownerGid: statSync(root).gid,
         operationKey: "opk1_0123456789abcdef",
-        operationForRevision: (revisionId) => ({ kind: "stack.render", revisionId }),
+        operationForRevision: (revisionId) => ({
+          expectedCurrentRevisionId: null,
+          kind: "stack.render",
+          revisionId,
+        }),
         payload: {
           domain: "maps.example.test",
           selectedRoots: [],
@@ -447,7 +496,11 @@ describe("trusted configuration snapshot publisher", () => {
       ownerUid: statSync(root).uid,
       ownerGid: statSync(root).gid,
       operationKey: "opk1_0123456789abcdef",
-      operationForRevision: (revisionId) => ({ kind: "stack.render", revisionId }),
+      operationForRevision: (revisionId) => ({
+        expectedCurrentRevisionId: null,
+        kind: "stack.render",
+        revisionId,
+      }),
       payload: {
         domain: "maps.example.test",
         selectedRoots: [],
@@ -486,7 +539,11 @@ describe("trusted configuration snapshot publisher", () => {
         ownerUid: statSync(root).uid,
         ownerGid: statSync(root).gid,
         operationKey: "opk1_0123456789abcdef",
-        operationForRevision: (revisionId) => ({ kind: "stack.render", revisionId }),
+        operationForRevision: (revisionId) => ({
+          expectedCurrentRevisionId: null,
+          kind: "stack.render",
+          revisionId,
+        }),
         payload: {
           domain: "maps.example.test",
           selectedRoots: [],
@@ -520,7 +577,11 @@ describe("trusted configuration snapshot publisher", () => {
       ownerUid: statSync(root).uid,
       ownerGid: statSync(root).gid,
       operationKey: "opk1_0123456789abcdef",
-      operationForRevision: (revisionId) => ({ kind: "stack.render", revisionId }),
+      operationForRevision: (revisionId) => ({
+        expectedCurrentRevisionId: null,
+        kind: "stack.render",
+        revisionId,
+      }),
       payload: {
         domain: "maps.example.test",
         selectedRoots: [],
@@ -549,7 +610,11 @@ describe("trusted configuration snapshot publisher", () => {
         ownerUid: statSync(root).uid,
         ownerGid: statSync(root).gid,
         operationKey: "opk1_0123456789abcdef",
-        operationForRevision: (revisionId) => ({ kind: "stack.render", revisionId }),
+        operationForRevision: (revisionId) => ({
+          expectedCurrentRevisionId: null,
+          kind: "stack.render",
+          revisionId,
+        }),
         payload: {
           domain: "maps.example.test",
           selectedRoots: [],

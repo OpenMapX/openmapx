@@ -1,11 +1,8 @@
 "use client";
 
-import { type ApiClient, ApiClientError } from "@openmapx/core";
+import type { ApiClient } from "@openmapx/core";
 import * as sdk from "@openmapx/core/api-admin-sdk";
-import type {
-  AdminIntegrationCredential,
-  AdminIntegrationImportFailure,
-} from "@openmapx/core/api-contracts";
+import type { AdminIntegrationCredential } from "@openmapx/core/api-contracts";
 import {
   type QueryClient,
   type QueryFunctionContext,
@@ -21,46 +18,12 @@ import {
 } from "@/components/admin/activity/activityQueries";
 import { invalidateIntegrationRuntime } from "@/lib/integrationRuntimeQuery";
 
+import { integrationErrorMessage } from "./integrationErrors";
+
+export { integrationErrorMessage } from "./integrationErrors";
+
 export const INTEGRATION_READ_TIMEOUT_MS = 30_000;
 const terminal = new Set(["success", "failed", "canceled"]);
-
-function importFailureMessage(failure: AdminIntegrationImportFailure): string {
-  if (failure.recovery === "restored")
-    return "Import failed. Previous saved and applied configuration was restored.";
-  const saved = {
-    retained: "The imported configuration is saved.",
-    restored: "The previous saved configuration was restored.",
-    conflict: "Saved configuration changed during the import; newer edits were preserved.",
-    unknown: "The saved configuration is uncertain.",
-  }[failure.database];
-  const applied =
-    failure.runtime === "restored"
-      ? "The previous running configuration was restored."
-      : failure.runtime === "unchanged"
-        ? "The running configuration is unchanged."
-        : "The running configuration is uncertain.";
-  return `Import failed. ${saved} ${applied} Review saved settings and running integrations before making further changes. Do not retry this import until the state has been checked.`;
-}
-
-/** Display only declared, validated failure fields; never stringify a response or its evidence. */
-export function integrationErrorMessage(error: unknown, fallback: string): string {
-  if (!(error instanceof ApiClientError)) return fallback;
-  if (error.status === 409) {
-    const failure = sdk.adminIntegrationImportFailureSchema.safeParse(error.payload);
-    if (failure.success) return importFailureMessage(failure.data);
-  }
-  const validation = sdk.adminIntegrationValidationErrorSchema.safeParse(error.payload);
-  if (validation.success)
-    return (
-      validation.data.errors
-        .slice(0, 8)
-        .map((s) => s.slice(0, 512))
-        .join("; ") || fallback
-    );
-  const vault = sdk.adminIntegrationVaultUnavailableSchema.safeParse(error.payload);
-  if (vault.success) return `${vault.data.error.slice(0, 512)}. ${vault.data.hint.slice(0, 512)}`;
-  return sdk.adminErrorMessage(error, fallback);
-}
 
 export async function integrationOrThrow<
   R extends { status: number; headers: Headers; data: unknown },
@@ -241,6 +204,7 @@ export function useIntegrationReload(id?: string) {
     setAccepted((current) => current.filter((job) => !finished.includes(job)));
   }, [jobs, observations, qc, apiUrl]);
   return useMutation({
+    mutationKey: ["integration-reload", apiUrl, id],
     retry: false,
     mutationFn: async () => {
       // Capture ownership in the executing request, not a callback whose options

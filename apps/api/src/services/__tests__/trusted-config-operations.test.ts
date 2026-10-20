@@ -4,6 +4,8 @@ const published: unknown[] = [];
 const applyEnabledIds = vi.fn();
 const abort = vi.fn();
 const operations: unknown[] = [];
+const inspect = vi.fn();
+const prepared = vi.fn();
 const service = (id: string) => ({
   manifest: { id, container: { image: `t/${id}`, tag: "1" } },
 });
@@ -20,17 +22,19 @@ vi.mock("../service-registry", () => ({
   }),
 }));
 vi.mock("../service-config-resolver", () => ({
-  resolveAllServiceConfigs: async () => ({
-    values: new Map([["photon", { LANGUAGES: "de" }]]),
-    envKeys: new Map(),
-  }),
+  resolveAllServiceConfigs: async () => {
+    prepared();
+    return { values: new Map([["photon", { LANGUAGES: "de" }]]), envKeys: new Map() };
+  },
 }));
 vi.mock("../service-secrets", () => ({
   resolveServiceVaultSecretsStrict: async () => ({}),
 }));
 vi.mock("../ops-client", () => ({
   createApiOpsClient: vi.fn(),
+  createDurableOpsKey: () => "opk1_inspect123456789",
   executeTrustedConfigurationAndWait: vi.fn(),
+  executeAndWait: (...args: unknown[]) => inspect(...args),
 }));
 vi.mock("../trusted-config-publisher", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../trusted-config-publisher")>()),
@@ -63,6 +67,8 @@ const { TrustedConfigurationApplyError, isProvenConfigurationNonCommit } = await
 describe("applyTrustedConfiguration", () => {
   beforeEach(() => {
     published.length = 0;
+    prepared.mockReset();
+    inspect.mockReset().mockResolvedValue({ revisionId: null, integrationConfigDigests: [] });
     operations.length = 0;
     applyEnabledIds.mockReset();
     abort.mockReset().mockResolvedValue(undefined);
@@ -81,12 +87,92 @@ describe("applyTrustedConfiguration", () => {
     process.env.OPS_TRUSTED_CONFIG_GID = "1000";
   });
 
+  it.each([
+    "stack.render",
+    "serviceSelection.apply",
+    "serviceConfig.apply",
+    "integrationConfig.apply",
+    "vault.apply",
+  ] as const)(
+    "fences a delayed %s snapshot after a competing writer completes, without retry",
+    async (kind) => {
+      const observed = `cfg1_${"a".repeat(43)}`;
+      const completed = `cfg1_${"b".repeat(43)}`;
+      let current = observed;
+      let release!: () => void;
+      let captured!: () => void;
+      const held = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const capture = new Promise<void>((resolve) => {
+        captured = resolve;
+      });
+      inspect.mockImplementation(async () => {
+        expect(prepared).not.toHaveBeenCalled();
+        return { revisionId: current, integrationConfigDigests: [] };
+      });
+      vi.mocked(executeTrustedConfigurationAndWait).mockImplementation(
+        async (_client, operation) => {
+          captured();
+          await held;
+          if (
+            (operation as { expectedCurrentRevisionId?: string }).expectedCurrentRevisionId !==
+              undefined &&
+            (operation as { expectedCurrentRevisionId?: string }).expectedCurrentRevisionId !==
+              current
+          )
+            return {
+              outcome: "not_committed",
+              reason: "conflict",
+              currentRevisionId: current,
+              cleanupFailed: false,
+            };
+          current = operation.revisionId;
+          return {
+            outcome: "committed",
+            revisionId: current,
+            enabledServiceIds: [],
+            followUp: "complete",
+            cleanupFailed: false,
+          };
+        },
+      );
+      const pending = applyTrustedConfigurationWithEvidence({
+        kind,
+        operationKey: "opk1_initialOwnership",
+        serviceId: "photon",
+        integrationId: "alpha",
+        ...(kind === "serviceSelection.apply" ? { selectedRoots: ["photon"] } : {}),
+      });
+      await capture;
+      // B finishes while A's already prepared payload is held at submission.
+      current = completed;
+      release();
+      const result = await pending;
+      expect(operations[0]).toHaveProperty("expectedCurrentRevisionId", observed);
+      expect(result.outcome).toMatchObject({ outcome: "not_committed", reason: "conflict" });
+      expect(current).toBe(completed);
+      expect(executeTrustedConfigurationAndWait).toHaveBeenCalledTimes(1);
+    },
+  );
+  it("does not prepare or publish when authoritative observation is unavailable", async () => {
+    inspect.mockRejectedValueOnce(new Error("synthetic observation failure"));
+    const result = await applyTrustedConfigurationWithEvidence({
+      kind: "stack.render",
+      operationKey: "opk1_observeFailure123",
+    });
+    expect(result.outcome).toMatchObject({ outcome: "not_committed", reason: "failed" });
+    expect(prepared).not.toHaveBeenCalled();
+    expect(published).toEqual([]);
+    expect(executeTrustedConfigurationAndWait).not.toHaveBeenCalled();
+  });
   it("returns the exact submitted payload with settled evidence for scoped compensation", async () => {
     const result = await applyTrustedConfigurationWithEvidence({
       kind: "stack.render",
       operationKey: "opk1_import",
     });
     expect(result.payload).toEqual(published[0]);
+    expect(result.previousApplied).toEqual({ revisionId: null, integrationConfigDigests: [] });
     expect(result.outcome).toMatchObject({
       outcome: "committed",
       followUp: "complete",

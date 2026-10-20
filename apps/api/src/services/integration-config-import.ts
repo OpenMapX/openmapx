@@ -3,7 +3,11 @@ import {
   type AdminIntegrationConfigEntry,
   adminIntegrationConfigImportSchema,
 } from "@openmapx/core/api-contracts";
-import type { TrustedConfigurationPayload } from "@openmapx/core/ops";
+import {
+  configurationProjectionFingerprint,
+  type OpsResultFor,
+  type TrustedConfigurationPayload,
+} from "@openmapx/core/ops";
 import { getSecretFields, validateConfigBody } from "../utils/validate-config-body";
 import { projectIntegrationConfig } from "./integration-config-projection";
 import type { TrustedConfigurationApplyOutcome } from "./trusted-config-outcome";
@@ -11,7 +15,11 @@ import type { TrustedConfigurationApplyOutcome } from "./trusted-config-outcome"
 type Schemas = ReadonlyMap<string, Record<string, unknown> | undefined>;
 type SavedConfig = { integrationId: string; config: Record<string, unknown> | null };
 export class IntegrationImportValidationError extends Error {
-  constructor() {
+  constructor(
+    readonly errors: string[] = [
+      "Invalid integration import: expected a nonempty batch with unique integration IDs and object configs",
+    ],
+  ) {
     super("Invalid integration import");
   }
 }
@@ -29,28 +37,74 @@ export function prepareIntegrationImport(
   schemas: Schemas,
 ): AdminIntegrationConfigEntry[] {
   const parsed = adminIntegrationConfigImportSchema.safeParse(body);
-  if (!parsed.success) throw new IntegrationImportValidationError();
-  return parsed.data.integrations.map(({ integrationId, config }) => {
-    if (!schemas.has(integrationId)) throw new IntegrationImportValidationError();
+  if (!parsed.success) {
+    throw new IntegrationImportValidationError(
+      parsed.error.issues.slice(0, 8).map((issue) => {
+        const index =
+          issue.path[0] === "integrations" && typeof issue.path[1] === "number"
+            ? issue.path[1]
+            : undefined;
+        const entry = index === undefined ? "Import" : `Entry ${index + 1}`;
+        const field =
+          issue.path[2] === "config" ? (issue.path[3] === "enabled" ? " enabled" : " config") : "";
+        return `${entry}${field}: ${issue.code === "custom" && issue.message === "Duplicate integration ID" ? "duplicate integration ID" : "invalid batch, entry or field shape"}`;
+      }),
+    );
+  }
+  const errors: string[] = [];
+  const entries = parsed.data.integrations.map(({ integrationId, config }, index) => {
+    const at = `Entry ${index + 1}`;
+    if (!schemas.has(integrationId)) {
+      errors.push(`${at}: unknown integration ID`);
+      return { integrationId, config };
+    }
+    // Only catalogue identifiers/field names are eligible for display, never
+    // supplied values, unknown keys, or validator messages containing schema data.
+    const label = /^[a-z0-9-]{1,64}$/.test(integrationId) ? `${at} (${integrationId})` : at;
     const schema = schemas.get(integrationId);
+    const properties = (schema?.properties ?? schema ?? {}) as Record<string, unknown>;
     const secrets = new Set(getSecretFields(schema).map((f) => f.key));
     const { enabled, ...fields } = config;
-    const nonSecret = Object.fromEntries(
-      Object.entries(fields).filter(([key]) => !secrets.has(key)),
-    );
-    if (
-      hasMask(nonSecret) ||
-      Object.hasOwn(nonSecret, "type") ||
-      Object.hasOwn(nonSecret, "properties")
-    )
-      throw new IntegrationImportValidationError();
-    const checked = validateConfigBody(nonSecret, schema);
-    if (checked.errors.length) throw new IntegrationImportValidationError();
+    const updates: Record<string, unknown> = {};
+    for (const [fieldIndex, [key, value]] of Object.entries(fields).entries()) {
+      if (secrets.has(key)) continue;
+      const known = Object.hasOwn(properties, key) && key !== "type" && key !== "properties";
+      const field =
+        known && /^[A-Za-z0-9_.-]{1,80}$/.test(key) ? `field "${key}"` : `field #${fieldIndex + 1}`;
+      if (!known) {
+        errors.push(`${label}: ${field} is not a writable field`);
+        continue;
+      }
+      if (hasMask(value)) {
+        errors.push(`${label}: ${field} contains a masked placeholder`);
+        continue;
+      }
+      const checked = validateConfigBody({ [key]: value }, schema);
+      if (checked.errors.length) {
+        const diagnostic = checked.errors[0];
+        const rules: [RegExp, string][] = [
+          [/is read-only/, "read-only constraint"],
+          [/must be at least|must have at least|must contain at least/, "minimum constraint"],
+          [/must be at most|must have at most|must contain at most/, "maximum constraint"],
+          [/must be one of:/, "allowed-choice constraint"],
+          [/must equal/, "constant constraint"],
+          [/is required/, "required-field constraint"],
+          [/is not allowed|Unknown config key/, "allowed-field constraint"],
+          [/secret field/, "non-secret-field constraint"],
+          [/must be (a|an) (boolean|string|number|integer|array|object)$/, "type constraint"],
+        ];
+        const rule =
+          rules.find(([pattern]) => pattern.test(diagnostic))?.[1] ?? "type or value constraints";
+        errors.push(`${label}: ${field} violates its ${rule}`);
+      } else Object.assign(updates, checked.updates);
+    }
     return {
       integrationId,
-      config: { ...checked.updates, ...(enabled !== undefined ? { enabled } : {}) },
+      config: { ...updates, ...(enabled !== undefined ? { enabled } : {}) },
     } as AdminIntegrationConfigEntry;
   });
+  if (errors.length) throw new IntegrationImportValidationError(errors.slice(0, 8));
+  return entries;
 }
 /** Old/unknown DB metadata is deliberately omitted, never guessed to be nonsecret. */
 export function exportIntegrationConfigs(rows: SavedConfig[], schemas: Schemas) {
@@ -83,6 +137,7 @@ export interface IntegrationImportPorts {
   persist(entries: AdminIntegrationConfigEntry[]): Promise<PersistedIntegrationImport>;
   apply(): Promise<{
     payload?: TrustedConfigurationPayload;
+    previousApplied?: OpsResultFor<"configuration.inspect">;
     outcome: TrustedConfigurationApplyOutcome;
   }>;
   compensate(
@@ -138,12 +193,39 @@ function compensationPayload(
       )
     )
       return undefined;
-    entry.values = projectIntegrationConfig(
-      schemas.get(entry.integrationId),
-      old,
-    ) as typeof entry.values;
+    const previousValues = projectIntegrationConfig(schemas.get(entry.integrationId), old);
+    entry.values = previousValues as typeof entry.values;
   }
   return seen.size === entries.length ? result : undefined;
+}
+
+/** The observation precedes preparation and its revision fences initial activation.
+ * A divergent/absent projection is not recoverable from DB values alone. Fail
+ * closed rather than replay saved values as if they were previously applied.
+ */
+function previousAppliedMatches(
+  saved: PersistedIntegrationImport,
+  entries: AdminIntegrationConfigEntry[],
+  schemas: Schemas,
+  observation: OpsResultFor<"configuration.inspect"> | undefined,
+): boolean {
+  if (!observation?.revisionId) return false;
+  const previous = new Map(
+    saved.previous.map(({ integrationId, config }) => [integrationId, config]),
+  );
+  const digests = new Map(
+    observation.integrationConfigDigests.map(({ integrationId, digest }) => [
+      integrationId,
+      digest,
+    ]),
+  );
+  return entries.every(
+    ({ integrationId }) =>
+      digests.get(integrationId) ===
+      configurationProjectionFingerprint(
+        projectIntegrationConfig(schemas.get(integrationId), previous.get(integrationId) ?? {}),
+      ),
+  );
 }
 
 /** External effects are not SQL-atomic. Every incomplete path returns explicit evidence. */
@@ -208,6 +290,18 @@ export async function runIntegrationImport(
       runtime,
       reason: "submitted_snapshot_not_owned" as const,
     };
+  if (
+    apply.outcome === "committed" &&
+    !previousAppliedMatches(saved, entries, schemas, applied.previousApplied)
+  )
+    return {
+      ...failure,
+      phase,
+      database: "retained" as const,
+      apply,
+      runtime,
+      reason: "previous_applied_not_proven" as const,
+    };
   let restored: boolean;
   try {
     restored = await saved.restore();
@@ -220,7 +314,10 @@ export async function runIntegrationImport(
       ...failure,
       phase,
       recovery:
-        apply.cleanupFailed || apply.publisherCleanupFailed || apply.registryUpdateFailed
+        apply.reason === "conflict" ||
+        apply.cleanupFailed ||
+        apply.publisherCleanupFailed ||
+        apply.registryUpdateFailed
           ? ("reconciliation_required" as const)
           : ("restored" as const),
       database: "restored" as const,

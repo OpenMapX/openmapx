@@ -33,6 +33,7 @@ export {
   commitConfigurationGeneration,
   currentConfigurationGeneration,
   initializeConfigurationGenerations,
+  inspectAppliedConfiguration,
   type RenderConfigurationOptions,
   readAppliedConfiguration,
   readAppliedServiceIds,

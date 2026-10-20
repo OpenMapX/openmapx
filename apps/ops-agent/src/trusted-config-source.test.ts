@@ -58,7 +58,11 @@ function sealed(issuedAtMs = now) {
   return sealTrustedConfigurationSnapshot({
     role: "api",
     operationKey: "opk1_0123456789abcdef",
-    operationForRevision: (revisionId) => ({ kind: "stack.render", revisionId }),
+    operationForRevision: (revisionId) => ({
+      expectedCurrentRevisionId: null,
+      kind: "stack.render",
+      revisionId,
+    }),
     payload: payload(),
     token,
     issuedAtMs,
@@ -70,7 +74,11 @@ function distinctSealed(index: number) {
   return sealTrustedConfigurationSnapshot({
     role: "api",
     operationKey: "opk1_0123456789abcdef",
-    operationForRevision: (revisionId) => ({ kind: "stack.render", revisionId }),
+    operationForRevision: (revisionId) => ({
+      expectedCurrentRevisionId: null,
+      kind: "stack.render",
+      revisionId,
+    }),
     payload: payload(),
     token,
     issuedAtMs: now,

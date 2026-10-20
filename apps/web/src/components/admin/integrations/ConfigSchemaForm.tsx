@@ -3,7 +3,10 @@
 import type { AdminIntegrationResolvedConfig } from "@openmapx/core/api-contracts";
 import { useMutation } from "@tanstack/react-query";
 import { useIntegrationAdmin } from "@/lib/admin/integrationAdmin";
+import { useIntegrationMutationOwner } from "@/lib/admin/useIntegrationMutationOwner";
 import { SchemaConfigForm } from "../shared/SchemaConfigForm";
+
+const excludedKeys = ["enabled"];
 
 interface ConfigSchemaFormProps {
   integrationId: string;
@@ -29,21 +32,24 @@ export function ConfigSchemaForm({
   onSaved,
 }: ConfigSchemaFormProps) {
   const admin = useIntegrationAdmin();
+  const owner = useIntegrationMutationOwner(admin.client, integrationId);
 
   const saveMutation = useMutation({
     retry: false,
-    mutationFn: (updates: Record<string, unknown>) => admin.patchConfig(integrationId, updates),
-    onSuccess: () => {
+    mutationKey: ["integration-config", admin.apiUrl, integrationId],
+    mutationFn: async (updates: Record<string, unknown>) => {
+      await admin.patchConfig(integrationId, updates);
       void admin.refresh();
-      onSaved?.();
+      if (owner.active) onSaved?.();
     },
   });
 
   return (
     <SchemaConfigForm
+      key={JSON.stringify([admin.apiUrl, integrationId])}
       schema={schema}
       resolvedConfig={resolvedConfig}
-      excludeKeys={["enabled"]}
+      excludeKeys={excludedKeys}
       onSave={async (diff) => {
         await saveMutation.mutateAsync(diff);
       }}

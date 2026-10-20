@@ -18,7 +18,7 @@ import {
   opsOperationFingerprint,
   type TrustedConfigurationPayload,
 } from "@openmapx/core/ops";
-import type { services } from "@openmapx/core/server";
+import { services } from "@openmapx/core/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createUnavailableRuntime, dispatchOpsOperation, type OpsTrustedClaim } from "./runtime";
 import {
@@ -141,7 +141,11 @@ describe("ops-agent trusted configuration runtime", () => {
     });
     const revisionId = "cfg1_0123456789abcdef0123456789abcdef0123456789a";
     const secretValue = Buffer.from([9, 8, 7, 6]).toString("base64url");
-    const operation = { kind: "serviceSelection.apply" as const, revisionId };
+    const operation = {
+      expectedCurrentRevisionId: services.currentConfigurationGeneration(paths.infraDir),
+      kind: "serviceSelection.apply" as const,
+      revisionId,
+    };
     select(paths.infraDir, ["beta"]);
     const trusted = claim(
       operation,
@@ -193,7 +197,11 @@ describe("ops-agent trusted configuration runtime", () => {
       infraDir: paths.infraDir,
     });
     const revisionId = "cfg1_0123456789abcdef0123456789abcdef0123456789a";
-    const operation = { kind: "stack.render" as const, revisionId };
+    const operation = {
+      expectedCurrentRevisionId: services.currentConfigurationGeneration(paths.infraDir),
+      kind: "stack.render" as const,
+      revisionId,
+    };
     const trusted = claim(
       operation,
       payload({
@@ -269,11 +277,22 @@ describe("ops-agent trusted configuration runtime", () => {
     await expect(
       dispatchOpsOperation(
         runtime,
-        { kind: "stack.render", revisionId },
+        {
+          expectedCurrentRevisionId: services.currentConfigurationGeneration(paths.infraDir),
+          kind: "stack.render",
+          revisionId,
+        },
         {
           signal: new AbortController().signal,
           emitLog: vi.fn(),
-          claim: claim({ kind: "stack.render", revisionId }, invalidPayload),
+          claim: claim(
+            {
+              expectedCurrentRevisionId: services.currentConfigurationGeneration(paths.infraDir),
+              kind: "stack.render",
+              revisionId,
+            },
+            invalidPayload,
+          ),
         },
       ),
     ).resolves.toMatchObject({ outcome: "not_committed", reason: "failed" });
@@ -291,7 +310,11 @@ describe("ops-agent trusted configuration runtime", () => {
       infraDir: paths.infraDir,
     });
     const revisionId = "cfg1_0123456789abcdef0123456789abcdef0123456789a";
-    const operation = { kind: "stack.render" as const, revisionId };
+    const operation = {
+      expectedCurrentRevisionId: services.currentConfigurationGeneration(paths.infraDir),
+      kind: "stack.render" as const,
+      revisionId,
+    };
     select(paths.infraDir, ["app-api"]);
     await expect(
       dispatchOpsOperation(runtime, operation, {
@@ -322,7 +345,11 @@ describe("ops-agent trusted configuration runtime", () => {
       infraDir: paths.infraDir,
     });
     const revisionId = "cfg1_0123456789abcdef0123456789abcdef0123456789a";
-    const operation = { kind: "stack.render" as const, revisionId };
+    const operation = {
+      expectedCurrentRevisionId: services.currentConfigurationGeneration(paths.infraDir),
+      kind: "stack.render" as const,
+      revisionId,
+    };
     select(paths.infraDir, ["app-api", "alpha"]);
     await dispatchOpsOperation(runtime, operation, {
       signal: new AbortController().signal,
@@ -392,6 +419,7 @@ describe("ops-agent trusted configuration runtime", () => {
     });
     const revisionId = `cfg1_${"v".repeat(43)}`;
     const operation = {
+      expectedCurrentRevisionId: services.currentConfigurationGeneration(paths.infraDir),
       kind: "integrationConfig.apply" as const,
       integrationId: "search-nlp",
       revisionId,
@@ -430,6 +458,7 @@ describe("ops-agent trusted configuration runtime", () => {
     });
     const revisionId = `cfg1_${"w".repeat(43)}`;
     const operation = {
+      expectedCurrentRevisionId: services.currentConfigurationGeneration(paths.infraDir),
       kind: "serviceConfig.apply" as const,
       serviceId: "dawarich-app",
       revisionId,
@@ -471,6 +500,7 @@ describe("ops-agent trusted configuration runtime", () => {
     });
     const revisionId = `cfg1_${"x".repeat(43)}`;
     const operation = {
+      expectedCurrentRevisionId: services.currentConfigurationGeneration(paths.infraDir),
       kind: "integrationConfig.apply" as const,
       integrationId: "custom",
       revisionId,
@@ -515,7 +545,11 @@ describe("ops-agent trusted configuration runtime", () => {
       ]),
     };
     const selectionRevision = `cfg1_${"i".repeat(43)}`;
-    const selection = { kind: "serviceSelection.apply" as const, revisionId: selectionRevision };
+    const selection = {
+      expectedCurrentRevisionId: services.currentConfigurationGeneration(paths.infraDir),
+      kind: "serviceSelection.apply" as const,
+      revisionId: selectionRevision,
+    };
     await expect(
       dispatchOpsOperation(runtime, selection, {
         signal: new AbortController().signal,
@@ -546,6 +580,7 @@ describe("ops-agent trusted configuration runtime", () => {
     };
     const configRevision = `cfg1_${"j".repeat(43)}`;
     const config = {
+      expectedCurrentRevisionId: services.currentConfigurationGeneration(paths.infraDir),
       kind: "integrationConfig.apply" as const,
       integrationId: "integration-live",
       revisionId: configRevision,
@@ -571,7 +606,11 @@ describe("ops-agent trusted configuration runtime", () => {
       integrationSchemas: new Map(),
     };
     const removedRevision = `cfg1_${"k".repeat(43)}`;
-    const removed = { kind: "serviceSelection.apply" as const, revisionId: removedRevision };
+    const removed = {
+      expectedCurrentRevisionId: services.currentConfigurationGeneration(paths.infraDir),
+      kind: "serviceSelection.apply" as const,
+      revisionId: removedRevision,
+    };
     await expect(
       dispatchOpsOperation(runtime, removed, {
         signal: new AbortController().signal,
@@ -605,11 +644,22 @@ describe("ops-agent trusted configuration runtime", () => {
     await expect(
       dispatchOpsOperation(
         runtime,
-        { kind: "stack.render", revisionId },
+        {
+          expectedCurrentRevisionId: services.currentConfigurationGeneration(paths.infraDir),
+          kind: "stack.render",
+          revisionId,
+        },
         {
           signal: new AbortController().signal,
           emitLog: vi.fn(),
-          claim: claim({ kind: "stack.render", revisionId }, payload({ integrationConfigs: [] })),
+          claim: claim(
+            {
+              expectedCurrentRevisionId: services.currentConfigurationGeneration(paths.infraDir),
+              kind: "stack.render",
+              revisionId,
+            },
+            payload({ integrationConfigs: [] }),
+          ),
         },
       ),
     ).resolves.toMatchObject({ outcome: "not_committed", reason: "failed" });
@@ -634,11 +684,22 @@ describe("ops-agent trusted configuration runtime", () => {
     await expect(
       dispatchOpsOperation(
         runtime,
-        { kind: "stack.render", revisionId },
+        {
+          expectedCurrentRevisionId: services.currentConfigurationGeneration(paths.infraDir),
+          kind: "stack.render",
+          revisionId,
+        },
         {
           signal: new AbortController().signal,
           emitLog: vi.fn(),
-          claim: claim({ kind: "stack.render", revisionId }, payload({ integrationConfigs: [] })),
+          claim: claim(
+            {
+              expectedCurrentRevisionId: services.currentConfigurationGeneration(paths.infraDir),
+              kind: "stack.render",
+              revisionId,
+            },
+            payload({ integrationConfigs: [] }),
+          ),
         },
       ),
     ).resolves.toMatchObject({ outcome: "committed", followUp: "failed" });
@@ -650,7 +711,11 @@ describe("ops-agent trusted configuration runtime", () => {
   it("resumes an identical orphan generation after a crash before the pointer swap", async () => {
     const paths = fixture();
     const revisionId = "cfg1_0123456789abcdef0123456789abcdef0123456789a";
-    const operation = { kind: "stack.render" as const, revisionId };
+    const operation = {
+      expectedCurrentRevisionId: services.currentConfigurationGeneration(paths.infraDir),
+      kind: "stack.render" as const,
+      revisionId,
+    };
     const crashing = createUnavailableRuntime();
     installTrustedConfigurationRuntime(crashing, {
       services: [service("alpha")],
@@ -703,7 +768,11 @@ describe("ops-agent trusted configuration runtime", () => {
   it("enters recovery-only state when the current pointer disappears after activation", async () => {
     const paths = fixture();
     const revisionId = `cfg1_${"p".repeat(43)}`;
-    const operation = { kind: "stack.render" as const, revisionId };
+    const operation = {
+      expectedCurrentRevisionId: services.currentConfigurationGeneration(paths.infraDir),
+      kind: "stack.render" as const,
+      revisionId,
+    };
     const runtime = createUnavailableRuntime();
     installTrustedConfigurationRuntime(runtime, {
       services: [service("alpha")],
@@ -732,10 +801,14 @@ describe("ops-agent trusted configuration runtime", () => {
     expect(readFileSync(paths.compose, "utf8")).toContain("alpha:");
   });
 
-  it("makes a post-pointer crash idempotently retryable", async () => {
+  it("rejects a direct replay after a post-pointer crash without reapplying", async () => {
     const paths = fixture();
     const revisionId = "cfg1_0123456789abcdef0123456789abcdef0123456789a";
-    const operation = { kind: "stack.render" as const, revisionId };
+    const operation = {
+      expectedCurrentRevisionId: services.currentConfigurationGeneration(paths.infraDir),
+      kind: "stack.render" as const,
+      revisionId,
+    };
     const crashing = createUnavailableRuntime();
     installTrustedConfigurationRuntime(crashing, {
       services: [service("alpha")],
@@ -764,7 +837,11 @@ describe("ops-agent trusted configuration runtime", () => {
         emitLog: vi.fn(),
         claim: claim(operation, payload({ integrationConfigs: [] })),
       }),
-    ).resolves.toMatchObject({ outcome: "committed", revisionId, enabledServiceIds: ["alpha"] });
+    ).resolves.toMatchObject({
+      outcome: "not_committed",
+      reason: "conflict",
+      currentRevisionId: revisionId,
+    });
   });
 
   it("applies an explicit empty vault entry and removes the prior generated secret", async () => {
@@ -776,7 +853,12 @@ describe("ops-agent trusted configuration runtime", () => {
       infraDir: paths.infraDir,
     });
     const firstRevision = `cfg1_${"s".repeat(43)}`;
-    const first = { kind: "vault.apply" as const, serviceId: "alpha", revisionId: firstRevision };
+    const first = {
+      expectedCurrentRevisionId: services.currentConfigurationGeneration(paths.infraDir),
+      kind: "vault.apply" as const,
+      serviceId: "alpha",
+      revisionId: firstRevision,
+    };
     await dispatchOpsOperation(runtime, first, {
       signal: new AbortController().signal,
       emitLog: vi.fn(),
@@ -793,7 +875,12 @@ describe("ops-agent trusted configuration runtime", () => {
     );
 
     const secondRevision = `cfg1_${"t".repeat(43)}`;
-    const second = { kind: "vault.apply" as const, serviceId: "alpha", revisionId: secondRevision };
+    const second = {
+      expectedCurrentRevisionId: services.currentConfigurationGeneration(paths.infraDir),
+      kind: "vault.apply" as const,
+      serviceId: "alpha",
+      revisionId: secondRevision,
+    };
     await dispatchOpsOperation(runtime, second, {
       signal: new AbortController().signal,
       emitLog: vi.fn(),
@@ -834,6 +921,7 @@ describe("ops-agent trusted configuration runtime", () => {
       env: {},
     });
     const operation = {
+      expectedCurrentRevisionId: services.currentConfigurationGeneration(paths.infraDir),
       kind: "serviceConfig.apply" as const,
       serviceId: "alpha",
       revisionId: `cfg1_${"c".repeat(43)}`,
@@ -868,6 +956,7 @@ describe("ops-agent trusted configuration runtime", () => {
       env: { OPENMAPX_ENABLED_SERVICES: "alpha" },
     });
     const operation = {
+      expectedCurrentRevisionId: services.currentConfigurationGeneration(paths.infraDir),
       kind: "serviceSelection.apply" as const,
       revisionId: `cfg1_${"e".repeat(43)}`,
     };

@@ -1,4 +1,8 @@
-import type { TrustedConfigurationPayload } from "@openmapx/core/ops";
+import {
+  configurationProjectionFingerprint,
+  type OpsResultFor,
+  type TrustedConfigurationPayload,
+} from "@openmapx/core/ops";
 import { describe, expect, it } from "vitest";
 import {
   exportIntegrationConfigs,
@@ -42,6 +46,38 @@ describe("integration import preparation", () => {
     input({ nested: { count: 0 } }),
   ])("rejects the entire invalid file before persistence: %j", (body) => {
     expect(() => prepareIntegrationImport(body, manifests)).toThrow("Invalid integration import");
+  });
+  it("bounds diagnostics and never echoes unknown keys, values or schema choice contents", () => {
+    const schemas = new Map([
+      ["alpha", { properties: { choice: { type: "string", enum: ["internal-schema-marker"] } } }],
+    ]);
+    try {
+      prepareIntegrationImport(
+        {
+          integrations: [
+            {
+              integrationId: "alpha",
+              config: { choice: "supplied-secret", "unknown-secret-name": "another-secret" },
+            },
+            ...Array.from({ length: 20 }, (_, index) => ({
+              integrationId: `unknown-${index}`,
+              config: {},
+            })),
+          ],
+        },
+        schemas,
+      );
+      throw Error("Expected validation failure");
+    } catch (error) {
+      expect(error).toBeInstanceOf(Error);
+      const diagnostics = (error as { errors: string[] }).errors;
+      expect(diagnostics).toHaveLength(8);
+      expect(diagnostics[0]).toMatch(/Entry 1.*alpha.*choice.*allowed-choice constraint/);
+      expect(diagnostics.every((entry) => entry.length <= 512)).toBe(true);
+      expect(JSON.stringify(diagnostics)).not.toMatch(
+        /internal-schema-marker|supplied-secret|unknown-secret-name|another-secret/,
+      );
+    }
   });
   it("omits declared secrets and preserves optional enabled and valid nested JSON", () => {
     expect(
@@ -88,7 +124,7 @@ function fixture() {
     serviceConfigs: [],
     serviceSecrets: [],
     integrationConfigs: [
-      { integrationId: "alpha", values: { label: "old" } },
+      { integrationId: "alpha", values: { label: "old", enabled: false } },
       { integrationId: "beta", values: { label: "before" } },
     ],
   };
@@ -139,6 +175,15 @@ function fixture() {
     },
     async apply() {
       events.push("apply");
+      const previousApplied: OpsResultFor<"configuration.inspect"> = {
+        revisionId: revision,
+        integrationConfigDigests: state.host.integrationConfigs.map(
+          ({ integrationId, values }) => ({
+            integrationId,
+            digest: configurationProjectionFingerprint(values),
+          }),
+        ),
+      };
       state.beforeApply();
       const payload = {
         ...host,
@@ -150,6 +195,7 @@ function fixture() {
       if (state.applyMode === "unknown")
         return {
           payload,
+          previousApplied,
           outcome: {
             outcome: "unknown",
             reason: "transport_or_result",
@@ -160,6 +206,7 @@ function fixture() {
       if (state.applyMode === "noncommit")
         return {
           payload,
+          previousApplied,
           outcome: {
             outcome: "not_committed",
             reason: "failed",
@@ -172,6 +219,7 @@ function fixture() {
       revision = "A";
       return {
         payload,
+        previousApplied,
         outcome: {
           outcome: "committed",
           revisionId: "A",
@@ -237,6 +285,24 @@ function fixture() {
 }
 
 describe("real batch coordinator with stateful storage and host boundaries", () => {
+  it.each(["reload", "runtime-unchanged"])(
+    "does not invent prior applied values after preexisting divergence: %s",
+    async (failure) => {
+      const f = fixture();
+      f.state.rows.set("alpha", { label: "saved-but-not-applied", enabled: false });
+      f.state.host.integrationConfigs[0].values = { label: "live-before", enabled: false };
+      if (failure === "reload") f.state.reloadFails = true;
+      else f.state.applyMode = "incomplete";
+      const result = await runIntegrationImport(
+        prepareIntegrationImport(input(), manifests),
+        manifests,
+        f.ports as never,
+      );
+      expect(result).toMatchObject({ ok: false, recovery: "reconciliation_required" });
+      expect(f.state.host.integrationConfigs[0].values.label).not.toBe("saved-but-not-applied");
+      expect(f.state.events).not.toContain("compensate");
+    },
+  );
   it("persists once, applies one complete snapshot and reloads once", async () => {
     const f = fixture();
     const result = await runIntegrationImport(
@@ -320,6 +386,32 @@ describe("real batch coordinator with stateful storage and host boundaries", () 
       { integrationId: "alpha", values: { label: "old", enabled: false } },
       { integrationId: "beta", values: { label: "newer" } },
     ]);
+  });
+  it("preserves every unrelated field of the actual submitted payload during compensation", async () => {
+    const f = fixture();
+    f.state.reloadFails = true;
+    const apply = f.ports.apply;
+    f.ports.apply = async () => {
+      const result = await apply();
+      Object.assign(result.payload, {
+        domain: "submitted.invalid",
+        serviceConfigs: [{ serviceId: "service", values: { flag: true }, envKeys: ["env"] }],
+        serviceSecrets: [{ serviceId: "service", values: { key: "synthetic-only" } }],
+      });
+      return result;
+    };
+    const result = await runIntegrationImport(
+      prepareIntegrationImport(input(), manifests),
+      manifests,
+      f.ports as never,
+    );
+    expect(result).toMatchObject({ recovery: "restored" });
+    expect(f.state.host).toMatchObject({
+      domain: "submitted.invalid",
+      serviceConfigs: [{ serviceId: "service", values: { flag: true }, envKeys: ["env"] }],
+      serviceSecrets: [{ serviceId: "service", values: { key: "synthetic-only" } }],
+    });
+    expect(JSON.stringify(result)).not.toContain("synthetic-only");
   });
   it("does not overwrite an intervening DB edit", async () => {
     const f = fixture();
@@ -474,6 +566,108 @@ describe("real batch coordinator with stateful storage and host boundaries", () 
 
 describe("coordinator against the actual conditional generation writer", () => {
   it.each([false, true])(
+    "fences capture -> completed B -> initial A, even when A would need recovery (%s)",
+    async (reloadFails) => {
+      const { mkdtempSync, mkdirSync, rmSync } = await import("node:fs");
+      const { tmpdir } = await import("node:os");
+      const { join } = await import("node:path");
+      const { services } = await import("@openmapx/core/server");
+      const root = mkdtempSync(join(tmpdir(), "initial-import-race-"));
+      const infraDir = join(root, "infra/docker");
+      mkdirSync(infraDir, { recursive: true });
+      const f = fixture();
+      f.state.reloadFails = reloadFails;
+      const commit = (
+        payload: TrustedConfigurationPayload,
+        expectedCurrentRevisionId?: string | null,
+      ) =>
+        services.commitConfigurationGeneration({
+          infraDir,
+          services: [],
+          input: { ...payload, selectedRoots: [] },
+          expectedCurrentRevisionId,
+        });
+      let release!: () => void, captured!: () => void;
+      const barrier = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const reached = new Promise<void>((resolve) => {
+        captured = resolve;
+      });
+      const prepare = f.ports.apply;
+      f.ports.apply = async () => {
+        const previousApplied = await services.withConfigurationGenerationWriter(
+          infraDir,
+          async () => services.inspectAppliedConfiguration(infraDir),
+        );
+        const { payload } = await prepare();
+        captured();
+        await barrier;
+        try {
+          const applied = await commit(payload, previousApplied.revisionId);
+          return {
+            payload,
+            previousApplied,
+            outcome: {
+              outcome: "committed",
+              revisionId: applied.revisionId,
+              enabledServiceIds: [],
+              followUp: "complete",
+              cleanupFailed: false,
+              publisherCleanupFailed: false,
+              registryUpdateFailed: false,
+            },
+          };
+        } catch (error) {
+          if (!(error instanceof services.ConfigurationGenerationError)) throw error;
+          return {
+            payload,
+            previousApplied,
+            outcome: {
+              ...error.result,
+              publisherCleanupFailed: false,
+              registryUpdateFailed: false,
+            },
+          } as Awaited<ReturnType<typeof prepare>>;
+        }
+      };
+      try {
+        await commit(f.state.host);
+        const pending = runIntegrationImport(
+          prepareIntegrationImport(input(), manifests),
+          manifests,
+          f.ports as never,
+        );
+        await reached;
+        f.state.rows.set("beta", { label: "completed-B" });
+        await commit({
+          ...f.state.host,
+          integrationConfigs: [
+            { integrationId: "alpha", values: { label: "new", enabled: false } },
+            { integrationId: "beta", values: { label: "completed-B" } },
+          ],
+        });
+        release();
+        const result = await pending;
+        expect(result).toMatchObject({
+          ok: false,
+          recovery: "reconciliation_required",
+          apply: { outcome: "not_committed", reason: "conflict" },
+          database: "restored",
+        });
+        expect(services.readAppliedConfiguration(infraDir).integrationConfigs[1].values.label).toBe(
+          "completed-B",
+        );
+        expect(f.state.rows.get("beta")?.label).toBe("completed-B");
+        expect(f.state.events).not.toContain("reload");
+        expect(f.state.events).not.toContain("compensate");
+      } finally {
+        release?.();
+        rmSync(root, { recursive: true, force: true });
+      }
+    },
+  );
+  it.each([false, true])(
     "preserves unrelated pre-apply changes and fences a newer generation (stale=%s)",
     async (stale) => {
       const { mkdtempSync, mkdirSync, rmSync } = await import("node:fs");
@@ -513,9 +707,17 @@ describe("coordinator against the actual conditional generation writer", () => {
       const ports = {
         ...f.ports,
         async apply() {
+          const previousApplied = await services.withConfigurationGenerationWriter(
+            infraDir,
+            async () => services.inspectAppliedConfiguration(infraDir),
+          );
           const { payload } = await prepare();
           submitted = payload;
-          return { payload, outcome: await commit(payload) };
+          return {
+            payload,
+            previousApplied,
+            outcome: await commit(payload, previousApplied.revisionId ?? undefined),
+          };
         },
         async compensate(payload: typeof submitted, expected: string) {
           if (stale)
@@ -531,6 +733,7 @@ describe("coordinator against the actual conditional generation writer", () => {
         },
       };
       try {
+        await commit(f.state.host);
         const result = await runIntegrationImport(
           prepareIntegrationImport(input(), manifests),
           manifests,

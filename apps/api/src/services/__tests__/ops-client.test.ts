@@ -544,7 +544,11 @@ describe("bounded async ops helpers", () => {
 });
 
 describe("configuration outcome evidence", () => {
-  const operation = { kind: "stack.render" as const, revisionId: `cfg1_${"a".repeat(43)}` };
+  const operation = {
+    expectedCurrentRevisionId: null,
+    kind: "stack.render" as const,
+    revisionId: `cfg1_${"a".repeat(43)}`,
+  };
   it("treats arbitrary submission failure as unknown and submits once", async () => {
     const client = fakeClient({
       execute: vi.fn().mockRejectedValue(new Error("connection lost after send")),

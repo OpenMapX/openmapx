@@ -39,6 +39,7 @@ import {
   useIntegrationAdmin,
   useIntegrationReload,
 } from "@/lib/admin/integrationAdmin";
+import { useIntegrationMutationOwner } from "@/lib/admin/useIntegrationMutationOwner";
 import { AdminTablePagination } from "../shared/AdminTablePagination";
 import { useAdminToast } from "../shared/AdminToast";
 import { MetaRow } from "../shared/MetaRow";
@@ -459,17 +460,23 @@ function CredentialsTab({
   integrationId: string;
 }) {
   const admin = useIntegrationAdmin();
+  const owner = useIntegrationMutationOwner(admin.client, integrationId);
   const [dialogField, setDialogField] = useState<CredentialStatus | null>(null);
   const showToast = useAdminToast();
 
   const deleteMutation = useMutation({
+    mutationKey: ["integration-credential-delete", admin.apiUrl, integrationId],
     retry: false,
-    mutationFn: (key: string) => admin.deleteCredential(integrationId, key),
-    onSuccess: (_, key) => {
-      void admin.refresh();
-      showToast(`Credential "${key}" deleted`);
+    mutationFn: async (key: string) => {
+      try {
+        await admin.deleteCredential(integrationId, key);
+        void admin.refresh();
+        if (owner.active) showToast(`Credential "${key}" deleted`);
+      } catch (err) {
+        if (owner.active) showToast(`Failed to delete "${key}"`, "error");
+        throw err;
+      }
     },
-    onError: (_, key) => showToast(`Failed to delete "${key}"`, "error"),
   });
 
   const secretCredentials = data.credentialStatus;
@@ -1004,14 +1011,21 @@ export function IntegrationDetail({ id }: IntegrationDetailProps) {
 
   const { data, isLoading, isError } = useQuery(admin.queries.detail(id));
 
+  const owner = useIntegrationMutationOwner(admin.client, id);
   const toggleMutation = useMutation({
+    mutationKey: ["integration-toggle", admin.apiUrl, id],
     retry: false,
-    mutationFn: (enable: boolean) => admin.toggle(id, enable),
-    onSuccess: (_, enable) => {
-      void admin.refresh();
-      showToast(`Integration ${enable ? "enabled" : "disabled"}`);
+    mutationFn: async (enable: boolean) => {
+      try {
+        await admin.toggle(id, enable);
+        void admin.refresh();
+        if (owner.active) showToast(`Integration ${enable ? "enabled" : "disabled"}`);
+      } catch (err) {
+        if (owner.active)
+          showToast(err instanceof Error ? err.message : "Operation failed", "error");
+        throw err;
+      }
     },
-    onError: (err) => showToast(err instanceof Error ? err.message : "Operation failed", "error"),
   });
 
   const reloadMutation = useIntegrationReload(id);
@@ -1110,8 +1124,11 @@ export function IntegrationDetail({ id }: IntegrationDetailProps) {
               onClick={() =>
                 reloadMutation.mutate(undefined, {
                   onSuccess: () =>
+                    owner.active &&
                     showToast("Reload job queued — check Activity for status", "info"),
-                  onError: () => showToast("Failed to queue reload job", "error"),
+                  onError: () => {
+                    if (owner.active) showToast("Failed to queue reload job", "error");
+                  },
                 })
               }
               disabled={isBusy}

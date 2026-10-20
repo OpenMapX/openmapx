@@ -416,8 +416,15 @@ the file. Exports omit secrets, obsolete/unknown DB fields and read-only fields;
 their optional `exportedAt` and `count` metadata is accepted by import. Empty imports
 are rejected, including an empty export with no saved overrides.
 
-One DB transaction persists the batch, one ordinary full `stack.render` applies
-it, and one normal reload follows. A failed import returns HTTP 409 with
+Validation errors identify bounded entry numbers, known integration/field names
+and public rule categories. They never include supplied values, unknown keys,
+raw schema values or internal validator details.
+
+One DB transaction persists the batch. Before preparing the complete input, the
+API observes the current host revision through typed `configuration.inspect`;
+the initial `stack.render` must still own that revision at activation. A completed
+competing writer causes a conflict, with no automatic mutation retry. One normal
+reload follows a successful apply. A failed import returns HTTP 409 with
 `ok: false`, `phase`, `recovery`, `database`, optional `runtime`, and optional
 `apply`/`compensation` outcome evidence. `recovery: "restored"` is still a failed
 import, not success. `reconciliation_required` means an operator must inspect
@@ -427,6 +434,15 @@ a mutation automatically. No secret-bearing snapshot enters this response.
 Recovery compares each named row's identity and PostgreSQL tuple version in an
 all-or-none transaction. It reverses only those integrations in the full payload
 actually submitted, preserving unrelated changes included during preparation.
+Before using previous DB rows as an inverse, recovery compares their named
+projections against fingerprints from that same authoritative host observation.
+Missing evidence or prior saved/applied divergence returns
+`reason: "previous_applied_not_proven"`, retains the imported DB rows, and requires
+reconciliation without replaying unproven values. The observation exposes no
+configuration values or secrets. An initial host conflict also requires
+reconciliation even if owned DB rows were restored: the competing generation may
+have included some of the imported settings.
+
 Host compensation authenticates `expectedCurrentRevisionId` using the committed
 import revision. A newer host generation conflicts rather than being overwritten.
 After a reload exception, a successful DB/host restoration also needs a recovery
@@ -435,3 +451,9 @@ compensation failure and incomplete cleanup remain explicit reconciliation.
 This is request-local compensation, not a crash-atomic DB/host/runtime transaction;
 process loss can require operator reconciliation. Live PostgreSQL and deployment
 acceptance are separate from provider-independent fixture qualification.
+
+Ordinary browser mutation completion effects capture the executing client and
+integration/credential owner. Replacement origins, identities and unmounted views
+cannot receive old callbacks, input clearing or feedback. Successful work can
+refresh its originating caches. Disposing the view does not cancel accepted host
+work; reload acceptance remains separate from Activity terminal completion.

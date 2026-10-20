@@ -26,6 +26,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { useState } from "react";
 import { useIntegrationAdmin, useIntegrationReload } from "@/lib/admin/integrationAdmin";
+import { useIntegrationMutationOwner } from "@/lib/admin/useIntegrationMutationOwner";
 import { AdminPageHeader } from "../shared/AdminPageHeader";
 import { useAdminToast } from "../shared/AdminToast";
 import { CompactAlert } from "../shared/CompactAlert";
@@ -113,6 +114,7 @@ function attentionHref(item: AttentionItem): string {
 
 export function AdminOverview() {
   const admin = useIntegrationAdmin();
+  const owner = useIntegrationMutationOwner(admin.client);
   const showToast = useAdminToast();
   const [attentionExpanded, setAttentionExpanded] = useState(false);
   const [credentialsExpanded, setCredentialsExpanded] = useState(false);
@@ -121,13 +123,18 @@ export function AdminOverview() {
   const credentialsOverview = useQuery({ ...admin.queries.credentials(), refetchInterval: 60_000 });
 
   const healthSweep = useMutation({
+    mutationKey: ["integration-health-sweep", admin.apiUrl],
     retry: false,
-    mutationFn: admin.healthSweep,
-    onSuccess: () => {
-      showToast("Health checks complete");
-      void admin.refresh();
+    mutationFn: async () => {
+      try {
+        await admin.healthSweep();
+        void admin.refresh();
+        if (owner.active) showToast("Health checks complete");
+      } catch (err) {
+        if (owner.active) showToast("Health check sweep failed", "error");
+        throw err;
+      }
     },
-    onError: () => showToast("Health check sweep failed", "error"),
   });
 
   const reloadMutation = useIntegrationReload();
@@ -194,8 +201,12 @@ export function AdminOverview() {
               startIcon={<RefreshIcon />}
               onClick={() =>
                 reloadMutation.mutate(undefined, {
-                  onSuccess: () => showToast("Reload job queued", "info"),
-                  onError: () => showToast("Reload failed", "error"),
+                  onSuccess: () => {
+                    if (owner.active) showToast("Reload job queued", "info");
+                  },
+                  onError: () => {
+                    if (owner.active) showToast("Reload failed", "error");
+                  },
                 })
               }
               disabled={isBusy}

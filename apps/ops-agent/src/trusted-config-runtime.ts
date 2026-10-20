@@ -60,6 +60,16 @@ async function commitGeneration(
       options.infraDir,
       async (writer) => {
         signal.throwIfAborted();
+        // Observe and compare before any desired-selection side effect, under
+        // the same cross-process fence as CLI preparation and activation.
+        const currentRevisionId = coreServices.currentConfigurationGeneration(options.infraDir);
+        if (operation.expectedCurrentRevisionId !== currentRevisionId)
+          throw new coreServices.ConfigurationGenerationError({
+            outcome: "not_committed",
+            reason: "conflict",
+            currentRevisionId,
+            cleanupFailed: false,
+          });
         const authority = await options.loadAuthority?.();
         if (
           authority &&
@@ -100,9 +110,7 @@ async function commitGeneration(
           input: { ...payload, selectedRoots },
           allowMissingSelected,
           revisionId: operation.revisionId,
-          ...(operation.kind === "stack.render"
-            ? { expectedCurrentRevisionId: operation.expectedCurrentRevisionId }
-            : {}),
+          expectedCurrentRevisionId: operation.expectedCurrentRevisionId,
           beforeCommit: options.beforeCommit,
           afterGenerationRename: options.afterGenerationRename,
           afterCommit: options.afterCommit,
@@ -144,6 +152,12 @@ export function installTrustedConfigurationRuntime(
   runtime: OpsRuntime,
   options: TrustedConfigurationRuntimeOptions,
 ): void {
+  runtime["configuration.inspect"] = (_operation, context) =>
+    coreServices.withConfigurationGenerationWriter(
+      options.infraDir,
+      async () => coreServices.inspectAppliedConfiguration(options.infraDir),
+      context.signal,
+    );
   runtime["stack.render"] = (operation, context) =>
     commitGeneration(
       options,

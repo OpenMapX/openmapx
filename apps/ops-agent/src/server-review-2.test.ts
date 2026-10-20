@@ -66,7 +66,11 @@ describe("reviewed durable admission boundary", () => {
   it("rolls back an authenticated late claim after the claim timeout without admitting a job", async () => {
     let finish!: () => void;
     let rollbacks = 0;
-    const operation = { kind: "stack.render" as const, revisionId: `cfg1_${"t".repeat(43)}` };
+    const operation = {
+      expectedCurrentRevisionId: null,
+      kind: "stack.render" as const,
+      revisionId: `cfg1_${"t".repeat(43)}`,
+    };
     const app = buildOpsAgentServer({
       tokens: { api: apiToken, "data-manager": dataManagerToken },
       claimTimeoutMs: 5,
@@ -114,6 +118,7 @@ describe("reviewed durable admission boundary", () => {
       let retained = true;
       let committed = false;
       const operation = {
+        expectedCurrentRevisionId: null,
         kind: "stack.render" as const,
         revisionId: `cfg1_${"r".repeat(43)}`,
       };

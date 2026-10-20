@@ -14,8 +14,12 @@ import {
 } from "node:fs";
 import { open } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
+import { configurationProjectionFingerprint, type OpsResultFor } from "../ops";
 import type { ConfigurationApplyResult } from "../ops/contract";
-import type { TrustedConfigurationPayload } from "../ops/trusted-config";
+import {
+  type TrustedConfigurationPayload,
+  trustedConfigurationPayloadSchema,
+} from "../ops/trusted-config";
 import {
   GENERATED_SECRETS_DIRNAME,
   type RenderContext,
@@ -516,6 +520,35 @@ export function readAppliedConfiguration(
     serviceConfigs: resolved.serviceConfigs ?? [],
     integrationConfigs: resolved.integrationConfigs ?? [],
     serviceSecrets,
+  };
+}
+
+/** Call under writer ownership so the pointer and its projections are one observation.
+ * Only the resolved integration file is read: service secrets never enter this result.
+ */
+export function inspectAppliedConfiguration(
+  infraDir: string,
+): OpsResultFor<"configuration.inspect"> {
+  const revisionId = currentConfigurationGeneration(infraDir);
+  if (revisionId === null) return { revisionId, integrationConfigDigests: [] };
+  const resolved = JSON.parse(
+    readFileSync(
+      join(infraDir, CONFIGURATION_GENERATIONS, revisionId, RESOLVED_CONFIG_FILE),
+      "utf8",
+    ),
+  );
+  const { integrationConfigs } = trustedConfigurationPayloadSchema.parse({
+    domain: "inspection.invalid",
+    serviceConfigs: [],
+    serviceSecrets: [],
+    integrationConfigs: resolved.integrationConfigs,
+  });
+  return {
+    revisionId,
+    integrationConfigDigests: integrationConfigs.map(({ integrationId, values }) => ({
+      integrationId,
+      digest: configurationProjectionFingerprint(values),
+    })),
   };
 }
 

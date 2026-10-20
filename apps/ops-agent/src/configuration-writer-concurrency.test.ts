@@ -80,6 +80,24 @@ function start(root: string, mode: string, letter = "a", expected = "", hold = "
 }
 const rev = (s: string) => `cfg1_${s.repeat(43)}`;
 describe("overlapping configuration writers", () => {
+  it("rejects a captured initial host snapshot after a separate CLI writer has completed", async () => {
+    const root = fixture();
+    const infra = join(root, "infra/docker");
+    const a = start(root, "ops", "a", "", "captured");
+    await a.wait("held");
+    const cli = start(root, "cli");
+    await cli.wait("done");
+    const completed = coreServices.currentConfigurationGeneration(infra);
+    expect(completed).not.toBeNull();
+    a.release();
+    expect((await a.wait("done")).result).toMatchObject({
+      outcome: "not_committed",
+      reason: "conflict",
+      currentRevisionId: completed,
+    });
+    expect(coreServices.currentConfigurationGeneration(infra)).toBe(completed);
+    expect(coreServices.readAppliedConfiguration(infra).serviceConfigs).toEqual([]);
+  }, 20_000);
   it("holds CLI read/staging and startup cleanup outside a host writer's staging and follow-up interval", async () => {
     const root = fixture();
     const infra = join(root, "infra/docker");

@@ -73,6 +73,7 @@ function fixture() {
       ...hooks,
     });
     const operation = {
+      expectedCurrentRevisionId: coreServices.currentConfigurationGeneration(infraDir),
       kind: "stack.render",
       revisionId: revision(letter),
       ...(expected !== undefined ? { expectedCurrentRevisionId: expected } : {}),
@@ -104,6 +105,138 @@ function fixture() {
   return { root, infraDir, services, apply, label, followUp };
 }
 describe("trusted configuration ownership and outcomes", () => {
+  it.each([
+    "stack.render",
+    "serviceSelection.apply",
+    "serviceConfig.apply",
+    "integrationConfig.apply",
+    "vault.apply",
+  ] as const)(
+    "rejects a captured %s payload after a completed writer before any desired-selection effect",
+    async (kind) => {
+      const f = fixture();
+      await f.apply("a");
+      const capturedRevision = coreServices.currentConfigurationGeneration(f.infraDir);
+      const capturedPayload = {
+        domain: "a.example.test",
+        serviceConfigs: [{ serviceId: "alpha", values: { label: "a" } }],
+        integrationConfigs: [{ integrationId: "demo", values: {} }],
+        serviceSecrets: [{ serviceId: "alpha", values: {} }],
+        ...(kind === "serviceSelection.apply" ? { selectedRoots: [] } : {}),
+      };
+      let release!: () => void;
+      const barrier = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const pending = (async () => {
+        await barrier;
+        const runtime = createUnavailableRuntime();
+        installTrustedConfigurationRuntime(runtime, {
+          services: f.services,
+          integrationSchemas: new Map([["demo", {}]]),
+          infraDir: f.infraDir,
+          env: {},
+        });
+        const operation = {
+          kind,
+          revisionId: revision("c"),
+          expectedCurrentRevisionId: capturedRevision,
+          ...(kind === "serviceConfig.apply" || kind === "vault.apply"
+            ? { serviceId: "alpha" }
+            : {}),
+          ...(kind === "integrationConfig.apply" ? { integrationId: "demo" } : {}),
+        } as OpsOperation;
+        return dispatchOpsOperation(runtime, operation, {
+          signal: new AbortController().signal,
+          emitLog() {},
+          claim: {
+            operation,
+            fingerprint: opsOperationFingerprint(operation),
+            source: "trusted-data",
+            capability: {
+              revisionId: revision("c"),
+              values: {},
+              trustedConfiguration: capturedPayload,
+            },
+          },
+        });
+      })();
+      await f.apply("b");
+      release();
+      expect(await pending).toMatchObject({
+        outcome: "not_committed",
+        reason: "conflict",
+        currentRevisionId: revision("b"),
+      });
+      expect(f.label()).toBe("b");
+      expect(JSON.parse(readFileSync(join(f.infraDir, "service-selection.json"), "utf8"))).toEqual({
+        selected: ["alpha"],
+      });
+    },
+  );
+  it("observes one settled generation under writer ownership without returning values or secrets", async () => {
+    const f = fixture();
+    await f.apply("a");
+    const runtime = createUnavailableRuntime();
+    installTrustedConfigurationRuntime(runtime, {
+      services: f.services,
+      integrationSchemas: new Map(),
+      infraDir: f.infraDir,
+      env: {},
+    });
+    let release!: () => void, held!: () => void;
+    const barrier = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const reached = new Promise<void>((resolve) => {
+      held = resolve;
+    });
+    const writer = coreServices.withConfigurationGenerationWriter(f.infraDir, async (owned) => {
+      await owned.commit({
+        services: f.services,
+        input: {
+          domain: "fixture.invalid",
+          selectedRoots: ["alpha"],
+          serviceConfigs: [],
+          integrationConfigs: [{ integrationId: "demo", values: { label: "previous-applied" } }],
+          serviceSecrets: [],
+        },
+      });
+      held();
+      await barrier;
+    });
+    await bounded(reached);
+    const operation = { kind: "configuration.inspect" as const };
+    let settled = false;
+    const observation = dispatchOpsOperation(runtime, operation, {
+      signal: new AbortController().signal,
+      emitLog() {},
+      claim: {
+        operation,
+        fingerprint: opsOperationFingerprint(operation),
+        source: "registry",
+        capability: { revisionId: "registry", values: {} },
+      },
+    }).then((result) => {
+      settled = true;
+      return result;
+    });
+    try {
+      await delay(40);
+      expect(settled).toBe(false);
+    } finally {
+      release();
+      await writer;
+    }
+    const result = await bounded(observation);
+    expect(result.revisionId).toBe(coreServices.currentConfigurationGeneration(f.infraDir));
+    expect(result.integrationConfigDigests).toEqual([
+      { integrationId: "demo", digest: expect.stringMatching(/^[a-f0-9]{64}$/) },
+    ]);
+    expect(JSON.stringify(result)).not.toContain("previous-applied");
+    expect(result).not.toHaveProperty("serviceConfigs");
+    expect(result).not.toHaveProperty("serviceSecrets");
+  });
   it("distinguishes real pre-pointer and post-pointer failures and releases ownership", async () => {
     const f = fixture();
     await f.apply("a");
@@ -198,13 +331,17 @@ describe("trusted configuration ownership and outcomes", () => {
     expect(coreServices.currentConfigurationGeneration(f.infraDir)).toBeNull();
   });
   it("binds strict expected-current metadata into operation identity", () => {
-    const base = { kind: "stack.render" as const, revisionId: revision("a") };
+    const base = {
+      expectedCurrentRevisionId: null,
+      kind: "stack.render" as const,
+      revisionId: revision("a"),
+    };
     const bound = { ...base, expectedCurrentRevisionId: revision("b") };
     expect(opsOperationSchema.safeParse(bound).success).toBe(true);
     expect(opsOperationFingerprint(bound)).not.toBe(opsOperationFingerprint(base));
-    expect(opsOperationFingerprint({ ...base, expectedCurrentRevisionId: null })).not.toBe(
-      opsOperationFingerprint(base),
-    );
+    expect(
+      opsOperationSchema.safeParse({ kind: base.kind, revisionId: base.revisionId }).success,
+    ).toBe(false);
     for (const value of ["authority-v1", "", 1, {}, false])
       expect(
         opsOperationSchema.safeParse({ ...base, expectedCurrentRevisionId: value }).success,

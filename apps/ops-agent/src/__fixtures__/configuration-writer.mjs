@@ -52,11 +52,24 @@ try {
             ? { afterGenerationRename: barrier }
             : {}),
     });
+    const payload = {
+      domain: `${letter}.example.test`,
+      serviceConfigs: [{ serviceId: "alpha", values: { label: letter } }],
+      integrationConfigs: [],
+      serviceSecrets: [],
+    };
     const operation = {
       kind: "stack.render",
       revisionId: `cfg1_${letter.repeat(43)}`,
-      ...(expected ? { expectedCurrentRevisionId: expected === "null" ? null : expected } : {}),
+      // This synthetic writer captures its initial baseline before entering the
+      // held activation schedule. Explicit values model stale compensation.
+      expectedCurrentRevisionId: expected
+        ? expected === "null"
+          ? null
+          : expected
+        : coreServices.currentConfigurationGeneration(infraDir),
     };
+    if (hold === "captured") await barrier();
     result = await dispatchOpsOperation(runtime, operation, {
       signal: new AbortController().signal,
       emitLog() {},
@@ -67,12 +80,7 @@ try {
         capability: {
           revisionId: operation.revisionId,
           values: {},
-          trustedConfiguration: {
-            domain: `${letter}.example.test`,
-            serviceConfigs: [{ serviceId: "alpha", values: { label: letter } }],
-            integrationConfigs: [],
-            serviceSecrets: [],
-          },
+          trustedConfiguration: payload,
         },
       },
     });

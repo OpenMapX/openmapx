@@ -6,4 +6,5 @@ export type ImportAdminIntegrationConfigs409Reason =
 
 export const ImportAdminIntegrationConfigs409Reason = {
   submitted_snapshot_not_owned: "submitted_snapshot_not_owned",
+  previous_applied_not_proven: "previous_applied_not_proven",
 } as const;

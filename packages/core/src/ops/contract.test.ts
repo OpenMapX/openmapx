@@ -12,6 +12,7 @@ import {
   parseOpsResult,
   redactedOpsError,
 } from "./contract";
+import { configurationProjectionFingerprint } from "./fingerprint";
 
 const issuedAt = "2026-08-23T18:00:00.000Z";
 const expiresAt = "2026-08-23T18:00:20.000Z";
@@ -31,7 +32,12 @@ function request(operation: unknown, extra: Record<string, unknown> = {}) {
 const samples: Record<(typeof OPS_OPERATION_KINDS)[number], OpsOperation> = {
   "docker.status": { kind: "docker.status" },
   "stack.status": { kind: "stack.status" },
-  "stack.render": { kind: "stack.render", revisionId: "config_20260823" },
+  "configuration.inspect": { kind: "configuration.inspect" },
+  "stack.render": {
+    expectedCurrentRevisionId: null,
+    kind: "stack.render",
+    revisionId: "config_20260823",
+  },
   "stack.start": { kind: "stack.start" },
   "stack.stop": { kind: "stack.stop" },
   "service.start": { kind: "service.start", serviceId: "motis" },
@@ -98,21 +104,25 @@ const samples: Record<(typeof OPS_OPERATION_KINDS)[number], OpsOperation> = {
   },
   "extension.remove": { kind: "extension.remove", extensionId: "maps-bundle" },
   "serviceSelection.apply": {
+    expectedCurrentRevisionId: null,
     kind: "serviceSelection.apply",
     revisionId: "selection_20260823",
   },
   "serviceSelection.inspect": { kind: "serviceSelection.inspect" },
   "serviceConfig.apply": {
+    expectedCurrentRevisionId: null,
     kind: "serviceConfig.apply",
     serviceId: "motis",
     revisionId: "config_20260823",
   },
   "integrationConfig.apply": {
+    expectedCurrentRevisionId: null,
     kind: "integrationConfig.apply",
     integrationId: "routing",
     revisionId: "config_20260823",
   },
   "vault.apply": {
+    expectedCurrentRevisionId: null,
     kind: "vault.apply",
     serviceId: "motis",
     revisionId: "vault_20260823",
@@ -170,6 +180,22 @@ const samples: Record<(typeof OPS_OPERATION_KINDS)[number], OpsOperation> = {
   },
   "gbfsCatalogLock.inspect": { kind: "gbfsCatalogLock.inspect" },
 };
+
+it("compares projections independent of object ordering while preserving array and value identity", () => {
+  const digest = configurationProjectionFingerprint({
+    label: "before",
+    nested: { a: 1, b: [true, false] },
+  });
+  expect(
+    configurationProjectionFingerprint({ nested: { b: [true, false], a: 1 }, label: "before" }),
+  ).toBe(digest);
+  expect(
+    configurationProjectionFingerprint({ label: "after", nested: { a: 1, b: [true, false] } }),
+  ).not.toBe(digest);
+  expect(
+    configurationProjectionFingerprint({ label: "before", nested: { a: 1, b: [false, true] } }),
+  ).not.toBe(digest);
+});
 
 describe("ops contract", () => {
   it.each([

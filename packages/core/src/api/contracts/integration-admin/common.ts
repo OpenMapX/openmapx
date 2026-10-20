@@ -242,6 +242,6 @@ export const adminIntegrationImportFailureSchema = z.strictObject({
   runtime: z.enum(["unchanged", "unknown", "restored"]).optional(),
   apply: importApplyEvidenceSchema.optional(),
   compensation: importApplyEvidenceSchema.optional(),
-  reason: z.literal("submitted_snapshot_not_owned").optional(),
+  reason: z.enum(["submitted_snapshot_not_owned", "previous_applied_not_proven"]).optional(),
 });
 export type AdminIntegrationImportFailure = z.infer<typeof adminIntegrationImportFailureSchema>;
