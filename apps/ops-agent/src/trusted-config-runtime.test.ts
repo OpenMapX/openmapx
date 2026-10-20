@@ -206,6 +206,7 @@ describe("ops-agent trusted configuration runtime", () => {
       claim: trusted,
     });
     expect(readFileSync(paths.compose, "utf8")).toContain(
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: Assert the literal Compose interpolation emitted for the container.
       "PUBLIC_SETTING: ${SERVICE_ALPHA_PUBLIC_SETTING:-}",
     );
   });

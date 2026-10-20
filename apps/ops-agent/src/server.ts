@@ -409,6 +409,9 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
     job.eventBytes += bytes;
   };
 
+  const outwardStateFor = (job: JobRecord): OpsJobState =>
+    configurationResultsSettling.has(job.operationId) ? "running" : job.state;
+
   const transition = async (
     job: JobRecord,
     state: OpsJobState,
@@ -427,10 +430,7 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
       pushEvent(job, {
         cursor: job.cursor,
         type: "state",
-        state:
-          configurationResultsSettling.has(job.operationId) && state === "succeeded"
-            ? "running"
-            : state,
+        state: outwardStateFor(job),
       });
     });
   };
@@ -471,7 +471,7 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
     operationKey: job.operationKey,
     kind: job.operation.kind,
     resourceId: job.resourceId,
-    state: configurationResultsSettling.has(job.operationId) ? "running" : job.state,
+    state: outwardStateFor(job),
     submittedAt: job.submittedAt,
     updatedAt: job.updatedAt,
     ...(job.terminationRequestedAt === undefined
@@ -763,7 +763,7 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
               operationId: existing.operationId,
               operationKey: existing.operationKey,
               kind: existing.operation.kind,
-              state: existing.state,
+              state: outwardStateFor(existing),
             }),
           );
         }
@@ -906,7 +906,7 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
               operationId: admission.job.operationId,
               operationKey: admission.job.operationKey,
               kind: admission.job.operation.kind,
-              state: admission.job.state,
+              state: outwardStateFor(admission.job),
             }),
           );
         }
@@ -931,7 +931,7 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
             operationId: job.operationId,
             operationKey: job.operationKey,
             kind: job.operation.kind,
-            state: job.state,
+            state: outwardStateFor(job),
           }),
         );
       }

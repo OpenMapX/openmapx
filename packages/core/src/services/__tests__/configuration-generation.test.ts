@@ -210,6 +210,7 @@ describe("desired selection", () => {
     });
   });
 
+  // biome-ignore lint/suspicious/noTemplateCurlyInString: The test name documents literal Compose default-value syntax.
   it("treats an override that names no service as unset, as `${VAR:-}` passes an unset one", () => {
     const { infraDir } = checkout();
     writeServiceSelectionFile(infraDir, ["valhalla"]);

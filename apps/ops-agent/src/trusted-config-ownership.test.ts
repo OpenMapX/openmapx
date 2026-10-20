@@ -24,6 +24,19 @@ const roots: string[] = [];
 afterEach(() => {
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
 });
+async function bounded<T>(promise: Promise<T>): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<never>((_resolve, reject) => {
+        timer = setTimeout(() => reject(new Error("transaction barrier timed out")), 3_000);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
 const revision = (letter: string) => `cfg1_${letter.repeat(43)}`;
 function fixture() {
   const root = mkdtempSync(join(tmpdir(), "openmapx-ownership-"));
@@ -200,7 +213,7 @@ describe("trusted configuration ownership and outcomes", () => {
 });
 
 describe("authenticated conditional configuration admission", () => {
-  it.each(["cleanup", "cancellation", "journal"] as const)(
+  it.each(["success", "cleanup", "cancellation", "journal"] as const)(
     "retains actual commit evidence after %s failure and deduplicates repeated operation identity",
     async (fault) => {
       const f = fixture();
@@ -235,6 +248,12 @@ describe("authenticated conditional configuration admission", () => {
           if (fault === "cleanup") throw new Error("synthetic terminal-link fault");
         },
       });
+      const raceAdmission = fault === "success" || fault === "cleanup";
+      const claimEntered = Promise.withResolvers<void>();
+      const returnClaim = Promise.withResolvers<void>();
+      const cleanupEntered = Promise.withResolvers<void>();
+      const returnCleanup = Promise.withResolvers<void>();
+      let holdFirstClaim = raceAdmission;
       let released = false;
       let terminalDurableAtRelease = false;
       let interimResultHidden = false;
@@ -251,6 +270,11 @@ describe("authenticated conditional configuration admission", () => {
           claim: async (...args) => {
             const resolved = await fileSource.claim(...args);
             if (!resolved || !("admission" in resolved)) return resolved;
+            if (holdFirstClaim) {
+              holdFirstClaim = false;
+              claimEntered.resolve();
+              await returnClaim.promise;
+            }
             return {
               ...resolved,
               admission: {
@@ -267,6 +291,10 @@ describe("authenticated conditional configuration admission", () => {
                     })
                   ).json().result;
                   interimResultHidden = interim.state === "running" && interim.result === undefined;
+                  if (raceAdmission) {
+                    cleanupEntered.resolve();
+                    await returnCleanup.promise;
+                  }
                   try {
                     await resolved.admission.release();
                   } finally {
@@ -323,9 +351,45 @@ describe("authenticated conditional configuration admission", () => {
           expectedCurrentRevisionId: `cfg1_${"x".repeat(43)}`,
         } as OpsOperation);
         expect(tampered.statusCode).toBe(403);
+        // The first request passes the early lookup and holds a real authenticated
+        // claim. The second creates the job; resuming the first exercises raced
+        // admission after the durable result exists but before cleanup settles.
+        const raced = raceAdmission ? submit(sealed.operation).then((response) => response) : null;
+        if (raceAdmission) await bounded(claimEntered.promise);
         const first = await submit(sealed.operation);
         expect(first.statusCode).toBe(202);
         const id = first.json().result.operationId;
+        if (raceAdmission) {
+          await bounded(cleanupEntered.promise);
+          returnClaim.resolve();
+          const racedAck = await raced;
+          const duplicateAck = await submit(sealed.operation);
+          for (const ack of [racedAck, duplicateAck]) {
+            expect(ack?.statusCode).toBe(202);
+            expect.soft(ack?.json().result).toMatchObject({ operationId: id, state: "running" });
+          }
+          const status = (
+            await app.inject({
+              method: "GET",
+              url: `/v1/operations/${id}`,
+              headers: { authorization: `Bearer ${token}` },
+            })
+          ).json().result;
+          expect(status.state).toBe("running");
+          expect(status.result).toBeUndefined();
+          const events = (
+            await app.inject({
+              method: "GET",
+              url: `/v1/operations/${id}/events?after=0&limit=100`,
+              headers: { authorization: `Bearer ${token}` },
+            })
+          ).json().result.events;
+          expect(
+            events.filter((event: { type: string }) => event.type === "state").at(-1).state,
+          ).toBe("running");
+          expect(released).toBe(false);
+          returnCleanup.resolve();
+        }
         if (fault === "cancellation") {
           const enteredDeadline = performance.now() + 3_000;
           while (executions === 0 && performance.now() < enteredDeadline) await delay(10);
@@ -369,7 +433,7 @@ describe("authenticated conditional configuration admission", () => {
           result: {
             outcome: "committed",
             revisionId: sealed.revisionId,
-            cleanupFailed: fault !== "cancellation",
+            cleanupFailed: fault === "cleanup" || fault === "journal",
           },
         });
         expect(terminalDurableAtRelease).toBe(fault !== "journal");
@@ -378,7 +442,7 @@ describe("authenticated conditional configuration admission", () => {
         expect(f.label()).toBe("a");
         await f.apply("b");
         const replay = await submit(sealed.operation);
-        expect(replay.json().result.operationId).toBe(id);
+        expect(replay.json().result).toMatchObject({ operationId: id, state: "succeeded" });
         expect(executions).toBe(1);
         expect(f.label()).toBe("b");
         const changed = await submit({
@@ -387,6 +451,8 @@ describe("authenticated conditional configuration admission", () => {
         } as OpsOperation);
         expect(changed.statusCode).toBe(409);
       } finally {
+        returnClaim.resolve();
+        returnCleanup.resolve();
         finish();
         await app.close();
       }
