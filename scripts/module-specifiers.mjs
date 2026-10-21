@@ -38,7 +38,10 @@ function isImportMeta(node, property) {
  *   `createRequire(import.meta.url)`, with the source range of the literal;
  * - `locationSensitive`: any other use of `import.meta` (`url`, `dirname`,
  *   `resolve`, `main`, …) or of `__dirname`/`__filename`, which means
- *   something different once the module is bundled.
+ *   something different once the module is bundled;
+ * - `topLevelStatements`: statements the module runs when it is imported,
+ *   other than imports, exports, declarations and directives (`"use client"`).
+ *   Variable initializers are not listed.
  */
 export function analyzeModule(file, text) {
   const source = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true);
@@ -137,6 +140,28 @@ export function analyzeModule(file, text) {
     ts.forEachChild(node, visit);
   };
   visit(source);
+  const topLevelStatements = [];
+  for (const statement of source.statements) {
+    if (
+      ts.isImportDeclaration(statement) ||
+      ts.isExportDeclaration(statement) ||
+      ts.isExportAssignment(statement) ||
+      ts.isImportEqualsDeclaration(statement) ||
+      ts.isVariableStatement(statement) ||
+      ts.isFunctionDeclaration(statement) ||
+      ts.isClassDeclaration(statement) ||
+      ts.isInterfaceDeclaration(statement) ||
+      ts.isTypeAliasDeclaration(statement) ||
+      ts.isEnumDeclaration(statement) ||
+      ts.isModuleDeclaration(statement) ||
+      ts.isEmptyStatement(statement) ||
+      (ts.isExpressionStatement(statement) && ts.isStringLiteral(statement.expression))
+    ) {
+      continue;
+    }
+    const { line } = source.getLineAndCharacterOfPosition(statement.getStart(source));
+    topLevelStatements.push(`line ${line + 1}`);
+  }
   const localRequires = [];
   for (const identifier of identifierUses) {
     if (!localRequireBindings.has(identifier.text) || bindingDeclarations.has(identifier)) continue;
@@ -157,5 +182,12 @@ export function analyzeModule(file, text) {
       );
     }
   }
-  return { specifiers, computedImport, assetUrls, localRequires, locationSensitive };
+  return {
+    specifiers,
+    computedImport,
+    assetUrls,
+    localRequires,
+    locationSensitive,
+    topLevelStatements,
+  };
 }

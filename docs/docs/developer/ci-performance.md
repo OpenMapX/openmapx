@@ -122,8 +122,9 @@ writer and offline package extractor worker threads.
 A bundle evaluates all of its npm imports before any bundled code, so an import of
 another entry's source loads that entry's output as its own module. data-manager's
 `index.mjs` imports `undici-fetch.mjs` and then `service.mjs`: the fetch globals
-are replaced before any module of the service is evaluated, as under tsx. `scripts/build-runtime-bundles.mjs` bundles an
-image's own code and the workspace code it reaches with esbuild:
+are replaced before any module of the service is evaluated, as under tsx.
+`scripts/build-runtime-bundles.mjs` bundles an image's own code and the
+workspace code it reaches with esbuild:
 
 - npm packages stay installed in the image, but every import is pinned. The script
   resolves it from the importing package's location with Node's conditions and
@@ -136,8 +137,17 @@ image's own code and the workspace code it reaches with esbuild:
   only when the entry is TypeScript source, in development and tests.
   A `require` created with `createRequire(import.meta.url)` may only be called with
   literal specifiers, which are pinned like imports.
+- Workspace modules are treated as side-effect free. A module none of whose
+  exports the bundle uses is left out, with the dependencies only it imports, so
+  editing code a bundle does not use leaves the bundle unchanged. A module whose
+  top-level code must run on import is an entry or is listed in its bundle's
+  `sideEffectModules` (data-manager: its database module, which checks the
+  production database secret). The build rejects any other module that runs
+  top-level statements besides declarations, so the list cannot fall behind.
+  It also rejects a listed module the bundle no longer includes.
 - A computed `import()` or `require()`, any other use of `import.meta` or the
-  module's location, and any esbuild warning fail the build.
+  module's location, and any esbuild warning fail the build. Among the warnings
+  is a bare `import "…"` of a module not in `sideEffectModules`.
 - The output is byte-identical across builds and checkout locations.
 
 The release planner fingerprints a bundled image by its bundle digest instead of
@@ -149,15 +159,20 @@ The plan job builds the bundles. A release build passes the planned digest as
 Pull-request image builds do not pass it, because their jobs have no workspace
 install, so a difference between the image's partial install and the full one
 only surfaces in the release build on main.
-The runner checks that every pinned dependency file exists in its production
-install. `check-dockerfile-workspace-sync` builds every bundle, checks that the
-`bundle` stage copies every file the bundle reads (sources, assets and
-tsconfig files), and rejects a bundled runner that copies workspace source.
+`runtime-externals.json` lists the dependency files the output loads, and the
+runner checks that each exists in its production install.
+`check-dockerfile-workspace-sync` builds every bundle, checks that the `bundle`
+stage copies every file the bundle reads (sources, assets and tsconfig files),
+and rejects a bundled runner that copies workspace source.
 
 Over the 200 main commits before this change, bundles would have rebuilt
 transitous-runner 24 times instead of 97 (its bundle never changed; the rest are
 Dockerfile, workflow and dependency changes), ops-agent 57 times instead of 106
-and data-manager 58 times instead of 118.
+and data-manager 58 times instead of 118. Leaving unused workspace modules out
+brings the replay to an estimated 44 for ops-agent and 47 for data-manager. It
+also makes the bundles smaller: the ops-agent CLI goes from 1.0 MB to 0.73 MB,
+data-manager's service from 1.38 MB to 1.17 MB, and its traffic worker from
+254 kB to 27 kB.
 
 Changesets excludes package-root `Dockerfile` edits from release detection;
 these private deployment-image changes do not need empty package notes. Source,

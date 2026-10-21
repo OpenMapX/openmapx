@@ -279,6 +279,72 @@ describe("runtime bundles", () => {
     await expect(buildRuntimeBundle(root, "fixture", config)).rejects.toThrow(message);
   });
 
+  it("leaves out workspace modules whose exports are unused, with their dependencies", async () => {
+    const files = (other: string) => ({
+      "node_modules/right-pad/package.json": JSON.stringify({
+        name: "right-pad",
+        main: "index.js",
+      }),
+      "node_modules/right-pad/index.js": 'module.exports = (value) => value + " ";',
+      "lib/src/index.ts": 'export * from "./tools";\nexport * from "./other";',
+      "lib/src/other.ts": `import pad from "right-pad";\nexport const other = () => pad("${other}");`,
+      "app/src/main.ts": 'import { used } from "../../lib/src/index";\nconsole.log(used());',
+    });
+    const bundle = await buildRuntimeBundle(workspace(files("a")), "fixture", config);
+    expect(text(bundle, "main.mjs")).not.toContain("right-pad");
+    expect(JSON.parse(text(bundle, EXTERNALS_MANIFEST))).toEqual([]);
+    const edited = await buildRuntimeBundle(workspace(files("b")), "fixture", config);
+    expect(edited.digest).toBe(bundle.digest);
+  });
+
+  it("requires modules that run code when imported to be listed", async () => {
+    const files = {
+      "lib/src/tools.ts": 'export const used = () => "used";\nconsole.log("loaded");',
+    };
+    await expect(buildRuntimeBundle(workspace(files), "fixture", config)).rejects.toThrow(
+      "lib/src/tools.ts: runs code when imported (line 2)",
+    );
+    const listed = await buildRuntimeBundle(workspace(files), "fixture", {
+      ...config,
+      sideEffectModules: ["lib/src/tools.ts"],
+    });
+    expect(text(listed, "main.mjs")).toContain('console.log("loaded")');
+    // Directives and declarations are not code that runs on import.
+    const declarations = await buildRuntimeBundle(
+      workspace({ "lib/src/tools.ts": '"use client";\nexport const used = () => "used";' }),
+      "fixture",
+      config,
+    );
+    expect(text(declarations, "main.mjs")).toContain('"used"');
+  });
+
+  it("keeps a listed module's bare import and rejects an unlisted or unused listing", async () => {
+    const files = {
+      "lib/src/setup.ts": "globalThis.configured = true;",
+      "app/src/main.ts": 'import "../../lib/src/setup";\nconsole.log(globalThis.configured);',
+    };
+    const listed = await buildRuntimeBundle(workspace(files), "fixture", {
+      ...config,
+      sideEffectModules: ["lib/src/setup.ts"],
+    });
+    expect(text(listed, "main.mjs")).toContain("globalThis.configured = true");
+    await expect(
+      buildRuntimeBundle(
+        workspace({ ...files, "lib/src/setup.ts": "export {};" }),
+        "fixture",
+        config,
+      ),
+    ).rejects.toThrow("marked as having no side effects");
+    await expect(
+      buildRuntimeBundle(workspace(), "fixture", {
+        ...config,
+        sideEffectModules: ["lib/src/tools.ts", "lib/src/missing.ts"],
+      }),
+    ).rejects.toThrow(
+      "sideEffectModules lists lib/src/missing.ts, which the bundle does not include",
+    );
+  });
+
   it("builds every repository bundle deterministically", async () => {
     const root = resolve(import.meta.dirname, "..");
     for (const image of Object.keys(RUNTIME_BUNDLES)) {

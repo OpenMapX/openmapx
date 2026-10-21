@@ -24,6 +24,15 @@ import { analyzeModule } from "./module-specifiers.mjs";
  * path relative to the output directory. Bundled code therefore loads the same
  * dependency files as before, and the bundle bytes record which ones.
  *
+ * Bundled workspace modules are treated as side-effect free: a module none of
+ * whose exports a bundle uses is left out of it, so a change to unused code
+ * does not change the bundle. A module whose top-level code must run when it
+ * is imported is an entry or is listed in its bundle's `sideEffectModules`
+ * (variable initializers are not checked: plain calls there, such as
+ * `z.object(…)`, are dropped with an unused module); the build rejects
+ * any other module that runs top-level statements, and a bare `import "…"` of
+ * an unlisted module (esbuild warns that it does nothing).
+ *
  * The output is deterministic, so the release planner fingerprints an image by
  * its bundle instead of by every source file the bundle might include.
  */
@@ -51,6 +60,10 @@ export const RUNTIME_BUNDLES = {
       "extractor-worker": "services/data-manager/src/offline-packages/extractor-worker.ts",
       "undici-fetch": "packages/core/src/undici-fetch.ts",
     },
+    sideEffectModules: [
+      // Refuses a production database URL without a secret before any query.
+      "services/data-manager/src/db/index.ts",
+    ],
   },
   "transitous-runner": {
     tsconfig: "apps/transitous-runner/tsconfig.json",
@@ -124,17 +137,20 @@ export async function buildRuntimeBundle(root, image, config = RUNTIME_BUNDLES[i
   const entryNames = new Map(
     Object.entries(config.entries).map(([name, entry]) => [join(absoluteRoot, entry), name]),
   );
-  const externals = new Set();
+  const pinnedRequires = new Map();
   const assets = new Map();
   const sources = new Set();
   const problems = [];
-
+  const sideEffectModules = new Set(
+    (config.sideEffectModules ?? []).map((path) => join(absoluteRoot, path)),
+  );
   // Bundled code is evaluated after every npm import of its bundle. An import
   // of another entry's source therefore loads that entry's output as its own
   // module, which keeps its place in the evaluation order.
   const workspaceModule = (path) => {
     const entry = entryNames.get(path);
-    return entry ? { path: `./${entry}.mjs`, external: true } : { path };
+    if (entry) return { path: `./${entry}.mjs`, external: true };
+    return sideEffectModules.has(path) ? { path } : { path, sideEffects: false };
   };
 
   const runtimePlugin = {
@@ -177,9 +193,7 @@ export async function buildRuntimeBundle(root, image, config = RUNTIME_BUNDLES[i
         if (WORKSPACE.test(args.path) || !resolved.path.split(sep).includes("node_modules")) {
           return workspaceModule(resolved.path);
         }
-        const pinned = posixRelative(outdir, resolved.path);
-        externals.add(pinned);
-        return { path: pinned, external: true };
+        return { path: posixRelative(outdir, resolved.path), external: true };
       });
       context.onLoad({ filter: SOURCE }, async (args) => {
         if (args.path.split(sep).includes("node_modules")) return undefined;
@@ -194,6 +208,15 @@ export async function buildRuntimeBundle(root, image, config = RUNTIME_BUNDLES[i
         }
         for (const use of facts.locationSensitive) {
           problems.push(`${file}: ${use} refers to the source location, not the bundle`);
+        }
+        if (
+          facts.topLevelStatements.length > 0 &&
+          !entryNames.has(args.path) &&
+          !sideEffectModules.has(args.path)
+        ) {
+          problems.push(
+            `${file}: runs code when imported (${facts.topLevelStatements.join(", ")}); move it into a function, or list the module in the bundle's sideEffectModules`,
+          );
         }
         const replacements = [];
         // Copy each literal `new URL("…", import.meta.url)` asset next to the
@@ -236,7 +259,7 @@ export async function buildRuntimeBundle(root, image, config = RUNTIME_BUNDLES[i
             continue;
           }
           const pinned = posixRelative(outdir, resolved.path);
-          externals.add(pinned);
+          pinnedRequires.set(args.path, [...(pinnedRequires.get(args.path) ?? []), pinned]);
           replacements.push({ ...call, text: pinned });
         }
         if (replacements.length === 0) return undefined;
@@ -276,11 +299,34 @@ export async function buildRuntimeBundle(root, image, config = RUNTIME_BUNDLES[i
       js: 'import { createRequire as __openmapxCreateRequire } from "node:module";\nconst require = __openmapxCreateRequire(import.meta.url);',
     },
     write: false,
+    metafile: true,
     logLevel: "silent",
     plugins: [runtimePlugin],
   });
   for (const warning of result.warnings) {
     problems.push(`${warning.location?.file ?? image}: ${warning.text}`);
+  }
+  // Only the dependency files the output loads: those of modules left out of
+  // every bundle need not be installed and do not change the digest.
+  const externals = new Set();
+  const included = new Set();
+  for (const output of Object.values(result.metafile.outputs)) {
+    for (const imported of output.imports) {
+      if (imported.external && !BUILTINS.has(imported.path)) externals.add(imported.path);
+    }
+    for (const [input, { bytesInOutput }] of Object.entries(output.inputs)) {
+      if (bytesInOutput === 0) continue;
+      included.add(join(absoluteRoot, input));
+      for (const pinned of pinnedRequires.get(join(absoluteRoot, input)) ?? []) {
+        externals.add(pinned);
+      }
+    }
+  }
+
+  for (const path of config.sideEffectModules ?? []) {
+    if (!included.has(join(absoluteRoot, path))) {
+      problems.push(`sideEffectModules lists ${path}, which the bundle does not include`);
+    }
   }
   if (problems.length > 0) {
     throw new Error(`Runtime bundle ${image} rejected:\n  ${problems.join("\n  ")}`);

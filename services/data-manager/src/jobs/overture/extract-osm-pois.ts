@@ -12,12 +12,11 @@ import { assertValidOvertureSchema } from "./schema.js";
 
 export type { OsmFilter };
 
-const osmTagMap = new Map<string, string>();
-for (const [catId, filters] of Object.entries(CATEGORY_FILTERS)) {
-  for (const { key, value } of filters) {
-    osmTagMap.set(`${key}=${value}`, catId);
-  }
-}
+const osmTagMap = new Map<string, string>(
+  Object.entries(CATEGORY_FILTERS).flatMap(([catId, filters]) =>
+    filters.map(({ key, value }): [string, string] => [`${key}=${value}`, catId]),
+  ),
+);
 
 /**
  * Maps a set of OSM tags to the first matching OpenMapX category, using the
