@@ -2,11 +2,14 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
+import { parseAllDocuments } from "yaml";
 import { computePrivacySourceFingerprint } from "../apps/api/privacy-source-fingerprint.mjs";
 import {
+  coversPath,
   createReleasePlan,
   dockerInputs,
   imageFingerprint,
+  lockfileSubgraph,
   selectChangedTargets,
   targets,
   trackedTree,
@@ -70,7 +73,40 @@ describe("Dockerfile build input coverage", () => {
         'FROM scratch\nCOPY --chown=1:1 package.json pnpm-lock.yaml /app/\nCOPY ["apps/web/", "/app/"]\nCOPY --exclude=*/package.json packages/ /app/\nCOPY assets/*.png /assets/\nCOPY --from=build /app /runtime\n',
         ".",
       ),
-    ).toEqual(["package.json", "pnpm-lock.yaml", "apps/web", "packages", "assets"]);
+    ).toEqual(["package.json", "pnpm-lock.yaml", "apps/web", "packages", "assets/*.png"]);
+  });
+  it("treats the build workflow and the planner's own code as inputs of every image, not ci.yml", () => {
+    const readDockerfile = (path: string) =>
+      readFileSync(resolve(import.meta.dirname, "..", path), "utf8");
+    for (const [path, expected] of [
+      [".github/workflows/docker.yml", 7],
+      ["scripts/docker-release-plan.mjs", 7],
+      ["scripts/docker-inputs.mjs", 7],
+      [".github/workflows/ci.yml", 0],
+    ] as const) {
+      const selected = selectChangedTargets({
+        changedPaths: [path],
+        readDockerfile,
+        candidates: targets,
+      });
+      expect(selected, path).toHaveLength(expected);
+    }
+  });
+  it("covers only the files a glob matches, and everything below a matched directory", () => {
+    const inputs = dockerInputs(
+      "COPY --parents packages/*/package.json ./\nCOPY --parents packages/core/ ./\nCOPY a/[ab].txt /b/\n",
+      ".",
+    );
+    expect(inputs).toEqual(["packages/*/package.json", "packages/core", "a"]);
+    expect(coversPath(inputs, "packages/web/package.json")).toBe(true);
+    expect(coversPath(inputs, "packages/web/src/index.ts")).toBe(false);
+    expect(coversPath(inputs, "packages/core/src/index.ts")).toBe(true);
+    expect(coversPath(inputs, "packages/package.json")).toBe(false);
+    expect(coversPath(["apps/*"], "apps/web/src/page.tsx")).toBe(true);
+    expect(coversPath(["file?.txt"], "file1.txt")).toBe(true);
+    expect(coversPath(["file?.txt"], "file12.txt")).toBe(false);
+    expect(coversPath(["a.b"], "aXb")).toBe(false);
+    expect(coversPath(["a.*"], "aXb")).toBe(false);
   });
   it.each([
     // biome-ignore lint/suspicious/noTemplateCurlyInString: Docker build argument syntax.
@@ -103,6 +139,21 @@ describe("Dockerfile build input coverage", () => {
           readFileSync(resolve(import.meta.dirname, "..", path), "utf8"),
       }),
     ).toContain("privacy-backup");
+  });
+  it.each([
+    ["packages/brands/src/index.ts", ["api", "web"]],
+    ["packages/brands/package.json", ["api", "web"]],
+    ["services/data-manager/src/jobs/example.ts", ["api", "data-manager"]],
+    ["services/data-manager/src/transitous-lock.ts", ["api", "data-manager", "ops-agent"]],
+  ])("rebuilds only the images that copy %s", (changed, expected) => {
+    expect(
+      selectChangedTargets({
+        changedPaths: [changed],
+        readDockerfile: (path: string) =>
+          readFileSync(resolve(import.meta.dirname, "..", path), "utf8"),
+        candidates: targets,
+      }),
+    ).toEqual(expected);
   });
 });
 
@@ -381,7 +432,183 @@ describe("selective release planning", () => {
     ).toEqual([]);
 
     const sources = dockerInputs(actual.readDockerfile("apps/transitous-runner/Dockerfile"), ".");
-    expect(sources).toContain("packages");
+    expect(sources).toContain("packages/core");
+    expect(sources).not.toContain("packages");
     expect(sources).toContain("services/motis/tools/transitous/requirements.txt");
+  });
+});
+
+describe("lockfile contribution to image fingerprints", () => {
+  const lockfileText = (
+    overrides: { webVersion?: string; agentVersion?: string; settings?: string } = {},
+  ) => `---
+lockfileVersion: '9.0'
+
+importers:
+
+  .:
+    packageManagerDependencies:
+      pnpm:
+        specifier: 12.11.2
+        version: 12.11.2
+
+packages:
+
+  pnpm@12.11.2:
+    resolution: {integrity: sha512-pnpm}
+
+snapshots:
+
+  pnpm@12.11.2: {}
+
+---
+lockfileVersion: '9.0'
+
+settings:
+  autoInstallPeers: ${overrides.settings ?? "true"}
+
+importers:
+
+  .:
+    devDependencies:
+      typescript:
+        specifier: ^6.0.0
+        version: 6.0.3
+
+  apps/agent:
+    dependencies:
+      '@openmapx/core':
+        specifier: workspace:^
+        version: link:../../packages/core
+      fastify:
+        specifier: ^5.0.0
+        version: ${overrides.agentVersion ?? "5.1.0"}
+
+  apps/web:
+    dependencies:
+      next:
+        specifier: ^16.0.0
+        version: ${overrides.webVersion ?? "16.0.0(react@19.0.0)"}
+
+  packages/core:
+    dependencies:
+      zod:
+        specifier: ^4.0.0
+        version: 4.1.0
+      string-width-cjs:
+        specifier: npm:string-width@^4.2.3
+        version: string-width@4.2.3
+
+packages:
+
+  fastify@5.1.0:
+    resolution: {integrity: sha512-fastify510}
+
+  fastify@5.2.0:
+    resolution: {integrity: sha512-fastify520}
+
+  next@16.0.0:
+    resolution: {integrity: sha512-next}
+
+  next@16.1.0:
+    resolution: {integrity: sha512-next161}
+
+  react@19.0.0:
+    resolution: {integrity: sha512-react}
+
+  string-width@4.2.3:
+    resolution: {integrity: sha512-sw}
+
+  typescript@6.0.3:
+    resolution: {integrity: sha512-ts}
+
+  zod@4.1.0:
+    resolution: {integrity: sha512-zod}
+
+  zod@4.2.0:
+    resolution: {integrity: sha512-zod420}
+
+snapshots:
+
+  fastify@5.1.0: {}
+
+  fastify@5.2.0: {}
+
+  next@16.0.0(react@19.0.0):
+    dependencies:
+      react: 19.0.0
+
+  next@16.1.0(react@19.0.0):
+    dependencies:
+      react: 19.0.0
+
+  react@19.0.0: {}
+
+  string-width@4.2.3: {}
+
+  typescript@6.0.3: {}
+
+  zod@4.1.0: {}
+
+  zod@4.2.0: {}
+`;
+  const documents = (text: string) => parseAllDocuments(text).map((document) => document.toJS());
+  const agent = (importer: string) => [".", "apps/agent"].includes(importer);
+
+  it("ignores dependency changes in importers the image does not install", () => {
+    const base = lockfileSubgraph(documents(lockfileText()), agent);
+    expect(
+      lockfileSubgraph(documents(lockfileText({ webVersion: "16.1.0(react@19.0.0)" })), agent),
+    ).toBe(base);
+  });
+
+  it("changes when a dependency the image installs changes, directly or through a workspace link", () => {
+    const base = lockfileSubgraph(documents(lockfileText()), agent);
+    expect(lockfileSubgraph(documents(lockfileText({ agentVersion: "5.2.0" })), agent)).not.toBe(
+      base,
+    );
+    // packages/core is not selected itself; the image reaches it through its link.
+    const linked = lockfileText().replace("        version: 4.1.0\n", "        version: 4.2.0\n");
+    expect(lockfileSubgraph(documents(linked), agent)).not.toBe(base);
+    const missing = lockfileText().replace(
+      "version: 4.1.0\n",
+      "version: 4.1.0\n      extra:\n        specifier: ^1.0.0\n        version: 1.0.0\n",
+    );
+    expect(() => lockfileSubgraph(documents(missing), agent)).toThrow(
+      "Missing snapshot extra@1.0.0",
+    );
+    expect(lockfileSubgraph(documents(lockfileText({ settings: "false" })), agent)).not.toBe(base);
+  });
+
+  it("falls back to the whole lockfile when it cannot follow an entry", () => {
+    const tree = [
+      { path: "apps/agent/src/index.ts", mode: "100644", oid: "1".repeat(40) },
+      { path: "pnpm-lock.yaml", mode: "100644", oid: "2".repeat(40) },
+    ];
+    const target = { app: "agent", context: ".", dockerfile: "Dockerfile" };
+    const readDockerfile = () =>
+      "FROM scratch\nCOPY package.json pnpm-lock.yaml ./\nCOPY apps/agent/ /app\n";
+    const fallbacks: string[] = [];
+    const fingerprint = (text: string, oid = "2".repeat(40)) =>
+      imageFingerprint({
+        target,
+        tree: tree.map((entry) => (entry.path === "pnpm-lock.yaml" ? { ...entry, oid } : entry)),
+        readDockerfile,
+        privacyFingerprint: privacy,
+        lockfile: { documents: documents(text) },
+        onLockfileFallback: (app: string) => fallbacks.push(app),
+      });
+    const base = fingerprint(lockfileText());
+    expect(fingerprint(lockfileText({ webVersion: "16.1.0(react@19.0.0)" }), "3".repeat(40))).toBe(
+      base,
+    );
+    expect(fallbacks).toEqual([]);
+    expect(fingerprint("lockfileVersion: '9.0'\n", "4".repeat(40))).not.toBe(base);
+    expect(fallbacks).toEqual(["agent"]);
+  });
+
+  it("follows every snapshot of the repository's lockfile", () => {
+    const text = readFileSync(resolve(import.meta.dirname, "../pnpm-lock.yaml"), "utf8");
+    expect(() => lockfileSubgraph(documents(text), () => true)).not.toThrow();
   });
 });
