@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import {
   type ConfigurationApplyResult,
   type OpsOperation,
@@ -5,10 +7,16 @@ import {
   type TrustedConfigurationPayload,
 } from "@openmapx/core/ops";
 import { services as coreServices } from "@openmapx/core/server";
+import { applyHardlinkPlan, type HardlinkEntry } from "@openmapx/hardlinks";
 import type { OpsRuntime, OpsTrustedClaim } from "./runtime";
 
 const FAILED = "Trusted configuration apply failed";
-type TrustedConfigurationOperation = Extract<OpsOperation, { revisionId: string }>;
+const LINK_FAILED = "Configuration hardlinks could not be applied";
+const LINK_STALE = "Another configuration was applied before its hardlinks";
+type TrustedConfigurationOperation = Exclude<
+  Extract<OpsOperation, { revisionId: string }>,
+  { kind: "stack.link" }
+>;
 
 export interface TrustedConfigurationRuntimeOptions {
   services: readonly coreServices.LoadedService[];
@@ -164,6 +172,37 @@ export function installTrustedConfigurationRuntime(
       operation,
       trustedPayload(operation, context),
       context.claim,
+      context.signal,
+    );
+  // The plan lives in the applied generation, which only this service can
+  // read. Consumers run as the same host user, so linking here matches what
+  // data-manager's link route would do.
+  runtime["stack.link"] = (operation, context) =>
+    coreServices.withConfigurationGenerationWriter(
+      options.infraDir,
+      async () => {
+        if (coreServices.currentConfigurationGeneration(options.infraDir) !== operation.revisionId)
+          throw new Error(LINK_STALE);
+        try {
+          const plan = JSON.parse(
+            readFileSync(
+              coreServices.currentConfigurationFile(
+                options.infraDir,
+                coreServices.GENERATED_HARDLINK_PLAN_FILE,
+              ),
+              "utf8",
+            ),
+          ) as unknown;
+          if (!Array.isArray(plan)) throw new Error(LINK_FAILED);
+          const result = applyHardlinkPlan(plan as HardlinkEntry[], {
+            rootDir: join(options.infraDir, "data"),
+            prune: true,
+          });
+          return { revisionId: operation.revisionId, entries: plan.length, ...result };
+        } catch {
+          throw new Error(LINK_FAILED);
+        }
+      },
       context.signal,
     );
   runtime["serviceSelection.apply"] = (operation, context) =>

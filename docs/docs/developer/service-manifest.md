@@ -224,7 +224,11 @@ Three arrays express how a service fits into the stack: the abstract roles it
 plays (`provides`), the prepared data it needs (`consumes`), and the data it
 publishes for others (`produces`). The renderer matches a consumer's `consumes`
 entry to another service's `produces` entry of the same `type` and emits a
-hardlink-plan entry so the files are shared without copying.
+hardlink-plan entry so the files are shared without copying. The CLI applies
+the plan after it renders. Before starting or recreating a service, the admin
+panel has the operations agent apply the plan of the configuration it just
+applied (`stack.link`), because the plan lives in the host's configuration
+generation, which the API container cannot read.
 
 ### `provides`
 

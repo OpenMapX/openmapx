@@ -2,10 +2,11 @@ import Fastify from "fastify";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const composeAction = vi.fn();
-const applyHardlinksFromPlan = vi
+const applyGenerationHardlinks = vi
   .fn()
   .mockResolvedValue({ applied: true, linked: 0, skipped: 0, pruned: 0, entries: 0 });
-const renderAndPersistCompose = vi.fn();
+const REVISION = `cfg1_${"r".repeat(43)}`;
+const renderAndPersistCompose = vi.fn().mockResolvedValue({ revisionId: REVISION });
 const adminA = { user: { id: "admin-a" } };
 
 vi.mock("@openmapx/core/server", () => ({
@@ -13,7 +14,7 @@ vi.mock("@openmapx/core/server", () => ({
   services: { renderConfiguration: vi.fn() },
 }));
 vi.mock("../../services/admin-ops", () => ({
-  applyHardlinksFromPlan: (...args: unknown[]) => applyHardlinksFromPlan(...args),
+  applyGenerationHardlinks: (...args: unknown[]) => applyGenerationHardlinks(...args),
   renderAndPersistCompose: (...args: unknown[]) => renderAndPersistCompose(...args),
 }));
 vi.mock("../../services/desired-selection", () => ({ readDesiredSelection: vi.fn() }));
@@ -36,7 +37,7 @@ vi.mock("../../utils/route-auth", () => ({ declareRouteAuth: vi.fn() }));
 describe("admin Compose routes", () => {
   beforeEach(() => {
     composeAction.mockClear();
-    applyHardlinksFromPlan.mockClear();
+    applyGenerationHardlinks.mockClear();
     renderAndPersistCompose.mockClear();
   });
   it("requires caller-retained idempotency and reuses the same agent key across an ambiguous retry", async () => {
@@ -55,9 +56,11 @@ describe("admin Compose routes", () => {
     const firstKey = composeAction.mock.calls[0]?.[2]?.operationKey;
     expect(firstKey).toMatch(/^opk1_[A-Za-z0-9_-]{43}$/);
     expect(composeAction.mock.calls[1]?.[2]?.operationKey).toBe(firstKey);
-    expect(applyHardlinksFromPlan.mock.calls[0]?.[0]?.operationIdentity).toBe(
-      applyHardlinksFromPlan.mock.calls[1]?.[0]?.operationIdentity,
+    expect(applyGenerationHardlinks.mock.calls[0]?.[0]?.operationIdentity).toBe(
+      applyGenerationHardlinks.mock.calls[1]?.[0]?.operationIdentity,
     );
+    // The links follow the generation this request just applied.
+    expect(applyGenerationHardlinks.mock.calls[0]?.[0]?.revisionId).toBe(REVISION);
     await app.close();
   });
 

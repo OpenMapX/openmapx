@@ -244,13 +244,14 @@ try {
         ),
       }),
     initializeRegistry: initServiceRegistry,
-    renderCompose: () =>
-      renderAndPersistCompose({
+    renderCompose: async () => {
+      await renderAndPersistCompose({
         operationKey: createDurableOpsKey(
           "startup.runtime-recovery.render",
           serviceRecovery.incidentId ?? "recovery-without-incident",
         ),
-      }),
+      });
+    },
   });
   server.log.info("Service repository rollbacks reconciled");
 } catch (err) {

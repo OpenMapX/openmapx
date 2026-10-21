@@ -38,6 +38,7 @@ const samples: Record<(typeof OPS_OPERATION_KINDS)[number], OpsOperation> = {
     kind: "stack.render",
     revisionId: "config_20260823",
   },
+  "stack.link": { kind: "stack.link", revisionId: `cfg1_${"a".repeat(43)}` },
   "stack.start": { kind: "stack.start" },
   "stack.stop": { kind: "stack.stop" },
   "service.start": { kind: "service.start", serviceId: "motis" },

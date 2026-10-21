@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@openmapx/core": "workspace:^",
+    "@openmapx/hardlinks": "workspace:*",
     "@openmapx/transitous-core": "workspace:^",
     "fastify": "^5.12.5"
   },

@@ -986,4 +986,83 @@ describe("ops-agent trusted configuration runtime", () => {
       ),
     ).resolves.toEqual({ source: "env", roots: ["alpha"] });
   });
+
+  describe("stack.link", () => {
+    const revisionId = `cfg1_${"l".repeat(43)}`;
+    const plan = [
+      {
+        source: "data/osm",
+        target: "data/valhalla/osm-pbf",
+        consumerService: "valhalla",
+        dataType: "osm-pbf",
+      },
+    ];
+
+    function applied(paths: ReturnType<typeof fixture>): void {
+      const generation = join(paths.infraDir, ".trusted-config-generations", revisionId);
+      mkdirSync(generation, { recursive: true, mode: 0o700 });
+      chmodSync(join(paths.infraDir, ".trusted-config-generations"), 0o700);
+      writeFileSync(join(generation, "docker-compose.generated.yml"), "services: {}\n", {
+        mode: 0o600,
+      });
+      writeFileSync(join(generation, "service-selection.json"), '{"selected":[]}', {
+        mode: 0o600,
+      });
+      writeFileSync(
+        join(generation, "docker-compose.generated.hardlinks.json"),
+        JSON.stringify(plan),
+        {
+          mode: 0o600,
+        },
+      );
+      symlinkSync(join(".trusted-config-generations", revisionId), paths.current);
+      mkdirSync(join(paths.infraDir, "data", "osm"), { recursive: true });
+      writeFileSync(join(paths.infraDir, "data", "osm", "germany.osm.pbf"), "pbf");
+    }
+
+    function runtimeFor(paths: ReturnType<typeof fixture>) {
+      const runtime = createUnavailableRuntime();
+      installTrustedConfigurationRuntime(runtime, {
+        services: [service("alpha")],
+        integrationSchemas: new Map(),
+        infraDir: paths.infraDir,
+      });
+      return runtime;
+    }
+
+    const link = (paths: ReturnType<typeof fixture>, linkRevision: string) => {
+      const operation = { kind: "stack.link" as const, revisionId: linkRevision };
+      return dispatchOpsOperation(runtimeFor(paths), operation, {
+        signal: new AbortController().signal,
+        emitLog: vi.fn(),
+        claim: {
+          fingerprint: opsOperationFingerprint(operation),
+          operation,
+          source: "registry",
+          capability: { revisionId: linkRevision, values: {} },
+        },
+      });
+    };
+
+    it("links consumer data as the applied generation's plan describes", async () => {
+      const paths = fixture();
+      applied(paths);
+      const result = await link(paths, revisionId);
+
+      expect(result).toEqual({ revisionId, entries: 1, linked: 1, skipped: 0, pruned: 0 });
+      const linked = join(paths.infraDir, "data", "valhalla", "osm-pbf", "germany.osm.pbf");
+      expect(statSync(linked).ino).toBe(
+        statSync(join(paths.infraDir, "data", "osm", "germany.osm.pbf")).ino,
+      );
+    });
+
+    it("refuses when another generation has been applied since", async () => {
+      const paths = fixture();
+      applied(paths);
+      await expect(link(paths, `cfg1_${"x".repeat(43)}`)).rejects.toThrow(
+        "Another configuration was applied before its hardlinks",
+      );
+      expect(existsSync(join(paths.infraDir, "data", "valhalla"))).toBe(false);
+    });
+  });
 });

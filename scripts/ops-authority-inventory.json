@@ -74,6 +74,7 @@
       "serviceSelection.apply",
       "serviceSelection.inspect",
       "services.buildAll",
+      "stack.link",
       "stack.render",
       "stack.start",
       "stack.status",
@@ -183,6 +184,12 @@
         "service.build",
         "services.buildAll"
       ]
+    },
+    {
+      "id": "api.configuration-hardlinks",
+      "callSiteIds": [],
+      "semanticSources": ["apps/api/src/services/admin-ops.ts#applyGenerationHardlinks"],
+      "typedKinds": ["stack.link"]
     },
     {
       "id": "api.compose-runtime",

@@ -34,7 +34,6 @@
       "HOST": "0.0.0.0",
       "TRUST_PROXY_RANGES": "${TRUST_PROXY_RANGES:-uniquelocal}",
       "DOMAIN": "${DOMAIN:-localhost}",
-      "OPENMAPX_ROOT_DIR": "/app",
       "OPENMAPX_CUSTOM_INTEGRATIONS_DIR": "${OPENMAPX_CUSTOM_INTEGRATIONS_DIR:-/app/custom_integrations}",
       "DATABASE_URL": "postgresql://postgres:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}@postgis:5432/openmapx",
       "REDIS_URL": "redis://redis:6379",

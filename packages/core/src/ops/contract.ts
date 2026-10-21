@@ -17,6 +17,7 @@ export const OPS_OPERATION_KINDS = [
   "stack.status",
   "stack.render",
   "configuration.inspect",
+  "stack.link",
   "stack.start",
   "stack.stop",
   "service.start",
@@ -131,6 +132,7 @@ export const OPS_KIND_POLICIES = {
   "stack.status": sync("api", 15_000, 256 * 1024),
   "configuration.inspect": sync("api", 15_000),
   "stack.render": asyncEffect("api", 120_000),
+  "stack.link": asyncEffect("api", 10 * 60_000),
   "stack.start": asyncEffect("api", LIFECYCLE_TIMEOUT_MS),
   "stack.stop": asyncEffect("api", 5 * 60_000),
   "service.start": asyncEffect("api", LIFECYCLE_TIMEOUT_MS),
@@ -261,6 +263,13 @@ export const opsOperationSchema = z.discriminatedUnion("kind", [
     kind: z.literal("stack.render"),
     revisionId: stableIdSchema,
     expectedCurrentRevisionId: configurationGenerationRevisionSchema.nullable(),
+  }),
+  // Links consumer data directories to their producers as the named, applied
+  // configuration generation's plan describes. Fails if another generation has
+  // been applied since.
+  z.strictObject({
+    kind: z.literal("stack.link"),
+    revisionId: configurationGenerationRevisionSchema,
   }),
   kindOnly("stack.start"),
   kindOnly("stack.stop"),
@@ -845,6 +854,13 @@ export const OPS_RESULT_SCHEMAS = {
       .max(256),
   }),
   "stack.render": revision,
+  "stack.link": z.strictObject({
+    revisionId: configurationGenerationRevisionSchema,
+    entries: nonnegativeSafeInteger,
+    linked: nonnegativeSafeInteger,
+    skipped: nonnegativeSafeInteger,
+    pruned: nonnegativeSafeInteger,
+  }),
   "stack.start": changed,
   "stack.stop": changed,
   "service.start": changed,
