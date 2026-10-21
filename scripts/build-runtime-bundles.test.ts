@@ -318,6 +318,66 @@ describe("runtime bundles", () => {
     expect(text(declarations, "main.mjs")).toContain('"used"');
   });
 
+  it.each([
+    [
+      "an assignment in an initializer",
+      "export const used = () => 1;\nexport const x = (globalThis.y = 1);",
+    ],
+    [
+      "an await in an initializer",
+      "export const used = () => 1;\nexport const x = await Promise.resolve(1);",
+    ],
+    [
+      "an update in an initializer",
+      "let n = 0;\nexport const used = () => 1;\nexport const x = n++;",
+    ],
+    ["a computed default export", 'export const used = () => 1;\nexport default Symbol.for("x");'],
+    [
+      "a class static block",
+      "export const used = () => 1;\nexport class A { static { console.log(1); } }",
+    ],
+    [
+      "a namespace with a body",
+      "export const used = () => 1;\nexport namespace N { export const v = 1; }",
+    ],
+  ])("rejects a module with %s that an unused import would drop", async (_case, tools) => {
+    await expect(
+      buildRuntimeBundle(workspace({ "lib/src/tools.ts": tools }), "fixture", config),
+    ).rejects.toThrow("lib/src/tools.ts: runs code when imported");
+  });
+
+  it("allows declarations whose initializers only compute values", async () => {
+    const bundle = await buildRuntimeBundle(
+      workspace({
+        "lib/src/tools.ts": [
+          "const make = (value: string) => ({ value });",
+          'export const schema = make("x");',
+          "export const used = () => schema.value;",
+          "export default function named() { return 1; }",
+          "declare global { var configured: boolean; }",
+          'export class A { static label = "a"; }',
+        ].join("\n"),
+      }),
+      "fixture",
+      config,
+    );
+    expect(text(bundle, "main.mjs")).toContain('make("x")');
+  });
+
+  it("leaves out the assets of modules the bundle does not include", async () => {
+    const files = (data: string) => ({
+      "lib/src/index.ts": 'export * from "./tools";\nexport * from "./data";',
+      "lib/src/data.ts":
+        'import { readFileSync } from "node:fs";\nexport const data = () => readFileSync(new URL("./list.json", import.meta.url), "utf8");',
+      "lib/src/list.json": data,
+      "app/src/main.ts": 'import { used } from "../../lib/src/index";\nconsole.log(used());',
+    });
+    const bundle = await buildRuntimeBundle(workspace(files('["a"]')), "fixture", config);
+    expect([...bundle.files.keys()].some((name) => name.startsWith("assets/"))).toBe(false);
+    const edited = await buildRuntimeBundle(workspace(files('["b"]')), "fixture", config);
+    expect(edited.digest).toBe(bundle.digest);
+  });
+
   it("keeps a listed module's bare import and rejects an unlisted or unused listing", async () => {
     const files = {
       "lib/src/setup.ts": "globalThis.configured = true;",

@@ -39,9 +39,12 @@ function isImportMeta(node, property) {
  * - `locationSensitive`: any other use of `import.meta` (`url`, `dirname`,
  *   `resolve`, `main`, …) or of `__dirname`/`__filename`, which means
  *   something different once the module is bundled;
- * - `topLevelStatements`: statements the module runs when it is imported,
- *   other than imports, exports, declarations and directives (`"use client"`).
- *   Variable initializers are not listed.
+ * - `topLevelStatements`: code the module runs when it is imported that a
+ *   bundler may drop with an unused module: statements other than imports,
+ *   exports, declarations and directives (`"use client"`); `await`,
+ *   assignments, `++`/`--` and `delete` in initializers; `export default` of a
+ *   computed value; class static blocks and decorators; and namespaces with a
+ *   body. Plain calls in initializers, such as `z.object(…)`, are not listed.
  */
 export function analyzeModule(file, text) {
   const source = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true);
@@ -141,26 +144,88 @@ export function analyzeModule(file, text) {
   };
   visit(source);
   const topLevelStatements = [];
-  for (const statement of source.statements) {
-    if (
-      ts.isImportDeclaration(statement) ||
-      ts.isExportDeclaration(statement) ||
-      ts.isExportAssignment(statement) ||
-      ts.isImportEqualsDeclaration(statement) ||
-      ts.isVariableStatement(statement) ||
-      ts.isFunctionDeclaration(statement) ||
-      ts.isClassDeclaration(statement) ||
-      ts.isInterfaceDeclaration(statement) ||
-      ts.isTypeAliasDeclaration(statement) ||
-      ts.isEnumDeclaration(statement) ||
-      ts.isModuleDeclaration(statement) ||
-      ts.isEmptyStatement(statement) ||
-      (ts.isExpressionStatement(statement) && ts.isStringLiteral(statement.expression))
-    ) {
-      continue;
-    }
-    const { line } = source.getLineAndCharacterOfPosition(statement.getStart(source));
+  const report = (node) => {
+    const { line } = source.getLineAndCharacterOfPosition(node.getStart(source));
     topLevelStatements.push(`line ${line + 1}`);
+  };
+  // Effects evaluated with the module, outside any function body.
+  const effectsIn = (node) => {
+    if (!node || ts.isFunctionLike(node) || ts.isClassLike(node)) return false;
+    if (
+      ts.isAwaitExpression(node) ||
+      ts.isDeleteExpression(node) ||
+      (ts.isForOfStatement(node) && node.awaitModifier) ||
+      ((ts.isPrefixUnaryExpression(node) || ts.isPostfixUnaryExpression(node)) &&
+        (node.operator === ts.SyntaxKind.PlusPlusToken ||
+          node.operator === ts.SyntaxKind.MinusMinusToken)) ||
+      (ts.isBinaryExpression(node) &&
+        node.operatorToken.kind >= ts.SyntaxKind.FirstAssignment &&
+        node.operatorToken.kind <= ts.SyntaxKind.LastAssignment)
+    ) {
+      return true;
+    }
+    return ts.forEachChild(node, effectsIn) ?? false;
+  };
+  const declaredValue = (node) => {
+    let value = node;
+    while (
+      ts.isParenthesizedExpression(value) ||
+      ts.isAsExpression(value) ||
+      ts.isSatisfiesExpression(value)
+    ) {
+      value = value.expression;
+    }
+    return (
+      ts.isFunctionLike(value) ||
+      ts.isClassLike(value) ||
+      ts.isIdentifier(value) ||
+      ts.isLiteralExpression(value) ||
+      ts.isObjectLiteralExpression(value) ||
+      ts.isArrayLiteralExpression(value)
+    );
+  };
+  for (const statement of source.statements) {
+    if (ts.isVariableStatement(statement)) {
+      if (statement.declarationList.declarations.some((d) => effectsIn(d.initializer))) {
+        report(statement);
+      }
+    } else if (ts.isExportAssignment(statement)) {
+      if (!declaredValue(statement.expression) || effectsIn(statement.expression)) {
+        report(statement);
+      }
+    } else if (ts.isClassDeclaration(statement)) {
+      if (
+        ts.getDecorators(statement)?.length ||
+        statement.members.some(
+          (member) =>
+            ts.isClassStaticBlockDeclaration(member) ||
+            ts.getDecorators(member)?.length ||
+            (ts.isPropertyDeclaration(member) &&
+              member.modifiers?.some((m) => m.kind === ts.SyntaxKind.StaticKeyword) &&
+              ts.forEachChild(member, effectsIn)),
+        )
+      ) {
+        report(statement);
+      }
+    } else if (ts.isModuleDeclaration(statement)) {
+      if (!statement.modifiers?.some((m) => m.kind === ts.SyntaxKind.DeclareKeyword)) {
+        report(statement);
+      }
+    } else if (
+      !(
+        ts.isImportDeclaration(statement) ||
+        ts.isExportDeclaration(statement) ||
+        ts.isImportEqualsDeclaration(statement) ||
+        ts.isFunctionDeclaration(statement) ||
+        ts.isInterfaceDeclaration(statement) ||
+        ts.isTypeAliasDeclaration(statement) ||
+        ts.isEnumDeclaration(statement) ||
+        ts.isEmptyStatement(statement) ||
+        (ts.isExpressionStatement(statement) && ts.isStringLiteral(statement.expression))
+      )
+    ) {
+      report(statement);
+    }
   }
   const localRequires = [];
   for (const identifier of identifierUses) {

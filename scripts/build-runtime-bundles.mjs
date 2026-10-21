@@ -336,7 +336,14 @@ export async function buildRuntimeBundle(root, image, config = RUNTIME_BUNDLES[i
   for (const output of result.outputFiles) {
     files.set(posixRelative(outdir, output.path).slice(2), Buffer.from(output.contents));
   }
-  for (const [name, bytes] of assets) files.set(`${ASSET_DIR}/${name}`, bytes);
+  // Only assets the output refers to: those of left-out modules or dead code
+  // would change the digest without changing what runs.
+  const emitted = result.outputFiles.map((output) => output.text).join("\n");
+  for (const [name, bytes] of assets) {
+    if (emitted.includes(JSON.stringify(`./${ASSET_DIR}/${name}`))) {
+      files.set(`${ASSET_DIR}/${name}`, bytes);
+    }
+  }
   files.set(EXTERNALS_MANIFEST, Buffer.from(`${JSON.stringify([...externals].sort(), null, 2)}\n`));
 
   // Bump the version when writeRuntimeBundle's output changes other than
