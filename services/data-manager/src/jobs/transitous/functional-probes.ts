@@ -8,7 +8,7 @@ import type {
   StopsResponse,
 } from "@motis-project/motis-client";
 import { MOTIS_VERSION } from "@openmapx/transitous-core";
-import { readTransitousLock } from "../../transitous-lock.js";
+import type { TransitousLock } from "../../transitous-lock.js";
 import { atomicWriteJsonSync } from "../../utils/atomic-write.js";
 import { CAPABILITY_SNAPSHOT_FILENAME, type MotisCandidateManifest } from "./candidate.js";
 import {
@@ -489,14 +489,13 @@ export interface CapabilitySnapshot {
 
 export function writeCapabilitySnapshot(
   stagingDir: string,
-  repoRoot: string,
+  lock: TransitousLock | null,
   manifest: MotisCandidateManifest,
   report: FunctionalProbeReport,
   testedAt: string,
 ): CapabilitySnapshot {
   if (!report.ok || !report.health)
     throw new Error("cannot persist an unsuccessful capability report");
-  const lock = readTransitousLock(repoRoot);
   let gbfsRegistry: { commit: string; sha256: string } | undefined;
   if (manifest.artifacts.sourceIndex) {
     try {

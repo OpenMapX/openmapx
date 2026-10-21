@@ -58,6 +58,7 @@ import {
   resolveCatalogBumpCandidate,
 } from "./jobs/transitous/catalog-bump.js";
 import { buildJobContext, runTransitousPipeline } from "./jobs/transitous/index.js";
+import { resolveTransitOverlayPath } from "./jobs/transitous/internal.js";
 import {
   type MotisOperationsPolicy,
   publicOperationsPolicy,
@@ -96,15 +97,12 @@ import {
   prepareAddTransitSource,
   prepareEnableTransitSource,
   prepareRemoveTransitSource,
-  resolveTransitOverlayPath,
   type TransitFeedStateEvidence,
   TransitSourceError,
 } from "./transit-sources.js";
 
 export interface ApiOptions {
   dataDir?: string;
-  /** Repo root used by `/transit/bump` to locate `infra/docker/transitous.lock.json`. */
-  repoRoot?: string;
   /**
    * Single-flight controller. Defaults to the process-wide singleton so the
    * cron + `/transit/sync` share state; tests inject an isolated controller.
@@ -421,7 +419,6 @@ function registerOfflinePackageRoutes(
 
 export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
   const dataDir = opts.dataDir ?? process.env.DATA_DIR ?? "/data";
-  const repoRoot = opts.repoRoot ?? process.env.OPENMAPX_ROOT_DIR ?? "";
   const singleFlight = opts.singleFlight ?? getSingleFlightController();
   const store = new StateStore(dataDir);
   const searchIndexSql = opts.searchIndexSql ?? sql;
@@ -466,7 +463,6 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
           dataDir,
           store,
           countries,
-          repoRoot,
           source: parseTransitSource(),
           operationsPolicy: { ...operationsPolicy, countries },
           jobId,

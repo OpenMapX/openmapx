@@ -76,7 +76,6 @@ export async function generateDocument(): Promise<string> {
     ) as OfflinePackageGenerator;
     registerApi(app, {
       dataDir: directory,
-      repoRoot: directory,
       offlinePackages,
       operationsPolicy: resolveOperationsProfile({ allowEmptyRegional: true }),
     });

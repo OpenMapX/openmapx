@@ -14,6 +14,7 @@ import { runOpsOperation } from "../../ops-client.js";
 import { atomicWriteJsonSync } from "../../utils/atomic-write.js";
 import { scrubSecrets } from "../../utils/scrub-secrets.js";
 import { readFeedOverlay } from "../transitous-feeds-overlay.js";
+import { resolveTransitOverlayPath } from "./internal.js";
 import type { StageFn, StageResult } from "./types.js";
 
 interface ObservedFeedLicense {
@@ -298,10 +299,7 @@ export const run: StageFn = async (ctx) => {
       throw new Error(`GBFS registry hash mismatch: expected ${lock.sha256}, got ${actualHash}`);
 
     const catalogDir = ctx.state.catalogDir ?? ctx.catalogDir;
-    const overlayPath =
-      ctx.feedsOverlayPath ??
-      process.env.TRANSITOUS_FEEDS_OVERLAY_PATH ??
-      join(ctx.repoRoot, "infra", "docker", "data", "overrides", "feeds-overlay.json");
+    const overlayPath = resolveTransitOverlayPath(ctx.dataDir, ctx.feedsOverlayPath);
     const overlay = existsSync(overlayPath) ? readFeedOverlay(overlayPath) : null;
     const compiled = compileGbfsCatalog({
       rows: parseMobilityDataGbfsCsv(csv),

@@ -1,9 +1,10 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   CANDIDATE_PROXY_DIRNAME,
+  CAPABILITY_SNAPSHOT_FILENAME,
   createCandidateManifest,
 } from "../../src/jobs/transitous/candidate.js";
 import { run as motisHealthRun } from "../../src/jobs/transitous/motis-health.js";
@@ -119,6 +120,28 @@ describe("motis-health stage", () => {
     expect(
       (result.artifacts as { probes?: Array<{ name: string }> }).probes?.map((p) => p.name),
     ).toEqual(["health", "initial", "stops", "plan", "plan-routed-transfers", "plan-elevation"]);
+  });
+
+  it("records the catalog lock prepare enforced in the capability snapshot", async () => {
+    const dataDir = makeStagingDir();
+    globalThis.fetch = vi.fn(async (input: unknown) => {
+      const url = typeof input === "string" ? input : (input as Request | URL).toString();
+      return jsonResponse(successfulBody(url));
+    }) as unknown as typeof fetch;
+    const atlas = "c".repeat(40);
+    const ctx = ctxFor(dataDir);
+    ctx.state.transitousLock = {
+      ref: `main@${"a".repeat(40)}`,
+      submodules: { "transitland-atlas": atlas },
+      lockedAt: "2026-05-01T00:00:00.000Z",
+      lockedBy: "test",
+    };
+
+    expect((await motisHealthRun(ctx)).status).toBe("ok");
+    const snapshot = JSON.parse(
+      readFileSync(join(dataDir, "motis", "staging", CAPABILITY_SNAPSHOT_FILENAME), "utf-8"),
+    ) as { pins: { transitous: string; atlas?: string } };
+    expect(snapshot.pins).toMatchObject({ transitous: `main@${"a".repeat(40)}`, atlas });
   });
 
   it("errors with the last failure when staging never becomes healthy", async () => {

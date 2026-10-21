@@ -1,7 +1,6 @@
 import { existsSync, readFileSync, rmSync, statSync } from "node:fs";
 import { join } from "node:path";
-import { services } from "@openmapx/core/server";
-import { applyHardlinkPlan, type HardlinkEntry } from "@openmapx/hardlinks";
+import { appliedHardlinkEntries, applyHardlinkPlan } from "@openmapx/hardlinks";
 import {
   type FeedProxyVars,
   normalizeFeedProxyVars,
@@ -81,23 +80,16 @@ const FEED_PROXY_DATA_TYPE = "motis-feed-proxy-config";
  * inode, orphaning the previously-linked copy — so without re-linking here nginx
  * keeps serving the stale config no matter how often we `nginx -s reload`. This
  * repairs the link (linkFileAt rm+relinks on inode mismatch) before every
- * validate/reload. Best-effort: on dev/test hosts with no hardlink plan it's a
- * no-op and the (already co-located) config is served directly.
+ * validate/reload. The generated plan lives in the host's configuration
+ * generation, which this container cannot read; the entries come from the
+ * data root, where every plan application records them. Best-effort: with no
+ * recorded entry (dev/test hosts, or a data root last linked before entries
+ * were recorded) it's a no-op.
  */
 function relinkFeedProxyConfig(ctx: JobContext): void {
-  if (!ctx.repoRoot) return;
-  const planPath = services.currentConfigurationFile(
-    join(ctx.repoRoot, "infra", "docker"),
-    services.GENERATED_HARDLINK_PLAN_FILE,
+  const entries = appliedHardlinkEntries(ctx.dataDir).filter(
+    (entry) => entry.dataType === FEED_PROXY_DATA_TYPE,
   );
-  if (!existsSync(planPath)) return;
-  let plan: HardlinkEntry[];
-  try {
-    plan = JSON.parse(readFileSync(planPath, "utf-8")) as HardlinkEntry[];
-  } catch {
-    return;
-  }
-  const entries = plan.filter((entry) => entry?.dataType === FEED_PROXY_DATA_TYPE);
   if (entries.length === 0) return;
   // prune: false — never delete container-side files (e.g. an operator resolver
   // drop-in); we only need the config file itself re-pointed at the fresh inode.

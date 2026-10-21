@@ -82,16 +82,6 @@ function emptyOverlay(): FeedOverlay {
   return { version: 3, sources: [], patches: [], quarantine: [] };
 }
 
-export function resolveTransitOverlayPath(dataDir: string, explicit?: string): string {
-  // `||`, not `??`: compose renders unset vars as empty strings, and an empty
-  // overlay path would make every mutation fail and every list read nothing.
-  return (
-    explicit ||
-    process.env.TRANSITOUS_FEEDS_OVERLAY_PATH ||
-    join(dataDir, "overrides", "feeds-overlay.json")
-  );
-}
-
 function readOverlay(path: string): FeedOverlay {
   return readFeedOverlay(path) ?? emptyOverlay();
 }

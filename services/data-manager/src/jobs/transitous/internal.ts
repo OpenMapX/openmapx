@@ -55,7 +55,32 @@ export const IMPORT_MARKER_FILE = ".data-manager-import.ok.json";
 
 export const RAW_BASE = "https://raw.githubusercontent.com/public-transport/transitous/main";
 export const DEFAULT_TRANSITOUS_API_KEYS_PATH = "/config/transitous/api-keys.json";
-export const DEFAULT_TRANSITOUS_FEEDS_OVERLAY_PATH = "/data/overrides/feeds-overlay.json";
+
+/**
+ * The operator's Transitous API keys: an explicit path, else
+ * `TRANSITOUS_API_KEYS_PATH`, else the file mounted at
+ * {@link DEFAULT_TRANSITOUS_API_KEYS_PATH}.
+ */
+export function resolveTransitousApiKeysPath(explicit?: string): string {
+  // `||`, not `??`: compose renders an unset variable as "", which must fall
+  // through to the mounted default.
+  return explicit || process.env.TRANSITOUS_API_KEYS_PATH || DEFAULT_TRANSITOUS_API_KEYS_PATH;
+}
+
+/**
+ * The operator's feeds overlay: an explicit path, else
+ * `TRANSITOUS_FEEDS_OVERLAY_PATH`, else `<dataDir>/overrides/feeds-overlay.json`
+ * (`/data/…` in the container, `infra/docker/data/…` on the host).
+ */
+export function resolveTransitOverlayPath(dataDir: string, explicit?: string): string {
+  // `||`, not `??`: compose renders unset vars as empty strings, and an empty
+  // overlay path would make every mutation fail and every list read nothing.
+  return (
+    explicit ||
+    process.env.TRANSITOUS_FEEDS_OVERLAY_PATH ||
+    join(dataDir, "overrides", "feeds-overlay.json")
+  );
+}
 
 const COUNTRY_TOKEN_RE = /^[a-z][a-z0-9_-]{0,31}$/;
 

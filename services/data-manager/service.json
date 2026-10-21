@@ -29,7 +29,6 @@
       "OPS_AGENT_TOKEN_FILE": "/run/secrets/ops-agent-data-manager-token",
       "TRANSITOUS_RUNNER_URL": "${TRANSITOUS_RUNNER_URL:-http://transitous-runner:4400}",
       "TRANSITOUS_RUNNER_CAPABILITY_KEY_FILE": "/run/secrets/transitous-runner-capability",
-      "OPENMAPX_ROOT_DIR": "/app",
       "APP_API_BASE_URL": "${APP_API_BASE_URL:-http://app-api:3001}",
       "MOTIS_URL": "${MOTIS_URL:-http://motis:8080}",
       "MOTIS_STAGING_URL": "${MOTIS_STAGING_URL:-http://motis-staging:8080}",

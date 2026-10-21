@@ -36,7 +36,6 @@ function scannedEnvironmentNames(): Set<string> {
 const NOT_ENV_LITERALS = new Set([
   "BUCKETS_PER_WEEK",
   "COEFFICIENT_COUNT",
-  "DEFAULT_TRANSITOUS_FEEDS_OVERLAY_PATH",
   "ERR_ASSERTION",
   "UNKNOWN_TRAFFIC_SPEED_RAW",
 ]);
