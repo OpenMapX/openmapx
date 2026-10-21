@@ -112,9 +112,10 @@ services](../install/managing-services.md).
 
 ### Maintenance _(self-hosted only)_
 
-Stages current core images without restarting containers, compares them with
-the running application, and updates Data Manager, Web, API, Ops Agent, and
-Transitous Runner in a controlled order. Updates create a database backup by default
+Checks the configured release by comparing its manifest with the running
+application's image digests; a check downloads no images. An update downloads
+the checked release while the services keep running, then updates Data Manager,
+Web, API, Ops Agent, and Transitous Runner in a controlled order. Updates create a database backup by default
 and checkpoint the operation before replacing the API, so the new API process can
 finalize the job after its migrations succeed. The pre-update backup is recommended
 but optional in the confirmation dialog. The same page runs the CLI-equivalent deep service probes.

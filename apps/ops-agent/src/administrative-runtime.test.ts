@@ -1186,6 +1186,55 @@ describe("administrative release runtime", () => {
       });
     });
 
+    it("compares running images with release pins by repository digest without downloading", async () => {
+      const pin = (name: string, digit: number) =>
+        `ghcr.io/openmapx/${name}@sha256:${String(digit).repeat(64)}`;
+      const running: Record<string, string> = {
+        [`sha256:${"a".repeat(64)}`]: JSON.stringify([pin("api", 1)]),
+        [`sha256:${"b".repeat(64)}`]: JSON.stringify([
+          `ghcr.io/openmapx/web@sha256:${"e".repeat(64)}`,
+        ]),
+        [`sha256:${"d".repeat(64)}`]: JSON.stringify([pin("ops-agent", 4)]),
+        [`sha256:${"f".repeat(64)}`]: "[]",
+      };
+      const containers: Record<string, string> = {
+        "app-api": "a",
+        "app-web": "b",
+        "data-manager": "c",
+        "ops-agent": "d",
+        "transitous-runner": "f",
+      };
+      const calls: string[][] = [];
+      const effects = systemFixture("file", async (args) => {
+        calls.push([...args]);
+        const joined = args.join(" ");
+        if (joined.startsWith("info ")) return "28.0.0\n";
+        if (joined.endsWith(" config -q")) return "";
+        const ps = /ps -q ([a-z-]+)$/.exec(joined);
+        if (ps) return containers[ps[1]].repeat(64);
+        if (args.includes("{{.Image}}"))
+          return `sha256:${String(args.at(-1)).slice(0, 1).repeat(64)}`;
+        if (args.some((arg) => arg.includes(".Config.Env")))
+          return `OPS_PRIVACY_BACKUP_COLLECTOR_IMAGE=${pin("privacy-backup", 5)}\n`;
+        if (args.includes("{{json .RepoDigests}}")) {
+          const digests = running[String(args.at(-1))];
+          if (digests !== undefined) return digests;
+        }
+        throw new Error("No such image");
+      });
+
+      const result = await effects.inspectSystem(context());
+      expect(result.services).toEqual([
+        expect.objectContaining({ serviceId: "app-api", state: "current" }),
+        expect.objectContaining({ serviceId: "app-web", state: "update_available" }),
+        expect.objectContaining({ serviceId: "data-manager", state: "unknown" }),
+        expect.objectContaining({ serviceId: "ops-agent", state: "current" }),
+        expect.objectContaining({ serviceId: "transitous-runner", state: "update_available" }),
+      ]);
+      for (const service of result.services) expect(service.localImageId).toBeUndefined();
+      expect(calls.some((args) => args[0] === "pull")).toBe(false);
+    });
+
     it("rejects a non-file Compose path instead of reporting it ready", async () => {
       const effects = systemFixture("directory", async (args) => {
         const joined = args.join(" ");

@@ -194,9 +194,11 @@ The shared CLI validates all seven pins and privacy evidence and extracts the fr
 All seven development aliases are verified before the main manifest pointer advances. Individual aliases can move separately; use the manifest for coherent updates. Named publication promotes the selected image digests without rebuilding them and advances preview only after immutable GitHub publication is verified. See [Product releases](../developer/product-releases.md).
 
 :::note[Admin updater and later service commands]
-The admin system updater checks the configured channel, stores its exact candidate ID and digest, and
-writes `docker-compose.release.yml` atomically after every digest-pinned image
-has been pulled. Apply uses that checked candidate rather than resolving the channel again. A configuration change requires a fresh check. It replaces API, web, data-manager, and transitous-runner without
+The admin system updater checks the configured channel and stores its exact candidate ID and digest.
+A check compares the manifest's digests with the running images and downloads
+nothing. Apply uses that checked candidate rather than resolving the channel again:
+it pulls every digest-pinned image while the services keep running, then writes
+`docker-compose.release.yml` atomically. A configuration change requires a fresh check. It replaces API, web, data-manager, and transitous-runner without
 restarting their dependencies. Before applying, it verifies that the running
 ops-agent image and its privacy-backup helper pin already match the selected
 release. If either differs or cannot be verified, the panel shows **Host update

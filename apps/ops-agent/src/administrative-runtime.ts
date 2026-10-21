@@ -1044,6 +1044,49 @@ export function createDefaultReleaseEffects(
       return undefined;
     }
   };
+  // A container created from a digest-pinned reference keeps that digest in
+  // its image's RepoDigests, so a release pin can be compared with the running
+  // image before the pinned image has been downloaded.
+  const inspectRepoDigests = async (
+    imageId: string,
+    context: FixedCliOptions,
+  ): Promise<string[] | undefined> => {
+    try {
+      const value = JSON.parse(
+        (
+          await runDocker(
+            ["image", "inspect", "--format", "{{json .RepoDigests}}", imageId],
+            context,
+          )
+        ).trim(),
+      ) as unknown;
+      return Array.isArray(value) && value.every((entry) => typeof entry === "string")
+        ? value
+        : undefined;
+    } catch {
+      return undefined;
+    }
+  };
+  // `matches` stays undefined when neither observation succeeded, so callers
+  // can fail closed instead of treating an unreadable image as different.
+  const observePinnedImage = async (
+    runningImageId: string,
+    pinnedImage: string,
+    context: FixedCliOptions,
+  ): Promise<{ matches?: boolean; localImageId?: string }> => {
+    const localImageId = await inspectImageId(
+      ["image", "inspect", "--format", "{{.Id}}", pinnedImage],
+      context,
+    );
+    if (localImageId === runningImageId) return { matches: true, localImageId };
+    const pinnedDigest = /@(sha256:[a-f0-9]{64})$/.exec(pinnedImage)?.[1];
+    const repoDigests = await inspectRepoDigests(runningImageId, context);
+    if (pinnedDigest && repoDigests?.some((entry) => entry.endsWith(`@${pinnedDigest}`))) {
+      return { matches: true, ...(localImageId ? { localImageId } : {}) };
+    }
+    if (repoDigests === undefined && localImageId === undefined) return {};
+    return { matches: false, ...(localImageId ? { localImageId } : {}) };
+  };
   // Inspect only the non-secret helper reference, never the complete environment.
   const inspectAgentHelper = async (
     containerId: string,
@@ -1076,20 +1119,18 @@ export function createDefaultReleaseEffects(
   ): Promise<void> => {
     let matches = false;
     try {
-      const expected = await inspectImageId(
-        ["image", "inspect", "--format", "{{.Id}}", manifest.images["ops-agent"]],
-        context,
-      );
       const containerId = (
         await runDocker([...stackArgs(), "ps", "-q", "ops-agent"], context)
       ).trim();
-      if (expected && /^[a-f0-9]{12,64}$/.test(containerId)) {
+      if (/^[a-f0-9]{12,64}$/.test(containerId)) {
         const running = await inspectImageId(
           ["container", "inspect", "--format", "{{.Image}}", containerId],
           context,
         );
         matches =
-          running === expected &&
+          running !== undefined &&
+          (await observePinnedImage(running, manifest.images["ops-agent"], context)).matches ===
+            true &&
           (await inspectAgentHelper(containerId, context)) === manifest.images["privacy-backup"];
       }
     } catch {
@@ -1390,16 +1431,18 @@ export function createDefaultReleaseEffects(
     pull: async (releaseId, context) => {
       await initialize();
       const manifest = loadManifest(releaseId);
-      for (const image of [
-        manifest.images.api,
-        manifest.images.web,
-        manifest.images["data-manager"],
-        manifest.images["ops-agent"],
-        manifest.images["privacy-backup"],
-        manifest.images["transitous-runner"],
-        manifest.images["transitous-tools"],
-      ]) {
-        await runDocker(["pull", image], context);
+      const names = [
+        "api",
+        "web",
+        "data-manager",
+        "ops-agent",
+        "privacy-backup",
+        "transitous-runner",
+        "transitous-tools",
+      ] as const;
+      for (const [index, name] of names.entries()) {
+        context.emitLog("stdout", `Downloading ${name} image (${index + 1}/${names.length})`);
+        await runDocker(["pull", manifest.images[name]], context);
       }
     },
     inspect: async () => {
@@ -1468,9 +1511,18 @@ export function createDefaultReleaseEffects(
               context,
             )
           : undefined;
-        const localImageId = pinnedImage
-          ? await inspectImageId(["image", "inspect", "--format", "{{.Id}}", pinnedImage], context)
-          : undefined;
+        const pin =
+          pinnedImage && runningImageId
+            ? await observePinnedImage(runningImageId, pinnedImage, context)
+            : {};
+        const localImageId =
+          pin.localImageId ??
+          (pinnedImage && !runningImageId
+            ? await inspectImageId(
+                ["image", "inspect", "--format", "{{.Id}}", pinnedImage],
+                context,
+              )
+            : undefined);
         const helper =
           serviceId === "ops-agent" && containerId
             ? await inspectAgentHelper(containerId, context)
@@ -1480,9 +1532,9 @@ export function createDefaultReleaseEffects(
             ? "unknown"
             : !containerId
               ? "not_running"
-              : !runningImageId || !localImageId || (serviceId === "ops-agent" && !helper)
+              : pin.matches === undefined || (serviceId === "ops-agent" && !helper)
                 ? "unknown"
-                : runningImageId === localImageId &&
+                : pin.matches &&
                     (serviceId !== "ops-agent" || helper === manifest?.images["privacy-backup"])
                   ? "current"
                   : "update_available";

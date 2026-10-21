@@ -8,6 +8,8 @@ export async function handleSystemUpdateJob(ctx: JobContext): Promise<Record<str
     releaseId?: string;
     expectedDigest?: string;
   };
+  // A check reads only the small release manifest. Images are downloaded by
+  // an update, while the running services keep serving.
   if (payload.operation === "check") {
     await ctx.setProgress(10);
     const release = await executeAdminJobOperation(
@@ -15,13 +17,7 @@ export async function handleSystemUpdateJob(ctx: JobContext): Promise<Record<str
       { kind: "release.resolve" },
       "admin-job.release.resolve",
     );
-    await ctx.setProgress(35);
-    await executeAdminJobOperation(
-      ctx,
-      { kind: "release.pull", releaseId: release.releaseId },
-      "admin-job.release.pull",
-    );
-    await ctx.setProgress(80);
+    await ctx.setProgress(60);
     const inspection = await executeAdminJobOperation(
       ctx,
       { kind: "release.inspect" },
@@ -38,7 +34,13 @@ export async function handleSystemUpdateJob(ctx: JobContext): Promise<Record<str
     !/^[a-f0-9]{64}$/.test(payload.expectedDigest)
   )
     throw new Error("Check a release before applying it");
-  await ctx.setProgress(10);
+  await ctx.setProgress(5);
+  await executeAdminJobOperation(
+    ctx,
+    { kind: "release.pull", releaseId: payload.releaseId },
+    "admin-job.release.pull",
+  );
+  await ctx.setProgress(60);
   const createBackup = payload.createBackup !== false;
   const result = await executeAdminJobOperation(
     ctx,

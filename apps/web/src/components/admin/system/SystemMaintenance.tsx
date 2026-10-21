@@ -99,7 +99,7 @@ function digest(value: string | null): string {
 }
 
 function imageStatusChip(image: ImageStatus) {
-  if (image.status === "update-available") return <Chip color="warning" label="Update ready" />;
+  if (image.status === "update-available") return <Chip color="warning" label="Update available" />;
   if (image.status === "up-to-date") {
     return <Chip color="success" variant="outlined" label="Up to date" />;
   }
@@ -256,8 +256,9 @@ export function SystemMaintenance() {
           </Typography>
         )}
         <Typography variant="body2" sx={{ mt: 1, color: "text.secondary" }}>
-          Check downloads the configured release without restarting services. Apply uses that exact
-          checked manifest. Change channels in the host configuration.
+          Check reads the configured release manifest without downloading images or restarting
+          services. Update downloads that exact checked release before replacing any container.
+          Change channels in the host configuration.
         </Typography>
       </Paper>
 
@@ -317,13 +318,18 @@ export function SystemMaintenance() {
 
       <AdminTableSurface
         title="OpenMapX application"
-        description="Checking pulls one coherent release into the local cache without restarting anything."
+        description="Checking compares the running images with the release manifest. Images are downloaded only when you update."
         toolbar={
           <Stack
             direction={{ xs: "column", sm: "row" }}
             sx={{ gap: 1, alignItems: { sm: "center" } }}
           >
-            {updateCount > 0 && <Chip color="warning" label={`${updateCount} update ready`} />}
+            {updateCount > 0 && (
+              <Chip
+                color="warning"
+                label={`${updateCount} ${updateCount === 1 ? "update" : "updates"} available`}
+              />
+            )}
             <Button
               variant="outlined"
               startIcon={<RefreshIcon />}
