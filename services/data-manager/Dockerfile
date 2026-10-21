@@ -130,55 +130,6 @@ COPY --from=build-gtfsclean /usr/local/bin/gtfsclean /usr/local/bin/gtfsclean
 ENV NODE_ENV=production
 ENV PYTHONDONTWRITEBYTECODE=1
 
-COPY --from=prod-deps /app/node_modules ./node_modules
-COPY --from=prod-deps /app/services/data-manager/node_modules ./services/data-manager/node_modules
-# The shared @openmapx/db-schema, @openmapx/hardlinks, and
-# @openmapx/motis-feed-proxy-config packages ship their TypeScript source
-# directly; tsx/esm (preserved because it's a prod dep) transpiles them on
-# import.
-# db-schema needs its own node_modules so the symlinked drizzle-orm resolves
-# from its source files at runtime; the other two have no prod externals so
-# only the source is needed.
-COPY packages/db-schema/ ./packages/db-schema/
-COPY --from=prod-deps /app/packages/db-schema/node_modules ./packages/db-schema/node_modules
-COPY packages/hardlinks/ ./packages/hardlinks/
-COPY packages/motis-feed-proxy-config/ ./packages/motis-feed-proxy-config/
-COPY packages/mobility-formats/ ./packages/mobility-formats/
-COPY --from=prod-deps /app/packages/mobility-formats/node_modules ./packages/mobility-formats/node_modules
-COPY packages/transitous-core/ ./packages/transitous-core/
-COPY --from=prod-deps /app/packages/transitous-core/node_modules ./packages/transitous-core/node_modules
-COPY packages/core/ ./packages/core/
-COPY packages/extension-contracts/ ./packages/extension-contracts/
-COPY --from=prod-deps /app/packages/extension-contracts/node_modules ./packages/extension-contracts/node_modules
-COPY --from=prod-deps /app/packages/core/node_modules ./packages/core/node_modules
-COPY packages/hey-api-client-fetch/ ./packages/hey-api-client-fetch/
-
-# Transitive runtime dependencies of @openmapx/core and @openmapx/cli, which
-# data-manager imports.
-COPY packages/place-ids/ ./packages/place-ids/
-COPY packages/air-quality/ ./packages/air-quality/
-COPY --from=prod-deps /app/packages/air-quality/node_modules ./packages/air-quality/node_modules
-COPY packages/integration-framework/ ./packages/integration-framework/
-COPY --from=prod-deps /app/packages/integration-framework/node_modules ./packages/integration-framework/node_modules
-COPY packages/mobility-core/ ./packages/mobility-core/
-COPY --from=prod-deps /app/packages/mobility-core/node_modules ./packages/mobility-core/node_modules
-
-# packages/cli source + node_modules — bundled for parity with apps/api's
-# runner (admin-cli.ts spawns the CLI for data jobs when no host bind-mount
-# with the CLI is present); tiny, no native deps.
-COPY packages/cli/ packages/cli/
-COPY --from=prod-deps /app/packages/cli/node_modules ./packages/cli/node_modules
-
-COPY --from=builder /app/services/data-manager/dist ./services/data-manager/dist
-COPY services/data-manager/package.json ./services/data-manager/
-# Producer acquisition captures this trusted metadata in each release contract.
-COPY integrations/poi-overture/manifest.json ./integrations/poi-overture/manifest.json
-
-# tsx resolves tsconfig paths + .js -> .ts at runtime for the workspace
-# packages that ship TypeScript source.
-ENV TSX_TSCONFIG_PATH=/app/tsconfig.base.json
-COPY tsconfig.base.json ./
-
 # Run as a dedicated non-root user. The data-manager writes to /data which is
 # bind-mounted from the host — the host-side permissions need to allow writes
 # by UID/GID 1001, or operators can override via `docker run --user` /
@@ -189,7 +140,58 @@ RUN groupadd --system --gid 1001 datamgr \
     && useradd --system --uid 1001 --gid datamgr --create-home --home-dir /home/datamgr datamgr \
     && rm -rf /usr/local/lib/node_modules/npm \
     && rm -f /usr/local/bin/npm /usr/local/bin/npx \
-    && chown -R datamgr:datamgr /app /home/datamgr
+    && chown datamgr:datamgr /app
+
+# Assign ownership while copying. A recursive chown afterwards would store a
+# second copy of every file, including node_modules, in its own layer.
+COPY --chown=datamgr:datamgr --from=prod-deps /app/node_modules ./node_modules
+COPY --chown=datamgr:datamgr --from=prod-deps /app/services/data-manager/node_modules ./services/data-manager/node_modules
+# The shared @openmapx/db-schema, @openmapx/hardlinks, and
+# @openmapx/motis-feed-proxy-config packages ship their TypeScript source
+# directly; tsx/esm (preserved because it's a prod dep) transpiles them on
+# import.
+# db-schema needs its own node_modules so the symlinked drizzle-orm resolves
+# from its source files at runtime; the other two have no prod externals so
+# only the source is needed.
+COPY --chown=datamgr:datamgr packages/db-schema/ ./packages/db-schema/
+COPY --chown=datamgr:datamgr --from=prod-deps /app/packages/db-schema/node_modules ./packages/db-schema/node_modules
+COPY --chown=datamgr:datamgr packages/hardlinks/ ./packages/hardlinks/
+COPY --chown=datamgr:datamgr packages/motis-feed-proxy-config/ ./packages/motis-feed-proxy-config/
+COPY --chown=datamgr:datamgr packages/mobility-formats/ ./packages/mobility-formats/
+COPY --chown=datamgr:datamgr --from=prod-deps /app/packages/mobility-formats/node_modules ./packages/mobility-formats/node_modules
+COPY --chown=datamgr:datamgr packages/transitous-core/ ./packages/transitous-core/
+COPY --chown=datamgr:datamgr --from=prod-deps /app/packages/transitous-core/node_modules ./packages/transitous-core/node_modules
+COPY --chown=datamgr:datamgr packages/core/ ./packages/core/
+COPY --chown=datamgr:datamgr packages/extension-contracts/ ./packages/extension-contracts/
+COPY --chown=datamgr:datamgr --from=prod-deps /app/packages/extension-contracts/node_modules ./packages/extension-contracts/node_modules
+COPY --chown=datamgr:datamgr --from=prod-deps /app/packages/core/node_modules ./packages/core/node_modules
+COPY --chown=datamgr:datamgr packages/hey-api-client-fetch/ ./packages/hey-api-client-fetch/
+
+# Transitive runtime dependencies of @openmapx/core and @openmapx/cli, which
+# data-manager imports.
+COPY --chown=datamgr:datamgr packages/place-ids/ ./packages/place-ids/
+COPY --chown=datamgr:datamgr packages/air-quality/ ./packages/air-quality/
+COPY --chown=datamgr:datamgr --from=prod-deps /app/packages/air-quality/node_modules ./packages/air-quality/node_modules
+COPY --chown=datamgr:datamgr packages/integration-framework/ ./packages/integration-framework/
+COPY --chown=datamgr:datamgr --from=prod-deps /app/packages/integration-framework/node_modules ./packages/integration-framework/node_modules
+COPY --chown=datamgr:datamgr packages/mobility-core/ ./packages/mobility-core/
+COPY --chown=datamgr:datamgr --from=prod-deps /app/packages/mobility-core/node_modules ./packages/mobility-core/node_modules
+
+# packages/cli source + node_modules — bundled for parity with apps/api's
+# runner (admin-cli.ts spawns the CLI for data jobs when no host bind-mount
+# with the CLI is present); tiny, no native deps.
+COPY --chown=datamgr:datamgr packages/cli/ packages/cli/
+COPY --chown=datamgr:datamgr --from=prod-deps /app/packages/cli/node_modules ./packages/cli/node_modules
+
+COPY --chown=datamgr:datamgr --from=builder /app/services/data-manager/dist ./services/data-manager/dist
+COPY --chown=datamgr:datamgr services/data-manager/package.json ./services/data-manager/
+# Producer acquisition captures this trusted metadata in each release contract.
+COPY --chown=datamgr:datamgr integrations/poi-overture/manifest.json ./integrations/poi-overture/manifest.json
+
+# tsx resolves tsconfig paths + .js -> .ts at runtime for the workspace
+# packages that ship TypeScript source.
+ENV TSX_TSCONFIG_PATH=/app/tsconfig.base.json
+COPY --chown=datamgr:datamgr tsconfig.base.json ./
 
 USER datamgr:datamgr
 

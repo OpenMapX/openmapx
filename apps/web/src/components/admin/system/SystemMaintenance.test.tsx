@@ -77,7 +77,8 @@ describe("SystemMaintenance", () => {
     expect(markup).toContain("v0.1.0-alpha.1");
     expect(markup).toContain("Check for updates");
     expect(markup).toContain("Update OpenMapX");
-    expect(markup).toContain("Update ready");
+    expect(markup).toContain("Update available");
+    expect(markup).toContain("1 update available");
     expect(markup).toContain("Deep diagnostics");
     expect(markup).toContain("Host-control readiness");
   });

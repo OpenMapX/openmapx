@@ -29,6 +29,9 @@ const read = (rel: string): string => readFileSync(join(ROOT, rel), "utf-8");
 const readJson = (rel: string): { name?: string; dependencies?: Record<string, string> } =>
   JSON.parse(read(rel));
 
+/** Ownership and mode flags do not change which build-context path a COPY reads. */
+const COPY_OPTIONS = String.raw`(?:--(?:chown|chmod)=\S+\s+|--link\s+)*`;
+
 /**
  * Extracts the set of `packages/<name>` source directories a Dockerfile's
  * `runner` stage bakes in, i.e. lines shaped `COPY packages/<name>/ <dest>`
@@ -43,7 +46,10 @@ function runnerPackages(relPath: string): Set<string> {
   }
   const runnerSection = content.slice(runnerIdx);
   const pkgs = new Set<string>();
-  const lineRegex = /^COPY\s+packages\/([a-z0-9-]+)\/\s+\S+\s*$/gm;
+  const lineRegex = new RegExp(
+    String.raw`^COPY\s+${COPY_OPTIONS}packages\/([a-z0-9-]+)\/\s+\S+\s*$`,
+    "gm",
+  );
   for (const match of runnerSection.matchAll(lineRegex)) {
     const name = match[1];
     if (name) pkgs.add(name);
@@ -59,7 +65,10 @@ function runnerPackages(relPath: string): Set<string> {
  */
 function manifestPackages(relPath: string): Set<string> {
   const pkgs = new Set<string>();
-  const lineRegex = /^COPY\s+packages\/([a-z0-9-]+)\/package\.json\s+\S+\s*$/gm;
+  const lineRegex = new RegExp(
+    String.raw`^COPY\s+${COPY_OPTIONS}packages\/([a-z0-9-]+)\/package\.json\s+\S+\s*$`,
+    "gm",
+  );
   for (const match of read(relPath).matchAll(lineRegex)) {
     const name = match[1];
     if (name) pkgs.add(name);

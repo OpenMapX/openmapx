@@ -207,6 +207,25 @@ describe("Docker release trust gate", () => {
     expect(workflow.jobs.ci.needs).toContain("docker-build");
   });
 
+  it("keeps the release layer cache in the registry, outside the evicting Actions cache", () => {
+    const build = load(release).jobs.build.steps.find((step) =>
+      step.uses?.startsWith("docker/build-push-action@"),
+    );
+    const expression = (value: string) => "$" + `{{ ${value} }}`;
+    const cacheRef = `type=registry,ref=${expression("env.IMAGE_PREFIX")}/${expression("matrix.app")}:buildcache`;
+    expect(build?.with?.["cache-from"]).toBe(cacheRef);
+    const cacheTo = String(build?.with?.["cache-to"]);
+    expect(cacheTo.startsWith(`${cacheRef},`)).toBe(true);
+    expect(cacheTo.split(",")).toEqual(
+      expect.arrayContaining([
+        `mode=${expression("matrix.app == 'api' && 'min' || 'max'")}`,
+        "image-manifest=true",
+        "ignore-error=true",
+      ]),
+    );
+    expect(release).not.toContain("type=gha");
+  });
+
   it("publishes immutable image tags before advancing the complete release pointer", () => {
     expect(release).toMatch(/^ {2}promote:\n/m);
     expect(release).toContain("needs: [gate, plan, build, validate-privacy-release]");

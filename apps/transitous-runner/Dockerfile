@@ -82,16 +82,6 @@ ENV NODE_ENV=production
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV TRANSITOUS_RUNNER_PORT=4400
 
-COPY --from=prod-deps /app/node_modules ./node_modules
-COPY --from=prod-deps /app/apps/transitous-runner/node_modules ./apps/transitous-runner/node_modules
-COPY --from=prod-deps /app/packages/core/node_modules ./packages/core/node_modules
-COPY packages/core/ ./packages/core/
-COPY packages/extension-contracts/ ./packages/extension-contracts/
-COPY --from=prod-deps /app/packages/extension-contracts/node_modules ./packages/extension-contracts/node_modules
-COPY --from=builder /app/apps/transitous-runner/dist ./apps/transitous-runner/dist
-COPY apps/transitous-runner/package.json ./apps/transitous-runner/
-COPY pnpm-workspace.yaml tsconfig.base.json ./
-
 # Run as a dedicated non-root user. Upstream Python runs under this identity and
 # has no route to escalate: the catalog is mounted read-only apart from its
 # output directory, and nothing else in the image is writable.
@@ -99,7 +89,19 @@ RUN groupadd --system --gid 1001 transitous \
     && useradd --system --uid 1001 --gid transitous --create-home --home-dir /home/transitous transitous \
     && rm -rf /usr/local/lib/node_modules/npm \
     && rm -f /usr/local/bin/npm /usr/local/bin/npx \
-    && chown -R transitous:transitous /app /home/transitous
+    && chown transitous:transitous /app
+
+# Assign ownership while copying. A recursive chown afterwards would store a
+# second copy of every file, including node_modules, in its own layer.
+COPY --chown=transitous:transitous --from=prod-deps /app/node_modules ./node_modules
+COPY --chown=transitous:transitous --from=prod-deps /app/apps/transitous-runner/node_modules ./apps/transitous-runner/node_modules
+COPY --chown=transitous:transitous --from=prod-deps /app/packages/core/node_modules ./packages/core/node_modules
+COPY --chown=transitous:transitous packages/core/ ./packages/core/
+COPY --chown=transitous:transitous packages/extension-contracts/ ./packages/extension-contracts/
+COPY --chown=transitous:transitous --from=prod-deps /app/packages/extension-contracts/node_modules ./packages/extension-contracts/node_modules
+COPY --chown=transitous:transitous --from=builder /app/apps/transitous-runner/dist ./apps/transitous-runner/dist
+COPY --chown=transitous:transitous apps/transitous-runner/package.json ./apps/transitous-runner/
+COPY --chown=transitous:transitous pnpm-workspace.yaml tsconfig.base.json ./
 
 USER transitous:transitous
 

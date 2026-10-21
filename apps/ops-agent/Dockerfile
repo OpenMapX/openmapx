@@ -44,16 +44,18 @@ ENV NODE_ENV=production
 ENV HOME=/home/node
 ENV PORT=4300
 
-COPY --from=prod-deps /app/node_modules ./node_modules
-COPY --from=prod-deps /app/apps/ops-agent/node_modules ./apps/ops-agent/node_modules
-COPY --from=prod-deps /app/packages/ ./packages/
-COPY packages/ ./packages/
-COPY --from=builder /app/apps/ops-agent/dist ./apps/ops-agent/dist
-COPY apps/ops-agent/package.json ./apps/ops-agent/
-COPY services/ ./services/
-COPY pnpm-workspace.yaml tsconfig.base.json ./
+# Assign ownership while copying. A recursive chown afterwards would store a
+# second copy of every file, including node_modules, in its own layer.
+COPY --chown=node:node --from=prod-deps /app/node_modules ./node_modules
+COPY --chown=node:node --from=prod-deps /app/apps/ops-agent/node_modules ./apps/ops-agent/node_modules
+COPY --chown=node:node --from=prod-deps /app/packages/ ./packages/
+COPY --chown=node:node packages/ ./packages/
+COPY --chown=node:node --from=builder /app/apps/ops-agent/dist ./apps/ops-agent/dist
+COPY --chown=node:node apps/ops-agent/package.json ./apps/ops-agent/
+COPY --chown=node:node services/ ./services/
+COPY --chown=node:node pnpm-workspace.yaml tsconfig.base.json ./
 
-RUN chown -R node:node /app /home/node
+RUN chown node:node /app && chown -R node:node /home/node
 USER node:node
 
 WORKDIR /app/apps/ops-agent

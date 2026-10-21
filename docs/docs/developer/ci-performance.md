@@ -48,6 +48,18 @@ layout or build toolchain.
 References: [Docker cache modes](https://docs.docker.com/build/cache/backends/)
 and [GitHub cache backend](https://docs.docker.com/build/cache/backends/gha/).
 
+## Release cache backend
+
+Trusted main releases keep their layer cache in the registry, as
+`ghcr.io/openmapx/<app>:buildcache`, with the same per-image modes. The shared
+Actions cache is capped at 10 GB per repository. On 2026-10-20 it held 10.79 GB,
+8.18 GB of it main BuildKit blobs, and the next release's ops-agent, API and
+data-manager builds reused no step. A rebuilt layer is not byte-identical, so
+every host update then downloaded nearly all layers again. Registry export uses
+`ignore-error=true`: a cache failure means a cold build, never a failed release.
+PR validation builds keep their PR-scoped Actions cache because PR jobs hold no
+registry credentials. See the [registry cache backend](https://docs.docker.com/build/cache/backends/registry/).
+
 ## Dependency-layer inputs
 
 The API and web images stage integration `package.json` files before installing

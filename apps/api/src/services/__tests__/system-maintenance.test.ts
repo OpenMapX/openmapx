@@ -27,7 +27,7 @@ function context(payload: Record<string, unknown>): JobContext {
 beforeEach(() => vi.clearAllMocks());
 
 describe("agent-owned system maintenance", () => {
-  it("checks a release without API Docker or filesystem input", async () => {
+  it("checks a release from its manifest without downloading images", async () => {
     const ctx = context({ operation: "check" });
     await expect(handleSystemUpdateJob(ctx)).resolves.toEqual({
       operation: "check",
@@ -37,12 +37,11 @@ describe("agent-owned system maintenance", () => {
     });
     expect(executeAdminOperation.mock.calls.map((call) => call.slice(1))).toEqual([
       [{ kind: "release.resolve" }, "admin-job.release.resolve"],
-      [{ kind: "release.pull", releaseId: "release-123" }, "admin-job.release.pull"],
       [{ kind: "release.inspect" }, "admin-job.release.inspect"],
     ]);
   });
 
-  it("delegates backup, release application, and app-api replacement as one durable operation", async () => {
+  it("downloads the checked release before delegating backup and application", async () => {
     const ctx = context({
       operation: "apply",
       createBackup: true,
@@ -54,6 +53,16 @@ describe("agent-owned system maintenance", () => {
       release: "release-123",
       phase: "complete",
     });
+    expect(executeAdminOperation.mock.calls.map((call) => call[1].kind)).toEqual([
+      "release.pull",
+      "system.update",
+    ]);
+    expect(executeAdminOperation).toHaveBeenNthCalledWith(
+      1,
+      ctx,
+      { kind: "release.pull", releaseId: "release-checked" },
+      "admin-job.release.pull",
+    );
     expect(executeAdminOperation).toHaveBeenLastCalledWith(
       ctx,
       {
