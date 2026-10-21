@@ -84,7 +84,21 @@ FROM deps AS builder
 WORKDIR /app
 
 COPY tsconfig.base.json ./
-COPY --exclude=*/package.json packages/ packages/
+# The workspace packages staged for installation, not every package.
+COPY packages/air-quality/ packages/air-quality/
+COPY packages/cli/ packages/cli/
+COPY packages/core/ packages/core/
+COPY packages/db-schema/ packages/db-schema/
+COPY packages/extension-contracts/ packages/extension-contracts/
+COPY packages/hardlinks/ packages/hardlinks/
+COPY packages/hey-api-client-fetch/ packages/hey-api-client-fetch/
+COPY packages/i18n/ packages/i18n/
+COPY packages/integration-framework/ packages/integration-framework/
+COPY packages/mobility-core/ packages/mobility-core/
+COPY packages/mobility-formats/ packages/mobility-formats/
+COPY packages/motis-feed-proxy-config/ packages/motis-feed-proxy-config/
+COPY packages/place-ids/ packages/place-ids/
+COPY packages/transitous-core/ packages/transitous-core/
 COPY services/data-manager/ services/data-manager/
 
 WORKDIR /app/services/data-manager

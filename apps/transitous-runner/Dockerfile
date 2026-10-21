@@ -33,8 +33,17 @@ FROM base AS deps
 WORKDIR /app
 ENV HUSKY=0
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json ./
-# Preserve workspace paths without including source in the install cache key.
-COPY --parents packages/*/package.json ./
+# Only the workspace packages the runner reaches. Manifests stay separate from
+# source, so a source edit keeps the dependency install cached.
+COPY --parents \
+    packages/air-quality/package.json \
+    packages/core/package.json \
+    packages/extension-contracts/package.json \
+    packages/hey-api-client-fetch/package.json \
+    packages/mobility-core/package.json \
+    packages/mobility-formats/package.json \
+    packages/transitous-core/package.json \
+    ./
 COPY apps/transitous-runner/package.json apps/transitous-runner/
 RUN pnpm install --frozen-lockfile
 
@@ -42,8 +51,15 @@ FROM base AS prod-deps
 WORKDIR /app
 ENV HUSKY=0
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json ./
-# Preserve workspace paths without including source in the install cache key.
-COPY --parents packages/*/package.json ./
+COPY --parents \
+    packages/air-quality/package.json \
+    packages/core/package.json \
+    packages/extension-contracts/package.json \
+    packages/hey-api-client-fetch/package.json \
+    packages/mobility-core/package.json \
+    packages/mobility-formats/package.json \
+    packages/transitous-core/package.json \
+    ./
 COPY apps/transitous-runner/package.json apps/transitous-runner/
 RUN pnpm install --frozen-lockfile --prod --ignore-scripts && \
     rm -rf node_modules/.pnpm/image-size@*
@@ -53,7 +69,15 @@ RUN pnpm install --frozen-lockfile --prod --ignore-scripts && \
 
 FROM deps AS builder
 WORKDIR /app
-COPY packages/ packages/
+COPY --parents \
+    packages/air-quality/ \
+    packages/core/ \
+    packages/extension-contracts/ \
+    packages/hey-api-client-fetch/ \
+    packages/mobility-core/ \
+    packages/mobility-formats/ \
+    packages/transitous-core/ \
+    ./
 COPY apps/transitous-runner/ apps/transitous-runner/
 COPY tsconfig.base.json ./
 WORKDIR /app/apps/transitous-runner

@@ -10,8 +10,22 @@ FROM base AS deps
 WORKDIR /app
 ENV HUSKY=0
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json ./
-# Preserve workspace paths without including source in the install cache key.
-COPY --parents packages/*/package.json ./
+# Only the workspace packages the agent and its fixed CLI reach. Manifests stay
+# separate from source, so a source edit keeps the dependency install cached.
+COPY --parents \
+    packages/air-quality/package.json \
+    packages/cli/package.json \
+    packages/core/package.json \
+    packages/extension-contracts/package.json \
+    packages/hardlinks/package.json \
+    packages/hey-api-client-fetch/package.json \
+    packages/integration-framework/package.json \
+    packages/mobility-core/package.json \
+    packages/mobility-formats/package.json \
+    packages/motis-feed-proxy-config/package.json \
+    packages/place-ids/package.json \
+    packages/transitous-core/package.json \
+    ./
 COPY apps/ops-agent/package.json apps/ops-agent/
 RUN pnpm install --frozen-lockfile
 
@@ -19,14 +33,39 @@ FROM base AS prod-deps
 WORKDIR /app
 ENV HUSKY=0
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json ./
-# Preserve workspace paths without including source in the install cache key.
-COPY --parents packages/*/package.json ./
+COPY --parents \
+    packages/air-quality/package.json \
+    packages/cli/package.json \
+    packages/core/package.json \
+    packages/extension-contracts/package.json \
+    packages/hardlinks/package.json \
+    packages/hey-api-client-fetch/package.json \
+    packages/integration-framework/package.json \
+    packages/mobility-core/package.json \
+    packages/mobility-formats/package.json \
+    packages/motis-feed-proxy-config/package.json \
+    packages/place-ids/package.json \
+    packages/transitous-core/package.json \
+    ./
 COPY apps/ops-agent/package.json apps/ops-agent/
 RUN pnpm install --frozen-lockfile --prod --ignore-scripts
 
 FROM deps AS builder
 WORKDIR /app
-COPY packages/ packages/
+COPY --parents \
+    packages/air-quality/ \
+    packages/cli/ \
+    packages/core/ \
+    packages/extension-contracts/ \
+    packages/hardlinks/ \
+    packages/hey-api-client-fetch/ \
+    packages/integration-framework/ \
+    packages/mobility-core/ \
+    packages/mobility-formats/ \
+    packages/motis-feed-proxy-config/ \
+    packages/place-ids/ \
+    packages/transitous-core/ \
+    ./
 COPY apps/ops-agent/ apps/ops-agent/
 COPY tsconfig.base.json ./
 WORKDIR /app/apps/ops-agent
@@ -49,10 +88,28 @@ ENV PORT=4300
 COPY --chown=node:node --from=prod-deps /app/node_modules ./node_modules
 COPY --chown=node:node --from=prod-deps /app/apps/ops-agent/node_modules ./apps/ops-agent/node_modules
 COPY --chown=node:node --from=prod-deps /app/packages/ ./packages/
-COPY --chown=node:node packages/ ./packages/
+COPY --chown=node:node --parents \
+    packages/air-quality/ \
+    packages/cli/ \
+    packages/core/ \
+    packages/extension-contracts/ \
+    packages/hardlinks/ \
+    packages/hey-api-client-fetch/ \
+    packages/integration-framework/ \
+    packages/mobility-core/ \
+    packages/mobility-formats/ \
+    packages/motis-feed-proxy-config/ \
+    packages/place-ids/ \
+    packages/transitous-core/ \
+    ./
 COPY --chown=node:node --from=builder /app/apps/ops-agent/dist ./apps/ops-agent/dist
 COPY --chown=node:node apps/ops-agent/package.json ./apps/ops-agent/
-COPY --chown=node:node services/ ./services/
+# The CLI's Transitous commands import these data-manager modules directly.
+COPY --chown=node:node --parents \
+    services/data-manager/src/transitous-lock.ts \
+    services/data-manager/src/gbfs-catalog-lock.ts \
+    services/data-manager/src/utils/atomic-write.ts \
+    ./
 COPY --chown=node:node pnpm-workspace.yaml tsconfig.base.json ./
 
 RUN chown node:node /app && chown -R node:node /home/node

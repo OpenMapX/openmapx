@@ -17,10 +17,18 @@
  *
  * The data-manager image does not bake `integrations/`; it is held to its own
  * dependency closure the same way, since it runs workspace source under tsx.
+ *
+ * The ops-agent and transitous-runner images copy only the packages they use,
+ * so a package changing elsewhere does not rebuild them. Their installs must
+ * stage their manifest closure, and every repository file their runtime code
+ * imports must be copied into the runner: the import graph below is followed
+ * from each tsx image's entry points with the image's own module resolution.
  */
 import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { coversPath, dockerInputs } from "./docker-inputs.mjs";
+import { runtimeImportGraph } from "./runtime-import-graph";
 
 const HERE = typeof __dirname !== "undefined" ? __dirname : dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "..");
@@ -29,51 +37,53 @@ const read = (rel: string): string => readFileSync(join(ROOT, rel), "utf-8");
 const readJson = (rel: string): { name?: string; dependencies?: Record<string, string> } =>
   JSON.parse(read(rel));
 
-/** Ownership and mode flags do not change which build-context path a COPY reads. */
-const COPY_OPTIONS = String.raw`(?:--(?:chown|chmod)=\S+\s+|--link\s+)*`;
-
-/**
- * Extracts the set of `packages/<name>` source directories a Dockerfile's
- * `runner` stage bakes in, i.e. lines shaped `COPY packages/<name>/ <dest>`
- * (source copies, not `--from=` node_modules copies or package.json-only
- * copies used by the deps/builder stages).
- */
-function runnerPackages(relPath: string): Set<string> {
+function runnerSection(relPath: string): string {
   const content = read(relPath);
   const runnerIdx = content.search(/^FROM\s+\S+\s+AS\s+runner\s*$/im);
   if (runnerIdx === -1) {
     throw new Error(`${relPath}: could not find a "FROM ... AS runner" stage`);
   }
-  const runnerSection = content.slice(runnerIdx);
+  return content.slice(runnerIdx);
+}
+
+const ALL_PACKAGES = readdirSync(join(ROOT, "packages"));
+
+/**
+ * The `packages/<name>` directories a set of Dockerfile instructions copies
+ * from the build context, read with the release planner's COPY parser (which
+ * understands flags, `--parents`, multiple sources and globs). A copy of the
+ * whole `packages/` directory, or syntax the parser widens to the context,
+ * counts as every package.
+ */
+function copiedPackages(instructions: string, file: (name: string) => string): Set<string> {
   const pkgs = new Set<string>();
-  const lineRegex = new RegExp(
-    String.raw`^COPY\s+${COPY_OPTIONS}packages\/([a-z0-9-]+)\/\s+\S+\s*$`,
-    "gm",
-  );
-  for (const match of runnerSection.matchAll(lineRegex)) {
-    const name = match[1];
-    if (name) pkgs.add(name);
+  for (const input of dockerInputs(instructions, ".") as string[]) {
+    if (input === "." || input === "packages") {
+      for (const name of ALL_PACKAGES) pkgs.add(name);
+      continue;
+    }
+    for (const name of ALL_PACKAGES) {
+      if (coversPath([input], `packages/${name}/${file(name)}`)) pkgs.add(name);
+    }
   }
   return pkgs;
 }
 
 /**
- * Extracts the `packages/<name>` set a Dockerfile stages a `package.json` for,
- * i.e. lines shaped `COPY packages/<name>/package.json <dest>`. These are what
- * `pnpm install --frozen-lockfile` needs present to resolve the workspace link;
- * without one the install fails outright, before any runtime concern.
+ * The `packages/<name>` source directories a Dockerfile's `runner` stage bakes
+ * in (source copies, not `--from=` node_modules copies).
+ */
+function runnerPackages(relPath: string): Set<string> {
+  return copiedPackages(runnerSection(relPath), () => "src/index.ts");
+}
+
+/**
+ * The `packages/<name>` set a Dockerfile stages a `package.json` for. These are
+ * what `pnpm install --frozen-lockfile` needs present to resolve the workspace
+ * link; without one the install fails outright, before any runtime concern.
  */
 function manifestPackages(relPath: string): Set<string> {
-  const pkgs = new Set<string>();
-  const lineRegex = new RegExp(
-    String.raw`^COPY\s+${COPY_OPTIONS}packages\/([a-z0-9-]+)\/package\.json\s+\S+\s*$`,
-    "gm",
-  );
-  for (const match of read(relPath).matchAll(lineRegex)) {
-    const name = match[1];
-    if (name) pkgs.add(name);
-  }
-  return pkgs;
+  return copiedPackages(read(relPath), () => "package.json");
 }
 
 /** Maps workspace package name (`@openmapx/core`) to its directory (`core`). */
@@ -152,6 +162,22 @@ const IMAGES: { path: string; stagesSource: boolean; required: Set<string> }[] =
       Object.keys(readJson("services/data-manager/package.json").dependencies ?? {}),
     ),
   },
+  {
+    path: "apps/ops-agent/Dockerfile",
+    stagesSource: false,
+    // The agent runs its fixed CLI from source, so the CLI's closure ships too.
+    required: requiredPackages([
+      ...Object.keys(readJson("apps/ops-agent/package.json").dependencies ?? {}),
+      "@openmapx/cli",
+    ]),
+  },
+  {
+    path: "apps/transitous-runner/Dockerfile",
+    stagesSource: false,
+    required: requiredPackages(
+      Object.keys(readJson("apps/transitous-runner/package.json").dependencies ?? {}),
+    ),
+  },
 ];
 
 const empty = IMAGES.filter((image) => image.required.size === 0);
@@ -187,6 +213,85 @@ for (const { path: dockerfile, stagesSource, required } of IMAGES) {
         "throws ERR_MODULE_NOT_FOUND at boot, taking down everything that imports it. " +
         "Add `COPY packages/<pkg>/ <dest>` (plus the matching `COPY --from=prod-deps " +
         ".../node_modules ...` if the package has runtime deps).",
+    );
+  }
+}
+
+/**
+ * Images that run workspace source under tsx, with the entry points their
+ * runtime starts from. Their own `src` is compiled into `dist` by the builder.
+ */
+const RUNTIME_IMAGES: {
+  path: string;
+  tsconfig: string;
+  entries: string[];
+  compiled: string;
+  computedImports?: Record<string, string[]>;
+  notShipped?: Record<string, string>;
+}[] = [
+  {
+    path: "apps/ops-agent/Dockerfile",
+    tsconfig: "apps/ops-agent/tsconfig.json",
+    entries: ["apps/ops-agent/src", "packages/cli/src/index.ts"],
+    compiled: "apps/ops-agent/src/",
+    computedImports: {
+      "apps/ops-agent/src/data-inventory.ts": ["packages/transitous-core/src/motis-config.ts"],
+    },
+    notShipped: {
+      "integrations/transit-dynamic-registry/":
+        "only `transit-registry bump` loads it, a developer command the agent never runs",
+    },
+  },
+  {
+    path: "apps/transitous-runner/Dockerfile",
+    tsconfig: "apps/transitous-runner/tsconfig.json",
+    entries: ["apps/transitous-runner/src"],
+    compiled: "apps/transitous-runner/src/",
+  },
+  {
+    path: "services/data-manager/Dockerfile",
+    tsconfig: "services/data-manager/tsconfig.json",
+    entries: ["services/data-manager/src"],
+    compiled: "services/data-manager/src/",
+  },
+];
+
+for (const image of RUNTIME_IMAGES) {
+  const graph = runtimeImportGraph({
+    root: ROOT,
+    tsconfig: image.tsconfig,
+    entries: image.entries,
+    computedImports: image.computedImports,
+  });
+  for (const file of graph.undeclaredComputedImports) {
+    completenessErrors.push(
+      `${file} imports a computed specifier, so the files ${image.path} must ship cannot be ` +
+        "followed. Declare the files it loads in RUNTIME_IMAGES.computedImports.",
+    );
+  }
+  for (const file of graph.staleComputedImportDeclarations) {
+    completenessErrors.push(
+      `${image.path}: ${file} is declared in computedImports but is unreachable or has no ` +
+        "computed import any more. Remove the declaration.",
+    );
+  }
+  for (const edge of graph.unresolved) {
+    completenessErrors.push(`${image.path}: unresolvable runtime import ${edge}.`);
+  }
+  const copied = dockerInputs(runnerSection(image.path), ".") as string[];
+  const notShipped = Object.keys(image.notShipped ?? {});
+  const missing = graph.files.filter(
+    (file) =>
+      !file.startsWith(image.compiled) &&
+      !notShipped.some((prefix) => file.startsWith(prefix)) &&
+      !coversPath(copied, file),
+  );
+  if (missing.length > 0) {
+    completenessErrors.push(
+      `${image.path}'s runner never copies files its runtime code imports: ` +
+        `${missing.slice(0, 8).join(", ")}${missing.length > 8 ? ` (+${missing.length - 8} more)` : ""}\n` +
+        "    They resolve during development and then throw ERR_MODULE_NOT_FOUND in the image. " +
+        "Copy them into the runner stage.",
     );
   }
 }

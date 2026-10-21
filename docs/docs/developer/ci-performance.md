@@ -63,8 +63,9 @@ registry credentials. See the [registry cache backend](https://docs.docker.com/b
 ## Dependency-layer inputs
 
 The API and web images stage integration `package.json` files before installing
-dependencies. The ops-agent and transitous-runner images do the same for workspace
-packages. [`COPY --parents`](https://docs.docker.com/reference/dockerfile/#copy---parents)
+dependencies. The ops-agent and transitous-runner images stage only the manifests
+of the workspace packages they use, so `node_modules` holds only their dependencies.
+[`COPY --parents`](https://docs.docker.com/reference/dockerfile/#copy---parents)
 preserves their directory layout without copying source; these Dockerfiles require
 the stable Dockerfile 1.20 frontend.
 
@@ -80,6 +81,40 @@ install; distinguish cache availability from input invalidation when measuring. 
 install lifecycle scripts independent of application source, or explicitly stage
 the inputs they need before installation and verify the cache behavior again.
 The external dependency build allowlist in `pnpm-workspace.yaml` still applies.
+
+## Release planner inputs
+
+The planner (`scripts/docker-release-plan.mjs`) rebuilds an image only when the
+files its Dockerfile copies change; otherwise the release reuses the published
+digest. Hosts then neither download nor restart that service.
+
+- A `*` or `?` glob covers only what it matches: `packages/*/package.json` is the
+  manifests, not every package's source.
+- ops-agent copies the 12 packages its code and fixed CLI reach, plus the three
+  data-manager modules the CLI imports. transitous-runner copies its 7 packages,
+  and the data-manager builder copies its 14. These images no longer copy all
+  of `packages/` or `services/`.
+- The lockfile counts only for what an image installs: the importers whose
+  `package.json` it copies, the workspace importers they link, and every
+  snapshot and package reachable from them, plus the lockfile settings. If the
+  planner cannot follow an entry, it counts the whole file. The plan job installs
+  the workspace for the `yaml` parser.
+- `ci.yml` is not an input: it passes nothing to `docker.yml`.
+
+`check-dockerfile-workspace-sync` keeps the narrowed images complete. It walks
+the TypeScript import graph from each tsx image's entry points with that image's
+module resolution. Every repository file reached must be copied into the runner.
+A computed dynamic import must declare the files it loads.
+
+Over the 200 main commits before this change, the same planner rules would have
+rebuilt ops-agent 106 times instead of 139, transitous-runner 97 instead of 121,
+data-manager 118 instead of 130, transitous-tools 10 instead of 18, and
+privacy-backup 8 instead of 17. API and web include every integration and change
+in most commits anyway. Most remaining rebuilds come from `packages/core`: every
+image uses it, and ops-agent's CLI imports its barrel, which reaches about 1,000
+of its files. File-level inputs would mostly help transitous-runner, which reaches
+3 core files. They are not used, because computed imports and file reads cannot
+all be followed, and a missed one would let a release reuse an image with stale code.
 
 Changesets excludes package-root `Dockerfile` edits from release detection;
 these private deployment-image changes do not need empty package notes. Source,
