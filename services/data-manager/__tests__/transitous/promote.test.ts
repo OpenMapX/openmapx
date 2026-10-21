@@ -829,19 +829,9 @@ describe("promote stage", () => {
       return jsonResponse(successfulBody(url));
     }) as unknown as typeof fetch;
 
-    // A repoRoot with a compose file makes restartPrimary take the
-    // `docker compose up` branch instead of the `docker restart` fallback.
-    const repoRoot = mkdtempSync(join(tmpdir(), "openmapx-promote-repo-"));
-    mkdirSync(join(repoRoot, "infra", "docker"), { recursive: true });
-    writeFileSync(
-      join(repoRoot, "infra", "docker", "docker-compose.generated.yml"),
-      "services: {}\n",
-    );
-
     const runnerCalls: Array<{ command: string; args: string[] }> = [];
     const ctx = buildJobContext({
       dataDir: fx.dataDir,
-      repoRoot,
       store: new StateStore(fx.dataDir),
       runner: async (command, args) => {
         runnerCalls.push({ command, args });
@@ -857,8 +847,6 @@ describe("promote stage", () => {
     // here at all.
     expect(opsCalls.map((call) => call.kind)).toContain("motis.primary.promote");
     expect(runnerCalls).toEqual([]);
-
-    rmSync(repoRoot, { recursive: true, force: true });
   });
 
   it("rolls back the rename when docker restart fails", async () => {
@@ -906,12 +894,6 @@ describe("promote stage", () => {
       return { changed: true, state: "stopped" };
     });
     const ctx = makeCtx({ dataDir: fx.dataDir, runner: async () => undefined });
-    ctx.repoRoot = fx.dataDir;
-    mkdirSync(join(ctx.repoRoot, "infra", "docker"), { recursive: true });
-    writeFileSync(
-      join(ctx.repoRoot, "infra", "docker", "docker-compose.generated.yml"),
-      "services: {}\n",
-    );
     ctx.slotLayout = ensureMotisSlotLayout(fx.dataDir);
     expect(aliasSlot(ctx.slotLayout, "live")).toBe("A");
     expect(aliasSlot(ctx.slotLayout, "staging")).toBe("B");

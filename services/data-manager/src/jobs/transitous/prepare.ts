@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync } from "node:fs";
 import { ensureCatalog } from "@openmapx/transitous-core";
 import { runOpsOperation } from "../../ops-client.js";
-import { parseRefShaPair } from "../../transitous-lock.js";
+import { parseRefShaPair, type TransitousLock } from "../../transitous-lock.js";
 import {
   DEFAULT_TRANSITOUS_REPO_URL,
   ensureTransitousWorkdirs,
@@ -36,7 +36,12 @@ export const run: StageFn = async (ctx) => {
       reset: true,
     });
 
-    await enforceTransitousLock(catalogDir, ctx.runner, ctx.logger, ctx.useProposedLock ?? false);
+    ctx.state.transitousLock = await enforceTransitousLock(
+      catalogDir,
+      ctx.runner,
+      ctx.logger,
+      ctx.useProposedLock ?? false,
+    );
     ensureTransitousWorkdirs(catalogDir, ctx.outDir, ctx.downloadsDir);
     pruneOrphanedGtfsDatasets(ctx);
 
@@ -109,8 +114,8 @@ async function enforceTransitousLock(
   runner: JobContext["runner"],
   logger: JobLogger,
   useProposedLock: boolean,
-): Promise<void> {
-  let lock: { ref: string } | null;
+): Promise<TransitousLock> {
+  let lock: TransitousLock | null;
   try {
     // The lock is agent-owned; data-manager reads it through the typed
     // operation rather than bind-mounting the host checkout. The auto-bump
@@ -148,7 +153,7 @@ async function enforceTransitousLock(
   }
   const safeArgs = safeDirArgs(catalogDir);
   const currentSha = await readGitHeadSha(catalogDir);
-  if (currentSha === sha) return;
+  if (currentSha === sha) return lock;
   logger.info(
     `transitous-pipeline: catalog HEAD ${currentSha || "(unknown)"} differs from lockfile ${sha}; resetting`,
   );
@@ -165,4 +170,5 @@ async function enforceTransitousLock(
     [...safeArgs, "-C", catalogDir, "submodule", "update", "--init", "--checkout", "--force"],
     { cwd: catalogDir, stdio: "pipe" },
   );
+  return lock;
 }

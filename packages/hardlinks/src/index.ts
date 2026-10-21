@@ -158,6 +158,26 @@ interface Sentinel {
   linkedPaths: string[];
   /** When the plan used `targetFilename`, record it so a rename gets pruned. */
   targetFilename?: string;
+  /** The plan entry applied, so it can be re-applied without the plan. */
+  entry?: HardlinkEntry;
+}
+
+function parseEntry(value: unknown): HardlinkEntry | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const obj = value as Record<string, unknown>;
+  const required = ["source", "target", "consumerService", "dataType"] as const;
+  if (!required.every((key) => typeof obj[key] === "string")) return undefined;
+  for (const key of ["instance", "targetFilename"] as const) {
+    if (obj[key] !== undefined && typeof obj[key] !== "string") return undefined;
+  }
+  return {
+    source: obj.source as string,
+    target: obj.target as string,
+    consumerService: obj.consumerService as string,
+    dataType: obj.dataType as string,
+    ...(typeof obj.instance === "string" ? { instance: obj.instance } : {}),
+    ...(typeof obj.targetFilename === "string" ? { targetFilename: obj.targetFilename } : {}),
+  };
 }
 
 function sentinelPathFor(rootDir: string, sentinelDir: string, entry: HardlinkEntry): string {
@@ -181,7 +201,7 @@ function readSentinel(sentinelPath: string): Sentinel | null {
       ? obj.linkedPaths.filter((x): x is string => typeof x === "string" && isSafeRelPath(x))
       : [];
     const targetFilename = typeof obj.targetFilename === "string" ? obj.targetFilename : undefined;
-    return { linkedPaths, targetFilename };
+    return { linkedPaths, targetFilename, entry: parseEntry(obj.entry) };
   } catch {
     return null;
   }
@@ -256,6 +276,7 @@ function pruneEmptyDirs(dir: string, stopAt: string): void {
  * that we never linked are left alone.
  */
 function linkTreeWithSentinel(
+  entry: HardlinkEntry,
   rootAbs: string,
   sourceDir: string,
   targetDir: string,
@@ -302,11 +323,12 @@ function linkTreeWithSentinel(
     // `previouslyLinked`, so no extra handling needed here.
   }
 
-  writeSentinel(sentinelPath, { linkedPaths: sourcePaths });
+  writeSentinel(sentinelPath, { linkedPaths: sourcePaths, entry });
   return result;
 }
 
 function linkSingleFileWithSentinel(
+  entry: HardlinkEntry,
   rootAbs: string,
   sourceDir: string,
   targetDir: string,
@@ -352,7 +374,7 @@ function linkSingleFileWithSentinel(
     }
   }
 
-  writeSentinel(sentinelPath, { linkedPaths: [targetFilename], targetFilename });
+  writeSentinel(sentinelPath, { linkedPaths: [targetFilename], targetFilename, entry });
   return result;
 }
 
@@ -423,6 +445,7 @@ export function applyHardlinkPlan(
 
     const r = entry.targetFilename
       ? linkSingleFileWithSentinel(
+          entry,
           rootAbs,
           source,
           target,
@@ -430,11 +453,33 @@ export function applyHardlinkPlan(
           sentinelPath,
           prune,
         )
-      : linkTreeWithSentinel(rootAbs, source, target, sentinelPath, prune);
+      : linkTreeWithSentinel(entry, rootAbs, source, target, sentinelPath, prune);
     result.linked += r.linked;
     result.skipped += r.skipped;
     result.pruned += r.pruned;
   }
 
   return result;
+}
+
+/**
+ * The plan entries last applied under `rootDir`, as their sentinels record
+ * them. A service that cannot read the host's generated plan, such as
+ * data-manager, re-applies some of them after replacing a producer file, whose
+ * consumer copy otherwise keeps the old inode. Sentinels written before
+ * entries were recorded are skipped until the plan is next applied.
+ */
+export function appliedHardlinkEntries(
+  rootDir: string,
+  sentinelDir: string = DEFAULT_SENTINEL_DIR,
+): HardlinkEntry[] {
+  const directory = join(resolve(rootDir), sentinelDir);
+  if (!existsSync(directory)) return [];
+  const entries: HardlinkEntry[] = [];
+  for (const name of readdirSync(directory).sort()) {
+    if (!name.endsWith(".json")) continue;
+    const entry = readSentinel(join(directory, name))?.entry;
+    if (entry) entries.push(entry);
+  }
+  return entries;
 }

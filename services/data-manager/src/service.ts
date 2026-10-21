@@ -42,7 +42,6 @@ const offlinePackages = new OfflinePackageGenerator({
     warn: (message, fields) => app.log.warn(fields, message),
   },
 });
-const repoRoot = process.env.OPENMAPX_ROOT_DIR ?? "";
 const singleFlight = getSingleFlightController();
 const operationsPolicy = resolveOperationsProfileFromEnv();
 
@@ -62,7 +61,6 @@ const notablePlaces = {
 registerApi(app, {
   dataDir,
   offlinePackages,
-  repoRoot,
   singleFlight,
   operationsPolicy,
   notablePlaces,
@@ -140,7 +138,6 @@ async function start(): Promise<void> {
     setupCronSchedulers: () =>
       setupCron({
         dataDir,
-        repoRoot,
         countries,
         operationsPolicy,
         store,

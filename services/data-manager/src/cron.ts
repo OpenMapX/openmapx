@@ -165,7 +165,6 @@ export interface CronLogger {
 
 export interface CronSetupOptions {
   dataDir: string;
-  repoRoot: string;
   countries: string[];
   operationsPolicy?: MotisOperationsPolicy;
   store: StateStore;
@@ -554,7 +553,6 @@ export function setupCron(options: CronSetupOptions): CronHandles {
           dataDir: options.dataDir,
           store: options.store,
           countries: options.countries,
-          repoRoot: options.repoRoot,
           source: parseTransitSource(),
           operationsPolicy: options.operationsPolicy,
           jobId: start.jobId,
@@ -652,7 +650,6 @@ export function setupCron(options: CronSetupOptions): CronHandles {
       dataDir: options.dataDir,
       store: options.store,
       countries: options.countries,
-      repoRoot: options.repoRoot,
       source: parseTransitSource(),
       operationsPolicy: options.operationsPolicy,
       jobId,

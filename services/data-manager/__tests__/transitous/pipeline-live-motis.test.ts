@@ -750,7 +750,6 @@ describeLive("transitous pipeline end-to-end against real motis containers", () 
         throw new Error("test setup did not complete");
       }
       const fixtureDataDir = dataDir;
-      const fixtureRepoRoot = tmp;
       const fixtureCatalogDir = join(fixtureDataDir, ".transitous-catalog");
 
       const runner: CommandRunner = async (command, args, opts) => {
@@ -768,7 +767,6 @@ describeLive("transitous pipeline end-to-end against real motis containers", () 
       const makeContext = () =>
         buildJobContext({
           dataDir: fixtureDataDir,
-          repoRoot: fixtureRepoRoot,
           store: new StateStore(fixtureDataDir),
           countries: ["de", "ch", "at"],
           feedsOverlayPath: join(fixtureDataDir, "feeds-overlay.json"),

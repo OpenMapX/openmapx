@@ -1,15 +1,23 @@
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { applyHardlinkPlan, DEFAULT_SENTINEL_DIR } from "../src/index.js";
+import { appliedHardlinkEntries, applyHardlinkPlan, DEFAULT_SENTINEL_DIR } from "../src/index.js";
 
 describe("applyHardlinkPlan", () => {
   let root: string;
 
   beforeEach(() => {
-    root = join(tmpdir(), `openmapx-hl-${Date.now()}-${Math.random().toString(36).slice(2)}`);
-    mkdirSync(root, { recursive: true });
+    root = mkdtempSync(join(tmpdir(), "openmapx-hl-"));
   });
 
   afterEach(() => {
@@ -352,5 +360,52 @@ describe("applyHardlinkPlan", () => {
 
     expect(result.linked).toBe(1);
     expect(existsSync(join(root, "nominatim", "osm-pbf", "data.osm.pbf"))).toBe(true);
+  });
+
+  it("records applied entries so they can be re-applied without the plan", () => {
+    mkdirSync(join(root, "proxy", "conf"), { recursive: true });
+    writeFileSync(join(root, "proxy", "conf", "feeds.conf"), "old");
+    mkdirSync(join(root, "osm"), { recursive: true });
+    writeFileSync(join(root, "osm", "germany.osm.pbf"), "pbf");
+    const proxy = {
+      source: "data/proxy/conf",
+      target: "data/feed-proxy/feed-proxy-config",
+      consumerService: "feed-proxy",
+      dataType: "feed-proxy-config",
+    };
+    const osm = {
+      source: "data/osm",
+      target: "data/nominatim/osm-pbf",
+      consumerService: "nominatim",
+      dataType: "osm-pbf",
+      instance: "de",
+      targetFilename: "data.osm.pbf",
+    };
+    applyHardlinkPlan([proxy, osm], { rootDir: root });
+    // A sentinel from before entries were recorded is skipped.
+    writeFileSync(
+      join(root, DEFAULT_SENTINEL_DIR, "old-data.json"),
+      JSON.stringify({ linkedPaths: ["a.txt"] }),
+    );
+
+    expect(appliedHardlinkEntries(root)).toEqual([proxy, osm]);
+
+    // Atomically replacing the producer file leaves the consumer on the old inode.
+    writeFileSync(join(root, "proxy", "conf", "feeds.conf.tmp"), "new");
+    renameSync(
+      join(root, "proxy", "conf", "feeds.conf.tmp"),
+      join(root, "proxy", "conf", "feeds.conf"),
+    );
+    const consumer = join(root, "feed-proxy", "feed-proxy-config", "feeds.conf");
+    expect(readFileSync(consumer, "utf-8")).toBe("old");
+
+    const entries = appliedHardlinkEntries(root).filter((e) => e.dataType === "feed-proxy-config");
+    applyHardlinkPlan(entries, { rootDir: root, prune: false });
+    expect(readFileSync(consumer, "utf-8")).toBe("new");
+    expect(statSync(consumer).ino).toBe(statSync(join(root, "proxy", "conf", "feeds.conf")).ino);
+  });
+
+  it("finds no applied entries before any plan was applied", () => {
+    expect(appliedHardlinkEntries(root)).toEqual([]);
   });
 });

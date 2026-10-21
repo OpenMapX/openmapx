@@ -157,7 +157,6 @@ describe("bounded GBFS candidate validation", () => {
     process.env.MOTIS_GBFS_CATALOG_ENABLED = "true";
     const ctx = buildJobContext({
       dataDir: join(tmp, "data"),
-      repoRoot: tmp,
       countries: ["de"],
       source: "build",
       store: new StateStore(join(tmp, "data")),
@@ -173,6 +172,67 @@ describe("bounded GBFS candidate validation", () => {
     });
     expect(result.message).toContain("json");
     expect(result.message).toContain("Invalid JSON response");
+  });
+
+  it("honors the data directory's overlay quarantine when no path is configured", async () => {
+    lookupMock.mockResolvedValue(PUBLIC);
+    tmp = mkdtempSync(join(tmpdir(), "openmapx-compile-gbfs-"));
+    const catalog = join(tmp, "data", ".transitous-catalog");
+    mkdirSync(join(catalog, "feeds"), { recursive: true });
+    mkdirSync(join(tmp, "data", "overrides"), { recursive: true });
+    writeFileSync(
+      join(tmp, "data", "overrides", "feeds-overlay.json"),
+      JSON.stringify({
+        version: 3,
+        sources: [],
+        patches: [],
+        quarantine: [
+          {
+            sourceId: "mobilitydata:de:demo:f4875dd78e",
+            reason: "broken upstream",
+            firstSeen: "2026-01-01T00:00:00Z",
+            lastChecked: "2026-01-01T00:00:00Z",
+          },
+        ],
+      }),
+    );
+    const csv =
+      "Country Code,Name,Location,System ID,URL,Auto-Discovery URL,Supported Versions,Authentication Info URL\nDE,Demo,Berlin,demo,https://example.test,https://example.test/gbfs.json,2.3,\n";
+    const commit = "b".repeat(40);
+    gbfsLock.value = {
+      schemaVersion: 1,
+      source: "mobilitydata-gbfs",
+      commit,
+      url: `https://raw.githubusercontent.com/MobilityData/gbfs/${commit}/systems.csv`,
+      sha256: createHash("sha256").update(csv).digest("hex"),
+      lockedAt: "2026-01-01T00:00:00Z",
+      lockedBy: "test",
+    };
+    // The only system would fail validation if it were not quarantined.
+    globalThis.fetch = vi.fn(async (input: unknown) =>
+      new URL(String(input)).hostname === "raw.githubusercontent.com"
+        ? new Response(csv)
+        : new Response("not-json"),
+    ) as typeof fetch;
+    process.env.MOTIS_GBFS_CATALOG_ENABLED = "true";
+    // Compose renders an unset variable as an empty string.
+    vi.stubEnv("TRANSITOUS_FEEDS_OVERLAY_PATH", "");
+    try {
+      const ctx = buildJobContext({
+        dataDir: join(tmp, "data"),
+        countries: ["de"],
+        source: "build",
+        store: new StateStore(join(tmp, "data")),
+        now: () => "2026-01-01T00:00:00Z",
+      });
+      ctx.state.catalogDir = catalog;
+
+      const result = await run(ctx);
+
+      expect(result.status, result.message).toBe("ok");
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 
   it.each(["build", "mirror"] as const)(
@@ -226,7 +286,6 @@ describe("bounded GBFS candidate validation", () => {
       process.env.MOTIS_GBFS_CATALOG_ENABLED = "true";
       const ctx = buildJobContext({
         dataDir: join(tmp, "data"),
-        repoRoot: tmp,
         countries: ["de"],
         source,
         store: new StateStore(join(tmp, "data")),
