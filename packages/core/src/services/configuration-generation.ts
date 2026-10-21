@@ -1,12 +1,17 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import {
+  type BigIntStats,
+  closeSync,
   constants,
   existsSync,
+  fstatSync,
   lstatSync,
   mkdirSync,
+  openSync,
   readdirSync,
   readFileSync,
   readlinkSync,
+  readSync,
   renameSync,
   rmSync,
   symlinkSync,
@@ -348,6 +353,62 @@ async function syncDirectory(path: string): Promise<void> {
 
 const UNSAFE = "Configuration generation is not owned by this user or has unsafe permissions";
 
+function sameFileObservation(left: BigIntStats, right: BigIntStats): boolean {
+  return (
+    left.dev === right.dev &&
+    left.ino === right.ino &&
+    left.mode === right.mode &&
+    left.nlink === right.nlink &&
+    left.uid === right.uid &&
+    left.gid === right.gid &&
+    left.size === right.size &&
+    left.mtimeNs === right.mtimeNs &&
+    left.ctimeNs === right.ctimeNs
+  );
+}
+
+/** The local POSIX directory boundary is trusted; pin and validate the final file. */
+function readGenerationFile(
+  path: string,
+  before: BigIntStats,
+  maximum: number,
+  modes: readonly bigint[],
+): { contents: Buffer; mode: bigint } {
+  if (
+    !before.isFile() ||
+    before.nlink !== 1n ||
+    before.uid !== BigInt(process.geteuid?.() ?? 0) ||
+    !modes.includes(before.mode & 0o777n) ||
+    before.size < 0n ||
+    before.size > BigInt(maximum)
+  ) {
+    throw new Error(UNSAFE);
+  }
+  // NONBLOCK prevents a raced-in FIFO from blocking before fstat can reject it.
+  const descriptor = openSync(
+    path,
+    constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
+  );
+  try {
+    const opened = fstatSync(descriptor, { bigint: true });
+    if (!sameFileObservation(before, opened)) throw new Error(UNSAFE);
+    const contents = Buffer.alloc(Number(opened.size));
+    let offset = 0;
+    while (offset < contents.length) {
+      const count = readSync(descriptor, contents, offset, contents.length - offset, offset);
+      if (count === 0) throw new Error(UNSAFE);
+      offset += count;
+    }
+    // Never follow growth with an unbounded allocation or read-to-EOF loop.
+    if (readSync(descriptor, Buffer.alloc(1), 0, 1, offset) !== 0) throw new Error(UNSAFE);
+    const after = fstatSync(descriptor, { bigint: true });
+    if (!sameFileObservation(opened, after)) throw new Error(UNSAFE);
+    return { contents, mode: opened.mode & 0o777n };
+  } finally {
+    closeSync(descriptor);
+  }
+}
+
 function safeGenerationTree(path: string): { entries: number; bytes: number } {
   const owner = process.geteuid?.() ?? 0;
   const rootStats = lstatSync(path);
@@ -388,20 +449,44 @@ function safeGenerationTree(path: string): { entries: number; bytes: number } {
 function generationDigest(path: string): string {
   safeGenerationTree(path);
   const digest = createHash("sha256").update("openmapx-trusted-generation-v1\0");
-  const visit = (directory: string, prefix = "") => {
+  let entries = 1;
+  let bytes = 0;
+  const visit = (directory: string, prefix = "", secrets = false) => {
     for (const entry of readdirSync(directory, { withFileTypes: true }).sort((a, b) =>
       a.name.localeCompare(b.name),
     )) {
       const child = join(directory, entry.name);
       const relative = prefix ? `${prefix}/${entry.name}` : entry.name;
-      const stats = lstatSync(child);
+      if (++entries > 1024) throw new Error(UNSAFE);
+      const stats = lstatSync(child, { bigint: true });
       digest
         .update(entry.isDirectory() ? "d\0" : "f\0")
         .update(relative)
         .update("\0");
-      digest.update(String(stats.mode & 0o777)).update("\0");
-      if (entry.isDirectory()) visit(child, relative);
-      else digest.update(readFileSync(child)).update("\0");
+      if (entry.isDirectory()) {
+        if (
+          !stats.isDirectory() ||
+          stats.uid !== BigInt(process.geteuid?.() ?? 0) ||
+          (stats.mode & 0o777n) !== 0o700n
+        ) {
+          throw new Error(UNSAFE);
+        }
+        digest.update(String(stats.mode & 0o777n)).update("\0");
+        visit(
+          child,
+          relative,
+          secrets || (directory === path && entry.name === GENERATED_SECRETS_DIRNAME),
+        );
+      } else {
+        const { contents, mode } = readGenerationFile(
+          child,
+          stats,
+          MAX_GENERATION_BYTES - bytes,
+          secrets ? [0o444n] : [0o400n, 0o600n],
+        );
+        bytes += contents.length;
+        digest.update(String(mode)).update("\0").update(contents).update("\0");
+      }
     }
   };
   visit(path);
@@ -467,13 +552,9 @@ export function readAppliedServiceIds(
     return null;
   }
   const path = join(infraDir, CONFIGURATION_GENERATIONS, active, SERVICE_SELECTION_FILE);
-  const metadata = lstatSync(path);
-  if (!metadata.isFile() || metadata.nlink !== 1 || metadata.size > 64 * 1024) {
-    throw new Error(`Malformed applied service selection at ${path}`);
-  }
-  const raw = JSON.parse(
-    new TextDecoder("utf-8", { fatal: true }).decode(readFileSync(path)),
-  ) as unknown;
+  const metadata = lstatSync(path, { bigint: true });
+  const { contents } = readGenerationFile(path, metadata, 64 * 1024, [0o400n, 0o600n]);
+  const raw = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(contents)) as unknown;
   if (!raw || typeof raw !== "object" || Array.isArray(raw) || Object.keys(raw).length !== 1) {
     throw new Error(`Malformed applied service selection at ${path}`);
   }
