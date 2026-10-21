@@ -12,6 +12,12 @@ import {
 import { redis } from "../redis";
 import { safeErrorClass, summarizeExternalUrl } from "../utils/safe-log-fields.js";
 import { appLogger } from "./app-logger.js";
+import {
+  editExtensionSources,
+  publishExtensionCatalog,
+  readExtensionSnapshot,
+} from "./extension-store-cache";
+import { ExtensionStoreError } from "./extension-store-error";
 
 type ExtensionManifest = coreServices.ExtensionManifest;
 type ExtensionTrust = "built-in" | "verified" | "community";
@@ -106,6 +112,7 @@ export interface ExtensionCatalogSource {
 
 export interface KillSwitch {
   removed: Map<string, string>; // id -> reason
+  /** maxVersion is advisory display data; every critical entry denies execution. */
   critical: Map<string, { reason: string; maxVersion?: string }>;
   /**
    * True when the moving revocation feed could not be refreshed and the last
@@ -187,41 +194,78 @@ async function readCachedRevocations(): Promise<RevocationSnapshot | null> {
   }
 }
 
-async function getExtraSources(): Promise<ExtensionCatalogSource[]> {
-  if (!redis) return [];
+const catalogKeys = { sources: EXTRA_SOURCES_CACHE_KEY, catalog: CATALOG_CACHE_KEY };
+
+async function getExtraSources(): Promise<{
+  raw: string | null;
+  sources: ExtensionCatalogSource[];
+}> {
+  // Without configured persistence, read-only discovery retains the default source.
+  const raw = redis ? await readExtensionSnapshot(redis, EXTRA_SOURCES_CACHE_KEY) : null;
+  if (raw === null) return { raw, sources: [] };
   try {
-    const raw = await redis.get(EXTRA_SOURCES_CACHE_KEY);
-    return raw ? (JSON.parse(raw) as ExtensionCatalogSource[]) : [];
+    const sources: unknown = JSON.parse(raw);
+    if (
+      !Array.isArray(sources) ||
+      !sources.every(
+        (source) =>
+          source !== null &&
+          typeof source === "object" &&
+          typeof source.url === "string" &&
+          typeof source.label === "string" &&
+          source.isDefault === false,
+      )
+    )
+      throw new Error();
+    // Preserve inert fields and exact observed bytes; do not normalize the CAS input.
+    return { raw, sources };
   } catch {
-    return [];
+    throw new ExtensionStoreError("invalid_source_snapshot");
   }
+}
+
+function withDefaultSource(sources: ExtensionCatalogSource[]): ExtensionCatalogSource[] {
+  return [
+    { url: DEFAULT_EXTENSION_CATALOG_URL, label: "OpenMapX Community", isDefault: true },
+    ...sources,
+  ];
 }
 
 export async function addExtensionSource(url: string, label: string): Promise<void> {
-  if (!redis) throw new Error("Redis unavailable — cannot persist catalog sources");
-  validatePublicUrl(url);
-  const parsed = new URL(url);
-  if (parsed.protocol !== "https:") throw new Error("Catalog source must use HTTPS");
-  if (parsed.username || parsed.password) {
-    throw new Error("Catalog source URL must not contain credentials");
+  if (!redis) throw new ExtensionStoreError("source_storage_unavailable");
+  try {
+    validatePublicUrl(url);
+    const parsed = new URL(url);
+    if (parsed.protocol !== "https:" || parsed.username || parsed.password) {
+      throw new ExtensionStoreError("invalid_source_url");
+    }
+  } catch {
+    throw new ExtensionStoreError("invalid_source_url");
   }
-  const existing = await getExtraSources();
-  if (existing.some((s) => s.url === url)) return;
-  existing.push({ url, label, isDefault: false });
-  await redis.set(EXTRA_SOURCES_CACHE_KEY, JSON.stringify(existing));
+  const { raw, sources } = await getExtraSources();
+  if (sources.some((s) => s.url === url)) return;
+  await editExtensionSources(
+    redis,
+    catalogKeys,
+    raw,
+    JSON.stringify([...sources, { url, label, isDefault: false }]),
+  );
 }
 
 export async function removeExtensionSource(url: string): Promise<void> {
-  if (!redis) return;
-  const existing = await getExtraSources();
-  await redis.set(EXTRA_SOURCES_CACHE_KEY, JSON.stringify(existing.filter((s) => s.url !== url)));
+  if (!redis) throw new ExtensionStoreError("source_storage_unavailable");
+  const { raw, sources } = await getExtraSources();
+  if (!sources.some((s) => s.url === url)) return;
+  await editExtensionSources(
+    redis,
+    catalogKeys,
+    raw,
+    JSON.stringify(sources.filter((s) => s.url !== url)),
+  );
 }
 
 export async function listExtensionSources(): Promise<ExtensionCatalogSource[]> {
-  return [
-    { url: DEFAULT_EXTENSION_CATALOG_URL, label: "OpenMapX Community", isDefault: true },
-    ...(await getExtraSources()),
-  ];
+  return withDefaultSource((await getExtraSources()).sources);
 }
 
 /**
@@ -260,18 +304,56 @@ interface FetchedCatalog {
   control: CatalogControl;
 }
 
+function isCatalogRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isCatalogEntryList(value: unknown): value is ExtensionCatalogEntry[] {
+  return (
+    Array.isArray(value) &&
+    value.every(
+      (entry) =>
+        isCatalogRecord(entry) && typeof entry.id === "string" && typeof entry.name === "string",
+    )
+  );
+}
+
+function isCatalogControlList(value: unknown, critical: boolean): boolean {
+  return (
+    Array.isArray(value) &&
+    value.every(
+      (entry) =>
+        isCatalogRecord(entry) &&
+        typeof entry.id === "string" &&
+        (!Object.hasOwn(entry, "reason") || typeof entry.reason === "string") &&
+        (!critical || !Object.hasOwn(entry, "maxVersion") || typeof entry.maxVersion === "string"),
+    )
+  );
+}
+
 async function fetchCatalogFromUrl(url: string): Promise<FetchedCatalog> {
   const data = await safeFetchJson<unknown>(url, {
     headers: { "User-Agent": USER_AGENT_ADMIN },
     timeoutMs: 15_000,
   });
   // Accept either a bare array of entries or `{ extensions, removed, critical }`.
+  // Validate the whole document before consuming it: malformed acquisition is
+  // not evidence of an empty catalog, and must not clear cached denials.
   if (Array.isArray(data)) {
-    return { entries: data as ExtensionCatalogEntry[], control: {} };
+    if (!isCatalogEntryList(data)) throw new ExtensionStoreError("catalog_acquisition_failed");
+    return { entries: data, control: {} };
+  }
+  if (
+    !isCatalogRecord(data) ||
+    (Object.hasOwn(data, "extensions") && !isCatalogEntryList(data.extensions)) ||
+    (Object.hasOwn(data, "removed") && !isCatalogControlList(data.removed, false)) ||
+    (Object.hasOwn(data, "critical") && !isCatalogControlList(data.critical, true))
+  ) {
+    throw new ExtensionStoreError("catalog_acquisition_failed");
   }
   const obj = data as { extensions?: ExtensionCatalogEntry[] } & CatalogControl;
   return {
-    entries: Array.isArray(obj.extensions) ? obj.extensions : [],
+    entries: obj.extensions ?? [],
     control: { removed: obj.removed, critical: obj.critical },
   };
 }
@@ -339,8 +421,8 @@ interface CachedCatalog {
   };
 }
 
-async function buildCatalog(): Promise<CachedCatalog> {
-  const sources = await listExtensionSources();
+async function buildCatalog(sources: ExtensionCatalogSource[]): Promise<CachedCatalog> {
+  let acquisitionFailed = false;
   const entries: ExtensionCatalogEntry[] = [];
   const seen = new Set<string>();
   const removed: [string, string][] = [];
@@ -376,6 +458,7 @@ async function buildCatalog(): Promise<CachedCatalog> {
         ]);
       }
     } catch (err) {
+      acquisitionFailed = true;
       appLogger.add({
         level: "warn",
         source: "extension-store",
@@ -387,6 +470,12 @@ async function buildCatalog(): Promise<CachedCatalog> {
         },
       });
     }
+  }
+
+  // A failed acquisition is not evidence that a catalog is empty. Preserve the
+  // existing nonempty partial-build behavior and independent revocation feed.
+  if (acquisitionFailed && entries.length === 0) {
+    throw new ExtensionStoreError("catalog_acquisition_failed");
   }
 
   // The catalog's declared `version` is only a fallback — the manifest URL is the
@@ -414,17 +503,55 @@ export async function getKillSwitch(): Promise<KillSwitch> {
 }
 
 async function getCatalogCached(forceRefresh: boolean): Promise<CachedCatalog> {
-  if (!forceRefresh && redis) {
+  if (forceRefresh && !redis) throw new ExtensionStoreError("source_storage_unavailable");
+  const snapshot = await getExtraSources();
+  const observedCatalog = redis ? await readExtensionSnapshot(redis, CATALOG_CACHE_KEY) : null;
+  if (!forceRefresh && observedCatalog !== null) {
     try {
-      const cached = await redis.get(CATALOG_CACHE_KEY);
-      if (cached) return JSON.parse(cached) as CachedCatalog;
+      const cached = JSON.parse(observedCatalog) as CachedCatalog;
+      if (
+        !Array.isArray(cached.entries) ||
+        !cached.entries.every(
+          (entry) => entry && typeof entry.id === "string" && typeof entry.name === "string",
+        ) ||
+        !Array.isArray(cached.killSwitch.removed) ||
+        !cached.killSwitch.removed.every(
+          (item) =>
+            Array.isArray(item) &&
+            item.length === 2 &&
+            typeof item[0] === "string" &&
+            typeof item[1] === "string",
+        ) ||
+        !Array.isArray(cached.killSwitch.critical) ||
+        !cached.killSwitch.critical.every(
+          (item) =>
+            Array.isArray(item) &&
+            item.length === 2 &&
+            typeof item[0] === "string" &&
+            item[1] &&
+            typeof item[1].reason === "string" &&
+            (item[1].maxVersion === undefined || typeof item[1].maxVersion === "string"),
+        )
+      ) {
+        throw new Error();
+      }
+      return cached;
     } catch {
-      // miss
+      throw new ExtensionStoreError("invalid_catalog_snapshot");
     }
   }
-  const built = await buildCatalog();
-  if (redis && built.entries.length > 0) {
-    redis.setex(CATALOG_CACHE_KEY, CATALOG_CACHE_TTL, JSON.stringify(built)).catch(() => {});
+  const built = await buildCatalog(withDefaultSource(snapshot.sources));
+  if (redis) {
+    // Await acknowledgement, including valid empty builds. A rejected publish
+    // never returns the obsolete build as current; callers may deliberately read again.
+    await publishExtensionCatalog(
+      redis,
+      catalogKeys,
+      snapshot.raw,
+      observedCatalog,
+      JSON.stringify(built),
+      CATALOG_CACHE_TTL,
+    );
   }
   return built;
 }
@@ -452,12 +579,12 @@ export async function resolveExtensionManifest(
     });
     const digest = createHash("sha256").update(text, "utf8").digest("hex");
     if (digest !== entry.manifestSha256.toLowerCase()) {
-      throw new Error(`Extension manifest digest mismatch for "${entry.id}"`);
+      throw new ExtensionStoreError("digest_mismatch");
     }
     raw = JSON.parse(text) as unknown;
   } else if (entry.manifest) {
     if (entry.trust === "verified") {
-      throw new Error(`Verified extension "${entry.id}" is missing its manifest digest`);
+      throw new ExtensionStoreError("missing_digest");
     }
     raw = await safeFetchJson<unknown>(entry.manifest, {
       headers: { "User-Agent": USER_AGENT_ADMIN },
@@ -473,20 +600,31 @@ export async function resolveExtensionManifest(
       integrations: entry.integrations,
     };
   }
-  const validation = coreServices.validateExtensionManifest(raw);
-  if (!validation.valid) {
-    throw new Error(`Invalid extension.json for "${entry.id}": ${validation.errors.join("; ")}`);
-  }
-  const manifest = raw as ExtensionManifest;
+  const manifest = validatedManifest(raw);
   // The catalog entry and the manifest must describe the same thing. Without
   // this, an entry could authorize one id/version and install another.
   if (manifest.id !== entry.id) {
-    throw new Error(`Extension manifest id does not match catalog entry "${entry.id}"`);
+    throw new ExtensionStoreError("id_mismatch");
   }
   if (entry.version && manifest.version !== entry.version) {
-    throw new Error(`Extension manifest version does not match catalog entry "${entry.id}"`);
+    throw new ExtensionStoreError("version_mismatch");
   }
   return manifest;
+}
+
+function validatedManifest(raw: unknown): ExtensionManifest {
+  const validation = coreServices.validateExtensionManifest(raw);
+  if (!validation.valid) throw new ExtensionStoreError("invalid_manifest");
+  return raw as ExtensionManifest;
+}
+
+/** Direct content has no catalog authorization to bind against or trust to inherit. */
+export async function resolveDirectExtensionManifest(url: string): Promise<ExtensionManifest> {
+  const raw = await safeFetchJson<unknown>(url, {
+    headers: { "User-Agent": USER_AGENT_ADMIN },
+    timeoutMs: 15_000,
+  });
+  return validatedManifest(raw);
 }
 
 export function isExtensionCompatible(entry: ExtensionCatalogEntry): boolean {

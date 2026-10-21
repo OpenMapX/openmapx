@@ -35,6 +35,8 @@ const TAG_DESCRIPTIONS: Record<string, string> = {
     "Activity administration: application and data-manager jobs, cancellation and live application events.",
   "data-manager-admin":
     "Data-manager administration, transit maintenance and ambient publications.",
+  "extension-admin":
+    "Extension administration: catalogs, installed components, previews, jobs and sources.",
   "runtime-metadata": "Public runtime capabilities, integration metadata and legal disclosures.",
   admin: "Operator-facing administration of integrations, services, settings and jobs.",
   "data-manager": "Transit, POI and Overture data pipeline control.",

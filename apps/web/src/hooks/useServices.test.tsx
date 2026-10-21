@@ -2,8 +2,8 @@ import { createApiClient } from "@openmapx/core";
 import { QueryClientProvider } from "@tanstack/react-query";
 import type { PropsWithChildren } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { AdminJobEffectsProvider } from "@/lib/admin/adminJobEffects";
 import { serviceAdminQueries } from "@/lib/admin/serviceAdmin";
-import { ServiceAdministrationProvider } from "@/lib/admin/serviceAdminJobs";
 import { act, cleanup, createTestQueryClient, renderHook, waitFor } from "@/test";
 import {
   useDeleteServiceCredential,
@@ -25,7 +25,7 @@ function mount<T>(fn: () => T) {
   caches.push(qc);
   const wrapper = ({ children }: PropsWithChildren) => (
     <QueryClientProvider client={qc}>
-      <ServiceAdministrationProvider>{children}</ServiceAdministrationProvider>
+      <AdminJobEffectsProvider>{children}</AdminJobEffectsProvider>
     </QueryClientProvider>
   );
   return { qc, ...renderHook(fn, { wrapper }) };

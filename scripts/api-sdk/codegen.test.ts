@@ -13,7 +13,7 @@ const ts = createRequire(new URL("../../packages/core/package.json", import.meta
 );
 
 import { generateArtifacts, writeOrCheckArtifacts } from "./codegen.mjs";
-import { selectTaggedDocument } from "./config.mjs";
+import { adminOperationBindings, createCodegenConfig, selectTaggedDocument } from "./config.mjs";
 import { validatedResponseTypes } from "./validated-response-types.mjs";
 
 function generatedConsumerDiagnostics(files: { filename: string; content: string }[]) {
@@ -133,6 +133,55 @@ function generatedConsumerDiagnostics(files: { filename: string; content: string
     `,
     );
   }
+  if (virtual.has(resolve(base, "src/api/generated/admin/extension-admin.generated.ts"))) {
+    virtual.set(
+      filename,
+      `${virtual.get(filename)}
+      import { listAdminExtensionCatalog, getAdminExtensionCatalogEntry, listAdminInstalledExtensions, previewAdminExtensionInstall, installAdminExtension, updateAdminExtension, removeAdminExtension, listAdminExtensionSources, addAdminExtensionSource, removeAdminExtensionSource, refreshAdminExtensionCatalog } from "./extension-admin.generated";
+      import type { AdminExtensionInstallPreview, AdminInstalledExtension, AdminExtensionSource } from "../../contracts/extension-admin";
+      listAdminExtensionCatalog({q: "a & b", type: "fallback", sort: "fallback"}).then(response => {
+        if (response.status === 200) {
+          const version: string | undefined = response.data.entries[0].version;
+          const state: "verified" | "community" | "revoked" | "stale-revocation-data" = response.data.entries[0].status;
+          const retained: unknown = response.data.entries[0].unfamiliar;
+        }
+      });
+      getAdminExtensionCatalogEntry("a/b?#").then(response => {
+        if (response.status === 200) { const kind: "service" | "integration" = response.data.componentList[0].kind; }
+        if (response.status === 404) { const error: string = response.data.error; }
+      });
+      listAdminInstalledExtensions().then(response => {
+        if (response.status === 200) { const item: AdminInstalledExtension = response.data.extensions[0]; }
+      });
+      previewAdminExtensionInstall({id: "a", manifestUrl: "https://example.test"}).then(response => {
+        if (response.status === 200) { const preview: AdminExtensionInstallPreview = response.data; }
+      });
+      installAdminExtension({id: "a", hostPortConfirmation: "opaque"}).then(response => {
+        if (response.status === 202) {
+          const job: string = response.data.jobId;
+          // @ts-expect-error Accepted jobs have no synchronous success flag.
+          response.data.ok;
+        }
+        // @ts-expect-error Install acceptance is 202, never 200.
+        if (response.status === 200) { throw Error(); }
+      });
+      updateAdminExtension("id", undefined); updateAdminExtension("id", {hostPortConfirmation: "opaque"});
+      removeAdminExtension("id", undefined); removeAdminExtension("id", {});
+      refreshAdminExtensionCatalog(undefined); refreshAdminExtensionCatalog({});
+      listAdminExtensionSources().then(response => { if (response.status === 200) { const source: AdminExtensionSource = response.data.sources[0]; } });
+      addAdminExtensionSource({url: "https://example.test", label: "Synthetic"});
+      removeAdminExtensionSource({url: "https://example.test"});
+      // @ts-expect-error Selector fields are strings.
+      installAdminExtension({id: 1});
+      // @ts-expect-error Unknown install fields are rejected.
+      installAdminExtension({id: "a", unexpected: true});
+      // @ts-expect-error Update null differs from absent body.
+      updateAdminExtension("id", null);
+      // @ts-expect-error Source label is required.
+      addAdminExtensionSource({url: "https://example.test"});
+    `,
+    );
+  }
   const host = ts.createCompilerHost(options);
   const fileExists = host.fileExists.bind(host),
     read = host.readFile.bind(host),
@@ -167,6 +216,58 @@ afterEach(async () => {
 });
 
 describe("SDK artifact gate", () => {
+  it("keeps extension generation dormant until a real document adopts the tag", () => {
+    const document = {
+      paths: {
+        "/fixture": {
+          post: { operationId: "fixture", tags: ["data-manager-admin"], responses: {} },
+        },
+      },
+    };
+    expect(
+      createCodegenConfig({ inputDocument: document, outputDirectory: "/tmp/sdk-config" }),
+    ).not.toHaveProperty("extensionAdmin");
+    // Disposable config fixture only; no production OpenAPI or SDK artifact is written.
+    const adopted = {
+      paths: {
+        ...document.paths,
+        "/api/admin/extensions/install": {
+          post: {
+            operationId: "installAdminExtension",
+            tags: ["extension-admin"],
+            responses: {
+              202: {
+                description: "Accepted",
+                content: {
+                  "application/json": {
+                    schema: {
+                      type: "object",
+                      properties: { jobId: { type: "string" } },
+                      required: ["jobId"],
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    };
+    const config = createCodegenConfig({
+      inputDocument: adopted,
+      outputDirectory: "/tmp/sdk-config",
+    });
+    expect(config).toHaveProperty("extensionAdmin");
+    expect(config.extensionAdmin.output).toMatchObject({
+      client: "fetch",
+      target: "/tmp/sdk-config/generated/admin/extension-admin.generated.ts",
+      schemas: "/tmp/sdk-config/generated/admin/extension-models",
+    });
+    expect(adminOperationBindings(adopted)).toContain(
+      'bindAdminOperation("installAdminExtension")',
+    );
+    expect(selectTaggedDocument(adopted, "service-admin").paths).toEqual({});
+  });
   it("isolates family schemas while preserving recursive refs and security definitions", () => {
     const document = {
       paths: {
@@ -284,6 +385,39 @@ describe("SDK artifact gate", () => {
         .sort();
       expect(declared, id).toEqual(Object.keys(operation.responses).sort());
     }
+    const extension = first.find(
+      (file: { filename: string }) => file.filename === "admin/extension-admin.generated.ts",
+    );
+    expect(extension).toBeDefined();
+    const { extensionAdminOperations } = await import(
+      "../../packages/core/src/api/contracts/extension-admin"
+    );
+    for (const [id, operation] of Object.entries(extensionAdminOperations)) {
+      expect(extension.content).toContain(`export const ${id}`);
+      const statuses = [
+        ...extension.content.matchAll(new RegExp(`export type ${id}Response(\\d+) =`, "g")),
+      ]
+        .map((match) => match[1])
+        .sort();
+      expect(statuses, id).toEqual(Object.keys(operation.responses).sort());
+    }
+    // Real committed document, removing only the adopted family for the isolation baseline.
+    const previousDocument = JSON.parse(
+      await readFile(new URL("../../apps/api/openapi.json", import.meta.url), "utf8"),
+    );
+    for (const methods of Object.values(previousDocument.paths)) {
+      for (const [method, operation] of Object.entries(methods as object))
+        if (operation.tags?.includes("extension-admin")) delete methods[method];
+    }
+    const previousFiles = await generateArtifacts({ document: previousDocument });
+    for (const file of previousFiles.filter(
+      (file: { filename: string }) => file.filename !== "admin/operation-bindings.generated.ts",
+    ))
+      expect(
+        first.find((candidate: { filename: string }) => candidate.filename === file.filename)
+          ?.content,
+        file.filename,
+      ).toBe(file.content);
     expect(generatedConsumerDiagnostics(first)).toEqual([]);
     const bindings = first.find(
       (file: { filename: string }) => file.filename === "admin/operation-bindings.generated.ts",

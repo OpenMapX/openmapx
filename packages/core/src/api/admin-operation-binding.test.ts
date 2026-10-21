@@ -48,6 +48,33 @@ const bind = () =>
     },
   });
 describe("family-neutral administration operation binding", () => {
+  it("binds extension acceptance to 202 and preserves absent optional update bodies", async () => {
+    const acquire = vi.fn(async (_url: string, init: RequestInit) => {
+      expect(init.body).toBeUndefined();
+      expect(new Headers(init.headers).has("content-type")).toBe(false);
+      return Response.json({ jobId: "extension-job" }, { status: 202 });
+    });
+    vi.stubGlobal("fetch", acquire);
+    const update = bindAdminOperation("updateAdminExtension");
+    await expect(
+      update("/api/admin/extensions/update/a%2Fb", {
+        client,
+        method: "POST",
+        headers: { "content-type": "application/json" },
+      }),
+    ).resolves.toMatchObject({ status: 202, data: { jobId: "extension-job" } });
+    for (const response of [
+      Response.json({ jobId: "extension-job" }),
+      Response.json({ jobId: "" }, { status: 202 }),
+      Response.json({ jobId: "extension-job", ok: true }, { status: 202 }),
+    ]) {
+      vi.stubGlobal("fetch", vi.fn().mockResolvedValue(response));
+      await expect(
+        update("/api/admin/extensions/update/a%2Fb", { client, method: "POST" }),
+      ).rejects.toBeInstanceOf(ApiContractError);
+    }
+    expect(acquire).toHaveBeenCalledTimes(1);
+  });
   it("supports PUT/PATCH, required headers, finite text and explicit bodyless outcomes", async () => {
     const acquire = vi.fn(async (url: string, init: RequestInit) => {
       expect(url).toBe("https://app.example/api/fixture/a%2Fb");

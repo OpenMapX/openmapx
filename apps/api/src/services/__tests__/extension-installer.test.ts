@@ -1,3 +1,4 @@
+import { getKillSwitch } from "../extension-store";
 import { TrustedConfigurationApplyError } from "../trusted-config-outcome";
 /**
  * Characterization + regression tests for the extension bundle install
@@ -314,6 +315,11 @@ afterEach(() => {
   // clearAllMocks resets call history but preserves mockReturnValue /
   // mockResolvedValue implementations (see integration-host.test.ts:135-139).
   vi.clearAllMocks();
+  vi.mocked(getKillSwitch).mockResolvedValue({
+    removed: new Map(),
+    critical: new Map(),
+    stale: false,
+  });
   // Re-prime implementations cleared history relies on but that must persist.
   reloadMock.mockResolvedValue({ message: "ok", reloaded: 1, enabled: 1 });
   composeMock.mockResolvedValue({ exitCode: 0, stdout: "", stderr: "" });
@@ -334,6 +340,45 @@ afterEach(() => {
 });
 
 describe("installExtension", () => {
+  it.each([undefined, "0.0", "1.0.0", "2.0", "10.0", "arbitrary-release"])(
+    "blocks critical preview and queued execution regardless of maxVersion %s",
+    async (maxVersion) => {
+      vi.mocked(getKillSwitch).mockResolvedValue({
+        removed: new Map(),
+        critical: new Map([[MANIFEST.id, { reason: "Synthetic advisory", maxVersion }]]),
+        stale: false,
+      });
+      for (const version of ["0.1", "1.0.0", "2.0", "10.0", "arbitrary-version"]) {
+        const opts = { manifest: { ...MANIFEST, version }, sourceTrust: "community" as const };
+        await expect(previewExtensionInstall(opts)).rejects.toThrow(/critical/);
+        await expect(installExtension(makeCtx(), opts)).rejects.toThrow(/critical/);
+      }
+      expect(stageRepoMock).not.toHaveBeenCalled();
+      expect(createInstallJournalMock).not.toHaveBeenCalled();
+      expect(writeSelectionMock).not.toHaveBeenCalled();
+      expect(serviceStartMock).not.toHaveBeenCalled();
+      expect(dbInstallMock).not.toHaveBeenCalled();
+    },
+  );
+  it("rechecks revocation after preview while queued and permits flow once cleared", async () => {
+    const opts = { manifest: MANIFEST, sourceTrust: "community" as const };
+    await previewExtensionInstall(opts);
+    stageRepoMock.mockClear();
+    vi.mocked(getKillSwitch).mockResolvedValue({
+      removed: new Map(),
+      critical: new Map([[MANIFEST.id, { reason: "Arrived while queued", maxVersion: "0" }]]),
+      stale: true,
+    });
+    await expect(installExtension(makeCtx(), opts)).rejects.toThrow(/critical/);
+    expect(stageRepoMock).not.toHaveBeenCalled();
+    expect(createInstallJournalMock).not.toHaveBeenCalled();
+    vi.mocked(getKillSwitch).mockResolvedValue({
+      removed: new Map(),
+      critical: new Map(),
+      stale: true,
+    });
+    await expect(installExtension(makeCtx(), opts)).resolves.toBeDefined();
+  });
   it("requires confirmation bound to the exact host-port preview", async () => {
     const portInspection = {
       commit: "d".repeat(40),

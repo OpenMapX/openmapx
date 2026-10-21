@@ -457,3 +457,101 @@ integration/credential owner. Replacement origins, identities and unmounted view
 cannot receive old callbacks, input clearing or feedback. Successful work can
 refresh its originating caches. Disposing the view does not cancel accepted host
 work; reload acceptance remains separate from Activity terminal completion.
+
+## Extension administration
+
+`extensionAdminOperations` owns all eleven catalog, installed-extension, preview,
+install/update/remove, source and refresh operations. Producers use the shared
+administration registrar after the inherited admin guard. The independent
+extension preview limiter and the shared install/update store limiter run before
+structural validation; global CSRF, public rate limits
+and JSON parsing retain their lifecycle positions.
+
+Import the generated functions and canonical wire types from
+`@openmapx/core/api-admin-sdk`. Catalog list and detail are distinct projections;
+unfamiliar nested JSON remains inert and lossless, and unknown versions remain
+absent. Installed rows expose ISO timestamps and optional registry enrichment.
+Installed `hasUpdate` is `boolean | null`: `true` means a different matching
+catalog version, `false` means the same version, and `null` means comparison is
+unavailable (catalog failure, absent entry or missing version). `latestVersion`
+is null when unavailable; `installedVersion` remains authoritative local data.
+Catalog-list `hasUpdate` remains boolean. Optional catalog failures do not hide
+local inventory; database and response-validation failures still fail the read.
+The browser retains current-origin cached inventory after a failed refetch with
+a stale warning and removal controls, but disables update using stale evidence.
+Preview responses retain all effective ports, the inspected repository commit,
+full security rating and confirmation fingerprint. Install, update and remove
+return HTTP 202 `{jobId}` acceptance; Activity observation owns terminal outcomes.
+Mutations are never retried automatically.
+
+Requests reject unknown keys, wrong types and explicit JSON null. Update may
+omit its body; remove and refresh accept absence or an empty object. Selectors
+retain ID precedence when both are supplied. Source strings retain exact identity;
+URL, trust, provenance, revocation, persistence and host authorization remain domain
+responsibilities. Regenerate OpenAPI then SDK and run both freshness checks after
+contract changes.
+
+Direct manifest URLs use the real safe-fetch path and full portable manifest
+validation, then apply revocation and platform policy to the validated identity.
+They always resolve at community trust. Catalog resolution retains ID, declared
+version, digest and immutable verified authorization checks. All critical entries
+block preview/install/update and worker execution until cleared; `maxVersion`
+remains display-only metadata. Removal stays available. Existing stale-feed
+reporting and cached denial semantics are preserved.
+
+Preview has its own one-token/30-second network-key bucket. Install and update
+retain their shared bucket at the same limit; other store callers are unchanged.
+The guard still runs before the limiter and canonical structural validation.
+Deliberate confirmation may follow preview immediately; neither HTTP operation
+is automatically retried.
+
+Extension-store validation errors select fixed public categories. Unknown
+provider, JSON, staging and source-persistence failures use fixed operation
+messages; route diagnostics contain only the operation message and safe error
+class. Never return or log arbitrary dependency messages, URLs, schema values or
+filesystem paths. Detail resolution failure retains its 200/empty-component
+fallback with safe diagnostics. The canonical wire schemas and generated SDK
+signatures are unchanged by these domain corrections.
+
+The browser extension consumer uses the generated family and canonical inferred
+contracts, including separate catalog list/detail projections and inert unknown
+JSON metadata. Its keys retain the raw configured API identity, including an empty
+same-origin value or trailing slash; only transport URL construction resolves the
+empty value against the document origin. Configured API bases must be HTTP(S)
+origins, without path prefixes, query strings or fragments. No global client is
+reconfigured. Queries consume cancellation through response bodies with a 30-second
+deadline; preview, mutation resolution and force refresh use 180 seconds and never
+retry automatically. Native EventSource observation has an independent lifetime.
+
+`AdminJobEffectsProvider` in the administration layout owns the shared accepted-job
+observer. Service and extension adapters capture client, raw API identity, job ID
+and feature terminal effects inside the executing mutation. View disposal suppresses
+UI callbacks without losing accepted work. Provider/origin replacement retires old
+registrations, including A-to-B-to-A replacement. Terminal extension effects cancel
+one union of affected origin-scoped extension, service, integration/configuration,
+credential inventory, runtime and overview reads before invalidating them; inactive queries remain stale
+and unrelated API origins are untouched. Synchronous source edits and refresh also
+invalidate catalog/detail/installed snapshots and installed badges.
+
+The private operator CLI uses these same generated operations with one isolated
+`ApiClient` per action. It reads `API_URL` → `OPENMAPX_API_URL` →
+`http://localhost:3001` late, omits credentials and always attaches
+`x-openmapx-local-admin` from the trimmed optional `OPENMAPX_LOCAL_ADMIN_TOKEN`
+(empty when absent). It does not configure the global client or create cookies,
+Origin headers or a new authentication mode. Other operator commands retain
+their existing transport.
+
+`ext preview <idOrUrl>` displays the complete validated inspected snapshot.
+Install/update preview again with their invocation client and selector before
+writing; port-bearing snapshots require an explicit matching
+`--host-port-confirmation <fingerprint>` supplied after human review. A mismatch
+requires new deliberate inspection. Generated functions own encoding exactly
+once, and omitted optional update/remove bodies stay absent. Reads use 30 seconds;
+preview and writes use finite 180-second deadlines through body consumption.
+Status/media/body/byte limits remain in the bound SDK transport. CLI failures use
+fixed safe messages and nonzero exits; validated 429 retains Retry-After without
+retrying. Timeouts are ambiguous and never cancel host jobs or trigger retries.
+The CLI prints queued 202 job IDs without adding an Activity watcher. Since
+install/update acquire another preview, a preceding explicit `ext preview` does
+not bypass the one-preview-per-30-seconds bucket; 429 ends that command without
+writing or automatically retrying.

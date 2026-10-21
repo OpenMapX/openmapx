@@ -15,6 +15,7 @@ vi.mock("../../utils/audit-log.js", () => ({
 }));
 
 vi.mock("../../utils/rate-limit.js", () => ({
+  extensionPreviewLimit: { preHandler: () => vi.fn().mockResolvedValue(undefined) },
   storeInstallLimit: { preHandler: () => vi.fn().mockResolvedValue(undefined) },
 }));
 
@@ -60,7 +61,14 @@ vi.mock("../../services/extension-installer.js", () => ({
 
 vi.mock("@openmapx/core/server", () => ({
   services: {
-    computeServiceSecurityRating: vi.fn().mockReturnValue({ score: 7 }),
+    computeServiceSecurityRating: vi.fn().mockReturnValue({
+      score: 7,
+      requiresBuiltIn: false,
+      hostPorts: 0,
+      secretCount: 0,
+      deploymentVariables: [],
+      factors: ["Synthetic rating"],
+    }),
     extensionComponentSummary: vi.fn().mockReturnValue([{ kind: "service", id: "oc-ingest" }]),
   },
 }));
@@ -97,6 +105,7 @@ vi.mock("../../services/extension-store.js", () => ({
   getExtensionCatalogEntry: (...a: unknown[]) => mockGetEntry(...a),
   getKillSwitch: (...a: unknown[]) => mockKillSwitch(...a),
   resolveExtensionManifest: (...a: unknown[]) => mockResolveManifest(...a),
+  resolveDirectExtensionManifest: (...a: unknown[]) => mockResolveManifest(...a),
   isExtensionCompatible: vi.fn().mockReturnValue(true),
   listExtensionSources: vi.fn().mockResolvedValue([]),
   listInstalledExtensions: vi.fn().mockResolvedValue([]),

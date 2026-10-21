@@ -5,8 +5,8 @@ import { Component, type ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { job } from "@/components/admin/activity/__tests__/fixtures";
 import { useActivityClient } from "@/components/admin/activity/activityQueries";
+import { AdminJobEffectsProvider } from "@/lib/admin/adminJobEffects";
 import { serviceAdminQueries } from "@/lib/admin/serviceAdmin";
-import { ServiceAdministrationProvider } from "@/lib/admin/serviceAdminJobs";
 import {
   act,
   cleanup,
@@ -183,9 +183,9 @@ function mount(child: ReactNode) {
   const view = (next: ReactNode) => (
     <QueryClientProvider client={qc}>
       <NextIntlClientProvider locale="en" messages={en} timeZone="UTC">
-        <ServiceAdministrationProvider>
+        <AdminJobEffectsProvider>
           <Boundary>{next}</Boundary>
-        </ServiceAdministrationProvider>
+        </AdminJobEffectsProvider>
       </NextIntlClientProvider>
     </QueryClientProvider>
   );

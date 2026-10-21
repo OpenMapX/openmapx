@@ -203,7 +203,7 @@ export async function previewExtensionInstall(
   opts: InstallExtensionOptions,
 ): Promise<ExtensionInstallPreview> {
   await preflightExtensionInstall(opts);
-  await assertNotRevoked(opts.manifest.id, opts.manifest.version);
+  await assertNotRevoked(opts.manifest.id);
   const staged = await stageExtensionServiceRepos(opts);
   try {
     return buildExtensionInstallPreview(opts, staged);
@@ -216,14 +216,14 @@ export async function previewExtensionInstall(
  * Revocation is authoritative at execution time, not at queue time. A denial
  * published while the job waited must still stop the install.
  */
-async function assertNotRevoked(extensionId: string, version: string): Promise<void> {
+async function assertNotRevoked(extensionId: string): Promise<void> {
   const kill = await getKillSwitch();
   const removed = kill.removed.get(extensionId);
   if (removed !== undefined) {
     throw new ExtensionPreflightError(`Extension "${extensionId}" is delisted: ${removed}`);
   }
   const critical = kill.critical.get(extensionId);
-  if (critical && (critical.maxVersion === undefined || version <= critical.maxVersion)) {
+  if (critical) {
     throw new ExtensionPreflightError(
       `Extension "${extensionId}" is flagged critical: ${critical.reason}`,
     );
@@ -375,7 +375,7 @@ export async function installExtension(
   await preflightExtensionInstall(opts);
   // Revocation can land between queueing and execution, so it is rechecked
   // immediately before the first mutation as well as at the end.
-  await assertNotRevoked(manifest.id, manifest.version);
+  await assertNotRevoked(manifest.id);
 
   const ledger: InstallLedger = {
     addedRepoHashes: [],
@@ -609,7 +609,7 @@ export async function installExtension(
     const now = new Date();
     const components = coreServices.extensionComponentSummary(manifest);
     // Last gate before the install becomes authoritative.
-    await assertNotRevoked(manifest.id, manifest.version);
+    await assertNotRevoked(manifest.id);
     await assertComponentOwnership(manifest.id, components);
     await db.transaction(async (tx) => {
       for (const row of pendingServiceRepoRows) {

@@ -285,9 +285,22 @@ jobs:
         run: pnpm --filter @openmapx/api exec drizzle-kit migrate
 
       # Docker Hub throttles and fails transiently. Pull the pinned digest with
-      # backoff here so the export test, which runs it with --pull=never, only
-      # spends its budget on the fixture itself. No Docker Hub login: the
+      # backoff here so the fixtures, which forbid pulling themselves, only
+      # spend their budget on the fixture itself. No Docker Hub login: the
       # workflow holds no Docker Hub credentials.
+      - name: Pull the pinned extension-store Valkey image
+        if: matrix.group == 'api-privacy'
+        timeout-minutes: 10
+        run: |
+          image="$(node -e 'const {container: c} = require("./services/redis/service.json"); console.log(c.image + ":" + c.tag + "@" + c.digest)')"
+          for backoff in 0 15 30 60 120; do
+            sleep "$backoff"
+            docker pull --quiet "$image" && exit 0
+            echo "::warning::Pulling $image failed; retrying with backoff"
+          done
+          echo "::error::Could not pull $image after 5 attempts"
+          exit 1
+
       - name: Pull the pinned managed Dawarich image
         if: matrix.group == 'export-restore'
         timeout-minutes: 10

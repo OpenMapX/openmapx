@@ -39,22 +39,20 @@ confirm.
 
 ## Trust tiers
 
-Every extension carries one trust tier, and the tier is assigned by **where it
-came from** — a manifest can advertise but never grant its own trust:
+Every extension carries a trust tier assigned by the host. A manifest cannot
+grant its own trust:
 
-| Tier          | Meaning                                                      | Source                                                                                                     |
-| ------------- | ------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------- |
-| **built-in**  | Ships in the OpenMapX monorepo                               | first-party                                                                                                |
-| **verified**  | Identity-checked + passed automated validation (not audited) | the curated OpenMapX catalog (`openmapx/community-extensions`), where inclusion is a CI-gated pull request |
-| **community** | Unreviewed                                                   | a catalog source you added yourself, or a direct install by URL                                            |
+| Tier          | Meaning                                                                      | Source                                                    |
+| ------------- | ---------------------------------------------------------------------------- | --------------------------------------------------------- |
+| **built-in**  | Ships in the OpenMapX monorepo                                               | First-party                                               |
+| **verified**  | Catalog authorization binds the exact manifest ID, version and SHA-256 bytes | An immutable default catalog with a digest-bound entry    |
+| **community** | No verified catalog authorization                                            | Custom sources, unpinned entries or a direct manifest URL |
 
-The default catalog source is the curated **verified** one. Anything you add
-under **Sources**, or install by raw URL, is surfaced as **community** and
-requires you to acknowledge the risk.
-
-Verified and community services receive the same container sandbox. Verification
-is a listing and identity check, not an integrity guarantee about the manifest,
-moving image tag, or bytes that will run tomorrow.
+The default catalog does not make every entry verified. Direct URL installation
+validates the fetched manifest and uses its actual identity, always at community
+trust. Catalog installs continue to require matching identity, declared version
+and digest where present. Verification is not a security audit. Verified and
+community services receive the same community container sandbox.
 
 ## Browsing and installing
 
@@ -82,7 +80,8 @@ The same operations are available on the CLI:
 
 ```bash
 pnpm openmapx ext browse                 # list the catalog
-pnpm openmapx ext install openconditions # install by catalog id…
+pnpm openmapx ext preview openconditions # inspect current bindings and fingerprint
+pnpm openmapx ext install openconditions # preview then queue by catalog id…
 pnpm openmapx ext install https://example.com/my-ext/extension.json  # …or by URL
 pnpm openmapx ext list                   # what's installed
 pnpm openmapx ext update <id>            # re-pin to the latest published version
@@ -90,7 +89,50 @@ pnpm openmapx ext remove <id>            # uninstall (removes its services + int
 ```
 
 The CLI talks to the admin API; run it on the API host (loopback admin) or set
-`OPENMAPX_API_URL`. Every install/update/remove is recorded in the audit log.
+`OPENMAPX_API_URL`. The destination is read for each action, in order:
+`API_URL`, `OPENMAPX_API_URL`, then `http://localhost:3001`. The CLI sends
+`x-openmapx-local-admin` on every request, using the trimmed optional
+`OPENMAPX_LOCAL_ADMIN_TOKEN` or an empty value. It omits cookies and does not
+create a browser session; a remote URL alone does not authenticate. The API's
+socket-peer, local-token and administrator-access rules still apply.
+Every accepted install/update/remove is recorded in the audit log.
+
+Install and update always acquire a fresh preview first, using the same API
+client and selector as the subsequent write. Without host ports they may proceed.
+With host ports, first deliberately inspect the explicit preview:
+
+```bash
+pnpm openmapx ext preview <idOrUrl>
+pnpm openmapx ext install <idOrUrl> --host-port-confirmation <fingerprint>
+# For an update, preview the same catalog ID:
+pnpm openmapx ext preview <id>
+pnpm openmapx ext update <id> --host-port-confirmation <fingerprint>
+```
+
+Use the `confirmation` fingerprint from the inspected output. Preview shows the
+complete extension identity and source trust, each service's full repository
+commit, all effective host/container ports, bind addresses (including IPv6),
+protocols and full security rating, including deployment variables and factors.
+Preview may fetch and stage repositories. Direct manifest URLs follow the same
+review flow and always have community trust. Because install/update obtain
+another preview, respect the one-preview-per-30-seconds limit after an explicit
+`ext preview` before invoking them. A 429 exits without retrying; wait for its
+`Retry-After` before a deliberate new invocation.
+
+Missing or mismatched confirmation fails with a nonzero exit before the write.
+If the snapshot moves between inspection and install/update, run a new explicit
+preview and review it before supplying its fingerprint. The CLI never copies a
+fresh fingerprint into consent, offers no `--yes` bypass, and does not re-enqueue
+a failed write. The worker remains the authority for host-port enforcement.
+
+Read requests have a 30-second deadline; preview and install/update/remove
+requests have finite 180-second deadlines, including response-body reading.
+A timeout leaves the outcome uncertain and does not cancel host work. Check
+**Admin → Activity** before deliberately retrying. HTTP 202 and the printed job
+ID mean queued acceptance, not completion. The CLI exits after acceptance without
+watching the job. Failed or invalid responses produce safe stderr and a nonzero
+exit, without dumping API payloads. Respect 429 `Retry-After`; no command retries
+automatically.
 
 ## What happens on install
 
@@ -153,6 +195,66 @@ entry points are also rejected; executable behavior must move into an isolated
 service. These reduce the blast radius of a
 malformed archive — they are not a substitute for trusting the author.
 
+### Preview, admission and failures
+
+Extension previews have an independent limit of one request per 30 seconds per
+network peer key. Install and update admission share a separate bucket with the
+same limit. At the HTTP level, preview can therefore be followed immediately by
+a deliberate install or update write. The CLI's install/update acquire their own
+fresh preview, so after `ext preview` they must also respect the preview bucket.
+Repeated requests in either bucket return 429 with
+`Retry-After`; there is no automatic mutation retry. Administrator, CSRF and
+broader API rate limits still apply.
+
+Install, update and removal return a queued job ID (HTTP 202). Check Activity
+for the terminal outcome. Dependency failures return bounded public messages;
+manifest detail may still return an empty component list if resolution fails.
+That fallback does not prove the extension has no components.
+
+The internal operator CLI provides `ext preview <idOrUrl>` and
+`ext install/update --host-port-confirmation <fingerprint>` as described above.
+Host-port approval is bound to the exact inspected snapshot and is never granted
+automatically.
+
+### Browser review and request lifetime
+
+The administration page distinguishes catalog trust from revoked status and stale
+revocation data. A missing manifest version appears as **Version unknown**. The
+default catalog label does not assert that every entry is verified. Failed reads
+show an error rather than an empty installed list or source table.
+
+Security review displays the exact repository commit, effective host-port bindings
+(including protocol and bind address), and full service rating, including deployment
+variables. Install and update have distinct confirmation actions. Editing a selector,
+closing/reopening a dialog, switching tabs or API origins, selecting another row,
+or receiving a changed catalog/installed snapshot retires the previous preview.
+Confirmation uses the exact reviewed selector and fingerprint. A changed port
+snapshot requires another deliberate review; confirmation is never automatic.
+
+Browser reads have a 30-second deadline. Preview, mutation resolution and explicit
+catalog refresh have a 180-second deadline. A timeout is an unknown result, not
+host-job cancellation; check Activity before deliberately retrying. The longer
+budget is not a guarantee for extensions with several repositories. Accepted jobs
+continue to be observed by the administration layout after leaving the extension
+view; all terminal outcomes refresh the originating extension/component state.
+
+### Catalog source changes and refresh
+
+A successful source edit invalidates the cached catalog before persisting the
+new source list. An older in-flight build cannot republish against changed source
+or catalog bytes. Concurrent edits or refreshes can therefore fail with a safe
+error: read the current state before deliberately trying again. No mutation is
+automatically retried, and unavailable source storage cannot acknowledge an edit
+or an explicit refresh.
+Removing an absent source remains a no-op; the default source remains built in.
+
+A fully successful empty refresh replaces the previous catalog. If any catalog
+source acquisition fails and the assembled result is empty, refresh fails and
+leaves the existing snapshot, including its denials, untouched. Nonempty partial
+results retain their existing behavior; a returned entry count does not prove
+that every source was fetched. Moving-feed stale status remains independent.
+A storage or refresh error is not evidence that the catalog is empty.
+
 ## Updating, uninstalling, and the kill-switch
 
 - **Update** re-pins **all** of a bundle's parts to the latest published version
@@ -168,7 +270,14 @@ malformed archive — they are not a substitute for trusting the author.
   the same component are left alone.
 - The catalog can carry a **kill-switch**: an extension marked `removed` is hidden
   from Browse (with a banner on installed copies), and one marked `critical`
-  shows a blocking security warning on installed copies and refuses new installs.
+  refuses preview, new installation and update admission. The worker rechecks
+  before installation effects and before committing installed state, including
+  when an advisory arrives while a job is queued. Every critical entry blocks
+  regardless of its version; advisory `maxVersion` is display information only.
+  Wait for the advisory to be cleared before trying another deliberate install
+  or update. Removal remains available. If the moving revocation feed cannot be
+  refreshed, known cached denials remain effective and the API reports stale
+  revocation data; an unavailable feed does not certify an extension as clean.
 
 :::note[An extension-managed service repo is pinned]
 Service repos installed as part of an extension are pinned and marked
@@ -192,16 +301,17 @@ road weather stations, maintenance vehicles and border crossings. Without
 OpenConditions, data sources that only it supplies, such as fuel prices, are
 not offered at all. It's
 published as the first **verified** entry in the curated catalog, so installing
-it is one action:
+it uses the same preview and confirmation flow:
 
 ```bash
-pnpm openmapx ext install openconditions
+pnpm openmapx ext preview openconditions
+pnpm openmapx ext install openconditions --host-port-confirmation <fingerprint>
 ```
 
 The orchestrator registers both services at their pinned tag, renders and starts
-them, and reloads the API, all as one job. The install reports success, but
-neither service runs yet: both stop at boot and their containers restart in a
-loop until their credentials are set (`DATABASE_URL` on both, the grant secret
+them, and reloads the API, all as one job. The CLI reports queued acceptance;
+check Activity for the job outcome. After a successful install, neither service
+is ready yet: both stop at boot and their containers restart in a loop until their credentials are set (`DATABASE_URL` on both, the grant secret
 and reviewer token on the contributions API). Set them as described in
 [Configuring the OpenConditions services](#configuring-the-openconditions-services)
 and **Save & Apply**; the ingest service then creates its `conditions` schema
