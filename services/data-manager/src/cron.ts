@@ -808,9 +808,9 @@ export function setupCron(options: CronSetupOptions): CronHandles {
 
   const syncCron = syncExpr
     ? new Cron(syncExpr, { name: "transitous-sync", protect: true }, () => {
-        // Swallow rejections so an unhandled cron exception doesn't crash
-        // the process; `runSync` already logs internally.
-        void runSync().catch((err) => {
+        // Return the full job lifetime so Croner keeps overlap protection;
+        // swallow rejections because `runSync` already logs internally.
+        return runSync().catch((err) => {
           log.error("transitous-cron: unexpected runSync rejection", {
             err: (err as Error).message,
           });
@@ -820,7 +820,7 @@ export function setupCron(options: CronSetupOptions): CronHandles {
 
   const feedProxyReloadCron = feedProxyReloadExpr
     ? new Cron(feedProxyReloadExpr, { name: "transitous-feed-proxy-reload", protect: true }, () => {
-        void runFeedProxyReload().catch((err) => {
+        return runFeedProxyReload().catch((err) => {
           log.warn("transitous-cron: feed-proxy heartbeat threw", {
             err: (err as Error).message,
           });
@@ -830,7 +830,7 @@ export function setupCron(options: CronSetupOptions): CronHandles {
 
   const stalenessCheckCron = stalenessCheckExpr
     ? new Cron(stalenessCheckExpr, { name: "transitous-staleness-check", protect: true }, () => {
-        void runStalenessCheck().catch((err) => {
+        return runStalenessCheck().catch((err) => {
           log.warn("transitous-cron: staleness check threw", {
             err: (err as Error).message,
           });
@@ -844,7 +844,7 @@ export function setupCron(options: CronSetupOptions): CronHandles {
   );
   const autoBumpCron = autoBumpExpr
     ? new Cron(autoBumpExpr, { name: "transitous-auto-bump", protect: true }, () => {
-        void runAutoBump().catch((err) => {
+        return runAutoBump().catch((err) => {
           log.error("transitous-auto-bump: unexpected rejection", { err: (err as Error).message });
         });
       })
@@ -1089,7 +1089,7 @@ export function setupCron(options: CronSetupOptions): CronHandles {
         trafficExtractExpr,
         { name: "valhalla-traffic-extract-guard", protect: true },
         () => {
-          void runTrafficExtractGuard().catch((err) => {
+          return runTrafficExtractGuard().catch((err) => {
             log.error("traffic-extract: guard cron threw", { err: (err as Error).message });
           });
         },
@@ -1580,7 +1580,7 @@ export function setupCron(options: CronSetupOptions): CronHandles {
   const trafficLiveCron =
     trafficLiveExpr && openConditionsUrl
       ? new Cron(trafficLiveExpr, { name: "traffic-live", protect: true }, () => {
-          void runTrafficLive().catch((err) => {
+          return runTrafficLive().catch((err) => {
             log.error("traffic-live: cron threw", { err: (err as Error).message });
           });
         })
@@ -1624,7 +1624,7 @@ export function setupCron(options: CronSetupOptions): CronHandles {
   const trafficPredictedCron =
     trafficPredictedExpr && openConditionsUrl
       ? new Cron(trafficPredictedExpr, { name: "traffic-predicted", protect: true }, () => {
-          void runTrafficPredicted().catch((err) => {
+          return runTrafficPredicted().catch((err) => {
             log.error("traffic-predicted: cron threw", { err: (err as Error).message });
           });
         })
