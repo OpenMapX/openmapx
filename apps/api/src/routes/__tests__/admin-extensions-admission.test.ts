@@ -25,7 +25,7 @@ vi.mock("../../redis", () => ({
   redis: {
     get: async (key: string) => ports.cache.get(key) ?? null,
     setex: async () => "OK",
-    set: (...args: unknown[]) => ports.persist(...args),
+    eval: (...args: unknown[]) => ports.persist(...args),
   },
 }));
 vi.mock("node:dns/promises", () => ({ lookup: vi.fn() }));
@@ -383,6 +383,21 @@ describe("real resolver through extension routes and final SDK", () => {
       }
       expect(ports.logs.join("")).not.toMatch(/sentinel-|\/file/);
       expect(ports.logs.join("")).toContain("errorClass");
+    },
+  );
+  it.each(["acquisition", "publication", "conflict"])(
+    "failed catalog %s returns a safe SDK error without success audit",
+    async (failure) => {
+      const before = ports.cache.get("extstore:catalog");
+      if (failure === "acquisition") ports.provider.mockRejectedValue(new Error(sensitive));
+      else if (failure === "publication") ports.persist.mockRejectedValue(new Error(sensitive));
+      else ports.persist.mockResolvedValue(0);
+      const result = await sdk.refreshAdminExtensionCatalog(undefined, options());
+      expect(result.status).toBe(500);
+      expect(JSON.stringify(result.data)).not.toMatch(/sentinel-|example\.test|\/file/);
+      expect(ports.cache.get("extstore:catalog")).toBe(before);
+      expect(ports.audit).not.toHaveBeenCalled();
+      expect(ports.persist).toHaveBeenCalledTimes(failure === "acquisition" ? 0 : 1);
     },
   );
 });

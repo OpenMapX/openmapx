@@ -169,6 +169,21 @@ describe("required database test gate", () => {
     );
   });
 
+  it("requires the extension-store fixture in api-privacy with production-pinned image preparation", () => {
+    expect(groups["api-privacy"]).toContain(
+      "apps/api/src/services/__tests__/extension-store-valkey.test.ts",
+    );
+    const workflow = read(".github/workflows/ci.yml");
+    const step = workflow
+      .split("      - name: Pull the pinned extension-store Valkey image")[1]
+      ?.split("      - name:")[0];
+    expect(step).toContain("if: matrix.group == 'api-privacy'");
+    expect(step).toContain("./services/redis/service.json");
+    expect(step).toContain("for backoff in 0 15 30 60 120");
+    expect(step).toContain('docker pull --quiet "$image" && exit 0');
+    expect(step).toContain("exit 1");
+  });
+
   it("keeps controller-wide export with the real backup and restore replay", () => {
     expect(groups["export-restore"]).toEqual([
       "apps/api/src/privacy/controller-wide-export-postgres.test.ts",

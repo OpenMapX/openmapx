@@ -171,6 +171,23 @@ update. This change does not implement those CLI commands or flags. Host-port
 approval continues to require the exact inspected snapshot; it must never be
 automatically granted.
 
+### Catalog source changes and refresh
+
+A successful source edit invalidates the cached catalog before persisting the
+new source list. An older in-flight build cannot republish against changed source
+or catalog bytes. Concurrent edits or refreshes can therefore fail with a safe
+error: read the current state before deliberately trying again. No mutation is
+automatically retried, and unavailable source storage cannot acknowledge an edit
+or an explicit refresh.
+Removing an absent source remains a no-op; the default source remains built in.
+
+A fully successful empty refresh replaces the previous catalog. If any catalog
+source acquisition fails and the assembled result is empty, refresh fails and
+leaves the existing snapshot, including its denials, untouched. Nonempty partial
+results retain their existing behavior; a returned entry count does not prove
+that every source was fetched. Moving-feed stale status remains independent.
+A storage or refresh error is not evidence that the catalog is empty.
+
 ## Updating, uninstalling, and the kill-switch
 
 - **Update** re-pins **all** of a bundle's parts to the latest published version
