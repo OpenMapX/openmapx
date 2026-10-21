@@ -2,7 +2,9 @@ import Fastify from "fastify";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const composeAction = vi.fn();
-const applyHardlinksFromPlan = vi.fn().mockResolvedValue([]);
+const applyHardlinksFromPlan = vi
+  .fn()
+  .mockResolvedValue({ applied: true, linked: 0, skipped: 0, pruned: 0, entries: 0 });
 const renderAndPersistCompose = vi.fn();
 const adminA = { user: { id: "admin-a" } };
 
@@ -25,7 +27,10 @@ vi.mock("../../utils/docker-compose", () => ({
   STACK_STOP_GUIDANCE:
     "Stack shutdown is unavailable from the web API because it would stop the operations agent. Run the documented host shutdown command instead.",
 }));
-vi.mock("../../utils/require-admin", () => ({ requireAdmin: vi.fn().mockResolvedValue(adminA) }));
+vi.mock("../../utils/require-admin", () => ({
+  requireAdmin: vi.fn().mockResolvedValue(adminA),
+  getAdminSession: () => adminA,
+}));
 vi.mock("../../utils/route-auth", () => ({ declareRouteAuth: vi.fn() }));
 
 describe("admin Compose routes", () => {
@@ -38,7 +43,7 @@ describe("admin Compose routes", () => {
     composeAction.mockResolvedValue({ exitCode: 0, stdout: "", stderr: "" });
     const { registerAdminComposeRoutes } = await import("../admin-compose.js");
     const app = Fastify({ logger: false });
-    await app.register(registerAdminComposeRoutes);
+    await app.register(registerAdminComposeRoutes, { prefix: "/api" });
 
     const missing = await app.inject({ method: "POST", url: "/api/admin/compose/up" });
     expect(missing.statusCode).toBe(400);
@@ -59,7 +64,7 @@ describe("admin Compose routes", () => {
   it("refuses stack shutdown with a non-success status and never submits stack.stop", async () => {
     const { registerAdminComposeRoutes } = await import("../admin-compose.js");
     const app = Fastify({ logger: false });
-    await app.register(registerAdminComposeRoutes);
+    await app.register(registerAdminComposeRoutes, { prefix: "/api" });
     const response = await app.inject({ method: "POST", url: "/api/admin/compose/down" });
 
     expect(response.statusCode).toBe(503);

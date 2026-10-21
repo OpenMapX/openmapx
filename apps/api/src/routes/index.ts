@@ -126,5 +126,5 @@ export async function registerCoreRoutes(
   await server.register(attributionRoute, { prefix: "/api" });
 
   await registerCapabilityBindingRoutes(server);
-  await registerAdminComposeRoutes(server);
+  await server.register(registerAdminComposeRoutes, { prefix: "/api" });
 }

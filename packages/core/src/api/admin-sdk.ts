@@ -14,3 +14,4 @@ export * from "./contracts/service-admin";
 export * from "./generated/admin/activity-admin.generated";
 export * from "./generated/admin/data-manager-admin.generated";
 export * from "./generated/admin/integration-admin.generated";
+export * from "./generated/admin/service-admin.generated";

@@ -4,6 +4,7 @@ import { restoreStoredServiceConfig } from "../../services/service-config-writer
 import { applyTrustedConfiguration } from "../../services/trusted-config-operations";
 import { TrustedConfigurationApplyError } from "../../services/trusted-config-outcome";
 import { createAdminTestApp, installAdminRouteMocks } from "./admin-test-helpers.js";
+import { serviceDataFixture, serviceSelectionFixture } from "./helpers/service-admin-fixtures";
 
 const {
   session: fakeSession,
@@ -71,8 +72,7 @@ vi.mock("../../db/schema.js", () => ({
 
 // admin-cli helpers
 const mockGetServiceSelectionSummary = vi.fn().mockReturnValue({
-  selectedRoots: [],
-  effectiveIds: [],
+  ...serviceSelectionFixture,
 });
 const mockListBackupSummaries = vi
   .fn()
@@ -158,10 +158,11 @@ const MOCK_SERVICE_RUNNING = {
     name: "MOTIS",
     version: "2.11.3",
     description: "Transit routing engine",
-    quality: "stable",
+    quality: "built-in",
     provides: [],
-    exposure: "internal",
+    container: { image: "example/service", tag: "1.0.0" },
   },
+  directory: "/synthetic/service",
   enabled: true,
   isBuiltIn: true,
 };
@@ -172,10 +173,11 @@ const MOCK_SERVICE_STOPPED = {
     name: "Valhalla",
     version: "3.4.0",
     description: "Street routing",
-    quality: "stable",
+    quality: "built-in",
     provides: [],
-    exposure: "internal",
+    container: { image: "example/service", tag: "1.0.0" },
   },
+  directory: "/synthetic/service",
   enabled: true,
   isBuiltIn: true,
 };
@@ -188,8 +190,9 @@ const MOCK_COMMUNITY_RUNNING = {
     description: "Community service",
     quality: "community",
     provides: [],
-    exposure: "internal",
+    container: { image: "example/service", tag: "1.0.0" },
   },
+  directory: "/synthetic/service",
   enabled: true,
   isBuiltIn: false,
 };
@@ -262,11 +265,7 @@ describe("strict administrative effect bodies", () => {
 
 describe("GET /admin/services/data", () => {
   it("loads a kind-only inventory from ops-agent without passing a host path", async () => {
-    const inventory = {
-      osm: { found: false },
-      builds: [{ target: "valhalla", built: false }],
-      motisTransitous: { configFound: false },
-    };
+    const inventory = serviceDataFixture;
     mockExecuteAndWait.mockResolvedValueOnce(inventory);
 
     const response = await app.inject({ method: "GET", url: "/admin/services/data" });
@@ -501,13 +500,14 @@ describe("POST /admin/services/:id/action", () => {
     });
 
     expect(res.statusCode).toBe(400);
-    expect(res.json().error).toContain("Invalid action");
+    expect(res.json().error).toContain("Invalid administration body");
   });
 });
 
 describe("GET /admin/services/selection", () => {
   it("returns service selection summary", async () => {
     mockGetServiceSelectionSummary.mockReturnValueOnce({
+      ...serviceSelectionFixture,
       selectedRoots: ["motis"],
       effectiveIds: ["motis", "valhalla"],
     });
@@ -644,7 +644,7 @@ describe("service credentials", () => {
         const res = await app.inject({
           method: "POST",
           url: "/admin/services/openconditions-ingest/config",
-          payload: {},
+          payload: { config: {} },
         });
         expect(res.statusCode).toBe(500);
         expect(restoreStoredServiceConfig).toHaveBeenCalledTimes(
@@ -898,5 +898,24 @@ describe("service credentials", () => {
 
     expect(res.statusCode).toBe(200);
     expect(mockDeleteServiceSecret).toHaveBeenCalledWith("openconditions-ingest", "LEGACY_KEY");
+  });
+});
+
+describe("explicit destructive selection intent", () => {
+  beforeEach(() => {
+    mockGetServiceRegistry.mockReturnValue({ list: mockRegistryList, get: mockRegistryGet });
+  });
+  it.each([
+    {},
+    { selectedRoots: null },
+    { selectedRoots: "motis" },
+    { selectedRoots: ["motis", 7] },
+    { selectedRoots: [""] },
+  ])("rejects malformed selection %j before any persistence or host work", async (payload) => {
+    const response = await app.inject({ method: "PUT", url: "/admin/services/selection", payload });
+    expect(response.statusCode).toBe(400);
+    expect(mockValidateServiceSelectionForWrite).not.toHaveBeenCalled();
+    expect(applyTrustedConfiguration).not.toHaveBeenCalled();
+    expect(mockWriteAuditLog).not.toHaveBeenCalled();
   });
 });

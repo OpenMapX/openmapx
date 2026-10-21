@@ -268,6 +268,23 @@ describe("SDK artifact gate", () => {
     expect(admin).toContain("status: 409");
     expect(admin).toContain("status: 422");
     expect(admin).toContain("encodeURIComponent");
+    const { serviceAdminOperations } = await import(
+      "../../packages/core/src/api/contracts/service-admin"
+    );
+    const service = first.find(
+      (file: { filename: string }) => file.filename === "admin/service-admin.generated.ts",
+    )?.content;
+    expect(service).toBeDefined();
+    for (const [id, operation] of Object.entries(serviceAdminOperations)) {
+      expect(service).toContain(`export const ${id}`);
+      const declared = [
+        ...(service ?? "").matchAll(new RegExp(`export type ${id}Response(\\d+) =`, "g")),
+      ]
+        .map((match) => match[1])
+        .sort();
+      expect(declared, id).toEqual(Object.keys(operation.responses).sort());
+    }
+    expect(generatedConsumerDiagnostics(first)).toEqual([]);
     const bindings = first.find(
       (file: { filename: string }) => file.filename === "admin/operation-bindings.generated.ts",
     )?.content;
@@ -746,7 +763,10 @@ describe("service administration custom-client generation", () => {
       expect(generatedConsumerDiagnostics(files)).toEqual([]);
       const previous = await generateArtifacts({ document: previousInput });
       for (const file of previous.filter(
-        (file: { filename: string }) => file.filename !== "admin/operation-bindings.generated.ts",
+        (file: { filename: string }) =>
+          file.filename !== "admin/operation-bindings.generated.ts" &&
+          file.filename !== "admin/service-admin.generated.ts" &&
+          !file.filename.startsWith("admin/service-models/"),
       ))
         expect(
           files.find((candidate: { filename: string }) => candidate.filename === file.filename)
