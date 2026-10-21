@@ -6,6 +6,7 @@ import {
 import { describe, expect, it } from "vitest";
 import {
   exportIntegrationConfigs,
+  type IntegrationImportPorts,
   prepareIntegrationImport,
   runIntegrationImport,
 } from "./integration-config-import";
@@ -303,6 +304,81 @@ describe("real batch coordinator with stateful storage and host boundaries", () 
       expect(f.state.events).not.toContain("compensate");
     },
   );
+  describe.each(["incomplete", "reload"] as const)("unproven prior state after %s", (failure) => {
+    it.each(["conflict", "unknown", "retained"] as const)(
+      "reports current database ownership as %s without restoring or compensating",
+      async (database) => {
+        const f = fixture();
+        f.state.rows.set("alpha", { label: "saved-but-not-applied", enabled: false });
+        f.state.host.integrationConfigs[0].values = { label: "live-before", enabled: false };
+        f.state.applyMode = failure === "incomplete" ? "incomplete" : "ok";
+        f.state.reloadFails = failure === "reload";
+        let ownershipUnavailable = false;
+        let ownershipChecks = 0;
+        const settleFailure = () => {
+          if (database === "conflict") f.editNamed();
+          if (database === "unknown") ownershipUnavailable = true;
+        };
+        const original = f.ports as IntegrationImportPorts;
+        const ports: IntegrationImportPorts = {
+          ...original,
+          async persist(entries) {
+            const saved = await original.persist(entries);
+            return {
+              ...saved,
+              async owns() {
+                ownershipChecks++;
+                if (ownershipUnavailable) throw Error("synthetic ownership failure");
+                return saved.owns();
+              },
+            };
+          },
+          async apply() {
+            const applied = await original.apply();
+            if (failure === "incomplete") settleFailure();
+            return applied;
+          },
+          async reload() {
+            settleFailure();
+            return original.reload();
+          },
+        };
+        const result = await runIntegrationImport(
+          prepareIntegrationImport(input(), manifests),
+          manifests,
+          ports,
+        );
+        expect(result).toEqual({
+          ok: false,
+          error: "Integration import failed",
+          recovery: "reconciliation_required",
+          phase: failure === "incomplete" ? "apply" : "reload",
+          database,
+          reason: "previous_applied_not_proven",
+          apply: {
+            outcome: "committed",
+            revisionId: "A",
+            enabledServiceIds: [],
+            followUp: failure === "incomplete" ? "failed" : "complete",
+            cleanupFailed: false,
+            publisherCleanupFailed: false,
+            registryUpdateFailed: false,
+          },
+          runtime: failure === "incomplete" ? "unchanged" : "unknown",
+        });
+        expect(f.state.rows.get("alpha")).toEqual(
+          database === "conflict"
+            ? { label: "competitor", enabled: true }
+            : { label: "new", enabled: false },
+        );
+        expect(f.state.host.integrationConfigs[0].values).toEqual({ label: "new", enabled: false });
+        expect(f.state.events).toEqual(
+          failure === "incomplete" ? ["persist", "apply"] : ["persist", "apply", "reload"],
+        );
+        expect(ownershipChecks).toBe(failure === "incomplete" ? 1 : 2);
+      },
+    );
+  });
   it("persists once, applies one complete snapshot and reloads once", async () => {
     const f = fixture();
     const result = await runIntegrationImport(

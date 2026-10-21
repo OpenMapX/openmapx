@@ -1,11 +1,13 @@
 import { createApiClient } from "@openmapx/core";
 import { integrationAdminOperations } from "@openmapx/core/api-contracts";
+import { configurationProjectionFingerprint } from "@openmapx/core/ops";
 import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 import Fastify from "fastify";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { integrationConfig } from "../../db/integration-config-schema";
 import { makeRateLimitTierHook } from "../../server-wiring";
 import { integrationConfigDbFixture } from "../../services/__tests__/helpers/integration-config-db";
+import type { IntegrationImportPorts } from "../../services/integration-config-import";
 import { TrustedConfigurationApplyError } from "../../services/trusted-config-outcome";
 import { makeCsrfGuardHook } from "../../utils/csrf";
 import { healthCheckSweepLimit, RateLimiter } from "../../utils/rate-limit";
@@ -24,21 +26,14 @@ vi.mock("../../services/job-runner.js", () => ({
 }));
 
 const configDb = integrationConfigDbFixture();
+const mockApplyWithEvidence = vi.fn<IntegrationImportPorts["apply"]>();
+const mockCompensate = vi.fn();
 const mockApply = vi.fn().mockResolvedValue({ revisionId: "revision_1" });
 vi.mock("../../services/trusted-config-operations.js", () => ({
   integrationSchemas: () =>
     new Map([["geocoding-maptiler", MOCK_INTEGRATION.manifest.configSchema]]),
-  applyTrustedConfigurationWithEvidence: async () => ({
-    outcome: {
-      outcome: "committed",
-      revisionId: `cfg1_${"a".repeat(43)}`,
-      enabledServiceIds: [],
-      followUp: "complete",
-      cleanupFailed: false,
-      publisherCleanupFailed: false,
-      registryUpdateFailed: false,
-    },
-  }),
+  applyTrustedConfigurationWithEvidence: () => mockApplyWithEvidence(),
+  applyTrustedConfigurationSnapshot: (...args: unknown[]) => mockCompensate(...args),
   applyTrustedConfiguration: (...args: unknown[]) => mockApply(...args),
 }));
 
@@ -222,6 +217,18 @@ const health = {
 };
 beforeEach(() => {
   configDb.reset();
+  mockApplyWithEvidence.mockReset().mockResolvedValue({
+    outcome: {
+      outcome: "committed",
+      revisionId: `cfg1_${"a".repeat(43)}`,
+      enabledServiceIds: [],
+      followUp: "complete",
+      cleanupFailed: false,
+      publisherCleanupFailed: false,
+      registryUpdateFailed: false,
+    },
+  });
+  mockCompensate.mockReset().mockRejectedValue(Error("Must not compensate"));
   mockApply.mockReset().mockResolvedValue({ revisionId: "revision_1" });
   mockRequireAdmin.mockReset().mockResolvedValue(fakeSession);
   mockGetIntegration.mockReset().mockReturnValue(MOCK_INTEGRATION);
@@ -627,6 +634,109 @@ describe("actual integration producers through generated SDK", () => {
     } finally {
       await app.close();
     }
+  });
+  describe.each(["incomplete", "reload"] as const)("unproven prior state after %s", (failure) => {
+    it.each(["conflict", "unknown", "retained"] as const)(
+      "carries %s through actual import, generated SDK and browser formatter",
+      async (database) => {
+        const sdk = await import("@openmapx/core/api-admin-sdk");
+        const { integrationErrorMessage } = await import(
+          "../../../../web/src/lib/admin/integrationErrors"
+        );
+        const { app, client } = await wire();
+        const id = MOCK_INTEGRATION.id;
+        configDb.reset([
+          { id: "row-alpha", integrationId: id, config: { label: "saved-before" }, version: "0" },
+        ]);
+        const settleFailure = () => {
+          if (database === "conflict") {
+            configDb.rows[0].config = { label: "competing-edit" };
+            configDb.rows[0].version = "competing-version";
+          }
+          if (database === "unknown")
+            mockDbSelect.mockImplementationOnce(() => {
+              throw Error("synthetic ownership failure");
+            });
+        };
+        const outcome = {
+          outcome: "committed" as const,
+          revisionId: `cfg1_${"b".repeat(43)}`,
+          enabledServiceIds: [],
+          followUp: failure === "incomplete" ? ("failed" as const) : ("complete" as const),
+          cleanupFailed: false,
+          publisherCleanupFailed: false,
+          registryUpdateFailed: false,
+        };
+        mockApplyWithEvidence.mockImplementationOnce(async () => {
+          if (failure === "incomplete") settleFailure();
+          return {
+            payload: {
+              domain: "fixture.invalid",
+              serviceConfigs: [],
+              serviceSecrets: [],
+              integrationConfigs: [{ integrationId: id, values: { label: "imported" } }],
+            },
+            previousApplied: {
+              revisionId: `cfg1_${"a".repeat(43)}`,
+              integrationConfigDigests: [
+                {
+                  integrationId: id,
+                  digest: configurationProjectionFingerprint({ label: "live-before" }),
+                },
+              ],
+            },
+            outcome,
+          };
+        });
+        if (failure === "reload")
+          mockReloadIntegrations.mockImplementationOnce(async () => {
+            settleFailure();
+            throw Error("synthetic reload failure");
+          });
+        try {
+          const response = await sdk.importAdminIntegrationConfigs(
+            { integrations: [{ integrationId: id, config: { label: "imported" } }] },
+            { client },
+          );
+          expect(response.status).toBe(409);
+          expect(response.data).toEqual({
+            ok: false,
+            error: "Integration import failed",
+            recovery: "reconciliation_required",
+            reason: "previous_applied_not_proven",
+            database,
+            phase: failure === "incomplete" ? "apply" : "reload",
+            runtime: failure === "incomplete" ? "unchanged" : "unknown",
+            apply: outcome,
+          });
+          let displayed = "";
+          try {
+            sdk.unwrapAdminResponse(response);
+          } catch (error) {
+            displayed = integrationErrorMessage(error, "Import failed");
+          }
+          if (database === "retained")
+            expect(displayed).toContain("The imported configuration is saved.");
+          else {
+            expect(displayed).toContain(
+              database === "conflict"
+                ? "newer edits were preserved"
+                : "The saved configuration is uncertain.",
+            );
+            expect(displayed).not.toContain("The imported configuration is saved.");
+          }
+          expect(configDb.rows[0].config).toEqual({
+            label: database === "conflict" ? "competing-edit" : "imported",
+          });
+          expect(configDb.writes).toBe(1);
+          expect(mockCompensate).not.toHaveBeenCalled();
+          expect(mockApplyWithEvidence).toHaveBeenCalledTimes(1);
+          expect(mockReloadIntegrations).toHaveBeenCalledTimes(failure === "reload" ? 1 : 0);
+        } finally {
+          await app.close();
+        }
+      },
+    );
   });
   it("validates the whole import before writes and carries explicit reconciliation evidence over generated transport", async () => {
     const sdk = await import("@openmapx/core/api-admin-sdk");

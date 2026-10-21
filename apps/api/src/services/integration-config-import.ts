@@ -293,15 +293,22 @@ export async function runIntegrationImport(
   if (
     apply.outcome === "committed" &&
     !previousAppliedMatches(saved, entries, schemas, applied.previousApplied)
-  )
+  ) {
+    let database: "retained" | "conflict" | "unknown" = "unknown";
+    try {
+      database = (await saved.owns()) ? "retained" : "conflict";
+    } catch {
+      /* Unavailable ownership evidence cannot establish the current saved state. */
+    }
     return {
       ...failure,
       phase,
-      database: "retained" as const,
+      database,
       apply,
       runtime,
       reason: "previous_applied_not_proven" as const,
     };
+  }
   let restored: boolean;
   try {
     restored = await saved.restore();
