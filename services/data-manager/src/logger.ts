@@ -51,7 +51,7 @@ function wrapChildBindings(
 }
 
 /**
- * Process-wide root logger. index.ts hands this to Fastify via
+ * Process-wide root logger. service.ts hands this to Fastify via
  * `loggerInstance`, so `app.log` and every job child share one pino root
  * (and therefore one LOG_LEVEL).
  */

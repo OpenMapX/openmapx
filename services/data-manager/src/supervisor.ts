@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 import { recoverTrafficWriterLock } from "./jobs/traffic/supervision.js";
 import { expireLiveTraffic } from "./jobs/traffic/write-live.js";
 import { runOpsOperation } from "./ops-client.js";
+import { entryExecArgv } from "./utils/entry-module.js";
 
 const dataDir = process.env.DATA_DIR ?? "/data";
 const statePath = join(dataDir, "traffic", "live-state.json");
@@ -76,11 +77,11 @@ while (!stopping) {
     await recoverTrafficWriterLock({ statePath, workerPid: worker?.pid, stopWorker });
     if (existsSync(tarPath)) await expireLiveTraffic({ tarPath, statePath });
     if (!worker && !fenced) {
-      worker = spawn(
-        process.execPath,
-        ["--import", "tsx/esm", fileURLToPath(new URL("./index.js", import.meta.url))],
-        { stdio: "inherit", env: process.env },
-      );
+      const entry = new URL("./index.ts", import.meta.url);
+      worker = spawn(process.execPath, [...entryExecArgv(entry), fileURLToPath(entry)], {
+        stdio: "inherit",
+        env: process.env,
+      });
       const child = worker;
       child.once("exit", () => {
         if (worker === child) worker = undefined;

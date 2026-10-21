@@ -15,26 +15,18 @@
  * Adding a workspace package is a repo-level act with obligations in every
  * baking Dockerfile, and it belongs to no single feature task.
  *
- * The data-manager image does not bake `integrations/`; it is held to its own
- * dependency closure the same way, since it runs workspace source under tsx.
- *
- * The ops-agent and transitous-runner images copy only the packages they use,
- * so a package changing elsewhere does not rebuild them. Their installs must
- * stage their manifest closure. For a tsx image, every repository file its
- * runtime code imports must be copied into the runner: the import graph below
- * is followed from its entry points with the image's own module resolution.
- *
- * A bundled image runs a bundle of its code instead (scripts/
- * build-runtime-bundles.mjs). Its bundle must build, its runner must not copy
- * workspace source, and the planner relies on the runner reaching the stage
- * named `bundle`.
+ * The data-manager, ops-agent and transitous-runner images run a bundle of
+ * their code instead (scripts/build-runtime-bundles.mjs). Their installs must
+ * stage their manifest closure, so the bundle's pinned npm dependencies are
+ * installed. Their bundles must build, their runners must not copy workspace
+ * source, and the planner relies on the runner reaching the stage named
+ * `bundle`.
  */
 import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { buildRuntimeBundle, RUNTIME_BUNDLES } from "./build-runtime-bundles.mjs";
 import { coversPath, dockerInputs, dockerStages, stageInputs } from "./docker-inputs.mjs";
-import { runtimeImportGraph } from "./runtime-import-graph";
 
 const HERE = typeof __dirname !== "undefined" ? __dirname : dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "..");
@@ -152,18 +144,17 @@ const integrationClosure = requiredPackages(integrationDependencies());
 
 /**
  * Every image checked, with the closure it must stage: the images that bake
- * `integrations/` need the integrations' closure, the data-manager image its
- * own. `stagesSource` marks the ones whose runner imports workspace code under
- * tsx and therefore needs the package *source*, not just its manifest —
- * `apps/web` does not, because Next's standalone output bundles workspace
- * packages at build time.
+ * `integrations/` need the integrations' closure, each bundled image its own.
+ * `stagesSource` marks the ones whose runner imports workspace code under tsx
+ * and therefore needs the package *source*, not just its manifest — `apps/web`
+ * and the bundled images do not, because their builds bundle workspace code.
  */
 const IMAGES: { path: string; stagesSource: boolean; required: Set<string> }[] = [
   { path: "apps/api/Dockerfile", stagesSource: true, required: integrationClosure },
   { path: "apps/web/Dockerfile", stagesSource: false, required: integrationClosure },
   {
     path: "services/data-manager/Dockerfile",
-    stagesSource: true,
+    stagesSource: false,
     required: requiredPackages(
       Object.keys(readJson("services/data-manager/package.json").dependencies ?? {}),
     ),
@@ -171,7 +162,7 @@ const IMAGES: { path: string; stagesSource: boolean; required: Set<string> }[] =
   {
     path: "apps/ops-agent/Dockerfile",
     stagesSource: false,
-    // The agent runs its fixed CLI from source, so the CLI's closure ships too.
+    // The agent's image bundles its fixed CLI, so it installs the CLI's closure too.
     required: requiredPackages([
       ...Object.keys(readJson("apps/ops-agent/package.json").dependencies ?? {}),
       "@openmapx/cli",
@@ -223,68 +214,9 @@ for (const { path: dockerfile, stagesSource, required } of IMAGES) {
   }
 }
 
-/**
- * Images that run workspace source under tsx, with the entry points their
- * runtime starts from. Their own `src` is compiled into `dist` by the builder.
- */
-const RUNTIME_IMAGES: {
-  path: string;
-  tsconfig: string;
-  entries: string[];
-  compiled: string;
-  computedImports?: Record<string, string[]>;
-  notShipped?: Record<string, string>;
-}[] = [
-  {
-    path: "services/data-manager/Dockerfile",
-    tsconfig: "services/data-manager/tsconfig.json",
-    entries: ["services/data-manager/src"],
-    compiled: "services/data-manager/src/",
-  },
-];
-
-for (const image of RUNTIME_IMAGES) {
-  const graph = runtimeImportGraph({
-    root: ROOT,
-    tsconfig: image.tsconfig,
-    entries: image.entries,
-    computedImports: image.computedImports,
-  });
-  for (const file of graph.undeclaredComputedImports) {
-    completenessErrors.push(
-      `${file} imports a computed specifier, so the files ${image.path} must ship cannot be ` +
-        "followed. Declare the files it loads in RUNTIME_IMAGES.computedImports.",
-    );
-  }
-  for (const file of graph.staleComputedImportDeclarations) {
-    completenessErrors.push(
-      `${image.path}: ${file} is declared in computedImports but is unreachable or has no ` +
-        "computed import any more. Remove the declaration.",
-    );
-  }
-  for (const edge of graph.unresolved) {
-    completenessErrors.push(`${image.path}: unresolvable runtime import ${edge}.`);
-  }
-  const copied = dockerInputs(runnerSection(image.path), ".") as string[];
-  const notShipped = Object.keys(image.notShipped ?? {});
-  const missing = graph.files.filter(
-    (file) =>
-      !file.startsWith(image.compiled) &&
-      !notShipped.some((prefix) => file.startsWith(prefix)) &&
-      !coversPath(copied, file),
-  );
-  if (missing.length > 0) {
-    completenessErrors.push(
-      `${image.path}'s runner never copies files its runtime code imports: ` +
-        `${missing.slice(0, 8).join(", ")}${missing.length > 8 ? ` (+${missing.length - 8} more)` : ""}\n` +
-        "    They resolve during development and then throw ERR_MODULE_NOT_FOUND in the image. " +
-        "Copy them into the runner stage.",
-    );
-  }
-}
-
 /** The Dockerfile of each bundled image, by bundle name. */
 const BUNDLED_DOCKERFILES: Record<string, string> = {
+  "data-manager": "services/data-manager/Dockerfile",
   "ops-agent": "apps/ops-agent/Dockerfile",
   "transitous-runner": "apps/transitous-runner/Dockerfile",
 };
@@ -306,7 +238,6 @@ async function checkBundledImages(): Promise<void> {
     "apps/api/Dockerfile",
     "apps/web/Dockerfile",
     ...Object.values(BUNDLED_DOCKERFILES),
-    ...RUNTIME_IMAGES.map((image) => image.path),
   ]) {
     const hasBundleStage = dockerStages(read(dockerfile)).some((stage) => stage.name === "bundle");
     if (hasBundleStage && !Object.values(BUNDLED_DOCKERFILES).includes(dockerfile)) {

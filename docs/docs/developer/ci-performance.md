@@ -90,21 +90,15 @@ digest. Hosts then neither download nor restart that service.
 
 - A `*` or `?` glob covers only what it matches: `packages/*/package.json` is the
   manifests, not every package's source.
-- ops-agent copies the 12 packages its code and fixed CLI reach, plus the three
-  data-manager modules the CLI imports. transitous-runner copies its 7 packages,
-  and the data-manager builder copies its 14. These images no longer copy all
-  of `packages/` or `services/`.
+- The bundle stages of ops-agent, data-manager and transitous-runner copy only
+  the workspace packages their bundles reach, not all of `packages/` or
+  `services/`.
 - The lockfile counts only for what an image installs: the importers whose
   `package.json` it copies, the workspace importers they link, and every
   snapshot and package reachable from them, plus the lockfile settings. If the
   planner cannot follow an entry, it counts the whole file. The plan job installs
   the workspace for the `yaml` parser.
 - `ci.yml` is not an input: it passes nothing to `docker.yml`.
-
-`check-dockerfile-workspace-sync` keeps the narrowed images complete. It walks
-the TypeScript import graph from each tsx image's entry points with that image's
-module resolution. Every repository file reached must be copied into the runner.
-A computed dynamic import must declare the files it loads.
 
 Over the 200 main commits before this change, the same planner rules would have
 rebuilt ops-agent 106 times instead of 139, transitous-runner 97 instead of 121,
@@ -118,12 +112,17 @@ all be followed, and a missed one would let a release reuse an image with stale 
 
 ## Runtime bundles
 
-Images that ran workspace TypeScript under tsx are moving to runtime bundles.
-transitous-runner and ops-agent use them. ops-agent ships three bundles, all
-started with plain `node`: the agent (`dist/agent.mjs`), its update helper
-(`dist/agent-handoff-main.mjs`) and its fixed CLI (`dist/cli.mjs`). The bundled
-CLI starts in about 0.2 s instead of about 0.8 s under tsx, and the agent starts
-it for every CLI-backed operation. `scripts/build-runtime-bundles.mjs` bundles an
+ops-agent, data-manager and transitous-runner run runtime bundles with plain
+`node` instead of workspace TypeScript under tsx. ops-agent ships its agent
+(`dist/agent.mjs`), its update helper (`dist/agent-handoff-main.mjs`) and its
+fixed CLI (`dist/cli.mjs`). The bundled CLI starts in about 0.2 s instead of about
+0.8 s under tsx, and the agent starts it for every CLI-backed operation.
+data-manager ships its supervisor, the service it starts, and the live traffic
+writer and offline package extractor worker threads.
+A bundle evaluates all of its npm imports before any bundled code, so an import of
+another entry's source loads that entry's output as its own module. data-manager's
+`index.mjs` imports `undici-fetch.mjs` and then `service.mjs`: the fetch globals
+are replaced before any module of the service is evaluated, as under tsx. `scripts/build-runtime-bundles.mjs` bundles an
 image's own code and the workspace code it reaches with esbuild:
 
 - npm packages stay installed in the image, but every import is pinned. The script
@@ -132,6 +131,9 @@ image's own code and the workspace code it reaches with esbuild:
   to the output directory. The bundle therefore loads the same dependency files
   as before.
 - A literal `new URL("…", import.meta.url)` asset is copied into `dist/assets/`.
+  A URL naming another entry of the same bundle, such as a worker's source file,
+  points at that entry's `.mjs` instead. `entryExecArgv` in data-manager adds tsx
+  only when the entry is TypeScript source, in development and tests.
   A `require` created with `createRequire(import.meta.url)` may only be called with
   literal specifiers, which are pinned like imports.
 - A computed `import()` or `require()`, any other use of `import.meta` or the
@@ -154,7 +156,8 @@ tsconfig files), and rejects a bundled runner that copies workspace source.
 
 Over the 200 main commits before this change, bundles would have rebuilt
 transitous-runner 24 times instead of 97 (its bundle never changed; the rest are
-Dockerfile, workflow and dependency changes) and ops-agent 57 times instead of 106. For data-manager the same replay gives 58 instead of 118.
+Dockerfile, workflow and dependency changes), ops-agent 57 times instead of 106
+and data-manager 58 times instead of 118.
 
 Changesets excludes package-root `Dockerfile` edits from release detection;
 these private deployment-image changes do not need empty package notes. Source,

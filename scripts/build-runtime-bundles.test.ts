@@ -173,6 +173,47 @@ describe("runtime bundles", () => {
     expect(changed.digest).not.toBe(bundle.digest);
   });
 
+  it("points a URL naming another entry at that entry's bundle", async () => {
+    const root = workspace({
+      "app/src/main.ts": [
+        'import { Worker } from "node:worker_threads";',
+        'new Worker(new URL("./jobs/worker.ts", import.meta.url));',
+      ].join("\n"),
+      "app/src/jobs/worker.ts": 'console.log("worker");',
+    });
+    const bundle = await buildRuntimeBundle(root, "fixture", {
+      ...config,
+      entries: { main: "app/src/main.ts", worker: "app/src/jobs/worker.ts" },
+    });
+    expect(text(bundle, "main.mjs")).toContain('new URL("./worker.mjs", import.meta.url)');
+    expect([...bundle.files.keys()].some((name) => name.startsWith("assets/"))).toBe(false);
+    // Outside the bundle's entries, the same URL is an asset to copy.
+    const asAsset = await buildRuntimeBundle(root, "fixture", config);
+    expect(text(asAsset, "main.mjs")).toMatch(/new URL\("\.\/assets\/[a-f0-9]{12}-worker\.ts"/);
+  });
+
+  it("loads another entry imported by source as that entry's own module", async () => {
+    const root = workspace({
+      "app/src/main.ts": 'import "./setup";\nimport "./service";',
+      "app/src/setup.ts": "globalThis.configured = true;",
+      "app/src/service.ts": 'import pad from "left-pad";\nconsole.log(pad("x"));',
+    });
+    const bundle = await buildRuntimeBundle(root, "fixture", {
+      ...config,
+      entries: {
+        main: "app/src/main.ts",
+        setup: "app/src/setup.ts",
+        service: "app/src/service.ts",
+      },
+    });
+    // ESM evaluates setup.mjs completely before service.mjs and its npm imports.
+    expect(text(bundle, "main.mjs")).toMatch(
+      /import "\.\/setup\.mjs";\nimport "\.\/service\.mjs";/,
+    );
+    expect(text(bundle, "main.mjs")).not.toContain("left-pad");
+    expect(text(bundle, "setup.mjs")).toContain("globalThis.configured = true");
+  });
+
   it("pins packages loaded through a require created from the module's URL", async () => {
     const bundle = await buildRuntimeBundle(
       workspace({

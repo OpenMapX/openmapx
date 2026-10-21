@@ -1,7 +1,7 @@
 import ts from "typescript";
 
-// Shared by the runtime import graph check and the runtime bundler. Plain
-// JavaScript, so the release plan job can load it without a TypeScript loader.
+// Used by the runtime bundler. Plain JavaScript, so the release plan job can
+// load it without a TypeScript loader.
 
 function typeOnlyImport(node) {
   const clause = node.importClause;

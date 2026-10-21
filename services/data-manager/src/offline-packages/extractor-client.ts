@@ -1,8 +1,7 @@
 import { existsSync, mkdirSync, mkdtempSync, renameSync, rmSync } from "node:fs";
-import { createRequire } from "node:module";
 import { basename, dirname, join } from "node:path";
-import { pathToFileURL } from "node:url";
 import { Worker } from "node:worker_threads";
+import { entryExecArgv } from "../utils/entry-module.js";
 import type { OfflinePackageExtractionMetadata, OfflinePackageExtractorOptions } from "./types.js";
 
 type ExtractionResponse =
@@ -17,12 +16,7 @@ export function createOfflinePackageExtractor(options: { workerUrl?: URL } = {})
   return {
     extract(input: OfflinePackageExtractorOptions): Promise<OfflinePackageExtractionMetadata> {
       if (closed) return Promise.reject(new Error("Offline package extractor closed"));
-      const entry =
-        options.workerUrl ??
-        new URL(
-          import.meta.url.endsWith(".ts") ? "./extractor-worker.ts" : "./extractor-worker.js",
-          import.meta.url,
-        );
+      const entry = options.workerUrl ?? new URL("./extractor-worker.ts", import.meta.url);
       let worker: Worker;
       let temporaryDirectory: string | undefined;
       let archivePath: string;
@@ -37,10 +31,7 @@ export function createOfflinePackageExtractor(options: { workerUrl?: URL } = {})
         archivePath = join(temporaryDirectory, "archive.pmtiles");
         worker = new Worker(entry, {
           workerData: { ...input, destinationPath: archivePath },
-          execArgv: [
-            "--import",
-            pathToFileURL(createRequire(import.meta.url).resolve("tsx/esm")).href,
-          ],
+          execArgv: entryExecArgv(entry),
         });
       } catch (error) {
         if (temporaryDirectory) rmSync(temporaryDirectory, { recursive: true, force: true });
