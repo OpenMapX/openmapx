@@ -1,6 +1,5 @@
 import type { FastifyInstance } from "fastify";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { restoreStoredServiceConfig } from "../../services/service-config-writer";
 import { applyTrustedConfiguration } from "../../services/trusted-config-operations";
 import { TrustedConfigurationApplyError } from "../../services/trusted-config-outcome";
 import { createAdminTestApp, installAdminRouteMocks } from "./admin-test-helpers.js";
@@ -105,11 +104,13 @@ vi.mock("../../services/service-config-resolver.js", () => ({
     mockResolveServiceConfigWithSources(...args),
 }));
 
+const mockRestoreServiceConfig = vi.fn().mockResolvedValue(true);
 const mockMergeServiceConfig = vi.fn().mockResolvedValue(undefined);
 vi.mock("../../services/service-config-writer.js", () => ({
-  mergeServiceConfig: (...args: unknown[]) => mockMergeServiceConfig(...args),
-  readStoredServiceConfig: vi.fn().mockResolvedValue(null),
-  restoreStoredServiceConfig: vi.fn().mockResolvedValue(undefined),
+  persistServiceConfigPatch: async (...args: unknown[]) => {
+    await mockMergeServiceConfig(...args);
+    return { restore: mockRestoreServiceConfig };
+  },
 }));
 vi.mock("../../services/trusted-config-operations.js", () => ({
   applyTrustedConfiguration: vi.fn().mockResolvedValue({ revisionId: "revision_1" }),
@@ -647,9 +648,7 @@ describe("service credentials", () => {
           payload: { config: {} },
         });
         expect(res.statusCode).toBe(500);
-        expect(restoreStoredServiceConfig).toHaveBeenCalledTimes(
-          outcome === "not_committed" ? 1 : 0,
-        );
+        expect(mockRestoreServiceConfig).toHaveBeenCalledTimes(outcome === "not_committed" ? 1 : 0);
       },
     );
     it("persists only the route-validated update through the atomic writer", async () => {

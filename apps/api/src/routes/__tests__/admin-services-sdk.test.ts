@@ -9,6 +9,7 @@ import {
 import Fastify from "fastify";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { makeRateLimitTierHook } from "../../server-wiring";
+import { TrustedConfigurationApplyError } from "../../services/trusted-config-outcome";
 import { makeCsrfGuardHook } from "../../utils/csrf";
 import { RateLimiter, serviceActionLimit } from "../../utils/rate-limit";
 import { installAdminRouteMocks } from "./admin-test-helpers";
@@ -80,11 +81,37 @@ vi.mock("../../services/trusted-config-operations", () => ({
   buildConfigurationInput: async () => ({}),
   integrationSchemas: () => new Map(),
 }));
+let storedConfig: Record<string, unknown> | null = null;
 const merge = vi.fn();
+const restore = vi.fn().mockResolvedValue(true);
+const persist = vi.fn<(...args: unknown[]) => Promise<{ restore(): Promise<boolean> }>>(
+  async (...args) => {
+    await merge(...args);
+    return { restore };
+  },
+);
+const internalFailures: unknown[] = [];
+vi.mock("../admin-service-contract", async (actual) => {
+  const real = await actual<typeof import("../admin-service-contract")>();
+  return {
+    registerServiceAdminRoute: ((app, operation, handler, options) =>
+      real.registerServiceAdminRoute(
+        app,
+        operation,
+        async (req, reply) => {
+          try {
+            return await handler(req, reply);
+          } catch (error) {
+            internalFailures.push(error);
+            throw error;
+          }
+        },
+        options,
+      )) as typeof real.registerServiceAdminRoute,
+  };
+});
 vi.mock("../../services/service-config-writer", () => ({
-  readStoredServiceConfig: async () => null,
-  mergeServiceConfig: (...args: unknown[]) => merge(...args),
-  restoreStoredServiceConfig: vi.fn(),
+  persistServiceConfigPatch: (...args: unknown[]) => persist(...args),
 }));
 vi.mock("../../services/service-config-resolver", () => ({
   resolveServiceConfigWithSources: async () => ({
@@ -258,6 +285,12 @@ const { adminDawarichRoute } = await import("../admin-dawarich");
 const { registerAdminComposeRoutes } = await import("../admin-compose");
 beforeEach(() => {
   vi.clearAllMocks();
+  internalFailures.length = 0;
+  restore.mockReset().mockResolvedValue(true);
+  persist.mockReset().mockImplementation(async (...args: unknown[]) => {
+    await merge(...args);
+    return { restore };
+  });
   serviceActionLimit.reset();
   registry.mockReset().mockImplementation(() => ({ list: () => [service], get: getService }));
   requireAdmin.mockResolvedValue(session);
@@ -310,6 +343,126 @@ async function wire(max = 1000) {
 }
 
 describe("actual service producers through final exported SDK", () => {
+  it.each([null, { count: 1 }])(
+    "preserves a newer request while an older noncommit fails (prior %j)",
+    async (prior) => {
+      storedConfig = prior;
+      let version = 0;
+      merge.mockImplementation(async (_id: string, updates: Record<string, unknown>) => {
+        storedConfig = { ...storedConfig, ...updates };
+        version++;
+      });
+      persist.mockImplementation(async (...args: unknown[]) => {
+        const previous = structuredClone(storedConfig);
+        await merge(...args);
+        const owned = version;
+        return {
+          restore: async () => {
+            if (version !== owned) return false;
+            storedConfig = previous;
+            version++;
+            return true;
+          },
+        };
+      });
+      const resume = Promise.withResolvers<void>();
+      apply.mockImplementationOnce(async () => {
+        await resume.promise;
+        throw new TrustedConfigurationApplyError({
+          outcome: "not_committed",
+          reason: "failed",
+          cleanupFailed: false,
+          publisherCleanupFailed: false,
+          registryUpdateFailed: false,
+        });
+      });
+      const { options, close } = await wire();
+      const older = sdk.updateAdminServiceConfig("motis", { config: { count: 3 } }, options);
+      try {
+        await vi.waitFor(() => expect(apply).toHaveBeenCalledTimes(1), { timeout: 2000 });
+        expect(
+          (await sdk.updateAdminServiceConfig("motis", { config: { count: 4 } }, options)).status,
+        ).toBe(200);
+        resume.resolve();
+        expect((await older).status).toBe(500);
+        expect(storedConfig).toEqual({ count: 4 });
+      } finally {
+        resume.resolve();
+        await older;
+        await close();
+        merge.mockReset();
+      }
+    },
+  );
+
+  it.each(["not_committed", "committed", "unknown"] as const)(
+    "keeps %s apply failure through serialized SDK without an unproven inverse",
+    async (outcome) => {
+      const failure = new TrustedConfigurationApplyError({
+        ...(outcome === "unknown"
+          ? { outcome, reason: "transport_or_result" as const }
+          : outcome === "committed"
+            ? {
+                outcome,
+                revisionId: `cfg1_${"a".repeat(43)}`,
+                enabledServiceIds: [],
+                followUp: "failed" as const,
+                cleanupFailed: false,
+              }
+            : { outcome, reason: "failed" as const, cleanupFailed: false }),
+        publisherCleanupFailed: false,
+        registryUpdateFailed: false,
+      });
+      apply.mockRejectedValueOnce(failure);
+      restore.mockResolvedValueOnce(false);
+      const { options, close } = await wire();
+      try {
+        const response = await sdk.updateAdminServiceConfig(
+          "motis",
+          { config: { count: 3 } },
+          options,
+        );
+        expect(response.status).toBe(500);
+        expect(response.data).toEqual({ error: "Service administration failed" });
+        expect(persist).toHaveBeenCalledWith("motis", { count: 3 });
+        expect(restore).toHaveBeenCalledTimes(outcome === "not_committed" ? 1 : 0);
+        expect(internalFailures).toEqual([failure]);
+        expect(writeAuditLog).not.toHaveBeenCalled();
+      } finally {
+        await close();
+      }
+    },
+  );
+
+  it("retains original apply failure internally when the inverse fails without leaking either error", async () => {
+    const failure = new TrustedConfigurationApplyError({
+      outcome: "not_committed",
+      reason: "failed",
+      cleanupFailed: false,
+      publisherCleanupFailed: false,
+      registryUpdateFailed: false,
+    });
+    failure.message = "synthetic-secret-apply";
+    const inverseFailure = new Error("synthetic-secret-inverse");
+    apply.mockRejectedValueOnce(failure);
+    restore.mockRejectedValueOnce(inverseFailure);
+    const { options, close } = await wire();
+    try {
+      const response = await sdk.updateAdminServiceConfig(
+        "motis",
+        { config: { count: 3 } },
+        options,
+      );
+      expect(response.status).toBe(500);
+      expect(response.data).toEqual({ error: "Service administration failed" });
+      expect(internalFailures[0]).toBeInstanceOf(AggregateError);
+      expect((internalFailures[0] as AggregateError).cause).toBe(failure);
+      expect((internalFailures[0] as AggregateError).errors).toEqual([failure, inverseFailure]);
+    } finally {
+      await close();
+    }
+  });
+
   it("exports all 30 actual registered methods", async () => {
     const { registered, close } = await wire();
     try {

@@ -29,11 +29,7 @@ import { jobRunner } from "../services/job-runner";
 import { createApiOpsClient, createDurableOpsKey, executeAndWait } from "../services/ops-client";
 import { isSecretsConfigured } from "../services/secrets";
 import { resolveServiceConfigWithSources } from "../services/service-config-resolver";
-import {
-  mergeServiceConfig,
-  readStoredServiceConfig,
-  restoreStoredServiceConfig,
-} from "../services/service-config-writer";
+import { persistServiceConfigPatch } from "../services/service-config-writer";
 import { getServiceRegistry } from "../services/service-registry";
 import {
   deleteServiceSecret,
@@ -396,8 +392,7 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
         return { errors };
       }
       const adminSession = getAdminSession(req);
-      const previous = await readStoredServiceConfig(req.params.id);
-      await mergeServiceConfig(req.params.id, config);
+      const saved = await persistServiceConfigPatch(req.params.id, config);
       try {
         await applyTrustedConfiguration({
           kind: "serviceConfig.apply",
@@ -409,7 +404,17 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
         });
       } catch (error) {
         if (!isProvenConfigurationNonCommit(error)) throw error;
-        await restoreStoredServiceConfig(req.params.id, previous);
+        try {
+          // False means a later writer owns the row. Either way the apply failed;
+          // do not promise restoration or turn this into a successful response.
+          await saved.restore();
+        } catch (restoreError) {
+          throw new AggregateError(
+            [error, restoreError],
+            "Service configuration apply and restoration failed",
+            { cause: error },
+          );
+        }
         throw error;
       }
       await writeAuditLog({

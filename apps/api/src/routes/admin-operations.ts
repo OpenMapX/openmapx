@@ -76,7 +76,9 @@ export async function adminOperationsRoute(app: FastifyInstance): Promise<void> 
       const payload: DataOperationJobPayload = {
         operation: definition.id,
         version: definition.version,
-        input: parsed.input,
+        // Keep validated RAW JSON: execution parses/transforms it once again at
+        // its own trust boundary (e.g. countries text -> typed countryCodes).
+        input: req.body ?? {},
       };
       const jobId = await jobRunner.enqueue("data.operation", { ...payload }, adminSession.user.id);
       await writeAuditLog({
