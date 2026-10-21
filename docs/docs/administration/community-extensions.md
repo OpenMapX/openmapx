@@ -139,11 +139,13 @@ automatically.
 Install is one orchestrated, atomic job — it reuses the per-component pipelines
 and rolls back on any failure, leaving parts that already existed untouched:
 
-1. **Register + pin each service** — the service repo is shallow-cloned at the
-   bundle's pinned tag/commit into `services/.community/<url-hash>/` and marked as
-   managed by this extension. Every `service.json` is validated against the
-   [service manifest](../developer/service-manifest.md) schema; if any fails, the
-   whole install is refused.
+1. **Inspect + pin each service repository** — the operations agent
+   shallow-clones the bundle's pinned tag or commit and validates every
+   `service.json` against the [service manifest](../developer/service-manifest.md)
+   schema and the community sandbox. If any manifest fails, or a service id is
+   already taken, the whole install is refused before anything changes. The
+   security preview describes that exact commit, and only that commit is
+   installed, into `services/.community/<url-hash>/`, managed by this extension.
 2. **Enable + render + start** the service(s) — `compose render` regenerates the
    stack and the container is brought up. Each service creates and migrates its
    own database schema on boot.
@@ -152,8 +154,14 @@ and rolls back on any failure, leaving parts that already existed untouched:
    `custom_integrations/<id>/`, and the integration host is hot-reloaded.
 4. **Record** the installed extension and its components.
 
-Both on-disk locations (`services/.community/` and `custom_integrations/`) are
-gitignored and bind-mounted, so installs survive container restarts.
+The operations agent owns `services/.community/` on the host, the way it owns
+Docker and the generated configuration. `app-api` never writes there: it asks
+the agent to inspect, install, settle or remove a repository, and reads the
+installed community services back from it. Until a change is settled the agent
+keeps the previous checkout, so a failed install or update restores it and an
+interrupted one is finished on the next start. `custom_integrations/` is
+written by `app-api`. Both locations are gitignored and live on the host, so
+installs survive container restarts.
 
 ### The service sandbox
 

@@ -288,12 +288,18 @@ archive.
 
 #### Service repositories
 
-An extension's service repository is cloned under fixed budgets: HTTPS only, on
-the allowlisted hosts, with no credentials, query string, or fragment in the
-URL. Each clone is shallow and bounded to 120 seconds, 25,000 entries, 512 MiB
-total, 64 MiB per file, and 512 bytes per path; symlinks and special files are
-rejected rather than followed. Only the canonical credential-free URL and the
-exact resolved commit are recorded.
+The operations agent clones an extension's service repository under fixed
+budgets: HTTPS only, on the allowlisted hosts, with no credentials, query
+string, or fragment in the URL. Each clone is shallow and bounded to 120
+seconds, 25,000 entries, 512 MiB total, 64 MiB per file, and 512 bytes per path;
+symlinks, submodules and special files are rejected rather than followed. Only
+the canonical credential-free URL and the exact resolved commit are recorded.
+
+The agent reads `service.json` files up to four directory levels deep, skipping
+dot-directories and dependency folders such as `node_modules`; a directory with
+a `service.json` is one service, and nothing below it is searched. A
+repository must provide at least one service, each with a unique id that no
+built-in or other installed service already uses.
 
 For a distributable artifact, set `"quality": "community"` in your manifest and
 declare the platform version you build against:
