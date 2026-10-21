@@ -13,6 +13,7 @@ import {
   loadConfiguredResourceAuthority,
   pruneBackupRetention,
 } from "./administrative-runtime";
+import { isTerminalHandoff, readAgentHandoff } from "./agent-handoff";
 import { loadOpsAgentConfig } from "./config";
 import {
   createDockerDawarichCollector,
@@ -224,6 +225,15 @@ async function main(): Promise<void> {
       }),
       journal,
       runtime,
+      replacementInProgress: () => {
+        try {
+          const handoff = readAgentHandoff(config.rootDir);
+          return handoff !== null && !isTerminalHandoff(handoff.phase);
+        } catch {
+          // An unreadable record fails release operations, not every operation.
+          return false;
+        }
+      },
       audit: (event) => process.stdout.write(`${JSON.stringify(event)}\n`),
       ...(privacyBackupExtraction ? { privacyBackupExtraction } : {}),
       privacyBackupHealth: () =>

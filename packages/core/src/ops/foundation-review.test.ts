@@ -57,6 +57,7 @@ describe("reviewed ops foundation contract", () => {
       "release.pull",
       "release.apply",
       "appApi.replace",
+      "agent.update",
       "system.update",
       "extension.install",
     ] as const) {

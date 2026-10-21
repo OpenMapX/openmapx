@@ -38,6 +38,7 @@ import {
 import {
   createUnavailableRuntime,
   dispatchOpsOperation,
+  OpsAgentBusyError,
   type OpsExecutionContext,
   OpsHostUpdateRequiredError,
   OpsNotWiredError,
@@ -98,6 +99,11 @@ export interface BuildOpsAgentServerOptions {
   maxJobEntries?: number;
   jobRetentionMs?: number;
   claimTimeoutMs?: number;
+  /**
+   * True while the agent is being replaced. New asynchronous operations are
+   * refused as busy, because recreating the agent would end them.
+   */
+  replacementInProgress?: () => boolean;
   /** Dedicated streaming managed-Dawarich collector; absent in minimal/dev agents. */
   dawarichExport?: Omit<DawarichSubjectExportRouteOptions, "apiToken">;
   /** Dedicated case-scoped backup extraction; absent in minimal agents. */
@@ -234,6 +240,7 @@ function classify(error: unknown): { errorClass: OpsErrorClass; statusCode: numb
   }
   if (error instanceof OpsHostUpdateRequiredError)
     return { errorClass: "host_update_required", statusCode: 409 };
+  if (error instanceof OpsAgentBusyError) return { errorClass: "busy", statusCode: 409 };
   if (error instanceof OpsNotWiredError) return { errorClass: "not_wired", statusCode: 501 };
   return { errorClass: "runtime", statusCode: 500 };
 }
@@ -441,6 +448,14 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
   ): OpsExecutionContext => ({
     signal,
     claim,
+    otherActiveOperations: () =>
+      [...jobsById.values()].filter(
+        (other) =>
+          other.operationId !== job.operationId &&
+          (other.state === "queued" ||
+            other.state === "running" ||
+            other.state === "termination_pending"),
+      ).length,
     emitLog: (stream, message) => {
       const boundedMessage = truncateUtf8(message, OPS_MAX_EVENT_MESSAGE_BYTES);
       job.cursor += 1;
@@ -697,6 +712,10 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
         }
         if (jobsById.size >= maxJobEntries) {
           throw new RequestGuardError("busy", 429);
+        }
+        // A resumed agent update re-attaches above; nothing new may start.
+        if (operation.kind !== "agent.update" && options.replacementInProgress?.()) {
+          throw new RequestGuardError("busy", 409);
         }
       }
       if (active >= maxConcurrency) throw new RequestGuardError("busy", 429);

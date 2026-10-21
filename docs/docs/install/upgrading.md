@@ -198,14 +198,28 @@ The admin system updater checks the configured channel and stores its exact cand
 A check compares the manifest's digests with the running images and downloads
 nothing. Apply uses that checked candidate rather than resolving the channel again:
 it pulls every digest-pinned image while the services keep running, then writes
-`docker-compose.release.yml` atomically. A configuration change requires a fresh check. It replaces API, web, data-manager, and transitous-runner without
-restarting their dependencies. Before applying, it verifies that the running
-ops-agent image and its privacy-backup helper pin already match the selected
-release. If either differs or cannot be verified, the panel shows **Host update
-required**, disables Apply, and provides copyable host-side update commands.
-If the running state changes after inspection, the update guard returns a
-specific `host_update_required` failure with the same guidance. The agent does not replace its own container while it is
-executing the update. System status includes all five running application services.
+`docker-compose.release.yml` atomically. A configuration change requires a fresh check.
+
+When the release changes the ops-agent image or its privacy-backup helper pin,
+the agent is updated first. It refuses while other agent operations are running,
+and refuses new ones until the handoff finishes.
+It records the handoff in `infra/docker/data/ops-agent/agent-handoff.json` and
+starts a helper container from its own image, which:
+
+1. writes the release overlay;
+2. recreates only `ops-agent`;
+3. waits up to three minutes for the new agent to be healthy and to run the pinned image and helper pin.
+
+If the new agent does not start, the helper restores the previous overlay and
+agent. The update then stops with **Host update required**, before any other
+service changes. A new agent can fail to start when the release needs a newer
+host checkout, for example for a new service manifest. In that case, run the
+host commands shown in the panel.
+
+The update then replaces API, web, data-manager and transitous-runner without
+restarting their dependencies. If that step fails, those four services return
+to the images they ran before the update; the verified new agent stays.
+System status includes all five running application services.
 
 API and CLI service lifecycle commands automatically include an
 existing release overlay, so restarting or re-rendering the stack retains the

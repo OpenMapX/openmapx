@@ -37,6 +37,8 @@ export const OPS_OPERATION_KINDS = [
   "release.apply",
   "appApi.replace",
   "appApi.runtime.inspect",
+  "agent.update",
+  "agent.handoff.inspect",
   "backup.list",
   "backup.create",
   "backup.restore",
@@ -83,6 +85,18 @@ export const OPS_OPERATION_KINDS = [
 ] as const;
 
 export type OpsOperationKind = (typeof OPS_OPERATION_KINDS)[number];
+
+/** `none` means no handoff with the requested ID exists. */
+export const OPS_AGENT_HANDOFF_PHASES = [
+  "none",
+  "launched",
+  "overlay_written",
+  "recreated",
+  "applied",
+  "rolled_back",
+  "failed",
+] as const;
+export type OpsAgentHandoffPhase = (typeof OPS_AGENT_HANDOFF_PHASES)[number];
 export type OpsRole = "api" | "data-manager";
 export type OpsExecutionMode = "sync" | "async";
 
@@ -136,6 +150,8 @@ export const OPS_KIND_POLICIES = {
   "release.apply": asyncEffect("api", 30 * 60_000),
   "appApi.replace": asyncEffect("api", 10 * 60_000),
   "appApi.runtime.inspect": sync("api", 30_000),
+  "agent.update": asyncEffect("api", 2 * 60_000),
+  "agent.handoff.inspect": sync("api", 30_000),
   "backup.list": sync("api", 30_000, 256 * 1024),
   "backup.create": asyncEffect("api", 30 * 60_000),
   "backup.restore": asyncEffect("api", 30 * 60_000),
@@ -279,6 +295,13 @@ export const opsOperationSchema = z.discriminatedUnion("kind", [
     updateJobId: stableIdSchema,
   }),
   kindOnly("appApi.runtime.inspect"),
+  z.strictObject({
+    kind: z.literal("agent.update"),
+    releaseId: stableIdSchema,
+    expectedDigest: z.string().regex(/^[a-f0-9]{64}$/),
+    handoffId: stableIdSchema,
+  }),
+  z.strictObject({ kind: z.literal("agent.handoff.inspect"), handoffId: stableIdSchema }),
   kindOnly("backup.list"),
   z.strictObject({ kind: z.literal("backup.create"), backupId: backupIdSchema }),
   z.strictObject({
@@ -431,7 +454,7 @@ export const OPS_PUBLIC_ERROR_MESSAGES: Record<OpsErrorClass, string> = {
   not_wired: "Operation is not available",
   recovery_required: "Operation requires an explicit retry",
   host_update_required:
-    "Host update required: this release updates the operations agent or its backup helper and cannot be installed from the admin panel. Run `pnpm openmapx compose release`, then `pnpm openmapx services update app-api app-web data-manager ops-agent transitous-runner` on the host.",
+    "Host update required: the operations agent or its backup helper could not be updated from the admin panel. Run `pnpm openmapx compose release`, then `pnpm openmapx services update app-api app-web data-manager ops-agent transitous-runner` on the host.",
   runtime: "Operation failed",
 };
 export class OpsContractError extends Error {
@@ -480,7 +503,7 @@ export interface OpsResourcePolicy {
   allowPreparedRun?: (preparedRunId: string) => PolicyResult;
   allowCandidate?: (candidateId: string) => PolicyResult;
   allowRelease?: (
-    kind: "release.pull" | "release.apply" | "appApi.replace" | "system.update",
+    kind: "release.pull" | "release.apply" | "appApi.replace" | "agent.update" | "system.update",
     releaseId: string,
   ) => PolicyResult;
   allowUpdateJobId?: (updateJobId: string) => PolicyResult;
@@ -533,6 +556,7 @@ export async function authorizeOpsResources(
       return allowed(policy.allowCandidate?.(operation.candidateId));
     case "release.pull":
     case "release.apply":
+    case "agent.update":
       return allowed(policy.allowRelease?.(operation.kind, operation.releaseId));
     case "appApi.replace":
       return (
@@ -842,6 +866,12 @@ export const OPS_RESULT_SCHEMAS = {
   "appApi.runtime.inspect": z.strictObject({
     releaseId: stableIdSchema.optional(),
     updateJobId: stableIdSchema.optional(),
+  }),
+  "agent.update": z.strictObject({ handoffId: stableIdSchema, replaced: z.boolean() }),
+  "agent.handoff.inspect": z.strictObject({
+    handoffId: stableIdSchema,
+    phase: z.enum(OPS_AGENT_HANDOFF_PHASES),
+    reason: z.string().max(256).optional(),
   }),
   "backup.list": z.strictObject({
     backups: z.array(backupInventoryEntry).max(OPS_MAX_BACKUP_INVENTORY_ENTRIES),

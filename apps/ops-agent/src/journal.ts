@@ -221,6 +221,21 @@ async function safeRead(path: string, maxBytes: number): Promise<Uint8Array | un
   }
 }
 
+/**
+ * Reads the persisted journal without recovering or rewriting it, for a
+ * process that must not take ownership of the journal.
+ */
+export async function readOpsJobJournalSnapshot(path: string): Promise<PersistedOpsJob[]> {
+  if (basename(path) !== "jobs-v1.json") throw new Error("Ops job journal is unavailable");
+  const bytes = await safeRead(path, OPS_JOB_JOURNAL_MAX_BYTES);
+  if (!bytes) return [];
+  try {
+    return parseFile(bytes, OPS_JOB_JOURNAL_MAX_ENTRIES);
+  } catch {
+    throw new Error("Ops job journal is unavailable");
+  }
+}
+
 export async function openOpsJobJournal(
   path: string,
   options: OpenOpsJobJournalOptions = {},

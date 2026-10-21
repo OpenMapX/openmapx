@@ -27,6 +27,8 @@
   ],
   "typedEffectRoles": {
     "api": [
+      "agent.handoff.inspect",
+      "agent.update",
       "appApi.replace",
       "appApi.runtime.inspect",
       "backup.create",
@@ -110,6 +112,7 @@
     "release.pull",
     "release.apply",
     "appApi.replace",
+    "agent.update",
     "system.update",
     "backup.create",
     "backup.restore",
@@ -210,6 +213,8 @@
         "release.apply",
         "appApi.replace",
         "appApi.runtime.inspect",
+        "agent.update",
+        "agent.handoff.inspect",
         "system.diagnostics",
         "system.update",
         "system.inspect"

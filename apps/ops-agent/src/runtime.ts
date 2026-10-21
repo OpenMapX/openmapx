@@ -22,10 +22,20 @@ export class OpsHostUpdateRequiredError extends Error {
   }
 }
 
+/** The agent cannot be replaced while it runs other operations. */
+export class OpsAgentBusyError extends Error {
+  constructor() {
+    super(OPS_PUBLIC_ERROR_MESSAGES.busy);
+    this.name = "OpsAgentBusyError";
+  }
+}
+
 export interface OpsExecutionContext {
   signal: AbortSignal;
   emitLog(stream: "stdout" | "stderr", message: string): void;
   claim: OpsTrustedClaim;
+  /** Unfinished operations other than this one; replacing the agent would end them. */
+  otherActiveOperations?(): number;
 }
 
 export interface OpsTrustedClaim {

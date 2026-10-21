@@ -62,6 +62,13 @@ const samples: Record<(typeof OPS_OPERATION_KINDS)[number], OpsOperation> = {
     updateJobId: "update_20260823",
   },
   "appApi.runtime.inspect": { kind: "appApi.runtime.inspect" },
+  "agent.update": {
+    kind: "agent.update",
+    releaseId: "release-123",
+    expectedDigest: "a".repeat(64),
+    handoffId: "handoff-123",
+  },
+  "agent.handoff.inspect": { kind: "agent.handoff.inspect", handoffId: "handoff-123" },
   "backup.list": { kind: "backup.list" },
   "backup.create": { kind: "backup.create", backupId: "pre-update-20260823" },
   "backup.restore": {
