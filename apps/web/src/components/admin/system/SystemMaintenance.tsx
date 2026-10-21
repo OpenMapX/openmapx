@@ -199,10 +199,19 @@ export function SystemMaintenance() {
         }
       : null;
   // The agent status includes the backup helper pin check, even when its image is current.
+  // An outdated agent is replaced by the update itself; an unverifiable agent, or
+  // a replacement that failed for this release, still needs the host.
   const agent = status?.images.find((image) => image.id === "ops-agent");
+  const agentReplacementFailed = Boolean(
+    checkedCandidate && blockedCandidate === checkedCandidate.expectedDigest,
+  );
   const hostUpdateRequired = Boolean(
     checkedCandidate &&
-      (agent?.status !== "up-to-date" || blockedCandidate === checkedCandidate.expectedDigest),
+      (agentReplacementFailed ||
+        (agent?.status !== "up-to-date" && agent?.status !== "update-available")),
+  );
+  const replacesAgent = Boolean(
+    checkedCandidate && !hostUpdateRequired && agent?.status === "update-available",
   );
   const canUpdate = Boolean(
     checkedCandidate &&
@@ -266,12 +275,10 @@ export function SystemMaintenance() {
         <Alert severity="warning" sx={{ minWidth: 0 }}>
           <AlertTitle>Host update required</AlertTitle>
           <Typography variant="body2">
-            {agent?.status === "update-available" ||
-            blockedCandidate === checkedCandidate?.expectedDigest
-              ? "This release updates the operations agent or its backup helper and cannot be installed from the admin panel."
+            {agentReplacementFailed
+              ? "The operations agent could not be updated from the admin panel. The previous agent keeps running."
               : "The operations agent or its backup helper could not be verified for this release. Updating from the admin panel is blocked."}{" "}
-            Run these commands from an updated OpenMapX checkout on the host. The agent cannot
-            replace its own container while executing an update.
+            Run these commands from an updated OpenMapX checkout on the host.
           </Typography>
           <Box
             component="pre"
@@ -298,6 +305,14 @@ export function SystemMaintenance() {
           >
             Copy commands
           </Button>
+        </Alert>
+      )}
+
+      {replacesAgent && (
+        <Alert severity="info">
+          This release also updates the operations agent. The update replaces it first and checks
+          that the new agent starts. If it does not, the previous agent is restored and the update
+          stops before any other service changes.
         </Alert>
       )}
 
@@ -457,8 +472,9 @@ export function SystemMaintenance() {
               {candidateToApply?.expectedDigest}
             </Typography>
             <Alert severity="info">
-              Images are pulled before any container is replaced. Data Manager and Web update first;
-              API updates last and briefly interrupts this page.
+              Images are downloaded before any container is replaced. The operations agent updates
+              first when the release changes it, then Data Manager and Web; API updates last and
+              briefly interrupts this page.
             </Alert>
             <FormControlLabel
               control={

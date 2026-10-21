@@ -83,7 +83,17 @@ describe("SystemMaintenance", () => {
     expect(markup).toContain("Host-control readiness");
   });
 
-  it.each(["update-available", "unknown", "not-running"] as const)(
+  it("lets the update replace an outdated agent first", async () => {
+    systemStatus.images[1].status = "update-available";
+    systemStatus.images[1].updateAvailable = true;
+    const { SystemMaintenance } = await import("./SystemMaintenance");
+    render(<SystemMaintenance />);
+    expect(screen.getByRole("button", { name: "Update OpenMapX" })).not.toBeDisabled();
+    expect(screen.getByRole("alert")).toHaveTextContent("updates the operations agent");
+    expect(screen.getByRole("alert")).not.toHaveTextContent("Host update required");
+  });
+
+  it.each(["unknown", "not-running"] as const)(
     "requires a host update when agent and helper readiness is %s",
     async (status) => {
       systemStatus.images[1].status = status;
@@ -113,7 +123,7 @@ describe("SystemMaintenance", () => {
   });
 
   it("copies the host update commands", async () => {
-    systemStatus.images[1].status = "update-available";
+    systemStatus.images[1].status = "unknown";
     const writeText = vi.fn().mockResolvedValue(undefined);
     Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
     const { SystemMaintenance } = await import("./SystemMaintenance");
