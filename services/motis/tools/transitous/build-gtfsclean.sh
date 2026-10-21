@@ -20,4 +20,5 @@ export GOPROXY=direct
 go mod init openmapx.local/gtfsclean-build
 retry_fetch go get github.com/public-transport/gtfsclean@013af793337b759e782c3f8919e0b535cb702944
 retry_fetch go get golang.org/x/text@v0.41.0
+retry_fetch go get github.com/klauspost/compress@v1.18.7
 go build -trimpath -o /usr/local/bin/gtfsclean github.com/public-transport/gtfsclean
