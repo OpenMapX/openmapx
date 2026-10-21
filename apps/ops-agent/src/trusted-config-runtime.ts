@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import {
   type ConfigurationApplyResult,
   type OpsOperation,
@@ -8,7 +9,12 @@ import { services as coreServices } from "@openmapx/core/server";
 import type { OpsRuntime, OpsTrustedClaim } from "./runtime";
 
 const FAILED = "Trusted configuration apply failed";
-type TrustedConfigurationOperation = Extract<OpsOperation, { revisionId: string }>;
+const PLAN_FAILED = "Configuration hardlink plan unavailable";
+const PLAN_STALE = "Another configuration was applied before its hardlinks";
+type TrustedConfigurationOperation = Exclude<
+  Extract<OpsOperation, { revisionId: string }>,
+  { kind: "configuration.hardlinks.inspect" }
+>;
 
 export interface TrustedConfigurationRuntimeOptions {
   services: readonly coreServices.LoadedService[];
@@ -164,6 +170,33 @@ export function installTrustedConfigurationRuntime(
       operation,
       trustedPayload(operation, context),
       context.claim,
+      context.signal,
+    );
+  // The plan lives in the applied generation, which only this service can
+  // read. Data-manager applies it: its mounts confine links and prunes to the
+  // data root, where other containers can write.
+  runtime["configuration.hardlinks.inspect"] = (operation, context) =>
+    coreServices.withConfigurationGenerationWriter(
+      options.infraDir,
+      async () => {
+        if (coreServices.currentConfigurationGeneration(options.infraDir) !== operation.revisionId)
+          throw new Error(PLAN_STALE);
+        try {
+          const plan = JSON.parse(
+            readFileSync(
+              coreServices.currentConfigurationFile(
+                options.infraDir,
+                coreServices.GENERATED_HARDLINK_PLAN_FILE,
+              ),
+              "utf8",
+            ),
+          ) as unknown;
+          if (!Array.isArray(plan)) throw new Error(PLAN_FAILED);
+          return { revisionId: operation.revisionId, plan };
+        } catch {
+          throw new Error(PLAN_FAILED);
+        }
+      },
       context.signal,
     );
   runtime["serviceSelection.apply"] = (operation, context) =>

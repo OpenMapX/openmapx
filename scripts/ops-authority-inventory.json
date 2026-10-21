@@ -35,6 +35,7 @@
       "backup.delete",
       "backup.list",
       "backup.restore",
+      "configuration.hardlinks.inspect",
       "configuration.inspect",
       "data.clean",
       "data.convertOverpass",
@@ -183,6 +184,12 @@
         "service.build",
         "services.buildAll"
       ]
+    },
+    {
+      "id": "api.configuration-hardlinks",
+      "callSiteIds": [],
+      "semanticSources": ["apps/api/src/services/admin-ops.ts#applyGenerationHardlinks"],
+      "typedKinds": ["configuration.hardlinks.inspect"]
     },
     {
       "id": "api.compose-runtime",

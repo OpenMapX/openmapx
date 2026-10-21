@@ -133,8 +133,8 @@ const dockerAvailable = vi.fn().mockResolvedValue(true);
 vi.mock("../../services/admin-ops", () => ({
   INFRA_DIR: "/synthetic/infra",
   isDockerAvailable: () => dockerAvailable(),
-  renderAndPersistCompose: vi.fn(),
-  applyHardlinksFromPlan: async () => serviceHardlinksFixture,
+  renderAndPersistCompose: vi.fn(async () => ({ revisionId: `cfg1_${"r".repeat(43)}` })),
+  applyGenerationHardlinks: async () => serviceHardlinksFixture,
 }));
 vi.mock("@openmapx/core/server", async (actual) => ({
   ...(await actual<typeof import("@openmapx/core/server")>()),

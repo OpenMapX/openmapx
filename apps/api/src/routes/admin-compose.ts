@@ -1,6 +1,6 @@
 import { repoPaths, services } from "@openmapx/core/server";
 import type { FastifyInstance } from "fastify";
-import { applyHardlinksFromPlan, renderAndPersistCompose } from "../services/admin-ops";
+import { applyGenerationHardlinks, renderAndPersistCompose } from "../services/admin-ops";
 import { readDesiredSelection } from "../services/desired-selection";
 import {
   createDirectAdminOpsKey,
@@ -54,8 +54,11 @@ export async function registerAdminComposeRoutes(
         req.headers[DIRECT_OPS_IDEMPOTENCY_HEADER],
       );
       const operationKey = createDirectAdminOpsKey(adminSession.user.id, idempotencyValue);
-      await renderAndPersistCompose({ operationKey });
-      const hardlinks = await applyHardlinksFromPlan({ operationIdentity: operationKey });
+      const { revisionId } = await renderAndPersistCompose({ operationKey });
+      const hardlinks = await applyGenerationHardlinks({
+        revisionId,
+        operationIdentity: operationKey,
+      });
       const r = await dockerComposeAction("", "start", {
         operationKey,
       });
