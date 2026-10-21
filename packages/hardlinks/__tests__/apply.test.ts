@@ -1,6 +1,7 @@
 import {
   existsSync,
   mkdirSync,
+  mkdtempSync,
   readFileSync,
   renameSync,
   rmSync,
@@ -16,8 +17,7 @@ describe("applyHardlinkPlan", () => {
   let root: string;
 
   beforeEach(() => {
-    root = join(tmpdir(), `openmapx-hl-${Date.now()}-${Math.random().toString(36).slice(2)}`);
-    mkdirSync(root, { recursive: true });
+    root = mkdtempSync(join(tmpdir(), "openmapx-hl-"));
   });
 
   afterEach(() => {

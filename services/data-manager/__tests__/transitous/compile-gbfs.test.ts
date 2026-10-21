@@ -210,7 +210,7 @@ describe("bounded GBFS candidate validation", () => {
     };
     // The only system would fail validation if it were not quarantined.
     globalThis.fetch = vi.fn(async (input: unknown) =>
-      String(input).includes("raw.githubusercontent.com")
+      new URL(String(input)).hostname === "raw.githubusercontent.com"
         ? new Response(csv)
         : new Response("not-json"),
     ) as typeof fetch;
