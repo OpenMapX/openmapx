@@ -118,7 +118,11 @@ ops-agent, data-manager and transitous-runner run runtime bundles with plain
 fixed CLI (`dist/cli.mjs`). The bundled CLI starts in about 0.2 s instead of about
 0.8 s under tsx, and the agent starts it for every CLI-backed operation.
 data-manager ships its supervisor, the service it starts, and the live traffic
-writer and offline package extractor worker threads. `scripts/build-runtime-bundles.mjs` bundles an
+writer and offline package extractor worker threads.
+A bundle evaluates all of its npm imports before any bundled code, so an import of
+another entry's source loads that entry's output as its own module. data-manager's
+`index.mjs` imports `undici-fetch.mjs` and then `service.mjs`: the fetch globals
+are replaced before any module of the service is evaluated, as under tsx. `scripts/build-runtime-bundles.mjs` bundles an
 image's own code and the workspace code it reaches with esbuild:
 
 - npm packages stay installed in the image, but every import is pinned. The script

@@ -109,6 +109,23 @@ it("shares the parent lock PID and cannot continue writing after that parent die
 }, 15000);
 
 it.skipIf(process.env.OPENMAPX_RUN_BUILT_WORKER_TESTS !== "1")(
+  "starts the service and its workers from the bundled outputs",
+  () => {
+    const dist = (name: string) =>
+      readFileSync(new URL(`../../dist/${name}`, import.meta.url), "utf8");
+    expect(dist("supervisor.mjs")).toContain('new URL("./index.mjs", import.meta.url)');
+    // The fetch globals are replaced before any module of the service runs.
+    expect(dist("index.mjs")).toMatch(
+      /import "\.\/undici-fetch\.mjs";\nimport "\.\/service\.mjs";/,
+    );
+    expect(dist("undici-fetch.mjs")).toContain("globalThis.fetch = ");
+    for (const worker of ["live-writer-worker", "extractor-worker"]) {
+      expect(dist("service.mjs")).toContain(`new URL("./${worker}.mjs", import.meta.url)`);
+    }
+  },
+);
+
+it.skipIf(process.env.OPENMAPX_RUN_BUILT_WORKER_TESTS !== "1")(
   "runs the bundled traffic writer worker with plain Node against a real tar",
   async () => {
     const dir = mkdtempSync(join(tmpdir(), "openmapx-writer-built-"));

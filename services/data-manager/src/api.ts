@@ -114,7 +114,7 @@ export interface ApiOptions {
   /** Test seam invoked after reservation; production launches the real pipeline. */
   launchTransitSync?: (args: { jobId: string; countries: string[]; trigger: string }) => void;
   /**
-   * Runs the predicted-traffic bake. Wired in `index.ts` only when
+   * Runs the predicted-traffic bake. Wired in `service.ts` only when
    * `OPENCONDITIONS_URL` is configured, so the route can answer 501 rather than
    * pretending to work on a deployment without OpenConditions.
    */

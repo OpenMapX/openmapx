@@ -42,9 +42,14 @@ export const RUNTIME_BUNDLES = {
     outdir: "services/data-manager/dist",
     entries: {
       supervisor: "services/data-manager/src/supervisor.ts",
+      // index imports undici-fetch and then service, each its own module, so
+      // the fetch globals are replaced before the service's npm imports are
+      // evaluated, as under tsx (see workspaceModule).
       index: "services/data-manager/src/index.ts",
+      service: "services/data-manager/src/service.ts",
       "live-writer-worker": "services/data-manager/src/jobs/traffic/live-writer-worker.ts",
       "extractor-worker": "services/data-manager/src/offline-packages/extractor-worker.ts",
+      "undici-fetch": "packages/core/src/undici-fetch.ts",
     },
   },
   "transitous-runner": {
@@ -124,6 +129,14 @@ export async function buildRuntimeBundle(root, image, config = RUNTIME_BUNDLES[i
   const sources = new Set();
   const problems = [];
 
+  // Bundled code is evaluated after every npm import of its bundle. An import
+  // of another entry's source therefore loads that entry's output as its own
+  // module, which keeps its place in the evaluation order.
+  const workspaceModule = (path) => {
+    const entry = entryNames.get(path);
+    return entry ? { path: `./${entry}.mjs`, external: true } : { path };
+  };
+
   const runtimePlugin = {
     name: "openmapx-runtime",
     setup(context) {
@@ -138,7 +151,7 @@ export async function buildRuntimeBundle(root, image, config = RUNTIME_BUNDLES[i
           if (!target) {
             return { errors: [{ text: `${args.path} is not exported by ${name}` }] };
           }
-          return { path: join(dir, target) };
+          return workspaceModule(join(dir, target));
         }
         const resolved = await context.resolve(`./${subpath ?? json.main ?? "index.ts"}`, {
           importer: args.importer,
@@ -146,12 +159,13 @@ export async function buildRuntimeBundle(root, image, config = RUNTIME_BUNDLES[i
           resolveDir: dir,
           pluginData: { resolving: true },
         });
-        return resolved.errors.length > 0 ? { errors: resolved.errors } : { path: resolved.path };
+        return resolved.errors.length > 0
+          ? { errors: resolved.errors }
+          : workspaceModule(resolved.path);
       });
       context.onResolve({ filter: /.*/ }, async (args) => {
         if (args.kind === "entry-point" || args.pluginData?.resolving) return undefined;
         if (BUILTINS.has(args.path)) return { path: args.path, external: true };
-        if (WORKSPACE.test(args.path)) return undefined;
         const resolved = await context.resolve(args.path, {
           importer: args.importer,
           kind: args.kind,
@@ -160,7 +174,9 @@ export async function buildRuntimeBundle(root, image, config = RUNTIME_BUNDLES[i
         });
         if (resolved.errors.length > 0) return { errors: resolved.errors };
         // A bare specifier that resolves into the workspace is workspace code.
-        if (!resolved.path.split(sep).includes("node_modules")) return undefined;
+        if (WORKSPACE.test(args.path) || !resolved.path.split(sep).includes("node_modules")) {
+          return workspaceModule(resolved.path);
+        }
         const pinned = posixRelative(outdir, resolved.path);
         externals.add(pinned);
         return { path: pinned, external: true };
