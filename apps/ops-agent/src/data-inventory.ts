@@ -3,6 +3,10 @@ import { lstatSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 import type { OpsResultFor } from "@openmapx/core/ops";
 import {
+  type MotisConfigExpectations,
+  parseMotisConfigExpectations,
+} from "@openmapx/transitous-core";
+import {
   listDescriptorAnchoredDirectory,
   readDescriptorAnchoredUtf8,
   statDescriptorAnchoredEntry,
@@ -37,27 +41,8 @@ interface MobilityCapabilitySnapshot {
   rentals?: { providerIds?: string[]; providerGroupIds?: string[] };
 }
 
-interface MotisConfigExpectations {
-  timetableDatasets: number;
-  realtimeFeeds: number;
-  gbfsFeeds: number;
-  expectsGbfs: boolean;
-  tilesEnabled: boolean;
-  elevationEnabled: boolean;
-  routedTransfersEnabled: boolean;
-  gbfsProxyUrl: string | null;
-  feedProxyUrls: string[];
-}
-
 async function parseMotisConfig(configText: string): Promise<MotisConfigExpectations> {
-  const moduleUrl = new URL(
-    "../../../packages/transitous-core/src/motis-config.ts",
-    import.meta.url,
-  ).href;
-  const module = (await import(moduleUrl)) as {
-    parseMotisConfigExpectations(value: string): MotisConfigExpectations;
-  };
-  return module.parseMotisConfigExpectations(configText);
+  return parseMotisConfigExpectations(configText);
 }
 
 function boundedString(value: unknown): string | null {

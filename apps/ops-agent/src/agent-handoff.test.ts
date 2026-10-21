@@ -399,9 +399,7 @@ describe("agent handoff helper container", () => {
       oldImageId,
       "--",
       "node",
-      "--import",
-      "tsx/esm",
-      "dist/agent-handoff-main.js",
+      "dist/agent-handoff-main.mjs",
     ]);
   });
 

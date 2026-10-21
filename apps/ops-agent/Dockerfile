@@ -50,7 +50,10 @@ COPY --parents \
 COPY apps/ops-agent/package.json apps/ops-agent/
 RUN pnpm install --frozen-lockfile --prod --ignore-scripts
 
-FROM deps AS builder
+# Bundles the agent, its update helper and its fixed CLI, with the workspace
+# code they reach, into dist/. The release planner fingerprints this bundle;
+# release builds pass its digest so a different bundle fails the build.
+FROM deps AS bundle
 WORKDIR /app
 COPY --parents \
     packages/air-quality/ \
@@ -67,9 +70,17 @@ COPY --parents \
     packages/transitous-core/ \
     ./
 COPY apps/ops-agent/ apps/ops-agent/
-COPY tsconfig.base.json ./
-WORKDIR /app/apps/ops-agent
-RUN pnpm build
+# The CLI imports these data-manager modules and, for `transit-registry bump`,
+# this integration.
+COPY --parents \
+    services/data-manager/src/transitous-lock.ts \
+    services/data-manager/src/gbfs-catalog-lock.ts \
+    services/data-manager/src/utils/atomic-write.ts \
+    integrations/transit-dynamic-registry/ \
+    ./
+COPY scripts/build-runtime-bundles.mjs scripts/module-specifiers.mjs scripts/
+ARG EXPECTED_BUNDLE_DIGEST=
+RUN node scripts/build-runtime-bundles.mjs ops-agent --expect "$EXPECTED_BUNDLE_DIGEST"
 
 FROM base AS runner
 WORKDIR /app
@@ -83,34 +94,14 @@ ENV NODE_ENV=production
 ENV HOME=/home/node
 ENV PORT=4300
 
-# Assign ownership while copying. A recursive chown afterwards would store a
-# second copy of every file, including node_modules, in its own layer.
+# The bundles import their npm dependencies by path from the pnpm store, so the
+# runner needs the production store and the bundles, and no workspace source.
+# Assign ownership while copying: a recursive chown afterwards would store a
+# second copy of every file in its own layer.
 COPY --chown=node:node --from=prod-deps /app/node_modules ./node_modules
-COPY --chown=node:node --from=prod-deps /app/apps/ops-agent/node_modules ./apps/ops-agent/node_modules
-COPY --chown=node:node --from=prod-deps /app/packages/ ./packages/
-COPY --chown=node:node --parents \
-    packages/air-quality/ \
-    packages/cli/ \
-    packages/core/ \
-    packages/extension-contracts/ \
-    packages/hardlinks/ \
-    packages/hey-api-client-fetch/ \
-    packages/integration-framework/ \
-    packages/mobility-core/ \
-    packages/mobility-formats/ \
-    packages/motis-feed-proxy-config/ \
-    packages/place-ids/ \
-    packages/transitous-core/ \
-    ./
-COPY --chown=node:node --from=builder /app/apps/ops-agent/dist ./apps/ops-agent/dist
-COPY --chown=node:node apps/ops-agent/package.json ./apps/ops-agent/
-# The CLI's Transitous commands import these data-manager modules directly.
-COPY --chown=node:node --parents \
-    services/data-manager/src/transitous-lock.ts \
-    services/data-manager/src/gbfs-catalog-lock.ts \
-    services/data-manager/src/utils/atomic-write.ts \
-    ./
-COPY --chown=node:node pnpm-workspace.yaml tsconfig.base.json ./
+COPY --chown=node:node --from=bundle /app/apps/ops-agent/dist ./apps/ops-agent/dist
+# Every dependency file the bundles pin must exist in this production install.
+RUN node -e 'const fs=require("node:fs"),p=require("node:path");const d="/app/apps/ops-agent/dist";const missing=JSON.parse(fs.readFileSync(p.join(d,"runtime-externals.json"),"utf8")).filter((f)=>!fs.existsSync(p.join(d,f)));if(missing.length){console.error("Missing bundle dependencies:",missing);process.exit(1)}'
 
 RUN chown node:node /app && chown -R node:node /home/node
 USER node:node
@@ -118,11 +109,11 @@ USER node:node
 WORKDIR /app/apps/ops-agent
 # The fixed CLI must boot without the host's integration source tree. Catch
 # eager imports of optional command implementations in the actual runtime image.
-RUN /app/packages/cli/node_modules/.bin/tsx --tsconfig /app/packages/cli/tsconfig.json /app/packages/cli/src/index.ts --help > /dev/null
+RUN node dist/cli.mjs --help > /dev/null
 EXPOSE 4300
 HEALTHCHECK --interval=15s --timeout=3s --retries=5 CMD ["curl", "-fsS", "http://127.0.0.1:4300/health"]
 # A command's helper that outlives it is reparented to PID 1. tini reaps it:
 # Node would leave it a zombie in the command's process group, and the
 # contained-process runner waits for that group to empty.
 ENTRYPOINT ["/sbin/tini", "--"]
-CMD ["node", "--import", "tsx/esm", "dist/index.js"]
+CMD ["node", "dist/agent.mjs"]

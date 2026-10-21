@@ -34,6 +34,8 @@ function isImportMeta(node, property) {
  *   literal;
  * - `assetUrls`: literal `new URL("…", import.meta.url)` references, with the
  *   source range of the literal so a bundler can rewrite it;
+ * - `localRequires`: literal calls of a `require` created with
+ *   `createRequire(import.meta.url)`, with the source range of the literal;
  * - `locationSensitive`: any other use of `import.meta` (`url`, `dirname`,
  *   `resolve`, `main`, …) or of `__dirname`/`__filename`, which means
  *   something different once the module is bundled.
@@ -45,7 +47,29 @@ export function analyzeModule(file, text) {
   const locationSensitive = [];
   let computedImport = false;
   const assetMetaNodes = new Set();
+  // `const require = createRequire(import.meta.url)`: the binding may only be
+  // called with literal specifiers, which a bundler can pin.
+  const localRequireBindings = new Set();
+  const bindingDeclarations = new Set();
+  const identifierUses = [];
   const visit = (node) => {
+    if (
+      ts.isVariableDeclaration(node) &&
+      ts.isIdentifier(node.name) &&
+      node.initializer &&
+      ts.isCallExpression(node.initializer) &&
+      node.initializer.arguments.length === 1 &&
+      isImportMeta(node.initializer.arguments[0], "url") &&
+      ((ts.isIdentifier(node.initializer.expression) &&
+        node.initializer.expression.text === "createRequire") ||
+        (ts.isPropertyAccessExpression(node.initializer.expression) &&
+          node.initializer.expression.name.text === "createRequire"))
+    ) {
+      localRequireBindings.add(node.name.text);
+      bindingDeclarations.add(node.name);
+      assetMetaNodes.add(node.initializer.arguments[0]);
+    }
+    if (ts.isIdentifier(node)) identifierUses.push(node);
     if (ts.isImportDeclaration(node)) {
       if (!typeOnlyImport(node) && ts.isStringLiteral(node.moduleSpecifier)) {
         specifiers.push(node.moduleSpecifier.text);
@@ -95,5 +119,25 @@ export function analyzeModule(file, text) {
     ts.forEachChild(node, visit);
   };
   visit(source);
-  return { specifiers, computedImport, assetUrls, locationSensitive };
+  const localRequires = [];
+  for (const identifier of identifierUses) {
+    if (!localRequireBindings.has(identifier.text) || bindingDeclarations.has(identifier)) continue;
+    const parent = identifier.parent;
+    if (ts.isPropertyAccessExpression(parent) && parent.name === identifier) continue;
+    const [argument] =
+      ts.isCallExpression(parent) && parent.expression === identifier ? parent.arguments : [];
+    if (argument && ts.isStringLiteralLike(argument) && parent.arguments.length === 1) {
+      localRequires.push({
+        specifier: argument.text,
+        start: argument.getStart(source),
+        end: argument.getEnd(),
+      });
+    } else {
+      const { line } = source.getLineAndCharacterOfPosition(identifier.getStart(source));
+      locationSensitive.push(
+        `${identifier.text} from createRequire(import.meta.url) is used other than with a literal specifier (line ${line + 1})`,
+      );
+    }
+  }
+  return { specifiers, computedImport, assetUrls, localRequires, locationSensitive };
 }

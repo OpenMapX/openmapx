@@ -1,6 +1,14 @@
 // biome-ignore-all lint/suspicious/noUndeclaredEnvVars: Standalone build script, never cached by Turbo.
 import { createHash } from "node:crypto";
-import { mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { builtinModules } from "node:module";
 import { basename, dirname, extname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -20,6 +28,15 @@ import { analyzeModule } from "./module-specifiers.mjs";
  * its bundle instead of by every source file the bundle might include.
  */
 export const RUNTIME_BUNDLES = {
+  "ops-agent": {
+    tsconfig: "apps/ops-agent/tsconfig.json",
+    outdir: "apps/ops-agent/dist",
+    entries: {
+      agent: "apps/ops-agent/src/index.ts",
+      "agent-handoff-main": "apps/ops-agent/src/agent-handoff-main.ts",
+      cli: "packages/cli/src/index.ts",
+    },
+  },
   "transitous-runner": {
     tsconfig: "apps/transitous-runner/tsconfig.json",
     outdir: "apps/transitous-runner/dist",
@@ -32,6 +49,36 @@ const ASSET_DIR = "assets";
 const WORKSPACE = /^(?:@openmapx\/|@integrations\/|\.|\/)/;
 const BUILTINS = new Set(builtinModules.flatMap((name) => [name, `node:${name}`]));
 const SOURCE = /\.[cm]?[jt]sx?$/;
+
+/**
+ * Workspace packages by name. Bundled code resolves them from the packages'
+ * own `exports` (or `main`), as Node does, instead of through node_modules
+ * links, so a bundle resolves the same in a full checkout and in an image
+ * that installs only part of the workspace.
+ */
+function workspacePackages(root) {
+  const packages = new Map();
+  const directory = join(root, "packages");
+  if (!existsSync(directory)) return packages;
+  for (const name of readdirSync(directory)) {
+    const manifest = join(directory, name, "package.json");
+    if (!existsSync(manifest)) continue;
+    const json = JSON.parse(readFileSync(manifest, "utf8"));
+    if (typeof json.name === "string")
+      packages.set(json.name, { dir: join(directory, name), json });
+  }
+  return packages;
+}
+
+function exportTarget(entry) {
+  if (typeof entry === "string") return entry;
+  if (!entry || typeof entry !== "object") return undefined;
+  for (const condition of ["import", "node", "default"]) {
+    const target = exportTarget(entry[condition]);
+    if (target) return target;
+  }
+  return undefined;
+}
 
 function posixRelative(from, to) {
   const path = relative(from, to).split(sep).join("/");
@@ -54,6 +101,7 @@ export async function buildRuntimeBundle(root, image, config = RUNTIME_BUNDLES[i
   // esbuild resolves real paths; a symlinked checkout must not leak into pins.
   const absoluteRoot = realpathSync(resolve(root));
   const outdir = join(absoluteRoot, config.outdir);
+  const packages = workspacePackages(absoluteRoot);
   const externals = new Set();
   const assets = new Map();
   const problems = [];
@@ -61,6 +109,27 @@ export async function buildRuntimeBundle(root, image, config = RUNTIME_BUNDLES[i
   const runtimePlugin = {
     name: "openmapx-runtime",
     setup(context) {
+      context.onResolve({ filter: /^@openmapx\// }, async (args) => {
+        if (args.pluginData?.resolving) return undefined;
+        const [, name, subpath] = /^(@openmapx\/[^/]+)(?:\/(.+))?$/.exec(args.path) ?? [];
+        const workspacePackage = packages.get(name);
+        if (!workspacePackage) return undefined;
+        const { dir, json } = workspacePackage;
+        if (json.exports) {
+          const target = exportTarget(json.exports[subpath ? `./${subpath}` : "."]);
+          if (!target) {
+            return { errors: [{ text: `${args.path} is not exported by ${name}` }] };
+          }
+          return { path: join(dir, target) };
+        }
+        const resolved = await context.resolve(`./${subpath ?? json.main ?? "index.ts"}`, {
+          importer: args.importer,
+          kind: args.kind,
+          resolveDir: dir,
+          pluginData: { resolving: true },
+        });
+        return resolved.errors.length > 0 ? { errors: resolved.errors } : { path: resolved.path };
+      });
       context.onResolve({ filter: /.*/ }, async (args) => {
         if (args.kind === "entry-point" || args.pluginData?.resolving) return undefined;
         if (BUILTINS.has(args.path)) return { path: args.path, external: true };
@@ -78,7 +147,7 @@ export async function buildRuntimeBundle(root, image, config = RUNTIME_BUNDLES[i
         externals.add(pinned);
         return { path: pinned, external: true };
       });
-      context.onLoad({ filter: SOURCE }, (args) => {
+      context.onLoad({ filter: SOURCE }, async (args) => {
         if (args.path.split(sep).includes("node_modules")) return undefined;
         const text = readFileSync(args.path, "utf8");
         const file = relative(absoluteRoot, args.path);
@@ -91,11 +160,9 @@ export async function buildRuntimeBundle(root, image, config = RUNTIME_BUNDLES[i
         for (const use of facts.locationSensitive) {
           problems.push(`${file}: ${use} refers to the source location, not the bundle`);
         }
-        if (facts.assetUrls.length === 0) return undefined;
+        const replacements = [];
         // Copy each literal `new URL("…", import.meta.url)` asset next to the
         // bundle and point the URL at the copy.
-        let contents = "";
-        let cursor = 0;
         for (const asset of facts.assetUrls) {
           const sourcePath = resolve(dirname(args.path), asset.specifier);
           let bytes;
@@ -107,8 +174,33 @@ export async function buildRuntimeBundle(root, image, config = RUNTIME_BUNDLES[i
           }
           const name = `${createHash("sha256").update(bytes).digest("hex").slice(0, 12)}-${basename(sourcePath)}`;
           assets.set(name, bytes);
-          contents += `${text.slice(cursor, asset.start)}${JSON.stringify(`./${ASSET_DIR}/${name}`)}`;
-          cursor = asset.end;
+          replacements.push({ ...asset, text: `./${ASSET_DIR}/${name}` });
+        }
+        // A `require` created from the module's URL resolves from the bundle
+        // instead; pin each literal it loads, as for imports.
+        for (const call of facts.localRequires) {
+          const resolved = await context.resolve(call.specifier, {
+            importer: args.path,
+            kind: "require-call",
+            resolveDir: dirname(args.path),
+            pluginData: { resolving: true },
+          });
+          if (resolved.errors.length > 0 || !resolved.path.split(sep).includes("node_modules")) {
+            problems.push(
+              `${file}: createRequire(import.meta.url) loads ${call.specifier}, which is not an installed package`,
+            );
+            continue;
+          }
+          const pinned = posixRelative(outdir, resolved.path);
+          externals.add(pinned);
+          replacements.push({ ...call, text: pinned });
+        }
+        if (replacements.length === 0) return undefined;
+        let contents = "";
+        let cursor = 0;
+        for (const replacement of replacements.sort((a, b) => a.start - b.start)) {
+          contents += `${text.slice(cursor, replacement.start)}${JSON.stringify(replacement.text)}`;
+          cursor = replacement.end;
         }
         return { contents: contents + text.slice(cursor), loader: loaderFor(args.path) };
       });

@@ -95,7 +95,8 @@ COPY apps/api/ apps/api/
 # the strict fingerprint is identical to a local build and fails if a required
 # input is removed.
 COPY apps/ops-agent/src/ apps/ops-agent/src/
-COPY apps/ops-agent/Dockerfile apps/ops-agent/package.json apps/ops-agent/tsconfig.json apps/ops-agent/tsconfig.build.json apps/ops-agent/
+COPY apps/ops-agent/Dockerfile apps/ops-agent/package.json apps/ops-agent/tsconfig.json apps/ops-agent/
+COPY scripts/build-runtime-bundles.mjs scripts/module-specifiers.mjs scripts/
 COPY .github/workflows/docker.yml .github/workflows/product-release.yml .github/workflows/
 COPY apps/web/src/app/(legal)/ apps/web/src/app/(legal)/
 COPY apps/web/src/app/admin/(full-admin)/privacy-setup/ apps/web/src/app/admin/(full-admin)/privacy-setup/

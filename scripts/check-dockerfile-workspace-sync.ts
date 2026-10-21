@@ -236,19 +236,6 @@ const RUNTIME_IMAGES: {
   notShipped?: Record<string, string>;
 }[] = [
   {
-    path: "apps/ops-agent/Dockerfile",
-    tsconfig: "apps/ops-agent/tsconfig.json",
-    entries: ["apps/ops-agent/src", "packages/cli/src/index.ts"],
-    compiled: "apps/ops-agent/src/",
-    computedImports: {
-      "apps/ops-agent/src/data-inventory.ts": ["packages/transitous-core/src/motis-config.ts"],
-    },
-    notShipped: {
-      "integrations/transit-dynamic-registry/":
-        "only `transit-registry bump` loads it, a developer command the agent never runs",
-    },
-  },
-  {
     path: "services/data-manager/Dockerfile",
     tsconfig: "services/data-manager/tsconfig.json",
     entries: ["services/data-manager/src"],
@@ -298,6 +285,7 @@ for (const image of RUNTIME_IMAGES) {
 
 /** The Dockerfile of each bundled image, by bundle name. */
 const BUNDLED_DOCKERFILES: Record<string, string> = {
+  "ops-agent": "apps/ops-agent/Dockerfile",
   "transitous-runner": "apps/transitous-runner/Dockerfile",
 };
 const SOURCE_PREFIXES = [

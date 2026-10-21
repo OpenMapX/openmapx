@@ -89,6 +89,26 @@ describe("runtime bundles", () => {
     ]);
   });
 
+  it("resolves workspace packages from their exports without node_modules links", async () => {
+    const files = {
+      "packages/greet/package.json": JSON.stringify({
+        name: "@openmapx/greet",
+        exports: { "./hello": { types: "./src/hello.ts", default: "./src/hello.ts" } },
+      }),
+      "packages/greet/src/hello.ts": 'export const hello = () => "hello";',
+      "app/src/main.ts": 'import { hello } from "@openmapx/greet/hello";\nconsole.log(hello());',
+    };
+    const bundle = await buildRuntimeBundle(workspace(files), "fixture", config);
+    expect(text(bundle, "main.mjs")).toContain('"hello"');
+    await expect(
+      buildRuntimeBundle(
+        workspace({ ...files, "app/src/main.ts": 'import "@openmapx/greet/missing";' }),
+        "fixture",
+        config,
+      ),
+    ).rejects.toThrow("is not exported by @openmapx/greet");
+  });
+
   it("is byte-identical across builds and checkout locations", async () => {
     const first = await buildRuntimeBundle(workspace(), "fixture", config);
     const second = await buildRuntimeBundle(workspace(), "fixture", config);
@@ -137,7 +157,38 @@ describe("runtime bundles", () => {
     expect(changed.digest).not.toBe(bundle.digest);
   });
 
+  it("pins packages loaded through a require created from the module's URL", async () => {
+    const bundle = await buildRuntimeBundle(
+      workspace({
+        "app/src/main.ts": [
+          'import { createRequire } from "node:module";',
+          "const require = createRequire(import.meta.url);",
+          'console.log(require("left-pad")("x"));',
+        ].join("\n"),
+      }),
+      "fixture",
+      config,
+    );
+    // esbuild renames the local binding, which the shared require shim shadows.
+    expect(text(bundle, "main.mjs")).toMatch(
+      /var (require\d*) = createRequire\(import\.meta\.url\);\nconsole\.log\(\1\("\.\.\/\.\.\/node_modules\/left-pad\/index\.js"\)/,
+    );
+    expect(JSON.parse(text(bundle, EXTERNALS_MANIFEST))).toEqual([
+      "../../node_modules/left-pad/index.js",
+    ]);
+  });
+
   it.each([
+    [
+      "a created require used for resolution",
+      'import { createRequire } from "node:module";\nconst require = createRequire(import.meta.url);\nconsole.log(require.resolve("left-pad"));',
+      "used other than with a literal specifier",
+    ],
+    [
+      "a created require loading workspace code",
+      'import { createRequire } from "node:module";\nconst require = createRequire(import.meta.url);\nconsole.log(require("../../lib/src/tools"));',
+      "not an installed package",
+    ],
     ["a computed import", 'const name = "x";\nvoid import(name);', "computed import()"],
     ["a computed require", 'const name = "x";\nrequire(name);', "computed import() or require()"],
     ["the module's directory", "console.log(import.meta.dirname);", "import.meta.dirname"],

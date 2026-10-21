@@ -118,8 +118,12 @@ all be followed, and a missed one would let a release reuse an image with stale 
 
 ## Runtime bundles
 
-Images that ran workspace TypeScript under tsx are moving to runtime bundles,
-starting with transitous-runner. `scripts/build-runtime-bundles.mjs` bundles an
+Images that ran workspace TypeScript under tsx are moving to runtime bundles.
+transitous-runner and ops-agent use them. ops-agent ships three bundles, all
+started with plain `node`: the agent (`dist/agent.mjs`), its update helper
+(`dist/agent-handoff-main.mjs`) and its fixed CLI (`dist/cli.mjs`). The bundled
+CLI starts in about 0.2 s instead of about 0.8 s under tsx, and the agent starts
+it for every CLI-backed operation. `scripts/build-runtime-bundles.mjs` bundles an
 image's own code and the workspace code it reaches with esbuild:
 
 - npm packages stay installed in the image, but every import is pinned. The script
@@ -128,6 +132,8 @@ image's own code and the workspace code it reaches with esbuild:
   to the output directory. The bundle therefore loads the same dependency files
   as before.
 - A literal `new URL("…", import.meta.url)` asset is copied into `dist/assets/`.
+  A `require` created with `createRequire(import.meta.url)` may only be called with
+  literal specifiers, which are pinned like imports.
 - A computed `import()` or `require()`, any other use of `import.meta` or the
   module's location, and any esbuild warning fail the build.
 - The output is byte-identical across builds and checkout locations.
@@ -147,8 +153,7 @@ bundled runner that copies workspace source.
 
 Over the 200 main commits before this change, bundles would have rebuilt
 transitous-runner 24 times instead of 97 (its bundle never changed; the rest are
-Dockerfile, workflow and dependency changes). For ops-agent and data-manager the
-same replay gives 57 and 58 instead of 106 and 118.
+Dockerfile, workflow and dependency changes) and ops-agent 57 times instead of 106. For data-manager the same replay gives 58 instead of 118.
 
 Changesets excludes package-root `Dockerfile` edits from release detection;
 these private deployment-image changes do not need empty package notes. Source,

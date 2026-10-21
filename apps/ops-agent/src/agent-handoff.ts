@@ -18,7 +18,7 @@ import {
  */
 
 export const AGENT_HANDOFF_LABEL = "openmapx.ops-agent.handoff";
-export const AGENT_HANDOFF_ENTRYPOINT = "dist/agent-handoff-main.js";
+export const AGENT_HANDOFF_ENTRYPOINT = "dist/agent-handoff-main.mjs";
 const MAX_HANDOFF_BYTES = 128 * 1024;
 const MAX_REASON_LENGTH = 256;
 const HANDOFF_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
@@ -247,8 +247,6 @@ export function agentHandoffRunArgs(
     facts.imageId,
     "--",
     "node",
-    "--import",
-    "tsx/esm",
     AGENT_HANDOFF_ENTRYPOINT,
   ];
 }
