@@ -1,6 +1,7 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import ts from "typescript";
+import { analyzeModule } from "./module-specifiers.mjs";
 
 /**
  * The repository files a program loads at runtime, found by following its
@@ -43,49 +44,6 @@ function sourcesBelow(path: string): string[] {
   });
 }
 
-function typeOnlyImport(node: ts.ImportDeclaration): boolean {
-  const clause = node.importClause;
-  if (!clause) return false;
-  if (clause.isTypeOnly) return true;
-  const bindings = clause.namedBindings;
-  return (
-    clause.name === undefined &&
-    bindings !== undefined &&
-    ts.isNamedImports(bindings) &&
-    bindings.elements.length > 0 &&
-    bindings.elements.every((element) => element.isTypeOnly)
-  );
-}
-
-/** Runtime module specifiers of one file, and whether it imports a computed one. */
-function specifiersOf(file: string, text: string): { specifiers: string[]; computed: boolean } {
-  const source = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true);
-  const specifiers: string[] = [];
-  let computed = false;
-  const visit = (node: ts.Node) => {
-    if (ts.isImportDeclaration(node)) {
-      if (!typeOnlyImport(node) && ts.isStringLiteral(node.moduleSpecifier)) {
-        specifiers.push(node.moduleSpecifier.text);
-      }
-    } else if (ts.isExportDeclaration(node)) {
-      if (!node.isTypeOnly && node.moduleSpecifier && ts.isStringLiteral(node.moduleSpecifier)) {
-        specifiers.push(node.moduleSpecifier.text);
-      }
-    } else if (ts.isCallExpression(node)) {
-      const isImport = node.expression.kind === ts.SyntaxKind.ImportKeyword;
-      const isRequire = ts.isIdentifier(node.expression) && node.expression.text === "require";
-      if (isImport || isRequire) {
-        const [argument] = node.arguments;
-        if (argument && ts.isStringLiteralLike(argument)) specifiers.push(argument.text);
-        else if (isImport) computed = true;
-      }
-    }
-    ts.forEachChild(node, visit);
-  };
-  visit(source);
-  return { specifiers, computed };
-}
-
 export function runtimeImportGraph(options: RuntimeImportGraphOptions): RuntimeImportGraph {
   const root = resolve(options.root);
   const config = ts.getParsedCommandLineOfConfigFile(join(root, options.tsconfig), undefined, {
@@ -107,7 +65,10 @@ export function runtimeImportGraph(options: RuntimeImportGraphOptions): RuntimeI
     seen.add(file);
     const rel = relative(root, file);
     if (!/\.[cm]?[jt]sx?$/.test(file)) continue;
-    const { specifiers, computed } = specifiersOf(file, readFileSync(file, "utf8"));
+    const { specifiers, computedImport: computed } = analyzeModule(
+      file,
+      readFileSync(file, "utf8"),
+    );
     if (computed) {
       computedFiles.add(rel);
       if (declared[rel]) queue.push(...declared[rel].map((target) => join(root, target)));

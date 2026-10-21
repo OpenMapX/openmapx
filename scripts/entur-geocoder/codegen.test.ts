@@ -33,12 +33,15 @@ describe("Entur Geocoder generated artifact gate", () => {
       "client.ts (missing)",
     );
   });
+  // Two Orval generations and Biome batch formats take about 6 s alone, and
+  // more than the default 15 s under the parallel CI suite; the API SDK's
+  // equivalent test allows the Biome batch deadline.
   it("generates deterministic complete output sets from the offline snapshot", async () => {
     const first = await generateArtifacts();
     const second = await generateArtifacts();
     expect(second).toEqual(first);
     await writeOrCheckArtifacts(first, { check: true });
-  });
+  }, 90_000);
   it("rejects a changed success binding rather than generating an unvalidated operation", async () => {
     const document = JSON.parse(
       await readFile("packages/entur-client/schema/geocoder.openapi.json", "utf8"),

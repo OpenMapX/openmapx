@@ -192,7 +192,8 @@ jobs:
           platforms: linux/amd64
           pull: true
           no-cache: ${{ steps.selection.outputs.refresh == 'true' }}
-          build-args: ${{ matrix.app == 'web' && format('SW_BUILD_ID={0}', needs.gate.outputs.sha) || '' }}
+          # A bundled image must contain the bundle the release plan fingerprinted.
+          build-args: ${{ matrix.app == 'web' && format('SW_BUILD_ID={0}', needs.gate.outputs.sha) || steps.selection.outputs.bundle_digest && format('EXPECTED_BUNDLE_DIGEST={0}', steps.selection.outputs.bundle_digest) || '' }}
           outputs: type=image,name=${{ env.IMAGE_PREFIX }}/${{ matrix.app }},push-by-digest=true,name-canonical=true,push=true
           labels: |
             org.opencontainers.image.revision=${{ needs.gate.outputs.sha }}
