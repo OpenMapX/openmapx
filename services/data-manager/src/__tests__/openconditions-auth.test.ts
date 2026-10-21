@@ -50,7 +50,6 @@ describe("OpenConditions operator token", () => {
   function cron(token: string | undefined) {
     return setupCron({
       dataDir: scratch,
-      repoRoot: "/tmp/nope",
       countries: [],
       store: {} as never,
       singleFlight: {} as never,

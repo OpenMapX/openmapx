@@ -119,7 +119,6 @@ let cachePathCounter = 0;
 function setupCronWithSeams(seams: Seams) {
   return setupCron({
     dataDir: "/tmp/openmapx-traffic-live-conditions",
-    repoRoot: "/tmp/nope",
     countries: [],
     store: {} as never,
     singleFlight: {} as never,

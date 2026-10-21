@@ -29,27 +29,6 @@ COPY --parents \
 COPY apps/ops-agent/package.json apps/ops-agent/
 RUN pnpm install --frozen-lockfile
 
-FROM base AS prod-deps
-WORKDIR /app
-ENV HUSKY=0
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json ./
-COPY --parents \
-    packages/air-quality/package.json \
-    packages/cli/package.json \
-    packages/core/package.json \
-    packages/extension-contracts/package.json \
-    packages/hardlinks/package.json \
-    packages/hey-api-client-fetch/package.json \
-    packages/integration-framework/package.json \
-    packages/mobility-core/package.json \
-    packages/mobility-formats/package.json \
-    packages/motis-feed-proxy-config/package.json \
-    packages/place-ids/package.json \
-    packages/transitous-core/package.json \
-    ./
-COPY apps/ops-agent/package.json apps/ops-agent/
-RUN pnpm install --frozen-lockfile --prod --ignore-scripts
-
 # Bundles the agent, its update helper and its fixed CLI, with the workspace
 # code they reach, into dist/. The release planner fingerprints this bundle;
 # release builds pass its digest so a different bundle fails the build.
@@ -82,6 +61,15 @@ COPY scripts/build-runtime-bundles.mjs scripts/module-specifiers.mjs scripts/
 ARG EXPECTED_BUNDLE_DIGEST=
 RUN node scripts/build-runtime-bundles.mjs ops-agent --expect "$EXPECTED_BUNDLE_DIGEST"
 
+# Only the installed package directories the bundles load, with the
+# node_modules links between them. The bundle build lists them from this same
+# install, so a dependency's production or development classification does
+# not matter here.
+FROM deps AS runtime-packages
+COPY scripts/copy-runtime-packages.mjs scripts/
+COPY --from=bundle /app/apps/ops-agent/dist/runtime-packages.json /tmp/runtime-packages.json
+RUN node scripts/copy-runtime-packages.mjs /tmp/runtime-packages.json /app /runtime
+
 FROM base AS runner
 WORKDIR /app
 # The pinned base predates Alpine's OpenSSL fix for CVE-2026-14456.
@@ -95,12 +83,13 @@ ENV HOME=/home/node
 ENV PORT=4300
 
 # The bundles import their npm dependencies by path from the pnpm store, so the
-# runner needs the production store and the bundles, and no workspace source.
+# runner needs the bundles and the store packages they load, and no workspace
+# source.
 # Assign ownership while copying: a recursive chown afterwards would store a
 # second copy of every file in its own layer.
-COPY --chown=node:node --from=prod-deps /app/node_modules ./node_modules
+COPY --chown=node:node --from=runtime-packages /runtime/node_modules ./node_modules
 COPY --chown=node:node --from=bundle /app/apps/ops-agent/dist ./apps/ops-agent/dist
-# Every dependency file the bundles pin must exist in this production install.
+# Every dependency file the bundles pin must exist among the copied packages.
 RUN node -e 'const fs=require("node:fs"),p=require("node:path");const d="/app/apps/ops-agent/dist";const missing=JSON.parse(fs.readFileSync(p.join(d,"runtime-externals.json"),"utf8")).filter((f)=>!fs.existsSync(p.join(d,f)));if(missing.length){console.error("Missing bundle dependencies:",missing);process.exit(1)}'
 
 RUN chown node:node /app && chown -R node:node /home/node

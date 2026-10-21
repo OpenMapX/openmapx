@@ -62,7 +62,8 @@ export const run: StageFn = async (ctx) => {
     }
     const snapshot = writeCapabilitySnapshot(
       ctx.motisStagingDataDir,
-      ctx.repoRoot,
+      // The lock prepare enforced; a run that skipped prepare records none.
+      ctx.state.transitousLock ?? null,
       manifest,
       report,
       ctx.now(),

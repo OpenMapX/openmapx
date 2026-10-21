@@ -217,7 +217,6 @@ export interface BuildJobContextOptions {
   dataDir: string;
   store: StateStore;
   countries?: string[];
-  repoRoot?: string;
   transitousRepoUrl?: string;
   apiKeysPath?: string;
   feedsOverlayPath?: string;
@@ -271,7 +270,6 @@ export function buildJobContext(opts: BuildJobContextOptions): JobContext {
     process.env.MOTIS_TWO_SLOT === "true" ? ensureMotisSlotLayout(opts.dataDir) : undefined;
   return {
     jobId: opts.jobId ?? randomUUID(),
-    repoRoot: opts.repoRoot ?? "",
     dataDir: opts.dataDir,
     catalogDir,
     downloadsDir,

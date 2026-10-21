@@ -33,7 +33,7 @@ describe("data-manager /transit/bump branch validation", () => {
     "rejects unsafe branch %j with 400",
     async (branch) => {
       const app = createTestApp();
-      registerApi(app, { dataDir: join(fixtureRoot, "data"), repoRoot: join(fixtureRoot, "repo") });
+      registerApi(app, { dataDir: join(fixtureRoot, "data") });
       const res = await app.inject({
         method: "POST",
         url: "/transit/bump",
@@ -46,7 +46,7 @@ describe("data-manager /transit/bump branch validation", () => {
 
   it("accepts a normal branch name (passes validation, fails later on missing catalog)", async () => {
     const app = createTestApp();
-    registerApi(app, { dataDir: join(fixtureRoot, "data"), repoRoot: join(fixtureRoot, "repo") });
+    registerApi(app, { dataDir: join(fixtureRoot, "data") });
     const res = await app.inject({
       method: "POST",
       url: "/transit/bump",

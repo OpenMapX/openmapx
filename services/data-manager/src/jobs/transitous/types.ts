@@ -1,5 +1,6 @@
 import type { TransitSource } from "@openmapx/transitous-core";
 import type { DatasetMetadata, StateStore } from "../../state.js";
+import type { TransitousLock } from "../../transitous-lock.js";
 import type { MotisOperationsPolicy } from "./operations-profile.js";
 import type { OperatorFeedRelayStore } from "./operator-feed-relay.js";
 import type { TransitousScriptRunner } from "./script-runner.js";
@@ -115,6 +116,8 @@ export interface JobState {
   /** When non-zero some fetches succeeded but others did not. */
   partialSuccess?: boolean;
   proxyTransaction?: ProxyTransactionState;
+  /** The catalog lock prepare enforced; the capability snapshot records it. */
+  transitousLock?: TransitousLock;
   gbfsCompilation?: {
     output: string;
     healthy: number;
@@ -137,8 +140,6 @@ export interface ProxyTransactionState {
 export interface JobContext {
   /** ULID/UUID */
   jobId: string;
-  /** Monorepo root (used to resolve lockfile + overlay defaults). */
-  repoRoot: string;
   /** Absolute path, typically `infra/docker/data`. */
   dataDir: string;
   /** `<dataDir>/.transitous-catalog` */

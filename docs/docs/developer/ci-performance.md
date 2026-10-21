@@ -131,6 +131,20 @@ workspace code it reaches with esbuild:
   main field, as Node does in the pnpm layout, and rewrites it to a path relative
   to the output directory. The bundle therefore loads the same dependency files
   as before.
+- The image installs only the npm packages the bundle loads. The script follows
+  every literal `import` and `require` from the pinned files through the
+  installed packages and lists the package directories it reaches in
+  `runtime-packages.json`. A computed `import()` or `require()` in any of them
+  fails the build, because its targets cannot be listed. The image's
+  `runtime-packages` stage runs `scripts/copy-runtime-packages.mjs` to copy
+  those directories whole, so a package keeps the files it reads by path and
+  its license, along with the node_modules links between them. It copies from
+  the same install the `bundle` stage analyzed, so whether a workspace manifest
+  lists a dependency as production or development does not change the image.
+  A production install for these images would be about 870 MB, mostly web and
+  mobile tooling that workspace manifests or peer dependencies pull in. The
+  images keep 24 MB of it for transitous-runner, 43 MB for ops-agent and 70 MB
+  for data-manager.
 - A literal `new URL("…", import.meta.url)` asset is copied into `dist/assets/`.
   A URL naming another entry of the same bundle, such as a worker's source file,
   points at that entry's `.mjs` instead. `entryExecArgv` in data-manager adds tsx
@@ -151,19 +165,27 @@ workspace code it reaches with esbuild:
 - The output is byte-identical across builds and checkout locations.
 
 The release planner fingerprints a bundled image by its bundle digest instead of
-by the stages that only feed the `bundle` stage. The production install counts
-through what it reads: the install fields of each manifest and the production
-lockfile entries. Scripts, versions and development dependencies do not count.
+by the stages that only feed the `bundle` stage. The digest also covers the
+packages the image keeps: `runtime-packages.json` names each by its store
+directory, which pins its version and peers. Package manifests and the lockfile
+therefore count only through the digest. The exception is the root manifest's
+`packageManager`, which selects the pnpm the base stage activates. A dependency
+change that leaves every kept package as it was rebuilds none of these images.
+Over the 200 main commits before this change, ignoring bundle changes, that
+cut rebuilds from 34 to 20 for data-manager, 31 to 15 for ops-agent and 32 to
+18 for transitous-runner. Some of the dropped rebuilds updated a kept package
+and still rebuild through the digest: at most 6, 4 and 3 respectively.
 The plan job builds the bundles. A release build passes the planned digest as
 `EXPECTED_BUNDLE_DIGEST`, and the `bundle` stage fails when its bundle differs.
 Pull-request image builds do not pass it, because their jobs have no workspace
 install, so a difference between the image's partial install and the full one
 only surfaces in the release build on main.
 `runtime-externals.json` lists the dependency files the output loads, and the
-runner checks that each exists in its production install.
+runner checks that each exists among the copied packages.
 `check-dockerfile-workspace-sync` builds every bundle, checks that the `bundle`
 stage copies every file the bundle reads (sources, assets and tsconfig files),
-and rejects a bundled runner that copies workspace source.
+and rejects a bundled runner that copies workspace source or the whole
+dependency install.
 
 Over the 200 main commits before this change, bundles would have rebuilt
 transitous-runner 24 times instead of 97 (its bundle never changed; the rest are

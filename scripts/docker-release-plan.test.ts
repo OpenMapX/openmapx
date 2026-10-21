@@ -623,17 +623,16 @@ describe("bundled image fingerprints", () => {
     "COPY packages/lib/package.json packages/lib/",
     "COPY apps/runner/package.json apps/runner/",
     "RUN pnpm install --frozen-lockfile",
-    "FROM base AS prod-deps",
-    "COPY package.json pnpm-lock.yaml ./",
-    "COPY packages/lib/package.json packages/lib/",
-    "COPY apps/runner/package.json apps/runner/",
-    "RUN pnpm install --frozen-lockfile --prod",
     "FROM deps AS bundle",
     "COPY packages/lib/ packages/lib/",
     "COPY apps/runner/ apps/runner/",
     "RUN node build.mjs",
+    "FROM deps AS runtime-packages",
+    "COPY scripts/copy-runtime-packages.mjs scripts/",
+    "COPY --from=bundle /app/apps/runner/dist/runtime-packages.json /tmp/",
+    "RUN node scripts/copy-runtime-packages.mjs /tmp/runtime-packages.json /app /runtime",
     "FROM base AS runner",
-    "COPY --from=prod-deps /app/node_modules ./node_modules",
+    "COPY --from=runtime-packages /runtime/node_modules ./node_modules",
     "COPY --from=bundle /app/apps/runner/dist ./dist",
     "COPY config/runtime.json ./",
   ].join("\n");
@@ -649,6 +648,7 @@ describe("bundled image fingerprints", () => {
     "packages/lib/src/index.ts": "export const a = 1;",
     "apps/runner/src/index.ts": "console.log(1);",
     "config/runtime.json": "{}",
+    "scripts/copy-runtime-packages.mjs": "copy();",
     "pnpm-lock.yaml": "lockfileVersion: '9.0'\n",
   };
   const fingerprint = (overrides: Record<string, string> = {}, bundleDigest = "a".repeat(64)) => {
@@ -677,6 +677,7 @@ describe("bundled image fingerprints", () => {
         "package.json",
         "packages/lib/package.json",
         "pnpm-lock.yaml",
+        "scripts/copy-runtime-packages.mjs",
       ].sort(),
     );
     // From the bundle stage itself: what a partial checkout gives the bundler.
@@ -693,8 +694,8 @@ describe("bundled image fingerprints", () => {
     expect(dockerStages(dockerfile).map((stage: { name?: string }) => stage.name)).toEqual([
       "base",
       "deps",
-      "prod-deps",
       "bundle",
+      "runtime-packages",
       "runner",
     ]);
   });
@@ -705,25 +706,14 @@ describe("bundled image fingerprints", () => {
     expect(fingerprint({ "apps/runner/src/index.ts": "console.log(2);" })).toBe(base);
     expect(fingerprint({}, "b".repeat(64))).not.toBe(base);
     expect(fingerprint({ "config/runtime.json": '{"changed":true}' })).not.toBe(base);
+    expect(fingerprint({ "scripts/copy-runtime-packages.mjs": "copy(2);" })).not.toBe(base);
   });
 
-  it("counts only what a production install reads from the manifests", () => {
+  it("counts manifests and the lockfile only through the bundle digest", () => {
     const base = fingerprint();
     const manifest = (value: object) => JSON.stringify(value);
-    expect(
-      fingerprint({
-        "package.json": manifest({ packageManager: "pnpm@12.11.2", scripts: { a: "2" } }),
-      }),
-    ).toBe(base);
-    expect(
-      fingerprint({
-        "packages/lib/package.json": manifest({
-          name: "lib",
-          version: "2.0.0",
-          dependencies: { zod: "^4" },
-        }),
-      }),
-    ).toBe(base);
+    // The packages the image keeps are named, by store directory, in the
+    // bundle's runtime-packages.json, so dependency changes count through it.
     expect(
       fingerprint({
         "packages/lib/package.json": manifest({
@@ -732,7 +722,18 @@ describe("bundled image fingerprints", () => {
           dependencies: { zod: "^5" },
         }),
       }),
-    ).not.toBe(base);
+    ).toBe(base);
+    expect(fingerprint({ "pnpm-lock.yaml": "lockfileVersion: '9.0'\nsettings: {}\n" })).toBe(base);
+    expect(
+      fingerprint({
+        "package.json": manifest({
+          packageManager: "pnpm@12.11.2",
+          scripts: { a: "2" },
+          pnpm: { overrides: { zod: "4.0.0" } },
+        }),
+      }),
+    ).toBe(base);
+    // The base stage activates the pnpm the root manifest names.
     expect(
       fingerprint({
         "package.json": manifest({ packageManager: "pnpm@12.12.0", scripts: { a: "1" } }),

@@ -196,7 +196,6 @@ describe("setupCron", () => {
   it("respects TRANSITOUS_SYNC_CRON=disabled by returning a null syncCron", () => {
     const handles = setupCron({
       dataDir,
-      repoRoot: "/tmp/nope",
       countries: [],
       store: {} as never,
       singleFlight: makeController(),
@@ -212,7 +211,6 @@ describe("setupCron", () => {
   it("treats an empty cron expression (unset via compose) as the default, not disabled", () => {
     const handles = setupCron({
       dataDir,
-      repoRoot: "/tmp/nope",
       countries: [],
       store: {} as never,
       singleFlight: makeController(),
@@ -243,7 +241,6 @@ describe("setupCron", () => {
 
     const handles = setupCron({
       dataDir,
-      repoRoot: "/tmp/nope",
       countries: [],
       store: {} as never,
       singleFlight: controller,
@@ -269,7 +266,6 @@ describe("setupCron", () => {
     });
     const handles = setupCron({
       dataDir,
-      repoRoot: "/tmp/nope",
       countries: [],
       store: {} as never,
       singleFlight: makeController(),
@@ -303,19 +299,7 @@ describe("setupCron", () => {
       transitlandAtlasSha: ATLAS_NEW,
     };
 
-    function seedRepo(): string {
-      const repoRoot = join(dataDir, "repo");
-      const lockDir = join(repoRoot, "infra", "docker");
-      mkdirSync(lockDir, { recursive: true });
-      writeFileSync(
-        join(lockDir, "transitous.lock.json"),
-        JSON.stringify({
-          ref: `main@${ACTIVE}`,
-          submodules: { "transitland-atlas": ATLAS_OLD },
-          lockedAt: "2026-05-01T00:00:00.000Z",
-          lockedBy: "seed",
-        }),
-      );
+    function seedLocks(): void {
       lockSlots.active = {
         ref: `main@${ACTIVE}`,
         submodules: { "transitland-atlas": ATLAS_OLD },
@@ -323,17 +307,16 @@ describe("setupCron", () => {
         lockedBy: "seed",
       };
       lockSlots.proposed = null;
-      return repoRoot;
     }
 
-    const activeLock = (_repoRoot: string) =>
+    const activeLock = () =>
       lockSlots.active as { ref: string; submodules: Record<string, string> };
-    const proposalExists = (_repoRoot: string) => lockSlots.proposed !== null;
+    const proposalExists = () => lockSlots.proposed !== null;
 
     it("is opt-in — an unset schedule leaves the cron disabled", () => {
+      seedLocks();
       const handles = setupCron({
         dataDir,
-        repoRoot: seedRepo(),
         countries: [],
         store: {} as never,
         singleFlight: makeController(),
@@ -347,7 +330,7 @@ describe("setupCron", () => {
     });
 
     it("activates the new pin when the canary passes", async () => {
-      const repoRoot = seedRepo();
+      seedLocks();
       const runBumpPipeline = vi.fn(async (_jobId: string) => ({
         jobId: "j",
         results: [],
@@ -355,7 +338,6 @@ describe("setupCron", () => {
       }));
       const handles = setupCron({
         dataDir,
-        repoRoot,
         countries: [],
         store: {} as never,
         singleFlight: makeController(),
@@ -369,22 +351,21 @@ describe("setupCron", () => {
       });
       await handles.runAutoBumpNow();
       expect(runBumpPipeline).toHaveBeenCalledTimes(1);
-      const active = activeLock(repoRoot);
+      const active = activeLock();
       expect(active.ref).toBe(`main@${CANDIDATE}`);
       expect(active.submodules["transitland-atlas"]).toBe(ATLAS_NEW);
-      expect(proposalExists(repoRoot)).toBe(false);
+      expect(proposalExists()).toBe(false);
       handles.stop();
     });
 
     it("keeps the current pin, retains the proposal, and alerts when the canary rejects", async () => {
-      const repoRoot = seedRepo();
+      seedLocks();
       const createIssue = vi.fn(async (_t: string, _b: string) => "https://x/issues/1");
       const runBumpPipeline = vi.fn(async (_jobId: string) => {
         throw new Error('motis-health probe "rentals" failed: empty');
       });
       const handles = setupCron({
         dataDir,
-        repoRoot,
         countries: [],
         store: {} as never,
         singleFlight: makeController(),
@@ -398,8 +379,8 @@ describe("setupCron", () => {
         githubIssueSink: { findOpenIssueByTitle: async () => null, createIssue },
       });
       await handles.runAutoBumpNow();
-      expect(activeLock(repoRoot).ref).toBe(`main@${ACTIVE}`);
-      expect(proposalExists(repoRoot)).toBe(true);
+      expect(activeLock().ref).toBe(`main@${ACTIVE}`);
+      expect(proposalExists()).toBe(true);
       expect(createIssue).toHaveBeenCalledTimes(1);
       const [title] = createIssue.mock.calls[0] ?? [];
       expect(title).toContain("auto-bump");
@@ -407,7 +388,7 @@ describe("setupCron", () => {
     });
 
     it("does nothing when the active pin already matches upstream", async () => {
-      const repoRoot = seedRepo();
+      seedLocks();
       const runBumpPipeline = vi.fn(async (_jobId: string) => ({
         jobId: "j",
         results: [],
@@ -415,7 +396,6 @@ describe("setupCron", () => {
       }));
       const handles = setupCron({
         dataDir,
-        repoRoot,
         countries: [],
         store: {} as never,
         singleFlight: makeController(),
@@ -434,7 +414,7 @@ describe("setupCron", () => {
       });
       await handles.runAutoBumpNow();
       expect(runBumpPipeline).not.toHaveBeenCalled();
-      expect(proposalExists(repoRoot)).toBe(false);
+      expect(proposalExists()).toBe(false);
       handles.stop();
     });
   });
@@ -449,7 +429,6 @@ describe("setupCron", () => {
 
     const handles = setupCron({
       dataDir,
-      repoRoot: "/tmp/nope",
       countries: [],
       store: {} as never,
       singleFlight: makeController(),
@@ -480,7 +459,6 @@ describe("setupCron", () => {
     const reload = vi.fn().mockResolvedValue(undefined);
     const handles = setupCron({
       dataDir,
-      repoRoot: "/tmp/nope",
       countries: [],
       store: {} as never,
       singleFlight: makeController(),
@@ -498,7 +476,6 @@ describe("setupCron", () => {
     function baseOptions(extra: Partial<CronSetupOptions>): CronSetupOptions {
       return {
         dataDir,
-        repoRoot: "/tmp/nope",
         countries: [],
         store: {} as never,
         singleFlight: makeController(),

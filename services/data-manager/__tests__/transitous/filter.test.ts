@@ -15,6 +15,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { run as filterRun } from "../../src/jobs/transitous/filter.js";
+import {
+  DEFAULT_TRANSITOUS_API_KEYS_PATH,
+  resolveTransitousApiKeysPath,
+} from "../../src/jobs/transitous/internal.js";
 import { OperatorFeedRelayStore } from "../../src/jobs/transitous/operator-feed-relay.js";
 import { buildJobContext } from "../../src/jobs/transitous/pipeline.js";
 import type { TransitousScriptRunner } from "../../src/jobs/transitous/script-runner.js";
@@ -459,6 +463,65 @@ describe("filter stage", () => {
     });
     expect(statSync(deFeedPath).mode & 0o777).toBe(0o600);
     expect(infos.some((m) => m.includes("applying 1 feeds-overlay patch"))).toBe(true);
+  });
+
+  it("applies the data directory's overlay when no path is configured, as scheduled runs do", async () => {
+    tmp = mkdtempSync(join(tmpdir(), "openmapx-filter-default-overlay-"));
+    const catalogDir = makeCatalog(tmp);
+    const deFeedPath = join(catalogDir, "feeds", "de.json");
+    writeFileSync(
+      deFeedPath,
+      JSON.stringify({
+        sources: [
+          { name: "BVG", url: "https://old.example/bvg.zip" },
+          { name: "VBB", url: "https://old.example/vbb.zip" },
+        ],
+      }),
+    );
+    mkdirSync(join(tmp, "overrides"));
+    writeFileSync(
+      join(tmp, "overrides", "feeds-overlay.json"),
+      JSON.stringify({
+        version: 3,
+        sources: [],
+        patches: [{ sourceId: "catalog:de:BVG", skip: true }],
+        quarantine: [],
+      }),
+    );
+    // Compose renders an unset variable as an empty string.
+    vi.stubEnv("TRANSITOUS_FEEDS_OVERLAY_PATH", "");
+    try {
+      const ctx = buildJobContext({
+        dataDir: tmp,
+        store: new StateStore(tmp),
+        countries: ["de"],
+        apiKeysPath: join(tmp, "absent-api-keys.json"),
+        runner: async () => {},
+        runScript: async () => {},
+        now: () => "2026-05-01T00:00:00.000Z",
+      });
+      ctx.state.catalogDir = catalogDir;
+
+      const result = await filterRun(ctx);
+      expect(result.status).toBe("ok");
+      expect(result.artifacts?.overlayPatchCount).toBe(1);
+      expect(readSources(deFeedPath)[0]).toMatchObject({ skip: true });
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it("falls back to the mounted API keys when the env var renders empty", () => {
+    vi.stubEnv("TRANSITOUS_API_KEYS_PATH", "");
+    try {
+      expect(resolveTransitousApiKeysPath()).toBe(DEFAULT_TRANSITOUS_API_KEYS_PATH);
+      expect(resolveTransitousApiKeysPath("")).toBe(DEFAULT_TRANSITOUS_API_KEYS_PATH);
+      expect(resolveTransitousApiKeysPath("/explicit.json")).toBe("/explicit.json");
+      vi.stubEnv("TRANSITOUS_API_KEYS_PATH", "/configured.json");
+      expect(resolveTransitousApiKeysPath()).toBe("/configured.json");
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 
   it("writes only run-bound relay URLs for operator sources into the upstream catalog", async () => {

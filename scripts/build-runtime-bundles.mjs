@@ -22,7 +22,9 @@ import { analyzeModule } from "./module-specifiers.mjs";
  * pinned: every bare import is resolved here, from the importing package's own
  * location exactly as Node resolves it in the pnpm layout, and rewritten to a
  * path relative to the output directory. Bundled code therefore loads the same
- * dependency files as before, and the bundle bytes record which ones.
+ * dependency files as before, and the bundle bytes record which ones. The image
+ * installs only the package directories those files load, statically, listed
+ * in `runtime-packages.json` (see scripts/copy-runtime-packages.mjs).
  *
  * Bundled workspace modules are treated as side-effect free: a module none of
  * whose exports a bundle uses is left out of it, so a change to unused code
@@ -73,6 +75,7 @@ export const RUNTIME_BUNDLES = {
 };
 
 export const EXTERNALS_MANIFEST = "runtime-externals.json";
+export const PACKAGES_MANIFEST = "runtime-packages.json";
 const ASSET_DIR = "assets";
 const WORKSPACE = /^(?:@openmapx\/|@integrations\/|\.|\/)/;
 const BUILTINS = new Set(builtinModules.flatMap((name) => [name, `node:${name}`]));
@@ -120,6 +123,83 @@ function posixRelative(from, to) {
 function loaderFor(path) {
   const extension = extname(path).slice(1);
   return { mts: "ts", cts: "ts", mjs: "js", cjs: "js" }[extension] ?? extension;
+}
+
+const PACKAGE_FILE = /^(.*node_modules\/(?:@[^/]+\/)?[^/]+)\//;
+const SCRIPT = /\.[cm]?js$/;
+// Any `require` other than a call with one plain string literal, or an
+// `import(` of anything else. Only a file containing one can make a computed
+// call, so only those are parsed.
+const UNCERTAIN_LOAD =
+  /\brequire\b(?!\s*\(\s*["'][^"'`\\]*["']\s*\))|\bimport\s*\((?!\s*["'][^"'`\\]*["']\s*\))/;
+
+/**
+ * The installed package directories, relative to the root, that the pinned
+ * files load: their own and those of every file they import or require with a
+ * literal specifier, transitively. Whole directories are kept, so a package
+ * still finds the files it reads or starts by path, and its license. A computed
+ * `import()` or `require()` in any of these files fails the build, because its
+ * target cannot be listed.
+ */
+async function runtimePackages(root, outdir, externals, problems) {
+  const pinned = [...externals]
+    .map((path) => resolve(outdir, path))
+    .filter((path) => path.split(sep).includes("node_modules"));
+  if (pinned.length === 0) return [];
+  let result;
+  try {
+    result = await build({
+      absWorkingDir: root,
+      entryPoints: pinned,
+      bundle: true,
+      platform: "node",
+      format: "esm",
+      target: "node24",
+      conditions: ["module-sync", "node-addons"],
+      mainFields: ["main"],
+      outdir: join(root, ".runtime-packages"),
+      write: false,
+      metafile: true,
+      logLevel: "silent",
+      plugins: [
+        {
+          name: "openmapx-runtime-packages",
+          setup(context) {
+            // Native addons and other data files count as loaded; their
+            // contents do not matter here.
+            context.onLoad({ filter: /.*/ }, (args) =>
+              SCRIPT.test(args.path) || args.path.endsWith(".json")
+                ? undefined
+                : { contents: "", loader: "empty" },
+            );
+          },
+        },
+      ],
+    });
+  } catch (error) {
+    const messages = error?.errors?.map(
+      (message) => `${message.location?.file ?? "dependency"}: ${message.text}`,
+    );
+    problems.push(...(messages ?? [String(error)]));
+    return [];
+  }
+  const directories = new Set();
+  for (const input of Object.keys(result.metafile.inputs)) {
+    const directory = PACKAGE_FILE.exec(input)?.[1];
+    if (!directory) {
+      problems.push(`${input}: loaded by an installed package but not part of one`);
+      continue;
+    }
+    directories.add(directory);
+    if (!SCRIPT.test(input)) continue;
+    const text = readFileSync(join(root, input), "utf8");
+    if (UNCERTAIN_LOAD.test(text) && analyzeModule(join(root, input), text).computedImport) {
+      problems.push(
+        `${input}: computed import() or require() in an installed package; the packages it loads cannot be listed`,
+      );
+    }
+  }
+  return [...directories].sort();
 }
 
 /**
@@ -328,6 +408,7 @@ export async function buildRuntimeBundle(root, image, config = RUNTIME_BUNDLES[i
       problems.push(`sideEffectModules lists ${path}, which the bundle does not include`);
     }
   }
+  const installed = await runtimePackages(absoluteRoot, outdir, externals, problems);
   if (problems.length > 0) {
     throw new Error(`Runtime bundle ${image} rejected:\n  ${problems.join("\n  ")}`);
   }
@@ -345,6 +426,7 @@ export async function buildRuntimeBundle(root, image, config = RUNTIME_BUNDLES[i
     }
   }
   files.set(EXTERNALS_MANIFEST, Buffer.from(`${JSON.stringify([...externals].sort(), null, 2)}\n`));
+  files.set(PACKAGES_MANIFEST, Buffer.from(`${JSON.stringify(installed, null, 2)}\n`));
 
   // Bump the version when writeRuntimeBundle's output changes other than
   // through these files, so the planner does not reuse an image built by the
