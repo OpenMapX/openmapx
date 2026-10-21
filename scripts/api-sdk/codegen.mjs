@@ -26,12 +26,13 @@ export async function generateArtifacts({
     );
     const config = createCodegenConfig({ inputDocument, outputDirectory: directory });
     await generate(config.runtimeMetadata);
-    await generate(config.dataManagerAdmin);
-    if (config.activityAdmin) await generate(config.activityAdmin);
+    for (const [family, configuration] of Object.entries(config))
+      if (family !== "runtimeMetadata") await generate(configuration);
     return await collectArtifacts(join(directory, "generated"), generatedDirectory, [
       "runtime-metadata.generated.ts",
-      "admin/data-manager-admin.generated.ts",
-      ...(config.activityAdmin ? ["admin/activity-admin.generated.ts"] : []),
+      ...Object.values(config)
+        .filter((configuration) => configuration !== config.runtimeMetadata)
+        .map((configuration) => `admin/${configuration.output.target.split("/").at(-1)}`),
     ]);
   } finally {
     await rm(directory, { recursive: true, force: true });

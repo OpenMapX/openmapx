@@ -22,11 +22,11 @@ import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import Link from "next/link";
-import { useMemo, useState } from "react";
-import { useEnv } from "@/integration-api/runtime/EnvProvider";
-import { invalidateIntegrationRuntime } from "@/lib/integrationRuntimeQuery";
+import { useEffect, useMemo, useState } from "react";
+import { useIntegrationAdmin, useIntegrationReload } from "@/lib/admin/integrationAdmin";
+import { useIntegrationMutationOwner } from "@/lib/admin/useIntegrationMutationOwner";
 import { AdminPageHeader } from "../shared/AdminPageHeader";
 import { AdminTablePagination } from "../shared/AdminTablePagination";
 import { AdminTableSurface } from "../shared/AdminTableSurface";
@@ -37,23 +37,7 @@ import { DomainChip } from "./DomainChip";
 import { computeStatusVariant, IntegrationStatusDot } from "./IntegrationStatusDot";
 import { StatusBadge } from "./StatusBadge";
 
-export interface IntegrationSummary {
-  id: string;
-  name: string;
-  description?: string;
-  version?: string;
-  domains: string[];
-  quality: "built-in" | "community-verified" | "community";
-  isBuiltIn: boolean;
-  /** Community directory ships code the server refuses to execute. */
-  blockedCode?: boolean;
-  enabled: boolean;
-  configured: boolean;
-  hasHealthCheck: boolean;
-  health: { status: "up" | "down" | "unconfigured"; responseTime?: number; error?: string } | null;
-  dependencies: string[];
-  infrastructure: { dockerProfile?: string; services?: string[] } | null;
-}
+export type IntegrationSummary = import("@openmapx/core/api-contracts").AdminIntegrationSummary;
 
 type StatusFilter = "all" | "enabled" | "disabled" | "unhealthy" | "unconfigured";
 type QualityFilter = "all" | "built-in" | "community";
@@ -107,9 +91,8 @@ function HealthCell({ integration }: { integration: IntegrationSummary }) {
 }
 
 export function IntegrationList() {
-  const env = useEnv();
-  const apiUrl = env.apiUrl;
-  const qc = useQueryClient();
+  const admin = useIntegrationAdmin();
+  const owner = useIntegrationMutationOwner(admin.client);
 
   const [search, setSearch] = useState("");
   const [domainFilter, setDomainFilter] = useState("all");
@@ -119,73 +102,45 @@ export function IntegrationList() {
   const [rowsPerPage, setRowsPerPage] = useState(25);
   const showToast = useAdminToast();
   const [togglingIds, setTogglingIds] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    if (owner.active) setTogglingIds(new Set());
+  }, [owner]);
 
-  const {
-    data: integrations = [],
-    isLoading,
-    isError,
-  } = useQuery<IntegrationSummary[]>({
-    queryKey: ["admin", "integrations"],
-    queryFn: async () => {
-      const res = await fetch(`${apiUrl}/api/admin/integrations`, { credentials: "include" });
-      if (!res.ok) throw new Error("Failed to load integrations");
-      return res.json();
-    },
-  });
+  const { data: integrations = [], isLoading, isError } = useQuery(admin.queries.list());
 
   async function toggleIntegration(integrationId: string, enable: boolean) {
     setTogglingIds((prev) => new Set(prev).add(integrationId));
     try {
-      const action = enable ? "enable" : "disable";
-      const res = await fetch(`${apiUrl}/api/admin/integrations/${integrationId}/${action}`, {
-        method: "POST",
-        credentials: "include",
-      });
-      if (!res.ok) throw new Error(`Failed to ${action}`);
-      void qc.invalidateQueries({ queryKey: ["admin", "integrations"] });
-      void invalidateIntegrationRuntime(qc, apiUrl);
-      showToast(`Integration ${enable ? "enabled" : "disabled"}`);
+      await admin.toggle(integrationId, enable);
+      void admin.refresh();
+      if (owner.active) showToast(`Integration ${enable ? "enabled" : "disabled"}`);
     } catch {
-      showToast("Operation failed", "error");
+      if (owner.active) showToast("Operation failed", "error");
     } finally {
-      setTogglingIds((prev) => {
-        const next = new Set(prev);
-        next.delete(integrationId);
-        return next;
-      });
+      if (owner.active)
+        setTogglingIds((prev) => {
+          const next = new Set(prev);
+          next.delete(integrationId);
+          return next;
+        });
     }
   }
 
-  const reloadMutation = useMutation({
-    mutationFn: async () => {
-      const res = await fetch(`${apiUrl}/api/admin/integrations/reload`, {
-        method: "POST",
-        credentials: "include",
-      });
-      if (!res.ok) throw new Error("Reload failed");
-      return res.json();
-    },
-    onSuccess: (data: { jobId: string }) => {
-      void qc.invalidateQueries({ queryKey: ["admin", "integrations"] });
-      showToast(`Reload job queued (${data.jobId})`);
-    },
-    onError: () => showToast("Reload failed", "error"),
-  });
+  const reloadMutation = useIntegrationReload();
 
   const healthMutation = useMutation({
+    mutationKey: ["integration-health-sweep", admin.apiUrl],
+    retry: false,
     mutationFn: async () => {
-      const res = await fetch(`${apiUrl}/api/admin/integrations/health/run`, {
-        method: "POST",
-        credentials: "include",
-      });
-      if (!res.ok) throw new Error("Health check failed");
-      return res.json();
+      try {
+        const data = await admin.healthSweep();
+        void admin.refresh();
+        if (owner.active) showToast(`Health checks completed: ${data.count} checked`);
+      } catch (err) {
+        if (owner.active) showToast("Health checks failed", "error");
+        throw err;
+      }
     },
-    onSuccess: (data) => {
-      void qc.invalidateQueries({ queryKey: ["admin", "integrations"] });
-      showToast(`Health checks completed: ${data.count} checked`);
-    },
-    onError: () => showToast("Health checks failed", "error"),
   });
 
   const allDomains = useMemo(
@@ -434,7 +389,16 @@ export function IntegrationList() {
                 startIcon={
                   reloadMutation.isPending ? <CircularProgress size={14} /> : <RefreshIcon />
                 }
-                onClick={() => reloadMutation.mutate()}
+                onClick={() =>
+                  reloadMutation.mutate(undefined, {
+                    onSuccess: () =>
+                      owner.active &&
+                      showToast("Reload job queued — check Activity for status", "info"),
+                    onError: () => {
+                      if (owner.active) showToast("Reload failed", "error");
+                    },
+                  })
+                }
                 disabled={reloadMutation.isPending || healthMutation.isPending}
               >
                 Reload All

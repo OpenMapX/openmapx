@@ -1,3 +1,4 @@
+import { TrustedConfigurationApplyError } from "../trusted-config-outcome";
 /**
  * Characterization + regression tests for the extension bundle install
  * pipeline (`installExtension`). These pin the observable behavior of the
@@ -563,6 +564,39 @@ describe("installExtension", () => {
     );
     expect(initRegistryMock).toHaveBeenCalledTimes(1);
   });
+
+  it.each(["unknown", "committed"] as const)(
+    "retains recovery artifacts after a %s configuration failure",
+    async (outcome) => {
+      dbMock.queueSelect([]);
+      const error = new TrustedConfigurationApplyError(
+        outcome === "unknown"
+          ? {
+              outcome,
+              reason: "transport_or_result",
+              publisherCleanupFailed: false,
+              registryUpdateFailed: false,
+            }
+          : {
+              outcome,
+              revisionId: `cfg1_${"a".repeat(43)}`,
+              enabledServiceIds: ["svc-one"],
+              followUp: "failed",
+              cleanupFailed: false,
+              publisherCleanupFailed: false,
+              registryUpdateFailed: false,
+            },
+      );
+      writeSelectionMock.mockRejectedValueOnce(error);
+      await expect(
+        installExtension(makeCtx(), { manifest: MANIFEST, sourceTrust: "community" }),
+      ).rejects.toBe(error);
+      expect(removeRepoMock).not.toHaveBeenCalled();
+      expect(restoreRepoMock).not.toHaveBeenCalled();
+      expect(renderMock).not.toHaveBeenCalled();
+      expect(discardRepoPreparationMock).not.toHaveBeenCalled();
+    },
+  );
 
   it("rolls back via the ledger when serviceStart fails, writing no extension rows", async () => {
     dbMock.queueSelect([]); // repo check; integration check never reached

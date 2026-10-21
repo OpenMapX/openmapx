@@ -8,7 +8,13 @@ export function administrationSdkFetch(
   return async (input, init) => {
     const url = new URL(input instanceof Request ? input.url : String(input));
     const method = init?.method ?? "GET";
-    if (method !== "GET" && method !== "POST" && method !== "DELETE")
+    if (
+      method !== "GET" &&
+      method !== "POST" &&
+      method !== "DELETE" &&
+      method !== "PUT" &&
+      method !== "PATCH"
+    )
       throw new Error("Unexpected administration method");
     if (init?.body !== undefined && typeof init.body !== "string")
       throw new Error("Administration fixture expects a serialized JSON body");

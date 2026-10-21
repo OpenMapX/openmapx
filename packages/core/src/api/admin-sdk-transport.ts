@@ -9,6 +9,7 @@ import {
 import { activityAdminOperations } from "./contracts/activity-admin";
 import type { AdminOperation } from "./contracts/admin";
 import { dataManagerAdminOperations } from "./contracts/data-manager-admin";
+import { integrationAdminOperations } from "./contracts/integration-admin";
 import { ApiContractError } from "./sdk-transport";
 
 export type AdminSdkRequestOptions = Omit<RequestInit, "signal" | "credentials"> &
@@ -39,7 +40,11 @@ interface AdminResponse {
   headers: Headers;
   data: unknown;
 }
-const operations = { ...dataManagerAdminOperations, ...activityAdminOperations };
+const operations = {
+  ...dataManagerAdminOperations,
+  ...activityAdminOperations,
+  ...integrationAdminOperations,
+};
 type OperationId = keyof typeof operations;
 function positive(value: number | undefined, fallback: number): number {
   const result = value ?? fallback;
@@ -159,7 +164,12 @@ export function createAdminOperationBinder<const Operations extends Record<strin
         )
       )
         throw new Error("Use the administration stream connection target");
-      validateRequestHeaders(operation, headers);
+      // Orval emits application/json even when an optional body is omitted.
+      // An empty JSON entity is invalid to Fastify; absence must stay absence.
+      const requestHeaders = new Headers(headers);
+      if (body === undefined && operation.request?.body?.isOptional())
+        requestHeaders.delete("content-type");
+      validateRequestHeaders(operation, requestHeaders);
       const jsonBudget = positive(maxJsonBytes, 8 * 1024 * 1024);
       const textBudget = positive(maxTextBytes, 8 * 1024 * 1024);
       const errorBudget = positive(maxErrorBytes, 64 * 1024);
@@ -220,7 +230,7 @@ export function createAdminOperationBinder<const Operations extends Record<strin
             throw new ApiContractError(response.status);
           }
         },
-        { signal, timeoutMs, cache, headers, acceptedStatuses: "all" },
+        { signal, timeoutMs, cache, headers: requestHeaders, acceptedStatuses: "all" },
       );
       return result as T;
     };

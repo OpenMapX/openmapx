@@ -16,6 +16,7 @@ export const OPS_OPERATION_KINDS = [
   "docker.status",
   "stack.status",
   "stack.render",
+  "configuration.inspect",
   "stack.start",
   "stack.stop",
   "service.start",
@@ -128,6 +129,7 @@ const LIFECYCLE_TIMEOUT_MS = 10 * 60_000 + 30_000;
 export const OPS_KIND_POLICIES = {
   "docker.status": sync("api", 5_000),
   "stack.status": sync("api", 15_000, 256 * 1024),
+  "configuration.inspect": sync("api", 15_000),
   "stack.render": asyncEffect("api", 120_000),
   "stack.start": asyncEffect("api", LIFECYCLE_TIMEOUT_MS),
   "stack.stop": asyncEffect("api", 5 * 60_000),
@@ -249,10 +251,17 @@ const kindOnly = <T extends OpsOperationKind>(kind: T) => z.strictObject({ kind:
 const serviceOperation = <T extends OpsOperationKind>(kind: T) =>
   z.strictObject({ kind: z.literal(kind), serviceId: serviceIdSchema });
 
+export const configurationGenerationRevisionSchema = z.string().regex(/^cfg1_[A-Za-z0-9_-]{43}$/);
+
 export const opsOperationSchema = z.discriminatedUnion("kind", [
   kindOnly("docker.status"),
   kindOnly("stack.status"),
-  z.strictObject({ kind: z.literal("stack.render"), revisionId: stableIdSchema }),
+  kindOnly("configuration.inspect"),
+  z.strictObject({
+    kind: z.literal("stack.render"),
+    revisionId: stableIdSchema,
+    expectedCurrentRevisionId: configurationGenerationRevisionSchema.nullable(),
+  }),
   kindOnly("stack.start"),
   kindOnly("stack.stop"),
   serviceOperation("service.start"),
@@ -337,22 +346,29 @@ export const opsOperationSchema = z.discriminatedUnion("kind", [
     catalogRevisionId: stableIdSchema,
   }),
   z.strictObject({ kind: z.literal("extension.remove"), extensionId: serviceIdSchema }),
-  z.strictObject({ kind: z.literal("serviceSelection.apply"), revisionId: stableIdSchema }),
+  z.strictObject({
+    kind: z.literal("serviceSelection.apply"),
+    revisionId: stableIdSchema,
+    expectedCurrentRevisionId: configurationGenerationRevisionSchema.nullable(),
+  }),
   kindOnly("serviceSelection.inspect"),
   z.strictObject({
     kind: z.literal("serviceConfig.apply"),
     serviceId: serviceIdSchema,
     revisionId: stableIdSchema,
+    expectedCurrentRevisionId: configurationGenerationRevisionSchema.nullable(),
   }),
   z.strictObject({
     kind: z.literal("integrationConfig.apply"),
     integrationId: serviceIdSchema,
     revisionId: stableIdSchema,
+    expectedCurrentRevisionId: configurationGenerationRevisionSchema.nullable(),
   }),
   z.strictObject({
     kind: z.literal("vault.apply"),
     serviceId: serviceIdSchema,
     revisionId: stableIdSchema,
+    expectedCurrentRevisionId: configurationGenerationRevisionSchema.nullable(),
   }),
   kindOnly("data.inspect"),
   z.strictObject({ kind: z.literal("data.downloadOsm"), regionId: regionIdSchema.optional() }),
@@ -707,10 +723,23 @@ const backupInventoryEntry = z
     }
   });
 const extension = z.strictObject({ extensionId: serviceIdSchema, revisionId: stableIdSchema });
-const revision = z.strictObject({
-  revisionId: stableIdSchema,
-  enabledServiceIds: z.array(serviceIdSchema).max(256),
-});
+export const configurationApplyResultSchema = z.discriminatedUnion("outcome", [
+  z.strictObject({
+    outcome: z.literal("committed"),
+    revisionId: configurationGenerationRevisionSchema,
+    enabledServiceIds: z.array(serviceIdSchema).max(256),
+    followUp: z.enum(["complete", "failed"]),
+    cleanupFailed: z.boolean(),
+  }),
+  z.strictObject({
+    outcome: z.literal("not_committed"),
+    reason: z.enum(["conflict", "busy", "failed"]),
+    currentRevisionId: configurationGenerationRevisionSchema.nullable().optional(),
+    cleanupFailed: z.boolean(),
+  }),
+]);
+export type ConfigurationApplyResult = z.infer<typeof configurationApplyResultSchema>;
+const revision = configurationApplyResultSchema;
 const data = z.strictObject({
   completed: z.literal(true),
   resourceId: resourceIdSchema.optional(),
@@ -800,6 +829,17 @@ export const OPS_RESULT_SCHEMAS = {
           serviceId: serviceIdSchema,
           state: serviceRuntimeState,
           health: z.enum(["healthy", "unhealthy", "starting", "none", "unknown"]).optional(),
+        }),
+      )
+      .max(256),
+  }),
+  "configuration.inspect": z.strictObject({
+    revisionId: configurationGenerationRevisionSchema.nullable(),
+    integrationConfigDigests: z
+      .array(
+        z.strictObject({
+          integrationId: serviceIdSchema,
+          digest: z.string().regex(/^[a-f0-9]{64}$/),
         }),
       )
       .max(256),

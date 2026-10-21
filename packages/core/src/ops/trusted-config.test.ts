@@ -76,7 +76,11 @@ describe("trusted configuration snapshot protocol", () => {
     const sealed = sealTrustedConfigurationSnapshot({
       role: "api",
       operationKey: "opk1_0123456789abcdef",
-      operationForRevision: (revisionId) => ({ kind: "stack.render", revisionId }),
+      operationForRevision: (revisionId) => ({
+        expectedCurrentRevisionId: null,
+        kind: "stack.render",
+        revisionId,
+      }),
       payload: payload(),
       token,
       issuedAtMs: now,
@@ -102,6 +106,7 @@ describe("trusted configuration snapshot protocol", () => {
       role: "api",
       operationKey: "opk1_0123456789abcdef",
       operationForRevision: (revisionId) => ({
+        expectedCurrentRevisionId: null,
         kind: "serviceConfig.apply",
         serviceId: "redis",
         revisionId,
@@ -133,6 +138,7 @@ describe("trusted configuration snapshot protocol", () => {
       "operation fingerprint",
       {
         operation: {
+          expectedCurrentRevisionId: null,
           kind: "serviceConfig.apply" as const,
           serviceId: "postgis",
           revisionId: "cfg1_0123456789abcdef0123456789abcdef0123456789a",
@@ -148,7 +154,11 @@ describe("trusted configuration snapshot protocol", () => {
       const sealed = sealTrustedConfigurationSnapshot({
         role: "api",
         operationKey: "opk1_0123456789abcdef",
-        operationForRevision: (revisionId) => ({ kind: "stack.render", revisionId }),
+        operationForRevision: (revisionId) => ({
+          expectedCurrentRevisionId: null,
+          kind: "stack.render",
+          revisionId,
+        }),
         payload: payload(),
         token,
         issuedAtMs: now,
@@ -172,7 +182,11 @@ describe("trusted configuration snapshot protocol", () => {
     const base = {
       role: "api" as const,
       operationKey: "opk1_0123456789abcdef",
-      operationForRevision: (revisionId: string) => ({ kind: "stack.render" as const, revisionId }),
+      operationForRevision: (revisionId: string) => ({
+        expectedCurrentRevisionId: null,
+        kind: "stack.render" as const,
+        revisionId,
+      }),
       payload: payload(),
       token,
       issuedAtMs: now,
@@ -212,6 +226,7 @@ describe("trusted configuration snapshot protocol", () => {
         role: "api",
         operationKey: "opk1_0123456789abcdef",
         operation: {
+          expectedCurrentRevisionId: null,
           kind: "stack.render",
           revisionId: "cfg1_0123456789abcdef0123456789abcdef0123456789a",
         },
@@ -234,7 +249,11 @@ describe("trusted configuration snapshot protocol", () => {
       sealTrustedConfigurationSnapshot({
         role: "api",
         operationKey: "opk1_0123456789abcdef",
-        operationForRevision: (revisionId) => ({ kind: "stack.render", revisionId }),
+        operationForRevision: (revisionId) => ({
+          expectedCurrentRevisionId: null,
+          kind: "stack.render",
+          revisionId,
+        }),
         payload: nested,
         token,
         issuedAtMs: now,
@@ -269,7 +288,11 @@ describe("trusted configuration snapshot protocol", () => {
         sealTrustedConfigurationSnapshot({
           role: "api",
           operationKey: "opk1_0123456789abcdef",
-          operationForRevision: (revisionId) => ({ kind: "stack.render", revisionId }),
+          operationForRevision: (revisionId) => ({
+            expectedCurrentRevisionId: null,
+            kind: "stack.render",
+            revisionId,
+          }),
           payload: duplicate,
           token,
           issuedAtMs: now,
@@ -281,7 +304,11 @@ describe("trusted configuration snapshot protocol", () => {
       sealTrustedConfigurationSnapshot({
         role: "api",
         operationKey: "opk1_0123456789abcdef",
-        operationForRevision: (revisionId) => ({ kind: "stack.render", revisionId }),
+        operationForRevision: (revisionId) => ({
+          expectedCurrentRevisionId: null,
+          kind: "stack.render",
+          revisionId,
+        }),
         payload: payload(),
         token,
         issuedAtMs: now,
@@ -295,7 +322,11 @@ describe("trusted configuration snapshot protocol", () => {
     const base = {
       role: "api" as const,
       operationKey: "opk1_0123456789abcdef",
-      operationForRevision: (revisionId: string) => ({ kind: "stack.render" as const, revisionId }),
+      operationForRevision: (revisionId: string) => ({
+        expectedCurrentRevisionId: null,
+        kind: "stack.render" as const,
+        revisionId,
+      }),
       token,
       issuedAtMs: now,
       nonce: "nonce_0123456789abcdef",
