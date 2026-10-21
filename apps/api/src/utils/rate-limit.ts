@@ -132,6 +132,8 @@ export const serviceActionLimit = new RateLimiter({
   },
 });
 
+export const extensionPreviewLimit = new RateLimiter({ max: 1, windowMs: 30_000 });
+
 export const storeInstallLimit = new RateLimiter({ max: 1, windowMs: 30_000 });
 
 export const systemMaintenanceLimit = new RateLimiter({ max: 1, windowMs: 30_000 });

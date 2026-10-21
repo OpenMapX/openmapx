@@ -1,6 +1,6 @@
 import type { AdminExtensionInstallRequest } from "@openmapx/core/api-contracts";
 import { services as coreServices } from "@openmapx/core/server";
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyRequest } from "fastify";
 import { previewExtensionInstall } from "../services/extension-installer";
 import {
   addExtensionSource,
@@ -14,15 +14,17 @@ import {
   listInstalledExtensions,
   PLATFORM_VERSION,
   removeExtensionSource,
+  resolveDirectExtensionManifest,
   resolveExtensionManifest,
 } from "../services/extension-store";
+import { ExtensionStoreError } from "../services/extension-store-error";
 import { jobRunner } from "../services/job-runner";
 import { getServiceRegistry } from "../services/service-registry";
 import { writeAuditLog } from "../utils/audit-log";
-import { storeInstallLimit } from "../utils/rate-limit";
+import { extensionPreviewLimit, storeInstallLimit } from "../utils/rate-limit";
 import { getAdminSession, requireAdmin } from "../utils/require-admin";
 import { declareRouteAuth } from "../utils/route-auth";
-import { summarizeExternalUrl } from "../utils/safe-log-fields";
+import { safeErrorClass, summarizeExternalUrl } from "../utils/safe-log-fields";
 import { registerExtensionAdminRoute } from "./admin-extension-contract";
 
 const { computeServiceSecurityRating } = coreServices;
@@ -36,28 +38,37 @@ class ExtensionInstallRequestError extends Error {
   }
 }
 
+function installFailure(request: FastifyRequest, error: unknown, fallback: string) {
+  request.log.warn({ errorClass: safeErrorClass(error) }, fallback);
+  return {
+    statusCode: error instanceof ExtensionInstallRequestError ? error.statusCode : (400 as const),
+    body: {
+      error:
+        error instanceof ExtensionInstallRequestError || error instanceof ExtensionStoreError
+          ? error.message
+          : fallback,
+    },
+  };
+}
+
+function assertAdmission(entry: ExtensionCatalogEntry, kill: KillSwitch): void {
+  if (kill.removed.has(entry.id)) throw new ExtensionInstallRequestError("Extension delisted");
+  if (kill.critical.has(entry.id))
+    throw new ExtensionInstallRequestError("Extension flagged critical");
+  if (!isExtensionCompatible(entry))
+    throw new ExtensionInstallRequestError("Extension requires a newer platform version");
+}
+
 async function resolveInstallRequest(body: AdminExtensionInstallRequest): Promise<{
   manifest: coreServices.ExtensionManifest;
   sourceUrl?: string;
   sourceTrust: "verified" | "community";
 }> {
-  const kill = await getKillSwitch();
   if (body.id) {
+    const kill = await getKillSwitch();
     const entry = await getExtensionCatalogEntry(body.id);
-    if (!entry) throw new ExtensionInstallRequestError(`Extension ${body.id} not found`, 404);
-    if (kill.removed.has(entry.id)) {
-      throw new ExtensionInstallRequestError(`Extension delisted: ${kill.removed.get(entry.id)}`);
-    }
-    if (kill.critical.has(entry.id)) {
-      throw new ExtensionInstallRequestError(
-        `Extension flagged critical: ${kill.critical.get(entry.id)?.reason}`,
-      );
-    }
-    if (!isExtensionCompatible(entry)) {
-      throw new ExtensionInstallRequestError(
-        `Requires platform >= ${entry.minPlatform} (this is ${PLATFORM_VERSION})`,
-      );
-    }
+    if (!entry) throw new ExtensionInstallRequestError("Extension not found", 404);
+    assertAdmission(entry, kill);
     return {
       manifest: await resolveExtensionManifest(entry),
       sourceUrl: entry.manifest ?? undefined,
@@ -65,16 +76,13 @@ async function resolveInstallRequest(body: AdminExtensionInstallRequest): Promis
     };
   }
   if (body.manifestUrl) {
-    return {
-      manifest: await resolveExtensionManifest({
-        id: "_direct",
-        name: "_direct",
-        version: "_",
-        manifest: body.manifestUrl,
-      }),
-      sourceUrl: body.manifestUrl,
-      sourceTrust: "community",
-    };
+    const manifest = await resolveDirectExtensionManifest(body.manifestUrl);
+    // The validated identity, never a selector sentinel or supplied trust, owns denial.
+    assertAdmission(
+      { id: manifest.id, name: manifest.name, minPlatform: manifest.platform },
+      await getKillSwitch(),
+    );
+    return { manifest, sourceUrl: body.manifestUrl, sourceTrust: "community" };
   }
   throw new ExtensionInstallRequestError("Either `id` or `manifestUrl` is required");
 }
@@ -172,7 +180,10 @@ export async function adminExtensionsRoute(app: FastifyInstance): Promise<void> 
       const manifest = await resolveExtensionManifest(entry);
       components = coreServices.extensionComponentSummary(manifest);
     } catch (err) {
-      request.log.warn({ err }, "failed to resolve extension manifest for detail");
+      request.log.warn(
+        { errorClass: safeErrorClass(err) },
+        "failed to resolve extension manifest for detail",
+      );
     }
 
     return {
@@ -239,12 +250,11 @@ export async function adminExtensionsRoute(app: FastifyInstance): Promise<void> 
         const resolved = await resolveInstallRequest(request.body ?? {});
         return await previewExtensionInstall(resolved);
       } catch (error) {
-        const statusCode =
-          error instanceof ExtensionInstallRequestError ? error.statusCode : (400 as const);
-        return reply.status(statusCode).send({ error: (error as Error).message });
+        const failure = installFailure(request, error, "Unable to preview extension installation");
+        return reply.status(failure.statusCode).send(failure.body);
       }
     },
-    { beforeValidation: storeInstallLimit.preHandler() },
+    { beforeValidation: extensionPreviewLimit.preHandler() },
   );
 
   // POST /admin/extensions/install — by catalog id or by direct manifest URL.
@@ -258,9 +268,8 @@ export async function adminExtensionsRoute(app: FastifyInstance): Promise<void> 
       try {
         resolved = await resolveInstallRequest(body);
       } catch (error) {
-        const statusCode =
-          error instanceof ExtensionInstallRequestError ? error.statusCode : (400 as const);
-        return reply.status(statusCode).send({ error: (error as Error).message });
+        const failure = installFailure(request, error, "Unable to resolve extension installation");
+        return reply.status(failure.statusCode).send(failure.body);
       }
 
       const { manifest, sourceUrl, sourceTrust } = resolved;
@@ -304,23 +313,30 @@ export async function adminExtensionsRoute(app: FastifyInstance): Promise<void> 
     async (request, reply) => {
       const { id } = request.params;
       const adminSession = getAdminSession(request);
-      const entry = await getExtensionCatalogEntry(id);
-      if (!entry) {
-        return reply.status(400).send({ error: "Extension is not in any catalog source" });
-      }
-      let manifest: coreServices.ExtensionManifest;
+      let resolved: Awaited<ReturnType<typeof resolveInstallRequest>>;
       try {
-        manifest = await resolveExtensionManifest(entry);
-      } catch (err) {
-        return reply.status(400).send({ error: (err as Error).message });
+        const entry = await getExtensionCatalogEntry(id);
+        if (!entry) {
+          return reply.status(400).send({ error: "Extension is not in any catalog source" });
+        }
+        assertAdmission(entry, await getKillSwitch());
+        resolved = {
+          manifest: await resolveExtensionManifest(entry),
+          sourceUrl: entry.manifest ?? undefined,
+          sourceTrust: entry.trust === "verified" ? "verified" : "community",
+        };
+      } catch (error) {
+        const failure = installFailure(request, error, "Unable to resolve extension update");
+        return reply.status(failure.statusCode).send(failure.body);
       }
+      const { manifest, sourceUrl, sourceTrust } = resolved;
 
       const jobId = await jobRunner.enqueue(
         "extension.install",
         {
           manifest,
-          sourceUrl: entry.manifest ?? undefined,
-          sourceTrust: entry.trust === "verified" ? "verified" : "community",
+          sourceUrl,
+          sourceTrust,
           actorId: adminSession.user.id,
           hostPortConfirmation: request.body?.hostPortConfirmation,
         },
@@ -380,7 +396,8 @@ export async function adminExtensionsRoute(app: FastifyInstance): Promise<void> 
     try {
       await addExtensionSource(url, label);
     } catch (err) {
-      return reply.status(400).send({ error: (err as Error).message });
+      const failure = installFailure(request, err, "Unable to add extension source");
+      return reply.status(failure.statusCode).send(failure.body);
     }
     await writeAuditLog({
       actorId: adminSession.user.id,

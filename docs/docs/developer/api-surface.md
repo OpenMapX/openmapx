@@ -462,8 +462,9 @@ work; reload acceptance remains separate from Activity terminal completion.
 
 `extensionAdminOperations` owns all eleven catalog, installed-extension, preview,
 install/update/remove, source and refresh operations. Producers use the shared
-administration registrar after the inherited admin guard. The existing dedicated
-store limiter runs before structural validation; global CSRF, public rate limits
+administration registrar after the inherited admin guard. The independent
+extension preview limiter and the shared install/update store limiter run before
+structural validation; global CSRF, public rate limits
 and JSON parsing retain their lifecycle positions.
 
 Import the generated functions and canonical wire types from
@@ -481,3 +482,25 @@ retain ID precedence when both are supplied. Source strings retain exact identit
 URL, trust, provenance, revocation, persistence and host authorization remain domain
 responsibilities. Regenerate OpenAPI then SDK and run both freshness checks after
 contract changes.
+
+Direct manifest URLs use the real safe-fetch path and full portable manifest
+validation, then apply revocation and platform policy to the validated identity.
+They always resolve at community trust. Catalog resolution retains ID, declared
+version, digest and immutable verified authorization checks. All critical entries
+block preview/install/update and worker execution until cleared; `maxVersion`
+remains display-only metadata. Removal stays available. Existing stale-feed
+reporting and cached denial semantics are preserved.
+
+Preview has its own one-token/30-second network-key bucket. Install and update
+retain their shared bucket at the same limit; other store callers are unchanged.
+The guard still runs before the limiter and canonical structural validation.
+Deliberate confirmation may follow preview immediately; neither HTTP operation
+is automatically retried.
+
+Extension-store validation errors select fixed public categories. Unknown
+provider, JSON, staging and source-persistence failures use fixed operation
+messages; route diagnostics contain only the operation message and safe error
+class. Never return or log arbitrary dependency messages, URLs, schema values or
+filesystem paths. Detail resolution failure retains its 200/empty-component
+fallback with safe diagnostics. The canonical wire schemas and generated SDK
+signatures are unchanged by these domain corrections.

@@ -39,22 +39,20 @@ confirm.
 
 ## Trust tiers
 
-Every extension carries one trust tier, and the tier is assigned by **where it
-came from** — a manifest can advertise but never grant its own trust:
+Every extension carries a trust tier assigned by the host. A manifest cannot
+grant its own trust:
 
-| Tier          | Meaning                                                      | Source                                                                                                     |
-| ------------- | ------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------- |
-| **built-in**  | Ships in the OpenMapX monorepo                               | first-party                                                                                                |
-| **verified**  | Identity-checked + passed automated validation (not audited) | the curated OpenMapX catalog (`openmapx/community-extensions`), where inclusion is a CI-gated pull request |
-| **community** | Unreviewed                                                   | a catalog source you added yourself, or a direct install by URL                                            |
+| Tier          | Meaning                                                                      | Source                                                    |
+| ------------- | ---------------------------------------------------------------------------- | --------------------------------------------------------- |
+| **built-in**  | Ships in the OpenMapX monorepo                                               | First-party                                               |
+| **verified**  | Catalog authorization binds the exact manifest ID, version and SHA-256 bytes | An immutable default catalog with a digest-bound entry    |
+| **community** | No verified catalog authorization                                            | Custom sources, unpinned entries or a direct manifest URL |
 
-The default catalog source is the curated **verified** one. Anything you add
-under **Sources**, or install by raw URL, is surfaced as **community** and
-requires you to acknowledge the risk.
-
-Verified and community services receive the same container sandbox. Verification
-is a listing and identity check, not an integrity guarantee about the manifest,
-moving image tag, or bytes that will run tomorrow.
+The default catalog does not make every entry verified. Direct URL installation
+validates the fetched manifest and uses its actual identity, always at community
+trust. Catalog installs continue to require matching identity, declared version
+and digest where present. Verification is not a security audit. Verified and
+community services receive the same community container sandbox.
 
 ## Browsing and installing
 
@@ -153,6 +151,26 @@ entry points are also rejected; executable behavior must move into an isolated
 service. These reduce the blast radius of a
 malformed archive — they are not a substitute for trusting the author.
 
+### Preview, admission and failures
+
+Extension previews have an independent limit of one request per 30 seconds per
+network peer key. Install and update admission share a separate bucket with the
+same limit. Preview can therefore be followed immediately by a deliberate
+install or update. Repeated requests in either bucket return 429 with
+`Retry-After`; there is no automatic mutation retry. Administrator, CSRF and
+broader API rate limits still apply.
+
+Install, update and removal return a queued job ID (HTTP 202). Check Activity
+for the terminal outcome. Dependency failures return bounded public messages;
+manifest detail may still return an empty component list if resolution fails.
+That fallback does not prove the extension has no components.
+
+The internal operator CLI's explicit preview and host-port fingerprint
+confirmation workflow is planned as part of the administration SDK caller
+update. This change does not implement those CLI commands or flags. Host-port
+approval continues to require the exact inspected snapshot; it must never be
+automatically granted.
+
 ## Updating, uninstalling, and the kill-switch
 
 - **Update** re-pins **all** of a bundle's parts to the latest published version
@@ -168,7 +186,14 @@ malformed archive — they are not a substitute for trusting the author.
   the same component are left alone.
 - The catalog can carry a **kill-switch**: an extension marked `removed` is hidden
   from Browse (with a banner on installed copies), and one marked `critical`
-  shows a blocking security warning on installed copies and refuses new installs.
+  refuses preview, new installation and update admission. The worker rechecks
+  before installation effects and before committing installed state, including
+  when an advisory arrives while a job is queued. Every critical entry blocks
+  regardless of its version; advisory `maxVersion` is display information only.
+  Wait for the advisory to be cleared before trying another deliberate install
+  or update. Removal remains available. If the moving revocation feed cannot be
+  refreshed, known cached denials remain effective and the API reports stale
+  revocation data; an unavailable feed does not certify an extension as clean.
 
 :::note[An extension-managed service repo is pinned]
 Service repos installed as part of an extension are pinned and marked

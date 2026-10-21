@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { makeRateLimitTierHook, uniformErrorHandler } from "../../server-wiring";
 import { mockAdminSession } from "../../test/auth";
 import { makeCsrfGuardHook } from "../../utils/csrf";
-import { RateLimiter, storeInstallLimit } from "../../utils/rate-limit";
+import { extensionPreviewLimit, RateLimiter, storeInstallLimit } from "../../utils/rate-limit";
 import { administrationSdkFetch } from "./helpers/administration-sdk-fetch";
 import {
   extensionCatalogFixture as entry,
@@ -61,6 +61,7 @@ const registered: { method: unknown; url: string; id?: string }[] = [];
 beforeEach(async () => {
   vi.resetAllMocks();
   storeInstallLimit.reset();
+  extensionPreviewLimit.reset();
   recorded.length = 0;
   registered.length = 0;
   getSession.mockResolvedValue(session);
@@ -115,6 +116,7 @@ afterEach(async () => {
   vi.unstubAllGlobals();
   floor.destroy();
   storeInstallLimit.reset();
+  extensionPreviewLimit.reset();
   await app.close();
 });
 function client(headers: Record<string, string> = {}) {
@@ -220,6 +222,7 @@ describe("actual extension producers", () => {
     ).toMatchObject({ status: 200, data: preview });
     expect(resolve).toHaveBeenLastCalledWith(entry);
     storeInstallLimit.reset();
+    extensionPreviewLimit.reset();
     expect(
       await sdk.installAdminExtension(
         { id: entry.id, hostPortConfirmation: preview.confirmation },
@@ -238,6 +241,7 @@ describe("actual extension producers", () => {
       session.user.id,
     );
     storeInstallLimit.reset();
+    extensionPreviewLimit.reset();
     expect(await sdk.updateAdminExtension(entry.id, undefined, options)).toMatchObject({
       status: 202,
       data: { jobId: "job-synthetic-202" },
@@ -364,6 +368,7 @@ describe("extension contract boundaries", () => {
       { status: 400 },
     );
     storeInstallLimit.reset();
+    extensionPreviewLimit.reset();
     expect(await sdk.installAdminExtension({ id: "" }, realOptions)).toMatchObject({ status: 400 });
     expect(enqueue).not.toHaveBeenCalled();
     expect(recorded.find((r) => r.url.includes("/update/"))).toMatchObject({
@@ -438,10 +443,12 @@ describe("extension contract boundaries", () => {
       status: 404,
     });
     storeInstallLimit.reset();
+    extensionPreviewLimit.reset();
     expect(await sdk.installAdminExtension({ id: "missing" }, options)).toMatchObject({
       status: 404,
     });
     storeInstallLimit.reset();
+    extensionPreviewLimit.reset();
     expect(await sdk.updateAdminExtension("missing", undefined, options)).toMatchObject({
       status: 400,
       data: { error: "Extension is not in any catalog source" },
@@ -449,6 +456,7 @@ describe("extension contract boundaries", () => {
     expect(enqueue).not.toHaveBeenCalled();
     detail.mockResolvedValue(entry);
     storeInstallLimit.reset();
+    extensionPreviewLimit.reset();
     enqueue.mockRejectedValue(Error("synthetic dependency"));
     expect(await sdk.installAdminExtension({ id: entry.id }, options)).toMatchObject({
       status: 500,
@@ -462,86 +470,89 @@ describe("extension contract boundaries", () => {
     await expect(sdk.removeAdminExtension(entry.id, undefined, options)).rejects.toThrow();
     expect(requests).toHaveBeenCalledTimes(1);
   });
-  it("keeps real admin, JSON parser, CSRF, floor and dedicated limiter precedence", async () => {
-    const invoke = (payload: unknown, headers = {}) =>
-      app.inject({
-        method: "POST",
-        url: path("/install"),
-        payload: JSON.stringify(payload),
-        headers: { "content-type": "application/json", ...headers },
-        remoteAddress: "198.51.100.12",
-      });
-    getSession.mockResolvedValue(null);
-    expect((await invoke({ wrong: true })).statusCode).toBe(401);
-    getSession.mockResolvedValue({ ...session, user: { ...session.user, role: "user" } });
-    expect((await invoke({ wrong: true })).statusCode).toBe(403);
-    getSession.mockResolvedValue(session);
-    expect((await invoke({ wrong: true })).statusCode).toBe(400); // admitted invalid input spends original bucket
-    const limited = await invoke({ id: entry.id });
-    expect(limited.statusCode).toBe(429);
-    expect(limited.headers["retry-after"]).toMatch(/^\d+$/);
-    expect(limited.json()).toMatchObject({
-      error: "Too many requests",
-      retryAfter: expect.any(Number),
-    });
-    expect(resolve).not.toHaveBeenCalled();
-    getSession.mockResolvedValue(null);
-    expect((await invoke({ id: entry.id })).statusCode).toBe(401);
-    getSession.mockResolvedValue(session);
-    expect(
-      (
-        await app.inject({
+  it.each(["install", "install-preview"])(
+    "keeps real admin, JSON parser, CSRF, floor and %s limiter precedence",
+    async (operation) => {
+      const invoke = (payload: unknown, headers = {}) =>
+        app.inject({
           method: "POST",
-          url: path("/install"),
-          payload: "{",
-          headers: { "content-type": "application/json" },
-        })
-      ).statusCode,
-    ).toBe(400);
-    expect(
-      (
-        await app.inject({
-          method: "POST",
-          url: path("/install"),
-          payload: "{",
-          headers: {
-            cookie: "synthetic=1",
-            origin: "https://evil.test",
-            "content-type": "application/json",
-          },
-        })
-      ).statusCode,
-    ).toBe(403);
-    expect(
-      (
-        await app.inject({
-          method: "POST",
-          url: path("/install"),
-          payload: "x",
-          headers: { "content-type": "application/x-synthetic" },
-        })
-      ).statusCode,
-    ).toBe(415);
-    expect((await invoke({ id: "x".repeat(5000) })).statusCode).toBe(413);
-    floor.destroy();
-    floor = new RateLimiter({ max: 1, windowMs: 60_000 });
-    expect(
-      (await app.inject({ url: path("/sources"), remoteAddress: "198.51.100.12" })).statusCode,
-    ).toBe(200);
-    getSession.mockResolvedValue(null);
-    expect(
-      (
-        await app.inject({
-          method: "POST",
-          url: path("/install"),
-          payload: "{",
+          url: path(`/${operation}`),
+          payload: JSON.stringify(payload),
+          headers: { "content-type": "application/json", ...headers },
           remoteAddress: "198.51.100.12",
-          headers: { "content-type": "application/json" },
-        })
-      ).statusCode,
-    ).toBe(429);
-    expect(enqueue).not.toHaveBeenCalled();
-  });
+        });
+      getSession.mockResolvedValue(null);
+      expect((await invoke({ wrong: true })).statusCode).toBe(401);
+      getSession.mockResolvedValue({ ...session, user: { ...session.user, role: "user" } });
+      expect((await invoke({ wrong: true })).statusCode).toBe(403);
+      getSession.mockResolvedValue(session);
+      expect((await invoke({ wrong: true })).statusCode).toBe(400); // admitted invalid input spends original bucket
+      const limited = await invoke({ id: entry.id });
+      expect(limited.statusCode).toBe(429);
+      expect(limited.headers["retry-after"]).toMatch(/^\d+$/);
+      expect(limited.json()).toMatchObject({
+        error: "Too many requests",
+        retryAfter: expect.any(Number),
+      });
+      expect(resolve).not.toHaveBeenCalled();
+      getSession.mockResolvedValue(null);
+      expect((await invoke({ id: entry.id })).statusCode).toBe(401);
+      getSession.mockResolvedValue(session);
+      expect(
+        (
+          await app.inject({
+            method: "POST",
+            url: path("/install"),
+            payload: "{",
+            headers: { "content-type": "application/json" },
+          })
+        ).statusCode,
+      ).toBe(400);
+      expect(
+        (
+          await app.inject({
+            method: "POST",
+            url: path("/install"),
+            payload: "{",
+            headers: {
+              cookie: "synthetic=1",
+              origin: "https://evil.test",
+              "content-type": "application/json",
+            },
+          })
+        ).statusCode,
+      ).toBe(403);
+      expect(
+        (
+          await app.inject({
+            method: "POST",
+            url: path("/install"),
+            payload: "x",
+            headers: { "content-type": "application/x-synthetic" },
+          })
+        ).statusCode,
+      ).toBe(415);
+      expect((await invoke({ id: "x".repeat(5000) })).statusCode).toBe(413);
+      floor.destroy();
+      floor = new RateLimiter({ max: 1, windowMs: 60_000 });
+      expect(
+        (await app.inject({ url: path("/sources"), remoteAddress: "198.51.100.12" })).statusCode,
+      ).toBe(200);
+      getSession.mockResolvedValue(null);
+      expect(
+        (
+          await app.inject({
+            method: "POST",
+            url: path("/install"),
+            payload: "{",
+            remoteAddress: "198.51.100.12",
+            headers: { "content-type": "application/json" },
+          })
+        ).statusCode,
+      ).toBe(429);
+      expect(enqueue).not.toHaveBeenCalled();
+    },
+  );
   it("validates strict HTTP inputs and preserves optional absence/empty object while rejecting null", async () => {
     for (const [method, suffix, body] of [
       ["POST", "/install", {}],
@@ -557,6 +568,7 @@ describe("extension contract boundaries", () => {
       ["DELETE", "/sources", { url: "x", ignored: 1 }],
     ] as const) {
       storeInstallLimit.reset();
+      extensionPreviewLimit.reset();
       const response = await app.inject({
         method,
         url: path(suffix),
@@ -575,6 +587,7 @@ describe("extension contract boundaries", () => {
     ] as const) {
       for (const payload of [undefined, "{}"]) {
         storeInstallLimit.reset();
+        extensionPreviewLimit.reset();
         expect(
           (
             await app.inject({
@@ -598,13 +611,13 @@ describe("extension contract boundaries", () => {
     expect(await sdk.previewAdminExtensionInstall({ id: entry.id }, options)).toMatchObject({
       status: 200,
     });
-    // Existing preview/write shared bucket is intentionally retained until Task5.
+    expect((await sdk.installAdminExtension({ id: entry.id }, options)).status).toBe(202);
     const limited = await sdk.installAdminExtension({ id: entry.id }, options);
     expect(limited).toMatchObject({
       status: 429,
       data: { error: "Too many requests", retryAfter: expect.any(Number) },
     });
     expect(limited.headers.get("retry-after")).toMatch(/^\d+$/);
-    expect(enqueue).not.toHaveBeenCalled();
+    expect(enqueue).toHaveBeenCalledTimes(1);
   });
 });

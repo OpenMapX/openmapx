@@ -12,6 +12,7 @@ import {
 import { redis } from "../redis";
 import { safeErrorClass, summarizeExternalUrl } from "../utils/safe-log-fields.js";
 import { appLogger } from "./app-logger.js";
+import { ExtensionStoreError } from "./extension-store-error";
 
 type ExtensionManifest = coreServices.ExtensionManifest;
 type ExtensionTrust = "built-in" | "verified" | "community";
@@ -106,6 +107,7 @@ export interface ExtensionCatalogSource {
 
 export interface KillSwitch {
   removed: Map<string, string>; // id -> reason
+  /** maxVersion is advisory display data; every critical entry denies execution. */
   critical: Map<string, { reason: string; maxVersion?: string }>;
   /**
    * True when the moving revocation feed could not be refreshed and the last
@@ -198,12 +200,15 @@ async function getExtraSources(): Promise<ExtensionCatalogSource[]> {
 }
 
 export async function addExtensionSource(url: string, label: string): Promise<void> {
-  if (!redis) throw new Error("Redis unavailable — cannot persist catalog sources");
-  validatePublicUrl(url);
-  const parsed = new URL(url);
-  if (parsed.protocol !== "https:") throw new Error("Catalog source must use HTTPS");
-  if (parsed.username || parsed.password) {
-    throw new Error("Catalog source URL must not contain credentials");
+  if (!redis) throw new ExtensionStoreError("source_storage_unavailable");
+  try {
+    validatePublicUrl(url);
+    const parsed = new URL(url);
+    if (parsed.protocol !== "https:" || parsed.username || parsed.password) {
+      throw new ExtensionStoreError("invalid_source_url");
+    }
+  } catch {
+    throw new ExtensionStoreError("invalid_source_url");
   }
   const existing = await getExtraSources();
   if (existing.some((s) => s.url === url)) return;
@@ -452,12 +457,12 @@ export async function resolveExtensionManifest(
     });
     const digest = createHash("sha256").update(text, "utf8").digest("hex");
     if (digest !== entry.manifestSha256.toLowerCase()) {
-      throw new Error(`Extension manifest digest mismatch for "${entry.id}"`);
+      throw new ExtensionStoreError("digest_mismatch");
     }
     raw = JSON.parse(text) as unknown;
   } else if (entry.manifest) {
     if (entry.trust === "verified") {
-      throw new Error(`Verified extension "${entry.id}" is missing its manifest digest`);
+      throw new ExtensionStoreError("missing_digest");
     }
     raw = await safeFetchJson<unknown>(entry.manifest, {
       headers: { "User-Agent": USER_AGENT_ADMIN },
@@ -473,20 +478,31 @@ export async function resolveExtensionManifest(
       integrations: entry.integrations,
     };
   }
-  const validation = coreServices.validateExtensionManifest(raw);
-  if (!validation.valid) {
-    throw new Error(`Invalid extension.json for "${entry.id}": ${validation.errors.join("; ")}`);
-  }
-  const manifest = raw as ExtensionManifest;
+  const manifest = validatedManifest(raw);
   // The catalog entry and the manifest must describe the same thing. Without
   // this, an entry could authorize one id/version and install another.
   if (manifest.id !== entry.id) {
-    throw new Error(`Extension manifest id does not match catalog entry "${entry.id}"`);
+    throw new ExtensionStoreError("id_mismatch");
   }
   if (entry.version && manifest.version !== entry.version) {
-    throw new Error(`Extension manifest version does not match catalog entry "${entry.id}"`);
+    throw new ExtensionStoreError("version_mismatch");
   }
   return manifest;
+}
+
+function validatedManifest(raw: unknown): ExtensionManifest {
+  const validation = coreServices.validateExtensionManifest(raw);
+  if (!validation.valid) throw new ExtensionStoreError("invalid_manifest");
+  return raw as ExtensionManifest;
+}
+
+/** Direct content has no catalog authorization to bind against or trust to inherit. */
+export async function resolveDirectExtensionManifest(url: string): Promise<ExtensionManifest> {
+  const raw = await safeFetchJson<unknown>(url, {
+    headers: { "User-Agent": USER_AGENT_ADMIN },
+    timeoutMs: 15_000,
+  });
+  return validatedManifest(raw);
 }
 
 export function isExtensionCompatible(entry: ExtensionCatalogEntry): boolean {
