@@ -27,12 +27,28 @@ async function runBiomeBatch(args) {
   const sizes = { stdout: 0, stderr: 0 };
   const maxBuffer = 16 * 1024 * 1024;
   let failure;
+  const groupHasLiveMembers = () => {
+    const output = execFileSync("ps", ["-axo", "pgid=,stat="], {
+      encoding: "utf8",
+      timeout: 1_000,
+      maxBuffer,
+    }).trim();
+    const states = output.split("\n").map((line) => line.trim().split(/\s+/));
+    // An empty or malformed process listing cannot establish termination.
+    if (states.some(([group, state, extra]) => !/^\d+$/.test(group) || !state || extra))
+      throw new Error("Could not inspect the Biome process group.");
+    return states.some(([group, state]) => Number(group) === child.pid && !state.startsWith("Z"));
+  };
   const killGroup = () => {
     if (!child.pid) return;
     try {
       process.kill(-child.pid, "SIGKILL");
     } catch (error) {
-      if (error.code !== "ESRCH") throw error;
+      if (error.code === "ESRCH") return;
+      // Darwin reports EPERM for a retained zombie-only group. Accept it only
+      // after inspection proves there is no member that can still run/write.
+      if (error.code === "EPERM" && !groupHasLiveMembers()) return;
+      throw error;
     }
   };
   const stop = (error) => {
@@ -74,24 +90,16 @@ async function runBiomeBatch(args) {
     await closed;
     // close drains the inherited pipes. Also check the owned group, so even a
     // descendant that closed its pipes cannot race the caller's scratch cleanup.
-    // Linux may retain dead orphan zombies; those cannot run or write anything.
+    // Retained zombies cannot run or write, on either supported POSIX platform.
     while (child.pid) {
       try {
         process.kill(-child.pid, 0);
       } catch (error) {
         if (error.code === "ESRCH") break;
+        if (error.code === "EPERM" && !groupHasLiveMembers()) break;
         throw error;
       }
-      const states = execFileSync("ps", ["-axo", "pgid=,stat="], {
-        encoding: "utf8",
-        timeout: 1_000,
-        maxBuffer,
-      })
-        .trim()
-        .split("\n")
-        .map((line) => line.trim().split(/\s+/));
-      if (!states.some(([group, state]) => Number(group) === child.pid && !state.startsWith("Z")))
-        break;
+      if (!groupHasLiveMembers()) break;
       await delay(5);
     }
   } finally {
