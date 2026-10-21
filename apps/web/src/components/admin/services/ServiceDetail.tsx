@@ -18,14 +18,20 @@ import Tabs from "@mui/material/Tabs";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import { safeHref } from "@openmapx/core";
+import { getProvidedCapabilityNames } from "@openmapx/core/api-admin-sdk";
+import type {
+  AdminServiceAction,
+  AdminServiceDetail as ServiceDetailData,
+} from "@openmapx/core/api-contracts";
 import { useState } from "react";
-import type { ServiceDetail as ServiceDetailData } from "@/hooks/useServices";
 import {
   useServiceAction,
   useServiceConfig,
   useServiceConfigSave,
   useServiceDetail,
 } from "@/hooks/useServices";
+import { useAdminMutationOwner } from "@/lib/admin/useAdminMutationOwner";
+import { useActivityClient } from "../activity/activityQueries";
 import { StatusBadge } from "../integrations/StatusBadge";
 import { useAdminToast } from "../shared/AdminToast";
 import { CompactAlert } from "../shared/CompactAlert";
@@ -162,7 +168,7 @@ function OverviewTab({ data }: { data: ServiceDetailData }) {
                 flexWrap: "wrap",
               }}
             >
-              {manifest.provides.map((p) => (
+              {getProvidedCapabilityNames(manifest.provides).map((p) => (
                 <Chip
                   key={p}
                   label={p}
@@ -385,6 +391,8 @@ function ConfigTab({ data }: { data: ServiceDetailData }) {
   const configQuery = useServiceConfig(manifest.id);
   const saveConfig = useServiceConfigSave(manifest.id);
   const action = useServiceAction(manifest.id);
+  const { client, apiUrl } = useActivityClient();
+  const owner = useAdminMutationOwner(client, JSON.stringify([manifest.id, manifest.configSchema]));
 
   if (!manifest.configSchema) {
     return (
@@ -408,6 +416,7 @@ function ConfigTab({ data }: { data: ServiceDetailData }) {
           Configuration
         </Typography>
         <ServiceConfigForm
+          key={JSON.stringify([apiUrl, manifest.id])}
           serviceId={manifest.id}
           schema={manifest.configSchema}
           resolvedConfig={configQuery.data?.resolvedConfig ?? {}}
@@ -419,7 +428,9 @@ function ConfigTab({ data }: { data: ServiceDetailData }) {
             // Service configs land in the generated compose env, so applying
             // a new value must go through `docker compose up -d` semantics.
             // Persist first so a failed apply doesn't lose the edit.
+            const execution = owner;
             await saveConfig.mutateAsync(values);
+            if (!execution.active) return;
             await action.mutateAsync("start");
           }}
         />
@@ -471,6 +482,13 @@ interface ServiceDetailProps {
 }
 
 export function ServiceDetail({ id }: ServiceDetailProps) {
+  const { apiUrl } = useActivityClient();
+  return <ServiceDetailView key={JSON.stringify([apiUrl, id])} id={id} />;
+}
+
+function ServiceDetailView({ id }: ServiceDetailProps) {
+  const { client } = useActivityClient();
+  const owner = useAdminMutationOwner(client, id);
   const [tab, setTab] = useState(0);
   const [logsOpen, setLogsOpen] = useState(false);
   const showToast = useAdminToast();
@@ -503,18 +521,15 @@ export function ServiceDetail({ id }: ServiceDetailProps) {
   const { manifest } = data;
   const isBusy = actionMutation.isPending;
 
-  async function runAction(action: "start" | "stop" | "restart") {
+  async function runAction(action: AdminServiceAction["action"]) {
+    const execution = owner;
     try {
       const result = await actionMutation.mutateAsync(action);
-      if (result.ok) {
-        // The backend enqueues the action via the job runner and returns immediately.
-        // Container state will transition asynchronously; the status chip refreshes
-        // via the invalidated ["admin", "services"] query.
-        showToast(`Service ${action} queued${result.jobId ? ` (job ${result.jobId})` : ""}`);
-      } else {
-        showToast(`Action "${action}" was rejected`, "warning");
-      }
+      if (!execution.active) return;
+      // Terminal observation refreshes the status; acceptance only queues work.
+      showToast(`Service ${action} queued (job ${result.jobId})`);
     } catch (err) {
+      if (!execution.active) return;
       showToast(err instanceof Error ? err.message : `Action "${action}" failed`, "error");
     }
   }

@@ -26,7 +26,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { useState } from "react";
 import { useIntegrationAdmin, useIntegrationReload } from "@/lib/admin/integrationAdmin";
-import { useIntegrationMutationOwner } from "@/lib/admin/useIntegrationMutationOwner";
+import { useAdminMutationOwner } from "@/lib/admin/useAdminMutationOwner";
 import { AdminPageHeader } from "../shared/AdminPageHeader";
 import { useAdminToast } from "../shared/AdminToast";
 import { CompactAlert } from "../shared/CompactAlert";
@@ -114,7 +114,7 @@ function attentionHref(item: AttentionItem): string {
 
 export function AdminOverview() {
   const admin = useIntegrationAdmin();
-  const owner = useIntegrationMutationOwner(admin.client);
+  const owner = useAdminMutationOwner(admin.client);
   const showToast = useAdminToast();
   const [attentionExpanded, setAttentionExpanded] = useState(false);
   const [credentialsExpanded, setCredentialsExpanded] = useState(false);

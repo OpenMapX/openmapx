@@ -16,7 +16,7 @@ import TextField from "@mui/material/TextField";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import { type CredentialSetup, readCredentialSetup } from "@openmapx/integration-framework";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CredentialSetupGuide } from "../integrations/CredentialSetupGuide";
 
 // The shared, schema-driven config form used by BOTH the integration and the
@@ -154,6 +154,10 @@ export interface SchemaConfigFormProps {
   onSaveAndApply?: (diff: Record<string, unknown>) => Promise<void>;
   /** Label for the apply button (default "Save & apply"). */
   applyLabel?: string;
+  /** Feature-specific acknowledgement: an accepted job is not completed work. */
+  applySuccessMessage?: string;
+  /** Preserve edited fields when a background read refreshes the saved baseline. */
+  preserveDirtyValuesOnRefresh?: boolean;
   /** Shown when there are no editable (non-secret) fields. */
   emptyMessage?: string;
 }
@@ -166,6 +170,8 @@ export function SchemaConfigForm({
   onSave,
   onSaveAndApply,
   applyLabel = "Save & apply",
+  applySuccessMessage = "Configuration saved and applied.",
+  preserveDirtyValuesOnRefresh = false,
   emptyMessage = "No editable configuration fields. Credentials live on the Credentials tab.",
 }: SchemaConfigFormProps) {
   const fields = useMemo(() => extractConfigFields(schema, excludeKeys), [schema, excludeKeys]);
@@ -188,10 +194,22 @@ export function SchemaConfigForm({
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState<"saved" | "applied" | null>(null);
 
-  // Re-sync when the resolved config changes (e.g. after a save + refetch).
+  // A disposed service form's cache refresh may reach its replacement form.
+  // Update its saved baseline without overwriting newly edited fields.
+  const previousInitial = useRef(values);
   useEffect(() => {
-    setValues(computeInitialValues());
-  }, [computeInitialValues]);
+    const next = computeInitialValues();
+    const previous = previousInitial.current;
+    previousInitial.current = next;
+    setValues((current) => {
+      if (!preserveDirtyValuesOnRefresh) return next;
+      const merged = { ...next };
+      for (const key of Object.keys(next)) {
+        if (comparable(current[key]) !== comparable(previous[key])) merged[key] = current[key];
+      }
+      return merged;
+    });
+  }, [computeInitialValues, preserveDirtyValuesOnRefresh]);
 
   const originalValues = useMemo(() => {
     const orig: Record<string, unknown> = {};
@@ -251,7 +269,7 @@ export function SchemaConfigForm({
       )}
       {saved === "applied" && (
         <Alert severity="success" variant="outlined" onClose={() => setSaved(null)}>
-          Configuration saved and applied.
+          {applySuccessMessage}
         </Alert>
       )}
       {envPrefix && (

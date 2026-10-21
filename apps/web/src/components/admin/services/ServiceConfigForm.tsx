@@ -1,13 +1,14 @@
 "use client";
 
-import type { ResolvedConfigValue } from "@/hooks/useServices";
+import type { AdminServiceResolvedConfig } from "@openmapx/core/api-contracts";
+import { useActivityClient } from "../activity/activityQueries";
 import { SchemaConfigForm } from "../shared/SchemaConfigForm";
 
 interface ServiceConfigFormProps {
   serviceId: string;
   schema: Record<string, unknown> | undefined;
   /** Resolved per-field values with source annotation (default / database / env). */
-  resolvedConfig: Record<string, ResolvedConfigValue>;
+  resolvedConfig: AdminServiceResolvedConfig;
   /** Env-var prefix (`SERVICE_<ID>_`) shown as an override hint in the header. */
   envPrefix?: string;
   /** Save the new config to the database (no container restart). */
@@ -25,15 +26,19 @@ interface ServiceConfigFormProps {
  * "Save & apply" action. Secrets are never shown — they live on the Credentials tab.
  */
 export function ServiceConfigForm({
-  serviceId: _serviceId,
+  serviceId,
   schema,
   resolvedConfig,
   envPrefix,
   onSave,
   onSaveAndApply,
 }: ServiceConfigFormProps) {
+  const { apiUrl } = useActivityClient();
   return (
     <SchemaConfigForm
+      key={JSON.stringify([apiUrl, serviceId, schema])}
+      preserveDirtyValuesOnRefresh
+      applySuccessMessage="Configuration saved. Service start queued."
       schema={schema}
       resolvedConfig={resolvedConfig}
       envPrefix={envPrefix}

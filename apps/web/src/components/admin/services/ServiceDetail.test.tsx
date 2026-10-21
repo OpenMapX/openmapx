@@ -1,6 +1,10 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
+vi.mock("@/integration-api/runtime/EnvProvider", () => ({
+  useEnv: () => ({ apiUrl: "http://admin.test" }),
+}));
+
 vi.mock("@/hooks/useServices", () => ({
   useServiceDetail: (serviceId: string) => ({
     data: {

@@ -1,4 +1,5 @@
 import { credentialSetupSchema } from "@openmapx/extension-contracts/integration";
+
 import { serviceManifestSchema } from "@openmapx/extension-contracts/service";
 import z from "zod/v4";
 import { adminCountSchema, adminJsonValueSchema, adminTimestampSchema } from "../admin";
@@ -172,3 +173,5 @@ export type AdminServiceAction = z.infer<typeof adminServiceActionSchema>;
 export type AdminServicesBulkAction = z.infer<typeof adminServicesBulkActionSchema>;
 export type AdminServicesChecked = z.infer<typeof adminServicesCheckedSchema>;
 export type AdminServiceLogsQuery = z.infer<typeof adminServiceLogsQuerySchema>;
+
+export { getProvidedCapabilityNames } from "@openmapx/extension-contracts/service";

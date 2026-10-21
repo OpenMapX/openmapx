@@ -26,7 +26,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useIntegrationAdmin, useIntegrationReload } from "@/lib/admin/integrationAdmin";
-import { useIntegrationMutationOwner } from "@/lib/admin/useIntegrationMutationOwner";
+import { useAdminMutationOwner } from "@/lib/admin/useAdminMutationOwner";
 import { AdminPageHeader } from "../shared/AdminPageHeader";
 import { AdminTablePagination } from "../shared/AdminTablePagination";
 import { AdminTableSurface } from "../shared/AdminTableSurface";
@@ -92,7 +92,7 @@ function HealthCell({ integration }: { integration: IntegrationSummary }) {
 
 export function IntegrationList() {
   const admin = useIntegrationAdmin();
-  const owner = useIntegrationMutationOwner(admin.client);
+  const owner = useAdminMutationOwner(admin.client);
 
   const [search, setSearch] = useState("");
   const [domainFilter, setDomainFilter] = useState("all");

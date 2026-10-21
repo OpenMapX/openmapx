@@ -5,8 +5,9 @@ import Card from "@mui/material/Card";
 import CardContent from "@mui/material/CardContent";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
+import type { AdminServiceSummary } from "@openmapx/core/api-contracts";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { type ServiceSummary, useServicesList } from "@/hooks/useServices";
+import { useServicesList } from "@/hooks/useServices";
 import { useIntegrationAdmin } from "@/lib/admin/integrationAdmin";
 import { CapabilityBindingPicker } from "./CapabilityBindingPicker";
 
@@ -18,7 +19,7 @@ function ServiceRequireRow({
   services,
 }: {
   req: RequireEntry & { service: string };
-  services: ServiceSummary[];
+  services: AdminServiceSummary[];
 }) {
   const installed = services.find((s) => s.id === req.service);
 
@@ -75,7 +76,7 @@ function CapabilityRequireRow({
   onBind,
 }: {
   req: RequireEntry & { capability: string };
-  services: ServiceSummary[];
+  services: AdminServiceSummary[];
   currentBinding: string | null;
   onBind: (serviceId: string | null) => void;
 }) {

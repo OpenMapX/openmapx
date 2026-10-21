@@ -39,7 +39,7 @@ import {
   useIntegrationAdmin,
   useIntegrationReload,
 } from "@/lib/admin/integrationAdmin";
-import { useIntegrationMutationOwner } from "@/lib/admin/useIntegrationMutationOwner";
+import { useAdminMutationOwner } from "@/lib/admin/useAdminMutationOwner";
 import { AdminTablePagination } from "../shared/AdminTablePagination";
 import { useAdminToast } from "../shared/AdminToast";
 import { MetaRow } from "../shared/MetaRow";
@@ -460,7 +460,7 @@ function CredentialsTab({
   integrationId: string;
 }) {
   const admin = useIntegrationAdmin();
-  const owner = useIntegrationMutationOwner(admin.client, integrationId);
+  const owner = useAdminMutationOwner(admin.client, integrationId);
   const [dialogField, setDialogField] = useState<CredentialStatus | null>(null);
   const showToast = useAdminToast();
 
@@ -1011,7 +1011,7 @@ export function IntegrationDetail({ id }: IntegrationDetailProps) {
 
   const { data, isLoading, isError } = useQuery(admin.queries.detail(id));
 
-  const owner = useIntegrationMutationOwner(admin.client, id);
+  const owner = useAdminMutationOwner(admin.client, id);
   const toggleMutation = useMutation({
     mutationKey: ["integration-toggle", admin.apiUrl, id],
     retry: false,
