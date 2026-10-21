@@ -10,6 +10,7 @@ import { activityAdminOperations } from "./contracts/activity-admin";
 import type { AdminOperation } from "./contracts/admin";
 import { dataManagerAdminOperations } from "./contracts/data-manager-admin";
 import { integrationAdminOperations } from "./contracts/integration-admin";
+import { serviceAdminOperations } from "./contracts/service-admin";
 import { ApiContractError } from "./sdk-transport";
 
 export type AdminSdkRequestOptions = Omit<RequestInit, "signal" | "credentials"> &
@@ -21,6 +22,10 @@ export type AdminSdkRequestOptions = Omit<RequestInit, "signal" | "credentials">
     /** Called within ApiClient's abort/deadline lifetime; never receives a raw Response. */
     onTextChunk?: (chunk: string) => void | Promise<void>;
   };
+/** Required consumer for incremental plain text; successful envelope data is undefined. */
+export type AdminTextStreamRequestOptions = AdminSdkRequestOptions & {
+  onTextChunk: NonNullable<AdminSdkRequestOptions["onTextChunk"]>;
+};
 /** Constructs a connection target only; the caller owns the subsequent EventSource lifetime. */
 export interface AdminEventStreamTargetOptions {
   client?: ApiClient;
@@ -44,6 +49,7 @@ const operations = {
   ...dataManagerAdminOperations,
   ...activityAdminOperations,
   ...integrationAdminOperations,
+  ...serviceAdminOperations,
 };
 type OperationId = keyof typeof operations;
 function positive(value: number | undefined, fallback: number): number {

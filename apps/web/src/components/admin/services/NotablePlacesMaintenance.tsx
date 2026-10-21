@@ -13,14 +13,21 @@ import Typography from "@mui/material/Typography";
 import { createApiClient } from "@openmapx/core";
 import * as sdk from "@openmapx/core/api-admin-sdk";
 import type { NotablePlacesStatus } from "@openmapx/core/api-contracts";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { useMemo, useState } from "react";
+import { SERVICE_READ_TIMEOUT_MS } from "@/lib/admin/serviceAdmin";
+import { useServiceJobRegistration } from "@/lib/admin/serviceAdminJobs";
+import { useAdminMutationOwner } from "@/lib/admin/useAdminMutationOwner";
 import { runAdminOperation } from "../operations/adminOperationsApi";
 import { useAdminToast } from "../shared/AdminToast";
 import { ConfirmDialog } from "../shared/ConfirmDialog";
 
 export type { NotablePlacesStatus };
+
+export function notablePlacesStatusQueryKey(apiUrl: string) {
+  return ["admin", "notable-places", apiUrl, "status"] as const;
+}
 
 /**
  * The Wikidata index that tells search which of several namesakes is famous.
@@ -28,33 +35,52 @@ export type { NotablePlacesStatus };
  * card shows what is published and lets an operator rebuild it now.
  */
 export function NotablePlacesMaintenance({ apiUrl }: { apiUrl: string }) {
+  return <NotablePlacesMaintenanceView key={apiUrl} apiUrl={apiUrl} />;
+}
+function NotablePlacesMaintenanceView({ apiUrl }: { apiUrl: string }) {
   const showToast = useAdminToast();
-  const queryClient = useQueryClient();
+  const register = useServiceJobRegistration();
   const client = useMemo(
     () => createApiClient({ baseUrl: apiUrl, credentials: "include" }),
     [apiUrl],
   );
   const [confirmOpen, setConfirmOpen] = useState(false);
   const statusQuery = useQuery<NotablePlacesStatus | null>({
-    queryKey: ["admin", "notable-places", "status"],
+    queryKey: notablePlacesStatusQueryKey(apiUrl),
     queryFn: async ({ signal }) => {
-      const response = await sdk.getApiDataManagerNotablePlacesStatus({ client, signal });
+      const response = await sdk.getApiDataManagerNotablePlacesStatus({
+        client,
+        signal,
+        timeoutMs: SERVICE_READ_TIMEOUT_MS,
+      });
       if (response.status === 404) return null;
       return sdk.unwrapAdminResponse(response);
     },
     refetchInterval: (query) => (query.state.data?.building ? 10_000 : 60_000),
   });
   const status = statusQuery.data;
+  const owner = useAdminMutationOwner(client, String(confirmOpen));
   const operation = useMutation({
-    mutationFn: () => runAdminOperation(apiUrl, "notable-places-build", {}),
-    onSuccess: (jobId) => {
-      showToast(`Queued notable-places build (${jobId})`);
-      setConfirmOpen(false);
-      void queryClient.invalidateQueries({ queryKey: ["admin", "jobs"] });
-      void queryClient.invalidateQueries({ queryKey: ["admin", "notable-places", "status"] });
+    retry: false,
+    mutationFn: async () => {
+      const execution = owner;
+      const effect = {
+        kind: "operations",
+        refreshKeys: [notablePlacesStatusQueryKey(apiUrl)],
+      } as const;
+      try {
+        const jobId = await runAdminOperation(client, "notable-places-build", {});
+        register({ client, apiUrl, jobId, effect });
+        if (execution.active) {
+          showToast(`Queued notable-places build (${jobId})`);
+          setConfirmOpen(false);
+        }
+      } catch (error) {
+        if (execution.active)
+          showToast(error instanceof Error ? error.message : "Operation failed", "error");
+        throw error;
+      }
     },
-    onError: (error) =>
-      showToast(error instanceof Error ? error.message : "Operation failed", "error"),
   });
 
   return (

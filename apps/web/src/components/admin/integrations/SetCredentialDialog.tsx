@@ -17,7 +17,7 @@ import type { CredentialSetup } from "@openmapx/integration-framework";
 import { useMutation } from "@tanstack/react-query";
 import { useState } from "react";
 import { useIntegrationAdmin } from "@/lib/admin/integrationAdmin";
-import { useIntegrationMutationOwner } from "@/lib/admin/useIntegrationMutationOwner";
+import { useAdminMutationOwner } from "@/lib/admin/useAdminMutationOwner";
 import { CredentialSetupGuide } from "./CredentialSetupGuide";
 
 interface SetCredentialDialogProps {
@@ -40,7 +40,7 @@ export function SetCredentialDialog({
   setup,
 }: SetCredentialDialogProps) {
   const admin = useIntegrationAdmin();
-  const owner = useIntegrationMutationOwner(
+  const owner = useAdminMutationOwner(
     admin.client,
     JSON.stringify([integrationId, credentialKey, open]),
   );

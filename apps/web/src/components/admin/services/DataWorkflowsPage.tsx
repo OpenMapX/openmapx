@@ -20,95 +20,34 @@ import Stack from "@mui/material/Stack";
 import Switch from "@mui/material/Switch";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
+import * as sdk from "@openmapx/core/api-admin-sdk";
+import type {
+  AdminServiceData,
+  AdminServiceSharedMobilityCategory,
+} from "@openmapx/core/api-contracts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useState } from "react";
-import { useEnv } from "@/integration-api/runtime/EnvProvider";
-import { formatBytes } from "@/lib/storageFormat";
-import { AdminOperationCard } from "../operations/AdminOperationCard";
 import {
-  type AdminOperationContract,
-  fetchAdminOperations,
-} from "../operations/adminOperationsApi";
+  invalidateServiceAdministration,
+  serviceAdminQueries,
+  serviceOrThrow,
+} from "@/lib/admin/serviceAdmin";
+import { formatBytes } from "@/lib/storageFormat";
+import { useActivityClient } from "../activity/activityQueries";
+import { AdminOperationCard } from "../operations/AdminOperationCard";
+import type { AdminOperationContract } from "../operations/adminOperationsApi";
 import { AdminPageHeader } from "../shared/AdminPageHeader";
 import { useAdminToast } from "../shared/AdminToast";
 import { AmbientPlacesMaintenance } from "./AmbientPlacesMaintenance";
-import { NotablePlacesMaintenance } from "./NotablePlacesMaintenance";
-import { OvertureMaintenance } from "./OvertureMaintenance";
-import { SearchIndexMaintenance } from "./SearchIndexMaintenance";
+import { NotablePlacesMaintenance, notablePlacesStatusQueryKey } from "./NotablePlacesMaintenance";
+import { OvertureMaintenance, overtureStatusQueryKey } from "./OvertureMaintenance";
+import { SearchIndexMaintenance, searchIndexStatusQueryKey } from "./SearchIndexMaintenance";
 import { TransitSourcesSection } from "./TransitSourcesSection";
 
-interface OsmInfo {
-  found: boolean;
-  filename?: string;
-  sizeBytes?: number;
-  modifiedAt?: string;
-  region?: string;
-}
-
-interface BuildStatus {
-  target: string;
-  built: boolean;
-  builtAt?: string;
-}
-
-interface MotisTransitousStatus {
-  configFound: boolean;
-  datasetCount: number;
-  realtimeFeedCount: number;
-  gbfsFeedCount: number;
-  feedProxyUrlCount: number;
-  gbfsProxyUrl: string | null;
-  feedProxyMode: "none" | "self-hosted" | "transitous-cloud" | "mixed";
-  feedProxyConfigFound: boolean;
-  feedProxyVarsFound: boolean;
-  feedProxyFeedCount: number;
-  capabilityState: "healthy" | "stale" | "missing" | "error";
-  capabilityError?: string;
-  activeEpoch: string | null;
-  candidateEpoch: string | null;
-  testedAt: string | null;
-  configHash: string | null;
-  licenseHash: string | null;
-  rentalProviderCount: number;
-  rentalProviderGroupCount: number;
-  rollbackAvailable: boolean;
-  operationsProfile: "regional-assisted" | "regional-sovereign" | "planet" | "unknown";
-  activeSlot: "A" | "B" | null;
-  previousHealthySlot: "A" | "B" | null;
-  preflightState: "passed" | "blocked" | "missing";
-  preflightRequiredDiskBytes: number | null;
-  preflightFreeDiskBytes: number | null;
-  pinProposalPending: boolean;
-  crowdsourceState: "disabled-pending-review";
-  gbfsCatalog: {
-    state: "active" | "missing" | "error";
-    commit: string | null;
-    lockedAt: string | null;
-    registryRows: number;
-    registryAdded: number;
-    transitousPreferred: number;
-    quarantined: number;
-    validationFailed: number;
-    sources: Array<{
-      sourceId: string;
-      country: string;
-      status: "configured" | "excluded";
-      observation: "validated" | "unknown";
-      errorClass?: string;
-      lastObservedSuccess?: string;
-      lastErrorAt?: string;
-      dataAge: "unknown";
-    }>;
-  };
-}
-
-interface DataResponse {
-  osm: OsmInfo;
-  builds: BuildStatus[];
-  motisTransitous: MotisTransitousStatus;
-  fetchedAt: string;
-}
+type OsmInfo = AdminServiceData["osm"];
+type BuildStatus = AdminServiceData["builds"][number];
+type MotisTransitousStatus = AdminServiceData["motisTransitous"];
 
 /** Overture and search operations have their own maintenance sections below. */
 const DATA_OPERATION_GROUPS: ReadonlySet<AdminOperationContract["group"]> = new Set([
@@ -116,21 +55,6 @@ const DATA_OPERATION_GROUPS: ReadonlySet<AdminOperationContract["group"]> = new 
   "build",
   "transit",
 ]);
-
-interface SharedMobilityOperationsState {
-  rollbackCategories: Array<"bike" | "scooter" | "car">;
-  decisions: Array<{
-    category: "bike" | "scooter" | "car";
-    recordedAt: string;
-    decision: {
-      policy: "fanout" | "shadow" | "motis-first";
-      local: "healthy" | "partial" | "error";
-      calledAdapters: string[];
-      skippedAdapters: string[];
-      partial: boolean;
-    };
-  }>;
-}
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString(undefined, {
@@ -157,20 +81,17 @@ const BUILD_LABELS: Record<string, string> = {
 
 function DataOperationsSection({ apiUrl }: { apiUrl: string }) {
   const showToast = useAdminToast();
-  const queryClient = useQueryClient();
+  const { client } = useActivityClient();
   const [lastJobId, setLastJobId] = useState<string | null>(null);
 
-  const catalog = useQuery<AdminOperationContract[]>({
-    queryKey: ["admin", "operations"],
-    queryFn: () => fetchAdminOperations(apiUrl),
+  const catalog = useQuery({
+    ...serviceAdminQueries(client, apiUrl).operations(),
     staleTime: 5 * 60_000,
   });
 
   const handleQueued = (jobId: string, operation: AdminOperationContract) => {
     setLastJobId(jobId);
     showToast(`Queued ${operation.title} (${jobId})`);
-    void queryClient.invalidateQueries({ queryKey: ["admin", "jobs"] });
-    void queryClient.invalidateQueries({ queryKey: ["admin-services-data"] });
   };
 
   return (
@@ -231,13 +152,18 @@ function DataOperationsSection({ apiUrl }: { apiUrl: string }) {
         </Box>
       )}
       <Grid container spacing={2}>
-        {(catalog.data ?? [])
+        {(catalog.data?.operations ?? [])
           .filter((operation) => DATA_OPERATION_GROUPS.has(operation.group))
           .map((operation) => (
             <Grid key={operation.id} size={{ xs: 12, md: 6 }}>
               <AdminOperationCard
                 apiUrl={apiUrl}
                 operation={operation}
+                refreshKeys={[
+                  overtureStatusQueryKey(apiUrl),
+                  searchIndexStatusQueryKey(apiUrl),
+                  notablePlacesStatusQueryKey(apiUrl),
+                ]}
                 onQueued={handleQueued}
                 onError={(message) => showToast(message, "error")}
               />
@@ -587,31 +513,29 @@ function MotisTransitousSection({ status }: { status: MotisTransitousStatus }) {
 
 function SharedMobilityPolicySection({ apiUrl }: { apiUrl: string }) {
   const queryClient = useQueryClient();
-  const { data } = useQuery<SharedMobilityOperationsState>({
-    queryKey: ["admin-shared-mobility-policy"],
-    queryFn: async () => {
-      const response = await fetch(`${apiUrl}/api/admin/shared-mobility`, {
-        credentials: "include",
-      });
-      if (!response.ok) throw new Error("Failed to load shared mobility policy");
-      return response.json();
-    },
+  const { client } = useActivityClient();
+  const policy = useQuery({
+    ...serviceAdminQueries(client, apiUrl).policy(),
     refetchInterval: 30_000,
   });
+  const data = policy.data;
   const rollback = useMutation({
-    mutationFn: async ({ category, enabled }: { category: string; enabled: boolean }) => {
-      const response = await fetch(
-        `${apiUrl}/api/admin/shared-mobility/${encodeURIComponent(category)}/rollback`,
-        {
-          method: "POST",
-          credentials: "include",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ enabled }),
-        },
+    retry: false,
+    mutationFn: async ({
+      category,
+      enabled,
+    }: {
+      category: AdminServiceSharedMobilityCategory;
+      enabled: boolean;
+    }) => {
+      const effect = { kind: "policy" } as const;
+      const result = await serviceOrThrow(
+        sdk.rollbackAdminSharedMobility(category, { enabled }, { client }),
       );
-      if (!response.ok) throw new Error("Failed to update shared mobility rollback");
+      // This response is the completed policy change, not a job acknowledgement.
+      await invalidateServiceAdministration(queryClient, apiUrl, effect);
+      return result;
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["admin-shared-mobility-policy"] }),
   });
 
   return (
@@ -623,6 +547,8 @@ function SharedMobilityPolicySection({ apiUrl }: { apiUrl: string }) {
         MOTIS-first decisions contain category-level operational state only; no coordinates or
         vehicle IDs are recorded. Enable rollback to restore fan-out immediately.
       </Typography>
+      {policy.isError && <Alert severity="error">Failed to load shared mobility policy.</Alert>}
+      {rollback.isError && <Alert severity="error">{rollback.error.message}</Alert>}
       <Stack spacing={1.5}>
         {(["bike", "scooter", "car"] as const).map((category) => {
           const record = data?.decisions.find((decision) => decision.category === category);
@@ -665,12 +591,14 @@ function SharedMobilityPolicySection({ apiUrl }: { apiUrl: string }) {
 }
 
 export function DataWorkflowsPage() {
-  const { apiUrl } = useEnv();
+  const { apiUrl } = useActivityClient();
+  return <DataWorkflowsView key={apiUrl} />;
+}
+function DataWorkflowsView() {
+  const { apiUrl, client } = useActivityClient();
 
-  const { data, isLoading, isError, refetch, isFetching } = useQuery<DataResponse>({
-    queryKey: ["admin-services-data"],
-    queryFn: () =>
-      fetch(`${apiUrl}/api/admin/services/data`, { credentials: "include" }).then((r) => r.json()),
+  const { data, isLoading, isError, refetch, isFetching } = useQuery({
+    ...serviceAdminQueries(client, apiUrl).data(),
     refetchInterval: 30_000,
   });
 

@@ -10,18 +10,21 @@ import {
 import { getServiceRegistry } from "../services/service-registry";
 import { buildConfigurationInput, integrationSchemas } from "../services/trusted-config-operations";
 import { dockerComposeAction, STACK_STOP_GUIDANCE } from "../utils/docker-compose";
-import { requireAdmin } from "../utils/require-admin";
+import { getAdminSession, requireAdmin } from "../utils/require-admin";
 import { declareRouteAuth } from "../utils/route-auth";
+import { registerServiceAdminRoute } from "./admin-service-contract";
 
 export async function registerAdminComposeRoutes(
   // biome-ignore lint/suspicious/noExplicitAny: accept any Fastify logger variant
   app: FastifyInstance<any, any, any, any>,
 ): Promise<void> {
   declareRouteAuth(app, "admin");
+  app.addHook("preHandler", async (request) => {
+    request.adminSession = await requireAdmin(request);
+  });
 
   // GET /api/admin/compose/preview — render generated compose YAML from registry
-  app.get("/api/admin/compose/preview", async (req, reply) => {
-    await requireAdmin(req);
+  registerServiceAdminRoute(app, "getAdminComposePreview", async (_req, reply) => {
     let registry: ReturnType<typeof getServiceRegistry>;
     try {
       registry = getServiceRegistry();
@@ -42,27 +45,35 @@ export async function registerAdminComposeRoutes(
   });
 
   // POST /api/admin/compose/up — bring the whole stack up
-  app.post("/api/admin/compose/up", async (req, reply) => {
-    const adminSession = await requireAdmin(req);
-    let idempotencyValue: string;
-    try {
-      idempotencyValue = parseDirectOpsIdempotency(req.headers[DIRECT_OPS_IDEMPOTENCY_HEADER]);
-    } catch (error) {
-      reply.code(400);
-      return { ok: false, error: (error as Error).message };
-    }
-    const operationKey = createDirectAdminOpsKey(adminSession.user.id, idempotencyValue);
-    await renderAndPersistCompose({ operationKey });
-    const hardlinks = await applyHardlinksFromPlan({ operationIdentity: operationKey });
-    const r = await dockerComposeAction("", "start", {
-      operationKey,
-    });
-    return { ok: r.exitCode === 0, stdout: r.stdout, hardlinks };
-  });
+  registerServiceAdminRoute(
+    app,
+    "startAdminCompose",
+    async (req) => {
+      const adminSession = getAdminSession(req);
+      const idempotencyValue = parseDirectOpsIdempotency(
+        req.headers[DIRECT_OPS_IDEMPOTENCY_HEADER],
+      );
+      const operationKey = createDirectAdminOpsKey(adminSession.user.id, idempotencyValue);
+      await renderAndPersistCompose({ operationKey });
+      const hardlinks = await applyHardlinksFromPlan({ operationIdentity: operationKey });
+      const r = await dockerComposeAction("", "start", {
+        operationKey,
+      });
+      return { ok: r.exitCode === 0, stdout: r.stdout, hardlinks };
+    },
+    {
+      beforeValidation: async (request, reply) => {
+        try {
+          parseDirectOpsIdempotency(request.headers[DIRECT_OPS_IDEMPOTENCY_HEADER]);
+        } catch (error) {
+          return reply.code(400).send({ ok: false, error: (error as Error).message });
+        }
+      },
+    },
+  );
 
   // POST /api/admin/compose/down — stop the whole stack
-  app.post("/api/admin/compose/down", async (req, reply) => {
-    await requireAdmin(req);
+  registerServiceAdminRoute(app, "stopAdminCompose", async (_req, reply) => {
     reply.code(503);
     return { ok: false, error: STACK_STOP_GUIDANCE };
   });

@@ -14,10 +14,13 @@ import Typography from "@mui/material/Typography";
 import { createApiClient } from "@openmapx/core";
 import * as sdk from "@openmapx/core/api-admin-sdk";
 import type { SearchIndexStatus } from "@openmapx/core/api-contracts";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { useLocale, useTranslations } from "next-intl";
 import { useMemo, useState } from "react";
+import { SERVICE_READ_TIMEOUT_MS } from "@/lib/admin/serviceAdmin";
+import { useServiceJobRegistration } from "@/lib/admin/serviceAdminJobs";
+import { useAdminMutationOwner } from "@/lib/admin/useAdminMutationOwner";
 import { runAdminOperation } from "../operations/adminOperationsApi";
 import { useAdminToast } from "../shared/AdminToast";
 import { ConfirmDialog } from "../shared/ConfirmDialog";
@@ -39,11 +42,18 @@ export function resolveSearchIndexRegion(
   return input.trim() || status?.region || "";
 }
 
+export function searchIndexStatusQueryKey(apiUrl: string) {
+  return ["admin", "search-index", apiUrl, "status"] as const;
+}
+
 export function SearchIndexMaintenance({ apiUrl }: { apiUrl: string }) {
+  return <SearchIndexMaintenanceView key={apiUrl} apiUrl={apiUrl} />;
+}
+function SearchIndexMaintenanceView({ apiUrl }: { apiUrl: string }) {
   const t = useTranslations("adminSearchIndex");
   const locale = useLocale();
   const showToast = useAdminToast();
-  const queryClient = useQueryClient();
+  const register = useServiceJobRegistration();
   const client = useMemo(
     () => createApiClient({ baseUrl: apiUrl, credentials: "include" }),
     [apiUrl],
@@ -51,9 +61,13 @@ export function SearchIndexMaintenance({ apiUrl }: { apiUrl: string }) {
   const [region, setRegion] = useState("");
   const [confirmOpen, setConfirmOpen] = useState(false);
   const statusQuery = useQuery<SearchIndexStatus | null>({
-    queryKey: ["admin", "search-index", "status"],
+    queryKey: searchIndexStatusQueryKey(apiUrl),
     queryFn: async ({ signal }) => {
-      const response = await sdk.getApiDataManagerSearchIndexStatus({ client, signal });
+      const response = await sdk.getApiDataManagerSearchIndexStatus({
+        client,
+        signal,
+        timeoutMs: SERVICE_READ_TIMEOUT_MS,
+      });
       if (response.status === 404) return null;
       return sdk.unwrapAdminResponse(response);
     },
@@ -61,16 +75,33 @@ export function SearchIndexMaintenance({ apiUrl }: { apiUrl: string }) {
   });
   const status = statusQuery.data;
   const effectiveRegion = resolveSearchIndexRegion(region, status);
+  const owner = useAdminMutationOwner(
+    client,
+    JSON.stringify([region, effectiveRegion, confirmOpen]),
+  );
   const operation = useMutation({
-    mutationFn: () => runAdminOperation(apiUrl, "search-index-build", { region: effectiveRegion }),
-    onSuccess: (jobId) => {
-      showToast(t("queued", { jobId }));
-      setConfirmOpen(false);
-      void queryClient.invalidateQueries({ queryKey: ["admin", "jobs"] });
-      void queryClient.invalidateQueries({ queryKey: ["admin", "search-index", "status"] });
+    retry: false,
+    mutationFn: async () => {
+      const execution = owner;
+      const effect = {
+        kind: "operations",
+        refreshKeys: [searchIndexStatusQueryKey(apiUrl)],
+      } as const;
+      try {
+        const jobId = await runAdminOperation(client, "search-index-build", {
+          region: effectiveRegion,
+        });
+        register({ client, apiUrl, jobId, effect });
+        if (execution.active) {
+          showToast(t("queued", { jobId }));
+          setConfirmOpen(false);
+        }
+      } catch (error) {
+        if (execution.active)
+          showToast(error instanceof Error ? error.message : t("operationFailed"), "error");
+        throw error;
+      }
     },
-    onError: (error) =>
-      showToast(error instanceof Error ? error.message : t("operationFailed"), "error"),
   });
 
   return (

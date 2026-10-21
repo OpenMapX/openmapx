@@ -7,60 +7,63 @@ import CircularProgress from "@mui/material/CircularProgress";
 import Paper from "@mui/material/Paper";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
+import * as sdk from "@openmapx/core/api-admin-sdk";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useRef } from "react";
+import { useActivityClient } from "@/components/admin/activity/activityQueries";
 import { useComposePreview } from "@/hooks/useComposePreview";
-import { useEnv } from "@/integration-api/runtime/EnvProvider";
+import { invalidateServiceAdministration, serviceOrThrow } from "@/lib/admin/serviceAdmin";
+import { useAdminMutationOwner } from "@/lib/admin/useAdminMutationOwner";
 import { useAdminToast } from "../shared/AdminToast";
 
 export function ComposePreview() {
-  const { apiUrl } = useEnv();
+  const { client, apiUrl } = useActivityClient();
+  return <ComposePreviewView key={apiUrl} client={client} apiUrl={apiUrl} />;
+}
+
+function ComposePreviewView({ client, apiUrl }: ReturnType<typeof useActivityClient>) {
   const queryClient = useQueryClient();
   const showToast = useAdminToast();
   const { data, isLoading, error } = useComposePreview();
+  const owner = useAdminMutationOwner(client, apiUrl);
   const composeUpIntent = useRef<string | null>(null);
 
   const composeUp = useMutation({
+    retry: false,
     mutationFn: async () => {
+      const execution = owner;
+      const effect = { kind: "compose" } as const;
       const idempotencyKey = composeUpIntent.current ?? crypto.randomUUID();
       composeUpIntent.current = idempotencyKey;
-      const res = await fetch(`${apiUrl}/api/admin/compose/up`, {
-        method: "POST",
-        credentials: "include",
-        headers: {
-          "Idempotency-Key": idempotencyKey,
-        },
-      });
-      if (!res.ok) throw new Error("Compose up failed");
-      return res.json() as Promise<{ ok: boolean }>;
+      try {
+        const result = await serviceOrThrow(
+          sdk.startAdminCompose({ "idempotency-key": idempotencyKey }, undefined, { client }),
+        );
+        if (!result.ok) throw new Error("Compose up failed");
+        composeUpIntent.current = null;
+        void invalidateServiceAdministration(queryClient, apiUrl, effect);
+        if (execution.active) showToast("Compose up completed");
+        return result;
+      } catch (error) {
+        if (execution.active)
+          showToast(error instanceof Error ? error.message : "Compose up failed", "error");
+        throw error;
+      }
     },
-    onSuccess: () => {
-      composeUpIntent.current = null;
-      showToast("Compose up completed");
-      void queryClient.invalidateQueries({ queryKey: ["admin", "services"] });
-      void queryClient.invalidateQueries({ queryKey: ["admin", "overview"] });
-      void queryClient.invalidateQueries({ queryKey: ["admin", "compose-preview"] });
-    },
-    onError: (err) => showToast(err instanceof Error ? err.message : "Compose up failed", "error"),
   });
-
   const composeDown = useMutation({
+    retry: false,
     mutationFn: async () => {
-      const res = await fetch(`${apiUrl}/api/admin/compose/down`, {
-        method: "POST",
-        credentials: "include",
-      });
-      if (!res.ok) throw new Error("Compose down failed");
-      return res.json() as Promise<{ ok: boolean }>;
+      const execution = owner;
+      try {
+        // This operation has no success variant: only validated host guidance/errors.
+        return await serviceOrThrow(sdk.stopAdminCompose(undefined, { client }));
+      } catch (error) {
+        if (execution.active)
+          showToast(error instanceof Error ? error.message : "Compose down failed", "error");
+        throw error;
+      }
     },
-    onSuccess: () => {
-      showToast("Compose down completed");
-      void queryClient.invalidateQueries({ queryKey: ["admin", "services"] });
-      void queryClient.invalidateQueries({ queryKey: ["admin", "overview"] });
-      void queryClient.invalidateQueries({ queryKey: ["admin", "compose-preview"] });
-    },
-    onError: (err) =>
-      showToast(err instanceof Error ? err.message : "Compose down failed", "error"),
   });
 
   if (isLoading) {
@@ -78,7 +81,7 @@ export function ComposePreview() {
   }
 
   if (error) {
-    return <Alert severity="error">{(error as Error).message}</Alert>;
+    return <Alert severity="error">{error.message}</Alert>;
   }
 
   return (

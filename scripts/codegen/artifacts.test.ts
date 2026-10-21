@@ -173,9 +173,155 @@ function killProbe(pid: number) {
   try {
     process.kill(pid, "SIGKILL");
   } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "EPERM") {
+      const states = execFileSync("ps", ["-axo", "pid=,pgid=,stat="], {
+        encoding: "utf8",
+        timeout: 1_000,
+      })
+        .trim()
+        .split("\n")
+        .map((line) => line.trim().split(/\s+/));
+      if (
+        states.every((row) => row.length === 3) &&
+        !states.some(
+          ([id, group, state]) =>
+            (pid < 0 ? Number(group) === -pid : Number(id) === pid) && !state.startsWith("Z"),
+        )
+      )
+        return;
+    }
     if ((error as NodeJS.ErrnoException).code !== "ESRCH") throw error;
   }
 }
+
+it("preserves overflow after actual group EPERM with a retained writer zombie", async () => {
+  const { source, destination } = await fixture();
+  await writeFile(join(source, "client.ts"), "export const client={a:1};\n");
+  const marker = join(destination, "zombie-owner.json");
+  const child = spawn(
+    process.execPath,
+    [resolve("scripts/codegen/fixtures/retained-zombie.mjs"), source, destination, marker],
+    { detached: true, stdio: ["ignore", "pipe", "pipe"] },
+  );
+  let output = "";
+  child.stdout.on("data", (chunk) => {
+    output += chunk;
+  });
+  child.stderr.on("data", (chunk) => {
+    output += chunk;
+  });
+  const finished = new Promise<number | null>((resolve, reject) => {
+    child.once("error", reject);
+    child.once("close", resolve);
+  });
+  const watchdog = setTimeout(() => {
+    if (child.pid) killProbe(-child.pid);
+  }, 10_000);
+  try {
+    expect(await finished, output).toBe(0);
+    const events = (await readFile(`${marker}.events`, "utf8"))
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line));
+    expect(events.find((event) => event.event === "formatter-returned").error.code).toBe(
+      "ERR_CHILD_PROCESS_STDIO_MAXBUFFER",
+    );
+    expect(
+      events.findIndex((event) => event.event === "stable-before-scratch-cleanup"),
+    ).toBeLessThan(events.findIndex((event) => event.event === "scratch-removed"));
+    if (process.platform === "darwin") {
+      for (const signal of ["SIGKILL", 0])
+        expect(
+          events.some(
+            (event) =>
+              event.event === "kill" && event.signal === signal && event.error?.code === "EPERM",
+          ),
+        ).toBe(true);
+    }
+    console.log(JSON.stringify(events));
+  } finally {
+    clearTimeout(watchdog);
+    await writeFile(`${marker}.release`, "release");
+    const group = await readProbeMarker(`${marker}.group`);
+    const markerText = await readProbeMarker(marker);
+    const pids = markerText
+      ? (JSON.parse(markerText) as { supervisor: number; writer: number; wrapper: number })
+      : undefined;
+    if (group && (!pids || probeIsLive(pids.wrapper) || probeIsLive(pids.writer)))
+      killProbe(-Number(group));
+    const until = Date.now() + 2_000;
+    while (
+      pids &&
+      [pids.supervisor, pids.writer, pids.wrapper].some(probeIsLive) &&
+      Date.now() < until
+    )
+      await delay(5);
+    if (pids) {
+      for (const pid of [pids.supervisor, pids.writer, pids.wrapper])
+        expect(probeIsLive(pid)).toBe(false);
+      expect(JSON.parse(await readFile(`${marker}.reaped`, "utf8")).reaped).toBe(pids.writer);
+    }
+    if (child.pid && probeIsLive(child.pid)) killProbe(-child.pid);
+    await finished;
+  }
+}, 15_000);
+
+it.each(
+  ["SIGKILL", 0].flatMap((signal) =>
+    ["live", "failed", "empty", "malformed"].map((inspection) => ({ signal, inspection })),
+  ),
+)(
+  "fails closed on group $signal EPERM when process inspection is $inspection",
+  async ({ signal, inspection }) => {
+    const { source, destination } = await fixture();
+    await writeFile(join(source, "client.ts"), "export const client={a:1};\n");
+    const denied = Object.assign(new Error("kill EPERM"), { code: "EPERM" });
+    const group = 123456789; // Synthetic child: no real signals are sent in this classification test.
+    const kill = vi.spyOn(process, "kill").mockImplementation((_pid, requestedSignal) => {
+      if (requestedSignal === signal) throw denied;
+      throw Object.assign(new Error("kill ESRCH"), { code: "ESRCH" });
+    });
+    vi.mocked(spawn).mockImplementationOnce(() => {
+      const child = new EventEmitter() as ChildProcess;
+      Object.assign(child, { pid: group });
+      process.nextTick(() => {
+        child.emit("exit", 0, null);
+        child.emit("close", 0, null);
+      });
+      return child;
+    });
+    vi.mocked(execFileSync).mockImplementation(() => {
+      if (inspection === "failed") throw new Error("inspection failed");
+      return inspection === "live"
+        ? `${group} S\n`
+        : inspection === "empty"
+          ? ""
+          : "unobservable\n";
+    });
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      const result = await collectArtifacts(source, destination, ["client.ts"]).catch(
+        (error: unknown) => error,
+      );
+      expect(result).toBeInstanceOf(Error);
+      const cleanupError =
+        signal === "SIGKILL" ? (result as AggregateError).errors?.at(-1) : result;
+      expect(cleanupError).toBeInstanceOf(Error);
+      expect((cleanupError as Error).message).toMatch(/EPERM|inspect/i);
+      expect(vi.getTimerCount()).toBe(0);
+      expect(await readFile(join(source, "client.ts"), "utf8")).toBe(
+        "export const client={a:1};\n",
+      );
+    } finally {
+      kill.mockRestore();
+      vi.mocked(execFileSync).mockImplementation(
+        (await vi.importActual<typeof import("node:child_process")>("node:child_process"))
+          .execFileSync,
+      );
+      vi.useRealTimers();
+    }
+  },
+);
 
 function probeIsLive(pid: number) {
   try {

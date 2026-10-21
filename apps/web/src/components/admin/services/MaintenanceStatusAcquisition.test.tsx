@@ -3,10 +3,13 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, cleanup, render, screen } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { NotablePlacesMaintenance } from "./NotablePlacesMaintenance";
-import { OvertureMaintenance } from "./OvertureMaintenance";
-import { SearchIndexMaintenance } from "./SearchIndexMaintenance";
+import { ServiceAdministrationProvider } from "@/lib/admin/serviceAdminJobs";
+import { NotablePlacesMaintenance, notablePlacesStatusQueryKey } from "./NotablePlacesMaintenance";
+import { OvertureMaintenance, overtureStatusQueryKey } from "./OvertureMaintenance";
+import { SearchIndexMaintenance, searchIndexStatusQueryKey } from "./SearchIndexMaintenance";
 
+const apiUrl = "https://api.example.test";
+vi.mock("@/integration-api/runtime/EnvProvider", () => ({ useEnv: () => ({ apiUrl }) }));
 vi.mock("../shared/AdminToast", () => ({ useAdminToast: () => vi.fn() }));
 const clients: QueryClient[] = [];
 function view(Component: typeof SearchIndexMaintenance) {
@@ -15,7 +18,9 @@ function view(Component: typeof SearchIndexMaintenance) {
   render(
     <QueryClientProvider client={client}>
       <NextIntlClientProvider locale="en" messages={en} timeZone="UTC">
-        <Component apiUrl="https://api.example.test" />
+        <ServiceAdministrationProvider>
+          <Component apiUrl={apiUrl} />
+        </ServiceAdministrationProvider>
       </NextIntlClientProvider>
     </QueryClientProvider>,
   );
@@ -46,19 +51,19 @@ describe("maintenance status contracts", () => {
     [
       "search",
       SearchIndexMaintenance,
-      ["admin", "search-index", "status"],
+      searchIndexStatusQueryKey(apiUrl),
       /No local OSM alias index is published/,
     ],
     [
       "notable",
       NotablePlacesMaintenance,
-      ["admin", "notable-places", "status"],
+      notablePlacesStatusQueryKey(apiUrl),
       /No notable-places index is published yet/,
     ],
     [
       "Overture",
       OvertureMaintenance,
-      ["admin", "overture", "status"],
+      overtureStatusQueryKey(apiUrl),
       /Overture Places has not been ingested yet/,
     ],
   ] as const)(
@@ -81,7 +86,7 @@ describe("maintenance status contracts", () => {
     );
     const client = view(NotablePlacesMaintenance);
     expect(await screen.findByRole("alert")).toHaveTextContent("Authentication required");
-    expect(client.getQueryState(["admin", "notable-places", "status"])?.status).toBe("error");
+    expect(client.getQueryState(notablePlacesStatusQueryKey(apiUrl))?.status).toBe("error");
     expect(screen.queryByText(/No notable-places index is published yet/)).not.toBeInTheDocument();
   });
   it("polls a building search index at ten seconds and a ready index at sixty", async () => {
@@ -108,7 +113,7 @@ describe("maintenance status contracts", () => {
       });
     });
     const client = view(SearchIndexMaintenance);
-    const key = ["admin", "search-index", "status"];
+    const key = searchIndexStatusQueryKey(apiUrl);
     await act(async () => {
       await vi.waitFor(() =>
         expect(client.getQueryData<{ building: boolean }>(key)?.building).toBe(true),

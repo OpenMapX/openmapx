@@ -27,7 +27,7 @@ import Typography from "@mui/material/Typography";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { hasVaultCredential, useIntegrationAdmin } from "@/lib/admin/integrationAdmin";
-import { useIntegrationMutationOwner } from "@/lib/admin/useIntegrationMutationOwner";
+import { useAdminMutationOwner } from "@/lib/admin/useAdminMutationOwner";
 import { AdminPageHeader } from "../shared/AdminPageHeader";
 import { useAdminToast } from "../shared/AdminToast";
 import { ConfigSchemaForm } from "./ConfigSchemaForm";
@@ -284,7 +284,7 @@ function CredentialsTable({
   const showToast = useAdminToast();
   const [dialogField, setDialogField] = useState<CredentialStatus | null>(null);
 
-  const owner = useIntegrationMutationOwner(admin.client, integrationId);
+  const owner = useAdminMutationOwner(admin.client, integrationId);
   const deleteMutation = useMutation({
     mutationKey: ["integration-credential-delete", admin.apiUrl, integrationId],
     retry: false,

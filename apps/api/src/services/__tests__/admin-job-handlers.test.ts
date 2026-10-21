@@ -1,3 +1,4 @@
+import Fastify from "fastify";
 import { describe, expect, it, vi } from "vitest";
 
 const runCliMock = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
@@ -38,6 +39,18 @@ vi.mock("../service-registry", () => ({
     ],
   }),
 }));
+
+const enqueue = vi.fn().mockResolvedValue("queued-job");
+const audit = vi.fn();
+vi.mock("../job-runner", () => ({
+  jobRunner: { enqueue: (...args: unknown[]) => enqueue(...args) },
+}));
+vi.mock("../../utils/audit-log", () => ({ writeAuditLog: (...args: unknown[]) => audit(...args) }));
+vi.mock("../../utils/require-admin", () => ({
+  requireAdmin: async () => ({ user: { id: "admin" } }),
+  getAdminSession: () => ({ user: { id: "admin" } }),
+}));
+const { adminOperationsRoute } = await import("../../routes/admin-operations");
 
 const { handleBackupOperationJob, handleDataOperationJob, handleServiceBulkJob } = await import(
   "../admin-job-handlers"
@@ -113,6 +126,151 @@ describe("admin job handlers", () => {
         checkpoint: vi.fn(),
       };
     }
+
+    // Queuing normalized countries makes the actual execution parser reject a valid request.
+    it.each([
+      [
+        { region: "europe/germany", countries: "de, at", failFast: true },
+        {
+          kind: "data.update",
+          regionId: "europe/germany",
+          countryCodes: ["DE", "AT"],
+          failFast: true,
+        },
+      ],
+      [{ countries: "  , " }, { kind: "data.update" }],
+      [{}, { kind: "data.update" }],
+    ])("executes actual update route payload %j exactly once", async (raw, effect) => {
+      enqueue.mockClear();
+      audit.mockClear();
+      runAdminOperationMock.mockClear();
+      const app = Fastify();
+      await app.register(adminOperationsRoute);
+      try {
+        const preview = await app.inject({
+          method: "POST",
+          url: "/admin/operations/update/preview",
+          payload: raw,
+        });
+        expect(preview.statusCode).toBe(200);
+        expect(preview.json().preview.length).toBeGreaterThan(0);
+        const response = await app.inject({
+          method: "POST",
+          url: "/admin/operations/update/run",
+          payload: raw,
+        });
+        expect(response.statusCode).toBe(200);
+        const payload = enqueue.mock.calls[0][1];
+        const ctx = dataCtx(payload);
+        await handleDataOperationJob(ctx);
+        expect(runAdminOperationMock.mock.calls).toEqual([[ctx, effect, "admin-job.data.update"]]);
+        expect(payload).toEqual({ operation: "update", version: 1, input: raw });
+        expect(audit.mock.calls[0][0].details).toEqual(preview.json().input);
+      } finally {
+        await app.close();
+      }
+    });
+
+    it.each([
+      ["download-osm", { region: "  " }, { kind: "data.downloadOsm" }],
+      [
+        "convert-overpass",
+        { region: " europe/germany " },
+        { kind: "data.convertOverpass", regionId: "europe/germany" },
+      ],
+      ["clean", { target: " osm " }, { kind: "data.clean", dataTypeId: "osm" }],
+      [
+        "overture-sync",
+        { region: " europe/germany " },
+        { kind: "data.overtureSync", regionId: "europe/germany" },
+      ],
+      [
+        "overture-conflate",
+        { region: " europe/germany " },
+        { kind: "data.overtureConflate", regionId: "europe/germany" },
+      ],
+      [
+        "search-index-build",
+        { region: " europe/germany " },
+        { kind: "data.searchIndexBuild", regionId: "europe/germany" },
+      ],
+    ])("round trips other transforming catalogue input %s", async (id, raw, effect) => {
+      enqueue.mockClear();
+      audit.mockClear();
+      runAdminOperationMock.mockClear();
+      const app = Fastify();
+      await app.register(adminOperationsRoute);
+      try {
+        const response = await app.inject({
+          method: "POST",
+          url: `/admin/operations/${id}/run`,
+          payload: raw,
+        });
+        expect(response.statusCode).toBe(200);
+        const payload = enqueue.mock.calls[0][1];
+        expect(payload).toEqual({ operation: id, version: 1, input: raw });
+        const ctx = dataCtx(payload);
+        await handleDataOperationJob(ctx);
+        expect(runAdminOperationMock.mock.calls).toEqual([[ctx, effect, `admin-job.data.${id}`]]);
+        if (id === "overture-conflate")
+          expect(audit.mock.calls[0][0].details).toEqual({
+            region: "europe/germany",
+            restart: false,
+          });
+        if (id === "clean") expect(audit.mock.calls[0][0].details).toEqual({ target: "osm" });
+      } finally {
+        await app.close();
+      }
+    });
+
+    it.each([undefined, null])("executes a parameterless raw %j route payload", async (raw) => {
+      enqueue.mockClear();
+      runAdminOperationMock.mockClear();
+      const app = Fastify();
+      await app.register(adminOperationsRoute);
+      try {
+        const response = await app.inject({
+          method: "POST",
+          url: "/admin/operations/download-fonts/run",
+          ...(raw === undefined
+            ? {}
+            : { headers: { "content-type": "application/json" }, payload: "null" }),
+        });
+        expect(response.statusCode).toBe(200);
+        const payload = enqueue.mock.calls[0][1];
+        expect(payload).toEqual({ operation: "download-fonts", version: 1, input: {} });
+        await handleDataOperationJob(dataCtx(payload));
+        expect(runAdminOperationMock.mock.calls.map((call) => call[1])).toEqual([
+          { kind: "data.downloadFonts" },
+        ]);
+      } finally {
+        await app.close();
+      }
+    });
+
+    it("rejects extra keys and transformed-array forgeries before enqueue or execution", async () => {
+      enqueue.mockClear();
+      runAdminOperationMock.mockClear();
+      const app = Fastify();
+      await app.register(adminOperationsRoute);
+      try {
+        for (const input of [{ countries: ["DE"] }, { argv: ["--privileged"] }]) {
+          const response = await app.inject({
+            method: "POST",
+            url: "/admin/operations/update/run",
+            payload: input,
+          });
+          expect(response.statusCode).toBe(400);
+          await expect(
+            handleDataOperationJob(dataCtx({ operation: "update", version: 1, input })),
+          ).rejects.toThrow(/Invalid input/);
+        }
+        expect(enqueue).not.toHaveBeenCalled();
+        expect(runAdminOperationMock).not.toHaveBeenCalled();
+      } finally {
+        await app.close();
+      }
+    });
 
     it("maps a validated catalog input to a typed agent operation", async () => {
       runAdminOperationMock.mockClear();

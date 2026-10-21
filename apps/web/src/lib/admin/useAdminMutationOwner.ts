@@ -8,7 +8,7 @@ import { useLayoutEffect, useMemo } from "react";
  * completion options: TanStack replaces those options while requests are pending.
  * Disposal only fences UI effects; it does not cancel the server's mutation.
  */
-export function useIntegrationMutationOwner(client: ApiClient, identity = "") {
+export function useAdminMutationOwner(client: ApiClient, identity = "") {
   const owner = useMemo(() => ({ active: false, client, identity }), [client, identity]);
   useLayoutEffect(() => {
     owner.active = true;

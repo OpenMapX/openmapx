@@ -95,6 +95,44 @@ function generatedConsumerDiagnostics(files: { filename: string; content: string
     `,
     );
   }
+  if (virtual.has(resolve(base, "src/api/generated/admin/service-admin.generated.ts"))) {
+    virtual.set(
+      filename,
+      `${virtual.get(filename)}
+      import { streamAdminServiceLogs, getAdminService, getAdminComposePreview, stopAdminCompose, setAdminServiceSelection, runAdminServicesBulkAction, restoreAdminServiceBackup } from "./service-admin.generated";
+      getAdminService("sample").then(response => {
+        if (response.status === 200) {
+          const image: string = response.data.manifest.container.image;
+          const count: number | "all" | undefined = response.data.manifest.container.gpu?.count;
+          response.data.manifest.provides?.forEach(entry => { const capability: string = typeof entry === "string" ? entry : entry.capability; });
+        }
+      });
+      const logHeaders = {"idempotency-key": "synthetic-intent-0001"};
+      streamAdminServiceLogs("id", logHeaders, undefined, {onTextChunk: async (chunk) => { const text: string = chunk; }, timeoutMs: 100}).then(response => {
+        if (response.status === 200) { const data: undefined = response.data; }
+        if (response.status === 404) { const error: string = response.data.error; }
+      });
+      // @ts-expect-error Streams require an explicit callback-bearing options argument.
+      streamAdminServiceLogs("id", logHeaders);
+      // @ts-expect-error Signal alone cannot consume a stream.
+      streamAdminServiceLogs("id", logHeaders, undefined, {signal: new AbortController().signal});
+      // @ts-expect-error Streams never buffer a successful string.
+      streamAdminServiceLogs("id", logHeaders, undefined, {onTextChunk: () => {}}).then(response => {if (response.status === 200) {const data: string = response.data;}});
+      getAdminComposePreview().then(response => {if (response.status === 200) {const yaml: string = response.data;}});
+      stopAdminCompose().then(response => {
+        // @ts-expect-error Compose down deliberately has no successful response.
+        if (response.status === 200) {}
+        if (response.status === 503) { const guidance: string = response.data.error; const ok: false = response.data.ok; }
+      });
+      setAdminServiceSelection({selectedRoots: []});
+      // @ts-expect-error An absent selection cannot mean intentional deselection.
+      setAdminServiceSelection({});
+      // @ts-expect-error Build-only fields cannot enter lifecycle actions.
+      runAdminServicesBulkAction({action: "start", serviceIds: ["sample"], all: true});
+      restoreAdminServiceBackup("sample", {serviceIds: [], stopRunning: true});
+    `,
+    );
+  }
   const host = ts.createCompilerHost(options);
   const fileExists = host.fileExists.bind(host),
     read = host.readFile.bind(host),
@@ -230,6 +268,23 @@ describe("SDK artifact gate", () => {
     expect(admin).toContain("status: 409");
     expect(admin).toContain("status: 422");
     expect(admin).toContain("encodeURIComponent");
+    const { serviceAdminOperations } = await import(
+      "../../packages/core/src/api/contracts/service-admin"
+    );
+    const service = first.find(
+      (file: { filename: string }) => file.filename === "admin/service-admin.generated.ts",
+    )?.content;
+    expect(service).toBeDefined();
+    for (const [id, operation] of Object.entries(serviceAdminOperations)) {
+      expect(service).toContain(`export const ${id}`);
+      const declared = [
+        ...(service ?? "").matchAll(new RegExp(`export type ${id}Response(\\d+) =`, "g")),
+      ]
+        .map((match) => match[1])
+        .sort();
+      expect(declared, id).toEqual(Object.keys(operation.responses).sort());
+    }
+    expect(generatedConsumerDiagnostics(first)).toEqual([]);
     const bindings = first.find(
       (file: { filename: string }) => file.filename === "admin/operation-bindings.generated.ts",
     )?.content;
@@ -592,6 +647,351 @@ describe("integration administration generation", () => {
         data: { error: "Absent" },
       });
     } finally {
+      vi.unstubAllGlobals();
+    }
+  }, 180_000);
+});
+
+describe("service administration custom-client generation", () => {
+  it("generates all30operations with callback-required logs, finite YAML and all-error down, preserving prior bytes", async () => {
+    const { serviceAdminOperations } = await import(
+      "../../packages/core/src/api/contracts/service-admin"
+    );
+    const { routeJsonSchema } = await import("../../packages/core/src/api/schema");
+    const previousInput = JSON.parse(
+      await readFile(new URL("../../apps/api/openapi.json", import.meta.url), "utf8"),
+    );
+    const input = structuredClone(previousInput);
+    const definitions = input.components.schemas;
+    const schemaIds = new Map<Parameters<typeof routeJsonSchema>[0], string>();
+    function schema(value: Parameters<typeof routeJsonSchema>[0], identity: string) {
+      const previous = schemaIds.get(value);
+      if (previous) return { $ref: `#/components/schemas/${previous}` };
+      schemaIds.set(value, identity);
+      const result = routeJsonSchema(value, {
+        identity,
+        io: "output",
+        registerDefinition: ({ $id, ...definition }) => {
+          definitions[$id] = definition;
+        },
+      });
+      definitions[identity] = result;
+      return { $ref: `#/components/schemas/${identity}` };
+    }
+    // Disposable producer-independent document. Actual producer adoption belongs to Task2.
+    for (const [id, entry] of Object.entries(serviceAdminOperations)) {
+      const operation: import("../../packages/core/src/api/contracts/admin").AdminOperation = entry;
+      const path = operation.path.replace(/:([^/]+)/g, "{$1}");
+      const request = operation.request;
+      const parameters: unknown[] = [];
+      for (const [location, shape] of [
+        ["path", request?.params],
+        ["query", request?.query],
+        ["header", request?.headers],
+      ] as const) {
+        if (!shape) continue;
+        const emitted = routeJsonSchema(shape, { identity: `${id}${location}`, io: "output" });
+        const required = emitted.required as string[] | undefined;
+        for (const [name, field] of Object.entries(emitted.properties as Record<string, unknown>))
+          parameters.push({
+            in: location,
+            name,
+            required: required?.includes(name) ?? false,
+            schema: field,
+          });
+      }
+      input.paths[path] ??= {};
+      input.paths[path][operation.method.toLowerCase()] = {
+        operationId: id,
+        tags: ["service-admin"],
+        parameters,
+        ...(request?.body
+          ? {
+              requestBody: {
+                required: !request.body.isOptional(),
+                content: { "application/json": { schema: schema(request.body, `${id}Body`) } },
+              },
+            }
+          : {}),
+        responses: Object.fromEntries(
+          Object.entries(operation.responses).map(([status, response]) => [
+            status,
+            {
+              description: "Synthetic service contract fixture",
+              content: {
+                [response.kind === "json"
+                  ? "application/json"
+                  : "mediaType" in response
+                    ? response.mediaType
+                    : "text/plain"]: {
+                  schema:
+                    "schema" in response
+                      ? schema(response.schema, `${id}Response${status}`)
+                      : { type: "string" },
+                },
+              },
+            },
+          ]),
+        ),
+      };
+    }
+    function references(value: unknown): void {
+      if (!value || typeof value !== "object") return;
+      const node = value as Record<string, unknown>;
+      if (typeof node.$ref === "string" && node.$ref.endsWith("#"))
+        node.$ref = `#/components/schemas/${node.$ref.slice(0, -1)}`;
+      for (const child of Object.values(value)) references(child);
+    }
+    references(definitions);
+    vi.stubGlobal("fetch", () => {
+      throw new Error("Unexpected network");
+    });
+    try {
+      const files = await generateArtifacts({ document: input });
+      const service = files.find(
+        (file: { filename: string }) => file.filename === "admin/service-admin.generated.ts",
+      );
+      expect(service, "The service-admin tag needs its own supported custom client").toBeDefined();
+      if (!service) throw new Error("Missing service family");
+      for (const id of Object.keys(serviceAdminOperations))
+        expect(service.content).toContain(`export const ${id}`);
+      expect(
+        files.some((file: { filename: string }) =>
+          file.filename.startsWith("admin/service-models/"),
+        ),
+      ).toBe(true);
+      expect(generatedConsumerDiagnostics(files)).toEqual([]);
+      const previous = await generateArtifacts({ document: previousInput });
+      for (const file of previous.filter(
+        (file: { filename: string }) =>
+          file.filename !== "admin/operation-bindings.generated.ts" &&
+          file.filename !== "admin/service-admin.generated.ts" &&
+          !file.filename.startsWith("admin/service-models/"),
+      ))
+        expect(
+          files.find((candidate: { filename: string }) => candidate.filename === file.filename)
+            ?.content,
+        ).toBe(file.content);
+      expect(await generateArtifacts({ document: input })).toEqual(files);
+      const bindings = files.find(
+        (file: { filename: string }) => file.filename === "admin/operation-bindings.generated.ts",
+      ).content;
+      const bundled = await build({
+        stdin: {
+          contents: service.content,
+          loader: "ts",
+          resolveDir: new URL("../../packages/core/src/api/generated/admin", import.meta.url)
+            .pathname,
+        },
+        bundle: true,
+        platform: "node",
+        format: "esm",
+        write: false,
+        plugins: [
+          {
+            name: "service-fixture-bindings",
+            setup(builder) {
+              builder.onResolve({ filter: /operation-bindings.generated/ }, () => ({
+                path: "bindings",
+                namespace: "fixture",
+              }));
+              builder.onLoad({ filter: /.*/, namespace: "fixture" }, () => ({
+                contents: bindings,
+                loader: "ts",
+                resolveDir: new URL("../../packages/core/src/api/generated/admin", import.meta.url)
+                  .pathname,
+              }));
+            },
+          },
+        ],
+      });
+      const sdk = await import(
+        `data:text/javascript;base64,${Buffer.from(bundled.outputFiles[0].text).toString("base64")}`
+      );
+      const { createApiClient } = await import("../../packages/core/src/api/client");
+      const client = createApiClient({ baseUrl: "https://app.example", credentials: "include" });
+      const headers = { "idempotency-key": "synthetic-intent-0001" };
+      expect(sdk.getStreamAdminServiceLogsUrl("a/b?#", { lines: "20 &" })).toBe(
+        "/api/admin/services/a%2Fb%3F%23/logs?lines=20+%26",
+      );
+      expect(sdk.getRestoreAdminServiceBackupUrl("a/b?#")).toBe(
+        "/api/admin/services/backups/a%2Fb%3F%23/restore",
+      );
+      let acquire: () => Response = () =>
+        new Response("services:\n  synthetic: {}\n", {
+          headers: { "content-type": "text/yaml; charset=utf-8" },
+        });
+      vi.stubGlobal("fetch", async (url: string, init: RequestInit) => {
+        expect(url).toMatch(/^https:\/\/app\.example\/api\/admin\//);
+        expect(init.credentials).toBe("include");
+        if (url.includes("/logs")) {
+          expect(url).toBe("https://app.example/api/admin/services/a%2Fb%3F%23/logs?lines=20");
+          expect(new Headers(init.headers).get("idempotency-key")).toBe("synthetic-intent-0001");
+        }
+        return acquire();
+      });
+      await expect(sdk.getAdminComposePreview({ client })).resolves.toMatchObject({
+        status: 200,
+        data: "services:\n  synthetic: {}\n",
+      });
+      await expect(sdk.getAdminComposePreview({ client, maxTextBytes: 1 })).rejects.toThrow(
+        /contract/i,
+      );
+      acquire = () => Response.json({ error: "Registry unavailable" }, { status: 503 });
+      await expect(sdk.getAdminComposePreview({ client })).resolves.toMatchObject({
+        status: 503,
+        data: { error: "Registry unavailable" },
+      });
+      acquire = () => Response.json({ ok: false, error: "Host guidance" }, { status: 503 });
+      await expect(sdk.stopAdminCompose(undefined, { client })).resolves.toMatchObject({
+        status: 503,
+        data: { ok: false, error: "Host guidance" },
+      });
+      acquire = () => Response.json({ ok: true });
+      await expect(sdk.stopAdminCompose(undefined, { client })).rejects.toThrow(/contract/i);
+      for (const status of [404, 409]) {
+        acquire = () => Response.json({ error: "Synthetic log rejection" }, { status });
+        await expect(
+          sdk.streamAdminServiceLogs(
+            "a/b?#",
+            headers,
+            { lines: "20" },
+            {
+              client,
+              onTextChunk: () => {
+                throw new Error("Must not consume JSON as log text");
+              },
+            },
+          ),
+        ).resolves.toMatchObject({ status, data: { error: "Synthetic log rejection" } });
+      }
+      acquire = () => Response.json({ error: "x".repeat(100) }, { status: 404 });
+      await expect(
+        sdk.streamAdminServiceLogs(
+          "a/b?#",
+          headers,
+          { lines: "20" },
+          { client, maxErrorBytes: 10, onTextChunk: () => {} },
+        ),
+      ).rejects.toThrow(/contract/i);
+      const log = (options: Record<string, unknown>) =>
+        sdk.streamAdminServiceLogs("a/b?#", headers, { lines: "20" }, { client, ...options });
+      const utf8 = new TextEncoder().encode("first €\nlast");
+      let body = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(utf8.slice(0, 7));
+          controller.enqueue(utf8.slice(7));
+          controller.enqueue(new Uint8Array([0xe2]));
+          controller.close();
+        },
+      });
+      acquire = () =>
+        new Response(body, { headers: { "content-type": "text/plain; charset=utf-8" } });
+      const chunks: string[] = [];
+      await expect(
+        log({
+          onTextChunk: async (chunk: string) => {
+            chunks.push(chunk);
+          },
+        }),
+      ).resolves.toMatchObject({ status: 200, data: undefined });
+      expect(chunks.join("")).toBe("first €\nlast�");
+      expect(body.locked).toBe(false);
+      acquire = () => new Response("synthetic", { headers: { "content-type": "text/plain" } });
+      await expect(log({})).rejects.toThrow(/contract/i);
+      await expect(
+        sdk.streamAdminServiceLogs(
+          "a/b?#",
+          { "idempotency-key": "short" },
+          { lines: "20" },
+          { client, onTextChunk: () => {} },
+        ),
+      ).rejects.toThrow(/contract/i);
+      // A callback owns backpressure: the generated call cannot complete first.
+      let deliver!: () => void;
+      let deliveryStarted!: () => void;
+      const delivering = new Promise<void>((resolve) => {
+        deliveryStarted = resolve;
+      });
+      let completed = false;
+      const delivered = log({
+        onTextChunk: () => {
+          deliveryStarted();
+          return new Promise<void>((resolve) => {
+            deliver = resolve;
+          });
+        },
+      }).then((response: unknown) => {
+        completed = true;
+        return response;
+      });
+      await delivering;
+      expect(completed).toBe(false);
+      deliver();
+      await expect(delivered).resolves.toMatchObject({ status: 200, data: undefined });
+      acquire = () =>
+        new Response(body, { headers: { "content-type": "text/plain; charset=utf-8" } });
+      // Actual generated stream: errors, stalled reads/callbacks, owner abort and deadline.
+      vi.useFakeTimers();
+      for (const schedule of [
+        "callback failure",
+        "abort read",
+        "deadline read",
+        "abort callback",
+        "deadline callback",
+      ] as const) {
+        const canceled = vi.fn();
+        let reading!: () => void;
+        const readEntered = new Promise<void>((resolve) => {
+          reading = resolve;
+        });
+        body = new ReadableStream<Uint8Array>(
+          {
+            start(controller) {
+              if (schedule.includes("callback"))
+                controller.enqueue(new TextEncoder().encode("chunk"));
+            },
+            pull() {
+              reading();
+            },
+            cancel: canceled,
+          },
+          { highWaterMark: 0 },
+        );
+        const abort = new AbortController();
+        const removedListener = vi.spyOn(abort.signal, "removeEventListener");
+        let entered!: () => void;
+        const callbackEntered = new Promise<void>((resolve) => {
+          entered = resolve;
+        });
+        const callback = () => {
+          entered();
+          if (schedule === "callback failure") throw new Error("Synthetic callback failure");
+          return new Promise<void>(() => {});
+        };
+        const result = log({
+          signal: abort.signal,
+          ...(schedule.startsWith("deadline") ? { timeoutMs: 20 } : {}),
+          onTextChunk: callback,
+        });
+        const rejected = expect(result).rejects.toThrow();
+        if (schedule.includes("callback")) await callbackEntered;
+        else await readEntered;
+        if (schedule.startsWith("abort")) abort.abort();
+        if (schedule.startsWith("deadline")) await vi.advanceTimersByTimeAsync(20);
+        await rejected;
+        expect(canceled).toHaveBeenCalledTimes(1);
+        expect(body.locked).toBe(false);
+        expect(vi.getTimerCount()).toBe(0);
+        expect(removedListener).toHaveBeenCalledWith("abort", expect.any(Function));
+      }
+      vi.useRealTimers();
+      acquire = () => new Response("not JSON", { headers: { "content-type": "application/json" } });
+      await expect(log({ onTextChunk: () => {} })).rejects.toThrow(/contract/i);
+      acquire = () => new Response(null, { headers: { "content-type": "text/plain" } });
+      await expect(log({ onTextChunk: () => {} })).rejects.toThrow(/contract/i);
+    } finally {
+      vi.useRealTimers();
       vi.unstubAllGlobals();
     }
   }, 180_000);

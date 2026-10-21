@@ -17,8 +17,11 @@ import Stack from "@mui/material/Stack";
 import Switch from "@mui/material/Switch";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
-import { useMutation } from "@tanstack/react-query";
-import { useState } from "react";
+import { createApiClient } from "@openmapx/core";
+import { type QueryKey, useMutation } from "@tanstack/react-query";
+import { useMemo, useState } from "react";
+import { useServiceJobRegistration } from "@/lib/admin/serviceAdminJobs";
+import { useAdminMutationOwner } from "@/lib/admin/useAdminMutationOwner";
 import {
   type AdminOperationContract,
   type AdminOperationField,
@@ -35,6 +38,7 @@ export interface AdminOperationCardProps {
   operation: AdminOperationContract;
   onQueued: (jobId: string, operation: AdminOperationContract) => void;
   onError: (message: string) => void;
+  refreshKeys?: readonly QueryKey[];
 }
 
 function fieldIssue(
@@ -102,12 +106,22 @@ function OperationField({
  * redacted preview, shows it (with the confirmation copy for destructive
  * operations), and only then queues the job.
  */
-export function AdminOperationCard({
+export function AdminOperationCard(props: AdminOperationCardProps) {
+  return <OperationView key={JSON.stringify([props.apiUrl, props.operation])} {...props} />;
+}
+function OperationView({
   apiUrl,
   operation,
   onQueued,
   onError,
+  refreshKeys,
 }: AdminOperationCardProps) {
+  const client = useMemo(
+    () => createApiClient({ baseUrl: apiUrl, credentials: "include" }),
+    [apiUrl],
+  );
+  const owner = useAdminMutationOwner(client);
+  const register = useServiceJobRegistration();
   const [values, setValues] = useState<AdminOperationFormValues>(() =>
     initialFormValues(operation),
   );
@@ -115,24 +129,37 @@ export function AdminOperationCard({
   const destructive = operation.risk === "destructive";
 
   const previewMutation = useMutation({
-    mutationFn: () => previewAdminOperation(apiUrl, operation.id, values),
-    onSuccess: (result) => setPreview(result),
-    onError: (error) => {
-      if (!(error instanceof AdminOperationInputError)) {
-        onError(error instanceof Error ? error.message : "Preview failed");
+    retry: false,
+    mutationFn: async () => {
+      const execution = owner;
+      try {
+        const result = await previewAdminOperation(client, operation.id, values);
+        if (execution.active) setPreview(result);
+      } catch (error) {
+        if (execution.active && !(error instanceof AdminOperationInputError))
+          onError(error instanceof Error ? error.message : "Preview failed");
+        throw error;
       }
     },
   });
-
   const runMutation = useMutation({
-    mutationFn: () => runAdminOperation(apiUrl, operation.id, values),
-    onSuccess: (jobId) => {
-      setPreview(null);
-      onQueued(jobId, operation);
-    },
-    onError: (error) => {
-      setPreview(null);
-      onError(error instanceof Error ? error.message : "Operation failed");
+    retry: false,
+    mutationFn: async () => {
+      const execution = owner;
+      const effect = { kind: "operations", refreshKeys } as const;
+      try {
+        const jobId = await runAdminOperation(client, operation.id, values);
+        register({ client, apiUrl, jobId, effect });
+        if (execution.active) {
+          setPreview(null);
+          onQueued(jobId, operation);
+        }
+      } catch (error) {
+        if (execution.active) {
+          onError(error instanceof Error ? error.message : "Operation failed");
+        }
+        throw error;
+      }
     },
   });
 
@@ -162,7 +189,7 @@ export function AdminOperationCard({
               field={field}
               value={values[field.name] ?? (field.kind === "boolean" ? false : "")}
               disabled={busy}
-              issue={fieldIssue(previewMutation.error, field)}
+              issue={fieldIssue(runMutation.error ?? previewMutation.error, field)}
               onChange={(value) => setValues((current) => ({ ...current, [field.name]: value }))}
             />
           ))}
@@ -184,6 +211,7 @@ export function AdminOperationCard({
       >
         <DialogTitle>{operation.confirmation?.title ?? `Queue ${operation.title}`}</DialogTitle>
         <DialogContent>
+          {runMutation.isError && <Alert severity="error">{runMutation.error.message}</Alert>}
           <Stack sx={{ gap: 1.5, pt: 0.5 }}>
             {destructive && operation.confirmation && (
               <Alert severity="warning">{operation.confirmation.message}</Alert>

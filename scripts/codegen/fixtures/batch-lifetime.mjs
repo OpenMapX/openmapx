@@ -83,6 +83,23 @@ if (nativeConfig) {
     try {
       process.kill(pid, "SIGKILL");
     } catch (error) {
+      if (error.code === "EPERM") {
+        const states = realSync("ps", ["-axo", "pid=,pgid=,stat="], {
+          encoding: "utf8",
+          timeout: 1_000,
+        })
+          .trim()
+          .split("\n")
+          .map((line) => line.trim().split(/\s+/));
+        if (
+          states.every((row) => row.length === 3) &&
+          !states.some(
+            ([id, group, state]) =>
+              (pid < 0 ? Number(group) === -pid : Number(id) === pid) && !state.startsWith("Z"),
+          )
+        )
+          return;
+      }
       if (error.code !== "ESRCH") throw error;
     }
   };

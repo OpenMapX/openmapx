@@ -3,7 +3,7 @@
 import type { AdminIntegrationResolvedConfig } from "@openmapx/core/api-contracts";
 import { useMutation } from "@tanstack/react-query";
 import { useIntegrationAdmin } from "@/lib/admin/integrationAdmin";
-import { useIntegrationMutationOwner } from "@/lib/admin/useIntegrationMutationOwner";
+import { useAdminMutationOwner } from "@/lib/admin/useAdminMutationOwner";
 import { SchemaConfigForm } from "../shared/SchemaConfigForm";
 
 const excludedKeys = ["enabled"];
@@ -32,7 +32,7 @@ export function ConfigSchemaForm({
   onSaved,
 }: ConfigSchemaFormProps) {
   const admin = useIntegrationAdmin();
-  const owner = useIntegrationMutationOwner(admin.client, integrationId);
+  const owner = useAdminMutationOwner(admin.client, integrationId);
 
   const saveMutation = useMutation({
     retry: false,

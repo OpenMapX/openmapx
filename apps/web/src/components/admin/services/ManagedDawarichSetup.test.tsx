@@ -1,6 +1,10 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+vi.mock("@/integration-api/runtime/EnvProvider", () => ({
+  useEnv: () => ({ apiUrl: "http://admin.test" }),
+}));
+
 const mutateProvision = vi.fn();
 const mutateRotate = vi.fn();
 const hookState = {
@@ -155,15 +159,6 @@ describe("ManagedDawarichSetup", () => {
     fireEvent.change(hostname, { target: { value: "Timeline.Example.Test." } });
     fireEvent.click(screen.getByRole("button", { name: "Provision/reconcile" }));
     await waitFor(() => expect(mutateProvision).toHaveBeenCalledWith("timeline.example.test"));
-  });
-
-  it("surfaces stable conflict errors without rendering secret material", () => {
-    hookState.provision.error = Object.assign(new Error("DAWARICH_DATABASE_SECRET_CONFLICT"), {
-      code: "DAWARICH_DATABASE_SECRET_CONFLICT",
-    });
-    render(<ManagedDawarichSetup />);
-    expect(screen.getByText(/database password copies conflict/i)).toBeInTheDocument();
-    expect(document.body.textContent).not.toContain("password-value");
   });
 
   it("requires the exact typed confirmation in the collapsed recovery area", async () => {

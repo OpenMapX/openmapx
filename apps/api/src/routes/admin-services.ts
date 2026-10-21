@@ -29,11 +29,7 @@ import { jobRunner } from "../services/job-runner";
 import { createApiOpsClient, createDurableOpsKey, executeAndWait } from "../services/ops-client";
 import { isSecretsConfigured } from "../services/secrets";
 import { resolveServiceConfigWithSources } from "../services/service-config-resolver";
-import {
-  mergeServiceConfig,
-  readStoredServiceConfig,
-  restoreStoredServiceConfig,
-} from "../services/service-config-writer";
+import { persistServiceConfigPatch } from "../services/service-config-writer";
 import { getServiceRegistry } from "../services/service-registry";
 import {
   deleteServiceSecret,
@@ -49,6 +45,7 @@ import { serviceActionLimit } from "../utils/rate-limit";
 import { getAdminSession, requireAdmin } from "../utils/require-admin";
 import { declareRouteAuth } from "../utils/route-auth.js";
 import { getSecretFields, validateConfigBody } from "../utils/validate-config-body";
+import { registerServiceAdminRoute } from "./admin-service-contract";
 
 const { getProvidedCapabilityNames, serviceConfigEnvPrefix } = coreServices;
 const BULK_SERVICE_ACTIONS = new Set(["start", "stop", "restart", "update", "build"] as const);
@@ -61,18 +58,6 @@ function hasOnlyBodyKeys(body: unknown, allowed: ReadonlySet<string>): boolean {
       !Array.isArray(body) &&
       Object.keys(body).every((key) => allowed.has(key)))
   );
-}
-
-function toIdList(input: unknown): string[] {
-  if (!Array.isArray(input)) return [];
-  const out: string[] = [];
-  for (const item of input) {
-    if (typeof item !== "string") continue;
-    const id = item.trim();
-    if (!id || out.includes(id)) continue;
-    out.push(id);
-  }
-  return out;
 }
 
 type BackupInventory = OpsResultFor<"backup.list">;
@@ -112,12 +97,11 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
     request.adminSession = await requireAdmin(request);
   });
 
-  app.get("/admin/shared-mobility", async () => getSharedMobilityOperationsState());
+  registerServiceAdminRoute(app, "getAdminSharedMobility", async () =>
+    getSharedMobilityOperationsState(),
+  );
 
-  app.post<{
-    Params: { category: string };
-    Body: { enabled?: boolean };
-  }>("/admin/shared-mobility/:category/rollback", async (req, reply) => {
+  registerServiceAdminRoute(app, "rollbackAdminSharedMobility", async (req, reply) => {
     if (!(["bike", "scooter", "car"] as string[]).includes(req.params.category)) {
       reply.status(400);
       return { error: "Unknown shared-mobility category" };
@@ -140,7 +124,7 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
   });
 
   // GET /admin/services — list all services from registry with docker ps status
-  app.get("/admin/services", async () => {
+  registerServiceAdminRoute(app, "listAdminServices", async () => {
     const registry = getServiceRegistry();
     const ps = await dockerComposePs();
     const services = registry.list().map((s) => ({
@@ -165,7 +149,7 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
   });
 
   // GET /admin/services/:id — single service detail
-  app.get<{ Params: { id: string } }>("/admin/services/:id", async (req, reply) => {
+  registerServiceAdminRoute(app, "getAdminService", async (req, reply) => {
     let svc: ReturnType<ReturnType<typeof getServiceRegistry>["get"]>;
     try {
       svc = getServiceRegistry().get(req.params.id);
@@ -185,9 +169,9 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
   });
 
   // POST /admin/services/:id/action — start | stop | restart
-  app.post<{ Params: { id: string }; Body: { action: "start" | "stop" | "restart" } }>(
-    "/admin/services/:id/action",
-    { preHandler: [serviceActionLimit.preHandler()] },
+  registerServiceAdminRoute(
+    app,
+    "runAdminServiceAction",
     async (req, reply) => {
       const { id } = req.params;
       const { action } = req.body;
@@ -225,10 +209,11 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
       });
       return { ok: true, jobId };
     },
+    { beforeValidation: serviceActionLimit.preHandler() },
   );
 
   // GET /admin/services/selection — requested + effective selection roots
-  app.get("/admin/services/selection", async (_req, reply) => {
+  registerServiceAdminRoute(app, "getAdminServiceSelection", async (_req, reply) => {
     let registry: ReturnType<typeof getServiceRegistry>;
     try {
       registry = getServiceRegistry();
@@ -240,8 +225,9 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
   });
 
   // PUT /admin/services/selection — persist selected root services
-  app.put<{ Body: { selectedRoots?: string[] } }>(
-    "/admin/services/selection",
+  registerServiceAdminRoute(
+    app,
+    "setAdminServiceSelection",
     async (req, reply) => {
       let registry: ReturnType<typeof getServiceRegistry>;
       try {
@@ -251,7 +237,7 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
         return { error: "Service registry not available" };
       }
 
-      const selectedRoots = toIdList(req.body?.selectedRoots);
+      const selectedRoots = [...new Set(req.body.selectedRoots)];
       let validated: Awaited<ReturnType<typeof validateServiceSelectionForWrite>>;
       try {
         validated = await validateServiceSelectionForWrite(registry, selectedRoots);
@@ -285,18 +271,19 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
 
       return { ok: true, revisionId: applied.revisionId, summary };
     },
+    {
+      beforeValidation: async (_request, reply) => {
+        try {
+          getServiceRegistry();
+        } catch {
+          return reply.code(503).send({ error: "Service registry not available" });
+        }
+      },
+    },
   );
 
   // POST /admin/services/bulk-action — enqueue CLI-backed bulk service actions
-  app.post<{
-    Body: {
-      action?: "start" | "stop" | "restart" | "update" | "build";
-      serviceIds?: string[];
-      all?: boolean;
-      region?: string;
-      continueOnError?: boolean;
-    };
-  }>("/admin/services/bulk-action", async (req, reply) => {
+  registerServiceAdminRoute(app, "runAdminServicesBulkAction", async (req, reply) => {
     const action = req.body?.action;
     if (!action || !BULK_SERVICE_ACTIONS.has(action)) {
       reply.status(400);
@@ -311,27 +298,28 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
       return { error: "Request contains unsupported fields" };
     }
 
-    const serviceIds = toIdList(req.body?.serviceIds);
+    const serviceIds = [...new Set(req.body?.serviceIds ?? [])];
     if (action !== "build" && serviceIds.length === 0) {
       reply.status(400);
       return { error: `Action "${action}" requires one or more serviceIds` };
     }
-    if (action === "build" && req.body?.all !== true && serviceIds.length === 0) {
+    if (
+      action === "build" &&
+      ("all" in req.body ? req.body.all : undefined) !== true &&
+      serviceIds.length === 0
+    ) {
       reply.status(400);
       return { error: 'Build action requires serviceIds or explicit "all": true' };
     }
 
-    const region =
-      typeof req.body?.region === "string" && req.body.region.trim()
-        ? req.body.region.trim()
-        : undefined;
+    const region = "region" in req.body ? req.body.region?.trim() || undefined : undefined;
     const adminSession = getAdminSession(req);
     const jobId = await jobRunner.enqueue(
       "service.bulk",
       {
         action,
         serviceIds,
-        all: req.body?.all === true,
+        all: ("all" in req.body ? req.body.all : undefined) === true,
         region,
         continueOnError: req.body?.continueOnError,
       },
@@ -343,7 +331,7 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
       targetType: "service",
       targetId: serviceIds.join(",") || "all",
       action: `service.bulk.${action}`,
-      details: { serviceIds, all: req.body?.all === true, region },
+      details: { serviceIds, all: ("all" in req.body ? req.body.all : undefined) === true, region },
       request: req,
     });
 
@@ -355,7 +343,7 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
   // the admin UI can render source badges (default / database / env) and
   // disable editing for fields currently overridden by `SERVICE_<ID>_<KEY>`
   // env vars on the host.
-  app.get<{ Params: { id: string } }>("/admin/services/:id/config", async (req, reply) => {
+  registerServiceAdminRoute(app, "getAdminServiceConfig", async (req, reply) => {
     const svc = getServiceRegistry().get(req.params.id);
     if (!svc) {
       reply.status(404);
@@ -379,8 +367,9 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
   });
 
   // POST /admin/services/:id/config — merge per-service config updates (JSONB upsert)
-  app.post<{ Params: { id: string }; Body: { config: Record<string, unknown> } }>(
-    "/admin/services/:id/config",
+  registerServiceAdminRoute(
+    app,
+    "updateAdminServiceConfig",
     async (req, reply) => {
       const svc = getServiceRegistry().get(req.params.id);
       if (!svc) {
@@ -403,8 +392,7 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
         return { errors };
       }
       const adminSession = getAdminSession(req);
-      const previous = await readStoredServiceConfig(req.params.id);
-      await mergeServiceConfig(req.params.id, config);
+      const saved = await persistServiceConfigPatch(req.params.id, config);
       try {
         await applyTrustedConfiguration({
           kind: "serviceConfig.apply",
@@ -416,7 +404,17 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
         });
       } catch (error) {
         if (!isProvenConfigurationNonCommit(error)) throw error;
-        await restoreStoredServiceConfig(req.params.id, previous);
+        try {
+          // False means a later writer owns the row. Either way the apply failed;
+          // do not promise restoration or turn this into a successful response.
+          await saved.restore();
+        } catch (restoreError) {
+          throw new AggregateError(
+            [error, restoreError],
+            "Service configuration apply and restoration failed",
+            { cause: error },
+          );
+        }
         throw error;
       }
       await writeAuditLog({
@@ -428,6 +426,13 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
         request: req,
       });
       return { ok: true };
+    },
+    {
+      beforeValidation: async (req, reply) => {
+        const { id } = req.params as { id: string };
+        const svc = getServiceRegistry().get(id);
+        if (!svc) return reply.code(404).send({ error: "Service not found" });
+      },
     },
   );
 
@@ -453,7 +458,7 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
 
   // GET /admin/services/:id/credentials — declared secret fields + per-field
   // status (vault | missing), setup guides, and who set each + when.
-  app.get<{ Params: { id: string } }>("/admin/services/:id/credentials", async (req, reply) => {
+  registerServiceAdminRoute(app, "getAdminServiceCredentials", async (req, reply) => {
     const svc = getServiceRegistry().get(req.params.id);
     if (!svc) {
       reply.status(404);
@@ -484,8 +489,9 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
   });
 
   // PUT /admin/services/:id/credentials/:key — set or rotate a secret.
-  app.put<{ Params: { id: string; key: string }; Body: { value: string } }>(
-    "/admin/services/:id/credentials/:key",
+  registerServiceAdminRoute(
+    app,
+    "setAdminServiceCredential",
     async (req, reply) => {
       const svc = getServiceRegistry().get(req.params.id);
       if (!svc) {
@@ -531,11 +537,26 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
       });
       return applyServiceSecretChange(svc.manifest.id, adminSession.user.id);
     },
+    {
+      beforeValidation: async (req, reply) => {
+        const { id, key } = req.params as { id: string; key: string };
+        const svc = getServiceRegistry().get(id);
+        if (!svc) return reply.code(404).send({ error: "Service not found" });
+        if (!isValidSecretKey(key))
+          return reply.code(400).send({ error: "Invalid credential key" });
+        if (isProvisioningOwnedDawarichCredential(svc.manifest.id, key))
+          return reply.code(409).send({
+            code: DAWARICH_CREDENTIAL_MANAGED_CODE,
+            error: DAWARICH_CREDENTIAL_MANAGED_ERROR,
+          });
+      },
+    },
   );
 
   // DELETE /admin/services/:id/credentials/:key — remove a secret.
-  app.delete<{ Params: { id: string; key: string } }>(
-    "/admin/services/:id/credentials/:key",
+  registerServiceAdminRoute(
+    app,
+    "deleteAdminServiceCredential",
     async (req, reply) => {
       const svc = getServiceRegistry().get(req.params.id);
       if (!svc) {
@@ -580,28 +601,27 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
       });
       return applyServiceSecretChange(svc.manifest.id, adminSession.user.id);
     },
+    {
+      beforeValidation: async (req, reply) => {
+        const { id, key } = req.params as { id: string; key: string };
+        const svc = getServiceRegistry().get(id);
+        if (!svc) return reply.code(404).send({ error: "Service not found" });
+        if (!isValidSecretKey(key))
+          return reply.code(400).send({ error: "Invalid credential key" });
+        if (isProvisioningOwnedDawarichCredential(svc.manifest.id, key))
+          return reply.code(409).send({
+            code: DAWARICH_CREDENTIAL_MANAGED_CODE,
+            error: DAWARICH_CREDENTIAL_MANAGED_ERROR,
+          });
+      },
+    },
   );
 
   // GET /admin/services/:id/logs — stream logs as plain text
-  app.get<{ Params: { id: string }; Querystring: { lines?: string } }>(
-    "/admin/services/:id/logs",
+  registerServiceAdminRoute(
+    app,
+    "streamAdminServiceLogs",
     async (req, reply) => {
-      let registry: ReturnType<typeof getServiceRegistry>;
-      try {
-        registry = getServiceRegistry();
-      } catch {
-        reply.status(503);
-        return { error: "Service registry not available" };
-      }
-      const service = registry.get(req.params.id);
-      if (!service) {
-        reply.status(404);
-        return { error: `Service "${req.params.id}" not found` };
-      }
-      if (!service.enabled) {
-        reply.status(409);
-        return { error: `Service "${req.params.id}" is disabled` };
-      }
       const adminSession = getAdminSession(req);
       let idempotencyValue: string;
       try {
@@ -624,7 +644,8 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
       const tail = Number.isFinite(requested)
         ? Math.min(Math.max(Math.trunc(requested), 1), 1000)
         : 200;
-      reply.header("Content-Type", "text/plain; charset=utf-8");
+      // Hijack bypasses Fastify header flushing; set the actual raw response.
+      reply.raw.setHeader("Content-Type", "text/plain; charset=utf-8");
       reply.hijack();
       // Community and built-in services stream through the same typed
       // agent operation; the API no longer spawns a Docker log process.
@@ -634,10 +655,37 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
       });
       return reply;
     },
+    {
+      beforeValidation: async (req, reply) => {
+        let registry: ReturnType<typeof getServiceRegistry>;
+        try {
+          registry = getServiceRegistry();
+        } catch {
+          reply.status(503);
+          return reply.send({ error: "Service registry not available" });
+        }
+        const service = registry.get((req.params as { id: string }).id);
+        if (!service) {
+          reply.status(404);
+          return reply.send({ error: `Service "${(req.params as { id: string }).id}" not found` });
+        }
+        if (!service.enabled) {
+          reply.status(409);
+          return reply.send({
+            error: `Service "${(req.params as { id: string }).id}" is disabled`,
+          });
+        }
+        try {
+          parseDirectOpsIdempotency(req.headers[DIRECT_OPS_IDEMPOTENCY_HEADER]);
+        } catch (error) {
+          return reply.code(400).send({ error: (error as Error).message });
+        }
+      },
+    },
   );
 
   // GET /admin/deployment — deployment mode detection
-  app.get("/admin/deployment", async () => {
+  registerServiceAdminRoute(app, "getAdminDeployment", async () => {
     const { INFRA_DIR, isDockerAvailable } = await import("../services/admin-ops");
     const dockerAvailable = await isDockerAvailable();
     // When the API runs inside app-api, docker-compose actions need the
@@ -665,7 +713,7 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
   });
 
   // POST /admin/services/check — docker compose ps summary
-  app.post("/admin/services/check", async (request) => {
+  registerServiceAdminRoute(app, "checkAdminServices", async (request) => {
     const adminSession = getAdminSession(request);
     const ps = await dockerComposePs();
     await writeAuditLog({
@@ -678,7 +726,7 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
   });
 
   // GET /admin/services/data — data inventory (OSM, builds, MOTIS health)
-  app.get("/admin/services/data", async () => {
+  registerServiceAdminRoute(app, "getAdminServiceData", async () => {
     const inventory = await executeAndWait(
       createApiOpsClient(),
       { kind: "data.inspect" },
@@ -692,13 +740,13 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
   });
 
   // GET /admin/services/backups — list on-disk backup manifests
-  app.get("/admin/services/backups", async (req) => {
+  registerServiceAdminRoute(app, "listAdminServiceBackups", async (req) => {
     const session = getAdminSession(req);
     return presentBackupInventory(await loadBackupInventory(`${session.user.id}:${req.id}`));
   });
 
   // POST /admin/services/backups — create backup job
-  app.post<{ Body: { name?: string } }>("/admin/services/backups", async (req, reply) => {
+  registerServiceAdminRoute(app, "createAdminServiceBackup", async (req, reply) => {
     if (!hasOnlyBodyKeys(req.body, new Set(["name"]))) {
       reply.status(400);
       return { error: "Request contains unsupported fields" };
@@ -731,10 +779,7 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
   });
 
   // POST /admin/services/backups/:name/restore — restore backup job
-  app.post<{
-    Params: { name: string };
-    Body: { serviceIds?: string[]; stopRunning?: boolean };
-  }>("/admin/services/backups/:name/restore", async (req, reply) => {
+  registerServiceAdminRoute(app, "restoreAdminServiceBackup", async (req, reply) => {
     if (!hasOnlyBodyKeys(req.body, new Set(["serviceIds", "stopRunning"]))) {
       reply.status(400);
       return { error: "Request contains unsupported fields" };
@@ -760,7 +805,7 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
       };
     }
 
-    const serviceIds = toIdList(req.body?.serviceIds);
+    const serviceIds = [...new Set(req.body?.serviceIds ?? [])];
     const adminSession = getAdminSession(req);
     const jobId = await jobRunner.enqueue(
       "backup.operation",
@@ -784,7 +829,7 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
   });
 
   // DELETE /admin/services/backups/:name — delete backup job
-  app.delete<{ Params: { name: string } }>("/admin/services/backups/:name", async (req, reply) => {
+  registerServiceAdminRoute(app, "deleteAdminServiceBackup", async (req, reply) => {
     if (!hasOnlyBodyKeys(req.body, new Set())) {
       reply.status(400);
       return { error: "Request contains unsupported fields" };

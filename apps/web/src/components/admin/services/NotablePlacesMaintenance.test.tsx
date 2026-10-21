@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 
 const status = vi.hoisted(() => ({ current: {} as Record<string, unknown> | null }));
 
+vi.mock("@/lib/admin/serviceAdminJobs", () => ({ useServiceJobRegistration: () => vi.fn() }));
 vi.mock("../shared/AdminToast", () => ({ useAdminToast: () => vi.fn() }));
 vi.mock("@tanstack/react-query", () => ({
   useQueryClient: () => ({ invalidateQueries: vi.fn() }),
