@@ -4,7 +4,6 @@ import {
   constants,
   fstatSync,
   fsyncSync,
-  lstatSync,
   openSync,
   readSync,
   renameSync,
@@ -13,15 +12,22 @@ import {
 } from "node:fs";
 import { dirname } from "node:path";
 
+/**
+ * Reads a regular, singly linked file. Every check is made on the opened
+ * descriptor, so the file cannot be swapped between check and read. A missing
+ * file keeps its ENOENT code; a symbolic link fails to open.
+ */
 export function strictReadFile(path: string, maximum: number): string {
-  const before = lstatSync(path);
-  if (!before.isFile() || before.isSymbolicLink() || before.nlink !== 1 || before.size > maximum) {
+  let descriptor: number;
+  try {
+    descriptor = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") throw error;
     throw new Error("Release authority rejected");
   }
-  const descriptor = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW);
   try {
     const opened = fstatSync(descriptor);
-    if (opened.dev !== before.dev || opened.ino !== before.ino || opened.size !== before.size) {
+    if (!opened.isFile() || opened.nlink !== 1 || opened.size > maximum) {
       throw new Error("Release authority rejected");
     }
     const buffer = Buffer.alloc(opened.size);
