@@ -47,22 +47,6 @@ COPY --parents \
 COPY apps/transitous-runner/package.json apps/transitous-runner/
 RUN pnpm install --frozen-lockfile
 
-FROM base AS prod-deps
-WORKDIR /app
-ENV HUSKY=0
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json ./
-COPY --parents \
-    packages/air-quality/package.json \
-    packages/core/package.json \
-    packages/extension-contracts/package.json \
-    packages/hey-api-client-fetch/package.json \
-    packages/mobility-core/package.json \
-    packages/mobility-formats/package.json \
-    packages/transitous-core/package.json \
-    ./
-COPY apps/transitous-runner/package.json apps/transitous-runner/
-RUN pnpm install --frozen-lockfile --prod --ignore-scripts
-
 # Bundles the runner and the workspace code it reaches into dist/. The release
 # planner fingerprints this bundle; release builds pass its digest so a
 # different bundle fails the build instead of shipping under the plan's name.
@@ -82,9 +66,11 @@ COPY scripts/build-runtime-bundles.mjs scripts/module-specifiers.mjs scripts/
 ARG EXPECTED_BUNDLE_DIGEST=
 RUN node scripts/build-runtime-bundles.mjs transitous-runner --expect "$EXPECTED_BUNDLE_DIGEST"
 
-# Only the installed package directories the bundles load, listed by the bundle
-# build, with the node_modules links between them.
-FROM prod-deps AS runtime-packages
+# Only the installed package directories the bundles load, with the
+# node_modules links between them. The bundle build lists them from this same
+# install, so a dependency's production or development classification does
+# not matter here.
+FROM deps AS runtime-packages
 COPY scripts/copy-runtime-packages.mjs scripts/
 COPY --from=bundle /app/apps/transitous-runner/dist/runtime-packages.json /tmp/runtime-packages.json
 RUN node scripts/copy-runtime-packages.mjs /tmp/runtime-packages.json /app /runtime

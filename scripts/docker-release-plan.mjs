@@ -111,11 +111,7 @@ function snapshotKey(name, version) {
  * package reachable from them, and all settings outside those maps. Throws when
  * anything it follows is missing, so callers can fall back to the whole file.
  */
-export function lockfileSubgraph(
-  documents,
-  selectsImporter,
-  sections = ["dependencies", "devDependencies", "optionalDependencies"],
-) {
+export function lockfileSubgraph(documents, selectsImporter) {
   // pnpm 11+ writes its own environment as a first document; the workspace
   // document is the one listing the workspace importers.
   const main = documents
@@ -137,7 +133,7 @@ export function lockfileSubgraph(
     const importer = main.importers[key];
     if (!importer || typeof importer !== "object") throw new Error(`Missing importer ${key}`);
     importers.set(key, importer);
-    for (const section of sections) {
+    for (const section of ["dependencies", "devDependencies", "optionalDependencies"]) {
       for (const [name, dependency] of Object.entries(importer[section] ?? {})) {
         const version = typeof dependency === "object" ? dependency?.version : dependency;
         if (typeof version !== "string") throw new Error(`Unresolved ${name} in ${key}`);
@@ -180,36 +176,14 @@ export function lockfileSubgraph(
     .digest("hex");
 }
 
-// What a production install reads from a manifest. Scripts, versions and
-// development dependencies do not change the installed packages.
-const ROOT_INSTALL_FIELDS = [
-  "packageManager",
-  "pnpm",
-  "dependencies",
-  "optionalDependencies",
-  "resolutions",
-  "engines",
-];
-const WORKSPACE_INSTALL_FIELDS = [
-  "name",
-  "dependencies",
-  "optionalDependencies",
-  "peerDependencies",
-  "dependenciesMeta",
-  "bin",
-];
-
-function installProjection(path, text) {
-  const manifest = JSON.parse(text);
-  const fields = path === "package.json" ? ROOT_INSTALL_FIELDS : WORKSPACE_INSTALL_FIELDS;
-  return JSON.stringify(fields.map((field) => [field, manifest[field] ?? null]));
-}
-
 /**
  * An image's input fingerprint. A bundled image (one built from a `bundle`
  * stage) is fingerprinted by its bundle digest instead of by the stages that
- * only feed the bundle; what its production install reads from the manifests
- * and lockfile stands in for those files.
+ * only feed the bundle. The digest also covers the npm packages the image
+ * keeps: runtime-packages.json names each by its store directory, which pins
+ * its version, peers and patches. So package manifests and the lockfile count
+ * only through the digest, apart from the root manifest's `packageManager`,
+ * which selects the pnpm the base stage activates.
  */
 export function imageFingerprint({
   target,
@@ -236,7 +210,7 @@ export function imageFingerprint({
   const hash = createHash("sha256");
   hash.update(
     JSON.stringify([
-      bundleDigest ? "openmapx/docker-inputs/v3-bundle" : "openmapx/docker-inputs/v2",
+      bundleDigest ? "openmapx/docker-inputs/v4-bundle" : "openmapx/docker-inputs/v2",
       target,
       "linux/amd64",
       dockerfile,
@@ -244,10 +218,12 @@ export function imageFingerprint({
   );
   if (bundleDigest) hash.update(JSON.stringify(["bundle", bundleDigest]));
   for (const entry of [...entries].sort((a, b) => a.path.localeCompare(b.path, "en"))) {
-    if (bundleDigest && (entry.path === "package.json" || entry.path.endsWith("/package.json"))) {
+    if (bundleDigest && entry.path.endsWith("/package.json")) continue;
+    if (bundleDigest && entry.path === LOCKFILE) continue;
+    if (bundleDigest && entry.path === "package.json") {
       try {
-        const projection = installProjection(entry.path, readFile(entry.path));
-        hash.update(JSON.stringify([entry.path, entry.mode, "install", projection]));
+        const { packageManager = null } = JSON.parse(readFile(entry.path));
+        hash.update(JSON.stringify([entry.path, entry.mode, "packageManager", packageManager]));
         continue;
       } catch {
         // An unreadable manifest counts as a whole file.
@@ -255,14 +231,10 @@ export function imageFingerprint({
     }
     // The installed dependencies depend on the lockfile entries this image's
     // copied manifests reach, not on unrelated workspace dependency changes.
-    // A bundled image's runner holds only the production install.
     if (entry.path === LOCKFILE && lockfile) {
       try {
-        const subgraph = lockfileSubgraph(
-          lockfile.documents,
-          (importer) =>
-            coversPath(inputs, importer === "." ? "package.json" : `${importer}/package.json`),
-          bundleDigest ? ["dependencies", "optionalDependencies"] : undefined,
+        const subgraph = lockfileSubgraph(lockfile.documents, (importer) =>
+          coversPath(inputs, importer === "." ? "package.json" : `${importer}/package.json`),
         );
         hash.update(JSON.stringify([entry.path, entry.mode, "subgraph", subgraph]));
         continue;

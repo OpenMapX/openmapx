@@ -8,7 +8,7 @@ import {
   realpathSync,
   symlinkSync,
 } from "node:fs";
-import { dirname, join, relative, resolve, sep } from "node:path";
+import { basename, dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 /**
@@ -48,9 +48,15 @@ export function copyRuntimePackages(directories, from, to) {
         symlinkSync(readlinkSync(path), target);
       } else if (entry.isDirectory()) {
         if (kept.has(path)) cpSync(path, target, { recursive: true, verbatimSymlinks: true });
-        // Links to kept packages live in node_modules and scope directories,
-        // including pnpm's hoisted node_modules/.pnpm/node_modules.
-        else if (ancestors.has(path) || entry.name === "node_modules" || entry.name[0] === "@") {
+        // Links to kept packages live in node_modules and the scope directories
+        // inside them, including pnpm's hoisted node_modules/.pnpm/node_modules.
+        // pnpm's store directories for scoped packages (`.pnpm/@scope+name@1`)
+        // are not scopes: only those of kept packages are entered, as ancestors.
+        else if (
+          ancestors.has(path) ||
+          entry.name === "node_modules" ||
+          (entry.name[0] === "@" && basename(directory) === "node_modules")
+        ) {
           visit(path);
         }
       }

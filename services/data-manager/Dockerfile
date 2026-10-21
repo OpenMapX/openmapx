@@ -53,29 +53,6 @@ COPY packages/place-ids/package.json packages/place-ids/
 
 RUN pnpm install --frozen-lockfile
 
-FROM base AS prod-deps
-WORKDIR /app
-ENV HUSKY=0
-
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
-COPY services/data-manager/package.json services/data-manager/
-COPY packages/db-schema/package.json packages/db-schema/
-COPY packages/hardlinks/package.json packages/hardlinks/
-COPY packages/motis-feed-proxy-config/package.json packages/motis-feed-proxy-config/
-COPY packages/mobility-formats/package.json packages/mobility-formats/
-COPY packages/transitous-core/package.json packages/transitous-core/
-COPY packages/core/package.json packages/core/
-COPY packages/extension-contracts/package.json packages/extension-contracts/
-COPY packages/hey-api-client-fetch/package.json packages/hey-api-client-fetch/
-COPY packages/i18n/package.json packages/i18n/
-COPY packages/cli/package.json packages/cli/
-COPY packages/air-quality/package.json packages/air-quality/
-COPY packages/integration-framework/package.json packages/integration-framework/
-COPY packages/mobility-core/package.json packages/mobility-core/
-COPY packages/place-ids/package.json packages/place-ids/
-
-RUN pnpm install --frozen-lockfile --prod --ignore-scripts
-
 FROM deps AS bundle
 WORKDIR /app
 
@@ -99,9 +76,11 @@ COPY scripts/build-runtime-bundles.mjs scripts/module-specifiers.mjs scripts/
 ARG EXPECTED_BUNDLE_DIGEST=
 RUN node scripts/build-runtime-bundles.mjs data-manager --expect "$EXPECTED_BUNDLE_DIGEST"
 
-# Only the installed package directories the bundles load, listed by the bundle
-# build, with the node_modules links between them.
-FROM prod-deps AS runtime-packages
+# Only the installed package directories the bundles load, with the
+# node_modules links between them. The bundle build lists them from this same
+# install, so a dependency's production or development classification does
+# not matter here.
+FROM deps AS runtime-packages
 COPY scripts/copy-runtime-packages.mjs scripts/
 COPY --from=bundle /app/services/data-manager/dist/runtime-packages.json /tmp/runtime-packages.json
 RUN node scripts/copy-runtime-packages.mjs /tmp/runtime-packages.json /app /runtime
