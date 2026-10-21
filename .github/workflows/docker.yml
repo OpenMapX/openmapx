@@ -193,8 +193,12 @@ jobs:
           labels: |
             org.opencontainers.image.revision=${{ needs.gate.outputs.sha }}
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
-          cache-from: type=gha,scope=${{ matrix.app }}
-          cache-to: type=gha,mode=${{ matrix.app == 'api' && 'min' || 'max' }},scope=${{ matrix.app }}
+          # Releases keep their layer cache in the registry. The shared Actions
+          # cache is capped at 10 GB and evicted these blobs between releases,
+          # so every rebuild produced new layers that hosts downloaded again.
+          # A cache failure only costs a cold build, never the release.
+          cache-from: type=registry,ref=${{ env.IMAGE_PREFIX }}/${{ matrix.app }}:buildcache
+          cache-to: type=registry,ref=${{ env.IMAGE_PREFIX }}/${{ matrix.app }}:buildcache,mode=${{ matrix.app == 'api' && 'min' || 'max' }},image-manifest=true,oci-mediatypes=true,ignore-error=true
           provenance: mode=max
           sbom: true
 
