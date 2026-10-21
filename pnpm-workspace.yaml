@@ -134,6 +134,23 @@ overrides:
   # constraint, drizzle-orm's optional expo-sqlite peer in server workspaces
   # auto-installs the newer 0.87.x line and leaves duplicate native modules.
   "react-native": "0.86.3"
+  # pnpm attaches a package's optional peer whenever any workspace project
+  # installs it. These peers serve entry points nothing here imports, and the
+  # API's production install carried them: Expo, React Native and Hermes
+  # through drizzle-orm's `drizzle-orm/expo-sqlite` (only apps/mobile installs
+  # expo-sqlite, and it does not use drizzle-orm) and @better-auth/expo's
+  # `/client`; Next.js, Vue and Vitest through better-auth's `/next-js`, `/vue`
+  # and `/test`. Remove an entry before importing the entry point it serves.
+  "@better-auth/expo>expo-constants": "-"
+  "@better-auth/expo>expo-linking": "-"
+  "@better-auth/expo>expo-network": "-"
+  "@better-auth/expo>expo-secure-store": "-"
+  "@better-auth/expo>expo-web-browser": "-"
+  "better-auth>drizzle-kit": "-"
+  "better-auth>next": "-"
+  "better-auth>vitest": "-"
+  "better-auth>vue": "-"
+  "drizzle-orm>expo-sqlite": "-"
 
 peerDependencyRules:
   # @emoji-mart/react is unchanged since 2022 and its React peer range stops at
