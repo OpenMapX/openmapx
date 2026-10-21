@@ -109,44 +109,25 @@ it("shares the parent lock PID and cannot continue writing after that parent die
 }, 15000);
 
 it.skipIf(process.env.OPENMAPX_RUN_BUILT_WORKER_TESTS !== "1")(
-  "runs the emitted JavaScript client and worker against a real tar",
+  "runs the bundled traffic writer worker with plain Node against a real tar",
   async () => {
     const dir = mkdtempSync(join(tmpdir(), "openmapx-writer-built-"));
     const tarPath = join(dir, "traffic.tar");
     writeFileSync(tarPath, trafficFixture());
-    const clientUrl = new URL("../../dist/jobs/traffic/live-writer-client.js", import.meta.url)
-      .href;
-    const loader = pathToFileURL(createRequire(import.meta.url).resolve("tsx/esm")).href;
-    const child = spawn(
-      process.execPath,
-      [
-        "--import",
-        loader,
-        "--input-type=module",
-        "--eval",
-        `import { createLiveTrafficWriter } from ${JSON.stringify(clientUrl)};
-    const writer = createLiveTrafficWriter();
-    try { console.log(JSON.stringify(await writer.write({ tarPath: ${JSON.stringify(tarPath)}, statePath: ${JSON.stringify(join(dir, "state.json"))},
-      csv: 'way_id,dir,current_kph,free_flow_kph,los\\n1,f,30,50,queuing\\n', waysToEdges: new Map([[1, [{forward:true,level:2,tile:0,index:1}]]]) }))); }
-    finally { await writer.close(); }`,
-      ],
-      { stdio: ["ignore", "pipe", "pipe"] },
-    );
-    let stdout = "";
-    let stderr = "";
-    child.stdout.on("data", (data) => {
-      stdout += data;
-    });
-    child.stderr.on("data", (data) => {
-      stderr += data;
+    const writer = createLiveTrafficWriter({
+      workerUrl: new URL("../../dist/live-writer-worker.mjs", import.meta.url),
     });
     try {
-      const [code] = await once(child, "exit");
-      expect(code, stderr).toBe(0);
-      expect(JSON.parse(stdout).written).toBe(1);
+      const result = await writer.write({
+        tarPath,
+        statePath: join(dir, "state.json"),
+        csv: "way_id,dir,current_kph,free_flow_kph,los\n1,f,30,50,queuing\n",
+        waysToEdges: new Map([[1, [{ forward: true, level: 2, tile: 0, index: 1 }]]]),
+      });
+      expect(result.written).toBe(1);
       expect(Number(readFileSync(tarPath).readBigUInt64LE(1536 + 32 + 8) & 0x7fn)).toBe(15);
     } finally {
-      child.kill("SIGKILL");
+      await writer.close();
       rmSync(dir, { recursive: true, force: true });
     }
   },

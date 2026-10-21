@@ -24,12 +24,15 @@ describe("required production build gate", () => {
     );
   });
 
-  it("executes the emitted traffic worker after the production build in the required build job", () => {
+  it("executes the bundled data-manager workers after the production build in the required build job", () => {
     const workflow = read(".github/workflows/ci.yml");
     const buildJob =
       workflow.match(/^ {2}build:\n[\s\S]*?(?=^ {2}\w[\w-]*:|$(?![\s\S]))/m)?.[0] ?? "";
-    const smoke =
-      "OPENMAPX_RUN_BUILT_WORKER_TESTS=1 pnpm exec vitest run --project node services/data-manager/src/__tests__/live-writer-worker.test.ts";
+    const smoke = [
+      "OPENMAPX_RUN_BUILT_WORKER_TESTS=1 pnpm exec vitest run --project node",
+      "services/data-manager/src/__tests__/live-writer-worker.test.ts",
+      "services/data-manager/src/__tests__/offline-extractor-worker.test.ts",
+    ].join(" ");
     const buildPosition = buildJob.indexOf("run: pnpm build");
     const smokePosition = buildJob.indexOf(`run: ${smoke}`);
     expect(buildPosition).toBeGreaterThan(-1);

@@ -37,6 +37,16 @@ export const RUNTIME_BUNDLES = {
       cli: "packages/cli/src/index.ts",
     },
   },
+  "data-manager": {
+    tsconfig: "services/data-manager/tsconfig.json",
+    outdir: "services/data-manager/dist",
+    entries: {
+      supervisor: "services/data-manager/src/supervisor.ts",
+      index: "services/data-manager/src/index.ts",
+      "live-writer-worker": "services/data-manager/src/jobs/traffic/live-writer-worker.ts",
+      "extractor-worker": "services/data-manager/src/offline-packages/extractor-worker.ts",
+    },
+  },
   "transitous-runner": {
     tsconfig: "apps/transitous-runner/tsconfig.json",
     outdir: "apps/transitous-runner/dist",
@@ -106,6 +116,9 @@ export async function buildRuntimeBundle(root, image, config = RUNTIME_BUNDLES[i
   const absoluteRoot = realpathSync(resolve(root));
   const outdir = join(absoluteRoot, config.outdir);
   const packages = workspacePackages(absoluteRoot);
+  const entryNames = new Map(
+    Object.entries(config.entries).map(([name, entry]) => [join(absoluteRoot, entry), name]),
+  );
   const externals = new Set();
   const assets = new Map();
   const sources = new Set();
@@ -168,9 +181,16 @@ export async function buildRuntimeBundle(root, image, config = RUNTIME_BUNDLES[i
         }
         const replacements = [];
         // Copy each literal `new URL("…", import.meta.url)` asset next to the
-        // bundle and point the URL at the copy.
+        // bundle and point the URL at the copy. A URL naming another entry of
+        // this bundle (a worker or child process) points at that entry's
+        // output instead; entries are written flat into the output directory.
         for (const asset of facts.assetUrls) {
           const sourcePath = resolve(dirname(args.path), asset.specifier);
+          const entry = entryNames.get(sourcePath);
+          if (entry) {
+            replacements.push({ ...asset, text: `./${entry}.mjs` });
+            continue;
+          }
           let bytes;
           try {
             bytes = readFileSync(sourcePath);

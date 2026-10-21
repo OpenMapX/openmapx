@@ -3,8 +3,8 @@
 # IMPORTANT: build context MUST be the repo root. This Dockerfile reaches
 # outside its own directory to pick up:
 #   - pnpm-workspace.yaml + workspace package.json files (for dependency
-#     resolution of @openmapx/db-schema, @openmapx/hardlinks, and the other
-#     workspace packages the data-manager imports)
+#     resolution of the workspace packages the data-manager bundles)
+#   - the bundled workspace sources and scripts/build-runtime-bundles.mjs
 #   - services/motis/tools/transitous/requirements.txt (pulled into the
 #     runtime stage for the Transitous GTFS pipeline)
 #
@@ -80,29 +80,28 @@ RUN pnpm install --frozen-lockfile --prod --ignore-scripts && \
 # runtime. Do not copy that unused, currently vulnerable package into the
 # production image merely because pnpm uses a shared workspace virtual store.
 
-FROM deps AS builder
+FROM deps AS bundle
 WORKDIR /app
 
 COPY tsconfig.base.json ./
-# The workspace packages staged for installation, not every package.
+# The workspace packages the bundles include, not every installed package.
 COPY packages/air-quality/ packages/air-quality/
 COPY packages/cli/ packages/cli/
 COPY packages/core/ packages/core/
 COPY packages/db-schema/ packages/db-schema/
 COPY packages/extension-contracts/ packages/extension-contracts/
 COPY packages/hardlinks/ packages/hardlinks/
-COPY packages/hey-api-client-fetch/ packages/hey-api-client-fetch/
-COPY packages/i18n/ packages/i18n/
-COPY packages/integration-framework/ packages/integration-framework/
 COPY packages/mobility-core/ packages/mobility-core/
 COPY packages/mobility-formats/ packages/mobility-formats/
 COPY packages/motis-feed-proxy-config/ packages/motis-feed-proxy-config/
-COPY packages/place-ids/ packages/place-ids/
 COPY packages/transitous-core/ packages/transitous-core/
 COPY services/data-manager/ services/data-manager/
-
-WORKDIR /app/services/data-manager
-RUN pnpm build
+# Producer acquisition captures this trusted metadata in each release
+# contract; the bundle carries it as an asset.
+COPY integrations/poi-overture/manifest.json integrations/poi-overture/manifest.json
+COPY scripts/build-runtime-bundles.mjs scripts/module-specifiers.mjs scripts/
+ARG EXPECTED_BUNDLE_DIGEST=
+RUN node scripts/build-runtime-bundles.mjs data-manager --expect "$EXPECTED_BUNDLE_DIGEST"
 
 FROM node:24.21.0-slim@sha256:d6aa754f16b3197301076f047b5def2f02ea1dbbc2ca920407d46d7ec7f87b20 AS runner
 WORKDIR /app
@@ -156,63 +155,18 @@ RUN groupadd --system --gid 1001 datamgr \
     && rm -f /usr/local/bin/npm /usr/local/bin/npx \
     && chown datamgr:datamgr /app
 
-# Assign ownership while copying. A recursive chown afterwards would store a
+# The bundles import their npm dependencies by path from the pnpm store, so the
+# runner needs the production store and the bundles, and no workspace source.
+# Assign ownership while copying: a recursive chown afterwards would store a
 # second copy of every file, including node_modules, in its own layer.
 COPY --chown=datamgr:datamgr --from=prod-deps /app/node_modules ./node_modules
-COPY --chown=datamgr:datamgr --from=prod-deps /app/services/data-manager/node_modules ./services/data-manager/node_modules
-# The shared @openmapx/db-schema, @openmapx/hardlinks, and
-# @openmapx/motis-feed-proxy-config packages ship their TypeScript source
-# directly; tsx/esm (preserved because it's a prod dep) transpiles them on
-# import.
-# db-schema needs its own node_modules so the symlinked drizzle-orm resolves
-# from its source files at runtime; the other two have no prod externals so
-# only the source is needed.
-COPY --chown=datamgr:datamgr packages/db-schema/ ./packages/db-schema/
-COPY --chown=datamgr:datamgr --from=prod-deps /app/packages/db-schema/node_modules ./packages/db-schema/node_modules
-COPY --chown=datamgr:datamgr packages/hardlinks/ ./packages/hardlinks/
-COPY --chown=datamgr:datamgr packages/motis-feed-proxy-config/ ./packages/motis-feed-proxy-config/
-COPY --chown=datamgr:datamgr packages/mobility-formats/ ./packages/mobility-formats/
-COPY --chown=datamgr:datamgr --from=prod-deps /app/packages/mobility-formats/node_modules ./packages/mobility-formats/node_modules
-COPY --chown=datamgr:datamgr packages/transitous-core/ ./packages/transitous-core/
-COPY --chown=datamgr:datamgr --from=prod-deps /app/packages/transitous-core/node_modules ./packages/transitous-core/node_modules
-COPY --chown=datamgr:datamgr packages/core/ ./packages/core/
-COPY --chown=datamgr:datamgr packages/extension-contracts/ ./packages/extension-contracts/
-COPY --chown=datamgr:datamgr --from=prod-deps /app/packages/extension-contracts/node_modules ./packages/extension-contracts/node_modules
-COPY --chown=datamgr:datamgr --from=prod-deps /app/packages/core/node_modules ./packages/core/node_modules
-COPY --chown=datamgr:datamgr packages/hey-api-client-fetch/ ./packages/hey-api-client-fetch/
-
-# Transitive runtime dependencies of @openmapx/core and @openmapx/cli, which
-# data-manager imports.
-COPY --chown=datamgr:datamgr packages/place-ids/ ./packages/place-ids/
-COPY --chown=datamgr:datamgr packages/air-quality/ ./packages/air-quality/
-COPY --chown=datamgr:datamgr --from=prod-deps /app/packages/air-quality/node_modules ./packages/air-quality/node_modules
-COPY --chown=datamgr:datamgr packages/integration-framework/ ./packages/integration-framework/
-COPY --chown=datamgr:datamgr --from=prod-deps /app/packages/integration-framework/node_modules ./packages/integration-framework/node_modules
-COPY --chown=datamgr:datamgr packages/mobility-core/ ./packages/mobility-core/
-COPY --chown=datamgr:datamgr --from=prod-deps /app/packages/mobility-core/node_modules ./packages/mobility-core/node_modules
-
-# packages/cli source + node_modules — bundled for parity with apps/api's
-# runner (admin-cli.ts spawns the CLI for data jobs when no host bind-mount
-# with the CLI is present); tiny, no native deps.
-COPY --chown=datamgr:datamgr packages/cli/ packages/cli/
-COPY --chown=datamgr:datamgr --from=prod-deps /app/packages/cli/node_modules ./packages/cli/node_modules
-
-COPY --chown=datamgr:datamgr --from=builder /app/services/data-manager/dist ./services/data-manager/dist
-COPY --chown=datamgr:datamgr services/data-manager/package.json ./services/data-manager/
-# Producer acquisition captures this trusted metadata in each release contract.
-COPY --chown=datamgr:datamgr integrations/poi-overture/manifest.json ./integrations/poi-overture/manifest.json
-
-# tsx resolves tsconfig paths + .js -> .ts at runtime for the workspace
-# packages that ship TypeScript source.
-ENV TSX_TSCONFIG_PATH=/app/tsconfig.base.json
-COPY --chown=datamgr:datamgr tsconfig.base.json ./
+COPY --chown=datamgr:datamgr --from=bundle /app/services/data-manager/dist ./services/data-manager/dist
+# Every dependency file the bundles pin must exist in this production install.
+RUN node -e 'const fs=require("node:fs"),p=require("node:path");const d="/app/services/data-manager/dist";const missing=JSON.parse(fs.readFileSync(p.join(d,"runtime-externals.json"),"utf8")).filter((f)=>!fs.existsSync(p.join(d,f)));if(missing.length){console.error("Missing bundle dependencies:",missing);process.exit(1)}'
 
 USER datamgr:datamgr
 
 WORKDIR /app/services/data-manager
 EXPOSE 4000
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 CMD ["curl", "-fs", "http://localhost:4000/status"]
-# `--import tsx/esm` lets the compiled dist entry reach back into
-# @openmapx/db-schema's, @openmapx/hardlinks's, and
-# @openmapx/motis-feed-proxy-config's .ts source without a separate build step.
-CMD ["node", "--import", "tsx/esm", "dist/supervisor.js"]
+CMD ["node", "dist/supervisor.mjs"]
