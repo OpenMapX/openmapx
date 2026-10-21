@@ -75,3 +75,52 @@ export function coversPath(inputs, path) {
       : input === "." || path === input || path.startsWith(`${input}/`),
   );
 }
+
+/** Splits a Dockerfile into its build stages, in order. */
+export function dockerStages(dockerfile) {
+  const lines = dockerfile
+    .split(/\r?\n/)
+    .filter((line) => !line.trimStart().startsWith("#"))
+    .join("\n")
+    .replace(/\\\n/g, " ")
+    .split("\n");
+  const stages = [];
+  for (const line of lines) {
+    const from = /^\s*FROM\s+(?:--platform=\S+\s+)?(\S+)(?:\s+AS\s+(\S+))?\s*$/i.exec(line);
+    if (from) {
+      stages.push({ name: from[2]?.toLowerCase(), base: from[1].toLowerCase(), lines: [] });
+      continue;
+    }
+    stages.at(-1)?.lines.push(line);
+  }
+  return stages.map(({ name, base, lines }) => ({ name, base, text: lines.join("\n") }));
+}
+
+/**
+ * Context inputs of the stages the final stage is built from, following `FROM
+ * <stage>` and `COPY --from=<stage>`, without entering the `replaced` stage.
+ * A caller accounts for that stage's output itself.
+ */
+export function stageInputs(dockerfile, context, replaced) {
+  const stages = dockerStages(dockerfile);
+  const byName = new Map(stages.filter((stage) => stage.name).map((stage) => [stage.name, stage]));
+  const visited = new Set();
+  const inputs = new Set();
+  let reachesReplaced = false;
+  const visit = (stage) => {
+    if (visited.has(stage)) return;
+    visited.add(stage);
+    for (const input of dockerInputs(stage.text, context)) inputs.add(input);
+    const dependencies = [
+      stage.base,
+      ...[...stage.text.matchAll(/^\s*COPY\s+.*--from=(\S+)/gim)].map((match) => match[1]),
+    ];
+    for (const dependency of dependencies) {
+      const name = dependency.toLowerCase();
+      if (name === replaced) reachesReplaced = true;
+      else if (byName.has(name)) visit(byName.get(name));
+    }
+  };
+  if (stages.length > 0) visit(stages.at(-1));
+  return { inputs: [...inputs], reachesReplaced };
+}

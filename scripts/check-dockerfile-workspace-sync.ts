@@ -20,14 +20,20 @@
  *
  * The ops-agent and transitous-runner images copy only the packages they use,
  * so a package changing elsewhere does not rebuild them. Their installs must
- * stage their manifest closure, and every repository file their runtime code
- * imports must be copied into the runner: the import graph below is followed
- * from each tsx image's entry points with the image's own module resolution.
+ * stage their manifest closure. For a tsx image, every repository file its
+ * runtime code imports must be copied into the runner: the import graph below
+ * is followed from its entry points with the image's own module resolution.
+ *
+ * A bundled image runs a bundle of its code instead (scripts/
+ * build-runtime-bundles.mjs). Its bundle must build, its runner must not copy
+ * workspace source, and the planner relies on the runner reaching the stage
+ * named `bundle`.
  */
 import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { coversPath, dockerInputs } from "./docker-inputs.mjs";
+import { buildRuntimeBundle, RUNTIME_BUNDLES } from "./build-runtime-bundles.mjs";
+import { coversPath, dockerInputs, dockerStages, stageInputs } from "./docker-inputs.mjs";
 import { runtimeImportGraph } from "./runtime-import-graph";
 
 const HERE = typeof __dirname !== "undefined" ? __dirname : dirname(fileURLToPath(import.meta.url));
@@ -243,12 +249,6 @@ const RUNTIME_IMAGES: {
     },
   },
   {
-    path: "apps/transitous-runner/Dockerfile",
-    tsconfig: "apps/transitous-runner/tsconfig.json",
-    entries: ["apps/transitous-runner/src"],
-    compiled: "apps/transitous-runner/src/",
-  },
-  {
     path: "services/data-manager/Dockerfile",
     tsconfig: "services/data-manager/tsconfig.json",
     entries: ["services/data-manager/src"],
@@ -296,16 +296,74 @@ for (const image of RUNTIME_IMAGES) {
   }
 }
 
-if (completenessErrors.length > 0) {
-  console.error(
-    `✗ Workspace packages an image's code reaches are missing from its build:\n\n` +
-      `${completenessErrors.map((e) => `  • ${e}`).join("\n\n")}\n`,
-  );
-  process.exit(1);
+/** The Dockerfile of each bundled image, by bundle name. */
+const BUNDLED_DOCKERFILES: Record<string, string> = {
+  "transitous-runner": "apps/transitous-runner/Dockerfile",
+};
+const SOURCE_PREFIXES = [
+  /^packages\//,
+  /^apps\/[^/]+\/src(?:\/|$)/,
+  /^services\/[^/]+\/src(?:\/|$)/,
+  /^integrations\//,
+];
+
+async function checkBundledImages(): Promise<void> {
+  const bundled = Object.keys(RUNTIME_BUNDLES).sort();
+  if (JSON.stringify(Object.keys(BUNDLED_DOCKERFILES).sort()) !== JSON.stringify(bundled)) {
+    completenessErrors.push(
+      `BUNDLED_DOCKERFILES must name the Dockerfile of every runtime bundle: ${bundled.join(", ")}.`,
+    );
+  }
+  for (const dockerfile of [
+    "apps/api/Dockerfile",
+    "apps/web/Dockerfile",
+    ...Object.values(BUNDLED_DOCKERFILES),
+    ...RUNTIME_IMAGES.map((image) => image.path),
+  ]) {
+    const hasBundleStage = dockerStages(read(dockerfile)).some((stage) => stage.name === "bundle");
+    if (hasBundleStage && !Object.values(BUNDLED_DOCKERFILES).includes(dockerfile)) {
+      completenessErrors.push(`${dockerfile} has a bundle stage but no runtime bundle definition.`);
+    }
+  }
+  for (const [image, dockerfile] of Object.entries(BUNDLED_DOCKERFILES)) {
+    const content = read(dockerfile);
+    if (!stageInputs(content, ".", "bundle").reachesReplaced) {
+      completenessErrors.push(
+        `${dockerfile}: the runner must be built from a stage named "bundle".`,
+      );
+    }
+    const copied = (dockerInputs(runnerSection(dockerfile), ".") as string[]).filter(
+      (input) => input === "." || SOURCE_PREFIXES.some((prefix) => prefix.test(input)),
+    );
+    if (copied.length > 0) {
+      completenessErrors.push(
+        `${dockerfile}'s runner copies workspace source (${copied.join(", ")}); a bundled image ` +
+          "runs its bundle, and the release planner does not fingerprint that source.",
+      );
+    }
+    try {
+      await buildRuntimeBundle(ROOT, image);
+    } catch (error) {
+      completenessErrors.push(error instanceof Error ? error.message : String(error));
+    }
+  }
 }
 
-console.log(
-  `✓ Dockerfile workspace packages complete — ${IMAGES.map(
-    (image) => `${image.path}: ${image.required.size}`,
-  ).join(", ")} packages staged.`,
-);
+async function report(): Promise<void> {
+  await checkBundledImages();
+  if (completenessErrors.length > 0) {
+    console.error(
+      `✗ Workspace packages an image's code reaches are missing from its build:\n\n` +
+        `${completenessErrors.map((e) => `  • ${e}`).join("\n\n")}\n`,
+    );
+    process.exit(1);
+  }
+  console.log(
+    `✓ Dockerfile workspace packages complete — ${IMAGES.map(
+      (image) => `${image.path}: ${image.required.size}`,
+    ).join(", ")} packages staged; bundles build for ${Object.keys(RUNTIME_BUNDLES).join(", ")}.`,
+  );
+}
+
+// No top-level await: this script is compiled as CommonJS.
+void report();

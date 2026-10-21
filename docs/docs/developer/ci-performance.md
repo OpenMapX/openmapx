@@ -116,6 +116,36 @@ of its files. File-level inputs would mostly help transitous-runner, which reach
 3 core files. They are not used, because computed imports and file reads cannot
 all be followed, and a missed one would let a release reuse an image with stale code.
 
+## Runtime bundles
+
+Images that ran workspace TypeScript under tsx are moving to runtime bundles,
+starting with transitous-runner. `scripts/build-runtime-bundles.mjs` bundles an
+image's own code and the workspace code it reaches with esbuild:
+
+- npm packages stay installed in the image, but every import is pinned. The script
+  resolves it from the importing package's location, as Node does in the pnpm
+  layout, and rewrites it to a path relative to the output directory. The bundle
+  therefore loads the same dependency files as before.
+- A literal `new URL("…", import.meta.url)` asset is copied into `dist/assets/`.
+- A computed `import()`, any other use of the module's own location, and any
+  esbuild warning fail the build.
+- The output is byte-identical across builds and checkout locations.
+
+The release planner fingerprints a bundled image by its bundle digest instead of
+by the stages that only feed the `bundle` stage. The production install counts
+through what it reads: the install fields of each manifest and the production
+lockfile entries. Scripts, versions and development dependencies do not count.
+The plan job builds the bundles. A release build passes the planned digest as
+`EXPECTED_BUNDLE_DIGEST`, and the `bundle` stage fails when its bundle differs.
+The runner checks that every pinned dependency file exists in its production
+install. `check-dockerfile-workspace-sync` builds every bundle and rejects a
+bundled runner that copies workspace source.
+
+Over the 200 main commits before this change, bundles would have rebuilt
+transitous-runner 24 times instead of 97 (its bundle never changed; the rest are
+Dockerfile, workflow and dependency changes). For ops-agent and data-manager the
+same replay gives 57 and 58 instead of 106 and 118.
+
 Changesets excludes package-root `Dockerfile` edits from release detection;
 these private deployment-image changes do not need empty package notes. Source,
 package manifests and nested Dockerfile fixtures still participate in the gate.

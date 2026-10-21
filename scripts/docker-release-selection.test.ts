@@ -160,13 +160,13 @@ describe("build selection and mandatory scanning", () => {
   it("exports the prior exact digest for reuse", () => {
     expect(select()).toEqual({
       status: 0,
-      output: `rebuild=false\nrefresh=false\ndigest=${digest}\n`,
+      output: `rebuild=false\nrefresh=false\ndigest=${digest}\nbundle_digest=\n`,
     });
   });
   it("does not expose a fallback digest for a required rebuild", () => {
     expect(select({}, { rebuild: true, refresh: true })).toEqual({
       status: 0,
-      output: "rebuild=true\nrefresh=true\ndigest=\n",
+      output: "rebuild=true\nrefresh=true\ndigest=\nbundle_digest=\n",
     });
   });
   it.each([{ release: `${sha}-124-1` }, { sourceRevision: "b".repeat(40) }, { version: 2 }])(
@@ -175,6 +175,18 @@ describe("build selection and mandatory scanning", () => {
       expect(select(patch)).toEqual({ status: 1, output: "" });
     },
   );
+  it("exports the planned bundle digest for the build to check", () => {
+    expect(select({}, { rebuild: true, digest: "", bundleDigest: "d".repeat(64) })).toEqual({
+      status: 0,
+      output: `rebuild=true\nrefresh=false\ndigest=\nbundle_digest=${"d".repeat(64)}\n`,
+    });
+  });
+  it("rejects a malformed or injected bundle digest", () => {
+    expect(select({}, { bundleDigest: `${"d".repeat(64)}\nrebuild=false` })).toEqual({
+      status: 1,
+      output: "",
+    });
+  });
   it("rejects unpullable or injected reused image references", () => {
     expect(select({}, { digest: "latest\nrebuild=false" })).toEqual({ status: 1, output: "" });
   });
