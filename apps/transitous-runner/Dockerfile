@@ -23,7 +23,7 @@ WORKDIR /tmp/gtfsclean-build
 COPY --chmod=0755 services/motis/tools/transitous/build-gtfsclean.sh /usr/local/bin/build-gtfsclean
 RUN build-gtfsclean
 
-FROM node:24.21.0-slim@sha256:d6aa754f16b3197301076f047b5def2f02ea1dbbc2ca920407d46d7ec7f87b20 AS base
+FROM node:24.22.1-slim@sha256:55fb5f5a527ea2c5c4a95f963e48ef90aa38c7b346054fdc8ee9957a2b55d205 AS base
 COPY package.json /tmp/package.json
 RUN corepack enable && \
     corepack prepare "$(node -e "console.log(require('/tmp/package.json').packageManager)")" --activate && \

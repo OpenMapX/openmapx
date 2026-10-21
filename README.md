@@ -162,7 +162,7 @@ See the [Admin panel](https://docs.openmapx.org/administration/admin-panel/) doc
 | Geocoding         | Photon, Nominatim, Pelias                                                                            |
 | Tiles             | TileServer GL, Martin (PostGIS vector tiles)                                                         |
 | Tooling           | Turborepo, pnpm 12, Biome, Vitest, Husky + Commitlint, Changesets, Docker Compose v2, Traefik        |
-| Language          | TypeScript end-to-end (Node 24.21.0+)                                                                |
+| Language          | TypeScript end-to-end (Node 24.22.1+)                                                                |
 
 ## Contributing
 

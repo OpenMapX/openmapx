@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.20
 
-FROM node:24.21.0-alpine@sha256:ebfe2f90462722a7a4de65e91990e97fe0d401c70e0e762c5b53302f905ec1c1 AS base
+FROM node:24.22.1-alpine@sha256:6a1c190e17215d844926b0677f4bf87273ff7d5e54db06d3b5b5863ab0b09a3d AS base
 COPY package.json /tmp/package.json
 RUN corepack enable && \
     corepack prepare "$(node -e "console.log(require('/tmp/package.json').packageManager)")" --activate && \

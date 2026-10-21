@@ -76,7 +76,7 @@ into linked tasks with independently verifiable outcomes.
 
 Requirements:
 
-- Node 24.21.0+ (`.nvmrc` is authoritative)
+- Node 24.22.1+ (`.nvmrc` is authoritative)
 - pnpm 12
 - Docker + Docker Compose if you want to run the self-hosted services
 
