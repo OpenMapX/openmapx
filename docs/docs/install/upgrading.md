@@ -45,7 +45,9 @@ below do both, in the right order.
 
 A complete release can reuse images from earlier releases: CI rebuilds only images
 whose inputs changed, then scans all seven selected application digests before publishing.
-Shared dependency and privacy changes can require several images to rebuild.
+Each image copies only the workspace packages it uses, and a lockfile change counts
+only for the dependencies that image installs. Changes to a package every image
+uses, such as `@openmapx/core`, and privacy changes still rebuild several images.
 Unchanged images retain their digest and original build revision; the release
 identifier describes the complete selected set. Daily CI catches up with `main`,
 including automated merges that do not trigger push workflows. Each image gets an
