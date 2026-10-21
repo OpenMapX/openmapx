@@ -457,3 +457,27 @@ integration/credential owner. Replacement origins, identities and unmounted view
 cannot receive old callbacks, input clearing or feedback. Successful work can
 refresh its originating caches. Disposing the view does not cancel accepted host
 work; reload acceptance remains separate from Activity terminal completion.
+
+## Extension administration
+
+`extensionAdminOperations` owns all eleven catalog, installed-extension, preview,
+install/update/remove, source and refresh operations. Producers use the shared
+administration registrar after the inherited admin guard. The existing dedicated
+store limiter runs before structural validation; global CSRF, public rate limits
+and JSON parsing retain their lifecycle positions.
+
+Import the generated functions and canonical wire types from
+`@openmapx/core/api-admin-sdk`. Catalog list and detail are distinct projections;
+unfamiliar nested JSON remains inert and lossless, and unknown versions remain
+absent. Installed rows expose ISO timestamps and optional registry enrichment.
+Preview responses retain all effective ports, the inspected repository commit,
+full security rating and confirmation fingerprint. Install, update and remove
+return HTTP 202 `{jobId}` acceptance; Activity observation owns terminal outcomes.
+Mutations are never retried automatically.
+
+Requests reject unknown keys, wrong types and explicit JSON null. Update may
+omit its body; remove and refresh accept absence or an empty object. Selectors
+retain ID precedence when both are supplied. Source strings retain exact identity;
+URL, trust, provenance, revocation, persistence and host authorization remain domain
+responsibilities. Regenerate OpenAPI then SDK and run both freshness checks after
+contract changes.

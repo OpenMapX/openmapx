@@ -7,6 +7,13 @@ import {
   bindAdminStreamOperation,
 } from "../../admin-sdk-transport";
 
+const addAdminExtensionSourceBound = bindAdminOperation("addAdminExtensionSource");
+export async function addAdminExtensionSourceRequest<T>(
+  url: string,
+  options?: AdminSdkRequestOptions,
+): Promise<T> {
+  return addAdminExtensionSourceBound<T>(url, options);
+}
 const cancelAdminActivityJobBound = bindAdminOperation("cancelAdminActivityJob");
 export async function cancelAdminActivityJobRequest<T>(
   url: string,
@@ -124,6 +131,13 @@ export async function getAdminDeploymentRequest<T>(
   options?: AdminSdkRequestOptions,
 ): Promise<T> {
   return getAdminDeploymentBound<T>(url, options);
+}
+const getAdminExtensionCatalogEntryBound = bindAdminOperation("getAdminExtensionCatalogEntry");
+export async function getAdminExtensionCatalogEntryRequest<T>(
+  url: string,
+  options?: AdminSdkRequestOptions,
+): Promise<T> {
+  return getAdminExtensionCatalogEntryBound<T>(url, options);
 }
 const getAdminIntegrationBound = bindAdminOperation("getAdminIntegration");
 export async function getAdminIntegrationRequest<T>(
@@ -308,6 +322,13 @@ export async function importAdminIntegrationConfigsRequest<T>(
 ): Promise<T> {
   return importAdminIntegrationConfigsBound<T>(url, options);
 }
+const installAdminExtensionBound = bindAdminOperation("installAdminExtension");
+export async function installAdminExtensionRequest<T>(
+  url: string,
+  options?: AdminSdkRequestOptions,
+): Promise<T> {
+  return installAdminExtensionBound<T>(url, options);
+}
 const listAdminActivityJobsBound = bindAdminOperation("listAdminActivityJobs");
 export async function listAdminActivityJobsRequest<T>(
   url: string,
@@ -321,6 +342,27 @@ export async function listAdminCredentialsRequest<T>(
   options?: AdminSdkRequestOptions,
 ): Promise<T> {
   return listAdminCredentialsBound<T>(url, options);
+}
+const listAdminExtensionCatalogBound = bindAdminOperation("listAdminExtensionCatalog");
+export async function listAdminExtensionCatalogRequest<T>(
+  url: string,
+  options?: AdminSdkRequestOptions,
+): Promise<T> {
+  return listAdminExtensionCatalogBound<T>(url, options);
+}
+const listAdminExtensionSourcesBound = bindAdminOperation("listAdminExtensionSources");
+export async function listAdminExtensionSourcesRequest<T>(
+  url: string,
+  options?: AdminSdkRequestOptions,
+): Promise<T> {
+  return listAdminExtensionSourcesBound<T>(url, options);
+}
+const listAdminInstalledExtensionsBound = bindAdminOperation("listAdminInstalledExtensions");
+export async function listAdminInstalledExtensionsRequest<T>(
+  url: string,
+  options?: AdminSdkRequestOptions,
+): Promise<T> {
+  return listAdminInstalledExtensionsBound<T>(url, options);
 }
 const listAdminIntegrationBindingsBound = bindAdminOperation("listAdminIntegrationBindings");
 export async function listAdminIntegrationBindingsRequest<T>(
@@ -464,6 +506,13 @@ export async function postApiDataManagerTransitSyncRequest<T>(
 ): Promise<T> {
   return postApiDataManagerTransitSyncBound<T>(url, options);
 }
+const previewAdminExtensionInstallBound = bindAdminOperation("previewAdminExtensionInstall");
+export async function previewAdminExtensionInstallRequest<T>(
+  url: string,
+  options?: AdminSdkRequestOptions,
+): Promise<T> {
+  return previewAdminExtensionInstallBound<T>(url, options);
+}
 const previewAdminOperationBound = bindAdminOperation("previewAdminOperation");
 export async function previewAdminOperationRequest<T>(
   url: string,
@@ -478,6 +527,13 @@ export async function provisionAdminDawarichRequest<T>(
 ): Promise<T> {
   return provisionAdminDawarichBound<T>(url, options);
 }
+const refreshAdminExtensionCatalogBound = bindAdminOperation("refreshAdminExtensionCatalog");
+export async function refreshAdminExtensionCatalogRequest<T>(
+  url: string,
+  options?: AdminSdkRequestOptions,
+): Promise<T> {
+  return refreshAdminExtensionCatalogBound<T>(url, options);
+}
 const reloadAdminIntegrationBound = bindAdminOperation("reloadAdminIntegration");
 export async function reloadAdminIntegrationRequest<T>(
   url: string,
@@ -491,6 +547,20 @@ export async function reloadAdminIntegrationsRequest<T>(
   options?: AdminSdkRequestOptions,
 ): Promise<T> {
   return reloadAdminIntegrationsBound<T>(url, options);
+}
+const removeAdminExtensionBound = bindAdminOperation("removeAdminExtension");
+export async function removeAdminExtensionRequest<T>(
+  url: string,
+  options?: AdminSdkRequestOptions,
+): Promise<T> {
+  return removeAdminExtensionBound<T>(url, options);
+}
+const removeAdminExtensionSourceBound = bindAdminOperation("removeAdminExtensionSource");
+export async function removeAdminExtensionSourceRequest<T>(
+  url: string,
+  options?: AdminSdkRequestOptions,
+): Promise<T> {
+  return removeAdminExtensionSourceBound<T>(url, options);
 }
 const restoreAdminServiceBackupBound = bindAdminOperation("restoreAdminServiceBackup");
 export async function restoreAdminServiceBackupRequest<T>(
@@ -603,6 +673,13 @@ export async function testAdminIntegrationCredentialsRequest<T>(
   options?: AdminSdkRequestOptions,
 ): Promise<T> {
   return testAdminIntegrationCredentialsBound<T>(url, options);
+}
+const updateAdminExtensionBound = bindAdminOperation("updateAdminExtension");
+export async function updateAdminExtensionRequest<T>(
+  url: string,
+  options?: AdminSdkRequestOptions,
+): Promise<T> {
+  return updateAdminExtensionBound<T>(url, options);
 }
 const updateAdminServiceConfigBound = bindAdminOperation("updateAdminServiceConfig");
 export async function updateAdminServiceConfigRequest<T>(

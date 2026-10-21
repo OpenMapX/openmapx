@@ -1,3 +1,4 @@
+import type { AdminExtensionInstallRequest } from "@openmapx/core/api-contracts";
 import { services as coreServices } from "@openmapx/core/server";
 import type { FastifyInstance } from "fastify";
 import { previewExtensionInstall } from "../services/extension-installer";
@@ -22,10 +23,9 @@ import { storeInstallLimit } from "../utils/rate-limit";
 import { getAdminSession, requireAdmin } from "../utils/require-admin";
 import { declareRouteAuth } from "../utils/route-auth";
 import { summarizeExternalUrl } from "../utils/safe-log-fields";
+import { registerExtensionAdminRoute } from "./admin-extension-contract";
 
 const { computeServiceSecurityRating } = coreServices;
-
-type ExtensionInstallRequest = { id?: string; manifestUrl?: string; hostPortConfirmation?: string };
 
 class ExtensionInstallRequestError extends Error {
   constructor(
@@ -36,7 +36,7 @@ class ExtensionInstallRequestError extends Error {
   }
 }
 
-async function resolveInstallRequest(body: ExtensionInstallRequest): Promise<{
+async function resolveInstallRequest(body: AdminExtensionInstallRequest): Promise<{
   manifest: coreServices.ExtensionManifest;
   sourceUrl?: string;
   sourceTrust: "verified" | "community";
@@ -108,9 +108,7 @@ export async function adminExtensionsRoute(app: FastifyInstance): Promise<void> 
   });
 
   // GET /admin/extensions/catalog
-  app.get<{
-    Querystring: { q?: string; category?: string; trust?: string; type?: string; sort?: string };
-  }>("/admin/extensions/catalog", async (request) => {
+  registerExtensionAdminRoute(app, "listAdminExtensionCatalog", async (request) => {
     const { q, category, trust, type, sort = "az" } = request.query;
     let entries = await getExtensionCatalog();
     const kill = await getKillSwitch();
@@ -164,7 +162,7 @@ export async function adminExtensionsRoute(app: FastifyInstance): Promise<void> 
   });
 
   // GET /admin/extensions/catalog/:id
-  app.get<{ Params: { id: string } }>("/admin/extensions/catalog/:id", async (request, reply) => {
+  registerExtensionAdminRoute(app, "getAdminExtensionCatalogEntry", async (request, reply) => {
     const entry = await getExtensionCatalogEntry(request.params.id);
     if (!entry) return reply.status(404).send({ error: "Not found" });
     const kill = await getKillSwitch();
@@ -188,7 +186,7 @@ export async function adminExtensionsRoute(app: FastifyInstance): Promise<void> 
   });
 
   // GET /admin/extensions/installed
-  app.get("/admin/extensions/installed", async () => {
+  registerExtensionAdminRoute(app, "listAdminInstalledExtensions", async () => {
     const installed = await listInstalledExtensions();
     let registry: ReturnType<typeof getServiceRegistry> | null = null;
     try {
@@ -233,9 +231,9 @@ export async function adminExtensionsRoute(app: FastifyInstance): Promise<void> 
 
   // POST /admin/extensions/install-preview — resolve and inspect the exact
   // community service snapshots without publishing or starting them.
-  app.post<{ Body: ExtensionInstallRequest }>(
-    "/admin/extensions/install-preview",
-    { preHandler: [storeInstallLimit.preHandler()] },
+  registerExtensionAdminRoute(
+    app,
+    "previewAdminExtensionInstall",
     async (request, reply) => {
       try {
         const resolved = await resolveInstallRequest(request.body ?? {});
@@ -246,12 +244,13 @@ export async function adminExtensionsRoute(app: FastifyInstance): Promise<void> 
         return reply.status(statusCode).send({ error: (error as Error).message });
       }
     },
+    { beforeValidation: storeInstallLimit.preHandler() },
   );
 
   // POST /admin/extensions/install — by catalog id or by direct manifest URL.
-  app.post<{ Body: ExtensionInstallRequest }>(
-    "/admin/extensions/install",
-    { preHandler: [storeInstallLimit.preHandler()] },
+  registerExtensionAdminRoute(
+    app,
+    "installAdminExtension",
     async (request, reply) => {
       const body = request.body ?? {};
       const adminSession = getAdminSession(request);
@@ -295,12 +294,13 @@ export async function adminExtensionsRoute(app: FastifyInstance): Promise<void> 
       reply.status(202);
       return { jobId };
     },
+    { beforeValidation: storeInstallLimit.preHandler() },
   );
 
   // POST /admin/extensions/update/:id — re-pin to the catalog's current version.
-  app.post<{ Params: { id: string }; Body: { hostPortConfirmation?: string } }>(
-    "/admin/extensions/update/:id",
-    { preHandler: [storeInstallLimit.preHandler()] },
+  registerExtensionAdminRoute(
+    app,
+    "updateAdminExtension",
     async (request, reply) => {
       const { id } = request.params;
       const adminSession = getAdminSession(request);
@@ -339,10 +339,11 @@ export async function adminExtensionsRoute(app: FastifyInstance): Promise<void> 
       reply.status(202);
       return { jobId };
     },
+    { beforeValidation: storeInstallLimit.preHandler() },
   );
 
   // DELETE /admin/extensions/:id
-  app.delete<{ Params: { id: string } }>("/admin/extensions/:id", async (request, reply) => {
+  registerExtensionAdminRoute(app, "removeAdminExtension", async (request, reply) => {
     const { id } = request.params;
     const adminSession = getAdminSession(request);
 
@@ -366,35 +367,32 @@ export async function adminExtensionsRoute(app: FastifyInstance): Promise<void> 
   });
 
   // GET /admin/extensions/sources
-  app.get("/admin/extensions/sources", async () => {
+  registerExtensionAdminRoute(app, "listAdminExtensionSources", async () => {
     return { sources: await listExtensionSources() };
   });
 
   // POST /admin/extensions/sources
-  app.post<{ Body: { url: string; label: string } }>(
-    "/admin/extensions/sources",
-    async (request, reply) => {
-      const { url, label } = request.body ?? {};
-      if (!url) return reply.status(400).send({ error: "url is required" });
-      if (!label) return reply.status(400).send({ error: "label is required" });
-      const adminSession = getAdminSession(request);
-      try {
-        await addExtensionSource(url, label);
-      } catch (err) {
-        return reply.status(400).send({ error: (err as Error).message });
-      }
-      await writeAuditLog({
-        actorId: adminSession.user.id,
-        action: "extension.add_source",
-        details: { sourceUrl: summarizeExternalUrl(url), label },
-        request,
-      });
-      return { ok: true };
-    },
-  );
+  registerExtensionAdminRoute(app, "addAdminExtensionSource", async (request, reply) => {
+    const { url, label } = request.body ?? {};
+    if (!url) return reply.status(400).send({ error: "url is required" });
+    if (!label) return reply.status(400).send({ error: "label is required" });
+    const adminSession = getAdminSession(request);
+    try {
+      await addExtensionSource(url, label);
+    } catch (err) {
+      return reply.status(400).send({ error: (err as Error).message });
+    }
+    await writeAuditLog({
+      actorId: adminSession.user.id,
+      action: "extension.add_source",
+      details: { sourceUrl: summarizeExternalUrl(url), label },
+      request,
+    });
+    return { ok: true };
+  });
 
   // DELETE /admin/extensions/sources
-  app.delete<{ Body: { url: string } }>("/admin/extensions/sources", async (request, reply) => {
+  registerExtensionAdminRoute(app, "removeAdminExtensionSource", async (request, reply) => {
     const { url } = request.body ?? {};
     if (!url) return reply.status(400).send({ error: "url is required" });
     const adminSession = getAdminSession(request);
@@ -409,7 +407,7 @@ export async function adminExtensionsRoute(app: FastifyInstance): Promise<void> 
   });
 
   // POST /admin/extensions/refresh-catalog
-  app.post("/admin/extensions/refresh-catalog", async (request) => {
+  registerExtensionAdminRoute(app, "refreshAdminExtensionCatalog", async (request) => {
     const adminSession = getAdminSession(request);
     const catalog = await getExtensionCatalog(true);
     await writeAuditLog({

@@ -60,7 +60,14 @@ vi.mock("../../services/extension-installer.js", () => ({
 
 vi.mock("@openmapx/core/server", () => ({
   services: {
-    computeServiceSecurityRating: vi.fn().mockReturnValue({ score: 7 }),
+    computeServiceSecurityRating: vi.fn().mockReturnValue({
+      score: 7,
+      requiresBuiltIn: false,
+      hostPorts: 0,
+      secretCount: 0,
+      deploymentVariables: [],
+      factors: ["Synthetic rating"],
+    }),
     extensionComponentSummary: vi.fn().mockReturnValue([{ kind: "service", id: "oc-ingest" }]),
   },
 }));
