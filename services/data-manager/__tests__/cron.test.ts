@@ -67,7 +67,14 @@ vi.mock("../src/db/index.js", () => {
   return { db: makeChain(), sql: { end: async () => {} } };
 });
 
-import { awaitInflightSync, type CronSetupOptions, setupCron } from "../src/cron.js";
+import {
+  awaitInflightSync,
+  type CronHandles,
+  type CronSetupOptions,
+  setupCron,
+} from "../src/cron.js";
+import * as trafficEvidence from "../src/jobs/traffic/evidence.js";
+import * as spanEdges from "../src/jobs/traffic/span-edges.js";
 import {
   createSingleFlightController,
   type SingleFlightController,
@@ -192,6 +199,271 @@ describe("setupCron", () => {
     });
     return createSingleFlightController({ db: stub as never });
   }
+
+  describe("protected schedule lifetimes", () => {
+    const everySecond = "* * * * * *";
+    type Schedule = Pick<
+      CronHandles,
+      | "syncCron"
+      | "feedProxyReloadCron"
+      | "stalenessCheckCron"
+      | "autoBumpCron"
+      | "trafficExtractCron"
+      | "trafficLiveCron"
+      | "trafficPredictedCron"
+    >;
+    const schedules: {
+      key: keyof Schedule;
+      configure: (work: () => Promise<void>) => Partial<CronSetupOptions>;
+    }[] = [
+      {
+        key: "syncCron",
+        configure: (work) => ({
+          syncCronExpression: everySecond,
+          runPipeline: async (jobId) => ({ jobId, results: [], finalStatus: "ok" }),
+          // Keep the post-sync check pending after the domain lock releases:
+          // the scheduler must still own the complete callback lifetime.
+          runStalenessCheck: work,
+        }),
+      },
+      {
+        key: "feedProxyReloadCron",
+        configure: (work) => ({
+          feedProxyReloadCronExpression: everySecond,
+          reloadFeedProxy: work,
+        }),
+      },
+      {
+        key: "stalenessCheckCron",
+        configure: (work) => ({
+          stalenessCheckCronExpression: everySecond,
+          runStalenessCheck: work,
+        }),
+      },
+      {
+        key: "autoBumpCron",
+        configure: (work) => ({
+          autoBumpCronExpression: everySecond,
+          resolveBumpCandidate: async () => {
+            await work();
+            return {
+              branch: "main",
+              ref: `main@${"a".repeat(40)}`,
+              transitousSha: "a".repeat(40),
+              transitlandAtlasSha: "b".repeat(40),
+            };
+          },
+          runBumpPipeline: async (jobId) => ({ jobId, results: [], finalStatus: "ok" }),
+        }),
+      },
+      {
+        key: "trafficExtractCron",
+        configure: (work) => ({
+          trafficExtractCronExpression: everySecond,
+          isTrafficExtractStale: async () => {
+            await work();
+            return false;
+          },
+        }),
+      },
+      {
+        key: "trafficLiveCron",
+        configure: (work) => ({
+          trafficLiveCronExpression: everySecond,
+          fetchLiveTrafficCsv: async () => {
+            await work();
+            return "way_id,dir,current_kph,free_flow_kph,los\n";
+          },
+        }),
+      },
+      {
+        key: "trafficPredictedCron",
+        configure: (work) => ({
+          trafficPredictedCronExpression: everySecond,
+          bakePredicted: async () => {
+            await work();
+            return {
+              segments: 0,
+              rows: 0,
+              tiles: 0,
+              built: false,
+              resolvable: 0,
+              matched: 0,
+              matchRatePct: 0,
+              coverageRatePct: 0,
+              wayCount: 0,
+              edgeCount: 0,
+            };
+          },
+        }),
+      },
+    ];
+
+    describe.each(schedules)("$key", ({ key, configure }) => {
+      it.each(["resolve", "reject"] as const)(
+        "blocks scheduled overlap until work and cleanup %s, then admits the next tick",
+        async (outcome) => {
+          vi.useFakeTimers();
+          try {
+            vi.setSystemTime(new Date("2026-10-21T00:00:00Z"));
+            let resolve!: () => void;
+            let reject!: (error: Error) => void;
+            const pending = new Promise<void>((fulfill, fail) => {
+              resolve = fulfill;
+              reject = fail;
+            });
+            const pendingOperations = new Set<Promise<unknown>>();
+            function trackCalls<Args extends unknown[], Result>(
+              operation: (...args: Args) => Promise<Result>,
+            ) {
+              return (...args: Args): Promise<Result> => {
+                const result = operation(...args);
+                pendingOperations.add(result);
+                void result.then(
+                  () => pendingOperations.delete(result),
+                  () => pendingOperations.delete(result),
+                );
+                return result;
+              };
+            }
+            if (key === "trafficLiveCron") {
+              // Track actual I/O, including failure evidence, independently of
+              // Croner's busy flag. A missing callback return must still clean up.
+              const evidence = { ...trafficEvidence };
+              const spans = { ...spanEdges };
+              vi.spyOn(trafficEvidence, "recordTrafficFlowSuccess").mockImplementation(
+                trackCalls(evidence.recordTrafficFlowSuccess),
+              );
+              vi.spyOn(trafficEvidence, "recordTrafficFlowFailure").mockImplementation(
+                trackCalls(evidence.recordTrafficFlowFailure),
+              );
+              vi.spyOn(trafficEvidence, "recordTrafficConditionsSuccess").mockImplementation(
+                trackCalls(evidence.recordTrafficConditionsSuccess),
+              );
+              vi.spyOn(trafficEvidence, "recordTrafficConditionsFailure").mockImplementation(
+                trackCalls(evidence.recordTrafficConditionsFailure),
+              );
+              vi.spyOn(trafficEvidence, "recordTrafficGraphSuccess").mockImplementation(
+                trackCalls(evidence.recordTrafficGraphSuccess),
+              );
+              vi.spyOn(trafficEvidence, "recordTrafficGraphFailure").mockImplementation(
+                trackCalls(evidence.recordTrafficGraphFailure),
+              );
+              vi.spyOn(spanEdges, "loadSpanEdgeCache").mockImplementation(
+                trackCalls(spans.loadSpanEdgeCache),
+              );
+              vi.spyOn(spanEdges, "saveSpanEdgeCache").mockImplementation(
+                trackCalls(spans.saveSpanEdgeCache),
+              );
+            }
+            const work = vi
+              .fn()
+              .mockImplementationOnce(trackCalls(() => pending))
+              .mockResolvedValue(undefined);
+            const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+            const confDir = join(dataDir, "motis-feed-proxy", "conf");
+            mkdirSync(confDir, { recursive: true });
+            const confPath = join(confDir, "default.conf");
+            writeFileSync(confPath, "server { listen 80; }\n");
+            utimesSync(confPath, new Date(Date.now()), new Date(Date.now()));
+            let handles: CronHandles | undefined;
+            try {
+              handles = setupCron({
+                dataDir,
+                countries: [],
+                store: {} as never,
+                singleFlight: makeController(),
+                logger,
+                githubIssueSink: null,
+                syncCronExpression: "disabled",
+                feedProxyReloadCronExpression: "disabled",
+                stalenessCheckCronExpression: "disabled",
+                autoBumpCronExpression: "disabled",
+                overtureEnabled: false,
+                overtureConflationRetryCronExpression: "disabled",
+                trafficExtractCronExpression: "disabled",
+                trafficLiveCronExpression: "disabled",
+                trafficPredictedCronExpression: "disabled",
+                openConditionsUrl: "https://traffic.example.test",
+                openConditionsToken: "",
+                runStalenessCheck: async () => {},
+                fetchConditionsJson: async () =>
+                  '{"schema_version":2,"complete":true,"conditions":[]}',
+                fetchTrafficPolicy: async () => ({
+                  revision: "synthetic",
+                  validUntil: new Date(Date.now() + 120_000).toISOString(),
+                  disallowedSourceIds: [],
+                }),
+                readTrafficGraphState: async () => ({
+                  generation: "synthetic",
+                  engineBootId: "test",
+                }),
+                loadWaysToEdges: async () => new Map(),
+                writeLiveTraffic: async () => ({
+                  written: 0,
+                  matched: 0,
+                  total: 0,
+                  outOfBounds: 0,
+                  closedEdges: 0,
+                  cappedEdges: 0,
+                  overridesUnresolved: 0,
+                  appliedObservationIds: [],
+                }),
+                ...configure(work),
+              });
+              const job = handles[key];
+              expect(job).not.toBeNull();
+              if (!job) throw new Error("Expected enabled schedule");
+              // Fire the actual registered timer, not runXNow/trigger(), which
+              // bypass the scheduler's overrun decision.
+              await vi.advanceTimersByTimeAsync(1000);
+              expect(work).toHaveBeenCalledTimes(1);
+              expect(job.isBusy()).toBe(true);
+              await vi.advanceTimersByTimeAsync(2000);
+              expect(work).toHaveBeenCalledTimes(1);
+              expect(job.isBusy()).toBe(true);
+
+              if (outcome === "reject") reject(new Error("Synthetic scheduled failure"));
+              else resolve();
+              await vi.waitFor(() => expect(job.isBusy()).toBe(false), { interval: 1 });
+              if (outcome === "reject") {
+                expect(
+                  logger.error.mock.calls.length + logger.warn.mock.calls.length,
+                ).toBeGreaterThan(0);
+              }
+              // A successful heartbeat only reloads a newly changed file.
+              utimesSync(confPath, new Date(Date.now()), new Date(Date.now()));
+              await vi.advanceTimersByTimeAsync(1000);
+              expect(work).toHaveBeenCalledTimes(2);
+              await vi.waitFor(() => expect(job.isBusy()).toBe(false), { interval: 1 });
+              handles.stop();
+              await vi.advanceTimersByTimeAsync(2000);
+              expect(work).toHaveBeenCalledTimes(2);
+            } finally {
+              handles?.stop();
+              resolve();
+              // Each settled I/O operation may enqueue the next awaited tail.
+              // Drain microtasks between batches; timers are already stopped.
+              do {
+                await Promise.allSettled([...pendingOperations]);
+                await vi.advanceTimersByTimeAsync(0);
+              } while (pendingOperations.size > 0);
+              if (handles) await handles.closeTrafficWriter();
+              if (key === "trafficLiveCron") {
+                expect(
+                  logger.info.mock.calls.filter(
+                    ([message]) => message === "traffic-live: cycle complete",
+                  ),
+                ).toHaveLength(work.mock.calls.length);
+              }
+            }
+          } finally {
+            vi.useRealTimers();
+          }
+        },
+      );
+    });
+  });
 
   it("respects TRANSITOUS_SYNC_CRON=disabled by returning a null syncCron", () => {
     const handles = setupCron({
