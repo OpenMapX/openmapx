@@ -19,8 +19,8 @@
  * their code instead (scripts/build-runtime-bundles.mjs). Their installs must
  * stage their manifest closure, so the bundle's pinned npm dependencies are
  * installed. Their bundles must build, their runners must not copy workspace
- * source, and the planner relies on the runner reaching the stage named
- * `bundle`.
+ * source or the whole install, and the planner relies on the runner reaching
+ * the stage named `bundle`.
  */
 import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -258,6 +258,12 @@ async function checkBundledImages(): Promise<void> {
       completenessErrors.push(
         `${dockerfile}'s runner copies workspace source (${copied.join(", ")}); a bundled image ` +
           "runs its bundle, so the copy only makes source changes rebuild the image.",
+      );
+    }
+    if (/^\s*COPY\s[^\n]*--from=(?:prod-deps|deps)\s/im.test(runnerSection(dockerfile))) {
+      completenessErrors.push(
+        `${dockerfile}'s runner copies the whole dependency install; copy the output of ` +
+          "scripts/copy-runtime-packages.mjs, which keeps only the packages its bundles load.",
       );
     }
     let bundle: Awaited<ReturnType<typeof buildRuntimeBundle>>;

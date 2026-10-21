@@ -74,11 +74,7 @@ COPY packages/integration-framework/package.json packages/integration-framework/
 COPY packages/mobility-core/package.json packages/mobility-core/
 COPY packages/place-ids/package.json packages/place-ids/
 
-RUN pnpm install --frozen-lockfile --prod --ignore-scripts && \
-    rm -rf node_modules/.pnpm/image-size@*
-# image-size belongs to Metro's mobile build toolchain, not the data-manager
-# runtime. Do not copy that unused, currently vulnerable package into the
-# production image merely because pnpm uses a shared workspace virtual store.
+RUN pnpm install --frozen-lockfile --prod --ignore-scripts
 
 FROM deps AS bundle
 WORKDIR /app
@@ -102,6 +98,13 @@ COPY integrations/poi-overture/manifest.json integrations/poi-overture/manifest.
 COPY scripts/build-runtime-bundles.mjs scripts/module-specifiers.mjs scripts/
 ARG EXPECTED_BUNDLE_DIGEST=
 RUN node scripts/build-runtime-bundles.mjs data-manager --expect "$EXPECTED_BUNDLE_DIGEST"
+
+# Only the installed package directories the bundles load, listed by the bundle
+# build, with the node_modules links between them.
+FROM prod-deps AS runtime-packages
+COPY scripts/copy-runtime-packages.mjs scripts/
+COPY --from=bundle /app/services/data-manager/dist/runtime-packages.json /tmp/runtime-packages.json
+RUN node scripts/copy-runtime-packages.mjs /tmp/runtime-packages.json /app /runtime
 
 FROM node:24.21.0-slim@sha256:d6aa754f16b3197301076f047b5def2f02ea1dbbc2ca920407d46d7ec7f87b20 AS runner
 WORKDIR /app
@@ -156,12 +159,13 @@ RUN groupadd --system --gid 1001 datamgr \
     && chown datamgr:datamgr /app
 
 # The bundles import their npm dependencies by path from the pnpm store, so the
-# runner needs the production store and the bundles, and no workspace source.
+# runner needs the bundles and the store packages they load, and no workspace
+# source.
 # Assign ownership while copying: a recursive chown afterwards would store a
 # second copy of every file, including node_modules, in its own layer.
-COPY --chown=datamgr:datamgr --from=prod-deps /app/node_modules ./node_modules
+COPY --chown=datamgr:datamgr --from=runtime-packages /runtime/node_modules ./node_modules
 COPY --chown=datamgr:datamgr --from=bundle /app/services/data-manager/dist ./services/data-manager/dist
-# Every dependency file the bundles pin must exist in this production install.
+# Every dependency file the bundles pin must exist among the copied packages.
 RUN node -e 'const fs=require("node:fs"),p=require("node:path");const d="/app/services/data-manager/dist";const missing=JSON.parse(fs.readFileSync(p.join(d,"runtime-externals.json"),"utf8")).filter((f)=>!fs.existsSync(p.join(d,f)));if(missing.length){console.error("Missing bundle dependencies:",missing);process.exit(1)}'
 
 USER datamgr:datamgr
