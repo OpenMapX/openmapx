@@ -29,7 +29,7 @@ export async function collectArtifacts(sourceDirectory, outputDirectory, require
       throw new Error(`Orval did not generate ${name}; check the OpenAPI document.`);
   if (resolve(sourceDirectory) === resolve(outputDirectory))
     throw new Error("Artifact formatting requires owned scratch separate from its destination.");
-  formatSourceFiles(sourceDirectory, paths);
+  await formatSourceFiles(sourceDirectory, paths);
   return Promise.all(
     paths.map(async (path) => ({
       filename: relative(sourceDirectory, path),

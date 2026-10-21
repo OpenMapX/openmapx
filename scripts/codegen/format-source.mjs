@@ -1,7 +1,8 @@
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { realpathSync, statSync } from "node:fs";
 import { createRequire } from "node:module";
 import { relative, resolve, sep } from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 
 const biome = createRequire(import.meta.url).resolve("@biomejs/biome/bin/biome");
@@ -16,8 +17,92 @@ export function formatSource(filename, content) {
   );
 }
 
+// The official CLI synchronously starts the native formatter. Own both in a
+// separate POSIX group, including when the wrapper exits before its child.
+async function runBiomeBatch(args) {
+  if (process.platform !== "darwin" && process.platform !== "linux")
+    throw new Error("Contained batch formatting requires Darwin or Linux process groups.");
+  const child = spawn(process.execPath, args, { cwd, detached: true, stdio: "pipe" });
+  const buffers = { stdout: [], stderr: [] };
+  const sizes = { stdout: 0, stderr: 0 };
+  const maxBuffer = 16 * 1024 * 1024;
+  let failure;
+  const killGroup = () => {
+    if (!child.pid) return;
+    try {
+      process.kill(-child.pid, "SIGKILL");
+    } catch (error) {
+      if (error.code !== "ESRCH") throw error;
+    }
+  };
+  const stop = (error) => {
+    failure ??= error;
+    try {
+      killGroup();
+    } catch (cleanupError) {
+      failure = new AggregateError([failure, cleanupError], "Could not stop the Biome group.");
+    }
+  };
+  const closed = new Promise((resolve) => {
+    child.once("error", stop);
+    child.once("exit", (code, signal) => {
+      // Do this on exit, not close: a surviving native child holds the pipes.
+      if (code !== 0 || signal)
+        stop(Object.assign(new Error(`Biome exited with ${signal ?? code}.`), { code, signal }));
+      else stop();
+    });
+    child.once("close", resolve);
+  });
+  const deadline = setTimeout(
+    () =>
+      stop(Object.assign(new Error("Biome batch formatting timed out."), { code: "ETIMEDOUT" })),
+    90_000,
+  );
+  for (const stream of ["stdout", "stderr"]) {
+    child[stream].on("data", (chunk) => {
+      sizes[stream] += chunk.length;
+      if (sizes[stream] > maxBuffer) {
+        stop(
+          Object.assign(new Error(`Biome ${stream} exceeded ${maxBuffer} bytes.`), {
+            code: "ERR_CHILD_PROCESS_STDIO_MAXBUFFER",
+          }),
+        );
+      } else buffers[stream].push(chunk);
+    });
+  }
+  try {
+    await closed;
+    // close drains the inherited pipes. Also check the owned group, so even a
+    // descendant that closed its pipes cannot race the caller's scratch cleanup.
+    // Linux may retain dead orphan zombies; those cannot run or write anything.
+    while (child.pid) {
+      try {
+        process.kill(-child.pid, 0);
+      } catch (error) {
+        if (error.code === "ESRCH") break;
+        throw error;
+      }
+      const states = execFileSync("ps", ["-axo", "pgid=,stat="], {
+        encoding: "utf8",
+        timeout: 1_000,
+        maxBuffer,
+      })
+        .trim()
+        .split("\n")
+        .map((line) => line.trim().split(/\s+/));
+      if (!states.some(([group, state]) => Number(group) === child.pid && !state.startsWith("Z")))
+        break;
+      await delay(5);
+    }
+  } finally {
+    clearTimeout(deadline);
+  }
+  if (failure) throw failure;
+  return Buffer.concat(buffers.stdout).toString("utf8");
+}
+
 /** Format only collected files in an Orval-owned generation scratch directory. */
-export function formatSourceFiles(sourceDirectory, paths) {
+export async function formatSourceFiles(sourceDirectory, paths) {
   const directory = realpathSync(sourceDirectory);
   if (
     directory !== resolve(sourceDirectory) ||
@@ -41,29 +126,18 @@ export function formatSourceFiles(sourceDirectory, paths) {
   if (!paths.length) return;
 
   const { summary } = JSON.parse(
-    execFileSync(
-      process.execPath,
-      [
-        biome,
-        "check",
-        "--write",
-        "--linter-enabled=false",
-        "--vcs-enabled=false",
-        "--files-ignore-unknown=false",
-        `--files-max-size=${maxSize}`,
-        "--error-on-warnings",
-        "--reporter=json",
-        ...paths,
-      ],
-      {
-        cwd,
-        encoding: "utf8",
-        stdio: "pipe",
-        maxBuffer: 16 * 1024 * 1024,
-        timeout: 90_000,
-        killSignal: "SIGKILL",
-      },
-    ),
+    await runBiomeBatch([
+      biome,
+      "check",
+      "--write",
+      "--linter-enabled=false",
+      "--vcs-enabled=false",
+      "--files-ignore-unknown=false",
+      `--files-max-size=${maxSize}`,
+      "--error-on-warnings",
+      "--reporter=json",
+      ...paths,
+    ]),
   );
   // The pinned CLI's summary accounts for every file, including already clean
   // ones. A successful exit alone can conceal config-excluded/unsupported files.
