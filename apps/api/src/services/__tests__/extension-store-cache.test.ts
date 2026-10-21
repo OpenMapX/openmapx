@@ -29,6 +29,7 @@ vi.mock("../app-logger", () => ({ appLogger: { add: vi.fn() } }));
 import {
   addExtensionSource,
   getExtensionCatalog,
+  getKillSwitch,
   listExtensionSources,
   removeExtensionSource,
 } from "../extension-store";
@@ -332,5 +333,140 @@ describe("extension source and catalog coherence", () => {
       category: "source_storage_unavailable",
     });
     expect(ports.fetch).not.toHaveBeenCalled();
+  });
+  describe("provider document classification", () => {
+    const denied = JSON.stringify({
+      entries: [{ id: "old", name: "Old" }],
+      killSwitch: { removed: [["old", "delisted"]], critical: [["old", { reason: "security" }]] },
+    });
+    const malformed: [string, unknown][] = [
+      ["scalar", 42],
+      ["null", null],
+      ["false", false],
+      ["empty string", ""],
+      ["wrong extensions", { extensions: "invalid" }],
+      ["null extensions", { extensions: null }],
+      ["false extensions", { extensions: false }],
+      ["zero extensions", { extensions: 0 }],
+      ["empty string extensions", { extensions: "" }],
+      ["present undefined extensions", { extensions: undefined }],
+      ["object extensions", { extensions: {} }],
+      ["null removed", { removed: null }],
+      ["empty string removed", { removed: "" }],
+      ["object removed", { removed: {} }],
+      ["present undefined removed", { removed: undefined }],
+      ["null critical", { critical: null }],
+      ["empty string critical", { critical: "" }],
+      ["object critical", { critical: {} }],
+      ["present undefined critical", { critical: undefined }],
+      ["null removed item", { removed: [null] }],
+      ["missing removed id", { removed: [{}] }],
+      ["null removed reason", { removed: [{ id: "old", reason: null }] }],
+      ["invalid critical item", { critical: [42] }],
+      ["missing critical id", { critical: [{}] }],
+      ["invalid critical id", { critical: [{ id: 42 }] }],
+      ["invalid critical reason", { critical: [{ id: "old", reason: false }] }],
+      ["null maxVersion", { critical: [{ id: "old", maxVersion: null }] }],
+      ["invalid maxVersion", { critical: [{ id: "old", maxVersion: 42 }] }],
+      ["null entry", [null]],
+      ["scalar entry", [42]],
+      ["missing entry identity", [{}]],
+      ["invalid entry name", [{ id: "x", name: false }]],
+      ["valid entry followed by invalid entry", [entry, null]],
+      ["valid entry with invalid controls", { extensions: [entry], critical: null }],
+    ];
+    it.each(malformed)(
+      "rejects %s without changing warm or cold catalog bytes",
+      async (_name, payload) => {
+        ports.fetch.mockResolvedValue(payload);
+        for (const cached of [true, false]) {
+          if (cached) ports.values.set(catalogKey, denied);
+          else ports.values.delete(catalogKey);
+          await expect(getExtensionCatalog(true)).rejects.toMatchObject({
+            category: "catalog_acquisition_failed",
+          });
+          expect(ports.values.get(catalogKey)).toBe(cached ? denied : undefined);
+        }
+        expect(ports.eval).not.toHaveBeenCalled();
+        expect(ports.fetch).toHaveBeenCalledTimes(2);
+      },
+    );
+    it.each([
+      [],
+      {},
+      { extensions: [] },
+      { removed: [], critical: [] },
+      {
+        extensions: [],
+        removed: [],
+        critical: [],
+        editorial: { arbitrary: [null, "retained input"] },
+      },
+    ])("publishes supported valid empty document %j", async (payload) => {
+      ports.values.set(catalogKey, denied);
+      ports.fetch.mockResolvedValue(payload);
+      expect(await getExtensionCatalog(true)).toEqual([]);
+      expect(ports.values.get(catalogKey)).toBe(empty);
+      expect(await getExtensionCatalog()).toEqual([]);
+    });
+    it("publishes a control-only object without losing empty-string reasons or opaque version metadata", async () => {
+      ports.values.set(catalogKey, denied);
+      const controls = {
+        removed: [{ id: "removed", reason: "" }, { id: "default-reason" }],
+        critical: [
+          { id: "critical", reason: "", maxVersion: "arbitrary-version", inert: [null] },
+          { id: "default-critical" },
+        ],
+      };
+      ports.fetch.mockResolvedValue(controls);
+      expect(await getExtensionCatalog(true)).toEqual([]);
+      expect(JSON.parse(ports.values.get(catalogKey) as string)).toEqual({
+        entries: [],
+        killSwitch: {
+          removed: [
+            ["removed", ""],
+            ["default-reason", "delisted"],
+          ],
+          critical: [
+            ["critical", { reason: "", maxVersion: "arbitrary-version" }],
+            ["default-critical", { reason: "security advisory" }],
+          ],
+        },
+      });
+    });
+    it.each(["bare", "object"])("preserves inert entry metadata in %s catalogs", async (form) => {
+      const item = {
+        ...entry,
+        version: "opaque version",
+        inert: { nested: [1, false, null, { arbitrary: "value" }] },
+      };
+      ports.fetch.mockResolvedValue(
+        form === "bare" ? [item] : { extensions: [item], editorial: { arbitrary: true } },
+      );
+      expect(await getExtensionCatalog(true)).toEqual([{ ...item, trust: "community" }]);
+      expect(await getExtensionCatalog()).toEqual([{ ...item, trust: "community" }]);
+    });
+    it("retains the intentional nonempty partial-source policy when another source is malformed", async () => {
+      ports.values.set(sourceKey, JSON.stringify([source]));
+      ports.fetch.mockImplementation(async (url: string) =>
+        url === extraUrl ? [entry] : { extensions: "invalid" },
+      );
+      expect(await getExtensionCatalog(true)).toEqual([{ ...entry, trust: "community" }]);
+      expect(await getExtensionCatalog()).toEqual([{ ...entry, trust: "community" }]);
+    });
+    it("does not change the independent moving-feed failure/stale behavior", async () => {
+      ports.values.set(catalogKey, denied);
+      ports.values.set(
+        "extstore:revocations",
+        JSON.stringify({ removed: [["feed", "retained"]], critical: [], fetchedAtMs: 1 }),
+      );
+      ports.fetch.mockRejectedValue(new Error("synthetic feed failure"));
+      const result = await getKillSwitch();
+      expect(result.stale).toBe(true);
+      expect(result.removed.get("feed")).toBe("retained");
+      expect(result.removed.get("old")).toBe("delisted");
+      expect(result.critical.get("old")).toEqual({ reason: "security" });
+      expect(ports.values.get(catalogKey)).toBe(denied);
+    });
   });
 });

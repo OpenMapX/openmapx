@@ -261,13 +261,26 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       await removeExtensionSource(extra);
       expect(await getExtensionCatalog()).toEqual([]);
       const denied =
-        '{"entries":[{"id":"old","name":"Old"}],"killSwitch":{"removed":[["old","delisted"]],"critical":[]}}';
+        '{"entries":[{"id":"old","name":"Old"}],"killSwitch":{"removed":[["old","delisted"]],"critical":[["old",{"reason":"unsafe","maxVersion":"1.0.0"}]]}}';
       await fixture.client.set("extstore:catalog", denied);
       ports.fetch.mockRejectedValue(new Error("synthetic acquisition failure"));
       await expect(getExtensionCatalog(true)).rejects.toMatchObject({
         category: "catalog_acquisition_failed",
       });
       expect(await fixture.client.get("extstore:catalog")).toBe(denied);
+      for (const malformed of [42, { extensions: "invalid" }, { critical: null }]) {
+        ports.fetch.mockResolvedValue(malformed);
+        await expect(getExtensionCatalog(true)).rejects.toMatchObject({
+          category: "catalog_acquisition_failed",
+        });
+        expect(await fixture.client.get("extstore:catalog")).toBe(denied);
+        await fixture.client.del("extstore:catalog");
+        await expect(getExtensionCatalog(true)).rejects.toMatchObject({
+          category: "catalog_acquisition_failed",
+        });
+        expect(await fixture.client.get("extstore:catalog")).toBeNull();
+        await fixture.client.set("extstore:catalog", denied);
+      }
       ports.fetch.mockResolvedValue([]);
       expect(await getExtensionCatalog(true)).toEqual([]);
       expect(await getExtensionCatalog()).toEqual([]);

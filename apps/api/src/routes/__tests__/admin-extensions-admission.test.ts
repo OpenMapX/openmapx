@@ -400,4 +400,54 @@ describe("real resolver through extension routes and final SDK", () => {
       expect(ports.persist).toHaveBeenCalledTimes(failure === "acquisition" ? 0 : 1);
     },
   );
+  it.each([
+    ["invalid JSON", "{"],
+    ["scalar", "42"],
+    ["null", "null"],
+    ["wrong extensions", '{"extensions":"invalid"}'],
+    ["false extensions", '{"extensions":false}'],
+    ["null removed", '{"removed":null}'],
+    ["empty critical", '{"critical":""}'],
+    ["invalid control item", '{"critical":[{"id":"old","reason":42}]}'],
+  ])(
+    "malformed %s catalog cannot publish or audit refresh success through the final SDK",
+    async (_name, body) => {
+      const denied = JSON.stringify({
+        entries: [{ id: "old", name: "Old" }],
+        killSwitch: { removed: [["old", "delisted"]], critical: [["old", { reason: "security" }]] },
+      });
+      ports.provider.mockImplementation(
+        async () => new Response(body, { headers: { "content-type": "application/json" } }),
+      );
+      // If malformed acquisition reaches the real helper's EVAL boundary, permit
+      // publication so this regression fails on false success, not a fake error.
+      ports.persist.mockImplementation(
+        async (
+          _script,
+          _count,
+          _sources,
+          catalogKey,
+          _sourcePresent,
+          _sourceRaw,
+          _catalogPresent,
+          _catalogRaw,
+          next,
+        ) => {
+          ports.cache.set(catalogKey, next);
+          return 1;
+        },
+      );
+      for (const cached of [true, false]) {
+        if (cached) ports.cache.set("extstore:catalog", denied);
+        else ports.cache.delete("extstore:catalog");
+        const result = await sdk.refreshAdminExtensionCatalog(undefined, options());
+        expect(result.status).toBe(500);
+        expect(result.data).toEqual({ error: "Internal Server Error" });
+        expect(ports.cache.get("extstore:catalog")).toBe(cached ? denied : undefined);
+      }
+      expect(ports.persist).not.toHaveBeenCalled();
+      expect(ports.audit).not.toHaveBeenCalled();
+      expect(ports.provider).toHaveBeenCalledTimes(2);
+    },
+  );
 });

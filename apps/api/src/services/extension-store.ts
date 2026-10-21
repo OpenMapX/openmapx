@@ -304,18 +304,56 @@ interface FetchedCatalog {
   control: CatalogControl;
 }
 
+function isCatalogRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isCatalogEntryList(value: unknown): value is ExtensionCatalogEntry[] {
+  return (
+    Array.isArray(value) &&
+    value.every(
+      (entry) =>
+        isCatalogRecord(entry) && typeof entry.id === "string" && typeof entry.name === "string",
+    )
+  );
+}
+
+function isCatalogControlList(value: unknown, critical: boolean): boolean {
+  return (
+    Array.isArray(value) &&
+    value.every(
+      (entry) =>
+        isCatalogRecord(entry) &&
+        typeof entry.id === "string" &&
+        (!Object.hasOwn(entry, "reason") || typeof entry.reason === "string") &&
+        (!critical || !Object.hasOwn(entry, "maxVersion") || typeof entry.maxVersion === "string"),
+    )
+  );
+}
+
 async function fetchCatalogFromUrl(url: string): Promise<FetchedCatalog> {
   const data = await safeFetchJson<unknown>(url, {
     headers: { "User-Agent": USER_AGENT_ADMIN },
     timeoutMs: 15_000,
   });
   // Accept either a bare array of entries or `{ extensions, removed, critical }`.
+  // Validate the whole document before consuming it: malformed acquisition is
+  // not evidence of an empty catalog, and must not clear cached denials.
   if (Array.isArray(data)) {
-    return { entries: data as ExtensionCatalogEntry[], control: {} };
+    if (!isCatalogEntryList(data)) throw new ExtensionStoreError("catalog_acquisition_failed");
+    return { entries: data, control: {} };
+  }
+  if (
+    !isCatalogRecord(data) ||
+    (Object.hasOwn(data, "extensions") && !isCatalogEntryList(data.extensions)) ||
+    (Object.hasOwn(data, "removed") && !isCatalogControlList(data.removed, false)) ||
+    (Object.hasOwn(data, "critical") && !isCatalogControlList(data.critical, true))
+  ) {
+    throw new ExtensionStoreError("catalog_acquisition_failed");
   }
   const obj = data as { extensions?: ExtensionCatalogEntry[] } & CatalogControl;
   return {
-    entries: Array.isArray(obj.extensions) ? obj.extensions : [],
+    entries: obj.extensions ?? [],
     control: { removed: obj.removed, critical: obj.critical },
   };
 }
