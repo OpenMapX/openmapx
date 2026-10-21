@@ -198,6 +198,7 @@ describe("readCommunityServices", () => {
     expect(result.problems).toEqual([
       expect.stringContaining(`Community service in repository ${"1".repeat(16)} was rejected`),
     ]);
+    expect(result.reportedServiceIds).toEqual(["svc-one", "svc-two"]);
   });
 });
 

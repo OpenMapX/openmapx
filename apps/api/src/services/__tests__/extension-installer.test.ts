@@ -305,8 +305,9 @@ afterEach(() => {
   readCommunityMock.mockResolvedValue({
     revisionId: `cfg1_${"d".repeat(43)}`,
     repositories: [],
-    services: [{ repository: REPO_ONE, directory: "/x", manifest: communityManifest("svc-one") }],
-    problems: [],
+    services: [],
+    problems: ["svc-one was rejected"],
+    reportedServiceIds: ["svc-one"],
   } as never);
   recoverMock.mockResolvedValue(undefined);
   lockMock.mockImplementation((work) => work());
@@ -948,6 +949,7 @@ describe("removeExtension", () => {
       repositories: [],
       services: [],
       problems: [],
+      reportedServiceIds: [],
     } as never);
     removeRepositoryMock.mockResolvedValueOnce({ repository: REPO_ONE, removed: false });
 

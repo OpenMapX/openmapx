@@ -945,19 +945,15 @@ async function removeExtensionNow(
   await ctx.setProgress(10);
 
   // A removal interrupted after the agent deleted a repository is retried
-  // without its services: their runtimes went before their repository, and
-  // the agent no longer knows them.
-  const installed =
+  // without that repository's services: their runtimes went first, and the
+  // agent, which no longer reports them at all, refuses to act on them.
+  const reported =
     serviceIds.length > 0
-      ? new Set(
-          (await readCommunityServices({ signal: ctx.signal })).services.map(
-            (service) => service.manifest.id,
-          ),
-        )
+      ? new Set((await readCommunityServices({ signal: ctx.signal })).reportedServiceIds)
       : new Set<string>();
 
   // Tear down service containers while they're still in the compose file.
-  for (const svc of serviceIds.filter((id) => installed.has(id))) {
+  for (const svc of serviceIds.filter((id) => reported.has(id))) {
     await ctx.log(`Removing service container ${svc}...`);
     const removed = await dockerComposeAction(svc, "remove", {
       operationKey: createDurableOpsKey("extension.service.remove", `${ctx.jobId}:${svc}`),

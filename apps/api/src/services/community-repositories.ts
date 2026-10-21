@@ -53,6 +53,8 @@ export interface CommunityServicesSnapshot {
   }>;
   /** Reported services the API's own manifest rules reject. */
   problems: string[];
+  /** Ids of every service the agent reported, including rejected ones. */
+  reportedServiceIds: string[];
 }
 
 interface OperationOptions {
@@ -182,6 +184,9 @@ export async function readCommunityServices(
     repositories: result.repositories,
     services,
     problems,
+    reportedServiceIds: result.services.flatMap((entry) =>
+      typeof entry.manifest.id === "string" ? [entry.manifest.id] : [],
+    ),
   };
 }
 
