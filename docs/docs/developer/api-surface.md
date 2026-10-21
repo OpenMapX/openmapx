@@ -524,3 +524,26 @@ one union of affected origin-scoped extension, service, integration/configuratio
 credential inventory, runtime and overview reads before invalidating them; inactive queries remain stale
 and unrelated API origins are untouched. Synchronous source edits and refresh also
 invalidate catalog/detail/installed snapshots and installed badges.
+
+The private operator CLI uses these same generated operations with one isolated
+`ApiClient` per action. It reads `API_URL` → `OPENMAPX_API_URL` →
+`http://localhost:3001` late, omits credentials and always attaches
+`x-openmapx-local-admin` from the trimmed optional `OPENMAPX_LOCAL_ADMIN_TOKEN`
+(empty when absent). It does not configure the global client or create cookies,
+Origin headers or a new authentication mode. Other operator commands retain
+their existing transport.
+
+`ext preview <idOrUrl>` displays the complete validated inspected snapshot.
+Install/update preview again with their invocation client and selector before
+writing; port-bearing snapshots require an explicit matching
+`--host-port-confirmation <fingerprint>` supplied after human review. A mismatch
+requires new deliberate inspection. Generated functions own encoding exactly
+once, and omitted optional update/remove bodies stay absent. Reads use 30 seconds;
+preview and writes use finite 180-second deadlines through body consumption.
+Status/media/body/byte limits remain in the bound SDK transport. CLI failures use
+fixed safe messages and nonzero exits; validated 429 retains Retry-After without
+retrying. Timeouts are ambiguous and never cancel host jobs or trigger retries.
+The CLI prints queued 202 job IDs without adding an Activity watcher. Since
+install/update acquire another preview, a preceding explicit `ext preview` does
+not bypass the one-preview-per-30-seconds bucket; 429 ends that command without
+writing or automatically retrying.

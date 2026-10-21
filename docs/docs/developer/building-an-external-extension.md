@@ -326,7 +326,12 @@ upgrades until you remove the integration.
 For distribution, wrap the artifact in an [`extension.json`](#bundle-it-as-an-extension)
 so an operator installs it from the **Extensions** store (or
 `pnpm openmapx ext install <extension.json-url>`) — that's the recommended path,
-and it's required once your extension also ships a companion service.
+and it's required once your extension also ships a companion service. The operator
+CLI previews before queuing an install. For host ports, first inspect
+`pnpm openmapx ext preview <extension.json-url>` and deliberately pass its exact
+fingerprint with `--host-port-confirmation <fingerprint>`. See the
+[operator confirmation workflow](../administration/community-extensions.md) for
+snapshot changes, request limits and queued-job handling.
 
 ### Reload `app-api`
 
@@ -558,7 +563,10 @@ starts the service, installs the integration, and reloads the API atomically
 (rolling back on failure):
 
 ```sh
-pnpm openmapx ext install https://…/extension.json   # or by catalog id once listed
+pnpm openmapx ext preview https://example.com/extension.json
+# Inspect the complete output. If it exposes host ports:
+pnpm openmapx ext install https://example.com/extension.json --host-port-confirmation <fingerprint>
+# Without host ports, omit the confirmation option. Catalog IDs also work.
 ```
 
 For the operator, updating is `pnpm openmapx ext update <id>` (or the **Update**
@@ -566,6 +574,22 @@ action in the admin panel, offered once the store sees your newer release); it
 re-pins every part together so the coupled service, integration, and shared
 schema stay version-consistent. Something installed directly by URL (not via a
 catalog) is updated by re-running `pnpm openmapx ext install <newer extension.json url>`.
+For a catalog update with host ports, run `pnpm openmapx ext preview <id>` first,
+review the current commit, bindings, source trust and full security rating, then
+use `pnpm openmapx ext update <id> --host-port-confirmation <fingerprint>`.
+Install/update obtain another preview and refuse missing or mismatched port
+confirmation before writing. A changed snapshot requires new deliberate review;
+there is no automatic consent or retry. Preview may fetch and stage repositories.
+
+Every critical advisory blocks preview, admission and execution until cleared,
+regardless of advisory `maxVersion`. Install/update/remove print a validated queued
+job ID (HTTP 202); check **Admin → Activity** for completion. The CLI does not watch
+jobs. Reads use 30-second deadlines, preview and writes 180 seconds. A timeout is
+ambiguous and does not cancel host work; check Activity before deliberately
+retrying. Respect 429 `Retry-After` for the independent preview and shared
+install/update buckets, each one request per 30 seconds. After an explicit
+`ext preview`, allow the preview bucket's limit before invoking install/update:
+those commands obtain another fresh preview and exit on 429 without retrying.
 
 ## Caveats
 

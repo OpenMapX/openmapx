@@ -33,8 +33,24 @@ remove the extension if appropriate. Treat HTTP 202 as queued acceptance and
 check Activity for completion. Respect 429 `Retry-After`; do not automatically
 retry mutations.
 
-Explicit operator CLI preview and host-port fingerprint confirmation are planned
-in the subsequent administration SDK caller task. They are not implemented by
-this admission change. Host ports still require deliberate authorization bound
-to the exact inspected snapshot. No data migration or cache version change is
-required.
+The internal operator CLI now previews before install/update. Run
+`pnpm openmapx ext preview <idOrUrl>` to inspect the full commit, effective
+host/container ports, bind addresses/protocols, source trust and security rating
+(including deployment variables and factors). Preview may fetch and stage
+repositories. For host ports, deliberately supply the inspected fingerprint with
+`ext install <idOrUrl> --host-port-confirmation <fingerprint>` or
+`ext update <id> --host-port-confirmation <fingerprint>` after previewing that same
+catalog ID. Without host ports the fresh preview may proceed directly. Because
+install/update obtain another preview, respect the one-preview-per-30-seconds
+limit after `ext preview`; a 429 exits without retrying. Wait for `Retry-After`
+before a deliberate new invocation.
+
+Missing or mismatched confirmation exits nonzero before the write. A moving
+snapshot requires a new explicit preview and deliberate review. There is no
+`--yes` bypass, automatic fingerprint consent, mutation retry or job watcher;
+the worker still enforces the inspected snapshot. Direct URLs remain community
+content. Reads have 30-second deadlines and preview/writes 180 seconds, including
+response bodies. Timeout leaves an uncertain result and does not cancel host
+work: check Activity before deliberately retrying. Invalid responses and failures
+produce safe stderr and a nonzero exit. No data migration or cache version change
+is required.

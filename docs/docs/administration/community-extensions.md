@@ -80,7 +80,8 @@ The same operations are available on the CLI:
 
 ```bash
 pnpm openmapx ext browse                 # list the catalog
-pnpm openmapx ext install openconditions # install by catalog id…
+pnpm openmapx ext preview openconditions # inspect current bindings and fingerprint
+pnpm openmapx ext install openconditions # preview then queue by catalog id…
 pnpm openmapx ext install https://example.com/my-ext/extension.json  # …or by URL
 pnpm openmapx ext list                   # what's installed
 pnpm openmapx ext update <id>            # re-pin to the latest published version
@@ -88,7 +89,50 @@ pnpm openmapx ext remove <id>            # uninstall (removes its services + int
 ```
 
 The CLI talks to the admin API; run it on the API host (loopback admin) or set
-`OPENMAPX_API_URL`. Every install/update/remove is recorded in the audit log.
+`OPENMAPX_API_URL`. The destination is read for each action, in order:
+`API_URL`, `OPENMAPX_API_URL`, then `http://localhost:3001`. The CLI sends
+`x-openmapx-local-admin` on every request, using the trimmed optional
+`OPENMAPX_LOCAL_ADMIN_TOKEN` or an empty value. It omits cookies and does not
+create a browser session; a remote URL alone does not authenticate. The API's
+socket-peer, local-token and administrator-access rules still apply.
+Every accepted install/update/remove is recorded in the audit log.
+
+Install and update always acquire a fresh preview first, using the same API
+client and selector as the subsequent write. Without host ports they may proceed.
+With host ports, first deliberately inspect the explicit preview:
+
+```bash
+pnpm openmapx ext preview <idOrUrl>
+pnpm openmapx ext install <idOrUrl> --host-port-confirmation <fingerprint>
+# For an update, preview the same catalog ID:
+pnpm openmapx ext preview <id>
+pnpm openmapx ext update <id> --host-port-confirmation <fingerprint>
+```
+
+Use the `confirmation` fingerprint from the inspected output. Preview shows the
+complete extension identity and source trust, each service's full repository
+commit, all effective host/container ports, bind addresses (including IPv6),
+protocols and full security rating, including deployment variables and factors.
+Preview may fetch and stage repositories. Direct manifest URLs follow the same
+review flow and always have community trust. Because install/update obtain
+another preview, respect the one-preview-per-30-seconds limit after an explicit
+`ext preview` before invoking them. A 429 exits without retrying; wait for its
+`Retry-After` before a deliberate new invocation.
+
+Missing or mismatched confirmation fails with a nonzero exit before the write.
+If the snapshot moves between inspection and install/update, run a new explicit
+preview and review it before supplying its fingerprint. The CLI never copies a
+fresh fingerprint into consent, offers no `--yes` bypass, and does not re-enqueue
+a failed write. The worker remains the authority for host-port enforcement.
+
+Read requests have a 30-second deadline; preview and install/update/remove
+requests have finite 180-second deadlines, including response-body reading.
+A timeout leaves the outcome uncertain and does not cancel host work. Check
+**Admin → Activity** before deliberately retrying. HTTP 202 and the printed job
+ID mean queued acceptance, not completion. The CLI exits after acceptance without
+watching the job. Failed or invalid responses produce safe stderr and a nonzero
+exit, without dumping API payloads. Respect 429 `Retry-After`; no command retries
+automatically.
 
 ## What happens on install
 
@@ -155,8 +199,10 @@ malformed archive — they are not a substitute for trusting the author.
 
 Extension previews have an independent limit of one request per 30 seconds per
 network peer key. Install and update admission share a separate bucket with the
-same limit. Preview can therefore be followed immediately by a deliberate
-install or update. Repeated requests in either bucket return 429 with
+same limit. At the HTTP level, preview can therefore be followed immediately by
+a deliberate install or update write. The CLI's install/update acquire their own
+fresh preview, so after `ext preview` they must also respect the preview bucket.
+Repeated requests in either bucket return 429 with
 `Retry-After`; there is no automatic mutation retry. Administrator, CSRF and
 broader API rate limits still apply.
 
@@ -165,11 +211,10 @@ for the terminal outcome. Dependency failures return bounded public messages;
 manifest detail may still return an empty component list if resolution fails.
 That fallback does not prove the extension has no components.
 
-The internal operator CLI's explicit preview and host-port fingerprint
-confirmation workflow is planned as part of the administration SDK caller
-update. This change does not implement those CLI commands or flags. Host-port
-approval continues to require the exact inspected snapshot; it must never be
-automatically granted.
+The internal operator CLI provides `ext preview <idOrUrl>` and
+`ext install/update --host-port-confirmation <fingerprint>` as described above.
+Host-port approval is bound to the exact inspected snapshot and is never granted
+automatically.
 
 ### Browser review and request lifetime
 
@@ -256,16 +301,17 @@ road weather stations, maintenance vehicles and border crossings. Without
 OpenConditions, data sources that only it supplies, such as fuel prices, are
 not offered at all. It's
 published as the first **verified** entry in the curated catalog, so installing
-it is one action:
+it uses the same preview and confirmation flow:
 
 ```bash
-pnpm openmapx ext install openconditions
+pnpm openmapx ext preview openconditions
+pnpm openmapx ext install openconditions --host-port-confirmation <fingerprint>
 ```
 
 The orchestrator registers both services at their pinned tag, renders and starts
-them, and reloads the API, all as one job. The install reports success, but
-neither service runs yet: both stop at boot and their containers restart in a
-loop until their credentials are set (`DATABASE_URL` on both, the grant secret
+them, and reloads the API, all as one job. The CLI reports queued acceptance;
+check Activity for the job outcome. After a successful install, neither service
+is ready yet: both stop at boot and their containers restart in a loop until their credentials are set (`DATABASE_URL` on both, the grant secret
 and reviewer token on the contributions API). Set them as described in
 [Configuring the OpenConditions services](#configuring-the-openconditions-services)
 and **Save & Apply**; the ingest service then creates its `conditions` schema
