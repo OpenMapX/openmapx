@@ -1,17 +1,10 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { useEnv } from "@/integration-api/runtime/EnvProvider";
+import { useActivityClient } from "@/components/admin/activity/activityQueries";
+import { serviceAdminQueries } from "@/lib/admin/serviceAdmin";
 
 export function useComposePreview() {
-  const env = useEnv();
-  const apiUrl = env.apiUrl;
-  return useQuery({
-    queryKey: ["admin", "compose-preview"],
-    queryFn: async () => {
-      const res = await fetch(`${apiUrl}/api/admin/compose/preview`, { credentials: "include" });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      return await res.text();
-    },
-  });
+  const { client, apiUrl } = useActivityClient();
+  return useQuery(serviceAdminQueries(client, apiUrl).compose());
 }

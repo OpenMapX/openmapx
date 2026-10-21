@@ -1,32 +1,15 @@
 "use client";
 
+import { ApiClientError } from "@openmapx/core";
+import * as sdk from "@openmapx/core/api-admin-sdk";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEnv } from "@/integration-api/runtime/EnvProvider";
+import { useActivityClient } from "@/components/admin/activity/activityQueries";
+import { invalidateServiceAdministration, serviceAdminQueries } from "@/lib/admin/serviceAdmin";
 
-export type ProvisioningSecretState = "missing" | "consistent" | "conflict";
-
-export interface ManagedDawarichProvisioningStatus {
-  installed: boolean;
-  selected: boolean;
-  running: boolean;
-  healthy: boolean;
-  publicOrigin: string | null;
-  oauthClient: {
-    present: boolean;
-    clientId: string | null;
-    redirectUriMatches: boolean;
-    settingsMatch: boolean;
-    recoveryRequired: boolean;
-  };
-  secrets: {
-    databasePassword: ProvisioningSecretState;
-    secretKeyBase: ProvisioningSecretState;
-    oidcClientSecret: ProvisioningSecretState;
-  };
-  configReady: boolean;
-  readyToStart: boolean;
-  needsApply: boolean;
-}
+export type {
+  AdminDawarichSecretState as ProvisioningSecretState,
+  AdminDawarichStatus as ManagedDawarichProvisioningStatus,
+} from "@openmapx/core/api-contracts";
 
 export class DawarichProvisioningApiError extends Error {
   constructor(readonly code: string) {
@@ -35,69 +18,71 @@ export class DawarichProvisioningApiError extends Error {
   }
 }
 
-async function parseResponse(response: Response): Promise<ManagedDawarichProvisioningStatus> {
-  const body = (await response.json().catch(() => ({}))) as {
-    code?: unknown;
-  } & Partial<ManagedDawarichProvisioningStatus>;
-  if (!response.ok) {
-    throw new DawarichProvisioningApiError(
-      typeof body.code === "string" ? body.code : "DAWARICH_PROVISIONING_FAILED",
-    );
+function safeError(error: unknown): DawarichProvisioningApiError {
+  const cause =
+    error instanceof Error && error.cause instanceof ApiClientError ? error.cause : error;
+  if (cause instanceof ApiClientError) {
+    const schema =
+      cause.status === 409
+        ? sdk.adminDawarichBundleConflictSchema
+        : cause.status === 422
+          ? sdk.adminDawarichInvalidHostSchema
+          : cause.status === 503
+            ? sdk.adminDawarichUnavailableSchema
+            : cause.status === 400
+              ? sdk.adminDawarichConfirmationErrorSchema
+              : null;
+    const parsed = schema?.safeParse(cause.payload);
+    if (parsed?.success) return new DawarichProvisioningApiError(parsed.data.code);
   }
-  return body as ManagedDawarichProvisioningStatus;
+  return new DawarichProvisioningApiError("DAWARICH_PROVISIONING_FAILED");
 }
 
 export function useDawarichProvisioning() {
-  const apiUrl = useEnv().apiUrl;
+  const { client, apiUrl } = useActivityClient();
   const queryClient = useQueryClient();
-  const queryKey = ["admin", "dawarich"] as const;
-
-  const statusQuery = useQuery<ManagedDawarichProvisioningStatus, DawarichProvisioningApiError>({
-    queryKey,
-    queryFn: async () =>
-      parseResponse(
-        await fetch(`${apiUrl}/api/admin/dawarich`, {
-          credentials: "include",
-          cache: "no-store",
-        }),
-      ),
+  const options = serviceAdminQueries(client, apiUrl).dawarich();
+  const statusQuery = useQuery({
+    ...options,
+    queryFn: async (context) => {
+      try {
+        if (!options.queryFn) throw new Error("Status query unavailable");
+        return await options.queryFn(context);
+      } catch (error) {
+        throw safeError(error);
+      }
+    },
     staleTime: 10_000,
   });
-
-  const provision = useMutation<
-    ManagedDawarichProvisioningStatus,
-    DawarichProvisioningApiError,
-    string | undefined
-  >({
-    mutationFn: async (publicHost) =>
-      parseResponse(
-        await fetch(`${apiUrl}/api/admin/dawarich/provision`, {
-          method: "POST",
-          credentials: "include",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(publicHost ? { publicHost } : {}),
-        }),
-      ),
-    onSuccess: (status) => {
-      queryClient.setQueryData(queryKey, status);
-      void queryClient.invalidateQueries({ queryKey: ["admin", "services"] });
-    },
+  async function complete(
+    pending: Promise<
+      sdk.provisionAdminDawarichResponse | sdk.rotateAdminDawarichOidcSecretResponse
+    >,
+  ) {
+    const effect = { kind: "dawarich" } as const;
+    try {
+      const status = sdk.unwrapAdminResponse(await pending);
+      queryClient.setQueryData(options.queryKey, status);
+      void invalidateServiceAdministration(queryClient, apiUrl, effect);
+      return status;
+    } catch (error) {
+      throw safeError(error);
+    }
+  }
+  const provision = useMutation({
+    retry: false,
+    mutationFn: (publicHost: string | undefined) =>
+      complete(sdk.provisionAdminDawarich(publicHost ? { publicHost } : {}, { client })),
   });
-
-  const rotate = useMutation<ManagedDawarichProvisioningStatus, DawarichProvisioningApiError>({
-    mutationFn: async () =>
-      parseResponse(
-        await fetch(`${apiUrl}/api/admin/dawarich/rotate-oidc-secret`, {
-          method: "POST",
-          credentials: "include",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ confirmation: "ROTATE DAWARICH OIDC SECRET" }),
-        }),
+  const rotate = useMutation({
+    retry: false,
+    mutationFn: () =>
+      complete(
+        sdk.rotateAdminDawarichOidcSecret(
+          { confirmation: "ROTATE DAWARICH OIDC SECRET" },
+          { client },
+        ),
       ),
-    onSuccess: (status) => {
-      queryClient.setQueryData(queryKey, status);
-    },
   });
-
   return { statusQuery, provision, rotate };
 }

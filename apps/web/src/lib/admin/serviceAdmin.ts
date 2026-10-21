@@ -95,7 +95,8 @@ export function serviceAdminQueries(client: ApiClient, apiUrl: string) {
     dawarich: () =>
       queryOptions({
         queryKey: [...key, "dawarich"],
-        queryFn: ({ signal }) => serviceOrThrow(sdk.getAdminDawarich(options(signal))),
+        queryFn: ({ signal }) =>
+          serviceOrThrow(sdk.getAdminDawarich({ ...options(signal), cache: "no-store" })),
       }),
   };
 }

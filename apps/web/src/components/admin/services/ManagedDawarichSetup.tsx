@@ -14,13 +14,15 @@ import CircularProgress from "@mui/material/CircularProgress";
 import Stack from "@mui/material/Stack";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
-import { useState } from "react";
+import { useRef, useState } from "react";
+import { useActivityClient } from "@/components/admin/activity/activityQueries";
 import {
   type DawarichProvisioningApiError,
   type ManagedDawarichProvisioningStatus,
   type ProvisioningSecretState,
   useDawarichProvisioning,
 } from "@/hooks/useDawarichProvisioning";
+import { useAdminMutationOwner } from "@/lib/admin/useAdminMutationOwner";
 
 const ROTATION_CONFIRMATION = "ROTATE DAWARICH OIDC SECRET";
 
@@ -144,12 +146,20 @@ function SetupChecklist({ status }: { status: ManagedDawarichProvisioningStatus 
 }
 
 export function ManagedDawarichSetup() {
+  const { client, apiUrl } = useActivityClient();
+  return <ManagedDawarichSetupView key={apiUrl} client={client} apiUrl={apiUrl} />;
+}
+
+function ManagedDawarichSetupView({ client, apiUrl }: ReturnType<typeof useActivityClient>) {
   const { statusQuery, provision, rotate } = useDawarichProvisioning();
   const [hostname, setHostname] = useState("");
   const [hostnameError, setHostnameError] = useState<string | null>(null);
   const [confirmation, setConfirmation] = useState("");
   const status = statusQuery.data;
-  const mutationError = errorMessage(provision.error ?? rotate.error);
+  const [feedback, setFeedback] = useState<Error | null>(null);
+  const feedbackSequence = useRef(0);
+  const owner = useAdminMutationOwner(client, JSON.stringify([apiUrl, hostname, confirmation]));
+  const mutationError = errorMessage(feedback);
 
   async function handleProvision() {
     const normalized = normalizeHostname(hostname);
@@ -158,14 +168,30 @@ export function ManagedDawarichSetup() {
       return;
     }
     setHostnameError(null);
+    const execution = owner;
+    const sequence = ++feedbackSequence.current;
+    setFeedback(null);
     provision.reset();
-    await provision.mutateAsync(normalized || undefined).catch(() => undefined);
+    try {
+      await provision.mutateAsync(normalized || undefined);
+    } catch (error) {
+      if (execution.active && sequence === feedbackSequence.current)
+        setFeedback(error instanceof Error ? error : new Error());
+    }
   }
 
   async function handleRotate() {
+    const execution = owner;
+    const sequence = ++feedbackSequence.current;
+    setFeedback(null);
     rotate.reset();
-    await rotate.mutateAsync().catch(() => undefined);
-    setConfirmation("");
+    try {
+      await rotate.mutateAsync();
+      if (execution.active && sequence === feedbackSequence.current) setConfirmation("");
+    } catch (error) {
+      if (execution.active && sequence === feedbackSequence.current)
+        setFeedback(error instanceof Error ? error : new Error());
+    }
   }
 
   return (

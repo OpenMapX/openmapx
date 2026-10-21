@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import type { ReactNode } from "react";
 import { AdminLayout } from "@/components/admin/AdminLayout";
+import { getSelfHosted } from "@/lib/admin/serverDeployment";
 
 async function getAdminSession() {
   const cookieStore = await cookies();
@@ -15,20 +16,6 @@ async function getAdminSession() {
   return res.json() as Promise<{
     user: { name: string; email: string; image?: string; role?: string };
   }>;
-}
-
-async function getSelfHosted(cookieHeader: string): Promise<boolean> {
-  try {
-    const res = await fetch(`${serverApiUrl()}/api/admin/deployment`, {
-      headers: { cookie: cookieHeader },
-      cache: "no-store",
-    });
-    if (!res.ok) return false;
-    const data = (await res.json()) as { selfHosted?: boolean };
-    return data.selfHosted === true;
-  } catch {
-    return false;
-  }
 }
 
 export default async function AdminRootLayout({ children }: { children: ReactNode }) {
