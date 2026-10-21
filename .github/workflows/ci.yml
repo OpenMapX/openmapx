@@ -292,7 +292,7 @@ jobs:
         if: matrix.group == 'api-privacy'
         timeout-minutes: 10
         run: |
-          image="$(node -e 'const {container: c} = require("./services/redis/service.json"); console.log(`${c.image}:${c.tag}@${c.digest}`)')"
+          image="$(node -e 'const {container: c} = require("./services/redis/service.json"); console.log(c.image + ":" + c.tag + "@" + c.digest)')"
           for backoff in 0 15 30 60 120; do
             sleep "$backoff"
             docker pull --quiet "$image" && exit 0
