@@ -1,4 +1,5 @@
-import { execFileSync, spawn } from "node:child_process";
+import { type ChildProcess, execFileSync, spawn } from "node:child_process";
+import { EventEmitter } from "node:events";
 import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
@@ -138,6 +139,35 @@ async function readProbeMarker(path: string) {
     if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
   }
 }
+
+it("preserves a streamless spawn failure and clears its deadline before rejecting", async () => {
+  const { source, destination } = await fixture();
+  await writeFile(join(source, "client.ts"), "export const client={a:1};\n");
+  const failure = Object.assign(new Error("spawn EMFILE"), { code: "EMFILE" });
+  // Node returns before assigning stdio streams when pipe creation hits EMFILE.
+  vi.mocked(spawn).mockImplementationOnce(() => {
+    const child = new EventEmitter() as ChildProcess;
+    process.nextTick(() => {
+      child.emit("error", failure);
+      child.emit("close", -1, null);
+    });
+    return child;
+  });
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  try {
+    const result = await collectArtifacts(source, destination, ["client.ts"]).catch(
+      (error: unknown) => error,
+    );
+    expect.soft(result).toBe(failure);
+    expect.soft(vi.getTimerCount()).toBe(0);
+    expect(await readFile(join(source, "client.ts"), "utf8")).toBe("export const client={a:1};\n");
+    await expect(readFile(join(destination, "client.ts"))).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+  } finally {
+    vi.useRealTimers();
+  }
+});
 
 function killProbe(pid: number) {
   try {

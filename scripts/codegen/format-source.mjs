@@ -59,7 +59,7 @@ async function runBiomeBatch(args) {
     90_000,
   );
   for (const stream of ["stdout", "stderr"]) {
-    child[stream].on("data", (chunk) => {
+    child[stream]?.on("data", (chunk) => {
       sizes[stream] += chunk.length;
       if (sizes[stream] > maxBuffer) {
         stop(
