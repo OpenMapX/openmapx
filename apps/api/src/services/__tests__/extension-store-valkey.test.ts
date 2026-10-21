@@ -10,6 +10,11 @@ import {
   readExtensionSnapshot,
 } from "../extension-store-cache";
 
+import {
+  type ExtensionValkeyFixtureRuntime,
+  stopExtensionValkeyFixture,
+} from "./extension-store-valkey-cleanup";
+
 const ports = vi.hoisted(() => ({ client: null as Redis | null, fetch: vi.fn() }));
 vi.mock("../../db", () => ({ db: {} }));
 vi.mock("../../redis", () => ({
@@ -50,11 +55,7 @@ async function createFixture() {
     "testcontainers",
   ) as {
     GenericContainer: new (image: string) => Builder;
-    getContainerRuntimeClient(): Promise<{
-      container: {
-        getById(id: string): { remove(options: { force: boolean; v: boolean }): Promise<unknown> };
-      };
-    }>;
+    getContainerRuntimeClient(): Promise<ExtensionValkeyFixtureRuntime>;
     Wait: {
       forLogMessage(message: RegExp): Parameters<PostgreSqlContainer["withWaitStrategy"]>[0];
     };
@@ -78,15 +79,7 @@ async function createFixture() {
   }
   let container: Started | undefined;
   let client: Redis | undefined;
-  const stop = async () => {
-    client?.disconnect();
-    if (container) await container.stop({ timeout: 0 });
-    else if (createdId) {
-      // start() can fail after creation but before returning a container handle.
-      // Remove only the ID captured by our own creation hook, never by inventory.
-      await runtime.container.getById(createdId).remove({ force: true, v: true });
-    }
-  };
+  const stop = () => stopExtensionValkeyFixture({ client, container, createdId, runtime });
   try {
     container = await new LoopbackValkey()
       .withCommand(["valkey-server", "--save", "", "--appendonly", "no"])
