@@ -20,6 +20,13 @@ and empty effective install selectors. Optional update/remove/refresh bodies may
 be absent; remove/refresh accept only an empty object when supplied. ID keeps
 precedence over a second manifest URL selector.
 
+Installed inventory remains available when optional catalog enrichment fails.
+Its `hasUpdate` field is now nullable: null means update comparison is unavailable,
+not that the installed version is current. Catalog-list `hasUpdate` remains boolean.
+Browser and CLI show unavailable comparisons explicitly; a failed browser refetch
+retains the last inventory with a warning and removal controls, without allowing
+updates based on stale metadata.
+
 ## Who is affected
 
 Deployment administrators and custom clients of the extension administration API,
@@ -27,7 +34,8 @@ including operators attempting an update of a critically flagged extension.
 
 ## Required action
 
-Update custom clients to send canonical request fields. Wait for a critical
+Update custom clients to send canonical request fields and handle installed
+`hasUpdate: null` as unknown, without enabling update. Wait for a critical
 advisory to be cleared before attempting another deliberate install or update;
 remove the extension if appropriate. Treat HTTP 202 as queued acceptance and
 check Activity for completion. Respect 429 `Retry-After`; do not automatically

@@ -197,7 +197,7 @@ export async function adminExtensionsRoute(app: FastifyInstance): Promise<void> 
   });
 
   // GET /admin/extensions/installed
-  registerExtensionAdminRoute(app, "listAdminInstalledExtensions", async () => {
+  registerExtensionAdminRoute(app, "listAdminInstalledExtensions", async (request) => {
     const installed = await listInstalledExtensions();
     let registry: ReturnType<typeof getServiceRegistry> | null = null;
     try {
@@ -205,8 +205,18 @@ export async function adminExtensionsRoute(app: FastifyInstance): Promise<void> 
     } catch {
       registry = null;
     }
-    const catalog = await getExtensionCatalog();
-    const catalogMap = new Map(catalog.map((e) => [e.id, e]));
+    // Catalog availability must not hide authoritative local inventory/removal.
+    // Keep DB reads and output validation outside this optional enrichment boundary.
+    let catalog: ExtensionCatalogEntry[] | undefined;
+    try {
+      catalog = await getExtensionCatalog();
+    } catch (error) {
+      request.log.warn(
+        { errorClass: safeErrorClass(error) },
+        "Installed extension update comparison unavailable",
+      );
+    }
+    const catalogMap = new Map(catalog?.map((e) => [e.id, e]));
 
     return {
       extensions: installed.map((ext) => {
@@ -233,7 +243,7 @@ export async function adminExtensionsRoute(app: FastifyInstance): Promise<void> 
           installedAt: ext.installedAt.toISOString(),
           updatedAt: ext.updatedAt.toISOString(),
           components,
-          hasUpdate: !!entry && entry.version != null && entry.version !== ext.installedVersion,
+          hasUpdate: entry?.version != null ? entry.version !== ext.installedVersion : null,
           latestVersion: entry?.version ?? null,
         };
       }),

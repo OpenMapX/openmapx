@@ -22,7 +22,8 @@ export const adminExtensionInstalledSchema = z.strictObject({
       securityRating: adminExtensionSecurityRatingSchema.optional(),
     }),
   ),
-  hasUpdate: z.boolean(),
+  // null means no catalog version is available for comparison.
+  hasUpdate: z.boolean().nullable(),
   latestVersion: z.string().nullable(),
 });
 export const adminExtensionInstalledListSchema = z.strictObject({

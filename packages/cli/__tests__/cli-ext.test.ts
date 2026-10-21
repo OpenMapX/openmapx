@@ -122,6 +122,17 @@ afterEach(() => {
 });
 
 describe("extension CLI through the final generated SDK", () => {
+  it("lists authoritative installed rows with an unavailable update comparison", async () => {
+    fetchMock.mockResolvedValueOnce(
+      respond({ extensions: [{ ...installed, hasUpdate: null, latestVersion: null }] }),
+    );
+    await run("list");
+    expect(process.exitCode).toBe(0);
+    expect(stdout()).toContain("synthetic");
+    expect(stdout()).toContain("Update status unavailable");
+    expect(stderr()).toBe("");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
   it("uses generated query encoding and preserves the catalog table and unknown version", async () => {
     fetchMock.mockResolvedValueOnce(
       respond({ entries: [catalogEntry], total: 1, revocationDataStale: false }),

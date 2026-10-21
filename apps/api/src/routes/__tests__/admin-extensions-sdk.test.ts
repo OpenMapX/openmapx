@@ -403,7 +403,7 @@ describe("extension contract boundaries", () => {
     expect(result.data.extensions[0]).toMatchObject({
       latestVersion: null,
       sourceUrl: null,
-      hasUpdate: false,
+      hasUpdate: null,
       components: installed.components,
     });
     expect(result.data.extensions[0].components[0]).not.toHaveProperty("securityRating");

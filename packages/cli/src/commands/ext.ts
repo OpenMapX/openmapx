@@ -90,7 +90,12 @@ export function registerExtCommands(program: Command): void {
               version: e.installedVersion,
               trust: e.sourceTrust,
               parts: e.components.map((c) => `${c.kind[0]}:${c.componentId}`).join(", "),
-              update: e.hasUpdate ? `→ ${e.latestVersion ?? "Version unknown"}` : "—",
+              update:
+                e.hasUpdate === null
+                  ? "Update status unavailable"
+                  : e.hasUpdate
+                    ? `→ ${e.latestVersion ?? "Version unknown"}`
+                    : "—",
             })),
           ),
         );

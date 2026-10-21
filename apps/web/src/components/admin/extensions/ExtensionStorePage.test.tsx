@@ -81,6 +81,93 @@ async function reviewUrl(value = "https://manifest.test/a.json") {
 const previewCalls = () => calls.filter((c) => c.url.pathname.endsWith("/install-preview"));
 const installCalls = () => calls.filter((c) => c.url.pathname.endsWith("/install"));
 describe("actual extension forms and SDK ownership", () => {
+  it("keeps removal reachable when the update comparison is unavailable", async () => {
+    intercept = (u) =>
+      u.pathname.endsWith("/installed")
+        ? Response.json({ extensions: [installed({ hasUpdate: null, latestVersion: null })] })
+        : undefined;
+    vi.stubGlobal("confirm", () => true);
+    mount();
+    fireEvent.click(screen.getByRole("tab", { name: "Installed" }));
+    await screen.findByText("Update status unavailable");
+    expect(screen.queryByRole("button", { name: "Update" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Uninstall" }));
+    await waitFor(() => expect(calls.filter((c) => c.init.method === "DELETE")).toHaveLength(1));
+  });
+  it.each(["displayed", "pending"])(
+    "keeps stale inventory/removal and retires a %s update preview after failed refetch",
+    async (state) => {
+      const pending = deferred<Response>();
+      const refresh = deferred<Response>();
+      const { qc } = mount();
+      fireEvent.click(screen.getByRole("tab", { name: "Installed" }));
+      const update = await screen.findByRole("button", { name: "Update" });
+      if (state === "pending")
+        intercept = (u) => (u.pathname.endsWith("/install-preview") ? pending.promise : undefined);
+      fireEvent.click(update);
+      await waitFor(() => expect(previewCalls()).toHaveLength(1));
+      if (state === "displayed") await screen.findByText("Review extension security");
+      intercept = (u) => (u.pathname.endsWith("/installed") ? refresh.promise : undefined);
+      let refetch!: Promise<void>;
+      act(() => {
+        refetch = qc.refetchQueries({ queryKey: ["admin", "extensions", apiUrl, "installed"] });
+      });
+      await waitFor(() =>
+        expect(calls.filter((c) => c.url.pathname.endsWith("/installed"))).toHaveLength(2),
+      );
+      await act(async () => {
+        refresh.resolve(Response.json({ error: "Unavailable" }, { status: 500 }));
+        await refetch;
+      });
+      await screen.findByText(/Showing last loaded installed extensions/);
+      if (state === "pending") await act(async () => pending.resolve(Response.json(preview())));
+      await waitFor(() => expect(screen.queryByText("Review extension security")).toBeNull());
+      expect(screen.queryByRole("button", { name: "Update" })).toBeNull();
+      expect(screen.queryByText(/→ 2/)).toBeNull();
+      expect(screen.getByText("Update status unavailable")).toBeInTheDocument();
+      vi.stubGlobal("confirm", () => true);
+      fireEvent.click(screen.getByRole("button", { name: "Uninstall" }));
+      await waitFor(() => expect(calls.filter((c) => c.init.method === "DELETE")).toHaveLength(1));
+      expect(calls.filter((c) => c.url.pathname.includes("/update/"))).toHaveLength(0);
+    },
+  );
+  it("does not show an empty success after refetch failure of a previously empty inventory", async () => {
+    intercept = (u) =>
+      u.pathname.endsWith("/installed") ? Response.json({ extensions: [] }) : undefined;
+    const { qc } = mount();
+    fireEvent.click(screen.getByRole("tab", { name: "Installed" }));
+    await screen.findByText(/No extensions installed/);
+    intercept = (u) =>
+      u.pathname.endsWith("/installed")
+        ? Response.json({ error: "Unavailable" }, { status: 500 })
+        : undefined;
+    await act(async () => {
+      await qc.refetchQueries({ queryKey: ["admin", "extensions", apiUrl, "installed"] });
+    });
+    await screen.findByText(/Showing last loaded installed extensions/);
+    expect(screen.queryByText(/No extensions installed/)).toBeNull();
+  });
+  it("never uses another origin's cached inventory when the new origin fails", async () => {
+    const { view, rerender } = mount();
+    fireEvent.click(screen.getByRole("tab", { name: "Installed" }));
+    await screen.findByRole("button", { name: "Uninstall" });
+    apiUrl = "http://second.test";
+    intercept = (u) =>
+      u.pathname.endsWith("/installed")
+        ? Response.json({ error: "Unavailable" }, { status: 500 })
+        : undefined;
+    rerender(view());
+    fireEvent.click(screen.getByRole("tab", { name: "Installed" }));
+    await screen.findByText("Failed to load installed extensions.");
+    expect(screen.queryByRole("button", { name: "Uninstall" })).toBeNull();
+    expect(screen.queryByText(/Showing last loaded/)).toBeNull();
+  });
+  it("preserves the full commit and gives its caption a wrapping rule", async () => {
+    mount();
+    await reviewUrl();
+    const caption = await screen.findByText(`Commit ${"a".repeat(40)}`);
+    expect(caption).toHaveStyle({ overflowWrap: "anywhere" });
+  });
   it("renders independent revocation/staleness, unknown version and the existing critical guard", async () => {
     intercept = (u) =>
       u.pathname.endsWith("/catalog")

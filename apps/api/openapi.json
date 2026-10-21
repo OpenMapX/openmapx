@@ -15319,7 +15319,10 @@
                             }
                           },
                           "hasUpdate": {
-                            "type": "boolean"
+                            "type": [
+                              "boolean",
+                              "null"
+                            ]
                           },
                           "latestVersion": {
                             "type": [

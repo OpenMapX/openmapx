@@ -471,6 +471,14 @@ Import the generated functions and canonical wire types from
 `@openmapx/core/api-admin-sdk`. Catalog list and detail are distinct projections;
 unfamiliar nested JSON remains inert and lossless, and unknown versions remain
 absent. Installed rows expose ISO timestamps and optional registry enrichment.
+Installed `hasUpdate` is `boolean | null`: `true` means a different matching
+catalog version, `false` means the same version, and `null` means comparison is
+unavailable (catalog failure, absent entry or missing version). `latestVersion`
+is null when unavailable; `installedVersion` remains authoritative local data.
+Catalog-list `hasUpdate` remains boolean. Optional catalog failures do not hide
+local inventory; database and response-validation failures still fail the read.
+The browser retains current-origin cached inventory after a failed refetch with
+a stale warning and removal controls, but disables update using stale evidence.
 Preview responses retain all effective ports, the inspected repository commit,
 full security rating and confirmation fingerprint. Install, update and remove
 return HTTP 202 `{jobId}` acceptance; Activity observation owns terminal outcomes.

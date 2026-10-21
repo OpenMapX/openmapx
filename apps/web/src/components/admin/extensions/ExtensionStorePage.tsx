@@ -190,7 +190,10 @@ function ExtensionSecurityPreviewDialog({
                     </Typography>
                     <SecurityChip rating={service.securityRating} />
                   </Stack>
-                  <Typography variant="caption" sx={{ color: "text.secondary" }}>
+                  <Typography
+                    variant="caption"
+                    sx={{ color: "text.secondary", overflowWrap: "anywhere" }}
+                  >
                     Commit {service.repositoryCommit}
                   </Typography>
                   <Typography variant="body2">
@@ -581,7 +584,7 @@ function BrowseTab() {
 function InstalledTab() {
   const showToast = useAdminToast();
   const { data, isLoading, isError } = useInstalledExtensions();
-  const flow = useExtensionPreview("update", data);
+  const flow = useExtensionPreview("update", isError ? null : data);
   const remove = useRemoveExtension();
   const rows = data?.extensions ?? [];
   const { paged, paginationProps } = useClientPagination(rows, 25);
@@ -592,8 +595,8 @@ function InstalledTab() {
         <CircularProgress />
       </Box>
     );
-  if (isError) return <Alert severity="error">Failed to load installed extensions.</Alert>;
-  if (rows.length === 0)
+  if (isError && !data) return <Alert severity="error">Failed to load installed extensions.</Alert>;
+  if (!isError && rows.length === 0)
     return (
       <Alert severity="info" variant="outlined">
         No extensions installed yet. Browse the catalog to add one.
@@ -602,6 +605,12 @@ function InstalledTab() {
 
   return (
     <>
+      {isError && (
+        <Alert severity="warning" sx={{ mb: 2 }}>
+          Failed to refresh installed extensions. Showing last loaded installed extensions; update
+          status is unavailable. Removal remains available.
+        </Alert>
+      )}
       <AdminTableSurface
         pagination={<AdminTablePagination {...paginationProps} count={rows.length} />}
       >
@@ -632,7 +641,12 @@ function InstalledTab() {
                   </TableCell>
                   <TableCell>
                     {ext.installedVersion}
-                    {ext.hasUpdate && (
+                    {(isError || ext.hasUpdate === null) && (
+                      <Typography variant="caption" component="div" color="text.secondary">
+                        Update status unavailable
+                      </Typography>
+                    )}
+                    {!isError && ext.hasUpdate === true && (
                       <Chip
                         size="small"
                         color="info"
@@ -662,7 +676,7 @@ function InstalledTab() {
                   </TableCell>
                   <TableCell align="right">
                     <Stack direction="row" sx={{ gap: 0.5, justifyContent: "flex-end" }}>
-                      {ext.hasUpdate && (
+                      {!isError && ext.hasUpdate === true && (
                         <Button
                           size="small"
                           disabled={flow.preparing || flow.busy || remove.isPendingFor(ext.id)}
