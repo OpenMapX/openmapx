@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   buildRuntimeBundle,
   EXTERNALS_MANIFEST,
+  PACKAGES_MANIFEST,
   RUNTIME_BUNDLES,
   writeRuntimeBundle,
 } from "./build-runtime-bundles.mjs";
@@ -65,6 +66,38 @@ describe("runtime bundles", () => {
     expect(JSON.parse(text(bundle, EXTERNALS_MANIFEST))).toEqual([
       "../../node_modules/left-pad/index.js",
     ]);
+  });
+
+  it("lists the installed package directories the pinned files load", async () => {
+    const bundle = await buildRuntimeBundle(
+      workspace({
+        "node_modules/left-pad/index.js": [
+          'const repeat = require("@pad/repeat");',
+          'require("./build/native.node");',
+          'module.exports = (value) => repeat(" ") + value;',
+        ].join("\n"),
+        "node_modules/left-pad/build/native.node": "binary",
+        "node_modules/@pad/repeat/package.json": JSON.stringify({ name: "@pad/repeat" }),
+        "node_modules/@pad/repeat/index.js": "module.exports = (value) => value;",
+        "node_modules/unused/index.js": "module.exports = 1;",
+      }),
+      "fixture",
+      config,
+    );
+    expect(JSON.parse(text(bundle, PACKAGES_MANIFEST))).toEqual([
+      "node_modules/@pad/repeat",
+      "node_modules/left-pad",
+    ]);
+  });
+
+  it("rejects a computed require in an installed package the bundle loads", async () => {
+    const root = workspace({
+      "node_modules/left-pad/index.js":
+        "const name = process.env.PAD;\nmodule.exports = require(name);",
+    });
+    await expect(buildRuntimeBundle(root, "fixture", config)).rejects.toThrow(
+      "node_modules/left-pad/index.js: computed import() or require() in an installed package",
+    );
   });
 
   it("pins the file Node loads, not esbuild's module condition", async () => {
@@ -412,6 +445,7 @@ describe("runtime bundles", () => {
       const second = await buildRuntimeBundle(root, image);
       expect(second.digest, image).toBe(first.digest);
       expect(JSON.parse(first.files.get(EXTERNALS_MANIFEST)?.toString() ?? "[]")).not.toEqual([]);
+      expect(JSON.parse(first.files.get(PACKAGES_MANIFEST)?.toString() ?? "[]")).not.toEqual([]);
     }
   });
 });

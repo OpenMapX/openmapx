@@ -424,8 +424,15 @@ describe("Docker release trust gate", () => {
     ]) {
       expect(read(dockerfile)).toContain("rm -rf /usr/local/lib/node_modules/npm");
     }
-    for (const dockerfile of ["apps/api/Dockerfile", "services/data-manager/Dockerfile"]) {
-      expect(read(dockerfile)).toContain("image-size@*");
+    expect(read("apps/api/Dockerfile")).toContain("image-size@*");
+    // Bundled images install only the packages their bundles load, which
+    // leaves out the mobile toolchain's image-size with everything else.
+    for (const dockerfile of [
+      "apps/ops-agent/Dockerfile",
+      "apps/transitous-runner/Dockerfile",
+      "services/data-manager/Dockerfile",
+    ]) {
+      expect(read(dockerfile)).toContain("--from=runtime-packages /runtime/node_modules");
     }
     for (const dockerfile of [
       "apps/transitous-runner/Dockerfile",

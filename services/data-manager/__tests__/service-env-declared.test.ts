@@ -48,8 +48,8 @@ const INTENTIONALLY_UNDECLARED = new Set([
   "NODE_ENV",
 ]);
 
-/** Runtime knobs consumed by Node/tsx rather than by our own code. */
-const DECLARED_WITHOUT_SOURCE_READ = new Set(["HOME", "TSX_TSCONFIG_PATH"]);
+/** Runtime knobs consumed by Node rather than by our own code. */
+const DECLARED_WITHOUT_SOURCE_READ = new Set(["HOME"]);
 
 const manifest = JSON.parse(
   readFileSync(join(process.cwd(), "services/data-manager/service.json"), "utf-8"),

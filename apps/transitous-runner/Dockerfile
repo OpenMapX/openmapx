@@ -61,11 +61,7 @@ COPY --parents \
     packages/transitous-core/package.json \
     ./
 COPY apps/transitous-runner/package.json apps/transitous-runner/
-RUN pnpm install --frozen-lockfile --prod --ignore-scripts && \
-    rm -rf node_modules/.pnpm/image-size@*
-# image-size belongs to Metro's mobile build toolchain, not this runtime. Do not
-# copy that unused, currently vulnerable package into the production image
-# merely because pnpm uses a shared workspace virtual store.
+RUN pnpm install --frozen-lockfile --prod --ignore-scripts
 
 # Bundles the runner and the workspace code it reaches into dist/. The release
 # planner fingerprints this bundle; release builds pass its digest so a
@@ -85,6 +81,13 @@ COPY apps/transitous-runner/ apps/transitous-runner/
 COPY scripts/build-runtime-bundles.mjs scripts/module-specifiers.mjs scripts/
 ARG EXPECTED_BUNDLE_DIGEST=
 RUN node scripts/build-runtime-bundles.mjs transitous-runner --expect "$EXPECTED_BUNDLE_DIGEST"
+
+# Only the installed package directories the bundles load, listed by the bundle
+# build, with the node_modules links between them.
+FROM prod-deps AS runtime-packages
+COPY scripts/copy-runtime-packages.mjs scripts/
+COPY --from=bundle /app/apps/transitous-runner/dist/runtime-packages.json /tmp/runtime-packages.json
+RUN node scripts/copy-runtime-packages.mjs /tmp/runtime-packages.json /app /runtime
 
 FROM base AS runner
 WORKDIR /app
@@ -119,12 +122,13 @@ RUN groupadd --system --gid 1001 transitous \
     && chown transitous:transitous /app
 
 # The bundle imports its npm dependencies by path from the pnpm store, so the
-# runner needs the production store and the bundle, and no workspace source.
+# runner needs the bundle and the store packages it loads, and no workspace
+# source.
 # Assign ownership while copying: a recursive chown afterwards would store a
 # second copy of every file in its own layer.
-COPY --chown=transitous:transitous --from=prod-deps /app/node_modules ./node_modules
+COPY --chown=transitous:transitous --from=runtime-packages /runtime/node_modules ./node_modules
 COPY --chown=transitous:transitous --from=bundle /app/apps/transitous-runner/dist ./apps/transitous-runner/dist
-# Every dependency file the bundle pins must exist in this production install.
+# Every dependency file the bundle pins must exist among the copied packages.
 RUN node -e 'const fs=require("node:fs"),p=require("node:path");const d="/app/apps/transitous-runner/dist";const missing=JSON.parse(fs.readFileSync(p.join(d,"runtime-externals.json"),"utf8")).filter((f)=>!fs.existsSync(p.join(d,f)));if(missing.length){console.error("Missing bundle dependencies:",missing);process.exit(1)}'
 
 USER transitous:transitous
