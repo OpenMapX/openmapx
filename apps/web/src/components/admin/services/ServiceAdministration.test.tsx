@@ -1,7 +1,7 @@
 import { QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { job } from "@/components/admin/activity/__tests__/fixtures";
-import { ServiceAdministrationProvider } from "@/lib/admin/serviceAdminJobs";
+import { AdminJobEffectsProvider } from "@/lib/admin/adminJobEffects";
 import { act, cleanup, createTestQueryClient, fireEvent, render, screen, waitFor } from "@/test";
 import { RequiredServicesPanel } from "../integrations/RequiredServicesPanel";
 import { ServiceCatalog } from "./ServiceCatalog";
@@ -117,7 +117,7 @@ function mount(child: React.ReactNode) {
   caches.push(qc);
   const view = (next: React.ReactNode) => (
     <QueryClientProvider client={qc}>
-      <ServiceAdministrationProvider>{next}</ServiceAdministrationProvider>
+      <AdminJobEffectsProvider>{next}</AdminJobEffectsProvider>
     </QueryClientProvider>
   );
   return { qc, view, ...render(view(child)) };

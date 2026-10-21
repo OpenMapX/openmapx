@@ -504,3 +504,23 @@ class. Never return or log arbitrary dependency messages, URLs, schema values or
 filesystem paths. Detail resolution failure retains its 200/empty-component
 fallback with safe diagnostics. The canonical wire schemas and generated SDK
 signatures are unchanged by these domain corrections.
+
+The browser extension consumer uses the generated family and canonical inferred
+contracts, including separate catalog list/detail projections and inert unknown
+JSON metadata. Its keys retain the raw configured API identity, including an empty
+same-origin value or trailing slash; only transport URL construction resolves the
+empty value against the document origin. Configured API bases must be HTTP(S)
+origins, without path prefixes, query strings or fragments. No global client is
+reconfigured. Queries consume cancellation through response bodies with a 30-second
+deadline; preview, mutation resolution and force refresh use 180 seconds and never
+retry automatically. Native EventSource observation has an independent lifetime.
+
+`AdminJobEffectsProvider` in the administration layout owns the shared accepted-job
+observer. Service and extension adapters capture client, raw API identity, job ID
+and feature terminal effects inside the executing mutation. View disposal suppresses
+UI callbacks without losing accepted work. Provider/origin replacement retires old
+registrations, including A-to-B-to-A replacement. Terminal extension effects cancel
+one union of affected origin-scoped extension, service, integration/configuration,
+credential inventory, runtime and overview reads before invalidating them; inactive queries remain stale
+and unrelated API origins are untouched. Synchronous source edits and refresh also
+invalidate catalog/detail/installed snapshots and installed badges.

@@ -10,7 +10,7 @@ vi.mock("@/integration-api/runtime/EnvProvider", () => ({
 const fetchMock = vi.fn();
 vi.stubGlobal("fetch", fetchMock);
 
-import { ServiceAdministrationProvider } from "@/lib/admin/serviceAdminJobs";
+import { AdminJobEffectsProvider } from "@/lib/admin/adminJobEffects";
 
 import { BackupsPage } from "../BackupsPage";
 
@@ -45,9 +45,9 @@ describe("BackupsPage pagination", () => {
 
   it("renders at most rowsPerPage rows for an oversized dataset", async () => {
     render(
-      <ServiceAdministrationProvider>
+      <AdminJobEffectsProvider>
         <BackupsPage />
-      </ServiceAdministrationProvider>,
+      </AdminJobEffectsProvider>,
       { wrapper: createQueryWrapper() },
     );
 
@@ -59,9 +59,9 @@ describe("BackupsPage pagination", () => {
 
   it("sorts newest-first then slices (page 1 shows the newest 25)", async () => {
     render(
-      <ServiceAdministrationProvider>
+      <AdminJobEffectsProvider>
         <BackupsPage />
-      </ServiceAdministrationProvider>,
+      </AdminJobEffectsProvider>,
       { wrapper: createQueryWrapper() },
     );
 
@@ -74,9 +74,9 @@ describe("BackupsPage pagination", () => {
   it("shows the next slice when paging forward", async () => {
     const user = userEvent.setup();
     render(
-      <ServiceAdministrationProvider>
+      <AdminJobEffectsProvider>
         <BackupsPage />
-      </ServiceAdministrationProvider>,
+      </AdminJobEffectsProvider>,
       { wrapper: createQueryWrapper() },
     );
 
@@ -92,9 +92,9 @@ describe("BackupsPage pagination", () => {
 
   it("reports the full count in the pager, not the page size", async () => {
     render(
-      <ServiceAdministrationProvider>
+      <AdminJobEffectsProvider>
         <BackupsPage />
-      </ServiceAdministrationProvider>,
+      </AdminJobEffectsProvider>,
       { wrapper: createQueryWrapper() },
     );
     await screen.findByText("backup-059");

@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, cleanup, render, screen } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ServiceAdministrationProvider } from "@/lib/admin/serviceAdminJobs";
+import { AdminJobEffectsProvider } from "@/lib/admin/adminJobEffects";
 import { NotablePlacesMaintenance, notablePlacesStatusQueryKey } from "./NotablePlacesMaintenance";
 import { OvertureMaintenance, overtureStatusQueryKey } from "./OvertureMaintenance";
 import { SearchIndexMaintenance, searchIndexStatusQueryKey } from "./SearchIndexMaintenance";
@@ -18,9 +18,9 @@ function view(Component: typeof SearchIndexMaintenance) {
   render(
     <QueryClientProvider client={client}>
       <NextIntlClientProvider locale="en" messages={en} timeZone="UTC">
-        <ServiceAdministrationProvider>
+        <AdminJobEffectsProvider>
           <Component apiUrl={apiUrl} />
-        </ServiceAdministrationProvider>
+        </AdminJobEffectsProvider>
       </NextIntlClientProvider>
     </QueryClientProvider>,
   );

@@ -9,13 +9,13 @@ vi.mock("@/integration-api/runtime/EnvProvider", () => ({
   useEnv: () => ({ apiUrl: "http://api.test" }),
 }));
 
-import { ServiceAdministrationProvider } from "@/lib/admin/serviceAdminJobs";
+import { AdminJobEffectsProvider } from "@/lib/admin/adminJobEffects";
 
 function wrapper() {
   const Query = createQueryWrapper();
   return ({ children }: { children: React.ReactNode }) => (
     <Query>
-      <ServiceAdministrationProvider>{children}</ServiceAdministrationProvider>
+      <AdminJobEffectsProvider>{children}</AdminJobEffectsProvider>
     </Query>
   );
 }

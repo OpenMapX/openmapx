@@ -171,6 +171,28 @@ update. This change does not implement those CLI commands or flags. Host-port
 approval continues to require the exact inspected snapshot; it must never be
 automatically granted.
 
+### Browser review and request lifetime
+
+The administration page distinguishes catalog trust from revoked status and stale
+revocation data. A missing manifest version appears as **Version unknown**. The
+default catalog label does not assert that every entry is verified. Failed reads
+show an error rather than an empty installed list or source table.
+
+Security review displays the exact repository commit, effective host-port bindings
+(including protocol and bind address), and full service rating, including deployment
+variables. Install and update have distinct confirmation actions. Editing a selector,
+closing/reopening a dialog, switching tabs or API origins, selecting another row,
+or receiving a changed catalog/installed snapshot retires the previous preview.
+Confirmation uses the exact reviewed selector and fingerprint. A changed port
+snapshot requires another deliberate review; confirmation is never automatic.
+
+Browser reads have a 30-second deadline. Preview, mutation resolution and explicit
+catalog refresh have a 180-second deadline. A timeout is an unknown result, not
+host-job cancellation; check Activity before deliberately retrying. The longer
+budget is not a guarantee for extensions with several repositories. Accepted jobs
+continue to be observed by the administration layout after leaving the extension
+view; all terminal outcomes refresh the originating extension/component state.
+
 ### Catalog source changes and refresh
 
 A successful source edit invalidates the cached catalog before persisting the

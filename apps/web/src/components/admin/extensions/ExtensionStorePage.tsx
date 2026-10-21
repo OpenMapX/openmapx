@@ -39,13 +39,15 @@ import Tabs from "@mui/material/Tabs";
 import TextField from "@mui/material/TextField";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
-import { useState } from "react";
+import type {
+  AdminExtensionCatalogEntry,
+  AdminExtensionInstallPreview,
+  AdminExtensionInstallRequest,
+  AdminExtensionSecurityRating,
+} from "@openmapx/core/api-contracts";
+import { useCallback, useLayoutEffect, useRef, useState } from "react";
+import { useActivityClient } from "@/components/admin/activity/activityQueries";
 import {
-  type ExtensionCatalogView,
-  type ExtensionInstallPreview,
-  type ExtensionInstallRequest,
-  type ExtensionSecurityRating,
-  type InstalledExtensionView,
   useAddExtensionSource,
   useExtensionCatalog,
   useExtensionSources,
@@ -57,6 +59,7 @@ import {
   useRemoveExtensionSource,
   useUpdateExtension,
 } from "@/hooks/useExtensions";
+import { useAdminMutationOwner } from "@/lib/admin/useAdminMutationOwner";
 import { AdminPageHeader } from "../shared/AdminPageHeader";
 import { AdminTablePagination } from "../shared/AdminTablePagination";
 import { AdminTableSurface } from "../shared/AdminTableSurface";
@@ -64,7 +67,7 @@ import { useAdminToast } from "../shared/AdminToast";
 import { TableSearchField, TableToolbar } from "../shared/TableToolbar";
 import { useClientPagination } from "../shared/tableHooks";
 
-type Trust = "built-in" | "verified" | "community";
+type Trust = AdminExtensionInstallPreview["sourceTrust"];
 
 function TrustChip({ trust }: { trust?: Trust }) {
   if (trust === "built-in")
@@ -103,7 +106,7 @@ function ratingColor(score: number): "success" | "warning" | "error" {
   return "error";
 }
 
-function SecurityChip({ rating }: { rating: ExtensionSecurityRating }) {
+function SecurityChip({ rating }: { rating: AdminExtensionSecurityRating }) {
   return (
     <Tooltip title={rating.factors.join(" · ") || "No special privileges"}>
       <Chip
@@ -118,7 +121,7 @@ function SecurityChip({ rating }: { rating: ExtensionSecurityRating }) {
 }
 
 function effectivePortLabel(
-  port: ExtensionInstallPreview["services"][number]["hostPorts"][number],
+  port: AdminExtensionInstallPreview["services"][number]["hostPorts"][number],
 ) {
   const host = port.bindAddress.includes(":") ? `[${port.bindAddress}]` : port.bindAddress;
   return `${host}:${port.host} → container ${port.container}/${port.protocol}`;
@@ -127,11 +130,13 @@ function effectivePortLabel(
 function ExtensionSecurityPreviewDialog({
   preview,
   busy,
+  action,
   onClose,
   onConfirm,
 }: {
-  preview: ExtensionInstallPreview | null;
+  preview: AdminExtensionInstallPreview | null;
   busy: boolean;
+  action: "install" | "update";
   onClose: () => void;
   onConfirm: () => void;
 }) {
@@ -186,7 +191,19 @@ function ExtensionSecurityPreviewDialog({
                     <SecurityChip rating={service.securityRating} />
                   </Stack>
                   <Typography variant="caption" sx={{ color: "text.secondary" }}>
-                    Commit {service.repositoryCommit.slice(0, 12)}
+                    Commit {service.repositoryCommit}
+                  </Typography>
+                  <Typography variant="body2">
+                    Built-in required: {service.securityRating.requiresBuiltIn ? "yes" : "no"}; host
+                    ports: {service.securityRating.hostPorts}; secrets:{" "}
+                    {service.securityRating.secretCount}
+                  </Typography>
+                  <Typography variant="body2">
+                    Deployment variables:{" "}
+                    {service.securityRating.deploymentVariables.join(", ") || "none"}
+                  </Typography>
+                  <Typography variant="body2">
+                    {service.securityRating.factors.join(" · ") || "No special privileges"}
                   </Typography>
                 </Paper>
               ))
@@ -200,12 +217,125 @@ function ExtensionSecurityPreviewDialog({
         </Button>
         <Button variant="contained" color="warning" onClick={onConfirm} disabled={busy}>
           {preview?.requiresHostPortConfirmation
-            ? "Confirm ports and install"
-            : "Install extension"}
+            ? `Confirm ports and ${action}`
+            : action === "update"
+              ? "Update extension"
+              : "Install extension"}
         </Button>
       </DialogActions>
     </Dialog>
   );
+}
+
+/** UI sessions retire synchronously, even when a form goes A→B→A before acknowledgement.
+ * Domain effects are intentionally owned by mutationFn/the layout, not these callbacks.
+ */
+function useExtensionUiSession() {
+  const binding = useActivityClient();
+  const owner = useAdminMutationOwner(binding.client, binding.apiUrl);
+  const generation = useRef(0);
+  const retire = useCallback(() => {
+    generation.current++;
+  }, []);
+  const capture = useCallback(() => {
+    const session = generation.current;
+    return () => owner.active && generation.current === session;
+  }, [owner]);
+  return { binding, owner, retire, capture };
+}
+
+function useExtensionPreview(action: "install" | "update", snapshot: unknown) {
+  const ui = useExtensionUiSession();
+  const preview = usePreviewExtensionInstall(ui.binding);
+  const install = useInstallExtension(ui.binding);
+  const update = useUpdateExtension(ui.binding);
+  const showToast = useAdminToast();
+  type Bundle = Readonly<{
+    request: Readonly<AdminExtensionInstallRequest>;
+    preview: AdminExtensionInstallPreview;
+    owner: typeof ui.owner;
+    action: typeof action;
+    current: () => boolean;
+  }>;
+  const [bundle, setBundle] = useState<Bundle | null>(null);
+  const [preparing, setPreparing] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const executing = useRef(false);
+  const retire = useCallback(() => {
+    ui.retire();
+    setBundle(null);
+    setPreparing(false);
+    setBusy(false);
+  }, [ui.retire]);
+  const priorSnapshot = useRef(snapshot);
+  useLayoutEffect(() => {
+    if (priorSnapshot.current !== snapshot) {
+      priorSnapshot.current = snapshot;
+      retire();
+    }
+  }, [snapshot, retire]);
+  const start = async (input: AdminExtensionInstallRequest) => {
+    if (executing.current) return;
+    retire();
+    const current = ui.capture();
+    const request = Object.freeze({ ...input });
+    setPreparing(true);
+    try {
+      const result = await preview.mutateAsync(request);
+      if (!current()) return;
+      if (request.id && result.extension.id !== request.id)
+        throw new Error("The preview does not match the selected extension");
+      setBundle(Object.freeze({ request, preview: result, owner: ui.owner, action, current }));
+    } catch (error) {
+      if (current())
+        showToast(error instanceof Error ? error.message : "Extension preview failed", "error");
+    } finally {
+      if (current()) setPreparing(false);
+    }
+  };
+  const confirm = async (onAccepted?: () => void) => {
+    const captured = bundle;
+    if (!captured || captured.owner !== ui.owner || !captured.current() || executing.current)
+      return;
+    executing.current = true;
+    setBusy(true);
+    try {
+      if (captured.action === "update") {
+        if (!captured.request.id) throw new Error("No extension selected for update");
+        await update.mutateAsync({
+          id: captured.request.id,
+          hostPortConfirmation: captured.preview.confirmation,
+        });
+      } else {
+        await install.mutateAsync({
+          ...captured.request,
+          hostPortConfirmation: captured.preview.confirmation,
+        });
+      }
+      if (!captured.current()) return;
+      showToast(
+        `${captured.action === "update" ? "Update" : "Install"} queued for ${captured.preview.extension.name}. Check Activity for completion.`,
+        "info",
+      );
+      retire();
+      onAccepted?.();
+    } catch (error) {
+      if (captured.current())
+        showToast(error instanceof Error ? error.message : "Extension request failed", "error");
+    } finally {
+      executing.current = false;
+      if (captured.current()) setBusy(false);
+    }
+  };
+  return {
+    start,
+    confirm,
+    retire,
+    preparing,
+    busy,
+    preview: bundle?.owner === ui.owner ? bundle.preview : null,
+    capture: ui.capture,
+  };
 }
 
 function BrowseTab() {
@@ -215,39 +345,15 @@ function BrowseTab() {
   const [type, setType] = useState("");
   const [manifestOpen, setManifestOpen] = useState(false);
   const [manifestUrl, setManifestUrl] = useState("");
-  const [pendingInstall, setPendingInstall] = useState<ExtensionInstallRequest | null>(null);
-  const [securityPreview, setSecurityPreview] = useState<ExtensionInstallPreview | null>(null);
-
   const { data, isLoading, isError } = useExtensionCatalog({ q, trust, type });
+  const flow = useExtensionPreview("install", data);
   const refresh = useRefreshExtensionCatalog();
-  const install = useInstallExtension();
-  const previewInstall = usePreviewExtensionInstall();
-
-  const doInstall = (entry: ExtensionCatalogView) => {
-    const request = { id: entry.id };
-    previewInstall.mutate(request, {
-      onSuccess: (preview) => {
-        setPendingInstall(request);
-        setSecurityPreview(preview);
-      },
-      onError: (e) => showToast((e as Error).message, "error"),
-    });
+  const doInstall = (entry: AdminExtensionCatalogEntry) => {
+    void flow.start({ id: entry.id });
   };
-
-  const confirmInstall = () => {
-    if (!pendingInstall || !securityPreview) return;
-    install.mutate(
-      { ...pendingInstall, hostPortConfirmation: securityPreview.confirmation },
-      {
-        onSuccess: () => {
-          showToast(`Installing ${securityPreview.extension.name}…`, "info");
-          setSecurityPreview(null);
-          setPendingInstall(null);
-          setManifestUrl("");
-        },
-        onError: (e) => showToast((e as Error).message, "error"),
-      },
-    );
+  const closeManifest = () => {
+    flow.retire();
+    setManifestOpen(false);
   };
 
   const entries = data?.entries ?? [];
@@ -256,10 +362,24 @@ function BrowseTab() {
     <Stack sx={{ gap: 2 }}>
       <Paper variant="outlined" sx={{ p: 1.25 }}>
         <TableToolbar>
-          <TableSearchField value={q} onChange={setQ} placeholder="Search extensions…" />
+          <TableSearchField
+            value={q}
+            onChange={(value) => {
+              flow.retire();
+              setQ(value);
+            }}
+            placeholder="Search extensions…"
+          />
           <FormControl size="small" sx={{ minWidth: 130 }}>
             <InputLabel>Trust</InputLabel>
-            <Select label="Trust" value={trust} onChange={(e) => setTrust(e.target.value)}>
+            <Select
+              label="Trust"
+              value={trust}
+              onChange={(e) => {
+                flow.retire();
+                setTrust(e.target.value);
+              }}
+            >
               <MenuItem value="">All</MenuItem>
               <MenuItem value="verified">Verified</MenuItem>
               <MenuItem value="community">Community</MenuItem>
@@ -267,7 +387,14 @@ function BrowseTab() {
           </FormControl>
           <FormControl size="small" sx={{ minWidth: 130 }}>
             <InputLabel>Type</InputLabel>
-            <Select label="Type" value={type} onChange={(e) => setType(e.target.value)}>
+            <Select
+              label="Type"
+              value={type}
+              onChange={(e) => {
+                flow.retire();
+                setType(e.target.value);
+              }}
+            >
               <MenuItem value="">All</MenuItem>
               <MenuItem value="service">Services</MenuItem>
               <MenuItem value="integration">Integrations</MenuItem>
@@ -277,7 +404,10 @@ function BrowseTab() {
           <Button
             size="small"
             startIcon={<LinkIcon />}
-            onClick={() => setManifestOpen(true)}
+            onClick={() => {
+              flow.retire();
+              setManifestOpen(true);
+            }}
             variant="outlined"
           >
             Install from URL
@@ -285,12 +415,18 @@ function BrowseTab() {
           <Tooltip title="Refresh catalog">
             <IconButton
               size="small"
-              onClick={() =>
-                refresh.mutate(undefined, {
-                  onSuccess: (r) => showToast(`Catalog refreshed (${r.entries} entries)`),
-                  onError: (e) => showToast((e as Error).message, "error"),
-                })
-              }
+              onClick={() => {
+                flow.retire();
+                const current = flow.capture();
+                void refresh.mutateAsync().then(
+                  (r) => {
+                    if (current()) showToast(`Catalog refreshed (${r.entries} entries)`);
+                  },
+                  (error) => {
+                    if (current()) showToast(error.message, "error");
+                  },
+                );
+              }}
               disabled={refresh.isPending}
             >
               {refresh.isPending ? (
@@ -309,6 +445,11 @@ function BrowseTab() {
         </Box>
       )}
       {isError && <Alert severity="error">Failed to load the extension catalog.</Alert>}
+      {data?.revocationDataStale && (
+        <Alert severity="warning">
+          Revocation data is stale. Current trust does not establish a fresh security check.
+        </Alert>
+      )}
       {!isLoading && !isError && entries.length === 0 && (
         <Alert severity="info" variant="outlined">
           No extensions found. Add a catalog source under the Sources tab, or install directly from
@@ -336,7 +477,9 @@ function BrowseTab() {
                   <TrustChip trust={e.trust} />
                 </Stack>
                 <Typography variant="caption" sx={{ color: "text.secondary" }}>
-                  {[e.version ? `v${e.version}` : null, e.author].filter(Boolean).join(" · ")}
+                  {[e.version ? `v${e.version}` : "Version unknown", e.author]
+                    .filter(Boolean)
+                    .join(" · ")}
                 </Typography>
                 {e.summary && (
                   <Typography variant="body2" sx={{ color: "text.secondary" }}>
@@ -347,6 +490,10 @@ function BrowseTab() {
                   services={e.components.services}
                   integrations={e.components.integrations}
                 />
+                {e.status === "revoked" && <Alert severity="error">Revoked</Alert>}
+                {e.status === "stale-revocation-data" && (
+                  <Alert severity="warning">Security status: stale revocation data</Alert>
+                )}
                 {e.removed && <Alert severity="error">Delisted: {e.removed}</Alert>}
                 {e.critical && (
                   <Alert severity="error">Security advisory: {e.critical.reason}</Alert>
@@ -368,11 +515,7 @@ function BrowseTab() {
                       variant="contained"
                       fullWidth
                       disabled={
-                        !e.compatible ||
-                        !!e.removed ||
-                        !!e.critical ||
-                        install.isPending ||
-                        previewInstall.isPending
+                        !e.compatible || !!e.removed || !!e.critical || flow.busy || flow.preparing
                       }
                       onClick={() => doInstall(e)}
                     >
@@ -386,7 +529,7 @@ function BrowseTab() {
         ))}
       </Grid>
 
-      <Dialog open={manifestOpen} onClose={() => setManifestOpen(false)} fullWidth maxWidth="sm">
+      <Dialog open={manifestOpen && !flow.preview} onClose={closeManifest} fullWidth maxWidth="sm">
         <DialogTitle>Install from extension.json URL</DialogTitle>
         <DialogContent>
           <Alert severity="warning" sx={{ mb: 2 }}>
@@ -398,25 +541,20 @@ function BrowseTab() {
             fullWidth
             label="extension.json URL"
             value={manifestUrl}
-            onChange={(e) => setManifestUrl(e.target.value)}
+            onChange={(e) => {
+              flow.retire();
+              setManifestUrl(e.target.value);
+            }}
             placeholder="https://…/extension.json"
           />
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setManifestOpen(false)}>Cancel</Button>
+          <Button onClick={closeManifest}>Cancel</Button>
           <Button
             variant="contained"
-            disabled={!manifestUrl.trim() || previewInstall.isPending}
+            disabled={!manifestUrl.trim() || flow.preparing}
             onClick={() => {
-              const request = { manifestUrl: manifestUrl.trim() };
-              previewInstall.mutate(request, {
-                onSuccess: (preview) => {
-                  setPendingInstall(request);
-                  setSecurityPreview(preview);
-                  setManifestOpen(false);
-                },
-                onError: (e) => showToast((e as Error).message, "error"),
-              });
+              void flow.start({ manifestUrl: manifestUrl.trim() });
             }}
           >
             Review security
@@ -425,13 +563,16 @@ function BrowseTab() {
       </Dialog>
 
       <ExtensionSecurityPreviewDialog
-        preview={securityPreview}
-        busy={install.isPending}
-        onClose={() => {
-          setSecurityPreview(null);
-          setPendingInstall(null);
+        preview={flow.preview}
+        action="install"
+        busy={flow.busy}
+        onClose={flow.retire}
+        onConfirm={() => {
+          void flow.confirm(() => {
+            setManifestUrl("");
+            setManifestOpen(false);
+          });
         }}
-        onConfirm={confirmInstall}
       />
     </Stack>
   );
@@ -439,12 +580,10 @@ function BrowseTab() {
 
 function InstalledTab() {
   const showToast = useAdminToast();
-  const { data, isLoading } = useInstalledExtensions();
-  const update = useUpdateExtension();
-  const previewInstall = usePreviewExtensionInstall();
+  const { data, isLoading, isError } = useInstalledExtensions();
+  const flow = useExtensionPreview("update", data);
+  const removing = useRef(new Set<string>());
   const remove = useRemoveExtension();
-  const [pendingUpdate, setPendingUpdate] = useState<InstalledExtensionView | null>(null);
-  const [securityPreview, setSecurityPreview] = useState<ExtensionInstallPreview | null>(null);
   const rows = data?.extensions ?? [];
   const { paged, paginationProps } = useClientPagination(rows, 25);
 
@@ -454,6 +593,7 @@ function InstalledTab() {
         <CircularProgress />
       </Box>
     );
+  if (isError) return <Alert severity="error">Failed to load installed extensions.</Alert>;
   if (rows.length === 0)
     return (
       <Alert severity="info" variant="outlined">
@@ -489,7 +629,7 @@ function InstalledTab() {
                     </Typography>
                   </TableCell>
                   <TableCell>
-                    <TrustChip trust={ext.sourceTrust as Trust} />
+                    <TrustChip trust={ext.sourceTrust} />
                   </TableCell>
                   <TableCell>
                     {ext.installedVersion}
@@ -526,19 +666,10 @@ function InstalledTab() {
                       {ext.hasUpdate && (
                         <Button
                           size="small"
-                          disabled={previewInstall.isPending || update.isPending}
-                          onClick={() =>
-                            previewInstall.mutate(
-                              { id: ext.id },
-                              {
-                                onSuccess: (preview) => {
-                                  setPendingUpdate(ext);
-                                  setSecurityPreview(preview);
-                                },
-                                onError: (e) => showToast((e as Error).message, "error"),
-                              },
-                            )
-                          }
+                          disabled={flow.preparing || flow.busy || remove.isPending}
+                          onClick={() => {
+                            void flow.start({ id: ext.id });
+                          }}
                         >
                           Update
                         </Button>
@@ -547,17 +678,35 @@ function InstalledTab() {
                         <IconButton
                           size="small"
                           color="error"
+                          disabled={remove.isPending || flow.busy}
                           onClick={() => {
+                            if (removing.current.has(ext.id)) return;
+                            flow.retire();
+                            const current = flow.capture();
                             if (
                               !confirm(
                                 `Uninstall ${ext.name}? This removes its services and integrations.`,
                               )
                             )
                               return;
-                            remove.mutate(ext.id, {
-                              onSuccess: () => showToast(`Removing ${ext.name}…`, "info"),
-                              onError: (e) => showToast((e as Error).message, "error"),
-                            });
+                            removing.current.add(ext.id);
+                            void remove
+                              .mutateAsync(ext.id)
+                              .then(
+                                () => {
+                                  if (current())
+                                    showToast(
+                                      `Removal queued for ${ext.name}. Check Activity for completion.`,
+                                      "info",
+                                    );
+                                },
+                                (error) => {
+                                  if (current()) showToast(error.message, "error");
+                                },
+                              )
+                              .finally(() => {
+                                removing.current.delete(ext.id);
+                              });
                           }}
                         >
                           <DeleteIcon fontSize="small" />
@@ -572,28 +721,12 @@ function InstalledTab() {
         </TableContainer>
       </AdminTableSurface>
       <ExtensionSecurityPreviewDialog
-        preview={securityPreview}
-        busy={update.isPending}
-        onClose={() => {
-          setSecurityPreview(null);
-          setPendingUpdate(null);
-        }}
+        preview={flow.preview}
+        action="update"
+        busy={flow.busy}
+        onClose={flow.retire}
         onConfirm={() => {
-          if (!pendingUpdate || !securityPreview) return;
-          update.mutate(
-            {
-              id: pendingUpdate.id,
-              hostPortConfirmation: securityPreview.confirmation,
-            },
-            {
-              onSuccess: () => {
-                showToast(`Updating ${pendingUpdate.name}…`, "info");
-                setSecurityPreview(null);
-                setPendingUpdate(null);
-              },
-              onError: (e) => showToast((e as Error).message, "error"),
-            },
-          );
+          void flow.confirm();
         }}
       />
     </>
@@ -602,7 +735,10 @@ function InstalledTab() {
 
 function SourcesTab() {
   const showToast = useAdminToast();
-  const { data, isLoading } = useExtensionSources();
+  const { data, isLoading, isError } = useExtensionSources();
+  const ui = useExtensionUiSession();
+  const removing = useRef(new Set<string>());
+  const adding = useRef(false);
   const add = useAddExtensionSource();
   const remove = useRemoveExtensionSource();
   const [open, setOpen] = useState(false);
@@ -614,13 +750,16 @@ function SourcesTab() {
     <>
       <AdminTableSurface
         title="Catalog sources"
-        description="Trusted indexes used to discover extensions"
+        description="Catalog indexes used to discover extensions; trust is evaluated per entry"
         toolbar={
           <Button
             size="small"
             startIcon={<AddIcon />}
             variant="outlined"
-            onClick={() => setOpen(true)}
+            onClick={() => {
+              ui.retire();
+              setOpen(true);
+            }}
           >
             Add source
           </Button>
@@ -630,6 +769,8 @@ function SourcesTab() {
           <Box sx={{ textAlign: "center", py: 4 }}>
             <CircularProgress />
           </Box>
+        ) : isError ? (
+          <Alert severity="error">Failed to load extension sources.</Alert>
         ) : (
           <TableContainer>
             <Table size="small">
@@ -648,12 +789,7 @@ function SourcesTab() {
                     <TableCell sx={{ wordBreak: "break-all" }}>{s.url}</TableCell>
                     <TableCell>
                       {s.isDefault ? (
-                        <Chip
-                          size="small"
-                          icon={<VerifiedIcon />}
-                          color="success"
-                          label="Verified (default)"
-                        />
+                        <Chip size="small" label="Default catalog" />
                       ) : (
                         <Chip size="small" color="warning" variant="outlined" label="Community" />
                       )}
@@ -664,12 +800,25 @@ function SourcesTab() {
                           <IconButton
                             size="small"
                             color="error"
-                            onClick={() =>
-                              remove.mutate(s.url, {
-                                onSuccess: () => showToast("Source removed"),
-                                onError: (e) => showToast((e as Error).message, "error"),
-                              })
-                            }
+                            disabled={remove.isPending}
+                            onClick={() => {
+                              if (removing.current.has(s.url)) return;
+                              removing.current.add(s.url);
+                              const current = ui.capture();
+                              void remove
+                                .mutateAsync(s.url)
+                                .then(
+                                  () => {
+                                    if (current()) showToast("Source removed");
+                                  },
+                                  (error) => {
+                                    if (current()) showToast(error.message, "error");
+                                  },
+                                )
+                                .finally(() => {
+                                  removing.current.delete(s.url);
+                                });
+                            }}
                           >
                             <DeleteIcon fontSize="small" />
                           </IconButton>
@@ -684,48 +833,79 @@ function SourcesTab() {
         )}
       </AdminTableSurface>
 
-      <Dialog open={open} onClose={() => setOpen(false)} fullWidth maxWidth="sm">
+      <Dialog
+        open={open}
+        onClose={() => {
+          ui.retire();
+          setOpen(false);
+        }}
+        fullWidth
+        maxWidth="sm"
+      >
         <DialogTitle>Add catalog source</DialogTitle>
         <DialogContent>
           <Alert severity="info" sx={{ mb: 2 }}>
             Extensions from operator-added sources are surfaced as <strong>community</strong>
-            (unreviewed). The default OpenMapX catalog is the only <strong>verified</strong> source.
+            (unreviewed). Default catalog entries retain their individual trust and revocation
+            status.
           </Alert>
           <Stack sx={{ gap: 2, mt: 1 }}>
             <TextField
               label="Label"
               value={label}
-              onChange={(e) => setLabel(e.target.value)}
+              onChange={(e) => {
+                ui.retire();
+                setLabel(e.target.value);
+              }}
               fullWidth
             />
             <TextField
               label="Catalog URL (HTTPS)"
               value={url}
-              onChange={(e) => setUrl(e.target.value)}
+              onChange={(e) => {
+                ui.retire();
+                setUrl(e.target.value);
+              }}
               placeholder="https://…/catalog.json"
               fullWidth
             />
           </Stack>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setOpen(false)}>Cancel</Button>
+          <Button
+            onClick={() => {
+              ui.retire();
+              setOpen(false);
+            }}
+          >
+            Cancel
+          </Button>
           <Button
             variant="contained"
             disabled={!url.trim() || !label.trim() || add.isPending}
-            onClick={() =>
-              add.mutate(
-                { url: url.trim(), label: label.trim() },
-                {
-                  onSuccess: () => {
+            onClick={() => {
+              if (adding.current) return;
+              adding.current = true;
+              const current = ui.capture();
+              void add
+                .mutateAsync({ url: url.trim(), label: label.trim() })
+                .then(
+                  () => {
+                    if (!current()) return;
                     showToast("Source added");
+                    ui.retire();
                     setOpen(false);
                     setUrl("");
                     setLabel("");
                   },
-                  onError: (e) => showToast((e as Error).message, "error"),
-                },
-              )
-            }
+                  (error) => {
+                    if (current()) showToast(error.message, "error");
+                  },
+                )
+                .finally(() => {
+                  adding.current = false;
+                });
+            }}
           >
             Add
           </Button>
@@ -735,7 +915,7 @@ function SourcesTab() {
   );
 }
 
-export function ExtensionStorePage() {
+function ExtensionStoreContent() {
   const [tab, setTab] = useState(0);
   return (
     <Stack sx={{ gap: 2 }}>
@@ -753,4 +933,10 @@ export function ExtensionStorePage() {
       {tab === 2 && <SourcesTab />}
     </Stack>
   );
+}
+
+/** Replacing a configured origin retires every tab/dialog, including origin A→B→A. */
+export function ExtensionStorePage() {
+  const { apiUrl } = useActivityClient();
+  return <ExtensionStoreContent key={apiUrl} />;
 }

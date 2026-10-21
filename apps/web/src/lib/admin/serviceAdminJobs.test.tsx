@@ -13,8 +13,9 @@ import {
   screen,
   waitFor,
 } from "@/test";
+import { AdminJobEffectsProvider } from "./adminJobEffects";
 import { serviceAdminQueries, serviceOrThrow } from "./serviceAdmin";
-import { ServiceAdministrationProvider, useServiceJobRegistration } from "./serviceAdminJobs";
+import { useServiceJobRegistration } from "./serviceAdminJobs";
 
 let apiUrl = "http://admin.test";
 vi.mock("@/integration-api/runtime/EnvProvider", () => ({ useEnv: () => ({ apiUrl }) }));
@@ -62,10 +63,10 @@ function mount() {
   const Wrapper = createQueryWrapper(qc);
   const view = (caller = true) => (
     <Wrapper>
-      <ServiceAdministrationProvider>
+      <AdminJobEffectsProvider>
         <Status />
         {caller && <Caller />}
-      </ServiceAdministrationProvider>
+      </AdminJobEffectsProvider>
     </Wrapper>
   );
   return { qc, view, ...render(view()) };

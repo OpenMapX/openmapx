@@ -6,6 +6,7 @@ import type { AdminActivityJobDetail, AdminActivityJobSource } from "@openmapx/c
 import { queryOptions } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { useEnv } from "@/integration-api/runtime/EnvProvider";
+import { browserAdminApiBase } from "@/lib/admin/browserAdminApiBase";
 
 /** JSON reads are finite; this deadline never owns a native EventSource. */
 export const ACTIVITY_READ_TIMEOUT_MS = 30_000;
@@ -13,7 +14,7 @@ export const ACTIVITY_READ_TIMEOUT_MS = 30_000;
 export function useActivityClient() {
   const { apiUrl } = useEnv();
   const client = useMemo(
-    () => createApiClient({ baseUrl: apiUrl, credentials: "include" }),
+    () => createApiClient({ baseUrl: browserAdminApiBase(apiUrl), credentials: "include" }),
     [apiUrl],
   );
   return { apiUrl, client };

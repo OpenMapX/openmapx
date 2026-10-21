@@ -2,7 +2,7 @@
 
 import Box from "@mui/material/Box";
 import { useCallback, useState } from "react";
-import { ServiceAdministrationProvider } from "@/lib/admin/serviceAdminJobs";
+import { AdminJobEffectsProvider } from "@/lib/admin/adminJobEffects";
 import { useHydrated } from "@/lib/useHydrated";
 import { AdminSidebar } from "./AdminSidebar";
 import { AdminTopBar } from "./AdminTopBar";
@@ -33,7 +33,7 @@ export function AdminLayout({ children, user, selfHosted = false }: AdminLayoutP
   return (
     <AdminThemeProvider>
       <AdminToastProvider>
-        <ServiceAdministrationProvider>
+        <AdminJobEffectsProvider>
           <Box
             className="omx-admin"
             sx={{ display: "flex", height: "100dvh", bgcolor: "background.default" }}
@@ -75,7 +75,7 @@ export function AdminLayout({ children, user, selfHosted = false }: AdminLayoutP
               </Box>
             </Box>
           </Box>
-        </ServiceAdministrationProvider>
+        </AdminJobEffectsProvider>
       </AdminToastProvider>
     </AdminThemeProvider>
   );
