@@ -383,6 +383,9 @@ export const opsOperationSchema = z.discriminatedUnion("kind", [
     kind: z.literal("serviceRepository.publish"),
     url: gitRepositoryUrlSchema,
     commit: gitCommitSchema,
+    // The ref the commit was inspected at, for hosts that refuse to fetch an
+    // unadvertised commit; it must still resolve to `commit`.
+    ref: gitRefSchema.optional(),
     extensionId: serviceIdSchema,
     recovery: repositoryRecoverySchema,
   }),
@@ -390,7 +393,9 @@ export const opsOperationSchema = z.discriminatedUnion("kind", [
     kind: z.literal("serviceRepository.settle"),
     repository: repositoryIdSchema,
     transactionId: repositoryTransactionIdSchema,
-    outcome: z.enum(["commit", "rollback"]),
+    // `rollback` restores the previous checkout and keeps the recovery note;
+    // `release` drops the note once the API has restored what it describes.
+    outcome: z.enum(["commit", "rollback", "release"]),
   }),
   z.strictObject({
     kind: z.literal("serviceRepository.remove"),
@@ -754,6 +759,7 @@ const backupInventoryEntry = z
   });
 const repositoryPending = z.strictObject({
   transactionId: repositoryTransactionIdSchema,
+  phase: z.enum(["published", "rolledBack"]),
   previousCommit: gitCommitSchema.nullable(),
   recovery: repositoryRecoverySchema,
 });
@@ -1027,7 +1033,7 @@ export const OPS_RESULT_SCHEMAS = {
   }),
   "serviceRepository.settle": z.strictObject({
     repository: repositoryIdSchema,
-    outcome: z.enum(["commit", "rollback"]),
+    outcome: z.enum(["commit", "rollback", "release"]),
     changed: z.boolean(),
   }),
   "serviceRepository.remove": z.strictObject({

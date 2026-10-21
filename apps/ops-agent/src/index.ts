@@ -102,16 +102,34 @@ async function main(): Promise<void> {
     }
     const builtInServices = releaseAuthority.services.map((service) => structuredClone(service));
     const paths = repoPaths(config.rootDir);
+    const uid = process.geteuid?.() ?? 0;
+    const gid = process.getegid?.() ?? 0;
+    const authorityOptions = {
+      rootDir: config.rootDir,
+      builtInAuthorityDigest: releaseAuthority.digest,
+    };
+    // The agent is the only writer of services/.community. An interrupted
+    // repository transaction is undone before any authority load, which
+    // refuses a checkout it cannot validate.
+    const communityRepositories = new CommunityRepositoryStore({
+      rootDir: config.rootDir,
+      uid,
+      loadAuthority: () => authorityLoader(),
+    });
+    await communityRepositories.recover();
+    // The operator's selection can name installed community services as well
+    // as built-in ones.
+    const communityServices = (
+      await createTrustedConfigurationAuthorityLoader({ ...authorityOptions, builtInServices })()
+    ).services.filter((service) => !service.isBuiltIn);
     const bootstrapEnabledServiceIds = resolveBootstrapEnabledServiceIds(
-      builtInServices,
+      [...builtInServices, ...communityServices],
       services.readDesiredSelection(paths.infraDir),
     );
     for (const service of builtInServices) {
       service.enabled = bootstrapEnabledServiceIds.has(service.manifest.id);
     }
     const journal = await openOpsJobJournal(config.journalFile);
-    const uid = process.geteuid?.() ?? 0;
-    const gid = process.getegid?.() ?? 0;
     await initializeTrustedSnapshotDirectory(config.trustedConfigDirectory, {
       allowedUids: [uid],
       expectedGid: gid,
@@ -120,19 +138,9 @@ async function main(): Promise<void> {
     });
     await initializeTrustedConfigurationRuntime(paths.infraDir);
     const authorityLoader = createTrustedConfigurationAuthorityLoader({
-      rootDir: config.rootDir,
+      ...authorityOptions,
       builtInServices,
-      builtInAuthorityDigest: releaseAuthority.digest,
     });
-    // The agent is the only writer of services/.community. An interrupted
-    // repository transaction is undone before the first authority load, which
-    // refuses a checkout it cannot validate.
-    const communityRepositories = new CommunityRepositoryStore({
-      rootDir: config.rootDir,
-      uid,
-      loadAuthority: authorityLoader,
-    });
-    await communityRepositories.recover();
     const initialAuthority = await authorityLoader();
     const runtime = createDockerRuntime({
       stack: paths,

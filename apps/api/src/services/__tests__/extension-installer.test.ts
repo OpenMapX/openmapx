@@ -95,6 +95,7 @@ vi.mock("../service-registry", () => ({
 vi.mock("../community-repositories", () => ({
   inspectServiceRepository: vi.fn(),
   publishServiceRepository: vi.fn(),
+  readCommunityServices: vi.fn(),
   settleServiceRepository: vi.fn(),
   removeServiceRepository: vi.fn(),
 }));
@@ -118,6 +119,7 @@ import { renderAndPersistCompose, serviceStart } from "../admin-ops";
 import {
   inspectServiceRepository,
   publishServiceRepository,
+  readCommunityServices,
   removeServiceRepository,
   settleServiceRepository,
 } from "../community-repositories";
@@ -258,6 +260,7 @@ const inspectMock = vi.mocked(inspectServiceRepository);
 const publishMock = vi.mocked(publishServiceRepository);
 const settleMock = vi.mocked(settleServiceRepository);
 const removeRepositoryMock = vi.mocked(removeServiceRepository);
+const readCommunityMock = vi.mocked(readCommunityServices);
 const recoverMock = vi.mocked(recoverInterruptedExtensionChanges);
 const lockMock = vi.mocked(withExtensionChangeLock);
 const serviceStartMock = vi.mocked(serviceStart);
@@ -299,6 +302,12 @@ afterEach(() => {
     repository: request.repository,
     removed: true,
   }));
+  readCommunityMock.mockResolvedValue({
+    revisionId: `cfg1_${"d".repeat(43)}`,
+    repositories: [],
+    services: [{ repository: REPO_ONE, directory: "/x", manifest: communityManifest("svc-one") }],
+    problems: [],
+  } as never);
   recoverMock.mockResolvedValue(undefined);
   lockMock.mockImplementation((work) => work());
   vi.mocked(getServiceSelectionSummary).mockReturnValue({ selectedRoots: [] } as never);
@@ -402,7 +411,13 @@ describe("installExtension", () => {
       expect.objectContaining({ operationKey: expect.stringMatching(/^opk1_/) }),
     );
     expect(publishMock).toHaveBeenCalledWith(
-      { url: REPO_URL, commit: COMMIT, extensionId: "bundle-x", recovery: RECOVERY },
+      {
+        url: REPO_URL,
+        commit: COMMIT,
+        ref: "HEAD",
+        extensionId: "bundle-x",
+        recovery: RECOVERY,
+      },
       expect.objectContaining({ operationKey: expect.stringMatching(/^opk1_/) }),
     );
     expect(inspectMock.mock.invocationCallOrder[0]).toBeLessThan(
@@ -719,10 +734,30 @@ describe("installExtension", () => {
       installExtension(makeCtx(), { manifest: TWO_REPO_MANIFEST, sourceTrust: "community" }),
     ).rejects.toThrow("start failed");
 
+    // Checkouts are restored newest first, then the selection, and only then
+    // are the agent's recovery notes released.
     expect(settleMock.mock.calls.map(([request]) => request)).toEqual([
       { repository: REPO_TWO, transactionId: transactionFor(REPO_TWO), outcome: "rollback" },
       { repository: REPO_ONE, transactionId: transactionFor(REPO_ONE), outcome: "rollback" },
+      { repository: REPO_TWO, transactionId: transactionFor(REPO_TWO), outcome: "release" },
+      { repository: REPO_ONE, transactionId: transactionFor(REPO_ONE), outcome: "release" },
     ]);
+    const restoreOrder = writeSelectionMock.mock.invocationCallOrder.at(-1) ?? 0;
+    expect(settleMock.mock.invocationCallOrder[1]).toBeLessThan(restoreOrder);
+    expect(settleMock.mock.invocationCallOrder[2]).toBeGreaterThan(restoreOrder);
+  });
+
+  it("keeps the recovery notes when restoring the selection fails", async () => {
+    serviceStartMock.mockRejectedValueOnce(new Error("start failed"));
+    writeSelectionMock
+      .mockResolvedValueOnce({ revisionId: "revision_1" } as never)
+      .mockRejectedValueOnce(new Error("selection unavailable"));
+
+    await expect(
+      installExtension(makeCtx(), { manifest: MANIFEST, sourceTrust: "community" }),
+    ).rejects.toThrow("start failed");
+
+    expect(settleMock.mock.calls.map(([request]) => request.outcome)).toEqual(["rollback"]);
   });
 
   it("leaves every repository transaction pending when failed-install runtime removal fails", async () => {
@@ -902,6 +937,26 @@ describe("removeExtension", () => {
 
     expect(dbMock.db.delete).not.toHaveBeenCalled();
     expect(renderMock).not.toHaveBeenCalled();
+  });
+
+  it("retries a removal whose repository the agent already deleted", async () => {
+    dbMock.queueSelect([{ id: "bundle-x" }]);
+    dbMock.queueSelect([{ extensionId: "bundle-x", kind: "service", componentId: "svc-one" }]);
+    dbMock.queueSelect([{ hash: REPO_ONE, url: REPO_URL }]);
+    readCommunityMock.mockResolvedValueOnce({
+      revisionId: `cfg1_${"d".repeat(43)}`,
+      repositories: [],
+      services: [],
+      problems: [],
+    } as never);
+    removeRepositoryMock.mockResolvedValueOnce({ repository: REPO_ONE, removed: false });
+
+    await expect(removeExtension(makeCtx(), "bundle-x")).resolves.toMatchObject({
+      id: "bundle-x",
+    });
+
+    expect(composeMock).not.toHaveBeenCalled();
+    expect(dbMock.db.delete).toHaveBeenCalledTimes(2);
   });
 
   it("retains selection and repository ownership when community runtime removal fails", async () => {

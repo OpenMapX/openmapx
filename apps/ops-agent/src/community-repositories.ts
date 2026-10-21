@@ -35,7 +35,9 @@ import { readCommunityRepository } from "./trusted-configuration-authority";
  * `.repository-<repository>.json`. Installing a commit is a transaction: the
  * previous checkout moves to `.backup-<repository>-<transaction>/` and stays
  * there until the API settles the transaction, because only the API knows
- * whether the rest of the extension change committed. Dot-prefixed entries are
+ * whether the rest of the extension change committed. A rolled-back
+ * transaction keeps its recovery note until the API has restored the service
+ * selection it describes and releases it. Dot-prefixed entries are
  * ignored by the authority snapshot, so staging, backups and records never
  * become services.
  */
@@ -49,12 +51,17 @@ const BACKUP = /^\.backup-([a-f0-9]{16})-(txn1_[a-f0-9]{24})$/;
 const STAGE = /^\.stage-[a-f0-9]{24}$/;
 const MAX_PROBLEMS = 64;
 const MAX_PROBLEM_LENGTH = 1_024;
+// communityServices.inspect returns every installed manifest in one result of
+// at most 1 MiB, so installed manifests must fit with room to spare.
+const MAX_LISTED_MANIFEST_BYTES = 768 * 1024;
+// Bounds of the inspect and installed-services results.
+const MAX_REPOSITORY_SERVICES = 64;
+const MAX_COMMUNITY_SERVICES = 256;
 
-export const COMMUNITY_REPOSITORY_PENDING = "A community repository change is still pending";
 const OWNERSHIP_REJECTED = "The repository belongs to another extension";
 const PUBLISH_REJECTED = "The repository could not be installed";
 
-export interface RepositoryRecovery {
+interface RepositoryRecovery {
   selectionBefore: string[] | null;
   touchedServiceIds: string[];
   previouslyEnabledServiceIds: string[];
@@ -68,8 +75,11 @@ interface RepositorySource {
 
 interface PendingTransaction {
   transactionId: string;
-  /** `prepared` until the new checkout is in place; `published` until settled. */
-  phase: "prepared" | "published";
+  /**
+   * `prepared` until the new checkout is in place, `published` until settled,
+   * and `rolledBack` once the previous checkout is restored, until released.
+   */
+  phase: "prepared" | "published" | "rolledBack";
   /** What the checkout held before; null when the repository is new. */
   previous: RepositorySource | null;
   next: { url: string; commit: string; extensionId: string };
@@ -139,7 +149,7 @@ function parseRecord(raw: unknown, repository: string): RepositoryRecord {
       !value ||
       typeof value.transactionId !== "string" ||
       !TRANSACTION.test(value.transactionId) ||
-      (value.phase !== "prepared" && value.phase !== "published") ||
+      (value.phase !== "prepared" && value.phase !== "published" && value.phase !== "rolledBack") ||
       !next?.url ||
       !next.commit ||
       !next.extensionId ||
@@ -187,6 +197,10 @@ function normalizePermissions(directory: string): void {
   }
 }
 
+function manifestSize(manifest: unknown): number {
+  return Buffer.byteLength(JSON.stringify(manifest));
+}
+
 function boundedProblems(problems: string[]): string[] {
   return problems
     .slice(0, MAX_PROBLEMS)
@@ -201,6 +215,8 @@ export class CommunityRepositoryStore {
   private readonly community: string;
   private readonly clone: CommunityRepositoryClone;
   private queue: Promise<unknown> = Promise.resolve();
+  /** Set when undoing a failed publish failed; recovery runs before the next operation. */
+  private needsRecovery = false;
 
   constructor(private readonly options: CommunityRepositoryStoreOptions) {
     this.community = join(options.rootDir, "services", ".community");
@@ -209,7 +225,14 @@ export class CommunityRepositoryStore {
 
   /** Run repository mutations one at a time. */
   private serialize<T>(work: () => Promise<T>): Promise<T> {
-    const run = this.queue.then(work, work);
+    const guarded = async () => {
+      if (this.needsRecovery) {
+        this.recoverNow(false);
+        this.needsRecovery = false;
+      }
+      return work();
+    };
+    const run = this.queue.then(guarded, guarded);
     this.queue = run.catch(() => undefined);
     return run;
   }
@@ -291,19 +314,73 @@ export class CommunityRepositoryStore {
     }
   }
 
-  /** Service ids the deployment already uses outside `repository`. */
-  private async takenServiceIds(repository: string): Promise<Set<string>> {
-    const authority = await this.options.loadAuthority();
-    const own = `${this.checkout(repository)}${sep}`;
-    return new Set(
-      authority.services
-        .filter((service) => service.isBuiltIn || !`${service.directory}${sep}`.startsWith(own))
-        .map((service) => service.manifest.id),
-    );
+  /**
+   * Only the extension that installed a repository may change it. The agent
+   * never leaves a checkout without an owner record, so one placed by hand is
+   * refused rather than adopted by whichever extension names its URL first.
+   */
+  private assertOwner(
+    repository: string,
+    record: RepositoryRecord | null,
+    extensionId: string,
+  ): void {
+    if (record ? record.extensionId !== extensionId : existsSync(this.checkout(repository))) {
+      throw new Error(OWNERSHIP_REJECTED);
+    }
   }
 
-  /** Undo a transaction whose new checkout may or may not be in place. */
-  private restorePrevious(record: RepositoryRecord, pending: PendingTransaction): void {
+  /**
+   * Why installing `staged` as `repository` would conflict with the rest of the
+   * deployment: a service id already in use, or more manifest bytes than
+   * communityServices.inspect can report.
+   */
+  private async conflicts(
+    repository: string,
+    staged: Awaited<ReturnType<CommunityRepositoryStore["stage"]>>,
+  ): Promise<string[]> {
+    const authority = await this.options.loadAuthority();
+    const own = `${this.checkout(repository)}${sep}`;
+    const taken = new Set<string>();
+    let manifestBytes = 0;
+    for (const service of authority.services) {
+      if (!service.isBuiltIn && `${service.directory}${sep}`.startsWith(own)) continue;
+      taken.add(service.manifest.id);
+      if (!service.isBuiltIn) manifestBytes += manifestSize(service.manifest);
+    }
+    const problems: string[] = [];
+    const communityCount =
+      authority.services.filter(
+        (service) => !service.isBuiltIn && !`${service.directory}${sep}`.startsWith(own),
+      ).length + staged.reading.services.length;
+    if (staged.reading.services.length > MAX_REPOSITORY_SERVICES) {
+      problems.push(`The repository provides more than ${MAX_REPOSITORY_SERVICES} services`);
+    } else if (communityCount > MAX_COMMUNITY_SERVICES) {
+      problems.push(`More than ${MAX_COMMUNITY_SERVICES} community services would be installed`);
+    }
+    for (const { service } of staged.reading.services) {
+      if (taken.has(service.manifest.id)) {
+        problems.push(`Service id "${service.manifest.id}" is already used by another service`);
+      }
+      manifestBytes += manifestSize(service.manifest);
+    }
+    if (manifestBytes > MAX_LISTED_MANIFEST_BYTES) {
+      problems.push(
+        `Installed community service manifests would exceed ${MAX_LISTED_MANIFEST_BYTES} bytes`,
+      );
+    }
+    return problems;
+  }
+
+  /**
+   * Undo a transaction whose new checkout may or may not be in place. With
+   * `keepNote`, the record keeps the transaction as `rolledBack` so the API can
+   * still restore the selection it describes.
+   */
+  private restorePrevious(
+    record: RepositoryRecord,
+    pending: PendingTransaction,
+    keepNote: boolean,
+  ): void {
     const checkout = this.checkout(record.repository);
     const backup = this.backupPath(record.repository, pending.transactionId);
     if (existsSync(backup)) {
@@ -313,45 +390,55 @@ export class CommunityRepositoryStore {
       rmSync(checkout, { recursive: true, force: true });
     }
     syncDirectory(this.community);
-    if (pending.previous === null) {
+    const previous = pending.previous ?? { url: null, commit: null, extensionId: null };
+    if (keepNote) {
+      this.writeRecord({ ...record, ...previous, pending: { ...pending, phase: "rolledBack" } });
+    } else if (pending.previous === null) {
       this.deleteRecord(record.repository);
     } else {
-      this.writeRecord({ ...record, ...pending.previous, pending: null });
+      this.writeRecord({ ...record, ...previous, pending: null });
     }
   }
 
   /**
    * Startup recovery: drop staging clones, undo transactions interrupted before
    * their checkout was in place, and drop backups no transaction refers to.
-   * Published transactions wait for the API to settle them.
+   * Published and rolled-back transactions wait for the API to settle them.
+   * A prepared transaction needs no note: the API changes nothing else until
+   * publish returns.
    */
   async recover(): Promise<void> {
-    await this.serialize(async () => {
-      if (!existsSync(this.community)) return;
-      const entries = readdirSync(this.community);
-      for (const name of entries) {
-        if (STAGE.test(name)) rmSync(join(this.community, name), { recursive: true, force: true });
+    await this.serialize(async () => this.recoverNow(true));
+  }
+
+  /** Staging clones are only dropped at startup, when no inspect can be using one. */
+  private recoverNow(startup: boolean): void {
+    if (!existsSync(this.community)) return;
+    const entries = readdirSync(this.community);
+    for (const name of entries) {
+      if (startup && STAGE.test(name)) {
+        rmSync(join(this.community, name), { recursive: true, force: true });
       }
-      const pendingBackups = new Set<string>();
-      for (const name of entries) {
-        const match = RECORD.exec(name);
-        if (!match?.[1]) continue;
-        const record = this.readRecord(match[1]);
-        if (!record?.pending) continue;
-        if (record.pending.phase === "prepared") {
-          this.restorePrevious(record, record.pending);
-        } else {
-          pendingBackups.add(this.backupPath(record.repository, record.pending.transactionId));
-        }
+    }
+    const pendingBackups = new Set<string>();
+    for (const name of entries) {
+      const match = RECORD.exec(name);
+      if (!match?.[1]) continue;
+      const record = this.readRecord(match[1]);
+      if (!record?.pending) continue;
+      if (record.pending.phase === "prepared") {
+        this.restorePrevious(record, record.pending, false);
+      } else if (record.pending.phase === "published") {
+        pendingBackups.add(this.backupPath(record.repository, record.pending.transactionId));
       }
-      for (const name of readdirSync(this.community)) {
-        const path = join(this.community, name);
-        if (BACKUP.test(name) && !pendingBackups.has(path)) {
-          rmSync(path, { recursive: true, force: true });
-        }
+    }
+    for (const name of readdirSync(this.community)) {
+      const path = join(this.community, name);
+      if (BACKUP.test(name) && !pendingBackups.has(path)) {
+        rmSync(path, { recursive: true, force: true });
       }
-      syncDirectory(this.community);
-    });
+    }
+    syncDirectory(this.community);
   }
 
   async inspect(
@@ -366,22 +453,27 @@ export class CommunityRepositoryStore {
       if (staged.reading.services.length === 0 && problems.length === 0) {
         problems.push("The repository contains no service.json");
       }
-      const taken = await this.takenServiceIds(repository);
-      for (const { service } of staged.reading.services) {
-        if (taken.has(service.manifest.id)) {
-          problems.push(`Service id "${service.manifest.id}" is already used by another service`);
-        }
-      }
+      problems.push(...(await this.conflicts(repository, staged)));
+      // Oversized results are not echoed back: they would exceed the result's
+      // own limits and hide the explanation.
+      const reportable =
+        staged.reading.services.length <= MAX_REPOSITORY_SERVICES &&
+        staged.reading.services.reduce(
+          (total, { service }) => total + manifestSize(service.manifest),
+          0,
+        ) <= MAX_LISTED_MANIFEST_BYTES;
       return {
         url: canonical,
         repository,
         commit: staged.commit,
         valid: problems.length === 0,
         problems: boundedProblems(problems),
-        services: staged.reading.services.map(({ service, path }) => ({
-          path,
-          manifest: service.manifest as unknown as Record<string, unknown>,
-        })),
+        services: reportable
+          ? staged.reading.services.map(({ service, path }) => ({
+              path,
+              manifest: service.manifest as unknown as Record<string, unknown>,
+            }))
+          : [],
       };
     } finally {
       rmSync(staged.directory, { recursive: true, force: true });
@@ -398,10 +490,11 @@ export class CommunityRepositoryStore {
       const repository = communityRepositoryId(canonical);
       const record = this.readRecord(repository);
       if (record?.pending) throw new OpsAgentBusyError();
-      if (record?.extensionId && record.extensionId !== operation.extensionId) {
-        throw new Error(OWNERSHIP_REJECTED);
-      }
-      const staged = await this.stage(canonical, operation.commit, signal);
+      this.assertOwner(repository, record, operation.extensionId);
+      const staged = await this.stage(canonical, operation.commit, signal).catch((error) => {
+        if (!operation.ref) throw error;
+        return this.stage(canonical, operation.ref, signal);
+      });
       let current: RepositoryRecord | null = null;
       let pending: PendingTransaction | null = null;
       try {
@@ -412,18 +505,14 @@ export class CommunityRepositoryStore {
         ) {
           throw new Error(PUBLISH_REJECTED);
         }
-        const taken = await this.takenServiceIds(repository);
-        if (staged.reading.services.some(({ service }) => taken.has(service.manifest.id))) {
+        if ((await this.conflicts(repository, staged)).length > 0) {
           throw new Error(PUBLISH_REJECTED);
         }
         const checkout = this.checkout(repository);
-        const previous: RepositorySource | null = existsSync(checkout)
-          ? {
-              url: record?.url ?? null,
-              commit: record?.commit ?? null,
-              extensionId: record?.extensionId ?? null,
-            }
-          : null;
+        const previous: RepositorySource | null =
+          record && existsSync(checkout)
+            ? { url: record.url, commit: record.commit, extensionId: record.extensionId }
+            : null;
         pending = {
           transactionId: `txn1_${randomBytes(12).toString("hex")}`,
           phase: "prepared",
@@ -462,9 +551,11 @@ export class CommunityRepositoryStore {
         rmSync(staged.directory, { recursive: true, force: true });
         if (current && pending) {
           try {
-            this.restorePrevious(current, pending);
+            this.restorePrevious(current, pending, false);
           } catch {
-            // Startup recovery retries an interrupted transaction.
+            // The checkout may now be one the authority snapshot refuses;
+            // recovery retries before the next operation.
+            this.needsRecovery = true;
           }
         }
         throw error;
@@ -482,15 +573,26 @@ export class CommunityRepositoryStore {
       if (!record || pending?.transactionId !== transactionId) {
         return { repository, outcome, changed: false };
       }
-      if (outcome === "rollback" || pending.phase === "prepared") {
-        if (outcome === "commit") throw new Error(PUBLISH_REJECTED);
-        this.restorePrevious(record, pending);
-      } else {
-        rmSync(this.backupPath(repository, transactionId), { recursive: true, force: true });
-        syncDirectory(this.community);
-        this.writeRecord({ ...record, pending: null });
+      switch (outcome) {
+        case "commit":
+          if (pending.phase !== "published") throw new Error(PUBLISH_REJECTED);
+          rmSync(this.backupPath(repository, transactionId), { recursive: true, force: true });
+          syncDirectory(this.community);
+          this.writeRecord({ ...record, pending: null });
+          return { repository, outcome, changed: true };
+        case "rollback":
+          if (pending.phase === "rolledBack") return { repository, outcome, changed: false };
+          this.restorePrevious(record, pending, true);
+          return { repository, outcome, changed: true };
+        case "release":
+          if (pending.phase !== "rolledBack") throw new Error(PUBLISH_REJECTED);
+          if (record.extensionId === null && !existsSync(this.checkout(repository))) {
+            this.deleteRecord(repository);
+          } else {
+            this.writeRecord({ ...record, pending: null });
+          }
+          return { repository, outcome, changed: true };
       }
-      return { repository, outcome, changed: true };
     });
   }
 
@@ -501,9 +603,7 @@ export class CommunityRepositoryStore {
       const { repository, extensionId } = operation;
       const record = this.readRecord(repository);
       if (record?.pending) throw new OpsAgentBusyError();
-      if (record?.extensionId && record.extensionId !== extensionId) {
-        throw new Error(OWNERSHIP_REJECTED);
-      }
+      this.assertOwner(repository, record, extensionId);
       const checkout = this.checkout(repository);
       const existed = existsSync(checkout) || record !== null;
       rmSync(checkout, { recursive: true, force: true });
@@ -515,6 +615,7 @@ export class CommunityRepositoryStore {
 
   /** Installed community services and repositories, as the authority snapshot sees them. */
   async list(): Promise<OpsResultFor<"communityServices.inspect">> {
+    if (this.needsRecovery) await this.serialize(async () => undefined);
     const authority = await this.options.loadAuthority();
     const services = authority.services
       .filter((service) => !service.isBuiltIn)
@@ -535,7 +636,8 @@ export class CommunityRepositoryStore {
       revisionId: authority.revisionId,
       repositories: [...repositories].sort().map((repository) => {
         const record = this.readRecord(repository);
-        const pending = record?.pending?.phase === "published" ? record.pending : null;
+        const pending =
+          record?.pending && record.pending.phase !== "prepared" ? record.pending : null;
         return {
           repository,
           url: record?.url ?? null,
@@ -544,6 +646,7 @@ export class CommunityRepositoryStore {
           pending: pending
             ? {
                 transactionId: pending.transactionId,
+                phase: pending.phase as "published" | "rolledBack",
                 previousCommit: pending.previous?.commit ?? null,
                 recovery: pending.recovery,
               }

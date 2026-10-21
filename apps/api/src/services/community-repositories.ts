@@ -102,7 +102,13 @@ export async function inspectServiceRepository(
 
 /** Install an exact commit; the agent keeps the previous checkout until the change is settled. */
 export async function publishServiceRepository(
-  request: { url: string; commit: string; extensionId: string; recovery: RepositoryRecovery },
+  request: {
+    url: string;
+    commit: string;
+    ref?: string;
+    extensionId: string;
+    recovery: RepositoryRecovery;
+  },
   options: OperationOptions,
 ): Promise<OpsResultFor<"serviceRepository.publish">> {
   const result = await executeAndWait(
@@ -118,7 +124,11 @@ export async function publishServiceRepository(
 }
 
 export function settleServiceRepository(
-  request: { repository: string; transactionId: string; outcome: "commit" | "rollback" },
+  request: {
+    repository: string;
+    transactionId: string;
+    outcome: "commit" | "rollback" | "release";
+  },
   options: OperationOptions,
 ): Promise<OpsResultFor<"serviceRepository.settle">> {
   return executeAndWait(
@@ -185,10 +195,13 @@ export interface ServiceRuntimeRecovery {
 /**
  * Settle every repository transaction an interrupted extension change left
  * pending. The extension's database transaction is the commit point: it
- * records the agent transaction it installed. A pending transaction the
- * database records is committed; any other is rolled back, after restoring the
- * selection it changed and recording which service runtimes to repair.
- * Must not run while an extension change is in progress.
+ * records the agent transaction it installed. A published transaction the
+ * database records is committed. Every other one is rolled back: first the
+ * service runtimes to repair are recorded, then each previous checkout is
+ * restored, then the selection from before the change is applied once those
+ * checkouts are back, and only then does the agent drop its recovery notes.
+ * Each step is safe to repeat, so a failure at any point is retried by the
+ * next recovery. Must not run while an extension change is in progress.
  */
 export async function reconcileCommunityRepositoryTransactions(
   options: {
@@ -212,48 +225,70 @@ export async function reconcileCommunityRepositoryTransactions(
         .join("\n"),
     )
     .digest("hex")}`;
+  const settle = (
+    repository: string,
+    transactionId: string,
+    outcome: "commit" | "rollback" | "release",
+  ) =>
+    settleServiceRepository(
+      { repository, transactionId, outcome },
+      {
+        operationKey: createDurableOpsKey(
+          `community.repository.${outcome}`,
+          `${incidentId}:${repository}:${transactionId}`,
+        ),
+        signal: options.signal,
+      },
+    );
+
+  const undone: typeof pending = [];
+  for (const entry of pending) {
+    if (entry.pending.phase === "published") {
+      const [row] = await db
+        .select({ lastTransactionId: serviceRepository.lastTransactionId })
+        .from(serviceRepository)
+        .where(eq(serviceRepository.hash, entry.repository))
+        .limit(1);
+      if (row?.lastTransactionId === entry.pending.transactionId) {
+        await settle(entry.repository, entry.pending.transactionId, "commit");
+        continue;
+      }
+    }
+    undone.push(entry);
+  }
+  if (undone.length === 0) {
+    return { runtimeRecoveryNeeded: false, orphanedServiceIds: [], restartServiceIds: [] };
+  }
+
   const orphanedServiceIds = new Set<string>();
   const restartServiceIds = new Set<string>();
-  for (const { repository, pending: transaction } of pending) {
-    const [row] = await db
-      .select({ lastTransactionId: serviceRepository.lastTransactionId })
-      .from(serviceRepository)
-      .where(eq(serviceRepository.hash, repository))
-      .limit(1);
-    const operationKey = createDurableOpsKey(
-      "community.repository.recover",
-      `${incidentId}:${repository}:${transaction.transactionId}`,
-    );
-    if (row?.lastTransactionId === transaction.transactionId) {
-      await settleServiceRepository(
-        { repository, transactionId: transaction.transactionId, outcome: "commit" },
-        { operationKey, signal: options.signal },
-      );
-      continue;
-    }
+  for (const { pending: transaction } of undone) {
     for (const id of transaction.recovery.touchedServiceIds) orphanedServiceIds.add(id);
     for (const id of transaction.recovery.previouslyEnabledServiceIds) restartServiceIds.add(id);
-    if (orphanedServiceIds.size > 0 || restartServiceIds.size > 0) {
-      await options.persistRuntimeRecovery?.({
-        runtimeRecoveryNeeded: true,
-        incidentId,
-        orphanedServiceIds: [...orphanedServiceIds].sort(),
-        restartServiceIds: [...restartServiceIds].sort(),
-      });
-    }
-    if (transaction.recovery.selectionBefore) {
-      await options.restoreSelection?.(transaction.recovery.selectionBefore, incidentId);
-    }
-    await settleServiceRepository(
-      { repository, transactionId: transaction.transactionId, outcome: "rollback" },
-      { operationKey, signal: options.signal },
-    );
   }
-  const runtimeRecoveryNeeded = orphanedServiceIds.size > 0 || restartServiceIds.size > 0;
-  return {
-    runtimeRecoveryNeeded,
+  const recovery: ServiceRuntimeRecovery = {
+    runtimeRecoveryNeeded: orphanedServiceIds.size > 0 || restartServiceIds.size > 0,
     orphanedServiceIds: [...orphanedServiceIds].sort(),
     restartServiceIds: [...restartServiceIds].sort(),
-    ...(runtimeRecoveryNeeded ? { incidentId } : {}),
+    incidentId,
   };
+  if (recovery.runtimeRecoveryNeeded) await options.persistRuntimeRecovery?.(recovery);
+  // Newest changes were published last; undo them first.
+  for (const { repository, pending: transaction } of [...undone].reverse()) {
+    if (transaction.phase === "published") {
+      await settle(repository, transaction.transactionId, "rollback");
+    }
+  }
+  // Every pending transaction belongs to the one interrupted change, so they
+  // share the selection from before it.
+  const selectionBefore = undone.find(
+    ({ pending: transaction }) => transaction.recovery.selectionBefore !== null,
+  )?.pending.recovery.selectionBefore;
+  if (selectionBefore) await options.restoreSelection?.(selectionBefore, incidentId);
+  for (const { repository, pending: transaction } of undone) {
+    await settle(repository, transaction.transactionId, "release");
+  }
+  return recovery.runtimeRecoveryNeeded
+    ? recovery
+    : { runtimeRecoveryNeeded: false, orphanedServiceIds: [], restartServiceIds: [] };
 }

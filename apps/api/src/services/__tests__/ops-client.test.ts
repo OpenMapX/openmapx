@@ -147,6 +147,20 @@ describe("bounded async ops helpers", () => {
     expect(execute).not.toHaveBeenCalled();
     expect(lookup).toHaveBeenCalled();
   });
+  it("fails a synchronous operation at once instead of looking it up", async () => {
+    const execute = vi.fn().mockRejectedValue(new ApiOpsError("runtime"));
+    const lookup = vi.fn();
+    const { submitOpsOperationWithRecovery } = await import("../ops-client.js");
+    await expect(
+      submitOpsOperationWithRecovery(
+        fakeClient({ execute, lookup }),
+        { kind: "communityServices.inspect" },
+        "opk1_syncNotJournaled00000",
+      ),
+    ).rejects.toMatchObject({ errorClass: "runtime" });
+    expect(lookup).not.toHaveBeenCalled();
+  });
+
   it("recovers an admitted-but-response-lost operation with the exact same key", async () => {
     const operationKey = "opk1_ambiguousAdmission00";
     const admission = {

@@ -167,7 +167,7 @@ installs survive container restarts.
 
 The sandbox is derived from provenance, not the manifest's `quality` label:
 manifests loaded from `services/.community/` are third-party whether they say
-`community` or `community-verified`. They may **not** use any `bindMounts`
+`community` or `community-verified`, and the admin lists them as community. They may **not** use any `bindMounts`
 entry: community service installation and updates reject every host bind mount,
 including read-only mounts, with `community_bind_mount_forbidden`. Use a
 namespaced named volume (`openmapx-<serviceId>-<suffix>`) for persistent service

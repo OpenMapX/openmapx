@@ -163,6 +163,71 @@ describe("community repository store", () => {
     expect(readdirSync(community)).toEqual([]);
   });
 
+  it("refuses manifests too large for the installed-services report", async () => {
+    const large = {
+      commit: FIRST,
+      files: Object.fromEntries(
+        Array.from({ length: 4 }, (_, index) => [
+          `s${index}/service.json`,
+          manifest(`large-${index}`, "1.0.0", { description: "x".repeat(250_000) }),
+        ]),
+      ),
+    };
+    const { store, community } = fixture({ HEAD: large, [FIRST]: large });
+
+    const inspected = await store.inspect(
+      { kind: "serviceRepository.inspect", url: URL },
+      signal(),
+    );
+    expect(inspected.valid).toBe(false);
+    expect(inspected.problems).toEqual([
+      `Installed community service manifests would exceed ${768 * 1024} bytes`,
+    ]);
+    expect(inspected.services).toEqual([]);
+    await expect(publish(store, FIRST)).rejects.toThrow("could not be installed");
+    expect(readdirSync(community)).toEqual([]);
+  });
+
+  it("falls back to the inspected ref when the host refuses a bare commit", async () => {
+    const { store, clones } = fixture({ v1: firstSnapshot, v2: secondSnapshot });
+    const viaRef = (ref: string) =>
+      store.publish(
+        {
+          kind: "serviceRepository.publish",
+          url: URL,
+          commit: FIRST,
+          ref,
+          extensionId: "live-bundle",
+          recovery: RECOVERY,
+        },
+        signal(),
+      );
+
+    // The ref has moved on since the inspection: refused.
+    await expect(viaRef("v2")).rejects.toThrow("could not be installed");
+    await expect(viaRef("v1")).resolves.toMatchObject({ commit: FIRST });
+    expect(clones).toEqual([`${URL}@${FIRST}`, `${URL}@v2`, `${URL}@${FIRST}`, `${URL}@v1`]);
+  });
+
+  it("refuses to adopt a checkout no extension installed", async () => {
+    const { store, community } = fixture({ [FIRST]: firstSnapshot });
+    mkdirSync(join(community, REPOSITORY, "services", "live"), { recursive: true, mode: 0o755 });
+    writeFileSync(
+      join(community, REPOSITORY, "services", "live", "service.json"),
+      manifest("community-live", "0.9.0"),
+    );
+
+    await expect(publish(store, FIRST)).rejects.toThrow("belongs to another extension");
+    await expect(
+      store.remove({
+        kind: "serviceRepository.remove",
+        repository: REPOSITORY,
+        extensionId: "live-bundle",
+      }),
+    ).rejects.toThrow("belongs to another extension");
+    expect(readdirSync(community)).toEqual([REPOSITORY]);
+  });
+
   it("installs a commit, keeps the previous checkout until commit, then drops it", async () => {
     const { store, community, loadAuthority } = fixture({
       [FIRST]: firstSnapshot,
@@ -186,7 +251,12 @@ describe("community repository store", () => {
         url: URL,
         commit: FIRST,
         extensionId: "live-bundle",
-        pending: { transactionId: first.transactionId, previousCommit: null, recovery: RECOVERY },
+        pending: {
+          transactionId: first.transactionId,
+          phase: "published",
+          previousCommit: null,
+          recovery: RECOVERY,
+        },
       },
     ]);
     expect(listed.services).toEqual([
@@ -245,6 +315,37 @@ describe("community repository store", () => {
       outcome: "rollback",
     });
     expect(installedVersion(community)).toBe("1.0.0");
+    // The recovery note stays until the API releases it, and blocks changes.
+    expect((await store.list()).repositories[0]).toMatchObject({
+      commit: FIRST,
+      pending: { transactionId: update.transactionId, phase: "rolledBack", recovery: RECOVERY },
+    });
+    await expect(publish(store, SECOND)).rejects.toThrow("Operations service is busy");
+    // An agent restart keeps the note.
+    await store.recover();
+    expect((await store.list()).repositories[0]?.pending?.phase).toBe("rolledBack");
+    await expect(
+      store.settle({
+        kind: "serviceRepository.settle",
+        repository: REPOSITORY,
+        transactionId: update.transactionId,
+        outcome: "commit",
+      }),
+    ).rejects.toThrow("could not be installed");
+    await expect(
+      store.settle({
+        kind: "serviceRepository.settle",
+        repository: REPOSITORY,
+        transactionId: update.transactionId,
+        outcome: "rollback",
+      }),
+    ).resolves.toMatchObject({ changed: false });
+    await store.settle({
+      kind: "serviceRepository.settle",
+      repository: REPOSITORY,
+      transactionId: update.transactionId,
+      outcome: "release",
+    });
     expect((await store.list()).repositories[0]).toMatchObject({ commit: FIRST, pending: null });
 
     await store.remove({
@@ -258,6 +359,20 @@ describe("community repository store", () => {
       repository: REPOSITORY,
       transactionId: fresh.transactionId,
       outcome: "rollback",
+    });
+    expect(readdirSync(community)).toEqual([`.repository-${REPOSITORY}.json`]);
+    expect((await store.list()).repositories).toEqual([
+      expect.objectContaining({
+        url: null,
+        extensionId: null,
+        pending: expect.objectContaining({ phase: "rolledBack" }),
+      }),
+    ]);
+    await store.settle({
+      kind: "serviceRepository.settle",
+      repository: REPOSITORY,
+      transactionId: fresh.transactionId,
+      outcome: "release",
     });
     expect(readdirSync(community)).toEqual([]);
   });

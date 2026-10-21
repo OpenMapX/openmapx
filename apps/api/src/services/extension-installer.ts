@@ -26,6 +26,7 @@ import {
   inspectServiceRepository,
   publishServiceRepository,
   type RepositoryInspection,
+  readCommunityServices,
   removeServiceRepository,
   settleServiceRepository,
 } from "./community-repositories";
@@ -448,6 +449,7 @@ async function installExtensionNow(
         {
           url: inspection.url,
           commit: inspection.commit,
+          ref: svc.ref ?? "HEAD",
           extensionId: manifest.id,
           recovery: {
             selectionBefore: ledger.selectedRootsBefore,
@@ -488,7 +490,7 @@ async function installExtensionNow(
     // file). Do NOT re-init after enabling — that re-reads the stale baked env
     // list.
     if (serviceComponents.length > 0) {
-      await initServiceRegistry();
+      await initServiceRegistry({ strict: true });
       const registry = getServiceRegistry();
       for (const component of serviceComponents) {
         const service = registry.get(component.service);
@@ -707,7 +709,7 @@ async function installExtensionNow(
     // failure here leaves the transaction pending, and recovery commits it.
     for (const { repository, transactionId } of ledger.publishedRepositories) {
       try {
-        await settleServiceRepository(
+        const settled = await settleServiceRepository(
           { repository, transactionId, outcome: "commit" },
           {
             operationKey: createDurableOpsKey(
@@ -717,6 +719,16 @@ async function installExtensionNow(
             signal: ctx.signal,
           },
         );
+        // Only another recovery can have settled it first; its checkout may no
+        // longer be the commit just recorded.
+        if (!settled.changed) {
+          await ctx
+            .log(
+              `The operations agent no longer held the installed change for repository ${repository}; reinstall extension "${manifest.id}" to make sure it runs the recorded commit.`,
+              "stderr",
+            )
+            .catch(() => {});
+        }
       } catch (error) {
         await ctx
           .log(
@@ -824,30 +836,35 @@ async function rollbackInstall(ctx: JobContext, ledger: InstallLedger): Promise<
     }
   }
   // Newest first: the agent restores each previous checkout, or removes a
-  // repository this run added.
-  for (const { repository, transactionId } of [...ledger.publishedRepositories].reverse()) {
+  // repository this run added, and keeps this run's recovery note.
+  const rolledBack: InstallLedger["publishedRepositories"] = [];
+  for (const transaction of [...ledger.publishedRepositories].reverse()) {
     try {
       await settleServiceRepository(
-        { repository, transactionId, outcome: "rollback" },
+        { ...transaction, outcome: "rollback" },
         {
           operationKey: createDurableOpsKey(
             "extension.repository.rollback",
-            `${ctx.jobId}:${repository}:${transactionId}`,
+            `${ctx.jobId}:${transaction.repository}:${transaction.transactionId}`,
           ),
         },
       );
+      rolledBack.push(transaction);
     } catch (error) {
       await ctx
         .log(
-          `Rollback: the operations agent could not restore repository ${repository}: ${(error as Error).message}`,
+          `Rollback: the operations agent could not restore repository ${transaction.repository}: ${(error as Error).message}`,
           "stderr",
         )
         .catch(() => {});
     }
   }
+  // With the previous checkouts back, restore the selection and runtimes. The
+  // agent drops the recovery notes only after that succeeds; otherwise the
+  // next recovery finishes the job from them.
   if (ledger.touchedServiceIds.length > 0 && ledger.selectedRootsBefore) {
     try {
-      await initServiceRegistry();
+      await initServiceRegistry({ strict: true });
       await applySelectionRoots(
         ledger.selectedRootsBefore,
         false,
@@ -864,6 +881,27 @@ async function rollbackInstall(ctx: JobContext, ledger: InstallLedger): Promise<
     } catch (error) {
       await ctx
         .log(`Rollback: failed to restore service state: ${(error as Error).message}`, "stderr")
+        .catch(() => {});
+      return;
+    }
+  }
+  for (const transaction of rolledBack) {
+    try {
+      await settleServiceRepository(
+        { ...transaction, outcome: "release" },
+        {
+          operationKey: createDurableOpsKey(
+            "extension.repository.release",
+            `${ctx.jobId}:${transaction.repository}:${transaction.transactionId}`,
+          ),
+        },
+      );
+    } catch (error) {
+      await ctx
+        .log(
+          `Rollback: the operations agent could not release repository ${transaction.repository}: ${(error as Error).message}`,
+          "stderr",
+        )
         .catch(() => {});
     }
   }
@@ -906,8 +944,20 @@ async function removeExtensionNow(
 
   await ctx.setProgress(10);
 
+  // A removal interrupted after the agent deleted a repository is retried
+  // without its services: their runtimes went before their repository, and
+  // the agent no longer knows them.
+  const installed =
+    serviceIds.length > 0
+      ? new Set(
+          (await readCommunityServices({ signal: ctx.signal })).services.map(
+            (service) => service.manifest.id,
+          ),
+        )
+      : new Set<string>();
+
   // Tear down service containers while they're still in the compose file.
-  for (const svc of serviceIds) {
+  for (const svc of serviceIds.filter((id) => installed.has(id))) {
     await ctx.log(`Removing service container ${svc}...`);
     const removed = await dockerComposeAction(svc, "remove", {
       operationKey: createDurableOpsKey("extension.service.remove", `${ctx.jobId}:${svc}`),

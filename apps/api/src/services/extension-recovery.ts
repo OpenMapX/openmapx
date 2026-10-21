@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { findRepoRoot } from "@openmapx/core/server";
 import { dockerComposeAction } from "../utils/docker-compose";
 import { renderAndPersistCompose } from "./admin-ops";
@@ -36,11 +37,16 @@ export async function recoverInterruptedExtensionChanges(signal?: AbortSignal): 
   const serviceRecovery: ServiceRuntimeRecovery = await reconcileCommunityRepositoryTransactions({
     signal,
     restoreSelection: async (roots, recoveryId) => {
-      await initServiceRegistry();
+      await initServiceRegistry({ strict: true });
       await applyTrustedConfiguration({
         kind: "serviceSelection.apply",
         selectedRoots: roots,
-        operationKey: createDurableOpsKey("startup.selection.recovery", recoveryId),
+        // A retry after a crash may follow a successful apply, so each attempt
+        // needs its own key; applying the same selection again is harmless.
+        operationKey: createDurableOpsKey(
+          "startup.selection.recovery",
+          `${recoveryId}:${randomUUID()}`,
+        ),
         signal,
       });
     },
@@ -78,7 +84,7 @@ export async function recoverInterruptedExtensionChanges(signal?: AbortSignal): 
           `${incident}:${serviceId}`,
         ),
       }),
-    initializeRegistry: initServiceRegistry,
+    initializeRegistry: () => initServiceRegistry({ strict: true }),
     renderCompose: async () => {
       await renderAndPersistCompose({
         operationKey: createDurableOpsKey("startup.runtime-recovery.render", incident),

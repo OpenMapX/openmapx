@@ -41,7 +41,11 @@ function manifest(id: string, overrides: Record<string, unknown> = {}) {
   };
 }
 
-function pendingRepository(repository: string, transactionId: string) {
+function pendingRepository(
+  repository: string,
+  transactionId: string,
+  phase: "published" | "rolledBack" = "published",
+) {
   return {
     repository,
     url: URL,
@@ -49,6 +53,7 @@ function pendingRepository(repository: string, transactionId: string) {
     extensionId: "bundle-x",
     pending: {
       transactionId,
+      phase,
       previousCommit: null,
       recovery: {
         selectionBefore: ["valhalla"],
@@ -197,8 +202,28 @@ describe("readCommunityServices", () => {
 });
 
 describe("reconcileCommunityRepositoryTransactions", () => {
+  /** The settle requests sent to the agent, in order. */
+  function settled() {
+    return executeMock.mock.calls
+      .map(([, operation]) => operation as { kind: string; repository?: string; outcome?: string })
+      .filter((operation) => operation.kind === "serviceRepository.settle")
+      .map((operation) => `${operation.outcome}:${operation.repository}`);
+  }
+
+  function agentAnswers(repositoriesList: unknown[]) {
+    executeMock.mockImplementation(async (_client, operation) => {
+      const request = operation as { kind: string; repository?: string; outcome?: string };
+      if (request.kind === "communityServices.inspect") return snapshot(repositoriesList) as never;
+      return { repository: request.repository, outcome: request.outcome, changed: true } as never;
+    });
+  }
+
+  afterEach(() => {
+    executeMock.mockReset();
+  });
+
   it("does nothing when no transaction is pending", async () => {
-    executeMock.mockResolvedValueOnce(snapshot([]) as never);
+    agentAnswers([]);
     const restoreSelection = vi.fn();
 
     await expect(
@@ -209,15 +234,12 @@ describe("reconcileCommunityRepositoryTransactions", () => {
       restartServiceIds: [],
     });
     expect(restoreSelection).not.toHaveBeenCalled();
-    expect(executeMock).toHaveBeenCalledTimes(1);
+    expect(settled()).toEqual([]);
   });
 
   it("commits a transaction the database recorded", async () => {
     const repository = "1".repeat(16);
-    executeMock.mockResolvedValueOnce(
-      snapshot([pendingRepository(repository, TRANSACTION)]) as never,
-    );
-    executeMock.mockResolvedValueOnce({ repository, outcome: "commit", changed: true } as never);
+    agentAnswers([pendingRepository(repository, TRANSACTION)]);
     dbMock.queueSelect([{ lastTransactionId: TRANSACTION }]);
     const restoreSelection = vi.fn();
     const persistRuntimeRecovery = vi.fn();
@@ -228,38 +250,25 @@ describe("reconcileCommunityRepositoryTransactions", () => {
     });
 
     expect(result.runtimeRecoveryNeeded).toBe(false);
-    expect(executeMock).toHaveBeenLastCalledWith(
-      {},
-      {
-        kind: "serviceRepository.settle",
-        repository,
-        transactionId: TRANSACTION,
-        outcome: "commit",
-      },
-      expect.any(String),
-      { signal: undefined },
-    );
+    expect(settled()).toEqual([`commit:${repository}`]);
     expect(restoreSelection).not.toHaveBeenCalled();
     expect(persistRuntimeRecovery).not.toHaveBeenCalled();
   });
 
-  it("records runtime repair and restores the selection before rolling back an unrecorded transaction", async () => {
-    const repository = "1".repeat(16);
-    executeMock.mockResolvedValueOnce(
-      snapshot([pendingRepository(repository, TRANSACTION)]) as never,
-    );
-    // The database still records the previous install's transaction.
+  it("records runtime repair, rolls back, restores the selection, then releases", async () => {
+    const one = "1".repeat(16);
+    const two = "2".repeat(16);
+    const otherTransaction = `txn1_${"c".repeat(24)}`;
+    agentAnswers([pendingRepository(one, TRANSACTION), pendingRepository(two, otherTransaction)]);
+    // The database still records an earlier install of the first repository.
     dbMock.queueSelect([{ lastTransactionId: `txn1_${"f".repeat(24)}` }]);
+    dbMock.queueSelect([]);
     const order: string[] = [];
     const restoreSelection = vi.fn(async () => {
-      order.push("selection");
+      order.push(`selection:${settled().join(",")}`);
     });
     const persistRuntimeRecovery = vi.fn(async () => {
-      order.push("runtime");
-    });
-    executeMock.mockImplementationOnce(async () => {
-      order.push("settle");
-      return { repository, outcome: "rollback", changed: true } as never;
+      order.push(`runtime:${settled().join(",")}`);
     });
 
     const result = await repositories.reconcileCommunityRepositoryTransactions({
@@ -267,7 +276,16 @@ describe("reconcileCommunityRepositoryTransactions", () => {
       persistRuntimeRecovery,
     });
 
-    expect(order).toEqual(["runtime", "selection", "settle"]);
+    // Runtime repair is recorded before anything changes; the selection is
+    // restored once, after every checkout is back; notes are released last.
+    expect(order).toEqual(["runtime:", `selection:rollback:${two},rollback:${one}`]);
+    expect(settled()).toEqual([
+      `rollback:${two}`,
+      `rollback:${one}`,
+      `release:${one}`,
+      `release:${two}`,
+    ]);
+    expect(restoreSelection).toHaveBeenCalledTimes(1);
     expect(restoreSelection).toHaveBeenCalledWith(["valhalla"], result.incidentId);
     expect(result).toMatchObject({
       runtimeRecoveryNeeded: true,
@@ -275,38 +293,24 @@ describe("reconcileCommunityRepositoryTransactions", () => {
       restartServiceIds: ["svc-two"],
       incidentId: expect.stringMatching(/^recovery_[a-f0-9]{64}$/),
     });
-    expect(executeMock).toHaveBeenLastCalledWith(
-      {},
-      expect.objectContaining({ kind: "serviceRepository.settle", outcome: "rollback" }),
-      expect.any(String),
-      { signal: undefined },
-    );
   });
 
-  it("rolls back a transaction for a repository the database never recorded", async () => {
-    const repository = "2".repeat(16);
-    executeMock.mockResolvedValueOnce(
-      snapshot([pendingRepository(repository, TRANSACTION)]) as never,
-    );
-    executeMock.mockResolvedValueOnce({ repository, outcome: "rollback", changed: true } as never);
-    dbMock.queueSelect([]);
-
-    const result = await repositories.reconcileCommunityRepositoryTransactions();
-
-    expect(result.runtimeRecoveryNeeded).toBe(true);
-    expect(executeMock).toHaveBeenLastCalledWith(
-      {},
-      expect.objectContaining({ repository, outcome: "rollback" }),
-      expect.any(String),
-      { signal: undefined },
-    );
-  });
-
-  it("does not settle when restoring the selection fails, so recovery can retry", async () => {
+  it("finishes a rollback whose selection restore failed earlier", async () => {
     const repository = "1".repeat(16);
-    executeMock.mockResolvedValueOnce(
-      snapshot([pendingRepository(repository, TRANSACTION)]) as never,
-    );
+    agentAnswers([pendingRepository(repository, TRANSACTION, "rolledBack")]);
+    const restoreSelection = vi.fn();
+
+    await repositories.reconcileCommunityRepositoryTransactions({ restoreSelection });
+
+    // A rolled-back transaction is never committed, whatever the database says.
+    expect(dbMock.db.select).not.toHaveBeenCalled();
+    expect(settled()).toEqual([`release:${repository}`]);
+    expect(restoreSelection).toHaveBeenCalledWith(["valhalla"], expect.any(String));
+  });
+
+  it("keeps the recovery note when restoring the selection fails, so recovery can retry", async () => {
+    const repository = "1".repeat(16);
+    agentAnswers([pendingRepository(repository, TRANSACTION)]);
     dbMock.queueSelect([]);
 
     await expect(
@@ -314,6 +318,6 @@ describe("reconcileCommunityRepositoryTransactions", () => {
         restoreSelection: vi.fn().mockRejectedValue(new Error("selection unavailable")),
       }),
     ).rejects.toThrow("selection unavailable");
-    expect(executeMock).toHaveBeenCalledTimes(1);
+    expect(settled()).toEqual([`rollback:${repository}`]);
   });
 });

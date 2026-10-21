@@ -30,7 +30,7 @@ const SKIP_DIRECTORIES = new Set([
   "__pycache__",
 ]);
 
-export interface CommunityRepositoryService {
+interface CommunityRepositoryService {
   service: coreServices.LoadedService;
   bytes: Uint8Array;
   /** Directory holding the manifest, relative to the repository root ("" for the root). */
@@ -50,7 +50,7 @@ export interface CommunityReadBudget {
   totalBytes: number;
 }
 
-export function createCommunityReadBudget(): CommunityReadBudget {
+function createCommunityReadBudget(): CommunityReadBudget {
   return { directories: 0, manifests: 0, totalBytes: 0 };
 }
 

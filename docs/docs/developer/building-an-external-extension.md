@@ -299,7 +299,8 @@ The agent reads `service.json` files up to four directory levels deep, skipping
 dot-directories and dependency folders such as `node_modules`; a directory with
 a `service.json` is one service, and nothing below it is searched. A
 repository must provide at least one service, each with a unique id that no
-built-in or other installed service already uses.
+built-in or other installed service already uses. The manifests of all installed
+community services together may not exceed 768 KiB.
 
 For a distributable artifact, set `"quality": "community"` in your manifest and
 declare the platform version you build against:

@@ -21,7 +21,7 @@ function communityService(id: string, repository: string) {
       id,
       name: id,
       version: "1.0.0",
-      quality: "community",
+      quality: "community-verified",
       container: {
         image: `registry.example.test/${id}`,
         tag: "1.0.0",
@@ -78,7 +78,7 @@ describe("community services in the API registry", () => {
     await registry.initServiceRegistry();
 
     const service = registry.getServiceRegistry().get("svc-one");
-    expect(service).toMatchObject({ isBuiltIn: false });
+    expect(service).toMatchObject({ isBuiltIn: false, manifest: { quality: "community" } });
     expect(registry.communityServiceRepository("svc-one")).toBe("1".repeat(16));
     expect(registry.getServiceRegistryWarnings()).toContain("svc-two was rejected");
   });
@@ -103,6 +103,35 @@ describe("community services in the API registry", () => {
     expect(readMock).toHaveBeenCalledTimes(3);
     expect(registry.getServiceRegistry().get("svc-one")).toBeUndefined();
     expect(registry.communityServiceRepository("svc-two")).toBe("2".repeat(16));
+  });
+
+  it("fails a strict read instead of using the last reported services", async () => {
+    process.env.OPS_AGENT_URL = "http://ops-agent:8787";
+    readMock.mockResolvedValueOnce(snapshot([communityService("svc-one", "1".repeat(16))]));
+    const registry = await loadRegistry();
+    await registry.initServiceRegistry();
+
+    readMock.mockRejectedValueOnce(new Error("unreachable"));
+    await expect(registry.initServiceRegistry({ strict: true })).rejects.toThrow("unreachable");
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(readMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps the enabled set applied since startup when a retry reloads", async () => {
+    process.env.OPS_AGENT_URL = "http://ops-agent:8787";
+    readMock.mockRejectedValueOnce(new Error("unreachable"));
+    const registry = await loadRegistry();
+    await registry.initServiceRegistry();
+    // A configuration apply moved the registry to what it applied.
+    registry.getServiceRegistry().applyEnabledIds(new Set(["svc-one"]));
+
+    readMock.mockResolvedValueOnce(snapshot([communityService("svc-one", "1".repeat(16))]));
+    await vi.advanceTimersByTimeAsync(60_000);
+
+    expect(registry.getServiceRegistry().get("svc-one")).toMatchObject({ enabled: true });
+    expect(registry.getServiceRegistryWarnings()).not.toEqual(
+      expect.arrayContaining([expect.stringContaining("unreachable")]),
+    );
   });
 
   it("scans the checkout instead when no operations agent is configured", async () => {

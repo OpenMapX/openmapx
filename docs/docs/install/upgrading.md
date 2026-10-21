@@ -402,7 +402,9 @@ the change is settled. The extension's database record is the commit point. If
 `app-api` or the agent stops mid-update, the next `app-api` start, and every
 later extension install or removal, settles what was left: a change the
 database recorded is kept, and any other is rolled back, restoring the previous
-checkout, service selection and running containers. Integration artifacts use
+checkout, service selection and running containers. The agent keeps its note
+about a rolled-back change until the selection is restored, so a failure part
+way through is finished by the next attempt. Integration artifacts use
 `custom_integrations/.extension-install-journal-*.json` the same way.
 
 If the agent is unreachable when `app-api` starts, `app-api` logs
