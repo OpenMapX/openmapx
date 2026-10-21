@@ -208,6 +208,7 @@ describe("operation-specific authority policy", () => {
     ).resolves.not.toBeNull();
     const configClaim = await claimer.claim(
       {
+        expectedCurrentRevisionId: null,
         kind: "integrationConfig.apply",
         integrationId: "integration-live",
         revisionId: `cfg1_${"c".repeat(43)}`,
@@ -232,6 +233,7 @@ describe("operation-specific authority policy", () => {
     await expect(
       claimer.claim(
         {
+          expectedCurrentRevisionId: null,
           kind: "integrationConfig.apply",
           integrationId: "integration-live",
           revisionId: `cfg1_${"e".repeat(43)}`,
@@ -270,7 +272,11 @@ describe("operation-specific authority policy", () => {
     });
     await expect(
       claimer.claim(
-        { kind: "stack.render", revisionId: `cfg1_${"r".repeat(43)}` },
+        {
+          expectedCurrentRevisionId: null,
+          kind: "stack.render",
+          revisionId: `cfg1_${"r".repeat(43)}`,
+        },
         "a".repeat(64),
         new AbortController().signal,
         { role: "api", operationKey: "opk1_authorityReject00" },
@@ -406,13 +412,19 @@ describe("operation-specific authority policy", () => {
     });
     const signal = new AbortController().signal;
     const forbidden: OpsOperation[] = [
-      { kind: "serviceConfig.apply", serviceId: "ops-agent", revisionId: "revision_1" },
+      {
+        expectedCurrentRevisionId: null,
+        kind: "serviceConfig.apply",
+        serviceId: "ops-agent",
+        revisionId: "revision_1",
+      },
       {
         kind: "backup.restore",
         backupId: "backup_1",
         serviceIds: ["redis", "traefik"],
       },
       {
+        expectedCurrentRevisionId: null,
         kind: "integrationConfig.apply",
         integrationId: "unregistered-integration",
         revisionId: "revision_1",

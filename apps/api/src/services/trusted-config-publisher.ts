@@ -405,10 +405,18 @@ export async function publishTrustedConfigurationSnapshot(
 export async function consumePublishedTrustedConfiguration<T>(
   published: { abort(): Promise<void> },
   submit: () => Promise<T>,
-): Promise<T> {
+): Promise<{ submission: PromiseSettledResult<T>; cleanupFailed: boolean }> {
+  let submission: PromiseSettledResult<T>;
   try {
-    return await submit();
-  } finally {
-    await published.abort();
+    submission = { status: "fulfilled", value: await submit() };
+  } catch (reason) {
+    submission = { status: "rejected", reason };
   }
+  let cleanupFailed = false;
+  try {
+    await published.abort();
+  } catch {
+    cleanupFailed = true;
+  }
+  return { submission, cleanupFailed };
 }

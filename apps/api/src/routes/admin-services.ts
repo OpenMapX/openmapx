@@ -41,6 +41,7 @@ import {
   setServiceSecret,
 } from "../services/service-secrets";
 import { applyTrustedConfiguration } from "../services/trusted-config-operations";
+import { isProvenConfigurationNonCommit } from "../services/trusted-config-outcome";
 import { writeAuditLog } from "../utils/audit-log";
 import { dockerComposeLogs, dockerComposePs } from "../utils/docker-compose";
 import { maskSecretConfigValues } from "../utils/mask-config.js";
@@ -414,6 +415,7 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
           ),
         });
       } catch (error) {
+        if (!isProvenConfigurationNonCommit(error)) throw error;
         await restoreStoredServiceConfig(req.params.id, previous);
         throw error;
       }

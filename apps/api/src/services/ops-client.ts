@@ -3,6 +3,8 @@ import { readFile } from "node:fs/promises";
 import { isAbsolute } from "node:path";
 import { Readable } from "node:stream";
 import {
+  type ConfigurationApplyResult,
+  configurationApplyResultSchema,
   OPS_KIND_POLICIES,
   OPS_MAX_EVENT_BATCH,
   OPS_MAX_EVENT_MESSAGE_BYTES,
@@ -539,5 +541,24 @@ export async function submitOpsOperationWithRecovery<K extends OpsOperationKind>
         }
       }
     }
+  }
+}
+
+/** A failed transport/status is never evidence that a configuration did not commit. */
+export async function executeTrustedConfigurationAndWait(
+  client: ApiOpsClient,
+  operation: Extract<OpsOperation, { revisionId: string }>,
+  operationKey: string,
+  options: WaitForOpsResultOptions = {},
+): Promise<ConfigurationApplyResult | { outcome: "unknown"; reason: "transport_or_result" }> {
+  try {
+    const result = configurationApplyResultSchema.parse(
+      await executeAndWait(client, operation, operationKey, options),
+    );
+    if (result.outcome === "committed" && result.revisionId !== operation.revisionId)
+      throw new Error("Unexpected applied revision");
+    return result;
+  } catch {
+    return { outcome: "unknown", reason: "transport_or_result" };
   }
 }

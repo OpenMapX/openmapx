@@ -59,6 +59,42 @@ function generatedConsumerDiagnostics(files: { filename: string; content: string
     streamAdminActivityJobEvents("id", undefined, {method: "POST"});
   `,
   );
+  if (virtual.has(resolve(base, "src/api/generated/admin/integration-admin.generated.ts"))) {
+    virtual.set(
+      filename,
+      `${virtual.get(filename)}
+      import { getAdminIntegration, setAdminIntegrationCredential, getAdminIntegrationHealthHistory, getAdminOverview, getAdminIntegrationCredentials } from "./integration-admin.generated";
+      import type { AdminSdkRequestOptions } from "../../admin-sdk-transport";
+      declare const finiteOptions: AdminSdkRequestOptions;
+      getAdminIntegration("sample", finiteOptions).then(response => {
+        if (response.status === 200) {
+          const id: string = response.data.manifest.id;
+          const domains: string[] = response.data.manifest.domains;
+          const source: "default" | "database" | "vault" | "config.json" | "env" = response.data.resolvedConfig.field.source;
+        }
+      });
+      setAdminIntegrationCredential("sample", "apiKey", {value: "synthetic"}, finiteOptions);
+      // @ts-expect-error Credential bodies reject unknown fields.
+      setAdminIntegrationCredential("sample", "apiKey", {value: "synthetic", unexpected: true});
+      // @ts-expect-error Credentials are strings, not numbers.
+      setAdminIntegrationCredential("sample", "apiKey", {value: 1});
+      getAdminIntegrationHealthHistory("sample", {hours: 24}, finiteOptions);
+      // @ts-expect-error Generated query output exposes bounded integer input, not string coercion.
+      getAdminIntegrationHealthHistory("sample", {hours: "24"});
+      getAdminOverview(finiteOptions).then(response => {
+        if (response.status === 200) {
+          const email: string | undefined = response.data.activeJobs[0].actor?.email;
+          const createdAt: string = response.data.recentActivity[0].createdAt;
+        }
+      });
+      getAdminIntegrationCredentials("sample", finiteOptions).then(response => {
+        if (response.status === 200) {
+          const source: "default" | "database" | "vault" | "config.json" | "env" | "missing" = response.data.credentials[0].source;
+        }
+      });
+    `,
+    );
+  }
   const host = ts.createCompilerHost(options);
   const fileExists = host.fileExists.bind(host),
     read = host.readFile.bind(host),
@@ -395,4 +431,168 @@ describe("activity generation", () => {
       vi.unstubAllGlobals();
     }
   }, 90_000);
+});
+
+describe("integration administration generation", () => {
+  it("generates all22operations, isolated models and aggregate bindings without changing prior families", async () => {
+    const { integrationAdminOperations } = await import(
+      "../../packages/core/src/api/contracts/integration-admin"
+    );
+    const { routeJsonSchema } = await import("../../packages/core/src/api/schema");
+    const previousInput = JSON.parse(
+      await readFile(new URL("../../apps/api/openapi.json", import.meta.url), "utf8"),
+    );
+    const input = structuredClone(previousInput);
+    // Keep the synthetic emitter probe; compare old families to a document without
+    // this family now that actual producers are adopted and separately qualified.
+    for (const operation of Object.values(integrationAdminOperations)) {
+      const path = operation.path.replace(/:([^/]+)/g, "{$1}");
+      delete previousInput.paths[path]?.[operation.method.toLowerCase()];
+    }
+    input.components ??= {};
+    input.components.schemas ??= {};
+    const definitions = input.components.schemas;
+    const schemaIds = new Map<Parameters<typeof routeJsonSchema>[0], string>();
+    function schema(value: Parameters<typeof routeJsonSchema>[0], identity: string) {
+      const previous = schemaIds.get(value);
+      if (previous) return { $ref: `#/components/schemas/${previous}` };
+      schemaIds.set(value, identity);
+      const result = routeJsonSchema(value, {
+        identity,
+        io: "output",
+        registerDefinition: ({ $id, ...definition }) => {
+          definitions[$id] = definition;
+        },
+      });
+      definitions[identity] = result;
+      return { $ref: `#/components/schemas/${identity}` };
+    }
+    for (const [id, operation] of Object.entries(integrationAdminOperations)) {
+      const path = operation.path.replace(/:([^/]+)/g, "{$1}");
+      const request = "request" in operation ? operation.request : undefined;
+      const parameters: unknown[] = [];
+      for (const name of [...path.matchAll(/\{([^}]+)\}/g)].map((match) => match[1]))
+        parameters.push({ in: "path", name, required: true, schema: { type: "string" } });
+      if (request && "query" in request)
+        parameters.push({
+          in: "query",
+          name: "hours",
+          schema: { type: "integer", minimum: 1, maximum: 168, default: 24 },
+        });
+      input.paths[path] ??= {};
+      input.paths[path][operation.method.toLowerCase()] = {
+        operationId: id,
+        tags: ["integration-admin"],
+        parameters,
+        ...(request && "body" in request
+          ? {
+              requestBody: {
+                required: !request.body.isOptional(),
+                content: { "application/json": { schema: schema(request.body, `${id}Body`) } },
+              },
+            }
+          : {}),
+        responses: Object.fromEntries(
+          Object.entries(operation.responses).map(([status, response]) => [
+            status,
+            {
+              description: "Synthetic contract fixture",
+              content: {
+                "application/json": { schema: schema(response.schema, `${id}Response${status}`) },
+              },
+            },
+          ]),
+        ),
+      };
+    }
+    function references(value: unknown): void {
+      if (!value || typeof value !== "object") return;
+      const node = value as Record<string, unknown>;
+      if (typeof node.$ref === "string" && node.$ref.endsWith("#"))
+        node.$ref = `#/components/schemas/${node.$ref.slice(0, -1)}`;
+      for (const child of Object.values(value)) references(child);
+    }
+    references(definitions);
+    vi.stubGlobal("fetch", () => {
+      throw new Error("Unexpected network");
+    });
+    try {
+      const files = await generateArtifacts({ document: input });
+      const integration = files.find(
+        (file: { filename: string }) => file.filename === "admin/integration-admin.generated.ts",
+      );
+      expect(integration).toBeDefined();
+      const previous = await generateArtifacts({ document: previousInput });
+      for (const file of previous.filter(
+        (file: { filename: string }) => file.filename !== "admin/operation-bindings.generated.ts",
+      ))
+        expect(
+          files.find((candidate: { filename: string }) => candidate.filename === file.filename)
+            ?.content,
+        ).toBe(file.content);
+      expect(await generateArtifacts({ document: input })).toEqual(files);
+      expect(
+        files.some((file: { filename: string }) =>
+          file.filename.startsWith("admin/integration-models/"),
+        ),
+      ).toBe(true);
+      expect(integration.content).toContain("./integration-models");
+      for (const id of Object.keys(integrationAdminOperations))
+        expect(integration.content).toContain(`export const ${id} =`);
+      const bindings = files.find(
+        (file: { filename: string }) => file.filename === "admin/operation-bindings.generated.ts",
+      ).content;
+      expect(bindings).toContain('bindAdminOperation("getAdminOverview")');
+      expect(bindings).toContain('bindAdminStreamOperation("streamAdminActivityJobEvents")');
+      expect(generatedConsumerDiagnostics(files)).toEqual([]);
+      const bundled = await build({
+        stdin: {
+          contents: integration.content,
+          loader: "ts",
+          resolveDir: new URL("../../packages/core/src/api/generated/admin", import.meta.url)
+            .pathname,
+        },
+        bundle: true,
+        platform: "node",
+        format: "esm",
+        write: false,
+        plugins: [
+          {
+            name: "pending-integration-bindings",
+            setup(builder) {
+              builder.onResolve({ filter: /operation-bindings.generated/ }, () => ({
+                path: "bindings",
+                namespace: "fixture",
+              }));
+              builder.onLoad({ filter: /.*/, namespace: "fixture" }, () => ({
+                contents: bindings,
+                loader: "ts",
+                resolveDir: new URL("../../packages/core/src/api/generated/admin", import.meta.url)
+                  .pathname,
+              }));
+            },
+          },
+        ],
+      });
+      const sdk = await import(
+        `data:text/javascript;base64,${Buffer.from(bundled.outputFiles[0].text).toString("base64")}`
+      );
+      expect(sdk.getGetAdminIntegrationUrl("sample /街?")).toBe(
+        "/api/admin/integrations/sample%20%2F%E8%A1%97%3F",
+      );
+      const { createApiClient } = await import("../../packages/core/src/api/client");
+      const client = createApiClient({ baseUrl: "https://app.example", credentials: "include" });
+      vi.stubGlobal("fetch", async (url: string) => {
+        if (url !== "https://app.example/api/admin/integrations/sample%20%2F%E8%A1%97%3F")
+          throw new Error("Unexpected network");
+        return Response.json({ error: "Absent" }, { status: 404 });
+      });
+      await expect(sdk.getAdminIntegration("sample /街?", { client })).resolves.toMatchObject({
+        status: 404,
+        data: { error: "Absent" },
+      });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  }, 180_000);
 });

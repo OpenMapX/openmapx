@@ -610,3 +610,61 @@ produce warnings rather than errors, so the manifest still loads.
   configure, and expose the services you've written.
 - **[How it works](../overview/how-it-works.md)** — the service/integration model
   and the capability binding that ties them together.
+
+## Configuration generation ownership and outcomes
+
+CLI rendering and trusted ops configuration apply share a single writer boundary
+in core. `withConfigurationGenerationWriter(infraDir, run, signal?)` acquires
+`.trusted-config-writer` before reading inputs and holds it through staging,
+initialization/pruning, pointer activation, follow-up files and cleanup. Its
+callback may commit once. Standalone `commitConfigurationGeneration` and
+`initializeConfigurationGenerations` acquire the same ownership.
+
+Ownership uses exclusive directory creation on Linux/macOS local POSIX storage,
+with a five-second acquisition deadline. There is no lease expiry or automatic
+lock stealing. A killed process leaves the lock in place and subsequent writers
+fail closed. Operator recovery must stop **all** CLI and agent writers before
+inspecting and removing an interrupted lock; neither startup nor a contender
+removes it. Network filesystems and Windows are not qualified. All writers must
+run as the stack's user against the same physical infrastructure directory.
+
+All API full-snapshot operations (`stack.render`, `serviceSelection.apply`,
+`serviceConfig.apply`, `integrationConfig.apply`, `vault.apply`) require
+`expectedCurrentRevisionId`; `null` deliberately means no applied pointer. The
+API obtains it through typed `configuration.inspect` **before** preparing the
+complete input. Observation and activation both acquire the shared writer
+boundary. Activation compares the revision before any desired-selection effect
+and again at pointer activation. CLI preparation reads the applied configuration
+inside the same writer ownership, so it needs no separate observation request.
+
+The condition is distinct from the candidate `revisionId` and manifest authority
+revision. Strict operation parsing, its authenticated fingerprint and snapshot
+claim bind it through execution. Missing conditions are rejected; there is no
+compatibility parser. CLI renders create fresh identities even for repeated
+content, preventing an old condition from becoming true again through content
+reuse. A conflict leaves the current generation and its follow-up files intact.
+The API observation returns only the current revision and bounded fingerprints
+of named integration projections, never configuration values or service secrets.
+A direct replay whose initial condition is no longer current conflicts; duplicate
+accepted operations use the existing journal's settled result.
+
+Configuration ops return `ConfigurationApplyResult`: `outcome: "committed"`
+with the revision, enabled service IDs, `followUp: "complete" | "failed"` and
+`cleanupFailed`, or `outcome: "not_committed"` with `reason: "conflict" | "busy" |
+"failed"`, optional `currentRevisionId`, and `cleanupFailed`. The pointer rename
+is the commit point; subsequent synchronization, follow-up or cleanup errors
+retain commit evidence. A completed result after cancellation still carries that
+evidence. Failed transport or lost journal evidence remains unknown, never proof
+of non-commit. There are no automatic mutation retries.
+
+The API's `applyTrustedConfigurationSnapshot({ payload,
+expectedCurrentRevisionId, operationKey, signal? })` accepts a complete trusted
+snapshot and requires an explicit condition. It returns the host outcome or
+`outcome: "unknown"`, plus `publisherCleanupFailed` and `registryUpdateFailed`.
+Normal `applyTrustedConfiguration` keeps its successful return shape and throws
+`TrustedConfigurationApplyError` for incomplete outcomes. Callers may consider
+restoring their own DB changes only with explicit non-commit evidence, and must
+separately prove DB ownership. Compensation after a known commit must condition
+an inverse of only proven named projections in the actually submitted snapshot
+on the committed revision. Unrelated submitted fields must be retained. Conflict, unknown or
+incomplete recovery requires reconciliation.

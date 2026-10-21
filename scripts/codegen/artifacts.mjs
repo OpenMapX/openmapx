@@ -1,6 +1,6 @@
 import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
-import { dirname, join, relative } from "node:path";
-import { formatSource } from "./format-source.mjs";
+import { dirname, join, relative, resolve } from "node:path";
+import { formatSourceFiles } from "./format-source.mjs";
 
 async function listFiles(directory) {
   try {
@@ -21,19 +21,19 @@ async function listFiles(directory) {
   }
 }
 
-/** Read formatted artifacts without mutating the destination in check mode. */
+/** Format owned generation scratch, leaving the destination untouched in check mode. */
 export async function collectArtifacts(sourceDirectory, outputDirectory, requiredFiles) {
   const paths = await listFiles(sourceDirectory);
   for (const name of requiredFiles)
     if (!paths.includes(join(sourceDirectory, name)))
       throw new Error(`Orval did not generate ${name}; check the OpenAPI document.`);
+  if (resolve(sourceDirectory) === resolve(outputDirectory))
+    throw new Error("Artifact formatting requires owned scratch separate from its destination.");
+  await formatSourceFiles(sourceDirectory, paths);
   return Promise.all(
     paths.map(async (path) => ({
       filename: relative(sourceDirectory, path),
-      content: formatSource(
-        join(outputDirectory, relative(sourceDirectory, path)),
-        await readFile(path, "utf8"),
-      ),
+      content: await readFile(path, "utf8"),
     })),
   );
 }

@@ -1,12 +1,17 @@
-import { createHash, randomUUID } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import {
+  type BigIntStats,
+  closeSync,
   constants,
   existsSync,
+  fstatSync,
   lstatSync,
   mkdirSync,
+  openSync,
   readdirSync,
   readFileSync,
   readlinkSync,
+  readSync,
   renameSync,
   rmSync,
   symlinkSync,
@@ -14,7 +19,12 @@ import {
 } from "node:fs";
 import { open } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
-import type { TrustedConfigurationPayload } from "../ops/trusted-config";
+import { configurationProjectionFingerprint, type OpsResultFor } from "../ops";
+import type { ConfigurationApplyResult } from "../ops/contract";
+import {
+  type TrustedConfigurationPayload,
+  trustedConfigurationPayloadSchema,
+} from "../ops/trusted-config";
 import {
   GENERATED_SECRETS_DIRNAME,
   type RenderContext,
@@ -27,6 +37,10 @@ import {
   resolveServiceConfigFromEnv,
   serviceConfigEnvPrefix,
 } from "./config-resolver";
+import {
+  acquireConfigurationOwnership,
+  ConfigurationWriterBusyError,
+} from "./configuration-ownership";
 import { validateTrustedConfigurationValues } from "./configuration-schema";
 import {
   CONFIGURATION_GENERATIONS,
@@ -62,8 +76,11 @@ export interface CommitConfigurationOptions {
   input: ConfigurationInput;
   /** Tolerate selected services that are not installed (the default selection in a reduced checkout). */
   allowMissingSelected?: boolean;
-  /** The generation's name; omitted, it is the digest of its content. */
+  /** The authenticated candidate identity; omitted, use a fresh activation identity (no ABA). */
   revisionId?: string;
+  /** Applied identity to compare under writer ownership; null means no pointer. */
+  expectedCurrentRevisionId?: string | null;
+  signal?: AbortSignal;
   beforeCommit?: () => Promise<void>;
   afterGenerationRename?: () => Promise<void>;
   afterCommit?: () => Promise<void>;
@@ -74,6 +91,105 @@ export interface CommittedConfiguration {
   enabledServiceIds: string[];
   /** Render advisories, such as optional bind mounts skipped for a missing source. */
   warnings: string[];
+}
+
+/** Evidence about THIS attempt, never inferred from a transport exception. */
+export class ConfigurationGenerationError extends Error {
+  constructor(
+    readonly result: ConfigurationApplyResult,
+    cause?: unknown,
+  ) {
+    super(cause instanceof Error ? cause.message : "Configuration generation failed", { cause });
+    this.name = "ConfigurationGenerationError";
+  }
+}
+
+export interface ConfigurationGenerationWriter {
+  commit(options: Omit<CommitConfigurationOptions, "infraDir">): Promise<CommittedConfiguration>;
+}
+
+/** Hold ownership before reading state used to construct a write, through all follow-up work. */
+export async function withConfigurationGenerationWriter<T>(
+  infraDir: string,
+  run: (writer: ConfigurationGenerationWriter) => Promise<T>,
+  signal?: AbortSignal,
+): Promise<T> {
+  let release: (() => void) | undefined;
+  let committed: CommittedConfiguration | undefined;
+  let failure: unknown;
+  let value!: T;
+  let active = true;
+  let pending: Promise<CommittedConfiguration> | undefined;
+  try {
+    release = await acquireConfigurationOwnership(infraDir, signal);
+    value = await run({
+      commit: (options) => {
+        if (!active || pending) throw new Error("Configuration writer is not available");
+        pending = commitOwnedConfigurationGeneration({
+          ...options,
+          infraDir,
+          signal: options.signal ?? signal,
+        }).then((result) => {
+          committed = result;
+          return result;
+        });
+        return pending;
+      },
+    });
+  } catch (error) {
+    failure =
+      error instanceof Error
+        ? error
+        : new Error("Configuration generation failed", { cause: error });
+  }
+  active = false;
+  // Even a misbehaving callback that did not await commit cannot release its fence early.
+  try {
+    await pending;
+  } catch (error) {
+    if (error instanceof ConfigurationGenerationError && error.result.outcome === "committed") {
+      failure = new ConfigurationGenerationError(error.result, failure ?? error);
+    } else {
+      failure ??=
+        error instanceof Error
+          ? error
+          : new Error("Configuration generation failed", { cause: error });
+    }
+  }
+  const followUpFailed = failure !== undefined;
+  let cleanupFailed = false;
+  try {
+    release?.();
+  } catch (error) {
+    cleanupFailed = true;
+    failure ??=
+      error instanceof Error
+        ? error
+        : new Error("Configuration generation failed", { cause: error });
+  }
+  if (failure) {
+    const result: ConfigurationApplyResult =
+      failure instanceof ConfigurationGenerationError
+        ? failure.result
+        : committed
+          ? {
+              outcome: "committed",
+              revisionId: committed.revisionId,
+              enabledServiceIds: committed.enabledServiceIds,
+              followUp: followUpFailed ? "failed" : "complete",
+              cleanupFailed: false,
+            }
+          : {
+              outcome: "not_committed",
+              reason: failure instanceof ConfigurationWriterBusyError ? "busy" : "failed",
+              cleanupFailed: false,
+            };
+    throw new ConfigurationGenerationError(
+      { ...result, cleanupFailed: result.cleanupFailed || cleanupFailed },
+      failure,
+    );
+  }
+  return value;
 }
 
 function schemaProperties(
@@ -237,6 +353,62 @@ async function syncDirectory(path: string): Promise<void> {
 
 const UNSAFE = "Configuration generation is not owned by this user or has unsafe permissions";
 
+function sameFileObservation(left: BigIntStats, right: BigIntStats): boolean {
+  return (
+    left.dev === right.dev &&
+    left.ino === right.ino &&
+    left.mode === right.mode &&
+    left.nlink === right.nlink &&
+    left.uid === right.uid &&
+    left.gid === right.gid &&
+    left.size === right.size &&
+    left.mtimeNs === right.mtimeNs &&
+    left.ctimeNs === right.ctimeNs
+  );
+}
+
+/** The local POSIX directory boundary is trusted; pin and validate the final file. */
+function readGenerationFile(
+  path: string,
+  before: BigIntStats,
+  maximum: number,
+  modes: readonly bigint[],
+): { contents: Buffer; mode: bigint } {
+  if (
+    !before.isFile() ||
+    before.nlink !== 1n ||
+    before.uid !== BigInt(process.geteuid?.() ?? 0) ||
+    !modes.includes(before.mode & 0o777n) ||
+    before.size < 0n ||
+    before.size > BigInt(maximum)
+  ) {
+    throw new Error(UNSAFE);
+  }
+  // NONBLOCK prevents a raced-in FIFO from blocking before fstat can reject it.
+  const descriptor = openSync(
+    path,
+    constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
+  );
+  try {
+    const opened = fstatSync(descriptor, { bigint: true });
+    if (!sameFileObservation(before, opened)) throw new Error(UNSAFE);
+    const contents = Buffer.alloc(Number(opened.size));
+    let offset = 0;
+    while (offset < contents.length) {
+      const count = readSync(descriptor, contents, offset, contents.length - offset, offset);
+      if (count === 0) throw new Error(UNSAFE);
+      offset += count;
+    }
+    // Never follow growth with an unbounded allocation or read-to-EOF loop.
+    if (readSync(descriptor, Buffer.alloc(1), 0, 1, offset) !== 0) throw new Error(UNSAFE);
+    const after = fstatSync(descriptor, { bigint: true });
+    if (!sameFileObservation(opened, after)) throw new Error(UNSAFE);
+    return { contents, mode: opened.mode & 0o777n };
+  } finally {
+    closeSync(descriptor);
+  }
+}
+
 function safeGenerationTree(path: string): { entries: number; bytes: number } {
   const owner = process.geteuid?.() ?? 0;
   const rootStats = lstatSync(path);
@@ -277,20 +449,44 @@ function safeGenerationTree(path: string): { entries: number; bytes: number } {
 function generationDigest(path: string): string {
   safeGenerationTree(path);
   const digest = createHash("sha256").update("openmapx-trusted-generation-v1\0");
-  const visit = (directory: string, prefix = "") => {
+  let entries = 1;
+  let bytes = 0;
+  const visit = (directory: string, prefix = "", secrets = false) => {
     for (const entry of readdirSync(directory, { withFileTypes: true }).sort((a, b) =>
       a.name.localeCompare(b.name),
     )) {
       const child = join(directory, entry.name);
       const relative = prefix ? `${prefix}/${entry.name}` : entry.name;
-      const stats = lstatSync(child);
+      if (++entries > 1024) throw new Error(UNSAFE);
+      const stats = lstatSync(child, { bigint: true });
       digest
         .update(entry.isDirectory() ? "d\0" : "f\0")
         .update(relative)
         .update("\0");
-      digest.update(String(stats.mode & 0o777)).update("\0");
-      if (entry.isDirectory()) visit(child, relative);
-      else digest.update(readFileSync(child)).update("\0");
+      if (entry.isDirectory()) {
+        if (
+          !stats.isDirectory() ||
+          stats.uid !== BigInt(process.geteuid?.() ?? 0) ||
+          (stats.mode & 0o777n) !== 0o700n
+        ) {
+          throw new Error(UNSAFE);
+        }
+        digest.update(String(stats.mode & 0o777n)).update("\0");
+        visit(
+          child,
+          relative,
+          secrets || (directory === path && entry.name === GENERATED_SECRETS_DIRNAME),
+        );
+      } else {
+        const { contents, mode } = readGenerationFile(
+          child,
+          stats,
+          MAX_GENERATION_BYTES - bytes,
+          secrets ? [0o444n] : [0o400n, 0o600n],
+        );
+        bytes += contents.length;
+        digest.update(String(mode)).update("\0").update(contents).update("\0");
+      }
     }
   };
   visit(path);
@@ -356,13 +552,9 @@ export function readAppliedServiceIds(
     return null;
   }
   const path = join(infraDir, CONFIGURATION_GENERATIONS, active, SERVICE_SELECTION_FILE);
-  const metadata = lstatSync(path);
-  if (!metadata.isFile() || metadata.nlink !== 1 || metadata.size > 64 * 1024) {
-    throw new Error(`Malformed applied service selection at ${path}`);
-  }
-  const raw = JSON.parse(
-    new TextDecoder("utf-8", { fatal: true }).decode(readFileSync(path)),
-  ) as unknown;
+  const metadata = lstatSync(path, { bigint: true });
+  const { contents } = readGenerationFile(path, metadata, 64 * 1024, [0o400n, 0o600n]);
+  const raw = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(contents)) as unknown;
   if (!raw || typeof raw !== "object" || Array.isArray(raw) || Object.keys(raw).length !== 1) {
     throw new Error(`Malformed applied service selection at ${path}`);
   }
@@ -412,11 +604,46 @@ export function readAppliedConfiguration(
   };
 }
 
+/** Call under writer ownership so the pointer and its projections are one observation.
+ * Only the resolved integration file is read: service secrets never enter this result.
+ */
+export function inspectAppliedConfiguration(
+  infraDir: string,
+): OpsResultFor<"configuration.inspect"> {
+  const revisionId = currentConfigurationGeneration(infraDir);
+  if (revisionId === null) return { revisionId, integrationConfigDigests: [] };
+  const resolved = JSON.parse(
+    readFileSync(
+      join(infraDir, CONFIGURATION_GENERATIONS, revisionId, RESOLVED_CONFIG_FILE),
+      "utf8",
+    ),
+  );
+  const { integrationConfigs } = trustedConfigurationPayloadSchema.parse({
+    domain: "inspection.invalid",
+    serviceConfigs: [],
+    serviceSecrets: [],
+    integrationConfigs: resolved.integrationConfigs,
+  });
+  return {
+    revisionId,
+    integrationConfigDigests: integrationConfigs.map(({ integrationId, values }) => ({
+      integrationId,
+      digest: configurationProjectionFingerprint(values),
+    })),
+  };
+}
+
 /**
  * Create the generations directory, drop interrupted writes and prune old
  * generations. The applied generation is never pruned.
  */
 export async function initializeConfigurationGenerations(infraDir: string): Promise<void> {
+  return withConfigurationGenerationWriter(infraDir, () =>
+    initializeOwnedConfigurationGenerations(infraDir),
+  );
+}
+
+async function initializeOwnedConfigurationGenerations(infraDir: string): Promise<void> {
   const generations = join(infraDir, CONFIGURATION_GENERATIONS);
   try {
     lstatSync(generations);
@@ -559,14 +786,35 @@ export function renderConfiguration(options: RenderConfigurationOptions) {
 export async function commitConfigurationGeneration(
   options: CommitConfigurationOptions,
 ): Promise<CommittedConfiguration> {
+  return withConfigurationGenerationWriter(
+    options.infraDir,
+    (writer) => writer.commit(options),
+    options.signal,
+  );
+}
+
+async function commitOwnedConfigurationGeneration(
+  options: CommitConfigurationOptions,
+): Promise<CommittedConfiguration> {
   const { infraDir, input } = options;
+  if (
+    options.expectedCurrentRevisionId !== undefined &&
+    options.expectedCurrentRevisionId !== null &&
+    !REVISION.test(options.expectedCurrentRevisionId)
+  ) {
+    throw new Error("Bad expected current generation");
+  }
+  options.signal?.throwIfAborted();
   const { resolved, context, rendered } = renderConfiguration(options);
   const generations = join(infraDir, CONFIGURATION_GENERATIONS);
-  await initializeConfigurationGenerations(infraDir);
+  await initializeOwnedConfigurationGenerations(infraDir);
   const nonce = randomUUID().replaceAll("-", "");
   const placeholder = options.revisionId ?? `cfg1_${"0".repeat(43)}`;
   if (!REVISION.test(placeholder)) throw new Error(`Bad generation name ${placeholder}`);
   let temporary: string | undefined = join(generations, `.${placeholder}.${nonce}.tmp`);
+  let committed: CommittedConfiguration | undefined;
+  let failure: unknown;
+  let cleanupFailed = false;
   try {
     mkdirSync(temporary, { mode: 0o700 });
     await writeDurable(join(temporary, GENERATED_COMPOSE_FILE), rendered.composeYaml, 0o600);
@@ -610,9 +858,10 @@ export async function commitConfigurationGeneration(
       await syncDirectory(secretsRoot);
     }
     await syncDirectory(temporary);
-    const revisionId = options.revisionId ?? `cfg1_${generationDigest(temporary)}`;
+    const revisionId = options.revisionId ?? `cfg1_${randomBytes(32).toString("base64url")}`;
     const finalGeneration = join(generations, revisionId);
     await options.beforeCommit?.();
+    options.signal?.throwIfAborted();
     if (existsSync(finalGeneration)) {
       if (generationDigest(finalGeneration) !== generationDigest(temporary)) {
         throw new Error(`Generation ${revisionId} exists with other content`);
@@ -625,22 +874,68 @@ export async function commitConfigurationGeneration(
       await syncDirectory(generations);
       await options.afterGenerationRename?.();
     }
-    if (currentConfigurationGeneration(infraDir) !== revisionId) {
+    options.signal?.throwIfAborted();
+    const currentRevisionId = currentConfigurationGeneration(infraDir);
+    if (
+      options.expectedCurrentRevisionId !== undefined &&
+      options.expectedCurrentRevisionId !== currentRevisionId
+    ) {
+      throw new ConfigurationGenerationError({
+        outcome: "not_committed",
+        reason: "conflict",
+        currentRevisionId,
+        cleanupFailed: false,
+      });
+    }
+    if (currentRevisionId !== revisionId) {
       const pointerTemporary = join(infraDir, `.${CURRENT_CONFIGURATION}.${nonce}.tmp`);
       symlinkSync(join(CONFIGURATION_GENERATIONS, revisionId), pointerTemporary);
       renameSync(pointerTemporary, join(infraDir, CURRENT_CONFIGURATION));
+      // The rename is the commit point. Record evidence BEFORE any fallible sync/follow-up.
+      committed = {
+        revisionId,
+        enabledServiceIds: resolved.enabledIdsOrdered,
+        warnings: rendered.warnings ?? [],
+      };
       await syncDirectory(infraDir);
+    } else {
+      committed = {
+        revisionId,
+        enabledServiceIds: resolved.enabledIdsOrdered,
+        warnings: rendered.warnings ?? [],
+      };
     }
     writeStackFiles(infraDir, resolved.enabled, context, rendered.writableBindDirs ?? []);
     await options.afterCommit?.();
-    return {
-      revisionId,
-      enabledServiceIds: resolved.enabledIdsOrdered,
-      warnings: rendered.warnings ?? [],
-    };
-  } finally {
-    // A fully staged generation without the pointer swap is inert and is
-    // cleaned by the next initialization.
-    if (temporary) rmSync(temporary, { recursive: true, force: true });
+  } catch (error) {
+    failure =
+      error instanceof Error
+        ? error
+        : new Error("Configuration generation failed", { cause: error });
   }
+  try {
+    if (temporary) rmSync(temporary, { recursive: true, force: true });
+  } catch (error) {
+    cleanupFailed = true;
+    failure ??=
+      error instanceof Error
+        ? error
+        : new Error("Configuration generation failed", { cause: error });
+  }
+  if (failure) {
+    const result: ConfigurationApplyResult = committed
+      ? {
+          outcome: "committed",
+          revisionId: committed.revisionId,
+          enabledServiceIds: committed.enabledServiceIds,
+          followUp: "failed",
+          cleanupFailed,
+        }
+      : failure instanceof ConfigurationGenerationError
+        ? { ...failure.result, cleanupFailed: failure.result.cleanupFailed || cleanupFailed }
+        : { outcome: "not_committed", reason: "failed", cleanupFailed };
+    throw new ConfigurationGenerationError(result, failure);
+  }
+  if (!committed) throw new Error("Configuration generation did not produce commit evidence");
+  return committed;
 }

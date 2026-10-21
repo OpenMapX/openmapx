@@ -84,6 +84,17 @@ export async function collectCoreRoutes(): Promise<CoreRouteCollection> {
     components?: Record<string, unknown>;
   };
   const paths = document.paths ?? {};
+  // Swagger assumes every Fastify body schema is required. Our registrar uses
+  // canonical Zod parsing and records the actual optional-body contract.
+  for (const route of routes) {
+    if ((route.config as { adminOptionalBody?: boolean } | undefined)?.adminOptionalBody !== true)
+      continue;
+    const path = route.url.replace(/:([^/]+)/g, "{$1}");
+    const operation = paths[path]?.[route.method.toLowerCase()] as
+      | { requestBody?: { required?: boolean } }
+      | undefined;
+    if (operation?.requestBody) operation.requestBody.required = false;
+  }
   await app.close();
 
   // Resolved after `ready()`: the plugin-scoped declarations are recorded by

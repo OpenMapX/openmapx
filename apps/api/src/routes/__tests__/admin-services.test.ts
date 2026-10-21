@@ -1,5 +1,8 @@
 import type { FastifyInstance } from "fastify";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { restoreStoredServiceConfig } from "../../services/service-config-writer";
+import { applyTrustedConfiguration } from "../../services/trusted-config-operations";
+import { TrustedConfigurationApplyError } from "../../services/trusted-config-outcome";
 import { createAdminTestApp, installAdminRouteMocks } from "./admin-test-helpers.js";
 
 const {
@@ -619,6 +622,36 @@ describe("service credentials", () => {
   });
 
   describe("POST /admin/services/:id/config", () => {
+    it.each(["unknown", "committed", "not_committed"] as const)(
+      "restores saved overrides only with proven non-commit (%s)",
+      async (outcome) => {
+        const error = new TrustedConfigurationApplyError({
+          ...(outcome === "unknown"
+            ? { outcome, reason: "transport_or_result" as const }
+            : outcome === "committed"
+              ? {
+                  outcome,
+                  revisionId: `cfg1_${"a".repeat(43)}`,
+                  enabledServiceIds: [],
+                  followUp: "failed" as const,
+                  cleanupFailed: false,
+                }
+              : { outcome, reason: "failed" as const, cleanupFailed: false }),
+          publisherCleanupFailed: false,
+          registryUpdateFailed: false,
+        });
+        vi.mocked(applyTrustedConfiguration).mockRejectedValueOnce(error);
+        const res = await app.inject({
+          method: "POST",
+          url: "/admin/services/openconditions-ingest/config",
+          payload: {},
+        });
+        expect(res.statusCode).toBe(500);
+        expect(restoreStoredServiceConfig).toHaveBeenCalledTimes(
+          outcome === "not_committed" ? 1 : 0,
+        );
+      },
+    );
     it("persists only the route-validated update through the atomic writer", async () => {
       mockValidateConfigBody.mockReturnValueOnce({
         updates: { RATE_LIMIT_MAX: 240 },

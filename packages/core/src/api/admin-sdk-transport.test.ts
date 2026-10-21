@@ -213,3 +213,78 @@ describe("canonical administration SDK acquisition", () => {
     }
   });
 });
+
+describe("pending integration family operation binding", () => {
+  it("validates all22canonical operation closures before final producer generation", async () => {
+    const { integrationAdminOperations } = await import("./contracts/integration-admin");
+    let calls = 0;
+    for (const [id, operation] of Object.entries(integrationAdminOperations)) {
+      const path = operation.path.replace(/:[^/]+/g, "sample");
+      vi.stubGlobal("fetch", async (url: string, init: RequestInit) => {
+        if (url !== `https://app.example${path}` || init.method !== operation.method)
+          throw new Error("Unexpected network");
+        calls++;
+        return Response.json({ error: "Synthetic rejection" }, { status: 400 });
+      });
+      const result = await bindAdminOperation(id as keyof typeof integrationAdminOperations)(path, {
+        client,
+        method: operation.method,
+      });
+      expect(result).toMatchObject({ status: 400, data: { error: "Synthetic rejection" } });
+    }
+    expect(calls).toBe(22);
+  });
+  it("retains domain errors and vault hints and requires Retry-After without exposing malformed bodies", async () => {
+    const cases = [
+      {
+        id: "patchAdminIntegrationConfig",
+        path: "/api/admin/integrations/sample/config",
+        method: "PATCH",
+        status: 400,
+        data: { errors: ["Invalid field"] },
+      },
+      {
+        id: "setAdminIntegrationCredential",
+        path: "/api/admin/credentials/sample/apiKey",
+        method: "PUT",
+        status: 503,
+        data: { error: "Vault unavailable", hint: "Configure vault" },
+      },
+      {
+        id: "runAdminIntegrationHealthChecks",
+        path: "/api/admin/integrations/health/run",
+        method: "POST",
+        status: 429,
+        data: { error: "Limited", retryAfter: 10 },
+      },
+    ] as const;
+    for (const entry of cases) {
+      vi.stubGlobal("fetch", async (url: string) => {
+        if (url !== `https://app.example${entry.path}`) throw new Error("Unexpected network");
+        return Response.json(entry.data, {
+          status: entry.status,
+          headers: entry.status === 429 ? { "retry-after": "10" } : {},
+        });
+      });
+      expect(
+        await bindAdminOperation(entry.id)(entry.path, { client, method: entry.method }),
+      ).toMatchObject({ status: entry.status, data: entry.data });
+    }
+    vi.stubGlobal("fetch", async () =>
+      Response.json({ error: "Limited", retryAfter: 10 }, { status: 429 }),
+    );
+    await expect(
+      bindAdminOperation("runAdminIntegrationHealthChecks")("/api/admin/integrations/health/run", {
+        client,
+        method: "POST",
+      }),
+    ).rejects.toBeInstanceOf(ApiContractError);
+    vi.stubGlobal("fetch", async () => Response.json({ value: "forbidden" }, { status: 503 }));
+    const error = await bindAdminOperation("setAdminIntegrationCredential")(
+      "/api/admin/credentials/sample/apiKey",
+      { client, method: "PUT" },
+    ).catch((error) => error);
+    expect(error).toBeInstanceOf(ApiContractError);
+    expect(String(error)).not.toContain("forbidden");
+  });
+});

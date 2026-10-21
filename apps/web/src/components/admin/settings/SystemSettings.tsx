@@ -32,7 +32,7 @@ import Typography from "@mui/material/Typography";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { useEnv } from "@/integration-api/runtime/EnvProvider";
-import { invalidateIntegrationRuntime } from "@/lib/integrationRuntimeQuery";
+import { useIntegrationAdmin } from "@/lib/admin/integrationAdmin";
 import { AdminPageHeader } from "../shared/AdminPageHeader";
 
 export interface ResolvedSetting {
@@ -654,6 +654,15 @@ function ExportImportSection({
   const qc = useQueryClient();
   const fileRef = useRef<HTMLInputElement>(null);
   const integrationsFileRef = useRef<HTMLInputElement>(null);
+  const admin = useIntegrationAdmin();
+  const integrationExport = useQuery({ ...admin.queries.exportConfigs(), enabled: false });
+  const transferOwner = useMemo(() => ({ active: true, client: admin.client }), [admin.client]);
+  useEffect(() => {
+    transferOwner.active = true;
+    return () => {
+      transferOwner.active = false;
+    };
+  }, [transferOwner]);
 
   const doExport = async () => {
     try {
@@ -698,11 +707,10 @@ function ExportImportSection({
 
   const exportIntegrations = async () => {
     try {
-      const res = await fetch(`${env.apiUrl}/api/admin/integrations/export`, {
-        credentials: "include",
-      });
-      if (!res.ok) throw new Error();
-      const data = await res.json();
+      const result = await integrationExport.refetch({ throwOnError: true });
+      if (!transferOwner.active) return;
+      const data = result.data;
+      if (!data) throw new Error("Export was interrupted");
       const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -710,39 +718,28 @@ function ExportImportSection({
       a.download = `openmapx-integrations-${new Date().toISOString().slice(0, 10)}.json`;
       a.click();
       URL.revokeObjectURL(url);
-      onMsg(`Exported ${(data as { count: number }).count} integration configs`);
+      onMsg(`Exported ${data.count} integration configs`);
     } catch {
-      onMsg("Export failed", "error");
+      if (transferOwner.active) onMsg("Export failed", "error");
     }
   };
 
   const importIntegrations = async (file: File) => {
     try {
       const text = await file.text();
-      const parsed = JSON.parse(text) as {
-        integrations?: Array<{ integrationId: string; config: Record<string, unknown> }>;
-      };
-      const integrations = Array.isArray(parsed.integrations) ? parsed.integrations : [];
-      if (integrations.length === 0) {
-        onMsg("Import failed — no integration configs found", "error");
-        return;
-      }
-      const res = await fetch(`${env.apiUrl}/api/admin/integrations/import`, {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ integrations }),
-      });
-      if (!res.ok) throw new Error();
-      const data = (await res.json()) as { imported: number; skipped: string[] };
-      void qc.invalidateQueries({ queryKey: ["admin", "integrations"] });
-      void invalidateIntegrationRuntime(qc, env.apiUrl);
-      const skippedCount = data.skipped?.length ?? 0;
+      if (!transferOwner.active) return;
+      const data = await admin.importConfigs(JSON.parse(text));
+      if (transferOwner.active) onMsg(`Imported ${data.imported} integration config(s)`);
+    } catch (error) {
+      if (!transferOwner.active) return;
       onMsg(
-        `Imported ${data.imported} integration config(s)${skippedCount > 0 ? ` (${skippedCount} skipped)` : ""}`,
+        error instanceof SyntaxError
+          ? "Import failed — check the JSON file format"
+          : error instanceof Error
+            ? error.message
+            : "Integration import failed",
+        "error",
       );
-    } catch {
-      onMsg("Integration import failed — check the file format", "error");
     }
   };
 

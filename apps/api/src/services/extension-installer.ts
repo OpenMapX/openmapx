@@ -52,6 +52,10 @@ import {
   stageRepo,
 } from "./service-repositories";
 import { applyTrustedConfiguration } from "./trusted-config-operations";
+import {
+  isProvenConfigurationNonCommit,
+  TrustedConfigurationApplyError,
+} from "./trusted-config-outcome";
 
 type ExtensionManifest = coreServices.ExtensionManifest;
 const ROOT_DIR = findRepoRoot();
@@ -743,6 +747,8 @@ export async function installExtension(
         // Stages already consumed by publication are no longer owned here.
       }
     }
+    if (err instanceof TrustedConfigurationApplyError && !isProvenConfigurationNonCommit(err))
+      throw err;
     if (bookkeepingCommitted) throw err;
     if (!rollbackRequired) throw err;
     await ctx
@@ -923,6 +929,7 @@ export async function removeExtension(
       );
     } catch (e) {
       await ctx.log(`Failed to disable services: ${(e as Error).message}`, "stderr");
+      throw e;
     }
     const repos = await db
       .select()
@@ -938,7 +945,7 @@ export async function removeExtension(
     await renderAndPersistCompose({
       operationKey: createDurableOpsKey("extension.remove.render", `${ctx.jobId}:${id}`),
       signal: ctx.signal,
-    }).catch(() => {});
+    });
   }
   await ctx.setProgress(60);
 

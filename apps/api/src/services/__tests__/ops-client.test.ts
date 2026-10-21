@@ -11,6 +11,7 @@ import {
   createApiOpsClient,
   createDurableOpsKey,
   executeAndWait,
+  executeTrustedConfigurationAndWait,
   followOpsEvents,
   waitForOpsResult,
 } from "../ops-client.js";
@@ -539,5 +540,75 @@ describe("bounded async ops helpers", () => {
 
     expect(result).toEqual({ cursor: 12, events: 2, bytes: 1, truncated: true });
     expect(progress).toHaveBeenLastCalledWith(result);
+  });
+});
+
+describe("configuration outcome evidence", () => {
+  const operation = {
+    expectedCurrentRevisionId: null,
+    kind: "stack.render" as const,
+    revisionId: `cfg1_${"a".repeat(43)}`,
+  };
+  it("treats arbitrary submission failure as unknown and submits once", async () => {
+    const client = fakeClient({
+      execute: vi.fn().mockRejectedValue(new Error("connection lost after send")),
+    });
+    expect(
+      await executeTrustedConfigurationAndWait(client, operation, "opk1_configOutcome123"),
+    ).toEqual({ outcome: "unknown", reason: "transport_or_result" });
+    expect(client.execute).toHaveBeenCalledTimes(1);
+  });
+  it.each(["failed", "timed_out"] as const)(
+    "does not infer non-commit from generic %s job state",
+    async (state) => {
+      const client = fakeClient({
+        execute: vi.fn().mockResolvedValue({
+          execution: "async",
+          kind: operation.kind,
+          operationId: "job",
+          operationKey: "opk1_configOutcome123",
+          state: "queued",
+        }),
+        status: vi.fn().mockResolvedValue({
+          state,
+          operationKey: "opk1_configOutcome123",
+          errorClass: "runtime",
+        }),
+      });
+      expect(
+        await executeTrustedConfigurationAndWait(client, operation, "opk1_configOutcome123"),
+      ).toEqual({ outcome: "unknown", reason: "transport_or_result" });
+      expect(client.execute).toHaveBeenCalledTimes(1);
+    },
+  );
+  it("accepts explicit conflict and rejects a committed result for another candidate", async () => {
+    const execute = vi
+      .fn()
+      .mockResolvedValueOnce({
+        execution: "sync",
+        value: {
+          outcome: "not_committed",
+          reason: "conflict",
+          currentRevisionId: null,
+          cleanupFailed: false,
+        },
+      })
+      .mockResolvedValueOnce({
+        execution: "sync",
+        value: {
+          outcome: "committed",
+          revisionId: `cfg1_${"b".repeat(43)}`,
+          enabledServiceIds: [],
+          followUp: "complete",
+          cleanupFailed: false,
+        },
+      });
+    const client = fakeClient({ execute });
+    expect(
+      await executeTrustedConfigurationAndWait(client, operation, "opk1_configOutcome123"),
+    ).toMatchObject({ outcome: "not_committed", reason: "conflict" });
+    expect(
+      await executeTrustedConfigurationAndWait(client, operation, "opk1_configOutcome456"),
+    ).toEqual({ outcome: "unknown", reason: "transport_or_result" });
   });
 });

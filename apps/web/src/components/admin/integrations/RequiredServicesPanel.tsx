@@ -5,64 +5,13 @@ import Card from "@mui/material/Card";
 import CardContent from "@mui/material/CardContent";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { type ServiceSummary, useServicesList } from "@/hooks/useServices";
-import { useEnv } from "@/integration-api/runtime/EnvProvider";
+import { useIntegrationAdmin } from "@/lib/admin/integrationAdmin";
 import { CapabilityBindingPicker } from "./CapabilityBindingPicker";
 
-interface RequireEntry {
-  service?: string;
-  capability?: string;
-  optional?: boolean;
-}
-
-interface Binding {
-  capability: string;
-  serviceId: string;
-}
-
-function useBindings(integrationId: string, apiUrl: string) {
-  return useQuery({
-    queryKey: ["capability-bindings", integrationId],
-    queryFn: async () => {
-      const res = await fetch(`${apiUrl}/api/admin/integrations/${integrationId}/bindings`, {
-        credentials: "include",
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      return (await res.json()) as { bindings: Binding[] };
-    },
-  });
-}
-
-function useSetBinding(integrationId: string, apiUrl: string) {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: async ({
-      capability,
-      serviceId,
-    }: {
-      capability: string;
-      serviceId: string | null;
-    }) => {
-      if (serviceId === null) {
-        await fetch(`${apiUrl}/api/admin/integrations/${integrationId}/bindings/${capability}`, {
-          method: "DELETE",
-          credentials: "include",
-        });
-      } else {
-        await fetch(`${apiUrl}/api/admin/integrations/${integrationId}/bindings/${capability}`, {
-          method: "POST",
-          credentials: "include",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ serviceId }),
-        });
-      }
-    },
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ["capability-bindings", integrationId] });
-    },
-  });
-}
+type RequireEntry =
+  import("@openmapx/core/api-contracts").AdminIntegrationSummary["requires"][number];
 
 function ServiceRequireRow({
   req,
@@ -183,10 +132,25 @@ export function RequiredServicesPanel({
   integrationId: string;
   requires: RequireEntry[];
 }) {
-  const { apiUrl } = useEnv();
+  const admin = useIntegrationAdmin();
   const { data: servicesData } = useServicesList();
-  const { data: bindingsData } = useBindings(integrationId, apiUrl);
-  const setBinding = useSetBinding(integrationId, apiUrl);
+  const { data: bindingsData, error: bindingsError } = useQuery(
+    admin.queries.bindings(integrationId),
+  );
+  const setBinding = useMutation({
+    mutationKey: ["integration-binding", admin.apiUrl, integrationId],
+    retry: false,
+    mutationFn: async ({
+      capability,
+      serviceId,
+    }: {
+      capability: string;
+      serviceId: string | null;
+    }) => {
+      await admin.setBinding(integrationId, capability, serviceId);
+      void admin.refresh();
+    },
+  });
 
   if (requires.length === 0) return null;
 
@@ -210,6 +174,9 @@ export function RequiredServicesPanel({
             gap: 1.5,
           }}
         >
+          {(setBinding.error || bindingsError) && (
+            <Alert severity="error">{(setBinding.error || bindingsError)?.message}</Alert>
+          )}
           {requires.map((r, idx) => {
             const key = r.service ?? r.capability ?? `req-${idx}`;
             if (r.service) {

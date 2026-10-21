@@ -1473,7 +1473,11 @@ while :; do printf "WRITE %s\\n" "$name" >&3; sleep 0.1; done
       execFile: async () => ({ stdout: "", stderr: "" }),
     });
     await expect(
-      dispatchOpsOperation(runtime, { kind: "stack.render", revisionId: "revision_1" }, context()),
+      dispatchOpsOperation(
+        runtime,
+        { expectedCurrentRevisionId: null, kind: "stack.render", revisionId: "revision_1" },
+        context(),
+      ),
     ).rejects.toMatchObject({
       name: "OpsNotWiredError",
     });

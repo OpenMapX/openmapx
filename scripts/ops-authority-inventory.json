@@ -35,6 +35,7 @@
       "backup.delete",
       "backup.list",
       "backup.restore",
+      "configuration.inspect",
       "data.clean",
       "data.convertOverpass",
       "data.downloadFonts",
@@ -241,11 +242,13 @@
       "callSiteIds": [],
       "semanticSources": [
         "apps/api/src/services/trusted-config-operations.ts#applyTrustedConfiguration",
+        "apps/api/src/services/trusted-config-operations.ts#applyTrustedConfigurationWithEvidence",
         "apps/api/src/services/admin-cli.ts#validateServiceSelectionForWrite",
         "apps/api/src/routes/admin.ts#adminRoute",
         "apps/api/src/services/service-secrets.ts#setServiceSecret"
       ],
       "typedKinds": [
+        "configuration.inspect",
         "serviceSelection.apply",
         "serviceConfig.apply",
         "integrationConfig.apply",

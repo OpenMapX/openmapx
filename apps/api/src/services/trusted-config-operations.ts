@@ -1,5 +1,7 @@
 import {
+  configurationGenerationRevisionSchema,
   type OpsOperation,
+  type OpsResultFor,
   readOpsTokenFile,
   type TrustedConfigurationPayload,
   trustedConfigurationPayloadSchema,
@@ -8,10 +10,20 @@ import { envString } from "@openmapx/core/server-env";
 import { db } from "../db";
 import { integrationConfig } from "../db/schema";
 import { getAllIntegrations } from "../integration-host";
-import { createApiOpsClient, executeAndWait } from "./ops-client";
+import { projectIntegrationConfig } from "./integration-config-projection";
+import {
+  createApiOpsClient,
+  createDurableOpsKey,
+  executeAndWait,
+  executeTrustedConfigurationAndWait,
+} from "./ops-client";
 import { resolveAllServiceConfigs } from "./service-config-resolver";
 import { getServiceRegistry } from "./service-registry";
 import { resolveServiceVaultSecretsStrict } from "./service-secrets";
+import {
+  TrustedConfigurationApplyError,
+  type TrustedConfigurationApplyOutcome,
+} from "./trusted-config-outcome";
 import {
   consumePublishedTrustedConfiguration,
   publishTrustedConfigurationSnapshot,
@@ -40,25 +52,6 @@ function exactInteger(env: NodeJS.ProcessEnv, name: string): number {
   const parsed = Number(value);
   if (!Number.isSafeInteger(parsed)) throw new Error("Trusted configuration unavailable");
   return parsed;
-}
-
-function nonSecretConfig(
-  schema: Record<string, unknown> | undefined,
-  values: Record<string, unknown>,
-): Record<string, unknown> {
-  const properties = ((schema?.properties ?? schema) || {}) as Record<
-    string,
-    { "x-openmapx-secret"?: unknown }
-  >;
-  return Object.fromEntries(
-    Object.entries(values).filter(
-      ([key]) =>
-        key !== "type" &&
-        key !== "properties" &&
-        properties[key] &&
-        properties[key]?.["x-openmapx-secret"] !== true,
-    ),
-  );
 }
 
 /**
@@ -99,7 +92,7 @@ export async function buildConfigurationInput(): Promise<TrustedConfigurationPay
     }),
     integrationConfigs: integrations.map((integration) => ({
       integrationId: integration.id,
-      values: nonSecretConfig(
+      values: projectIntegrationConfig(
         integration.manifest.configSchema as Record<string, unknown> | undefined,
         configuredById.get(integration.id) ?? {},
       ),
@@ -116,50 +109,171 @@ export async function buildConfigurationInput(): Promise<TrustedConfigurationPay
 export async function applyTrustedConfiguration(
   options: ApplyTrustedConfigurationOptions,
 ): Promise<{ revisionId: string; enabledServiceIds: string[] }> {
-  if ((options.kind === "serviceSelection.apply") !== (options.selectedRoots !== undefined)) {
-    throw new Error("Trusted configuration unavailable");
-  }
-  const payload = trustedConfigurationPayloadSchema.parse({
-    ...(await buildConfigurationInput()),
-    ...(options.selectedRoots ? { selectedRoots: options.selectedRoots } : {}),
-  });
-  const directory = process.env.OPS_TRUSTED_CONFIG_DIR;
-  const tokenFile = process.env.OPS_AGENT_TOKEN_FILE;
-  if (!directory || !tokenFile) throw new Error("Trusted configuration unavailable");
-  const token = await readOpsTokenFile(tokenFile);
-  const operationForRevision = (revisionId: string): OpsOperation => {
-    switch (options.kind) {
-      case "stack.render":
-      case "serviceSelection.apply":
-        return { kind: options.kind, revisionId };
-      case "serviceConfig.apply":
-      case "vault.apply":
-        if (!options.serviceId) throw new Error("Trusted configuration unavailable");
-        return { kind: options.kind, serviceId: options.serviceId, revisionId };
-      case "integrationConfig.apply":
-        if (!options.integrationId) throw new Error("Trusted configuration unavailable");
-        return { kind: options.kind, integrationId: options.integrationId, revisionId };
+  const { outcome } = await applyTrustedConfigurationWithEvidence(options);
+  if (
+    outcome.outcome !== "committed" ||
+    outcome.followUp !== "complete" ||
+    outcome.cleanupFailed ||
+    outcome.publisherCleanupFailed ||
+    outcome.registryUpdateFailed
+  )
+    throw new TrustedConfigurationApplyError(outcome);
+  return { revisionId: outcome.revisionId, enabledServiceIds: outcome.enabledServiceIds };
+}
+
+/** Internal evidence for scoped compensation. Payload may contain secrets; never serialize it. */
+export async function applyTrustedConfigurationWithEvidence(
+  options: ApplyTrustedConfigurationOptions,
+): Promise<{
+  payload?: TrustedConfigurationPayload;
+  previousApplied?: OpsResultFor<"configuration.inspect">;
+  outcome: TrustedConfigurationApplyOutcome;
+}> {
+  let payload: TrustedConfigurationPayload;
+  let previousApplied: OpsResultFor<"configuration.inspect">;
+  try {
+    if ((options.kind === "serviceSelection.apply") !== (options.selectedRoots !== undefined)) {
+      throw new Error("Trusted configuration unavailable");
     }
-  };
-  const sealed = await publishTrustedConfigurationSnapshot({
-    directory,
-    token,
-    ownerUid: exactInteger(process.env, "OPS_TRUSTED_CONFIG_UID"),
-    ownerGid: exactInteger(process.env, "OPS_TRUSTED_CONFIG_GID"),
-    operationKey: options.operationKey,
-    operationForRevision,
-    payload,
-  });
-  const result = (await consumePublishedTrustedConfiguration(sealed, () =>
-    executeAndWait(
+    previousApplied = await executeAndWait(
       createApiOpsClient(),
-      sealed.operation as Extract<OpsOperation, { revisionId: string }>,
-      options.operationKey,
+      { kind: "configuration.inspect" },
+      createDurableOpsKey("configuration.inspect", options.operationKey),
       { signal: options.signal },
-    ),
-  )) as { revisionId: string; enabledServiceIds: string[] };
-  getServiceRegistry().applyEnabledIds(new Set(result.enabledServiceIds));
-  return result;
+    );
+    payload = trustedConfigurationPayloadSchema.parse({
+      ...(await buildConfigurationInput()),
+      ...(options.selectedRoots ? { selectedRoots: options.selectedRoots } : {}),
+    });
+  } catch {
+    return {
+      outcome: {
+        outcome: "not_committed",
+        reason: "failed",
+        cleanupFailed: false,
+        publisherCleanupFailed: false,
+        registryUpdateFailed: false,
+      },
+    };
+  }
+  return {
+    payload,
+    previousApplied,
+    outcome: await applySnapshot(options, payload, previousApplied.revisionId),
+  };
+}
+
+/** Full-snapshot compensation; compare the applied generation, NOT the manifest authority. */
+export async function applyTrustedConfigurationSnapshot(options: {
+  payload: TrustedConfigurationPayload;
+  expectedCurrentRevisionId: string | null;
+  operationKey: string;
+  signal?: AbortSignal;
+}): Promise<TrustedConfigurationApplyOutcome> {
+  if (
+    !configurationGenerationRevisionSchema.nullable().safeParse(options.expectedCurrentRevisionId)
+      .success
+  ) {
+    return {
+      outcome: "not_committed",
+      reason: "failed",
+      cleanupFailed: false,
+      publisherCleanupFailed: false,
+      registryUpdateFailed: false,
+    };
+  }
+  return applySnapshot(
+    { kind: "stack.render", operationKey: options.operationKey, signal: options.signal },
+    options.payload,
+    options.expectedCurrentRevisionId,
+  );
+}
+
+async function applySnapshot(
+  options: ApplyTrustedConfigurationOptions,
+  input: TrustedConfigurationPayload,
+  expectedCurrentRevisionId: string | null,
+): Promise<TrustedConfigurationApplyOutcome> {
+  let submitted = false;
+  try {
+    const payload = trustedConfigurationPayloadSchema.parse(input);
+    const directory = process.env.OPS_TRUSTED_CONFIG_DIR;
+    const tokenFile = process.env.OPS_AGENT_TOKEN_FILE;
+    if (!directory || !tokenFile) throw new Error("Trusted configuration unavailable");
+    const token = await readOpsTokenFile(tokenFile);
+    const operationForRevision = (revisionId: string): OpsOperation => {
+      switch (options.kind) {
+        case "stack.render":
+          return {
+            kind: options.kind,
+            revisionId,
+            expectedCurrentRevisionId,
+          };
+        case "serviceSelection.apply":
+          return { kind: options.kind, revisionId, expectedCurrentRevisionId };
+        case "serviceConfig.apply":
+        case "vault.apply":
+          if (!options.serviceId) throw new Error("Trusted configuration unavailable");
+          return {
+            kind: options.kind,
+            serviceId: options.serviceId,
+            revisionId,
+            expectedCurrentRevisionId,
+          };
+        case "integrationConfig.apply":
+          if (!options.integrationId) throw new Error("Trusted configuration unavailable");
+          return {
+            kind: options.kind,
+            integrationId: options.integrationId,
+            revisionId,
+            expectedCurrentRevisionId,
+          };
+      }
+    };
+    const sealed = await publishTrustedConfigurationSnapshot({
+      directory,
+      token,
+      ownerUid: exactInteger(process.env, "OPS_TRUSTED_CONFIG_UID"),
+      ownerGid: exactInteger(process.env, "OPS_TRUSTED_CONFIG_GID"),
+      operationKey: options.operationKey,
+      operationForRevision,
+      payload,
+    });
+    const consumed = await consumePublishedTrustedConfiguration(sealed, () => {
+      const client = createApiOpsClient();
+      submitted = true;
+      return executeTrustedConfigurationAndWait(
+        client,
+        sealed.operation as Extract<OpsOperation, { revisionId: string }>,
+        options.operationKey,
+        { signal: options.signal },
+      );
+    });
+    const result =
+      consumed.submission.status === "fulfilled"
+        ? consumed.submission.value
+        : submitted
+          ? { outcome: "unknown" as const, reason: "transport_or_result" as const }
+          : { outcome: "not_committed" as const, reason: "failed" as const, cleanupFailed: false };
+    let registryUpdateFailed = false;
+    if (result.outcome === "committed") {
+      try {
+        getServiceRegistry().applyEnabledIds(new Set(result.enabledServiceIds));
+      } catch {
+        registryUpdateFailed = true;
+      }
+    }
+    return { ...result, publisherCleanupFailed: consumed.cleanupFailed, registryUpdateFailed };
+  } catch {
+    // Publication/preparation failed before execute, or an unexpected error after submission.
+    return {
+      ...(submitted
+        ? { outcome: "unknown" as const, reason: "transport_or_result" as const }
+        : { outcome: "not_committed" as const, reason: "failed" as const, cleanupFailed: false }),
+      publisherCleanupFailed: false,
+      registryUpdateFailed: false,
+    };
+  }
 }
 
 /** The config schema of every loaded integration, by id. */
