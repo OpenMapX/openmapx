@@ -127,6 +127,11 @@ function loaderFor(path) {
 
 const PACKAGE_FILE = /^(.*node_modules\/(?:@[^/]+\/)?[^/]+)\//;
 const SCRIPT = /\.[cm]?js$/;
+// Any `require` other than a call with one plain string literal, or an
+// `import(` of anything else. Only a file containing one can make a computed
+// call, so only those are parsed.
+const UNCERTAIN_LOAD =
+  /\brequire\b(?!\s*\(\s*["'][^"'`\\]*["']\s*\))|\bimport\s*\((?!\s*["'][^"'`\\]*["']\s*\))/;
 
 /**
  * The installed package directories, relative to the root, that the pinned
@@ -187,7 +192,8 @@ async function runtimePackages(root, outdir, externals, problems) {
     }
     directories.add(directory);
     if (!SCRIPT.test(input)) continue;
-    if (analyzeModule(join(root, input), readFileSync(join(root, input), "utf8")).computedImport) {
+    const text = readFileSync(join(root, input), "utf8");
+    if (UNCERTAIN_LOAD.test(text) && analyzeModule(join(root, input), text).computedImport) {
       problems.push(
         `${input}: computed import() or require() in an installed package; the packages it loads cannot be listed`,
       );

@@ -447,5 +447,7 @@ describe("runtime bundles", () => {
       expect(JSON.parse(first.files.get(EXTERNALS_MANIFEST)?.toString() ?? "[]")).not.toEqual([]);
       expect(JSON.parse(first.files.get(PACKAGES_MANIFEST)?.toString() ?? "[]")).not.toEqual([]);
     }
-  });
+    // Six full bundle builds; the parallel CI suite can take longer than the
+    // 15 s default.
+  }, 60_000);
 });
