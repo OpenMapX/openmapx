@@ -3,7 +3,10 @@ import { apiClient, configureApiClient } from "@openmapx/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { getSelfHosted } from "./serverDeployment";
 
-vi.mock("@openmapx/core/server-api", () => ({ serverApiUrl: () => "http://server.test" }));
+vi.mock("@openmapx/core/server-api", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@openmapx/core/server-api")>()),
+  serverApiUrl: () => "http://server.test",
+}));
 const deployment = {
   selfHosted: true,
   dockerAvailable: false,
@@ -85,7 +88,14 @@ describe("request-scoped deployment", () => {
       async () => new Response(stream, { headers: { "content-type": "application/json" } }),
     );
     const pending = getSelfHosted("session=one");
-    await vi.advanceTimersByTimeAsync(30_000);
+    let settled = false;
+    void pending.then(() => {
+      settled = true;
+    });
+    await vi.advanceTimersByTimeAsync(29_999);
+    expect(settled).toBe(false);
+    expect(canceled).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
     expect(await pending).toBe(false);
     expect(canceled).toBe(true);
     expect(stream.locked).toBe(false);
@@ -105,7 +115,9 @@ it("returns false when the deployment headers fail or time out", async () => {
     });
   });
   const pending = getSelfHosted("session=one");
-  await vi.advanceTimersByTimeAsync(30_000);
+  await vi.advanceTimersByTimeAsync(29_999);
+  expect(signal?.aborted).toBe(false);
+  await vi.advanceTimersByTimeAsync(1);
   expect(await pending).toBe(false);
   expect(signal?.aborted).toBe(true);
   expect((vi as typeof vi & { getTimerCount(): number }).getTimerCount()).toBe(0);

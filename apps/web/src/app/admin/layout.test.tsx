@@ -13,7 +13,10 @@ vi.mock("next/navigation", () => ({
   },
 }));
 vi.mock("@/components/admin/AdminLayout", () => ({ AdminLayout: () => null }));
-vi.mock("@openmapx/core/server-api", () => ({ serverApiUrl: () => "http://server.test" }));
+vi.mock("@openmapx/core/server-api", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@openmapx/core/server-api")>()),
+  serverApiUrl: () => "http://server.test",
+}));
 afterEach(() => {
   vi.unstubAllGlobals();
 });
