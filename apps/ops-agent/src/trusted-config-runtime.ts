@@ -1,5 +1,4 @@
 import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import {
   type ConfigurationApplyResult,
   type OpsOperation,
@@ -7,15 +6,14 @@ import {
   type TrustedConfigurationPayload,
 } from "@openmapx/core/ops";
 import { services as coreServices } from "@openmapx/core/server";
-import { applyHardlinkPlan, type HardlinkEntry } from "@openmapx/hardlinks";
 import type { OpsRuntime, OpsTrustedClaim } from "./runtime";
 
 const FAILED = "Trusted configuration apply failed";
-const LINK_FAILED = "Configuration hardlinks could not be applied";
-const LINK_STALE = "Another configuration was applied before its hardlinks";
+const PLAN_FAILED = "Configuration hardlink plan unavailable";
+const PLAN_STALE = "Another configuration was applied before its hardlinks";
 type TrustedConfigurationOperation = Exclude<
   Extract<OpsOperation, { revisionId: string }>,
-  { kind: "stack.link" }
+  { kind: "configuration.hardlinks.inspect" }
 >;
 
 export interface TrustedConfigurationRuntimeOptions {
@@ -175,14 +173,14 @@ export function installTrustedConfigurationRuntime(
       context.signal,
     );
   // The plan lives in the applied generation, which only this service can
-  // read. Consumers run as the same host user, so linking here matches what
-  // data-manager's link route would do.
-  runtime["stack.link"] = (operation, context) =>
+  // read. Data-manager applies it: its mounts confine links and prunes to the
+  // data root, where other containers can write.
+  runtime["configuration.hardlinks.inspect"] = (operation, context) =>
     coreServices.withConfigurationGenerationWriter(
       options.infraDir,
       async () => {
         if (coreServices.currentConfigurationGeneration(options.infraDir) !== operation.revisionId)
-          throw new Error(LINK_STALE);
+          throw new Error(PLAN_STALE);
         try {
           const plan = JSON.parse(
             readFileSync(
@@ -193,14 +191,10 @@ export function installTrustedConfigurationRuntime(
               "utf8",
             ),
           ) as unknown;
-          if (!Array.isArray(plan)) throw new Error(LINK_FAILED);
-          const result = applyHardlinkPlan(plan as HardlinkEntry[], {
-            rootDir: join(options.infraDir, "data"),
-            prune: true,
-          });
-          return { revisionId: operation.revisionId, entries: plan.length, ...result };
+          if (!Array.isArray(plan)) throw new Error(PLAN_FAILED);
+          return { revisionId: operation.revisionId, plan };
         } catch {
-          throw new Error(LINK_FAILED);
+          throw new Error(PLAN_FAILED);
         }
       },
       context.signal,

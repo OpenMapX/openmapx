@@ -987,7 +987,7 @@ describe("ops-agent trusted configuration runtime", () => {
     ).resolves.toEqual({ source: "env", roots: ["alpha"] });
   });
 
-  describe("stack.link", () => {
+  describe("configuration.hardlinks.inspect", () => {
     const revisionId = `cfg1_${"l".repeat(43)}`;
     const plan = [
       {
@@ -1011,58 +1011,46 @@ describe("ops-agent trusted configuration runtime", () => {
       writeFileSync(
         join(generation, "docker-compose.generated.hardlinks.json"),
         JSON.stringify(plan),
-        {
-          mode: 0o600,
-        },
+        { mode: 0o600 },
       );
       symlinkSync(join(".trusted-config-generations", revisionId), paths.current);
-      mkdirSync(join(paths.infraDir, "data", "osm"), { recursive: true });
-      writeFileSync(join(paths.infraDir, "data", "osm", "germany.osm.pbf"), "pbf");
     }
 
-    function runtimeFor(paths: ReturnType<typeof fixture>) {
+    const inspect = (paths: ReturnType<typeof fixture>, inspectRevision: string) => {
       const runtime = createUnavailableRuntime();
       installTrustedConfigurationRuntime(runtime, {
         services: [service("alpha")],
         integrationSchemas: new Map(),
         infraDir: paths.infraDir,
       });
-      return runtime;
-    }
-
-    const link = (paths: ReturnType<typeof fixture>, linkRevision: string) => {
-      const operation = { kind: "stack.link" as const, revisionId: linkRevision };
-      return dispatchOpsOperation(runtimeFor(paths), operation, {
+      const operation = {
+        kind: "configuration.hardlinks.inspect" as const,
+        revisionId: inspectRevision,
+      };
+      return dispatchOpsOperation(runtime, operation, {
         signal: new AbortController().signal,
         emitLog: vi.fn(),
         claim: {
           fingerprint: opsOperationFingerprint(operation),
           operation,
           source: "registry",
-          capability: { revisionId: linkRevision, values: {} },
+          capability: { revisionId: inspectRevision, values: {} },
         },
       });
     };
 
-    it("links consumer data as the applied generation's plan describes", async () => {
+    it("returns the applied generation's plan for data-manager to apply", async () => {
       const paths = fixture();
       applied(paths);
-      const result = await link(paths, revisionId);
-
-      expect(result).toEqual({ revisionId, entries: 1, linked: 1, skipped: 0, pruned: 0 });
-      const linked = join(paths.infraDir, "data", "valhalla", "osm-pbf", "germany.osm.pbf");
-      expect(statSync(linked).ino).toBe(
-        statSync(join(paths.infraDir, "data", "osm", "germany.osm.pbf")).ino,
-      );
+      await expect(inspect(paths, revisionId)).resolves.toEqual({ revisionId, plan });
     });
 
     it("refuses when another generation has been applied since", async () => {
       const paths = fixture();
       applied(paths);
-      await expect(link(paths, `cfg1_${"x".repeat(43)}`)).rejects.toThrow(
+      await expect(inspect(paths, `cfg1_${"x".repeat(43)}`)).rejects.toThrow(
         "Another configuration was applied before its hardlinks",
       );
-      expect(existsSync(join(paths.infraDir, "data", "valhalla"))).toBe(false);
     });
   });
 });

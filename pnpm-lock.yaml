@@ -522,9 +522,6 @@ importers:
       '@openmapx/core':
         specifier: workspace:^
         version: link:../../packages/core
-      '@openmapx/hardlinks':
-        specifier: workspace:*
-        version: link:../../packages/hardlinks
       '@openmapx/transitous-core':
         specifier: workspace:^
         version: link:../../packages/transitous-core

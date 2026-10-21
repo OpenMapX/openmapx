@@ -33,12 +33,15 @@ const samples: Record<(typeof OPS_OPERATION_KINDS)[number], OpsOperation> = {
   "docker.status": { kind: "docker.status" },
   "stack.status": { kind: "stack.status" },
   "configuration.inspect": { kind: "configuration.inspect" },
+  "configuration.hardlinks.inspect": {
+    kind: "configuration.hardlinks.inspect",
+    revisionId: `cfg1_${"a".repeat(43)}`,
+  },
   "stack.render": {
     expectedCurrentRevisionId: null,
     kind: "stack.render",
     revisionId: "config_20260823",
   },
-  "stack.link": { kind: "stack.link", revisionId: `cfg1_${"a".repeat(43)}` },
   "stack.start": { kind: "stack.start" },
   "stack.stop": { kind: "stack.stop" },
   "service.start": { kind: "service.start", serviceId: "motis" },

@@ -226,9 +226,10 @@ publishes for others (`produces`). The renderer matches a consumer's `consumes`
 entry to another service's `produces` entry of the same `type` and emits a
 hardlink-plan entry so the files are shared without copying. The CLI applies
 the plan after it renders. Before starting or recreating a service, the admin
-panel has the operations agent apply the plan of the configuration it just
-applied (`stack.link`), because the plan lives in the host's configuration
-generation, which the API container cannot read.
+panel reads the plan of the configuration it just applied from the operations
+agent (`configuration.hardlinks.inspect`), since it lives in the host's
+configuration generation, and has data-manager apply it. Data-manager mounts
+only the data root, which confines the links and prunes to it.
 
 ### `provides`
 

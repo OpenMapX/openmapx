@@ -17,7 +17,7 @@ export const OPS_OPERATION_KINDS = [
   "stack.status",
   "stack.render",
   "configuration.inspect",
-  "stack.link",
+  "configuration.hardlinks.inspect",
   "stack.start",
   "stack.stop",
   "service.start",
@@ -131,8 +131,8 @@ export const OPS_KIND_POLICIES = {
   "docker.status": sync("api", 5_000),
   "stack.status": sync("api", 15_000, 256 * 1024),
   "configuration.inspect": sync("api", 15_000),
+  "configuration.hardlinks.inspect": sync("api", 15_000, 1024 * 1024),
   "stack.render": asyncEffect("api", 120_000),
-  "stack.link": asyncEffect("api", 10 * 60_000),
   "stack.start": asyncEffect("api", LIFECYCLE_TIMEOUT_MS),
   "stack.stop": asyncEffect("api", 5 * 60_000),
   "service.start": asyncEffect("api", LIFECYCLE_TIMEOUT_MS),
@@ -264,11 +264,11 @@ export const opsOperationSchema = z.discriminatedUnion("kind", [
     revisionId: stableIdSchema,
     expectedCurrentRevisionId: configurationGenerationRevisionSchema.nullable(),
   }),
-  // Links consumer data directories to their producers as the named, applied
-  // configuration generation's plan describes. Fails if another generation has
-  // been applied since.
+  // The hardlink plan of the named, applied configuration generation. Fails if
+  // another generation has been applied since. Data-manager applies it: only
+  // its mounts confine the links and prunes to the data root.
   z.strictObject({
-    kind: z.literal("stack.link"),
+    kind: z.literal("configuration.hardlinks.inspect"),
     revisionId: configurationGenerationRevisionSchema,
   }),
   kindOnly("stack.start"),
@@ -842,6 +842,21 @@ export const OPS_RESULT_SCHEMAS = {
       )
       .max(256),
   }),
+  "configuration.hardlinks.inspect": z.strictObject({
+    revisionId: configurationGenerationRevisionSchema,
+    plan: z
+      .array(
+        z.strictObject({
+          source: z.string().min(1).max(1_024),
+          target: z.string().min(1).max(1_024),
+          consumerService: serviceIdSchema,
+          dataType: z.string().min(1).max(128),
+          instance: z.string().min(1).max(128).optional(),
+          targetFilename: z.string().min(1).max(255).optional(),
+        }),
+      )
+      .max(256),
+  }),
   "configuration.inspect": z.strictObject({
     revisionId: configurationGenerationRevisionSchema.nullable(),
     integrationConfigDigests: z
@@ -854,13 +869,6 @@ export const OPS_RESULT_SCHEMAS = {
       .max(256),
   }),
   "stack.render": revision,
-  "stack.link": z.strictObject({
-    revisionId: configurationGenerationRevisionSchema,
-    entries: nonnegativeSafeInteger,
-    linked: nonnegativeSafeInteger,
-    skipped: nonnegativeSafeInteger,
-    pruned: nonnegativeSafeInteger,
-  }),
   "stack.start": changed,
   "stack.stop": changed,
   "service.start": changed,

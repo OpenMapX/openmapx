@@ -1,5 +1,11 @@
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  createDataManagerTransport,
+  getStatus,
+  link,
+  unwrapDataManagerResponse,
+} from "@openmapx/core/data-manager-sdk";
 import { repoPaths } from "@openmapx/core/server";
 import {
   type DockerComposeAction,
@@ -10,6 +16,9 @@ import type { JobContext } from "./job-runner";
 import { createApiOpsClient, createDurableOpsKey, executeAndWait } from "./ops-client";
 import { getServiceRegistry } from "./service-registry";
 import { applyTrustedConfiguration } from "./trusted-config-operations";
+
+const DATA_MANAGER_STARTUP_TIMEOUT_MS = 60_000;
+const DATA_MANAGER_POLL_INTERVAL_MS = 2_000;
 
 export interface HardlinkApplySummary {
   applied: boolean;
@@ -82,23 +91,98 @@ export async function renderAndPersistCompose(options: {
   return { revisionId };
 }
 
+function dataManagerEnabled(): boolean {
+  try {
+    const svc = getServiceRegistry().get("data-manager");
+    return !!svc?.enabled;
+  } catch {
+    return false;
+  }
+}
+
+function dataManagerUrlCandidates(): string[] {
+  const out: string[] = [];
+  if (process.env.DATA_MANAGER_URL?.trim()) out.push(process.env.DATA_MANAGER_URL.trim());
+  // In docker-compose, app-api reaches data-manager over the service DNS name.
+  out.push("http://data-manager:4000");
+  // Keep localhost fallback for non-container local API runs.
+  out.push("http://localhost:4000");
+  return [...new Set(out)];
+}
+
+async function waitForDataManagerTransport(): Promise<{
+  transport: ReturnType<typeof createDataManagerTransport>;
+  url: string;
+}> {
+  const urls = dataManagerUrlCandidates();
+  const deadline = Date.now() + DATA_MANAGER_STARTUP_TIMEOUT_MS;
+  let lastErr: unknown;
+
+  while (Date.now() < deadline) {
+    for (const url of urls) {
+      const transport = createDataManagerTransport({
+        baseUrl: url,
+        authToken: process.env.DATA_MANAGER_AUTH_TOKEN?.trim(),
+      });
+      try {
+        unwrapDataManagerResponse(await getStatus({ transport }));
+        return { transport, url };
+      } catch (err) {
+        lastErr = err;
+      }
+    }
+    await new Promise((resolve) => setTimeout(resolve, DATA_MANAGER_POLL_INTERVAL_MS));
+  }
+
+  const detail = (lastErr as Error | undefined)?.message ?? String(lastErr ?? "unknown error");
+  throw new Error(
+    `data-manager did not become reachable within ${DATA_MANAGER_STARTUP_TIMEOUT_MS / 1000}s (${urls.join(", ")}): ${detail}`,
+  );
+}
+
 /**
  * Link consumer data directories to their producers as the configuration
  * generation just applied describes. The plan lives in that generation on the
- * host, which only the operations agent can read, so the agent applies it.
+ * host, which only the operations agent can read; data-manager applies it,
+ * because its mounts confine the links and prunes to the data root.
  */
 export async function applyGenerationHardlinks(opts: {
   revisionId: string;
   operationIdentity: string;
+  log?: (msg: string) => Promise<void> | void;
   signal?: AbortSignal;
 }): Promise<HardlinkApplySummary> {
-  const { entries, linked, skipped, pruned } = await executeAndWait(
+  const { plan } = await executeAndWait(
     createApiOpsClient(),
-    { kind: "stack.link", revisionId: opts.revisionId },
-    createDurableOpsKey("admin-job.hardlinks.apply", opts.operationIdentity),
+    { kind: "configuration.hardlinks.inspect", revisionId: opts.revisionId },
+    createDurableOpsKey("admin-job.hardlinks.inspect", opts.operationIdentity),
     { signal: opts.signal },
   );
-  return { applied: true, entries, linked, skipped, pruned, via: "ops-agent" };
+  if (plan.length === 0) {
+    return { applied: true, linked: 0, skipped: 0, pruned: 0, entries: 0 };
+  }
+  if (!dataManagerEnabled()) {
+    throw new Error(
+      `Hardlink plan contains ${plan.length} entr${plan.length === 1 ? "y" : "ies"}, but service "data-manager" is disabled. Enable data-manager before starting services from Admin, or apply links via CLI first.`,
+    );
+  }
+
+  await opts.log?.("Ensuring data-manager is running for hardlink apply...");
+  const dmStart = await dockerComposeAction("data-manager", "start", {
+    operationKey: createDurableOpsKey(
+      "admin-job.hardlinks.start",
+      `${opts.operationIdentity}:data-manager`,
+    ),
+    signal: opts.signal,
+  });
+  if (dmStart.exitCode !== 0) {
+    throw new Error(`docker compose up data-manager exited with ${dmStart.exitCode}`);
+  }
+
+  await opts.log?.(`Applying hardlink plan (${plan.length} entries, prune enabled)...`);
+  const { transport, url } = await waitForDataManagerTransport();
+  const result = unwrapDataManagerResponse(await link({ plan, prune: true }, { transport }));
+  return { applied: true, entries: plan.length, via: url, ...result };
 }
 
 // Service control (job handlers) — registry-authorized + routed through the
@@ -142,10 +226,10 @@ export async function serviceStart(service: string, ctx: JobContext): Promise<vo
     operationKey: createDurableOpsKey("admin-job.config.render", `${ctx.jobId}:${service}`),
     signal: ctx.signal,
   });
-  await ctx.log("Applying hardlinks for the applied configuration...");
   const hardlinks = await applyGenerationHardlinks({
     revisionId,
     operationIdentity: `${ctx.jobId}:${service}`,
+    log: (m) => ctx.log(m),
     signal: ctx.signal,
   });
   await ctx.log(
@@ -173,10 +257,10 @@ export async function serviceApply(service: string, ctx: JobContext): Promise<vo
           operationKey: createDurableOpsKey("admin-job.config.apply", `${ctx.jobId}:${service}`),
           signal: ctx.signal,
         });
-  await ctx.log("Applying hardlinks for the applied configuration...");
   const hardlinks = await applyGenerationHardlinks({
     revisionId,
     operationIdentity: `${ctx.jobId}:${service}`,
+    log: (m) => ctx.log(m),
     signal: ctx.signal,
   });
   await ctx.log(
