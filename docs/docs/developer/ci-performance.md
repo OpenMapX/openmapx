@@ -148,8 +148,9 @@ Pull-request image builds do not pass it, because their jobs have no workspace
 install, so a difference between the image's partial install and the full one
 only surfaces in the release build on main.
 The runner checks that every pinned dependency file exists in its production
-install. `check-dockerfile-workspace-sync` builds every bundle and rejects a
-bundled runner that copies workspace source.
+install. `check-dockerfile-workspace-sync` builds every bundle, checks that the
+`bundle` stage copies every file the bundle reads (sources, assets and
+tsconfig files), and rejects a bundled runner that copies workspace source.
 
 Over the 200 main commits before this change, bundles would have rebuilt
 transitous-runner 24 times instead of 97 (its bundle never changed; the rest are

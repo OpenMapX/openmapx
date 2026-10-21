@@ -329,10 +329,22 @@ async function checkBundledImages(): Promise<void> {
           "runs its bundle, so the copy only makes source changes rebuild the image.",
       );
     }
+    let bundle: Awaited<ReturnType<typeof buildRuntimeBundle>>;
     try {
-      await buildRuntimeBundle(ROOT, image);
+      bundle = await buildRuntimeBundle(ROOT, image);
     } catch (error) {
       completenessErrors.push(error instanceof Error ? error.message : String(error));
+      continue;
+    }
+    // The bundle stage builds from a partial checkout: it must copy every file
+    // the bundle reads, or the release build fails after merge.
+    const staged = stageInputs(content, ".", undefined, "bundle").inputs as string[];
+    const unstaged = bundle.sources.filter((file) => !coversPath(staged, file));
+    if (unstaged.length > 0) {
+      completenessErrors.push(
+        `${dockerfile}'s bundle stage never copies files its bundle reads: ` +
+          `${unstaged.slice(0, 8).join(", ")}${unstaged.length > 8 ? ` (+${unstaged.length - 8} more)` : ""}`,
+      );
     }
   }
 }

@@ -97,11 +97,11 @@ export function dockerStages(dockerfile) {
 }
 
 /**
- * Context inputs of the stages the final stage is built from, following `FROM
- * <stage>` and `COPY --from=<stage>`, without entering the `replaced` stage.
- * A caller accounts for that stage's output itself.
+ * Context inputs of the stages the final stage (or the `start` stage) is built
+ * from, following `FROM <stage>` and `COPY --from=<stage>`, without entering
+ * the `replaced` stage. A caller accounts for that stage's output itself.
  */
-export function stageInputs(dockerfile, context, replaced) {
+export function stageInputs(dockerfile, context, replaced, start) {
   const stages = dockerStages(dockerfile);
   const byName = new Map(stages.filter((stage) => stage.name).map((stage) => [stage.name, stage]));
   const visited = new Set();
@@ -121,6 +121,7 @@ export function stageInputs(dockerfile, context, replaced) {
       else if (byName.has(name)) visit(byName.get(name));
     }
   };
-  if (stages.length > 0) visit(stages.at(-1));
+  const first = start === undefined ? stages.at(-1) : byName.get(start);
+  if (first) visit(first);
   return { inputs: [...inputs], reachesReplaced };
 }

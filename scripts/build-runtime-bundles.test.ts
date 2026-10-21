@@ -107,6 +107,22 @@ describe("runtime bundles", () => {
         config,
       ),
     ).rejects.toThrow("is not exported by @openmapx/greet");
+    // Node picks the first condition it matches, in the order the package lists them.
+    const ordered = await buildRuntimeBundle(
+      workspace({
+        ...files,
+        "packages/greet/package.json": JSON.stringify({
+          name: "@openmapx/greet",
+          exports: { "./hello": { node: "./src/node.ts", import: "./src/hello.ts" } },
+        }),
+        "packages/greet/src/node.ts": 'export const hello = () => "node";',
+      }),
+      "fixture",
+      config,
+    );
+    expect(text(ordered, "main.mjs")).toContain('"node"');
+    expect(ordered.sources).toContain("packages/greet/src/node.ts");
+    expect(ordered.sources).not.toContain("packages/greet/src/hello.ts");
   });
 
   it("is byte-identical across builds and checkout locations", async () => {
@@ -163,7 +179,7 @@ describe("runtime bundles", () => {
         "app/src/main.ts": [
           'import { createRequire } from "node:module";',
           "const require = createRequire(import.meta.url);",
-          'console.log(require("left-pad")("x"));',
+          'console.log(require("left-pad")("x"), require("node:fs").existsSync);',
         ].join("\n"),
       }),
       "fixture",
@@ -173,6 +189,8 @@ describe("runtime bundles", () => {
     expect(text(bundle, "main.mjs")).toMatch(
       /var (require\d*) = createRequire\(import\.meta\.url\);\nconsole\.log\(\1\("\.\.\/\.\.\/node_modules\/left-pad\/index\.js"\)/,
     );
+    // Builtins are left as they are.
+    expect(text(bundle, "main.mjs")).toMatch(/require\d*\("node:fs"\)/);
     expect(JSON.parse(text(bundle, EXTERNALS_MANIFEST))).toEqual([
       "../../node_modules/left-pad/index.js",
     ]);
@@ -194,6 +212,17 @@ describe("runtime bundles", () => {
     ["the module's directory", "console.log(import.meta.dirname);", "import.meta.dirname"],
     ["an entry-point check", "if (import.meta.main) console.log(1);", "import.meta.main"],
     ["module resolution", 'console.log(import.meta.resolve("left-pad"));', "import.meta.resolve"],
+    ["a computed import.meta property", 'console.log(import.meta["url"]);', "import.meta (line 1)"],
+    [
+      "a destructured import.meta",
+      "const { url } = import.meta;\nconsole.log(url);",
+      "import.meta",
+    ],
+    [
+      "an exported created require",
+      'import { createRequire } from "node:module";\nexport const load = createRequire(import.meta.url);',
+      "exported load from createRequire(import.meta.url)",
+    ],
     [
       "the module's URL",
       'import { createRequire } from "node:module";\ncreateRequire(import.meta.url);',

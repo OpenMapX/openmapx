@@ -68,6 +68,18 @@ export function analyzeModule(file, text) {
       localRequireBindings.add(node.name.text);
       bindingDeclarations.add(node.name);
       assetMetaNodes.add(node.initializer.arguments[0]);
+      // Other modules' calls of an exported binding are not analyzed.
+      const statement = node.parent?.parent;
+      if (
+        statement &&
+        ts.isVariableStatement(statement) &&
+        statement.modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword)
+      ) {
+        const { line } = source.getLineAndCharacterOfPosition(node.getStart(source));
+        locationSensitive.push(
+          `exported ${node.name.text} from createRequire(import.meta.url) (line ${line + 1})`,
+        );
+      }
     }
     if (ts.isIdentifier(node)) identifierUses.push(node);
     if (ts.isImportDeclaration(node)) {
@@ -102,12 +114,18 @@ export function analyzeModule(file, text) {
       });
       assetMetaNodes.add(node.arguments[1]);
     } else if (
-      ts.isPropertyAccessExpression(node) &&
-      isImportMeta(node, node.name.text) &&
-      !assetMetaNodes.has(node)
+      ts.isMetaProperty(node) &&
+      node.keywordToken === ts.SyntaxKind.ImportKeyword &&
+      !assetMetaNodes.has(node.parent)
     ) {
+      // Every form other than the two above: `import.meta.dirname`,
+      // `import.meta["url"]`, `const { url } = import.meta`, …
+      const property =
+        ts.isPropertyAccessExpression(node.parent) && node.parent.expression === node
+          ? `import.meta.${node.parent.name.text}`
+          : "import.meta";
       const { line } = source.getLineAndCharacterOfPosition(node.getStart(source));
-      locationSensitive.push(`import.meta.${node.name.text} (line ${line + 1})`);
+      locationSensitive.push(`${property} (line ${line + 1})`);
     } else if (
       ts.isIdentifier(node) &&
       (node.text === "__dirname" || node.text === "__filename") &&

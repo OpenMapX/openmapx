@@ -70,11 +70,15 @@ function workspacePackages(root) {
   return packages;
 }
 
+const EXPORT_CONDITIONS = new Set(["node", "import", "module-sync", "node-addons", "default"]);
+
+/** The target Node picks: the first key, in object order, that it matches. */
 function exportTarget(entry) {
   if (typeof entry === "string") return entry;
-  if (!entry || typeof entry !== "object") return undefined;
-  for (const condition of ["import", "node", "default"]) {
-    const target = exportTarget(entry[condition]);
+  if (!entry || typeof entry !== "object" || Array.isArray(entry)) return undefined;
+  for (const [condition, value] of Object.entries(entry)) {
+    if (!EXPORT_CONDITIONS.has(condition)) continue;
+    const target = exportTarget(value);
     if (target) return target;
   }
   return undefined;
@@ -104,6 +108,7 @@ export async function buildRuntimeBundle(root, image, config = RUNTIME_BUNDLES[i
   const packages = workspacePackages(absoluteRoot);
   const externals = new Set();
   const assets = new Map();
+  const sources = new Set();
   const problems = [];
 
   const runtimePlugin = {
@@ -149,6 +154,7 @@ export async function buildRuntimeBundle(root, image, config = RUNTIME_BUNDLES[i
       });
       context.onLoad({ filter: SOURCE }, async (args) => {
         if (args.path.split(sep).includes("node_modules")) return undefined;
+        sources.add(args.path);
         const text = readFileSync(args.path, "utf8");
         const file = relative(absoluteRoot, args.path);
         const facts = analyzeModule(args.path, text);
@@ -174,11 +180,13 @@ export async function buildRuntimeBundle(root, image, config = RUNTIME_BUNDLES[i
           }
           const name = `${createHash("sha256").update(bytes).digest("hex").slice(0, 12)}-${basename(sourcePath)}`;
           assets.set(name, bytes);
+          sources.add(sourcePath);
           replacements.push({ ...asset, text: `./${ASSET_DIR}/${name}` });
         }
         // A `require` created from the module's URL resolves from the bundle
         // instead; pin each literal it loads, as for imports.
         for (const call of facts.localRequires) {
+          if (BUILTINS.has(call.specifier)) continue;
           const resolved = await context.resolve(call.specifier, {
             importer: args.path,
             kind: "require-call",
@@ -256,7 +264,18 @@ export async function buildRuntimeBundle(root, image, config = RUNTIME_BUNDLES[i
   for (const [name, bytes] of [...files].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))) {
     hash.update(`${name}\0`).update(createHash("sha256").update(bytes).digest("hex"));
   }
-  return { outdir, files, digest: hash.digest("hex") };
+  // Every repository file the build read, for checking the image's bundle stage.
+  const configs = [];
+  for (let tsconfig = join(absoluteRoot, config.tsconfig); tsconfig; ) {
+    configs.push(tsconfig);
+    const parent = JSON.parse(readFileSync(tsconfig, "utf8")).extends;
+    tsconfig =
+      typeof parent === "string" && parent.startsWith(".")
+        ? resolve(dirname(tsconfig), parent)
+        : "";
+  }
+  const read = [...sources, ...configs].map((path) => posixRelative(absoluteRoot, path).slice(2));
+  return { outdir, files, digest: hash.digest("hex"), sources: [...new Set(read)].sort() };
 }
 
 export function writeRuntimeBundle(bundle) {

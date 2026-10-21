@@ -679,6 +679,17 @@ describe("bundled image fingerprints", () => {
         "pnpm-lock.yaml",
       ].sort(),
     );
+    // From the bundle stage itself: what a partial checkout gives the bundler.
+    expect(stageInputs(dockerfile, ".", undefined, "bundle").inputs.sort()).toEqual(
+      [
+        "apps/runner",
+        "apps/runner/package.json",
+        "package.json",
+        "packages/lib",
+        "packages/lib/package.json",
+        "pnpm-lock.yaml",
+      ].sort(),
+    );
     expect(dockerStages(dockerfile).map((stage: { name?: string }) => stage.name)).toEqual([
       "base",
       "deps",
