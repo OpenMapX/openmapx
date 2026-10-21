@@ -15,9 +15,12 @@ import Typography from "@mui/material/Typography";
 import { createApiClient } from "@openmapx/core";
 import * as sdk from "@openmapx/core/api-admin-sdk";
 import type { OvertureStatus } from "@openmapx/core/api-contracts";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { useMemo, useState } from "react";
+import { SERVICE_READ_TIMEOUT_MS } from "@/lib/admin/serviceAdmin";
+import { useServiceJobRegistration } from "@/lib/admin/serviceAdminJobs";
+import { useAdminMutationOwner } from "@/lib/admin/useAdminMutationOwner";
 import { runAdminOperation } from "../operations/adminOperationsApi";
 import { useAdminToast } from "../shared/AdminToast";
 import { ConfirmDialog } from "../shared/ConfirmDialog";
@@ -89,9 +92,16 @@ export function canResumeOvertureLinks(
   );
 }
 
+export function overtureStatusQueryKey(apiUrl: string) {
+  return ["admin", "overture", apiUrl, "status"] as const;
+}
+
 export function OvertureMaintenance({ apiUrl }: { apiUrl: string }) {
+  return <OvertureMaintenanceView key={apiUrl} apiUrl={apiUrl} />;
+}
+function OvertureMaintenanceView({ apiUrl }: { apiUrl: string }) {
   const showToast = useAdminToast();
-  const queryClient = useQueryClient();
+  const register = useServiceJobRegistration();
   const client = useMemo(
     () => createApiClient({ baseUrl: apiUrl, credentials: "include" }),
     [apiUrl],
@@ -100,25 +110,41 @@ export function OvertureMaintenance({ apiUrl }: { apiUrl: string }) {
   const [confirmOperation, setConfirmOperation] = useState<Operation | null>(null);
 
   const statusQuery = useQuery<OvertureStatus | null>({
-    queryKey: ["admin", "overture", "status"],
+    queryKey: overtureStatusQueryKey(apiUrl),
     queryFn: async ({ signal }) => {
-      const response = await sdk.getApiDataManagerOvertureStatus({ client, signal });
+      const response = await sdk.getApiDataManagerOvertureStatus({
+        client,
+        signal,
+        timeoutMs: SERVICE_READ_TIMEOUT_MS,
+      });
       if (response.status === 404) return null;
       return sdk.unwrapAdminResponse(response);
     },
     refetchInterval: (query) => (query.state.data?.status === "running" ? 10_000 : 60_000),
   });
 
+  const owner = useAdminMutationOwner(client, JSON.stringify([region, confirmOperation]));
   const operation = useMutation({
-    mutationFn: (operationName: Operation) =>
-      runAdminOperation(apiUrl, operationName, { region: region.trim() }),
-    onSuccess: (jobId, operationName) => {
-      showToast(`Queued ${operationName} (${jobId})`);
-      setConfirmOperation(null);
-      void queryClient.invalidateQueries({ queryKey: ["admin", "jobs"] });
+    retry: false,
+    mutationFn: async (operationName: Operation) => {
+      const execution = owner;
+      const effect = {
+        kind: "operations",
+        refreshKeys: [overtureStatusQueryKey(apiUrl)],
+      } as const;
+      try {
+        const jobId = await runAdminOperation(client, operationName, { region: region.trim() });
+        register({ client, apiUrl, jobId, effect });
+        if (execution.active) {
+          showToast(`Queued ${operationName} (${jobId})`);
+          setConfirmOperation(null);
+        }
+      } catch (error) {
+        if (execution.active)
+          showToast(error instanceof Error ? error.message : "Operation failed", "error");
+        throw error;
+      }
     },
-    onError: (error) =>
-      showToast(error instanceof Error ? error.message : "Operation failed", "error"),
   });
 
   const status = statusQuery.data;

@@ -5,10 +5,26 @@ import { createQueryWrapper, render, screen, userEvent, waitFor } from "@/test";
 import { AdminOperationCard } from "../AdminOperationCard";
 import { type AdminOperationContract, initialFormValues } from "../adminOperationsApi";
 
+vi.mock("@/integration-api/runtime/EnvProvider", () => ({
+  useEnv: () => ({ apiUrl: "http://api.test" }),
+}));
+
+import { ServiceAdministrationProvider } from "@/lib/admin/serviceAdminJobs";
+
+function wrapper() {
+  const Query = createQueryWrapper();
+  return ({ children }: { children: React.ReactNode }) => (
+    <Query>
+      <ServiceAdministrationProvider>{children}</ServiceAdministrationProvider>
+    </Query>
+  );
+}
 const responses: unknown[] = [];
 const fetchCalls: Array<[string, RequestInit | undefined]> = [];
 vi.stubGlobal("fetch", async (url: string, init?: RequestInit) => {
   fetchCalls.push([url, init]);
+  if (url.includes("/jobs/"))
+    return Response.json({ error: "Observation fixture" }, { status: 500 });
   return responses.shift();
 });
 
@@ -39,7 +55,7 @@ const cleanContract: AdminOperationContract = {
 };
 
 function jsonResponse(status: number, body: unknown) {
-  return { ok: status >= 200 && status < 300, status, json: async () => body };
+  return Response.json(body, { status });
 }
 
 afterEach(() => {
@@ -74,7 +90,7 @@ describe("AdminOperationCard", () => {
         onQueued={onQueued}
         onError={onError}
       />,
-      { wrapper: createQueryWrapper() },
+      { wrapper: wrapper() },
     );
 
     await userEvent.type(screen.getByLabelText("Region"), "europe/germany");
@@ -110,7 +126,7 @@ describe("AdminOperationCard", () => {
         onQueued={vi.fn()}
         onError={onError}
       />,
-      { wrapper: createQueryWrapper() },
+      { wrapper: wrapper() },
     );
     await userEvent.type(screen.getByLabelText("Region"), "Europe");
     await userEvent.click(screen.getByRole("button", { name: "Queue Full Update Pipeline" }));
@@ -136,7 +152,7 @@ describe("AdminOperationCard", () => {
         onQueued={vi.fn()}
         onError={vi.fn()}
       />,
-      { wrapper: createQueryWrapper() },
+      { wrapper: wrapper() },
     );
     await userEvent.click(screen.getByRole("button", { name: "Queue Cleanup Data" }));
     expect(await screen.findByText("Confirm data cleanup")).toBeTruthy();
@@ -152,7 +168,7 @@ describe("AdminOperationCard", () => {
         onQueued={vi.fn()}
         onError={vi.fn()}
       />,
-      { wrapper: createQueryWrapper() },
+      { wrapper: wrapper() },
     );
     const button = screen.getByRole("button", { name: "Queue Cleanup Data" });
     expect(button.hasAttribute("disabled")).toBe(false);
