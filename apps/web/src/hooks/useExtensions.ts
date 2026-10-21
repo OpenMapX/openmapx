@@ -6,7 +6,13 @@ import type {
   AdminExtensionCatalogQuery,
   AdminExtensionInstallRequest,
 } from "@openmapx/core/api-contracts";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  type QueryClient,
+  useMutation,
+  useMutationState,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { useActivityClient } from "@/components/admin/activity/activityQueries";
 import { useAdminJobRegistration } from "@/lib/admin/adminJobEffects";
 import {
@@ -29,29 +35,65 @@ export function useExtensionSources() {
   const { client, apiUrl } = useActivityClient();
   return useQuery(extensionAdminQueries(client, apiUrl).sources());
 }
+type RemovalOperation = "extension" | "source";
+// View/observer disposal must not release an executing request. Each QueryClient
+// has its own ephemeral owners; weak keys do not retain disposed client instances.
+const removalOwners = new WeakMap<QueryClient, Set<string>>();
+function acquireRemoval(
+  qc: QueryClient,
+  apiUrl: string,
+  operation: RemovalOperation,
+  target: string,
+) {
+  let owners = removalOwners.get(qc);
+  if (!owners) {
+    owners = new Set();
+    removalOwners.set(qc, owners);
+  }
+  const key = JSON.stringify([apiUrl, operation, target]);
+  if (owners.has(key)) throw new Error("Removal already pending for this target");
+  owners.add(key);
+  return () => {
+    owners.delete(key);
+    if (!owners.size) removalOwners.delete(qc);
+  };
+}
+
 function useExtensionWrite<T extends object, V = void>(
   run: (client: ApiClient, values: V) => Promise<T>,
   binding?: ExtensionAdministrationClient,
+  removal?: { operation: RemovalOperation; target: (values: V) => string },
 ) {
   const local = useActivityClient();
   const { client, apiUrl } = binding ?? local;
   const qc = useQueryClient();
   const register = useAdminJobRegistration();
   return useMutation({
-    mutationKey: ["extension-write", apiUrl],
+    mutationKey: removal
+      ? ["extension-removal", apiUrl, removal.operation]
+      : ["extension-write", apiUrl],
     retry: false,
     mutationFn: async (values: V) => {
       // Essential effects capture execution ownership here and survive view disposal.
-      const result = await run(client, values);
-      if ("jobId" in result && typeof result.jobId === "string")
-        register({
-          client,
-          apiUrl,
-          jobId: result.jobId,
-          onSettled: () => invalidateExtensionAdministration(qc, apiUrl, "components"),
-        });
-      else await invalidateExtensionAdministration(qc, apiUrl, "snapshot");
-      return result;
+      // Acquire synchronously, before request construction/acquisition. A stale UI
+      // or another observer cannot send a second request or release the first owner.
+      const release = removal
+        ? acquireRemoval(qc, apiUrl, removal.operation, removal.target(values))
+        : undefined;
+      try {
+        const result = await run(client, values);
+        if ("jobId" in result && typeof result.jobId === "string")
+          register({
+            client,
+            apiUrl,
+            jobId: result.jobId,
+            onSettled: () => invalidateExtensionAdministration(qc, apiUrl, "components"),
+          });
+        else await invalidateExtensionAdministration(qc, apiUrl, "snapshot");
+        return result;
+      } finally {
+        release?.();
+      }
     },
   });
 }
@@ -88,8 +130,34 @@ export function useUpdateExtension(binding?: ExtensionAdministrationClient) {
     binding,
   );
 }
+/** The MutationCache outlives tab observers. Select all removal scopes so raw
+ * identity changes are reflected immediately, independently of cache notifications.
+ */
+function useExtensionRemoval<T extends object>(
+  operation: RemovalOperation,
+  run: (client: ApiClient, target: string) => Promise<T>,
+) {
+  const { apiUrl } = useActivityClient();
+  const pending = useMutationState({
+    filters: { mutationKey: ["extension-removal"], status: "pending" },
+    select: (mutation) =>
+      [
+        mutation.options.mutationKey?.[1],
+        mutation.options.mutationKey?.[2],
+        mutation.state.variables,
+      ] as const,
+  });
+  const mutation = useExtensionWrite(run, undefined, { operation, target: (value) => value });
+  return {
+    ...mutation,
+    isPendingFor: (target: string) =>
+      pending.some(
+        ([origin, kind, value]) => origin === apiUrl && kind === operation && value === target,
+      ),
+  };
+}
 export function useRemoveExtension() {
-  return useExtensionWrite((client, id: string) =>
+  return useExtensionRemoval("extension", (client, id) =>
     extensionOrThrow(sdk.removeAdminExtension(id, undefined, options(client))),
   );
 }
@@ -104,7 +172,7 @@ export function useAddExtensionSource() {
   );
 }
 export function useRemoveExtensionSource() {
-  return useExtensionWrite((client, url: string) =>
+  return useExtensionRemoval("source", (client, url) =>
     extensionOrThrow(sdk.removeAdminExtensionSource({ url }, options(client))),
   );
 }

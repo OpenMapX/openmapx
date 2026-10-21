@@ -1,8 +1,10 @@
 import { QueryClientProvider } from "@tanstack/react-query";
 import type { PropsWithChildren } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { job } from "@/components/admin/activity/__tests__/fixtures";
 import { AdminJobEffectsProvider } from "@/lib/admin/adminJobEffects";
 import { act, cleanup, createTestQueryClient, renderHook, waitFor } from "@/test";
+import { deferred } from "@/test/extensionAdmin";
 import {
   useAddExtensionSource,
   useExtensionCatalog,
@@ -269,6 +271,252 @@ describe("extension browser acquisition through the real generated SDK", () => {
         ["admin", "extensions", "http://admin.test", kind],
         ["admin", "extensions", "https://remote.test/", kind],
       ]);
+    },
+  );
+});
+
+type RemovalHook =
+  | ReturnType<typeof useRemoveExtension>
+  | ReturnType<typeof useRemoveExtensionSource>;
+
+let removalJobSequence = 0;
+function removalReply(kind: "extension" | "source", id = `removal-job-${++removalJobSequence}`) {
+  return kind === "extension"
+    ? Response.json({ jobId: id }, { status: 202 })
+    : Response.json({ ok: true });
+}
+describe("removal execution ownership beyond a view observer", () => {
+  it.each(["extension", "source"] as const)(
+    "atomically excludes overlapping %s observers for one target while another target executes",
+    async (kind) => {
+      const first = deferred<Response>();
+      const deletes: string[] = [];
+      vi.stubGlobal("fetch", (url: string, init: RequestInit) => {
+        if (init.method !== "DELETE")
+          return Response.json(job({ id: new URL(url).pathname.split("/").at(-1) ?? "missing" }));
+        const target =
+          kind === "extension"
+            ? decodeURIComponent(new URL(url).pathname.split("/").at(-1) ?? "")
+            : JSON.parse(String(init.body)).url;
+        deletes.push(target);
+        if (target === "target-A" && deletes.filter((t) => t === target).length === 1)
+          return first.promise;
+        if (target === "target-A")
+          return Response.json({ error: "Duplicate reached transport" }, { status: 400 });
+        return removalReply(kind);
+      });
+      const useRemoval = kind === "extension" ? useRemoveExtension : useRemoveExtensionSource;
+      const { result } = mount(() => ({ first: useRemoval(), second: useRemoval() }));
+      let work!: Promise<unknown>;
+      let duplicate!: Promise<unknown>;
+      // Both calls use one render, before either observer can learn new UI pending state.
+      act(() => {
+        work = result.current.first.mutateAsync("target-A");
+        work.catch(() => {});
+        duplicate = result.current.second.mutateAsync("target-A");
+        duplicate.catch(() => {});
+      });
+      try {
+        await act(async () => {
+          await expect(duplicate).rejects.toThrow("Removal already pending for this target");
+        });
+        expect(deletes).toEqual(["target-A"]);
+        await act(async () => {
+          await result.current.second.mutateAsync("target-B");
+        });
+        expect(deletes).toEqual(["target-A", "target-B"]);
+        await waitFor(() => expect(result.current.second.isPendingFor("target-A")).toBe(true));
+        expect(result.current.second.isPendingFor("target-B")).toBe(false);
+        await act(async () => {
+          await expect(result.current.second.mutateAsync("target-A")).rejects.toThrow(
+            "Removal already pending for this target",
+          );
+        });
+        expect(deletes).toEqual(["target-A", "target-B"]);
+      } finally {
+        await act(async () => {
+          first.resolve(removalReply(kind));
+          await work;
+        });
+      }
+    },
+  );
+  it.each(["extension", "source"] as const)(
+    "releases %s ownership after success and error without retrying",
+    async (kind) => {
+      const first = deferred<Response>();
+      let attempts = 0;
+      vi.stubGlobal("fetch", (url: string, init: RequestInit) =>
+        init.method === "DELETE"
+          ? ++attempts === 1
+            ? first.promise
+            : attempts === 2
+              ? Response.json({ error: "Deliberate rejection" }, { status: 400 })
+              : removalReply(kind)
+          : Response.json(job({ id: new URL(url).pathname.split("/").at(-1) ?? "missing" })),
+      );
+      const useRemoval = kind === "extension" ? useRemoveExtension : useRemoveExtensionSource;
+      const { result } = mount<RemovalHook>(useRemoval);
+      let work!: Promise<unknown>;
+      act(() => {
+        work = result.current.mutateAsync("same-target");
+      });
+      await waitFor(() => expect(attempts).toBe(1));
+      await act(async () => {
+        first.resolve(removalReply(kind));
+        await work;
+      });
+      expect(attempts).toBe(1);
+      await act(async () => {
+        await expect(result.current.mutateAsync("same-target")).rejects.toThrow(
+          "Deliberate rejection",
+        );
+      });
+      expect(attempts).toBe(2);
+      await act(async () => {
+        await result.current.mutateAsync("same-target");
+      });
+      expect(attempts).toBe(3);
+    },
+  );
+  it.each(["extension", "source"] as const)(
+    "keeps %s exclusions scoped to QueryClient",
+    async (kind) => {
+      const responses = [deferred<Response>(), deferred<Response>()];
+      let attempts = 0;
+      vi.stubGlobal("fetch", (url: string, init: RequestInit) =>
+        init.method === "DELETE"
+          ? responses[attempts++].promise
+          : Response.json(job({ id: new URL(url).pathname.split("/").at(-1) ?? "missing" })),
+      );
+      const useRemoval = kind === "extension" ? useRemoveExtension : useRemoveExtensionSource;
+      const a = mount<RemovalHook>(useRemoval);
+      const b = mount<RemovalHook>(useRemoval);
+      let workA!: Promise<unknown>;
+      let workB!: Promise<unknown>;
+      act(() => {
+        workA = a.result.current.mutateAsync("same-target");
+        workB = b.result.current.mutateAsync("same-target");
+      });
+      await waitFor(() => expect(attempts).toBe(2));
+      await act(async () => {
+        responses[0].resolve(removalReply(kind));
+        responses[1].resolve(removalReply(kind));
+        await Promise.all([workA, workB]);
+      });
+    },
+  );
+  it.each(["extension", "source"] as const)(
+    "distinguishes raw %s origins and retains the original scope on origin ABA",
+    async (kind) => {
+      const responses = [deferred<Response>(), deferred<Response>()];
+      const origins: string[] = [];
+      vi.stubGlobal("fetch", (url: string, init: RequestInit) => {
+        if (init.method !== "DELETE")
+          return Response.json(job({ id: new URL(url).pathname.split("/").at(-1) ?? "missing" }));
+        origins.push(new URL(url).origin);
+        return origins.length <= 2
+          ? responses[origins.length - 1].promise
+          : Response.json({ error: "Duplicate reached transport" }, { status: 400 });
+      });
+      const useRemoval = kind === "extension" ? useRemoveExtension : useRemoveExtensionSource;
+      const { result, rerender } = mount<RemovalHook>(useRemoval);
+      let workA!: Promise<unknown>;
+      let workB!: Promise<unknown>;
+      act(() => {
+        workA = result.current.mutateAsync("same-target");
+      });
+      await waitFor(() => expect(origins).toHaveLength(1));
+      await waitFor(() => expect(result.current.isPendingFor("same-target")).toBe(true));
+      apiUrl = "http://admin.test/";
+      rerender();
+      expect(result.current.isPendingFor("same-target")).toBe(false);
+      act(() => {
+        workB = result.current.mutateAsync("same-target");
+      });
+      await waitFor(() => expect(origins).toHaveLength(2));
+      apiUrl = "http://admin.test";
+      rerender();
+      expect(result.current.isPendingFor("same-target")).toBe(true);
+      try {
+        await act(async () => {
+          await expect(result.current.mutateAsync("same-target")).rejects.toThrow(
+            "Removal already pending for this target",
+          );
+        });
+        expect(origins).toEqual(["http://admin.test", "http://admin.test"]);
+      } finally {
+        await act(async () => {
+          responses[0].resolve(removalReply(kind));
+          responses[1].resolve(removalReply(kind));
+          await Promise.all([workA, workB]);
+        });
+      }
+    },
+  );
+  it("keeps extension removal and source removal independent even for equal target strings", async () => {
+    const replies = [deferred<Response>(), deferred<Response>()];
+    const paths: string[] = [];
+    vi.stubGlobal("fetch", (url: string, init: RequestInit) => {
+      if (init.method !== "DELETE")
+        return Response.json(job({ id: new URL(url).pathname.split("/").at(-1) ?? "missing" }));
+      paths.push(new URL(url).pathname);
+      return replies[paths.length - 1].promise;
+    });
+    const { result } = mount(() => ({
+      extension: useRemoveExtension(),
+      source: useRemoveExtensionSource(),
+    }));
+    let a!: Promise<unknown>;
+    let b!: Promise<unknown>;
+    act(() => {
+      a = result.current.extension.mutateAsync("same-target");
+      b = result.current.source.mutateAsync("same-target");
+    });
+    await waitFor(() =>
+      expect(paths).toEqual(["/api/admin/extensions/same-target", "/api/admin/extensions/sources"]),
+    );
+    await act(async () => {
+      replies[0].resolve(removalReply("extension"));
+      replies[1].resolve(removalReply("source"));
+      await Promise.all([a, b]);
+    });
+  });
+  it.each(["extension", "source"] as const)(
+    "releases %s exclusion on observed timeout, preserving ambiguity and no automatic retry",
+    async (kind) => {
+      vi.useFakeTimers();
+      let attempts = 0;
+      vi.stubGlobal("fetch", (url: string, init: RequestInit) => {
+        if (init.method !== "DELETE")
+          return Response.json(job({ id: new URL(url).pathname.split("/").at(-1) ?? "missing" }));
+        if (++attempts > 1) return removalReply(kind);
+        return new Promise((_resolve, reject) =>
+          init.signal?.addEventListener(
+            "abort",
+            () => reject(new DOMException("Aborted", "AbortError")),
+            { once: true },
+          ),
+        );
+      });
+      const useRemoval = kind === "extension" ? useRemoveExtension : useRemoveExtensionSource;
+      const { result } = mount<RemovalHook>(useRemoval);
+      let work!: Promise<unknown>;
+      act(() => {
+        work = result.current.mutateAsync("same-target");
+        work.catch(() => {});
+      });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(180_001);
+        await expect(work).rejects.toThrow(
+          "Extension request ended without a confirmed result. Work may still be running; this does not cancel a host job. Check Activity before deliberately retrying.",
+        );
+      });
+      expect(attempts).toBe(1);
+      await act(async () => {
+        await result.current.mutateAsync("same-target");
+      });
+      expect(attempts).toBe(2);
     },
   );
 });

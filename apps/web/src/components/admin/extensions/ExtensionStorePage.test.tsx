@@ -1,7 +1,16 @@
 import { QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AdminJobEffectsProvider } from "@/lib/admin/adminJobEffects";
-import { act, cleanup, createTestQueryClient, fireEvent, render, screen, waitFor } from "@/test";
+import {
+  act,
+  cleanup,
+  createTestQueryClient,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@/test";
 import { catalogEntry, deferred, installed, preview } from "@/test/extensionAdmin";
 import { job } from "../activity/__tests__/fixtures";
 import { AdminToastProvider } from "../shared/AdminToast";
@@ -340,4 +349,134 @@ describe("actual extension forms and SDK ownership", () => {
     expect(screen.queryByText("Review extension security")).toBeNull();
     expect(installCalls()).toHaveLength(0);
   });
+});
+
+describe("destructive target exclusion survives tab disposal", () => {
+  it.each(["success", "error"] as const)(
+    "retains an uninstall guard through Installed→Browse→Installed until %s, without blocking another ID",
+    async (outcome) => {
+      vi.stubGlobal("confirm", () => true);
+      const pending = deferred<Response>();
+      const deletes: string[] = [];
+      intercept = (u, i) => {
+        if (u.pathname.endsWith("/installed"))
+          return Response.json({
+            extensions: [installed(), installed({ id: "other", name: "Other extension" })],
+          });
+        if (i.method === "DELETE") {
+          const id = decodeURIComponent(u.pathname.split("/").at(-1) ?? "");
+          deletes.push(id);
+          if (id === "demo")
+            return deletes.filter((x) => x === "demo").length === 1
+              ? pending.promise
+              : Response.json({ error: "Duplicate reached transport" }, { status: 400 });
+          return Response.json({ jobId: "other-job" }, { status: 202 });
+        }
+        if (u.pathname.includes("/jobs/"))
+          return Response.json(job({ id: u.pathname.split("/").at(-1) }));
+        return undefined;
+      };
+      mount();
+      fireEvent.click(screen.getByRole("tab", { name: "Installed" }));
+      const button = (name: string) =>
+        within(screen.getByRole("row", { name: new RegExp(name) })).getByRole("button", {
+          name: "Uninstall",
+        });
+      await screen.findByText("Demo extension");
+      fireEvent.click(button("Demo extension"));
+      await waitFor(() => expect(deletes).toEqual(["demo"]));
+      fireEvent.click(screen.getByRole("tab", { name: "Browse" }));
+      fireEvent.click(screen.getByRole("tab", { name: "Installed" }));
+      await screen.findByText("Demo extension");
+      fireEvent.click(button("Demo extension"));
+      await act(async () => {});
+      expect(deletes).toEqual(["demo"]);
+      expect(button("Demo extension")).toBeDisabled();
+      expect(button("Other extension")).not.toBeDisabled();
+      fireEvent.click(button("Other extension"));
+      await waitFor(() => expect(deletes).toEqual(["demo", "other"]));
+      await screen.findByText("Removal queued for Other extension. Check Activity for completion.");
+      expect(button("Demo extension")).toBeDisabled();
+      await act(async () =>
+        pending.resolve(
+          Response.json(
+            outcome === "success" ? { jobId: "original-job" } : { error: "Old uninstall rejected" },
+            { status: outcome === "success" ? 202 : 400 },
+          ),
+        ),
+      );
+      await waitFor(() => expect(button("Demo extension")).not.toBeDisabled());
+      expect(screen.queryByText("Old uninstall rejected")).toBeNull();
+      expect(
+        screen.queryByText("Removal queued for Demo extension. Check Activity for completion."),
+      ).toBeNull();
+      expect(deletes).toEqual(["demo", "other"]);
+      if (outcome === "success")
+        await waitFor(() =>
+          expect(calls.some((c) => c.url.pathname.endsWith("/jobs/original-job"))).toBe(true),
+        );
+    },
+  );
+  it.each(["success", "error"] as const)(
+    "retains source removal through Sources→Browse→Sources until %s, without blocking another URL",
+    async (outcome) => {
+      const pending = deferred<Response>();
+      const deletes: string[] = [];
+      const first = "https://custom.test/index.json",
+        second = "https://other.test/index.json";
+      intercept = (u, i) => {
+        if (!u.pathname.endsWith("/sources")) return undefined;
+        if (i.method === "DELETE") {
+          const url = JSON.parse(String(i.body)).url;
+          deletes.push(url);
+          if (url === first)
+            return deletes.filter((x) => x === first).length === 1
+              ? pending.promise
+              : Response.json({ error: "Duplicate reached transport" }, { status: 400 });
+          return Response.json({ ok: true });
+        }
+        return Response.json({
+          sources: [
+            { url: first, label: "First catalog", isDefault: false },
+            { url: second, label: "Second catalog", isDefault: false },
+          ],
+        });
+      };
+      mount();
+      fireEvent.click(screen.getByRole("tab", { name: "Sources" }));
+      const button = (label: string) =>
+        within(screen.getByRole("row", { name: new RegExp(label) })).getByRole("button", {
+          name: "Remove source",
+        });
+      await screen.findByText("First catalog");
+      fireEvent.click(button("First catalog"));
+      await waitFor(() => expect(deletes).toEqual([first]));
+      fireEvent.click(screen.getByRole("tab", { name: "Browse" }));
+      fireEvent.click(screen.getByRole("tab", { name: "Sources" }));
+      await screen.findByText("First catalog");
+      fireEvent.click(button("First catalog"));
+      await act(async () => {});
+      expect(deletes).toEqual([first]);
+      expect(button("First catalog")).toBeDisabled();
+      expect(button("Second catalog")).not.toBeDisabled();
+      fireEvent.click(button("Second catalog"));
+      await waitFor(() => expect(deletes).toEqual([first, second]));
+      await screen.findByText("Source removed");
+      expect(button("First catalog")).toBeDisabled();
+      fireEvent.click(screen.getByRole("button", { name: "Close" }));
+      await waitFor(() => expect(screen.queryByText("Source removed")).toBeNull());
+      await act(async () =>
+        pending.resolve(
+          Response.json(
+            outcome === "success" ? { ok: true } : { error: "Old source removal rejected" },
+            { status: outcome === "success" ? 200 : 400 },
+          ),
+        ),
+      );
+      await waitFor(() => expect(button("First catalog")).not.toBeDisabled());
+      expect(screen.queryByText("Old source removal rejected")).toBeNull();
+      expect(screen.queryByText("Source removed")).toBeNull();
+      expect(deletes).toEqual([first, second]);
+    },
+  );
 });

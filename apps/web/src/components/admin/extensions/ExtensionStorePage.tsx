@@ -582,7 +582,6 @@ function InstalledTab() {
   const showToast = useAdminToast();
   const { data, isLoading, isError } = useInstalledExtensions();
   const flow = useExtensionPreview("update", data);
-  const removing = useRef(new Set<string>());
   const remove = useRemoveExtension();
   const rows = data?.extensions ?? [];
   const { paged, paginationProps } = useClientPagination(rows, 25);
@@ -666,7 +665,7 @@ function InstalledTab() {
                       {ext.hasUpdate && (
                         <Button
                           size="small"
-                          disabled={flow.preparing || flow.busy || remove.isPending}
+                          disabled={flow.preparing || flow.busy || remove.isPendingFor(ext.id)}
                           onClick={() => {
                             void flow.start({ id: ext.id });
                           }}
@@ -678,9 +677,9 @@ function InstalledTab() {
                         <IconButton
                           size="small"
                           color="error"
-                          disabled={remove.isPending || flow.busy}
+                          disabled={remove.isPendingFor(ext.id) || flow.busy}
                           onClick={() => {
-                            if (removing.current.has(ext.id)) return;
+                            if (remove.isPendingFor(ext.id)) return;
                             flow.retire();
                             const current = flow.capture();
                             if (
@@ -689,24 +688,18 @@ function InstalledTab() {
                               )
                             )
                               return;
-                            removing.current.add(ext.id);
-                            void remove
-                              .mutateAsync(ext.id)
-                              .then(
-                                () => {
-                                  if (current())
-                                    showToast(
-                                      `Removal queued for ${ext.name}. Check Activity for completion.`,
-                                      "info",
-                                    );
-                                },
-                                (error) => {
-                                  if (current()) showToast(error.message, "error");
-                                },
-                              )
-                              .finally(() => {
-                                removing.current.delete(ext.id);
-                              });
+                            void remove.mutateAsync(ext.id).then(
+                              () => {
+                                if (current())
+                                  showToast(
+                                    `Removal queued for ${ext.name}. Check Activity for completion.`,
+                                    "info",
+                                  );
+                              },
+                              (error) => {
+                                if (current()) showToast(error.message, "error");
+                              },
+                            );
                           }}
                         >
                           <DeleteIcon fontSize="small" />
@@ -737,7 +730,6 @@ function SourcesTab() {
   const showToast = useAdminToast();
   const { data, isLoading, isError } = useExtensionSources();
   const ui = useExtensionUiSession();
-  const removing = useRef(new Set<string>());
   const adding = useRef(false);
   const add = useAddExtensionSource();
   const remove = useRemoveExtensionSource();
@@ -800,24 +792,18 @@ function SourcesTab() {
                           <IconButton
                             size="small"
                             color="error"
-                            disabled={remove.isPending}
+                            disabled={remove.isPendingFor(s.url)}
                             onClick={() => {
-                              if (removing.current.has(s.url)) return;
-                              removing.current.add(s.url);
+                              if (remove.isPendingFor(s.url)) return;
                               const current = ui.capture();
-                              void remove
-                                .mutateAsync(s.url)
-                                .then(
-                                  () => {
-                                    if (current()) showToast("Source removed");
-                                  },
-                                  (error) => {
-                                    if (current()) showToast(error.message, "error");
-                                  },
-                                )
-                                .finally(() => {
-                                  removing.current.delete(s.url);
-                                });
+                              void remove.mutateAsync(s.url).then(
+                                () => {
+                                  if (current()) showToast("Source removed");
+                                },
+                                (error) => {
+                                  if (current()) showToast(error.message, "error");
+                                },
+                              );
                             }}
                           >
                             <DeleteIcon fontSize="small" />
