@@ -13,7 +13,7 @@ const ts = createRequire(new URL("../../packages/core/package.json", import.meta
 );
 
 import { generateArtifacts, writeOrCheckArtifacts } from "./codegen.mjs";
-import { selectTaggedDocument } from "./config.mjs";
+import { adminOperationBindings, createCodegenConfig, selectTaggedDocument } from "./config.mjs";
 import { validatedResponseTypes } from "./validated-response-types.mjs";
 
 function generatedConsumerDiagnostics(files: { filename: string; content: string }[]) {
@@ -167,6 +167,58 @@ afterEach(async () => {
 });
 
 describe("SDK artifact gate", () => {
+  it("keeps extension generation dormant until a real document adopts the tag", () => {
+    const document = {
+      paths: {
+        "/fixture": {
+          post: { operationId: "fixture", tags: ["data-manager-admin"], responses: {} },
+        },
+      },
+    };
+    expect(
+      createCodegenConfig({ inputDocument: document, outputDirectory: "/tmp/sdk-config" }),
+    ).not.toHaveProperty("extensionAdmin");
+    // Disposable config fixture only; no production OpenAPI or SDK artifact is written.
+    const adopted = {
+      paths: {
+        ...document.paths,
+        "/api/admin/extensions/install": {
+          post: {
+            operationId: "installAdminExtension",
+            tags: ["extension-admin"],
+            responses: {
+              202: {
+                description: "Accepted",
+                content: {
+                  "application/json": {
+                    schema: {
+                      type: "object",
+                      properties: { jobId: { type: "string" } },
+                      required: ["jobId"],
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    };
+    const config = createCodegenConfig({
+      inputDocument: adopted,
+      outputDirectory: "/tmp/sdk-config",
+    });
+    expect(config).toHaveProperty("extensionAdmin");
+    expect(config.extensionAdmin.output).toMatchObject({
+      client: "fetch",
+      target: "/tmp/sdk-config/generated/admin/extension-admin.generated.ts",
+      schemas: "/tmp/sdk-config/generated/admin/extension-models",
+    });
+    expect(adminOperationBindings(adopted)).toContain(
+      'bindAdminOperation("installAdminExtension")',
+    );
+    expect(selectTaggedDocument(adopted, "service-admin").paths).toEqual({});
+  });
   it("isolates family schemas while preserving recursive refs and security definitions", () => {
     const document = {
       paths: {
