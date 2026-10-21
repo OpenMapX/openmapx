@@ -1,7 +1,7 @@
 import { type PrivacySource, privacySourceSchema } from "@openmapx/core/privacy";
 import type { FastifyPluginAsync } from "fastify";
+import { resolveSettings } from "../services/settings";
 import { declareRouteAuth } from "../utils/route-auth";
-import { resolveSettings } from "./admin-settings";
 
 /**
  * Public, unauthenticated read of the legal facts the published /privacy page
