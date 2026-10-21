@@ -220,6 +220,9 @@ importers:
       '@vitest/coverage-v8':
         specifier: ^5.0.3
         version: 5.0.3(vitest@5.0.3)
+      esbuild:
+        specifier: '>=0.28.1'
+        version: 0.28.2
       graphql:
         specifier: 17.0.2
         version: 17.0.2
@@ -544,13 +547,13 @@ importers:
       fastify:
         specifier: ^5.12.5
         version: 5.12.5
-      tsx:
-        specifier: 4.23.15
-        version: 4.23.15
     devDependencies:
       '@types/node':
         specifier: ^26.6.5
         version: 26.6.5
+      tsx:
+        specifier: 4.23.15
+        version: 4.23.15
       typescript:
         specifier: ^6.0.3
         version: 6.0.3

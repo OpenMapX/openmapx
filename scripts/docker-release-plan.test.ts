@@ -4,6 +4,7 @@ import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { parseAllDocuments } from "yaml";
 import { computePrivacySourceFingerprint } from "../apps/api/privacy-source-fingerprint.mjs";
+import { dockerStages, stageInputs } from "./docker-inputs.mjs";
 import {
   coversPath,
   createReleasePlan,
@@ -610,5 +611,155 @@ snapshots:
   it("follows every snapshot of the repository's lockfile", () => {
     const text = readFileSync(resolve(import.meta.dirname, "../pnpm-lock.yaml"), "utf8");
     expect(() => lockfileSubgraph(documents(text), () => true)).not.toThrow();
+  });
+});
+
+describe("bundled image fingerprints", () => {
+  const dockerfile = [
+    "FROM node AS base",
+    "COPY package.json /tmp/package.json",
+    "FROM base AS deps",
+    "COPY package.json pnpm-lock.yaml ./",
+    "COPY packages/lib/package.json packages/lib/",
+    "COPY apps/runner/package.json apps/runner/",
+    "RUN pnpm install --frozen-lockfile",
+    "FROM base AS prod-deps",
+    "COPY package.json pnpm-lock.yaml ./",
+    "COPY packages/lib/package.json packages/lib/",
+    "COPY apps/runner/package.json apps/runner/",
+    "RUN pnpm install --frozen-lockfile --prod",
+    "FROM deps AS bundle",
+    "COPY packages/lib/ packages/lib/",
+    "COPY apps/runner/ apps/runner/",
+    "RUN node build.mjs",
+    "FROM base AS runner",
+    "COPY --from=prod-deps /app/node_modules ./node_modules",
+    "COPY --from=bundle /app/apps/runner/dist ./dist",
+    "COPY config/runtime.json ./",
+  ].join("\n");
+  const target = { app: "runner", context: ".", dockerfile: "apps/runner/Dockerfile" };
+  const files: Record<string, string> = {
+    "package.json": JSON.stringify({ packageManager: "pnpm@12.11.2", scripts: { a: "1" } }),
+    "packages/lib/package.json": JSON.stringify({
+      name: "lib",
+      version: "1.0.0",
+      dependencies: { zod: "^4" },
+    }),
+    "apps/runner/package.json": JSON.stringify({ name: "runner", scripts: { start: "x" } }),
+    "packages/lib/src/index.ts": "export const a = 1;",
+    "apps/runner/src/index.ts": "console.log(1);",
+    "config/runtime.json": "{}",
+    "pnpm-lock.yaml": "lockfileVersion: '9.0'\n",
+  };
+  const fingerprint = (overrides: Record<string, string> = {}, bundleDigest = "a".repeat(64)) => {
+    const contents = { ...files, ...overrides };
+    return imageFingerprint({
+      target,
+      tree: Object.entries(contents).map(([path, text]) => ({
+        path,
+        mode: "100644",
+        oid: createHash("sha1").update(text).digest("hex"),
+      })),
+      readDockerfile: () => dockerfile,
+      privacyFingerprint: privacy,
+      bundleDigest,
+      readFile: (path: string) => contents[path],
+    });
+  };
+
+  it("follows the stages the runner is built from, without entering the bundle stage", () => {
+    const { inputs, reachesReplaced } = stageInputs(dockerfile, ".", "bundle");
+    expect(reachesReplaced).toBe(true);
+    expect(inputs.sort()).toEqual(
+      [
+        "apps/runner/package.json",
+        "config/runtime.json",
+        "package.json",
+        "packages/lib/package.json",
+        "pnpm-lock.yaml",
+      ].sort(),
+    );
+    expect(dockerStages(dockerfile).map((stage: { name?: string }) => stage.name)).toEqual([
+      "base",
+      "deps",
+      "prod-deps",
+      "bundle",
+      "runner",
+    ]);
+  });
+
+  it("ignores source edits that leave the bundle unchanged and follows the bundle digest", () => {
+    const base = fingerprint();
+    expect(fingerprint({ "packages/lib/src/index.ts": "export const a = 2;" })).toBe(base);
+    expect(fingerprint({ "apps/runner/src/index.ts": "console.log(2);" })).toBe(base);
+    expect(fingerprint({}, "b".repeat(64))).not.toBe(base);
+    expect(fingerprint({ "config/runtime.json": '{"changed":true}' })).not.toBe(base);
+  });
+
+  it("counts only what a production install reads from the manifests", () => {
+    const base = fingerprint();
+    const manifest = (value: object) => JSON.stringify(value);
+    expect(
+      fingerprint({
+        "package.json": manifest({ packageManager: "pnpm@12.11.2", scripts: { a: "2" } }),
+      }),
+    ).toBe(base);
+    expect(
+      fingerprint({
+        "packages/lib/package.json": manifest({
+          name: "lib",
+          version: "2.0.0",
+          dependencies: { zod: "^4" },
+        }),
+      }),
+    ).toBe(base);
+    expect(
+      fingerprint({
+        "packages/lib/package.json": manifest({
+          name: "lib",
+          version: "1.0.0",
+          dependencies: { zod: "^5" },
+        }),
+      }),
+    ).not.toBe(base);
+    expect(
+      fingerprint({
+        "package.json": manifest({ packageManager: "pnpm@12.12.0", scripts: { a: "1" } }),
+      }),
+    ).not.toBe(base);
+  });
+
+  it("refuses a bundled image whose runner does not use a bundle stage", () => {
+    expect(() =>
+      imageFingerprint({
+        target,
+        tree: [],
+        readDockerfile: () => "FROM node AS runner\nCOPY a ./\n",
+        privacyFingerprint: privacy,
+        bundleDigest: "a".repeat(64),
+        readFile: () => "",
+      }),
+    ).toThrow('no stage named "bundle"');
+  });
+
+  it("records the bundle digest for the release build, which checks it", () => {
+    const root = resolve(import.meta.dirname, "..");
+    const plan = createReleasePlan({
+      ...options,
+      tree: trackedTree(root),
+      readDockerfile: (path: string) => readFileSync(resolve(root, path), "utf8"),
+      bundleDigests: { "transitous-runner": "c".repeat(64) },
+      readFile: (path: string) => readFileSync(resolve(root, path), "utf8"),
+    });
+    expect(
+      plan.images.find((image: { app: string }) => image.app === "transitous-runner"),
+    ).toMatchObject({ bundleDigest: "c".repeat(64) });
+    const workflow = readFileSync(resolve(root, ".github/workflows/docker.yml"), "utf8");
+    expect(workflow).toContain(
+      "format('EXPECTED_BUNDLE_DIGEST={0}', steps.selection.outputs.bundle_digest)",
+    );
+    expect(readFileSync(resolve(root, "apps/transitous-runner/Dockerfile"), "utf8")).toMatch(
+      /ARG EXPECTED_BUNDLE_DIGEST=\nRUN node scripts\/build-runtime-bundles\.mjs transitous-runner --expect "\$EXPECTED_BUNDLE_DIGEST"/,
+    );
   });
 });

@@ -67,7 +67,10 @@ RUN pnpm install --frozen-lockfile --prod --ignore-scripts && \
 # copy that unused, currently vulnerable package into the production image
 # merely because pnpm uses a shared workspace virtual store.
 
-FROM deps AS builder
+# Bundles the runner and the workspace code it reaches into dist/. The release
+# planner fingerprints this bundle; release builds pass its digest so a
+# different bundle fails the build instead of shipping under the plan's name.
+FROM deps AS bundle
 WORKDIR /app
 COPY --parents \
     packages/air-quality/ \
@@ -79,9 +82,9 @@ COPY --parents \
     packages/transitous-core/ \
     ./
 COPY apps/transitous-runner/ apps/transitous-runner/
-COPY tsconfig.base.json ./
-WORKDIR /app/apps/transitous-runner
-RUN pnpm build
+COPY scripts/build-runtime-bundles.mjs scripts/module-specifiers.mjs scripts/
+ARG EXPECTED_BUNDLE_DIGEST=
+RUN node scripts/build-runtime-bundles.mjs transitous-runner --expect "$EXPECTED_BUNDLE_DIGEST"
 
 FROM base AS runner
 WORKDIR /app
@@ -115,21 +118,18 @@ RUN groupadd --system --gid 1001 transitous \
     && rm -f /usr/local/bin/npm /usr/local/bin/npx \
     && chown transitous:transitous /app
 
-# Assign ownership while copying. A recursive chown afterwards would store a
-# second copy of every file, including node_modules, in its own layer.
+# The bundle imports its npm dependencies by path from the pnpm store, so the
+# runner needs the production store and the bundle, and no workspace source.
+# Assign ownership while copying: a recursive chown afterwards would store a
+# second copy of every file in its own layer.
 COPY --chown=transitous:transitous --from=prod-deps /app/node_modules ./node_modules
-COPY --chown=transitous:transitous --from=prod-deps /app/apps/transitous-runner/node_modules ./apps/transitous-runner/node_modules
-COPY --chown=transitous:transitous --from=prod-deps /app/packages/core/node_modules ./packages/core/node_modules
-COPY --chown=transitous:transitous packages/core/ ./packages/core/
-COPY --chown=transitous:transitous packages/extension-contracts/ ./packages/extension-contracts/
-COPY --chown=transitous:transitous --from=prod-deps /app/packages/extension-contracts/node_modules ./packages/extension-contracts/node_modules
-COPY --chown=transitous:transitous --from=builder /app/apps/transitous-runner/dist ./apps/transitous-runner/dist
-COPY --chown=transitous:transitous apps/transitous-runner/package.json ./apps/transitous-runner/
-COPY --chown=transitous:transitous pnpm-workspace.yaml tsconfig.base.json ./
+COPY --chown=transitous:transitous --from=bundle /app/apps/transitous-runner/dist ./apps/transitous-runner/dist
+# Every dependency file the bundle pins must exist in this production install.
+RUN node -e 'const fs=require("node:fs"),p=require("node:path");const d="/app/apps/transitous-runner/dist";const missing=JSON.parse(fs.readFileSync(p.join(d,"runtime-externals.json"),"utf8")).filter((f)=>!fs.existsSync(p.join(d,f)));if(missing.length){console.error("Missing bundle dependencies:",missing);process.exit(1)}'
 
 USER transitous:transitous
 
 WORKDIR /app/apps/transitous-runner
 EXPOSE 4400
 HEALTHCHECK --interval=15s --timeout=3s --retries=5 CMD ["curl", "-fsS", "http://127.0.0.1:4400/health"]
-CMD ["node", "--import", "tsx/esm", "dist/index.js"]
+CMD ["node", "dist/index.mjs"]

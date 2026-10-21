@@ -13,7 +13,7 @@ import { tmpdir } from "node:os";
 import { join, posix, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { computePrivacySourceFingerprint } from "../apps/api/privacy-source-fingerprint.mjs";
-import { coversPath, dockerInputs } from "./docker-inputs.mjs";
+import { coversPath, dockerInputs, stageInputs } from "./docker-inputs.mjs";
 
 export { coversPath, dockerInputs };
 
@@ -53,9 +53,13 @@ const globalInputs = [
 ];
 const LOCKFILE = "pnpm-lock.yaml";
 
-export function targetInputs(target, readDockerfile) {
+export function targetInputs(
+  target,
+  readDockerfile,
+  sources = dockerInputs(readDockerfile(target.dockerfile), target.context),
+) {
   return [
-    ...dockerInputs(readDockerfile(target.dockerfile), target.context),
+    ...sources,
     target.dockerfile,
     posix.join(target.context, ".dockerignore"),
     `${target.dockerfile}.dockerignore`,
@@ -107,7 +111,11 @@ function snapshotKey(name, version) {
  * package reachable from them, and all settings outside those maps. Throws when
  * anything it follows is missing, so callers can fall back to the whole file.
  */
-export function lockfileSubgraph(documents, selectsImporter) {
+export function lockfileSubgraph(
+  documents,
+  selectsImporter,
+  sections = ["dependencies", "devDependencies", "optionalDependencies"],
+) {
   // pnpm 11+ writes its own environment as a first document; the workspace
   // document is the one listing the workspace importers.
   const main = documents
@@ -123,7 +131,6 @@ export function lockfileSubgraph(documents, selectsImporter) {
   const packages = new Map();
   const importerQueue = Object.keys(main.importers).filter(selectsImporter);
   const snapshotQueue = [];
-  const sections = ["dependencies", "devDependencies", "optionalDependencies"];
   while (importerQueue.length > 0) {
     const key = importerQueue.pop();
     if (importers.has(key)) continue;
@@ -173,6 +180,37 @@ export function lockfileSubgraph(documents, selectsImporter) {
     .digest("hex");
 }
 
+// What a production install reads from a manifest. Scripts, versions and
+// development dependencies do not change the installed packages.
+const ROOT_INSTALL_FIELDS = [
+  "packageManager",
+  "pnpm",
+  "dependencies",
+  "optionalDependencies",
+  "resolutions",
+  "engines",
+];
+const WORKSPACE_INSTALL_FIELDS = [
+  "name",
+  "dependencies",
+  "optionalDependencies",
+  "peerDependencies",
+  "dependenciesMeta",
+  "bin",
+];
+
+function installProjection(path, text) {
+  const manifest = JSON.parse(text);
+  const fields = path === "package.json" ? ROOT_INSTALL_FIELDS : WORKSPACE_INSTALL_FIELDS;
+  return JSON.stringify(fields.map((field) => [field, manifest[field] ?? null]));
+}
+
+/**
+ * An image's input fingerprint. A bundled image (one built from a `bundle`
+ * stage) is fingerprinted by its bundle digest instead of by the stages that
+ * only feed the bundle; what its production install reads from the manifests
+ * and lockfile stands in for those files.
+ */
 export function imageFingerprint({
   target,
   tree,
@@ -180,22 +218,51 @@ export function imageFingerprint({
   privacyFingerprint,
   lockfile,
   onLockfileFallback = () => {},
+  bundleDigest,
+  readFile,
 }) {
   const dockerfile = readDockerfile(target.dockerfile);
-  const inputs = targetInputs(target, readDockerfile);
+  let inputs;
+  if (bundleDigest) {
+    const staged = stageInputs(dockerfile, target.context, "bundle");
+    if (!staged.reachesReplaced) throw new Error(`${target.app}: no stage named "bundle" is used`);
+    if (typeof readFile !== "function") throw new Error("A bundled image needs file contents");
+    inputs = targetInputs(target, readDockerfile, staged.inputs);
+  } else inputs = targetInputs(target, readDockerfile);
   let entries = tree.filter((entry) => coversPath(inputs, entry.path));
   // A copied symlink may resolve to another tracked path. Include the whole tree
   // rather than guessing which side of a Docker COPY dereferences it.
   if (entries.some((entry) => entry.mode === "120000")) entries = tree;
   const hash = createHash("sha256");
-  hash.update(JSON.stringify(["openmapx/docker-inputs/v2", target, "linux/amd64", dockerfile]));
+  hash.update(
+    JSON.stringify([
+      bundleDigest ? "openmapx/docker-inputs/v3-bundle" : "openmapx/docker-inputs/v2",
+      target,
+      "linux/amd64",
+      dockerfile,
+    ]),
+  );
+  if (bundleDigest) hash.update(JSON.stringify(["bundle", bundleDigest]));
   for (const entry of [...entries].sort((a, b) => a.path.localeCompare(b.path, "en"))) {
+    if (bundleDigest && (entry.path === "package.json" || entry.path.endsWith("/package.json"))) {
+      try {
+        const projection = installProjection(entry.path, readFile(entry.path));
+        hash.update(JSON.stringify([entry.path, entry.mode, "install", projection]));
+        continue;
+      } catch {
+        // An unreadable manifest counts as a whole file.
+      }
+    }
     // The installed dependencies depend on the lockfile entries this image's
     // copied manifests reach, not on unrelated workspace dependency changes.
+    // A bundled image's runner holds only the production install.
     if (entry.path === LOCKFILE && lockfile) {
       try {
-        const subgraph = lockfileSubgraph(lockfile.documents, (importer) =>
-          coversPath(inputs, importer === "." ? "package.json" : `${importer}/package.json`),
+        const subgraph = lockfileSubgraph(
+          lockfile.documents,
+          (importer) =>
+            coversPath(inputs, importer === "." ? "package.json" : `${importer}/package.json`),
+          bundleDigest ? ["dependencies", "optionalDependencies"] : undefined,
         );
         hash.update(JSON.stringify([entry.path, entry.mode, "subgraph", subgraph]));
         continue;
@@ -265,6 +332,8 @@ export function createReleasePlan({
   imagePrefix = "ghcr.io/openmapx",
   lockfile,
   onLockfileFallback,
+  bundleDigests = {},
+  readFile,
 }) {
   if (
     !shaPattern.test(revision) ||
@@ -284,6 +353,8 @@ export function createReleasePlan({
       privacyFingerprint,
       lockfile,
       onLockfileFallback,
+      bundleDigest: bundleDigests[target.app],
+      readFile,
     });
     const old =
       previous?.buildMetadata?.version === 1
@@ -324,6 +395,7 @@ export function createReleasePlan({
       refresh,
       reason,
       digest: rebuild ? "" : previous.images[target.app].split("@")[1],
+      ...(bundleDigests[target.app] ? { bundleDigest: bundleDigests[target.app] } : {}),
     };
   });
   return {
@@ -410,6 +482,13 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     const lockfileDocuments = parseAllDocuments(readFileSync(join(root, LOCKFILE), "utf8"));
     if (lockfileDocuments.some((document) => document.errors.length > 0))
       throw new Error("Lockfile could not be parsed");
+    // Bundled images are fingerprinted by their bundles, built here exactly as
+    // the image's bundle stage builds them.
+    const { RUNTIME_BUNDLES, buildRuntimeBundle } = await import("./build-runtime-bundles.mjs");
+    const bundleDigests = {};
+    for (const image of Object.keys(RUNTIME_BUNDLES)) {
+      bundleDigests[image] = (await buildRuntimeBundle(root, image)).digest;
+    }
     const plan = createReleasePlan({
       revision,
       releaseId: process.env.RELEASE_ID,
@@ -422,6 +501,8 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
       lockfile: { documents: lockfileDocuments.map((document) => document.toJS()) },
       onLockfileFallback: (app, error) =>
         console.warn(`${app}: whole lockfile counted (${error.message})`),
+      bundleDigests,
+      readFile: (path) => readFileSync(join(root, path), "utf8"),
     });
     mkdirSync(argument, { recursive: true });
     writeFileSync(join(argument, "release-plan.json"), `${JSON.stringify(plan, null, 2)}\n`);
@@ -445,12 +526,13 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
       !selected ||
       typeof selected.rebuild !== "boolean" ||
       typeof selected.refresh !== "boolean" ||
-      (!selected.rebuild && !digestPattern.test(selected.digest))
+      (!selected.rebuild && !digestPattern.test(selected.digest)) ||
+      (selected.bundleDigest !== undefined && !hashPattern.test(selected.bundleDigest))
     )
       throw new Error("Invalid image selection plan");
     appendFileSync(
       process.env.GITHUB_OUTPUT,
-      `rebuild=${selected.rebuild}\nrefresh=${selected.refresh}\ndigest=${selected.rebuild ? "" : selected.digest}\n`,
+      `rebuild=${selected.rebuild}\nrefresh=${selected.refresh}\ndigest=${selected.rebuild ? "" : selected.digest}\nbundle_digest=${selected.bundleDigest ?? ""}\n`,
     );
     console.log(`${argument}: ${selected.rebuild ? "build" : "reuse"} (${selected.reason})`);
   } else if (command === "changed") {
