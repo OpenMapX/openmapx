@@ -8,6 +8,13 @@ export interface ServiceRegistryOptions {
   rootDir: string;
   servicesDir?: string;
   communityDir?: string;
+  /**
+   * Community services supplied by the caller instead of scanning
+   * `communityDir`. The app-api container has no host checkout, so it reads
+   * them from the operations agent, which owns `services/.community`. Each
+   * must already have passed the community manifest rules.
+   */
+  communityServices?: readonly LoadedService[];
   enabledIds?: Set<string>;
   warnings?: string[];
 }
@@ -29,9 +36,27 @@ export class ServiceRegistry {
     if (existsSync(servicesDir)) {
       this.scanBuiltInDir(servicesDir, warnings);
     }
-    if (existsSync(communityDir)) {
+    if (this.opts.communityServices) {
+      for (const service of this.opts.communityServices)
+        this.addCommunityService(service, warnings);
+    } else if (existsSync(communityDir)) {
       this.scanCommunityDir(communityDir, warnings);
     }
+  }
+
+  private addCommunityService(service: LoadedService, warnings: string[]): void {
+    if (this.services.some((existing) => existing.manifest.id === service.manifest.id)) {
+      warnings.push(
+        `Duplicate service id "${service.manifest.id}" at ${service.directory} — keeping first`,
+      );
+      return;
+    }
+    this.services.push({
+      manifest: service.manifest,
+      directory: service.directory,
+      isBuiltIn: false,
+      enabled: this.opts.enabledIds ? this.opts.enabledIds.has(service.manifest.id) : true,
+    });
   }
 
   private scanBuiltInDir(dir: string, warnings: string[]): void {

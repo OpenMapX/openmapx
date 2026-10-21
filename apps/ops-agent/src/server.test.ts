@@ -15,7 +15,6 @@ const allowAll: OpsResourcePolicy = {
   allowRelease: () => true,
   allowRegion: () => true,
   allowDataType: () => true,
-  allowExtension: () => true,
   allowIntegration: () => true,
   allowTrustedRevision: () => true,
 };

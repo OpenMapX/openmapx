@@ -6,10 +6,10 @@
 // so we keep the protocol locked to https and the host locked to a small set
 // of well-known public Git hosts.
 //
-// Both the service-repositories registrar (`apps/api/src/services/
-// service-repositories.ts`) and the integration installer
-// (`packages/core/src/integration/installer.ts`) call into this module so the
-// two paths can't drift.
+// The API and the operations agent check community service repository URLs
+// here, and the integration installer
+// (`packages/core/src/integration/installer.ts`) calls into this module too, so
+// the paths can't drift.
 
 export const ALLOWED_GIT_HOSTS: ReadonlySet<string> = new Set([
   "github.com",

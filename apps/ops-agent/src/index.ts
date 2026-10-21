@@ -14,6 +14,10 @@ import {
   pruneBackupRetention,
 } from "./administrative-runtime";
 import { isTerminalHandoff, readAgentHandoff } from "./agent-handoff";
+import {
+  CommunityRepositoryStore,
+  installCommunityRepositoryRuntime,
+} from "./community-repositories";
 import { loadOpsAgentConfig } from "./config";
 import {
   createDockerDawarichCollector,
@@ -120,6 +124,15 @@ async function main(): Promise<void> {
       builtInServices,
       builtInAuthorityDigest: releaseAuthority.digest,
     });
+    // The agent is the only writer of services/.community. An interrupted
+    // repository transaction is undone before the first authority load, which
+    // refuses a checkout it cannot validate.
+    const communityRepositories = new CommunityRepositoryStore({
+      rootDir: config.rootDir,
+      uid,
+      loadAuthority: authorityLoader,
+    });
+    await communityRepositories.recover();
     const initialAuthority = await authorityLoader();
     const runtime = createDockerRuntime({
       stack: paths,
@@ -132,6 +145,7 @@ async function main(): Promise<void> {
       loadAuthority: authorityLoader,
       infraDir: paths.infraDir,
     });
+    installCommunityRepositoryRuntime(runtime, communityRepositories);
     // The managed timeline endpoint is registered only when the trusted
     // service selection explicitly enables `dawarich-app`.  Its request path,
     // container name and collector script remain fixed; every call re-checks

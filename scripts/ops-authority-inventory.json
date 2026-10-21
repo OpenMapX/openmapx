@@ -35,6 +35,7 @@
       "backup.delete",
       "backup.list",
       "backup.restore",
+      "communityServices.inspect",
       "configuration.hardlinks.inspect",
       "configuration.inspect",
       "data.clean",
@@ -51,10 +52,6 @@
       "data.update",
       "dawarich.provisioning.inspect",
       "docker.status",
-      "extension.install",
-      "extension.remove",
-      "extension.repository.inspect",
-      "extension.update",
       "integrationConfig.apply",
       "release.apply",
       "release.inspect",
@@ -72,6 +69,10 @@
       "service.stop",
       "service.update",
       "serviceConfig.apply",
+      "serviceRepository.inspect",
+      "serviceRepository.publish",
+      "serviceRepository.remove",
+      "serviceRepository.settle",
       "serviceSelection.apply",
       "serviceSelection.inspect",
       "services.buildAll",
@@ -103,10 +104,6 @@
     ]
   },
   "trustedDataSourceKinds": [
-    "extension.repository.inspect",
-    "extension.install",
-    "extension.update",
-    "extension.remove",
     "serviceSelection.apply",
     "serviceConfig.apply",
     "integrationConfig.apply",
@@ -232,16 +229,20 @@
       "id": "api.extension-repository",
       "callSiteIds": [],
       "semanticSources": [
-        "apps/api/src/services/service-repositories.ts#prepareRepo",
-        "apps/api/src/services/service-repositories.ts#removeRepo",
+        "apps/api/src/services/community-repositories.ts#inspectServiceRepository",
+        "apps/api/src/services/community-repositories.ts#publishServiceRepository",
+        "apps/api/src/services/community-repositories.ts#settleServiceRepository",
+        "apps/api/src/services/community-repositories.ts#removeServiceRepository",
+        "apps/api/src/services/community-repositories.ts#readCommunityServices",
         "apps/api/src/services/extension-installer.ts#installExtension",
         "apps/api/src/services/extension-installer.ts#removeExtension"
       ],
       "typedKinds": [
-        "extension.repository.inspect",
-        "extension.install",
-        "extension.update",
-        "extension.remove"
+        "serviceRepository.inspect",
+        "serviceRepository.publish",
+        "serviceRepository.settle",
+        "serviceRepository.remove",
+        "communityServices.inspect"
       ]
     },
     {

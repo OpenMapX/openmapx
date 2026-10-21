@@ -73,8 +73,9 @@ RUN node scripts/copy-runtime-packages.mjs /tmp/runtime-packages.json /app /runt
 FROM base AS runner
 WORKDIR /app
 # The pinned base predates Alpine's OpenSSL fix for CVE-2026-14456.
+# git fetches community service repositories into services/.community.
 RUN apk upgrade --no-cache libcrypto3 libssl3 && \
-    apk add --no-cache ca-certificates curl docker-cli docker-cli-compose tini && \
+    apk add --no-cache ca-certificates curl docker-cli docker-cli-compose git tini && \
     rm -rf /usr/local/lib/node_modules/npm && \
     rm -f /usr/local/bin/npm /usr/local/bin/npx
 

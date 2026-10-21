@@ -8,6 +8,7 @@ export {
   WELL_KNOWN_CAPABILITIES,
   WELL_KNOWN_DATA_TYPES,
 } from "./capabilities";
+export { communityServiceManifestProblems } from "./community-manifest";
 export {
   type ComposeServiceSnippet,
   GENERATED_SECRETS_DIRNAME,
