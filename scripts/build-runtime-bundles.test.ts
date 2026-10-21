@@ -32,7 +32,7 @@ function workspace(files: Record<string, string> = {}): string {
       },
     }),
     "node_modules/left-pad/package.json": JSON.stringify({ name: "left-pad", main: "index.js" }),
-    "node_modules/left-pad/index.js": "module.exports = (value) => ` ${value}`;",
+    "node_modules/left-pad/index.js": 'module.exports = (value) => " " + value;',
     "app/src/main.ts": [
       'import { readFileSync } from "node:fs";',
       'import pad from "left-pad";',
@@ -64,6 +64,28 @@ describe("runtime bundles", () => {
     expect(main).toContain('from "node:fs"');
     expect(JSON.parse(text(bundle, EXTERNALS_MANIFEST))).toEqual([
       "../../node_modules/left-pad/index.js",
+    ]);
+  });
+
+  it("pins the file Node loads, not esbuild's module condition", async () => {
+    const bundle = await buildRuntimeBundle(
+      workspace({
+        "node_modules/dual/package.json": JSON.stringify({
+          name: "dual",
+          main: "main.cjs",
+          module: "module.js",
+          exports: { ".": { module: "./module.js", import: "./node.mjs", require: "./main.cjs" } },
+        }),
+        "node_modules/dual/module.js": "export default 1;",
+        "node_modules/dual/node.mjs": "export default 2;",
+        "node_modules/dual/main.cjs": "module.exports = 3;",
+        "app/src/main.ts": 'import dual from "dual";\nconsole.log(dual);',
+      }),
+      "fixture",
+      config,
+    );
+    expect(JSON.parse(text(bundle, EXTERNALS_MANIFEST))).toEqual([
+      "../../node_modules/dual/node.mjs",
     ]);
   });
 
@@ -117,7 +139,10 @@ describe("runtime bundles", () => {
 
   it.each([
     ["a computed import", 'const name = "x";\nvoid import(name);', "computed import()"],
+    ["a computed require", 'const name = "x";\nrequire(name);', "computed import() or require()"],
     ["the module's directory", "console.log(import.meta.dirname);", "import.meta.dirname"],
+    ["an entry-point check", "if (import.meta.main) console.log(1);", "import.meta.main"],
+    ["module resolution", 'console.log(import.meta.resolve("left-pad"));', "import.meta.resolve"],
     [
       "the module's URL",
       'import { createRequire } from "node:module";\ncreateRequire(import.meta.url);',

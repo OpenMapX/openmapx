@@ -123,12 +123,13 @@ starting with transitous-runner. `scripts/build-runtime-bundles.mjs` bundles an
 image's own code and the workspace code it reaches with esbuild:
 
 - npm packages stay installed in the image, but every import is pinned. The script
-  resolves it from the importing package's location, as Node does in the pnpm
-  layout, and rewrites it to a path relative to the output directory. The bundle
-  therefore loads the same dependency files as before.
+  resolves it from the importing package's location with Node's conditions and
+  main field, as Node does in the pnpm layout, and rewrites it to a path relative
+  to the output directory. The bundle therefore loads the same dependency files
+  as before.
 - A literal `new URL("…", import.meta.url)` asset is copied into `dist/assets/`.
-- A computed `import()`, any other use of the module's own location, and any
-  esbuild warning fail the build.
+- A computed `import()` or `require()`, any other use of `import.meta` or the
+  module's location, and any esbuild warning fail the build.
 - The output is byte-identical across builds and checkout locations.
 
 The release planner fingerprints a bundled image by its bundle digest instead of
@@ -137,6 +138,9 @@ through what it reads: the install fields of each manifest and the production
 lockfile entries. Scripts, versions and development dependencies do not count.
 The plan job builds the bundles. A release build passes the planned digest as
 `EXPECTED_BUNDLE_DIGEST`, and the `bundle` stage fails when its bundle differs.
+Pull-request image builds do not pass it, because their jobs have no workspace
+install, so a difference between the image's partial install and the full one
+only surfaces in the release build on main.
 The runner checks that every pinned dependency file exists in its production
 install. `check-dockerfile-workspace-sync` builds every bundle and rejects a
 bundled runner that copies workspace source.

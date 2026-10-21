@@ -30,11 +30,12 @@ function isImportMeta(node, property) {
  * The runtime facts of one module that a bundle can change:
  * - `specifiers`: module specifiers it loads at runtime (type-only imports and
  *   exports are erased, so they are not listed);
- * - `computedImport`: an `import()` whose specifier is not a literal;
+ * - `computedImport`: an `import()` or `require()` whose specifier is not a
+ *   literal;
  * - `assetUrls`: literal `new URL("…", import.meta.url)` references, with the
  *   source range of the literal so a bundler can rewrite it;
- * - `locationSensitive`: any other use of the module's own location
- *   (`import.meta.url`, `import.meta.dirname`, `__dirname`, …), which means
+ * - `locationSensitive`: any other use of `import.meta` (`url`, `dirname`,
+ *   `resolve`, `main`, …) or of `__dirname`/`__filename`, which means
  *   something different once the module is bundled.
  */
 export function analyzeModule(file, text) {
@@ -59,7 +60,7 @@ export function analyzeModule(file, text) {
       if (isImport || isRequire) {
         const [argument] = node.arguments;
         if (argument && ts.isStringLiteralLike(argument)) specifiers.push(argument.text);
-        else if (isImport) computedImport = true;
+        else computedImport = true;
       }
     } else if (
       ts.isNewExpression(node) &&
@@ -78,7 +79,7 @@ export function analyzeModule(file, text) {
       assetMetaNodes.add(node.arguments[1]);
     } else if (
       ts.isPropertyAccessExpression(node) &&
-      ["url", "dirname", "filename"].some((property) => isImportMeta(node, property)) &&
+      isImportMeta(node, node.name.text) &&
       !assetMetaNodes.has(node)
     ) {
       const { line } = source.getLineAndCharacterOfPosition(node.getStart(source));

@@ -338,7 +338,7 @@ async function checkBundledImages(): Promise<void> {
     if (copied.length > 0) {
       completenessErrors.push(
         `${dockerfile}'s runner copies workspace source (${copied.join(", ")}); a bundled image ` +
-          "runs its bundle, and the release planner does not fingerprint that source.",
+          "runs its bundle, so the copy only makes source changes rebuild the image.",
       );
     }
     try {

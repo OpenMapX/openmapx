@@ -84,7 +84,9 @@ export async function buildRuntimeBundle(root, image, config = RUNTIME_BUNDLES[i
         const file = relative(absoluteRoot, args.path);
         const facts = analyzeModule(args.path, text);
         if (facts.computedImport) {
-          problems.push(`${file}: computed import() cannot be bundled; import a literal specifier`);
+          problems.push(
+            `${file}: computed import() or require() cannot be bundled; load a literal specifier`,
+          );
         }
         for (const use of facts.locationSensitive) {
           problems.push(`${file}: ${use} refers to the source location, not the bundle`);
@@ -127,6 +129,11 @@ export async function buildRuntimeBundle(root, image, config = RUNTIME_BUNDLES[i
     entryNames: "[name]",
     outExtension: { ".js": ".mjs" },
     tsconfig: join(absoluteRoot, config.tsconfig),
+    // Resolve npm packages with Node 24's conditions (esbuild adds `node`,
+    // `import`/`require` and `default`), without esbuild's `module` condition
+    // and `module` main field, which Node never reads.
+    conditions: ["module-sync", "node-addons"],
+    mainFields: ["main"],
     legalComments: "none",
     // Bundled CommonJS code calls `require`; give ESM output a real one.
     banner: {
@@ -150,6 +157,9 @@ export async function buildRuntimeBundle(root, image, config = RUNTIME_BUNDLES[i
   for (const [name, bytes] of assets) files.set(`${ASSET_DIR}/${name}`, bytes);
   files.set(EXTERNALS_MANIFEST, Buffer.from(`${JSON.stringify([...externals].sort(), null, 2)}\n`));
 
+  // Bump the version when writeRuntimeBundle's output changes other than
+  // through these files, so the planner does not reuse an image built by the
+  // previous writer.
   const hash = createHash("sha256").update("openmapx/runtime-bundle/v1\0");
   for (const [name, bytes] of [...files].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))) {
     hash.update(`${name}\0`).update(createHash("sha256").update(bytes).digest("hex"));
