@@ -202,9 +202,14 @@ describe("service administration query acquisition", () => {
       expect(canceled).toBe(true);
     },
   );
-  it("separates every resource by origin, and reserved service IDs from subresources", async () => {
+  it.each([
+    "http://second.test",
+    "http://admin.test.evil.test",
+    "http://admin.test:8080",
+    "https://admin.test",
+  ])("separates resources and reserved service IDs from %s", async (secondOrigin) => {
     const first = queries();
-    const second = queries("http://second.test");
+    const second = queries(secondOrigin);
     for (const name of reads)
       expect(read(first, name).queryKey).not.toEqual(read(second, name).queryKey);
     const keys = [
@@ -222,7 +227,11 @@ describe("service administration query acquisition", () => {
     vi.stubGlobal("fetch", (url: string) =>
       Response.json({
         services: [],
-        summary: { running: 0, stopped: 0, total: url.startsWith(apiUrl) ? 1 : 2 },
+        summary: {
+          running: 0,
+          stopped: 0,
+          total: new URL(url).origin === new URL(apiUrl).origin ? 1 : 2,
+        },
       }),
     );
     const qc = cache();

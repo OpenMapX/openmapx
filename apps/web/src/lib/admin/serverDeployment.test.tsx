@@ -21,9 +21,14 @@ afterEach(() => {
   configureApiClient({ baseUrl: "http://localhost:3001", credentials: "include" });
 });
 describe("request-scoped deployment", () => {
-  it("isolates concurrent cookies and never changes singleton authentication", async () => {
+  it.each([
+    "http://browser.test",
+    "http://server.test.evil.test",
+    "http://server.test:8080",
+    "https://server.test",
+  ])("isolates concurrent cookies and singleton authentication for %s", async (browserOrigin) => {
     configureApiClient({
-      baseUrl: "http://browser.test",
+      baseUrl: browserOrigin,
       headerInterceptor: () => ({ authorization: "synthetic-browser" }),
     });
     const requests: { url: string; init: RequestInit }[] = [];
@@ -33,7 +38,7 @@ describe("request-scoped deployment", () => {
     });
     vi.stubGlobal("fetch", async (url: string, init: RequestInit) => {
       requests.push({ url, init });
-      if (url.startsWith("http://server.test")) {
+      if (new URL(url).origin === "http://server.test") {
         await gate;
         return Response.json({
           ...deployment,
@@ -50,7 +55,7 @@ describe("request-scoped deployment", () => {
     expect(requests.map(({ url }) => url)).toEqual([
       "http://server.test/api/admin/deployment",
       "http://server.test/api/admin/deployment",
-      "http://browser.test/probe",
+      `${browserOrigin}/probe`,
     ]);
     for (const [i, cookie] of ["session=one", "session=two"].entries()) {
       expect(Object.fromEntries(new Headers(requests[i].init.headers))).toEqual({
