@@ -55,6 +55,43 @@ afterEach(() => {
   vi.useRealTimers();
 });
 describe("managed Dawarich canonical acquisition", () => {
+  it.each(["provision", "rotate"] as const)(
+    "returns validated %s success without inventing status success when refresh fails",
+    async (action) => {
+      let reads = 0;
+      vi.stubGlobal("fetch", async (_url: string, init: RequestInit) => {
+        if (init.method === "POST") return Response.json(status);
+        reads++;
+        return Response.json({ code: "DAWARICH_PROVISIONING_FAILED" }, { status: 503 });
+      });
+      const { result, qc } = mount();
+      await waitFor(() => expect(result.current.statusQuery.isError).toBe(true));
+      const publications: unknown[] = [];
+      const unsubscribe = qc.getQueryCache().subscribe((event) => {
+        if (event.query.queryKey[3] === "dawarich") publications.push(event.query.state.data);
+      });
+      try {
+        await act(async () => {
+          const response = await (action === "rotate"
+            ? result.current.rotate.mutateAsync()
+            : result.current.provision.mutateAsync(undefined));
+          expect(response).toEqual(status);
+        });
+        await waitFor(() => {
+          expect(reads).toBe(2);
+          expect(result.current.statusQuery.isFetching).toBe(false);
+        });
+        expect(publications.length).toBeGreaterThan(0);
+        for (const data of publications) expect(data).toBeUndefined();
+        expect(result.current.statusQuery.isError).toBe(true);
+        expect(result.current.statusQuery.data).toBeUndefined();
+        expect(result.current.statusQuery.error?.message).toBe("DAWARICH_PROVISIONING_FAILED");
+      } finally {
+        unsubscribe();
+      }
+    },
+  );
+
   it("preserves independent flags, scoped status and no-store", async () => {
     const requests: RequestInit[] = [];
     vi.stubGlobal("fetch", async (_url: string, init: RequestInit) => {

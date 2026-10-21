@@ -62,7 +62,7 @@ export function useDawarichProvisioning() {
     const effect = { kind: "dawarich" } as const;
     try {
       const status = sdk.unwrapAdminResponse(await pending);
-      queryClient.setQueryData(options.queryKey, status);
+      // Only the status GET owns shared data; mutation snapshots may arrive out of order.
       void invalidateServiceAdministration(queryClient, apiUrl, effect);
       return status;
     } catch (error) {

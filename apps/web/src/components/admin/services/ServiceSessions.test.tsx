@@ -303,6 +303,177 @@ describe("generated log sessions", () => {
   });
 });
 describe("managed Dawarich view ownership", () => {
+  it.each(["stalled", "failed"])(
+    "keeps the newer A status after A→B→A and a late success with %s refresh",
+    async (refresh) => {
+      const old = pending<Response>();
+      const stalled = pending<Response>();
+      const originA = apiUrl;
+      const originB = "http://replacement.test";
+      const keyA = ["admin", "services", originA, "dawarich"];
+      const current = {
+        ...ready,
+        publicOrigin: "https://current.test",
+        oauthClient: { ...ready.oauthClient, recoveryRequired: false, settingsMatch: true },
+        readyToStart: true,
+      };
+      let readsA = 0;
+      let readsB = 0;
+      let writes = 0;
+      vi.stubGlobal("fetch", async (url: string, init: RequestInit) => {
+        if (init.method === "POST") {
+          writes++;
+          return old.promise;
+        }
+        if (new URL(url).origin === originB) {
+          readsB++;
+          return Response.json({ ...ready, publicOrigin: "https://replacement.test" });
+        }
+        readsA++;
+        if (readsA <= 2) return Response.json(readsA === 1 ? ready : current);
+        return refresh === "stalled"
+          ? stalled.promise
+          : Response.json({ code: "DAWARICH_PROVISIONING_FAILED" }, { status: 503 });
+      });
+      const view = mount(<ManagedDawarichSetup />);
+      await screen.findByText(/OIDC recovery is incomplete/);
+      fireEvent.click(screen.getByRole("button", { name: "Provision/reconcile" }));
+      await waitFor(() => expect(writes).toBe(1));
+      apiUrl = originB;
+      view.replace();
+      await screen.findByText("https://replacement.test");
+      // Another status effect makes inactive A stale before its replacement reads it.
+      await view.qc.invalidateQueries({ queryKey: keyA });
+      apiUrl = originA;
+      view.replace();
+      await screen.findByText(current.publicOrigin);
+      fireEvent.change(screen.getByRole("textbox", { name: "Public hostname (optional)" }), {
+        target: { value: "replacement-input.test" },
+      });
+      fireEvent.click(screen.getByText("OIDC secret recovery"));
+      fireEvent.change(screen.getByRole("textbox", { name: "Type confirmation" }), {
+        target: { value: "replacement confirmation" },
+      });
+      view.qc.setQueryData(["admin", "overview", originA], {});
+      view.qc.setQueryData(["admin", "overview", originB], {});
+      const publications: unknown[] = [];
+      const unsubscribe = view.qc.getQueryCache().subscribe((event) => {
+        if (JSON.stringify(event.query.queryKey) === JSON.stringify(keyA)) {
+          publications.push(event.query.state.data);
+        }
+      });
+      try {
+        await act(async () => {
+          old.resolve(Response.json({ ...ready, publicOrigin: "https://obsolete.test" }));
+        });
+        await waitFor(() => expect(readsA).toBe(3));
+        expect(view.qc.getQueryState(["admin", "overview", originA])?.isInvalidated).toBe(true);
+        expect(view.qc.getQueryState(["admin", "overview", originB])?.isInvalidated).toBe(false);
+        expect(readsB).toBe(1);
+        if (refresh === "failed") {
+          await waitFor(() => expect(view.qc.getQueryState(keyA)?.status).toBe("error"));
+          expect(screen.getByText(/Managed Dawarich provisioning failed/)).toBeInTheDocument();
+        } else {
+          expect(view.qc.getQueryState(keyA)?.fetchStatus).toBe("fetching");
+        }
+        expect(publications.length).toBeGreaterThan(0);
+        for (const data of publications) expect(data).toEqual(current);
+        expect(view.qc.getQueryData(keyA)).toEqual(current);
+        expect(screen.getByText(current.publicOrigin)).toBeInTheDocument();
+        expect(screen.queryByText(/OIDC recovery is incomplete/)).not.toBeInTheDocument();
+        expect(screen.getByRole("textbox", { name: "Public hostname (optional)" })).toHaveValue(
+          "replacement-input.test",
+        );
+        expect(screen.getByRole("textbox", { name: "Type confirmation" })).toHaveValue(
+          "replacement confirmation",
+        );
+      } finally {
+        unsubscribe();
+      }
+    },
+  );
+
+  it.each(["stalled", "failed"])(
+    "keeps canonical status when newer rotation precedes older provision success and %s refresh",
+    async (refresh) => {
+      const old = pending<Response>();
+      const rotation = pending<Response>();
+      const stalled = pending<Response>();
+      const key = ["admin", "services", apiUrl, "dawarich"];
+      const current = {
+        ...ready,
+        publicOrigin: "https://current.test",
+        oauthClient: { ...ready.oauthClient, recoveryRequired: false, settingsMatch: true },
+        readyToStart: true,
+      };
+      const writes: string[] = [];
+      let reads = 0;
+      vi.stubGlobal("fetch", async (url: string, init: RequestInit) => {
+        if (init.method === "POST") {
+          writes.push(new URL(url).pathname);
+          return url.endsWith("/provision") ? old.promise : rotation.promise;
+        }
+        reads++;
+        if (reads <= 2) return Response.json(reads === 1 ? ready : current);
+        return refresh === "stalled"
+          ? stalled.promise
+          : Response.json({ code: "DAWARICH_PROVISIONING_FAILED" }, { status: 503 });
+      });
+      const view = mount(<ManagedDawarichSetup />);
+      await screen.findByText(/OIDC recovery is incomplete/);
+      fireEvent.click(screen.getByText("OIDC secret recovery"));
+      fireEvent.change(screen.getByRole("textbox", { name: "Type confirmation" }), {
+        target: { value: "ROTATE DAWARICH OIDC SECRET" },
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Provision/reconcile" }));
+      fireEvent.click(screen.getByRole("button", { name: "Rotate OIDC secret" }));
+      await waitFor(() =>
+        expect(writes).toEqual([
+          "/api/admin/dawarich/provision",
+          "/api/admin/dawarich/rotate-oidc-secret",
+        ]),
+      );
+      await act(async () => {
+        rotation.resolve(Response.json({ ...current, publicOrigin: "https://rotation.test" }));
+      });
+      await screen.findByText(current.publicOrigin);
+      await waitFor(() =>
+        expect(screen.getByRole("textbox", { name: "Type confirmation" })).toHaveValue(""),
+      );
+      fireEvent.change(screen.getByRole("textbox", { name: "Type confirmation" }), {
+        target: { value: "replacement confirmation" },
+      });
+      const publications: unknown[] = [];
+      const unsubscribe = view.qc.getQueryCache().subscribe((event) => {
+        if (JSON.stringify(event.query.queryKey) === JSON.stringify(key)) {
+          publications.push(event.query.state.data);
+        }
+      });
+      try {
+        await act(async () => {
+          old.resolve(Response.json({ ...ready, publicOrigin: "https://obsolete.test" }));
+        });
+        await waitFor(() => expect(reads).toBe(3));
+        if (refresh === "failed") {
+          await waitFor(() => expect(view.qc.getQueryState(key)?.status).toBe("error"));
+          expect(screen.getByText(/Managed Dawarich provisioning failed/)).toBeInTheDocument();
+        } else {
+          expect(view.qc.getQueryState(key)?.fetchStatus).toBe("fetching");
+        }
+        expect(publications.length).toBeGreaterThan(0);
+        for (const data of publications) expect(data).toEqual(current);
+        expect(view.qc.getQueryData(key)).toEqual(current);
+        expect(screen.getByText(current.publicOrigin)).toBeInTheDocument();
+        expect(screen.queryByText(/OIDC recovery is incomplete/)).not.toBeInTheDocument();
+        expect(screen.getByRole("textbox", { name: "Type confirmation" })).toHaveValue(
+          "replacement confirmation",
+        );
+      } finally {
+        unsubscribe();
+      }
+    },
+  );
+
   it.each([true, false])(
     "old rotation %s cannot clear replacement confirmation or publish feedback",
     async (ok) => {
