@@ -1,7 +1,13 @@
 import { type ApiClient, ApiClientError } from "@openmapx/core";
 import * as sdk from "@openmapx/core/api-admin-sdk";
-import { type QueryClient, type QueryKey, queryOptions } from "@tanstack/react-query";
-import { invalidateIntegrationRuntime } from "@/lib/integrationRuntimeQuery";
+import {
+  matchQuery,
+  type QueryClient,
+  type QueryFilters,
+  type QueryKey,
+  queryOptions,
+} from "@tanstack/react-query";
+import { integrationRuntimeQueryKey } from "@/lib/integrationRuntimeQuery";
 
 export const SERVICE_READ_TIMEOUT_MS = 30_000;
 
@@ -109,11 +115,11 @@ export type ServiceAdministrationEffect = (
 };
 
 /** Same graph for synchronous writes and all terminal outcomes of accepted jobs. */
-export function invalidateServiceAdministration(
+export async function invalidateServiceAdministration(
   queryClient: QueryClient,
   apiUrl: string,
   effect: ServiceAdministrationEffect,
-): Promise<unknown[]> {
+): Promise<void> {
   const key = ["admin", "services", apiUrl];
   const resources: readonly unknown[][] =
     "serviceId" in effect
@@ -127,10 +133,19 @@ export function invalidateServiceAdministration(
           [...key, "dawarich"],
         ]
       : [key];
-  return Promise.all([
-    ...(effect.refreshKeys ?? []).map((queryKey) => queryClient.invalidateQueries({ queryKey })),
-    ...resources.map((queryKey) => queryClient.invalidateQueries({ queryKey })),
-    queryClient.invalidateQueries({ queryKey: ["admin", "overview", apiUrl] }),
-    invalidateIntegrationRuntime(queryClient, apiUrl),
-  ]);
+  const queryKeys = [
+    ...(effect.refreshKeys ?? []),
+    ...resources,
+    ["admin", "overview", apiUrl],
+    integrationRuntimeQueryKey(apiUrl),
+  ];
+  const filters: QueryFilters = {
+    predicate: (query) => queryKeys.some((queryKey) => matchQuery({ queryKey }, query)),
+  };
+  // Invalidation alone can join a pre-effect initial fetch when it has no data.
+  // Cancel all matching reads before starting any replacements. One union avoids
+  // overlapping prefixes canceling/refetching a replacement more than once.
+  await queryClient.cancelQueries(filters);
+  // Default active-only refetch preserves invalidation for inactive queries too.
+  await queryClient.invalidateQueries(filters);
 }

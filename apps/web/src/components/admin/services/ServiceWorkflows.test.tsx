@@ -363,6 +363,53 @@ async function queueEmbedded(kind: string) {
   fireEvent.click(await screen.findByRole("button", { name: confirm }));
 }
 describe("embedded operation callers", () => {
+  it.each(["success", "failed", "canceled"] as const)(
+    "replaces a pending initial embedded GET on terminal %s before its old response arrives",
+    async (status) => {
+      const initial = pending<Response>();
+      const before = { ...indexStatus, source: "synthetic", minSitelinks: 8, nameCount: 202 };
+      const oldResponse = Response.json(before);
+      let completed = false;
+      let reads = 0;
+      setup((url) => {
+        if (url.pathname.startsWith("/api/admin/jobs/"))
+          return Response.json(job({ id: "job-1", status: completed ? status : "cancel_pending" }));
+        if (url.pathname.endsWith("/notable-places/status")) {
+          if (++reads === 1) return initial.promise;
+          return Response.json({ ...before, placeCount: 303 });
+        }
+        return undefined;
+      });
+      const { qc } = mount(<NotablePlacesMaintenance apiUrl={apiUrl} />);
+      await waitFor(() => expect(reads).toBe(1));
+      await queueEmbedded("notable-places-build");
+      const jobKey = ["admin", "jobs", "detail", apiUrl, "application", "job-1"];
+      await waitFor(() =>
+        expect(qc.getQueryData(jobKey)).toMatchObject({ status: "cancel_pending" }),
+      );
+      expect(reads).toBe(1);
+      const publications: unknown[] = [];
+      const unsubscribe = qc.getQueryCache().subscribe((event) => {
+        if (event.query.queryKey[1] === "notable-places") publications.push(event.query.state.data);
+      });
+      try {
+        completed = true;
+        await act(() => qc.invalidateQueries({ queryKey: jobKey }));
+        await waitFor(() => expect(reads).toBe(2));
+        await screen.findByText("303");
+        await act(async () => initial.resolve(oldResponse));
+        expect(screen.getByText("303")).toBeInTheDocument();
+        expect(screen.queryByText("101")).toBeNull();
+        expect(reads).toBe(2);
+        for (const data of publications)
+          if (data !== undefined) expect(data).toMatchObject({ placeCount: 303 });
+      } finally {
+        initial.resolve(oldResponse);
+        unsubscribe();
+      }
+    },
+  );
+
   it.each(["overture-sync", "overture-conflate", "search-index-build", "notable-places-build"])(
     "registers %s after disposal and refreshes its actual displayed status on terminal failure",
     async (kind) => {
@@ -780,7 +827,10 @@ describe("wire intent, validation, polling and policy", () => {
         ? Response.json({ error: "Synthetic refused" }, { status: 500 })
         : undefined,
     );
-    if (kind === "restore" || kind === "delete") {
+    if (kind === "create") {
+      mount(<BackupsPage />);
+      fireEvent.click(await screen.findByRole("button", { name: "Create backup" }));
+    } else if (kind === "restore" || kind === "delete") {
       mount(<BackupsPage />);
       const row = (await screen.findByText("snapshot-1")).closest("tr") as HTMLElement;
       fireEvent.click(
@@ -820,6 +870,10 @@ describe("wire intent, validation, polling and policy", () => {
     expect(
       calls.filter((r) => r.init.method === "POST" || r.init.method === "DELETE"),
     ).toHaveLength(kind === "run" ? 2 : 1);
+    if (kind === "create")
+      expect(calls.filter((r) => r.init.method === "POST").map((r) => r.url.pathname)).toEqual([
+        "/api/admin/services/backups",
+      ]);
   });
   it("keeps full MOTIS/GBFS evidence in the query and synchronously refreshes rollback without a job", async () => {
     let rollback = false;

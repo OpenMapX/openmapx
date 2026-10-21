@@ -55,6 +55,90 @@ afterEach(() => {
   vi.useRealTimers();
 });
 describe("managed Dawarich canonical acquisition", () => {
+  describe.each(["response", "body", "failed refresh"])("pending initial %s", (delay) => {
+    it.each(["provision", "rotate"] as const)(
+      "starts a post-effect GET after %s before the initial read settles",
+      async (action) => {
+        const current = { ...status, publicOrigin: "https://current.test", needsApply: false };
+        const initial = Response.json(status);
+        let release!: () => void;
+        let canceled = false;
+        let body: ReadableStream<Uint8Array> | undefined;
+        let reads = 0;
+        const signals: (AbortSignal | null | undefined)[] = [];
+        vi.stubGlobal("fetch", async (_url: string, init: RequestInit) => {
+          if (init.method === "POST") return Response.json(status);
+          signals.push(init.signal);
+          if (++reads > 1)
+            return delay === "failed refresh"
+              ? Response.json({ code: "DAWARICH_PROVISIONING_FAILED" }, { status: 503 })
+              : Response.json(current);
+          if (delay === "body") {
+            const bytes = new TextEncoder().encode(JSON.stringify(status));
+            body = new ReadableStream<Uint8Array>({
+              start(controller) {
+                controller.enqueue(bytes.slice(0, 10));
+                release = () => {
+                  if (canceled) return;
+                  controller.enqueue(bytes.slice(10));
+                  controller.close();
+                };
+              },
+              cancel() {
+                canceled = true;
+              },
+            });
+            return new Response(body, { headers: { "content-type": "application/json" } });
+          }
+          // Capture the old snapshot now; deliberately ignore abort until delivery.
+          return new Promise<Response>((resolve) => {
+            release = () => resolve(initial);
+          });
+        });
+        const { result, qc } = mount();
+        await waitFor(() => expect(reads).toBe(1));
+        expect(result.current.statusQuery.data).toBeUndefined();
+        if (body) await waitFor(() => expect(body?.locked).toBe(true));
+        const publications: unknown[] = [];
+        const unsubscribe = qc.getQueryCache().subscribe((event) => {
+          if (event.query.queryKey[3] === "dawarich") publications.push(event.query.state.data);
+        });
+        try {
+          await act(async () => {
+            expect(
+              await (action === "rotate"
+                ? result.current.rotate.mutateAsync()
+                : result.current.provision.mutateAsync(undefined)),
+            ).toEqual(status);
+          });
+          await waitFor(() => expect(reads).toBe(2));
+          await waitFor(() => expect(result.current.statusQuery.isFetching).toBe(false));
+          expect(signals[0]?.aborted).toBe(true);
+          expect(signals[1]?.aborted).toBe(false);
+          if (body) {
+            expect(canceled).toBe(true);
+            expect(body.locked).toBe(false);
+          }
+          await act(async () => release());
+          expect(reads).toBe(2);
+          if (delay === "failed refresh") {
+            expect(result.current.statusQuery.isError).toBe(true);
+            expect(result.current.statusQuery.error?.message).toBe("DAWARICH_PROVISIONING_FAILED");
+            expect(result.current.statusQuery.data).toBeUndefined();
+            for (const data of publications) expect(data).toBeUndefined();
+          } else {
+            expect(result.current.statusQuery.data).toEqual(current);
+            expect(publications.filter((data) => data !== undefined).length).toBeGreaterThan(0);
+            for (const data of publications) if (data !== undefined) expect(data).toEqual(current);
+          }
+        } finally {
+          release();
+          unsubscribe();
+        }
+      },
+    );
+  });
+
   it.each(["provision", "rotate"] as const)(
     "returns validated %s success without inventing status success when refresh fails",
     async (action) => {

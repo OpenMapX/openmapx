@@ -80,6 +80,60 @@ afterEach(() => {
 });
 describe("admin-owned accepted service jobs", () => {
   it.each(["success", "failed", "canceled"] as const)(
+    "replaces a pending initial service GET on terminal %s before its old response arrives",
+    async (status) => {
+      const initial = pending<Response>();
+      const oldResponse = Response.json({
+        services: [],
+        summary: { running: 0, stopped: 2, total: 2 },
+      });
+      let completed = false;
+      let reads = 0;
+      const signals: (AbortSignal | null | undefined)[] = [];
+      vi.stubGlobal("fetch", (url: string, init: RequestInit) => {
+        const path = new URL(url).pathname;
+        if (path.endsWith("/action")) return Response.json({ ok: true, jobId: "job-1" });
+        if (path.startsWith("/api/admin/jobs/"))
+          return Response.json(job({ id: "job-1", status: completed ? status : "cancel_pending" }));
+        expect(path).toBe("/api/admin/services");
+        signals.push(init.signal);
+        if (++reads === 1) return initial.promise;
+        return Response.json({ services: [], summary: { running: 2, stopped: 0, total: 2 } });
+      });
+      const { qc } = mount();
+      await waitFor(() => expect(reads).toBe(1));
+      fireEvent.click(screen.getByText("Queue"));
+      const jobKey = ["admin", "jobs", "detail", apiUrl, "application", "job-1"];
+      await waitFor(() =>
+        expect(qc.getQueryData(jobKey)).toMatchObject({ status: "cancel_pending" }),
+      );
+      expect(reads).toBe(1);
+      expect(screen.getByText("waiting")).toBeInTheDocument();
+      const publications: unknown[] = [];
+      const unsubscribe = qc.getQueryCache().subscribe((event) => {
+        if (event.query.queryKey[3] === "list") publications.push(event.query.state.data);
+      });
+      try {
+        completed = true;
+        await act(() => qc.invalidateQueries({ queryKey: jobKey }));
+        await waitFor(() => expect(reads).toBe(2));
+        await screen.findByText("2");
+        expect(signals[0]?.aborted).toBe(true);
+        expect(signals[1]?.aborted).toBe(false);
+        await act(async () => initial.resolve(oldResponse));
+        expect(screen.getByText("2")).toBeInTheDocument();
+        expect(screen.queryByText("0")).toBeNull();
+        expect(reads).toBe(2);
+        for (const data of publications)
+          if (data !== undefined) expect(data).toMatchObject({ summary: { running: 2 } });
+      } finally {
+        initial.resolve(oldResponse);
+        unsubscribe();
+      }
+    },
+  );
+
+  it.each(["success", "failed", "canceled"] as const)(
     "retains distinct same-origin clients, multiple jobs and disposed callers until %s refresh",
     async (status) => {
       let completed = false;

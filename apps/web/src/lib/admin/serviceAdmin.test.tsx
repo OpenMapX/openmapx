@@ -1,7 +1,7 @@
 import { createApiClient } from "@openmapx/core";
-import { useQuery } from "@tanstack/react-query";
+import { useQueries, useQuery } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, createTestQueryClient, renderHookWithQuery, waitFor } from "@/test";
+import { act, cleanup, createTestQueryClient, renderHookWithQuery, waitFor } from "@/test";
 import { invalidateServiceAdministration, serviceAdminQueries } from "./serviceAdmin";
 
 let apiUrl = "http://admin.test";
@@ -51,6 +51,120 @@ afterEach(() => {
   vi.useRealTimers();
 });
 describe("service administration query acquisition", () => {
+  it.each(["service", "configuration", "credentials", "operations"] as const)(
+    "refreshes the %s graph once per active query, preserving inactive and unrelated scope",
+    async (kind) => {
+      apiUrl = "http://admin.test/";
+      const qc = cache();
+      qc.setDefaultOptions({ queries: { retry: false, gcTime: Infinity } });
+      const root = ["admin", "services", apiUrl];
+      const keys = {
+        list: [...root, "list"],
+        detail: [...root, "detail", "demo"],
+        config: [...root, "config", "demo"],
+        credentials: [...root, "credentials", "demo"],
+        compose: [...root, "compose"],
+        deployment: [...root, "deployment"],
+        dawarich: [...root, "dawarich"],
+        overview: ["admin", "overview", apiUrl, "status"],
+        runtime: ["integrations", "http://admin.test", "status"],
+        extra: ["admin", "embedded", apiUrl, { page: 1, section: "status" }],
+        otherService: [...root, "detail", "other"],
+        otherOrigin: ["admin", "services", "http://second.test", "list"],
+        otherOverview: ["admin", "overview", "http://second.test", "status"],
+        otherRuntime: ["integrations", "http://second.test", "status"],
+        otherExtra: ["admin", "embedded", "http://second.test", { page: 1 }],
+        unrelated: ["admin", "unrelated", apiUrl],
+      };
+      const unaffected = new Set([
+        "otherOrigin",
+        "otherOverview",
+        "otherRuntime",
+        "otherExtra",
+        "unrelated",
+        ...(kind === "operations" ? [] : ["otherService"]),
+      ]);
+      const counts = new Map<string, number>();
+      const signals = new Map<string, AbortSignal[]>();
+      const releases: (() => void)[] = [];
+      const queryFn =
+        (name: string) =>
+        ({ signal }: { signal: AbortSignal }) => {
+          const count = (counts.get(name) ?? 0) + 1;
+          counts.set(name, count);
+          signals.set(name, [...(signals.get(name) ?? []), signal]);
+          if (count > 1) return Promise.resolve("post-effect");
+          return new Promise<string>((resolve) => releases.push(() => resolve("pre-effect")));
+        };
+      // Cached data exposes duplicate refetches from overlapping prefixes as well.
+      qc.setQueryData(keys.list, "cached");
+      const { result } = renderHookWithQuery(
+        () =>
+          useQueries({
+            queries: Object.entries(keys).map(([name, queryKey]) => ({
+              queryKey,
+              queryFn: queryFn(name),
+              staleTime: 0,
+            })),
+          }),
+        { queryClient: qc },
+      );
+      const inactive = [...root, "config", "demo", "inactive"];
+      const inactivePending = qc
+        .fetchQuery({ queryKey: inactive, queryFn: queryFn("inactive") })
+        .catch(() => undefined);
+      const inactiveSettled = [...root, "credentials", "demo", "inactive"];
+      qc.setQueryData(inactiveSettled, "cached");
+      await waitFor(() => expect(counts.size).toBe(Object.keys(keys).length + 1));
+      try {
+        await act(async () => {
+          // Intentionally overlapping/duplicate prefixes, including normalized runtime.
+          void invalidateServiceAdministration(qc, apiUrl, {
+            ...(kind === "operations" ? { kind } : { kind, serviceId: "demo" }),
+            refreshKeys: [
+              keys.list,
+              keys.list,
+              ["admin", "overview", apiUrl],
+              ["integrations", "http://admin.test"],
+              ["admin", "embedded", apiUrl],
+              ["admin", "embedded", apiUrl, { page: 1 }],
+            ],
+          });
+        });
+        await waitFor(() => {
+          for (const name of Object.keys(keys))
+            expect(counts.get(name)).toBe(unaffected.has(name) ? 1 : 2);
+        });
+        for (const [name, queryKey] of Object.entries(keys)) {
+          expect(signals.get(name)?.[0].aborted).toBe(!unaffected.has(name));
+          if (!unaffected.has(name)) {
+            expect(signals.get(name)?.[1].aborted).toBe(false);
+            expect(qc.getQueryData(queryKey)).toBe("post-effect");
+          } else expect(qc.getQueryState(queryKey)?.isInvalidated).toBe(false);
+        }
+        expect(counts.get("inactive")).toBe(1);
+        expect(signals.get("inactive")?.[0].aborted).toBe(true);
+        expect(qc.getQueryState(inactive)?.isInvalidated).toBe(true);
+        expect(qc.getQueryState(inactiveSettled)?.isInvalidated).toBe(true);
+        expect(qc.getQueryData(inactiveSettled)).toBe("cached");
+        await act(async () => {
+          for (const release of releases) release();
+          await inactivePending;
+        });
+        await waitFor(() => {
+          for (const [index, name] of Object.keys(keys).entries())
+            expect(result.current[index]?.data).toBe(
+              unaffected.has(name) ? "pre-effect" : "post-effect",
+            );
+        });
+        expect(qc.getQueryState(inactive)?.isInvalidated).toBe(true);
+        expect(qc.getQueryData(inactive)).toBeUndefined();
+      } finally {
+        for (const release of releases) release();
+      }
+    },
+  );
+
   it.each(reads)(
     "bounds %s body acquisition to 30 seconds and cancels the reader",
     async (name) => {
