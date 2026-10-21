@@ -89,6 +89,42 @@ describe("runtime bundles", () => {
     ]);
   });
 
+  it("resolves workspace packages from their exports without node_modules links", async () => {
+    const files = {
+      "packages/greet/package.json": JSON.stringify({
+        name: "@openmapx/greet",
+        exports: { "./hello": { types: "./src/hello.ts", default: "./src/hello.ts" } },
+      }),
+      "packages/greet/src/hello.ts": 'export const hello = () => "hello";',
+      "app/src/main.ts": 'import { hello } from "@openmapx/greet/hello";\nconsole.log(hello());',
+    };
+    const bundle = await buildRuntimeBundle(workspace(files), "fixture", config);
+    expect(text(bundle, "main.mjs")).toContain('"hello"');
+    await expect(
+      buildRuntimeBundle(
+        workspace({ ...files, "app/src/main.ts": 'import "@openmapx/greet/missing";' }),
+        "fixture",
+        config,
+      ),
+    ).rejects.toThrow("is not exported by @openmapx/greet");
+    // Node picks the first condition it matches, in the order the package lists them.
+    const ordered = await buildRuntimeBundle(
+      workspace({
+        ...files,
+        "packages/greet/package.json": JSON.stringify({
+          name: "@openmapx/greet",
+          exports: { "./hello": { node: "./src/node.ts", import: "./src/hello.ts" } },
+        }),
+        "packages/greet/src/node.ts": 'export const hello = () => "node";',
+      }),
+      "fixture",
+      config,
+    );
+    expect(text(ordered, "main.mjs")).toContain('"node"');
+    expect(ordered.sources).toContain("packages/greet/src/node.ts");
+    expect(ordered.sources).not.toContain("packages/greet/src/hello.ts");
+  });
+
   it("is byte-identical across builds and checkout locations", async () => {
     const first = await buildRuntimeBundle(workspace(), "fixture", config);
     const second = await buildRuntimeBundle(workspace(), "fixture", config);
@@ -137,12 +173,56 @@ describe("runtime bundles", () => {
     expect(changed.digest).not.toBe(bundle.digest);
   });
 
+  it("pins packages loaded through a require created from the module's URL", async () => {
+    const bundle = await buildRuntimeBundle(
+      workspace({
+        "app/src/main.ts": [
+          'import { createRequire } from "node:module";',
+          "const require = createRequire(import.meta.url);",
+          'console.log(require("left-pad")("x"), require("node:fs").existsSync);',
+        ].join("\n"),
+      }),
+      "fixture",
+      config,
+    );
+    // esbuild renames the local binding, which the shared require shim shadows.
+    expect(text(bundle, "main.mjs")).toMatch(
+      /var (require\d*) = createRequire\(import\.meta\.url\);\nconsole\.log\(\1\("\.\.\/\.\.\/node_modules\/left-pad\/index\.js"\)/,
+    );
+    // Builtins are left as they are.
+    expect(text(bundle, "main.mjs")).toMatch(/require\d*\("node:fs"\)/);
+    expect(JSON.parse(text(bundle, EXTERNALS_MANIFEST))).toEqual([
+      "../../node_modules/left-pad/index.js",
+    ]);
+  });
+
   it.each([
+    [
+      "a created require used for resolution",
+      'import { createRequire } from "node:module";\nconst require = createRequire(import.meta.url);\nconsole.log(require.resolve("left-pad"));',
+      "used other than with a literal specifier",
+    ],
+    [
+      "a created require loading workspace code",
+      'import { createRequire } from "node:module";\nconst require = createRequire(import.meta.url);\nconsole.log(require("../../lib/src/tools"));',
+      "not an installed package",
+    ],
     ["a computed import", 'const name = "x";\nvoid import(name);', "computed import()"],
     ["a computed require", 'const name = "x";\nrequire(name);', "computed import() or require()"],
     ["the module's directory", "console.log(import.meta.dirname);", "import.meta.dirname"],
     ["an entry-point check", "if (import.meta.main) console.log(1);", "import.meta.main"],
     ["module resolution", 'console.log(import.meta.resolve("left-pad"));', "import.meta.resolve"],
+    ["a computed import.meta property", 'console.log(import.meta["url"]);', "import.meta (line 1)"],
+    [
+      "a destructured import.meta",
+      "const { url } = import.meta;\nconsole.log(url);",
+      "import.meta",
+    ],
+    [
+      "an exported created require",
+      'import { createRequire } from "node:module";\nexport const load = createRequire(import.meta.url);',
+      "exported load from createRequire(import.meta.url)",
+    ],
     [
       "the module's URL",
       'import { createRequire } from "node:module";\ncreateRequire(import.meta.url);',

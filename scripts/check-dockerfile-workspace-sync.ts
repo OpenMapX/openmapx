@@ -236,19 +236,6 @@ const RUNTIME_IMAGES: {
   notShipped?: Record<string, string>;
 }[] = [
   {
-    path: "apps/ops-agent/Dockerfile",
-    tsconfig: "apps/ops-agent/tsconfig.json",
-    entries: ["apps/ops-agent/src", "packages/cli/src/index.ts"],
-    compiled: "apps/ops-agent/src/",
-    computedImports: {
-      "apps/ops-agent/src/data-inventory.ts": ["packages/transitous-core/src/motis-config.ts"],
-    },
-    notShipped: {
-      "integrations/transit-dynamic-registry/":
-        "only `transit-registry bump` loads it, a developer command the agent never runs",
-    },
-  },
-  {
     path: "services/data-manager/Dockerfile",
     tsconfig: "services/data-manager/tsconfig.json",
     entries: ["services/data-manager/src"],
@@ -298,6 +285,7 @@ for (const image of RUNTIME_IMAGES) {
 
 /** The Dockerfile of each bundled image, by bundle name. */
 const BUNDLED_DOCKERFILES: Record<string, string> = {
+  "ops-agent": "apps/ops-agent/Dockerfile",
   "transitous-runner": "apps/transitous-runner/Dockerfile",
 };
 const SOURCE_PREFIXES = [
@@ -341,10 +329,22 @@ async function checkBundledImages(): Promise<void> {
           "runs its bundle, so the copy only makes source changes rebuild the image.",
       );
     }
+    let bundle: Awaited<ReturnType<typeof buildRuntimeBundle>>;
     try {
-      await buildRuntimeBundle(ROOT, image);
+      bundle = await buildRuntimeBundle(ROOT, image);
     } catch (error) {
       completenessErrors.push(error instanceof Error ? error.message : String(error));
+      continue;
+    }
+    // The bundle stage builds from a partial checkout: it must copy every file
+    // the bundle reads, or the release build fails after merge.
+    const staged = stageInputs(content, ".", undefined, "bundle").inputs as string[];
+    const unstaged = bundle.sources.filter((file) => !coversPath(staged, file));
+    if (unstaged.length > 0) {
+      completenessErrors.push(
+        `${dockerfile}'s bundle stage never copies files its bundle reads: ` +
+          `${unstaged.slice(0, 8).join(", ")}${unstaged.length > 8 ? ` (+${unstaged.length - 8} more)` : ""}`,
+      );
     }
   }
 }

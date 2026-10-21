@@ -1642,21 +1642,32 @@ export function createDefaultReleaseEffects(
   };
 }
 
-export function createDefaultFixedCli(_rootDir: string): FixedCliRunner {
-  const runtimeRoot = join(import.meta.dirname, "..", "..", "..");
-  const executable = join(runtimeRoot, "packages", "cli", "node_modules", ".bin", "tsx");
-  const tsconfig = join(runtimeRoot, "packages", "cli", "tsconfig.json");
-  const entrypoint = join(runtimeRoot, "packages", "cli", "src", "index.ts");
+/**
+ * The fixed CLI the agent runs. In the image both are runtime bundles and
+ * `cli.mjs` sits next to the agent's entry; in development the agent runs from
+ * `src/` and the CLI runs from source under tsx.
+ */
+export function createDefaultFixedCli(
+  _rootDir: string,
+  entry: string = process.argv[1] ?? "",
+): FixedCliRunner {
+  const entryDirectory = dirname(entry);
+  const bundled = join(entryDirectory, "cli.mjs");
+  const runtimeRoot = join(entryDirectory, "..", "..", "..");
+  const [executable, ...prefix] = existsSync(bundled)
+    ? [process.execPath, bundled]
+    : [
+        join(runtimeRoot, "packages", "cli", "node_modules", ".bin", "tsx"),
+        "--tsconfig",
+        join(runtimeRoot, "packages", "cli", "tsconfig.json"),
+        join(runtimeRoot, "packages", "cli", "src", "index.ts"),
+      ];
   return async (args, options) => {
-    const result = await runContainedProcess(
-      executable,
-      ["--tsconfig", tsconfig, entrypoint, ...args],
-      {
-        signal: options.signal,
-        timeout: MAX_CLI_DURATION_MS,
-        maxBuffer: MAX_CLI_OUTPUT_BYTES,
-      },
-    );
+    const result = await runContainedProcess(executable as string, [...prefix, ...args], {
+      signal: options.signal,
+      timeout: MAX_CLI_DURATION_MS,
+      maxBuffer: MAX_CLI_OUTPUT_BYTES,
+    });
     emitLines(options.emitLog, "stdout", result.stdout);
     emitLines(options.emitLog, "stderr", result.stderr);
   };
