@@ -3,7 +3,7 @@
 # The build context is `docs/` only — this package is a self-contained pnpm
 # workspace (its own pnpm-workspace.yaml + pnpm-lock.yaml), fully decoupled from
 # the monorepo workspace and the app build.
-FROM node:24.21.0-alpine@sha256:ebfe2f90462722a7a4de65e91990e97fe0d401c70e0e762c5b53302f905ec1c1 AS build
+FROM node:24.22.1-alpine@sha256:6a1c190e17215d844926b0677f4bf87273ff7d5e54db06d3b5b5863ab0b09a3d AS build
 WORKDIR /app
 COPY package.json /tmp/package.json
 RUN corepack enable && \
