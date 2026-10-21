@@ -318,7 +318,7 @@ export function SystemMaintenance() {
 
       <AdminTableSurface
         title="OpenMapX application"
-        description="Checking compares the running images with the release manifest. Images are downloaded only when you update."
+        description="Checking compares running images with the release. Only Update downloads images."
         toolbar={
           <Stack
             direction={{ xs: "column", sm: "row" }}
