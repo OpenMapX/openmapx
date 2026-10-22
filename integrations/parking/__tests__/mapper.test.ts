@@ -329,6 +329,36 @@ describe("mapParkingSiteToDetail", () => {
     ]);
   });
 
+  it("an area open around the clock or the same hours daily reads in the reader's clock", () => {
+    const detail = mapParkingSiteToDetail(
+      makeSite({
+        areas: [
+          area("car", "short_term", { hours: "07:00-22:30" }),
+          area("car", "disabled", { hours: "24/7" }),
+          area("car", "family", { hours: "Mo-Su 00:00-24:00" }),
+          area("car", "ev_charging", { hours: "Mo-Su 06:30-24:00" }),
+          area("car", "delivery", { hours: "Mo-Fr 06:30-22:15; Sa 08:30-22:15" }),
+        ],
+      }),
+    );
+    const facility = section(detail.sections, "Facility");
+
+    expect(rowsOf(facility)).toEqual([
+      ["Short-Term", "Available, applies 7:00 AM–10:30 PM"],
+      ["Disabled Spaces", "Available, around the clock"],
+      ["Families", "Available, around the clock"],
+      ["EV Charging", "Available, applies 6:30 AM–12:00 AM"],
+      ["Deliveries", "Available, applies Mo-Fr 06:30-22:15; Sa 08:30-22:15"],
+    ]);
+    expect(rowsOf(facility, "de")).toEqual([
+      ["Kurzparker", "Vorhanden, gilt 07:00–22:30"],
+      ["Behindertenplätze", "Vorhanden, rund um die Uhr"],
+      ["Familien", "Vorhanden, rund um die Uhr"],
+      ["E-Ladeplätze", "Vorhanden, gilt 06:30–00:00"],
+      ["Lieferverkehr", "Vorhanden, gilt Mo-Fr 06:30-22:15; Sa 08:30-22:15"],
+    ]);
+  });
+
   it("a stale reading keeps its counts and says it is stale", () => {
     const detail = mapParkingSiteToDetail(
       makeSite({ capacity: 400, available: 120, stale: true, at: AT }),
