@@ -60,7 +60,7 @@
     "maplibre-contour": "0.1.1",
     "maplibre-gl": "^6.13.0",
     "maplibre-theme": "^1.0.0",
-    "next": "^16.4.0",
+    "next": "^16.4.1",
     "next-intl": "^4.14.9",
     "papaparse": "5.7.0",
     "pure-web-bottom-sheet": "1.1.1",
