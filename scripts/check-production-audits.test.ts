@@ -123,6 +123,46 @@ describe("production dependency audit policy", () => {
     ]);
   });
 
+  it("reads an advisory that does not say whether its patch is unpublished", () => {
+    const unpatched = checkProductionAuditResults(
+      results(report({ patched_versions_unpublished: undefined })),
+      policy(),
+      NOW,
+    );
+    const patched = checkProductionAuditResults(
+      results(report({ patched_versions: ">=1.2.4", patched_versions_unpublished: undefined })),
+      policy(),
+      NOW,
+    );
+    const low = checkProductionAuditResults(
+      results(report({ severity: "low", patched_versions_unpublished: undefined })),
+      policy(),
+      NOW,
+    );
+
+    expect(unpatched.errors).toEqual([]);
+    expect(unpatched.notices).toEqual([
+      "[root] acknowledged high advisory GHSA-aaaa-bbbb-cccc for example-package@1.2.3 until 2026-11-10",
+    ]);
+    expect(patched.errors).toEqual([
+      "[root] GHSA-aaaa-bbbb-cccc for example-package now has a published patch; remove the allowance and upgrade",
+    ]);
+    expect(low.errors).toEqual([]);
+    expect(low.warnings).toEqual([
+      "[root] observed low advisory GHSA-aaaa-bbbb-cccc for example-package@1.2.3 (non-blocking)",
+    ]);
+  });
+
+  it("fails closed on an unpublished flag that is not a boolean", () => {
+    const outcome = checkProductionAuditResults(
+      results(report({ patched_versions_unpublished: "yes" })),
+      policy(),
+      NOW,
+    );
+
+    expect(outcome.errors).toEqual(["[root] malformed audit report"]);
+  });
+
   it("blocks an advisory whose severity escalates beyond the allowance", () => {
     const outcome = checkProductionAuditResults(
       results(report({ severity: "critical" })),

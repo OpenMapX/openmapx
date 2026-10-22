@@ -47,7 +47,7 @@ overrides:
   # Docusaurus/AJV dependency tree.
   "fast-uri": "^3.1.6"
   # Security-patched transitive dependencies in the Docusaurus toolchain.
-  "dompurify": "^3.4.13"
+  "dompurify": "^3.4.17"
   "mermaid": "^11.16.1"
   "nanoid@3": "^3.3.18"
   "colord": "^2.9.4"
