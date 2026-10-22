@@ -145,6 +145,17 @@ describe("when an effect is in force", () => {
     expect(validityHoldsAt({ status: "cancelled" }, at)).toBe(false);
   });
 
+  it("holds from its start up to, not at, its end", () => {
+    const window = {
+      status: "active" as const,
+      start: "2026-09-11T08:00:00Z",
+      end: "2026-09-11T12:00:00Z",
+    };
+    expect(validityHoldsAt(window, new Date("2026-09-11T08:00:00Z"))).toBe(true);
+    expect(validityHoldsAt(window, new Date("2026-09-11T11:59:59.999Z"))).toBe(true);
+    expect(validityHoldsAt(window, new Date("2026-09-11T12:00:00Z"))).toBe(false);
+  });
+
   it("holds a nightly window in its own time zone, across midnight, and not in an exception", () => {
     const nightly = {
       status: "active" as const,

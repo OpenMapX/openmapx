@@ -472,13 +472,14 @@ export function scheduleOccursAt(schedule: RoadConditionSchedule, at: Date): boo
 
 /**
  * Whether a validity's window holds at `at`, whatever its lifecycle: inside
- * its declared bounds (each inclusive, unbounded when absent), inside one of
+ * its declared bounds `[start, end)` (unbounded when absent; the end itself
+ * is past, as OpenConditions decides), inside one of
  * its periods when it has any, and inside none of its exceptions.
  */
 export function validityWindowHoldsAt(validity: RoadConditionValidity, at: Date): boolean {
   const t = at.getTime();
   if (validity.start && t < Date.parse(validity.start)) return false;
-  if (validity.end && t > Date.parse(validity.end)) return false;
+  if (validity.end && t >= Date.parse(validity.end)) return false;
   if (validity.periods && !validity.periods.some((p) => scheduleOccursAt(p, at))) return false;
   return !validity.exceptions?.some((p) => scheduleOccursAt(p, at));
 }

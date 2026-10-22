@@ -281,7 +281,7 @@ export function effectStateText(
   if (
     validity.status === "ended" ||
     validity.status === "cancelled" ||
-    (validity.end && Date.parse(validity.end) < at.getTime())
+    (validity.end && Date.parse(validity.end) <= at.getTime())
   ) {
     return translate("state.ended");
   }

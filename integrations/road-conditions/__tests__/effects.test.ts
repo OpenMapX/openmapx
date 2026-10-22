@@ -285,6 +285,11 @@ describe("effectStateText", () => {
     expect(state("unknown")).toBe("status unknown, not treated as in force");
   });
 
+  it("reads an effect as ended at the very instant its window ends", () => {
+    const event = situation({ validity: { status: "active", end: AT.toISOString() } });
+    expect(effectStateText(event, effect("c", "closure"), options)).toBe("ended");
+  });
+
   it("says when an operator action is not in place, and nothing more when it is", () => {
     const state = (actionStatus: string) =>
       effectStateText(situation(), effect("c", "closure", { actionStatus }), options);
