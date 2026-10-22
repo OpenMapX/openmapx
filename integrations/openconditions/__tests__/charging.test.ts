@@ -414,6 +414,120 @@ describe("charging-sites-openconditions", () => {
     expect(n).toBeGreaterThan(49.0088);
   });
 
+  test("carries the site's hours exceptions still to come, charging when closed, parking type and amenities", () => {
+    const answer = body();
+    const record = recordOf(answer);
+    record.openingHours = {
+      osm: "Mo-Fr 07:00-21:00",
+      timezone: "Europe/Berlin",
+      chargingWhenClosed: true,
+      exceptions: [
+        { start: "2026-12-24T13:00:00Z", end: "2026-12-26T07:00:00Z", open: false },
+        // Ended before now.
+        { start: "2026-10-01T00:00:00Z", end: "2026-10-02T00:00:00Z", open: false },
+        // Under way at now.
+        { start: "2026-10-06T00:00:00Z", end: "2026-10-07T00:00:00Z", open: true },
+        { start: "not a time", end: "2026-12-31T00:00:00Z", open: false },
+        { start: "2026-12-31T00:00:00Z", end: "2026-12-30T00:00:00Z", open: false },
+      ],
+    };
+    record.details = { ...(record.details as Rec), parkingType: "parking_garage" };
+    record.amenities = ["restaurant", "wifi"];
+    expect(mapped(answer)).toMatchObject({
+      openingHours: "Mo-Fr 07:00-21:00",
+      timeZone: "Europe/Berlin",
+      chargingWhenClosed: true,
+      openingHoursExceptions: [
+        { start: "2026-10-06T00:00:00Z", end: "2026-10-07T00:00:00Z", open: true },
+        { start: "2026-12-24T13:00:00Z", end: "2026-12-26T07:00:00Z", open: false },
+      ],
+      parkingType: "parking_garage",
+      amenities: ["restaurant", "wifi"],
+    });
+
+    const bare = mapped(body())!;
+    for (const field of [
+      "openingHoursExceptions",
+      "chargingWhenClosed",
+      "parkingType",
+      "amenities",
+      "energyMix",
+    ]) {
+      expect(bare).not.toHaveProperty(field);
+    }
+  });
+
+  test("structured opening hours stand in for a missing OSM string", () => {
+    const answer = body();
+    recordOf(answer).openingHours = { twentyFourSeven: true };
+    expect(mapped(answer)!.openingHours).toBe("24/7");
+  });
+
+  test("the site's and each tariff's energy mix are read, what cannot be read left out", () => {
+    const answer = body();
+    const record = recordOf(answer);
+    record.details = {
+      ...(record.details as Rec),
+      energyMix: {
+        isGreen: true,
+        supplierName: "EnBW",
+        productName: "Ökostrom",
+        sources: [
+          { source: "wind", pct: 60 },
+          { source: "solar", pct: 40 },
+          { source: "coal", pct: 140 },
+          { pct: 5 },
+        ],
+        impacts: [
+          { category: "carbon_dioxide", gPerKwh: 0 },
+          { category: "nuclear_waste", gPerKwh: -1 },
+        ],
+      },
+    };
+    offersOf(answer)[0]!.energyMix = { isGreen: false };
+    const site = mapped(answer)!;
+    expect(site.energyMix).toEqual({
+      isGreen: true,
+      supplierName: "EnBW",
+      productName: "Ökostrom",
+      sources: [
+        { source: "wind", pct: 60 },
+        { source: "solar", pct: 40 },
+      ],
+      impacts: [{ category: "carbon_dioxide", gPerKwh: 0 }],
+    });
+    expect(site.tariffs[0]!.energyMix).toEqual({ isGreen: false, sources: [], impacts: [] });
+
+    (record.details as Rec).energyMix = { sources: [{ source: "wind", pct: "60" }] };
+    expect(mapped(answer)).not.toHaveProperty("energyMix");
+  });
+
+  test("a tariff element priced for a booking says which part of it", () => {
+    const answer = body();
+    const tariff = offersOf(answer)[0]!;
+    tariff.elements = [
+      {
+        components: [{ type: "flat", price: { amount: "5.00", currency: "EUR" } }],
+        restrictions: { booking: "booking_cancellation_fees" },
+      },
+    ];
+    expect(mapped(answer)!.tariffs[0]!.elements[0]!.restrictions).toEqual({
+      booking: "booking_cancellation_fees",
+    });
+  });
+
+  test("each EVSE carries its parking restrictions", () => {
+    const answer = body();
+    const evse = (recordOf(answer).components as Rec[]).find((c) => c.key === "EVSE-2")!;
+    evse.details = { ...(evse.details as Rec), parkingRestrictions: ["taxis", "tenants"] };
+    const evses = mapped(answer)!.evses;
+    expect(evses.find((e) => e.key === "EVSE-1")!.parkingRestrictions).toEqual(["ev_only"]);
+    expect(evses.find((e) => e.key === "EVSE-2")!.parkingRestrictions).toEqual([
+      "taxis",
+      "tenants",
+    ]);
+  });
+
   test("a site opens without a disallowed source, as the search listed it", async () => {
     const { provider } = providerWith((req) => (req.method === "getResponse" ? NOT_FOUND : body()));
     const listed = (await provider.searchSites(BBOX, { excludedSourceIds: [OSM] })).sites[0]!;

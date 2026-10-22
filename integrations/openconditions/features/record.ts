@@ -68,6 +68,13 @@ export function list(value: unknown): Rec[] {
   return Array.isArray(value) ? value.map(rec) : [];
 }
 
+/** The non-empty strings of a list, in order; nothing for a value that is not a list. */
+export function stringsOf(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((v): v is string => typeof v === "string" && v !== "")
+    : [];
+}
+
 /** The first text of a multilingual `[{ lang, text }]` value. */
 export function firstText(value: unknown): string | undefined {
   return list(value)
@@ -447,6 +454,43 @@ export function addressOf(location: Rec): string | undefined {
   const place = [str(address.postalCode), str(address.city)].filter(Boolean).join(" ");
   const line = [street, place].filter(Boolean).join(", ");
   return line.length > 0 ? line : undefined;
+}
+
+/** OpenConditions' opening days as OpenStreetMap writes them. */
+const OSM_DAYS: Readonly<Record<string, string>> = {
+  MO: "Mo",
+  TU: "Tu",
+  WE: "We",
+  TH: "Th",
+  FR: "Fr",
+  SA: "Sa",
+  SU: "Su",
+  PH: "PH",
+};
+const LOCAL_TIME = /^(?:[01]\d|2[0-4]):[0-5]\d$/;
+
+/**
+ * An OpenConditions `OpeningHours` as an OpenStreetMap `opening_hours`
+ * string: its own `osm`, else `24/7` for a place always open, else its weekly
+ * spec, each entry a rule added to the others ("Mo,Tu 08:00-12:00, Mo,Tu
+ * 14:00-18:00"). Undefined when it says nothing that can be read.
+ */
+export function osmOpeningHoursOf(value: unknown): string | undefined {
+  const hours = rec(value);
+  const osm = str(hours.osm);
+  if (osm) return osm;
+  if (hours.twentyFourSeven === true) return "24/7";
+  const rules = list(hours.spec).flatMap((entry) => {
+    const days = (Array.isArray(entry.days) ? entry.days : []).flatMap((day) =>
+      typeof day === "string" && OSM_DAYS[day] ? [OSM_DAYS[day]] : [],
+    );
+    const opens = str(entry.opens);
+    const closes = str(entry.closes);
+    if (days.length === 0 || !opens || !closes) return [];
+    if (!LOCAL_TIME.test(opens) || !LOCAL_TIME.test(closes)) return [];
+    return [`${days.join(",")} ${opens}-${closes}`];
+  });
+  return rules.length > 0 ? rules.join(", ") : undefined;
 }
 
 export function countryOf(location: Rec): string | undefined {

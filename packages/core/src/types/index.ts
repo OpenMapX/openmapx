@@ -89,7 +89,7 @@ export type {
   HotelProviderInfo,
   HotelSearchParams,
 } from "./hotel";
-export type { I18nToken, MoneyValue, Translatable } from "./i18nToken";
+export type { I18nToken, MoneyValue, Translatable, WallClockValue } from "./i18nToken";
 export type { Identified, Ids } from "./identified";
 export { makeId, parseId, withId } from "./identified";
 export type {

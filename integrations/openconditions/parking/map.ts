@@ -23,6 +23,7 @@ import {
   list,
   NO_SOURCES,
   newestReading,
+  osmOpeningHoursOf,
   pointOf,
   type Rec,
   readingCredits,
@@ -31,6 +32,7 @@ import {
   sourcesOf,
   splitKey,
   str,
+  stringsOf,
   upstreamCredits,
 } from "../features/record.js";
 
@@ -45,6 +47,7 @@ const LAYOUTS: ReadonlySet<string> = new Set<ParkingLayout>([
   "single_level",
   "multi_storey",
   "underground",
+  "underground_and_multi_storey",
   "surface",
   "automated",
   "covered",
@@ -205,7 +208,9 @@ const counted = (area: ParkingArea) =>
   area.capacity !== undefined ||
   area.available !== undefined ||
   area.status !== undefined ||
-  area.trend !== undefined;
+  area.trend !== undefined ||
+  area.hours !== undefined ||
+  area.maxStayMin !== undefined;
 
 /**
  * An OpenConditions `parking_site` record with its readings in effect and its
@@ -253,11 +258,15 @@ export function recordToParkingSite(
     const own = countsOf(readings, rawKey, now);
     if (excluded(source) && own.used.length === 0) continue;
     const capacity = countOf(details["capacity"]);
+    const hours = osmOpeningHoursOf(details["hours"]);
+    const maxStayMin = minutesOf(details["maxStay"]);
     const area: ParkingArea = {
       key: `${vehicleType}:${userGroup}`,
       vehicleType,
       userGroup,
       ...(capacity !== undefined ? { capacity } : {}),
+      ...(hours ? { hours } : {}),
+      ...(maxStayMin ? { maxStayMin } : {}),
       ...own.counts,
       contributors: readingCredits(...own.used),
     };
@@ -287,10 +296,13 @@ export function recordToParkingSite(
   const address = addressOf(location) ?? str(rec(location["address"])["text"]);
   const operator = firstText(rec(record["operator"])["name"]);
   const website = str(details["website"]);
-  const openingHours = str(rec(record["openingHours"])["osm"]);
+  const openingHours = osmOpeningHoursOf(record["openingHours"]);
   const openingHoursText = firstText(details["openingHoursText"]);
   const audience = oneOf<NonNullable<ParkingSite["audience"]>>(AUDIENCES, access["audience"]);
   const heightLimitCm = heightLimitCmOf(details);
+  const maxStayMin = minutesOf(details["maxStay"]);
+  const reservation = details["reservation"];
+  const amenities = stringsOf(record["amenities"]);
   const tariffText = firstText(details["tariffText"]);
   const notes = firstText(record["description"]);
   return {
@@ -309,6 +321,9 @@ export function recordToParkingSite(
     ...(audience ? { audience } : {}),
     ...(payment.length > 0 ? { free: payment.includes("free") } : {}),
     ...(heightLimitCm !== undefined ? { heightLimitCm } : {}),
+    ...(maxStayMin ? { maxStayMin } : {}),
+    ...(typeof reservation === "boolean" ? { reservation } : {}),
+    ...(amenities.length > 0 ? { amenities } : {}),
     ...(capacity !== undefined ? { capacity } : {}),
     ...site.counts,
     areas,

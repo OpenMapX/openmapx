@@ -7,7 +7,9 @@
   "section": {
     "connectors": "Connectors",
     "usage": "Usage",
-    "openingHours": "Opening Hours"
+    "openingHours": "Opening Hours",
+    "hoursExceptions": "Special Opening Hours",
+    "energyMix": "Energy Mix"
   },
   "availability": "{available} of {total} available",
   "column": {
@@ -17,10 +19,63 @@
   },
   "row": {
     "payment": "Payment",
-    "authentication": "Authentication"
+    "authentication": "Authentication",
+    "parkingRestrictions": "Parking",
+    "whenClosed": "Outside opening hours",
+    "parkingType": "Location"
   },
   "value": {
-    "restricted": "Restricted"
+    "restricted": "Restricted",
+    "chargingWhenClosed": "Charging possible",
+    "noChargingWhenClosed": "No charging"
+  },
+  "parkingRestriction": {
+    "ev_only": "Electric vehicles only",
+    "plugged": "Only while charging",
+    "disabled": "Disabled drivers only",
+    "customers": "Customers only",
+    "motorcycles": "Motorcycles only",
+    "employees": "Employees only",
+    "taxis": "Taxis only",
+    "tenants": "Tenants only"
+  },
+  "parkingRestrictionSome": "{restriction} (some charge points)",
+  "parkingType": {
+    "along_motorway": "Along a motorway",
+    "parking_garage": "Parking garage",
+    "parking_lot": "Car park",
+    "on_driveway": "Driveway",
+    "on_street": "On-street",
+    "underground_garage": "Underground garage",
+    "other": "Other"
+  },
+  "hours": {
+    "period": "{start} – {end}",
+    "day": "{date}",
+    "days": "{start} – {end}"
+  },
+  "energyMix": {
+    "green": "Renewable energy",
+    "supplier": "Supplier",
+    "product": "Energy product",
+    "share": "{pct, number}%",
+    "gPerKwh": "{value, number, ::@##} g/kWh"
+  },
+  "energySource": {
+    "nuclear": "Nuclear",
+    "general_fossil": "Fossil (unspecified)",
+    "coal": "Coal",
+    "gas": "Natural gas",
+    "general_green": "Renewable (unspecified)",
+    "solar": "Solar",
+    "wind": "Wind",
+    "water": "Hydropower",
+    "biogas": "Biogas",
+    "other": "Other"
+  },
+  "energyImpact": {
+    "carbon_dioxide": "CO₂ emissions",
+    "nuclear_waste": "Radioactive waste"
   },
   "current": {
     "ac": "AC",
@@ -145,7 +200,13 @@
     "hours": "{count} h",
     "reservation": "while reserved",
     "reservationExpires": "after a reservation expires",
-    "exclVat": "excl. VAT"
+    "exclVat": "excl. VAT",
+    "booking": {
+      "booking": "with a booking",
+      "booking_expires": "after a booking expires",
+      "booking_cancellation_fees": "when a booking is cancelled",
+      "booking_overtime": "when a booking is overstayed"
+    }
   },
   "day": {
     "MO": "Mon",

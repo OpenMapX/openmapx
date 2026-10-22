@@ -17,11 +17,14 @@
     "disabledSpaces": "Behindertenplätze",
     "womenSpaces": "Frauenparkplätze",
     "evCharging": "E-Ladeplätze",
-    "dataFreshness": "Datenaktualität"
+    "dataFreshness": "Datenaktualität",
+    "maxStay": "Höchstparkdauer",
+    "reservation": "Reservierbar"
   },
   "value": {
     "parkingGarage": "Parkhaus",
     "undergroundGarage": "Tiefgarage",
+    "undergroundAndMultiStorey": "Tief- und Hochgarage",
     "surfaceLot": "Parkplatz",
     "singleLevel": "Eingeschossiges Parkdeck",
     "automated": "Automatisches Parkhaus",
@@ -50,7 +53,10 @@
     "totalSpaces": "{count} Plätze"
   },
   "area": {
-    "forVehicle": "{group} ({vehicle})"
+    "forVehicle": "{group} ({vehicle})",
+    "spaces": "{count, plural, =1 {1 Platz} other {# Plätze}}",
+    "maxStay": "höchstens {duration}",
+    "hours": "gilt {hours}"
   },
   "vehicleType": {
     "car": "Pkw",
@@ -59,6 +65,7 @@
     "coach": "Reisebusse",
     "motorcycle": "Motorräder",
     "bicycle": "Fahrräder",
+    "cargo_bike": "Lastenräder",
     "caravan": "Wohnwagen",
     "any": "Alle Fahrzeuge"
   },
@@ -69,6 +76,9 @@
     "ev_charging": "E-Laden",
     "car_sharing": "Carsharing",
     "residents": "Anwohner",
+    "customers": "Kunden",
+    "taxi": "Taxis",
+    "delivery": "Lieferverkehr",
     "short_term": "Kurzparker",
     "long_term": "Dauerparker",
     "hazmat": "Gefahrgut",

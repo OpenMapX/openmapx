@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { resolveToken } from "../src/resolver.js";
-import { money, sharedStrings } from "../src/token.js";
+import { money, sharedStrings, wallClock } from "../src/token.js";
 
 const charging = {
   en: { price: { energy: "{amount}/kWh" } },
@@ -157,5 +157,28 @@ describe("resolveToken", () => {
       { locale: "de", fallbackLocale: "en", shared, integration },
     );
     expect(out).toBe("Free Spaces");
+  });
+});
+
+describe("resolveToken — wall-clock values", () => {
+  const catalog = { en: { span: "{start} – {end}" }, de: { span: "{start} bis {end}" } };
+  const resolve = (locale: string, start: string, end: string) =>
+    resolveToken(
+      { $t: "span", values: { start: wallClock(start), end: wallClock(end) } },
+      { locale, fallbackLocale: "en", shared: sharedStrings, integration: catalog },
+    );
+
+  it("formats a date, or a date and time, in the reader's locale without moving it", () => {
+    expect(resolve("de", "2026-12-24", "2026-12-26")).toBe("24.12.2026 bis 26.12.2026");
+    expect(resolve("de", "2026-12-24T00:00", "2026-12-24T23:30")).toBe(
+      "24.12.2026, 00:00 bis 24.12.2026, 23:30",
+    );
+    expect(resolve("en", "2026-12-24", "2027-01-01")).toBe("Dec 24, 2026 – Jan 1, 2027");
+    // A time of day alone ends a period on the day it starts.
+    expect(resolve("de", "2026-10-25T17:00", "23:00")).toBe("25.10.2026, 17:00 bis 23:00");
+  });
+
+  it("leaves text that is no wall clock as it is", () => {
+    expect(resolve("en", "Christmas", "2026-12-26")).toBe("Christmas – Dec 26, 2026");
   });
 });

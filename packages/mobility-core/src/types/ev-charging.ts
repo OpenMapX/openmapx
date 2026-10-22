@@ -62,6 +62,35 @@ export interface EnergyTariffRestrictions {
   minDurationSec?: number;
   maxDurationSec?: number;
   reservation?: string;
+  /**
+   * The booking made ahead of arrival the element prices: `booking`, its
+   * expiry (`booking_expires`), cancelling it (`booking_cancellation_fees`)
+   * or overstaying it (`booking_overtime`).
+   */
+  booking?: string;
+}
+
+/**
+ * Where the energy supplied at a site, or under a tariff, comes from: whether
+ * it is wholly renewable, the supplier and its product, the share of each
+ * source and the impact its generation has.
+ */
+export interface EnergyMix {
+  isGreen?: boolean;
+  supplierName?: string;
+  /** The supplier's product or tariff plan the energy is bought under. */
+  productName?: string;
+  /** Each source's share in percent, by OpenConditions code (`solar`, `wind`, `general_fossil`). */
+  sources: { source: string; pct: number }[];
+  /** Grams per kilowatt-hour left behind, by category (`carbon_dioxide`, `nuclear_waste`). */
+  impacts: { category: string; gPerKwh: number }[];
+}
+
+/** A period the opening hours do not describe, open or closed, as ISO 8601 instants. */
+export interface OpeningHoursException {
+  start: string;
+  end: string;
+  open: boolean;
 }
 
 export interface EnergyTariff extends ContributingRecord {
@@ -90,6 +119,8 @@ export interface EnergyTariff extends ContributingRecord {
   priceIncludesVat?: boolean;
   altText?: string;
   url?: string;
+  /** Where the energy sold under the tariff comes from. */
+  energyMix?: EnergyMix;
   sourceId: string;
 }
 
@@ -109,6 +140,16 @@ export interface ChargingSite extends ContributingRecord {
   address?: string;
   openingHours?: string;
   openingHoursText?: string;
+  /** Periods, current or to come, the opening hours do not describe, earliest first. */
+  openingHoursExceptions?: OpeningHoursException[];
+  /** Whether a vehicle may charge while the site is closed. */
+  chargingWhenClosed?: boolean;
+  /** Where vehicles stand while they charge, as an OpenConditions code (`parking_garage`). */
+  parkingType?: string;
+  /** What is at or near the site, as OpenConditions amenity codes (`restaurant`, `wifi`). */
+  amenities?: string[];
+  /** Where the energy supplied at the site comes from. */
+  energyMix?: EnergyMix;
 
   audience?: "public" | "customers" | "permit" | "private" | "restricted" | "unknown";
   payment: string[];

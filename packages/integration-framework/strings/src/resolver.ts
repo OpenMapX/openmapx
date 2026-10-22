@@ -1,6 +1,7 @@
 import { IntlMessageFormat } from "intl-messageformat";
 import { formatMoney } from "./money";
 import type { I18nToken, LocaleStrings } from "./types";
+import { formatWallClock } from "./wallClock";
 
 export interface ResolveOptions {
   /** Active locale (e.g. "en", "de"). */
@@ -63,6 +64,8 @@ function resolveValues(
       out[name] = value;
     } else if ("$money" in value) {
       out[name] = formatMoney(value.$money, value.currency, opts.locale, value.minDigits);
+    } else if ("$wallClock" in value) {
+      out[name] = formatWallClock(value.$wallClock, opts.locale);
     } else {
       out[name] = resolveToken(value, opts);
     }
