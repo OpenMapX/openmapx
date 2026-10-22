@@ -6,8 +6,10 @@ import {
   type DataSourceDetailSection,
   type DataSourceResult,
   gapFillBranding,
+  isoWithOffsetInZone,
   isSafeHttpUrl,
   type OsmIdentity,
+  tzOffsetMinutes,
   validObservedAt,
   withBrandingContributors,
 } from "@openmapx/core";
@@ -19,6 +21,7 @@ import {
   type Translatable,
   token,
   vocabularyLabels,
+  wallClock,
 } from "@openmapx/integration-framework/strings";
 import { snapshotContributors } from "@openmapx/mobility-core/contributors";
 import {
@@ -395,35 +398,85 @@ function siteSection(site: ChargingSite): DataSourceDetailSection | null {
   return { title: sharedT.section.facility, type: "table", rows, sectionIcon: "info" };
 }
 
-/** The periods, current or to come, the opening hours do not describe, and whether it is open then. */
+/** The most exceptions to the opening hours the details list, the soonest first. */
+const MAX_HOURS_EXCEPTIONS = 10;
+
+const ISO_WALL_CLOCK = /^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2})/;
+
+/**
+ * An instant as the clock at the site reads it, `YYYY-MM-DDTHH:mm`: in the
+ * site's time zone, else in the offset the instant was written with.
+ */
+function siteWallClock(instant: string, timeZone: string | undefined): string | undefined {
+  const at = new Date(instant);
+  if (!Number.isFinite(at.getTime())) return undefined;
+  const written =
+    timeZone !== undefined && tzOffsetMinutes(at, timeZone) !== null
+      ? isoWithOffsetInZone(at, timeZone)
+      : instant;
+  const match = ISO_WALL_CLOCK.exec(written);
+  return match ? `${match[1]}T${match[2]}` : undefined;
+}
+
+/** The calendar day before a `YYYY-MM-DD` date. */
+function dayBefore(date: string): string {
+  return new Date(Date.parse(`${date}T00:00:00Z`) - 86_400_000).toISOString().slice(0, 10);
+}
+
+/**
+ * A period as the site's clock reads it. One from midnight to midnight is
+ * whole days, named by its first and last day; any other its start and end
+ * times.
+ */
+function periodToken(
+  exception: NonNullable<ChargingSite["openingHoursExceptions"]>[number],
+  timeZone: string | undefined,
+): I18nToken | undefined {
+  const start = siteWallClock(exception.start, timeZone);
+  const end = siteWallClock(exception.end, timeZone);
+  if (!start || !end) return undefined;
+  if (start.endsWith("T00:00") && end.endsWith("T00:00")) {
+    const first = start.slice(0, 10);
+    const last = dayBefore(end.slice(0, 10));
+    return last <= first
+      ? token("hours.day", { date: wallClock(first) })
+      : token("hours.days", { start: wallClock(first), end: wallClock(last) });
+  }
+  return token("hours.period", { start: wallClock(start), end: wallClock(end) });
+}
+
+/**
+ * The periods, current or to come, the opening hours do not describe, and
+ * whether the site is open then: the soonest ones, in the site's own time.
+ */
 function hoursExceptionsSection(site: ChargingSite): DataSourceDetailSection | null {
-  const exceptions = site.openingHoursExceptions ?? [];
-  if (exceptions.length === 0) return null;
+  const rows = (site.openingHoursExceptions ?? []).flatMap((exception): Row[] => {
+    const period = periodToken(exception, site.timeZone);
+    return period ? [[period, exception.open ? sharedT.value.open : sharedT.value.closed]] : [];
+  });
+  if (rows.length === 0) return null;
   return {
     title: token("section.hoursExceptions"),
     type: "table",
-    rows: exceptions.map(
-      (exception): Row => [
-        token("hours.period", {
-          start: Date.parse(exception.start),
-          end: Date.parse(exception.end),
-        }),
-        exception.open ? sharedT.value.open : sharedT.value.closed,
-      ],
-    ),
+    rows: rows.slice(0, MAX_HOURS_EXCEPTIONS),
     sectionIcon: "access_time",
   };
 }
 
 /**
- * The energy mix the place details show: the site's own, else the one every
- * tariff that states a mix agrees on.
+ * The energy mix the place details show: the site's own, else the tariffs'
+ * when every tariff states the same one. Where some tariff states another
+ * mix or none, no tariff's mix speaks for the site: a green tariff beside a
+ * regular one does not make the site's energy green.
  */
 function energyMixOf(site: ChargingSite): EnergyMix | undefined {
   if (site.energyMix) return site.energyMix;
-  const mixes = site.tariffs.flatMap((tariff) => (tariff.energyMix ? [tariff.energyMix] : []));
-  const distinct = new Set(mixes.map((mix) => JSON.stringify(mix)));
-  return distinct.size === 1 ? mixes[0] : undefined;
+  const [first, ...rest] = site.tariffs;
+  if (!first?.energyMix) return undefined;
+  const mix = JSON.stringify(first.energyMix);
+  return rest.every((tariff) => tariff.energyMix && JSON.stringify(tariff.energyMix) === mix)
+    ? first.energyMix
+    : undefined;
 }
 
 /** Whether the energy is renewable, who supplies it, its sources, largest first, and its impact. */

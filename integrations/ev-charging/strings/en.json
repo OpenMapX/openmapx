@@ -50,7 +50,9 @@
     "other": "Other"
   },
   "hours": {
-    "period": "{start, date, medium}, {start, time, short} – {end, date, medium}, {end, time, short}"
+    "period": "{start} – {end}",
+    "day": "{date}",
+    "days": "{start} – {end}"
   },
   "energyMix": {
     "green": "Renewable energy",

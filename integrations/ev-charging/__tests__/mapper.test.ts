@@ -23,6 +23,9 @@ const AT = "2026-10-05T08:00:00Z";
 /** The no-break space ICU puts between a German number and its percent sign. */
 const NBSP = " ";
 
+/** The narrow no-break space ICU puts before an English AM or PM. */
+const NNBSP = " ";
+
 function text(t: unknown, locale = "en"): string {
   if (!isI18nToken(t)) return String(t);
   return resolveToken(t, {
@@ -720,12 +723,16 @@ describe("mapChargingSiteToDetail", () => {
     expect(usage({ chargingWhenClosed: true })).toEqual([]);
   });
 
-  it("lists the exceptions to the opening hours, each open or closed", () => {
+  it("lists the exceptions to the opening hours in the site's own time, each open or closed", () => {
     const detail = mapChargingSiteToDetail(
       makeSite({
+        timeZone: "Europe/Berlin",
         openingHours: "Mo-Fr 08:00-20:00",
         openingHoursExceptions: [
-          { start: "2026-12-24T14:00:00Z", end: "2026-12-26T08:00:00Z", open: false },
+          // Berlin's 24 December, midnight to midnight: one whole day.
+          { start: "2026-12-23T23:00:00Z", end: "2026-12-24T23:00:00Z", open: false },
+          // 31 December to 1 January, Berlin time: two whole days.
+          { start: "2026-12-30T23:00:00Z", end: "2027-01-01T23:00:00Z", open: false },
           { start: "2026-12-27T10:00:00Z", end: "2026-12-27T14:00:00Z", open: true },
         ],
       }),
@@ -734,12 +741,13 @@ describe("mapChargingSiteToDetail", () => {
     expect(exceptions?.sectionIcon).toBe("access_time");
     expect(exceptions?.rows).toEqual([
       [
+        { $t: "hours.day", values: { date: { $wallClock: "2026-12-24" } } },
+        { $t: "shared.value.closed" },
+      ],
+      [
         {
-          $t: "hours.period",
-          values: {
-            start: Date.parse("2026-12-24T14:00:00Z"),
-            end: Date.parse("2026-12-26T08:00:00Z"),
-          },
+          $t: "hours.days",
+          values: { start: { $wallClock: "2026-12-31" }, end: { $wallClock: "2027-01-01" } },
         },
         { $t: "shared.value.closed" },
       ],
@@ -747,21 +755,70 @@ describe("mapChargingSiteToDetail", () => {
         {
           $t: "hours.period",
           values: {
-            start: Date.parse("2026-12-27T10:00:00Z"),
-            end: Date.parse("2026-12-27T14:00:00Z"),
+            start: { $wallClock: "2026-12-27T11:00" },
+            end: { $wallClock: "2026-12-27T15:00" },
           },
         },
         { $t: "shared.value.open" },
       ],
     ]);
-    const [period] = rowsOf(exceptions, "de")[0]!;
-    expect(period).toMatch(
-      /^\d{1,2}\. Dez\. 2026, \d{2}:\d{2} – \d{1,2}\. Dez\. 2026, \d{2}:\d{2}$/,
+    // Read the same wherever the reader is: the client never shifts a wall clock.
+    // ICU versions differ on the space before AM and PM.
+    expect(rowsOf(exceptions).map((row) => row.map((cell) => cell.replaceAll(NNBSP, " ")))).toEqual(
+      [
+        ["Dec 24, 2026", "Closed"],
+        ["Dec 31, 2026 – Jan 1, 2027", "Closed"],
+        ["Dec 27, 2026, 11:00 AM – Dec 27, 2026, 3:00 PM", "Open"],
+      ],
     );
-    expect(rowsOf(exceptions, "de")[0]![1]).toBe("Geschlossen");
+    expect(rowsOf(exceptions, "de")).toEqual([
+      ["24.12.2026", "Geschlossen"],
+      ["31.12.2026 bis 01.01.2027", "Geschlossen"],
+      ["27.12.2026, 11:00 – 27.12.2026, 15:00", "Geöffnet"],
+    ]);
     expect(section(mapChargingSiteToDetail(makeSite()).sections, "Special Opening Hours")).toBe(
       undefined,
     );
+  });
+
+  it("without a time zone an exception reads in the offset it was written with", () => {
+    const detail = mapChargingSiteToDetail(
+      makeSite({
+        openingHoursExceptions: [
+          { start: "2026-12-24T00:00:00+01:00", end: "2026-12-25T00:00:00+01:00", open: false },
+          { start: "2026-12-27T09:30:00-05:00", end: "2026-12-27T12:00:00-05:00", open: true },
+        ],
+      }),
+    );
+    expect(rowsOf(section(detail.sections, "Special Opening Hours"), "de")).toEqual([
+      ["24.12.2026", "Geschlossen"],
+      ["27.12.2026, 09:30 – 27.12.2026, 12:00", "Geöffnet"],
+    ]);
+    const unknownZone = mapChargingSiteToDetail(
+      makeSite({
+        timeZone: "Mars/Olympus_Mons",
+        openingHoursExceptions: [
+          { start: "2026-12-24T00:00:00+01:00", end: "2026-12-25T00:00:00+01:00", open: false },
+        ],
+      }),
+    );
+    expect(rowsOf(section(unknownZone.sections, "Special Opening Hours"), "de")).toEqual([
+      ["24.12.2026", "Geschlossen"],
+    ]);
+  });
+
+  it("lists at most the ten soonest exceptions", () => {
+    const openingHoursExceptions = Array.from({ length: 14 }, (_, i) => ({
+      start: `2027-01-${String(i + 1).padStart(2, "0")}T10:00:00Z`,
+      end: `2027-01-${String(i + 1).padStart(2, "0")}T12:00:00Z`,
+      open: false,
+    }));
+    const exceptions = section(
+      mapChargingSiteToDetail(makeSite({ timeZone: "UTC", openingHoursExceptions })).sections,
+      "Special Opening Hours",
+    );
+    expect(exceptions?.rows).toHaveLength(10);
+    expect(rowsOf(exceptions, "de").at(-1)![0]).toBe("10.01.2027, 10:00 – 10.01.2027, 12:00");
   });
 
   it("shows the energy mix: green, supplier, product, sources largest first and impacts", () => {
@@ -810,18 +867,25 @@ describe("mapChargingSiteToDetail", () => {
     ]);
   });
 
-  it("takes the energy mix the tariffs agree on when the site states none", () => {
+  it("takes the tariffs' energy mix for the site only when every tariff states the same one", () => {
     const green = { isGreen: true, sources: [], impacts: [] };
     const agreed = mapChargingSiteToDetail(
       makeSite({
-        tariffs: [
-          tariff({ id: "A", energyMix: green }),
-          tariff({ id: "B", energyMix: green }),
-          tariff({ id: "C" }),
-        ],
+        tariffs: [tariff({ id: "A", energyMix: green }), tariff({ id: "B", energyMix: green })],
       }),
     );
     expect(rowsOf(section(agreed.sections, "Energy Mix"))).toEqual([["Renewable energy", "Yes"]]);
+    // A green tariff beside one that states no mix does not make the site's energy green.
+    const partial = mapChargingSiteToDetail(
+      makeSite({
+        tariffs: [tariff({ id: "A", energyMix: green }), tariff({ id: "B" })],
+      }),
+    );
+    expect(section(partial.sections, "Energy Mix")).toBeUndefined();
+    const unstated = mapChargingSiteToDetail(
+      makeSite({ tariffs: [tariff({ id: "A" }), tariff({ id: "B", energyMix: green })] }),
+    );
+    expect(section(unstated.sections, "Energy Mix")).toBeUndefined();
     const split = mapChargingSiteToDetail(
       makeSite({
         tariffs: [
