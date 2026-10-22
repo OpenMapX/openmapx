@@ -20,6 +20,9 @@ import en from "../strings/en.json";
 
 const AT = "2026-10-05T08:00:00Z";
 
+/** The no-break space ICU puts between a German number and its percent sign. */
+const NBSP = " ";
+
 function text(t: unknown, locale = "en"): string {
   if (!isI18nToken(t)) return String(t);
   return resolveToken(t, {
@@ -680,6 +683,209 @@ describe("mapChargingSiteToDetail", () => {
     ]);
   });
 
+  it("says who may park at the charge points, and which restrictions only some have", () => {
+    const detail = mapChargingSiteToDetail(
+      makeSite({
+        evses: [
+          evse({ key: "a", parkingRestrictions: ["ev_only", "plugged"] }),
+          evse({ key: "b", parkingRestrictions: ["ev_only", "taxis", "valet_only"] }),
+        ],
+      }),
+    );
+    const usage = section(detail.sections, "Usage");
+    expect(rowsOf(usage)).toEqual([
+      [
+        "Parking",
+        "Electric vehicles only, Only while charging (some charge points), Taxis only (some charge points), valet only (some charge points)",
+      ],
+    ]);
+    expect(rowsOf(usage, "de")).toEqual([
+      [
+        "Parken",
+        "Nur Elektrofahrzeuge, Nur während des Ladens (einige Ladepunkte), Nur Taxis (einige Ladepunkte), valet only (einige Ladepunkte)",
+      ],
+    ]);
+  });
+
+  it("says whether one may charge while a site with opening hours is closed", () => {
+    const usage = (over: Partial<ChargingSite>) =>
+      rowsOf(section(mapChargingSiteToDetail(makeSite(over)).sections, "Usage"));
+    expect(usage({ openingHours: "Mo-Sa 07:00-22:00", chargingWhenClosed: true })).toEqual([
+      ["Outside opening hours", "Charging possible"],
+    ]);
+    expect(usage({ openingHours: "Mo-Sa 07:00-22:00", chargingWhenClosed: false })).toEqual([
+      ["Outside opening hours", "No charging"],
+    ]);
+    expect(usage({ openingHours: "24/7", chargingWhenClosed: false })).toEqual([]);
+    expect(usage({ chargingWhenClosed: true })).toEqual([]);
+  });
+
+  it("lists the exceptions to the opening hours, each open or closed", () => {
+    const detail = mapChargingSiteToDetail(
+      makeSite({
+        openingHours: "Mo-Fr 08:00-20:00",
+        openingHoursExceptions: [
+          { start: "2026-12-24T14:00:00Z", end: "2026-12-26T08:00:00Z", open: false },
+          { start: "2026-12-27T10:00:00Z", end: "2026-12-27T14:00:00Z", open: true },
+        ],
+      }),
+    );
+    const exceptions = section(detail.sections, "Special Opening Hours");
+    expect(exceptions?.sectionIcon).toBe("access_time");
+    expect(exceptions?.rows).toEqual([
+      [
+        {
+          $t: "hours.period",
+          values: {
+            start: Date.parse("2026-12-24T14:00:00Z"),
+            end: Date.parse("2026-12-26T08:00:00Z"),
+          },
+        },
+        { $t: "shared.value.closed" },
+      ],
+      [
+        {
+          $t: "hours.period",
+          values: {
+            start: Date.parse("2026-12-27T10:00:00Z"),
+            end: Date.parse("2026-12-27T14:00:00Z"),
+          },
+        },
+        { $t: "shared.value.open" },
+      ],
+    ]);
+    const [period] = rowsOf(exceptions, "de")[0]!;
+    expect(period).toMatch(
+      /^\d{1,2}\. Dez\. 2026, \d{2}:\d{2} – \d{1,2}\. Dez\. 2026, \d{2}:\d{2}$/,
+    );
+    expect(rowsOf(exceptions, "de")[0]![1]).toBe("Geschlossen");
+    expect(section(mapChargingSiteToDetail(makeSite()).sections, "Special Opening Hours")).toBe(
+      undefined,
+    );
+  });
+
+  it("shows the energy mix: green, supplier, product, sources largest first and impacts", () => {
+    const detail = mapChargingSiteToDetail(
+      makeSite({
+        energyMix: {
+          isGreen: false,
+          supplierName: "EnBW",
+          productName: "Naturstrom Plus",
+          sources: [
+            { source: "coal", pct: 12.5 },
+            { source: "wind", pct: 40 },
+            { source: "solar", pct: 30 },
+            { source: "tidal", pct: 17.5 },
+          ],
+          impacts: [
+            { category: "carbon_dioxide", gPerKwh: 186.4 },
+            { category: "nuclear_waste", gPerKwh: 0.00063 },
+          ],
+        },
+      }),
+    );
+    const mix = section(detail.sections, "Energy Mix");
+    expect(mix?.sectionIcon).toBe("eco");
+    expect(rowsOf(mix)).toEqual([
+      ["Renewable energy", "No"],
+      ["Supplier", "EnBW"],
+      ["Energy product", "Naturstrom Plus"],
+      ["Wind", "40%"],
+      ["Solar", "30%"],
+      ["tidal", "17.5%"],
+      ["Coal", "12.5%"],
+      ["CO₂ emissions", "186 g/kWh"],
+      ["Radioactive waste", "0.00063 g/kWh"],
+    ]);
+    expect(rowsOf(mix, "de")).toEqual([
+      ["Ökostrom", "Nein"],
+      ["Versorger", "EnBW"],
+      ["Stromprodukt", "Naturstrom Plus"],
+      ["Wind", `40${NBSP}%`],
+      ["Sonne", `30${NBSP}%`],
+      ["tidal", `17,5${NBSP}%`],
+      ["Kohle", `12,5${NBSP}%`],
+      ["CO₂-Emissionen", "186 g/kWh"],
+      ["Radioaktiver Abfall", "0,00063 g/kWh"],
+    ]);
+  });
+
+  it("takes the energy mix the tariffs agree on when the site states none", () => {
+    const green = { isGreen: true, sources: [], impacts: [] };
+    const agreed = mapChargingSiteToDetail(
+      makeSite({
+        tariffs: [
+          tariff({ id: "A", energyMix: green }),
+          tariff({ id: "B", energyMix: green }),
+          tariff({ id: "C" }),
+        ],
+      }),
+    );
+    expect(rowsOf(section(agreed.sections, "Energy Mix"))).toEqual([["Renewable energy", "Yes"]]);
+    const split = mapChargingSiteToDetail(
+      makeSite({
+        tariffs: [
+          tariff({ id: "A", energyMix: green }),
+          tariff({ id: "B", energyMix: { ...green, isGreen: false } }),
+        ],
+      }),
+    );
+    expect(section(split.sections, "Energy Mix")).toBeUndefined();
+    const own = mapChargingSiteToDetail(
+      makeSite({
+        energyMix: { isGreen: false, sources: [], impacts: [] },
+        tariffs: [tariff({ energyMix: green })],
+      }),
+    );
+    expect(rowsOf(section(own.sections, "Energy Mix"))).toEqual([["Renewable energy", "No"]]);
+  });
+
+  it("names where vehicles stand and the amenities nearby", () => {
+    const facility = (over: Partial<ChargingSite>, locale = "en") =>
+      rowsOf(section(mapChargingSiteToDetail(makeSite(over)).sections, "Facility"), locale);
+    expect(
+      facility({ parkingType: "underground_garage", amenities: ["restaurant", "wifi", "spa"] }),
+    ).toEqual([
+      ["Location", "Underground garage"],
+      ["Amenities", "Restaurant, Wi-Fi, Spa"],
+    ]);
+    expect(
+      facility({ parkingType: "along_motorway", amenities: ["restaurant", "wifi"] }, "de"),
+    ).toEqual([
+      ["Lage", "An der Autobahn"],
+      ["Ausstattung", "Restaurant, WLAN"],
+    ]);
+    expect(facility({ parkingType: "rooftop_deck" })).toEqual([["Location", "rooftop deck"]]);
+    expect(facility({})).toEqual([]);
+  });
+
+  it("a booking-priced element says which part of a booking it prices", () => {
+    const rows = rowsOf(
+      section(
+        mapChargingSiteToDetail(
+          makeSite({
+            tariffs: [
+              tariff({
+                elements: [
+                  {
+                    components: [{ type: "flat", price: 5 }],
+                    restrictions: { booking: "booking_cancellation_fees" },
+                  },
+                  {
+                    components: [{ type: "flat", price: 2 }],
+                    restrictions: { booking: "booking_on_mars" },
+                  },
+                ],
+              }),
+            ],
+          }),
+        ).sections,
+        "Pricing",
+      ),
+    );
+    expect(rows.map((row) => row[2])).toEqual(["when a booking is cancelled", "booking on mars"]);
+  });
+
   it("a site without a name gets a fallback name", () => {
     const detail = mapChargingSiteToDetail(makeSite({ name: "" }));
     expect(text(detail.fallbackName)).toBe("Charging station");
@@ -728,6 +934,43 @@ const STATUSES: EvseStatus[] = [
 ];
 
 const STANDARDS = Object.keys(en.connector);
+
+/** OpenConditions' `EVSE_PARKING_RESTRICTIONS`. */
+const OC_PARKING_RESTRICTIONS = [
+  "ev_only",
+  "plugged",
+  "disabled",
+  "customers",
+  "motorcycles",
+  "employees",
+  "taxis",
+  "tenants",
+];
+/** OpenConditions' `CHARGING_PARKING_TYPES`. */
+const OC_PARKING_TYPES = [
+  "along_motorway",
+  "parking_garage",
+  "parking_lot",
+  "on_driveway",
+  "on_street",
+  "underground_garage",
+  "other",
+];
+/** The energy sources OpenConditions writes: OCPI's categories, DATEX's biogas and other. */
+const OC_ENERGY_SOURCES = [
+  "nuclear",
+  "general_fossil",
+  "coal",
+  "gas",
+  "general_green",
+  "solar",
+  "wind",
+  "water",
+  "biogas",
+  "other",
+];
+/** OpenConditions' `BOOKING_RESTRICTIONS`. */
+const OC_BOOKINGS = ["booking", "booking_expires", "booking_cancellation_fees", "booking_overtime"];
 
 describe("ev-charging strings", () => {
   it("every token the mapper emits exists in en and de", () => {
@@ -830,6 +1073,39 @@ describe("ev-charging strings", () => {
         evses: [evse({ connectors: [connector({ tariffIds: ["A", "B"] })] })],
         tariffs: [tariff({ id: "A" }), tariff({ id: "B" }), tariff({ id: "C" })],
       }),
+      makeSite({
+        evses: [
+          evse({ key: "all", parkingRestrictions: [...OC_PARKING_RESTRICTIONS] }),
+          evse({ key: "some", parkingRestrictions: ["ev_only"] }),
+        ],
+        openingHours: "Mo-Fr 08:00-18:00",
+        chargingWhenClosed: true,
+        openingHoursExceptions: [
+          { start: "2026-12-24T00:00:00Z", end: "2026-12-25T00:00:00Z", open: false },
+          { start: "2026-12-27T00:00:00Z", end: "2026-12-28T00:00:00Z", open: true },
+        ],
+        amenities: ["restaurant"],
+        energyMix: {
+          isGreen: true,
+          supplierName: "S",
+          productName: "P",
+          sources: OC_ENERGY_SOURCES.map((source) => ({ source, pct: 10 })),
+          impacts: [
+            { category: "carbon_dioxide", gPerKwh: 1 },
+            { category: "nuclear_waste", gPerKwh: 0.001 },
+          ],
+        },
+        tariffs: [
+          tariff({
+            elements: OC_BOOKINGS.map((booking) => ({
+              components: [{ type: "flat" as const, price: 1 }],
+              restrictions: { booking },
+            })),
+          }),
+        ],
+      }),
+      makeSite({ openingHours: "Mo-Fr 08:00-18:00", chargingWhenClosed: false }),
+      ...OC_PARKING_TYPES.map((parkingType) => makeSite({ parkingType })),
       makeSite({ closed: true }),
       makeSite({ planned: true }),
       makeSite({ evses: [evse({ connectors: [connector({ maxPowerKw: undefined })] })] }),
@@ -854,6 +1130,18 @@ describe("ev-charging strings", () => {
         expect(lookup(en, key), `en ${key}`).toBeTypeOf("string");
         expect(lookup(de, key), `de ${key}`).toBeTypeOf("string");
       }
+    }
+  });
+
+  it("label every value of the OpenConditions vocabularies the details show", () => {
+    for (const catalog of [en, de]) {
+      expect(Object.keys(catalog.parkingRestriction).sort()).toEqual(
+        [...OC_PARKING_RESTRICTIONS].sort(),
+      );
+      expect(Object.keys(catalog.parkingType).sort()).toEqual([...OC_PARKING_TYPES].sort());
+      expect(Object.keys(catalog.energySource).sort()).toEqual([...OC_ENERGY_SOURCES].sort());
+      expect(Object.keys(catalog.energyImpact).sort()).toEqual(["carbon_dioxide", "nuclear_waste"]);
+      expect(Object.keys(catalog.qualifier.booking).sort()).toEqual([...OC_BOOKINGS].sort());
     }
   });
 

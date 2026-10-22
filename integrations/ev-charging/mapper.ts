@@ -25,6 +25,7 @@ import {
   availabilityOf,
   type ChargingConnector,
   type ChargingSite,
+  type EnergyMix,
   type EnergyTariff,
   type EnergyTariffRestrictions,
   type EvseStatus,
@@ -38,6 +39,13 @@ type Day = NonNullable<EnergyTariffRestrictions["days"]>[number];
 
 /** Every connector standard the strings label; any other is shown as it is written. */
 const LABELLED_STANDARDS = new Set(Object.keys(strings.connector));
+
+/** The codes of these vocabularies the strings label; any other is shown in words. */
+const PARKING_RESTRICTIONS = new Set(Object.keys(strings.parkingRestriction));
+const PARKING_TYPES = new Set(Object.keys(strings.parkingType));
+const ENERGY_SOURCES = new Set(Object.keys(strings.energySource));
+const ENERGY_IMPACTS = new Set(Object.keys(strings.energyImpact));
+const BOOKINGS = new Set(Object.keys(strings.qualifier.booking));
 
 const WEEK: readonly Day[] = ["MO", "TU", "WE", "TH", "FR", "SA", "SU"];
 
@@ -328,6 +336,27 @@ function connectorsSection(site: ChargingSite): DataSourceDetailSection | null {
   };
 }
 
+/** A code no catalog names, in words: "drive_through" as "drive through". */
+function literal(code: string): I18nToken {
+  return token("literal", { value: code.replaceAll("_", " ") });
+}
+
+/**
+ * Who may park at the charge points, each restriction once: a restriction
+ * only some charge points have says so.
+ */
+function parkingRestrictions(site: ChargingSite): Translatable[] {
+  const restrictions = [...new Set(site.evses.flatMap((evse) => evse.parkingRestrictions))];
+  return restrictions.map((restriction) => {
+    const label = PARKING_RESTRICTIONS.has(restriction)
+      ? token(`parkingRestriction.${restriction}`)
+      : literal(restriction);
+    return site.evses.every((evse) => evse.parkingRestrictions.includes(restriction))
+      ? label
+      : token("parkingRestrictionSome", { restriction: label });
+  });
+}
+
 function usageSection(site: ChargingSite): DataSourceDetailSection | null {
   const rows: Row[] = [];
   const audience = site.audience && AUDIENCE_TOKEN[site.audience];
@@ -336,8 +365,91 @@ function usageSection(site: ChargingSite): DataSourceDetailSection | null {
   if (payment.length > 0) rows.push([token("row.payment"), payment]);
   const authentication = vocabularyLabels("authentication", site.authentication);
   if (authentication.length > 0) rows.push([token("row.authentication"), authentication]);
+  const restrictions = parkingRestrictions(site);
+  if (restrictions.length > 0) rows.push([token("row.parkingRestrictions"), restrictions]);
+  // Whether one may charge while the site is closed matters only where it closes.
+  if (site.chargingWhenClosed !== undefined && site.openingHours && site.openingHours !== "24/7") {
+    rows.push([
+      token("row.whenClosed"),
+      token(site.chargingWhenClosed ? "value.chargingWhenClosed" : "value.noChargingWhenClosed"),
+    ]);
+  }
   if (rows.length === 0) return null;
   return { title: token("section.usage"), type: "table", rows, sectionIcon: "payments" };
+}
+
+/** Where vehicles stand while they charge, and what is at or near the site. */
+function siteSection(site: ChargingSite): DataSourceDetailSection | null {
+  const rows: Row[] = [];
+  if (site.parkingType) {
+    rows.push([
+      token("row.parkingType"),
+      PARKING_TYPES.has(site.parkingType)
+        ? token(`parkingType.${site.parkingType}`)
+        : literal(site.parkingType),
+    ]);
+  }
+  const amenities = vocabularyLabels("amenity", site.amenities ?? []);
+  if (amenities.length > 0) rows.push([sharedT.row.amenities, amenities]);
+  if (rows.length === 0) return null;
+  return { title: sharedT.section.facility, type: "table", rows, sectionIcon: "info" };
+}
+
+/** The periods, current or to come, the opening hours do not describe, and whether it is open then. */
+function hoursExceptionsSection(site: ChargingSite): DataSourceDetailSection | null {
+  const exceptions = site.openingHoursExceptions ?? [];
+  if (exceptions.length === 0) return null;
+  return {
+    title: token("section.hoursExceptions"),
+    type: "table",
+    rows: exceptions.map(
+      (exception): Row => [
+        token("hours.period", {
+          start: Date.parse(exception.start),
+          end: Date.parse(exception.end),
+        }),
+        exception.open ? sharedT.value.open : sharedT.value.closed,
+      ],
+    ),
+    sectionIcon: "access_time",
+  };
+}
+
+/**
+ * The energy mix the place details show: the site's own, else the one every
+ * tariff that states a mix agrees on.
+ */
+function energyMixOf(site: ChargingSite): EnergyMix | undefined {
+  if (site.energyMix) return site.energyMix;
+  const mixes = site.tariffs.flatMap((tariff) => (tariff.energyMix ? [tariff.energyMix] : []));
+  const distinct = new Set(mixes.map((mix) => JSON.stringify(mix)));
+  return distinct.size === 1 ? mixes[0] : undefined;
+}
+
+/** Whether the energy is renewable, who supplies it, its sources, largest first, and its impact. */
+function energyMixSection(site: ChargingSite): DataSourceDetailSection | null {
+  const mix = energyMixOf(site);
+  if (!mix) return null;
+  const rows: Row[] = [];
+  if (mix.isGreen !== undefined) {
+    rows.push([token("energyMix.green"), mix.isGreen ? sharedT.value.yes : sharedT.value.no]);
+  }
+  if (mix.supplierName) rows.push([token("energyMix.supplier"), mix.supplierName]);
+  if (mix.productName) rows.push([token("energyMix.product"), mix.productName]);
+  for (const { source, pct } of mix.sources.toSorted((a, b) => b.pct - a.pct)) {
+    rows.push([
+      ENERGY_SOURCES.has(source) ? token(`energySource.${source}`) : literal(source),
+      token("energyMix.share", { pct }),
+    ]);
+  }
+  for (const { category, gPerKwh } of mix.impacts) {
+    rows.push([
+      ENERGY_IMPACTS.has(category) ? token(`energyImpact.${category}`) : literal(category),
+      token("energyMix.gPerKwh", { value: gPerKwh }),
+    ]);
+  }
+  if (rows.length === 0) return null;
+  return { title: token("section.energyMix"), type: "table", rows, sectionIcon: "eco" };
 }
 
 /** A component's price with its unit; the client formats the amount in the reader's locale. */
@@ -428,6 +540,11 @@ function qualifierOf(
   if (duration) parts.push(duration);
   if (r?.reservation === "reservation") parts.push(token("qualifier.reservation"));
   if (r?.reservation === "reservation_expires") parts.push(token("qualifier.reservationExpires"));
+  if (r?.booking) {
+    parts.push(
+      BOOKINGS.has(r.booking) ? token(`qualifier.booking.${r.booking}`) : literal(r.booking),
+    );
+  }
   if (exclVat) parts.push(token("qualifier.exclVat"));
   return joinParts(parts, "qualifier.and");
 }
@@ -631,6 +748,12 @@ export function mapChargingSiteToDetail(site: ChargingSite): DataSourceDetail {
       sectionIcon: "access_time",
     });
   }
+  const hoursExceptions = hoursExceptionsSection(site);
+  if (hoursExceptions) sections.push(hoursExceptions);
+  const energyMix = energyMixSection(site);
+  if (energyMix) sections.push(energyMix);
+  const facility = siteSection(site);
+  if (facility) sections.push(facility);
   if (site.notes) {
     sections.push({
       title: sharedT.section.notes,

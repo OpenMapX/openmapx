@@ -7,7 +7,9 @@
   "section": {
     "connectors": "Anschlüsse",
     "usage": "Nutzung",
-    "openingHours": "Öffnungszeiten"
+    "openingHours": "Öffnungszeiten",
+    "hoursExceptions": "Abweichende Öffnungszeiten",
+    "energyMix": "Strommix"
   },
   "availability": "{available} von {total} verfügbar",
   "column": {
@@ -17,10 +19,61 @@
   },
   "row": {
     "payment": "Zahlung",
-    "authentication": "Authentifizierung"
+    "authentication": "Authentifizierung",
+    "parkingRestrictions": "Parken",
+    "whenClosed": "Außerhalb der Öffnungszeiten",
+    "parkingType": "Lage"
   },
   "value": {
-    "restricted": "Eingeschränkt"
+    "restricted": "Eingeschränkt",
+    "chargingWhenClosed": "Laden möglich",
+    "noChargingWhenClosed": "Kein Laden möglich"
+  },
+  "parkingRestriction": {
+    "ev_only": "Nur Elektrofahrzeuge",
+    "plugged": "Nur während des Ladens",
+    "disabled": "Nur für Menschen mit Behinderung",
+    "customers": "Nur für Kunden",
+    "motorcycles": "Nur Motorräder",
+    "employees": "Nur für Beschäftigte",
+    "taxis": "Nur Taxis",
+    "tenants": "Nur für Mieter"
+  },
+  "parkingRestrictionSome": "{restriction} (einige Ladepunkte)",
+  "parkingType": {
+    "along_motorway": "An der Autobahn",
+    "parking_garage": "Parkhaus",
+    "parking_lot": "Parkplatz",
+    "on_driveway": "Einfahrt",
+    "on_street": "Straßenrand",
+    "underground_garage": "Tiefgarage",
+    "other": "Sonstige"
+  },
+  "hours": {
+    "period": "{start, date, medium}, {start, time, short} – {end, date, medium}, {end, time, short}"
+  },
+  "energyMix": {
+    "green": "Ökostrom",
+    "supplier": "Versorger",
+    "product": "Stromprodukt",
+    "share": "{pct, number} %",
+    "gPerKwh": "{value, number, ::@##} g/kWh"
+  },
+  "energySource": {
+    "nuclear": "Kernenergie",
+    "general_fossil": "Fossil (nicht näher bestimmt)",
+    "coal": "Kohle",
+    "gas": "Erdgas",
+    "general_green": "Erneuerbar (nicht näher bestimmt)",
+    "solar": "Sonne",
+    "wind": "Wind",
+    "water": "Wasserkraft",
+    "biogas": "Biogas",
+    "other": "Sonstige"
+  },
+  "energyImpact": {
+    "carbon_dioxide": "CO₂-Emissionen",
+    "nuclear_waste": "Radioaktiver Abfall"
   },
   "current": {
     "ac": "AC",
@@ -145,7 +198,13 @@
     "hours": "{count} Std.",
     "reservation": "während einer Reservierung",
     "reservationExpires": "nach Ablauf einer Reservierung",
-    "exclVat": "zzgl. MwSt."
+    "exclVat": "zzgl. MwSt.",
+    "booking": {
+      "booking": "mit Buchung",
+      "booking_expires": "nach Ablauf einer Buchung",
+      "booking_cancellation_fees": "bei Stornierung einer Buchung",
+      "booking_overtime": "bei Überschreitung einer Buchung"
+    }
   },
   "day": {
     "MO": "Mo",

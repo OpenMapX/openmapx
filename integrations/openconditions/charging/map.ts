@@ -21,6 +21,7 @@ import {
   list,
   NO_SOURCES,
   newestReading,
+  osmOpeningHoursOf,
   pointOf,
   type Rec,
   readingCredits,
@@ -92,10 +93,74 @@ function secondsOf(quantity: unknown): number | undefined {
   return value * perUnit;
 }
 
+type EnergyMix = NonNullable<ChargingSite["energyMix"]>;
+type OpeningHoursException = NonNullable<ChargingSite["openingHoursExceptions"]>[number];
+
+/** An energy mix as far as it can be read; undefined when it says nothing. */
+function energyMixOf(raw: unknown): EnergyMix | undefined {
+  const mix = rec(raw);
+  const supplierName = str(mix["supplierName"]);
+  const productName = str(mix["productName"]);
+  const sources = list(mix["sources"]).flatMap((s) => {
+    const source = str(s["source"]);
+    const pct = number(s["pct"]);
+    return source && pct !== undefined && pct >= 0 && pct <= 100 ? [{ source, pct }] : [];
+  });
+  const impacts = list(mix["impacts"]).flatMap((i) => {
+    const category = str(i["category"]);
+    const gPerKwh = number(i["gPerKwh"]);
+    return category && gPerKwh !== undefined && gPerKwh >= 0 ? [{ category, gPerKwh }] : [];
+  });
+  const isGreen = mix["isGreen"];
+  if (
+    typeof isGreen !== "boolean" &&
+    !supplierName &&
+    !productName &&
+    sources.length === 0 &&
+    impacts.length === 0
+  ) {
+    return undefined;
+  }
+  return {
+    ...(typeof isGreen === "boolean" ? { isGreen } : {}),
+    ...(supplierName ? { supplierName } : {}),
+    ...(productName ? { productName } : {}),
+    sources,
+    impacts,
+  };
+}
+
+/**
+ * The exceptions to a site's opening hours that have not ended by `now`,
+ * earliest first; one whose times cannot be read is left out.
+ */
+function hoursExceptionsOf(raw: unknown, now: Date): OpeningHoursException[] {
+  return list(raw)
+    .flatMap((e) => {
+      const start = str(e["start"]);
+      const end = str(e["end"]);
+      const open = e["open"];
+      if (!start || !end || typeof open !== "boolean") return [];
+      const from = Date.parse(start);
+      const to = Date.parse(end);
+      if (!Number.isFinite(from) || !Number.isFinite(to) || to <= from) return [];
+      return to > now.getTime() ? [{ start, end, open, from }] : [];
+    })
+    .sort((a, b) => a.from - b.from)
+    .map(({ from: _from, ...exception }) => exception);
+}
+
 function restrictionsOf(raw: unknown): EnergyTariffRestrictions | undefined {
   const r = rec(raw);
   const out: EnergyTariffRestrictions = {};
-  for (const key of ["startTime", "endTime", "startDate", "endDate", "reservation"] as const) {
+  for (const key of [
+    "startTime",
+    "endTime",
+    "startDate",
+    "endDate",
+    "reservation",
+    "booking",
+  ] as const) {
     const value = str(r[key]);
     if (value) out[key] = value;
   }
@@ -156,6 +221,7 @@ function tariffOf(offer: Rec): EnergyTariff | undefined {
   const maxPrice = amountOf(offer["maxPrice"]);
   const altText = firstText(offer["altText"]) ?? firstText(offer["displayText"]);
   const url = str(offer["url"]);
+  const energyMix = energyMixOf(offer["energyMix"]);
   return {
     id,
     currency,
@@ -168,6 +234,7 @@ function tariffOf(offer: Rec): EnergyTariff | undefined {
       : {}),
     ...(altText ? { altText } : {}),
     ...(url ? { url } : {}),
+    ...(energyMix ? { energyMix } : {}),
     sourceId,
     contributors: recordCredits(offer),
   };
@@ -321,9 +388,14 @@ export function recordToChargingSite(
   const brand = str(details["brand"]);
   const website = str(details["website"]);
   const openingHours = rec(record["openingHours"]);
-  const osmHours = str(openingHours["osm"]);
+  const osmHours = osmOpeningHoursOf(openingHours);
   const timeZone = str(openingHours["timezone"]);
   const openingHoursText = firstText(details["openingHoursText"]);
+  const hoursExceptions = hoursExceptionsOf(openingHours["exceptions"], now);
+  const chargingWhenClosed = openingHours["chargingWhenClosed"];
+  const parkingType = str(details["parkingType"]);
+  const amenities = stringsOf(record["amenities"]);
+  const energyMix = energyMixOf(details["energyMix"]);
   const audience = oneOf<NonNullable<ChargingSite["audience"]>>(AUDIENCES, access["audience"]);
   const tariffText = firstText(details["tariffText"]);
   const notes = firstText(record["description"]);
@@ -342,6 +414,11 @@ export function recordToChargingSite(
     ...(address ? { address } : {}),
     ...(osmHours ? { openingHours: osmHours } : {}),
     ...(openingHoursText ? { openingHoursText } : {}),
+    ...(hoursExceptions.length > 0 ? { openingHoursExceptions: hoursExceptions } : {}),
+    ...(typeof chargingWhenClosed === "boolean" ? { chargingWhenClosed } : {}),
+    ...(parkingType ? { parkingType } : {}),
+    ...(amenities.length > 0 ? { amenities } : {}),
+    ...(energyMix ? { energyMix } : {}),
     ...(audience ? { audience } : {}),
     payment: stringsOf(access["payment"]),
     authentication: stringsOf(access["authentication"]),
