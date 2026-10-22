@@ -1,66 +1,89 @@
-import { defineTransitProvider, type IntegrationContext } from "@openmapx/integration-framework";
-import { isOtpAvailable, motisModesToOtp, plan, setOtpUrl } from "./provider.js";
+import {
+  captureTransitContributors,
+  type IntegrationContext,
+  resolveIntegrationContributors,
+  snapshotContributors,
+} from "@openmapx/integration-framework";
+import { freshnessNow } from "@openmapx/mobility-core/freshness";
+import { withAttribution } from "@openmapx/mobility-core/result";
+import { transitDataContributors } from "@openmapx/mobility-core/transit-contributors";
+import { createOtpClient, OtpError } from "@openmapx/otp-client";
+import { createOtpProvider } from "./provider";
 
-const { attribution, wrapRT, init } = defineTransitProvider();
-
-export async function setup(ctx: IntegrationContext): Promise<void> {
-  init(ctx);
-  // Resolve OTP URL from the service registry if available.
-  const resolved = ctx.getRequiredService("otp");
-  const url =
-    resolved?.url ?? (ctx.config.endpoint as string | undefined) ?? "http://localhost:8090";
-  ctx.onActivate(() => setOtpUrl(url));
-
-  // Only register if OTP is available
-  if (await isOtpAvailable(url)) {
-    ctx.registerTransitProvider({
-      id: "transit-otp",
-      prefix: "otp:",
-      coverage: { all: true },
-      priority: 6,
-      role: "regional",
-      attribution: attribution.all(),
-      capabilities: {
-        stops: {
-          lookup: false,
-          nearby: false,
-          bbox: false,
-          search: false,
-          infrastructure: false,
-          platforms: false,
-          timetable: false,
-        },
-        departures: false,
-        arrivals: false,
-        routes: { lookup: false, forStop: false, stops: false, geometry: false },
-        planning: true,
-        vehiclePositions: false,
-        vehicleJourney: false,
-        alerts: { byStop: false, byRoute: false, byBbox: false },
-        facilities: false,
+export function setup(ctx: IntegrationContext): void {
+  const generation = new AbortController();
+  const receipts = snapshotContributors(resolveIntegrationContributors(ctx, ["otp"]));
+  const client = createOtpClient({
+    endpoint:
+      ctx.getRequiredService("otp")?.url ??
+      (typeof ctx.config.endpoint === "string" ? ctx.config.endpoint : "http://localhost:8090"),
+    http: ctx.http,
+    signal: generation.signal,
+    isSourceAllowed: async () => {
+      const denied = await ctx.getDisallowedSourceIds?.();
+      return !denied?.has("otp") && !denied?.has(ctx.id);
+    },
+  });
+  const provider = createOtpProvider(client);
+  ctx.onShutdown(async () => {
+    generation.abort();
+  });
+  ctx.registerHealthCheck(async () => {
+    try {
+      await client.sdk.OtpReadiness();
+      if (generation.signal.aborted) throw new OtpError("cancelled");
+      return { status: "up" };
+    } catch (error) {
+      return {
+        status: "down",
+        error: error instanceof OtpError ? error.message : "OTP upstream unavailable",
+      };
+    }
+  });
+  ctx.registerTransitProvider({
+    id: "transit-otp",
+    prefix: "otp:",
+    coverage: { all: true },
+    priority: 6,
+    role: "regional",
+    attribution: receipts,
+    capabilities: {
+      stops: {
+        lookup: false,
+        nearby: false,
+        bbox: false,
+        search: false,
+        infrastructure: false,
+        platforms: false,
+        timetable: false,
       },
-      async planTrip(params) {
-        // OTP groups all heavy rail under RAIL, so it can't exclude
-        // long-distance trains — it can't honour the Deutschlandticket filter.
-        // Defer to a provider that can (MOTIS/db-vendo) rather than leak ICE/IC
-        // into a D-Ticket result.
-        if (params.deutschlandticketOnly) return wrapRT([]);
-        const now = new Date();
-        const arriveBy = params.arrivalTime != null;
-        const when = arriveBy ? params.arrivalTime : params.departureTime;
-        const result = await plan({
-          fromLat: params.from.lat,
-          fromLng: params.from.lng,
-          toLat: params.to.lat,
-          toLng: params.to.lng,
-          time: when?.slice(11, 19) ?? now.toISOString().slice(11, 19),
-          date: when?.slice(0, 10) ?? now.toISOString().slice(0, 10),
-          modes: motisModesToOtp(params.modes),
-          numItineraries: params.numItineraries,
-          arriveBy,
-        });
-        return wrapRT(result ? [result] : []);
-      },
-    });
-  }
+      departures: false,
+      arrivals: false,
+      routes: { lookup: false, forStop: false, stops: false, geometry: false },
+      planning: true,
+      vehiclePositions: false,
+      vehicleJourney: false,
+      alerts: { byStop: false, byRoute: false, byBbox: false },
+      facilities: false,
+    },
+    async planTrip(params) {
+      await client.assertAvailable();
+      // OTP's RAIL includes long-distance trains, so defer the D-ticket request.
+      const data = params.deutschlandticketOnly ? [] : [await provider.plan(params)];
+      await client.assertAvailable();
+      if (generation.signal.aborted) throw new OtpError("cancelled");
+      const credited = captureTransitContributors(data, receipts);
+      return withAttribution(
+        credited,
+        transitDataContributors(credited),
+        freshnessNow({
+          hasRealtimeData: credited.some((plan) =>
+            plan.itineraries.some((itinerary) =>
+              itinerary.legs.some((leg) => leg.realtime === true),
+            ),
+          ),
+        }),
+      );
+    },
+  });
 }

@@ -25,6 +25,7 @@ COPY packages/mobility-core/package.json packages/mobility-core/
 COPY packages/ev-charge-planner/package.json packages/ev-charge-planner/
 COPY packages/mobility-formats/package.json packages/mobility-formats/
 COPY packages/entur-client/package.json packages/entur-client/
+COPY packages/otp-client/package.json packages/otp-client/
 COPY packages/noaa-coops-data/package.json packages/noaa-coops-data/
 COPY packages/openconditions-contrib-client/package.json packages/openconditions-contrib-client/
 COPY packages/ourairports-data/package.json packages/ourairports-data/
