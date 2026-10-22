@@ -2,6 +2,7 @@ import { existsSync } from "node:fs";
 import { isAbsolute, relative, resolve } from "node:path";
 import { dump as yamlDump } from "js-yaml";
 import { configSchemaKeys, serviceConfigEnvPrefix } from "./config-resolver";
+import { resolveConsumesDependencies } from "./consumes-dependencies";
 import { STACK_PROJECT } from "./deployment";
 import {
   EXTERNAL_PROXY_NETWORK_KEY,
@@ -846,41 +847,7 @@ function renderTraefikLabels(m: ServiceManifest, ctx: RenderContext): Record<str
 }
 
 function topologicalOrder(services: LoadedService[]): LoadedService[] {
-  // Mirror the same instance-aware lookup as `detectConsumesCycle` so multi-
-  // region producer setups order correctly.
-  const defaultProducers = new Map<string, string>();
-  const instancedProducers = new Map<string, string>();
-  const producersByType = new Map<string, string[]>();
-  for (const s of services) {
-    for (const p of s.manifest.produces ?? []) {
-      if (p.instance === undefined) {
-        defaultProducers.set(p.type, s.manifest.id);
-      } else {
-        instancedProducers.set(`${p.type}/${p.instance}`, s.manifest.id);
-      }
-      const list = producersByType.get(p.type) ?? [];
-      list.push(s.manifest.id);
-      producersByType.set(p.type, list);
-    }
-  }
-  const adj = new Map<string, Set<string>>();
-  for (const s of services) {
-    const upstream = new Set<string>();
-    for (const c of s.manifest.consumes ?? []) {
-      let producer: string | undefined;
-      if (c.instance !== undefined) {
-        producer = instancedProducers.get(`${c.type}/${c.instance}`);
-      } else {
-        producer =
-          defaultProducers.get(c.type) ??
-          (producersByType.get(c.type)?.length === 1
-            ? producersByType.get(c.type)?.[0]
-            : undefined);
-      }
-      if (producer && producer !== s.manifest.id) upstream.add(producer);
-    }
-    adj.set(s.manifest.id, upstream);
-  }
+  const adj = resolveConsumesDependencies(services);
 
   const visited = new Set<string>();
   const result: LoadedService[] = [];

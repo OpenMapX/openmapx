@@ -1,3 +1,4 @@
+import { resolveConsumesDependencies } from "./consumes-dependencies";
 import {
   getProvidedCapabilityNames,
   type IntegrationRequirement,
@@ -83,54 +84,9 @@ export function resolveRequirement(
 /**
  * Detect a cycle in the consumes/produces DAG. Returns the set of service ids
  * forming the cycle (any order), or null if acyclic.
- *
- * Producers are indexed by `(type, instance)` so multi-region setups (one
- * service per region producing the same type with different `instance` ids)
- * don't collide. A consumer that omits `instance` resolves to:
- *   1. the default-instance producer for the type, if any, else
- *   2. the only instanced producer for the type, if exactly one exists, else
- *   3. nothing (cycle detection treats it as no dependency — the renderer
- *      will surface the ambiguity at render time).
  */
 export function detectConsumesCycle(services: LoadedService[]): string[] | null {
-  const defaultProducers = new Map<string, string>(); // type -> serviceId
-  const instancedProducers = new Map<string, string>(); // `${type}/${instance}` -> serviceId
-  const producersByType = new Map<string, string[]>(); // type -> all producer serviceIds
-  for (const s of services) {
-    for (const p of s.manifest.produces ?? []) {
-      if (p.instance === undefined) {
-        defaultProducers.set(p.type, s.manifest.id);
-      } else {
-        instancedProducers.set(`${p.type}/${p.instance}`, s.manifest.id);
-      }
-      const list = producersByType.get(p.type) ?? [];
-      list.push(s.manifest.id);
-      producersByType.set(p.type, list);
-    }
-  }
-
-  const adj = new Map<string, string[]>(); // serviceId -> upstream ids it consumes from
-  for (const s of services) {
-    const deps: string[] = [];
-    for (const c of s.manifest.consumes ?? []) {
-      let producer: string | undefined;
-      if (c.instance !== undefined) {
-        producer = instancedProducers.get(`${c.type}/${c.instance}`);
-      } else {
-        producer =
-          defaultProducers.get(c.type) ??
-          (producersByType.get(c.type)?.length === 1
-            ? producersByType.get(c.type)?.[0]
-            : undefined);
-      }
-      // A service that produces AND consumes the same data type (e.g. osrm
-      // produces osrm-graph from its buildCommand, then its container consumes
-      // the same type) is NOT a cycle — the host-side hardlink apply mediates
-      // between source and target. `topologicalOrder` applies the same filter.
-      if (producer && producer !== s.manifest.id) deps.push(producer);
-    }
-    adj.set(s.manifest.id, deps);
-  }
+  const adj = resolveConsumesDependencies(services);
 
   const WHITE = 0,
     GRAY = 1,
