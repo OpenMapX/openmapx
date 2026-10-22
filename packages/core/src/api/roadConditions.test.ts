@@ -332,6 +332,28 @@ describe("roadConditionFeatureToEvent", () => {
       { ref: "A1", name: [{ lang: "de", text: "Hansalinie" }], class: "motorway" },
     ]);
     expect(event?.direction).toEqual({ value: "positive", compass: "N" });
+    expect(
+      read({
+        direction: {
+          value: "negative",
+          basis: "geometry",
+          bearingDeg: 45,
+          loop: "inner",
+          toward: "Utrecht",
+          text: "richting Utrecht",
+        },
+      })?.direction,
+    ).toEqual({
+      value: "negative",
+      basis: "geometry",
+      bearingDeg: 45,
+      loop: "inner",
+      toward: "Utrecht",
+      text: "richting Utrecht",
+    });
+    expect(read({ direction: { value: "both", bearingDeg: "45" } })?.direction).toEqual({
+      value: "both",
+    });
     expect(read({ roads: [{ name: "x" }], direction: { compass: "N" } })).not.toHaveProperty(
       "roads",
     );

@@ -136,7 +136,13 @@ export function situationToRoadConditionEvent(
       ? {
           direction: {
             value: String(direction.value),
+            ...strField("basis", direction.basis),
             ...strField("compass", direction.compass),
+            ...(typeof direction.bearingDeg === "number" && Number.isFinite(direction.bearingDeg)
+              ? { bearingDeg: direction.bearingDeg }
+              : {}),
+            ...strField("loop", direction.loop),
+            ...strField("toward", direction.toward),
             ...strField("text", direction.text),
           },
         }

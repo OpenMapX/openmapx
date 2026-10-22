@@ -208,6 +208,7 @@ export type {
   LocalizedText,
   RoadConditionAttribution,
   RoadConditionBindingStatus,
+  RoadConditionDirection,
   RoadConditionEffect,
   RoadConditionEvent,
   RoadConditionRoadRef,

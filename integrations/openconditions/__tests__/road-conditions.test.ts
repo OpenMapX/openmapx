@@ -674,7 +674,13 @@ function record(over: Rec = {}): Rec {
       roads: [
         { ref: "1", name: [{ lang: "fi", text: "Turunväylä" }], class: "motorway", from: "Espoo" },
       ],
-      direction: { value: "positive", basis: "carriageway", text: "kohti Turkua" },
+      direction: {
+        value: "positive",
+        basis: "road_reference",
+        bearingDeg: 280,
+        toward: "Turku",
+        text: "kohti Turkua",
+      },
     },
     provenance: {
       origin: "feed",
@@ -735,7 +741,13 @@ describe("situationToRoadConditionEvent", () => {
       roads: [
         { ref: "1", name: [{ lang: "fi", text: "Turunväylä" }], class: "motorway", from: "Espoo" },
       ],
-      direction: { value: "positive", text: "kohti Turkua" },
+      direction: {
+        value: "positive",
+        basis: "road_reference",
+        bearingDeg: 280,
+        toward: "Turku",
+        text: "kohti Turkua",
+      },
       validity: {
         status: "planned",
         start: "2026-09-20T06:00:00Z",

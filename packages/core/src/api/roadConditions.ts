@@ -111,9 +111,14 @@ function direction(v: unknown): RoadConditionEvent["direction"] {
   const d = object(v);
   const value = str(d?.value);
   if (!d || !value) return undefined;
+  const bearing = d.bearingDeg;
   return {
     value,
+    ...(str(d.basis) ? { basis: str(d.basis) } : {}),
     ...(str(d.compass) ? { compass: str(d.compass) } : {}),
+    ...(typeof bearing === "number" && Number.isFinite(bearing) ? { bearingDeg: bearing } : {}),
+    ...(str(d.loop) ? { loop: str(d.loop) } : {}),
+    ...(str(d.toward) ? { toward: str(d.toward) } : {}),
     ...(str(d.text) ? { text: str(d.text) } : {}),
   };
 }

@@ -616,7 +616,27 @@
       "positive": "Aufsteigende Straßenreferenz",
       "negative": "Absteigende Straßenreferenz",
       "both": "Beide Richtungen",
-      "unknown": "Richtung unbekannt"
+      "unknown": "Richtung unbekannt",
+      "geometry": {
+        "positive": "In Zeichnungsrichtung der betroffenen Straße",
+        "negative": "Gegen die Zeichnungsrichtung der betroffenen Straße"
+      },
+      "oneWay": "Nur eine Richtung (nicht angegeben)",
+      "loop": {
+        "inner": "Innerer Ring",
+        "outer": "Äußerer Ring"
+      },
+      "toward": "Richtung {place}",
+      "compass": {
+        "N": "Richtung Norden",
+        "NE": "Richtung Nordosten",
+        "E": "Richtung Osten",
+        "SE": "Richtung Südosten",
+        "S": "Richtung Süden",
+        "SW": "Richtung Südwesten",
+        "W": "Richtung Westen",
+        "NW": "Richtung Nordwesten"
+      }
     },
     "effect": {
       "closure": "Gesperrt",

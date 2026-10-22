@@ -616,7 +616,27 @@
       "positive": "Increasing road reference",
       "negative": "Decreasing road reference",
       "both": "Both directions",
-      "unknown": "Direction unknown"
+      "unknown": "Direction unknown",
+      "geometry": {
+        "positive": "In the direction the affected road is drawn",
+        "negative": "Against the direction the affected road is drawn"
+      },
+      "oneWay": "One direction only (not identified)",
+      "loop": {
+        "inner": "Inner loop",
+        "outer": "Outer loop"
+      },
+      "toward": "Towards {place}",
+      "compass": {
+        "N": "Northbound",
+        "NE": "Northeastbound",
+        "E": "Eastbound",
+        "SE": "Southeastbound",
+        "S": "Southbound",
+        "SW": "Southwestbound",
+        "W": "Westbound",
+        "NW": "Northwestbound"
+      }
     },
     "effect": {
       "closure": "Closed",

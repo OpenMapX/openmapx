@@ -1,5 +1,7 @@
 import {
+  bearingBetween,
   getRoadConditionRoutingDecision,
+  type LngLat,
   localizedTextFor,
   type RoadConditionEvent,
 } from "@openmapx/core";
@@ -132,6 +134,12 @@ const KNOWN_TYPES = new Set([
 ]);
 
 const DIRECTION_VALUES = new Set(["positive", "negative", "both", "unknown"]);
+/** Direction bases that name a reference axis: positive is increasing reference. */
+const REFERENCE_BASES = new Set(["road_reference", "alert_c", "openlr"]);
+const DIRECTION_LOOPS = new Set(["inner", "outer"]);
+/** The eight compass points, clockwise from north, 45° apart. */
+const COMPASS_ORDER = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"] as const;
+const COMPASS_POINTS = new Set<string>(COMPASS_ORDER);
 const BINDING_STATUSES = new Set([
   "exact",
   "likely",
@@ -271,18 +279,102 @@ export function roadNamesForEvents(
   return names.length > 0 ? names.join(", ") : undefined;
 }
 
-function directionText(
+/** The eight-point compass direction of a bearing in degrees. */
+function compassOf(bearingDeg: number): string {
+  return COMPASS_ORDER[Math.round((((bearingDeg % 360) + 360) % 360) / 45) % 8] as string;
+}
+
+/** The ends of a location's line, first coordinate to last, or undefined for no line. */
+function lineEnds(geometry: RoadConditionEvent["geometry"]): [LngLat, LngLat] | undefined {
+  const lines =
+    geometry.type === "LineString"
+      ? [geometry.coordinates]
+      : geometry.type === "MultiLineString"
+        ? geometry.coordinates
+        : [];
+  const first = lines[0]?.[0];
+  const lastLine = lines[lines.length - 1];
+  const last = lastLine?.[lastLine.length - 1];
+  if (!first || !last || (first[0] === last[0] && first[1] === last[1])) return undefined;
+  return [
+    [first[0] as number, first[1] as number],
+    [last[0] as number, last[1] as number],
+  ];
+}
+
+/**
+ * Which way along its reference a stated direction runs. A reference axis
+ * (road reference, Alert-C, OpenLR) reads as increasing or decreasing road
+ * reference. A direction along the location's drawn line reads as the
+ * compass heading of that line, first point to last or back, since the
+ * reader cannot see the order a line is drawn in; the drawn line names it
+ * where there is no line to take a heading from. A direction on an axis
+ * nobody identified says only that it is one direction.
+ */
+function axisText(
+  direction: NonNullable<RoadConditionEvent["direction"]>,
+  geometry: RoadConditionEvent["geometry"] | undefined,
+  translate: RoadConditionTranslate,
+): { text: string; heading?: string } | undefined {
+  const { value, basis } = direction;
+  if (value === "both") return { text: translate("direction.both") };
+  if (value !== "positive" && value !== "negative") return undefined;
+  if (basis === undefined || REFERENCE_BASES.has(basis)) {
+    return { text: translate(`direction.${value}`) };
+  }
+  if (basis === "geometry") {
+    const ends = geometry ? lineEnds(geometry) : undefined;
+    if (!ends) return { text: translate(`direction.geometry.${value}`) };
+    const [from, to] = value === "positive" ? ends : [ends[1], ends[0]];
+    const heading = compassOf(bearingBetween(from, to));
+    return { text: translate(`direction.compass.${heading}`), heading };
+  }
+  return { text: translate("direction.oneWay") };
+}
+
+/**
+ * A situation's direction for the reader: the ring-road loop, the way along
+ * its reference axis (left out where the source names the place it leads
+ * to, which says the same more plainly), that place, the compass heading
+ * and the source's own words. A value or vocabulary this host does not know
+ * reads as its humanized token, never a raw key.
+ */
+export function directionText(
   direction: RoadConditionEvent["direction"],
+  geometry: RoadConditionEvent["geometry"] | undefined,
   translate: RoadConditionTranslate,
 ): string | undefined {
   if (!direction) return undefined;
+  const loop =
+    direction.loop === undefined
+      ? undefined
+      : DIRECTION_LOOPS.has(direction.loop)
+        ? translate(`direction.loop.${direction.loop}`)
+        : humanizeToken(direction.loop);
+  const toward = direction.toward
+    ? translate("direction.toward", { place: direction.toward })
+    : undefined;
+  const axis =
+    toward && direction.value !== "both" ? undefined : axisText(direction, geometry, translate);
+  const stated =
+    direction.compass && COMPASS_POINTS.has(direction.compass)
+      ? direction.compass
+      : direction.bearingDeg !== undefined
+        ? compassOf(direction.bearingDeg)
+        : undefined;
+  const heading =
+    stated && stated !== axis?.heading ? translate(`direction.compass.${stated}`) : undefined;
+  const source = direction.text && direction.text !== direction.toward ? direction.text : undefined;
+  const known = DIRECTION_VALUES.has(direction.value);
   const parts = [
-    DIRECTION_VALUES.has(direction.value)
-      ? translate(`direction.${direction.value}`)
-      : humanizeToken(direction.value),
-    direction.compass,
-    direction.text,
-  ].filter(Boolean);
+    loop,
+    axis?.text ?? (known ? undefined : humanizeToken(direction.value)),
+    toward,
+    heading,
+    direction.compass && !COMPASS_POINTS.has(direction.compass) ? direction.compass : undefined,
+    source,
+  ].filter((part): part is string => Boolean(part));
+  if (parts.length === 0) return translate("direction.unknown");
   return parts.join(" · ");
 }
 
@@ -443,7 +535,7 @@ function formatPopupEntry(
     typeof value === "string" && Number.isFinite(Date.parse(value))
       ? new Date(value).toISOString()
       : undefined;
-  const direction = directionText(detailed?.direction, translate);
+  const direction = directionText(detailed?.direction, detailed?.geometry, translate);
   const bindingText =
     typeof sourceEntry.bindingStatus === "string"
       ? distinctNonEmpty(sourceEntry.bindingStatus.split(","))

@@ -144,6 +144,9 @@ const common = {
       value: z.string(),
       basis: z.string().optional(),
       compass: z.string().optional(),
+      bearingDeg: z.number().optional(),
+      loop: z.string().optional(),
+      toward: z.string().optional(),
       text: z.string().optional(),
     })
     .optional(),

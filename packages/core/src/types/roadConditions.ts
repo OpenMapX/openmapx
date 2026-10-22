@@ -52,6 +52,24 @@ export interface RoadConditionRoadRef {
 }
 
 /**
+ * Which way of a road a situation affects, mirroring the conditions model's
+ * `DirectionRef`. `value` is read against `basis`: `road_reference`,
+ * `alert_c` and `openlr` name a reference axis (positive = increasing
+ * reference); `geometry` the order its location's line is drawn in, first
+ * coordinate to last; `unknown` an axis nobody identified. `loop` names the
+ * carriageway of a ring road, `toward` the place it leads to.
+ */
+export interface RoadConditionDirection {
+  value: string;
+  basis?: string;
+  compass?: string;
+  bearingDeg?: number;
+  loop?: string;
+  toward?: string;
+  text?: string;
+}
+
+/**
  * A recurring validity rule, shaped after schema.org `Schedule`
  * (https://schema.org/Schedule). Local fields (`startTime`, `startDate`/
  * `endDate`, `byDay`) are interpreted in `scheduleTimezone` (an IANA name), so
@@ -198,7 +216,7 @@ export interface RoadConditionEvent extends ContributingRecord {
   /** WGS84 [lon,lat] geometry. */
   geometry: Geometry;
   roads?: RoadConditionRoadRef[];
-  direction?: { value: string; compass?: string; text?: string };
+  direction?: RoadConditionDirection;
   validity: RoadConditionValidity;
   effects: RoadConditionEffect[];
   /** `feed` = an authoritative official source, `crowd` = user reports. */

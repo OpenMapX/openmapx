@@ -1,7 +1,11 @@
 import type { RoadConditionEvent } from "@openmapx/core";
 import type { MapGeoJSONFeature } from "maplibre-gl";
 import { describe, expect, it } from "vitest";
-import { buildRoadConditionPopupGroups, buildRoadConditionPopupHtml } from "../popup";
+import {
+  buildRoadConditionPopupGroups,
+  buildRoadConditionPopupHtml,
+  directionText,
+} from "../popup";
 import { effect, situation, text } from "./fixtures";
 
 const AT = Date.parse("2026-09-11T12:00:00Z");
@@ -437,5 +441,65 @@ describe("road-condition popup provenance", () => {
       }).html.split("omx-overlay-popup__details")[0];
     expect(summaryHtml(agreeing)).toContain("effect.closure");
     expect(summaryHtml(differing)).not.toContain("effect.");
+  });
+});
+
+describe("directionText", () => {
+  type Direction = NonNullable<RoadConditionEvent["direction"]>;
+  const eastward: RoadConditionEvent["geometry"] = {
+    type: "LineString",
+    coordinates: [
+      [6.7, 51.2],
+      [6.8, 51.2],
+    ],
+  };
+  const say = (direction: Direction, geometry?: RoadConditionEvent["geometry"]) =>
+    directionText(direction, geometry, translate);
+
+  it("reads positive and negative against a reference axis as road reference", () => {
+    for (const basis of ["road_reference", "alert_c", "openlr", undefined]) {
+      expect(say({ value: "positive", ...(basis ? { basis } : {}) })).toBe("direction.positive");
+      expect(say({ value: "negative", ...(basis ? { basis } : {}) })).toBe("direction.negative");
+    }
+  });
+
+  it("reads a direction along the drawn line as that line's compass heading", () => {
+    expect(say({ value: "positive", basis: "geometry" }, eastward)).toBe("direction.compass.E");
+    expect(say({ value: "negative", basis: "geometry" }, eastward)).toBe("direction.compass.W");
+    expect(say({ value: "positive", basis: "geometry" }, point)).toBe(
+      "direction.geometry.positive",
+    );
+  });
+
+  it("says only one direction for an axis nobody identified", () => {
+    expect(say({ value: "positive", basis: "unknown" })).toBe("direction.oneWay");
+  });
+
+  it("names a ring road's loop and the place the direction leads to", () => {
+    expect(say({ value: "unknown", basis: "text", loop: "inner" })).toBe("direction.loop.inner");
+    expect(say({ value: "positive", basis: "road_reference", toward: "Utrecht" })).toBe(
+      "direction.toward(Utrecht)",
+    );
+    expect(say({ value: "both", basis: "road_reference" })).toBe("direction.both");
+  });
+
+  it("adds a stated compass point or bearing, and the source's words unless they repeat the place", () => {
+    expect(say({ value: "unknown", basis: "compass", compass: "N" })).toBe("direction.compass.N");
+    expect(say({ value: "unknown", basis: "bearing", bearingDeg: 92 })).toBe("direction.compass.E");
+    expect(
+      say(
+        { value: "positive", basis: "geometry", compass: "E", text: "richting Arnhem" },
+        eastward,
+      ),
+    ).toBe("direction.compass.E · richting Arnhem");
+    expect(say({ value: "negative", basis: "alert_c", toward: "Arnhem", text: "Arnhem" })).toBe(
+      "direction.toward(Arnhem)",
+    );
+  });
+
+  it("degrades a value or loop this host does not know to readable text", () => {
+    expect(say({ value: "unknown", basis: "unknown" })).toBe("direction.unknown");
+    expect(say({ value: "clockwise", basis: "ring" })).toBe("Clockwise");
+    expect(say({ value: "unknown", loop: "middle_ring" })).toBe("Middle ring");
   });
 });
