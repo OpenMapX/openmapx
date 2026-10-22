@@ -1,3 +1,4 @@
+import { zonedWallClockToInstant } from "@openmapx/core";
 import type {
   IntegrationContext,
   RideAvailability,
@@ -39,28 +40,17 @@ function localWallClock(timezone: string, at: Date): string {
 }
 
 /**
- * Interpret a `YYYY-MM-DDTHH:mm` wall clock in the feed's timezone and return
- * Unix seconds. Derives the zone's offset at that instant by formatting a
- * probe date, so it stays correct across daylight-saving changes without
- * pulling in a timezone library.
+ * Resolve a feed-local pickup time to GOFS Unix seconds using the shared policy:
+ * folds choose the earlier instant; gaps choose the first valid instant after
+ * the requested wall clock. Invalid dates/zones omit the optional pickup time.
  */
 export function wallClockToEpochSeconds(
   pickupAt: string | undefined,
   timezone: string,
 ): number | null {
   if (!pickupAt) return null;
-  const asUtc = Date.parse(`${pickupAt}:00Z`);
-  if (Number.isNaN(asUtc)) return null;
-  try {
-    const probe = new Date(asUtc);
-    const local = new Date(probe.toLocaleString("en-US", { timeZone: timezone }));
-    const utc = new Date(probe.toLocaleString("en-US", { timeZone: "UTC" }));
-    const offsetMs = local.getTime() - utc.getTime();
-    return Math.floor((asUtc - offsetMs) / 1000);
-  } catch {
-    // An unknown timezone string should not lose the whole handoff.
-    return Math.floor(asUtc / 1000);
-  }
+  const instant = zonedWallClockToInstant(timezone, pickupAt);
+  return instant ? Math.floor(instant.getTime() / 1000) : null;
 }
 
 /**

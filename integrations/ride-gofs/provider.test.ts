@@ -6,6 +6,7 @@ import {
   LEAN_FEED_DOCUMENTS,
   LEAN_IN_ZONE,
   REALTIME_BOOKING,
+  SYSTEM_INFORMATION,
 } from "./__fixtures__/feed.js";
 import { createGofsRideProvider } from "./provider.js";
 
@@ -92,6 +93,23 @@ describe("getQuotes", () => {
     expect(quote?.handoff?.carriesCoordinates).toBe(true);
   });
 
+  it("preserves the scheduled instant in realtime booking handoffs after a DST change", async () => {
+    const { provider } = providerWith();
+    const result = await provider.getQuotes?.({
+      pickup: inZone,
+      dropoff: inZone,
+      pickupAt: "2026-11-01T03:30",
+    });
+    const handoff = result?.data.find((quote) => quote.productId === "regular")?.handoff;
+    expect(handoff).toBeDefined();
+    const url = new URL(handoff?.webUrl ?? "");
+    expect(url.searchParams.get("pickup_time")).toBe(
+      String(Date.parse("2026-11-01T08:30:00Z") / 1000),
+    );
+    expect(url.searchParams.get("pickup_lat")).toBe("45.5");
+    expect(handoff?.androidUrl).toBe("exampletaxi://book");
+  });
+
   it("falls back to wait_time plus the static tariff, marking the fare estimated", async () => {
     const { provider } = providerWith();
     const result = await provider.getQuotes?.({
@@ -145,6 +163,73 @@ describe("createHandoff", () => {
     const pickupTime = new URL(handoff.webUrl).searchParams.get("pickup_time");
     expect(pickupTime).toBe(String(Date.parse("2026-08-11T18:00:00Z") / 1000));
   });
+
+  it.each([
+    ["after the spring transition", "America/Toronto", "2026-03-08T03:30", "2026-03-08T07:30:00Z"],
+    ["after the fall transition", "America/Toronto", "2026-11-01T03:30", "2026-11-01T08:30:00Z"],
+    [
+      "the earlier instant in a fold",
+      "America/Toronto",
+      "2026-11-01T01:30",
+      "2026-11-01T05:30:00Z",
+    ],
+    [
+      "the first valid instant after a gap",
+      "America/Toronto",
+      "2026-03-08T02:30",
+      "2026-03-08T07:00:00Z",
+    ],
+    ["a fractional-hour offset", "Asia/Kolkata", "2026-08-11T14:00", "2026-08-11T08:30:00Z"],
+    ["midnight", "America/Toronto", "2026-08-11T00:00", "2026-08-11T04:00:00Z"],
+  ])("uses feed-local Unix seconds for %s", async (_label, timezone, pickupAt, expected) => {
+    const { provider } = providerWith({
+      "https://feed.example/system_information.json": {
+        ...SYSTEM_INFORMATION,
+        data: { ...SYSTEM_INFORMATION.data, timezone },
+      },
+    });
+    const handoff = await provider.createHandoff({ pickup: inZone, dropoff: inZone, pickupAt });
+    expect(new URL(handoff.webUrl).searchParams.get("pickup_time")).toBe(
+      String(Date.parse(expected) / 1000),
+    );
+  });
+
+  it.each([
+    ["malformed input", "America/Toronto", "not-a-date"],
+    ["an impossible calendar date", "America/Toronto", "2026-02-30T14:00"],
+    ["an invalid hour", "America/Toronto", "2026-08-11T25:00"],
+    ["an unknown timezone", "Unknown/Zone", "2026-08-11T14:00"],
+    ["an empty pickup time", "America/Toronto", ""],
+  ])(
+    "omits unresolvable pickup_time for %s while preserving the handoff",
+    async (_label, timezone, pickupAt) => {
+      const { provider } = providerWith({
+        "https://feed.example/system_information.json": {
+          ...SYSTEM_INFORMATION,
+          data: { ...SYSTEM_INFORMATION.data, timezone },
+        },
+      });
+      const handoff = await provider.createHandoff({
+        pickup: inZone,
+        dropoff: [-73.6, 45.52],
+        pickupAddress: "Pickup address",
+        dropoffAddress: "Dropoff address",
+        pickupAt,
+      });
+      const url = new URL(handoff.webUrl);
+      expect(url.origin + url.pathname).toBe("https://feed.example/book");
+      expect(Object.fromEntries(url.searchParams)).toEqual({
+        pickup_lat: "45.5",
+        pickup_lon: "-73.57",
+        pickup_address: "Pickup address",
+        drop_off_lat: "45.52",
+        drop_off_lon: "-73.6",
+        drop_off_address: "Dropoff address",
+      });
+      expect(handoff.phoneNumber).toBe("+15550001111");
+      expect(handoff.carriesCoordinates).toBe(true);
+    },
+  );
 
   it("omits pickup_time when the ride is immediate", async () => {
     const { provider } = providerWith();
