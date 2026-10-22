@@ -42,6 +42,12 @@ export interface FuelStation {
   products: FuelProduct[];
   /** True when the source lists every product: a missing product is then not sold. */
   productsComplete: boolean;
+  /** Payment methods the station takes, as OpenConditions codes (`cash`, `card`, `app`). */
+  payment?: string[];
+  /** What else the station offers, as OpenConditions amenity codes (`shop`, `car_wash`). */
+  amenities?: string[];
+  /** Whether lorries can fill up there: a lane or pump for heavy goods vehicles. */
+  truckSuitable?: boolean;
   /** Every source id that contributed to this station, most authoritative first. */
   sources: string[];
   attributions: Attribution[];

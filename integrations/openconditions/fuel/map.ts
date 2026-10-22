@@ -14,6 +14,7 @@ import {
   list,
   NO_SOURCES,
   newestReading,
+  osmOpeningHoursOf,
   pointOf,
   type Rec,
   readingCredits,
@@ -21,6 +22,7 @@ import {
   sourcesOf,
   splitKey,
   str,
+  stringsOf,
   upstreamCredits,
 } from "../features/record.js";
 
@@ -136,7 +138,10 @@ export function recordToFuelStation(
   const brandWikidata = str(details["brandWikidata"]);
   const country = countryOf(location);
   const address = addressOf(location);
-  const openingHours = str(rec(record["openingHours"])["osm"]);
+  const openingHours = osmOpeningHoursOf(record["openingHours"]);
+  const payment = stringsOf(rec(record["access"])["payment"]);
+  const amenities = stringsOf(record["amenities"]);
+  const truckSuitable = details["truckSuitable"];
   return {
     id,
     name: name ?? brand ?? "",
@@ -148,6 +153,9 @@ export function recordToFuelStation(
     ...(openingHours ? { openingHours } : {}),
     products,
     productsComplete: details["productsComplete"] === true,
+    ...(payment.length > 0 ? { payment } : {}),
+    ...(amenities.length > 0 ? { amenities } : {}),
+    ...(typeof truckSuitable === "boolean" ? { truckSuitable } : {}),
     sources: [...new Set(kept.map((s) => s.id))],
     attributions: snapshotContributors(
       kept.map((s) => credit(s, sources)),

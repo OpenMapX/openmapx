@@ -15,8 +15,10 @@ import { siteAttributions } from "@openmapx/integration-framework";
 import {
   type I18nToken,
   money,
+  sharedT,
   type Translatable,
   token,
+  vocabularyLabels,
 } from "@openmapx/integration-framework/strings";
 import { snapshotContributors } from "@openmapx/mobility-core/contributors";
 import type { FuelProduct, FuelStation } from "@openmapx/mobility-core/fuel";
@@ -289,8 +291,26 @@ function buildProductTable(station: FuelStation): DataSourceDetailSection | null
   };
 }
 
+/** How a driver pays, whether lorries can fill up and what else the station offers. */
+function buildServicesSection(station: FuelStation): DataSourceDetailSection | null {
+  const rows: [I18nToken, Translatable | Translatable[]][] = [];
+  const payment = vocabularyLabels("payment", station.payment ?? []);
+  if (payment.length > 0) rows.push([sharedT.row.payment, payment]);
+  if (station.truckSuitable !== undefined) {
+    rows.push([
+      token("row.truckSuitable"),
+      station.truckSuitable ? sharedT.value.yes : sharedT.value.no,
+    ]);
+  }
+  const amenities = vocabularyLabels("amenity", station.amenities ?? []);
+  if (amenities.length > 0) rows.push([sharedT.row.amenities, amenities]);
+  if (rows.length === 0) return null;
+  return { title: token("section.services"), type: "table", rows, sectionIcon: "info" };
+}
+
 export function mapFuelStationToDetail(station: FuelStation): DataSourceDetail {
   const table = buildProductTable(station);
+  const services = buildServicesSection(station);
   const detail: DataSourceDetail = {
     id: station.id,
     sources: [...station.sources],
@@ -302,7 +322,7 @@ export function mapFuelStationToDetail(station: FuelStation): DataSourceDetail {
     address: station.address ? { line1: station.address } : undefined,
     operator: station.brand ? { name: station.brand } : undefined,
     openingHours: station.openingHours,
-    sections: table ? [table] : [],
+    sections: [table, services].filter((s): s is DataSourceDetailSection => s !== null),
   };
   const attributions = stationCredits(station);
   if (attributions) detail.attributions = attributions;

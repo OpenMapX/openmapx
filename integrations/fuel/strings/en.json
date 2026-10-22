@@ -2,7 +2,11 @@
   "name": "Fuel Prices",
   "description": "Gas stations with their fuel grades and prices, from every enabled fuel-station provider",
   "section": {
-    "fuelPrices": "Fuel Prices"
+    "fuelPrices": "Fuel Prices",
+    "services": "Services"
+  },
+  "row": {
+    "truckSuitable": "Suitable for HGVs"
   },
   "column": {
     "fuelType": "Fuel Type",

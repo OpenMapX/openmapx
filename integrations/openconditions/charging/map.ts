@@ -29,6 +29,7 @@ import {
   sourcesOf,
   splitKey,
   str,
+  stringsOf,
   upstreamCredits,
 } from "../features/record.js";
 
@@ -90,9 +91,6 @@ function secondsOf(quantity: unknown): number | undefined {
   }
   return value * perUnit;
 }
-
-const stringsOf = (value: unknown): string[] =>
-  Array.isArray(value) ? value.filter((v): v is string => typeof v === "string" && v !== "") : [];
 
 function restrictionsOf(raw: unknown): EnergyTariffRestrictions | undefined {
   const r = rec(raw);

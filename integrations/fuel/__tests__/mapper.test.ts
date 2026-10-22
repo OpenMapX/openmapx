@@ -40,7 +40,8 @@ const OC_FUEL_GRADES = [
 ];
 
 function text(token: unknown, locale = "en"): string {
-  return resolveToken(token as Parameters<typeof resolveToken>[0], {
+  if (!isI18nToken(token)) return String(token);
+  return resolveToken(token, {
     locale,
     fallbackLocale: "en",
     shared: sharedStrings,
@@ -348,6 +349,39 @@ describe("mapFuelStationToDetail", () => {
     ).sections[0].rows;
     expect(text(rows[0][0], "de")).toBe("NEW FUEL");
     expect(text(rows[1][0], "en")).toBe("NEW FUEL (HGV)");
+  });
+
+  it("lists payment, lorry access and amenities in the reader's language", () => {
+    const detail = mapFuelStationToDetail(
+      makeStation({
+        payment: ["cash", "card", "app"],
+        truckSuitable: true,
+        amenities: ["shop", "compressed_air", "car_wash", "fuel_additives", "drone_port"],
+      }),
+    );
+    const services = detail.sections.find((s) => text(s.title) === "Services");
+    const rows = (locale: string) =>
+      services?.rows?.map(([label, value]) => [
+        text(label, locale),
+        Array.isArray(value) ? value.map((v) => text(v, locale)).join(", ") : text(value, locale),
+      ]);
+    expect(rows("en")).toEqual([
+      ["Payment", "Cash, Payment card, App"],
+      ["Suitable for HGVs", "Yes"],
+      ["Amenities", "Shop, Air pump, Car wash, Fuel additives, Drone port"],
+    ]);
+    expect(rows("de")).toEqual([
+      ["Bezahlung", "Bargeld, Zahlungskarte, App"],
+      ["Für Lkw geeignet", "Ja"],
+      ["Ausstattung", "Shop, Luftdruckstation, Autowäsche, Kraftstoffzusätze, Drone port"],
+    ]);
+    expect(text(services?.title, "de")).toBe("Service");
+
+    const noLorries = mapFuelStationToDetail(makeStation({ truckSuitable: false }));
+    expect(noLorries.sections.at(-1)?.rows).toEqual([
+      [{ $t: "row.truckSuitable" }, { $t: "shared.value.no" }],
+    ]);
+    expect(mapFuelStationToDetail(makeStation()).sections).toHaveLength(1);
   });
 
   it("has no price table for a station without products", () => {

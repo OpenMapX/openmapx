@@ -2,7 +2,11 @@
   "name": "Kraftstoffpreise",
   "description": "Tankstellen mit ihren Kraftstoffsorten und Preisen, von allen aktivierten Tankstellen-Anbietern",
   "section": {
-    "fuelPrices": "Kraftstoffpreise"
+    "fuelPrices": "Kraftstoffpreise",
+    "services": "Service"
+  },
+  "row": {
+    "truckSuitable": "Für Lkw geeignet"
   },
   "column": {
     "fuelType": "Kraftstoffart",

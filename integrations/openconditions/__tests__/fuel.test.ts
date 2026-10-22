@@ -898,4 +898,43 @@ describe("recordToFuelStation", () => {
     record.details = { productsComplete: false, brand: "Aral", brandWikidata: "Aral" };
     expect(recordToFuelStation(record, [])).not.toHaveProperty("brandWikidata");
   });
+
+  test("carries the station's payment methods, amenities and lorry access", () => {
+    const record = canonical([fuelProduct("diesel")]);
+    record.details = { productsComplete: false, truckSuitable: false };
+    record.access = { audience: "public", payment: ["cash", "card", 7, ""] };
+    record.amenities = ["shop", "compressed_air", "bottled_gas"];
+    expect(recordToFuelStation(record, [])).toMatchObject({
+      payment: ["cash", "card"],
+      amenities: ["shop", "compressed_air", "bottled_gas"],
+      truckSuitable: false,
+    });
+
+    const bare = canonical([fuelProduct("diesel")]);
+    const station = recordToFuelStation(bare, [])!;
+    expect(station).not.toHaveProperty("payment");
+    expect(station).not.toHaveProperty("amenities");
+    expect(station).not.toHaveProperty("truckSuitable");
+  });
+
+  test("opening hours without an OSM string are read from the 24/7 flag or the weekly spec", () => {
+    const record = canonical([fuelProduct("diesel")]);
+    record.openingHours = { osm: "Mo-Fr 06:00-22:00", twentyFourSeven: false };
+    expect(recordToFuelStation(record, [])!.openingHours).toBe("Mo-Fr 06:00-22:00");
+    record.openingHours = { twentyFourSeven: true };
+    expect(recordToFuelStation(record, [])!.openingHours).toBe("24/7");
+    record.openingHours = {
+      spec: [
+        { days: ["MO", "TU"], opens: "08:00", closes: "12:00" },
+        { days: ["MO", "TU"], opens: "14:00", closes: "18:00" },
+        { days: ["SA", "XX"], opens: "09:00", closes: "13:00" },
+        { days: ["SU"], opens: "late", closes: "13:00" },
+      ],
+    };
+    expect(recordToFuelStation(record, [])!.openingHours).toBe(
+      "Mo,Tu 08:00-12:00, Mo,Tu 14:00-18:00, Sa 09:00-13:00",
+    );
+    record.openingHours = { spec: [] };
+    expect(recordToFuelStation(record, [])).not.toHaveProperty("openingHours");
+  });
 });
