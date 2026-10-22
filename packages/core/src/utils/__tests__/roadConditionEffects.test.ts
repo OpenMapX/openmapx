@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  actionInForce,
   actionInPlace,
   bindsEveryCar,
   closesRoadForCars,
@@ -215,6 +216,31 @@ describe("when an effect is in force", () => {
       expect(effectInForceAt(e, e.effects[0]!, at)).toBe(false);
     }
     expect(lifecycleInForce({ status: "active" })).toBe(true);
+  });
+
+  it("counts a planned or approved effect for a later instant while its start is still ahead", () => {
+    const now = new Date("2026-09-11T12:00:00Z");
+    const later = new Date("2026-09-13T12:00:00Z");
+    const window = { start: "2026-09-12T00:00:00Z", end: "2026-09-14T00:00:00Z" };
+    const planned = { ...event(), validity: { status: "planned" as const, ...window } };
+    const closure = planned.effects[0]!;
+    expect(effectInForceAt(planned, closure, later, now)).toBe(true);
+    // Not before its window, not without a wall clock, not once the start has passed.
+    expect(effectInForceAt(planned, closure, now, now)).toBe(false);
+    expect(effectInForceAt(planned, closure, later)).toBe(false);
+    expect(effectInForceAt(planned, closure, later, new Date("2026-09-12T06:00:00Z"))).toBe(false);
+    const undated = { ...event(), validity: { status: "planned" as const, end: window.end } };
+    expect(effectInForceAt(undated, closure, later, now)).toBe(false);
+    const suspended = { ...event(), validity: { status: "suspended" as const, ...window } };
+    expect(effectInForceAt(suspended, closure, later, now)).toBe(false);
+
+    const active = { ...event(), validity: { status: "active" as const, ...window } };
+    const approved = effect("c", "closure", { actionStatus: "approved" });
+    const requested = effect("c", "closure", { actionStatus: "requested" });
+    expect(actionInForce(approved, window, now)).toBe(true);
+    expect(effectInForceAt(active, approved, later, now)).toBe(true);
+    expect(effectInForceAt(active, approved, later, new Date("2026-09-12T06:00:00Z"))).toBe(false);
+    expect(effectInForceAt(active, requested, later, now)).toBe(false);
   });
 
   it("reads the lifecycle of an effect's own validity before its situation's", () => {

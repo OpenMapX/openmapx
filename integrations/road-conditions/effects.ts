@@ -277,7 +277,7 @@ export function effectStateText(
   { translate, at, formatDateTime = (value) => value }: EffectFormatOptions,
 ): string {
   const validity = effectValidity(event, effect);
-  if (effectInForceAt(event, effect, at)) return translate("state.active");
+  if (effectInForceAt(event, effect, at, at)) return translate("state.active");
   if (
     validity.status === "ended" ||
     validity.status === "cancelled" ||

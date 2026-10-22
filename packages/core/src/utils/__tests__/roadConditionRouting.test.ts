@@ -35,6 +35,26 @@ describe("road-condition routing evidence", () => {
     },
   );
 
+  it("weighs a planned start against the instant of evaluation, for a trip inside its window", () => {
+    const planned = (start: string) => ({
+      ...event(),
+      validity: { status: "planned" as const, start },
+    });
+    const later = Date.parse("2026-09-11T12:05:00Z");
+    const ahead = planned("2026-09-11T12:01:00Z");
+    expect(
+      getRoadConditionRoutingDecision(ahead, closure(ahead), { evaluatedAt: now, travelAt: later })
+        .reasons,
+    ).not.toContain("lifecycle_not_in_force");
+    const passed = planned("2026-09-11T11:00:00Z");
+    expect(
+      getRoadConditionRoutingDecision(passed, closure(passed), {
+        evaluatedAt: now,
+        travelAt: later,
+      }).reasons,
+    ).toContain("lifecycle_not_in_force");
+  });
+
   it("never routes an operator action that is not in place", () => {
     const e = event();
     const approved = { ...closure(e), actionStatus: "approved" };

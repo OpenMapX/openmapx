@@ -485,18 +485,40 @@ export function validityWindowHoldsAt(validity: RoadConditionValidity, at: Date)
 }
 
 /**
- * Whether a declared lifecycle leaves the window to decide when a record is
- * in force: only `active` does. A planned or suspended record is not in force
- * whatever its window says, an ended or cancelled one no longer is, and an
- * unknown status establishes nothing. OpenConditions decides the same.
+ * Whether a validity declares a start still ahead of the wall clock `now`:
+ * a record announced for later, which its publisher has rightly not
+ * activated yet.
  */
-export function lifecycleInForce(validity: Pick<RoadConditionValidity, "status">): boolean {
-  return validity.status === "active";
+function startsAfter(
+  validity: Pick<RoadConditionValidity, "start">,
+  now: Date | undefined,
+): boolean {
+  if (now === undefined || validity.start === undefined) return false;
+  const start = Date.parse(validity.start);
+  return Number.isFinite(start) && start > now.getTime();
 }
 
-/** Whether a validity holds at `at`: an active lifecycle, inside its window. */
-export function validityHoldsAt(validity: RoadConditionValidity, at: Date): boolean {
-  return lifecycleInForce(validity) && validityWindowHoldsAt(validity, at);
+/**
+ * Whether a declared lifecycle leaves the window to decide when a record is
+ * in force. `active` does; so does `planned` when the window declares a start
+ * still ahead of the wall clock `now`: a trip at a later instant inside that
+ * window meets the record its publisher will activate by then. A planned
+ * record whose start has passed, or that declares none, is not in force; nor
+ * is a suspended one, an ended or cancelled one, or one of unknown status.
+ * Without `now`, only `active` does, as OpenConditions decides for the
+ * current state.
+ */
+export function lifecycleInForce(
+  validity: Pick<RoadConditionValidity, "status" | "start">,
+  now?: Date,
+): boolean {
+  if (validity.status === "active") return true;
+  return validity.status === "planned" && startsAfter(validity, now);
+}
+
+/** Whether a validity holds at `at`: a lifecycle in force (see `lifecycleInForce`), inside its window. */
+export function validityHoldsAt(validity: RoadConditionValidity, at: Date, now?: Date): boolean {
+  return lifecycleInForce(validity, now) && validityWindowHoldsAt(validity, at);
 }
 
 /**
@@ -512,6 +534,23 @@ export function actionInPlace(effect: Pick<RoadConditionEffect, "actionStatus">)
   return effect.actionStatus === undefined || !ACTIONS_NOT_IN_PLACE.has(effect.actionStatus);
 }
 
+/**
+ * Whether the operator action an effect states counts for an instant inside
+ * its window: in place, or `approved` with a declared start still ahead of
+ * the wall clock `now`, which its operator will implement by then. A
+ * requested or rejected action never counts, nor an approved one whose start
+ * has passed or that declares none.
+ */
+export function actionInForce(
+  effect: Pick<RoadConditionEffect, "actionStatus">,
+  validity: Pick<RoadConditionValidity, "start">,
+  now?: Date,
+): boolean {
+  return (
+    actionInPlace(effect) || (effect.actionStatus === "approved" && startsAfter(validity, now))
+  );
+}
+
 /** Issue codes that leave an effect's time window unknown, so it is never in force. */
 const TEMPORAL_ISSUES = new Set(["invalid_window", "unsupported_schedule", "unsupported_status"]);
 
@@ -525,32 +564,40 @@ export function effectValidity(
 
 /**
  * Whether an effect of `event` may be in force at all, whatever the instant:
- * its lifecycle is active, the operator action it states is in place, and
- * its window could be read.
+ * its lifecycle is in force (`lifecycleInForce`), the operator action it
+ * states counts (`actionInForce`), and its window could be read. `now` is
+ * the wall clock a planned or approved start is weighed against; without
+ * it, only an active lifecycle and an action in place count.
  */
 export function effectStatusInForce(
   event: Pick<RoadConditionEvent, "validity">,
   effect: RoadConditionEffect,
+  now?: Date,
 ): boolean {
+  const validity = effectValidity(event, effect);
   return (
-    lifecycleInForce(effectValidity(event, effect)) &&
-    actionInPlace(effect) &&
+    lifecycleInForce(validity, now) &&
+    actionInForce(effect, validity, now) &&
     !effect.issues?.some((issue) => TEMPORAL_ISSUES.has(issue.code))
   );
 }
 
 /**
- * Whether an effect of `event` is in force at `at`: in force by its status
- * (`effectStatusInForce`) and inside its window. Only such an effect closes
- * a road, caps its speed or delays traffic.
+ * Whether an effect of `event` is in force at `at`, judged at the wall clock
+ * `now`: in force by its status (`effectStatusInForce`) and inside its
+ * window. Only such an effect closes a road, caps its speed or delays
+ * traffic. A trip planned for later passes the travel instant as `at` and
+ * the present as `now`.
  */
 export function effectInForceAt(
   event: Pick<RoadConditionEvent, "validity">,
   effect: RoadConditionEffect,
   at: Date,
+  now?: Date,
 ): boolean {
   return (
-    effectStatusInForce(event, effect) && validityWindowHoldsAt(effectValidity(event, effect), at)
+    effectStatusInForce(event, effect, now) &&
+    validityWindowHoldsAt(effectValidity(event, effect), at)
   );
 }
 

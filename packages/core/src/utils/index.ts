@@ -318,6 +318,7 @@ export {
 } from "./resultReference";
 export { buildRideOpenUrl, rideQuoteBody } from "./rideLink";
 export {
+  actionInForce,
   actionInPlace,
   bindsEveryCar,
   closesRoadForCars,

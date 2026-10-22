@@ -218,6 +218,32 @@ describe("projectEventsToRoute", () => {
     expect(closesRoad([closure({ actionStatus: "implemented" })])).toBe(true);
   });
 
+  it("closes the road at a later instant inside a planned window whose start is still ahead", () => {
+    const planned = ev("p", "major", { type: "Point", coordinates: [13.05, 52.00008] }, "works", {
+      validity: {
+        status: "planned",
+        start: "2026-09-12T00:00:00Z",
+        end: "2026-09-14T00:00:00Z",
+      },
+      effects: [
+        {
+          id: "c",
+          kind: "closure",
+          v: 1,
+          scope: "road",
+          applicability: { kind: "all" },
+          compliance: "mandatory",
+          normalization: "complete",
+        } as RoadConditionEvent["effects"][number],
+      ],
+    });
+    const closes = (now: string, clock: string) =>
+      projectEventsToRoute([planned], route, 0, { now: new Date(now), clock: new Date(clock) })[0]
+        ?.closesRoad;
+    expect(closes("2026-09-13T12:00:00Z", "2026-09-11T12:00:00Z")).toBe(true);
+    expect(closes("2026-09-13T12:00:00Z", "2026-09-12T06:00:00Z")).toBe(false);
+  });
+
   it("adds no delay from an effect whose status keeps it out of force", () => {
     const at = new Date("2026-09-11T12:00:00Z");
     const suspended = ev("s", "major", { type: "Point", coordinates: [13.05, 52.00008] }, "works", {

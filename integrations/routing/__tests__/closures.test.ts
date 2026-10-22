@@ -458,6 +458,57 @@ describe("activeClosuresForBbox", () => {
       },
     );
 
+    describe("a closure announced for later, for a trip at a later instant", () => {
+      const day = 86_400_000;
+      const iso = (offsetMs: number) => new Date(Date.now() + offsetMs).toISOString();
+      const inThreeDays = () => new Date(Date.now() + 3 * day);
+
+      it("closes the road inside a planned window whose start is still ahead", async () => {
+        const planned = closureAt(point(0.5, 51.5), {
+          validity: { status: "planned", start: iso(2 * day), end: iso(4 * day) },
+        });
+        expect((await run([planned], inThreeDays())).points).toEqual([[0.5, 51.5]]);
+        // Before the window opens, and right now, it closes nothing.
+        expect((await run([planned], new Date(Date.now() + day))).points).toHaveLength(0);
+        expect((await run([planned])).points).toHaveLength(0);
+      });
+
+      it("closes nothing once a still-planned start has passed, or with no start", async () => {
+        const stale = closureAt(point(0.5, 51.5), {
+          validity: { status: "planned", start: iso(-day), end: iso(4 * day) },
+        });
+        const undated = closureAt(point(0.5, 51.5), {
+          validity: { status: "planned", end: iso(4 * day) },
+        });
+        expect((await run([stale], inThreeDays())).points).toHaveLength(0);
+        expect((await run([stale])).points).toHaveLength(0);
+        expect((await run([undated], inThreeDays())).points).toHaveLength(0);
+      });
+
+      it("counts an approved action the same way, and never a requested one", async () => {
+        const at = (actionStatus: string, start: string) =>
+          closureAt(point(0.5, 51.5), {
+            validity: { status: "active", start, end: iso(4 * day) },
+            effects: [effect("test:1/closure", "closure", { actionStatus })],
+          });
+        expect((await run([at("approved", iso(2 * day))], inThreeDays())).points).toEqual([
+          [0.5, 51.5],
+        ]);
+        expect((await run([at("approved", iso(-day))], inThreeDays())).points).toHaveLength(0);
+        expect((await run([at("requested", iso(2 * day))], inThreeDays())).points).toHaveLength(0);
+      });
+
+      it.each(["suspended", "cancelled", "ended", "unknown"] as const)(
+        "never closes the road under a %s lifecycle, whatever its start",
+        async (status) => {
+          const closure = closureAt(point(0.5, 51.5), {
+            validity: { status, start: iso(2 * day), end: iso(4 * day) },
+          });
+          expect((await run([closure], inThreeDays())).points).toHaveLength(0);
+        },
+      );
+    });
+
     it("keeps a closure in force by its status when the travel time cannot be read", async () => {
       const result = await run([closureAt(point(0.5, 51.5))], new Date(Number.NaN));
       expect(result.points).toEqual([[0.5, 51.5]]);
