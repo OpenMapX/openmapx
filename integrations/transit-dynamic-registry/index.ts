@@ -83,15 +83,20 @@ export async function setup(ctx: IntegrationContext): Promise<void> {
 
     async function assertPublication() {
       await adapter?.assertAvailable?.(entry);
+    }
+    // This fence must run in the synchronous publishing continuation, after every await.
+    function assertNotRetired() {
       if (entry.protocol === "otpGraphQl" && generation.signal.aborted)
         throw new OtpError("cancelled");
     }
-    const wrap = <T>(data: T) =>
-      withAttribution(
+    const wrap = <T>(data: T) => {
+      assertNotRetired();
+      return withAttribution(
         captureTransitContributors(data, entryAttribution),
         entryAttribution,
         freshnessNow(),
       );
+    };
     const wrapRT = <T>(data: T) =>
       withAttribution(
         captureTransitContributors(data, entryAttribution),
@@ -140,6 +145,7 @@ export async function setup(ctx: IntegrationContext): Promise<void> {
             if (!fn) return wrapRT([]);
             const departures = await fn(entry, id, min);
             await assertPublication();
+            assertNotRetired();
             return entry.protocol === "otpGraphQl"
               ? withAttribution(
                   captureTransitContributors(departures, entryAttribution),

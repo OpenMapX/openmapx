@@ -1,8 +1,9 @@
 import type { UpstreamRuntime } from "@openmapx/integration-framework";
 import {
+  fakeHttpClient as baseFakeHttpClient,
   createMockIntegrationContext,
-  fakeHttpClient,
 } from "@openmapx/integration-framework/testing";
+import * as freshness from "@openmapx/mobility-core/freshness";
 import { describe, expect, it, vi } from "vitest";
 import type { RegistryEntry } from "../registry-types";
 
@@ -16,7 +17,21 @@ import { fetchRegistryEntries } from "../fetcher";
 import { hafasMgateAdapter } from "../hafas-mgate";
 import { setup } from "../index";
 import { RegistryManager, registry } from "../registry";
-export const entry: RegistryEntry = {
+
+const fakeHttpClient = (
+  respond: (request: import("@openmapx/integration-framework/testing").FakeHttpRequest) => unknown,
+) =>
+  baseFakeHttpClient((req) => {
+    const body = respond({
+      ...req,
+      body: typeof req.body === "string" ? JSON.parse(req.body) : req.body,
+    });
+    return req.method === "postText"
+      ? { status: 200, headers: {}, body: JSON.stringify(body) }
+      : body;
+  });
+
+const entry: RegistryEntry = {
   id: "ee/peatus-otp",
   slug: "peatus",
   prefix: "peatus:",
@@ -177,4 +192,68 @@ describe("captured registry generation", () => {
     finish();
     registry.stopRefresh();
   });
+});
+
+describe("retirement in the publishing continuation", () => {
+  it.each(["nearby", "search", "departures"])(
+    "never wraps retired %s data across final assertion microtasks",
+    async (surface) => {
+      const originalFreshness = freshness.freshnessNow;
+      const spy = vi.spyOn(freshness, "freshnessNow");
+      const badDepths: number[] = [];
+      try {
+        for (let depth = 1; depth <= 18; depth++) {
+          let retired = false,
+            wrappedAfterRetire = false,
+            checks = 0;
+          const shutdown: Array<() => Promise<void>> = [];
+          spy.mockImplementation((...args) => {
+            wrappedAfterRetire ||= retired;
+            return originalFreshness(...args);
+          });
+          vi.mocked(fetchRegistryEntries).mockResolvedValue([structuredClone(entry)]);
+          const http = fakeHttpClient((req) => {
+            const query = (req.body as { query: string }).query;
+            return query.includes("DynamicNearby")
+              ? { data: { nearest: { edges: [] } } }
+              : query.includes("DynamicDepartures")
+                ? { data: { stop: { gtfsId: "EE:1", stoptimesWithoutPatterns: [] } } }
+                : { data: { stops: [stop] } };
+          });
+          const ctx = createMockIntegrationContext({ id: "transit-dynamic-registry", http });
+          ctx.upstreamRuntime = shared();
+          ctx.onShutdown = (fn) => shutdown.push(fn);
+          ctx.getDisallowedSourceIds = async () => {
+            if (++checks === 5) {
+              const retire = (left: number): void => {
+                if (left === 0) {
+                  retired = true;
+                  void shutdown[0]();
+                } else queueMicrotask(() => retire(left - 1));
+              };
+              retire(depth);
+            }
+            return new Set();
+          };
+          await setup(ctx);
+          const provider = ctx.registered.transit[0];
+          try {
+            if (surface === "nearby") await provider.getStopsNearby?.(58, 25, 500);
+            else if (surface === "departures") await provider.getDepartures?.("peatus:EE:1", 10);
+            else await provider.searchStopsByName?.("Public", 1);
+          } catch (error) {
+            expect(error).toMatchObject({ kind: "cancelled" });
+          }
+          await new Promise((resolve) => setImmediate(resolve));
+          if (wrappedAfterRetire) badDepths.push(depth);
+          await shutdown[0]();
+          registry.stopRefresh();
+        }
+        expect(badDepths).toEqual([]);
+      } finally {
+        spy.mockRestore();
+        registry.stopRefresh();
+      }
+    },
+  );
 });

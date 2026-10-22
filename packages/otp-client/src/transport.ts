@@ -93,20 +93,25 @@ export function createRequester(
           await bounded(combined, () => beforeRequest(combined));
           await available(combined);
         }
+        const request = { query: binding.query, variables };
+        const responseOptions = {
+          headers: { ...headers },
+          responseHeaders: ["retry-after", "date"],
+          timeoutMs: 10000,
+          signal: combined,
+          maxBytes: 4 * 1024 * 1024,
+          contentTypes: ["application/json", "application/graphql-response+json"],
+          redirect: "error" as const,
+        };
         const response = await bounded(combined, () =>
-          options.http.postResponse(
-            options.endpoint,
-            { query: binding.query, variables },
-            {
-              headers: { ...headers },
-              responseHeaders: ["retry-after", "date"],
-              timeoutMs: 10000,
-              signal: combined,
-              maxBytes: 4 * 1024 * 1024,
-              contentTypes: ["application/json", "application/graphql-response+json"],
-              redirect: "error",
-            },
-          ),
+          afterResponse
+            ? options.http.postText(options.endpoint, JSON.stringify(request), {
+                ...responseOptions,
+                headers: { "Content-Type": "application/json", ...headers },
+                successStatuses: [200],
+                discardErrorBody: true,
+              })
+            : options.http.postResponse(options.endpoint, request, responseOptions),
         );
         await available(combined);
         if (afterResponse) {
@@ -114,7 +119,16 @@ export function createRequester(
           await available(combined);
         }
         if (response.status !== 200) throw new OtpError("http");
-        const parsed = envelope.safeParse(response.body);
+        let body: unknown = response.body;
+        if (afterResponse) {
+          if (typeof body !== "string") throw new OtpError("payload");
+          try {
+            body = JSON.parse(body);
+          } catch {
+            throw new OtpError("payload");
+          }
+        }
+        const parsed = envelope.safeParse(body);
         if (!parsed.success || !("data" in parsed.data)) throw new OtpError("payload");
         if (parsed.data.errors !== undefined) throw new OtpError("graphql");
         const result = binding.schema.safeParse(parsed.data.data);

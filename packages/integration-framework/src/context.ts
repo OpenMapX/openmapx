@@ -72,6 +72,13 @@ export interface ResponseOptions extends HttpClientOptions {
    * bodies for caller classification. JSON and byte methods ignore this option.
    */
   successStatuses?: readonly number[];
+  /**
+   * getText/postText/getStream only: cancel unsuccessful bodies without reading
+   * them and expose status/selected headers with an empty body. Opt in when
+   * errors are classified from metadata (for example Retry-After on HTTP 429).
+   * Success bodies retain media-type, byte, cancellation and deadline checks.
+   */
+  discardErrorBody?: boolean;
   /** Media type assumed only when the upstream omits Content-Type. Must be in contentTypes. */
   fallbackContentType?: string;
   /** Response headers to expose. Names are matched case-insensitively and returned lowercase. */

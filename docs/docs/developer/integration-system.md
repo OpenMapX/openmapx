@@ -739,14 +739,18 @@ For `getText()`, `postText()` and `getStream()`, optional `successStatuses` narr
 which statuses require the success `contentTypes` allowlist. It must be a nonempty
 list of integer 2xx statuses; omission preserves validation for all 2xx responses.
 For example, `[200]` lets a caller classify a headerless 204 or plain-text 201
-before decoding. All statuses retain the same byte ceiling and body deadline.
-JSON and byte methods ignore `successStatuses` and retain their existing media
-validation.
+before decoding. By default, all statuses retain the same byte ceiling and body
+deadline. For metadata-only error classification, `discardErrorBody: true` cancels
+unsuccessful bodies immediately and returns an empty body with the status and
+selected headers. This lets a caller honor `Retry-After` on a non-JSON, oversized
+or stalled HTTP 429 without consuming its body. Successful bodies retain all media,
+byte and deadline checks. JSON and byte methods ignore these two options and
+retain their existing media validation.
 
 Every response method requires `maxBytes` and an exact `contentTypes` allowlist.
 `fallbackContentType` applies only when the upstream omits `Content-Type`, and
 must itself be allowlisted. The byte ceiling checks declared size and actual
-decoded response bytes, including error bodies.
+decoded response bytes, including error bodies unless explicitly discarded.
 
 `http.getStream()` returns `{ status, headers, stream }`, where `stream` is a
 pull-driven `ReadableStream<Uint8Array>`. Consume or cancel it; the host retains

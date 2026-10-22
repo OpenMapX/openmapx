@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { createOtpClient } from "./index";
 
 function fixture() {
-  const http = fakeHttpClient(() => ({ data: { __typename: "QueryType" } }));
+  const http = fakeHttpClient(() => JSON.stringify({ data: { __typename: "QueryType" } }));
   const controller = new AbortController();
   const headers = { "subscription-key": "original" };
   const beforeRequest = vi.fn(async () => {});
@@ -56,10 +56,10 @@ describe("bounded optional OTP transport hooks", () => {
   });
   it("observes 429 before status rejection and propagates observation-store failure safely", async () => {
     const f = fixture();
-    vi.spyOn(f.http, "postResponse").mockResolvedValue({
+    vi.spyOn(f.http, "postText").mockResolvedValue({
       status: 429,
       headers: { "retry-after": "10" },
-      body: {},
+      body: "",
     });
     f.afterResponse.mockRejectedValue(new Error("private"));
     await expect(createOtpClient(f.options).sdk.OtpReadiness()).rejects.toThrow(

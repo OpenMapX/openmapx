@@ -21,10 +21,6 @@ export function boundedIntegrationResponseStream(
     if (!Number.isSafeInteger(options.maxBytes) || options.maxBytes <= 0) {
       throw new Error("integration HTTP response maxBytes must be a positive safe integer");
     }
-    const declared = Number(response.headers.get("content-length"));
-    if (Number.isFinite(declared) && declared > options.maxBytes) {
-      throw new Error("integration HTTP response too large (declared length exceeds maxBytes)");
-    }
     const successStatuses = allowErrorContentType ? options.successStatuses : undefined;
     if (
       successStatuses !== undefined &&
@@ -38,6 +34,15 @@ export function boundedIntegrationResponseStream(
         "integration HTTP success statuses must be a nonempty list of integer 2xx statuses",
       );
     const successful = successStatuses ? successStatuses.includes(response.status) : response.ok;
+    if (allowErrorContentType && options.discardErrorBody && !successful) {
+      discard(response.body, new Error("integration HTTP error body discarded"));
+      return new ReadableStream({ start: (controller) => controller.close() });
+    }
+    const declared = Number(response.headers.get("content-length"));
+    if (Number.isFinite(declared) && declared > options.maxBytes) {
+      throw new Error("integration HTTP response too large (declared length exceeds maxBytes)");
+    }
+
     if (successful || !allowErrorContentType) {
       const mediaType = (
         response.headers.get("content-type")?.split(";", 1)[0]?.trim() ??

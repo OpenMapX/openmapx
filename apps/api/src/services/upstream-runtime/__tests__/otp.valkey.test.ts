@@ -1,10 +1,11 @@
 import { randomUUID } from "node:crypto";
-import { fakeHttpClient } from "@openmapx/integration-framework/testing";
+import { createNoopLogger, fakeHttpClient } from "@openmapx/integration-framework/testing";
 import Redis from "ioredis";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { createOtpGraphQlAdapter } from "../../../../../../integrations/transit-dynamic-registry/otp-graphql";
 import { OTP_PROFILES } from "../../../../../../integrations/transit-dynamic-registry/otp-profiles";
 import type { RegistryEntry } from "../../../../../../integrations/transit-dynamic-registry/registry-types";
+import { createHttpClient } from "../../../integration-clients";
 import { createRedisUpstreamRuntime, type UpstreamRedisClient } from "../index";
 
 const url = process.env.OPENMAPX_TEST_VALKEY_URL;
@@ -31,7 +32,11 @@ describe.skipIf(!url)("dynamic OTP shared cooldown with actual Valkey", () => {
       options: { endpoint: profile.catalogEndpoint },
       coverage: { bbox: [-180, -90, 180, 90], tiers: [] },
     };
-    const http = fakeHttpClient(() => ({ status, headers, body: { data: { stops: [] } } }));
+    const http = fakeHttpClient(() => ({
+      status,
+      headers,
+      body: JSON.stringify({ data: { stops: [] } }),
+    }));
     const adapter = createOtpGraphQlAdapter({
       http,
       upstreamRuntime: createRedisUpstreamRuntime(redis as unknown as UpstreamRedisClient, {
@@ -85,5 +90,29 @@ describe.skipIf(!url)("dynamic OTP shared cooldown with actual Valkey", () => {
     const different = client("c", "", "it/torino-otp");
     expect(await different.run()).toEqual([]);
     expect(different.http.calls).toHaveLength(1);
+  });
+  it("records a non-JSON actual host response in Valkey before another regional client", async () => {
+    const key = randomUUID();
+    const first = client("actual-host", key, "fi/digitransit-otp");
+    const fetch = vi.fn(
+      async () =>
+        new Response("slow down", {
+          status: 429,
+          headers: { "content-type": "text/plain", "retry-after": "37" },
+        }),
+    );
+    vi.stubGlobal("fetch", fetch);
+    const real = createHttpClient(createNoopLogger());
+    const post = vi.spyOn(first.http, "postText").mockImplementation(real.postText);
+    try {
+      await expect(first.run()).rejects.toMatchObject({ kind: "quota" });
+      const second = client("after-actual-host", key, "fi/waltti-otp");
+      await expect(second.run()).rejects.toMatchObject({ kind: "quota" });
+      expect(fetch).toHaveBeenCalledTimes(1);
+      expect(second.http.calls).toHaveLength(0);
+    } finally {
+      post.mockRestore();
+      vi.unstubAllGlobals();
+    }
   });
 });

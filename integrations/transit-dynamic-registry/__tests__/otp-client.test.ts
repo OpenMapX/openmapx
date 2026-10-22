@@ -76,7 +76,7 @@ function fixture(family = "peatus", response?: unknown) {
   };
   const generation = new AbortController();
   let allowed = true;
-  const http = fakeHttpClient((req) => {
+  const respond = (req: { body?: unknown }) => {
     if (response !== undefined) return response;
     const body = req.body as { query: string };
     if (body.query.includes("DynamicNearby"))
@@ -88,6 +88,17 @@ function fixture(family = "peatus", response?: unknown) {
         ? { data: { quay: { id: "feed:1", estimatedCalls: [tmCall()] } } }
         : { data: { stop: { gtfsId: "feed:1", stoptimesWithoutPatterns: [calls()] } } };
     return { data: family === "trufi" ? { quays: [quay] } : { stops: [stop] } };
+  };
+  const http = fakeHttpClient((req) => {
+    const result = respond({
+      ...req,
+      body: typeof req.body === "string" ? JSON.parse(req.body) : req.body,
+    });
+    const response =
+      typeof result === "object" && result !== null && "status" in result && "body" in result
+        ? result
+        : { status: 200, headers: {}, body: result };
+    return { ...response, body: JSON.stringify(response.body) };
   });
   const admit = vi.fn(async (_input: { scope: string; key: string; signal?: AbortSignal }) => ({
     allowed: true as const,
@@ -235,16 +246,16 @@ describe("generated dynamic OTP acquisition", () => {
     await expect(f.adapter.searchByName!(f.entry, "X", 1)).rejects.toThrow("OTP source denied");
     expect(f.http.calls).toHaveLength(0);
     const g = fixture();
-    vi.spyOn(g.http, "postResponse").mockImplementation(async () => {
+    vi.spyOn(g.http, "postText").mockImplementation(async () => {
       g.deny();
-      return { status: 200, headers: {}, body: { data: { stops: [] } } };
+      return { status: 200, headers: {}, body: JSON.stringify({ data: { stops: [] } }) };
     });
     await expect(g.adapter.searchByName!(g.entry, "X", 1)).rejects.toThrow("OTP source denied");
   });
   it("retires an uncooperative request and rejects its late success", async () => {
     const f = fixture();
     let finish!: (value: HttpResponse<unknown>) => void;
-    vi.spyOn(f.http, "postResponse").mockImplementation(
+    vi.spyOn(f.http, "postText").mockImplementation(
       () =>
         new Promise((resolve) => {
           finish = resolve;
@@ -254,7 +265,7 @@ describe("generated dynamic OTP acquisition", () => {
     await vi.waitFor(() => expect(finish).toBeTypeOf("function"));
     f.generation.abort();
     await expect(pending).rejects.toThrow("OTP request cancelled");
-    finish({ status: 200, headers: {}, body: { data: { stops: [] } } });
+    finish({ status: 200, headers: {}, body: JSON.stringify({ data: { stops: [] } }) });
   });
   it("fails closed on missing/store-unavailable admission and records shared Retry-After", async () => {
     const f = fixture();
