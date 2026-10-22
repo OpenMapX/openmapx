@@ -87,13 +87,7 @@ import {
   handleServiceBulkJob,
 } from "./services/admin-job-handlers";
 import { validateAdminOperationCatalog } from "./services/admin-operation-catalog";
-import {
-  renderAndPersistCompose,
-  serviceApply,
-  serviceRestart,
-  serviceStart,
-  serviceStop,
-} from "./services/admin-ops";
+import { serviceApply, serviceRestart, serviceStart, serviceStop } from "./services/admin-ops";
 import { appLogger } from "./services/app-logger";
 import { cacheInvalidation } from "./services/cache-invalidation";
 import {
@@ -111,24 +105,18 @@ import {
   handleExtensionInstallJob,
   handleExtensionRemoveJob,
 } from "./services/extension-installer";
+import {
+  recoverInterruptedExtensionChanges,
+  withExtensionChangeLock,
+} from "./services/extension-recovery";
 import { pruneOldRecords } from "./services/health-history";
 import { jobRunner } from "./services/job-runner";
 import { readOfflinePackagePrincipalKeyFile } from "./services/offline-package-principal.js";
-import { createDurableOpsKey } from "./services/ops-client";
-import { openRuntimeRecoveryAuthority } from "./services/runtime-recovery-authority";
-import {
-  mergeRuntimeRecovery,
-  type RuntimeRecoveryRecord,
-} from "./services/runtime-recovery-journal";
 import { getServiceRegistry, initServiceRegistry } from "./services/service-registry";
-import { reconcileRepoBackups } from "./services/service-repositories";
-import { reconcileDurableServiceRuntime } from "./services/service-runtime-recovery";
 import { handleSystemDiagnosticsJob, handleSystemUpdateJob } from "./services/system-maintenance";
-import { applyTrustedConfiguration } from "./services/trusted-config-operations";
 import { configurePrivacyArtifactDeleter, readJournalKey } from "./services/user-erasure.js";
 import { applyRequiredMigrations } from "./startup-migrations";
 import { configuredTrustedWebOrigins, makeCsrfGuardHook } from "./utils/csrf";
-import { dockerComposeAction } from "./utils/docker-compose";
 import { sendMail } from "./utils/email.js";
 import {
   authLimit,
@@ -199,64 +187,22 @@ try {
     return !!row && isDeepStrictEqual(row.manifest, journal.targetManifest);
   });
   server.log.info("Extension integration install journals reconciled");
-  const root = findRepoRoot();
-  const runtimeRecoveryJournal = await openRuntimeRecoveryAuthority(root);
-  const serviceRecovery = await reconcileRepoBackups({
-    restoreSelection: async (roots, recoveryId) => {
-      await initServiceRegistry();
-      await applyTrustedConfiguration({
-        kind: "serviceSelection.apply",
-        selectedRoots: roots,
-        operationKey: createDurableOpsKey("startup.selection.recovery", recoveryId),
-      });
-    },
-    persistRuntimeRecovery: async (recovery) => {
-      if (!recovery.incidentId) {
-        throw new Error("Service runtime recovery is missing its durable incident identity");
-      }
-      const discovered: RuntimeRecoveryRecord = {
-        version: 1,
-        incidentId: recovery.incidentId,
-        orphanedServiceIds: [...recovery.orphanedServiceIds],
-        restartServiceIds: [...recovery.restartServiceIds],
-      };
-      const retained = runtimeRecoveryJournal.record();
-      await runtimeRecoveryJournal.replace(
-        retained === null ? discovered : mergeRuntimeRecovery(retained, discovered),
-      );
-    },
-  });
-  await reconcileDurableServiceRuntime(serviceRecovery, runtimeRecoveryJournal, {
-    // Startup runtime recovery uses the same typed operations as every other
-    // lifecycle path, so recovery never needs a Docker socket either.
-    remove: (serviceId) =>
-      dockerComposeAction(serviceId, "remove", {
-        operationKey: createDurableOpsKey(
-          "startup.runtime-recovery.remove",
-          `${serviceRecovery.incidentId ?? "recovery-without-incident"}:${serviceId}`,
-        ),
-      }),
-    recreate: (serviceId) =>
-      dockerComposeAction(serviceId, "recreate-isolated", {
-        operationKey: createDurableOpsKey(
-          "startup.runtime-recovery.recreate",
-          `${serviceRecovery.incidentId ?? "recovery-without-incident"}:${serviceId}`,
-        ),
-      }),
-    initializeRegistry: initServiceRegistry,
-    renderCompose: async () => {
-      await renderAndPersistCompose({
-        operationKey: createDurableOpsKey(
-          "startup.runtime-recovery.render",
-          serviceRecovery.incidentId ?? "recovery-without-incident",
-        ),
-      });
-    },
-  });
-  server.log.info("Service repository rollbacks reconciled");
 } catch (err) {
-  server.log.fatal(err, "Service repository rollback reconciliation failed; refusing to start");
+  server.log.fatal(err, "Extension integration journal reconciliation failed; refusing to start");
   throw err;
+}
+
+// Settle what an interrupted extension change left in the operations agent.
+// An unreachable agent must not keep the API down; every extension job runs
+// this recovery again before it changes anything.
+try {
+  await withExtensionChangeLock(() => recoverInterruptedExtensionChanges());
+  server.log.info("Interrupted extension changes recovered");
+} catch (err) {
+  server.log.error(
+    err,
+    "Interrupted extension changes could not be recovered yet; extension jobs will retry",
+  );
 }
 
 const trustedWebOrigins = configuredTrustedWebOrigins();

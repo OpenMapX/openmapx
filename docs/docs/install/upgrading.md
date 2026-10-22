@@ -394,25 +394,25 @@ pnpm openmapx ext update <id>     # re-pin every part to the catalog's current v
 An update re-pins the bundle's service(s) and integration(s) together and
 re-renders the stack as one orchestrated step.
 
-### If `app-api` refuses to start after an interrupted extension update
+### After an interrupted extension update
 
-Extension installs and updates write small recovery journals next to the files
-they change — `services/.community/.rollback-*.json`,
-`services/.community/.prepare-*.json`, and
-`custom_integrations/.extension-install-journal-*.json`. If `app-api` crashes
-mid-update, the next start replays those journals before it serves anything,
-restoring the previous repository checkout, integration artifact, service
-selection, and running containers. That replay is fail-closed: when a journal
-refers to a backup or database row that no longer exists (for example after a
-manual clean-up), `app-api` logs
-`Service repository rollback reconciliation failed; refusing to start` with the
-journal path and exits instead of guessing.
+The operations agent installs each service repository as a transaction: it
+keeps the previous checkout, and what `app-api` needs to undo the change, until
+the change is settled. The extension's database record is the commit point. If
+`app-api` or the agent stops mid-update, the next `app-api` start, and every
+later extension install or removal, settles what was left: a change the
+database recorded is kept, and any other is rolled back, restoring the previous
+checkout, service selection and running containers. The agent keeps its note
+about a rolled-back change until the selection is restored, so a failure part
+way through is finished by the next attempt. Integration artifacts use
+`custom_integrations/.extension-install-journal-*.json` the same way.
 
-To recover, confirm the referenced repository or integration is in the state
-you want, then delete the journal named in the log (and, for `.rollback-*`
-journals, the matching `.rollback-*` backup directory) and start `app-api`
-again. Never delete a journal whose backup still exists unless you intend to
-keep the _new_ files it was about to roll back.
+If the agent is unreachable when `app-api` starts, `app-api` logs
+`Interrupted extension changes could not be recovered yet` and serves normally;
+the next extension job retries the recovery and fails, without changing
+anything, until it succeeds. Do not delete `.repository-*`, `.backup-*` or
+`.stage-*` entries under `services/.community/` by hand. The agent removes
+leftover staging directories itself when it starts.
 
 ## Air-quality API compatibility
 

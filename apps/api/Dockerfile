@@ -130,11 +130,11 @@ WORKDIR /app
 # `curl -fs http://localhost:3001/health`). Alpine ships wget but not curl,
 # so we install it explicitly. ca-certificates gives node outgoing HTTPS.
 #
-# git is required by admin Store / community-service repository installs:
-# both the community integration installer and service-repo refresh path clone
-# or fetch allowlisted Git URLs from inside the app-api container. Those clones
-# are bounded by time, entry count, size, path length, and file type, and the
-# URL is validated to a credential-free allowlisted host before `git` runs.
+# git is required by the community integration installer, which clones
+# allowlisted Git URLs from inside the app-api container. Those clones are
+# bounded by time, entry count, size, path length, and file type, and the URL is
+# validated to a credential-free allowlisted host before `git` runs. Community
+# service repositories are fetched by the operations agent instead.
 #
 # The Docker CLI is deliberately ABSENT. Every host effect the admin GUI
 # triggers is now a typed operation sent to the private operations agent, which

@@ -97,23 +97,34 @@ const samples: Record<(typeof OPS_OPERATION_KINDS)[number], OpsOperation> = {
     createBackup: true,
     backupId: "pre-update-20260823",
   },
-  "extension.repository.inspect": {
-    kind: "extension.repository.inspect",
-    catalogEntryId: "maps-bundle",
-    catalogRevisionId: "catalog_20260823",
+  "serviceRepository.inspect": {
+    kind: "serviceRepository.inspect",
+    url: "https://github.com/example/maps-services",
+    ref: "v1.2.0",
   },
-  "extension.install": {
-    kind: "extension.install",
+  "serviceRepository.publish": {
+    kind: "serviceRepository.publish",
+    url: "https://github.com/example/maps-services",
+    commit: "a".repeat(40),
     extensionId: "maps-bundle",
-    catalogEntryId: "maps-bundle",
-    catalogRevisionId: "catalog_20260823",
+    recovery: {
+      selectionBefore: ["postgis"],
+      touchedServiceIds: ["maps-tiles"],
+      previouslyEnabledServiceIds: [],
+    },
   },
-  "extension.update": {
-    kind: "extension.update",
+  "serviceRepository.settle": {
+    kind: "serviceRepository.settle",
+    repository: "0123456789abcdef",
+    transactionId: `txn1_${"b".repeat(24)}`,
+    outcome: "commit",
+  },
+  "serviceRepository.remove": {
+    kind: "serviceRepository.remove",
+    repository: "0123456789abcdef",
     extensionId: "maps-bundle",
-    catalogRevisionId: "catalog_20260823",
   },
-  "extension.remove": { kind: "extension.remove", extensionId: "maps-bundle" },
+  "communityServices.inspect": { kind: "communityServices.inspect" },
   "serviceSelection.apply": {
     expectedCurrentRevisionId: null,
     kind: "serviceSelection.apply",
@@ -632,6 +643,78 @@ describe("ops contract", () => {
     ).toThrow();
     expect(() =>
       parseOpsResult("dawarich.provisioning.inspect", { ...inspection, environment: [] }),
+    ).toThrow();
+  });
+
+  it("binds community repository operations to exact, bounded identities", () => {
+    const publish = {
+      kind: "serviceRepository.publish",
+      url: "https://github.com/example/maps-services",
+      commit: "a".repeat(40),
+      extensionId: "maps-bundle",
+      recovery: { selectionBefore: null, touchedServiceIds: [], previouslyEnabledServiceIds: [] },
+    };
+    expect(parseOpsRequest(request(publish), { role: "api" }).operation).toEqual(publish);
+    for (const operation of [
+      { ...publish, url: "http://github.com/example/maps-services" },
+      { ...publish, url: "ssh://git@github.com/example/maps-services" },
+      { ...publish, url: "https://github.com/example/maps services" },
+      { ...publish, url: "https://github.com/example/maps-services?ref=main" },
+      { ...publish, commit: "a".repeat(7) },
+      { ...publish, commit: "A".repeat(40) },
+      { ...publish, recovery: { ...publish.recovery, touchedServiceIds: ["../x"] } },
+      { ...publish, recovery: { ...publish.recovery, directory: "/tmp" } },
+      { kind: "serviceRepository.inspect", url: publish.url, ref: "--upload-pack=x" },
+      {
+        kind: "serviceRepository.settle",
+        repository: "0123456789abcdef",
+        transactionId: "txn1_short",
+        outcome: "commit",
+      },
+      {
+        kind: "serviceRepository.settle",
+        repository: "0123456789abcdef",
+        transactionId: `txn1_${"b".repeat(24)}`,
+        outcome: "discard",
+      },
+      { kind: "serviceRepository.remove", repository: "../services", extensionId: "maps-bundle" },
+      { kind: "communityServices.inspect", repository: "0123456789abcdef" },
+    ]) {
+      expect(
+        () => parseOpsRequest(request(operation), { role: "api" }),
+        JSON.stringify(operation),
+      ).toThrow(OpsContractError);
+    }
+    expect(() => parseOpsRequest(request(publish), { role: "data-manager" })).toThrow(
+      OpsContractError,
+    );
+    expect(
+      opsResourceId({
+        kind: "serviceRepository.remove",
+        repository: "0123456789abcdef",
+        extensionId: "maps-bundle",
+      }),
+    ).toBe("0123456789abcdef");
+  });
+
+  it("bounds community repository inspection results", () => {
+    const inspection = {
+      url: "https://github.com/example/maps-services",
+      repository: "0123456789abcdef",
+      commit: "a".repeat(40),
+      valid: false,
+      problems: ["service.json: invalid"],
+      services: [{ path: "tiles", manifest: { id: "maps-tiles" } }],
+    };
+    expect(parseOpsResult("serviceRepository.inspect", inspection)).toEqual(inspection);
+    expect(() =>
+      parseOpsResult("serviceRepository.inspect", {
+        ...inspection,
+        problems: Array.from({ length: 65 }, () => "x"),
+      }),
+    ).toThrow();
+    expect(() =>
+      parseOpsResult("serviceRepository.inspect", { ...inspection, checkout: "/srv" }),
     ).toThrow();
   });
 });

@@ -51,7 +51,8 @@ openmapx/
 Two directories hold _generated output only_. `infra/docker/` is written by
 `pnpm openmapx compose render` and never edited by hand — there is no
 hand-maintained `docker-compose.yml`. `custom_integrations/` and the community
-service tree under `services/.community/` are populated at runtime from Git URLs.
+service tree under `services/.community/` are populated at runtime from Git URLs;
+the operations agent owns the community service tree.
 
 ### Applications
 
@@ -167,7 +168,7 @@ bounded structured audit fields. It is reachable solely on the private
 `openmapx` network.
 
 `ops-agent` is the sole owner of the Docker socket and trusted repository write
-mounts. `app-api` and `data-manager` submit typed operations instead of receiving
+mounts, including the community service checkouts under `services/.community/`. `app-api` and `data-manager` submit typed operations instead of receiving
 that host authority themselves. A process cannot recreate its own container, so
 to update itself the agent starts a short-lived helper container from its own
 image. The helper has only the socket and checkout mounts, no network and no

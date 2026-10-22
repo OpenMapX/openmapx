@@ -48,10 +48,11 @@ export const OPS_OPERATION_KINDS = [
   "system.diagnostics",
   "system.inspect",
   "system.update",
-  "extension.repository.inspect",
-  "extension.install",
-  "extension.update",
-  "extension.remove",
+  "serviceRepository.inspect",
+  "serviceRepository.publish",
+  "serviceRepository.settle",
+  "serviceRepository.remove",
+  "communityServices.inspect",
   "serviceSelection.apply",
   "serviceSelection.inspect",
   "serviceConfig.apply",
@@ -163,10 +164,11 @@ export const OPS_KIND_POLICIES = {
   "system.diagnostics": asyncEffect("api", 10 * 60_000, 256 * 1024),
   "system.inspect": sync("api", 30_000, 256 * 1024),
   "system.update": asyncEffect("api", 30 * 60_000),
-  "extension.repository.inspect": asyncEffect("api", 5 * 60_000, 256 * 1024),
-  "extension.install": asyncEffect("api", 30 * 60_000),
-  "extension.update": asyncEffect("api", 30 * 60_000),
-  "extension.remove": asyncEffect("api", 15 * 60_000),
+  "serviceRepository.inspect": asyncEffect("api", 5 * 60_000, 1024 * 1024),
+  "serviceRepository.publish": asyncEffect("api", 10 * 60_000),
+  "serviceRepository.settle": asyncEffect("api", 5 * 60_000),
+  "serviceRepository.remove": asyncEffect("api", 5 * 60_000),
+  "communityServices.inspect": sync("api", 15_000, 1024 * 1024),
   "serviceSelection.apply": asyncEffect("api", 2 * 60_000),
   "serviceSelection.inspect": sync("api", 15_000),
   "serviceConfig.apply": asyncEffect("api", 2 * 60_000),
@@ -241,6 +243,36 @@ const transitousSubmodulesSchema = z.record(
   z.string().regex(/^[0-9a-f]{40}$/),
 );
 const actorLabelSchema = z.string().min(1).max(128);
+
+// Community service repositories. The ops-agent owns their checkouts under
+// `services/.community/<repository>`, where the repository id is the first 16
+// hex digits of the SHA-256 of the canonical URL.
+const repositoryIdSchema = z.string().regex(/^[a-f0-9]{16}$/);
+const gitCommitSchema = z.string().regex(/^[a-f0-9]{40}$/);
+// The canonical form of an allowed Git URL: https on the default port, without
+// credentials, query or fragment. The agent checks the host allowlist again
+// before it fetches anything.
+const gitRepositoryUrlSchema = z
+  .string()
+  .max(2_048)
+  .regex(/^https:\/\/[a-z0-9.-]+\/[^\s?#]+$/);
+const gitRefSchema = z
+  .string()
+  .min(1)
+  .max(255)
+  .regex(/^[A-Za-z0-9][A-Za-z0-9._/-]*$/);
+const repositoryTransactionIdSchema = z.string().regex(/^txn1_[a-f0-9]{24}$/);
+const serviceIdListSchema = z.array(serviceIdSchema).max(256);
+// What the API needs to undo an interrupted extension change, kept by the agent
+// with the pending repository transaction so it survives an API restart.
+const repositoryRecoverySchema = z.strictObject({
+  selectionBefore: serviceIdListSchema.nullable(),
+  touchedServiceIds: serviceIdListSchema,
+  previouslyEnabledServiceIds: serviceIdListSchema,
+});
+// A service manifest as read from a checkout. Its receiver validates it with
+// the service manifest rules; the result size limit bounds it here.
+const serviceManifestObjectSchema = z.record(z.string().max(256), z.unknown());
 const transitousLockRecordSchema = z.strictObject({
   ref: transitousRefSchema,
   submodules: transitousSubmodulesSchema,
@@ -338,23 +370,39 @@ export const opsOperationSchema = z.discriminatedUnion("kind", [
     createBackup: z.boolean(),
     backupId: backupIdSchema.optional(),
   }),
+  // Clones a repository into staging, validates its services and discards the
+  // clone. Validation problems are part of the result, not a failure.
   z.strictObject({
-    kind: z.literal("extension.repository.inspect"),
-    catalogEntryId: stableIdSchema,
-    catalogRevisionId: stableIdSchema,
+    kind: z.literal("serviceRepository.inspect"),
+    url: gitRepositoryUrlSchema,
+    ref: gitRefSchema.optional(),
   }),
+  // Installs the exact commit as the repository's checkout. The previous
+  // checkout is kept until the transaction is settled.
   z.strictObject({
-    kind: z.literal("extension.install"),
+    kind: z.literal("serviceRepository.publish"),
+    url: gitRepositoryUrlSchema,
+    commit: gitCommitSchema,
+    // The ref the commit was inspected at, for hosts that refuse to fetch an
+    // unadvertised commit; it must still resolve to `commit`.
+    ref: gitRefSchema.optional(),
     extensionId: serviceIdSchema,
-    catalogEntryId: stableIdSchema,
-    catalogRevisionId: stableIdSchema,
+    recovery: repositoryRecoverySchema,
   }),
   z.strictObject({
-    kind: z.literal("extension.update"),
-    extensionId: serviceIdSchema,
-    catalogRevisionId: stableIdSchema,
+    kind: z.literal("serviceRepository.settle"),
+    repository: repositoryIdSchema,
+    transactionId: repositoryTransactionIdSchema,
+    // `rollback` restores the previous checkout and keeps the recovery note;
+    // `release` drops the note once the API has restored what it describes.
+    outcome: z.enum(["commit", "rollback", "release"]),
   }),
-  z.strictObject({ kind: z.literal("extension.remove"), extensionId: serviceIdSchema }),
+  z.strictObject({
+    kind: z.literal("serviceRepository.remove"),
+    repository: repositoryIdSchema,
+    extensionId: serviceIdSchema,
+  }),
+  kindOnly("communityServices.inspect"),
   z.strictObject({
     kind: z.literal("serviceSelection.apply"),
     revisionId: stableIdSchema,
@@ -536,10 +584,6 @@ export interface OpsResourcePolicy {
   allowCountry?: (kind: "data.update", countryCode: string) => PolicyResult;
   allowDataType?: (dataTypeId: string) => PolicyResult;
   allowCatalogRevision?: (kind: "data.generateApiKeys", catalogRevisionId: string) => PolicyResult;
-  allowExtension?: (
-    kind: "extension.install" | "extension.update" | "extension.remove",
-    extensionId: string,
-  ) => PolicyResult;
   allowIntegration?: (integrationId: string) => PolicyResult;
   allowTrustedRevision?: (kind: OpsOperationKind, revisionId: string) => PolicyResult;
 }
@@ -595,24 +639,6 @@ export async function authorizeOpsResources(
           (operation.backupId !== undefined &&
             (await allowed(policy.allowBackup?.("backup.create", operation.backupId)))))
       );
-    case "extension.repository.inspect":
-      return (
-        (await allowed(policy.allowTrustedRevision?.(operation.kind, operation.catalogEntryId))) &&
-        allowed(policy.allowTrustedRevision?.(operation.kind, operation.catalogRevisionId))
-      );
-    case "extension.install":
-      return (
-        (await allowed(policy.allowExtension?.(operation.kind, operation.extensionId))) &&
-        (await allowed(policy.allowTrustedRevision?.(operation.kind, operation.catalogEntryId))) &&
-        allowed(policy.allowTrustedRevision?.(operation.kind, operation.catalogRevisionId))
-      );
-    case "extension.update":
-      return (
-        (await allowed(policy.allowExtension?.(operation.kind, operation.extensionId))) &&
-        allowed(policy.allowTrustedRevision?.(operation.kind, operation.catalogRevisionId))
-      );
-    case "extension.remove":
-      return allowed(policy.allowExtension?.(operation.kind, operation.extensionId));
     case "stack.render":
     case "serviceSelection.apply":
       return allowed(policy.allowTrustedRevision?.(operation.kind, operation.revisionId));
@@ -731,7 +757,12 @@ const backupInventoryEntry = z
       });
     }
   });
-const extension = z.strictObject({ extensionId: serviceIdSchema, revisionId: stableIdSchema });
+const repositoryPending = z.strictObject({
+  transactionId: repositoryTransactionIdSchema,
+  phase: z.enum(["published", "rolledBack"]),
+  previousCommit: gitCommitSchema.nullable(),
+  recovery: repositoryRecoverySchema,
+});
 export const configurationApplyResultSchema = z.discriminatedUnion("outcome", [
   z.strictObject({
     outcome: z.literal("committed"),
@@ -984,14 +1015,54 @@ export const OPS_RESULT_SCHEMAS = {
       ),
   }),
   "system.update": release,
-  "extension.repository.inspect": z.strictObject({
-    catalogEntryId: stableIdSchema,
-    revisionId: stableIdSchema,
+  "serviceRepository.inspect": z.strictObject({
+    url: gitRepositoryUrlSchema,
+    repository: repositoryIdSchema,
+    commit: gitCommitSchema,
     valid: z.boolean(),
+    problems: z.array(z.string().max(1_024)).max(64),
+    services: z
+      .array(z.strictObject({ path: z.string().max(512), manifest: serviceManifestObjectSchema }))
+      .max(64),
   }),
-  "extension.install": extension,
-  "extension.update": extension,
-  "extension.remove": z.strictObject({ extensionId: serviceIdSchema, removed: z.boolean() }),
+  "serviceRepository.publish": z.strictObject({
+    repository: repositoryIdSchema,
+    commit: gitCommitSchema,
+    transactionId: repositoryTransactionIdSchema,
+    serviceIds: serviceIdListSchema,
+  }),
+  "serviceRepository.settle": z.strictObject({
+    repository: repositoryIdSchema,
+    outcome: z.enum(["commit", "rollback", "release"]),
+    changed: z.boolean(),
+  }),
+  "serviceRepository.remove": z.strictObject({
+    repository: repositoryIdSchema,
+    removed: z.boolean(),
+  }),
+  "communityServices.inspect": z.strictObject({
+    revisionId: stableIdSchema,
+    repositories: z
+      .array(
+        z.strictObject({
+          repository: repositoryIdSchema,
+          url: gitRepositoryUrlSchema.nullable(),
+          commit: gitCommitSchema.nullable(),
+          extensionId: serviceIdSchema.nullable(),
+          pending: repositoryPending.nullable(),
+        }),
+      )
+      .max(256),
+    services: z
+      .array(
+        z.strictObject({
+          repository: repositoryIdSchema,
+          directory: z.string().min(1).max(4_096),
+          manifest: serviceManifestObjectSchema,
+        }),
+      )
+      .max(256),
+  }),
   "serviceSelection.apply": revision,
   "serviceSelection.inspect": z.strictObject({
     source: z.enum(["env", "file", "default"]),
@@ -1282,12 +1353,12 @@ export function opsResourceId(operation: OpsOperation): string {
   if ("backupId" in operation && operation.backupId) return operation.backupId;
   if ("preparedRunId" in operation) return operation.preparedRunId;
   if ("candidateId" in operation) return operation.candidateId;
+  if ("repository" in operation) return operation.repository;
   if ("extensionId" in operation) return operation.extensionId;
   if ("integrationId" in operation) return operation.integrationId;
   if ("regionId" in operation && operation.regionId) return operation.regionId;
   if ("dataTypeId" in operation) return operation.dataTypeId;
   if ("releaseId" in operation) return operation.releaseId;
   if ("revisionId" in operation) return operation.revisionId;
-  if ("catalogEntryId" in operation) return operation.catalogEntryId;
   return operation.kind;
 }

@@ -30,34 +30,118 @@ const SKIP_DIRECTORIES = new Set([
   "__pycache__",
 ]);
 
-function readCommunityManifest(
+interface CommunityRepositoryService {
+  service: coreServices.LoadedService;
+  bytes: Uint8Array;
+  /** Directory holding the manifest, relative to the repository root ("" for the root). */
+  path: string;
+}
+
+/** The services a repository checkout provides, and why any of it would be rejected. */
+export interface CommunityRepositoryReading {
+  services: CommunityRepositoryService[];
+  problems: string[];
+}
+
+/** Limits shared by every repository one authority snapshot reads. */
+export interface CommunityReadBudget {
+  directories: number;
+  manifests: number;
+  totalBytes: number;
+}
+
+function createCommunityReadBudget(): CommunityReadBudget {
+  return { directories: 0, manifests: 0, totalBytes: 0 };
+}
+
+/**
+ * Walk one repository checkout the way the authority snapshot does and read
+ * every service manifest in it. A directory holding `service.json` is a
+ * service; the walk does not descend below it. Problems are collected rather
+ * than thrown, so a preview can explain them; the authority loader rejects a
+ * checkout with any problem.
+ */
+export function readCommunityRepository(
   filesystem: TrustedAuthorityFilesystem,
-  path: string,
-  directory: string,
-): { service: coreServices.LoadedService; bytes: Uint8Array } {
-  const bytes = filesystem.readManifest(path, "service", MAX_MANIFEST_BYTES);
-  const raw = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes)) as unknown;
-  const validation = coreServices.validateServiceManifest(raw, { firstParty: false });
-  if (!validation.valid || !raw || typeof raw !== "object" || Array.isArray(raw)) {
-    throw new Error(FAILED);
-  }
-  const manifest = raw as coreServices.ServiceManifest;
-  if (
-    !SERVICE_ID.test(manifest.id) ||
-    manifest.quality !== "community" ||
-    !/^sha256:[a-f0-9]{64}$/.test(manifest.container.digest ?? "")
-  )
-    throw new Error(FAILED);
-  assertTrustedConfigurationSchema(manifest.configSchema);
-  return {
-    service: {
-      manifest,
-      directory: resolve(directory),
-      isBuiltIn: false,
-      enabled: true,
-    },
-    bytes,
+  repositoryDirectory: string,
+  budget: CommunityReadBudget = createCommunityReadBudget(),
+): CommunityRepositoryReading {
+  const services: CommunityRepositoryService[] = [];
+  const problems: string[] = [];
+  const ids = new Set<string>();
+  const walk = (directory: string, path: string, depth: number): boolean => {
+    budget.directories += 1;
+    if (budget.directories > MAX_DIRECTORIES) {
+      problems.push(`The repository has more than ${MAX_DIRECTORIES} directories to search`);
+      return false;
+    }
+    filesystem.openDirectory(directory);
+    const entries = filesystem.listDirectory(directory);
+    if (entries.length > MAX_DIRECTORY_ENTRIES) {
+      problems.push(
+        `${path || "The repository root"} has more than ${MAX_DIRECTORY_ENTRIES} entries`,
+      );
+      return false;
+    }
+    if (entries.some((entry) => entry.name === "service.json")) {
+      const label = path ? `${path}/service.json` : "service.json";
+      let bytes: Uint8Array;
+      try {
+        bytes = filesystem.readManifest(
+          join(directory, "service.json"),
+          "service",
+          MAX_MANIFEST_BYTES,
+        );
+      } catch {
+        problems.push(`${label} is not a regular file of at most ${MAX_MANIFEST_BYTES} bytes`);
+        return true;
+      }
+      budget.manifests += 1;
+      budget.totalBytes += bytes.byteLength;
+      if (budget.manifests > MAX_MANIFESTS || budget.totalBytes > MAX_TOTAL_MANIFEST_BYTES) {
+        problems.push(
+          `Community services exceed ${MAX_MANIFESTS} manifests or ${MAX_TOTAL_MANIFEST_BYTES} bytes`,
+        );
+        return false;
+      }
+      let raw: unknown;
+      try {
+        raw = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
+      } catch {
+        problems.push(`${label} is not valid UTF-8 JSON`);
+        return true;
+      }
+      const manifestProblems = coreServices.communityServiceManifestProblems(raw);
+      if (manifestProblems.length > 0) {
+        for (const problem of manifestProblems) problems.push(`${label}: ${problem}`);
+        return true;
+      }
+      const manifest = raw as coreServices.ServiceManifest;
+      if (ids.has(manifest.id)) {
+        problems.push(`${label}: service id "${manifest.id}" is declared more than once`);
+        return true;
+      }
+      ids.add(manifest.id);
+      services.push({
+        service: { manifest, directory: resolve(directory), isBuiltIn: false, enabled: true },
+        bytes,
+        path,
+      });
+      return true;
+    }
+    if (depth === MAX_DEPTH) return true;
+    for (const entry of entries.sort((left, right) => left.name.localeCompare(right.name))) {
+      if (!entry.isDirectory() || entry.name.startsWith(".") || SKIP_DIRECTORIES.has(entry.name))
+        continue;
+      if (
+        !walk(join(directory, entry.name), path ? `${path}/${entry.name}` : entry.name, depth + 1)
+      )
+        return false;
+    }
+    return true;
   };
+  walk(repositoryDirectory, "", 0);
+  return { services, problems };
 }
 
 function loadCommunityServices(
@@ -80,6 +164,8 @@ function loadCommunityServices(
     (entry) => entry.isDirectory() && REPOSITORY.test(entry.name),
   );
   if (repositories.length > MAX_REPOSITORIES) throw new Error(FAILED);
+  // Dot-prefixed entries are the operations agent's own staging, backups and
+  // repository records; every other entry must be a repository checkout.
   for (const entry of repositoryEntries) {
     if (entry.name.startsWith(".")) continue;
     if (!entry.isDirectory() || !REPOSITORY.test(entry.name)) throw new Error(FAILED);
@@ -87,36 +173,16 @@ function loadCommunityServices(
 
   const services: coreServices.LoadedService[] = [];
   const manifestBytes: Uint8Array[] = [];
-  let directories = 0;
-  let totalBytes = 0;
-  const walk = (directory: string, depth: number): void => {
-    directories += 1;
-    if (directories > MAX_DIRECTORIES || depth > MAX_DEPTH) throw new Error(FAILED);
-    filesystem.openDirectory(directory);
-    const entries = filesystem.listDirectory(directory);
-    if (entries.length > MAX_DIRECTORY_ENTRIES) throw new Error(FAILED);
-    const manifestEntry = entries.find((entry) => entry.name === "service.json");
-    if (manifestEntry) {
-      const loaded = readCommunityManifest(filesystem, join(directory, "service.json"), directory);
-      services.push(loaded.service);
-      manifestBytes.push(loaded.bytes);
-      totalBytes += loaded.bytes.byteLength;
-      if (services.length > MAX_MANIFESTS || totalBytes > MAX_TOTAL_MANIFEST_BYTES) {
-        throw new Error(FAILED);
-      }
-      return;
-    }
-    if (depth === MAX_DEPTH) return;
-    for (const entry of entries) {
-      if (!entry.isDirectory() || entry.name.startsWith(".") || SKIP_DIRECTORIES.has(entry.name))
-        continue;
-      walk(join(directory, entry.name), depth + 1);
-    }
-  };
+  const budget = createCommunityReadBudget();
   for (const repository of repositories.sort((left, right) =>
     left.name.localeCompare(right.name),
   )) {
-    walk(join(community, repository.name), 0);
+    const reading = readCommunityRepository(filesystem, join(community, repository.name), budget);
+    if (reading.problems.length > 0) throw new Error(FAILED);
+    for (const entry of reading.services) {
+      services.push(entry.service);
+      manifestBytes.push(entry.bytes);
+    }
   }
   return { services, manifestBytes };
 }

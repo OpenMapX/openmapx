@@ -513,9 +513,18 @@ export async function submitOpsOperationWithRecovery<K extends OpsOperationKind>
   {
     const error = firstError;
     if (!isTransientTransportError(error)) translateError(error);
+    // The agent journals only asynchronous operations, so a lookup can never
+    // find a synchronous one; it simply failed.
+    if (
+      !options.admissionAlreadyAttempted &&
+      OPS_KIND_POLICIES[operation.kind].execution === "sync"
+    )
+      translateError(error);
     const recoveryTimeoutMs = options.recoveryTimeoutMs ?? 35_000;
     validatePositiveBounded(recoveryTimeoutMs, 35_000, "admission recovery timeout");
-    const recoverySignal = AbortSignal.timeout(recoveryTimeoutMs);
+    const recoverySignal = options.signal
+      ? AbortSignal.any([AbortSignal.timeout(recoveryTimeoutMs), options.signal])
+      : AbortSignal.timeout(recoveryTimeoutMs);
     for (;;) {
       try {
         const status = await client.lookup(operation, operationKey, {

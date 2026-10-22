@@ -28,10 +28,11 @@ const requiredKinds = [
   "data.overtureConflate",
   "data.searchIndexBuild",
   "system.update",
-  "extension.repository.inspect",
-  "extension.install",
-  "extension.update",
-  "extension.remove",
+  "serviceRepository.inspect",
+  "serviceRepository.publish",
+  "serviceRepository.settle",
+  "serviceRepository.remove",
+  "communityServices.inspect",
   "serviceSelection.apply",
   "serviceConfig.apply",
   "integrationConfig.apply",
@@ -59,7 +60,8 @@ describe("reviewed ops foundation contract", () => {
       "appApi.replace",
       "agent.update",
       "system.update",
-      "extension.install",
+      "serviceRepository.inspect",
+      "serviceRepository.publish",
     ] as const) {
       expect(OPS_KIND_POLICIES[kind].execution).toBe("async");
     }

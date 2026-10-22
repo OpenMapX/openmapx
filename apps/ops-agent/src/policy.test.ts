@@ -451,16 +451,12 @@ describe("operation-specific authority policy", () => {
     const signal = new AbortController().signal;
     await expect(
       claimer.claim(
-        {
-          kind: "extension.repository.inspect",
-          catalogEntryId: "catalog_1",
-          catalogRevisionId: "revision_1",
-        },
+        { kind: "feedProxy.validateAndReload", candidateId: "candidate_1" },
         "a".repeat(64),
         signal,
       ),
     ).resolves.not.toBeNull();
-    expect(claimedKinds).toEqual(["extension.repository.inspect"]);
+    expect(claimedKinds).toEqual(["feedProxy.validateAndReload"]);
   });
 
   it("does not start a trusted read when admission aborts during registry preflight", async () => {
@@ -477,11 +473,7 @@ describe("operation-specific authority policy", () => {
     });
     const controller = new AbortController();
     const result = claimer.claim(
-      {
-        kind: "extension.repository.inspect",
-        catalogEntryId: "catalog_1",
-        catalogRevisionId: "revision_1",
-      },
+      { kind: "feedProxy.validateAndReload", candidateId: "candidate_1" },
       "c".repeat(64),
       controller.signal,
     );
