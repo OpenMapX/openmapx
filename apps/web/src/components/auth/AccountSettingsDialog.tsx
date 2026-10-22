@@ -46,6 +46,7 @@ import { MangroveAccountSection } from "./MangroveAccountSection";
 import { PrivacyDataSection } from "./PrivacyDataSection";
 import { SharedLinksSection } from "./SharedLinksSection";
 import { TimelineConnectionSection } from "./TimelineConnectionSection";
+import { useAccountCredentials } from "./useAccountCredentials";
 
 interface AccountSettingsDialogProps {
   open: boolean;
@@ -72,13 +73,20 @@ export function AccountSettingsDialog({
     type: "success" | "error";
     text: string;
   } | null>(null);
-  const [passkeys, setPasskeys] = useState<
-    { id: string; name?: string | null | undefined; createdAt?: Date | null | undefined }[]
-  >([]);
-  const [linkedAccounts, setLinkedAccounts] = useState<{ id: string; providerId: string }[]>([]);
+  const {
+    passkeys,
+    linkedAccounts,
+    confirmUnlinkProvider,
+    setConfirmUnlinkProvider,
+    passkeysBusy,
+    providersBusy,
+    addPasskey: handleAddPasskey,
+    deletePasskey: handleDeletePasskey,
+    linkProvider: handleLinkProvider,
+    unlinkProvider: handleUnlinkProvider,
+  } = useAccountCredentials(open ? user.id : null, setMessage);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deletePassword, setDeletePassword] = useState("");
-  const [confirmUnlinkProvider, setConfirmUnlinkProvider] = useState<string | null>(null);
   const timelineHeadingRef = useRef<HTMLHeadingElement>(null);
   const sharingHeadingRef = useRef<HTMLHeadingElement>(null);
   const privacyHeadingRef = useRef<HTMLHeadingElement>(null);
@@ -134,11 +142,8 @@ export function AccountSettingsDialog({
     if (open) {
       setName(user.name);
       setMessage(null);
-      setPasskeys([]);
-      setLinkedAccounts([]);
       setConfirmDelete(false);
       setDeletePassword("");
-      setConfirmUnlinkProvider(null);
       setChangingEmail(false);
       setNewEmail("");
       setEmailOtp("");
@@ -168,31 +173,6 @@ export function AccountSettingsDialog({
       .then(setQrDataUrl)
       .catch(() => setQrDataUrl(null));
   }, [totpSetupUri]);
-
-  useEffect(() => {
-    if (!sessionKey) return;
-    let cancelled = false;
-
-    // Load passkeys
-    authClient.passkey.listUserPasskeys().then(({ data }) => {
-      if (!cancelled && data) setPasskeys(data);
-    });
-
-    // Load linked accounts
-    authClient.listAccounts().then(({ data }) => {
-      if (!cancelled && data) {
-        setLinkedAccounts(
-          data.map((a: { id: string; providerId: string }) => ({
-            id: a.id,
-            providerId: a.providerId,
-          })),
-        );
-      }
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [sessionKey]);
 
   const handleUpdateProfile = async () => {
     setSaving(true);
@@ -374,62 +354,6 @@ export function AccountSettingsDialog({
     a.download = "openmapx-backup-codes.txt";
     a.click();
     URL.revokeObjectURL(url);
-  };
-
-  const handleAddPasskey = async () => {
-    setMessage(null);
-    try {
-      const { error } = await authClient.passkey.addPasskey();
-      if (error) {
-        setMessage({
-          type: "error",
-          text: String(error.message ?? t("failedAddPasskey")),
-        });
-        return;
-      }
-      setMessage({ type: "success", text: t("passkeyAdded") });
-      const { data } = await authClient.passkey.listUserPasskeys();
-      if (data) setPasskeys(data);
-    } catch {
-      setMessage({ type: "error", text: t("failedAddPasskey") });
-    }
-  };
-
-  const handleDeletePasskey = async (id: string) => {
-    try {
-      await authClient.passkey.deletePasskey({ id });
-      setPasskeys((prev) => prev.filter((p) => p.id !== id));
-      setMessage({ type: "success", text: t("passkeyRemoved") });
-    } catch {
-      setMessage({ type: "error", text: t("failedRemovePasskey") });
-    }
-  };
-
-  const handleLinkProvider = async (providerId: string, providerName: string) => {
-    try {
-      await authClient.linkSocial({
-        provider: providerId,
-        callbackURL: window.location.origin,
-      });
-    } catch {
-      setMessage({
-        type: "error",
-        text: t("failedLink", { provider: providerName }),
-      });
-    }
-  };
-
-  const handleUnlinkProvider = async (providerId: string, providerName: string) => {
-    try {
-      const account = linkedAccounts.find((a) => a.providerId === providerId);
-      if (!account) return;
-      await authClient.unlinkAccount({ accountId: account.id });
-      setLinkedAccounts((prev) => prev.filter((a) => a.providerId !== providerId));
-      setConfirmUnlinkProvider(null);
-      setMessage({ type: "success", text: t("accountUnlinked", { provider: providerName }) });
-    } catch {
-      setMessage({ type: "error", text: t("failedUnlink", { provider: providerName }) });
-    }
   };
 
   const hasCredential = linkedAccounts.some((a) => a.providerId === "credential");
@@ -1061,6 +985,7 @@ export function AccountSettingsDialog({
                       <Button
                         size="small"
                         variant="outlined"
+                        disabled={providersBusy}
                         onClick={() => setConfirmUnlinkProvider(null)}
                       >
                         {tc("cancel")}
@@ -1069,6 +994,7 @@ export function AccountSettingsDialog({
                         size="small"
                         variant="contained"
                         color="error"
+                        disabled={providersBusy}
                         onClick={() => handleUnlinkProvider(provider.providerId, provider.name)}
                       >
                         {tc("confirm")}
@@ -1078,6 +1004,7 @@ export function AccountSettingsDialog({
                     <Button
                       size="small"
                       color="error"
+                      disabled={providersBusy}
                       onClick={() => setConfirmUnlinkProvider(provider.providerId)}
                     >
                       {t("unlink")}
@@ -1087,6 +1014,7 @@ export function AccountSettingsDialog({
                   <Button
                     size="small"
                     startIcon={<LinkIcon />}
+                    disabled={providersBusy}
                     onClick={() => handleLinkProvider(provider.providerId, provider.name)}
                   >
                     {t("connect")}
@@ -1124,6 +1052,7 @@ export function AccountSettingsDialog({
                   <IconButton
                     edge="end"
                     aria-label={t("removePasskey")}
+                    disabled={passkeysBusy}
                     onClick={() => handleDeletePasskey(pk.id)}
                     size="small"
                   >
@@ -1157,6 +1086,7 @@ export function AccountSettingsDialog({
         <Button
           size="small"
           startIcon={<KeyIcon />}
+          disabled={passkeysBusy}
           onClick={handleAddPasskey}
           sx={{ mt: 1, mb: 3 }}
         >
