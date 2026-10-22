@@ -114,7 +114,7 @@ export async function formatSourceFiles(sourceDirectory, paths) {
   const directory = realpathSync(sourceDirectory);
   if (
     directory !== resolve(sourceDirectory) ||
-    !/^\.superpowers\/(api-sdk|data-manager-sdk|entur-geocoder)\/generation-[^/]+\/generated$/.test(
+    !/^\.superpowers\/(api-sdk|data-manager-sdk|entur-geocoder|mbta)\/generation-[^/]+\/generated$/.test(
       relative(cwd, directory).split(sep).join("/"),
     )
   )
