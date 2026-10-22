@@ -56,7 +56,9 @@
     "forVehicle": "{group} ({vehicle})",
     "spaces": "{count, plural, =1 {1 Platz} other {# Plätze}}",
     "maxStay": "höchstens {duration}",
-    "hours": "gilt {hours}"
+    "hours": "gilt {hours}",
+    "allDay": "rund um die Uhr",
+    "daily": "gilt {from}–{to}"
   },
   "vehicleType": {
     "car": "Pkw",

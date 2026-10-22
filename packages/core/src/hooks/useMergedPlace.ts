@@ -327,12 +327,13 @@ export function useMergedPlace(selectedPlace: Place | null): {
   );
 
   // Keep the computed verdict with the exact raw schedule that won merging.
-  // A matched data source may supply different hours without a computed status;
-  // in that case show the schedule neutrally until its source can evaluate it.
+  // A matched data source's route evaluates its own hours; hours no candidate
+  // evaluated show neutrally.
   const matchingCandidates = [
     ...(isDataSourcePlace ? [selectedPlace, nominatimDetails] : [nominatimDetails, selectedPlace]),
   ];
-  const chosenHours = matchingOpeningHours(place.openingHours, matchingCandidates, now);
+  const hoursCandidates = [...matchingCandidates, matchedDetail];
+  const chosenHours = matchingOpeningHours(place.openingHours, hoursCandidates, now);
   place.openingHoursInfo = chosenHours.info;
   place.openingHoursSource = chosenHours.source;
   const fields: Record<string, readonly Attribution[]> = { ...place.fieldContributors };
@@ -345,7 +346,7 @@ export function useMergedPlace(selectedPlace: Place | null): {
       delete fields[key];
   }
   if (chosenHours.info) {
-    const infoOwner = matchingCandidates.find(
+    const infoOwner = hoursCandidates.find(
       (candidate) =>
         candidate?.openingHours === place.openingHours &&
         candidate?.openingHoursInfo === chosenHours.info,

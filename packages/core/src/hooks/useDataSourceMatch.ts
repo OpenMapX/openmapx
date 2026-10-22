@@ -6,6 +6,7 @@ import { apiQueryRequestOptions, DETAIL_QUERY_POLICY, MAP_QUERY_POLICY } from ".
 import type { DataSourceDetail, DataSourceResult } from "../types/dataSource";
 import type { Place } from "../types/place";
 import { haversineDistance } from "../utils/coordinates";
+import { refetchWhileHoursShown } from "./useDataSources";
 
 /**
  * Mapping from OSM raw category strings to data source IDs.
@@ -127,6 +128,7 @@ export function useDataSourceMatch(place: Place | null): DataSourceDetail | null
       ),
     enabled: sourceId !== null && bestMatch !== null,
     staleTime: 5 * 60 * 1000,
+    refetchInterval: refetchWhileHoursShown,
     gcTime: DETAIL_QUERY_POLICY.gcTime,
   });
   const detail = detailEnvelope?.data;

@@ -1,11 +1,11 @@
-import type { DataSourceResult } from "@openmapx/core";
+import type { DataSourceDetail, DataSourceResult } from "@openmapx/core";
 import type {
   CacheClient,
   IntegrationContext,
   MobilityDataSourceProvider,
 } from "@openmapx/integration-framework";
 import { createMockIntegrationContext } from "@openmapx/integration-framework/testing";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { setup } from "../index.js";
 
 const FRESHNESS = { fetchedAt: "2026-10-04T10:00:00.000Z", hasRealtimeData: false, isStale: false };
@@ -166,5 +166,78 @@ describe("data-source list route", () => {
     const res = reply();
     await route(ctx, "/")({ query: {}, params: {}, body: undefined, headers: {} }, res);
     expect(res.send.mock.calls[0]![0]).toMatchObject({ sources: [{ id: "fuel" }] });
+  });
+});
+
+describe("data-source detail route", () => {
+  const station: DataSourceDetail = {
+    id: "s1",
+    sources: ["src"],
+    name: "Station",
+    coordinates: [8.6247, 47.7034],
+    openingHours: "Mo-Sa 08:00-18:00",
+    sections: [],
+  };
+
+  async function detail(ctx: ReturnType<typeof ctxWith>) {
+    const res = reply();
+    await route(ctx, "/:id/detail/*")(
+      { query: {}, params: { id: "fuel", "*": "s1" }, body: undefined, headers: {} },
+      res,
+    );
+    return res;
+  }
+
+  const sent = (res: ReturnType<typeof reply>) =>
+    (res.send.mock.calls[0]![0] as { data: DataSourceDetail }).data;
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("evaluates the hours at the item's place for each response, never caching the verdict", async () => {
+    // Thursday 22:05 in Schaffhausen.
+    vi.useFakeTimers({ now: new Date("2026-10-22T20:05:00Z"), toFake: ["Date"] });
+    const getDetail = vi.fn(async () => ({
+      data: station,
+      attributions: [],
+      freshness: FRESHNESS,
+    }));
+    const ctx = ctxWith(provider({ getDetail }));
+
+    const first = await detail(ctx);
+    vi.setSystemTime(new Date("2026-10-23T06:30:00Z"));
+    const second = await detail(ctx);
+
+    expect(getDetail).toHaveBeenCalledTimes(1);
+    expect(first.header).toHaveBeenCalledWith("Cache-Control", "no-store");
+    expect(sent(first).openingHoursInfo).toMatchObject({
+      validUntil: "2026-10-22T20:06:00.000Z",
+      status: {
+        isOpen: false,
+        nextChange: { kind: "opens", at: "08:00", day: "tomorrow" },
+      },
+    });
+    expect(sent(second).openingHoursInfo).toMatchObject({
+      validUntil: "2026-10-23T06:31:00.000Z",
+      status: { isOpen: true, nextChange: { kind: "closes", at: "18:00", day: "today" } },
+    });
+  });
+
+  it("lets a detail without hours be cached by the browser", async () => {
+    const { openingHours: _, ...withoutHours } = station;
+    const ctx = ctxWith(
+      provider({
+        getDetail: async () => ({ data: withoutHours, attributions: [], freshness: FRESHNESS }),
+      }),
+    );
+
+    const res = await detail(ctx);
+
+    expect(sent(res).openingHoursInfo).toBeUndefined();
+    expect(res.header).toHaveBeenCalledWith(
+      "Cache-Control",
+      expect.stringMatching(/^public, max-age=\d+$/),
+    );
   });
 });

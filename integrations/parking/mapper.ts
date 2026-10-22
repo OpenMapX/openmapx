@@ -18,6 +18,7 @@ import {
   type Translatable,
   token,
   vocabularyLabels,
+  wallClock,
 } from "@openmapx/integration-framework/strings";
 import { snapshotContributors } from "@openmapx/mobility-core/contributors";
 import type {
@@ -238,13 +239,29 @@ function repeatsSite(area: ParkingArea, site: ParkingSite): boolean {
   );
 }
 
+const DAILY_HOURS = /^(?:Mo-Su )?(\d{2}:\d{2})-(\d{2}:\d{2})$/;
+
+/**
+ * When an area's spaces apply: around the clock, or the same span every day
+ * in the reader's clock format. Other OpenStreetMap hours stay as written.
+ */
+function areaHours(hours: string): I18nToken {
+  const value = hours.trim();
+  if (value === "24/7") return token("area.allDay");
+  const daily = DAILY_HOURS.exec(value);
+  if (!daily) return token("area.hours", { hours: value });
+  const [, from = "", to = ""] = daily;
+  if (from === "00:00" && to === "24:00") return token("area.allDay");
+  return token("area.daily", { from: wallClock(from), to: wallClock(to) });
+}
+
 /** An area's limits: how long a vehicle may stay, and when its restriction holds. */
 function areaLimits(area: ParkingArea): I18nToken[] {
   const limits: I18nToken[] = [];
   if (area.maxStayMin) {
     limits.push(token("area.maxStay", { duration: durationToken(area.maxStayMin) }));
   }
-  if (area.hours) limits.push(token("area.hours", { hours: area.hours }));
+  if (area.hours) limits.push(areaHours(area.hours));
   return limits;
 }
 
