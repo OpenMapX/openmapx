@@ -17,11 +17,14 @@
     "disabledSpaces": "Disabled Spaces",
     "womenSpaces": "Women's Spaces",
     "evCharging": "EV Charging",
-    "dataFreshness": "Data Freshness"
+    "dataFreshness": "Data Freshness",
+    "maxStay": "Max Stay",
+    "reservation": "Reservable"
   },
   "value": {
     "parkingGarage": "Parking Garage",
     "undergroundGarage": "Underground Garage",
+    "undergroundAndMultiStorey": "Underground and Multi-Storey Garage",
     "surfaceLot": "Surface Lot",
     "singleLevel": "Single-Level Car Park",
     "automated": "Automated Car Park",
@@ -50,7 +53,10 @@
     "totalSpaces": "{count} spaces"
   },
   "area": {
-    "forVehicle": "{group} ({vehicle})"
+    "forVehicle": "{group} ({vehicle})",
+    "spaces": "{count, plural, =1 {1 space} other {# spaces}}",
+    "maxStay": "max. {duration}",
+    "hours": "applies {hours}"
   },
   "vehicleType": {
     "car": "Cars",
@@ -59,6 +65,7 @@
     "coach": "Coaches",
     "motorcycle": "Motorcycles",
     "bicycle": "Bicycles",
+    "cargo_bike": "Cargo Bikes",
     "caravan": "Caravans",
     "any": "All Vehicles"
   },
@@ -69,6 +76,9 @@
     "ev_charging": "EV Charging",
     "car_sharing": "Car Sharing",
     "residents": "Residents",
+    "customers": "Customers",
+    "taxi": "Taxis",
+    "delivery": "Deliveries",
     "short_term": "Short-Term",
     "long_term": "Long-Term",
     "hazmat": "Hazardous Goods",

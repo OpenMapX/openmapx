@@ -12,6 +12,7 @@ export type ParkingLayout =
   | "single_level"
   | "multi_storey"
   | "underground"
+  | "underground_and_multi_storey"
   | "surface"
   | "automated"
   | "covered"
@@ -56,6 +57,14 @@ export interface ParkingArea extends ParkingCounts {
   vehicleType: string;
   /** `any` for untyped spaces. */
   userGroup: string;
+  /**
+   * When the area's restriction holds, as an OSM-format opening_hours string:
+   * its spaces are kept for its user group, and its maximum stay applies,
+   * during these hours only.
+   */
+  hours?: string;
+  /** The longest a vehicle may stay in the area, in minutes. */
+  maxStayMin?: number;
 }
 
 /**
@@ -96,6 +105,12 @@ export interface ParkingSite extends ParkingCounts {
   free?: boolean;
   /** Maximum vehicle height in centimetres. */
   heightLimitCm?: number;
+  /** The longest a vehicle may stay at the site, in minutes. */
+  maxStayMin?: number;
+  /** Whether a space can be reserved ahead. */
+  reservation?: boolean;
+  /** What else the site offers, as OpenConditions amenity codes (`toilets`, `shower`). */
+  amenities?: string[];
   areas: ParkingArea[];
   rates: ParkingRate[];
   tariffText?: string;

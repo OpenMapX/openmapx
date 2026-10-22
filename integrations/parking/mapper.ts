@@ -17,6 +17,7 @@ import {
   sharedT,
   type Translatable,
   token,
+  vocabularyLabels,
 } from "@openmapx/integration-framework/strings";
 import { snapshotContributors } from "@openmapx/mobility-core/contributors";
 import type {
@@ -29,7 +30,7 @@ import type {
 } from "@openmapx/mobility-core/parking";
 import strings from "./strings/en.json" with { type: "json" };
 
-type Row = [I18nToken, Translatable];
+type Row = [I18nToken, Translatable | Translatable[]];
 type RateRow = ParkingRate["rows"][number];
 
 /** Every vehicle type and user group the strings label; any other is shown as it is written. */
@@ -48,6 +49,7 @@ const LAYOUT_TOKEN: Partial<Record<NonNullable<ParkingSite["layout"]>, I18nToken
   single_level: token("value.singleLevel"),
   multi_storey: token("value.parkingGarage"),
   underground: token("value.undergroundGarage"),
+  underground_and_multi_storey: token("value.undergroundAndMultiStorey"),
   surface: token("value.surfaceLot"),
   automated: token("value.automated"),
   covered: token("value.covered"),
@@ -230,23 +232,44 @@ function repeatsSite(area: ParkingArea, site: ParkingSite): boolean {
     area.userGroup === "any" &&
     (area.vehicleType === "car" || area.vehicleType === "any") &&
     area.capacity === site.capacity &&
-    area.available === site.available
+    area.available === site.available &&
+    area.hours === undefined &&
+    area.maxStayMin === undefined
   );
 }
 
-/** Areas with a fresh count go to availability; the rest show their capacity, or that they exist. */
+/** An area's limits: how long a vehicle may stay, and when its restriction holds. */
+function areaLimits(area: ParkingArea): I18nToken[] {
+  const limits: I18nToken[] = [];
+  if (area.maxStayMin) {
+    limits.push(token("area.maxStay", { duration: durationToken(area.maxStayMin) }));
+  }
+  if (area.hours) limits.push(token("area.hours", { hours: area.hours }));
+  return limits;
+}
+
+/**
+ * Areas with a fresh count go to availability; the rest show their capacity,
+ * or that they exist. Each is followed by its limits, its capacity then
+ * naming its unit so the count does not run into them.
+ */
 function areaRows(site: ParkingSite): { live: Row[]; facility: Row[] } {
   const live: Row[] = [];
   const facility: Row[] = [];
   for (const area of site.areas) {
     if (repeatsSite(area, site)) continue;
     const label = areaLabel(area);
+    const limits = areaLimits(area);
+    const withLimits = (value: Translatable): Translatable | Translatable[] =>
+      limits.length > 0 ? [value, ...limits] : value;
     if (area.available !== undefined && !area.stale) {
-      live.push([label, countOf(area.available, area.capacity)]);
+      live.push([label, withLimits(countOf(area.available, area.capacity))]);
     } else if (area.capacity !== undefined) {
-      facility.push([label, `${area.capacity}`]);
+      const capacity =
+        limits.length > 0 ? token("area.spaces", { count: area.capacity }) : `${area.capacity}`;
+      facility.push([label, withLimits(capacity)]);
     } else {
-      facility.push([label, token("value.available")]);
+      facility.push([label, withLimits(token("value.available"))]);
     }
   }
   return { live, facility };
@@ -286,9 +309,15 @@ function facilitySection(site: ParkingSite, areaFacility: Row[]): DataSourceDeta
   if (site.heightLimitCm) {
     rows.push([token("row.maxHeight"), `${(site.heightLimitCm / 100).toFixed(2)} m`]);
   }
+  if (site.maxStayMin) rows.push([token("row.maxStay"), durationToken(site.maxStayMin)]);
   rows.push(...areaFacility);
   const audience = site.audience && AUDIENCE_TOKEN[site.audience];
   if (audience) rows.push([sharedT.row.access, audience]);
+  if (site.reservation !== undefined) {
+    rows.push([token("row.reservation"), site.reservation ? sharedT.value.yes : sharedT.value.no]);
+  }
+  const amenities = vocabularyLabels("amenity", site.amenities ?? []);
+  if (amenities.length > 0) rows.push([sharedT.row.amenities, amenities]);
   if (rows.length === 0) return null;
   return { title: token("section.facility"), type: "table", rows, sectionIcon: "info" };
 }

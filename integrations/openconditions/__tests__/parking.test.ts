@@ -637,6 +637,70 @@ describe("recordToParkingSite", () => {
     expect(areas[0]).toMatchObject({ capacity: 5 });
   });
 
+  test("an area carries its hours and maximum stay; one with them replaces one without", () => {
+    const answer = body();
+    const record = recordOf(answer);
+    const components = record.components as Rec[];
+    components[0]!.details = {
+      ...(components[0]!.details as Rec),
+      maxStay: { value: 3, unit: "h" },
+      hours: { osm: "Mo-Fr 08:00-18:00" },
+    };
+    components[1]!.details = {
+      ...(components[1]!.details as Rec),
+      hours: { spec: [{ days: ["SA", "SU"], opens: "10:00", closes: "16:00" }] },
+      maxStay: { value: 2, unit: "fortnight" },
+    };
+    record.components = [
+      ...components,
+      {
+        key: "osm-parking/truck:delivery",
+        kind: "parking_area",
+        details: { kind: "parking_area", v: 1, vehicleType: "truck", userGroup: "delivery" },
+      },
+      {
+        key: "osm-parking/truck:delivery-limited",
+        kind: "parking_area",
+        details: {
+          kind: "parking_area",
+          v: 1,
+          vehicleType: "truck",
+          userGroup: "delivery",
+          maxStay: { value: 30, unit: "min" },
+        },
+      },
+    ];
+    const areas = mapped(answer)!.areas;
+    expect(areas.map((a) => [a.key, a.hours, a.maxStayMin])).toEqual([
+      ["car:disabled", "Mo-Fr 08:00-18:00", 180],
+      ["car:women", "Sa,Su 10:00-16:00", undefined],
+      ["truck:delivery", undefined, 30],
+    ]);
+  });
+
+  test("a site carries its maximum stay, reservation, amenities and the new layout", () => {
+    const answer = body();
+    const record = recordOf(answer);
+    record.details = {
+      ...(record.details as Rec),
+      layout: "underground_and_multi_storey",
+      maxStay: { value: 1, unit: "d" },
+      reservation: true,
+    };
+    record.amenities = ["toilets", "shower", 3];
+    expect(mapped(answer)).toMatchObject({
+      layout: "underground_and_multi_storey",
+      maxStayMin: 1_440,
+      reservation: true,
+      amenities: ["toilets", "shower"],
+    });
+
+    const bare = mapped(body())!;
+    expect(bare).not.toHaveProperty("maxStayMin");
+    expect(bare).not.toHaveProperty("reservation");
+    expect(bare).not.toHaveProperty("amenities");
+  });
+
   test("crowd reports retain the expanded observation capture", () => {
     const answer = body();
     latestOf(answer)[0]!.contributors = [MOBIDATA, "crowd"];
