@@ -208,6 +208,25 @@ describe("projectEventsToRoute", () => {
     expect(
       closesRoad([closure({ validity: { status: "planned", start: "2026-09-12T00:00:00Z" } })]),
     ).toBe(false);
+    // Inside its window, only an active lifecycle and an action in place close the road.
+    for (const status of ["planned", "suspended", "unknown"] as const) {
+      expect(closesRoad([closure({ validity: { status, start: "2026-09-11T00:00:00Z" } })])).toBe(
+        false,
+      );
+    }
+    expect(closesRoad([closure({ actionStatus: "approved" })])).toBe(false);
+    expect(closesRoad([closure({ actionStatus: "implemented" })])).toBe(true);
+  });
+
+  it("adds no delay from an effect whose status keeps it out of force", () => {
+    const at = new Date("2026-09-11T12:00:00Z");
+    const suspended = ev("s", "major", { type: "Point", coordinates: [13.05, 52.00008] }, "works", {
+      validity: { status: "suspended" },
+      effects: [delay(900)],
+    });
+    expect(projectEventsToRoute([suspended], route, 0, { now: at })[0]).not.toHaveProperty(
+      "delaySeconds",
+    );
   });
 
   it("drops incidents off the corridor", () => {

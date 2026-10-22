@@ -9,6 +9,7 @@ import type {
 import {
   closesRoadForCars,
   effectInForceAt,
+  effectStatusInForce,
   haversineDistance,
   isLocalAccessClosure,
 } from "@openmapx/core";
@@ -96,10 +97,13 @@ function isCrowdNonRoutable(event: Pick<RoadConditionEvent, "origin" | "evidence
  * detour around a closure that hasn't started, has ended, or is only active at
  * night. `at` is the chosen departure/arrival instant, or "now" for an
  * immediate trip. The effect's own validity wins over its situation's; an
- * unparseable travel time never suppresses a closure.
+ * unparseable travel time never suppresses a closure whose status puts it in
+ * force. A planned, suspended or unknown lifecycle, or an operator action not
+ * in place, closes nothing at any time.
  */
 function inForceAt(event: RoadConditionEvent, effect: RoadConditionEffect, at: Date): boolean {
-  return Number.isNaN(at.getTime()) || effectInForceAt(event, effect, at);
+  if (Number.isNaN(at.getTime())) return effectStatusInForce(event, effect);
+  return effectInForceAt(event, effect, at);
 }
 
 /** The place an effect closes: its own location when it has one, else its situation's. */

@@ -581,7 +581,7 @@
       "effects": "Auswirkungen",
       "direction": "Richtung",
       "roads": "Betroffene Straßen",
-      "validity": "Aktiv",
+      "validity": "Status",
       "startsAt": "Beginnt am",
       "description": "Details",
       "sourceRecord": "Quelleneintrag",
@@ -701,7 +701,33 @@
       "active": "gilt",
       "scheduled": "ab {date}",
       "inactive": "gilt derzeit nicht",
-      "ended": "beendet"
+      "ended": "beendet",
+      "lifecycle": {
+        "planned": "geplant, gilt noch nicht",
+        "suspended": "ausgesetzt, gilt nicht",
+        "unknown": "Status unbekannt, gilt nicht als in Kraft"
+      },
+      "action": {
+        "requested": "beantragt, nicht umgesetzt",
+        "approved": "genehmigt, noch nicht umgesetzt",
+        "rejected": "abgelehnt, nicht umgesetzt"
+      }
+    },
+    "validityStatus": {
+      "planned": "Geplant",
+      "active": "Aktiv",
+      "suspended": "Ausgesetzt",
+      "ended": "Beendet",
+      "cancelled": "Abgesagt",
+      "unknown": "Status unbekannt"
+    },
+    "endedReason": {
+      "source_ended": "von der Quelle beendet",
+      "withdrawn_from_feed": "aus dem Datenstrom entfernt",
+      "expired": "abgelaufen",
+      "superseded": "ersetzt",
+      "cancelled": "abgesagt",
+      "stale": "nicht mehr bestätigt"
     },
     "compliance": {
       "advisory": "Empfehlung"

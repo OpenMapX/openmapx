@@ -318,13 +318,16 @@ export {
 } from "./resultReference";
 export { buildRideOpenUrl, rideQuoteBody } from "./rideLink";
 export {
+  actionInPlace,
   bindsEveryCar,
   closesRoadForCars,
   effectInForceAt,
+  effectStatusInForce,
   effectValidity,
   isLocalAccessClosure,
   isRestrictionEvidence,
   isVehicleSpecific,
+  lifecycleInForce,
   localizedTextFor,
   readRoadConditionEffects,
   roadConditionEffectSchema,
@@ -334,6 +337,7 @@ export {
   speedCapKph,
   VEHICLE_CLASSES,
   validityHoldsAt,
+  validityWindowHoldsAt,
   vehicleApplicabilitySchema,
 } from "./roadConditionEffects";
 export {

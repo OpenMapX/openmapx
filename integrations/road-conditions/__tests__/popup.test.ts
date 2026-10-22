@@ -302,6 +302,35 @@ describe("road-condition popup effects", () => {
     expect(html).toContain("effect.closure: scope.road · state.scheduled(2026-09-20T22:00:00Z)");
   });
 
+  it("opens the validity row with the declared status, not a fixed 'active'", () => {
+    const row = (validity: RoadConditionEvent["validity"]) => {
+      const html = render([situation({ validity })]).html;
+      const match = html.match(
+        /panel\.validity<\/span><span class="omx-overlay-popup__value">([^<]*)</,
+      );
+      return match?.[1];
+    };
+    expect(row({ status: "planned", start: "2026-09-20T00:00:00Z" })).toBe(
+      "validityStatus.planned · 2026-09-20T00:00:00Z – …",
+    );
+    for (const status of ["active", "suspended", "cancelled", "unknown"] as const) {
+      expect(row({ status })).toBe(`validityStatus.${status}`);
+    }
+    expect(row({ status: "ended", endedReason: "withdrawn_from_feed" })).toBe(
+      "validityStatus.ended (endedReason.withdrawn_from_feed)",
+    );
+    // A reason or status this host does not know degrades to readable text, never a raw key.
+    expect(row({ status: "ended", endedReason: "vanished" })).toBe("validityStatus.ended");
+    expect(row({ status: "paused" as "active" })).toBe("Paused");
+  });
+
+  it("says an effect whose operator action is approved is not yet in place", () => {
+    const { html } = render([
+      situation({ effects: [effect("c", "closure", { actionStatus: "approved" })] }),
+    ]);
+    expect(html).toContain("effect.closure: scope.road · state.action.approved");
+  });
+
   it("flags restriction evidence without widening it to all vehicles", () => {
     const { html } = render([
       situation({

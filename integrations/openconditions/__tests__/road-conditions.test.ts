@@ -788,6 +788,14 @@ describe("situationToRoadConditionEvent", () => {
     expect(rated({ label: "none" }, { status: "paused" }).validity).toEqual({ status: "unknown" });
   });
 
+  it("carries why an ended situation ended", () => {
+    const ended = record({ validity: { status: "ended", endedReason: "withdrawn_from_feed" } });
+    expect(situationToRoadConditionEvent(ended)!.validity).toEqual({
+      status: "ended",
+      endedReason: "withdrawn_from_feed",
+    });
+  });
+
   it("carries a crowd situation's evidence", () => {
     const crowd = record({
       provenance: {

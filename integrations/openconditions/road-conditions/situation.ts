@@ -80,6 +80,7 @@ function validityOf(raw: Rec): RoadConditionValidity {
   return {
     status: oneOf(VALIDITY_STATUSES, raw.status, "unknown"),
     ...Object.fromEntries(keys.filter((k) => raw[k] !== undefined).map((k) => [k, raw[k]])),
+    ...strField("endedReason", raw.endedReason),
   };
 }
 

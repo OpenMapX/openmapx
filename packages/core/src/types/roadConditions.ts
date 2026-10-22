@@ -83,11 +83,14 @@ export interface RoadConditionSchedule {
 
 /**
  * When a situation (or one of its effects) holds: the source's declared
- * lifecycle, its outer bounds, and recurring windows inside them. Whether it
- * holds at an instant is `validityHoldsAt`, never `status` alone.
+ * lifecycle, its outer bounds, and recurring windows inside them. Only an
+ * `active` lifecycle lets the window decide; whether it holds at an instant
+ * is `validityHoldsAt`, never `status` alone.
  */
 export interface RoadConditionValidity {
   status: "planned" | "active" | "suspended" | "ended" | "cancelled" | "unknown";
+  /** Why an ended record ended (`source_ended`, `withdrawn_from_feed`, `expired`, …). */
+  endedReason?: string;
   start?: string;
   end?: string;
   estimatedEnd?: string;

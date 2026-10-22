@@ -49,6 +49,7 @@ export const roadConditionValiditySchema = z.object({
   estimatedEnd: z.string().optional(),
   periods: z.array(roadConditionScheduleSchema).min(1).optional(),
   exceptions: z.array(roadConditionScheduleSchema).min(1).optional(),
+  endedReason: z.string().optional(),
 });
 
 export const VEHICLE_CLASSES = [
@@ -459,18 +460,48 @@ export function scheduleOccursAt(schedule: RoadConditionSchedule, at: Date): boo
 }
 
 /**
- * Whether a validity holds at `at`: not ended or cancelled, inside its
- * declared bounds (each inclusive, unbounded when absent), inside one of its
- * periods when it has any, and inside none of its exceptions.
+ * Whether a validity's window holds at `at`, whatever its lifecycle: inside
+ * its declared bounds (each inclusive, unbounded when absent), inside one of
+ * its periods when it has any, and inside none of its exceptions.
  */
-export function validityHoldsAt(validity: RoadConditionValidity, at: Date): boolean {
-  if (validity.status === "ended" || validity.status === "cancelled") return false;
+export function validityWindowHoldsAt(validity: RoadConditionValidity, at: Date): boolean {
   const t = at.getTime();
   if (validity.start && t < Date.parse(validity.start)) return false;
   if (validity.end && t > Date.parse(validity.end)) return false;
   if (validity.periods && !validity.periods.some((p) => scheduleOccursAt(p, at))) return false;
   return !validity.exceptions?.some((p) => scheduleOccursAt(p, at));
 }
+
+/**
+ * Whether a declared lifecycle leaves the window to decide when a record is
+ * in force: only `active` does. A planned or suspended record is not in force
+ * whatever its window says, an ended or cancelled one no longer is, and an
+ * unknown status establishes nothing. OpenConditions decides the same.
+ */
+export function lifecycleInForce(validity: Pick<RoadConditionValidity, "status">): boolean {
+  return validity.status === "active";
+}
+
+/** Whether a validity holds at `at`: an active lifecycle, inside its window. */
+export function validityHoldsAt(validity: RoadConditionValidity, at: Date): boolean {
+  return lifecycleInForce(validity) && validityWindowHoldsAt(validity, at);
+}
+
+/**
+ * Operator action statuses under which the action is not in place, by DATEX
+ * `OperatorActionStatusEnum`: requested but neither approved nor acted on,
+ * approved but not yet implemented, or rejected. An action whose termination
+ * is requested or under way is still in place.
+ */
+const ACTIONS_NOT_IN_PLACE = new Set(["requested", "approved", "rejected"]);
+
+/** Whether the operator action an effect states, if it states one, is in place. */
+export function actionInPlace(effect: Pick<RoadConditionEffect, "actionStatus">): boolean {
+  return effect.actionStatus === undefined || !ACTIONS_NOT_IN_PLACE.has(effect.actionStatus);
+}
+
+/** Issue codes that leave an effect's time window unknown, so it is never in force. */
+const TEMPORAL_ISSUES = new Set(["invalid_window", "unsupported_schedule", "unsupported_status"]);
 
 /** The validity an effect is evaluated against: its own, else its situation's. */
 export function effectValidity(
@@ -480,13 +511,35 @@ export function effectValidity(
   return effect.validity ?? event.validity;
 }
 
-/** Whether an effect of `event` is in force at `at`. */
+/**
+ * Whether an effect of `event` may be in force at all, whatever the instant:
+ * its lifecycle is active, the operator action it states is in place, and
+ * its window could be read.
+ */
+export function effectStatusInForce(
+  event: Pick<RoadConditionEvent, "validity">,
+  effect: RoadConditionEffect,
+): boolean {
+  return (
+    lifecycleInForce(effectValidity(event, effect)) &&
+    actionInPlace(effect) &&
+    !effect.issues?.some((issue) => TEMPORAL_ISSUES.has(issue.code))
+  );
+}
+
+/**
+ * Whether an effect of `event` is in force at `at`: in force by its status
+ * (`effectStatusInForce`) and inside its window. Only such an effect closes
+ * a road, caps its speed or delays traffic.
+ */
 export function effectInForceAt(
   event: Pick<RoadConditionEvent, "validity">,
   effect: RoadConditionEffect,
   at: Date,
 ): boolean {
-  return validityHoldsAt(effectValidity(event, effect), at);
+  return (
+    effectStatusInForce(event, effect) && validityWindowHoldsAt(effectValidity(event, effect), at)
+  );
 }
 
 /**

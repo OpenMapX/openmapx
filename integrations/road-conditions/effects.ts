@@ -1,4 +1,5 @@
 import {
+  effectInForceAt,
   effectValidity,
   formatDuration,
   isRestrictionEvidence,
@@ -7,7 +8,6 @@ import {
   type RoadConditionEvent,
   VEHICLE_CLASSES,
   type VehicleApplicability,
-  validityHoldsAt,
 } from "@openmapx/core";
 import type { RoadConditionTranslate } from "./types";
 
@@ -198,20 +198,40 @@ function describe(
   }
 }
 
-/** The effect's state at `at`: in force, starting later, outside its windows, or over. */
+/** Operator action statuses under which an action is not in place, each with its own text. */
+const ACTIONS_NOT_IN_PLACE = new Set(["requested", "approved", "rejected"]);
+
+/** Lifecycles that keep an effect out of force inside its window, each with its own text. */
+const LIFECYCLES_NOT_IN_FORCE = new Set(["planned", "suspended", "unknown"]);
+
+/**
+ * The effect's state at `at`: in force, over, an operator action not yet (or
+ * never) in place, starting later, held out of force by its lifecycle, or
+ * outside its windows. It says "in force" exactly when the effect is, so it
+ * agrees with what closes a road or delays traffic.
+ */
 export function effectStateText(
   event: Pick<RoadConditionEvent, "validity">,
   effect: RoadConditionEffect,
   { translate, at, formatDateTime = (value) => value }: EffectFormatOptions,
 ): string {
   const validity = effectValidity(event, effect);
-  if (validityHoldsAt(validity, at)) return translate("state.active");
-  if (validity.status === "ended" || validity.status === "cancelled") {
+  if (effectInForceAt(event, effect, at)) return translate("state.active");
+  if (
+    validity.status === "ended" ||
+    validity.status === "cancelled" ||
+    (validity.end && Date.parse(validity.end) < at.getTime())
+  ) {
     return translate("state.ended");
   }
-  if (validity.end && Date.parse(validity.end) < at.getTime()) return translate("state.ended");
+  if (effect.actionStatus && ACTIONS_NOT_IN_PLACE.has(effect.actionStatus)) {
+    return translate(`state.action.${effect.actionStatus}`);
+  }
   if (validity.start && Date.parse(validity.start) > at.getTime()) {
     return translate("state.scheduled", { date: formatDateTime(validity.start) });
+  }
+  if (LIFECYCLES_NOT_IN_FORCE.has(validity.status)) {
+    return translate(`state.lifecycle.${validity.status}`);
   }
   return translate("state.inactive");
 }

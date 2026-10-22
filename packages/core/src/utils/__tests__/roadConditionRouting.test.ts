@@ -24,6 +24,26 @@ describe("road-condition routing evidence", () => {
     },
   );
 
+  it.each(["planned", "suspended", "unknown"] as const)(
+    "never routes an effect under a %s lifecycle, whatever its evidence",
+    (status) => {
+      const e = { ...event(), validity: { status } };
+      expect(getRoadConditionRoutingDecision(e, closure(e), { evaluatedAt: now })).toMatchObject({
+        eligible: false,
+        reasons: ["lifecycle_not_in_force"],
+      });
+    },
+  );
+
+  it("never routes an operator action that is not in place", () => {
+    const e = event();
+    const approved = { ...closure(e), actionStatus: "approved" };
+    expect(getRoadConditionRoutingDecision(e, approved, { evaluatedAt: now })).toMatchObject({
+      eligible: false,
+      reasons: ["action_not_routable"],
+    });
+  });
+
   it("cannot use a binding of an earlier revision", () => {
     const e = event();
     e.routingEvidence!["fr1/closure"]!.binding_revision = 2;

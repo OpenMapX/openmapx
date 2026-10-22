@@ -1,13 +1,17 @@
 import { describe, expect, it } from "vitest";
 import {
+  actionInPlace,
   bindsEveryCar,
   closesRoadForCars,
   effectInForceAt,
+  effectStatusInForce,
   isLocalAccessClosure,
+  lifecycleInForce,
   localizedTextFor,
   readRoadConditionEffects,
   speedCapKph,
   validityHoldsAt,
+  validityWindowHoldsAt,
 } from "../roadConditionEffects";
 import { effect, event } from "./fixtures/roadCondition";
 
@@ -163,6 +167,56 @@ describe("when an effect is in force", () => {
     const at = new Date("2026-09-11T12:00:00Z");
     expect(effectInForceAt(e, e.effects[0]!, at)).toBe(true);
     expect(effectInForceAt(e, phase, at)).toBe(false);
+  });
+
+  it("is in force only under an active lifecycle, as OpenConditions decides", () => {
+    const at = new Date("2026-09-11T12:00:00Z");
+    for (const status of ["planned", "suspended", "ended", "cancelled", "unknown"] as const) {
+      expect(lifecycleInForce({ status })).toBe(false);
+      expect(validityHoldsAt({ status, start: "2026-09-11T08:00:00Z" }, at)).toBe(false);
+      expect(validityWindowHoldsAt({ status, start: "2026-09-11T08:00:00Z" }, at)).toBe(true);
+      const e = { ...event(), validity: { status } };
+      expect(effectStatusInForce(e, e.effects[0]!)).toBe(false);
+      expect(effectInForceAt(e, e.effects[0]!, at)).toBe(false);
+    }
+    expect(lifecycleInForce({ status: "active" })).toBe(true);
+  });
+
+  it("reads the lifecycle of an effect's own validity before its situation's", () => {
+    const at = new Date("2026-09-11T12:00:00Z");
+    const plannedPhase = effect("p", "closure", { validity: { status: "planned" } });
+    const activePhase = effect("p", "closure", { validity: { status: "active" } });
+    expect(effectInForceAt(event(), plannedPhase, at)).toBe(false);
+    const planned = { ...event(), validity: { status: "planned" as const } };
+    expect(effectInForceAt(planned, activePhase, at)).toBe(true);
+  });
+
+  it("is in force only when the operator action it states is in place", () => {
+    const at = new Date("2026-09-11T12:00:00Z");
+    const e = event();
+    for (const actionStatus of ["requested", "approved", "rejected"]) {
+      const pending = effect("c", "closure", { actionStatus });
+      expect(actionInPlace(pending)).toBe(false);
+      expect(effectInForceAt(e, pending, at)).toBe(false);
+    }
+    for (const actionStatus of [
+      undefined,
+      "being_implemented",
+      "implemented",
+      "termination_requested",
+      "being_terminated",
+    ]) {
+      const placed = effect("c", "closure", actionStatus ? { actionStatus } : {});
+      expect(actionInPlace(placed)).toBe(true);
+      expect(effectInForceAt(e, placed, at)).toBe(true);
+    }
+  });
+
+  it("is never in force when its window could not be read", () => {
+    const unread = effect("c", "closure", {
+      issues: [{ code: "unsupported_schedule", sourcePath: "validity" }],
+    });
+    expect(effectInForceAt(event(), unread, new Date("2026-09-11T12:00:00Z"))).toBe(false);
   });
 });
 

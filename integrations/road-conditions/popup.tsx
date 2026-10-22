@@ -143,6 +143,22 @@ const BINDING_STATUSES = new Set([
   "obsolete",
   "invalid",
 ]);
+const VALIDITY_STATUSES = new Set([
+  "planned",
+  "active",
+  "suspended",
+  "ended",
+  "cancelled",
+  "unknown",
+]);
+const ENDED_REASONS = new Set([
+  "source_ended",
+  "withdrawn_from_feed",
+  "expired",
+  "superseded",
+  "cancelled",
+  "stale",
+]);
 const SCHEDULE_WEEKDAY_CODES = new Set(["MO", "TU", "WE", "TH", "FR", "SA", "SU"]);
 
 function humanizeToken(raw: string): string {
@@ -199,6 +215,24 @@ function formatValidity(
   const t = end ? input.formatDateTime(end) : "";
   if (!f && !t) return "";
   return `${f || "…"} – ${t || "…"}`;
+}
+
+/**
+ * The declared lifecycle a validity row opens with ("Planned", "Active", …),
+ * with why an ended record ended where the reason is known.
+ */
+function validityStatusText(
+  validity: RoadConditionEvent["validity"],
+  translate: RoadConditionTranslate,
+): string {
+  const status = VALIDITY_STATUSES.has(validity.status)
+    ? translate(`validityStatus.${validity.status}`)
+    : humanizeToken(validity.status);
+  const reason =
+    validity.endedReason && ENDED_REASONS.has(validity.endedReason)
+      ? translate(`endedReason.${validity.endedReason}`)
+      : undefined;
+  return reason ? `${status} (${reason})` : status;
 }
 
 function attributionString(raw: unknown): string {
@@ -381,7 +415,11 @@ function formatPopupEntry(
   )
     ? translate(`sev.${String(sourceEntry.severity)}`)
     : undefined;
-  const validity = formatValidity(detailed?.validity, input);
+  const validity = detailed
+    ? [validityStatusText(detailed.validity, translate), formatValidity(detailed.validity, input)]
+        .filter(Boolean)
+        .join(" · ")
+    : "";
   const startsAt =
     sourceEntry.future === true && detailed?.validity.start
       ? input.formatDateTime(detailed.validity.start)

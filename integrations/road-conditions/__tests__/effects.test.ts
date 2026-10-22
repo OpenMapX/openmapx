@@ -204,6 +204,40 @@ describe("effectStateText", () => {
       "from 2026-09-20T00:00:00Z",
     );
   });
+
+  it("says in force only when the effect is, naming the lifecycle that holds it out", () => {
+    const state = (status: "planned" | "suspended" | "unknown" | "active") =>
+      effectStateText(
+        situation({ validity: { status, start: "2026-09-01T00:00:00Z" } }),
+        effect("c", "closure"),
+        options,
+      );
+    expect(state("active")).toBe("in force");
+    expect(state("planned")).toBe("planned, not yet in force");
+    expect(state("suspended")).toBe("suspended, not in force");
+    expect(state("unknown")).toBe("status unknown, not treated as in force");
+  });
+
+  it("says when an operator action is not in place, and nothing more when it is", () => {
+    const state = (actionStatus: string) =>
+      effectStateText(situation(), effect("c", "closure", { actionStatus }), options);
+    expect(state("requested")).toBe("requested, not in place");
+    expect(state("approved")).toBe("approved, not yet in place");
+    expect(state("rejected")).toBe("rejected, not in place");
+    expect(state("being_terminated")).toBe("in force");
+  });
+
+  it("finds every state text in the German catalog too", () => {
+    const german = { ...options, translate: dictionaryTranslate(de) };
+    for (const status of ["planned", "suspended", "unknown"] as const) {
+      const event = situation({ validity: { status } });
+      expect(() => effectStateText(event, effect("c", "closure"), german)).not.toThrow();
+    }
+    for (const actionStatus of ["requested", "approved", "rejected"]) {
+      const pending = effect("c", "closure", { actionStatus });
+      expect(() => effectStateText(situation(), pending, german)).not.toThrow();
+    }
+  });
 });
 
 describe("hasRestrictionEvidence", () => {

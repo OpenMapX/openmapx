@@ -581,7 +581,7 @@
       "effects": "Effects",
       "direction": "Direction",
       "roads": "Roads affected",
-      "validity": "Active",
+      "validity": "Status",
       "startsAt": "Starts at",
       "description": "Details",
       "sourceRecord": "Source record",
@@ -701,7 +701,33 @@
       "active": "in force",
       "scheduled": "from {date}",
       "inactive": "not in force now",
-      "ended": "ended"
+      "ended": "ended",
+      "lifecycle": {
+        "planned": "planned, not yet in force",
+        "suspended": "suspended, not in force",
+        "unknown": "status unknown, not treated as in force"
+      },
+      "action": {
+        "requested": "requested, not in place",
+        "approved": "approved, not yet in place",
+        "rejected": "rejected, not in place"
+      }
+    },
+    "validityStatus": {
+      "planned": "Planned",
+      "active": "Active",
+      "suspended": "Suspended",
+      "ended": "Ended",
+      "cancelled": "Cancelled",
+      "unknown": "Unknown status"
+    },
+    "endedReason": {
+      "source_ended": "ended by the source",
+      "withdrawn_from_feed": "withdrawn from the feed",
+      "expired": "expired",
+      "superseded": "superseded",
+      "cancelled": "cancelled",
+      "stale": "no longer confirmed"
     },
     "compliance": {
       "advisory": "advisory"
