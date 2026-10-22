@@ -1,13 +1,14 @@
-import type { ProtocolAdapter } from "./adapter-types";
+import type { RegisteredProtocolAdapter } from "./adapter-types";
 import { hafasMgateAdapter } from "./hafas-mgate";
-import { otpGraphQlAdapter } from "./otp-graphql";
+import { createOtpGraphQlAdapter } from "./otp-graphql";
 import type { ProtocolType } from "./registry-types";
-
-const adapterMap: Partial<Record<ProtocolType, ProtocolAdapter>> = {
-  hafasMgate: hafasMgateAdapter,
-  otpGraphQl: otpGraphQlAdapter,
-};
-
-export function getAdapter(protocol: ProtocolType): ProtocolAdapter | null {
-  return adapterMap[protocol] ?? null;
+export function getAdapter(
+  protocol: ProtocolType,
+  otp: Parameters<typeof createOtpGraphQlAdapter>[0],
+): RegisteredProtocolAdapter | null {
+  return protocol === "hafasMgate"
+    ? hafasMgateAdapter
+    : protocol === "otpGraphQl"
+      ? createOtpGraphQlAdapter(otp)
+      : null;
 }

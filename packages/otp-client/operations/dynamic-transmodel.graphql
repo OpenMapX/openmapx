@@ -1,0 +1,72 @@
+query DynamicNearby($lat: Float!, $lon: Float!, $radius: Float!, $limit: Int!) {
+  nearest(
+    latitude: $lat
+    longitude: $lon
+    maximumDistance: $radius
+    maximumResults: $limit
+    filterByPlaceTypes: [quay]
+    first: $limit
+  ) {
+    edges {
+      node {
+        place {
+          __typename
+          ... on Quay {
+            id
+            name
+            latitude
+            longitude
+            publicCode
+            stopPlace {
+              id
+            }
+          }
+        }
+      }
+    }
+  }
+}
+query DynamicDepartures($id: String!, $start: DateTime!, $range: Int!, $limit: Int!) {
+  quay(id: $id) {
+    id
+    estimatedCalls(
+      startTime: $start
+      timeRange: $range
+      numberOfDepartures: $limit
+      includeCancelledTrips: true
+    ) {
+      aimedDepartureTime
+      expectedDepartureTime
+      realtime
+      realtimeState
+      cancellation
+      forBoarding
+      destinationDisplay {
+        frontText
+      }
+      serviceJourney {
+        id
+        transportMode
+        publicCode
+        line {
+          id
+          publicCode
+          name
+          transportMode
+        }
+      }
+    }
+  }
+}
+query DynamicSearch($name: String!) {
+  quays(name: $name) {
+    id
+    name
+    latitude
+    longitude
+    publicCode
+    stopPlace {
+      id
+    }
+  }
+}

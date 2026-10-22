@@ -37,6 +37,22 @@
           "cost": "Free.",
           "notes": "No scopes required (public read only). Used solely to raise GitHub's unauthenticated REST limit from 60/hr to 5,000/hr when fetching the public registry."
         }
+      },
+      "digitransitApiKey": {
+        "type": "string",
+        "title": "Digitransit subscription key",
+        "description": "Required for the four Finnish Digitransit OTP providers. Sent only to their reviewed api.digitransit.fi endpoints; catalog credentials are ignored.",
+        "x-openmapx-secret": true,
+        "x-openmapx-setup": {
+          "url": "https://portal-api.digitransit.fi/",
+          "urlLabel": "Register with Digitransit",
+          "steps": [
+            "Register in the Digitransit API portal.",
+            "Subscribe to the required Routing v2 GTFS APIs.",
+            "Copy the subscription key."
+          ],
+          "notes": "One operator key is shared across Finland, HSL, VARELY and Waltti. Limits and Retry-After cooldowns are shared across regions."
+        }
       }
     }
   },
@@ -208,6 +224,186 @@
           {
             "text": "Various (per regional operator)",
             "url": "https://github.com/public-transport/transport-apis"
+          }
+        ]
+      }
+    },
+    {
+      "sourceId": "stadtnavi",
+      "name": "Stadtnavi",
+      "url": "https://www.stadtnavi.de/",
+      "apiHosts": ["api.stadtnavi.de"],
+      "commercialUse": "unknown",
+      "providerCountry": "DE",
+      "providerPrivacyUrl": "https://www.stadtnavi.de/",
+      "endUserExposure": "server-only",
+      "personalData": true,
+      "cookies": false,
+      "dpaAvailable": false,
+      "credentialOwner": "none",
+      "reviewedAt": "2026-10-22",
+      "notes": "Fixed reviewed OTP endpoint. Source data terms and privacy guarantees are not established by the OTP software licence. The linked provider page is a contact/reference, not verified privacy assurance.",
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "data",
+            "subject": "Stadtnavi transit data",
+            "license": {
+              "kind": "unknown"
+            }
+          },
+          {
+            "scope": "service",
+            "subject": "Stadtnavi API",
+            "license": {
+              "kind": "unknown",
+              "url": "https://www.stadtnavi.de/"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "sourceId": "peatus",
+      "name": "Peatus",
+      "url": "https://www.peatus.ee/",
+      "apiHosts": ["api.peatus.ee"],
+      "commercialUse": "unknown",
+      "providerCountry": "EE",
+      "providerPrivacyUrl": "https://www.peatus.ee/",
+      "endUserExposure": "server-only",
+      "personalData": true,
+      "cookies": false,
+      "dpaAvailable": false,
+      "credentialOwner": "none",
+      "reviewedAt": "2026-10-22",
+      "notes": "Fixed reviewed OTP endpoint. Source data terms and privacy guarantees are not established by the OTP software licence. The linked provider page is a contact/reference, not verified privacy assurance.",
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "data",
+            "subject": "Peatus transit data",
+            "license": {
+              "kind": "unknown"
+            }
+          },
+          {
+            "scope": "service",
+            "subject": "Peatus API",
+            "license": {
+              "kind": "unknown",
+              "url": "https://www.peatus.ee/"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "sourceId": "torino",
+      "name": "5T Torino",
+      "url": "https://www.5t.torino.it/",
+      "apiHosts": ["mapi.5t.torino.it"],
+      "commercialUse": "unknown",
+      "providerCountry": "IT",
+      "providerPrivacyUrl": "https://www.5t.torino.it/",
+      "endUserExposure": "server-only",
+      "personalData": true,
+      "cookies": false,
+      "dpaAvailable": false,
+      "credentialOwner": "none",
+      "reviewedAt": "2026-10-22",
+      "notes": "Fixed reviewed OTP endpoint. Source data terms and privacy guarantees are not established by the OTP software licence. The linked provider page is a contact/reference, not verified privacy assurance.",
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "data",
+            "subject": "5T Torino transit data",
+            "license": {
+              "kind": "unknown"
+            }
+          },
+          {
+            "scope": "service",
+            "subject": "5T Torino API",
+            "license": {
+              "kind": "unknown",
+              "url": "https://www.5t.torino.it/"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "sourceId": "trufi",
+      "name": "Trufi Cochabamba",
+      "url": "https://www.trufi-association.org/",
+      "apiHosts": ["otp281.trufi.app"],
+      "commercialUse": "unknown",
+      "providerCountry": "Unknown",
+      "providerPrivacyUrl": "https://www.trufi-association.org/",
+      "endUserExposure": "server-only",
+      "personalData": true,
+      "cookies": false,
+      "dpaAvailable": false,
+      "credentialOwner": "none",
+      "reviewedAt": "2026-10-22",
+      "notes": "Fixed reviewed OTP endpoint. Source data terms and privacy guarantees are not established by the OTP software licence. The linked provider page is a contact/reference, not verified privacy assurance.",
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "data",
+            "subject": "Trufi Cochabamba transit data",
+            "license": {
+              "kind": "unknown"
+            }
+          },
+          {
+            "scope": "service",
+            "subject": "Trufi Cochabamba API",
+            "license": {
+              "kind": "unknown",
+              "url": "https://www.trufi-association.org/"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "sourceId": "digitransit",
+      "name": "Digitransit",
+      "url": "https://digitransit.fi/en/developers/",
+      "apiHosts": ["api.digitransit.fi"],
+      "commercialUse": "unknown",
+      "providerCountry": "FI",
+      "providerPrivacyUrl": "https://digitransit.fi/en/developers/apis/7-terms-of-use",
+      "endUserExposure": "server-only",
+      "personalData": true,
+      "cookies": false,
+      "dpaAvailable": false,
+      "credentialOwner": "instance-operator",
+      "reviewedAt": "2026-10-22",
+      "notes": "Fixed reviewed OTP endpoint. Source data terms and privacy guarantees are not established by the OTP software licence. The linked provider page is a contact/reference, not verified privacy assurance. Digitransit requires registration and acceptance of its terms.",
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "data",
+            "subject": "Digitransit transit data",
+            "license": {
+              "kind": "unknown"
+            }
+          },
+          {
+            "scope": "service",
+            "subject": "Digitransit API",
+            "license": {
+              "kind": "unknown",
+              "url": "https://digitransit.fi/en/developers/"
+            }
           }
         ]
       }

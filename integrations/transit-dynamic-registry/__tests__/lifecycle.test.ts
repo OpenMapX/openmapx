@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 
 const registryMock = vi.hoisted(() => ({
   initialize: vi.fn().mockResolvedValue(undefined),
-  listEntries: vi.fn().mockReturnValue([]),
+  snapshotEntries: vi.fn().mockReturnValue([]),
   releases: [vi.fn(), vi.fn()],
   startRefresh: vi.fn(),
   stopRefresh: vi.fn(),
@@ -15,7 +15,7 @@ vi.mock("../registry.js", () => ({
   registry: registryMock,
   RegistryManager: class {
     initialize = registryMock.initialize;
-    listEntries = registryMock.listEntries;
+    snapshotEntries = registryMock.snapshotEntries;
   },
 }));
 vi.mock("../hafas-mgate.js", () => ({

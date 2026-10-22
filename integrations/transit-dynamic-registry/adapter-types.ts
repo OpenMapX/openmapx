@@ -48,3 +48,7 @@ export interface ProtocolAdapter {
     numItineraries?: number,
   ): Promise<TripPlan | null>;
 }
+
+export type RegisteredProtocolAdapter = {
+  assertAvailable?: (entry: RegistryEntry) => Promise<void>;
+} & Pick<ProtocolAdapter, "getStopsNearby" | "getDepartures" | "searchByName">;

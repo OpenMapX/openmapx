@@ -1,5 +1,5 @@
-import { readFile, writeFile } from "node:fs/promises";
-import { resolve } from "node:path";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { codegen } from "@graphql-codegen/core";
 import * as sdk from "@graphql-codegen/typescript-generic-sdk";
@@ -24,19 +24,27 @@ const scalarTypes = {
   Ratio: "number",
   Reluctance: "number",
   Speed: "number",
+  Coordinates: "number[][]",
+  Date: "string",
+  DateTime: "string",
+  DoubleFunction: "unknown",
+  LocalTime: "string",
+  Time: "string",
 };
 const scalarSchemas = Object.fromEntries(
   Object.entries(scalarTypes).map(([name, type]) => [
     name,
-    name === "OffsetDateTime"
+    ["OffsetDateTime", "DateTime"].includes(name)
       ? "z.iso.datetime({ offset: true })"
       : name === "Long"
         ? "z.number().int().safe()"
-        : type === "number"
-          ? "z.number().finite()"
-          : type === "string"
-            ? "z.string()"
-            : "z.unknown()",
+        : name === "Coordinates"
+          ? "z.array(z.array(z.number().finite()))"
+          : type === "number"
+            ? "z.number().finite()"
+            : type === "string"
+              ? "z.string()"
+              : "z.unknown()",
   ]),
 );
 /** Select complete generated result declarations and their generated enum dependencies.
@@ -74,10 +82,15 @@ export function selectOperationValidators(source, names) {
       .join("\n")
   );
 }
-export async function generateArtifacts({ source, document } = {}) {
+export const families = ["self", "stadtnavi", "peatus", "torino", "digitransit", "trufi"];
+export async function generateArtifacts({ family = "self", source, document } = {}) {
+  if (!families.includes(family)) throw new Error("Unknown OTP schema family");
+  const schemaFile = ["self", "digitransit"].includes(family) ? "gtfs-2.10" : family;
+  const operationFile =
+    family === "self" ? "gtfs" : family === "trufi" ? "dynamic-transmodel" : "dynamic-gtfs";
   const schema = parse(
     source ??
-      (await readFile(resolve(root, "packages/otp-client/schema/gtfs-2.10.graphql"), "utf8")),
+      (await readFile(resolve(root, `packages/otp-client/schema/${schemaFile}.graphql`), "utf8")),
   );
   const parsed = buildASTSchema(schema);
   const errors = validateSchema(parsed);
@@ -85,7 +98,10 @@ export async function generateArtifacts({ source, document } = {}) {
     {
       document: parse(
         document ??
-          (await readFile(resolve(root, "packages/otp-client/operations/gtfs.graphql"), "utf8")),
+          (await readFile(
+            resolve(root, `packages/otp-client/operations/${operationFile}.graphql`),
+            "utf8",
+          )),
       ),
     },
   ];
@@ -107,7 +123,11 @@ export async function generateArtifacts({ source, document } = {}) {
     validationSchemaExportType: "const",
     zodOptionalType: "nullable",
   };
-  const directory = resolve(root, "packages/otp-client/src/generated");
+  const directory = resolve(
+    root,
+    "packages/otp-client/src/generated",
+    family === "self" ? "" : family,
+  );
   const operationNames = documents[0].document.definitions
     .filter((def) => def.kind === "OperationDefinition")
     .map((def) => def.name.value + "Query");
@@ -158,12 +178,16 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   try {
     if (process.argv.slice(2).some((arg) => arg !== "--check"))
       throw new Error("Usage: generate.mjs [--check]");
-    const files = await generateArtifacts();
+    const files = [];
+    for (const family of families) files.push(...(await generateArtifacts({ family })));
     for (const file of files) {
       if (process.argv.includes("--check")) {
         if ((await readFile(file.filename, "utf8").catch(() => "")) !== file.content)
           throw new Error("OTP artifacts stale: run pnpm otp:generate");
-      } else await writeFile(file.filename, file.content);
+      } else {
+        await mkdir(dirname(file.filename), { recursive: true });
+        await writeFile(file.filename, file.content);
+      }
     }
   } catch (error) {
     console.error(error.message);

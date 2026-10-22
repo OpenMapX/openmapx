@@ -35,3 +35,6 @@ export function createOtpClient(options: OtpTransportOptions) {
   };
 }
 export type OtpClient = ReturnType<typeof createOtpClient>;
+
+export * from "./dynamic";
+export type { OtpTransportOptions } from "./transport";

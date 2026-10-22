@@ -13,9 +13,34 @@
       "dataReceived": "Gleiche Anbieterkonfigurations-JSON wie JSDelivr"
     },
     "regional-operators": {
-      "purpose": "Regionale Fahrplanauskunfts-APIs des öffentlichen Verkehrs, automatisch aus dem public-transport/transport-apis-Register erkannt (~85 Anbieter in vielen Ländern). Nur abgefragt, wenn kein handgepflegter Anbieter Ihr Gebiet abdeckt.",
-      "dataSent": "Ihre Reiseanfrage — Start-/Zielkoordinaten und/oder Haltestellen-IDs — wird serverseitig an die API des passenden regionalen Anbieters (HAFAS mgate oder OpenTripPlanner) weitergeleitet. Es werden keine Konto- oder Gerätekennungen übermittelt.",
-      "dataReceived": "Haltestellen, Abfahrten und Reiseverbindungen für die angefragte Fahrt."
+      "purpose": "Regionale Haltestellen- und Abfahrts-APIs aus dem transport-apis-Verzeichnis.",
+      "dataSent": "Koordinaten und Radius, Haltestellennamen oder IDs und Abfahrtszeitfenster; keine Konto- oder Gerätekennung.",
+      "dataReceived": "Haltestellen und Abfahrtstafeln."
+    },
+    "stadtnavi": {
+      "purpose": "Haltestellen suchen und Abfahrtstafeln beim geprüften regionalen OTP-Anbieter abrufen.",
+      "dataSent": "Koordinaten und Radius, Haltestellennamen oder IDs und das Abfahrtszeitfenster; keine Konto- oder Gerätekennung.",
+      "dataReceived": "Haltestellen, planmäßige Abfahrten, gemeldete Echtzeitprognosen und Ausfälle."
+    },
+    "peatus": {
+      "purpose": "Haltestellen suchen und Abfahrtstafeln beim geprüften regionalen OTP-Anbieter abrufen.",
+      "dataSent": "Koordinaten und Radius, Haltestellennamen oder IDs und das Abfahrtszeitfenster; keine Konto- oder Gerätekennung.",
+      "dataReceived": "Haltestellen, planmäßige Abfahrten, gemeldete Echtzeitprognosen und Ausfälle."
+    },
+    "torino": {
+      "purpose": "Haltestellen suchen und Abfahrtstafeln beim geprüften regionalen OTP-Anbieter abrufen.",
+      "dataSent": "Koordinaten und Radius, Haltestellennamen oder IDs und das Abfahrtszeitfenster; keine Konto- oder Gerätekennung.",
+      "dataReceived": "Haltestellen, planmäßige Abfahrten, gemeldete Echtzeitprognosen und Ausfälle."
+    },
+    "trufi": {
+      "purpose": "Haltestellen suchen und Abfahrtstafeln beim geprüften regionalen OTP-Anbieter abrufen.",
+      "dataSent": "Koordinaten und Radius, Haltestellennamen oder IDs und das Abfahrtszeitfenster; keine Konto- oder Gerätekennung.",
+      "dataReceived": "Haltestellen, planmäßige Abfahrten, gemeldete Echtzeitprognosen und Ausfälle."
+    },
+    "digitransit": {
+      "purpose": "Haltestellen suchen und Abfahrtstafeln beim geprüften regionalen OTP-Anbieter abrufen.",
+      "dataSent": "Koordinaten und Radius, Haltestellennamen oder IDs und das Abfahrtszeitfenster; keine Konto- oder Gerätekennung. Digitransit erhält außerdem den Betreiberschlüssel.",
+      "dataReceived": "Haltestellen, planmäßige Abfahrten, gemeldete Echtzeitprognosen und Ausfälle."
     }
   }
 }

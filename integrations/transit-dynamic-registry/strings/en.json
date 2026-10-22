@@ -13,9 +13,34 @@
       "dataReceived": "Same provider config JSON as JSDelivr"
     },
     "regional-operators": {
-      "purpose": "Regional public-transport journey-planning APIs auto-discovered from the public-transport/transport-apis registry (~85 operators across many countries). Queried only when no hand-crafted provider covers your area.",
-      "dataSent": "Your journey query — origin/destination coordinates and/or stop IDs — forwarded server-side to the matched regional operator's API (HAFAS mgate or OpenTripPlanner). No account or device identifier is included.",
-      "dataReceived": "Stops, departures, and journey itineraries for the requested trip."
+      "purpose": "Regional public-transport stop and departure APIs from the transport-apis registry.",
+      "dataSent": "Nearby coordinates and radius, stop names or IDs and departure time window; no account or device identifier.",
+      "dataReceived": "Stops and departure boards."
+    },
+    "stadtnavi": {
+      "purpose": "Find stops and retrieve departure boards from the reviewed regional OTP provider.",
+      "dataSent": "Nearby coordinates and radius, stop names or stop IDs and requested departure time window; no account/device identifier.",
+      "dataReceived": "Stops, scheduled departures, reported realtime estimates and cancellations."
+    },
+    "peatus": {
+      "purpose": "Find stops and retrieve departure boards from the reviewed regional OTP provider.",
+      "dataSent": "Nearby coordinates and radius, stop names or stop IDs and requested departure time window; no account/device identifier.",
+      "dataReceived": "Stops, scheduled departures, reported realtime estimates and cancellations."
+    },
+    "torino": {
+      "purpose": "Find stops and retrieve departure boards from the reviewed regional OTP provider.",
+      "dataSent": "Nearby coordinates and radius, stop names or stop IDs and requested departure time window; no account/device identifier.",
+      "dataReceived": "Stops, scheduled departures, reported realtime estimates and cancellations."
+    },
+    "trufi": {
+      "purpose": "Find stops and retrieve departure boards from the reviewed regional OTP provider.",
+      "dataSent": "Nearby coordinates and radius, stop names or stop IDs and requested departure time window; no account/device identifier.",
+      "dataReceived": "Stops, scheduled departures, reported realtime estimates and cancellations."
+    },
+    "digitransit": {
+      "purpose": "Find stops and retrieve departure boards from the reviewed regional OTP provider.",
+      "dataSent": "Nearby coordinates and radius, stop names or stop IDs and requested departure time window; no account/device identifier. Digitransit also receives the operator subscription key.",
+      "dataReceived": "Stops, scheduled departures, reported realtime estimates and cancellations."
     }
   }
 }

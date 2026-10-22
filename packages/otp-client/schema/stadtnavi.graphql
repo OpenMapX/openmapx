@@ -1,0 +1,1678 @@
+schema {
+  query: QueryType
+}
+
+directive @async on FIELD_DEFINITION
+
+directive @defer(if: Boolean! = true, label: String) on FRAGMENT_SPREAD | INLINE_FRAGMENT
+
+directive @experimental_disableErrorPropagation on QUERY | MUTATION | SUBSCRIPTION
+
+directive @timingData on FIELD_DEFINITION
+
+enum AbsoluteDirection {
+  EAST
+  NORTH
+  NORTHEAST
+  NORTHWEST
+  SOUTH
+  SOUTHEAST
+  SOUTHWEST
+  WEST
+}
+
+input AccessibilityPreferencesInput {
+  wheelchair: WheelchairPreferencesInput
+}
+
+type Agency implements Node {
+  alerts(types: [AgencyAlertType]): [Alert]
+  fareUrl: String
+  gtfsId: String!
+  id: ID!
+  lang: String
+  name: String!
+  phone: String
+  routes: [Route]
+  timezone: String!
+  url: String!
+}
+
+enum AgencyAlertType {
+  AGENCY
+  ROUTES
+  ROUTE_TYPES
+}
+
+type Alert implements Node {
+  agency: Agency @deprecated(reason: "Alert can have multiple affected entities now instead of there being duplicate alerts\nfor different entities. This will return only one of the affected agencies.\nUse entities instead.")
+  alertCause: AlertCauseType
+  alertDescriptionText(language: String): String!
+  alertDescriptionTextTranslations: [TranslatedString!]! @deprecated(reason: "Use `alertDescriptionText` instead. `accept-language` header can be used for translations or the `language` parameter on the `alertDescriptionText` field.")
+  alertEffect: AlertEffectType
+  alertHash: Int
+  alertHeaderText(language: String): String
+  alertHeaderTextTranslations: [TranslatedString!]! @deprecated(reason: "Use `alertHeaderText` instead. `accept-language` header can be used for translations or the `language` parameter on the `alertHeaderText` field.")
+  alertSeverityLevel: AlertSeverityLevelType
+  alertUrl(language: String): String
+  alertUrlTranslations: [TranslatedString!]! @deprecated(reason: "Use `alertUrl` instead. `accept-language` header can be used for translations or the `language` parameter on the `alertUrl` field.")
+  effectiveEndDate: Long
+  effectiveStartDate: Long
+  entities: [AlertEntity]
+  feed: String
+  id: ID!
+  patterns: [Pattern] @deprecated(reason: "This will always return an empty list. Use entities instead.")
+  route: Route @deprecated(reason: "Alert can have multiple affected entities now instead of there being duplicate alerts\nfor different entities. This will return only one of the affected routes.\nUse entities instead.")
+  stop: Stop @deprecated(reason: "Alert can have multiple affected entities now instead of there being duplicate alerts\nfor different entities. This will return only one of the affected stops.\nUse entities instead.")
+  trip: Trip @deprecated(reason: "Alert can have multiple affected entities now instead of there being duplicate alerts\nfor different entities. This will return only one of the affected trips.\nUse entities instead.")
+}
+
+enum AlertCauseType {
+  ACCIDENT
+  CONSTRUCTION
+  DEMONSTRATION
+  HOLIDAY
+  MAINTENANCE
+  MEDICAL_EMERGENCY
+  OTHER_CAUSE
+  POLICE_ACTIVITY
+  STRIKE
+  TECHNICAL_PROBLEM
+  UNKNOWN_CAUSE
+  WEATHER
+}
+
+enum AlertEffectType {
+  ACCESSIBILITY_ISSUE
+  ADDITIONAL_SERVICE
+  DETOUR
+  MODIFIED_SERVICE
+  NO_EFFECT
+  NO_SERVICE
+  OTHER_EFFECT
+  REDUCED_SERVICE
+  SIGNIFICANT_DELAYS
+  STOP_MOVED
+  UNKNOWN_EFFECT
+}
+
+union AlertEntity = Agency | Pattern | Route | RouteType | Stop | StopOnRoute | StopOnTrip | Trip | Unknown
+
+enum AlertSeverityLevelType {
+  INFO
+  SEVERE
+  UNKNOWN_SEVERITY
+  WARNING
+}
+
+input AlightPreferencesInput {
+  slack: Duration = "PT0S"
+}
+
+type ArrivalDepartureTime {
+  arrival: OffsetDateTime
+  departure: OffsetDateTime
+}
+
+input BicycleParkingPreferencesInput {
+  filters: [ParkingFilter!] = []
+  preferred: [ParkingFilter!] = []
+  unpreferredCost: Cost = 300
+}
+
+input BicyclePreferencesInput {
+  boardCost: Cost = 600
+  optimization: CyclingOptimizationInput = {triangle: {flatness: 0.3, safety: 0.4, time: 0.3}}
+  parking: BicycleParkingPreferencesInput
+  reluctance: Reluctance = 2
+  rental: BicycleRentalPreferencesInput
+  speed: Speed = 5
+  walk: BicycleWalkPreferencesInput
+}
+
+input BicycleRentalPreferencesInput {
+  allowedNetworks: [String!]
+  bannedNetworks: [String!] = ["de.stadtnavi.gbfs.stadtrad", "de.stadtnavi.gbfs.gueltstein", "de.stadtnavi.gbfs.alf", "de.stadtnavi.gbfs.bananologen"]
+  destinationBicyclePolicy: DestinationBicyclePolicyInput
+}
+
+input BicycleWalkPreferencesCostInput {
+  mountDismountCost: Cost = 0
+  reluctance: Reluctance = 5
+}
+
+input BicycleWalkPreferencesInput {
+  cost: BicycleWalkPreferencesCostInput
+  mountDismountTime: Duration = "PT0S"
+  speed: Speed = 1.33
+}
+
+type BikePark implements Node & PlaceInterface {
+  bikeParkId: String
+  id: ID!
+  lat: Float
+  lon: Float
+  name(language: String): String!
+  openingHours: OpeningHours
+  realtime: Boolean
+  spacesAvailable: Int
+  tags: [String]
+}
+
+type BikeRentalStation implements Node & PlaceInterface {
+  allowDropoff: Boolean
+  allowDropoffNow: Boolean
+  allowOverloading: Boolean
+  allowPickup: Boolean
+  allowPickupNow: Boolean
+  bikesAvailable: Int
+  capacity: Int
+  id: ID!
+  lat: Float
+  lon: Float
+  name: String!
+  networks: [String]
+  operative: Boolean
+  realtime: Boolean
+  rentalUris: BikeRentalStationUris
+  spacesAvailable: Int
+  state: String @deprecated(reason: "Use operative instead")
+  stationId: String
+}
+
+type BikeRentalStationUris {
+  android: String
+  ios: String
+  web: String
+}
+
+enum BikesAllowed {
+  ALLOWED
+  NOT_ALLOWED
+  NO_INFORMATION
+}
+
+input BoardPreferencesInput {
+  slack: Duration = "PT0S"
+  waitReluctance: Reluctance = 1.2
+}
+
+type BookingInfo {
+  contactInfo: ContactInfo
+  dropOffMessage: String
+  earliestBookingTime: BookingTime
+  latestBookingTime: BookingTime
+  maximumBookingNotice: Duration
+  maximumBookingNoticeSeconds: Long @deprecated(reason: "Use `maximumBookingNotice`")
+  message: String
+  minimumBookingNotice: Duration
+  minimumBookingNoticeSeconds: Long @deprecated(reason: "Use `minimumBookingNotice`")
+  pickupMessage: String
+}
+
+type BookingTime {
+  daysPrior: Int
+  time: String
+}
+
+type CallRealTime {
+  arrival: EstimatedTime
+  departure: EstimatedTime
+}
+
+type CallSchedule {
+  time: CallScheduledTime
+}
+
+union CallScheduledTime = ArrivalDepartureTime | TimeWindow
+
+union CallStopLocation = Location | LocationGroup | Stop
+
+input CanceledTripsFilterInput {
+  exclude: [CanceledTripsFilterSelectInput!]
+  include: [CanceledTripsFilterSelectInput!]
+}
+
+input CanceledTripsFilterSelectInput {
+  modes: [TransitMode!]
+}
+
+type CarPark implements Node & PlaceInterface {
+  carParkId: String
+  id: ID!
+  lat: Float
+  lon: Float
+  maxCapacity: Int
+  name(language: String): String!
+  openingHours: OpeningHours
+  realtime: Boolean
+  spacesAvailable: Int
+  tags: [String]
+}
+
+input CarParkingPreferencesInput {
+  filters: [ParkingFilter!] = []
+  preferred: [ParkingFilter!] = []
+  unpreferredCost: Cost = 300
+}
+
+input CarPreferencesInput {
+  boardCost: Cost = 600
+  parking: CarParkingPreferencesInput
+  reluctance: Reluctance = 2
+  rental: CarRentalPreferencesInput
+}
+
+input CarRentalPreferencesInput {
+  allowedNetworks: [String!]
+  bannedNetworks: [String!] = []
+  rentalDuration: Duration
+}
+
+type Cluster implements Node {
+  gtfsId: String! @deprecated(reason: "Not implemented")
+  id: ID! @deprecated(reason: "Not implemented")
+  lat: Float! @deprecated(reason: "Not implemented")
+  lon: Float! @deprecated(reason: "Not implemented")
+  name: String! @deprecated(reason: "Not implemented")
+  stops: [Stop!] @deprecated(reason: "Not implemented")
+}
+
+type ContactInfo {
+  additionalDetails: String
+  bookingUrl: String
+  contactPerson: String
+  eMail: String
+  faxNumber: String
+  infoUrl: String
+  phoneNumber: String
+}
+
+type Coordinate {
+  latitude: CoordinateValue!
+  longitude: CoordinateValue!
+}
+
+scalar CoordinateValue
+
+type Coordinates {
+  lat: Float
+  lon: Float
+}
+
+scalar Cost
+
+type Currency {
+  code: String!
+  digits: Int!
+}
+
+input CyclingOptimizationInput {
+  triangle: TriangleCyclingFactorsInput
+  type: CyclingOptimizationType
+}
+
+enum CyclingOptimizationType {
+  FLAT_STREETS
+  SAFEST_STREETS
+  SAFE_STREETS
+  SHORTEST_DURATION
+}
+
+type DefaultFareProduct implements FareProduct {
+  id: String!
+  medium: FareMedium
+  name: String!
+  price: Money!
+  riderCategory: RiderCategory
+}
+
+type DepartureRow implements Node & PlaceInterface {
+  id: ID!
+  lat: Float
+  lon: Float
+  pattern: Pattern
+  stop: Stop
+  stoptimes(numberOfDepartures: Int = 1, omitCanceled: Boolean = true, omitNonPickups: Boolean = false, startTime: Long = 0, timeRange: Int = 86400): [Stoptime]
+}
+
+type DependentFareProduct implements FareProduct {
+  dependencies(filter: DependentFareProductFilter = ALL): [FareProduct!]!
+  id: String!
+  medium: FareMedium
+  name: String!
+  price: Money!
+  riderCategory: RiderCategory
+}
+
+enum DependentFareProductFilter {
+  ALL
+  MATCH_CATEGORY_AND_MEDIUM
+}
+
+input DestinationBicyclePolicyInput {
+  allowKeeping: Boolean = true
+  keepingCost: Cost = 180
+}
+
+input DestinationScooterPolicyInput {
+  allowKeeping: Boolean = false
+  keepingCost: Cost = 0
+}
+
+scalar Duration
+
+type ElevatorUse {
+  from: Level
+  to: Level
+  verticalDirection: VerticalDirection!
+}
+
+type Emissions {
+  co2: Grams
+}
+
+type Entrance {
+  entranceId: String!
+  name: String
+  publicCode: String
+  wheelchairAccessible: WheelchairBoarding
+}
+
+type EscalatorUse {
+  from: Level
+  to: Level
+  verticalDirection: VerticalDirection!
+}
+
+type EstimatedTime {
+  delay: Duration!
+  time: OffsetDateTime!
+}
+
+type FareMedium {
+  id: String!
+  name: String
+}
+
+interface FareProduct {
+  id: String!
+  medium: FareMedium
+  name: String!
+  riderCategory: RiderCategory
+}
+
+type FareProductUse {
+  id: String!
+  product: FareProduct
+}
+
+type Feed {
+  agencies: [Agency]
+  alerts(types: [FeedAlertType!]): [Alert]
+  feedId: String!
+  publisher: FeedPublisher
+}
+
+enum FeedAlertType {
+  AGENCIES
+  ROUTE_TYPES
+}
+
+type FeedPublisher {
+  name: String!
+  url: String!
+}
+
+enum FilterPlaceType {
+  BICYCLE_RENT @deprecated(reason: "Use VEHICLE_RENT instead as it's clearer that it also returns rental scooters, cars...")
+  BIKE_PARK
+  CAR_PARK
+  DEPARTURE_ROW
+  STATION
+  STOP
+  VEHICLE_RENT
+}
+
+input FlexRequest {
+  bookingTime: OffsetDateTime
+}
+
+enum FormFactor {
+  BICYCLE
+  CAR
+  CARGO_BICYCLE
+  MOPED
+  OTHER
+  SCOOTER
+  SCOOTER_SEATED
+  SCOOTER_STANDING
+}
+
+scalar GeoJson
+
+type Geometry {
+  length: Int
+  points: Polyline
+}
+
+scalar Grams
+
+input InputBanned {
+  agencies: String
+  routes: String
+  trips: String
+}
+
+input InputCoordinates {
+  address: String
+  lat: Float!
+  locationSlack: Int
+  lon: Float!
+}
+
+enum InputField {
+  DATE_TIME
+  FROM
+  TO
+  VIA
+}
+
+input InputFilters {
+  bikeParks: [String]
+  bikeRentalStations: [String]
+  carParks: [String]
+  routes: [String]
+  stations: [String]
+  stops: [String]
+}
+
+input InputModeWeight {
+  AIRPLANE: Float
+  BUS: Float
+  CABLE_CAR: Float
+  CARPOOL: Float
+  COACH: Float
+  FERRY: Float
+  FUNICULAR: Float
+  GONDOLA: Float
+  MONORAIL: Float
+  RAIL: Float
+  SUBWAY: Float
+  TAXI: Float
+  TRAM: Float
+  TROLLEYBUS: Float
+}
+
+input InputPreferred {
+  agencies: String
+  otherThanPreferredRoutesPenalty: Int
+  routes: String
+}
+
+input InputTriangle {
+  safetyFactor: Float
+  slopeFactor: Float
+  timeFactor: Float
+}
+
+input InputUnpreferred {
+  agencies: String
+  routes: String
+  unpreferredCost: String
+}
+
+type Itinerary {
+  accessibilityScore: Float
+  arrivedAtDestinationWithRentedBicycle: Boolean
+  duration: Long
+  elevationGained: Float
+  elevationLost: Float
+  emissionsPerPerson: Emissions
+  end: OffsetDateTime
+  endTime: Long @deprecated(reason: "Use `end` instead which includes timezone information.")
+  fares: [fare] @deprecated(reason: "Use the leg's `fareProducts`.")
+  generalizedCost: Int
+  legs: [Leg]!
+  numberOfTransfers: Int!
+  start: OffsetDateTime
+  startTime: Long @deprecated(reason: "Use `start` instead which includes timezone information.")
+  systemNotices: [SystemNotice]!
+  waitingTime: Long
+  walkDistance: Float
+  walkTime: Long
+}
+
+enum ItineraryFilterDebugProfile {
+  LIMIT_TO_NUMBER_OF_ITINERARIES
+  LIMIT_TO_SEARCH_WINDOW
+  LIST_ALL
+  OFF
+}
+
+type Leg {
+  accessibilityScore: Float
+  agency: Agency
+  alerts: [Alert]
+  arrivalDelay: Int @deprecated(reason: "Use `start.estimated.delay` instead.")
+  departureDelay: Int @deprecated(reason: "Use `end.estimated.delay` instead.")
+  distance: Float
+  dropOffBookingInfo: BookingInfo
+  dropoffType: PickupDropoffType
+  duration: Float
+  end: LegTime!
+  endTime: Long @deprecated(reason: "Use `end.estimated.time` instead which contains timezone information.")
+  fareProducts: [FareProductUse]
+  from: Place!
+  generalizedCost: Int
+  headsign: String
+  id: String
+  interlineWithPreviousLeg: Boolean
+  intermediatePlace: Boolean @deprecated(reason: "Not implemented. Use `viaLocationType` from from/to fields instead.")
+  intermediatePlaces: [Place] @deprecated(reason: "Use `leg.stopCalls` instead")
+  intermediateStops(include: [StopType!]): [Stop] @deprecated(reason: "Use `leg.stopCalls` instead")
+  legGeometry: Geometry
+  mode: Mode
+  nextLegs(destinationModesWithParentStation: [TransitMode!], numberOfLegs: Int!, originModesWithParentStation: [TransitMode!]): [Leg!]
+  pickupBookingInfo: BookingInfo
+  pickupType: PickupDropoffType
+  previousLegs(destinationModesWithParentStation: [TransitMode!], numberOfLegs: Int!, originModesWithParentStation: [TransitMode!]): [Leg!]
+  realTime: Boolean
+  realtimeState: RealtimeState
+  rentedBike: Boolean
+  rideHailingEstimate: RideHailingEstimate
+  route: Route
+  serviceDate: String
+  start: LegTime!
+  startTime: Long @deprecated(reason: "Use `start.estimated.time` instead which contains timezone information.")
+  steps: [step]
+  stopCalls: [StopCall!]!
+  to: Place!
+  transitLeg: Boolean
+  trip: Trip
+  walkingBike: Boolean
+}
+
+type LegTime {
+  estimated: RealTimeEstimate
+  scheduledTime: OffsetDateTime!
+}
+
+type Level {
+  level: Float!
+  name: String!
+}
+
+scalar LocalDate
+
+input LocalDateRangeInput {
+  end: LocalDate
+  start: LocalDate
+}
+
+type LocalTimeSpan {
+  from: Int!
+  to: Int!
+}
+
+type LocalTimeSpanDate {
+  date: String!
+  timeSpans: [LocalTimeSpan]
+}
+
+scalar Locale
+
+type Location {
+  geometry: StopGeometries!
+  gtfsId: String!
+  name: String
+}
+
+type LocationGroup {
+  gtfsId: String!
+  members: [Stop!]!
+  name: String
+}
+
+enum LocationType {
+  ENTRANCE
+  STATION
+  STOP
+}
+
+scalar Long
+
+enum Mode {
+  AIRPLANE
+  BICYCLE
+  BUS
+  CABLE_CAR
+  CAR
+  CARPOOL
+  COACH
+  FERRY
+  FLEX
+  FLEXIBLE @deprecated(reason: "Use FLEX instead")
+  FUNICULAR
+  GONDOLA
+  LEG_SWITCH @deprecated
+  MONORAIL
+  RAIL
+  SCOOTER
+  SUBWAY
+  TAXI
+  TRAM
+  TRANSIT
+  TROLLEYBUS
+  WALK
+}
+
+type Money {
+  amount: Float!
+  currency: Currency!
+}
+
+interface Node {
+  id: ID!
+}
+
+enum OccupancyStatus {
+  CRUSHED_STANDING_ROOM_ONLY
+  EMPTY
+  FEW_SEATS_AVAILABLE
+  FULL
+  MANY_SEATS_AVAILABLE
+  NOT_ACCEPTING_PASSENGERS
+  NO_DATA_AVAILABLE
+  STANDING_ROOM_ONLY
+}
+
+scalar OffsetDateTime
+
+type OpeningHours {
+  dates(dates: [String!]!): [LocalTimeSpanDate]
+  osm: String
+}
+
+enum OptimizeType {
+  FLAT
+  GREENWAYS
+  QUICK
+  SAFE
+  TRIANGLE
+}
+
+type PageInfo {
+  endCursor: String
+  hasNextPage: Boolean!
+  hasPreviousPage: Boolean!
+  startCursor: String
+}
+
+input ParkingFilter {
+  not: [ParkingFilterOperation!]
+  select: [ParkingFilterOperation!]
+}
+
+input ParkingFilterOperation {
+  tags: [String]
+}
+
+type Pattern implements Node {
+  alerts(types: [PatternAlertType]): [Alert]
+  code: String!
+  directionId: Int
+  geometry: [Coordinates]
+  headsign: String
+  id: ID!
+  name: String
+  originalTripPattern: Pattern
+  patternGeometry: Geometry
+  route: Route!
+  semanticHash: String
+  stops: [Stop!]
+  trips: [Trip!]
+  tripsForDate(serviceDate: String): [Trip!]
+  vehiclePositions: [VehiclePosition!]
+}
+
+enum PatternAlertType {
+  AGENCY
+  PATTERN
+  ROUTE
+  ROUTE_TYPE
+  STOPS_ON_PATTERN
+  STOPS_ON_TRIPS
+  TRIPS
+}
+
+enum PickupDropoffType {
+  CALL_AGENCY
+  COORDINATE_WITH_DRIVER
+  NONE
+  SCHEDULED
+}
+
+type Place {
+  arrival: LegTime
+  arrivalTime: Long! @deprecated(reason: "Use `arrival` which includes timezone information.")
+  bikePark: BikePark @deprecated(reason: "bikePark is deprecated. Use vehicleParking instead.")
+  bikeRentalStation: BikeRentalStation @deprecated(reason: "Use vehicleRentalStation and rentalVehicle instead")
+  carPark: CarPark @deprecated(reason: "carPark is deprecated. Use vehicleParking instead.")
+  departure: LegTime
+  departureTime: Long! @deprecated(reason: "Use `departure` which includes timezone information.")
+  lat: Float!
+  lon: Float!
+  name: String
+  rentalVehicle: RentalVehicle
+  stop: Stop
+  stopPosition: StopPosition
+  vehicleParking: VehicleParking
+  vehicleRentalStation: VehicleRentalStation
+  vertexType: VertexType @deprecated(reason: "Unmaintained. Use `stop`, `rentalVehicle`, `vehicleParking` or `vehicleRentalStation` to tell which type it is.")
+  viaLocationType: ViaLocationType
+}
+
+interface PlaceInterface {
+  id: ID!
+  lat: Float
+  lon: Float
+}
+
+type Plan {
+  date: Long
+  debugOutput: debugOutput!
+  from: Place!
+  itineraries: [Itinerary]!
+  messageEnums: [String]!
+  messageStrings: [String]!
+  nextDateTime: Long @deprecated(reason: "Use nextPageCursor instead")
+  nextPageCursor: String
+  prevDateTime: Long @deprecated(reason: "Use previousPageCursor instead")
+  previousPageCursor: String
+  routingErrors: [RoutingError!]!
+  searchWindowUsed: Long @deprecated(reason: "This is not needed for debugging, and is misleading if the window is cropped.")
+  to: Place!
+}
+
+enum PlanAccessMode {
+  BICYCLE
+  BICYCLE_PARKING
+  BICYCLE_RENTAL
+  CAR
+  CAR_DROP_OFF
+  CAR_PARKING
+  CAR_RENTAL
+  FLEX
+  SCOOTER_RENTAL
+  WALK
+}
+
+type PlanConnection {
+  edges: [PlanEdge]
+  pageInfo: PlanPageInfo!
+  routingErrors: [RoutingError!]!
+  searchDateTime: OffsetDateTime
+}
+
+input PlanCoordinateInput {
+  latitude: CoordinateValue!
+  longitude: CoordinateValue!
+}
+
+input PlanDateTimeInput {
+  earliestDeparture: OffsetDateTime
+  latestArrival: OffsetDateTime
+}
+
+enum PlanDirectMode {
+  BICYCLE
+  BICYCLE_PARKING
+  BICYCLE_RENTAL
+  CAR
+  CAR_PARKING
+  CAR_RENTAL
+  FLEX
+  SCOOTER_RENTAL
+  WALK
+}
+
+type PlanEdge {
+  cursor: String!
+  node: Itinerary!
+}
+
+enum PlanEgressMode {
+  BICYCLE
+  BICYCLE_RENTAL
+  CAR
+  CAR_PICKUP
+  CAR_RENTAL
+  FLEX
+  SCOOTER_RENTAL
+  WALK
+}
+
+input PlanItineraryFilterInput {
+  groupSimilarityKeepOne: Ratio = 0.85
+  groupSimilarityKeepThree: Ratio = 0.68
+  groupedOtherThanSameLegsMaxCostMultiplier: Float = 2
+  itineraryFilterDebugProfile: ItineraryFilterDebugProfile = OFF
+}
+
+input PlanLabeledLocationInput {
+  label: String
+  location: PlanLocationInput!
+}
+
+input PlanLocationInput {
+  coordinate: PlanCoordinateInput
+  stopLocation: PlanStopLocationInput
+}
+
+input PlanModesInput {
+  direct: [PlanDirectMode!] = [WALK]
+  directOnly: Boolean = false
+  transit: PlanTransitModesInput
+  transitOnly: Boolean = false
+}
+
+type PlanPageInfo {
+  endCursor: String
+  hasNextPage: Boolean!
+  hasPreviousPage: Boolean!
+  searchWindowUsed: Duration
+  startCursor: String
+}
+
+input PlanPassThroughViaLocationInput {
+  label: String
+  stopLocationIds: [String!]!
+}
+
+input PlanPreferencesInput {
+  accessibility: AccessibilityPreferencesInput
+  street: PlanStreetPreferencesInput
+  transit: TransitPreferencesInput
+}
+
+input PlanStopLocationInput {
+  stopLocationId: String!
+}
+
+input PlanStreetPreferencesInput {
+  bicycle: BicyclePreferencesInput
+  car: CarPreferencesInput
+  scooter: ScooterPreferencesInput
+  walk: WalkPreferencesInput
+}
+
+enum PlanTransferMode {
+  BICYCLE
+  CAR
+  WALK
+}
+
+input PlanTransitModePreferenceInput {
+  cost: TransitModePreferenceCostInput
+  mode: TransitMode!
+}
+
+input PlanTransitModesInput {
+  access: [PlanAccessMode!] = [WALK]
+  egress: [PlanEgressMode!] = [WALK]
+  transfer: [PlanTransferMode!] = [WALK]
+  transit: [PlanTransitModePreferenceInput!] = [{mode: AIRPLANE}, {mode: BUS}, {mode: CABLE_CAR}, {mode: CARPOOL}, {mode: COACH}, {mode: FERRY}, {mode: FUNICULAR}, {mode: GONDOLA}, {mode: MONORAIL}, {mode: RAIL}, {mode: SNOW_AND_ICE}, {mode: SUBWAY}, {mode: TAXI}, {mode: TRAM}, {mode: TROLLEYBUS}]
+}
+
+input PlanViaLocationInput {
+  passThrough: PlanPassThroughViaLocationInput
+  visit: PlanVisitViaLocationInput
+}
+
+input PlanVisitViaLocationInput {
+  coordinate: PlanCoordinateInput
+  label: String
+  minimumWaitTime: Duration = "PT0S"
+  stopLocationIds: [String!]
+}
+
+scalar Polyline
+
+type PositionAtStop {
+  position: Int
+}
+
+type PositionBetweenStops {
+  nextPosition: Int
+  previousPosition: Int
+}
+
+enum PropulsionType {
+  COMBUSTION
+  COMBUSTION_DIESEL
+  ELECTRIC
+  ELECTRIC_ASSIST
+  HUMAN
+  HYBRID
+  HYDROGEN_FUEL_CELL
+  PLUG_IN_HYBRID
+}
+
+enum Qualifier {
+  ACCESS
+  DIRECT
+  DROPOFF
+  EGRESS
+  HAIL
+  HAVE @deprecated(reason: "Currently not used")
+  KEEP @deprecated(reason: "Currently not used")
+  PARK
+  PICKUP
+  RENT
+}
+
+type QueryType {
+  agencies: [Agency]
+  agency(id: String!): Agency
+  alerts(cause: [AlertCauseType!], effect: [AlertEffectType!], feeds: [String!], route: [String!], severityLevel: [AlertSeverityLevelType!], stop: [String!]): [Alert]
+  bikePark(id: String!): BikePark @deprecated(reason: "bikePark is deprecated. Use vehicleParking instead.")
+  bikeParks: [BikePark] @deprecated(reason: "bikeParks is deprecated. Use vehicleParkings instead.")
+  bikeRentalStation(id: String!): BikeRentalStation @deprecated(reason: "Use rentalVehicle or vehicleRentalStation instead")
+  bikeRentalStations(ids: [String]): [BikeRentalStation] @deprecated(reason: "Use rentalVehicles or vehicleRentalStations instead")
+  canceledTrips(after: String, before: String, filters: [CanceledTripsFilterInput!], first: Int, last: Int): TripOnServiceDateConnection
+  cancelledTripTimes(feeds: [String], maxArrivalTime: Int, maxDate: String, maxDepartureTime: Int, minArrivalTime: Int, minDate: String, minDepartureTime: Int, patterns: [String], routes: [String], trips: [String]): [Stoptime] @deprecated(reason: "`cancelledTripTimes` is not implemented. Use `canceledTrips` instead.")
+  carPark(id: String!): CarPark @deprecated(reason: "carPark is deprecated. Use vehicleParking instead.")
+  carParks(ids: [String]): [CarPark] @deprecated(reason: "carParks is deprecated. Use vehicleParkings instead.")
+  cluster(id: String!): Cluster @deprecated(reason: "Not implemented")
+  clusters: [Cluster] @deprecated(reason: "Not implemented")
+  departureRow(id: String!): DepartureRow
+  feeds: [Feed]
+  fuzzyTrip(date: String!, direction: Int = -1, route: String!, time: Int!): Trip
+  leg(id: String!): Leg
+  nearest(after: String, before: String, filterByModes: [Mode], filterByNetwork: [String!], filterByPlaceTypes: [FilterPlaceType], first: Int, last: Int, lat: Float!, lon: Float!, maxDistance: Int = 2000, maxResults: Int = 20): placeAtDistanceConnection
+  node(id: ID!): Node
+  pattern(id: String!): Pattern
+  patterns: [Pattern]
+  plan(alightSlack: Int, allowKeepingRentedBicycleAtDestination: Boolean, allowedTicketTypes: [String], allowedVehicleRentalNetworks: [String], arriveBy: Boolean, banned: InputBanned, bannedVehicleRentalNetworks: [String], bikeBoardCost: Int, bikeReluctance: Float, bikeSpeed: Float, bikeSwitchCost: Int, bikeSwitchTime: Int, bikeWalkingReluctance: Float, boardSlack: Int, carReluctance: Float, date: String, debugItineraryFilter: Boolean, from: InputCoordinates, fromPlace: String, ignoreRealtimeUpdates: Boolean, keepingRentedBicycleAtDestinationCost: Int, locale: String, maxTransfers: Int, minTransferTime: Int, modeWeight: InputModeWeight, nonpreferredTransferPenalty: Int, numItineraries: Int = 3, omitCanceled: Boolean = true, optimize: OptimizeType, pageCursor: String, parking: VehicleParkingInput, searchWindow: Long, startTransitStopId: String, time: String, to: InputCoordinates, toPlace: String, transferPenalty: Int, transportModes: [TransportMode], triangle: InputTriangle, unpreferred: InputUnpreferred, via: [PlanViaLocationInput!], waitReluctance: Float, walkBoardCost: Int, walkReluctance: Float, walkSafetyFactor: Float, walkSpeed: Float, wheelchair: Boolean): Plan @deprecated(reason: "Use `planConnection` instead.")
+  planConnection(after: String, before: String, dateTime: PlanDateTimeInput, destination: PlanLabeledLocationInput!, first: Int = 5, flex: FlexRequest, itineraryFilter: PlanItineraryFilterInput, last: Int, locale: Locale, modes: PlanModesInput, origin: PlanLabeledLocationInput!, preferences: PlanPreferencesInput, searchWindow: Duration, via: [PlanViaLocationInput!]): PlanConnection
+  rentalVehicle(id: String!): RentalVehicle
+  rentalVehicles(formFactors: [FormFactor], ids: [String]): [RentalVehicle]
+  route(id: String!): Route
+  routes(feeds: [String], name: String, serviceDates: LocalDateRangeInput, transportModes: [Mode]): [Route]
+  serviceTimeRange: serviceTimeRange
+  station(id: String!): Stop
+  stations(ids: [String], name: String): [Stop]
+  stop(id: String!): Stop
+  stops(ids: [String], name: String): [Stop]
+  stopsByBbox(feeds: [String!], maxLat: Float!, maxLon: Float!, minLat: Float!, minLon: Float!): [Stop]
+  stopsByRadius(after: String, before: String, feeds: [String!], first: Int, last: Int, lat: Float!, lon: Float!, radius: Int!): stopAtDistanceConnection
+  ticketTypes: [TicketType]
+  trip(id: String!): Trip
+  trips(feeds: [String]): [Trip]
+  vehicleParking(id: String!): VehicleParking
+  vehicleParkings(ids: [String]): [VehicleParking]
+  vehicleRentalStation(id: String!): VehicleRentalStation
+  vehicleRentalStations(ids: [String]): [VehicleRentalStation]
+  vehicleRentalsByBbox(maximumLatitude: CoordinateValue!, maximumLongitude: CoordinateValue!, minimumLatitude: CoordinateValue!, minimumLongitude: CoordinateValue!): [RentalPlace!]!
+  viewer: QueryType
+}
+
+scalar Ratio
+
+type RealTimeEstimate {
+  delay: Duration!
+  time: OffsetDateTime!
+}
+
+enum RealtimeState {
+  ADDED
+  CANCELED
+  MODIFIED
+  SCHEDULED
+  UPDATED
+}
+
+enum RelativeDirection {
+  CIRCLE_CLOCKWISE
+  CIRCLE_COUNTERCLOCKWISE
+  CONTINUE
+  DEPART
+  ELEVATOR
+  ENTER_STATION
+  EXIT_STATION
+  FOLLOW_SIGNS
+  HARD_LEFT
+  HARD_RIGHT
+  LEFT
+  RIGHT
+  SLIGHTLY_LEFT
+  SLIGHTLY_RIGHT
+  UTURN_LEFT
+  UTURN_RIGHT
+}
+
+scalar Reluctance
+
+union RentalPlace = RentalVehicle | VehicleRentalStation
+
+type RentalVehicle implements Node & PlaceInterface {
+  allowPickupNow: Boolean
+  availableUntil: OffsetDateTime
+  fuel: RentalVehicleFuel
+  id: ID!
+  lat: Float
+  lon: Float
+  name: String!
+  network: String @deprecated(reason: "Use `networkId` from `rentalNetwork` instead.")
+  operative: Boolean
+  rentalNetwork: VehicleRentalNetwork!
+  rentalUris: VehicleRentalUris
+  vehicleId: String
+  vehicleType: RentalVehicleType
+}
+
+type RentalVehicleEntityCounts {
+  byType: [RentalVehicleTypeCount!]!
+  total: Int!
+}
+
+type RentalVehicleFuel {
+  percent: Ratio
+  range: Int
+}
+
+type RentalVehicleType {
+  formFactor: FormFactor
+  propulsionType: PropulsionType
+}
+
+type RentalVehicleTypeCount {
+  count: Int!
+  vehicleType: RentalVehicleType!
+}
+
+type ReplacedByRelation {
+  tripOnServiceDate: TripOnServiceDate
+}
+
+type ReplacementForRelation {
+  tripOnServiceDate: TripOnServiceDate
+}
+
+type RideHailingEstimate {
+  arrival: Duration!
+  maxPrice: Money!
+  minPrice: Money!
+  productName: String
+  provider: RideHailingProvider!
+}
+
+type RideHailingProvider {
+  id: String!
+}
+
+type RiderCategory {
+  id: String!
+  isDefault: Boolean!
+  name: String
+}
+
+type Route implements Node {
+  agency: Agency
+  alerts(types: [RouteAlertType]): [Alert]
+  bikesAllowed: BikesAllowed
+  color: String
+  desc: String
+  gtfsId: String!
+  id: ID!
+  isReplacement: Boolean!
+  longName(language: String): String
+  mode: TransitMode
+  patterns(serviceDates: LocalDateRangeInput): [Pattern]
+  replacementsExist: Boolean!
+  shortName: String
+  sortOrder: Int
+  stops: [Stop]
+  textColor: String
+  trips: [Trip]
+  type: Int
+  url: String
+}
+
+enum RouteAlertType {
+  AGENCY
+  PATTERNS
+  ROUTE
+  ROUTE_TYPE
+  STOPS_ON_ROUTE
+  STOPS_ON_TRIPS
+  TRIPS
+}
+
+type RouteType {
+  agency: Agency
+  routeType: Int!
+  routes: [Route]
+}
+
+type RoutingError {
+  code: RoutingErrorCode!
+  description: String!
+  inputField: InputField
+}
+
+enum RoutingErrorCode {
+  LOCATION_NOT_FOUND
+  NO_STOPS_IN_RANGE
+  NO_TRANSIT_CONNECTION
+  NO_TRANSIT_CONNECTION_IN_SEARCH_WINDOW
+  OUTSIDE_BOUNDS
+  OUTSIDE_SERVICE_PERIOD
+  WALKING_BETTER_THAN_TRANSIT
+}
+
+input ScooterOptimizationInput {
+  triangle: TriangleScooterFactorsInput
+  type: ScooterOptimizationType
+}
+
+enum ScooterOptimizationType {
+  FLAT_STREETS
+  SAFEST_STREETS
+  SAFE_STREETS
+  SHORTEST_DURATION
+}
+
+input ScooterPreferencesInput {
+  optimization: ScooterOptimizationInput = {type: SAFE_STREETS}
+  reluctance: Reluctance = 2
+  rental: ScooterRentalPreferencesInput
+  speed: Speed = 5
+}
+
+input ScooterRentalPreferencesInput {
+  allowedNetworks: [String!]
+  bannedNetworks: [String!] = []
+  destinationScooterPolicy: DestinationScooterPolicyInput
+}
+
+scalar Speed
+
+type StairsUse {
+  from: Level
+  to: Level
+  verticalDirection: VerticalDirection!
+}
+
+union StepFeature = ElevatorUse | Entrance | EscalatorUse | StairsUse
+
+type Stop implements Node & PlaceInterface {
+  alerts(types: [StopAlertType]): [Alert]
+  cluster: Cluster @deprecated(reason: "Not implemented")
+  code: String
+  desc(language: String): String
+  direction: String
+  geometries: StopGeometries
+  gtfsId: String!
+  id: ID!
+  lat: Float
+  locationType: LocationType
+  lon: Float
+  name(language: String): String!
+  parentStation: Stop
+  patterns: [Pattern]
+  platformCode: String
+  routes(serviceDates: LocalDateRangeInput): [Route!]
+  stopTimesForPattern(id: String!, numberOfDepartures: Int = 2, omitCanceled: Boolean = true, omitNonPickups: Boolean = false, startTime: Long = 0, timeRange: Int = 86400): [Stoptime]
+  stops: [Stop]
+  stoptimesForPatterns(numberOfDepartures: Int = 5, omitCanceled: Boolean = true, omitNonPickups: Boolean = false, startTime: Long = 0, timeRange: Int = 86400): [StoptimesInPattern]
+  stoptimesForServiceDate(date: String, omitCanceled: Boolean = false, omitNonPickups: Boolean = false): [StoptimesInPattern]
+  stoptimesWithoutPatterns(numberOfDepartures: Int = 5, omitCanceled: Boolean = true, omitNonPickups: Boolean = false, startTime: Long = 0, timeRange: Int = 86400): [Stoptime]
+  timezone: String
+  transfers(maxDistance: Int): [stopAtDistance]
+  url(language: String): String
+  vehicleMode: Mode
+  vehicleType: Int @deprecated(reason: "Not implemented. Use `vehicleMode`.")
+  wheelchairBoarding: WheelchairBoarding
+  zoneId: String
+}
+
+enum StopAlertType {
+  AGENCIES_OF_ROUTES
+  PATTERNS
+  ROUTES
+  STOP
+  STOP_ON_ROUTES
+  STOP_ON_TRIPS
+  TRIPS
+}
+
+type StopCall {
+  realTime: CallRealTime
+  schedule: CallSchedule
+  stopLocation: CallStopLocation!
+}
+
+type StopGeometries {
+  geoJson: GeoJson
+  googleEncoded: [Geometry]
+}
+
+type StopOnRoute {
+  route: Route!
+  stop: Stop!
+}
+
+type StopOnTrip {
+  stop: Stop!
+  trip: Trip!
+}
+
+union StopPosition = PositionAtStop | PositionBetweenStops
+
+type StopRelationship {
+  status: VehicleStopStatus!
+  stop: Stop!
+}
+
+enum StopType {
+  LOCATION
+  LOCATION_GROUP
+  STOP
+}
+
+type Stoptime {
+  arrivalDelay: Int
+  departureDelay: Int
+  dropoffType: PickupDropoffType
+  headsign(language: String): String
+  pickupType: PickupDropoffType
+  realtime: Boolean
+  realtimeArrival: Int
+  realtimeDeparture: Int
+  realtimeState: RealtimeState
+  scheduledArrival: Int
+  scheduledDeparture: Int
+  serviceDay: Long
+  stop: Stop
+  stopPosition: Int
+  stopPositionInPattern: Int!
+  timepoint: Boolean
+  trip: Trip
+}
+
+type StoptimesInPattern {
+  pattern: Pattern
+  stoptimes: [Stoptime]
+}
+
+type SystemNotice {
+  tag: String
+  text: String
+}
+
+type TicketType implements Node {
+  currency: String
+  fareId: String!
+  id: ID!
+  price: Float
+  zones: [String!]
+}
+
+type TimeWindow {
+  end: OffsetDateTime!
+  start: OffsetDateTime!
+}
+
+input TimetablePreferencesInput {
+  excludeRealTimeUpdates: Boolean = false
+  includePlannedCancellations: Boolean = false
+  includeRealTimeCancellations: Boolean = false
+}
+
+input TransferPreferencesInput {
+  cost: Cost = 0
+  maximumAdditionalTransfers: Int = 5
+  maximumTransfers: Int = 11
+  slack: Duration = "PT1M"
+}
+
+input TransitFilterInput {
+  exclude: [TransitFilterSelectInput!]
+  include: [TransitFilterSelectInput!]
+}
+
+input TransitFilterSelectInput {
+  agencies: [String!]
+  routes: [String!]
+}
+
+enum TransitMode {
+  AIRPLANE
+  BUS
+  CABLE_CAR
+  CARPOOL
+  COACH
+  FERRY
+  FUNICULAR
+  GONDOLA
+  MONORAIL
+  RAIL
+  SNOW_AND_ICE
+  SUBWAY
+  TAXI
+  TRAM
+  TROLLEYBUS
+}
+
+input TransitModePreferenceCostInput {
+  reluctance: Reluctance!
+}
+
+input TransitPreferencesInput {
+  alight: AlightPreferencesInput
+  board: BoardPreferencesInput
+  filters: [TransitFilterInput!]
+  timetable: TimetablePreferencesInput
+  transfer: TransferPreferencesInput
+}
+
+type TranslatedString {
+  language: String
+  text: String
+}
+
+input TransportMode {
+  mode: Mode!
+  qualifier: Qualifier
+}
+
+input TriangleCyclingFactorsInput {
+  flatness: Ratio!
+  safety: Ratio!
+  time: Ratio!
+}
+
+input TriangleScooterFactorsInput {
+  flatness: Ratio!
+  safety: Ratio!
+  time: Ratio!
+}
+
+type Trip implements Node {
+  activeDates: [String]
+  alerts(types: [TripAlertType]): [Alert]
+  arrivalStoptime(serviceDate: String): Stoptime
+  bikesAllowed: BikesAllowed
+  blockId: String
+  departureStoptime(serviceDate: String): Stoptime
+  directionId: String
+  geometry: [[Float]]
+  gtfsId: String!
+  id: ID!
+  isReplacement: Boolean!
+  occupancy: TripOccupancy
+  pattern: Pattern
+  replacementsExist: Boolean!
+  route: Route!
+  routeShortName: String
+  semanticHash: String!
+  serviceId: String
+  shapeId: String
+  stops: [Stop!]!
+  stoptimes: [Stoptime]
+  stoptimesForDate(serviceDate: String): [Stoptime]
+  tripGeometry: Geometry
+  tripHeadsign(language: String): String
+  tripShortName: String
+  wheelchairAccessible: WheelchairBoarding
+}
+
+enum TripAlertType {
+  AGENCY
+  PATTERN
+  ROUTE
+  ROUTE_TYPE
+  STOPS_ON_TRIP
+  TRIP
+}
+
+type TripOccupancy {
+  occupancyStatus: OccupancyStatus
+}
+
+type TripOnServiceDate {
+  end: StopCall!
+  isReplacement: Boolean
+  replacedByRelation: [ReplacedByRelation!]!
+  replacementForRelation: [ReplacementForRelation!]!
+  serviceDate: LocalDate!
+  start: StopCall!
+  stopCalls: [StopCall!]!
+  trip: Trip
+}
+
+type TripOnServiceDateConnection {
+  edges: [TripOnServiceDateEdge]
+  pageInfo: PageInfo!
+  totalCount: Int!
+}
+
+type TripOnServiceDateEdge {
+  cursor: String!
+  node: TripOnServiceDate
+}
+
+type Unknown {
+  description: String
+}
+
+type VehicleParking implements Node & PlaceInterface {
+  anyCarPlaces: Boolean
+  availability: VehicleParkingSpaces
+  bicyclePlaces: Boolean
+  capacity: VehicleParkingSpaces
+  carPlaces: Boolean
+  detailsUrl: String
+  id: ID!
+  imageUrl: String
+  lat: Float
+  lon: Float
+  name(language: String): String!
+  note(language: String): String
+  openingHours: OpeningHours
+  realtime: Boolean
+  state: VehicleParkingState
+  tags: [String]
+  vehicleParkingId: String
+  wheelchairAccessibleCarPlaces: Boolean
+}
+
+input VehicleParkingInput {
+  filters: [ParkingFilter]
+  preferred: [ParkingFilter]
+  unpreferredCost: Int
+}
+
+type VehicleParkingSpaces {
+  bicycleSpaces: Int
+  carSpaces: Int
+  wheelchairAccessibleCarSpaces: Int
+}
+
+enum VehicleParkingState {
+  CLOSED
+  OPERATIONAL
+  TEMPORARILY_CLOSED
+}
+
+type VehiclePosition {
+  heading: Float
+  label: String
+  lastUpdate: OffsetDateTime
+  lastUpdated: Long @deprecated(reason: "Use `lastUpdate` instead.")
+  lat: Float
+  lon: Float
+  speed: Float
+  stopRelationship: StopRelationship
+  trip: Trip!
+  vehicleId: String
+}
+
+type VehicleRentalNetwork {
+  networkId: String!
+  url: String
+}
+
+type VehicleRentalStation implements Node & PlaceInterface {
+  allowDropoff: Boolean
+  allowDropoffNow: Boolean
+  allowOverloading: Boolean
+  allowPickup: Boolean
+  allowPickupNow: Boolean
+  availableSpaces: RentalVehicleEntityCounts
+  availableVehicles: RentalVehicleEntityCounts
+  capacity: Int
+  id: ID!
+  lat: Float
+  lon: Float
+  name: String!
+  network: String @deprecated(reason: "Use `networkId` from `rentalNetwork` instead.")
+  operative: Boolean
+  realtime: Boolean
+  rentalNetwork: VehicleRentalNetwork!
+  rentalUris: VehicleRentalUris
+  spacesAvailable: Int @deprecated(reason: "Use `availableSpaces` instead, which also contains the space vehicle types")
+  stationId: String
+  vehiclesAvailable: Int @deprecated(reason: "Use `availableVehicles` instead, which also contains vehicle types")
+}
+
+type VehicleRentalUris {
+  android: String
+  ios: String
+  web: String
+}
+
+enum VehicleStopStatus {
+  INCOMING_AT
+  IN_TRANSIT_TO
+  STOPPED_AT
+}
+
+enum VertexType {
+  BIKEPARK
+  BIKESHARE
+  NORMAL
+  PARKANDRIDE
+  TRANSIT
+}
+
+enum VerticalDirection {
+  DOWN
+  UNKNOWN
+  UP
+}
+
+enum ViaLocationType {
+  PASS_THROUGH
+  VISIT
+}
+
+input WalkPreferencesInput {
+  boardCost: Cost = 180
+  reluctance: Reluctance = 3
+  safetyFactor: Ratio = 1
+  speed: Speed = 1.33
+}
+
+enum WheelchairBoarding {
+  NOT_POSSIBLE
+  NO_INFORMATION
+  POSSIBLE
+}
+
+input WheelchairPreferencesInput {
+  enabled: Boolean = false
+}
+
+type debugOutput {
+  pathCalculationTime: Long
+  precalculationTime: Long
+  renderingTime: Long
+  timedOut: Boolean
+  totalTime: Long
+}
+
+type elevationProfileComponent {
+  distance: Float
+  elevation: Float
+}
+
+type fare {
+  cents: Int @deprecated
+  components: [fareComponent] @deprecated
+  currency: String @deprecated
+  type: String @deprecated
+}
+
+type fareComponent {
+  cents: Int @deprecated
+  currency: String @deprecated
+  fareId: String @deprecated
+  routes: [Route] @deprecated
+}
+
+type placeAtDistance implements Node {
+  distance: Int
+  id: ID!
+  place: PlaceInterface
+}
+
+type placeAtDistanceConnection {
+  edges: [placeAtDistanceEdge]
+  pageInfo: PageInfo!
+}
+
+type placeAtDistanceEdge {
+  cursor: String!
+  node: placeAtDistance
+}
+
+type serviceTimeRange {
+  end: Long
+  start: Long
+}
+
+type step {
+  absoluteDirection: AbsoluteDirection
+  alerts: [Alert]
+  area: Boolean
+  bogusName: Boolean
+  distance: Float
+  elevationProfile: [elevationProfileComponent]
+  exit: String
+  feature: StepFeature
+  lat: Float
+  lon: Float
+  relativeDirection: RelativeDirection
+  stayOn: Boolean
+  streetName: String
+  walkingBike: Boolean
+}
+
+type stopAtDistance implements Node {
+  distance: Int
+  id: ID!
+  stop: Stop
+}
+
+type stopAtDistanceConnection {
+  edges: [stopAtDistanceEdge]
+  pageInfo: PageInfo!
+}
+
+type stopAtDistanceEdge {
+  cursor: String!
+  node: stopAtDistance
+}

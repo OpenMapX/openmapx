@@ -1,0 +1,660 @@
+schema {
+  query: QueryType
+}
+
+type QueryType {
+  node(id: ID!): Node
+  feeds: [Feed]
+  agencies: [Agency]
+  ticketTypes: [TicketType]
+  agency(id: String!): Agency
+  stops(ids: [String], feeds: [String!], name: String, maxResults: Int): [Stop]
+  stopsByBbox(minLat: Float!, minLon: Float!, maxLat: Float!, maxLon: Float!, agency: String, feeds: [String!]): [Stop]
+  stopsByRadius(lat: Float!, lon: Float!, radius: Int!, agency: String, feeds: [String!], before: String, after: String, first: Int, last: Int): stopAtDistanceConnection
+  nearest(lat: Float!, lon: Float!, maxDistance: Int = 2000, maxResults: Int = 20, filterByPlaceTypes: [FilterPlaceType], filterByModes: [Mode], filterByIds: InputFilters, before: String, after: String, first: Int, last: Int): placeAtDistanceConnection
+  departureRow(id: String!): DepartureRow
+  stop(id: String!): Stop
+  station(id: String!): Stop
+  stations(ids: [String], feeds: [String!], name: String, maxResults: Int): [Stop]
+  routes(ids: [String], feeds: [String], name: String, longName: String, modes: String, transportModes: [Mode], competentAuthority: [String]): [Route]
+  route(id: String!): Route
+  trips(feeds: [String]): [Trip]
+  trip(id: String!): Trip
+  fuzzyTrip(route: String!, direction: Int = -1, date: String!, time: Int!): Trip
+  cancelledTripTimes(feeds: [String], routes: [String], patterns: [String], trips: [String], minDate: String, maxDate: String, minDepartureTime: Int, maxDepartureTime: Int, minArrivalTime: Int, maxArrivalTime: Int): [Stoptime]
+  patterns: [Pattern]
+  pattern(id: String!): Pattern
+  clusters: [Cluster]
+  cluster(id: String!): Cluster
+  alerts(feeds: [String!], severityLevel: [AlertSeverityLevelType!], effect: [AlertEffectType!], cause: [AlertCauseType!], route: [String!], stop: [String!]): [Alert]
+  serviceTimeRange: serviceTimeRange
+  bikeRentalStations(ids: [String]): [BikeRentalStation]
+  bikeRentalStation(id: String!): BikeRentalStation
+  bikeParks: [BikePark]
+  bikePark(id: String!): BikePark
+  carParks(ids: [String]): [CarPark]
+  carPark(id: String!): CarPark
+  viewer: QueryType
+  plan(date: String, time: String, from: InputCoordinates, to: InputCoordinates, fromPlace: String, toPlace: String, wheelchair: Boolean, numItineraries: Int = 3, maxWalkDistance: Float, maxPreTransitTime: Int, maxSlope: Float, carParkCarLegWeight: Float, itineraryFiltering: Float, walkReluctance: Float, walkOnStreetReluctance: Float, waitReluctance: Float, waitAtBeginningFactor: Float, walkSpeed: Float, bikeSpeed: Float, bikeSwitchTime: Int, bikeSwitchCost: Int, optimize: OptimizeType, triangle: InputTriangle, arriveBy: Boolean, intermediatePlaces: [InputCoordinates], preferred: InputPreferred, unpreferred: InputUnpreferred, walkBoardCost: Int, bikeBoardCost: Int, banned: InputBanned, transferPenalty: Int, batch: Boolean, modes: String, transportModes: [TransportMode], modeWeight: InputModeWeight, allowBikeRental: Boolean, boardSlack: Int, alightSlack: Int, minTransferTime: Int, nonpreferredTransferPenalty: Int, maxTransfers: Int, startTransitStopId: String, startTransitTripId: String, claimInitialWait: Long, reverseOptimizeOnTheFly: Boolean, omitCanceled: Boolean = true, ignoreRealtimeUpdates: Boolean, disableRemainingWeightHeuristic: Boolean, locale: String, ticketTypes: String, allowedTicketTypes: [String], heuristicStepsPerMainStep: Int, compactLegsByReversedSearch: Boolean, allowedBikeRentalNetworks: [String]): Plan
+}
+
+interface Node {
+  id: ID!
+}
+
+type Feed {
+  feedId: String!
+  agencies: [Agency]
+}
+
+type Agency implements Node {
+  id: ID!
+  gtfsId: String!
+  name: String!
+  url: String!
+  timezone: String!
+  lang: String
+  phone: String
+  fareUrl: String
+  routes: [Route]
+  alerts: [Alert]
+}
+
+type Route implements Node {
+  id: ID!
+  gtfsId: String!
+  agency: Agency
+  shortName: String
+  longName: String
+  mode: Mode
+  type: Int
+  desc: String
+  url: String
+  color: String
+  competentAuthority: String
+  textColor: String
+  bikesAllowed: BikesAllowed
+  patterns: [Pattern]
+  stops: [Stop]
+  trips: [Trip]
+  routeTimetable(omitNonPickups: Boolean = false, omitCanceled: Boolean = false): [TripTimesByWeekdaysParts]
+  alerts: [Alert]
+  description: String
+}
+
+enum Mode {
+  AIRPLANE
+  BICYCLE
+  BUS
+  CABLE_CAR
+  CAR
+  FERRY
+  FUNICULAR
+  GONDOLA
+  LEG_SWITCH
+  RAIL
+  SUBWAY
+  TRAM
+  TRANSIT
+  WALK
+}
+
+enum BikesAllowed {
+  NO_INFORMATION
+  ALLOWED
+  NOT_ALLOWED
+}
+
+type Pattern implements Node {
+  id: ID!
+  route: Route!
+  directionId: Int
+  name: String
+  code: String!
+  headsign: String
+  trip: Trip!
+  trips: [Trip!]
+  patternTimetable(stopId: String): [PatternTimetable!]
+  tripsForDate(serviceDay: String, serviceDate: String): [Trip!]
+  stops: [Stop!]
+  geometry: [Coordinates]
+  patternGeometry: Geometry
+  semanticHash: String
+  alerts: [Alert]
+}
+
+type Trip implements Node {
+  id: ID!
+  gtfsId: String!
+  route: Route!
+  serviceId: String
+  activeDates: [String]
+  tripShortName: String
+  tripLongName: String
+  tripHeadsign: String
+  routeShortName: String
+  directionId: String
+  blockId: String
+  shapeId: String
+  wheelchairAccessible: WheelchairBoarding
+  bikesAllowed: BikesAllowed
+  pattern: Pattern
+  stops: [Stop!]!
+  semanticHash: String!
+  stoptimes: [Stoptime]
+  departureStoptime(serviceDate: String): Stoptime
+  arrivalStoptime(serviceDate: String): Stoptime
+  stoptimesForDate(serviceDay: String, serviceDate: String): [Stoptime]
+  stoptimesForWeek(omitNonPickups: Boolean = false, omitCanceled: Boolean = false): [TripTimesByWeekdaysParts]
+  tripTimesWeekdaysGroups(omitNonPickups: Boolean = false, omitCanceled: Boolean = false): [String]
+  tripTimesValidTill: String
+  geometry: [[Float]]
+  tripGeometry: Geometry
+  alerts: [Alert]
+}
+
+enum WheelchairBoarding {
+  NO_INFORMATION
+  POSSIBLE
+  NOT_POSSIBLE
+}
+
+type Stop implements Node & PlaceInterface {
+  id: ID!
+  stopTimesForPattern(id: String!, startTime: Long = 0, timeRange: Int = 86400, numberOfDepartures: Int = 2, omitNonPickups: Boolean = false, omitCanceled: Boolean = true): [Stoptime]
+  gtfsId: String!
+  name: String!
+  lat: Float
+  lon: Float
+  code: String
+  desc: String
+  zoneId: String
+  url: String
+  locationType: LocationType
+  parentStation: Stop
+  wheelchairBoarding: WheelchairBoarding
+  direction: String
+  timezone: String
+  vehicleType: Int
+  vehicleMode: Mode
+  platformCode: String
+  cluster: Cluster
+  stops: [Stop]
+  routes: [Route!]
+  patterns: [Pattern]
+  transfers(maxDistance: Int): [stopAtDistance]
+  stopArea: String
+  stoptimesForServiceDate(date: String, omitNonPickups: Boolean = false, omitCanceled: Boolean = false): [StoptimesInPattern]
+  stoptimesForPatterns(startTime: Long = 0, timeRange: Int = 86400, numberOfDepartures: Int = 5, omitNonPickups: Boolean = false, omitCanceled: Boolean = true): [StoptimesInPattern]
+  stoptimesWithoutPatterns(startTime: Long = 0, timeRange: Int = 86400, numberOfDepartures: Int = 5, omitNonPickups: Boolean = false, omitCanceled: Boolean = true): [Stoptime]
+  alerts: [Alert]
+}
+
+scalar Long
+
+enum LocationType {
+  STOP
+  STATION
+  ENTRANCE
+}
+
+type Cluster implements Node {
+  id: ID!
+  gtfsId: String!
+  name: String!
+  lat: Float!
+  lon: Float!
+  stops: [Stop!]
+}
+
+type stopAtDistance implements Node {
+  id: ID!
+  stop: Stop
+  distance: Int
+}
+
+type StoptimesInPattern {
+  pattern: Pattern
+  stoptimes: [Stoptime]
+}
+
+type Alert implements Node {
+  id: ID!
+  alertHash: Int
+  feed: String
+  agency: Agency
+  route: Route
+  trip: Trip
+  stop: Stop
+  patterns: [Pattern]
+  alertHeaderText: String
+  alertHeaderTextTranslations: [TranslatedString!]!
+  alertDescriptionText: String!
+  alertDescriptionTextTranslations: [TranslatedString!]!
+  alertUrl: String
+  alertUrlTranslations: [TranslatedString!]!
+  alertEffect: AlertEffectType
+  alertCause: AlertCauseType
+  alertSeverityLevel: AlertSeverityLevelType
+  effectiveStartDate: Long
+  effectiveEndDate: Long
+}
+
+type TranslatedString {
+  text: String
+  language: String
+}
+
+enum AlertEffectType {
+  NO_SERVICE
+  REDUCED_SERVICE
+  SIGNIFICANT_DELAYS
+  DETOUR
+  ADDITIONAL_SERVICE
+  MODIFIED_SERVICE
+  OTHER_EFFECT
+  UNKNOWN_EFFECT
+  STOP_MOVED
+  NO_EFFECT
+}
+
+enum AlertCauseType {
+  UNKNOWN_CAUSE
+  OTHER_CAUSE
+  TECHNICAL_PROBLEM
+  STRIKE
+  DEMONSTRATION
+  ACCIDENT
+  HOLIDAY
+  WEATHER
+  MAINTENANCE
+  CONSTRUCTION
+  POLICE_ACTIVITY
+  MEDICAL_EMERGENCY
+}
+
+enum AlertSeverityLevelType {
+  UNKNOWN_SEVERITY
+  INFO
+  WARNING
+  SEVERE
+}
+
+interface PlaceInterface {
+  id: ID!
+  lat: Float
+  lon: Float
+}
+
+type Stoptime {
+  stop: Stop
+  scheduledArrival: Int
+  realtimeArrival: Int
+  arrivalDelay: Int
+  scheduledDeparture: Int
+  realtimeDeparture: Int
+  departureDelay: Int
+  timepoint: Boolean
+  realtime: Boolean
+  realtimeState: RealtimeState
+  pickupType: PickupDropoffType
+  dropoffType: PickupDropoffType
+  serviceDay: Long
+  trip: Trip
+  stopHeadsign: String @deprecated(reason: "Use headsign instead, will be removed in the future")
+  headsign: String
+  stopSequence: Int
+}
+
+enum RealtimeState {
+  SCHEDULED
+  UPDATED
+  CANCELED
+  ADDED
+  MODIFIED
+}
+
+enum PickupDropoffType {
+  SCHEDULED
+  NONE
+  CALL_AGENCY
+  COORDINATE_WITH_DRIVER
+}
+
+type TripTimesByWeekdaysParts {
+  parts: Int!
+  weekdays: String!
+  calendarDatesByFirstStoptime: CalendarDatesByFirstStoptime
+  tripTimesByWeekdaysList: [TripTimesByWeekdays]
+  validFrom: String!
+  validTill: String!
+}
+
+type CalendarDatesByFirstStoptime {
+  time: Int!
+  calendarDateExceptions: [CalendarDateException]
+}
+
+type CalendarDateException {
+  exceptionType: Int
+  dates: [String]
+}
+
+type TripTimesByWeekdays {
+  tripTimeByStopNameList: [TripTimeByStopName]
+}
+
+type TripTimeByStopName {
+  stopName: String!
+  tripTimeShort: Stoptime!
+  differentDeparture: Boolean!
+}
+
+type Geometry {
+  length: Int
+  points: Polyline
+}
+
+scalar Polyline
+
+type PatternTimetable {
+  validity: ServiceValidityType
+  timetable: [PatternTimetableElement]
+}
+
+type ServiceValidityType {
+  validFrom: String
+  validTo: String
+}
+
+type PatternTimetableElement {
+  weekday: String
+  time: Stoptime
+}
+
+type Coordinates {
+  lat: Float
+  lon: Float
+}
+
+type TicketType implements Node {
+  id: ID!
+  fareId: ID!
+  price: Float
+  currency: String
+  zones: [String!]
+}
+
+type stopAtDistanceConnection {
+  edges: [stopAtDistanceEdge]
+  pageInfo: PageInfo!
+}
+
+type stopAtDistanceEdge {
+  node: stopAtDistance
+  cursor: String!
+}
+
+type PageInfo {
+  hasNextPage: Boolean!
+  hasPreviousPage: Boolean!
+  startCursor: String
+  endCursor: String
+}
+
+type placeAtDistanceConnection {
+  edges: [placeAtDistanceEdge]
+  pageInfo: PageInfo!
+}
+
+type placeAtDistanceEdge {
+  node: placeAtDistance
+  cursor: String!
+}
+
+type placeAtDistance implements Node {
+  id: ID!
+  place: PlaceInterface
+  distance: Int
+}
+
+enum FilterPlaceType {
+  STOP
+  DEPARTURE_ROW
+  BICYCLE_RENT
+  BIKE_PARK
+  CAR_PARK
+}
+
+input InputFilters {
+  stops: [String]
+  routes: [String]
+  bikeRentalStations: [String]
+  bikeParks: [String]
+  carParks: [String]
+}
+
+type DepartureRow implements Node & PlaceInterface {
+  id: ID!
+  stop: Stop
+  lat: Float
+  lon: Float
+  pattern: Pattern
+  stoptimes(startTime: Long = 0, timeRange: Int = 86400, numberOfDepartures: Int = 1, omitNonPickups: Boolean = false, omitCanceled: Boolean = true): [Stoptime]
+}
+
+type serviceTimeRange {
+  start: Long
+  end: Long
+}
+
+type BikeRentalStation implements Node & PlaceInterface {
+  id: ID!
+  stationId: String
+  name: String!
+  bikesAvailable: Int
+  spacesAvailable: Int
+  capacity: Int
+  state: String
+  realtime: Boolean
+  allowDropoff: Boolean
+  allowOverloading: Boolean
+  isFloatingBike: Boolean
+  isCarStation: Boolean
+  networks: [String]
+  lon: Float
+  lat: Float
+}
+
+type BikePark implements Node & PlaceInterface {
+  id: ID!
+  bikeParkId: String
+  name: String!
+  spacesAvailable: Int
+  realtime: Boolean
+  lon: Float
+  lat: Float
+}
+
+type CarPark implements Node & PlaceInterface {
+  id: ID!
+  carParkId: String
+  name: String!
+  maxCapacity: Int
+  spacesAvailable: Int
+  realtime: Boolean
+  lon: Float
+  lat: Float
+}
+
+type Plan {
+  date: Long
+  from: Place!
+  to: Place!
+  itineraries: [Itinerary]!
+  messageEnums: [String]!
+  messageStrings: [String]!
+  debugOutput: debugOutput!
+}
+
+type Place {
+  name: String
+  vertexType: VertexType
+  lat: Float!
+  lon: Float!
+  arrivalTime: Long!
+  departureTime: Long!
+  stop: Stop
+  stopSequence: Int
+  bikeRentalStation: BikeRentalStation
+  bikePark: BikePark
+  carPark: CarPark
+}
+
+enum VertexType {
+  NORMAL
+  TRANSIT
+  BIKEPARK
+  BIKESHARE
+  PARKANDRIDE
+}
+
+type Itinerary {
+  startTime: Long
+  endTime: Long
+  duration: Long
+  waitingTime: Long
+  walkTime: Long
+  walkDistance: Float
+  legs: [Leg]!
+  fares: [fare]
+  elevationGained: Float
+  elevationLost: Float
+}
+
+type Leg {
+  startTime: Long
+  endTime: Long
+  departureDelay: Int
+  arrivalDelay: Int
+  mode: Mode
+  duration: Float
+  legGeometry: Geometry
+  agency: Agency
+  realTime: Boolean
+  realtimeState: RealtimeState
+  distance: Float
+  transitLeg: Boolean
+  rentedBike: Boolean
+  from: Place!
+  to: Place!
+  route: Route
+  trip: Trip
+  serviceDate: String
+  interlineWithPreviousLeg: Boolean
+  intermediateStops: [Stop]
+  intermediatePlaces: [Place]
+  intermediatePlace: Boolean
+  steps: [step]
+}
+
+type step {
+  distance: Float
+  lon: Float
+  lat: Float
+  elevationProfile: [elevationProfileComponent]
+}
+
+type elevationProfileComponent {
+  distance: Float
+  elevation: Float
+}
+
+type fare {
+  type: String
+  currency: String
+  cents: Int
+  components: [fareComponent]
+}
+
+type fareComponent {
+  fareId: String
+  currency: String
+  cents: Int
+  routes: [Route]
+}
+
+type debugOutput {
+  totalTime: Long
+  pathCalculationTime: Long
+  precalculationTime: Long
+  renderingTime: Long
+  timedOut: Boolean
+}
+
+input InputCoordinates {
+  lat: Float!
+  lon: Float!
+  address: String
+  locationSlack: Int
+}
+
+enum OptimizeType {
+  QUICK
+  SAFE
+  FLAT
+  GREENWAYS
+  TRIANGLE
+  TRANSFERS
+}
+
+input InputTriangle {
+  safetyFactor: Float
+  slopeFactor: Float
+  timeFactor: Float
+}
+
+input InputPreferred {
+  routes: String
+  agencies: String
+  otherThanPreferredRoutesPenalty: Int
+}
+
+input InputUnpreferred {
+  routes: String
+  agencies: String
+  useUnpreferredRoutesPenalty: Int
+}
+
+input InputBanned {
+  routes: String
+  agencies: String
+  trips: String
+  stops: String
+  stopsHard: String
+}
+
+input TransportMode {
+  mode: Mode!
+  qualifier: Qualifier
+}
+
+enum Qualifier {
+  RENT
+  HAVE
+  PARK
+  KEEP
+  PICKUP
+}
+
+input InputModeWeight {
+  TRAM: Float
+  SUBWAY: Float
+  RAIL: Float
+  BUS: Float
+  FERRY: Float
+  CABLE_CAR: Float
+  GONDOLA: Float
+  FUNICULAR: Float
+  AIRPLANE: Float
+}

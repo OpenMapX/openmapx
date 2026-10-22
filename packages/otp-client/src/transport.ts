@@ -1,4 +1,4 @@
-import type { HttpClient } from "@openmapx/integration-framework";
+import type { HttpClient, HttpResponse } from "@openmapx/integration-framework";
 import type { ZodType } from "zod";
 import { z } from "zod";
 import { OtpError } from "./errors";
@@ -8,6 +8,9 @@ export interface OtpTransportOptions {
   endpoint: string;
   signal: AbortSignal;
   isSourceAllowed: () => Promise<boolean>;
+  headers?: Readonly<Record<string, string>>;
+  beforeRequest?: (signal: AbortSignal) => Promise<void>;
+  afterResponse?: (response: HttpResponse<unknown>, signal: AbortSignal) => Promise<void>;
 }
 function abortError(signal: AbortSignal): OtpError {
   return new OtpError(signal.reason?.name === "TimeoutError" ? "timeout" : "cancelled");
@@ -47,6 +50,12 @@ export function createRequester(
   options: OtpTransportOptions,
   bindings: ReadonlyMap<unknown, { query: string; schema: ZodType }>,
 ) {
+  const beforeRequest = options.beforeRequest;
+  const afterResponse = options.afterResponse;
+  const headers = {
+    ...options.headers,
+    Accept: "application/graphql-response+json, application/json",
+  };
   async function available(signal: AbortSignal) {
     if (signal.aborted) throw abortError(signal);
     if (!(await bounded(signal, options.isSourceAllowed))) throw new OtpError("policy");
@@ -80,23 +89,46 @@ export function createRequester(
         await available(combined);
         const binding = bindings.get(document);
         if (!binding) throw new OtpError("input");
+        if (beforeRequest) {
+          await bounded(combined, () => beforeRequest(combined));
+          await available(combined);
+        }
+        const request = { query: binding.query, variables };
+        const responseOptions = {
+          headers: { ...headers },
+          responseHeaders: ["retry-after", "date"],
+          timeoutMs: 10000,
+          signal: combined,
+          maxBytes: 4 * 1024 * 1024,
+          contentTypes: ["application/json", "application/graphql-response+json"],
+          redirect: "error" as const,
+        };
         const response = await bounded(combined, () =>
-          options.http.postResponse(
-            options.endpoint,
-            { query: binding.query, variables },
-            {
-              headers: { Accept: "application/graphql-response+json, application/json" },
-              timeoutMs: 10000,
-              signal: combined,
-              maxBytes: 4 * 1024 * 1024,
-              contentTypes: ["application/json", "application/graphql-response+json"],
-              redirect: "error",
-            },
-          ),
+          afterResponse
+            ? options.http.postText(options.endpoint, JSON.stringify(request), {
+                ...responseOptions,
+                headers: { "Content-Type": "application/json", ...headers },
+                successStatuses: [200],
+                discardErrorBody: true,
+              })
+            : options.http.postResponse(options.endpoint, request, responseOptions),
         );
         await available(combined);
+        if (afterResponse) {
+          await bounded(combined, () => afterResponse(response, combined));
+          await available(combined);
+        }
         if (response.status !== 200) throw new OtpError("http");
-        const parsed = envelope.safeParse(response.body);
+        let body: unknown = response.body;
+        if (afterResponse) {
+          if (typeof body !== "string") throw new OtpError("payload");
+          try {
+            body = JSON.parse(body);
+          } catch {
+            throw new OtpError("payload");
+          }
+        }
+        const parsed = envelope.safeParse(body);
         if (!parsed.success || !("data" in parsed.data)) throw new OtpError("payload");
         if (parsed.data.errors !== undefined) throw new OtpError("graphql");
         const result = binding.schema.safeParse(parsed.data.data);
