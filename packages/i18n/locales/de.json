@@ -612,6 +612,20 @@
       "obsolete": "Veraltet",
       "invalid": "Ungültig"
     },
+    "bindingReason": {
+      "no_candidates": "keine Straße in der Nähe gefunden",
+      "no_path": "keine verbundene Strecke zwischen den Enden",
+      "low_coverage": "zu wenig davon passt zu einer Straße",
+      "disconnected_geometry": "der Ort besteht aus getrennten Teilen",
+      "subgraph_too_large": "erstreckt sich über zu viel des Straßennetzes",
+      "resolver_error": "Zuordnung mit einem Fehler abgebrochen",
+      "conflicting_direction": "die angegebene Richtung widerspricht dem Ort",
+      "direction_undecided": "die Fahrbahn der angegebenen Richtung ist unklar",
+      "outside_regions": "außerhalb des importierten Straßennetzes",
+      "area_type": "nach seiner Art ein Gebiet, keine Straße",
+      "polygon_geometry": "nach seiner Form ein Gebiet, keine Straße",
+      "location_not_exact": "der Ort ist nicht genau genug angegeben"
+    },
     "direction": {
       "positive": "Aufsteigende Straßenreferenz",
       "negative": "Absteigende Straßenreferenz",
@@ -4194,7 +4208,10 @@
         "unattempted": "Noch nicht versucht",
         "obsolete": "Veraltet",
         "notApplicable": "Nicht zutreffend"
-      }
+      },
+      "bindingReasons": "Warum Zuordnungen nicht ins Routing gehen",
+      "noBindingReasons": "Keine gemeldet",
+      "reasonCounts": "{situations, plural, one {# Meldung} other {# Meldungen}}, {effects, plural, one {# Auswirkung} other {# Auswirkungen}}"
     }
   },
   "privacySetup": {

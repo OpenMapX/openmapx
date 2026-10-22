@@ -131,6 +131,42 @@ export type RoadConditionBindingStatus =
   | "invalid";
 
 /**
+ * Why a location was not bound to the road graph, or why its binding was kept
+ * off routing, as the OpenConditions resolver records it. A producer may add
+ * reasons; a reader labels the ones listed here and shows any other plainly.
+ */
+export const ROAD_CONDITION_BINDING_REASONS = [
+  "no_candidates",
+  "no_path",
+  "low_coverage",
+  "disconnected_geometry",
+  "subgraph_too_large",
+  "resolver_error",
+  "conflicting_direction",
+  "direction_undecided",
+  "outside_regions",
+  "area_type",
+  "polygon_geometry",
+  "location_not_exact",
+] as const;
+
+/** A graph binding of a situation's place or of one effect, and why it stands as it does. */
+export interface RoadConditionBinding {
+  status: string;
+  /** A machine reason (`ROAD_CONDITION_BINDING_REASONS` and any later one), or null. */
+  reason: string | null;
+}
+
+/**
+ * The bindings of one situation: its own place's, and each effect's with a
+ * place or direction of its own, by effect id.
+ */
+export interface RoadConditionBindingDetail {
+  situation: RoadConditionBinding | null;
+  effects: Record<string, RoadConditionBinding>;
+}
+
+/**
  * Versioned routing evidence of one effect of one record revision, as
  * OpenConditions publishes it: where it is bound, under which rights, until
  * when. snake_case matches the OC wire contract.

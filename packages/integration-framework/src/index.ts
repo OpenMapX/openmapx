@@ -147,6 +147,7 @@ export type {
   NaturalHazardType,
   NlpProvider,
   NlpProviderId,
+  OperationalBindingReason,
   OperationalEvidence,
   OperationalFeedCoverage,
   OperationalFeedEvidence,

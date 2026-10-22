@@ -403,6 +403,17 @@ describe("road-conditions provider", () => {
                     unattempted: 0,
                     obsolete: 0,
                     notApplicable: 0,
+                    reasons: [
+                      {
+                        status: "ambiguous",
+                        reason: "direction_undecided",
+                        situations: 1,
+                        effects: 2,
+                      },
+                      { status: "unresolved", reason: "no_candidates", situations: 1, effects: 0 },
+                      { status: "unresolved", situations: 3 },
+                      "garbage",
+                    ],
                   },
                 },
               ],
@@ -426,6 +437,11 @@ describe("road-conditions provider", () => {
       rejectedCount: 4,
       graph: { generation: "graph-1", status: "ready", regions: ["de"] },
       bindingCounts: { exact: 5, likely: 1 },
+      // A reason row without a status and reason, or not a row at all, is left out.
+      bindingReasons: [
+        { status: "ambiguous", reason: "direction_undecided", situations: 1, effects: 2 },
+        { status: "unresolved", reason: "no_candidates", situations: 1, effects: 0 },
+      ],
       status: "healthy",
       action: null,
     });

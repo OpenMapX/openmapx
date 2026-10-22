@@ -262,6 +262,17 @@ const roadConditionOperationalMetricsSchema = z.object({
     .record(z.string().max(64), z.number().int().nonnegative())
     .refine((value) => Object.keys(value).length <= 16, "Too many binding buckets")
     .nullable(),
+  bindingReasons: z
+    .array(
+      z.object({
+        status: z.string().max(64),
+        reason: z.string().max(64),
+        situations: z.number().int().nonnegative(),
+        effects: z.number().int().nonnegative(),
+      }),
+    )
+    .max(64)
+    .optional(),
   graph: z.object({
     generation: z.string().max(256).nullable(),
     status: z.enum(["ready", "partial", "missing", "unknown"]),

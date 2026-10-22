@@ -612,6 +612,20 @@
       "obsolete": "Outdated",
       "invalid": "Invalid"
     },
+    "bindingReason": {
+      "no_candidates": "no road found nearby",
+      "no_path": "no connected route between its ends",
+      "low_coverage": "too little of it matched a road",
+      "disconnected_geometry": "its location is in disconnected pieces",
+      "subgraph_too_large": "it spans too much of the road network",
+      "resolver_error": "matching failed with an error",
+      "conflicting_direction": "the stated direction contradicts the location",
+      "direction_undecided": "the carriageway of the stated direction is undecided",
+      "outside_regions": "outside the imported road network",
+      "area_type": "an area rather than a road, by its type",
+      "polygon_geometry": "an area rather than a road, by its shape",
+      "location_not_exact": "its location is not precise enough"
+    },
     "direction": {
       "positive": "Increasing road reference",
       "negative": "Decreasing road reference",
@@ -4194,7 +4208,10 @@
         "unattempted": "Not attempted",
         "obsolete": "Outdated",
         "notApplicable": "Not applicable"
-      }
+      },
+      "bindingReasons": "Why bindings were not routed",
+      "noBindingReasons": "None reported",
+      "reasonCounts": "{situations, plural, one {# situation} other {# situations}}, {effects, plural, one {# effect} other {# effects}}"
     }
   },
   "privacySetup": {

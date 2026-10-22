@@ -207,6 +207,8 @@ export { isQuoteExpired } from "./ride";
 export type {
   LocalizedText,
   RoadConditionAttribution,
+  RoadConditionBinding,
+  RoadConditionBindingDetail,
   RoadConditionBindingStatus,
   RoadConditionDirection,
   RoadConditionEffect,
@@ -224,7 +226,10 @@ export type {
   RouteFlowSpan,
   VehicleApplicability,
 } from "./roadConditions";
-export { ROAD_CONDITION_SEVERITY_LABELS } from "./roadConditions";
+export {
+  ROAD_CONDITION_BINDING_REASONS,
+  ROAD_CONDITION_SEVERITY_LABELS,
+} from "./roadConditions";
 export type {
   DirectionsResult,
   EvChargeStop,

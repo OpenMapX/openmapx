@@ -105,6 +105,7 @@ export type {
   PricingPlanEntry,
 } from "./mobility-data-source-provider.js";
 export type {
+  OperationalBindingReason,
   OperationalEvidence,
   OperationalFeedCoverage,
   OperationalFeedEvidence,
