@@ -652,6 +652,23 @@
       "unsupported": "Beschränkung",
       "lanesClosedOf": "{closed} von {total} Fahrstreifen gesperrt",
       "lanesClosed": "{closed} gesperrt",
+      "lanesRestrictedOf": "{restricted} von {total} Fahrstreifen eingeschränkt",
+      "lanesRestricted": "{restricted} Fahrstreifen eingeschränkt",
+      "lanesOpen": "{open} frei",
+      "delayBand": {
+        "negligible": "geringfügig",
+        "up_to_ten_minutes": "bis 10 Min.",
+        "between_ten_minutes_and_thirty_minutes": "10–30 Min.",
+        "between_thirty_minutes_and_one_hour": "30 Min. – 1 Std.",
+        "between_one_hour_and_three_hours": "1–3 Std.",
+        "between_three_hours_and_six_hours": "3–6 Std.",
+        "longer_than_six_hours": "über 6 Std."
+      },
+      "delayType": {
+        "delays_of_uncertain_duration": "Dauer ungewiss",
+        "long_delays": "lang",
+        "very_long_delays": "sehr lang"
+      },
       "advisorySpeed": "(Empfehlung)",
       "queue": "Stau {length}",
       "via": "über {roads}",

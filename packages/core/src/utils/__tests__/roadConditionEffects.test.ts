@@ -102,6 +102,30 @@ describe("what an effect does to cars", () => {
     ).toBe(false);
   });
 
+  it("never closes the road for lanes that are only restricted, however many", () => {
+    const [restricted] = readRoadConditionEffects([
+      effect("l", "lane_restriction", {
+        vehicleImpact: "some_lanes_closed",
+        lanesTotal: 2,
+        lanesRestricted: 2,
+        lanesOperational: 0,
+      }),
+    ]);
+    expect(restricted).toMatchObject({ lanesRestricted: 2, lanesOperational: 0 });
+    expect(closesRoadForCars(restricted!)).toBe(false);
+  });
+
+  it("keeps a delay's band and description when its length is not given", () => {
+    const [delay] = readRoadConditionEffects([
+      effect("d", "delay", { delayBand: "longer_than_six_hours", delayType: "very_long_delays" }),
+    ]);
+    expect(delay).toMatchObject({
+      kind: "delay",
+      delayBand: "longer_than_six_hours",
+      delayType: "very_long_delays",
+    });
+  });
+
   it("caps speed by a mandatory limit only", () => {
     const limit = (fields: Record<string, unknown>) =>
       effect("s", "speed_limit", { limit: { value: 60, unit: "km/h" }, ...fields });

@@ -100,6 +100,64 @@ export function applicabilityText(
   return [included || translate("vehicles.unspecified"), except].filter(Boolean).join(" ");
 }
 
+/** Delay bands with a label in the catalog, by DATEX `DelayBandEnum`. */
+const DELAY_BANDS = new Set([
+  "negligible",
+  "up_to_ten_minutes",
+  "between_ten_minutes_and_thirty_minutes",
+  "between_thirty_minutes_and_one_hour",
+  "between_one_hour_and_three_hours",
+  "between_three_hours_and_six_hours",
+  "longer_than_six_hours",
+]);
+
+/**
+ * Delay descriptions with a label in the catalog, by DATEX `DelaysTypeEnum`.
+ * Plain `delays` says no more than the effect itself and is not repeated.
+ */
+const DELAY_TYPES = new Set(["delays_of_uncertain_duration", "long_delays", "very_long_delays"]);
+
+type LaneRestriction = Extract<RoadConditionEffect, { kind: "lane_restriction" }>;
+
+/**
+ * How many lanes a lane restriction closes, restricts and leaves open. A
+ * restricted lane is restricted fully or partially, so it is not a closed
+ * one; a closed lane is also a restricted one, so restricted lanes are named
+ * apart only where more are restricted than closed. Without counts, the
+ * closed and restricted lanes are counted from the per-lane statuses; open
+ * ones are not, as a source may list only the lanes it affects.
+ */
+function laneCountsText(
+  effect: LaneRestriction,
+  translate: RoadConditionTranslate,
+): string | undefined {
+  const listed = effect.lanes ?? [];
+  const counted = (statuses: (status: string) => boolean) =>
+    listed.length > 0 ? listed.filter((lane) => statuses(lane.status)).length : undefined;
+  const total = effect.lanesTotal;
+  const closed = effect.lanesClosed ?? counted((status) => status === "closed");
+  const restricted = effect.lanesRestricted ?? counted((status) => status !== "open");
+  const open = effect.lanesOperational;
+  const restrictedBeyondClosed = restricted !== undefined && restricted > (closed ?? 0);
+  const parts = restrictedBeyondClosed
+    ? [
+        total !== undefined
+          ? translate("effect.lanesRestrictedOf", { restricted, total })
+          : translate("effect.lanesRestricted", { restricted }),
+        closed ? translate("effect.lanesClosed", { closed }) : undefined,
+      ]
+    : [
+        closed !== undefined && total !== undefined
+          ? translate("effect.lanesClosedOf", { closed, total })
+          : closed !== undefined
+            ? translate("effect.lanesClosed", { closed })
+            : undefined,
+      ];
+  if (open !== undefined) parts.push(translate("effect.lanesOpen", { open }));
+  const text = parts.filter(Boolean).join(", ");
+  return text || undefined;
+}
+
 /** What the effect does, as a label and an optional value. */
 function describe(
   effect: RoadConditionEffect,
@@ -115,15 +173,7 @@ function describe(
           : humanizeToken(effect.scope),
       };
     case "lane_restriction": {
-      const lanes =
-        effect.lanesClosed !== undefined && effect.lanesTotal !== undefined
-          ? translate("effect.lanesClosedOf", {
-              closed: effect.lanesClosed,
-              total: effect.lanesTotal,
-            })
-          : effect.lanesClosed !== undefined
-            ? translate("effect.lanesClosed", { closed: effect.lanesClosed })
-            : undefined;
+      const lanes = laneCountsText(effect, translate);
       return { label, value: lanes ?? humanizeToken(effect.vehicleImpact) };
     }
     case "speed_limit":
@@ -138,7 +188,18 @@ function describe(
       };
     case "delay": {
       const parts = [
-        effect.delay ? `+${quantityText(effect.delay)}` : undefined,
+        effect.delay
+          ? `+${quantityText(effect.delay)}`
+          : effect.delayBand
+            ? DELAY_BANDS.has(effect.delayBand)
+              ? translate(`effect.delayBand.${effect.delayBand}`)
+              : humanizeToken(effect.delayBand)
+            : undefined,
+        effect.delay === undefined && effect.delayType && effect.delayType !== "delays"
+          ? DELAY_TYPES.has(effect.delayType)
+            ? translate(`effect.delayType.${effect.delayType}`)
+            : humanizeToken(effect.delayType)
+          : undefined,
         effect.queueLength
           ? translate("effect.queue", { length: quantityText(effect.queueLength) })
           : undefined,

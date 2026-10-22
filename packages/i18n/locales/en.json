@@ -652,6 +652,23 @@
       "unsupported": "Restriction",
       "lanesClosedOf": "{closed} of {total} lanes closed",
       "lanesClosed": "{closed} closed",
+      "lanesRestrictedOf": "{restricted} of {total} lanes restricted",
+      "lanesRestricted": "{restricted} lanes restricted",
+      "lanesOpen": "{open} open",
+      "delayBand": {
+        "negligible": "negligible",
+        "up_to_ten_minutes": "up to 10 min",
+        "between_ten_minutes_and_thirty_minutes": "10–30 min",
+        "between_thirty_minutes_and_one_hour": "30 min – 1 h",
+        "between_one_hour_and_three_hours": "1–3 h",
+        "between_three_hours_and_six_hours": "3–6 h",
+        "longer_than_six_hours": "over 6 h"
+      },
+      "delayType": {
+        "delays_of_uncertain_duration": "duration uncertain",
+        "long_delays": "long",
+        "very_long_delays": "very long"
+      },
       "advisorySpeed": "(advisory)",
       "queue": "queue {length}",
       "via": "via {roads}",

@@ -192,6 +192,10 @@ export const roadConditionEffectSchema = z.discriminatedUnion("kind", [
     kind: z.literal("lane_restriction"),
     lanesTotal: z.number().int().positive().optional(),
     lanesClosed: z.number().int().nonnegative().optional(),
+    /** Lanes restricted fully or partially; a closed lane is a restricted one, not every restricted lane is closed. */
+    lanesRestricted: z.number().int().nonnegative().optional(),
+    /** Lanes that remain fully usable. */
+    lanesOperational: z.number().int().nonnegative().optional(),
     lanes: z
       .array(
         z.object({
@@ -214,6 +218,10 @@ export const roadConditionEffectSchema = z.discriminatedUnion("kind", [
     ...common,
     kind: z.literal("delay"),
     delay: quantity.optional(),
+    /** The band a delay falls in where its length is not given (`between_ten_minutes_and_thirty_minutes`, …). */
+    delayBand: z.string().min(1).optional(),
+    /** How a delay is described where its length is not (`long_delays`, …). */
+    delayType: z.string().min(1).optional(),
     queueLength: quantity.optional(),
     los: z.string().optional(),
     capacityRemainingPct: z.number().min(0).max(100).optional(),

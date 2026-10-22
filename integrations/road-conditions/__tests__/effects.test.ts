@@ -35,6 +35,15 @@ function dictionaryTranslate(catalog: unknown) {
 }
 
 const translate = dictionaryTranslate(en);
+const DELAY_BAND_CODES = [
+  "negligible",
+  "up_to_ten_minutes",
+  "between_ten_minutes_and_thirty_minutes",
+  "between_thirty_minutes_and_one_hour",
+  "between_one_hour_and_three_hours",
+  "between_three_hours_and_six_hours",
+  "longer_than_six_hours",
+];
 const AT = new Date("2026-09-11T12:00:00Z");
 const options = { translate, locale: "en", at: AT };
 const lines = (effects: RoadConditionEffect[], over = {}) =>
@@ -73,6 +82,51 @@ describe("effectLines", () => {
       "Dangerous goods: prohibited, ADR tunnel category C, UN classes 1, 7 · in force",
       "Detour: via B 9, signposted · in force",
       "Contraflow · in force",
+    ]);
+  });
+
+  it("tells restricted lanes from closed ones and counts the lanes left open", () => {
+    const lanes = (fields: Record<string, unknown>) =>
+      lines([effect("l", "lane_restriction", { vehicleImpact: "some_lanes_closed", ...fields })]);
+    expect(lanes({ lanesRestricted: 2, lanesTotal: 3, lanesOperational: 1 })).toEqual([
+      "Lanes: 2 of 3 lanes restricted, 1 open · in force",
+    ]);
+    expect(lanes({ lanesRestricted: 2, lanesClosed: 1, lanesTotal: 3 })).toEqual([
+      "Lanes: 2 of 3 lanes restricted, 1 closed · in force",
+    ]);
+    expect(lanes({ lanesRestricted: 1, lanesClosed: 1, lanesTotal: 3 })).toEqual([
+      "Lanes: 1 of 3 lanes closed · in force",
+    ]);
+    expect(lanes({ lanesRestricted: 2 })).toEqual(["Lanes: 2 lanes restricted · in force"]);
+    expect(
+      lanes({
+        lanes: [
+          { index: 1, status: "closed" },
+          { index: 2, status: "narrowed" },
+          { index: 3, status: "open" },
+        ],
+      }),
+    ).toEqual(["Lanes: 2 lanes restricted, 1 closed · in force"]);
+  });
+
+  it("gives a delay's band or description where its length is not known", () => {
+    const delay = (fields: Record<string, unknown>) => lines([effect("d", "delay", fields)]);
+    expect(delay({ delayBand: "between_ten_minutes_and_thirty_minutes" })).toEqual([
+      "Delay: 10–30 min · in force",
+    ]);
+    expect(
+      delay({ delayBand: "between_one_hour_and_three_hours", delayType: "long_delays" }),
+    ).toEqual(["Delay: 1–3 h, long · in force"]);
+    expect(delay({ delayType: "delays_of_uncertain_duration" })).toEqual([
+      "Delay: duration uncertain · in force",
+    ]);
+    expect(delay({ delayType: "delays" })).toEqual(["Delay · in force"]);
+    // An exact delay wins over its band; a band or description this host does not know reads plainly.
+    expect(delay({ delay: { value: 600, unit: "s" }, delayBand: "longer_than_six_hours" })).toEqual(
+      ["Delay: +10 min · in force"],
+    );
+    expect(delay({ delayBand: "a_fortnight", delayType: "glacial_delays" })).toEqual([
+      "Delay: A fortnight, Glacial delays · in force",
     ]);
   });
 
@@ -178,6 +232,19 @@ describe("effectLines", () => {
       }),
       effect("5", "hazmat", { mode: "restricted", adrTunnelCategory: "E" }),
       effect("6", "unsupported"),
+      effect("7", "lane_restriction", {
+        lanesRestricted: 2,
+        lanesClosed: 1,
+        lanesTotal: 3,
+        lanesOperational: 1,
+        vehicleImpact: "x",
+      }),
+      effect("8", "lane_restriction", { lanesRestricted: 2, vehicleImpact: "x" }),
+      ...[...DELAY_BAND_CODES, "x"].map((delayBand, i) =>
+        effect(`9.${i}`, "delay", { delayBand, delayType: "very_long_delays" }),
+      ),
+      effect("10", "delay", { delayType: "long_delays" }),
+      effect("11", "delay", { delayType: "delays_of_uncertain_duration" }),
     ];
     expect(() =>
       effectLines(situation({ effects: every }), { ...options, translate: german }),
