@@ -19,22 +19,12 @@ import Snackbar from "@mui/material/Snackbar";
 import ToggleButton from "@mui/material/ToggleButton";
 import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
 import Typography from "@mui/material/Typography";
-import type {
-  AutocompleteResult,
-  DirectionsResult,
-  LngLat,
-  TransitReplanOptions,
-  TravelMode,
-} from "@openmapx/core";
+import type { AutocompleteResult, DirectionsResult, LngLat, TravelMode } from "@openmapx/core";
 import {
   directionsQueryKey,
   formatDistance,
   formatDuration,
   isApiClientError,
-  preferredModesToMotis,
-  rankItineraries,
-  TRANSIT_ACCESS_MOTIS_MODES,
-  TRANSIT_ACCESS_RENTAL_FORM_FACTORS,
   timeZoneAt,
   tzDiffMinutes,
   tzOffsetLabel,
@@ -47,14 +37,10 @@ import {
   useMapStore,
   useMenuStore,
   useOptimizeRoute,
-  useRouteInGermany,
   useScheduledDirections,
   useSession,
   useSettingsStore,
   useSidebarStore,
-  useTransitChainPlan,
-  useTransitPlan,
-  useTransitPlanningCapabilities,
   useVehicles,
   viewerTimeZone,
 } from "@openmapx/core";
@@ -63,7 +49,6 @@ import type { Attribution } from "@openmapx/mobility-core/attribution";
 import {
   contributorsForField,
   contributorsForNestedRecordFields,
-  contributorsForRecords,
   snapshotContributors,
 } from "@openmapx/mobility-core/contributors";
 import { useQueryClient } from "@tanstack/react-query";
@@ -108,6 +93,7 @@ import { useForegroundLocation } from "@/lib/mobile/useForegroundLocation";
 import { routeAttributions } from "@/lib/routeAttributions";
 import { servedAttributions } from "@/lib/servedAttributions";
 import { useRouteImpacts } from "./useRouteImpacts";
+import { useTransitDirectionsPlan } from "./useTransitDirectionsPlan";
 
 const GROUND_FALLBACK_MODES = ["walking", "cycling", "driving", "motorcycle"] as const;
 type GroundFallbackMode = (typeof GROUND_FALLBACK_MODES)[number];
@@ -192,7 +178,6 @@ export function DirectionsPanelContent() {
     bikePreferQuietRoads,
     bikePreferSmoothSurfaces,
     bikeSpeedKmh,
-    transitItineraries,
     activeItineraryIndex,
     transitDepartureTime,
     transitArrivalTime,
@@ -281,7 +266,6 @@ export function DirectionsPanelContent() {
   const { services: caps } = useCapabilities();
   const queryClient = useQueryClient();
   const optimizeMutation = useOptimizeRoute();
-  const { data: transitPlanningCapabilities } = useTransitPlanningCapabilities();
 
   const [showOptions, setShowOptions] = useState(false);
   const [detailsRouteIndex, setDetailsRouteIndex] = useState<number | null>(null);
@@ -291,9 +275,6 @@ export function DirectionsPanelContent() {
   // Driving depart/arrive is kept independent of the transit time state so the
   // two flows never interfere.
   const [scheduleEditIndex, setScheduleEditIndex] = useState<number | null>(null);
-  const [numItineraries, setNumItineraries] = useState(3);
-  const [transitPageToken, setTransitPageToken] = useState<string | undefined>();
-  const [transitPageDirection, setTransitPageDirection] = useState<"previous" | "next">("next");
   const [focusedField, setFocusedField] = useState<number | null>(null);
   const [snackbar, setSnackbar] = useState<string | null>(null);
   const waypointListRef = useRef<HTMLDivElement>(null);
@@ -557,192 +538,36 @@ export function DirectionsPanelContent() {
   const evQuery = useEvDirections(evRequest);
   const { data: evData, isLoading: evLoading, isError: evIsError } = evQuery;
 
-  // Transit plan query
-  const debouncedDepartureTime = useDebounce(transitDepartureTime, 500);
-  const debouncedArrivalTime = useDebounce(transitArrivalTime, 500);
-  const transitDepartAtStr =
-    isTransitMode && transitTimeMode === "depart" && debouncedDepartureTime instanceof Date
-      ? debouncedDepartureTime.toISOString()
-      : undefined;
-  const transitArriveByStr =
-    isTransitMode && transitTimeMode === "arrive" && debouncedArrivalTime instanceof Date
-      ? debouncedArrivalTime.toISOString()
-      : undefined;
-
-  // "Fewer transfers" / "Less walking" re-rank the returned Pareto front, so
-  // fetch a few extra alternatives to give the sort something to choose from.
-  const ranksClientSide =
-    transitRoutePreference === "fewerTransfers" || transitRoutePreference === "lessWalking";
-  const effectiveNumItineraries = ranksClientSide ? Math.max(numItineraries, 5) : numItineraries;
-
-  // The Deutschlandticket filter is Germany-only; gate it on both endpoints
-  // resolving to DE so we never silently constrain a route that leaves Germany.
-  // Only resolve the endpoints' country when the toggle is actually on —
-  // bothInGermany is consumed solely by deutschlandticketActive below, so an
-  // off toggle must not fire two reverse-geocodes per transit route. (The
-  // options panel resolves it separately to decide whether to show the toggle.)
-  const { bothInGermany } = useRouteInGermany(
-    isTransitMode && deutschlandticketOnly ? origin : null,
-    isTransitMode && deutschlandticketOnly ? destination : null,
-  );
-  const deutschlandticketActive = isTransitMode && bothInGermany && deutschlandticketOnly;
-
-  // Send the user's raw Prefer selection plus a Deutschlandticket flag; each
-  // transit provider applies the D-Ticket restriction its own (most accurate)
-  // way server-side (MOTIS intersects modes, db-vendo uses DB's native filter).
-  const effectiveMotisModes = useMemo(
-    () => preferredModesToMotis(transitPreferredModes),
-    [transitPreferredModes],
-  );
-
-  const accessModes = TRANSIT_ACCESS_MOTIS_MODES[transitAccessMode];
-  const rentalFormFactors = TRANSIT_ACCESS_RENTAL_FORM_FACTORS[transitAccessMode];
-  const activePlanningMetadata = transitPlanningCapabilities?.providers.find(
-    (provider) => provider.id === "transit-motis-local",
-  )?.metadata;
-
-  // Snapshot of the resolved MOTIS options to hand to navigation, so an on-trip
-  // replan reuses the same modes/access/wheelchair/D-Ticket gate the plan used.
-  const transitReplanOptions = useMemo<TransitReplanOptions>(
-    () => ({
-      modes: effectiveMotisModes,
-      wheelchairRequired,
-      maxTransfers: maxTransfers ?? undefined,
-      transferBuffer,
-      requireBikeTransport,
-      bikeHillPreference,
-      preTransitModes: accessModes.preTransitModes,
-      postTransitModes: accessModes.postTransitModes,
-      directModes: accessModes.directModes,
-      deutschlandticketOnly: deutschlandticketActive,
-    }),
-    [
-      effectiveMotisModes,
-      wheelchairRequired,
-      maxTransfers,
-      transferBuffer,
-      requireBikeTransport,
-      bikeHillPreference,
-      accessModes,
-      deutschlandticketActive,
-    ],
-  );
-
-  // A transit journey with intermediate stops — or with any stop time — is a
-  // chain of connections, one per segment; the point-to-point planner cannot
-  // express it, so exactly one of the two queries runs.
-  const transitIsChained =
-    isTransitMode &&
-    allWaypointsFilled &&
-    (waypoints.length > 2 || waypoints.some((wp) => wp.schedule !== undefined));
-
-  const transitChainRequest = useMemo(
-    () =>
-      transitIsChained
-        ? {
-            waypoints: routeWaypoints.map(([lng, lat]) => ({ lat, lng })),
-            schedules: waypoints.map((wp) => wp.schedule ?? null),
-            ...(transitDepartAtStr ? { departureTime: transitDepartAtStr } : {}),
-            ...(transitArriveByStr ? { arrivalTime: transitArriveByStr } : {}),
-            modes: effectiveMotisModes,
-            wheelchairRequired,
-            ...(maxTransfers !== null ? { maxTransfers } : {}),
-            transferBuffer,
-            requireBikeTransport,
-            bikeHillPreference,
-            preTransitModes: accessModes.preTransitModes,
-            postTransitModes: accessModes.postTransitModes,
-            directModes: accessModes.directModes,
-            deutschlandticketOnly: deutschlandticketActive,
-            ...(activePlanningMetadata?.datasetEpoch
-              ? { capabilityEpoch: activePlanningMetadata.datasetEpoch }
-              : {}),
-          }
-        : null,
-    [
-      transitIsChained,
-      routeWaypoints,
-      waypoints,
-      transitDepartAtStr,
-      transitArriveByStr,
-      effectiveMotisModes,
-      wheelchairRequired,
-      maxTransfers,
-      transferBuffer,
-      requireBikeTransport,
-      bikeHillPreference,
-      accessModes,
-      deutschlandticketActive,
-      activePlanningMetadata,
-    ],
-  );
-  const transitChainQuery = useTransitChainPlan(transitChainRequest);
-  const { data: transitChainData } = transitChainQuery;
-
-  const transitPlanQuery = useTransitPlan({
-    origin: isTransitMode && !transitIsChained ? origin : null,
-    destination: isTransitMode && !transitIsChained ? destination : null,
-    departAt: transitDepartAtStr,
-    arriveBy: transitArriveByStr,
-    numItineraries: effectiveNumItineraries,
-    modes: effectiveMotisModes,
+  const {
+    isChained: transitIsChained,
+    planQuery: transitPlanQuery,
+    chainQuery: transitChainQuery,
+    itineraries: transitItineraries,
+    replanOptions: transitReplanOptions,
+    attributions: transitPlanAttributions,
+    paging: transitPaging,
+  } = useTransitDirectionsPlan({
+    enabled: isTransitMode,
+    timeMode: transitTimeMode,
+    waypoints,
+    transitDepartureTime,
+    transitArrivalTime,
+    transitPreferredModes,
+    transitRoutePreference,
+    transitAccessMode,
     wheelchairRequired,
-    maxTransfers: maxTransfers ?? undefined,
+    maxTransfers,
     transferBuffer,
     requireBikeTransport,
     bikeHillPreference,
-    rentalFormFactors,
-    capabilityEpoch: activePlanningMetadata?.datasetEpoch,
-    rentalSource: rentalFormFactors ? activePlanningMetadata?.source : undefined,
-    rentalInstance: rentalFormFactors ? activePlanningMetadata?.instance : undefined,
-    preTransitModes: accessModes.preTransitModes,
-    postTransitModes: accessModes.postTransitModes,
-    directModes: accessModes.directModes,
-    deutschlandticketOnly: deutschlandticketActive,
-    pageToken: transitPageToken,
+    deutschlandticketOnly,
   });
+  const { data: transitChainData } = transitChainQuery;
   const {
     data: transitPlanData,
     isLoading: transitLoading,
     isError: transitError,
   } = transitPlanQuery;
-  const transitPlanAttributions = contributorsForRecords(transitItineraries);
-
-  useEffect(() => {
-    if (transitPlanData?.itineraries) {
-      const incoming = transitPlanData.itineraries;
-      const existing = transitPageToken ? useDirectionsStore.getState().transitItineraries : [];
-      const combined =
-        transitPageToken && transitPageDirection === "previous"
-          ? [...incoming, ...existing]
-          : [...existing, ...incoming];
-      const seen = new Set<string>();
-      const deduped = combined.filter((itinerary) => {
-        const fallback = `${itinerary.startTime}|${itinerary.endTime}|${itinerary.legs
-          .map((leg) => `${leg.tripId ?? leg.mode}:${leg.from.stopId ?? leg.from.name}`)
-          .join("|")}`;
-        const key = `${itinerary.source ?? transitPlanData.provider ?? "unknown"}:${
-          itinerary.id ?? fallback
-        }`;
-        if (seen.has(key)) return false;
-        seen.add(key);
-        return true;
-      });
-      setTransitItineraries(rankItineraries(deduped, transitRoutePreference));
-    }
-  }, [
-    transitPlanData,
-    transitRoutePreference,
-    setTransitItineraries,
-    transitPageToken,
-    transitPageDirection,
-  ]);
-
-  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional trigger deps
-  useEffect(() => {
-    setNumItineraries(3);
-    setTransitPageToken(undefined);
-  }, [origin, destination]);
 
   // Autocomplete for the currently focused waypoint input
   const activeQuery = focusedField !== null ? (inputValues[focusedField] ?? "") : "";
@@ -1516,7 +1341,7 @@ export function DirectionsPanelContent() {
                 onRetry={() => void transitPlanQuery.refetch()}
                 {...recoveryActions}
               />
-            ) : transitPlanData?.itineraries.length === 0 && !transitPageToken ? (
+            ) : transitPlanData?.itineraries.length === 0 && !transitPaging.isPage ? (
               <RouteRecovery failed={false} {...recoveryActions} />
             ) : transitItineraries.length === 0 ? (
               <RouteRecovery failed={false} {...recoveryActions} />
@@ -1557,26 +1382,20 @@ export function DirectionsPanelContent() {
                     {t("arrivalInDestinationTime")}
                   </Typography>
                 )}
-                {(transitPlanData?.previousPageToken || transitPlanData?.nextPageToken) && (
+                {(transitPaging.previousToken || transitPaging.nextToken) && (
                   <Box sx={{ px: 2, py: 1, borderTop: "1px solid", borderColor: "divider" }}>
                     <Box sx={{ display: "flex", justifyContent: "space-between", gap: 1 }}>
                       <Button
                         size="small"
-                        disabled={!transitPlanData.previousPageToken || transitLoading}
-                        onClick={() => {
-                          setTransitPageDirection("previous");
-                          setTransitPageToken(transitPlanData.previousPageToken);
-                        }}
+                        disabled={!transitPaging.previousToken || transitLoading}
+                        onClick={transitPaging.loadPrevious}
                       >
                         {t("earlierConnections")}
                       </Button>
                       <Button
                         size="small"
-                        disabled={!transitPlanData.nextPageToken || transitLoading}
-                        onClick={() => {
-                          setTransitPageDirection("next");
-                          setTransitPageToken(transitPlanData.nextPageToken);
-                        }}
+                        disabled={!transitPaging.nextToken || transitLoading}
+                        onClick={transitPaging.loadNext}
                       >
                         {t("laterConnections")}
                       </Button>
