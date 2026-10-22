@@ -139,7 +139,7 @@ function parseAdvisory(value: unknown): AuditAdvisory | undefined {
     typeof severity !== "string" ||
     !SEVERITIES.has(severity as AuditSeverity) ||
     (patchedVersions !== null && typeof patchedVersions !== "string") ||
-    typeof patchedVersionsUnpublished !== "boolean" ||
+    (patchedVersionsUnpublished !== undefined && typeof patchedVersionsUnpublished !== "boolean") ||
     !Array.isArray(findings) ||
     findings.length === 0
   ) {
@@ -160,7 +160,8 @@ function parseAdvisory(value: unknown): AuditAdvisory | undefined {
     severity: severity as AuditSeverity,
     versions: [...versions].sort(),
     patchedVersions,
-    patchedVersionsUnpublished,
+    // The registry's report may leave the flag out; then no patched range means none is published.
+    patchedVersionsUnpublished: patchedVersionsUnpublished ?? patchedVersions === null,
   };
 }
 

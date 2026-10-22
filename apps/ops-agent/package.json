@@ -14,7 +14,7 @@
   "dependencies": {
     "@openmapx/core": "workspace:^",
     "@openmapx/transitous-core": "workspace:^",
-    "fastify": "^5.12.5"
+    "fastify": "^5.12.7"
   },
   "devDependencies": {
     "@types/node": "^26.6.5",
