@@ -667,7 +667,7 @@
       "lanesClosedOf": "{closed} von {total} Fahrstreifen gesperrt",
       "lanesClosed": "{closed} gesperrt",
       "lanesRestrictedOf": "{restricted} von {total} Fahrstreifen eingeschränkt",
-      "lanesRestricted": "{restricted} Fahrstreifen eingeschränkt",
+      "lanesRestricted": "{restricted} eingeschränkt",
       "lanesOpen": "{open} frei",
       "delayBand": {
         "negligible": "geringfügig",

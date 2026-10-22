@@ -667,7 +667,7 @@
       "lanesClosedOf": "{closed} of {total} lanes closed",
       "lanesClosed": "{closed} closed",
       "lanesRestrictedOf": "{restricted} of {total} lanes restricted",
-      "lanesRestricted": "{restricted} lanes restricted",
+      "lanesRestricted": "{restricted} restricted",
       "lanesOpen": "{open} open",
       "delayBand": {
         "negligible": "negligible",

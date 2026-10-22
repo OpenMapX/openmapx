@@ -97,7 +97,7 @@ describe("effectLines", () => {
     expect(lanes({ lanesRestricted: 1, lanesClosed: 1, lanesTotal: 3 })).toEqual([
       "Lanes: 1 of 3 lanes closed · in force",
     ]);
-    expect(lanes({ lanesRestricted: 2 })).toEqual(["Lanes: 2 lanes restricted · in force"]);
+    expect(lanes({ lanesRestricted: 1 })).toEqual(["Lanes: 1 restricted · in force"]);
     expect(
       lanes({
         lanes: [
@@ -106,7 +106,7 @@ describe("effectLines", () => {
           { index: 3, status: "open" },
         ],
       }),
-    ).toEqual(["Lanes: 2 lanes restricted, 1 closed · in force"]);
+    ).toEqual(["Lanes: 2 restricted, 1 closed · in force"]);
   });
 
   it("gives a delay's band or description where its length is not known", () => {
