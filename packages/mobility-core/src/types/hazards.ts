@@ -67,7 +67,8 @@ export interface NaturalHazard extends ContributingRecord {
   ended: boolean;
   updatedAt?: string;
   severity?: {
-    label: "minor" | "moderate" | "major" | "critical" | "unknown";
+    /** `none`: the publisher states it has no impact. */
+    label: "none" | "minor" | "moderate" | "major" | "critical" | "unknown";
     level?: number;
     /** The publisher's own word for it, e.g. a GDACS alert level. */
     declared?: string;

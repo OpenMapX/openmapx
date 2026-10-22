@@ -353,6 +353,22 @@ describe("natural hazards", () => {
     expect(byId(await hazards(), "usgs-quakes:us6000ty43").tsunamiFlag).toBe(true);
   });
 
+  test("a severity of no impact stays none, not unknown", async () => {
+    const answer = clone(naturalAnswer);
+    const records = answer.records as unknown as Rec[];
+    const quake = records.find((r) => String(r.id).endsWith("us6000u0xi"))!;
+    quake.severity = { label: "none" };
+    const other = records.find((r) => String(r.id).endsWith("us6000ty43"))!;
+    other.severity = { label: "none", declaredRaw: "green" };
+    const { provider } = providerWith((path) => (path === "/situations" ? answer : undefined));
+    const list = (await provider.getNaturalHazards(BBOX, { types: ["earthquake"] })).hazards;
+    expect(byId(list, "usgs-quakes:us6000u0xi").severity).toEqual({ label: "none" });
+    expect(byId(list, "usgs-quakes:us6000ty43").severity).toEqual({
+      label: "none",
+      declared: "green",
+    });
+  });
+
   test("a polygon hazard is drawn at the vertex mean of its outer rings", async () => {
     const fire = byId(await hazards(), "us-nifc-fires:DB5448A6-FCAC-4041-A817-6F8198161DBA");
     const record = (naturalAnswer.records as unknown as Rec[]).find((r) =>

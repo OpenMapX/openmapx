@@ -37,7 +37,7 @@ const NATURAL_HAZARD_TYPES: ReadonlySet<string> = new Set<NaturalHazardType>([
   "sea_ice",
 ]);
 
-const SEVERITY_LABELS = ["minor", "moderate", "major", "critical", "unknown"] as const;
+const SEVERITY_LABELS = ["none", "minor", "moderate", "major", "critical", "unknown"] as const;
 
 /**
  * The text of a multilingual `[{ lang, text }]` value: the first in the
