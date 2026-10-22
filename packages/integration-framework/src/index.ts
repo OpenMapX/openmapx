@@ -206,6 +206,8 @@ export type {
   RideQuoteRequest,
   RideUnavailableReason,
   RoadConditionAttribution,
+  RoadConditionBinding,
+  RoadConditionBindingDetail,
   RoadConditionEffect,
   RoadConditionEvent,
   RoadConditionRoadRef,

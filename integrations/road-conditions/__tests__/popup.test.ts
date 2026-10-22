@@ -2,9 +2,11 @@ import type { RoadConditionEvent } from "@openmapx/core";
 import type { MapGeoJSONFeature } from "maplibre-gl";
 import { describe, expect, it } from "vitest";
 import {
+  bindingLabel,
   buildRoadConditionPopupGroups,
   buildRoadConditionPopupHtml,
   directionText,
+  popupEvents,
 } from "../popup";
 import { effect, situation, text } from "./fixtures";
 
@@ -501,5 +503,44 @@ describe("directionText", () => {
     expect(say({ value: "unknown", basis: "unknown" })).toBe("direction.unknown");
     expect(say({ value: "clockwise", basis: "ring" })).toBe("Clockwise");
     expect(say({ value: "unknown", loop: "middle_ring" })).toBe("Middle ring");
+  });
+});
+
+describe("road-condition popup bindings", () => {
+  it("says why a binding stands as it does, with plain words for a reason it does not know", () => {
+    expect(bindingLabel("ambiguous:direction_undecided", translate)).toBe(
+      "binding.ambiguous: bindingReason.direction_undecided",
+    );
+    expect(bindingLabel("exact", translate)).toBe("binding.exact");
+    expect(bindingLabel("unresolved:a_reason_from_tomorrow", translate)).toBe(
+      "binding.unresolved: a reason from tomorrow",
+    );
+    expect(bindingLabel("mystery:no_path", translate)).toBe("Mystery: bindingReason.no_path");
+  });
+
+  it("shows the read bindings of a situation in place of its routing evidence statuses", () => {
+    const shown = situation({ id: "oc:bound", effects: [effect("oc:bound/c", "closure")] });
+    const bindings = new Map([
+      [
+        "oc:bound",
+        {
+          situation: { status: "unresolved", reason: "conflicting_direction" },
+          effects: { "oc:bound/c": { status: "ambiguous", reason: "direction_undecided" } },
+        },
+      ],
+    ]);
+    const { html } = render([shown], { bindings });
+    expect(html).toContain(
+      "binding.unresolved: bindingReason.conflicting_direction, binding.ambiguous: bindingReason.direction_undecided",
+    );
+    expect(render([shown]).html).not.toContain("bindingReason.");
+  });
+
+  it("lists the situations a popup shows once each, for reading their bindings", () => {
+    const shown = popupEvents({
+      hits: [hit({ _displayId: displayId }, point), hit({ _displayIds: [displayId] }, point)],
+      eventsByDisplayId: lookup,
+    });
+    expect(shown.map((event) => event.id)).toEqual(events.map((event) => event.id));
   });
 });

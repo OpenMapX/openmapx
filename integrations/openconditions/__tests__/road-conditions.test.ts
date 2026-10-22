@@ -283,6 +283,58 @@ describe("road-conditions provider", () => {
     ]);
   });
 
+  it("reads a situation's bindings and their reasons from the record API", async () => {
+    const urls: string[] = [];
+    const answer = {
+      record: situation("s1"),
+      binding: {
+        status: "unresolved",
+        confidence: null,
+        directionMode: "unknown",
+        reason: "conflicting_direction",
+        boundAt: "2026-09-11T10:00:00.000Z",
+      },
+      effectBindings: {
+        "s1/closure": { status: "ambiguous", reason: "direction_undecided" },
+        "s1/limit": { status: "exact", reason: null },
+        "s1/garbage": "x",
+      },
+    };
+    const p = provider({
+      serve: (url) => (url.includes("/situations/") ? answer : undefined),
+      capture: (url) => urls.push(url),
+    });
+    expect(await p.getBindings!("oc:situation:nl-ndw-events:s1")).toEqual({
+      situation: { status: "unresolved", reason: "conflicting_direction" },
+      effects: {
+        "s1/closure": { status: "ambiguous", reason: "direction_undecided" },
+        "s1/limit": { status: "exact", reason: null },
+      },
+    });
+    expect(urls).toEqual([
+      `${BASE_URL}/situations/${encodeURIComponent("oc:situation:nl-ndw-events:s1")}`,
+    ]);
+  });
+
+  it("gives no bindings for an unknown situation or one of an excluded source", async () => {
+    const missing = provider({
+      serve: (url) =>
+        url.includes("/situations/") ? { status: 404, headers: {}, body: null } : undefined,
+    });
+    expect(await missing.getBindings!("oc:situation:x")).toBeNull();
+    const known = provider({
+      serve: (url) =>
+        url.includes("/situations/")
+          ? { record: situation("s1"), binding: { status: "exact", reason: null } }
+          : undefined,
+    });
+    expect(
+      await known.getBindings!("oc:situation:nl-ndw-events:s1", {
+        excludedSourceIds: ["nl-ndw-events"],
+      }),
+    ).toBeNull();
+  });
+
   it("leaves a threshold the record API does not take to the orchestrator", async () => {
     const calls: Params[] = [];
     const p = provider({

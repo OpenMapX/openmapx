@@ -540,3 +540,90 @@ describe("GET /events filters", () => {
     });
   });
 });
+
+describe("GET /bindings", () => {
+  function bindingsHarness(providers: RoadConditionsProvider[], disallowed: string[] = []) {
+    const routes = new Map<string, Handler>();
+    const ctx = {
+      registerRoute(_method: string, path: string, handler: Handler) {
+        routes.set(path, handler);
+      },
+      cache: { withCache: async <T>(_k: string, _t: number, fn: () => Promise<T>) => fn() },
+      getIntegrationsByDomain: () =>
+        providers.map((p) => ({
+          id: p.id,
+          providers: new Map<string, RoadConditionsProvider[]>([["road-conditions", [p]]]),
+        })),
+      getDisallowedSourceIds: async () => new Set(disallowed),
+      log: { warn() {}, error() {}, info() {}, debug() {} },
+    } as unknown as IntegrationContext;
+    setup(ctx);
+    return async (query: Record<string, string | undefined>) => {
+      let status = 200;
+      let body: unknown;
+      await handlerFor(routes, "/bindings")(
+        { query, body: undefined },
+        {
+          status: (code) => {
+            status = code;
+            return { send: (b: unknown) => (body = b) };
+          },
+          header: () => {},
+          send: (b: unknown) => (body = b),
+        },
+      );
+      return { status, body };
+    };
+  }
+
+  const detail = {
+    situation: { status: "ambiguous", reason: "direction_undecided" },
+    effects: {},
+  };
+
+  it("asks the named provider for the situation's bindings, excluding disallowed sources", async () => {
+    const asked: Array<[string, unknown]> = [];
+    const get = bindingsHarness(
+      [
+        {
+          id: "oc",
+          getEvents: async () => [],
+          getBindings: async (id, opts) => {
+            asked.push([id, opts]);
+            return detail;
+          },
+        },
+      ],
+      ["grey"],
+    );
+    expect(await get({ provider: "oc", id: "oc:situation:a" })).toEqual({
+      status: 200,
+      body: detail,
+    });
+    expect(asked).toEqual([["oc:situation:a", { excludedSourceIds: ["grey"] }]]);
+  });
+
+  it("answers 404 for an unknown provider, one without bindings or an unknown situation", async () => {
+    const get = bindingsHarness([
+      { id: "plain", getEvents: async () => [] },
+      { id: "oc", getEvents: async () => [], getBindings: async () => null },
+    ]);
+    expect((await get({ provider: "nope", id: "x" })).status).toBe(404);
+    expect((await get({ provider: "plain", id: "x" })).status).toBe(404);
+    expect((await get({ provider: "oc", id: "x" })).status).toBe(404);
+    expect((await get({ provider: "oc" })).status).toBe(400);
+  });
+
+  it("answers 503 when the provider's read fails", async () => {
+    const get = bindingsHarness([
+      {
+        id: "oc",
+        getEvents: async () => [],
+        getBindings: async () => {
+          throw new Error("down");
+        },
+      },
+    ]);
+    expect((await get({ provider: "oc", id: "x" })).status).toBe(503);
+  });
+});

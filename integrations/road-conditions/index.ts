@@ -163,6 +163,43 @@ export function setup(ctx: IntegrationContext): void {
     }
   });
 
+  // GET /bindings?provider=<provider id>&id=<situation id>
+  // The graph bindings of one situation, with why each stands as it does,
+  // asked of the provider that published it. A popup reads it on demand: the
+  // situation lists carry no bindings. A situation of a disallowed source, or
+  // one its provider no longer serves, answers 404.
+  ctx.registerRoute("GET", "/bindings", async (req, reply) => {
+    const { provider: providerId, id } = scalarQueries(req.query);
+    if (!providerId || !id || providerId.length > 128 || id.length > 512) {
+      reply.status(400).send({ error: "provider and id required" });
+      return;
+    }
+    const provider = collectProviders(ctx).find((p) => p.id === providerId);
+    if (!provider?.getBindings) {
+      reply.status(404).send({ error: "no bindings for this situation" });
+      return;
+    }
+    try {
+      const disallowed = [...((await ctx.getDisallowedSourceIds?.()) ?? [])];
+      const detail = await ctx.cache.withCache(
+        `conditions:binding:${providerId}:${id}:${disallowed.sort().join("+")}`,
+        ROAD_EVENT_CACHE_MAX_AGE_S,
+        async () => (await provider.getBindings?.(id, { excludedSourceIds: disallowed })) ?? null,
+      );
+      if (!detail) {
+        reply.header("Cache-Control", "no-cache");
+        reply.status(404).send({ error: "no bindings for this situation" });
+        return;
+      }
+      reply.header("Cache-Control", `private, max-age=${ROAD_EVENT_CACHE_MAX_AGE_S}`);
+      reply.send(detail);
+    } catch (err) {
+      ctx.log.warn("road-conditions binding read failed", err);
+      reply.header("Cache-Control", "no-cache");
+      reply.status(503).send({ error: "road-condition bindings unavailable" });
+    }
+  });
+
   // POST /flow-along-route { routes: [{ id, geometry }] }
   // Live speed/congestion matched onto each submitted route polyline and
   // returned as along-route metre spans, so the client can paint the route

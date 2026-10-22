@@ -3,6 +3,8 @@ import {
   getRoadConditionRoutingDecision,
   type LngLat,
   localizedTextFor,
+  ROAD_CONDITION_BINDING_REASONS,
+  type RoadConditionBindingDetail,
   type RoadConditionEvent,
 } from "@openmapx/core";
 import {
@@ -80,6 +82,8 @@ export interface RoadConditionPopupInput {
   atMs?: number;
   /** Layer refreshes must not revive withdrawn records from old hit properties. */
   requireCurrentEvents?: boolean;
+  /** Graph bindings read for the shown situations, by situation id. */
+  bindings?: ReadonlyMap<string, RoadConditionBindingDetail>;
 }
 
 export interface RoadConditionPopupContent {
@@ -151,6 +155,7 @@ const BINDING_STATUSES = new Set([
   "obsolete",
   "invalid",
 ]);
+const BINDING_REASONS = new Set<string>(ROAD_CONDITION_BINDING_REASONS);
 const VALIDITY_STATUSES = new Set([
   "planned",
   "active",
@@ -378,6 +383,24 @@ export function directionText(
   return parts.join(" · ");
 }
 
+/**
+ * One binding as the card reads it, from a `status` or `status:reason`
+ * token: its status, and why it stands as it does where a reason is known
+ * ("Ambiguous: the carriageway of the stated direction is undecided"). A
+ * status or reason this host does not know reads as its words.
+ */
+export function bindingLabel(token: string, translate: RoadConditionTranslate): string {
+  const [status = "", reason] = token.split(":");
+  const statusText = BINDING_STATUSES.has(status)
+    ? translate(`binding.${status}`)
+    : humanizeToken(status);
+  if (!reason) return statusText;
+  const reasonText = BINDING_REASONS.has(reason)
+    ? translate(`bindingReason.${reason}`)
+    : humanizeToken(reason).toLowerCase();
+  return `${statusText}: ${reasonText}`;
+}
+
 /** The raw, untranslated card fields of one situation. */
 function popupProperties(
   event: RoadConditionEvent,
@@ -385,6 +408,7 @@ function popupProperties(
   includeRecordId: boolean,
   locale: string,
   atMs: number,
+  binding?: RoadConditionBindingDetail,
 ): Record<string, unknown> {
   const properties: Record<string, unknown> = {
     headline: localizedTextFor(event.headline, locale) ?? "",
@@ -420,6 +444,16 @@ function popupProperties(
       ? "candidate"
       : "display_only";
   }
+  // The bindings read for the situation say more than its routing evidence:
+  // every binding, routable or not, with why it stands as it does.
+  const bindings = binding
+    ? [...(binding.situation ? [binding.situation] : []), ...Object.values(binding.effects)]
+    : [];
+  if (bindings.length > 0) {
+    properties.bindingStatus = distinctNonEmpty(
+      bindings.map(({ status, reason }) => (reason ? `${status}:${reason}` : status)),
+    ).join(",");
+  }
   if (includeRecordId) properties.recordId = event.id;
   const description = localizedTextFor(event.description, locale);
   if (description) properties.description = description;
@@ -444,16 +478,24 @@ export function buildRoadConditionPopupGroups(
   relatedHeadline: (headline: string, count: number) => string = defaultRelatedHeadline,
   locale = "en",
   atMs: number = Date.now(),
+  bindings?: ReadonlyMap<string, RoadConditionBindingDetail>,
 ): RoadConditionPopupGroup[] {
   if (events.length === 0) return [];
   const childEntries = events.map((event) =>
-    popupProperties(event, displayId, events.length > 1, locale, atMs),
+    popupProperties(event, displayId, events.length > 1, locale, atMs, bindings?.get(event.id)),
   );
   const firstEntry = childEntries[0];
   if (events.length === 1 && firstEntry) return [{ summary: firstEntry, sourceRecords: [] }];
 
   const representative = mostSevereEvent(events);
-  const summary = popupProperties(representative, displayId, false, locale, atMs);
+  const summary = popupProperties(
+    representative,
+    displayId,
+    false,
+    locale,
+    atMs,
+    bindings?.get(representative.id),
+  );
   summary.sourceRecordCount = events.length;
 
   const same = (field: keyof RoadConditionEvent) =>
@@ -472,9 +514,9 @@ export function buildRoadConditionPopupGroups(
   if (!same("effects") || !same("validity") || !same("direction")) {
     summary._summaryOnly = true;
   }
-  if (!same("routingEvidence")) {
+  if (!same("routingEvidence")) delete summary.applicationReason;
+  if (new Set(childEntries.map((entry) => entry.bindingStatus)).size > 1) {
     delete summary.bindingStatus;
-    delete summary.applicationReason;
   }
   if (!same("updatedAt")) delete summary.updatedAt;
   if (!same("fetchedAt")) delete summary.checkedAt;
@@ -539,9 +581,7 @@ function formatPopupEntry(
   const bindingText =
     typeof sourceEntry.bindingStatus === "string"
       ? distinctNonEmpty(sourceEntry.bindingStatus.split(","))
-          .map((status) =>
-            BINDING_STATUSES.has(status) ? translate(`binding.${status}`) : humanizeToken(status),
-          )
+          .map((token) => bindingLabel(token, translate))
           .join(", ")
       : "";
   const applicationText =
@@ -596,6 +636,19 @@ function displayIdsForHit(properties: Record<string, unknown>): string[] {
   return [String(properties._displayId ?? properties._id ?? properties.headline ?? "")];
 }
 
+/** The current situations a popup over `hits` shows, each once. */
+export function popupEvents(
+  input: Pick<RoadConditionPopupInput, "hits" | "eventsByDisplayId">,
+): RoadConditionEvent[] {
+  const displayIds = new Set(
+    input.hits.flatMap((hit) =>
+      displayIdsForHit((hit.properties ?? {}) as Record<string, unknown>),
+    ),
+  );
+  const events = [...displayIds].flatMap((id) => input.eventsByDisplayId.get(id) ?? []);
+  return [...new Map(events.map((event) => [event.id, event])).values()];
+}
+
 /**
  * Build shared incident popup HTML and its anchor from either marker or line
  * hits. The event lookup is authoritative for grouped records, so line hits
@@ -627,6 +680,7 @@ export function buildRoadConditionPopupHtml(
             (headline, count) => input.translate("panel.relatedRecords", { headline, count }),
             input.locale,
             atMs,
+            input.bindings,
           )
         : [{ summary: properties, sourceRecords: [] }];
 

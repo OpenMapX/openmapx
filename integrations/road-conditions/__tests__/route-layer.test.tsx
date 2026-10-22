@@ -51,6 +51,9 @@ vi.mock("@/integration-api/overlay/useOverlayStoreState", () => ({
   useOverlayLayerVisible: () => true,
 }));
 vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntl());
+vi.mock("@/integration-api/runtime/EnvProvider", () => ({
+  useEnv: () => ({ apiUrl: "https://api.test" }),
+}));
 vi.mock("@/integration-api/runtime/useDateTimeFormat", () => ({
   useDateTimeFormat: () => ({
     dateTime: (value: string | number | Date) => String(value),

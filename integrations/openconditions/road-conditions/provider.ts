@@ -1,5 +1,6 @@
 import type { BBox, RoadConditionRoutingEvidence } from "@openmapx/core";
 import type {
+  RoadConditionBinding,
   RoadConditionEvent,
   RoadConditionsProvider,
   RoadConditionsQuery,
@@ -31,6 +32,17 @@ type SegmentConditionEvidenceResponse = {
   complete?: unknown;
   conditions?: Array<{ routing_evidence?: RoadConditionRoutingEvidence }>;
 };
+
+/** One binding as the record API serves it, keeping its status and reason; null when unreadable. */
+function bindingOf(raw: unknown): RoadConditionBinding | null {
+  if (raw === null || typeof raw !== "object") return null;
+  const { status, reason } = raw as Rec;
+  if (typeof status !== "string" || status.length === 0 || status.length > 64) return null;
+  return {
+    status,
+    reason: typeof reason === "string" && reason.length > 0 && reason.length <= 64 ? reason : null,
+  };
+}
 
 /** Whether a record comes from a source, or a catalogue child of a source, the deployment excluded. */
 function excluded(record: Rec, sources: ReadonlySet<string>): boolean {
@@ -204,6 +216,35 @@ export function createRoadConditionsProvider(
       if (!sources.ready) return [];
       const body = await client.get<unknown>("/segments.geojson", { bbox: bbox.join(",") });
       return featureCollectionToRoadFlowSegments(body, PROVIDER_ID);
+    },
+    /**
+     * A situation's bindings from `GET /situations/{id}`: its own place's and
+     * each effect's bound on its own, with the resolver's reason. A situation
+     * the live source list does not serve, or of an excluded source, has none
+     * to show.
+     */
+    async getBindings(eventId, opts) {
+      if (!sources.ready) return null;
+      const answer = await client.getOptional<unknown>(
+        `/situations/${encodeURIComponent(eventId)}`,
+      );
+      const body = answer !== null && typeof answer === "object" ? (answer as Rec) : undefined;
+      const record = body?.["record"];
+      if (!body || !record || typeof record !== "object") return null;
+      const without = new Set(opts?.excludedSourceIds ?? []);
+      if (!listed(record as Rec, sources) || excluded(record as Rec, without)) return null;
+      const effects = body["effectBindings"];
+      return {
+        situation: bindingOf(body["binding"]),
+        effects: Object.fromEntries(
+          Object.entries(effects !== null && typeof effects === "object" ? effects : {}).flatMap(
+            ([id, raw]) => {
+              const binding = bindingOf(raw);
+              return binding ? [[id, binding] as const] : [];
+            },
+          ),
+        ),
+      };
     },
     /** The road feeds' polls and publications, judged with the segment graph they bind to. */
     async getOperationalEvidence() {

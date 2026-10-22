@@ -170,6 +170,8 @@ export type {
 export type {
   LocalizedText,
   RoadConditionAttribution,
+  RoadConditionBinding,
+  RoadConditionBindingDetail,
   RoadConditionEffect,
   RoadConditionEvent,
   RoadConditionRoadRef,

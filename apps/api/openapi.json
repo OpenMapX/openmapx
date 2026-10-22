@@ -60708,6 +60708,23 @@
         "x-openmapx-source": "integrations/ride-hailing/index.ts"
       }
     },
+    "/api/integrations/road-conditions/bindings": {
+      "get": {
+        "operationId": "getApiIntegrationsRoadConditionsBindings",
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /bindings (road-conditions)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "road-conditions",
+        "x-openmapx-source": "integrations/road-conditions/index.ts"
+      }
+    },
     "/api/integrations/road-conditions/events": {
       "get": {
         "operationId": "getApiIntegrationsRoadConditionsEvents",
