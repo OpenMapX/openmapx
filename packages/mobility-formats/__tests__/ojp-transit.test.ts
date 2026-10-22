@@ -7,6 +7,27 @@ import {
   parseOjpTripResponse,
 } from "../index.js";
 
+describe("OJP elapsed-duration policy", () => {
+  it.each<[string | undefined, number | undefined]>([
+    ["P1DT2H", 93600],
+    ["PT0.49S", 0],
+    ["PT0.5S", 1],
+    ["PT1.5S", 2],
+    ["PT0S", 0],
+    [undefined, undefined],
+    ["P", undefined],
+    ["PT", undefined],
+    ["P1DT", undefined],
+    ["pt1h", undefined],
+    ["garbagePT1Hgarbage", undefined],
+    ["P1M", undefined],
+  ])("rounds %j to %s or preserves missing data", (duration, expected) => {
+    const element = duration === undefined ? "" : `<Duration>${duration}</Duration>`;
+    const xml = `<OJP><OJPResponse><ServiceDelivery><OJPTripDelivery><TripResult><Trip>${element}</Trip></TripResult></OJPTripDelivery></ServiceDelivery></OJPResponse></OJP>`;
+    expect(parseOjpTripResponse(xml).trips[0]?.durationSeconds).toBe(expected);
+  });
+});
+
 describe("OJP transit adapter", () => {
   it("parses richer trip legs, service metadata, geometry, and intermodal fields", () => {
     const xml = `<?xml version="1.0" encoding="UTF-8"?>

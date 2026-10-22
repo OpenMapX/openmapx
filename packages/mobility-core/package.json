@@ -49,6 +49,10 @@
       "types": "./src/detail-store.ts",
       "default": "./src/detail-store.ts"
     },
+    "./duration": {
+      "types": "./src/duration.ts",
+      "default": "./src/duration.ts"
+    },
     "./entur-mobility": {
       "types": "./src/entur-mobility.ts",
       "default": "./src/entur-mobility.ts"
