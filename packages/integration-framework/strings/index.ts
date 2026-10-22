@@ -8,6 +8,7 @@ export {
   token,
   vocabularyLabel,
   vocabularyLabels,
+  wallClock,
 } from "./src/token";
 export type { I18nToken, LocaleCatalog, LocaleStrings, Translatable } from "./src/types";
 

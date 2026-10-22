@@ -17,9 +17,21 @@ export interface I18nToken {
    * ICU MessageFormat placeholder values for the resolved template
    * (e.g. {free: 3, capacity: 10} for "{free}/{capacity} free"). A value may
    * itself be a token, resolved first, so one message can embed translated
-   * parts, or an amount of money, formatted in the reader's locale.
+   * parts, or an amount of money or a wall-clock date, formatted in the
+   * reader's locale.
    */
-  values?: Record<string, string | number | I18nToken | MoneyValue>;
+  values?: Record<string, string | number | I18nToken | MoneyValue | WallClockValue>;
+}
+
+/**
+ * A date, or a date and time of day, as a clock on the wall at the place
+ * reads it; the client formats it in its locale without converting it to the
+ * reader's time zone, so a closure from midnight in Berlin reads from
+ * midnight wherever it is read.
+ */
+export interface WallClockValue {
+  /** `YYYY-MM-DD`, or `YYYY-MM-DDTHH:mm` for a time of day. */
+  $wallClock: string;
 }
 
 /** An amount of money in a token placeholder; the client formats it in its locale. */

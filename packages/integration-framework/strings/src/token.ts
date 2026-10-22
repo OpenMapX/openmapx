@@ -1,6 +1,6 @@
 import deShared from "../locales/de.json" with { type: "json" };
 import enShared from "../locales/en.json" with { type: "json" };
-import type { I18nToken, LocaleStrings } from "./types";
+import type { I18nToken, LocaleStrings, WallClockValue } from "./types";
 
 /**
  * The framework's shared-vocabulary catalog. Indexed by locale code; each
@@ -36,6 +36,16 @@ export function money(amount: number, currency: string, minDigits?: number): I18
       ? { $money: amount, currency }
       : { $money: amount, currency, minDigits };
   return { $t: "shared.value.money", values: { amount: value } };
+}
+
+/**
+ * A wall-clock date (`2026-12-24`) or date and time of day
+ * (`2026-12-24T14:00`) as a placeholder value, formatted by the client in the
+ * reader's locale but never moved into the reader's time zone. The caller
+ * reads the instant in the place's own zone first.
+ */
+export function wallClock(value: string): WallClockValue {
+  return { $wallClock: value };
 }
 
 /**
