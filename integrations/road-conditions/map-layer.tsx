@@ -410,7 +410,6 @@ export function RoadConditionsLayer() {
         if (!opened) return;
         // The situation lists carry no bindings; read them for the cards shown.
         void loadRoadConditionBindings(
-          apiUrl,
           popupEvents({ hits, eventsByDisplayId: eventsByDisplayIdRef.current }),
         ).then((bindings) => {
           if (popupSelectionRef.current !== selection || bindings.size === 0) return;
@@ -423,7 +422,7 @@ export function RoadConditionsLayer() {
       unregister();
       closeIncidentPopup(map, popupRef);
     };
-  }, [mapReady, mapRef, styleVersion, layerVisible, apiUrl, refreshPopup]);
+  }, [mapReady, mapRef, styleVersion, layerVisible, refreshPopup]);
 
   // The area overlay stops at its min zoom; this covers the route at the zooms
   // below it, where a whole trip is on screen.

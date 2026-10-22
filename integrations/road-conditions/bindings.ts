@@ -1,7 +1,10 @@
-import type {
-  RoadConditionBinding,
-  RoadConditionBindingDetail,
-  RoadConditionEvent,
+import {
+  API_ENDPOINTS,
+  apiClient,
+  isApiClientError,
+  type RoadConditionBinding,
+  type RoadConditionBindingDetail,
+  type RoadConditionEvent,
 } from "@openmapx/core";
 
 /** How long a read binding is reused before a popup asks again. */
@@ -39,27 +42,24 @@ export function parseBindingDetail(raw: unknown): RoadConditionBindingDetail | n
 }
 
 async function readBindings(
-  apiUrl: string,
   event: Pick<RoadConditionEvent, "id" | "provider">,
   now: number,
 ): Promise<RoadConditionBindingDetail | null> {
   const key = `${event.provider}\u0000${event.id}`;
   const cached = read.get(key);
   if (cached && now - cached.at < BINDING_TTL_MS) return cached.detail;
-  const params = new URLSearchParams({ provider: event.provider, id: event.id });
-  const url = `${apiUrl.replace(/\/$/, "")}/api/integrations/road-conditions/bindings?${params.toString()}`;
   try {
-    const res = await fetch(url, { credentials: "include" });
-    // A situation without bindings is an answer; a failed read is retried next time.
-    if (res.status === 404) {
-      read.set(key, { at: now, detail: null });
-      return null;
-    }
-    if (!res.ok) return null;
-    const detail = parseBindingDetail(await res.json());
+    const detail = parseBindingDetail(
+      await apiClient.get<unknown>(API_ENDPOINTS.roadConditionBindings, {
+        provider: event.provider,
+        id: event.id,
+      }),
+    );
     read.set(key, { at: now, detail });
     return detail;
-  } catch {
+  } catch (error) {
+    // A situation without bindings is an answer; a failed read is retried next time.
+    if (isApiClientError(error) && error.status === 404) read.set(key, { at: now, detail: null });
     return null;
   }
 }
@@ -70,12 +70,11 @@ async function readBindings(
  * what its routing evidence says.
  */
 export async function loadRoadConditionBindings(
-  apiUrl: string,
   events: readonly Pick<RoadConditionEvent, "id" | "provider">[],
   now = Date.now(),
 ): Promise<Map<string, RoadConditionBindingDetail>> {
   const asked = events.filter((event) => event.provider).slice(0, MAX_BINDING_READS);
-  const answers = await Promise.all(asked.map((event) => readBindings(apiUrl, event, now)));
+  const answers = await Promise.all(asked.map((event) => readBindings(event, now)));
   const out = new Map<string, RoadConditionBindingDetail>();
   asked.forEach((event, i) => {
     const detail = answers[i];

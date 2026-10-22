@@ -17,7 +17,6 @@ import { useGeoJsonSourceDataBridge } from "@/integration-api/map/useGeoJsonSour
 import { useMapLayerGroup } from "@/integration-api/map/useMapLayerGroup";
 import { useOverlayMinZoom } from "@/integration-api/overlay/overlayZoomGate";
 import { useRenderedMapAttributions } from "@/integration-api/overlay/useRenderedMapAttributions";
-import { useEnv } from "@/integration-api/runtime/EnvProvider";
 import { useDateTimeFormat } from "@/integration-api/runtime/useDateTimeFormat";
 import { roadConditionAttributions } from "./attributions";
 import { loadRoadConditionBindings } from "./bindings";
@@ -113,7 +112,6 @@ export function RouteConditionsLayer() {
     tRef.current = t;
   }, [t]);
   const locale = useLocale();
-  const { apiUrl } = useEnv();
 
   useEffect(() => {
     if (!layerVisible || geometry.length < 2) {
@@ -305,7 +303,7 @@ export function RouteConditionsLayer() {
         popupInputRef.current = input;
         if (!openIncidentPopup(map, popupRef, input)) return;
         // The situation lists carry no bindings; read them for the cards shown.
-        void loadRoadConditionBindings(apiUrl, popupEvents(input)).then((bindings) => {
+        void loadRoadConditionBindings(popupEvents(input)).then((bindings) => {
           const popup = popupRef.current;
           if (popupInputRef.current !== input || !popup || bindings.size === 0) return;
           popupInputRef.current = { ...input, bindings };
@@ -324,7 +322,7 @@ export function RouteConditionsLayer() {
       unregister();
       closeIncidentPopup(map, popupRef);
     };
-  }, [mapRef, mapReady, styleVersion, layerVisible, eventsByDisplayId, locale, apiUrl]);
+  }, [mapRef, mapReady, styleVersion, layerVisible, eventsByDisplayId, locale]);
 
   return null;
 }
