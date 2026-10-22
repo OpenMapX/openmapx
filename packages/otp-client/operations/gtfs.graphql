@@ -1,0 +1,85 @@
+query OtpReadiness {
+  __typename
+}
+
+query OtpPlan(
+  $origin: PlanLabeledLocationInput!
+  $destination: PlanLabeledLocationInput!
+  $dateTime: PlanDateTimeInput!
+  $modes: PlanModesInput
+  $first: Int!
+) {
+  planConnection(
+    origin: $origin
+    destination: $destination
+    dateTime: $dateTime
+    modes: $modes
+    first: $first
+  ) {
+    routingErrors {
+      code
+    }
+    edges {
+      node {
+        start
+        end
+        duration
+        numberOfTransfers
+        walkDistance
+        legs {
+          mode
+          start {
+            scheduledTime
+            estimated {
+              time
+              delay
+            }
+          }
+          end {
+            scheduledTime
+            estimated {
+              time
+              delay
+            }
+          }
+          from {
+            name
+            lat
+            lon
+            stop {
+              gtfsId
+            }
+          }
+          to {
+            name
+            lat
+            lon
+            stop {
+              gtfsId
+            }
+          }
+          route {
+            shortName
+            longName
+            color
+          }
+          trip {
+            gtfsId
+          }
+          tripOnServiceDate {
+            realTimeTripState {
+              canceled
+              updated
+            }
+          }
+          legGeometry {
+            points
+          }
+          stopCalls {
+            __typename
+          }
+        }
+      }
+    }
+  }
+}

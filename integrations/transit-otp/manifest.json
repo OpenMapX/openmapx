@@ -35,11 +35,6 @@
   "backend": {
     "routes": false
   },
-  "healthCheck": {
-    "type": "ping",
-    "urlTemplate": "${endpoint}/otp/routers/default",
-    "requiredConfigKeys": ["endpoint"]
-  },
   "dataSources": [
     {
       "sourceId": "otp",

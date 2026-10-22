@@ -50,8 +50,6 @@ const RAW_FETCH_ALLOWLIST: Record<string, string> = {
     "tile proxy: forwards the binary MVT tile body, content-type and status verbatim",
   "integrations/street-level-imagery-mapillary/index.ts":
     "Mapillary vector tiles: forwards the binary tile body, content-type, and status verbatim",
-  "integrations/transit-otp/provider.ts":
-    "isOtpAvailable() reachability probe: reads only res.ok, never the body",
 };
 
 // Matches a bare, unqualified `fetch(` call — NOT `fetchJson(`,
