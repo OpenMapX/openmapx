@@ -86,3 +86,53 @@ describe("generated validator projection", () => {
     ).toThrow();
   });
 });
+
+describe("dynamic OTP profile generation", () => {
+  it.each(["stadtnavi", "peatus", "torino", "digitransit", "trufi"])(
+    "generates selected SDK/validators for the %s contract",
+    (family) => {
+      const script = `import {generateArtifacts} from './packages/otp-codegen/generate.mjs'; console.log(JSON.stringify((await generateArtifacts({family:${JSON.stringify(family)}})).map(f=>f.filename)));`;
+      const result = JSON.parse(
+        execFileSync(process.execPath, ["--input-type=module", "-e", script], {
+          cwd: root,
+          encoding: "utf8",
+          timeout: 90000,
+        }),
+      );
+      expect(result).toHaveLength(3);
+      expect(result.every((name: string) => name.includes(`/generated/${family}/`))).toBe(true);
+    },
+    90000,
+  );
+});
+
+describe("pinned deployed profile SDLs", () => {
+  it("retains stadtnavi's reviewed derived schema", () => {
+    expect(
+      createHash("sha256")
+        .update(readFileSync(resolve(root, "packages/otp-client/schema/stadtnavi.graphql")))
+        .digest("hex"),
+    ).toBe("bc167110515cf18fb07a478d815c7be85b1fe649f79430eb6bc16907c5b9cf46");
+  });
+  it("retains peatus's reviewed derived schema", () => {
+    expect(
+      createHash("sha256")
+        .update(readFileSync(resolve(root, "packages/otp-client/schema/peatus.graphql")))
+        .digest("hex"),
+    ).toBe("1d57c9c9699634f4b5529efcd79124812c6cfa3de253543a6708d0a2d3533480");
+  });
+  it("retains torino's reviewed derived schema", () => {
+    expect(
+      createHash("sha256")
+        .update(readFileSync(resolve(root, "packages/otp-client/schema/torino.graphql")))
+        .digest("hex"),
+    ).toBe("7c2f4f35d132b32ba12618c4ce22693ef7a71ddba58ddd4b9a6ae734ac363bd7");
+  });
+  it("retains trufi's reviewed derived schema", () => {
+    expect(
+      createHash("sha256")
+        .update(readFileSync(resolve(root, "packages/otp-client/schema/trufi.graphql")))
+        .digest("hex"),
+    ).toBe("68e1f73f450127db1c0d82f27e5b73271087d30e01030d49f058d1975718a9fe");
+  });
+});

@@ -1,0 +1,71 @@
+query DynamicNearby($lat: Float!, $lon: Float!, $radius: Int!, $limit: Int!) {
+  nearest(
+    lat: $lat
+    lon: $lon
+    maxDistance: $radius
+    maxResults: $limit
+    filterByPlaceTypes: [STOP]
+    first: $limit
+  ) {
+    edges {
+      node {
+        place {
+          __typename
+          ... on Stop {
+            gtfsId
+            name
+            lat
+            lon
+            vehicleMode
+            platformCode
+            parentStation {
+              gtfsId
+            }
+          }
+        }
+      }
+    }
+  }
+}
+query DynamicDepartures($id: String!, $start: Long!, $range: Int!, $limit: Int!) {
+  stop(id: $id) {
+    gtfsId
+    stoptimesWithoutPatterns(
+      startTime: $start
+      timeRange: $range
+      numberOfDepartures: $limit
+      omitCanceled: false
+      omitNonPickups: true
+    ) {
+      serviceDay
+      scheduledDeparture
+      realtimeDeparture
+      realtime
+      realtimeState
+      headsign
+      trip {
+        gtfsId
+        route {
+          gtfsId
+          shortName
+          longName
+          mode
+          color
+        }
+      }
+    }
+  }
+}
+query DynamicSearch($name: String!) {
+  stops(name: $name) {
+    gtfsId
+    name
+    lat
+    lon
+    vehicleMode
+    platformCode
+    parentStation {
+      gtfsId
+    }
+  }
+}

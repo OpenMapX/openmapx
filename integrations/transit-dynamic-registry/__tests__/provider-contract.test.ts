@@ -34,14 +34,14 @@ const HAFAS_ENTRY: RegistryEntry = {
 };
 
 const OTP_ENTRY: RegistryEntry = {
-  id: "us/example-otp",
+  id: "ee/peatus-otp",
   slug: "exotp",
   prefix: "exotp:",
   name: "Example OTP",
   protocol: "otpGraphQl",
   supportedLanguages: ["en"],
   timezone: "America/New_York",
-  options: { endpoint: "https://otp.example/otp/routers/default/index/graphql" },
+  options: { endpoint: "https://api.peatus.ee/routing/v1/routers/estonia/" },
   coverage: { bbox: [-74.3, 40.5, -73.7, 40.9], tiers: [] },
   attribution: { name: "Example OTP" },
 };

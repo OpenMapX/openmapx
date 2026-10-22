@@ -1,4 +1,6 @@
 export type OtpErrorKind =
+  | "quota"
+  | "unconfigured"
   | "configuration"
   | "input"
   | "http"
@@ -10,6 +12,8 @@ export type OtpErrorKind =
   | "cancelled"
   | "timeout";
 const messages: Record<OtpErrorKind, string> = {
+  quota: "OTP upstream cooldown",
+  unconfigured: "OTP credentials required",
   configuration: "OTP invalid configuration",
   input: "OTP invalid request",
   http: "OTP HTTP request failed",
