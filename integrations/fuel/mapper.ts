@@ -28,6 +28,9 @@ const SUMMARY_GRADES = ["diesel", "e5", "e10", "sp98", "e85", "lpg"];
 /** Every grade `summary.grade.<grade>` has a label for; any other is shown by its code. */
 const LABELLED_GRADES = new Set(Object.keys(strings.summary.grade));
 
+/** Every grade `fuel.<grade>` names in full; any other is shown by its code. */
+const NAMED_GRADES = new Set(Object.keys(strings.fuel));
+
 const UNIT_LABEL: Record<FuelProduct["per"], string> = { L: "L", kg: "kg", m3: "m³" };
 
 type PricedProduct = FuelProduct & { price: NonNullable<FuelProduct["price"]> };
@@ -84,11 +87,21 @@ interface SummaryPrice {
   amount: number;
 }
 
+/** A grade's code as it is shown where no label names it: "new_fuel" as "NEW FUEL". */
+function gradeCode(grade: string): string {
+  return grade.replaceAll("_", " ").toUpperCase();
+}
+
 /** A grade's short label on the card: translated, or for an unknown grade its code. */
 function summaryLabel(grade: string): I18nToken | string {
-  return LABELLED_GRADES.has(grade)
-    ? token(`summary.grade.${grade}`)
-    : grade.replaceAll("_", " ").toUpperCase();
+  return LABELLED_GRADES.has(grade) ? token(`summary.grade.${grade}`) : gradeCode(grade);
+}
+
+/** A grade's full name in the price table: translated, or for an unknown grade its code. */
+function gradeLabel(grade: string): I18nToken {
+  return NAMED_GRADES.has(grade)
+    ? token(`fuel.${grade}`)
+    : token("literal", { value: gradeCode(grade) });
 }
 
 /** Where a grade sorts on the card: the summary grades in their order, then the rest. */
@@ -266,8 +279,8 @@ function buildProductTable(station: FuelStation): DataSourceDetailSection | null
     columns: [token("column.fuelType"), token("column.price")],
     rows: station.products.map((product) => [
       product.vehicleScope === "hgv"
-        ? token("fuelHgv", { grade: token(`fuel.${product.grade}`) })
-        : token(`fuel.${product.grade}`),
+        ? token("fuelHgv", { grade: gradeLabel(product.grade) })
+        : gradeLabel(product.grade),
       priceCell(product),
       productCaption(product),
     ]),

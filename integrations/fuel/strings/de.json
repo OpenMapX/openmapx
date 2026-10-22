@@ -45,7 +45,10 @@
     "e5_premium": "Premium 95 (E5)",
     "sp98_e10": "Super 98 (E10)",
     "cng_bio": "Bio-CNG",
-    "lng_bio": "Bio-LNG"
+    "lng_bio": "Bio-LNG",
+    "sp100": "SP100 (Super 100)",
+    "b20": "Diesel B20",
+    "b30": "Diesel B30"
   },
   "summary": {
     "priceList": "{scope, select, car {{prices}} hgv {{hgvPrices} (Lkw)} other {{prices} · {hgvPrices} (Lkw)}}",
@@ -78,9 +81,13 @@
       "e5_premium": "Premium 95 (E5)",
       "sp98_e10": "Super 98 (E10)",
       "cng_bio": "Bio-CNG",
-      "lng_bio": "Bio-LNG"
+      "lng_bio": "Bio-LNG",
+      "sp100": "100",
+      "b20": "B20",
+      "b30": "B30"
     }
   },
   "fuelHgv": "{grade} (Lkw)",
+  "literal": "{value}",
   "stationFallbackName": "Tankstelle"
 }

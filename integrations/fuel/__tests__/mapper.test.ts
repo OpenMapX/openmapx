@@ -34,6 +34,9 @@ const OC_FUEL_GRADES = [
   "sp98_e10",
   "cng_bio",
   "lng_bio",
+  "sp100",
+  "b20",
+  "b30",
 ];
 
 function text(token: unknown, locale = "en"): string {
@@ -321,6 +324,30 @@ describe("mapFuelStationToDetail", () => {
     ]);
     expect(text(rows[1][0], "en")).toBe("Diesel (HGV)");
     expect(text(rows[1][0], "de")).toBe("Diesel (Lkw)");
+  });
+
+  it("names every grade of the vocabulary in the price table, and an unknown one by its code", () => {
+    for (const grade of OC_FUEL_GRADES) {
+      const [label] = mapFuelStationToDetail(makeStation({ products: [product({ grade })] }))
+        .sections[0].rows[0];
+      for (const locale of ["en", "de"]) {
+        const shown = text(label, locale);
+        expect(shown, `${grade} ${locale}`).toBe(
+          ((locale === "en" ? en : de).fuel as Record<string, string>)[grade],
+        );
+        expect(shown, `${grade} ${locale}`).not.toContain("fuel.");
+      }
+    }
+    const rows = mapFuelStationToDetail(
+      makeStation({
+        products: [
+          product({ grade: "new_fuel" }),
+          product({ key: "new_fuel:hgv", grade: "new_fuel", vehicleScope: "hgv" }),
+        ],
+      }),
+    ).sections[0].rows;
+    expect(text(rows[0][0], "de")).toBe("NEW FUEL");
+    expect(text(rows[1][0], "en")).toBe("NEW FUEL (HGV)");
   });
 
   it("has no price table for a station without products", () => {
