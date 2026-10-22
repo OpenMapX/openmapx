@@ -9,6 +9,6 @@
     "@openmapx/integration-framework": "workspace:^",
     "@openmapx/mobility-core": "workspace:^",
     "@openmapx/otp-client": "workspace:^",
-    "zod": "4.6.5"
+    "zod": "4.6.7"
   }
 }

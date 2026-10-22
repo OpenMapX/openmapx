@@ -18,7 +18,7 @@
   },
   "dependencies": {
     "@openmapx/integration-framework": "workspace:^",
-    "zod": "4.6.5"
+    "zod": "4.6.7"
   },
   "devDependencies": {
     "@types/node": "^26.6.5",
