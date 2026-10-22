@@ -1,3 +1,4 @@
+import { parseElapsedDurationSeconds } from "@openmapx/mobility-core/duration";
 import { z } from "zod";
 import type {
   LocalizedText,
@@ -405,16 +406,12 @@ function addDaysLocal(localDate: string, delta: number): string {
   return d.toISOString().slice(0, 10);
 }
 
-/** ISO-8601 duration → milliseconds (PnDTnHnMnS subset). */
+/** Elapsed duration → milliseconds, retaining null for the schedule fallback. */
 function durationToMs(iso: string | undefined): number | null {
-  if (!iso) return null;
-  const m = iso.match(/^P(?:(\d+)D)?(?:T(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?)?$/);
-  if (!m) return null;
-  const [, d, h, mi, s] = m;
-  return (
-    (Number(d ?? 0) * 86_400 + Number(h ?? 0) * 3_600 + Number(mi ?? 0) * 60 + Number(s ?? 0)) *
-    1_000
-  );
+  const seconds = parseElapsedDurationSeconds(iso);
+  if (seconds === undefined) return null;
+  const milliseconds = seconds * 1000;
+  return Number.isFinite(milliseconds) ? milliseconds : null;
 }
 
 /** Length of each occurrence: explicit `duration`, else endTime−startTime

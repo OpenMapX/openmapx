@@ -10,6 +10,7 @@ import {
   lifecycleInForce,
   localizedTextFor,
   readRoadConditionEffects,
+  scheduleOccursAt,
   speedCapKph,
   validityHoldsAt,
   validityWindowHoldsAt,
@@ -138,6 +139,45 @@ describe("what an effect does to cars", () => {
 });
 
 describe("when an effect is in force", () => {
+  it("preserves subsecond precision with an exclusive schedule end", () => {
+    const schedule = {
+      startDate: "2026-09-11",
+      endDate: "2026-09-11",
+      startTime: "10:00",
+      duration: "PT0.5S",
+      scheduleTimezone: "UTC",
+    };
+    expect(scheduleOccursAt(schedule, new Date("2026-09-11T10:00:00.499Z"))).toBe(true);
+    expect(scheduleOccursAt(schedule, new Date("2026-09-11T10:00:00.500Z"))).toBe(false);
+  });
+
+  it.each(["P", "PT", "P1DT", "garbagePT1Hgarbage", "P1M", `PT${"9".repeat(306)}S`])(
+    "uses the existing end-time fallback for unusable duration %s",
+    (duration) => {
+      const schedule = {
+        startDate: "2026-09-11",
+        endDate: "2026-09-11",
+        startTime: "10:00",
+        endTime: "11:00",
+        duration,
+        scheduleTimezone: "UTC",
+      };
+      expect(scheduleOccursAt(schedule, new Date("2026-09-11T10:30:00Z"))).toBe(true);
+      expect(scheduleOccursAt(schedule, new Date("2026-09-11T11:00:00Z"))).toBe(false);
+    },
+  );
+
+  it("retains the whole-day fallback when neither duration nor end time is usable", () => {
+    const schedule = {
+      startDate: "2026-09-11",
+      endDate: "2026-09-11",
+      duration: "P",
+      scheduleTimezone: "UTC",
+    };
+    expect(scheduleOccursAt(schedule, new Date("2026-09-11T12:00:00Z"))).toBe(true);
+    expect(scheduleOccursAt(schedule, new Date("2026-09-12T00:00:00Z"))).toBe(false);
+  });
+
   it("holds inside its bounds, not when ended, cancelled or outside them", () => {
     const at = new Date("2026-09-11T12:00:00Z");
     expect(validityHoldsAt({ status: "active", start: "2026-09-11T08:00:00Z" }, at)).toBe(true);
