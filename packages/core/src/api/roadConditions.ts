@@ -1,14 +1,15 @@
 import { parseContributors } from "@openmapx/mobility-core/contributors";
 import { parseLicensing } from "@openmapx/mobility-core/licensing";
 import type { BBox } from "../types/geometry";
-import type {
-  LocalizedText,
-  RoadConditionEvent,
-  RoadConditionRoadRef,
-  RoadConditionSeverityLabel,
-  RouteFlowInput,
-  RouteFlowResponse,
-  RouteFlowSpan,
+import {
+  type LocalizedText,
+  ROAD_CONDITION_SEVERITY_LABELS,
+  type RoadConditionEvent,
+  type RoadConditionRoadRef,
+  type RoadConditionSeverityLabel,
+  type RouteFlowInput,
+  type RouteFlowResponse,
+  type RouteFlowSpan,
 } from "../types/roadConditions";
 import {
   readRoadConditionEffects,
@@ -64,7 +65,6 @@ function isWellFormedFeatureCollection(v: unknown): v is RoadConditionFeatureCol
   return Array.isArray((v as { features: unknown }).features);
 }
 
-const SEVERITY_LABELS = ["minor", "moderate", "major", "critical", "unknown"] as const;
 const CERTAINTIES = ["observed", "likely", "possible", "unlikely", "unknown"] as const;
 const TEMPORALITIES = ["live", "scheduled", "forecast"] as const;
 const ORIGINS = ["feed", "crowd", "federation", "derived"] as const;
@@ -152,7 +152,7 @@ export function roadConditionFeatureToEvent(
     type,
     ...(str(p.subtype) ? { subtype: str(p.subtype) } : {}),
     severity: {
-      label: oneOf(SEVERITY_LABELS, severity?.label, "unknown"),
+      label: oneOf(ROAD_CONDITION_SEVERITY_LABELS, severity?.label, "unknown"),
       ...(typeof severity?.level === "number" ? { level: severity.level } : {}),
     },
     certainty: oneOf(CERTAINTIES, p.certainty, "unknown"),

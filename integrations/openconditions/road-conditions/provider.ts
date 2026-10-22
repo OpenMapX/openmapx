@@ -18,6 +18,12 @@ const ROUTING_PAGE = 5000;
 
 type Rec = Record<string, unknown>;
 
+/**
+ * The severity thresholds `/situations` takes. Any other threshold is left
+ * to the orchestrator, which applies every threshold again after the read.
+ */
+const SEVERITY_THRESHOLDS = new Set<string>(["minor", "moderate", "major", "critical"]);
+
 type SituationPage = { records?: unknown; next?: unknown };
 
 type SegmentConditionEvidenceResponse = {
@@ -93,7 +99,9 @@ export function createRoadConditionsProvider(
           ...(opts?.kinds?.length ? { kind: opts.kinds.join(",") } : {}),
           ...(opts?.excludeKinds?.length ? { excludeKind: opts.excludeKinds.join(",") } : {}),
           ...(opts?.types?.length ? { type: opts.types.join(",") } : {}),
-          ...(opts?.minSeverity ? { minSeverity: opts.minSeverity } : {}),
+          ...(opts?.minSeverity && SEVERITY_THRESHOLDS.has(opts.minSeverity)
+            ? { minSeverity: opts.minSeverity }
+            : {}),
           // Only narrow when the caller asked: routing reads unfiltered so it
           // can evaluate future closures at the chosen travel time.
           ...(opts?.horizonDays != null ? { horizonDays: opts.horizonDays } : {}),

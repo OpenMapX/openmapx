@@ -86,6 +86,14 @@ describe("RoadConditionsLegend time-horizon control", () => {
     expect(useRoadConditionsStore.getState().minSeverity).toBe("major");
   });
 
+  it("keys the no-impact and unknown colours beside the severity threshold", () => {
+    render(<RoadConditionsLegend />);
+
+    expect(screen.getByText("roadConditions.sev.none")).toBeTruthy();
+    expect(screen.getByText("roadConditions.sev.unknown")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /roadConditions\.sev\.none/ })).toBeNull();
+  });
+
   it("explains active and starts-later incident lines with the renderer styles", () => {
     render(<RoadConditionsLegend />);
 

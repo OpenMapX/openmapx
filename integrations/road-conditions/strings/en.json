@@ -8,6 +8,7 @@
     "validTo": "Until",
     "via": "Via",
     "severity": {
+      "none": "No impact",
       "minor": "Minor",
       "moderate": "Moderate",
       "major": "Major",

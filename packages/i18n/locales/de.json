@@ -527,6 +527,7 @@
     "reset": "Zurücksetzen",
     "all": "Alle",
     "sev": {
+      "none": "Keine Auswirkung",
       "minor": "Gering",
       "moderate": "Mittel",
       "major": "Hoch",

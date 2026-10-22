@@ -283,6 +283,17 @@ describe("road-conditions provider", () => {
     ]);
   });
 
+  it("leaves a threshold the record API does not take to the orchestrator", async () => {
+    const calls: Params[] = [];
+    const p = provider({
+      serve: api([situation("a")]),
+      capture: (url, params) => url.endsWith("/situations") && calls.push(params),
+    });
+    await p.getEvents([4, 51, 6, 53], { minSeverity: "none" });
+    await p.getEvents([4, 51, 6, 53], { minSeverity: "unknown" });
+    expect(calls.map((params) => params?.minSeverity)).toEqual([undefined, undefined]);
+  });
+
   it("reads every endpoint with the operator token", async () => {
     const seen: Array<[string, string | undefined]> = [];
     const p = provider({
@@ -765,6 +776,16 @@ describe("situationToRoadConditionEvent", () => {
     });
     expect(event.effects[0]!.validity).toBeUndefined();
     expect(event.effects.every((e) => !("source" in e))).toBe(true);
+  });
+
+  it("keeps a declared no-impact severity and reads labels it does not know as unknown", () => {
+    const rated = (severity: Rec, validity: Rec = { status: "active" }) =>
+      situationToRoadConditionEvent(record({ severity, validity }))!;
+    expect(rated({ label: "none", source: "declared" }).severity).toEqual({ label: "none" });
+    expect(rated({ label: "catastrophic", source: "declared" }).severity).toEqual({
+      label: "unknown",
+    });
+    expect(rated({ label: "none" }, { status: "paused" }).validity).toEqual({ status: "unknown" });
   });
 
   it("carries a crowd situation's evidence", () => {

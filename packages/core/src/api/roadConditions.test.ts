@@ -242,6 +242,11 @@ describe("roadConditionFeatureToEvent", () => {
     });
   });
 
+  it("keeps a declared no-impact severity apart from a missing one", () => {
+    expect(read({ severity: { label: "none" } })?.severity).toEqual({ label: "none" });
+    expect(read({})?.severity).toEqual({ label: "unknown" });
+  });
+
   it("carries timing, freshness, evidence and the publisher's texts through", () => {
     const event = read({
       source: "de-autobahn",

@@ -1,13 +1,18 @@
 import type { RoadConditionEvent, RoadConditionSeverityLabel } from "@openmapx/core";
 import type * as maplibregl from "maplibre-gl";
 
-/** Severity labels, mildest first; `unknown` ranks below every label. */
+/**
+ * Severity labels, mildest first. A declared `none` ranks lowest: it states
+ * no impact. `unknown` ranks above it, as it may hide any impact, and below
+ * every stated impact, so any threshold hides both.
+ */
 export const SEVERITY_RANK: Record<RoadConditionSeverityLabel, number> = {
-  unknown: 0,
-  minor: 1,
-  moderate: 2,
-  major: 3,
-  critical: 4,
+  none: 0,
+  unknown: 1,
+  minor: 2,
+  moderate: 3,
+  major: 4,
+  critical: 5,
 };
 
 export const SEVERITY_LABELS = Object.keys(SEVERITY_RANK) as RoadConditionSeverityLabel[];
@@ -22,6 +27,7 @@ export const SEVERITY_COLORS: Record<RoadConditionSeverityLabel, string> = {
   major: "#cc0033",
   moderate: "#ff9933",
   minor: "#ffde33",
+  none: "#1a7a63",
   unknown: "#8a8a8a",
 };
 
@@ -37,6 +43,8 @@ export const SEVERITY_LINE_COLOR: maplibregl.ExpressionSpecification = [
   SEVERITY_COLORS.moderate,
   "minor",
   SEVERITY_COLORS.minor,
+  "none",
+  SEVERITY_COLORS.none,
   SEVERITY_COLORS.unknown,
 ];
 

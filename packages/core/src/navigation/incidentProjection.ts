@@ -50,6 +50,7 @@ const SEVERITY_APPROACH: Record<
   major: { leadSec: 20, minM: 400, maxM: 1500 },
   moderate: { leadSec: 14, minM: 250, maxM: 1000 },
   minor: { leadSec: 10, minM: 150, maxM: 600 },
+  none: { leadSec: 10, minM: 150, maxM: 600 },
   unknown: { leadSec: 12, minM: 200, maxM: 800 },
 };
 

@@ -8,8 +8,27 @@ export type { RoadConditionEffect, VehicleApplicability };
 /** A text in every language its publisher wrote it in, the publisher's own first. */
 export type LocalizedText = { lang: string; text: string }[];
 
-/** How severe a situation is, mildest first; `unknown` ranks below every label. */
-export type RoadConditionSeverityLabel = "minor" | "moderate" | "major" | "critical" | "unknown";
+/**
+ * How severe a situation is, by its impact on traffic, mildest first. `none`
+ * is a declared rating of no impact, not a missing one: that is `unknown`.
+ */
+export type RoadConditionSeverityLabel =
+  | "none"
+  | "minor"
+  | "moderate"
+  | "major"
+  | "critical"
+  | "unknown";
+
+/** Every severity label, mildest first, `unknown` last. */
+export const ROAD_CONDITION_SEVERITY_LABELS = [
+  "none",
+  "minor",
+  "moderate",
+  "major",
+  "critical",
+  "unknown",
+] as const satisfies readonly RoadConditionSeverityLabel[];
 
 /** Per-event provenance, carried through to attribution UI + legal tables. */
 export interface RoadConditionAttribution {

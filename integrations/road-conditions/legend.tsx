@@ -55,6 +55,12 @@ const SEVERITY_STEPS: { value: MinSeverity; color?: string }[] = [
   { value: "critical", color: SEVERITY_COLORS.critical },
 ];
 
+/**
+ * Labels below every threshold step, keyed beside the control: a declared
+ * absence of impact and a missing rating. Any threshold hides both.
+ */
+const UNRATED_KEYS = ["none", "unknown"] as const;
+
 /** Time-horizon steps, narrowest first — the default is the first. */
 const HORIZON_STEPS: Horizon[] = ["active", "week", "all"];
 
@@ -296,17 +302,21 @@ function IncidentControls() {
             alignItems: "center",
           }}
         >
-          <Box
-            component="span"
-            sx={{
-              width: 8,
-              height: 8,
-              borderRadius: "50%",
-              bgcolor: SEVERITY_COLORS.unknown,
-              mr: 0.5,
-            }}
-          />
-          {t("sev.unknown")}
+          {UNRATED_KEYS.map((label) => (
+            <Box component="span" key={label} sx={{ display: "flex", alignItems: "center", mr: 1 }}>
+              <Box
+                component="span"
+                sx={{
+                  width: 8,
+                  height: 8,
+                  borderRadius: "50%",
+                  bgcolor: SEVERITY_COLORS[label],
+                  mr: 0.5,
+                }}
+              />
+              {t(`sev.${label}`)}
+            </Box>
+          ))}
         </Typography>
       </Box>
 

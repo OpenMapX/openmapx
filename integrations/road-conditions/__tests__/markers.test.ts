@@ -151,6 +151,10 @@ describe("markerImageId", () => {
     expect(markerImageId("nope", "high")).toBe("rc:other:unknown");
   });
 
+  it("keeps a declared no-impact severity as its own marker", () => {
+    expect(markerImageId("road_closure", "none")).toBe("rc:road_closure:none");
+  });
+
   it("round-trips through parseMarkerImageId", () => {
     expect(parseMarkerImageId("rc:road_closure:major")).toEqual({
       glyph: "road_closure",
