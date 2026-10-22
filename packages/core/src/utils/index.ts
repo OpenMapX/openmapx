@@ -276,7 +276,7 @@ export {
   parseCoordinateInput,
   parseDMSCoordinateInput,
 } from "./parseCoordinates";
-export { formatPaymentMethodLabel, formatPaymentMethods } from "./paymentMethods";
+export { formatPaymentMethodLabel } from "./paymentMethods";
 export { withPhotoContributors } from "./photo-contributors";
 export {
   computePlusCode,

@@ -5,7 +5,6 @@ import {
   type DataSourceDetail,
   type DataSourceDetailSection,
   type DataSourceResult,
-  formatPaymentMethods,
   gapFillBranding,
   isSafeHttpUrl,
   type OsmIdentity,
@@ -19,6 +18,7 @@ import {
   sharedT,
   type Translatable,
   token,
+  vocabularyLabels,
 } from "@openmapx/integration-framework/strings";
 import { snapshotContributors } from "@openmapx/mobility-core/contributors";
 import {
@@ -32,7 +32,7 @@ import {
 } from "@openmapx/mobility-core/ev-charging";
 import strings from "./strings/en.json" with { type: "json" };
 
-type Row = [I18nToken, Translatable];
+type Row = [I18nToken, Translatable | Translatable[]];
 type Component = EnergyTariff["elements"][number]["components"][number];
 type Day = NonNullable<EnergyTariffRestrictions["days"]>[number];
 
@@ -332,12 +332,10 @@ function usageSection(site: ChargingSite): DataSourceDetailSection | null {
   const rows: Row[] = [];
   const audience = site.audience && AUDIENCE_TOKEN[site.audience];
   if (audience) rows.push([sharedT.row.access, audience]);
-  if (site.payment.length > 0) {
-    rows.push([token("row.payment"), formatPaymentMethods(site.payment)]);
-  }
-  if (site.authentication.length > 0) {
-    rows.push([token("row.authentication"), formatPaymentMethods(site.authentication)]);
-  }
+  const payment = vocabularyLabels("payment", site.payment);
+  if (payment.length > 0) rows.push([token("row.payment"), payment]);
+  const authentication = vocabularyLabels("authentication", site.authentication);
+  if (authentication.length > 0) rows.push([token("row.authentication"), authentication]);
   if (rows.length === 0) return null;
   return { title: token("section.usage"), type: "table", rows, sectionIcon: "payments" };
 }

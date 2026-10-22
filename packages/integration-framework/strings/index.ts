@@ -1,6 +1,14 @@
 export { formatMoney } from "./src/money";
 export { type ResolveOptions, resolveToken } from "./src/resolver";
-export { money, sharedStrings, sharedT, token } from "./src/token";
+export {
+  money,
+  type SharedVocabulary,
+  sharedStrings,
+  sharedT,
+  token,
+  vocabularyLabel,
+  vocabularyLabels,
+} from "./src/token";
 export type { I18nToken, LocaleCatalog, LocaleStrings, Translatable } from "./src/types";
 
 /**

@@ -97,9 +97,13 @@ function section(sections: DataSourceDetailSection[], title: string) {
   return sections.find((s) => isI18nToken(s.title) && text(s.title) === title);
 }
 
-/** Each row as plain text in `locale`, cell by cell. */
+/** Each row as plain text in `locale`, cell by cell; a list cell joined as the client joins it. */
 function rowsOf(s: DataSourceDetailSection | undefined, locale = "en"): string[][] {
-  return (s?.rows ?? []).map((row) => row.map((cell) => text(cell, locale)));
+  return (s?.rows ?? []).map((row) =>
+    row.map((cell) =>
+      Array.isArray(cell) ? cell.map((c) => text(c, locale)).join(", ") : text(cell, locale),
+    ),
+  );
 }
 
 describe("availabilityOf", () => {
@@ -640,8 +644,8 @@ describe("mapChargingSiteToDetail", () => {
 
     expect(rowsOf(section(detail.sections, "Usage"))).toEqual([
       ["Access", "Customers"],
-      ["Payment", "Credit Card, App"],
-      ["Authentication", "RFID"],
+      ["Payment", "Credit card, App"],
+      ["Authentication", "RFID card"],
     ]);
     expect(section(detail.sections, "Opening Hours")?.content).toBe("Mo–Fr 7–19");
     expect(section(detail.sections, "Notes")?.content).toBe("Entrance from the rear");
@@ -656,6 +660,24 @@ describe("mapChargingSiteToDetail", () => {
     );
     expect(withHours.openingHours).toBe("24/7");
     expect(section(withHours.sections, "Opening Hours")).toBeUndefined();
+  });
+
+  it("names payment and authentication methods in the reader's language, a new one in words", () => {
+    const detail = mapChargingSiteToDetail(
+      makeSite({
+        payment: ["sms", "direct_debit", "sms", "barter_trade"],
+        authentication: ["none", "plug_and_charge", "pin", "qr"],
+      }),
+    );
+    const usage = section(detail.sections, "Usage");
+    expect(rowsOf(usage)).toEqual([
+      ["Payment", "SMS, Direct debit, Barter trade"],
+      ["Authentication", "Not required, Plug & Charge, PIN, QR code"],
+    ]);
+    expect(rowsOf(usage, "de")).toEqual([
+      ["Zahlung", "SMS, Lastschrift, Barter trade"],
+      ["Authentifizierung", "Nicht erforderlich, Plug & Charge, PIN, QR-Code"],
+    ]);
   });
 
   it("a site without a name gets a fallback name", () => {
