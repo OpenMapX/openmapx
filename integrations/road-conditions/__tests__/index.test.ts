@@ -542,13 +542,26 @@ describe("GET /events filters", () => {
 });
 
 describe("GET /bindings", () => {
+  /**
+   * Drives `/bindings` with a stub host whose cache keeps each entry as JSON,
+   * as a shared cache does, so what the route caches is what it reads back.
+   */
   function bindingsHarness(providers: RoadConditionsProvider[], disallowed: string[] = []) {
     const routes = new Map<string, Handler>();
+    const stored = new Map<string, string>();
     const ctx = {
       registerRoute(_method: string, path: string, handler: Handler) {
         routes.set(path, handler);
       },
-      cache: { withCache: async <T>(_k: string, _t: number, fn: () => Promise<T>) => fn() },
+      cache: {
+        async withCache<T>(key: string, _ttl: number, fn: () => Promise<T>): Promise<T> {
+          const hit = stored.get(key);
+          if (hit !== undefined) return JSON.parse(hit) as T;
+          const value = await fn();
+          stored.set(key, JSON.stringify(value));
+          return value;
+        },
+      },
       getIntegrationsByDomain: () =>
         providers.map((p) => ({
           id: p.id,
@@ -603,27 +616,68 @@ describe("GET /bindings", () => {
     expect(asked).toEqual([["oc:situation:a", { excludedSourceIds: ["grey"] }]]);
   });
 
-  it("answers 404 for an unknown provider, one without bindings or an unknown situation", async () => {
-    const get = bindingsHarness([
-      { id: "plain", getEvents: async () => [] },
-      { id: "oc", getEvents: async () => [], getBindings: async () => null },
-    ]);
-    expect((await get({ provider: "nope", id: "x" })).status).toBe(404);
-    expect((await get({ provider: "plain", id: "x" })).status).toBe(404);
-    expect((await get({ provider: "oc", id: "x" })).status).toBe(404);
-    expect((await get({ provider: "oc" })).status).toBe(400);
-  });
-
-  it("answers 503 when the provider's read fails", async () => {
+  it("refuses an id that is not an OpenConditions situation's before asking anyone", async () => {
+    let asked = 0;
     const get = bindingsHarness([
       {
         id: "oc",
         getEvents: async () => [],
         getBindings: async () => {
-          throw new Error("down");
+          asked += 1;
+          return detail;
         },
       },
     ]);
-    expect((await get({ provider: "oc", id: "x" })).status).toBe(503);
+    for (const id of ["x", "..", ".", "oc:situation:a/../../feeds", "oc:feature:a", undefined]) {
+      expect((await get({ provider: "oc", id })).status).toBe(400);
+    }
+    expect(asked).toBe(0);
+  });
+
+  it("answers 404 for an unknown provider, one without bindings or an unknown situation", async () => {
+    const get = bindingsHarness([
+      { id: "plain", getEvents: async () => [] },
+      { id: "oc", getEvents: async () => [], getBindings: async () => null },
+    ]);
+    expect((await get({ provider: "nope", id: "oc:situation:x" })).status).toBe(404);
+    expect((await get({ provider: "plain", id: "oc:situation:x" })).status).toBe(404);
+    expect((await get({ provider: "oc", id: "oc:situation:x" })).status).toBe(404);
+  });
+
+  it("caches a situation without bindings, so asking again reads no provider", async () => {
+    let asked = 0;
+    const get = bindingsHarness([
+      {
+        id: "oc",
+        getEvents: async () => [],
+        getBindings: async () => {
+          asked += 1;
+          return null;
+        },
+      },
+    ]);
+    expect((await get({ provider: "oc", id: "oc:situation:gone" })).status).toBe(404);
+    expect((await get({ provider: "oc", id: "oc:situation:gone" })).status).toBe(404);
+    expect(asked).toBe(1);
+  });
+
+  it("answers 503 when the provider cannot answer yet, and asks again next time", async () => {
+    let asked = 0;
+    const get = bindingsHarness([
+      {
+        id: "oc",
+        getEvents: async () => [],
+        getBindings: async () => {
+          asked += 1;
+          if (asked === 1) throw new Error("OpenConditions source list not read yet");
+          return detail;
+        },
+      },
+    ]);
+    expect((await get({ provider: "oc", id: "oc:situation:a" })).status).toBe(503);
+    expect(await get({ provider: "oc", id: "oc:situation:a" })).toEqual({
+      status: 200,
+      body: detail,
+    });
   });
 });

@@ -1,4 +1,4 @@
-import type { BBox } from "@openmapx/core";
+import type { BBox, RoadConditionBindingDetail } from "@openmapx/core";
 import { type IntegrationContext, scalarQueries } from "@openmapx/integration-framework";
 import { eventsToFeatureCollection } from "./eventsToGeojson.js";
 import { flowSpansForRoutes, parseRouteFlowBody } from "./flowAlongRoute.js";
@@ -12,6 +12,16 @@ import { isSeverityLabel } from "./severity.js";
  * so the cache only bounds how late a changed situation can arrive.
  */
 const ROAD_EVENT_CACHE_MAX_AGE_S = 60;
+
+/**
+ * The situation ids `/bindings` reads: OpenConditions situations, whose
+ * record API serves bindings. Any other id is refused before it can reach a
+ * provider's request path.
+ */
+const BINDABLE_SITUATION_ID = /^oc:situation:[^/\\?#]+$/;
+
+/** What `/bindings` caches for a situation without bindings: a cache keeps no bare null. */
+const NO_BINDINGS = { none: true } as const;
 
 /** A comma-separated query list, trimmed, empties dropped, sorted for a stable cache key. */
 function listParam(raw: string | undefined): string[] {
@@ -167,11 +177,18 @@ export function setup(ctx: IntegrationContext): void {
   // The graph bindings of one situation, with why each stands as it does,
   // asked of the provider that published it. A popup reads it on demand: the
   // situation lists carry no bindings. A situation of a disallowed source, or
-  // one its provider no longer serves, answers 404.
+  // one its provider no longer serves, answers 404; a provider that cannot
+  // answer yet (its source list unread) or fails answers 503, uncached.
   ctx.registerRoute("GET", "/bindings", async (req, reply) => {
     const { provider: providerId, id } = scalarQueries(req.query);
-    if (!providerId || !id || providerId.length > 128 || id.length > 512) {
-      reply.status(400).send({ error: "provider and id required" });
+    if (
+      !providerId ||
+      !id ||
+      providerId.length > 128 ||
+      id.length > 512 ||
+      !BINDABLE_SITUATION_ID.test(id)
+    ) {
+      reply.status(400).send({ error: "provider and an OpenConditions situation id required" });
       return;
     }
     const provider = collectProviders(ctx).find((p) => p.id === providerId);
@@ -181,11 +198,16 @@ export function setup(ctx: IntegrationContext): void {
     }
     try {
       const disallowed = [...((await ctx.getDisallowedSourceIds?.()) ?? [])];
-      const detail = await ctx.cache.withCache(
+      // A situation without bindings is cached as such, so asking for an
+      // unknown id again costs no provider read until the entry expires. A
+      // provider that cannot answer yet throws, and nothing is cached.
+      const cached = await ctx.cache.withCache<RoadConditionBindingDetail | typeof NO_BINDINGS>(
         `conditions:binding:${providerId}:${id}:${disallowed.sort().join("+")}`,
         ROAD_EVENT_CACHE_MAX_AGE_S,
-        async () => (await provider.getBindings?.(id, { excludedSourceIds: disallowed })) ?? null,
+        async () =>
+          (await provider.getBindings?.(id, { excludedSourceIds: disallowed })) ?? NO_BINDINGS,
       );
+      const detail = !cached || "none" in cached ? null : cached;
       if (!detail) {
         reply.header("Cache-Control", "no-cache");
         reply.status(404).send({ error: "no bindings for this situation" });

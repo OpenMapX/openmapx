@@ -316,6 +316,19 @@ describe("road-conditions provider", () => {
     ]);
   });
 
+  it("fails a bindings read before the source list is read, and never asks for another kind of id", async () => {
+    const urls: string[] = [];
+    const notReady = provider({
+      sources: { ...EVERY_SOURCE, ready: false },
+      capture: (url) => urls.push(url),
+    });
+    await expect(notReady.getBindings!("oc:situation:nl-ndw-events:s1")).rejects.toThrow(
+      /source list/,
+    );
+    expect(await provider({ capture: (url) => urls.push(url) }).getBindings!("..")).toBeNull();
+    expect(urls).toEqual([]);
+  });
+
   it("gives no bindings for an unknown situation or one of an excluded source", async () => {
     const missing = provider({
       serve: (url) =>

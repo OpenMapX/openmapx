@@ -221,10 +221,12 @@ export function createRoadConditionsProvider(
      * A situation's bindings from `GET /situations/{id}`: its own place's and
      * each effect's bound on its own, with the resolver's reason. A situation
      * the live source list does not serve, or of an excluded source, has none
-     * to show.
+     * to show. Until the source list is read it cannot tell, and fails rather
+     * than answer "none".
      */
     async getBindings(eventId, opts) {
-      if (!sources.ready) return null;
+      if (!sources.ready) throw new Error("OpenConditions source list not read yet");
+      if (!eventId.startsWith("oc:situation:")) return null;
       const answer = await client.getOptional<unknown>(
         `/situations/${encodeURIComponent(eventId)}`,
       );
