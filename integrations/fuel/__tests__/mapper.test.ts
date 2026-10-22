@@ -182,6 +182,17 @@ describe("mapFuelStationToResult", () => {
         );
       }
     }
+    for (const [grade, label] of [
+      ["sp100", "SP100"],
+      ["b20", "B20"],
+      ["b30", "B30"],
+    ]) {
+      const summary = mapFuelStationToResult(
+        makeStation({ products: [product({ grade, price: eur(1.899) })] }),
+      ).summary;
+      expect(text(summary, "en")).toBe(`${label} €1.899`);
+      expect(text(summary, "de")).toBe(`${label} 1,899${NB}€`);
+    }
     const kerosene = mapFuelStationToResult(
       makeStation({ products: [product({ grade: "kerosene", price: eur(2.1) })] }),
     ).summary;
