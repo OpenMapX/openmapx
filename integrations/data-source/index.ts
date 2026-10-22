@@ -1,4 +1,5 @@
 import { ConfigurationError } from "@openmapx/core";
+import { currentOpeningHoursInfo } from "@openmapx/core/server";
 import {
   type BoundingBoxLimits,
   clampViewportBoundingBox,
@@ -111,12 +112,28 @@ export function setup(ctx: IntegrationContext): void {
         reply.status(404).send({ error: "Item not found" });
         return;
       }
-      reply.header("Cache-Control", `public, max-age=${Math.min(detailTtl, 300)}`);
+      const detail = envelope.data;
+      // Hours are evaluated per response, never cached with the detail: the
+      // verdict holds for a minute, so a response carrying one is not stored.
+      const [lon, lat] = detail.coordinates;
+      const openingHoursInfo = await currentOpeningHoursInfo(detail.openingHours, {
+        lat,
+        lon,
+        countryCode: detail.address?.country,
+      });
+      reply.header(
+        "Cache-Control",
+        openingHoursInfo ? "no-store" : `public, max-age=${Math.min(detailTtl, 300)}`,
+      );
       // Stamp the producing provider id so the client resolves this detail's
       // I18nTokens against the right integration catalog. Done on the way out
       // (not inside the cached producer) so cached entries are stamped too.
       reply.send({
-        data: { ...envelope.data, providerId: provider.id },
+        data: {
+          ...detail,
+          providerId: provider.id,
+          ...(openingHoursInfo ? { openingHoursInfo } : {}),
+        },
         attributions: envelope.attributions,
         freshness: envelope.freshness,
       });

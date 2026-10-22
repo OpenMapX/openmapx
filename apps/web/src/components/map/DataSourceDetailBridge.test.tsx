@@ -83,6 +83,27 @@ it("shows a site's own website, or else its operator's, as the place's website",
   expect(websiteOf({ website: "javascript:alert(1)" })).toBeUndefined();
 });
 
+it("carries the hours the route evaluated with the place", () => {
+  const openingHoursInfo = {
+    validUntil: "2026-10-22T20:06:00.000Z",
+    status: {
+      isOpen: false,
+      nextChange: { kind: "opens", at: "08:00", weekday: 5, day: "tomorrow" },
+    },
+    isAlwaysOpen: false,
+    weekBitmap: "",
+  };
+  response.detail = { ...response.detail, openingHours: "Mo-Sa 08:00-18:00", openingHoursInfo };
+  const view = render(<DataSourceDetailBridge />);
+  expect(usePlaceStore.getState().selectedPlace).toMatchObject({
+    openingHours: "Mo-Sa 08:00-18:00",
+    openingHoursInfo,
+  });
+  view.unmount();
+  useDataSourceStore.getState().clearSelection();
+  usePlaceStore.getState().setSelectedPlace(null);
+});
+
 it("does not reclaim a newer transit selection on a retained data-source refetch", () => {
   usePlaceStore.getState().setSelectedPlace(
     createPlace({

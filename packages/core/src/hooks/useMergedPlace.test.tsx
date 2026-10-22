@@ -129,6 +129,41 @@ it("uses captured reverse address and matched schedule ownership with neutral co
   state.matched = null;
 });
 
+it("shows a matched data source's hours with the verdict its route evaluated", () => {
+  const b = { sourceId: "hours", name: "Matched hours" };
+  const openingHoursInfo = {
+    validUntil: new Date(Date.now() + 60_000).toISOString(),
+    status: { isOpen: true },
+    isAlwaysOpen: true,
+    weekBitmap: "",
+  };
+  state.nom = null;
+  state.reverse = null;
+  state.matched = {
+    id: "detail",
+    name: "Detail",
+    coordinates: [6, 51],
+    sources: [],
+    sections: [],
+    openingHours: "24/7",
+    openingHoursInfo,
+    contributors: [b],
+    fieldContributors: { openingHours: [b], openingHoursInfo: [b], name: [] },
+  };
+  const selected = {
+    id: "coordinate:6,51",
+    primaryScheme: "coordinate",
+    ids: {},
+    name: "Point",
+    coordinates: [6, 51],
+    address: "",
+  } as Place;
+  const { result } = renderHook(() => useMergedPlace(selected));
+  expect(result.current.place?.openingHoursInfo).toBe(openingHoursInfo);
+  expect(contributorsForField(result.current.place ?? {}, "openingHoursInfo")).toEqual([b]);
+  state.matched = null;
+});
+
 it("preserves an unknown saved coordinate axis through the real panel merge and resave", () => {
   state.nom = null;
   state.reverse = null;

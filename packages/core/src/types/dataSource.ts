@@ -3,6 +3,7 @@ import type { ContributingRecord, FieldContributors } from "@openmapx/mobility-c
 import type { OsmFilter } from "../utils/overpass.service";
 import type { LngLat } from "./geometry";
 import type { I18nToken, Translatable } from "./i18nToken";
+import type { OpeningHoursInfo } from "./openingHoursInfo";
 
 export type { Attribution } from "@openmapx/mobility-core/attribution";
 
@@ -302,6 +303,8 @@ export interface DataSourceDetail extends ContributingRecord {
   usageInfo?: { type: Translatable; cost?: Translatable; membershipRequired?: boolean };
   /** OSM-format opening hours string (e.g., "Mo-Fr 06:00-20:00; Sa-Su 08:00-20:00"). */
   openingHours?: string;
+  /** `openingHours` evaluated at the item's location, stamped by the host's data-source route. */
+  openingHoursInfo?: OpeningHoursInfo;
   actions?: {
     primaryRental?: {
       label: I18nToken;

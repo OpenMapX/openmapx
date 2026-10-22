@@ -92,6 +92,7 @@ export function DataSourceDetailBridge() {
       // The site's own website, else its operator's; only http(s) links.
       website: [detail.website, detail.operator?.url].find(isSafeHttpUrl),
       openingHours: detail.openingHours,
+      openingHoursInfo: detail.openingHoursInfo,
       dataSourceDetail: detail,
     });
 
