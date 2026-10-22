@@ -23,6 +23,7 @@ import {
   OPS_PUBLIC_ERROR_MESSAGES,
   type OpsResultFor,
 } from "@openmapx/core/ops";
+import { atomicWrite, durableUnlink, fsyncDirectory } from "@openmapx/core/release-files";
 import { services as coreServices } from "@openmapx/core/server";
 import {
   advanceAgentHandoff,
@@ -40,7 +41,7 @@ import {
   readDescriptorAnchoredUtf8,
 } from "./descriptor-file";
 import { runContainedProcess } from "./docker-runtime";
-import { atomicWrite, durableUnlink, fsyncDirectory, strictReadFile } from "./durable-files";
+import { strictReadFile } from "./durable-files";
 import { createImageInspection } from "./release-images";
 import {
   OpsAgentBusyError,

@@ -1,6 +1,7 @@
 import { join } from "node:path";
 import type { OpsAgentHandoffPhase } from "@openmapx/core/ops";
-import { atomicWrite, strictReadFile } from "./durable-files";
+import { atomicWrite } from "@openmapx/core/release-files";
+import { strictReadFile } from "./durable-files";
 import {
   type AgentReleasePins,
   createImageInspection,
