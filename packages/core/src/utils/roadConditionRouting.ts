@@ -1,10 +1,12 @@
 import type { RoadConditionEvent, RoadConditionRoutingEvidence } from "../types/roadConditions";
 import {
+  actionInForce,
   bindsEveryCar,
   closesRoadForCars,
   effectValidity,
   isRestrictionEvidence,
   isVehicleSpecific,
+  lifecycleInForce,
   type RoadConditionEffect,
   speedCapKph,
 } from "./roadConditionEffects";
@@ -229,6 +231,11 @@ export function getRoadConditionRoutingDecision(
     reasons.push("outside_validity");
   if (start !== null && end !== null && start >= end) reasons.push("invalid_time");
   const validity = effectValidity(event, effect);
+  // A planned or approved effect still announced for later counts for a trip
+  // inside its window, weighed against the instant of evaluation.
+  const clock = new Date(now);
+  if (!lifecycleInForce(validity, clock)) reasons.push("lifecycle_not_in_force");
+  if (!actionInForce(effect, validity, clock)) reasons.push("action_not_routable");
   if ((validity.periods?.length || validity.exceptions?.length) && transition === null)
     reasons.push("unsupported_schedule");
   if (travel === now && transition !== null && transition <= now) reasons.push("expired_window");

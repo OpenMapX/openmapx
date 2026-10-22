@@ -105,6 +105,7 @@ export type {
   PricingPlanEntry,
 } from "./mobility-data-source-provider.js";
 export type {
+  OperationalBindingReason,
   OperationalEvidence,
   OperationalFeedCoverage,
   OperationalFeedEvidence,
@@ -169,6 +170,8 @@ export type {
 export type {
   LocalizedText,
   RoadConditionAttribution,
+  RoadConditionBinding,
+  RoadConditionBindingDetail,
   RoadConditionEffect,
   RoadConditionEvent,
   RoadConditionRoadRef,

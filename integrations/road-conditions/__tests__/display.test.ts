@@ -342,7 +342,7 @@ describe("buildRoadConditionFeatures", () => {
       _icon: "rc:road_closure:critical",
       _id: groups[0]?.displayId,
       _displayId: groups[0]?.displayId,
-      _sev: 4,
+      _sev: 5,
       _unconfirmed: true,
       future: false,
     });

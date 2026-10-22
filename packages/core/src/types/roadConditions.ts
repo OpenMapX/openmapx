@@ -8,8 +8,27 @@ export type { RoadConditionEffect, VehicleApplicability };
 /** A text in every language its publisher wrote it in, the publisher's own first. */
 export type LocalizedText = { lang: string; text: string }[];
 
-/** How severe a situation is, mildest first; `unknown` ranks below every label. */
-export type RoadConditionSeverityLabel = "minor" | "moderate" | "major" | "critical" | "unknown";
+/**
+ * How severe a situation is, by its impact on traffic, mildest first. `none`
+ * is a declared rating of no impact, not a missing one: that is `unknown`.
+ */
+export type RoadConditionSeverityLabel =
+  | "none"
+  | "minor"
+  | "moderate"
+  | "major"
+  | "critical"
+  | "unknown";
+
+/** Every severity label, mildest first, `unknown` last. */
+export const ROAD_CONDITION_SEVERITY_LABELS = [
+  "none",
+  "minor",
+  "moderate",
+  "major",
+  "critical",
+  "unknown",
+] as const satisfies readonly RoadConditionSeverityLabel[];
 
 /** Per-event provenance, carried through to attribution UI + legal tables. */
 export interface RoadConditionAttribution {
@@ -30,6 +49,24 @@ export interface RoadConditionRoadRef {
   class?: string;
   from?: string;
   to?: string;
+}
+
+/**
+ * Which way of a road a situation affects, mirroring the conditions model's
+ * `DirectionRef`. `value` is read against `basis`: `road_reference`,
+ * `alert_c` and `openlr` name a reference axis (positive = increasing
+ * reference); `geometry` the order its location's line is drawn in, first
+ * coordinate to last; `unknown` an axis nobody identified. `loop` names the
+ * carriageway of a ring road, `toward` the place it leads to.
+ */
+export interface RoadConditionDirection {
+  value: string;
+  basis?: string;
+  compass?: string;
+  bearingDeg?: number;
+  loop?: string;
+  toward?: string;
+  text?: string;
 }
 
 /**
@@ -64,11 +101,14 @@ export interface RoadConditionSchedule {
 
 /**
  * When a situation (or one of its effects) holds: the source's declared
- * lifecycle, its outer bounds, and recurring windows inside them. Whether it
- * holds at an instant is `validityHoldsAt`, never `status` alone.
+ * lifecycle, its outer bounds, and recurring windows inside them. Only an
+ * `active` lifecycle lets the window decide; whether it holds at an instant
+ * is `validityHoldsAt`, never `status` alone.
  */
 export interface RoadConditionValidity {
   status: "planned" | "active" | "suspended" | "ended" | "cancelled" | "unknown";
+  /** Why an ended record ended (`source_ended`, `withdrawn_from_feed`, `expired`, …). */
+  endedReason?: string;
   start?: string;
   end?: string;
   estimatedEnd?: string;
@@ -89,6 +129,42 @@ export type RoadConditionBindingStatus =
   | "unattempted"
   | "obsolete"
   | "invalid";
+
+/**
+ * Why a location was not bound to the road graph, or why its binding was kept
+ * off routing, as the OpenConditions resolver records it. A producer may add
+ * reasons; a reader labels the ones listed here and shows any other plainly.
+ */
+export const ROAD_CONDITION_BINDING_REASONS = [
+  "no_candidates",
+  "no_path",
+  "low_coverage",
+  "disconnected_geometry",
+  "subgraph_too_large",
+  "resolver_error",
+  "conflicting_direction",
+  "direction_undecided",
+  "outside_regions",
+  "area_type",
+  "polygon_geometry",
+  "location_not_exact",
+] as const;
+
+/** A graph binding of a situation's place or of one effect, and why it stands as it does. */
+export interface RoadConditionBinding {
+  status: string;
+  /** A machine reason (`ROAD_CONDITION_BINDING_REASONS` and any later one), or null. */
+  reason: string | null;
+}
+
+/**
+ * The bindings of one situation: its own place's, and each effect's with a
+ * place or direction of its own, by effect id.
+ */
+export interface RoadConditionBindingDetail {
+  situation: RoadConditionBinding | null;
+  effects: Record<string, RoadConditionBinding>;
+}
 
 /**
  * Versioned routing evidence of one effect of one record revision, as
@@ -176,7 +252,7 @@ export interface RoadConditionEvent extends ContributingRecord {
   /** WGS84 [lon,lat] geometry. */
   geometry: Geometry;
   roads?: RoadConditionRoadRef[];
-  direction?: { value: string; compass?: string; text?: string };
+  direction?: RoadConditionDirection;
   validity: RoadConditionValidity;
   effects: RoadConditionEffect[];
   /** `feed` = an authoritative official source, `crowd` = user reports. */

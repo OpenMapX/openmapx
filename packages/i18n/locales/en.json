@@ -527,6 +527,7 @@
     "reset": "Reset",
     "all": "All",
     "sev": {
+      "none": "No impact",
       "minor": "Minor",
       "moderate": "Moderate",
       "major": "Major",
@@ -580,7 +581,7 @@
       "effects": "Effects",
       "direction": "Direction",
       "roads": "Roads affected",
-      "validity": "Active",
+      "validity": "Status",
       "startsAt": "Starts at",
       "description": "Details",
       "sourceRecord": "Source record",
@@ -611,11 +612,45 @@
       "obsolete": "Outdated",
       "invalid": "Invalid"
     },
+    "bindingReason": {
+      "no_candidates": "no road found nearby",
+      "no_path": "no connected route between its ends",
+      "low_coverage": "too little of it matched a road",
+      "disconnected_geometry": "its location is in disconnected pieces",
+      "subgraph_too_large": "it spans too much of the road network",
+      "resolver_error": "matching failed with an error",
+      "conflicting_direction": "the stated direction contradicts the location",
+      "direction_undecided": "the carriageway of the stated direction is undecided",
+      "outside_regions": "outside the imported road network",
+      "area_type": "an area rather than a road, by its type",
+      "polygon_geometry": "an area rather than a road, by its shape",
+      "location_not_exact": "its location is not precise enough"
+    },
     "direction": {
       "positive": "Increasing road reference",
       "negative": "Decreasing road reference",
       "both": "Both directions",
-      "unknown": "Direction unknown"
+      "unknown": "Direction unknown",
+      "geometry": {
+        "positive": "In the direction the affected road is drawn",
+        "negative": "Against the direction the affected road is drawn"
+      },
+      "oneWay": "One direction only (not identified)",
+      "loop": {
+        "inner": "Inner loop",
+        "outer": "Outer loop"
+      },
+      "toward": "Towards {place}",
+      "compass": {
+        "N": "Northbound",
+        "NE": "Northeastbound",
+        "E": "Eastbound",
+        "SE": "Southeastbound",
+        "S": "Southbound",
+        "SW": "Southwestbound",
+        "W": "Westbound",
+        "NW": "Northwestbound"
+      }
     },
     "effect": {
       "closure": "Closed",
@@ -631,6 +666,23 @@
       "unsupported": "Restriction",
       "lanesClosedOf": "{closed} of {total} lanes closed",
       "lanesClosed": "{closed} closed",
+      "lanesRestrictedOf": "{restricted} of {total} lanes restricted",
+      "lanesRestricted": "{restricted} restricted",
+      "lanesOpen": "{open} open",
+      "delayBand": {
+        "negligible": "negligible",
+        "up_to_ten_minutes": "up to 10 min",
+        "between_ten_minutes_and_thirty_minutes": "10–30 min",
+        "between_thirty_minutes_and_one_hour": "30 min – 1 h",
+        "between_one_hour_and_three_hours": "1–3 h",
+        "between_three_hours_and_six_hours": "3–6 h",
+        "longer_than_six_hours": "over 6 h"
+      },
+      "delayType": {
+        "delays_of_uncertain_duration": "duration uncertain",
+        "long_delays": "long",
+        "very_long_delays": "very long"
+      },
       "advisorySpeed": "(advisory)",
       "queue": "queue {length}",
       "via": "via {roads}",
@@ -700,7 +752,33 @@
       "active": "in force",
       "scheduled": "from {date}",
       "inactive": "not in force now",
-      "ended": "ended"
+      "ended": "ended",
+      "lifecycle": {
+        "planned": "planned, not yet in force",
+        "suspended": "suspended, not in force",
+        "unknown": "status unknown, not treated as in force"
+      },
+      "action": {
+        "requested": "requested, not in place",
+        "approved": "approved, not yet in place",
+        "rejected": "rejected, not in place"
+      }
+    },
+    "validityStatus": {
+      "planned": "Planned",
+      "active": "Active",
+      "suspended": "Suspended",
+      "ended": "Ended",
+      "cancelled": "Cancelled",
+      "unknown": "Unknown status"
+    },
+    "endedReason": {
+      "source_ended": "ended by the source",
+      "withdrawn_from_feed": "withdrawn from the feed",
+      "expired": "expired",
+      "superseded": "superseded",
+      "cancelled": "cancelled",
+      "stale": "no longer confirmed"
     },
     "compliance": {
       "advisory": "advisory"
@@ -4130,7 +4208,10 @@
         "unattempted": "Not attempted",
         "obsolete": "Outdated",
         "notApplicable": "Not applicable"
-      }
+      },
+      "bindingReasons": "Why bindings were not routed",
+      "noBindingReasons": "None reported",
+      "reasonCounts": "{situations, plural, one {# situation} other {# situations}}, {effects, plural, one {# effect} other {# effects}}"
     }
   },
   "privacySetup": {

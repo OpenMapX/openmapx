@@ -62,6 +62,7 @@ vi.mock("maplibre-gl", () => ({
 }));
 
 import type { RoadConditionEvent } from "@openmapx/core";
+import { clearRoadConditionBindings } from "../bindings";
 import { eventsToFeatureCollection } from "../eventsToGeojson";
 import { buildRoadConditionPopupGroups, buildSources, RoadConditionsLayer } from "../map-layer";
 import { effect, situation, text } from "./fixtures";
@@ -772,6 +773,50 @@ describe("RoadConditionsLayer viewport scheduler", () => {
     respondWith([]);
     await flush(FRESHNESS_DEADLINE_MS);
     expect(popupRemove).toHaveBeenCalledTimes(1);
+  });
+
+  it("reads an open popup's bindings and says why one was kept off routing", async () => {
+    clearRoadConditionBindings();
+    const current = situation({
+      id: "oc:situation:nl-ndw:bound",
+      geometry: { type: "Point", coordinates: [10.5, 45.5] },
+    });
+    const features = eventsToFeatureCollection([current]).features;
+    fetchMock.mockImplementation(async (url: string) =>
+      url.includes("/road-conditions/bindings?")
+        ? {
+            ok: true,
+            status: 200,
+            json: async () => ({
+              situation: { status: "ambiguous", reason: "direction_undecided" },
+              effects: {},
+            }),
+          }
+        : { ok: true, status: 200, json: async () => ({ type: "FeatureCollection", features }) },
+    );
+    render(<RoadConditionsLayer />);
+    await flush();
+    const marker = sourceFeatures("Point")[0]!;
+    fake.setRenderedFeatures(MARKER_LAYER, [
+      {
+        ...marker,
+        layer: { id: MARKER_LAYER, type: "symbol" },
+        source: SOURCE,
+        state: {},
+      } as unknown as import("maplibre-gl").MapGeoJSONFeature,
+    ]);
+    await act(async () => {
+      fake.emit("click", { point: { x: 10, y: 20 }, lngLat: { lng: 10.5, lat: 45.5 } });
+    });
+    await flush();
+    const asked = fetchMock.mock.calls
+      .map(([url]) => String(url))
+      .find((url) => url.includes("/bindings?"));
+    expect(asked).toContain("provider=road-conditions-openconditions");
+    expect(asked).toContain(`id=${encodeURIComponent(current.id)}`);
+    expect(popupHtml.mock.lastCall![0]).toContain(
+      "roadConditions.binding.ambiguous: roadConditions.bindingReason.direction_undecided",
+    );
   });
 
   it("bounds getBounds() reads and network requests under a 60Hz moveend burst that stays in the padded viewport", async () => {

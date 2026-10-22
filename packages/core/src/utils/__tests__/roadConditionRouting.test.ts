@@ -24,6 +24,46 @@ describe("road-condition routing evidence", () => {
     },
   );
 
+  it.each(["planned", "suspended", "unknown"] as const)(
+    "never routes an effect under a %s lifecycle, whatever its evidence",
+    (status) => {
+      const e = { ...event(), validity: { status } };
+      expect(getRoadConditionRoutingDecision(e, closure(e), { evaluatedAt: now })).toMatchObject({
+        eligible: false,
+        reasons: ["lifecycle_not_in_force"],
+      });
+    },
+  );
+
+  it("weighs a planned start against the instant of evaluation, for a trip inside its window", () => {
+    const planned = (start: string) => ({
+      ...event(),
+      validity: { status: "planned" as const, start },
+    });
+    const later = Date.parse("2026-09-11T12:05:00Z");
+    const ahead = planned("2026-09-11T12:01:00Z");
+    expect(
+      getRoadConditionRoutingDecision(ahead, closure(ahead), { evaluatedAt: now, travelAt: later })
+        .reasons,
+    ).not.toContain("lifecycle_not_in_force");
+    const passed = planned("2026-09-11T11:00:00Z");
+    expect(
+      getRoadConditionRoutingDecision(passed, closure(passed), {
+        evaluatedAt: now,
+        travelAt: later,
+      }).reasons,
+    ).toContain("lifecycle_not_in_force");
+  });
+
+  it("never routes an operator action that is not in place", () => {
+    const e = event();
+    const approved = { ...closure(e), actionStatus: "approved" };
+    expect(getRoadConditionRoutingDecision(e, approved, { evaluatedAt: now })).toMatchObject({
+      eligible: false,
+      reasons: ["action_not_routable"],
+    });
+  });
+
   it("cannot use a binding of an earlier revision", () => {
     const e = event();
     e.routingEvidence!["fr1/closure"]!.binding_revision = 2;

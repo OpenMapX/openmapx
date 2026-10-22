@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  type RoadConditionBindingDetail,
   type RoadConditionEvent,
   roadConditionFeatureToEvent,
   useOverlayExclusion,
@@ -22,6 +23,7 @@ import { useRenderedMapAttributions } from "@/integration-api/overlay/useRendere
 import { useEnv } from "@/integration-api/runtime/EnvProvider";
 import { useDateTimeFormat } from "@/integration-api/runtime/useDateTimeFormat";
 import { roadConditionAttributions } from "./attributions";
+import { loadRoadConditionBindings } from "./bindings";
 import { buildRoadConditionDisplayGroups, buildRoadConditionFeatures } from "./display";
 // The named import also runs the module side-effect that registers the
 // "road-conditions" overlay store (shared by the layer selector + legend).
@@ -34,7 +36,7 @@ import {
 } from "./incident-layers";
 import { useIncidentsVisible } from "./incidents-visible";
 import { markerImageData, parseMarkerImageId } from "./markers";
-import { buildRoadConditionPopupHtml } from "./popup";
+import { buildRoadConditionPopupHtml, popupEvents } from "./popup";
 import { useRestoredRoadConditionsChoices } from "./restore-choices";
 import { RouteConditionsLayer } from "./route-layer";
 import { RoadSourceLayers } from "./source-layers";
@@ -148,6 +150,7 @@ export function RoadConditionsLayer() {
   const popupSelectionRef = useRef<{
     hits: MapGeoJSONFeature[];
     fallbackCoordinates: [number, number];
+    bindings?: ReadonlyMap<string, RoadConditionBindingDetail>;
   } | null>(null);
   const viewNeedsRefreshRef = useRef(false);
   const eventsByDisplayIdRef = useRef<Map<string, RoadConditionEvent[]>>(new Map());
@@ -388,9 +391,13 @@ export function RoadConditionsLayer() {
         if (hits.length === 0) return;
 
         const { lngLat } = interaction.event;
-        popupSelectionRef.current = { hits, fallbackCoordinates: [lngLat.lng, lngLat.lat] };
-        openIncidentPopup(map, popupRef, {
-          ...popupSelectionRef.current,
+        const selection = {
+          hits,
+          fallbackCoordinates: [lngLat.lng, lngLat.lat] as [number, number],
+        };
+        popupSelectionRef.current = selection;
+        const opened = openIncidentPopup(map, popupRef, {
+          ...selection,
           atMs: Date.now(),
           needsRefresh: viewNeedsRefreshRef.current,
           requireCurrentEvents: true,
@@ -400,13 +407,22 @@ export function RoadConditionsLayer() {
           translate: (key, values) => tRef.current(key, values),
           locale: localeRef.current,
         });
+        if (!opened) return;
+        // The situation lists carry no bindings; read them for the cards shown.
+        void loadRoadConditionBindings(
+          popupEvents({ hits, eventsByDisplayId: eventsByDisplayIdRef.current }),
+        ).then((bindings) => {
+          if (popupSelectionRef.current !== selection || bindings.size === 0) return;
+          popupSelectionRef.current = { ...selection, bindings };
+          refreshPopup(viewNeedsRefreshRef.current);
+        });
       },
     });
     return () => {
       unregister();
       closeIncidentPopup(map, popupRef);
     };
-  }, [mapReady, mapRef, styleVersion, layerVisible]);
+  }, [mapReady, mapRef, styleVersion, layerVisible, refreshPopup]);
 
   // The area overlay stops at its min zoom; this covers the route at the zooms
   // below it, where a whole trip is on screen.

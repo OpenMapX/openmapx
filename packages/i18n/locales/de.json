@@ -527,6 +527,7 @@
     "reset": "Zurücksetzen",
     "all": "Alle",
     "sev": {
+      "none": "Keine Auswirkung",
       "minor": "Gering",
       "moderate": "Mittel",
       "major": "Hoch",
@@ -580,7 +581,7 @@
       "effects": "Auswirkungen",
       "direction": "Richtung",
       "roads": "Betroffene Straßen",
-      "validity": "Aktiv",
+      "validity": "Status",
       "startsAt": "Beginnt am",
       "description": "Details",
       "sourceRecord": "Quelleneintrag",
@@ -611,11 +612,45 @@
       "obsolete": "Veraltet",
       "invalid": "Ungültig"
     },
+    "bindingReason": {
+      "no_candidates": "keine Straße in der Nähe gefunden",
+      "no_path": "keine verbundene Strecke zwischen den Enden",
+      "low_coverage": "zu wenig davon passt zu einer Straße",
+      "disconnected_geometry": "der Ort besteht aus getrennten Teilen",
+      "subgraph_too_large": "erstreckt sich über zu viel des Straßennetzes",
+      "resolver_error": "Zuordnung mit einem Fehler abgebrochen",
+      "conflicting_direction": "die angegebene Richtung widerspricht dem Ort",
+      "direction_undecided": "die Fahrbahn der angegebenen Richtung ist unklar",
+      "outside_regions": "außerhalb des importierten Straßennetzes",
+      "area_type": "nach seiner Art ein Gebiet, keine Straße",
+      "polygon_geometry": "nach seiner Form ein Gebiet, keine Straße",
+      "location_not_exact": "der Ort ist nicht genau genug angegeben"
+    },
     "direction": {
       "positive": "Aufsteigende Straßenreferenz",
       "negative": "Absteigende Straßenreferenz",
       "both": "Beide Richtungen",
-      "unknown": "Richtung unbekannt"
+      "unknown": "Richtung unbekannt",
+      "geometry": {
+        "positive": "In Zeichnungsrichtung der betroffenen Straße",
+        "negative": "Gegen die Zeichnungsrichtung der betroffenen Straße"
+      },
+      "oneWay": "Nur eine Richtung (nicht angegeben)",
+      "loop": {
+        "inner": "Innerer Ring",
+        "outer": "Äußerer Ring"
+      },
+      "toward": "Richtung {place}",
+      "compass": {
+        "N": "Richtung Norden",
+        "NE": "Richtung Nordosten",
+        "E": "Richtung Osten",
+        "SE": "Richtung Südosten",
+        "S": "Richtung Süden",
+        "SW": "Richtung Südwesten",
+        "W": "Richtung Westen",
+        "NW": "Richtung Nordwesten"
+      }
     },
     "effect": {
       "closure": "Gesperrt",
@@ -631,6 +666,23 @@
       "unsupported": "Beschränkung",
       "lanesClosedOf": "{closed} von {total} Fahrstreifen gesperrt",
       "lanesClosed": "{closed} gesperrt",
+      "lanesRestrictedOf": "{restricted} von {total} Fahrstreifen eingeschränkt",
+      "lanesRestricted": "{restricted} eingeschränkt",
+      "lanesOpen": "{open} frei",
+      "delayBand": {
+        "negligible": "geringfügig",
+        "up_to_ten_minutes": "bis 10 Min.",
+        "between_ten_minutes_and_thirty_minutes": "10–30 Min.",
+        "between_thirty_minutes_and_one_hour": "30 Min. – 1 Std.",
+        "between_one_hour_and_three_hours": "1–3 Std.",
+        "between_three_hours_and_six_hours": "3–6 Std.",
+        "longer_than_six_hours": "über 6 Std."
+      },
+      "delayType": {
+        "delays_of_uncertain_duration": "Dauer ungewiss",
+        "long_delays": "lang",
+        "very_long_delays": "sehr lang"
+      },
       "advisorySpeed": "(Empfehlung)",
       "queue": "Stau {length}",
       "via": "über {roads}",
@@ -700,7 +752,33 @@
       "active": "gilt",
       "scheduled": "ab {date}",
       "inactive": "gilt derzeit nicht",
-      "ended": "beendet"
+      "ended": "beendet",
+      "lifecycle": {
+        "planned": "geplant, gilt noch nicht",
+        "suspended": "ausgesetzt, gilt nicht",
+        "unknown": "Status unbekannt, gilt nicht als in Kraft"
+      },
+      "action": {
+        "requested": "beantragt, nicht umgesetzt",
+        "approved": "genehmigt, noch nicht umgesetzt",
+        "rejected": "abgelehnt, nicht umgesetzt"
+      }
+    },
+    "validityStatus": {
+      "planned": "Geplant",
+      "active": "Aktiv",
+      "suspended": "Ausgesetzt",
+      "ended": "Beendet",
+      "cancelled": "Abgesagt",
+      "unknown": "Status unbekannt"
+    },
+    "endedReason": {
+      "source_ended": "von der Quelle beendet",
+      "withdrawn_from_feed": "aus dem Datenstrom entfernt",
+      "expired": "abgelaufen",
+      "superseded": "ersetzt",
+      "cancelled": "abgesagt",
+      "stale": "nicht mehr bestätigt"
     },
     "compliance": {
       "advisory": "Empfehlung"
@@ -4130,7 +4208,10 @@
         "unattempted": "Noch nicht versucht",
         "obsolete": "Veraltet",
         "notApplicable": "Nicht zutreffend"
-      }
+      },
+      "bindingReasons": "Warum Zuordnungen nicht ins Routing gehen",
+      "noBindingReasons": "Keine gemeldet",
+      "reasonCounts": "{situations, plural, one {# Meldung} other {# Meldungen}}, {effects, plural, one {# Auswirkung} other {# Auswirkungen}}"
     }
   },
   "privacySetup": {

@@ -283,6 +283,82 @@ describe("road-conditions provider", () => {
     ]);
   });
 
+  it("reads a situation's bindings and their reasons from the record API", async () => {
+    const urls: string[] = [];
+    const answer = {
+      record: situation("s1"),
+      binding: {
+        status: "unresolved",
+        confidence: null,
+        directionMode: "unknown",
+        reason: "conflicting_direction",
+        boundAt: "2026-09-11T10:00:00.000Z",
+      },
+      effectBindings: {
+        "s1/closure": { status: "ambiguous", reason: "direction_undecided" },
+        "s1/limit": { status: "exact", reason: null },
+        "s1/garbage": "x",
+      },
+    };
+    const p = provider({
+      serve: (url) => (url.includes("/situations/") ? answer : undefined),
+      capture: (url) => urls.push(url),
+    });
+    expect(await p.getBindings!("oc:situation:nl-ndw-events:s1")).toEqual({
+      situation: { status: "unresolved", reason: "conflicting_direction" },
+      effects: {
+        "s1/closure": { status: "ambiguous", reason: "direction_undecided" },
+        "s1/limit": { status: "exact", reason: null },
+      },
+    });
+    expect(urls).toEqual([
+      `${BASE_URL}/situations/${encodeURIComponent("oc:situation:nl-ndw-events:s1")}`,
+    ]);
+  });
+
+  it("fails a bindings read before the source list is read, and never asks for another kind of id", async () => {
+    const urls: string[] = [];
+    const notReady = provider({
+      sources: { ...EVERY_SOURCE, ready: false },
+      capture: (url) => urls.push(url),
+    });
+    await expect(notReady.getBindings!("oc:situation:nl-ndw-events:s1")).rejects.toThrow(
+      /source list/,
+    );
+    expect(await provider({ capture: (url) => urls.push(url) }).getBindings!("..")).toBeNull();
+    expect(urls).toEqual([]);
+  });
+
+  it("gives no bindings for an unknown situation or one of an excluded source", async () => {
+    const missing = provider({
+      serve: (url) =>
+        url.includes("/situations/") ? { status: 404, headers: {}, body: null } : undefined,
+    });
+    expect(await missing.getBindings!("oc:situation:x")).toBeNull();
+    const known = provider({
+      serve: (url) =>
+        url.includes("/situations/")
+          ? { record: situation("s1"), binding: { status: "exact", reason: null } }
+          : undefined,
+    });
+    expect(
+      await known.getBindings!("oc:situation:nl-ndw-events:s1", {
+        excludedSourceIds: ["nl-ndw-events"],
+      }),
+    ).toBeNull();
+  });
+
+  it("leaves a threshold the record API does not take to the orchestrator", async () => {
+    const calls: Params[] = [];
+    const p = provider({
+      serve: api([situation("a")]),
+      capture: (url, params) => url.endsWith("/situations") && calls.push(params),
+    });
+    await p.getEvents([4, 51, 6, 53], { minSeverity: "none" });
+    await p.getEvents([4, 51, 6, 53], { minSeverity: "unknown" });
+    expect(calls.map((params) => params?.minSeverity)).toEqual([undefined, undefined]);
+  });
+
   it("reads every endpoint with the operator token", async () => {
     const seen: Array<[string, string | undefined]> = [];
     const p = provider({
@@ -392,6 +468,17 @@ describe("road-conditions provider", () => {
                     unattempted: 0,
                     obsolete: 0,
                     notApplicable: 0,
+                    reasons: [
+                      {
+                        status: "ambiguous",
+                        reason: "direction_undecided",
+                        situations: 1,
+                        effects: 2,
+                      },
+                      { status: "unresolved", reason: "no_candidates", situations: 1, effects: 0 },
+                      { status: "unresolved", situations: 3 },
+                      "garbage",
+                    ],
                   },
                 },
               ],
@@ -415,6 +502,11 @@ describe("road-conditions provider", () => {
       rejectedCount: 4,
       graph: { generation: "graph-1", status: "ready", regions: ["de"] },
       bindingCounts: { exact: 5, likely: 1 },
+      // A reason row without a status and reason, or not a row at all, is left out.
+      bindingReasons: [
+        { status: "ambiguous", reason: "direction_undecided", situations: 1, effects: 2 },
+        { status: "unresolved", reason: "no_candidates", situations: 1, effects: 0 },
+      ],
       status: "healthy",
       action: null,
     });
@@ -663,7 +755,13 @@ function record(over: Rec = {}): Rec {
       roads: [
         { ref: "1", name: [{ lang: "fi", text: "Turunväylä" }], class: "motorway", from: "Espoo" },
       ],
-      direction: { value: "positive", basis: "carriageway", text: "kohti Turkua" },
+      direction: {
+        value: "positive",
+        basis: "road_reference",
+        bearingDeg: 280,
+        toward: "Turku",
+        text: "kohti Turkua",
+      },
     },
     provenance: {
       origin: "feed",
@@ -724,7 +822,13 @@ describe("situationToRoadConditionEvent", () => {
       roads: [
         { ref: "1", name: [{ lang: "fi", text: "Turunväylä" }], class: "motorway", from: "Espoo" },
       ],
-      direction: { value: "positive", text: "kohti Turkua" },
+      direction: {
+        value: "positive",
+        basis: "road_reference",
+        bearingDeg: 280,
+        toward: "Turku",
+        text: "kohti Turkua",
+      },
       validity: {
         status: "planned",
         start: "2026-09-20T06:00:00Z",
@@ -765,6 +869,24 @@ describe("situationToRoadConditionEvent", () => {
     });
     expect(event.effects[0]!.validity).toBeUndefined();
     expect(event.effects.every((e) => !("source" in e))).toBe(true);
+  });
+
+  it("keeps a declared no-impact severity and reads labels it does not know as unknown", () => {
+    const rated = (severity: Rec, validity: Rec = { status: "active" }) =>
+      situationToRoadConditionEvent(record({ severity, validity }))!;
+    expect(rated({ label: "none", source: "declared" }).severity).toEqual({ label: "none" });
+    expect(rated({ label: "catastrophic", source: "declared" }).severity).toEqual({
+      label: "unknown",
+    });
+    expect(rated({ label: "none" }, { status: "paused" }).validity).toEqual({ status: "unknown" });
+  });
+
+  it("carries why an ended situation ended", () => {
+    const ended = record({ validity: { status: "ended", endedReason: "withdrawn_from_feed" } });
+    expect(situationToRoadConditionEvent(ended)!.validity).toEqual({
+      status: "ended",
+      endedReason: "withdrawn_from_feed",
+    });
   });
 
   it("carries a crowd situation's evidence", () => {

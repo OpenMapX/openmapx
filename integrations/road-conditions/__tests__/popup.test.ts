@@ -1,7 +1,13 @@
 import type { RoadConditionEvent } from "@openmapx/core";
 import type { MapGeoJSONFeature } from "maplibre-gl";
 import { describe, expect, it } from "vitest";
-import { buildRoadConditionPopupGroups, buildRoadConditionPopupHtml } from "../popup";
+import {
+  bindingLabel,
+  buildRoadConditionPopupGroups,
+  buildRoadConditionPopupHtml,
+  directionText,
+  popupEvents,
+} from "../popup";
 import { effect, situation, text } from "./fixtures";
 
 const AT = Date.parse("2026-09-11T12:00:00Z");
@@ -302,6 +308,35 @@ describe("road-condition popup effects", () => {
     expect(html).toContain("effect.closure: scope.road · state.scheduled(2026-09-20T22:00:00Z)");
   });
 
+  it("opens the validity row with the declared status, not a fixed 'active'", () => {
+    const row = (validity: RoadConditionEvent["validity"]) => {
+      const html = render([situation({ validity })]).html;
+      const match = html.match(
+        /panel\.validity<\/span><span class="omx-overlay-popup__value">([^<]*)</,
+      );
+      return match?.[1];
+    };
+    expect(row({ status: "planned", start: "2026-09-20T00:00:00Z" })).toBe(
+      "validityStatus.planned · 2026-09-20T00:00:00Z – …",
+    );
+    for (const status of ["active", "suspended", "cancelled", "unknown"] as const) {
+      expect(row({ status })).toBe(`validityStatus.${status}`);
+    }
+    expect(row({ status: "ended", endedReason: "withdrawn_from_feed" })).toBe(
+      "validityStatus.ended (endedReason.withdrawn_from_feed)",
+    );
+    // A reason or status this host does not know degrades to readable text, never a raw key.
+    expect(row({ status: "ended", endedReason: "vanished" })).toBe("validityStatus.ended");
+    expect(row({ status: "paused" as "active" })).toBe("Paused");
+  });
+
+  it("says an effect whose operator action is approved is not yet in place", () => {
+    const { html } = render([
+      situation({ effects: [effect("c", "closure", { actionStatus: "approved" })] }),
+    ]);
+    expect(html).toContain("effect.closure: scope.road · state.action.approved");
+  });
+
   it("flags restriction evidence without widening it to all vehicles", () => {
     const { html } = render([
       situation({
@@ -408,5 +443,152 @@ describe("road-condition popup provenance", () => {
       }).html.split("omx-overlay-popup__details")[0];
     expect(summaryHtml(agreeing)).toContain("effect.closure");
     expect(summaryHtml(differing)).not.toContain("effect.");
+  });
+});
+
+describe("directionText", () => {
+  type Direction = NonNullable<RoadConditionEvent["direction"]>;
+  const eastward: RoadConditionEvent["geometry"] = {
+    type: "LineString",
+    coordinates: [
+      [6.7, 51.2],
+      [6.8, 51.2],
+    ],
+  };
+  const say = (direction: Direction, geometry?: RoadConditionEvent["geometry"]) =>
+    directionText(direction, geometry, translate);
+
+  it("reads positive and negative against a reference axis as road reference", () => {
+    for (const basis of ["road_reference", "alert_c", "openlr", undefined]) {
+      expect(say({ value: "positive", ...(basis ? { basis } : {}) })).toBe("direction.positive");
+      expect(say({ value: "negative", ...(basis ? { basis } : {}) })).toBe("direction.negative");
+    }
+  });
+
+  it("reads a direction along the drawn line as that line's compass heading", () => {
+    expect(say({ value: "positive", basis: "geometry" }, eastward)).toBe("direction.compass.E");
+    expect(say({ value: "negative", basis: "geometry" }, eastward)).toBe("direction.compass.W");
+    expect(say({ value: "positive", basis: "geometry" }, point)).toBe(
+      "direction.geometry.positive",
+    );
+  });
+
+  it("names the drawn direction where the line's ends do not describe it", () => {
+    // A U-shaped road: out east, back west, ending a little north of its start.
+    const uTurn: RoadConditionEvent["geometry"] = {
+      type: "LineString",
+      coordinates: [
+        [6.7, 51.2],
+        [6.8, 51.2],
+        [6.8, 51.21],
+        [6.7, 51.21],
+      ],
+    };
+    expect(say({ value: "positive", basis: "geometry" }, uTurn)).toBe(
+      "direction.geometry.positive",
+    );
+    // Two parts that do not join end to start are no one path.
+    const apart: RoadConditionEvent["geometry"] = {
+      type: "MultiLineString",
+      coordinates: [
+        [
+          [6.8, 51.2],
+          [6.9, 51.2],
+        ],
+        [
+          [6.7, 51.2],
+          [6.8, 51.2],
+        ],
+      ],
+    };
+    expect(say({ value: "negative", basis: "geometry" }, apart)).toBe(
+      "direction.geometry.negative",
+    );
+    // Parts joined end to start are one path, and keep their heading.
+    const joined: RoadConditionEvent["geometry"] = {
+      type: "MultiLineString",
+      coordinates: [
+        [
+          [6.7, 51.2],
+          [6.8, 51.2],
+        ],
+        [
+          [6.8, 51.2],
+          [6.9, 51.2],
+        ],
+      ],
+    };
+    expect(say({ value: "positive", basis: "geometry" }, joined)).toBe("direction.compass.E");
+  });
+
+  it("says only one direction for an axis nobody identified", () => {
+    expect(say({ value: "positive", basis: "unknown" })).toBe("direction.oneWay");
+  });
+
+  it("names a ring road's loop and the place the direction leads to", () => {
+    expect(say({ value: "unknown", basis: "text", loop: "inner" })).toBe("direction.loop.inner");
+    expect(say({ value: "positive", basis: "road_reference", toward: "Utrecht" })).toBe(
+      "direction.toward(Utrecht)",
+    );
+    expect(say({ value: "both", basis: "road_reference" })).toBe("direction.both");
+  });
+
+  it("adds a stated compass point or bearing, and the source's words unless they repeat the place", () => {
+    expect(say({ value: "unknown", basis: "compass", compass: "N" })).toBe("direction.compass.N");
+    expect(say({ value: "unknown", basis: "bearing", bearingDeg: 92 })).toBe("direction.compass.E");
+    expect(
+      say(
+        { value: "positive", basis: "geometry", compass: "E", text: "richting Arnhem" },
+        eastward,
+      ),
+    ).toBe("direction.compass.E · richting Arnhem");
+    expect(say({ value: "negative", basis: "alert_c", toward: "Arnhem", text: "Arnhem" })).toBe(
+      "direction.toward(Arnhem)",
+    );
+  });
+
+  it("degrades a value or loop this host does not know to readable text", () => {
+    expect(say({ value: "unknown", basis: "unknown" })).toBe("direction.unknown");
+    expect(say({ value: "clockwise", basis: "ring" })).toBe("Clockwise");
+    expect(say({ value: "unknown", loop: "middle_ring" })).toBe("Middle ring");
+  });
+});
+
+describe("road-condition popup bindings", () => {
+  it("says why a binding stands as it does, with plain words for a reason it does not know", () => {
+    expect(bindingLabel("ambiguous:direction_undecided", translate)).toBe(
+      "binding.ambiguous: bindingReason.direction_undecided",
+    );
+    expect(bindingLabel("exact", translate)).toBe("binding.exact");
+    expect(bindingLabel("unresolved:a_reason_from_tomorrow", translate)).toBe(
+      "binding.unresolved: a reason from tomorrow",
+    );
+    expect(bindingLabel("mystery:no_path", translate)).toBe("Mystery: bindingReason.no_path");
+  });
+
+  it("shows the read bindings of a situation in place of its routing evidence statuses", () => {
+    const shown = situation({ id: "oc:bound", effects: [effect("oc:bound/c", "closure")] });
+    const bindings = new Map([
+      [
+        "oc:bound",
+        {
+          situation: { status: "unresolved", reason: "conflicting_direction" },
+          effects: { "oc:bound/c": { status: "ambiguous", reason: "direction_undecided" } },
+        },
+      ],
+    ]);
+    const { html } = render([shown], { bindings });
+    expect(html).toContain(
+      "binding.unresolved: bindingReason.conflicting_direction, binding.ambiguous: bindingReason.direction_undecided",
+    );
+    expect(render([shown]).html).not.toContain("bindingReason.");
+  });
+
+  it("lists the situations a popup shows once each, for reading their bindings", () => {
+    const shown = popupEvents({
+      hits: [hit({ _displayId: displayId }, point), hit({ _displayIds: [displayId] }, point)],
+      eventsByDisplayId: lookup,
+    });
+    expect(shown.map((event) => event.id)).toEqual(events.map((event) => event.id));
   });
 });

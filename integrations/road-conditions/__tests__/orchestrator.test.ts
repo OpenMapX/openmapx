@@ -175,12 +175,21 @@ describe("aggregateRoadConditions", () => {
           severity: { label: "unknown" },
           geometry: pt(13.402),
         }),
+        ev({
+          id: "cleared",
+          kind: "congestion",
+          type: "congestion",
+          severity: { label: "none" },
+          geometry: pt(13.403),
+        }),
       ]),
     ]);
     const ids = async (query: Parameters<typeof aggregateRoadConditions>[2]) =>
       (await aggregateRoadConditions(ctx, BBOX, query)).map((e) => e.id).sort();
     expect(await ids({ kinds: ["roadworks"] })).toEqual(["works"]);
-    expect(await ids({ excludeKinds: ["roadworks", "closure"] })).toEqual(["accident"]);
+    expect(await ids({ excludeKinds: ["roadworks", "closure", "congestion"] })).toEqual([
+      "accident",
+    ]);
     // Bare type codes, AND-ed with kinds, as OpenConditions filters them.
     expect(await ids({ types: ["accident"] })).toEqual(["accident"]);
     expect(await ids({ types: ["incident.accident"] })).toEqual([]);
@@ -190,7 +199,8 @@ describe("aggregateRoadConditions", () => {
       "accident",
       "closure",
     ]);
-    // `unknown` ranks below every label, so any threshold hides it.
+    // `none` and `unknown` rank below every stated impact, so any threshold hides them.
+    expect(await ids({})).toEqual(["accident", "cleared", "closure", "works"]);
     expect(await ids({ minSeverity: "minor" })).toEqual(["accident", "works"]);
     expect(await ids({ minSeverity: "major" })).toEqual(["accident"]);
   });

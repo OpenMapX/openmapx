@@ -49,6 +49,7 @@ export const roadConditionValiditySchema = z.object({
   estimatedEnd: z.string().optional(),
   periods: z.array(roadConditionScheduleSchema).min(1).optional(),
   exceptions: z.array(roadConditionScheduleSchema).min(1).optional(),
+  endedReason: z.string().optional(),
 });
 
 export const VEHICLE_CLASSES = [
@@ -143,6 +144,9 @@ const common = {
       value: z.string(),
       basis: z.string().optional(),
       compass: z.string().optional(),
+      bearingDeg: z.number().optional(),
+      loop: z.string().optional(),
+      toward: z.string().optional(),
       text: z.string().optional(),
     })
     .optional(),
@@ -188,6 +192,10 @@ export const roadConditionEffectSchema = z.discriminatedUnion("kind", [
     kind: z.literal("lane_restriction"),
     lanesTotal: z.number().int().positive().optional(),
     lanesClosed: z.number().int().nonnegative().optional(),
+    /** Lanes restricted fully or partially; a closed lane is a restricted one, not every restricted lane is closed. */
+    lanesRestricted: z.number().int().nonnegative().optional(),
+    /** Lanes that remain fully usable. */
+    lanesOperational: z.number().int().nonnegative().optional(),
     lanes: z
       .array(
         z.object({
@@ -210,6 +218,10 @@ export const roadConditionEffectSchema = z.discriminatedUnion("kind", [
     ...common,
     kind: z.literal("delay"),
     delay: quantity.optional(),
+    /** The band a delay falls in where its length is not given (`between_ten_minutes_and_thirty_minutes`, …). */
+    delayBand: z.string().min(1).optional(),
+    /** How a delay is described where its length is not (`long_delays`, …). */
+    delayType: z.string().min(1).optional(),
     queueLength: quantity.optional(),
     los: z.string().optional(),
     capacityRemainingPct: z.number().min(0).max(100).optional(),
@@ -459,18 +471,88 @@ export function scheduleOccursAt(schedule: RoadConditionSchedule, at: Date): boo
 }
 
 /**
- * Whether a validity holds at `at`: not ended or cancelled, inside its
- * declared bounds (each inclusive, unbounded when absent), inside one of its
- * periods when it has any, and inside none of its exceptions.
+ * Whether a validity's window holds at `at`, whatever its lifecycle: inside
+ * its declared bounds `[start, end)` (unbounded when absent; the end itself
+ * is past, as OpenConditions decides), inside one of
+ * its periods when it has any, and inside none of its exceptions.
  */
-export function validityHoldsAt(validity: RoadConditionValidity, at: Date): boolean {
-  if (validity.status === "ended" || validity.status === "cancelled") return false;
+export function validityWindowHoldsAt(validity: RoadConditionValidity, at: Date): boolean {
   const t = at.getTime();
   if (validity.start && t < Date.parse(validity.start)) return false;
-  if (validity.end && t > Date.parse(validity.end)) return false;
+  if (validity.end && t >= Date.parse(validity.end)) return false;
   if (validity.periods && !validity.periods.some((p) => scheduleOccursAt(p, at))) return false;
   return !validity.exceptions?.some((p) => scheduleOccursAt(p, at));
 }
+
+/**
+ * Whether a validity declares a start still ahead of the wall clock `now`:
+ * a record announced for later, which its publisher has rightly not
+ * activated yet.
+ */
+function startsAfter(
+  validity: Pick<RoadConditionValidity, "start">,
+  now: Date | undefined,
+): boolean {
+  if (now === undefined || validity.start === undefined) return false;
+  const start = Date.parse(validity.start);
+  return Number.isFinite(start) && start > now.getTime();
+}
+
+/**
+ * Whether a declared lifecycle leaves the window to decide when a record is
+ * in force. `active` does; so does `planned` when the window declares a start
+ * still ahead of the wall clock `now`: a trip at a later instant inside that
+ * window meets the record its publisher will activate by then. A planned
+ * record whose start has passed, or that declares none, is not in force; nor
+ * is a suspended one, an ended or cancelled one, or one of unknown status.
+ * Without `now`, only `active` does, as OpenConditions decides for the
+ * current state.
+ */
+export function lifecycleInForce(
+  validity: Pick<RoadConditionValidity, "status" | "start">,
+  now?: Date,
+): boolean {
+  if (validity.status === "active") return true;
+  return validity.status === "planned" && startsAfter(validity, now);
+}
+
+/** Whether a validity holds at `at`: a lifecycle in force (see `lifecycleInForce`), inside its window. */
+export function validityHoldsAt(validity: RoadConditionValidity, at: Date, now?: Date): boolean {
+  return lifecycleInForce(validity, now) && validityWindowHoldsAt(validity, at);
+}
+
+/**
+ * Operator action statuses under which the action is not in place, by DATEX
+ * `OperatorActionStatusEnum`: requested but neither approved nor acted on,
+ * approved but not yet implemented, or rejected. An action whose termination
+ * is requested or under way is still in place.
+ */
+const ACTIONS_NOT_IN_PLACE = new Set(["requested", "approved", "rejected"]);
+
+/** Whether the operator action an effect states, if it states one, is in place. */
+export function actionInPlace(effect: Pick<RoadConditionEffect, "actionStatus">): boolean {
+  return effect.actionStatus === undefined || !ACTIONS_NOT_IN_PLACE.has(effect.actionStatus);
+}
+
+/**
+ * Whether the operator action an effect states counts for an instant inside
+ * its window: in place, or `approved` with a declared start still ahead of
+ * the wall clock `now`, which its operator will implement by then. A
+ * requested or rejected action never counts, nor an approved one whose start
+ * has passed or that declares none.
+ */
+export function actionInForce(
+  effect: Pick<RoadConditionEffect, "actionStatus">,
+  validity: Pick<RoadConditionValidity, "start">,
+  now?: Date,
+): boolean {
+  return (
+    actionInPlace(effect) || (effect.actionStatus === "approved" && startsAfter(validity, now))
+  );
+}
+
+/** Issue codes that leave an effect's time window unknown, so it is never in force. */
+const TEMPORAL_ISSUES = new Set(["invalid_window", "unsupported_schedule", "unsupported_status"]);
 
 /** The validity an effect is evaluated against: its own, else its situation's. */
 export function effectValidity(
@@ -480,13 +562,43 @@ export function effectValidity(
   return effect.validity ?? event.validity;
 }
 
-/** Whether an effect of `event` is in force at `at`. */
+/**
+ * Whether an effect of `event` may be in force at all, whatever the instant:
+ * its lifecycle is in force (`lifecycleInForce`), the operator action it
+ * states counts (`actionInForce`), and its window could be read. `now` is
+ * the wall clock a planned or approved start is weighed against; without
+ * it, only an active lifecycle and an action in place count.
+ */
+export function effectStatusInForce(
+  event: Pick<RoadConditionEvent, "validity">,
+  effect: RoadConditionEffect,
+  now?: Date,
+): boolean {
+  const validity = effectValidity(event, effect);
+  return (
+    lifecycleInForce(validity, now) &&
+    actionInForce(effect, validity, now) &&
+    !effect.issues?.some((issue) => TEMPORAL_ISSUES.has(issue.code))
+  );
+}
+
+/**
+ * Whether an effect of `event` is in force at `at`, judged at the wall clock
+ * `now`: in force by its status (`effectStatusInForce`) and inside its
+ * window. Only such an effect closes a road, caps its speed or delays
+ * traffic. A trip planned for later passes the travel instant as `at` and
+ * the present as `now`.
+ */
 export function effectInForceAt(
   event: Pick<RoadConditionEvent, "validity">,
   effect: RoadConditionEffect,
   at: Date,
+  now?: Date,
 ): boolean {
-  return validityHoldsAt(effectValidity(event, effect), at);
+  return (
+    effectStatusInForce(event, effect, now) &&
+    validityWindowHoldsAt(effectValidity(event, effect), at)
+  );
 }
 
 /**

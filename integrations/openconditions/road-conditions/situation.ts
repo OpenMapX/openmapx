@@ -1,3 +1,4 @@
+import { ROAD_CONDITION_SEVERITY_LABELS } from "@openmapx/core";
 import type {
   LocalizedText,
   RoadConditionEffect,
@@ -56,11 +57,30 @@ function roadsOf(location: Rec): RoadConditionRoadRef[] | undefined {
   }));
 }
 
+/** A value of `values`, else `fallback`: a label this host does not know never passes unread. */
+function oneOf<T extends string>(values: readonly T[], v: unknown, fallback: T): T {
+  return values.includes(v as T) ? (v as T) : fallback;
+}
+
+const VALIDITY_STATUSES = [
+  "planned",
+  "active",
+  "suspended",
+  "ended",
+  "cancelled",
+  "unknown",
+] as const satisfies readonly RoadConditionValidity["status"][];
+
+/**
+ * A validity as the host reads it. A status it does not know reads as
+ * `unknown`, which establishes nothing: such a validity never holds.
+ */
 function validityOf(raw: Rec): RoadConditionValidity {
   const keys = ["start", "end", "estimatedEnd", "periods", "exceptions"] as const;
   return {
-    status: raw.status as RoadConditionValidity["status"],
+    status: oneOf(VALIDITY_STATUSES, raw.status, "unknown"),
     ...Object.fromEntries(keys.filter((k) => raw[k] !== undefined).map((k) => [k, raw[k]])),
+    ...strField("endedReason", raw.endedReason),
   };
 }
 
@@ -102,7 +122,7 @@ export function situationToRoadConditionEvent(
     type: String(record.type),
     ...strField("subtype", record.subtype),
     severity: {
-      label: (str(severity.label) ?? "unknown") as RoadConditionEvent["severity"]["label"],
+      label: oneOf(ROAD_CONDITION_SEVERITY_LABELS, severity.label, "unknown"),
       ...(typeof severity.level === "number" ? { level: severity.level } : {}),
     },
     certainty: (str(record.certainty) ?? "unknown") as RoadConditionEvent["certainty"],
@@ -116,7 +136,13 @@ export function situationToRoadConditionEvent(
       ? {
           direction: {
             value: String(direction.value),
+            ...strField("basis", direction.basis),
             ...strField("compass", direction.compass),
+            ...(typeof direction.bearingDeg === "number" && Number.isFinite(direction.bearingDeg)
+              ? { bearingDeg: direction.bearingDeg }
+              : {}),
+            ...strField("loop", direction.loop),
+            ...strField("toward", direction.toward),
             ...strField("text", direction.text),
           },
         }

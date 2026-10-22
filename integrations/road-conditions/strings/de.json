@@ -8,6 +8,7 @@
     "validTo": "Bis",
     "via": "Quelle",
     "severity": {
+      "none": "Keine Auswirkung",
       "minor": "Gering",
       "moderate": "Mittel",
       "major": "Hoch",

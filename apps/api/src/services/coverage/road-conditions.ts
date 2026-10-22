@@ -99,6 +99,7 @@ export function roadConditionStreams(
         rejectedCount: feed.rejectedCount,
         consecutiveFailures: feed.consecutiveFailures,
         bindingCounts: feed.bindingCounts,
+        ...(feed.bindingReasons ? { bindingReasons: feed.bindingReasons } : {}),
         graph: feed.graph,
       },
     });

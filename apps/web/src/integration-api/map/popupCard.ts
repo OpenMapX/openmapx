@@ -57,6 +57,7 @@ const SEVERITY_STYLE: Record<string, { bg: string; fg: string }> = {
   major: { bg: "#cc0033", fg: "#ffffff" },
   moderate: { bg: "#ff9933", fg: "#3a2a00" },
   minor: { bg: "#ffde33", fg: "#3a2a00" },
+  none: { bg: "#1a7a63", fg: "#ffffff" },
   unknown: { bg: "#8a8a8a", fg: "#ffffff" },
 };
 

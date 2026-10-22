@@ -396,12 +396,12 @@ describe("activeClosuresForBbox", () => {
   });
 
   describe("time-aware filtering (validity vs travel time)", () => {
-    // Planned closure in effect 2026-07-10 22:00 → 2026-07-13 05:00 (CEST).
+    // Announced closure in effect 2026-07-10 22:00 → 2026-07-13 05:00 (CEST).
     const plannedClosure = closureAt(point(0.5, 51.5), {
       temporality: "scheduled",
       planned: true,
       validity: {
-        status: "planned",
+        status: "active",
         start: "2026-07-10T22:00:00+02:00",
         end: "2026-07-13T05:00:00+02:00",
       },
@@ -427,13 +427,92 @@ describe("activeClosuresForBbox", () => {
       expect(result.points).toEqual([[0.5, 51.5]]);
     });
 
-    it.each(["ended", "cancelled"] as const)(
-      "skips a closure whose source says %s",
+    it.each(["ended", "cancelled", "planned", "suspended", "unknown"] as const)(
+      "skips a closure whose source says %s, even inside its window",
       async (status) => {
-        const result = await run([closureAt(point(0.5, 51.5), { validity: { status } })]);
-        expect(result.points).toHaveLength(0);
+        const validity = { status, start: "2026-07-10T22:00:00+02:00" };
+        for (const at of [new Date("2026-07-11T08:00:00Z"), new Date(Number.NaN)]) {
+          const result = await run([closureAt(point(0.5, 51.5), { validity })], at);
+          expect(result.points).toHaveLength(0);
+        }
       },
     );
+
+    it.each(["requested", "approved", "rejected"])(
+      "skips a closure whose operator action is %s, so not in place",
+      async (actionStatus) => {
+        const pending = closureAt(point(0.5, 51.5), {
+          effects: [effect("test:1/closure", "closure", { actionStatus })],
+        });
+        expect((await run([pending])).points).toHaveLength(0);
+      },
+    );
+
+    it.each(["being_implemented", "implemented", "termination_requested", "being_terminated"])(
+      "keeps a closure whose operator action is %s, so in place",
+      async (actionStatus) => {
+        const placed = closureAt(point(0.5, 51.5), {
+          effects: [effect("test:1/closure", "closure", { actionStatus })],
+        });
+        expect((await run([placed])).points).toEqual([[0.5, 51.5]]);
+      },
+    );
+
+    describe("a closure announced for later, for a trip at a later instant", () => {
+      const day = 86_400_000;
+      const iso = (offsetMs: number) => new Date(Date.now() + offsetMs).toISOString();
+      const inThreeDays = () => new Date(Date.now() + 3 * day);
+
+      it("closes the road inside a planned window whose start is still ahead", async () => {
+        const planned = closureAt(point(0.5, 51.5), {
+          validity: { status: "planned", start: iso(2 * day), end: iso(4 * day) },
+        });
+        expect((await run([planned], inThreeDays())).points).toEqual([[0.5, 51.5]]);
+        // Before the window opens, and right now, it closes nothing.
+        expect((await run([planned], new Date(Date.now() + day))).points).toHaveLength(0);
+        expect((await run([planned])).points).toHaveLength(0);
+      });
+
+      it("closes nothing once a still-planned start has passed, or with no start", async () => {
+        const stale = closureAt(point(0.5, 51.5), {
+          validity: { status: "planned", start: iso(-day), end: iso(4 * day) },
+        });
+        const undated = closureAt(point(0.5, 51.5), {
+          validity: { status: "planned", end: iso(4 * day) },
+        });
+        expect((await run([stale], inThreeDays())).points).toHaveLength(0);
+        expect((await run([stale])).points).toHaveLength(0);
+        expect((await run([undated], inThreeDays())).points).toHaveLength(0);
+      });
+
+      it("counts an approved action the same way, and never a requested one", async () => {
+        const at = (actionStatus: string, start: string) =>
+          closureAt(point(0.5, 51.5), {
+            validity: { status: "active", start, end: iso(4 * day) },
+            effects: [effect("test:1/closure", "closure", { actionStatus })],
+          });
+        expect((await run([at("approved", iso(2 * day))], inThreeDays())).points).toEqual([
+          [0.5, 51.5],
+        ]);
+        expect((await run([at("approved", iso(-day))], inThreeDays())).points).toHaveLength(0);
+        expect((await run([at("requested", iso(2 * day))], inThreeDays())).points).toHaveLength(0);
+      });
+
+      it.each(["suspended", "cancelled", "ended", "unknown"] as const)(
+        "never closes the road under a %s lifecycle, whatever its start",
+        async (status) => {
+          const closure = closureAt(point(0.5, 51.5), {
+            validity: { status, start: iso(2 * day), end: iso(4 * day) },
+          });
+          expect((await run([closure], inThreeDays())).points).toHaveLength(0);
+        },
+      );
+    });
+
+    it("keeps a closure in force by its status when the travel time cannot be read", async () => {
+      const result = await run([closureAt(point(0.5, 51.5))], new Date(Number.NaN));
+      expect(result.points).toEqual([[0.5, 51.5]]);
+    });
 
     it("evaluates an effect against its own validity before its situation's", async () => {
       // Works run all month; the full closure is one weekend phase of them.
@@ -442,7 +521,7 @@ describe("activeClosuresForBbox", () => {
         effects: [
           effect("test:1/closure", "closure", {
             validity: {
-              status: "planned",
+              status: "active",
               start: "2026-07-11T00:00:00Z",
               end: "2026-07-13T00:00:00Z",
             },
@@ -451,6 +530,18 @@ describe("activeClosuresForBbox", () => {
       });
       expect((await run([works], new Date("2026-07-05T12:00:00Z"))).points).toHaveLength(0);
       expect((await run([works], new Date("2026-07-12T12:00:00Z"))).points).toEqual([[0.5, 51.5]]);
+    });
+
+    it("reads the lifecycle from the effect's own validity: a planned phase closes nothing", async () => {
+      const works = closureAt(point(0.5, 51.5), {
+        validity: { status: "active" },
+        effects: [
+          effect("test:1/closure", "closure", {
+            validity: { status: "planned", start: "2026-07-11T00:00:00Z" },
+          }),
+        ],
+      });
+      expect((await run([works], new Date("2026-07-12T12:00:00Z"))).points).toHaveLength(0);
     });
   });
 
@@ -511,7 +602,7 @@ describe("activeClosuresForBbox", () => {
     it("does NOT avoid it before its start, even on a matching night", async () => {
       const future = closureAt(point(0.5, 51.5), {
         validity: {
-          status: "planned",
+          status: "active",
           start: "2026-08-01T18:00:00.000Z",
           periods: [nightlyPeriod],
         },
@@ -523,7 +614,7 @@ describe("activeClosuresForBbox", () => {
     it("avoids it when both the outer span and a period contain the travel time", async () => {
       const future = closureAt(point(0.5, 51.5), {
         validity: {
-          status: "planned",
+          status: "active",
           start: "2026-08-01T18:00:00.000Z",
           periods: [nightlyPeriod],
         },

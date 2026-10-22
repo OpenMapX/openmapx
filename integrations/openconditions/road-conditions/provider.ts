@@ -1,5 +1,6 @@
 import type { BBox, RoadConditionRoutingEvidence } from "@openmapx/core";
 import type {
+  RoadConditionBinding,
   RoadConditionEvent,
   RoadConditionsProvider,
   RoadConditionsQuery,
@@ -18,6 +19,12 @@ const ROUTING_PAGE = 5000;
 
 type Rec = Record<string, unknown>;
 
+/**
+ * The severity thresholds `/situations` takes. Any other threshold is left
+ * to the orchestrator, which applies every threshold again after the read.
+ */
+const SEVERITY_THRESHOLDS = new Set<string>(["minor", "moderate", "major", "critical"]);
+
 type SituationPage = { records?: unknown; next?: unknown };
 
 type SegmentConditionEvidenceResponse = {
@@ -25,6 +32,17 @@ type SegmentConditionEvidenceResponse = {
   complete?: unknown;
   conditions?: Array<{ routing_evidence?: RoadConditionRoutingEvidence }>;
 };
+
+/** One binding as the record API serves it, keeping its status and reason; null when unreadable. */
+function bindingOf(raw: unknown): RoadConditionBinding | null {
+  if (raw === null || typeof raw !== "object") return null;
+  const { status, reason } = raw as Rec;
+  if (typeof status !== "string" || status.length === 0 || status.length > 64) return null;
+  return {
+    status,
+    reason: typeof reason === "string" && reason.length > 0 && reason.length <= 64 ? reason : null,
+  };
+}
 
 /** Whether a record comes from a source, or a catalogue child of a source, the deployment excluded. */
 function excluded(record: Rec, sources: ReadonlySet<string>): boolean {
@@ -93,7 +111,9 @@ export function createRoadConditionsProvider(
           ...(opts?.kinds?.length ? { kind: opts.kinds.join(",") } : {}),
           ...(opts?.excludeKinds?.length ? { excludeKind: opts.excludeKinds.join(",") } : {}),
           ...(opts?.types?.length ? { type: opts.types.join(",") } : {}),
-          ...(opts?.minSeverity ? { minSeverity: opts.minSeverity } : {}),
+          ...(opts?.minSeverity && SEVERITY_THRESHOLDS.has(opts.minSeverity)
+            ? { minSeverity: opts.minSeverity }
+            : {}),
           // Only narrow when the caller asked: routing reads unfiltered so it
           // can evaluate future closures at the chosen travel time.
           ...(opts?.horizonDays != null ? { horizonDays: opts.horizonDays } : {}),
@@ -196,6 +216,37 @@ export function createRoadConditionsProvider(
       if (!sources.ready) return [];
       const body = await client.get<unknown>("/segments.geojson", { bbox: bbox.join(",") });
       return featureCollectionToRoadFlowSegments(body, PROVIDER_ID);
+    },
+    /**
+     * A situation's bindings from `GET /situations/{id}`: its own place's and
+     * each effect's bound on its own, with the resolver's reason. A situation
+     * the live source list does not serve, or of an excluded source, has none
+     * to show. Until the source list is read it cannot tell, and fails rather
+     * than answer "none".
+     */
+    async getBindings(eventId, opts) {
+      if (!sources.ready) throw new Error("OpenConditions source list not read yet");
+      if (!eventId.startsWith("oc:situation:")) return null;
+      const answer = await client.getOptional<unknown>(
+        `/situations/${encodeURIComponent(eventId)}`,
+      );
+      const body = answer !== null && typeof answer === "object" ? (answer as Rec) : undefined;
+      const record = body?.["record"];
+      if (!body || !record || typeof record !== "object") return null;
+      const without = new Set(opts?.excludedSourceIds ?? []);
+      if (!listed(record as Rec, sources) || excluded(record as Rec, without)) return null;
+      const effects = body["effectBindings"];
+      return {
+        situation: bindingOf(body["binding"]),
+        effects: Object.fromEntries(
+          Object.entries(effects !== null && typeof effects === "object" ? effects : {}).flatMap(
+            ([id, raw]) => {
+              const binding = bindingOf(raw);
+              return binding ? [[id, binding] as const] : [];
+            },
+          ),
+        ),
+      };
     },
     /** The road feeds' polls and publications, judged with the segment graph they bind to. */
     async getOperationalEvidence() {

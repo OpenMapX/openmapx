@@ -36,6 +36,22 @@ describe("road-condition operational evidence adapter", () => {
     expect(stream!.roadConditions?.bindingCounts).toEqual({ exact: 40, unresolved: 2 });
     expect(stream!.sourceId).toBe("wzdx-kansas");
   });
+  it("carries why bindings were not routed, and none where the provider gave none", () => {
+    const bindingReasons = [
+      { status: "ambiguous", reason: "direction_undecided", situations: 4, effects: 9 },
+    ];
+    const streams = roadConditionStreams("oc", {
+      schemaVersion: 1,
+      instanceId: "i1",
+      collectedAt: "2026-09-11T12:00:00Z",
+      feeds: [
+        { ...feed, bindingReasons },
+        { ...feed, sourceId: "wzdx-iowa" },
+      ],
+    });
+    expect(streams[0]!.roadConditions?.bindingReasons).toEqual(bindingReasons);
+    expect(streams[1]!.roadConditions).not.toHaveProperty("bindingReasons");
+  });
   it("does not expose upstream URL credentials in errors or invent counts", () => {
     const [stream] = roadConditionStreams("oc", {
       schemaVersion: 1,

@@ -76,6 +76,17 @@ describe("buildPopupCard", () => {
     expect(html).toContain("#ff9933"); // moderate severity color still uses the raw value
   });
 
+  it("badges a declared no-impact severity in its own colour, apart from unknown", () => {
+    const html = buildPopupCard(
+      { titleField: "h", severityField: "severity", severityLabelField: "severityText", rows: [] },
+      { h: "T", severity: "none", severityText: "No impact" },
+    );
+
+    expect(html).toContain("No impact");
+    expect(html).toContain("#1a7a63");
+    expect(html).not.toContain("#8a8a8a");
+  });
+
   it("omits the severity badge when severity is unknown or empty", () => {
     for (const severity of ["unknown", "Unknown", "", null]) {
       const html = buildPopupCard(

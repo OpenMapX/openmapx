@@ -183,6 +183,7 @@ export * from "./getCoverageEvidence200EvidenceItemRegionBasis";
 export * from "./getCoverageEvidence200EvidenceItemRegionRelation";
 export * from "./getCoverageEvidence200EvidenceItemRoadConditions";
 export * from "./getCoverageEvidence200EvidenceItemRoadConditionsBindingCounts";
+export * from "./getCoverageEvidence200EvidenceItemRoadConditionsBindingReasonsItem";
 export * from "./getCoverageEvidence200EvidenceItemRoadConditionsGraph";
 export * from "./getCoverageEvidence200EvidenceItemRoadConditionsGraphStatus";
 export * from "./getCoverageEvidence200Pagination";
