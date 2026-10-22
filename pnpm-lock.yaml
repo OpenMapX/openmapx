@@ -209,6 +209,9 @@ importers:
       '@biomejs/biome':
         specifier: ^2.5.15
         version: 2.5.15
+      '@scalar/openapi-parser':
+        specifier: ^0.29.12
+        version: 0.29.12
       '@changesets/cli':
         specifier: 3.0.3
         version: 3.0.3
@@ -2197,15 +2200,15 @@ importers:
 
   integrations/transit-mbta:
     dependencies:
-      '@openmapx/core':
-        specifier: workspace:^
-        version: link:../../packages/core
       '@openmapx/integration-framework':
         specifier: workspace:^
         version: link:../../packages/integration-framework
       '@openmapx/mobility-core':
         specifier: workspace:^
         version: link:../../packages/mobility-core
+      zod:
+        specifier: ^4.6.5
+        version: 4.6.5
 
   integrations/transit-mobility-database:
     dependencies:

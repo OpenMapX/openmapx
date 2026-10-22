@@ -14,8 +14,8 @@ vi.mock("node:child_process", async (importOriginal) => {
 });
 
 const directories: string[] = [];
-async function fixture() {
-  const root = resolve(".superpowers/api-sdk");
+async function fixture(generator = "api-sdk") {
+  const root = resolve(`.superpowers/${generator}`);
   await mkdir(root, { recursive: true });
   const directory = await mkdtemp(join(root, "generation-artifacts-test-"));
   directories.push(directory);
@@ -392,3 +392,12 @@ it.each(["timeout", "stdout", "stderr", "wrapper-exit"])(
   },
   15_000,
 );
+
+it("formats the explicitly owned MBTA generator scratch", async () => {
+  const { source, destination } = await fixture("mbta");
+  await writeFile(join(source, "client.ts"), "export const value={ok:true};\n");
+  const files = await collectArtifacts(source, destination, ["client.ts"]);
+  expect(files).toEqual([
+    { filename: "client.ts", content: "export const value = { ok: true };\n" },
+  ]);
+});

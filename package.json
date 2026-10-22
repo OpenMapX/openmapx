@@ -48,7 +48,7 @@
     "search-eval:record": "pnpm -C packages/cli exec tsx ../../scripts/record-search-eval.mts",
     "check-toolchain-pins": "pnpm -C packages/cli exec tsx ../../scripts/check-toolchain-pins.ts",
     "check-production-audits": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types scripts/check-production-audits.ts",
-    "check:policy": "pnpm check-legal-tables && pnpm check-legal-updated && pnpm check-data-flows && pnpm check-subject-data && pnpm check-license-metadata && pnpm check-air-quality-release-gates && pnpm check-toolchain-pins && pnpm check-feed-ids && pnpm check-credential-keys && pnpm check-dockerfile-sync && pnpm check-image-size-dos && pnpm check-docker-context-secrets && pnpm check-ops-authority && pnpm check-entur-graphql && pnpm check-entur-geocoder && pnpm check-api-sdk && pnpm check-data-manager-openapi && pnpm check-data-manager-sdk",
+    "check:policy": "pnpm check-legal-tables && pnpm check-legal-updated && pnpm check-data-flows && pnpm check-subject-data && pnpm check-license-metadata && pnpm check-air-quality-release-gates && pnpm check-toolchain-pins && pnpm check-feed-ids && pnpm check-credential-keys && pnpm check-dockerfile-sync && pnpm check-image-size-dos && pnpm check-docker-context-secrets && pnpm check-ops-authority && pnpm check-entur-graphql && pnpm check-entur-geocoder && pnpm check-mbta && pnpm check-api-sdk && pnpm check-data-manager-openapi && pnpm check-data-manager-sdk",
     "check-openapi": "pnpm -C apps/api exec tsx scripts/openapi/generate.ts --check",
     "validate:privacy-release": "node scripts/validate-privacy-release.mjs",
     "check-packed-packages": "node scripts/check-packed-packages.mjs",
@@ -72,10 +72,13 @@
     "data-manager:sdk:generate": "node scripts/data-manager-sdk/codegen.mjs",
     "check-data-manager-sdk": "node scripts/data-manager-sdk/codegen.mjs --check",
     "entur-geocoder:generate": "node scripts/entur-geocoder/codegen.mjs",
-    "check-entur-geocoder": "node scripts/entur-geocoder/codegen.mjs --check"
+    "check-entur-geocoder": "node scripts/entur-geocoder/codegen.mjs --check",
+    "mbta:generate": "node scripts/mbta/codegen.mjs",
+    "check-mbta": "node scripts/mbta/codegen.mjs --check"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.15",
+    "@scalar/openapi-parser": "^0.29.12",
     "@changesets/cli": "3.0.3",
     "@commitlint/cli": "^21.2.3",
     "@commitlint/config-conventional": "^21.2.3",
